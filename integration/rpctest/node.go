@@ -15,10 +15,9 @@ import (
 	"time"
 
 	rpc "github.com/gcash/bchd/rpcclient"
-	"github.com/gcash/bchutil"
 )
 
-// nodeConfig contains all the args, and data required to launch a btcd process
+// nodeConfig contains all the args, and data required to launch a bchd process
 // and connect the rpc client to it.
 type nodeConfig struct {
 	rpcUser    string
@@ -42,7 +41,7 @@ type nodeConfig struct {
 
 // newConfig returns a newConfig with all default values.
 func newConfig(prefix, certFile, keyFile string, extra []string) (*nodeConfig, error) {
-	btcdPath, err := btcdExecutablePath()
+	btcdPath, err := bchdExecutablePath()
 	if err != nil {
 		btcdPath = "btcd"
 	}
