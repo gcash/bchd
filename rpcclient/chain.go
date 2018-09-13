@@ -781,7 +781,7 @@ func (c *Client) RescanBlocksAsync(blockHashes []chainhash.Hash) FutureRescanBlo
 // the client's loaded transaction filter.  The blocks do not need to be on the
 // main chain, but they do need to be adjacent to each other.
 //
-// NOTE: This is a btcsuite extension ported from
+// NOTE: This is a gcash extension ported from
 // github.com/decred/dcrrpcclient.
 func (c *Client) RescanBlocks(blockHashes []chainhash.Hash) ([]btcjson.RescannedBlock, error) {
 	return c.RescanBlocksAsync(blockHashes).Receive()

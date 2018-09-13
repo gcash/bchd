@@ -7,7 +7,7 @@ rpcclient
 
 rpcclient implements a Websocket-enabled Bitcoin JSON-RPC client package written
 in [Go](http://golang.org/).  It provides a robust and easy to use client for
-interfacing with a Bitcoin RPC server that uses a btcd/bitcoin core compatible
+interfacing with a Bitcoin RPC server that uses a bchd/bitcoin core compatible
 Bitcoin JSON-RPC API.
 
 ## Status
@@ -19,12 +19,12 @@ implement and the API is not stable yet.
 ## Documentation
 
 * [API Reference](http://godoc.org/github.com/gcash/bchd/rpcclient)
-* [btcd Websockets Example](https://github.com/gcash/bchd/tree/master/rpcclient/examples/btcdwebsockets)
-  Connects to a btcd RPC server using TLS-secured websockets, registers for
+* [bchd Websockets Example](https://github.com/gcash/bchd/tree/master/rpcclient/examples/bchdwebsockets)
+  Connects to a bchd RPC server using TLS-secured websockets, registers for
   block connected and block disconnected notifications, and gets the current
   block count
-* [btcwallet Websockets Example](https://github.com/gcash/bchd/tree/master/rpcclient/examples/btcwalletwebsockets)
-  Connects to a btcwallet RPC server using TLS-secured websockets, registers for
+* [bchwallet Websockets Example](https://github.com/gcash/bchd/tree/master/rpcclient/examples/bchwalletwebsockets)
+  Connects to a bchwallet RPC server using TLS-secured websockets, registers for
   notifications about changes to account balances, and gets a list of unspent
   transaction outputs (utxos) the wallet can sign
 * [Bitcoin Core HTTP POST Example](https://github.com/gcash/bchd/tree/master/rpcclient/examples/bitcoincorehttp)
@@ -33,9 +33,9 @@ implement and the API is not stable yet.
 
 ## Major Features
 
-* Supports Websockets (btcd/btcwallet) and HTTP POST mode (bitcoin core)
-* Provides callback and registration functions for btcd/btcwallet notifications
-* Supports btcd extensions
+* Supports Websockets (bchd/bchwallet) and HTTP POST mode (bitcoin core)
+* Provides callback and registration functions for bchd/bchwallet notifications
+* Supports bchd extensions
 * Translates to and from higher-level and easier to use Go types
 * Offers a synchronous (blocking) and asynchronous API
 * When running in Websockets mode (the default):
