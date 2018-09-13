@@ -142,7 +142,7 @@ func (c *Client) ListAddressTransactionsAsync(addresses []bchutil.Address, accou
 // with the provided addresses.
 //
 // NOTE: This is a btcwallet extension.
-func (c *Client) ListAddressTransactions(addresses []bchutil.Address, account string) ([]bchjson.ListTransactionsResult, error) {
+func (c *Client) ListAddressTransactions(addresses []bchutil.Address, account string) ([]btcjson.ListTransactionsResult, error) {
 	return c.ListAddressTransactionsAsync(addresses, account).Receive()
 }
 
@@ -360,7 +360,7 @@ func (r FutureExportWatchingWalletResult) Receive() ([]byte, []byte, error) {
 //
 // NOTE: This is a bchwallet extension.
 func (c *Client) ExportWatchingWalletAsync(account string) FutureExportWatchingWalletResult {
-	cmd := btcjson.NewExportWatchingWalletCmd(&account, bchjson.Bool(true))
+	cmd := btcjson.NewExportWatchingWalletCmd(&account, btcjson.Bool(true))
 	return c.sendCmd(cmd)
 }
 
