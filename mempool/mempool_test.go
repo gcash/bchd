@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -132,7 +132,7 @@ type poolHarness struct {
 	//
 	// payAddr is the p2sh address for the signing key and is used for the
 	// payment address throughout the tests.
-	signKey     *btcec.PrivateKey
+	signKey     *bchec.PrivateKey
 	payAddr     btcutil.Address
 	payScript   []byte
 	chainParams *chaincfg.Params
@@ -283,7 +283,7 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 	if err != nil {
 		return nil, nil, err
 	}
-	signKey, signPub := btcec.PrivKeyFromBytes(btcec.S256(), keyBytes)
+	signKey, signPub := bchec.PrivKeyFromBytes(bchec.S256(), keyBytes)
 
 	// Generate associated pay-to-script-hash address and resulting payment
 	// script.

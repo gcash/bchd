@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/ripemd160"
 
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 )
@@ -2111,19 +2111,19 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		hash = calcSignatureHash(subScript, hashType, &vm.tx, vm.txIdx)
 	}
 
-	pubKey, err := btcec.ParsePubKey(pkBytes, btcec.S256())
+	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
 	if err != nil {
 		vm.dstack.PushBool(false)
 		return nil
 	}
 
-	var signature *btcec.Signature
+	var signature *bchec.Signature
 	if vm.hasFlag(ScriptVerifyStrictEncoding) ||
 		vm.hasFlag(ScriptVerifyDERSignatures) {
 
-		signature, err = btcec.ParseDERSignature(sigBytes, btcec.S256())
+		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
 	} else {
-		signature, err = btcec.ParseSignature(sigBytes, btcec.S256())
+		signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
 	}
 	if err != nil {
 		vm.dstack.PushBool(false)
@@ -2171,7 +2171,7 @@ func opcodeCheckSigVerify(op *parsedOpcode, vm *Engine) error {
 // the same signature multiple times when verifying a multisig.
 type parsedSigInfo struct {
 	signature       []byte
-	parsedSignature *btcec.Signature
+	parsedSignature *bchec.Signature
 	parsed          bool
 }
 
@@ -2316,7 +2316,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		signature := rawSig[:len(rawSig)-1]
 
 		// Only parse and check the signature encoding once.
-		var parsedSig *btcec.Signature
+		var parsedSig *bchec.Signature
 		if !sigInfo.parsed {
 			if err := vm.checkHashTypeEncoding(hashType); err != nil {
 				return err
@@ -2330,11 +2330,11 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			if vm.hasFlag(ScriptVerifyStrictEncoding) ||
 				vm.hasFlag(ScriptVerifyDERSignatures) {
 
-				parsedSig, err = btcec.ParseDERSignature(signature,
-					btcec.S256())
+				parsedSig, err = bchec.ParseDERSignature(signature,
+					bchec.S256())
 			} else {
-				parsedSig, err = btcec.ParseSignature(signature,
-					btcec.S256())
+				parsedSig, err = bchec.ParseSignature(signature,
+					bchec.S256())
 			}
 			sigInfo.parsed = true
 			if err != nil {
@@ -2356,7 +2356,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		}
 
 		// Parse the pubkey.
-		parsedPubKey, err := btcec.ParsePubKey(pubKey, btcec.S256())
+		parsedPubKey, err := bchec.ParsePubKey(pubKey, bchec.S256())
 		if err != nil {
 			continue
 		}

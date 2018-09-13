@@ -29,7 +29,7 @@ import (
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -3561,7 +3561,7 @@ func handleVerifyMessage(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	wire.WriteVarString(&buf, 0, "Bitcoin Signed Message:\n")
 	wire.WriteVarString(&buf, 0, c.Message)
 	expectedMessageHash := chainhash.DoubleHashB(buf.Bytes())
-	pk, wasCompressed, err := btcec.RecoverCompact(btcec.S256(), sig,
+	pk, wasCompressed, err := bchec.RecoverCompact(bchec.S256(), sig,
 		expectedMessageHash)
 	if err != nil {
 		// Mirror Bitcoin Core behavior, which treats error in

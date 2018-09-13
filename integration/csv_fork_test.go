@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/integration/rpctest"
@@ -31,11 +31,11 @@ const (
 // makeTestOutput creates an on-chain output paying to a freshly generated
 // p2pkh output with the specified amount.
 func makeTestOutput(r *rpctest.Harness, t *testing.T,
-	amt btcutil.Amount) (*btcec.PrivateKey, *wire.OutPoint, []byte, error) {
+	amt btcutil.Amount) (*bchec.PrivateKey, *wire.OutPoint, []byte, error) {
 
 	// Create a fresh key, then send some coins to an address spendable by
 	// that key.
-	key, err := btcec.NewPrivateKey(btcec.S256())
+	key, err := bchec.NewPrivateKey(bchec.S256())
 	if err != nil {
 		return nil, nil, nil, err
 	}

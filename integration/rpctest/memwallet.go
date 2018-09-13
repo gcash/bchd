@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/gcash/bchd/blockchain"
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/rpcclient"
@@ -71,7 +71,7 @@ type undoEntry struct {
 // wallet functionality to the harness. The wallet uses a hard-coded HD key
 // hierarchy which promotes reproducibility between harness test runs.
 type memWallet struct {
-	coinbaseKey  *btcec.PrivateKey
+	coinbaseKey  *bchec.PrivateKey
 	coinbaseAddr btcutil.Address
 
 	// hdRoot is the root master private key for the wallet.
@@ -581,7 +581,7 @@ func (m *memWallet) ConfirmedBalance() btcutil.Amount {
 }
 
 // keyToAddr maps the passed private to corresponding p2pkh address.
-func keyToAddr(key *btcec.PrivateKey, net *chaincfg.Params) (btcutil.Address, error) {
+func keyToAddr(key *bchec.PrivateKey, net *chaincfg.Params) (btcutil.Address, error) {
 	serializedKey := key.PubKey().SerializeCompressed()
 	pubKeyAddr, err := btcutil.NewAddressPubKey(serializedKey, net)
 	if err != nil {

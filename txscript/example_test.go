@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -89,7 +89,7 @@ func ExampleSignTxOutput() {
 		fmt.Println(err)
 		return
 	}
-	privKey, pubKey := btcec.PrivKeyFromBytes(btcec.S256(), privKeyBytes)
+	privKey, pubKey := bchec.PrivKeyFromBytes(bchec.S256(), privKeyBytes)
 	pubKeyHash := btcutil.Hash160(pubKey.SerializeCompressed())
 	addr, err := btcutil.NewAddressPubKeyHash(pubKeyHash,
 		&chaincfg.MainNetParams)
@@ -130,7 +130,7 @@ func ExampleSignTxOutput() {
 	redeemTx.AddTxOut(txOut)
 
 	// Sign the redeeming transaction.
-	lookupKey := func(a btcutil.Address) (*btcec.PrivateKey, bool, error) {
+	lookupKey := func(a btcutil.Address) (*bchec.PrivateKey, bool, error) {
 		// Ordinarily this function would involve looking up the private
 		// key for the provided address, but since the only thing being
 		// signed in this example uses the address associated with the

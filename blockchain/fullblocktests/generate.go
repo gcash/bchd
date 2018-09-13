@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
-	"github.com/gcash/bchd/btcec"
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -192,13 +192,13 @@ type testGenerator struct {
 	prevCollectedHash chainhash.Hash
 
 	// Common key for any tests which require signed transactions.
-	privKey *btcec.PrivateKey
+	privKey *bchec.PrivateKey
 }
 
 // makeTestGenerator returns a test generator instance initialized with the
 // genesis block as the tip.
 func makeTestGenerator(params *chaincfg.Params) (testGenerator, error) {
-	privKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), []byte{0x01})
+	privKey, _ := bchec.PrivKeyFromBytes(bchec.S256(), []byte{0x01})
 	genesis := params.GenesisBlock
 	genesisHash := genesis.BlockHash()
 	return testGenerator{
