@@ -2036,7 +2036,7 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 	//      actually supports
 	//    - Set the remote netaddress services to the what was advertised by
 	//      by the remote peer in its version message
-	msg.AddrYou.Services = wire.SFNodeNetwork|wire.SFNodeBitcoinCash
+	msg.AddrYou.Services = wire.SFNodeNetwork
 
 	// Advertise the services flag
 	msg.Services = p.cfg.Services
