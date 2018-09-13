@@ -42,9 +42,9 @@ func TestHash(t *testing.T) {
 	}
 
 	// Ensure proper size.
-	if len(hash) != HashSize {
+	if len(*hash) != HashSize {
 		t.Errorf("NewHash: hash length mismatch - got: %v, want: %v",
-			len(hash), HashSize)
+			len(*hash), HashSize)
 	}
 
 	// Ensure contents match.
