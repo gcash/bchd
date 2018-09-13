@@ -29,12 +29,12 @@ func mustParseShortForm(script string) []byte {
 	return s
 }
 
-// newAddressPubKey returns a new btcutil.AddressPubKey from the provided
+// newAddressPubKey returns a new bchutil.AddressPubKey from the provided
 // serialized public key.  It panics if an error occurs.  This is only used in
 // the tests as a helper since the only way it can fail is if there is an error
 // in the test source code.
-func newAddressPubKey(serializedPubKey []byte) btcutil.Address {
-	addr, err := btcutil.NewAddressPubKey(serializedPubKey,
+func newAddressPubKey(serializedPubKey []byte) bchutil.Address {
+	addr, err := bchutil.NewAddressPubKey(serializedPubKey,
 		&chaincfg.MainNetParams)
 	if err != nil {
 		panic("invalid public key in test source")
@@ -43,12 +43,12 @@ func newAddressPubKey(serializedPubKey []byte) btcutil.Address {
 	return addr
 }
 
-// newAddressPubKeyHash returns a new btcutil.AddressPubKeyHash from the
+// newAddressPubKeyHash returns a new bchutil.AddressPubKeyHash from the
 // provided hash.  It panics if an error occurs.  This is only used in the tests
 // as a helper since the only way it can fail is if there is an error in the
 // test source code.
-func newAddressPubKeyHash(pkHash []byte) btcutil.Address {
-	addr, err := btcutil.NewAddressPubKeyHash(pkHash, &chaincfg.MainNetParams)
+func newAddressPubKeyHash(pkHash []byte) bchutil.Address {
+	addr, err := bchutil.NewAddressPubKeyHash(pkHash, &chaincfg.MainNetParams)
 	if err != nil {
 		panic("invalid public key hash in test source")
 	}
@@ -56,12 +56,12 @@ func newAddressPubKeyHash(pkHash []byte) btcutil.Address {
 	return addr
 }
 
-// newAddressScriptHash returns a new btcutil.AddressScriptHash from the
+// newAddressScriptHash returns a new bchutil.AddressScriptHash from the
 // provided hash.  It panics if an error occurs.  This is only used in the tests
 // as a helper since the only way it can fail is if there is an error in the
 // test source code.
-func newAddressScriptHash(scriptHash []byte) btcutil.Address {
-	addr, err := btcutil.NewAddressScriptHashFromHash(scriptHash,
+func newAddressScriptHash(scriptHash []byte) bchutil.Address {
+	addr, err := bchutil.NewAddressScriptHashFromHash(scriptHash,
 		&chaincfg.MainNetParams)
 	if err != nil {
 		panic("invalid script hash in test source")
@@ -78,7 +78,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 	tests := []struct {
 		name    string
 		script  []byte
-		addrs   []btcutil.Address
+		addrs   []bchutil.Address
 		reqSigs int
 		class   ScriptClass
 	}{
@@ -86,7 +86,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 			name: "standard p2pk with compressed pubkey (0x02)",
 			script: hexToBytes("2102192d74d0cb94344c9569c2e779015" +
 				"73d8d7903c3ebec3a957724895dca52c6b4ac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("02192d74d0cb9434" +
 					"4c9569c2e77901573d8d7903c3ebec3a9577" +
 					"24895dca52c6b4")),
@@ -100,7 +100,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"c1eb68a382e97b1482ecad7b148a6909a5cb2e0eaddf" +
 				"b84ccf9744464f82e160bfa9b8b64f9d4c03f999b864" +
 				"3f656b412a3ac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("0411db93e1dcdb8a" +
 					"016b49840f8c53bc1eb68a382e97b1482eca" +
 					"d7b148a6909a5cb2e0eaddfb84ccf9744464" +
@@ -116,7 +116,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"73d8d7903c3ebec3a957724895dca52c6b40d4526483" +
 				"8c0bd96852662ce6a847b197376830160c6d2eb5e6a4" +
 				"c44d33f453eac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("06192d74d0cb9434" +
 					"4c9569c2e77901573d8d7903c3ebec3a9577" +
 					"24895dca52c6b40d45264838c0bd96852662" +
@@ -130,7 +130,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 			name: "standard p2pk with compressed pubkey (0x03)",
 			script: hexToBytes("2103b0bd634234abbb1ba1e986e884185" +
 				"c61cf43e001f9137f23c2c409273eb16e65ac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("03b0bd634234abbb" +
 					"1ba1e986e884185c61cf43e001f9137f23c2" +
 					"c409273eb16e65")),
@@ -144,7 +144,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"c61cf43e001f9137f23c2c409273eb16e6537a576782" +
 				"eba668a7ef8bd3b3cfb1edb7117ab65129b8a2e681f3" +
 				"c1e0908ef7bac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("04b0bd634234abbb" +
 					"1ba1e986e884185c61cf43e001f9137f23c2" +
 					"c409273eb16e6537a576782eba668a7ef8bd" +
@@ -160,7 +160,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"c61cf43e001f9137f23c2c409273eb16e6537a576782" +
 				"eba668a7ef8bd3b3cfb1edb7117ab65129b8a2e681f3" +
 				"c1e0908ef7bac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("07b0bd634234abbb" +
 					"1ba1e986e884185c61cf43e001f9137f23c2" +
 					"c409273eb16e6537a576782eba668a7ef8bd" +
@@ -174,7 +174,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 			name: "standard p2pkh",
 			script: hexToBytes("76a914ad06dd6ddee55cbca9a9e3713bd" +
 				"7587509a3056488ac"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKeyHash(hexToBytes("ad06dd6ddee5" +
 					"5cbca9a9e3713bd7587509a30564")),
 			},
@@ -185,7 +185,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 			name: "standard p2sh",
 			script: hexToBytes("a91463bcc565f9e68ee0189dd5cc67f1b" +
 				"0e5f02f45cb87"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressScriptHash(hexToBytes("63bcc565f9e6" +
 					"8ee0189dd5cc67f1b0e5f02f45cb")),
 			},
@@ -202,7 +202,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"1354d80e550078cb532a34bfa2fcfdeb7d76519aecc6" +
 				"2770f5b0e4ef8551946d8a540911abe3e7854a26f39f" +
 				"58b25c15342af52ae"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("04cc71eb30d653c0" +
 					"c3163990c47b976f3fb3f37cccdcbedb169a" +
 					"1dfef58bbfbfaff7d8a473e7e2e6d317b87b" +
@@ -230,7 +230,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"2bbf781c5410d3f22a7a3a56ffefb2238af8627363bd" +
 				"f2ed97c1f89784a1aecdb43384f11d2acc64443c7fc2" +
 				"99cef0400421a53ae"),
-			addrs: []btcutil.Address{
+			addrs: []bchutil.Address{
 				newAddressPubKey(hexToBytes("04cb9c3c222c5f7a" +
 					"7d3b9bd152f363a0b6d54c9eb312c4d4f9af" +
 					"1e8551b6c421a6a4ab0e29105f24de20ff46" +
@@ -306,7 +306,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"16e20626520666f756e6420696e207472616e7361637" +
 				"4696f6e2036633533636439383731313965663739376" +
 				"435616463636453ae"),
-			addrs:   []btcutil.Address{},
+			addrs:   []bchutil.Address{},
 			reqSigs: 1,
 			class:   MultiSigTy,
 		},
@@ -322,7 +322,7 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 				"13963663463303363363039633539336333653931666" +
 				"56465373032392131323364643432643235363339643" +
 				"338613663663530616234636434340a00000053ae"),
-			addrs:   []btcutil.Address{},
+			addrs:   []bchutil.Address{},
 			reqSigs: 1,
 			class:   MultiSigTy,
 		},
@@ -564,29 +564,29 @@ func TestCalcScriptInfo(t *testing.T) {
 	}
 }
 
-// bogusAddress implements the btcutil.Address interface so the tests can ensure
+// bogusAddress implements the bchutil.Address interface so the tests can ensure
 // unsupported address types are handled properly.
 type bogusAddress struct{}
 
 // EncodeAddress simply returns an empty string.  It exists to satisfy the
-// btcutil.Address interface.
+// bchutil.Address interface.
 func (b *bogusAddress) EncodeAddress() string {
 	return ""
 }
 
 // ScriptAddress simply returns an empty byte slice.  It exists to satisfy the
-// btcutil.Address interface.
+// bchutil.Address interface.
 func (b *bogusAddress) ScriptAddress() []byte {
 	return nil
 }
 
-// IsForNet lies blatantly to satisfy the btcutil.Address interface.
+// IsForNet lies blatantly to satisfy the bchutil.Address interface.
 func (b *bogusAddress) IsForNet(chainParams *chaincfg.Params) bool {
 	return true // why not?
 }
 
 // String simply returns an empty string.  It exists to satisfy the
-// btcutil.Address interface.
+// bchutil.Address interface.
 func (b *bogusAddress) String() string {
 	return ""
 }
@@ -597,7 +597,7 @@ func TestPayToAddrScript(t *testing.T) {
 	t.Parallel()
 
 	// 1MirQ9bwyQcGVJPwKUgapu5ouK2E2Ey4gX
-	p2pkhMain, err := btcutil.NewAddressPubKeyHash(hexToBytes("e34cce70c86"+
+	p2pkhMain, err := bchutil.NewAddressPubKeyHash(hexToBytes("e34cce70c86"+
 		"373273efcc54ce7d2a491bb4a0e84"), &chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("Unable to create public key hash address: %v", err)
@@ -605,21 +605,21 @@ func TestPayToAddrScript(t *testing.T) {
 
 	// Taken from transaction:
 	// b0539a45de13b3e0403909b8bd1a555b8cbe45fd4e3f3fda76f3a5f52835c29d
-	p2shMain, _ := btcutil.NewAddressScriptHashFromHash(hexToBytes("e8c300"+
+	p2shMain, _ := bchutil.NewAddressScriptHashFromHash(hexToBytes("e8c300"+
 		"c87986efa84c37c0519929019ef86eb5b4"), &chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("Unable to create script hash address: %v", err)
 	}
 
 	//  mainnet p2pk 13CG6SJ3yHUXo4Cr2RY4THLLJrNFuG3gUg
-	p2pkCompressedMain, err := btcutil.NewAddressPubKey(hexToBytes("02192d"+
+	p2pkCompressedMain, err := bchutil.NewAddressPubKey(hexToBytes("02192d"+
 		"74d0cb94344c9569c2e77901573d8d7903c3ebec3a957724895dca52c6b4"),
 		&chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("Unable to create pubkey address (compressed): %v",
 			err)
 	}
-	p2pkCompressed2Main, err := btcutil.NewAddressPubKey(hexToBytes("03b0b"+
+	p2pkCompressed2Main, err := bchutil.NewAddressPubKey(hexToBytes("03b0b"+
 		"d634234abbb1ba1e986e884185c61cf43e001f9137f23c2c409273eb16e65"),
 		&chaincfg.MainNetParams)
 	if err != nil {
@@ -627,7 +627,7 @@ func TestPayToAddrScript(t *testing.T) {
 			err)
 	}
 
-	p2pkUncompressedMain, err := btcutil.NewAddressPubKey(hexToBytes("0411"+
+	p2pkUncompressedMain, err := bchutil.NewAddressPubKey(hexToBytes("0411"+
 		"db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5"+
 		"cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b4"+
 		"12a3"), &chaincfg.MainNetParams)
@@ -641,7 +641,7 @@ func TestPayToAddrScript(t *testing.T) {
 	errUnsupportedAddress := scriptError(ErrUnsupportedAddress, "")
 
 	tests := []struct {
-		in       btcutil.Address
+		in       bchutil.Address
 		expected string
 		err      error
 	}{
@@ -684,9 +684,9 @@ func TestPayToAddrScript(t *testing.T) {
 		},
 
 		// Supported address types with nil pointers.
-		{(*btcutil.AddressPubKeyHash)(nil), "", errUnsupportedAddress},
-		{(*btcutil.AddressScriptHash)(nil), "", errUnsupportedAddress},
-		{(*btcutil.AddressPubKey)(nil), "", errUnsupportedAddress},
+		{(*bchutil.AddressPubKeyHash)(nil), "", errUnsupportedAddress},
+		{(*bchutil.AddressScriptHash)(nil), "", errUnsupportedAddress},
+		{(*bchutil.AddressPubKey)(nil), "", errUnsupportedAddress},
 
 		// Unsupported address type.
 		{&bogusAddress{}, "", errUnsupportedAddress},
@@ -716,14 +716,14 @@ func TestMultiSigScript(t *testing.T) {
 	t.Parallel()
 
 	//  mainnet p2pk 13CG6SJ3yHUXo4Cr2RY4THLLJrNFuG3gUg
-	p2pkCompressedMain, err := btcutil.NewAddressPubKey(hexToBytes("02192d"+
+	p2pkCompressedMain, err := bchutil.NewAddressPubKey(hexToBytes("02192d"+
 		"74d0cb94344c9569c2e77901573d8d7903c3ebec3a957724895dca52c6b4"),
 		&chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("Unable to create pubkey address (compressed): %v",
 			err)
 	}
-	p2pkCompressed2Main, err := btcutil.NewAddressPubKey(hexToBytes("03b0b"+
+	p2pkCompressed2Main, err := bchutil.NewAddressPubKey(hexToBytes("03b0b"+
 		"d634234abbb1ba1e986e884185c61cf43e001f9137f23c2c409273eb16e65"),
 		&chaincfg.MainNetParams)
 	if err != nil {
@@ -731,7 +731,7 @@ func TestMultiSigScript(t *testing.T) {
 			err)
 	}
 
-	p2pkUncompressedMain, err := btcutil.NewAddressPubKey(hexToBytes("0411"+
+	p2pkUncompressedMain, err := bchutil.NewAddressPubKey(hexToBytes("0411"+
 		"db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5"+
 		"cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b4"+
 		"12a3"), &chaincfg.MainNetParams)
@@ -741,13 +741,13 @@ func TestMultiSigScript(t *testing.T) {
 	}
 
 	tests := []struct {
-		keys      []*btcutil.AddressPubKey
+		keys      []*bchutil.AddressPubKey
 		nrequired int
 		expected  string
 		err       error
 	}{
 		{
-			[]*btcutil.AddressPubKey{
+			[]*bchutil.AddressPubKey{
 				p2pkCompressedMain,
 				p2pkCompressed2Main,
 			},
@@ -759,7 +759,7 @@ func TestMultiSigScript(t *testing.T) {
 			nil,
 		},
 		{
-			[]*btcutil.AddressPubKey{
+			[]*bchutil.AddressPubKey{
 				p2pkCompressedMain,
 				p2pkCompressed2Main,
 			},
@@ -771,7 +771,7 @@ func TestMultiSigScript(t *testing.T) {
 			nil,
 		},
 		{
-			[]*btcutil.AddressPubKey{
+			[]*bchutil.AddressPubKey{
 				p2pkCompressedMain,
 				p2pkCompressed2Main,
 			},
@@ -780,7 +780,7 @@ func TestMultiSigScript(t *testing.T) {
 			scriptError(ErrTooManyRequiredSigs, ""),
 		},
 		{
-			[]*btcutil.AddressPubKey{
+			[]*bchutil.AddressPubKey{
 				p2pkUncompressedMain,
 			},
 			1,
@@ -791,7 +791,7 @@ func TestMultiSigScript(t *testing.T) {
 			nil,
 		},
 		{
-			[]*btcutil.AddressPubKey{
+			[]*bchutil.AddressPubKey{
 				p2pkUncompressedMain,
 			},
 			2,

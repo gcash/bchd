@@ -30,9 +30,9 @@ type opcode struct {
 	opfunc func(*parsedOpcode, *Engine) error
 }
 
-// These constants are the values of the official opcodes used on the btc wiki,
+// These constants are the values of the official opcodes used on the bch wiki,
 // in bitcoin core and in most if not all other references and software related
-// to handling BTC scripts.
+// to handling BCH scripts.
 const (
 	OP_0                   = 0x00 // 0
 	OP_FALSE               = 0x00 // 0 - AKA OP_0
