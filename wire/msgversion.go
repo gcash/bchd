@@ -17,7 +17,7 @@ import (
 const MaxUserAgentLen = 256
 
 // DefaultUserAgent for wire in the stack
-const DefaultUserAgent = "/btcwire:0.5.0/"
+const DefaultUserAgent = "/bchwire:0.5.0/"
 
 // MsgVersion implements the Message interface and represents a bitcoin version
 // message.  It is used for a peer to advertise itself as soon as an outbound
@@ -259,7 +259,7 @@ func (msg *MsgVersion) AddUserAgent(name string, version string,
 		newUserAgent = fmt.Sprintf("%s(%s)", newUserAgent,
 			strings.Join(comments, "; "))
 	}
-	newUserAgent = fmt.Sprintf("%s%s/", msg.UserAgent, newUserAgent)
+	newUserAgent = fmt.Sprintf("%s/", newUserAgent)
 	err := validateUserAgent(newUserAgent)
 	if err != nil {
 		return err
