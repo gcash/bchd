@@ -416,7 +416,7 @@ func loadConfig() (*config, []string, error) {
 		DbType:               defaultDbType,
 		RPCKey:               defaultRPCKeyFile,
 		RPCCert:              defaultRPCCertFile,
-		MinRelayTxFee:        mempool.DefaultMinRelayTxFee.ToBTC(),
+		MinRelayTxFee:        mempool.DefaultMinRelayTxFee.ToBCH(),
 		FreeTxRelayLimit:     defaultFreeTxRelayLimit,
 		TrickleInterval:      defaultTrickleInterval,
 		BlockMinSize:         defaultBlockMinSize,

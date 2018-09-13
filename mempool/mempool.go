@@ -1197,7 +1197,7 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 		mpd := &btcjson.GetRawMempoolVerboseResult{
 			Size:             int32(tx.MsgTx().SerializeSize()),
 			Vsize:            int32(GetTxVirtualSize(tx)),
-			Fee:              bchutil.Amount(desc.Fee).ToBTC(),
+			Fee:              bchutil.Amount(desc.Fee).ToBCH(),
 			Time:             desc.Added.Unix(),
 			Height:           int64(desc.Height),
 			StartingPriority: desc.StartingPriority,
