@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gcash/bchd/wire"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gcash/bchd/wire"
 )
 
 // genTestTx creates a random transaction for uses within test cases.

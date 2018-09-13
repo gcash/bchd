@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/rpcclient"

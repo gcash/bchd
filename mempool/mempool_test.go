@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
