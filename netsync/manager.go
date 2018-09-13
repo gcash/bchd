@@ -51,7 +51,7 @@ type newPeerMsg struct {
 // blockMsg packages a bitcoin block message and the peer it came from together
 // so the block handler has access to that information.
 type blockMsg struct {
-	block *btcutil.Block
+	block *bchutil.Block
 	peer  *peerpkg.Peer
 	reply chan struct{}
 }
@@ -78,7 +78,7 @@ type donePeerMsg struct {
 // txMsg packages a bitcoin tx message and the peer it came from together
 // so the block handler has access to that information.
 type txMsg struct {
-	tx    *btcutil.Tx
+	tx    *bchutil.Tx
 	peer  *peerpkg.Peer
 	reply chan struct{}
 }
@@ -102,7 +102,7 @@ type processBlockResponse struct {
 // extra handling whereas this message essentially is just a concurrent safe
 // way to call ProcessBlock on the internal block chain instance.
 type processBlockMsg struct {
-	block *btcutil.Block
+	block *bchutil.Block
 	flags blockchain.BehaviorFlags
 	reply chan processBlockResponse
 }
@@ -1232,7 +1232,7 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 			return
 		}
 
-		block, ok := notification.Data.(*btcutil.Block)
+		block, ok := notification.Data.(*bchutil.Block)
 		if !ok {
 			log.Warnf("Chain accepted notification is not a block.")
 			break
@@ -1244,7 +1244,7 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 
 	// A block has been connected to the main block chain.
 	case blockchain.NTBlockConnected:
-		block, ok := notification.Data.(*btcutil.Block)
+		block, ok := notification.Data.(*bchutil.Block)
 		if !ok {
 			log.Warnf("Chain connected notification is not a block.")
 			break
@@ -1282,7 +1282,7 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 
 	// A block has been disconnected from the main block chain.
 	case blockchain.NTBlockDisconnected:
-		block, ok := notification.Data.(*btcutil.Block)
+		block, ok := notification.Data.(*bchutil.Block)
 		if !ok {
 			log.Warnf("Chain disconnected notification is not a block.")
 			break
@@ -1320,7 +1320,7 @@ func (sm *SyncManager) NewPeer(peer *peerpkg.Peer) {
 // QueueTx adds the passed transaction message and peer to the block handling
 // queue. Responds to the done channel argument after the tx message is
 // processed.
-func (sm *SyncManager) QueueTx(tx *btcutil.Tx, peer *peerpkg.Peer, done chan struct{}) {
+func (sm *SyncManager) QueueTx(tx *bchutil.Tx, peer *peerpkg.Peer, done chan struct{}) {
 	// Don't accept more transactions if we're shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
 		done <- struct{}{}
@@ -1333,7 +1333,7 @@ func (sm *SyncManager) QueueTx(tx *btcutil.Tx, peer *peerpkg.Peer, done chan str
 // QueueBlock adds the passed block message and peer to the block handling
 // queue. Responds to the done channel argument after the block message is
 // processed.
-func (sm *SyncManager) QueueBlock(block *btcutil.Block, peer *peerpkg.Peer, done chan struct{}) {
+func (sm *SyncManager) QueueBlock(block *bchutil.Block, peer *peerpkg.Peer, done chan struct{}) {
 	// Don't accept more blocks if we're shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
 		done <- struct{}{}
@@ -1412,7 +1412,7 @@ func (sm *SyncManager) SyncPeerID() int32 {
 
 // ProcessBlock makes use of ProcessBlock on an internal instance of a block
 // chain.
-func (sm *SyncManager) ProcessBlock(block *btcutil.Block, flags blockchain.BehaviorFlags) (bool, error) {
+func (sm *SyncManager) ProcessBlock(block *bchutil.Block, flags blockchain.BehaviorFlags) (bool, error) {
 	reply := make(chan processBlockResponse, 1)
 	sm.msgChan <- processBlockMsg{block: block, flags: flags, reply: reply}
 	response := <-reply
