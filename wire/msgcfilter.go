@@ -34,9 +34,9 @@ type MsgCFilter struct {
 	Data       []byte
 }
 
-// BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
+// BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
-func (msg *MsgCFilter) BtcDecode(r io.Reader, pver uint32, _ MessageEncoding) error {
+func (msg *MsgCFilter) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) error {
 	// Read filter type
 	err := readElement(r, &msg.FilterType)
 	if err != nil {
@@ -55,14 +55,14 @@ func (msg *MsgCFilter) BtcDecode(r io.Reader, pver uint32, _ MessageEncoding) er
 	return err
 }
 
-// BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
+// BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
-func (msg *MsgCFilter) BtcEncode(w io.Writer, pver uint32, _ MessageEncoding) error {
+func (msg *MsgCFilter) BchEncode(w io.Writer, pver uint32, _ MessageEncoding) error {
 	size := len(msg.Data)
 	if size > MaxCFilterDataSize {
 		str := fmt.Sprintf("cfilter size too large for message "+
 			"[size %v, max %v]", size, MaxCFilterDataSize)
-		return messageError("MsgCFilter.BtcEncode", str)
+		return messageError("MsgCFilter.BchEncode", str)
 	}
 
 	err := writeElement(w, msg.FilterType)
@@ -80,7 +80,7 @@ func (msg *MsgCFilter) BtcEncode(w io.Writer, pver uint32, _ MessageEncoding) er
 
 // Deserialize decodes a filter from r into the receiver using a format that is
 // suitable for long-term storage such as a database. This function differs
-// from BtcDecode in that BtcDecode decodes from the bitcoin wire protocol as
+// from BchDecode in that BchDecode decodes from the bitcoin wire protocol as
 // it was sent across the network.  The wire encoding can technically differ
 // depending on the protocol version and doesn't even really need to match the
 // format of a stored filter at all. As of the time this comment was written,
@@ -90,8 +90,8 @@ func (msg *MsgCFilter) BtcEncode(w io.Writer, pver uint32, _ MessageEncoding) er
 func (msg *MsgCFilter) Deserialize(r io.Reader) error {
 	// At the current time, there is no difference between the wire encoding
 	// and the stable long-term storage format.  As a result, make use of
-	// BtcDecode.
-	return msg.BtcDecode(r, 0, BaseEncoding)
+	// BchDecode.
+	return msg.BchDecode(r, 0, BaseEncoding)
 }
 
 // Command returns the protocol command string for the message.  This is part

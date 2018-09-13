@@ -25,9 +25,9 @@ type MsgPing struct {
 	Nonce uint64
 }
 
-// BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
+// BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
-func (msg *MsgPing) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
+func (msg *MsgPing) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
 	// There was no nonce for BIP0031Version and earlier.
 	// NOTE: > is not a mistake here.  The BIP0031 was defined as AFTER
 	// the version unlike most others.
@@ -41,9 +41,9 @@ func (msg *MsgPing) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) err
 	return nil
 }
 
-// BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
+// BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
-func (msg *MsgPing) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
+func (msg *MsgPing) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
 	// There was no nonce for BIP0031Version and earlier.
 	// NOTE: > is not a mistake here.  The BIP0031 was defined as AFTER
 	// the version unlike most others.

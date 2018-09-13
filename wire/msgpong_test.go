@@ -46,14 +46,14 @@ func TestPongLatest(t *testing.T) {
 
 	// Test encode with latest protocol version.
 	var buf bytes.Buffer
-	err = msg.BtcEncode(&buf, pver, enc)
+	err = msg.BchEncode(&buf, pver, enc)
 	if err != nil {
 		t.Errorf("encode of MsgPong failed %v err <%v>", msg, err)
 	}
 
 	// Test decode with latest protocol version.
 	readmsg := NewMsgPong(0)
-	err = readmsg.BtcDecode(&buf, pver, enc)
+	err = readmsg.BchDecode(&buf, pver, enc)
 	if err != nil {
 		t.Errorf("decode of MsgPong failed [%v] err <%v>", buf, err)
 	}
@@ -89,7 +89,7 @@ func TestPongBIP0031(t *testing.T) {
 
 	// Test encode with old protocol version.
 	var buf bytes.Buffer
-	err = msg.BtcEncode(&buf, pver, enc)
+	err = msg.BchEncode(&buf, pver, enc)
 	if err == nil {
 		t.Errorf("encode of MsgPong succeeded when it shouldn't have %v",
 			msg)
@@ -97,7 +97,7 @@ func TestPongBIP0031(t *testing.T) {
 
 	// Test decode with old protocol version.
 	readmsg := NewMsgPong(0)
-	err = readmsg.BtcDecode(&buf, pver, enc)
+	err = readmsg.BchDecode(&buf, pver, enc)
 	if err == nil {
 		t.Errorf("decode of MsgPong succeeded when it shouldn't have %v",
 			spew.Sdump(buf))
@@ -124,14 +124,14 @@ func TestPongCrossProtocol(t *testing.T) {
 
 	// Encode with latest protocol version.
 	var buf bytes.Buffer
-	err = msg.BtcEncode(&buf, ProtocolVersion, BaseEncoding)
+	err = msg.BchEncode(&buf, ProtocolVersion, BaseEncoding)
 	if err != nil {
 		t.Errorf("encode of MsgPong failed %v err <%v>", msg, err)
 	}
 
 	// Decode with old protocol version.
 	readmsg := NewMsgPong(0)
-	err = readmsg.BtcDecode(&buf, BIP0031Version, BaseEncoding)
+	err = readmsg.BchDecode(&buf, BIP0031Version, BaseEncoding)
 	if err == nil {
 		t.Errorf("encode of MsgPong succeeded when it shouldn't have %v",
 			msg)
@@ -177,13 +177,13 @@ func TestPongWire(t *testing.T) {
 	for i, test := range tests {
 		// Encode the message to wire format.
 		var buf bytes.Buffer
-		err := test.in.BtcEncode(&buf, test.pver, test.enc)
+		err := test.in.BchEncode(&buf, test.pver, test.enc)
 		if err != nil {
-			t.Errorf("BtcEncode #%d error %v", i, err)
+			t.Errorf("BchEncode #%d error %v", i, err)
 			continue
 		}
 		if !bytes.Equal(buf.Bytes(), test.buf) {
-			t.Errorf("BtcEncode #%d\n got: %s want: %s", i,
+			t.Errorf("BchEncode #%d\n got: %s want: %s", i,
 				spew.Sdump(buf.Bytes()), spew.Sdump(test.buf))
 			continue
 		}
@@ -191,13 +191,13 @@ func TestPongWire(t *testing.T) {
 		// Decode the message from wire format.
 		var msg MsgPong
 		rbuf := bytes.NewReader(test.buf)
-		err = msg.BtcDecode(rbuf, test.pver, test.enc)
+		err = msg.BchDecode(rbuf, test.pver, test.enc)
 		if err != nil {
-			t.Errorf("BtcDecode #%d error %v", i, err)
+			t.Errorf("BchDecode #%d error %v", i, err)
 			continue
 		}
 		if !reflect.DeepEqual(msg, test.out) {
-			t.Errorf("BtcDecode #%d\n got: %s want: %s", i,
+			t.Errorf("BchDecode #%d\n got: %s want: %s", i,
 				spew.Sdump(msg), spew.Sdump(test.out))
 			continue
 		}
@@ -236,9 +236,9 @@ func TestPongWireErrors(t *testing.T) {
 	for i, test := range tests {
 		// Encode to wire format.
 		w := newFixedWriter(test.max)
-		err := test.in.BtcEncode(w, test.pver, test.enc)
+		err := test.in.BchEncode(w, test.pver, test.enc)
 		if reflect.TypeOf(err) != reflect.TypeOf(test.writeErr) {
-			t.Errorf("BtcEncode #%d wrong error got: %v, want: %v",
+			t.Errorf("BchEncode #%d wrong error got: %v, want: %v",
 				i, err, test.writeErr)
 			continue
 		}
@@ -247,7 +247,7 @@ func TestPongWireErrors(t *testing.T) {
 		// equality.
 		if _, ok := err.(*MessageError); !ok {
 			if err != test.writeErr {
-				t.Errorf("BtcEncode #%d wrong error got: %v, "+
+				t.Errorf("BchEncode #%d wrong error got: %v, "+
 					"want: %v", i, err, test.writeErr)
 				continue
 			}
@@ -256,9 +256,9 @@ func TestPongWireErrors(t *testing.T) {
 		// Decode from wire format.
 		var msg MsgPong
 		r := newFixedReader(test.max, test.buf)
-		err = msg.BtcDecode(r, test.pver, test.enc)
+		err = msg.BchDecode(r, test.pver, test.enc)
 		if reflect.TypeOf(err) != reflect.TypeOf(test.readErr) {
-			t.Errorf("BtcDecode #%d wrong error got: %v, want: %v",
+			t.Errorf("BchDecode #%d wrong error got: %v, want: %v",
 				i, err, test.readErr)
 			continue
 		}
@@ -267,7 +267,7 @@ func TestPongWireErrors(t *testing.T) {
 		// equality.
 		if _, ok := err.(*MessageError); !ok {
 			if err != test.readErr {
-				t.Errorf("BtcDecode #%d wrong error got: %v, "+
+				t.Errorf("BchDecode #%d wrong error got: %v, "+
 					"want: %v", i, err, test.readErr)
 				continue
 			}

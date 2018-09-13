@@ -57,11 +57,11 @@ func (msg *MsgBlock) ClearTransactions() {
 	msg.Transactions = make([]*MsgTx, 0, defaultTransactionAlloc)
 }
 
-// BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
+// BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 // See Deserialize for decoding blocks stored to disk, such as in a database, as
 // opposed to decoding blocks from the wire.
-func (msg *MsgBlock) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
+func (msg *MsgBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
 	err := readBlockHeader(r, pver, &msg.Header)
 	if err != nil {
 		return err
@@ -78,13 +78,13 @@ func (msg *MsgBlock) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 	if txCount > maxTxPerBlock {
 		str := fmt.Sprintf("too many transactions to fit into a block "+
 			"[count %d, max %d]", txCount, maxTxPerBlock)
-		return messageError("MsgBlock.BtcDecode", str)
+		return messageError("MsgBlock.BchDecode", str)
 	}
 
 	msg.Transactions = make([]*MsgTx, 0, txCount)
 	for i := uint64(0); i < txCount; i++ {
 		tx := MsgTx{}
-		err := tx.BtcDecode(r, pver, enc)
+		err := tx.BchDecode(r, pver, enc)
 		if err != nil {
 			return err
 		}
@@ -96,8 +96,8 @@ func (msg *MsgBlock) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 
 // Deserialize decodes a block from r into the receiver using a format that is
 // suitable for long-term storage such as a database while respecting the
-// Version field in the block.  This function differs from BtcDecode in that
-// BtcDecode decodes from the bitcoin wire protocol as it was sent across the
+// Version field in the block.  This function differs from BchDecode in that
+// BchDecode decodes from the bitcoin wire protocol as it was sent across the
 // network.  The wire encoding can technically differ depending on the protocol
 // version and doesn't even really need to match the format of a stored block at
 // all.  As of the time this comment was written, the encoded block is the same
@@ -106,20 +106,20 @@ func (msg *MsgBlock) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 func (msg *MsgBlock) Deserialize(r io.Reader) error {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
-	// a result, make use of BtcDecode.
+	// a result, make use of BchDecode.
 	//
-	// Passing an encoding type of WitnessEncoding to BtcEncode for the
+	// Passing an encoding type of WitnessEncoding to BchEncode for the
 	// MessageEncoding parameter indicates that the transactions within the
 	// block are expected to be serialized according to the new
 	// serialization structure defined in BIP0141.
-	return msg.BtcDecode(r, 0, WitnessEncoding)
+	return msg.BchDecode(r, 0, WitnessEncoding)
 }
 
 // DeserializeNoWitness decodes a block from r into the receiver similar to
 // Deserialize, however DeserializeWitness strips all (if any) witness data
 // from the transactions within the block before encoding them.
 func (msg *MsgBlock) DeserializeNoWitness(r io.Reader) error {
-	return msg.BtcDecode(r, 0, BaseEncoding)
+	return msg.BchDecode(r, 0, BaseEncoding)
 }
 
 // DeserializeTxLoc decodes r in the same manner Deserialize does, but it takes
@@ -169,11 +169,11 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	return txLocs, nil
 }
 
-// BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
+// BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
 // See Serialize for encoding blocks to be stored to disk, such as in a
 // database, as opposed to encoding blocks for the wire.
-func (msg *MsgBlock) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
+func (msg *MsgBlock) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
 	err := writeBlockHeader(w, pver, &msg.Header)
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (msg *MsgBlock) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) er
 	}
 
 	for _, tx := range msg.Transactions {
-		err = tx.BtcEncode(w, pver, enc)
+		err = tx.BchEncode(w, pver, enc)
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (msg *MsgBlock) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) er
 
 // Serialize encodes the block to w using a format that suitable for long-term
 // storage such as a database while respecting the Version field in the block.
-// This function differs from BtcEncode in that BtcEncode encodes the block to
+// This function differs from BchEncode in that BchEncode encodes the block to
 // the bitcoin wire protocol in order to be sent across the network.  The wire
 // encoding can technically differ depending on the protocol version and doesn't
 // even really need to match the format of a stored block at all.  As of the
@@ -206,12 +206,12 @@ func (msg *MsgBlock) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) er
 func (msg *MsgBlock) Serialize(w io.Writer) error {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
-	// a result, make use of BtcEncode.
+	// a result, make use of BchEncode.
 	//
 	// Passing WitnessEncoding as the encoding type here indicates that
 	// each of the transactions should be serialized using the witness
 	// serialization structure defined in BIP0141.
-	return msg.BtcEncode(w, 0, WitnessEncoding)
+	return msg.BchEncode(w, 0, WitnessEncoding)
 }
 
 // SerializeNoWitness encodes a block to w using an identical format to
@@ -220,7 +220,7 @@ func (msg *MsgBlock) Serialize(w io.Writer) error {
 // allow one to selectively encode transaction witness data to non-upgraded
 // peers which are unaware of the new encoding.
 func (msg *MsgBlock) SerializeNoWitness(w io.Writer) error {
-	return msg.BtcEncode(w, 0, BaseEncoding)
+	return msg.BchEncode(w, 0, BaseEncoding)
 }
 
 // SerializeSize returns the number of bytes it would take to serialize the

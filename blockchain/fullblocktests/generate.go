@@ -635,10 +635,10 @@ func nonCanonicalVarInt(val uint32) []byte {
 // encoding.
 func encodeNonCanonicalBlock(b *wire.MsgBlock) []byte {
 	var buf bytes.Buffer
-	b.Header.BtcEncode(&buf, 0, wire.BaseEncoding)
+	b.Header.BchEncode(&buf, 0, wire.BaseEncoding)
 	buf.Write(nonCanonicalVarInt(uint32(len(b.Transactions))))
 	for _, tx := range b.Transactions {
-		tx.BtcEncode(&buf, 0, wire.BaseEncoding)
+		tx.BchEncode(&buf, 0, wire.BaseEncoding)
 	}
 	return buf.Bytes()
 }

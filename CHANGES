@@ -87,8 +87,8 @@ Changes in 0.12.0 (Fri Nov 20 2015)
     - Various cleanup of the new peer package (#528, #531, #524, #534,
       #549)
     - Blocks heights now consistently use int32 everywhere (#481)
-    - The BlockHeader type in the wire package now provides the BtcDecode
-      and BtcEncode methods (#467)
+    - The BlockHeader type in the wire package now provides the BchDecode
+      and BchEncode methods (#467)
     - Update wire package to recognize BIP0064 (getutxo) service bit (#489)
     - Export LockTimeThreshold constant from txscript package (#454)
     - Export MaxDataCarrierSize constant from txscript package (#466)

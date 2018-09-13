@@ -35,9 +35,9 @@ func (msg *MsgGetData) AddInvVect(iv *InvVect) error {
 	return nil
 }
 
-// BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
+// BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
-func (msg *MsgGetData) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
+func (msg *MsgGetData) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
 	count, err := ReadVarInt(r, pver)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func (msg *MsgGetData) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 	// Limit to max inventory vectors per message.
 	if count > MaxInvPerMsg {
 		str := fmt.Sprintf("too many invvect in message [%v]", count)
-		return messageError("MsgGetData.BtcDecode", str)
+		return messageError("MsgGetData.BchDecode", str)
 	}
 
 	// Create a contiguous slice of inventory vectors to deserialize into in
@@ -65,14 +65,14 @@ func (msg *MsgGetData) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 	return nil
 }
 
-// BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
+// BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
-func (msg *MsgGetData) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
+func (msg *MsgGetData) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
 	// Limit to max inventory vectors per message.
 	count := len(msg.InvList)
 	if count > MaxInvPerMsg {
 		str := fmt.Sprintf("too many invvect in message [%v]", count)
-		return messageError("MsgGetData.BtcEncode", str)
+		return messageError("MsgGetData.BchEncode", str)
 	}
 
 	err := WriteVarInt(w, pver, uint64(count))

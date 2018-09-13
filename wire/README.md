@@ -48,13 +48,13 @@ to a remote node running a bitcoin peer.  Example syntax is:
 	// Use the most recent protocol version supported by the package and the
 	// main bitcoin network.
 	pver := wire.ProtocolVersion
-	btcnet := wire.MainNet
+	bchnet := wire.MainNet
 
 	// Reads and validates the next bitcoin message from conn using the
-	// protocol version pver and the bitcoin network btcnet.  The returns
+	// protocol version pver and the bitcoin network bchnet.  The returns
 	// are a wire.Message, a []byte which contains the unmarshalled
 	// raw payload, and a possible error.
-	msg, rawPayload, err := wire.ReadMessage(conn, pver, btcnet)
+	msg, rawPayload, err := wire.ReadMessage(conn, pver, bchnet)
 	if err != nil {
 		// Log and handle the error
 	}
@@ -73,39 +73,19 @@ from a remote peer is:
 	// Use the most recent protocol version supported by the package and the
 	// main bitcoin network.
 	pver := wire.ProtocolVersion
-	btcnet := wire.MainNet
+	bchnet := wire.MainNet
 
 	// Create a new getaddr bitcoin message.
 	msg := wire.NewMsgGetAddr()
 
 	// Writes a bitcoin message msg to conn using the protocol version
-	// pver, and the bitcoin network btcnet.  The return is a possible
+	// pver, and the bitcoin network bchnet.  The return is a possible
 	// error.
-	err := wire.WriteMessage(conn, msg, pver, btcnet)
+	err := wire.WriteMessage(conn, msg, pver, bchnet)
 	if err != nil {
 		// Log and handle the error
 	}
 ```
-
-## GPG Verification Key
-
-All official release tags are signed by Conformal so users can ensure the code
-has not been tampered with and is coming from the btcsuite developers.  To
-verify the signature perform the following:
-
-- Download the public key from the Conformal website at
-  https://opensource.conformal.com/GIT-GPG-KEY-conformal.txt
-
-- Import the public key into your GPG keyring:
-  ```bash
-  gpg --import GIT-GPG-KEY-conformal.txt
-  ```
-
-- Verify the release tag with the following command where `TAG_NAME` is a
-  placeholder for the specific tag:
-  ```bash
-  git tag -v TAG_NAME
-  ```
 
 ## License
 

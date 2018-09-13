@@ -16,13 +16,13 @@ received.  This provides the caller with a high level of flexibility.
 
 Bitcoin Message Overview
 
-The bitcoin protocol consists of exchanging messages between peers.  Each
+The bitcoin cash protocol consists of exchanging messages between peers.  Each
 message is preceded by a header which identifies information about it such as
 which bitcoin network it is a part of, its type, how big it is, and a checksum
 to verify validity.  All encoding and decoding of message headers is handled by
 this package.
 
-To accomplish this, there is a generic interface for bitcoin messages named
+To accomplish this, there is a generic interface for bitcoin cash messages named
 Message which allows messages of any type to be read, written, or passed around
 through channels, functions, etc.  In addition, concrete implementations of most
 of the currently supported bitcoin messages are provided.  For these supported
@@ -32,11 +32,11 @@ themselves with the specifics.
 
 Message Interaction
 
-The following provides a quick summary of how the bitcoin messages are intended
-to interact with one another.  As stated above, these interactions are not
-directly handled by this package.  For more in-depth details about the
-appropriate interactions, see the official bitcoin protocol wiki entry at
-https://en.bitcoin.it/wiki/Protocol_specification.
+The following provides a quick summary of how the bitcoin cash messages are
+intended to interact with one another.  As stated above, these interactions
+are not indirectly handled by this package.  For more in-depth details about
+the appropriate interactions, see the official bitcoin cash protocol wiki entry
+at https://en.bitcoin.it/wiki/Protocol_specification.
 
 The initial handshake consists of two peers sending each other a version message
 (MsgVersion) followed by responding with a verack message (MsgVerAck).  Both
@@ -65,8 +65,8 @@ interactions in no particular order.
 Common Parameters
 
 There are several common parameters that arise when using this package to read
-and write bitcoin messages.  The following sections provide a quick overview of
-these parameters so the next sections can build on them.
+and write bitcoin cash messages.  The following sections provide a quick overview
+of these parameters so the next sections can build on them.
 
 Protocol Version
 
@@ -77,10 +77,10 @@ latest protocol version this package supports and is typically the value to use
 for all outbound connections before a potentially lower protocol version is
 negotiated.
 
-Bitcoin Network
+Bitcoin Cash Network
 
-The bitcoin network is a magic number which is used to identify the start of a
-message and which bitcoin network the message applies to.  This package provides
+The bitcoin cash network is a magic number which is used to identify the start of a
+message and which bitcoin cash network the message applies to.  This package provides
 the following constants:
 
 	wire.MainNet
@@ -90,8 +90,8 @@ the following constants:
 
 Determining Message Type
 
-As discussed in the bitcoin message overview section, this package reads
-and writes bitcoin messages using a generic interface named Message.  In
+As discussed in the bitcoin cash message overview section, this package reads
+and writes bitcoin cash messages using a generic interface named Message.  In
 order to determine the actual concrete type of the message, use a type
 switch or type assertion.  An example of a type switch follows:
 
@@ -108,33 +108,33 @@ switch or type assertion.  An example of a type switch follows:
 
 Reading Messages
 
-In order to unmarshall bitcoin messages from the wire, use the ReadMessage
+In order to unmarshall bitcoin cash messages from the wire, use the ReadMessage
 function.  It accepts any io.Reader, but typically this will be a net.Conn to
-a remote node running a bitcoin peer.  Example syntax is:
+a remote node running a bitcoin cash peer.  Example syntax is:
 
-	// Reads and validates the next bitcoin message from conn using the
-	// protocol version pver and the bitcoin network btcnet.  The returns
+	// Reads and validates the next bitcoin cash message from conn using the
+	// protocol version pver and the bitcoin cash network bchnet.  The returns
 	// are a wire.Message, a []byte which contains the unmarshalled
 	// raw payload, and a possible error.
-	msg, rawPayload, err := wire.ReadMessage(conn, pver, btcnet)
+	msg, rawPayload, err := wire.ReadMessage(conn, pver, bchnet)
 	if err != nil {
 		// Log and handle the error
 	}
 
 Writing Messages
 
-In order to marshall bitcoin messages to the wire, use the WriteMessage
+In order to marshall bitcoin cash messages to the wire, use the WriteMessage
 function.  It accepts any io.Writer, but typically this will be a net.Conn to
-a remote node running a bitcoin peer.  Example syntax to request addresses
+a remote node running a bitcoin cash peer.  Example syntax to request addresses
 from a remote peer is:
 
-	// Create a new getaddr bitcoin message.
+	// Create a new getaddr bitcoin cash message.
 	msg := wire.NewMsgGetAddr()
 
-	// Writes a bitcoin message msg to conn using the protocol version
-	// pver, and the bitcoin network btcnet.  The return is a possible
+	// Writes a bitcoin cash message msg to conn using the protocol version
+	// pver, and the bitcoin cash network bchnet.  The return is a possible
 	// error.
-	err := wire.WriteMessage(conn, msg, pver, btcnet)
+	err := wire.WriteMessage(conn, msg, pver, bchnet)
 	if err != nil {
 		// Log and handle the error
 	}
