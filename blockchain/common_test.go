@@ -31,7 +31,10 @@ const (
 	testDbRoot = "testdbs"
 
 	// blockDataNet is the expected network in the test block data.
-	blockDataNet = wire.MainNet
+	// The serialized test data uses the Bitcoin Core network magic.
+	// Eventually we should create new testdata using the Bitcoin Cash
+	// magic.
+	blockDataNet wire.BitcoinNet = 0xd9b4bef9
 )
 
 // filesExists returns whether or not the named file or directory exists.
@@ -63,7 +66,7 @@ func isSupportedDbType(dbType string) bool {
 func loadBlocks(filename string) (blocks []*bchutil.Block, err error) {
 	filename = filepath.Join("testdata/", filename)
 
-	var network = wire.MainNet
+	var network = blockDataNet
 	var dr io.Reader
 	var fi io.ReadCloser
 
