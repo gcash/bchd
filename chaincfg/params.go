@@ -227,12 +227,12 @@ var MainNetParams = Params{
 	Net:         wire.MainNet,
 	DefaultPort: "8333",
 	DNSSeeds: []DNSSeed{
-		{"seed.bitcoin.sipa.be", true},
-		{"dnsseed.bluematt.me", true},
-		{"dnsseed.bitcoin.dashjr.org", false},
-		{"seed.bitcoinstats.com", true},
-		{"seed.bitnodes.io", false},
-		{"seed.bitcoin.jonasschnelli.ch", true},
+		{"seed.bitcoinabc.org", true},
+		{"seed-abc.bitcoinforks.org", true},
+		{"btccash-seeder.bitcoinunlimited.info", true},
+		{"seed.bitprim.org", true},
+		{"seed.deadalnix.me", true},
+		{"seeder.criptolayer.net", true},
 	},
 
 	// Chain parameters
@@ -403,10 +403,11 @@ var TestNet3Params = Params{
 	Net:         wire.TestNet3,
 	DefaultPort: "18333",
 	DNSSeeds: []DNSSeed{
-		{"testnet-seed.bitcoin.jonasschnelli.ch", true},
-		{"testnet-seed.bitcoin.schildbach.de", false},
-		{"seed.tbtc.petertodd.org", true},
-		{"testnet-seed.bluematt.me", false},
+		{"testnet-seed.bitcoinabc.org", true},
+		{"testnet-seed-abc.bitcoinforks.org", true},
+		{"testnet-seed.bitprim.org", true},
+		{"testnet-seed.deadalnix.me", true},
+		{"testnet-seeder.criptolayer.net", true},
 	},
 
 	// Chain parameters
