@@ -136,7 +136,7 @@ func Example_blockStorageAndRetrieval() {
 	// and example.
 	err = db.Update(func(tx database.Tx) error {
 		genesisBlock := chaincfg.MainNetParams.GenesisBlock
-		return tx.StoreBlock(btcutil.NewBlock(genesisBlock))
+		return tx.StoreBlock(bchutil.NewBlock(genesisBlock))
 	})
 	if err != nil {
 		fmt.Println(err)

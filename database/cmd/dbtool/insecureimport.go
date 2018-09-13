@@ -108,7 +108,7 @@ func (bi *blockImporter) readBlock() ([]byte, error) {
 // NOTE: This is not a safe import as it does not verify chain rules.
 func (bi *blockImporter) processBlock(serializedBlock []byte) (bool, error) {
 	// Deserialize the block which includes checks for malformed blocks.
-	block, err := btcutil.NewBlockFromBytes(serializedBlock)
+	block, err := bchutil.NewBlockFromBytes(serializedBlock)
 	if err != nil {
 		return false, err
 	}

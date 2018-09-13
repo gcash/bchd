@@ -12,7 +12,7 @@ import (
 	"github.com/gcash/bchlog"
 )
 
-var log = btclog.Disabled
+var log = bchlog.Disabled
 
 const (
 	dbType = "ffldb"
@@ -65,7 +65,7 @@ func createDBDriver(args ...interface{}) (database.DB, error) {
 
 // useLogger is the callback provided during driver registration that sets the
 // current logger to the provided one.
-func useLogger(logger btclog.Logger) {
+func useLogger(logger bchlog.Logger) {
 	log = logger
 }
 

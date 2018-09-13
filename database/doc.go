@@ -7,7 +7,7 @@ Package database provides a block and metadata storage database.
 
 Overview
 
-As of Feb 2016, there are over 400,000 blocks in the Bitcoin block chain and
+As of Feb 2016, there are over 400,000 blocks in the Bitcoin Cash block chain and
 and over 112 million transactions (which turns out to be over 60GB of data).
 This package provides a database layer to store and retrieve this data in a
 simple and efficient manner.
@@ -19,7 +19,7 @@ storage, and strict checksums in key areas to ensure data integrity.
 A quick overview of the features database provides are as follows:
 
  - Key/value metadata store
- - Bitcoin block storage
+ - Bitcoin Cash block storage
  - Efficient retrieval of block headers and regions (transactions, scripts, etc)
  - Read-only and read-write transactions with both manual and managed modes
  - Nested buckets
