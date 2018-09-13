@@ -280,7 +280,7 @@ func determineMainChainBlocks(blocksMap map[chainhash.Hash]*blockChainContext, t
 //  - header code: 0x03 (coinbase, output zero unspent, 0 bytes of unspentness)
 //  - unspentness: Nothing since it is zero bytes
 //  - compressed txout 0:
-//    - 0x32: VLQ-encoded compressed amount for 5000000000 (50 BTC)
+//    - 0x32: VLQ-encoded compressed amount for 5000000000 (50 BCH)
 //    - 0x04: special script type pay-to-pubkey
 //    - 0x96...52: x-coordinate of the pubkey
 //
@@ -300,11 +300,11 @@ func determineMainChainBlocks(blocksMap map[chainhash.Hash]*blockChainContext, t
 //  - unspentness: [0x01] (bit 0 is set, so output 0+2 = 2 is unspent)
 //    NOTE: It's +2 since the first two outputs are encoded in the header code
 //  - compressed txout 0:
-//    - 0x12: VLQ-encoded compressed amount for 20000000 (0.2 BTC)
+//    - 0x12: VLQ-encoded compressed amount for 20000000 (0.2 BCH)
 //    - 0x00: special script type pay-to-pubkey-hash
 //    - 0xe2...8a: pubkey hash
 //  - compressed txout 2:
-//    - 0x8009: VLQ-encoded compressed amount for 15000000 (0.15 BTC)
+//    - 0x8009: VLQ-encoded compressed amount for 15000000 (0.15 BCH)
 //    - 0x00: special script type pay-to-pubkey-hash
 //    - 0xb8...58: pubkey hash
 //
@@ -325,7 +325,7 @@ func determineMainChainBlocks(blocksMap map[chainhash.Hash]*blockChainContext, t
 //  - unspentness: [0x00 0x00 0x10] (bit 20 is set, so output 20+2 = 22 is unspent)
 //    NOTE: It's +2 since the first two outputs are encoded in the header code
 //  - compressed txout 22:
-//    - 0x8ba5b9e763: VLQ-encoded compressed amount for 366875659 (3.66875659 BTC)
+//    - 0x8ba5b9e763: VLQ-encoded compressed amount for 366875659 (3.66875659 BCH)
 //    - 0x01: special script type pay-to-script-hash
 //    - 0x1d...e6: script hash
 func deserializeUtxoEntryV0(serialized []byte) (map[uint32]*UtxoEntry, error) {

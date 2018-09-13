@@ -101,7 +101,7 @@ func HashMerkleBranches(left *chainhash.Hash, right *chainhash.Hash) *chainhash.
 // using witness transaction id's rather than regular transaction id's. This
 // also presents an additional case wherein the wtxid of the coinbase transaction
 // is the zeroHash.
-func BuildMerkleTreeStore(transactions []*btcutil.Tx, witness bool) []*chainhash.Hash {
+func BuildMerkleTreeStore(transactions []*bchutil.Tx, witness bool) []*chainhash.Hash {
 	// Calculate how many entries are required to hold the binary merkle
 	// tree as a linear array and create an array of that size.
 	nextPoT := nextPowerOfTwo(len(transactions))
@@ -160,7 +160,7 @@ func BuildMerkleTreeStore(transactions []*btcutil.Tx, witness bool) []*chainhash
 // boolean indicating if the witness root was located within any of the txOut's
 // in the passed transaction. The witness commitment is stored as the data push
 // for an OP_RETURN with special magic bytes to aide in location.
-func ExtractWitnessCommitment(tx *btcutil.Tx) ([]byte, bool) {
+func ExtractWitnessCommitment(tx *bchutil.Tx) ([]byte, bool) {
 	// The witness commitment *must* be located within one of the coinbase
 	// transaction's outputs.
 	if !IsCoinBase(tx) {
@@ -191,7 +191,7 @@ func ExtractWitnessCommitment(tx *btcutil.Tx) ([]byte, bool) {
 
 // ValidateWitnessCommitment validates the witness commitment (if any) found
 // within the coinbase transaction of the passed block.
-func ValidateWitnessCommitment(blk *btcutil.Block) error {
+func ValidateWitnessCommitment(blk *bchutil.Block) error {
 	// If the block doesn't have any transactions at all, then we won't be
 	// able to extract a commitment from the non-existent coinbase
 	// transaction. So we exit early here.

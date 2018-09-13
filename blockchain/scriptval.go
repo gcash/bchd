@@ -19,7 +19,7 @@ import (
 type txValidateItem struct {
 	txInIndex int
 	txIn      *wire.TxIn
-	tx        *btcutil.Tx
+	tx        *bchutil.Tx
 	sigHashes *txscript.TxSigHashes
 }
 
@@ -188,7 +188,7 @@ func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
 
 // ValidateTransactionScripts validates the scripts for the passed transaction
 // using multiple goroutines.
-func ValidateTransactionScripts(tx *btcutil.Tx, utxoView *UtxoViewpoint,
+func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
 	hashCache *txscript.HashCache) error {
 
@@ -240,7 +240,7 @@ func ValidateTransactionScripts(tx *btcutil.Tx, utxoView *UtxoViewpoint,
 
 // checkBlockScripts executes and validates the scripts for all transactions in
 // the passed block using multiple goroutines.
-func checkBlockScripts(block *btcutil.Block, utxoView *UtxoViewpoint,
+func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	scriptFlags txscript.ScriptFlags, sigCache *txscript.SigCache,
 	hashCache *txscript.HashCache) error {
 
