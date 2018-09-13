@@ -16,9 +16,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/mining"
-	"github.com/btcsuite/btcutil"
+	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mining"
+	"github.com/gcash/bchutil"
 )
 
 // TODO incorporate Alex Morcos' modifications to Gavin's initial model

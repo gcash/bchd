@@ -17,12 +17,12 @@ import (
 
 const (
 	// svcName is the name of btcd service.
-	svcName = "btcdsvc"
+	svcName = "bchdsvc"
 
 	// svcDisplayName is the service name that will be shown in the windows
 	// services list.  Not the svcName is the "real" name which is used
 	// to control the service.  This is only for display purposes.
-	svcDisplayName = "Btcd Service"
+	svcDisplayName = "Bchd Service"
 
 	// svcDesc is the description of the service.
 	svcDesc = "Downloads and stays synchronized with the bitcoin block " +
@@ -44,27 +44,27 @@ func logServiceStartOfDay(srvr *server) {
 	elog.Info(1, message)
 }
 
-// btcdService houses the main service handler which handles all service
-// updates and launching btcdMain.
-type btcdService struct{}
+// bchdService houses the main service handler which handles all service
+// updates and launching bchdMain.
+type bchdService struct{}
 
 // Execute is the main entry point the winsvc package calls when receiving
 // information from the Windows service control manager.  It launches the
-// long-running btcdMain (which is the real meat of btcd), handles service
+// long-running bchdMain (which is the real meat of bchd), handles service
 // change requests, and notifies the service control manager of changes.
-func (s *btcdService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
+func (s *bchdService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
 	// Service start is pending.
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	changes <- svc.Status{State: svc.StartPending}
 
-	// Start btcdMain in a separate goroutine so the service can start
+	// Start bchdMain in a separate goroutine so the service can start
 	// quickly.  Shutdown (along with a potential error) is reported via
 	// doneChan.  serverChan is notified with the main server instance once
 	// it is started so it can be gracefully stopped.
 	doneChan := make(chan error)
 	serverChan := make(chan *server)
 	go func() {
-		err := btcdMain(serverChan)
+		err := bchdMain(serverChan)
 		doneChan <- err
 	}()
 
@@ -110,7 +110,7 @@ loop:
 	return false, 0
 }
 
-// installService attempts to install the btcd service.  Typically this should
+// installService attempts to install the bchd service.  Typically this should
 // be done by the msi installer, but it is provided here since it can be useful
 // for development.
 func installService() error {
@@ -159,7 +159,7 @@ func installService() error {
 	return eventlog.InstallAsEventCreate(svcName, eventsSupported)
 }
 
-// removeService attempts to uninstall the btcd service.  Typically this should
+// removeService attempts to uninstall the bchd service.  Typically this should
 // be done by the msi uninstaller, but it is provided here since it can be
 // useful for development.  Not the eventlog entry is intentionally not removed
 // since it would invalidate any existing event log messages.
@@ -182,7 +182,7 @@ func removeService() error {
 	return service.Delete()
 }
 
-// startService attempts to start the btcd service.
+// startService attempts to start the bchd service.
 func startService() error {
 	// Connect to the windows service manager.
 	serviceManager, err := mgr.Connect()
@@ -291,7 +291,7 @@ func serviceMain() (bool, error) {
 	}
 	defer elog.Close()
 
-	err = svc.Run(svcName, &btcdService{})
+	err = svc.Run(svcName, &bchdService{})
 	if err != nil {
 		elog.Error(1, fmt.Sprintf("Service start failed: %v", err))
 		return true, err

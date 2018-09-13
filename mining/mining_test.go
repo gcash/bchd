@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/btcsuite/btcutil"
+	"github.com/gcash/bchutil"
 )
 
 // TestTxFeePrioHeap ensures the priority queue for transaction fees and

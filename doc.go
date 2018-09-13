@@ -3,22 +3,22 @@
 // license that can be found in the LICENSE file.
 
 /*
-btcd is a full-node bitcoin implementation written in Go.
+bchd is a full-node bitcoin cash implementation written in Go.
 
-The default options are sane for most users.  This means btcd will work 'out of
+The default options are sane for most users.  This means bchd will work 'out of
 the box' for most users.  However, there are also a wide variety of flags that
 can be used to control it.
 
 The following section provides a usage overview which enumerates the flags.  An
 interesting point to note is that the long form of all of these options
 (except -C) can be specified in a configuration file that is automatically
-parsed when btcd starts up.  By default, the configuration file is located at
-~/.btcd/btcd.conf on POSIX-style operating systems and %LOCALAPPDATA%\btcd\btcd.conf
+parsed when bchd starts up.  By default, the configuration file is located at
+~/.bchd/bchd.conf on POSIX-style operating systems and %LOCALAPPDATA%\bchd\bchd.conf
 on Windows.  The -C (--configfile) flag, as shown below, can be used to override
 this location.
 
 Usage:
-  btcd [OPTIONS]
+  bchd [OPTIONS]
 
 Application Options:
   -V, --version             Display version information and exit
@@ -91,7 +91,7 @@ Application Options:
                             the log level for individual subsystems -- Use show
                             to list available subsystems (info)
       --upnp                Use UPnP to map our listening port outside of NAT
-      --minrelaytxfee=      The minimum transaction fee in BTC/kB to be
+      --minrelaytxfee=      The minimum transaction fee in BCH/kB to be
                             considered a non-zero fee.
       --limitfreerelay=     Limit relay of transactions with no transaction fee
                             to the given amount in thousands of bytes per

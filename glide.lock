@@ -3,9 +3,9 @@ updated: 2018-08-23T22:38:49.421147894-07:00
 imports:
 - name: github.com/aead/siphash
   version: 83563a290f60225eb120d724600b9690c3fb536f
-- name: github.com/btcsuite/btclog
+- name: github.com/gcash/bchlog
   version: 84c8d2346e9fc8c7b947e243b9c24e6df9fd206a
-- name: github.com/btcsuite/btcutil
+- name: github.com/gcash/bchutil
   version: ab6388e0c60ae4834a1f57511e20c17b5f78be4b
   subpackages:
   - base58

@@ -5,7 +5,7 @@
 package blockchain
 
 import (
-	"github.com/btcsuite/btclog"
+	"github.com/gcash/bchlog"
 )
 
 // log is a logger that is initialized with no output filters.  This
