@@ -22,7 +22,7 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 	tests := []struct {
 		name     string         // test description.
 		size     int64          // Transaction size in bytes.
-		relayFee btcutil.Amount // minimum relay transaction fee.
+		relayFee bchutil.Amount // minimum relay transaction fee.
 		want     int64          // Expected fee.
 	}{
 		{
@@ -48,8 +48,8 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 		{
 			"max standard tx size with max satoshi relay fee",
 			maxStandardTxWeight / 4,
-			btcutil.MaxSatoshi,
-			btcutil.MaxSatoshi,
+			bchutil.MaxSatoshi,
+			bchutil.MaxSatoshi,
 		},
 		{
 			"1500 bytes with 5000 relay fee",
@@ -215,7 +215,7 @@ func TestDust(t *testing.T) {
 	tests := []struct {
 		name     string // test description
 		txOut    wire.TxOut
-		relayFee btcutil.Amount // minimum relay transaction fee.
+		relayFee bchutil.Amount // minimum relay transaction fee.
 		isDust   bool
 	}{
 		{
@@ -247,8 +247,8 @@ func TestDust(t *testing.T) {
 		{
 			// Maximum allowed value is never dust.
 			"max satoshi amount is never dust",
-			wire.TxOut{Value: btcutil.MaxSatoshi, PkScript: pkScript},
-			btcutil.MaxSatoshi,
+			wire.TxOut{Value: bchutil.MaxSatoshi, PkScript: pkScript},
+			bchutil.MaxSatoshi,
 			false,
 		},
 		{
@@ -292,7 +292,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 		Sequence:         wire.MaxTxInSequenceNum,
 	}
 	addrHash := [20]byte{0x01}
-	addr, err := btcutil.NewAddressPubKeyHash(addrHash[:],
+	addr, err := bchutil.NewAddressPubKeyHash(addrHash[:],
 		&chaincfg.TestNet3Params)
 	if err != nil {
 		t.Fatalf("NewAddressPubKeyHash: unexpected error: %v", err)
@@ -302,7 +302,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 		t.Fatalf("PayToAddrScript: unexpected error: %v", err)
 	}
 	dummyTxOut := wire.TxOut{
-		Value:    100000000, // 1 BTC
+		Value:    100000000, // 1 BCH
 		PkScript: dummyPkScript,
 	}
 
@@ -469,7 +469,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 	pastMedianTime := time.Now()
 	for _, test := range tests {
 		// Ensure standardness is as expected.
-		err := checkTransactionStandard(btcutil.NewTx(&test.tx),
+		err := checkTransactionStandard(bchutil.NewTx(&test.tx),
 			test.height, pastMedianTime, DefaultMinRelayTxFee, 1)
 		if err == nil && test.isStandard {
 			// Test passes since function returned standard for a
