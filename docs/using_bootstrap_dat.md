@@ -3,7 +3,7 @@
 2. [What are the pros and cons of using bootstrap.dat?](#ProsCons)
 3. [Where do I get bootstrap.dat?](#Obtaining)
 4. [How do I know I can trust the bootstrap.dat I downloaded?](#Trust)
-5. [How do I use bootstrap.dat with btcd?](#Importing)
+5. [How do I use bootstrap.dat with bchd?](#Importing)
 
 <a name="What" />
 
@@ -16,7 +16,7 @@ on the last time it was updated.
 See [this](https://bitcointalk.org/index.php?topic=145386.0) thread on
 bitcointalk for more details.
 
-**NOTE:** Using bootstrap.dat is entirely optional.  Btcd will download the
+**NOTE:** Using bootstrap.dat is entirely optional.  Bchd will download the
 block chain from other peers through the Bitcoin protocol with no extra
 configuration needed.
 
@@ -58,20 +58,20 @@ is using.
 
 <a name="Importing" />
 
-### 5. How do I use bootstrap.dat with btcd?
+### 5. How do I use bootstrap.dat with bchd?
 
-btcd comes with a separate utility named `addblock` which can be used to import
+bchd comes with a separate utility named `addblock` which can be used to import
 `bootstrap.dat`.  This approach is used since the import is a one-time operation
 and we prefer to keep the daemon itself as lightweight as possible.
 
-1. Stop btcd if it is already running.  This is required since addblock needs to
-   access the database used by btcd and it will be locked if btcd is using it.
+1. Stop bchd if it is already running.  This is required since addblock needs to
+   access the database used by bchd and it will be locked if bchd is using it.
 2. Note the path to the downloaded bootstrap.dat file.
 3. Run the addblock utility with the `-i` argument pointing to the location of
    boostrap.dat:<br /><br />
 **Windows:**
 ```bat
-C:\> "%PROGRAMFILES%\Btcd Suite\Btcd\addblock" -i C:\Path\To\bootstrap.dat
+C:\> "%PROGRAMFILES%\gcash\bchd\addblock" -i C:\Path\To\bootstrap.dat
 ```
 **Linux/Unix/BSD/POSIX:**
 ```bash
