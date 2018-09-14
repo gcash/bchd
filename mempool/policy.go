@@ -49,6 +49,9 @@ const (
 	// in a multi-signature transaction output script for it to be
 	// considered standard.
 	maxStandardMultiSigKeys = 3
+
+	// maxStandardTxSize is the maximum size of a transaction
+	maxStandardTxSize = 1000000
 )
 
 // calcMinRequiredTxRelayFee returns the minimum transaction fee required for a

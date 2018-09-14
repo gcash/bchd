@@ -35,7 +35,7 @@ func TestTx(t *testing.T) {
 	}
 
 	// Ensure max payload is expected value for latest protocol version.
-	wantPayload := uint32(1000 * 4000)
+	wantPayload := uint32(32000000)
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+
@@ -178,12 +178,6 @@ func TestTxHash(t *testing.T) {
 func TestWTxSha(t *testing.T) {
 	hashStrTxid := "0f167d1385a84d1518cfee208b653fc9163b605ccf1b75347e2850b3e2eb19f3"
 	wantHashTxid, err := chainhash.NewHashFromStr(hashStrTxid)
-	if err != nil {
-		t.Errorf("NewShaHashFromStr: %v", err)
-		return
-	}
-	hashStrWTxid := "0858eab78e77b6b033da30f46699996396cf48fcf625a783c85a51403e175e74"
-	wantHashWTxid, err := chainhash.NewHashFromStr(hashStrWTxid)
 	if err != nil {
 		t.Errorf("NewShaHashFromStr: %v", err)
 		return
