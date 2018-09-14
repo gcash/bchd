@@ -1246,6 +1246,16 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 	sp.server.addrManager.AddAddresses(msg.AddrList, sp.NA())
 }
 
+// OnReject logs all reject messages received from the remote peer.
+func (sp *serverPeer) OnReject(p *peer.Peer, msg *wire.MsgReject) {
+	peerLog.Warn("Received reject message from peer %s, code: %s, reason: %s", p, msg.Code.String(), msg.Reason)
+}
+
+// OnNotFound logs all not found messages received from the remote peer.
+func (sp *serverPeer) OnNotFound(p *peer.Peer, msg *wire.MsgNotFound) {
+	peerLog.Warn("Received not found message from peer %s, %d not found invs", p, len(msg.InvList))
+}
+
 // OnRead is invoked when a peer receives a message and it is used to update
 // the bytes received by the server.
 func (sp *serverPeer) OnRead(_ *peer.Peer, bytesRead int, msg wire.Message, err error) {
@@ -1908,6 +1918,8 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnAddr:         sp.OnAddr,
 			OnRead:         sp.OnRead,
 			OnWrite:        sp.OnWrite,
+			OnReject:       sp.OnReject,
+			OnNotFound:     sp.OnNotFound,
 
 			// Note: The reference client currently bans peers that send alerts
 			// not signed with its key.  We could verify against their key, but
