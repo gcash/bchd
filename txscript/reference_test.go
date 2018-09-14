@@ -23,16 +23,10 @@ import (
 // scriptTestName returns a descriptive test name for the given reference script
 // test data.
 func scriptTestName(test []interface{}) (string, error) {
-	// Account for any optional leading witness data.
-	var witnessOffset int
-	if _, ok := test[0].([]interface{}); ok {
-		witnessOffset++
-	}
 
-	// In addition to the optional leading witness data, the test must
-	// consist of at least a signature script, public key script, flags,
-	// and expected error.  Finally, it may optionally contain a comment.
-	if len(test) < witnessOffset+4 || len(test) > witnessOffset+5 {
+	// The test must consist of at least a signature script, public key script,
+	// flags, and expected error.  Finally, it may optionally contain a comment.
+	if len(test) < 4 || len(test) > 5 {
 		return "", fmt.Errorf("invalid test length %d", len(test))
 	}
 
@@ -40,11 +34,11 @@ func scriptTestName(test []interface{}) (string, error) {
 	// construct the name based on the signature script, public key script,
 	// and flags.
 	var name string
-	if len(test) == witnessOffset+5 {
-		name = fmt.Sprintf("test (%s)", test[witnessOffset+4])
+	if len(test) == 5 {
+		name = fmt.Sprintf("test (%s)", test[4])
 	} else {
-		name = fmt.Sprintf("test ([%s, %s, %s])", test[witnessOffset],
-			test[witnessOffset+1], test[witnessOffset+2])
+		name = fmt.Sprintf("test ([%s, %s, %s])", test[0],
+			test[1], test[2])
 	}
 	return name, nil
 }
@@ -55,22 +49,6 @@ func parseHex(tok string) ([]byte, error) {
 		return nil, errors.New("not a hex number")
 	}
 	return hex.DecodeString(tok[2:])
-}
-
-// parseWitnessStack parses a json array of witness items encoded as hex into a
-// slice of witness elements.
-func parseWitnessStack(elements []interface{}) ([][]byte, error) {
-	witness := make([][]byte, len(elements))
-	for i, e := range elements {
-		witElement, err := hex.DecodeString(e.(string))
-		if err != nil {
-			return nil, err
-		}
-
-		witness[i] = witElement
-	}
-
-	return witness, nil
 }
 
 // shortFormOps holds a map of opcode names to values for use in short form
@@ -184,14 +162,6 @@ func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 			flags |= ScriptVerifySigPushOnly
 		case "STRICTENC":
 			flags |= ScriptVerifyStrictEncoding
-		case "WITNESS":
-			flags |= ScriptVerifyWitness
-		case "DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM":
-			flags |= ScriptVerifyDiscourageUpgradeableWitnessProgram
-		case "MINIMALIF":
-			flags |= ScriptVerifyMinimalIf
-		case "WITNESS_PUBKEYTYPE":
-			flags |= ScriptVerifyWitnessPubKeyType
 		default:
 			return flags, fmt.Errorf("invalid flag: %s", flag)
 		}
@@ -261,24 +231,6 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 		return []ErrorCode{ErrNegativeLockTime}, nil
 	case "UNSATISFIED_LOCKTIME":
 		return []ErrorCode{ErrUnsatisfiedLockTime}, nil
-	case "MINIMALIF":
-		return []ErrorCode{ErrMinimalIf}, nil
-	case "DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM":
-		return []ErrorCode{ErrDiscourageUpgradableWitnessProgram}, nil
-	case "WITNESS_PROGRAM_WRONG_LENGTH":
-		return []ErrorCode{ErrWitnessProgramWrongLength}, nil
-	case "WITNESS_PROGRAM_WITNESS_EMPTY":
-		return []ErrorCode{ErrWitnessProgramEmpty}, nil
-	case "WITNESS_PROGRAM_MISMATCH":
-		return []ErrorCode{ErrWitnessProgramMismatch}, nil
-	case "WITNESS_MALLEATED":
-		return []ErrorCode{ErrWitnessMalleated}, nil
-	case "WITNESS_MALLEATED_P2SH":
-		return []ErrorCode{ErrWitnessMalleatedP2SH}, nil
-	case "WITNESS_UNEXPECTED":
-		return []ErrorCode{ErrWitnessUnexpected}, nil
-	case "WITNESS_PUBKEYTYPE":
-		return []ErrorCode{ErrWitnessPubKeyType}, nil
 	}
 
 	return nil, fmt.Errorf("unrecognized expected result in test data: %v",
@@ -287,13 +239,13 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 
 // createSpendTx generates a basic spending transaction given the passed
 // signature, witness and public key scripts.
-func createSpendingTx(witness [][]byte, sigScript, pkScript []byte,
+func createSpendingTx(sigScript, pkScript []byte,
 	outputValue int64) *wire.MsgTx {
 
 	coinbaseTx := wire.NewMsgTx(wire.TxVersion)
 
 	outPoint := wire.NewOutPoint(&chainhash.Hash{}, ^uint32(0))
-	txIn := wire.NewTxIn(outPoint, []byte{OP_0, OP_0}, nil)
+	txIn := wire.NewTxIn(outPoint, []byte{OP_0, OP_0})
 	txOut := wire.NewTxOut(outputValue, pkScript)
 	coinbaseTx.AddTxIn(txIn)
 	coinbaseTx.AddTxOut(txOut)
@@ -301,7 +253,7 @@ func createSpendingTx(witness [][]byte, sigScript, pkScript []byte,
 	spendingTx := wire.NewMsgTx(wire.TxVersion)
 	coinbaseTxSha := coinbaseTx.TxHash()
 	outPoint = wire.NewOutPoint(&coinbaseTxSha, 0)
-	txIn = wire.NewTxIn(outPoint, sigScript, witness)
+	txIn = wire.NewTxIn(outPoint, sigScript)
 	txOut = wire.NewTxOut(outputValue, nil)
 
 	spendingTx.AddTxIn(txIn)
@@ -345,39 +297,10 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 			continue
 		}
 
-		var (
-			witness  wire.TxWitness
-			inputAmt bchutil.Amount
-		)
-
-		// When the first field of the test data is a slice it contains
-		// witness data and everything else is offset by 1 as a result.
-		witnessOffset := 0
-		if witnessData, ok := test[0].([]interface{}); ok {
-			witnessOffset++
-
-			// If this is a witness test, then the final element
-			// within the slice is the input amount, so we ignore
-			// all but the last element in order to parse the
-			// witness stack.
-			strWitnesses := witnessData[:len(witnessData)-1]
-			witness, err = parseWitnessStack(strWitnesses)
-			if err != nil {
-				t.Errorf("%s: can't parse witness; %v", name, err)
-				continue
-			}
-
-			inputAmt, err = bchutil.NewAmount(witnessData[len(witnessData)-1].(float64))
-			if err != nil {
-				t.Errorf("%s: can't parse input amt: %v",
-					name, err)
-				continue
-			}
-
-		}
+		var inputAmt bchutil.Amount
 
 		// Extract and parse the signature script from the test fields.
-		scriptSigStr, ok := test[witnessOffset].(string)
+		scriptSigStr, ok := test[0].(string)
 		if !ok {
 			t.Errorf("%s: signature script is not a string", name)
 			continue
@@ -390,7 +313,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		}
 
 		// Extract and parse the public key script from the test fields.
-		scriptPubKeyStr, ok := test[witnessOffset+1].(string)
+		scriptPubKeyStr, ok := test[1].(string)
 		if !ok {
 			t.Errorf("%s: public key script is not a string", name)
 			continue
@@ -403,7 +326,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		}
 
 		// Extract and parse the script flags from the test fields.
-		flagsStr, ok := test[witnessOffset+2].(string)
+		flagsStr, ok := test[2].(string)
 		if !ok {
 			t.Errorf("%s: flags field is not a string", name)
 			continue
@@ -421,7 +344,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		// fine grained with its errors than the reference test data, so
 		// some of the reference test data errors map to more than one
 		// possibility.
-		resultStr, ok := test[witnessOffset+3].(string)
+		resultStr, ok := test[3].(string)
 		if !ok {
 			t.Errorf("%s: result field is not a string", name)
 			continue
@@ -435,7 +358,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		// Generate a transaction pair such that one spends from the
 		// other and the provided signature and public key scripts are
 		// used, then create a new engine to execute the scripts.
-		tx := createSpendingTx(witness, scriptSig, scriptPubKey,
+		tx := createSpendingTx(scriptSig, scriptPubKey,
 			int64(inputAmt))
 		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, nil,
 			int64(inputAmt))

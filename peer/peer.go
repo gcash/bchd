@@ -444,7 +444,6 @@ type Peer struct {
 	protocolVersion      uint32 // negotiated protocol version
 	sendHeadersPreferred bool   // peer sent a sendheaders message
 	verAckReceived       bool
-	witnessEnabled       bool
 
 	wireEncoding wire.MessageEncoding
 
@@ -792,18 +791,6 @@ func (p *Peer) WantsHeaders() bool {
 	p.flagsMtx.Unlock()
 
 	return sendHeadersPreferred
-}
-
-// IsWitnessEnabled returns true if the peer has signalled that it supports
-// segregated witness.
-//
-// This function is safe for concurrent access.
-func (p *Peer) IsWitnessEnabled() bool {
-	p.flagsMtx.Lock()
-	witnessEnabled := p.witnessEnabled
-	p.flagsMtx.Unlock()
-
-	return witnessEnabled
 }
 
 // PushAddrMsg sends an addr message to the connected peer using the provided
@@ -1603,8 +1590,7 @@ out:
 				// If this is a new block, then we'll blast it
 				// out immediately, sipping the inv trickle
 				// queue.
-				if iv.Type == wire.InvTypeBlock ||
-					iv.Type == wire.InvTypeWitnessBlock {
+				if iv.Type == wire.InvTypeBlock {
 
 					invMsg := wire.NewMsgInvSizeHint(1)
 					invMsg.AddInvVect(iv)
@@ -1922,21 +1908,7 @@ func (p *Peer) handleRemoteVersionMsg(msg *wire.MsgVersion) error {
 	// Set the remote peer's user agent.
 	p.userAgent = msg.UserAgent
 
-	// Determine if the peer would like to receive witness data with
-	// transactions, or not.
-	if p.services&wire.SFNodeWitness == wire.SFNodeWitness {
-		p.witnessEnabled = true
-	}
 	p.flagsMtx.Unlock()
-
-	// Once the version message has been exchanged, we're able to determine
-	// if this peer knows how to encode witness data over the wire
-	// protocol. If so, then we'll switch to a decoding mode which is
-	// prepared for the new transaction format introduced as part of
-	// BIP0144.
-	if p.services&wire.SFNodeWitness == wire.SFNodeWitness {
-		p.wireEncoding = wire.WitnessEncoding
-	}
 
 	return nil
 }

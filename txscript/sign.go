@@ -14,6 +14,7 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+// TODO: [issue#4] rename this once the bitcoin cash fork activates
 // RawTxInWitnessSignature returns the serialized ECDA signature for the input
 // idx of the given transaction, with the hashType appended to it. This
 // function is identical to RawTxInSignature, however the signature generated
@@ -41,12 +42,13 @@ func RawTxInWitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	return append(signature.Serialize(), byte(hashType)), nil
 }
 
+// TODO: [issue#4] rename this once the bitcoin cash fork activates
 // WitnessSignature creates an input witness stack for tx to spend BCH sent
 // from a previous output to the owner of privKey using the p2wkh script
 // template. The passed transaction must contain all the inputs and outputs as
 // dictated by the passed hashType. The signature generated observes the new
 // transaction digest algorithm defined within BIP0143.
-func WitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
+/*func WitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 	subscript []byte, hashType SigHashType, privKey *bchec.PrivateKey,
 	compress bool) (wire.TxWitness, error) {
 
@@ -67,7 +69,7 @@ func WitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64
 	// A witness script is actually a stack, so we return an array of byte
 	// slices here, rather than a single byte slice.
 	return wire.TxWitness{sig, pkData}, nil
-}
+}*/
 
 // RawTxInSignature returns the serialized ECDSA signature for the input idx of
 // the given transaction, with hashType appended to it.

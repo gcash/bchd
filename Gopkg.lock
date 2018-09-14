@@ -86,19 +86,18 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:77137d0a9f6babb58111188d99004314a0208eb83a8e967c47268a0181e6c3a0"
+  digest = "1:b87aeccebb26fef0169342cd9e064e8473ce3a605abb80b4e148ca795e16dfe2"
   name = "github.com/gcash/bchutil"
   packages = [
     ".",
     "base58",
-    "bech32",
     "bloom",
     "gcs",
     "gcs/builder",
     "hdkeychain",
   ]
   pruneopts = "UT"
-  revision = "1655d73a07ffdb0ac0d6f76cd60caa25cb271f9e"
+  revision = "42941223b0aa0125fd11d2dafe1d5a5609fcdda2"
 
 [[projects]]
   branch = "master"

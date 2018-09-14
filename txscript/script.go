@@ -70,98 +70,6 @@ func IsPayToScriptHash(script []byte) bool {
 	return isScriptHash(pops)
 }
 
-// isWitnessScriptHash returns true if the passed script is a
-// pay-to-witness-script-hash transaction, false otherwise.
-func isWitnessScriptHash(pops []parsedOpcode) bool {
-	return len(pops) == 2 &&
-		pops[0].opcode.value == OP_0 &&
-		pops[1].opcode.value == OP_DATA_32
-}
-
-// IsPayToWitnessScriptHash returns true if the is in the standard
-// pay-to-witness-script-hash (P2WSH) format, false otherwise.
-func IsPayToWitnessScriptHash(script []byte) bool {
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-	return isWitnessScriptHash(pops)
-}
-
-// IsPayToWitnessPubKeyHash returns true if the is in the standard
-// pay-to-witness-pubkey-hash (P2WKH) format, false otherwise.
-func IsPayToWitnessPubKeyHash(script []byte) bool {
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-	return isWitnessPubKeyHash(pops)
-}
-
-// isWitnessPubKeyHash returns true if the passed script is a
-// pay-to-witness-pubkey-hash, and false otherwise.
-func isWitnessPubKeyHash(pops []parsedOpcode) bool {
-	return len(pops) == 2 &&
-		pops[0].opcode.value == OP_0 &&
-		pops[1].opcode.value == OP_DATA_20
-}
-
-// IsWitnessProgram returns true if the passed script is a valid witness
-// program which is encoded according to the passed witness program version. A
-// witness program must be a small integer (from 0-16), followed by 2-40 bytes
-// of pushed data.
-func IsWitnessProgram(script []byte) bool {
-	// The length of the script must be between 4 and 42 bytes. The
-	// smallest program is the witness version, followed by a data push of
-	// 2 bytes.  The largest allowed witness program has a data push of
-	// 40-bytes.
-	if len(script) < 4 || len(script) > 42 {
-		return false
-	}
-
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-
-	return isWitnessProgram(pops)
-}
-
-// isWitnessProgram returns true if the passed script is a witness program, and
-// false otherwise. A witness program MUST adhere to the following constraints:
-// there must be exactly two pops (program version and the program itself), the
-// first opcode MUST be a small integer (0-16), the push data MUST be
-// canonical, and finally the size of the push data must be between 2 and 40
-// bytes.
-func isWitnessProgram(pops []parsedOpcode) bool {
-	return len(pops) == 2 &&
-		isSmallInt(pops[0].opcode) &&
-		canonicalPush(pops[1]) &&
-		(len(pops[1].data) >= 2 && len(pops[1].data) <= 40)
-}
-
-// ExtractWitnessProgramInfo attempts to extract the witness program version,
-// as well as the witness program itself from the passed script.
-func ExtractWitnessProgramInfo(script []byte) (int, []byte, error) {
-	pops, err := parseScript(script)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	// If at this point, the scripts doesn't resemble a witness program,
-	// then we'll exit early as there isn't a valid version or program to
-	// extract.
-	if !isWitnessProgram(pops) {
-		return 0, nil, fmt.Errorf("script is not a witness program, " +
-			"unable to extract version or witness program")
-	}
-
-	witnessVersion := asSmallInt(pops[0].opcode)
-	witnessProgram := pops[1].data
-
-	return witnessVersion, witnessProgram, nil
-}
-
 // isPushOnly returns true if the script only pushes data, false otherwise.
 func isPushOnly(pops []parsedOpcode) bool {
 	// NOTE: This function does NOT verify opcodes directly since it is
@@ -424,6 +332,7 @@ func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 	return chainhash.DoubleHashH(b.Bytes())
 }
 
+//TODO:[issue#4] rename and use this after bitcoin cash fork
 // calcWitnessSignatureHash computes the sighash digest of a transaction's
 // segwit input using the new, optimized digest calculation algorithm defined
 // in BIP0143: https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki.
@@ -485,7 +394,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	binary.LittleEndian.PutUint32(bIndex[:], txIn.PreviousOutPoint.Index)
 	sigHash.Write(bIndex[:])
 
-	if isWitnessPubKeyHash(subScript) {
+	/*if isWitnessPubKeyHash(subScript) {
 		// The script code for a p2wkh is a length prefix varint for
 		// the next 25 bytes, followed by a re-creation of the original
 		// p2pkh pk script.
@@ -502,7 +411,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 		// serialized with a var int length prefix.
 		rawScript, _ := unparseScript(subScript)
 		wire.WriteVarBytes(&sigHash, 0, rawScript)
-	}
+	}*/
 
 	// Next, add the input amount, and sequence number of the input being
 	// signed.
@@ -540,6 +449,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	return chainhash.DoubleHashB(sigHash.Bytes()), nil
 }
 
+//TODO:[issue#4] rename and use this after bitcoin cash fork
 // CalcWitnessSigHash computes the sighash digest for the specified input of
 // the target transaction observing the desired sig hash type.
 func CalcWitnessSigHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
@@ -682,8 +592,8 @@ func calcSignatureHash(script []parsedOpcode, hashType SigHashType, tx *wire.Msg
 	// The final hash is the double sha256 of both the serialized modified
 	// transaction and the hash type (encoded as a 4-byte little-endian
 	// value) appended.
-	wbuf := bytes.NewBuffer(make([]byte, 0, txCopy.SerializeSizeStripped()+4))
-	txCopy.SerializeNoWitness(wbuf)
+	wbuf := bytes.NewBuffer(make([]byte, 0, txCopy.SerializeSize()+4))
+	txCopy.Serialize(wbuf)
 	binary.Write(wbuf, binary.LittleEndian, hashType)
 	return chainhash.DoubleHashB(wbuf.Bytes())
 }
@@ -786,65 +696,6 @@ func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, bip16 bool) int {
 	// failure.
 	shPops, _ := parseScript(shScript)
 	return getSigOpCount(shPops, true)
-}
-
-// GetWitnessSigOpCount returns the number of signature operations generated by
-// spending the passed pkScript with the specified witness, or sigScript.
-// Unlike GetPreciseSigOpCount, this function is able to accurately count the
-// number of signature operations generated by spending witness programs, and
-// nested p2sh witness programs. If the script fails to parse, then the count
-// up to the point of failure is returned.
-func GetWitnessSigOpCount(sigScript, pkScript []byte, witness wire.TxWitness) int {
-	// If this is a regular witness program, then we can proceed directly
-	// to counting its signature operations without any further processing.
-	if IsWitnessProgram(pkScript) {
-		return getWitnessSigOps(pkScript, witness)
-	}
-
-	// Next, we'll check the sigScript to see if this is a nested p2sh
-	// witness program. This is a case wherein the sigScript is actually a
-	// datapush of a p2wsh witness program.
-	sigPops, err := parseScript(sigScript)
-	if err != nil {
-		return 0
-	}
-	if IsPayToScriptHash(pkScript) && isPushOnly(sigPops) &&
-		IsWitnessProgram(sigScript[1:]) {
-		return getWitnessSigOps(sigScript[1:], witness)
-	}
-
-	return 0
-}
-
-// getWitnessSigOps returns the number of signature operations generated by
-// spending the passed witness program wit the passed witness. The exact
-// signature counting heuristic is modified by the version of the passed
-// witness program. If the version of the witness program is unable to be
-// extracted, then 0 is returned for the sig op count.
-func getWitnessSigOps(pkScript []byte, witness wire.TxWitness) int {
-	// Attempt to extract the witness program version.
-	witnessVersion, witnessProgram, err := ExtractWitnessProgramInfo(
-		pkScript,
-	)
-	if err != nil {
-		return 0
-	}
-
-	switch witnessVersion {
-	case 0:
-		switch {
-		case len(witnessProgram) == payToWitnessPubKeyHashDataSize:
-			return 1
-		case len(witnessProgram) == payToWitnessScriptHashDataSize &&
-			len(witness) > 0:
-
-			witnessScript := witness[len(witness)-1]
-			pops, _ := parseScript(witnessScript)
-			return getSigOpCount(pops, true)
-		}
-	}
-
-	return 0
 }
 
 // IsUnspendable returns whether the passed public key script is unspendable, or
