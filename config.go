@@ -49,6 +49,7 @@ const (
 	defaultDbType                = "ffldb"
 	defaultFreeTxRelayLimit      = 15.0
 	defaultTrickleInterval       = peer.DefaultTrickleInterval
+	defaultExcessiveBlockSize    = 32000000
 	defaultBlockMinSize          = 0
 	defaultBlockMaxSize          = 750000
 	blockMaxSizeMin              = 1000
@@ -84,6 +85,16 @@ func minUint32(a, b uint32) uint32 {
 	}
 	return b
 }
+
+// maxUint32 is a helper function to return the maximum of two uint32s.
+// This avoids a math import and the need to cast to floats.
+func maxUint32(a, b uint32) uint32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 
 // config defines the configuration options for bchd.
 //
@@ -135,6 +146,7 @@ type config struct {
 	CPUProfile           string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel           string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                 bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
+	ExcessiveBlockSize   uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept. Cannot be less than 32000000."`
 	MinRelayTxFee        float64       `long:"minrelaytxfee" description:"The minimum transaction fee in BCH/kB to be considered a non-zero fee."`
 	FreeTxRelayLimit     float64       `long:"limitfreerelay" description:"Limit relay of transactions with no transaction fee to the given amount in thousands of bytes per minute"`
 	NoRelayPriority      bool          `long:"norelaypriority" description:"Do not require free or low-fee transactions to have high priority for relaying"`
@@ -410,6 +422,7 @@ func loadConfig() (*config, []string, error) {
 		DbType:               defaultDbType,
 		RPCKey:               defaultRPCKeyFile,
 		RPCCert:              defaultRPCCertFile,
+		ExcessiveBlockSize:   defaultExcessiveBlockSize,
 		MinRelayTxFee:        mempool.DefaultMinRelayTxFee.ToBCH(),
 		FreeTxRelayLimit:     defaultFreeTxRelayLimit,
 		TrickleInterval:      defaultTrickleInterval,
@@ -776,6 +789,9 @@ func loadConfig() (*config, []string, error) {
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
 	}
+
+	// Excessive blocksize cannot be set less than the default but it can be higher.
+	cfg.ExcessiveBlockSize = maxUint32(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
 
 	// Limit the block priority and minimum block sizes to max block size.
 	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
