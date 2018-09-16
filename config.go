@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/btcsuite/go-socks/socks"
-	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/connmgr"
@@ -53,7 +52,7 @@ const (
 	defaultBlockMinSize          = 0
 	defaultBlockMaxSize          = 750000
 	blockMaxSizeMin              = 1000
-	blockMaxSizeMax              = blockchain.MaxBlockSize - 1000
+	blockMaxSizeMax              = defaultExcessiveBlockSize - 1000
 	defaultGenerate              = false
 	defaultMaxOrphanTransactions = 100
 	defaultMaxOrphanTxSize       = 100000
@@ -94,7 +93,6 @@ func maxUint32(a, b uint32) uint32 {
 	}
 	return b
 }
-
 
 // config defines the configuration options for bchd.
 //

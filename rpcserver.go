@@ -335,6 +335,8 @@ type gbtWorkState struct {
 	template      *mining.BlockTemplate
 	notifyMap     map[chainhash.Hash]map[int64]chan struct{}
 	timeSource    blockchain.MedianTimeSource
+	maxSigOps     uint32
+	maxBlockSize  uint32
 }
 
 // newGbtWorkState returns a new instance of a gbtWorkState with all internal
@@ -1712,8 +1714,8 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		CurTime:      header.Timestamp.Unix(),
 		Height:       int64(template.Height),
 		PreviousHash: header.PrevBlock.String(),
-		SigOpLimit:   blockchain.MaxBlockSigOps,
-		SizeLimit:    blockchain.MaxBlockSize,
+		SigOpLimit:   int64(template.MaxSigOps),
+		SizeLimit:    int64(template.MaxBlockSize),
 		Transactions: transactions,
 		Version:      header.Version,
 		LongPollID:   templateID,

@@ -42,24 +42,19 @@ const (
 	// value is halved every SubsidyHalvingInterval blocks.
 	baseSubsidy = 50 * bchutil.SatoshiPerBitcoin
 
-	// MaxBlockSize is the maximum number of bytes within a block
-	// which can be allocated to non-witness data.
-	MaxBlockSize = 1000000
+	// LegacyMaxBlockSize is the maximum number of bytes allowed in a block
+	// prior to the August 1st, 2018 UAHF hardfork
+	LegacyMaxBlockSize = 1000000
 
 	// The maximum number of allowed sigops allowed per one megabyte
 	// allowed in a block
 	MaxBlockSigOpsPerMB = 20000
-
-	MaxBlockSigOps = (MaxBlockSize / 1000000) * MaxBlockSigOpsPerMB
 
 	// The maximum allowable size of a transaction
 	MaxTransactionSize = 1000000
 
 	// The maximum allowable number of sigops per transaction
 	MaxTransactionSigOps = 20000
-
-	// The absolute most outputs we can fit in a block
-	MaxOutputsPerBlock = MaxBlockSize / wire.MinTxOutPayload
 )
 
 var (
@@ -78,6 +73,36 @@ var (
 	// avoid the need to create a new instance every time a check is needed.
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
+
+// Returns the is the maximum number of bytes allowed in a block.
+// If the UAHF hardfork is active the returned value is the excessive
+// blocksize. Otherwise it's the legacy blocksize.
+func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
+	if uahfActive {
+		return int(b.excessiveBlockSize)
+	}
+	return LegacyMaxBlockSize
+}
+
+// Returns the maximum allowable number of signature operations per block.
+// If the UAHF hardfork is active the returned value is a function
+// of the excessive blocksize. Otherwise it's a function of the
+// legacy blocksize.
+func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
+	limit := LegacyMaxBlockSize
+	if uahfActive {
+		limit = int(b.excessiveBlockSize)
+	}
+	return (limit / 1000000) * MaxBlockSigOpsPerMB
+}
+
+// getMaxOutputsPerBlock returns the maximum possible number of outputs
+// in a block based on the excessiveBlockSize Settings. This is only used
+// by the UtxoViewPoint to limit the number of iterations performed
+// when searching for a Utxo via a txid.
+func (b *BlockChain) MaxOutputsPerBlock() uint32 {
+	return b.excessiveBlockSize / wire.MinTxOutPayload
+}
 
 // isNullOutpoint determines whether or not a previous transaction output point
 // is set.
@@ -519,23 +544,6 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 			"any transactions")
 	}
 
-	// A block must not have more transactions than the max block payload or
-	// else it is certainly over the size limit.
-	if numTx > MaxBlockSize {
-		str := fmt.Sprintf("block contains too many transactions - "+
-			"got %d, max %d", numTx, MaxBlockSize)
-		return ruleError(ErrBlockTooBig, str)
-	}
-
-	// A block must not exceed the maximum allowed block payload when
-	// serialized.
-	serializedSize := msgBlock.SerializeSize()
-	if serializedSize > MaxBlockSize {
-		str := fmt.Sprintf("serialized block is too big - got %d, "+
-			"max %d", serializedSize, MaxBlockSize)
-		return ruleError(ErrBlockTooBig, str)
-	}
-
 	// The first transaction in a block must be a coinbase.
 	transactions := block.Transactions()
 	if !IsCoinBase(transactions[0]) {
@@ -588,22 +596,6 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 			return ruleError(ErrDuplicateTx, str)
 		}
 		existingTxHashes[*hash] = struct{}{}
-	}
-
-	// The number of signature operations must be less than the maximum
-	// allowed per block.
-	totalSigOps := 0
-	for _, tx := range transactions {
-		// We could potentially overflow the accumulator so check for
-		// overflow.
-		lastSigOps := totalSigOps
-		totalSigOps += CountSigOps(tx)
-		if totalSigOps < lastSigOps || totalSigOps > MaxBlockSigOps {
-			str := fmt.Sprintf("block contains too many signature "+
-				"operations - got %v, max %v", totalSigOps,
-				MaxBlockSigOps)
-			return ruleError(ErrTooManySigOps, str)
-		}
 	}
 
 	return nil
@@ -1012,6 +1004,33 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			"of expected %v", view.BestHash(), parentHash))
 	}
 
+	// If Uahf is active then we need to calculate the max block size
+	// and max sigops using the excessiveBlockSize rather than the
+	// LegacyBlockSize
+	uahfActive := node.height >= b.chainParams.UahfForkHeight
+
+	// A block must not have more transactions than the max block payload or
+	// else it is certainly over the size limit.
+	// We need to check the blocksize here rather than in checkBlockSanity
+	// because after the Uahf activation it is not longer context free as
+	// the max size depends on whether Uahf has activated or not.
+	maxBlockSize := b.MaxBlockSize(uahfActive)
+	numTx := len(block.MsgBlock().Transactions)
+	if numTx > maxBlockSize {
+		str := fmt.Sprintf("block contains too many transactions - "+
+			"got %d, max %d", numTx, maxBlockSize)
+		return ruleError(ErrBlockTooBig, str)
+	}
+
+	// A block must not exceed the maximum allowed block payload when
+	// serialized.
+	serializedSize := block.MsgBlock().SerializeSize()
+	if serializedSize > maxBlockSize {
+		str := fmt.Sprintf("serialized block is too big - got %d, "+
+			"max %d", serializedSize, maxBlockSize)
+		return ruleError(ErrBlockTooBig, str)
+	}
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1075,10 +1094,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// this on every loop iteration to avoid overflow.
 		lastSigOpCost := totalSigOpCost
 		totalSigOpCost += sigOpCost
-		if totalSigOpCost < lastSigOpCost || totalSigOpCost > MaxBlockSigOps {
+		maxSigOps := b.MaxBlockSigOps(uahfActive)
+		if totalSigOpCost < lastSigOpCost || totalSigOpCost > maxSigOps {
 			str := fmt.Sprintf("block contains too many "+
 				"signature operations - got %v, max %v",
-				totalSigOpCost, MaxBlockSigOps)
+				totalSigOpCost, maxSigOps)
 			return ruleError(ErrTooManySigOps, str)
 		}
 	}
@@ -1259,7 +1279,7 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 
 	// Leave the spent txouts entry nil in the state since the information
 	// is not needed and thus extra work can be avoided.
-	view := NewUtxoViewpoint()
+	view := NewUtxoViewpoint(b.MaxOutputsPerBlock())
 	view.SetBestHash(&tip.hash)
 	newNode := newBlockNode(&header, tip)
 	return b.checkConnectBlock(newNode, block, view, nil)

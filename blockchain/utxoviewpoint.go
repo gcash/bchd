@@ -119,8 +119,9 @@ func (entry *UtxoEntry) Clone() *UtxoEntry {
 // The unspent outputs are needed by other transactions for things such as
 // script validation and double spend prevention.
 type UtxoViewpoint struct {
-	entries  map[wire.OutPoint]*UtxoEntry
-	bestHash chainhash.Hash
+	entries            map[wire.OutPoint]*UtxoEntry
+	bestHash           chainhash.Hash
+	maxOutputsPerBlock uint32
 }
 
 // BestHash returns the hash of the best block in the chain the view currently
@@ -284,7 +285,7 @@ func (view *UtxoViewpoint) connectTransactions(block *bchutil.Block, stxos *[]Sp
 func (view *UtxoViewpoint) fetchEntryByHash(db database.DB, hash *chainhash.Hash) (*UtxoEntry, error) {
 	// First attempt to find a utxo with the provided hash in the view.
 	prevOut := wire.OutPoint{Hash: *hash}
-	for idx := uint32(0); idx < MaxOutputsPerBlock; idx++ {
+	for idx := uint32(0); idx < view.maxOutputsPerBlock; idx++ {
 		prevOut.Index = idx
 		entry := view.LookupEntry(prevOut)
 		if entry != nil {
@@ -577,9 +578,10 @@ func (view *UtxoViewpoint) fetchInputUtxos(db database.DB, block *bchutil.Block)
 }
 
 // NewUtxoViewpoint returns a new empty unspent transaction output view.
-func NewUtxoViewpoint() *UtxoViewpoint {
+func NewUtxoViewpoint(maxOutputsPerBlock uint32) *UtxoViewpoint {
 	return &UtxoViewpoint{
-		entries: make(map[wire.OutPoint]*UtxoEntry),
+		entries:            make(map[wire.OutPoint]*UtxoEntry),
+		maxOutputsPerBlock: maxOutputsPerBlock,
 	}
 }
 
@@ -607,7 +609,7 @@ func (b *BlockChain) FetchUtxoView(tx *bchutil.Tx) (*UtxoViewpoint, error) {
 
 	// Request the utxos from the point of view of the end of the main
 	// chain.
-	view := NewUtxoViewpoint()
+	view := NewUtxoViewpoint(b.MaxOutputsPerBlock())
 	b.chainLock.RLock()
 	err := view.fetchUtxosMain(b.db, neededSet)
 	b.chainLock.RUnlock()
