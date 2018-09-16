@@ -81,13 +81,12 @@ const (
 	// network magic than Bitcoin Core so connections should not be possible.
 	SFNodeBitcoinCash
 
+	// SFNodeGraphene is a flag used to indicate a peer supports graphene block relay.
+	SFNodeGraphene
+
 	// SFNodeCF is a flag used to indicate a peer supports committed
 	// filters (CFs).
 	SFNodeCF
-
-	// SFNode2X is a flag used to indicate a peer is running the Segwit2X
-	// software.
-	SFNode2X
 )
 
 // Map of service flags back to their constant names for pretty printing.
@@ -98,8 +97,8 @@ var sfStrings = map[ServiceFlag]string{
 	SFNodeWitness:     "SFNodeWitness",
 	SFNodeXthin:       "SFNodeXthin",
 	SFNodeBitcoinCash: "SFNodeBitcoinCash",
+	SFNodeGraphene:    "SFNodeGraphene",
 	SFNodeCF:          "SFNodeCF",
-	SFNode2X:          "SFNode2X",
 }
 
 // orderedSFStrings is an ordered list of service flags from highest to
@@ -111,8 +110,8 @@ var orderedSFStrings = []ServiceFlag{
 	SFNodeWitness,
 	SFNodeXthin,
 	SFNodeBitcoinCash,
+	SFNodeGraphene,
 	SFNodeCF,
-	SFNode2X,
 }
 
 // String returns the ServiceFlag in human-readable form.

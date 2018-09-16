@@ -23,8 +23,7 @@ const defaultTransactionAlloc = 2048
 const MaxBlocksPerMsg = 500
 
 // MaxBlockPayload is the maximum bytes a block message can be in bytes.
-// After Segregated Witness, the max block payload has been raised to 4MB.
-const MaxBlockPayload = 4000000
+const MaxBlockPayload = 32000000
 
 // maxTxPerBlock is the maximum number of transactions that could
 // possibly fit into a block.
@@ -107,18 +106,6 @@ func (msg *MsgBlock) Deserialize(r io.Reader) error {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
 	// a result, make use of BchDecode.
-	//
-	// Passing an encoding type of WitnessEncoding to BchEncode for the
-	// MessageEncoding parameter indicates that the transactions within the
-	// block are expected to be serialized according to the new
-	// serialization structure defined in BIP0141.
-	return msg.BchDecode(r, 0, WitnessEncoding)
-}
-
-// DeserializeNoWitness decodes a block from r into the receiver similar to
-// Deserialize, however DeserializeWitness strips all (if any) witness data
-// from the transactions within the block before encoding them.
-func (msg *MsgBlock) DeserializeNoWitness(r io.Reader) error {
 	return msg.BchDecode(r, 0, BaseEncoding)
 }
 
@@ -207,19 +194,6 @@ func (msg *MsgBlock) Serialize(w io.Writer) error {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
 	// a result, make use of BchEncode.
-	//
-	// Passing WitnessEncoding as the encoding type here indicates that
-	// each of the transactions should be serialized using the witness
-	// serialization structure defined in BIP0141.
-	return msg.BchEncode(w, 0, WitnessEncoding)
-}
-
-// SerializeNoWitness encodes a block to w using an identical format to
-// Serialize, with all (if any) witness data stripped from all transactions.
-// This method is provided in additon to the regular Serialize, in order to
-// allow one to selectively encode transaction witness data to non-upgraded
-// peers which are unaware of the new encoding.
-func (msg *MsgBlock) SerializeNoWitness(w io.Writer) error {
 	return msg.BchEncode(w, 0, BaseEncoding)
 }
 
@@ -232,20 +206,6 @@ func (msg *MsgBlock) SerializeSize() int {
 
 	for _, tx := range msg.Transactions {
 		n += tx.SerializeSize()
-	}
-
-	return n
-}
-
-// SerializeSizeStripped returns the number of bytes it would take to serialize
-// the block, excluding any witness data (if any).
-func (msg *MsgBlock) SerializeSizeStripped() int {
-	// Block header bytes + Serialized varint size for the number of
-	// transactions.
-	n := blockHeaderLen + VarIntSerializeSize(uint64(len(msg.Transactions)))
-
-	for _, tx := range msg.Transactions {
-		n += tx.SerializeSizeStripped()
 	}
 
 	return n

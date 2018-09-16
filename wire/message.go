@@ -66,16 +66,11 @@ const (
 	// BaseEncoding encodes all messages in the default format specified
 	// for the Bitcoin wire protocol.
 	BaseEncoding MessageEncoding = 1 << iota
-
-	// WitnessEncoding encodes all messages other than transaction messages
-	// using the default Bitcoin wire protocol specification. For transaction
-	// messages, the new encoding format detailed in BIP0144 will be used.
-	WitnessEncoding
 )
 
 // LatestEncoding is the most recently specified encoding for the Bitcoin wire
 // protocol.
-var LatestEncoding = WitnessEncoding
+var LatestEncoding = BaseEncoding
 
 // Message is an interface that describes a bitcoin message.  A type that
 // implements Message has complete control over the representation of its data

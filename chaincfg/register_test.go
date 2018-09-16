@@ -13,13 +13,13 @@ import (
 // network.  This is necessary to test the registration of and
 // lookup of encoding magics from the network.
 var mockNetParams = Params{
-	Name:             "mocknet",
-	Net:              1<<32 - 1,
-	PubKeyHashAddrID: 0x9f,
-	ScriptHashAddrID: 0xf9,
-	Bech32HRPSegwit:  "tc",
-	HDPrivateKeyID:   [4]byte{0x01, 0x02, 0x03, 0x04},
-	HDPublicKeyID:    [4]byte{0x05, 0x06, 0x07, 0x08},
+	Name: "mocknet",
+	Net:  1<<32 - 1,
+	LegacyPubKeyHashAddrID: 0x9f,
+	LegacyScriptHashAddrID: 0xf9,
+	HDPrivateKeyID:         [4]byte{0x01, 0x02, 0x03, 0x04},
+	HDPublicKeyID:          [4]byte{0x05, 0x06, 0x07, 0x08},
+	CashAddressPrefix:      "bchmock",
 }
 
 func TestRegister(t *testing.T) {
@@ -43,12 +43,12 @@ func TestRegister(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		register       []registerTest
-		p2pkhMagics    []magicTest
-		p2shMagics     []magicTest
-		segwitPrefixes []prefixTest
-		hdMagics       []hdTest
+		name             string
+		register         []registerTest
+		p2pkhMagics      []magicTest
+		p2shMagics       []magicTest
+		cashAddrPrefixes []prefixTest
+		hdMagics         []hdTest
 	}{
 		{
 			name: "default networks",
@@ -76,23 +76,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2pkhMagics: []magicTest{
 				{
-					magic: MainNetParams.PubKeyHashAddrID,
+					magic: MainNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.PubKeyHashAddrID,
+					magic: TestNet3Params.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.PubKeyHashAddrID,
+					magic: RegressionNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.PubKeyHashAddrID,
+					magic: SimNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.PubKeyHashAddrID,
+					magic: mockNetParams.LegacyPubKeyHashAddrID,
 					valid: false,
 				},
 				{
@@ -102,23 +102,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2shMagics: []magicTest{
 				{
-					magic: MainNetParams.ScriptHashAddrID,
+					magic: MainNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.ScriptHashAddrID,
+					magic: TestNet3Params.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.ScriptHashAddrID,
+					magic: RegressionNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.ScriptHashAddrID,
+					magic: SimNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.ScriptHashAddrID,
+					magic: mockNetParams.LegacyScriptHashAddrID,
 					valid: false,
 				},
 				{
@@ -126,29 +126,29 @@ func TestRegister(t *testing.T) {
 					valid: false,
 				},
 			},
-			segwitPrefixes: []prefixTest{
+			cashAddrPrefixes: []prefixTest{
 				{
-					prefix: MainNetParams.Bech32HRPSegwit + "1",
+					prefix: MainNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: TestNet3Params.Bech32HRPSegwit + "1",
+					prefix: TestNet3Params.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: RegressionNetParams.Bech32HRPSegwit + "1",
+					prefix: RegressionNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: SimNetParams.Bech32HRPSegwit + "1",
+					prefix: SimNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: strings.ToUpper(MainNetParams.Bech32HRPSegwit + "1"),
+					prefix: strings.ToUpper(MainNetParams.CashAddressPrefix + ":"),
 					valid:  true,
 				},
 				{
-					prefix: mockNetParams.Bech32HRPSegwit + "1",
+					prefix: mockNetParams.CashAddressPrefix + ":",
 					valid:  false,
 				},
 				{
@@ -160,7 +160,7 @@ func TestRegister(t *testing.T) {
 					valid:  false,
 				},
 				{
-					prefix: MainNetParams.Bech32HRPSegwit,
+					prefix: MainNetParams.CashAddressPrefix,
 					valid:  false,
 				},
 			},
@@ -210,23 +210,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2pkhMagics: []magicTest{
 				{
-					magic: MainNetParams.PubKeyHashAddrID,
+					magic: MainNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.PubKeyHashAddrID,
+					magic: TestNet3Params.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.PubKeyHashAddrID,
+					magic: RegressionNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.PubKeyHashAddrID,
+					magic: SimNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.PubKeyHashAddrID,
+					magic: mockNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
@@ -236,23 +236,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2shMagics: []magicTest{
 				{
-					magic: MainNetParams.ScriptHashAddrID,
+					magic: MainNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.ScriptHashAddrID,
+					magic: TestNet3Params.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.ScriptHashAddrID,
+					magic: RegressionNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.ScriptHashAddrID,
+					magic: SimNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.ScriptHashAddrID,
+					magic: mockNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
@@ -260,29 +260,29 @@ func TestRegister(t *testing.T) {
 					valid: false,
 				},
 			},
-			segwitPrefixes: []prefixTest{
+			cashAddrPrefixes: []prefixTest{
 				{
-					prefix: MainNetParams.Bech32HRPSegwit + "1",
+					prefix: MainNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: TestNet3Params.Bech32HRPSegwit + "1",
+					prefix: TestNet3Params.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: RegressionNetParams.Bech32HRPSegwit + "1",
+					prefix: RegressionNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: SimNetParams.Bech32HRPSegwit + "1",
+					prefix: SimNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: strings.ToUpper(MainNetParams.Bech32HRPSegwit + "1"),
+					prefix: strings.ToUpper(MainNetParams.CashAddressPrefix + ":"),
 					valid:  true,
 				},
 				{
-					prefix: mockNetParams.Bech32HRPSegwit + "1",
+					prefix: mockNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
@@ -294,7 +294,7 @@ func TestRegister(t *testing.T) {
 					valid:  false,
 				},
 				{
-					prefix: MainNetParams.Bech32HRPSegwit,
+					prefix: MainNetParams.CashAddressPrefix,
 					valid:  false,
 				},
 			},
@@ -337,23 +337,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2pkhMagics: []magicTest{
 				{
-					magic: MainNetParams.PubKeyHashAddrID,
+					magic: MainNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.PubKeyHashAddrID,
+					magic: TestNet3Params.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.PubKeyHashAddrID,
+					magic: RegressionNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.PubKeyHashAddrID,
+					magic: SimNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.PubKeyHashAddrID,
+					magic: mockNetParams.LegacyPubKeyHashAddrID,
 					valid: true,
 				},
 				{
@@ -363,23 +363,23 @@ func TestRegister(t *testing.T) {
 			},
 			p2shMagics: []magicTest{
 				{
-					magic: MainNetParams.ScriptHashAddrID,
+					magic: MainNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: TestNet3Params.ScriptHashAddrID,
+					magic: TestNet3Params.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: RegressionNetParams.ScriptHashAddrID,
+					magic: RegressionNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: SimNetParams.ScriptHashAddrID,
+					magic: SimNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
-					magic: mockNetParams.ScriptHashAddrID,
+					magic: mockNetParams.LegacyScriptHashAddrID,
 					valid: true,
 				},
 				{
@@ -387,29 +387,29 @@ func TestRegister(t *testing.T) {
 					valid: false,
 				},
 			},
-			segwitPrefixes: []prefixTest{
+			cashAddrPrefixes: []prefixTest{
 				{
-					prefix: MainNetParams.Bech32HRPSegwit + "1",
+					prefix: MainNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: TestNet3Params.Bech32HRPSegwit + "1",
+					prefix: TestNet3Params.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: RegressionNetParams.Bech32HRPSegwit + "1",
+					prefix: RegressionNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: SimNetParams.Bech32HRPSegwit + "1",
+					prefix: SimNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
-					prefix: strings.ToUpper(MainNetParams.Bech32HRPSegwit + "1"),
+					prefix: strings.ToUpper(MainNetParams.CashAddressPrefix + ":"),
 					valid:  true,
 				},
 				{
-					prefix: mockNetParams.Bech32HRPSegwit + "1",
+					prefix: mockNetParams.CashAddressPrefix + ":",
 					valid:  true,
 				},
 				{
@@ -421,7 +421,7 @@ func TestRegister(t *testing.T) {
 					valid:  false,
 				},
 				{
-					prefix: MainNetParams.Bech32HRPSegwit,
+					prefix: MainNetParams.CashAddressPrefix,
 					valid:  false,
 				},
 			},
@@ -485,8 +485,8 @@ func TestRegister(t *testing.T) {
 					test.name, i, valid, magTest.valid)
 			}
 		}
-		for i, prxTest := range test.segwitPrefixes {
-			valid := IsBech32SegwitPrefix(prxTest.prefix)
+		for i, prxTest := range test.cashAddrPrefixes {
+			valid := IsCashAddressPrefix(prxTest.prefix)
 			if valid != prxTest.valid {
 				t.Errorf("%s: segwit prefix %s (%d) valid mismatch: got %v expected %v",
 					test.name, prxTest.prefix, i, valid, prxTest.valid)
