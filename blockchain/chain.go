@@ -1729,6 +1729,10 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, AssertError("blockchain.New excessive block size set lower than LegacyBlockSize")
 	}
 
+	// Set the MaxMessagePayload size in the wire package based on the excessive block configuration
+	// The default is set to 64MB but should go higher if the user enters a larger ExcessiveBlockSize
+	wire.MaxMessagePayload = ((config.ExcessiveBlockSize / 1000000) * 1024 * 1024) * 2
+
 	// Generate a checkpoint by height map from the provided checkpoints
 	// and assert the provided checkpoints are sorted by height as required.
 	var checkpointsByHeight map[int32]*chaincfg.Checkpoint

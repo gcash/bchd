@@ -24,7 +24,7 @@ const CommandSize = 12
 
 // MaxMessagePayload is the maximum bytes a message can be regardless of other
 // individual limits imposed by messages themselves.
-const MaxMessagePayload = (1024 * 1024 * 32) // 32MB
+var MaxMessagePayload = uint32(1024 * 1024 * 32) * 2// 32MB
 
 // Commands used in bitcoin message headers which describe the type of message.
 const (
@@ -280,7 +280,7 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	lenp := len(payload)
 
 	// Enforce maximum overall message payload.
-	if lenp > MaxMessagePayload {
+	if lenp > int(MaxMessagePayload) {
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload is %d bytes",
 			lenp, MaxMessagePayload)
