@@ -74,6 +74,10 @@ const (
 	// ScriptVerifyStrictEncoding defines that signature scripts and
 	// public keys must follow the strict encoding requirements.
 	ScriptVerifyStrictEncoding
+
+	// ScriptVerifyBip43SigHash defines that signature hashes should
+	// be calculated using the bip0143 signature hashing algorithm.
+	ScriptVerifyBip143SigHash
 )
 
 const (
@@ -104,6 +108,7 @@ type Engine struct {
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
 	bip16           bool     // treat execution as pay-to-script-hash
+	uahf            bool
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
 }
@@ -409,6 +414,11 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 		return nil
 	}
 
+	if vm.uahf && hashType&SigHashForkID != SigHashForkID{
+		str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
+		return scriptError(ErrInvalidSigHashType, str)
+	}
+
 	sigHashType := hashType & ^SigHashAnyOneCanPay
 	if sigHashType < SigHashAll || sigHashType > SigHashSingle {
 		str := fmt.Sprintf("invalid hash type 0x%x", hashType)
@@ -711,6 +721,10 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	if vm.hasFlag(ScriptVerifyMinimalData) {
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true
+	}
+
+	if vm.hasFlag(ScriptVerifyBip143SigHash) {
+		vm.uahf = true
 	}
 
 	vm.tx = *tx

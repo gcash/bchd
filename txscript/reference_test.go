@@ -758,7 +758,7 @@ func TestCalcSignatureHash(t *testing.T) {
 			// Skip first line -- contains comments only.
 			continue
 		}
-		if len(test) != 5 {
+		if len(test) != 7 {
 			t.Fatalf("TestCalcSignatureHash: Test #%d has "+
 				"wrong length.", i)
 		}
@@ -780,12 +780,30 @@ func TestCalcSignatureHash(t *testing.T) {
 		}
 
 		hashType := SigHashType(testVecF64ToUint32(test[3].(float64)))
-		hash := calcSignatureHash(parsedScript, hashType, &tx,
+		var hash []byte
+		hash, err = calcLegacySignatureHash(parsedScript, hashType, &tx,
 			int(test[2].(float64)))
-
-		expectedHash, _ := chainhash.NewHashFromStr(test[4].(string))
+		if err != nil {
+			t.Errorf("TestCalcLegacySignatureHash failed test #%d: "+
+				"calcLegacySignatureHash returned error: %v", i, err)
+			continue
+		}
+		expectedHash, _ := chainhash.NewHashFromStr(test[5].(string))
 		if !bytes.Equal(hash, expectedHash[:]) {
-			t.Errorf("TestCalcSignatureHash failed test #%d: "+
+			t.Errorf("TestCalcLegacySignatureHash failed test #%d: "+
+				"Signature hash mismatch.", i)
+		}
+		sigHashes := NewTxSigHashes(&tx)
+		hash, err = calcBip143SignatureHash(parsedScript, sigHashes, hashType, &tx,
+			int(test[2].(float64)), 0)
+		if err != nil {
+			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+
+				"calcLegacySignatureHash returned error: %v", i, err)
+			continue
+		}
+		expectedHash, _ = chainhash.NewHashFromStr(test[6].(string))
+		if !bytes.Equal(hash, expectedHash[:]) {
+			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+
 				"Signature hash mismatch.", i)
 		}
 	}

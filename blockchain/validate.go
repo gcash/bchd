@@ -1198,6 +1198,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptVerifyCheckLockTimeVerify
 	}
 
+	// If Uahf is active we must enforce strict encoding on all signatures
+	if node.height >= b.chainParams.UahfForkHeight {
+		scriptFlags |= txscript.ScriptVerifyStrictEncoding
+	}
+
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
 	// the soft-fork deployment is fully active.
 	csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
