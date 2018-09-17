@@ -1659,7 +1659,7 @@ nexttest:
 			} else {
 				idx = j
 			}
-			script, err = SignatureScript(tx, idx,0,
+			script, err = SignatureScript(tx, idx, 0,
 				sigScriptTests[i].inputs[j].txout.PkScript,
 				sigScriptTests[i].hashType, privKey,
 				sigScriptTests[i].compress)

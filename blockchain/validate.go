@@ -674,13 +674,17 @@ func checkSerializedHeight(coinbaseTx *bchutil.Tx, wantHeight int32) error {
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode *blockNode, flags BehaviorFlags) error {
+	// The height of this block is one more than the referenced previous
+	// block.
+	blockHeight := prevNode.height + 1
+
 	fastAdd := flags&BFFastAdd == BFFastAdd
 	if !fastAdd {
 		// Ensure the difficulty specified in the block header matches
 		// the calculated difficulty based on the previous block and
 		// difficulty retarget rules.
 		expectedDifficulty, err := b.calcNextRequiredDifficulty(prevNode,
-			header.Timestamp)
+			header.Timestamp, b.SelectDifficultyAdjustmentAlgorithm(blockHeight))
 		if err != nil {
 			return err
 		}
@@ -700,10 +704,6 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 			return ruleError(ErrTimeTooOld, str)
 		}
 	}
-
-	// The height of this block is one more than the referenced previous
-	// block.
-	blockHeight := prevNode.height + 1
 
 	// Ensure chain matches up to predetermined checkpoints.
 	blockHash := header.BlockHash()

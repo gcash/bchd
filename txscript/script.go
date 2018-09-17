@@ -546,7 +546,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	var bIndex [4]byte
 	binary.LittleEndian.PutUint32(bIndex[:], tx.TxIn[idx].PreviousOutPoint.Index)
 	sigHash.Write(bIndex[:])
-	
+
 	scriptBytes, _ := unparseScript(subScript)
 
 	wire.WriteVarBytes(&sigHash, 0, scriptBytes)

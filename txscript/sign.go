@@ -37,6 +37,24 @@ func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	return append(signature.Serialize(), byte(hashType)), nil
 }
 
+// LegacyTxInSignature generates a signature using the pre-uahf signature
+// hashing algorithm
+func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
+	hashType SigHashType, key *bchec.PrivateKey) ([]byte, error) {
+
+	script, _ := parseScript(subScript)
+	hash, err := calcLegacySignatureHash(script, hashType, tx, idx)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := key.Sign(hash)
+	if err != nil {
+		return nil, fmt.Errorf("cannot sign tx input: %s", err)
+	}
+
+	return append(signature.Serialize(), byte(hashType)), nil
+}
+
 // SignatureScript creates an input signature script for tx to spend BCH sent
 // from a previous output to the owner of privKey. tx must include all
 // transaction inputs and outputs, however txin scripts are allowed to be filled
@@ -175,7 +193,7 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
 // an error and results in undefined behaviour.
 func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, class ScriptClass, addresses []bchutil.Address, nRequired int,
-		sigScript, prevScript []byte) ([]byte, error) {
+	sigScript, prevScript []byte) ([]byte, error) {
 
 	// TODO: the scripthash and multisig paths here are overly
 	// inefficient in that they will recompute already known data.

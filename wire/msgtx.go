@@ -58,8 +58,6 @@ const (
 	// SignatureScript length 1 byte + Sequence 4 bytes.
 	minTxInPayload = 9 + chainhash.HashSize
 
-
-
 	// MinTxOutPayload is the minimum payload size for a transaction output.
 	// Value 8 bytes + Varint for PkScript length 1 byte.
 	MinTxOutPayload = 9
@@ -97,7 +95,6 @@ var (
 	// maxTxOutPerMessage is the maximum number of transactions outputs that
 	// a transaction which fits into a message could possibly have.
 	maxTxOutPerMessage = (MaxMessagePayload / MinTxOutPayload) + 1
-
 )
 
 // scriptFreeList defines a free list of byte slices (up to the maximum number

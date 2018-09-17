@@ -66,7 +66,6 @@ import (
 //
 // Now we can define bounds on Alert size, SetCancel and SetSubVer
 
-
 const (
 	// Fixed size of the alert payload
 	fixedAlertSize = 45
@@ -77,7 +76,6 @@ const (
 )
 
 var (
-
 
 	// maxCountSetCancel is the maximum number of cancel IDs that could possibly
 	// fit into a maximum size alert.

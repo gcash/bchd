@@ -21,6 +21,38 @@ var (
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 )
 
+// Bitcoin Cash has had three different difficulty adjustment algorithms during
+// its life. What this means for us is our node needs to select which algorithm
+// to use when calculating difficulty based on where it is in the chain.
+//
+// The DifficultyAlgorithm specifies which algorithm to use and is passed into
+// the calcNextRequiredDifficulty function.
+type DifficultyAlgorithm uint32
+
+const (
+	// DifficultyLegacy was in effect from genesis through August 1st, 2017.
+	DifficultyLegacy DifficultyAlgorithm = 0
+
+	// DifficultyEDA (Emergency Difficulty Adjustment) was a short lived changed
+	// right after the August 1st, 2017 hardfork and lasted until November 15th, 2017.
+	DifficultyEDA    DifficultyAlgorithm = 1
+
+	// DifficultyDAA (Difficulty Adjustment Algorithm) is the current Bitcoin Cash
+	// difficulty algorithm in effect since Novemeber 15th, 2017.
+	DifficultyDAA    DifficultyAlgorithm = 2
+)
+
+// SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
+// should be used when validating a block at the given height.
+func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(height int32) DifficultyAlgorithm {
+	if height >= b.chainParams.UahfForkHeight && height < b.chainParams.DaaForkHeight {
+		return DifficultyEDA
+	} else if height >= b.chainParams.DaaForkHeight {
+		return DifficultyDAA
+	}
+	return DifficultyLegacy
+}
+
 // HashToBig converts a chainhash.Hash into a big.Int that can be used to
 // perform math comparisons.
 func HashToBig(hash *chainhash.Hash) *big.Int {
@@ -218,7 +250,7 @@ func (b *BlockChain) findPrevTestNetDifficulty(startNode *blockNode) uint32 {
 // This function differs from the exported CalcNextRequiredDifficulty in that
 // the exported version uses the current best chain as the previous block node
 // while this function accepts any block node.
-func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTime time.Time) (uint32, error) {
+func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTime time.Time, algorithm DifficultyAlgorithm) (uint32, error) {
 	// Genesis block.
 	if lastNode == nil {
 		return b.chainParams.PowLimitBits, nil
@@ -244,6 +276,43 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 			// return the difficulty for the last block which did
 			// not have the special minimum difficulty rule applied.
 			return b.findPrevTestNetDifficulty(lastNode), nil
+		}
+
+		// If we're using the EDA check if we need to perform an emergency
+		// difficulty adjustment
+		if algorithm == DifficultyEDA {
+			// We can't go bellow the minimum, so early bail.
+			oldTarget := CompactToBig(lastNode.bits)
+			if oldTarget.Cmp(b.chainParams.PowLimit) == 0 {
+				return BigToCompact(b.chainParams.PowLimit), nil
+			}
+			// If producing the last 6 block took less than 12h, we keep the same
+			// difficulty.
+			firstNode := lastNode.RelativeAncestor(6)
+			if firstNode == nil {
+				return 0, AssertError("unable to obtain previous retarget block")
+			}
+			mtp6Blocks := lastNode.CalcPastMedianTime().Sub(firstNode.CalcPastMedianTime())
+			if mtp6Blocks >= 12 * time.Hour {
+				// If producing the last 6 block took more than 12h, increase the difficulty
+				// target by 1/4 (which reduces the difficulty by 20%). This ensure the
+				// chain do not get stuck in case we lose hashrate abruptly.
+				nPow := CompactToBig(lastNode.bits)
+				shft := new(big.Int).Rsh(nPow, 2)
+				nPow.Add(nPow, shft)
+
+				// Make sure it doesn't go over limit
+				if nPow.Cmp(b.chainParams.PowLimit) > 0 {
+					return BigToCompact(b.chainParams.PowLimit), nil
+				}
+
+				newTargetBits := BigToCompact(nPow)
+				log.Debugf("Emergency difficulty retarget at block height %d", lastNode.height+1)
+				log.Debugf("Old target %08x (%064x)", lastNode.bits, oldTarget)
+				log.Debugf("New target %08x (%064x)", newTargetBits, CompactToBig(newTargetBits))
+				log.Debugf("Actual mtp time passed %s", mtp6Blocks)
+				return newTargetBits, nil
+			}
 		}
 
 		// For the main network (or any unrecognized networks), simply
@@ -306,7 +375,9 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 // This function is safe for concurrent access.
 func (b *BlockChain) CalcNextRequiredDifficulty(timestamp time.Time) (uint32, error) {
 	b.chainLock.Lock()
-	difficulty, err := b.calcNextRequiredDifficulty(b.bestChain.Tip(), timestamp)
+	tip := b.bestChain.Tip()
+	difficulty, err := b.calcNextRequiredDifficulty(tip, timestamp,
+		b.SelectDifficultyAdjustmentAlgorithm(tip.height))
 	b.chainLock.Unlock()
 	return difficulty, err
 }

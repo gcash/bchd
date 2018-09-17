@@ -107,7 +107,7 @@ type Engine struct {
 	flags           ScriptFlags
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
-	bip16           bool     // treat execution as pay-to-script-hash
+	bip16           bool // treat execution as pay-to-script-hash
 	uahf            bool
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
@@ -414,7 +414,7 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 		return nil
 	}
 
-	if vm.uahf && hashType&SigHashForkID != SigHashForkID{
+	if vm.uahf && hashType&SigHashForkID != SigHashForkID {
 		str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
 		return scriptError(ErrInvalidSigHashType, str)
 	}
