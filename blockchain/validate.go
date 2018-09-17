@@ -763,6 +763,30 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return err
 	}
 
+	uahfActive := block.Height() >= b.chainParams.UahfForkHeight
+
+	// A block must not have more transactions than the max block payload or
+	// else it is certainly over the size limit.
+	// We need to check the blocksize here rather than in checkBlockSanity
+	// because after the Uahf activation it is not longer context free as
+	// the max size depends on whether Uahf has activated or not.
+	maxBlockSize := b.MaxBlockSize(uahfActive)
+	numTx := len(block.MsgBlock().Transactions)
+	if numTx > maxBlockSize {
+		str := fmt.Sprintf("block contains too many transactions - "+
+			"got %d, max %d", numTx, maxBlockSize)
+		return ruleError(ErrBlockTooBig, str)
+	}
+
+	// A block must not exceed the maximum allowed block payload when
+	// serialized.
+	serializedSize := block.MsgBlock().SerializeSize()
+	if serializedSize > maxBlockSize {
+		str := fmt.Sprintf("serialized block is too big - got %d, "+
+			"max %d", serializedSize, maxBlockSize)
+		return ruleError(ErrBlockTooBig, str)
+	}
+
 	fastAdd := flags&BFFastAdd == BFFastAdd
 	if !fastAdd {
 		// Obtain the latest state of the deployed CSV soft-fork in
@@ -1009,28 +1033,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// LegacyBlockSize
 	uahfActive := node.height >= b.chainParams.UahfForkHeight
 
-	// A block must not have more transactions than the max block payload or
-	// else it is certainly over the size limit.
-	// We need to check the blocksize here rather than in checkBlockSanity
-	// because after the Uahf activation it is not longer context free as
-	// the max size depends on whether Uahf has activated or not.
-	maxBlockSize := b.MaxBlockSize(uahfActive)
-	numTx := len(block.MsgBlock().Transactions)
-	if numTx > maxBlockSize {
-		str := fmt.Sprintf("block contains too many transactions - "+
-			"got %d, max %d", numTx, maxBlockSize)
-		return ruleError(ErrBlockTooBig, str)
-	}
-
-	// A block must not exceed the maximum allowed block payload when
-	// serialized.
-	serializedSize := block.MsgBlock().SerializeSize()
-	if serializedSize > maxBlockSize {
-		str := fmt.Sprintf("serialized block is too big - got %d, "+
-			"max %d", serializedSize, maxBlockSize)
-		return ruleError(ErrBlockTooBig, str)
-	}
-
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1078,6 +1080,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// scripts.
 	transactions := block.Transactions()
 	totalSigOpCost := 0
+	maxSigOps := b.MaxBlockSigOps(uahfActive)
 	for i, tx := range transactions {
 		// Since the first (and only the first) transaction has
 		// already been verified to be a coinbase transaction,
@@ -1094,7 +1097,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// this on every loop iteration to avoid overflow.
 		lastSigOpCost := totalSigOpCost
 		totalSigOpCost += sigOpCost
-		maxSigOps := b.MaxBlockSigOps(uahfActive)
 		if totalSigOpCost < lastSigOpCost || totalSigOpCost > maxSigOps {
 			str := fmt.Sprintf("block contains too many "+
 				"signature operations - got %v, max %v",

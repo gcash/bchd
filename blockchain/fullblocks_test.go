@@ -115,11 +115,12 @@ func chainSetup(dbName string, params *chaincfg.Params) (*blockchain.BlockChain,
 
 	// Create the main chain instance.
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:          db,
-		ChainParams: &paramsCopy,
-		Checkpoints: nil,
-		TimeSource:  blockchain.NewMedianTime(),
-		SigCache:    txscript.NewSigCache(1000),
+		DB:                 db,
+		ChainParams:        &paramsCopy,
+		Checkpoints:        nil,
+		TimeSource:         blockchain.NewMedianTime(),
+		SigCache:           txscript.NewSigCache(1000),
+		ExcessiveBlockSize: 1000000,
 	})
 	if err != nil {
 		teardown()
