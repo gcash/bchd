@@ -2061,7 +2061,8 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 
 	sigHashes := NewTxSigHashes(&vm.tx)
 
-	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx, vm.inputAmount, vm.uahf)
+	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
+		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 	if err != nil {
 		vm.dstack.PushBool(false)
 		return nil
@@ -2240,7 +2241,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	pubKeyIdx := -1
 	signatureIdx := 0
 	var sigHashes *TxSigHashes
-	if vm.uahf {
+	if vm.hasFlag(ScriptVerifyBip143SigHash) {
 		sigHashes = NewTxSigHashes(&vm.tx)
 	}
 	for numSignatures > 0 {
@@ -2318,7 +2319,8 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		}
 
 		// Generate the signature hash based on the signature hash type.
-		signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx, vm.inputAmount, vm.uahf)
+		signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+			vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 		if err != nil {
 			vm.dstack.PushBool(false)
 			return nil

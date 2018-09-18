@@ -1198,9 +1198,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptVerifyCheckLockTimeVerify
 	}
 
-	// If Uahf is active we must enforce strict encoding on all signatures
+	// If Uahf is active we must enforce strict encoding on all signatures and enforce
+	// the replay protected sighash.
 	if node.height >= b.chainParams.UahfForkHeight {
-		scriptFlags |= txscript.ScriptVerifyStrictEncoding
+		scriptFlags |= txscript.ScriptVerifyStrictEncoding | txscript.ScriptVerifyBip143SigHash
 	}
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once

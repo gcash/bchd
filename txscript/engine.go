@@ -107,8 +107,7 @@ type Engine struct {
 	flags           ScriptFlags
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
-	bip16           bool // treat execution as pay-to-script-hash
-	uahf            bool
+	bip16           bool     // treat execution as pay-to-script-hash
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
 }
@@ -414,7 +413,7 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 		return nil
 	}
 
-	if vm.uahf && hashType&SigHashForkID != SigHashForkID {
+	if vm.hasFlag(ScriptVerifyBip143SigHash) && hashType&SigHashForkID != SigHashForkID {
 		str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
 		return scriptError(ErrInvalidSigHashType, str)
 	}
@@ -721,10 +720,6 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	if vm.hasFlag(ScriptVerifyMinimalData) {
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true
-	}
-
-	if vm.hasFlag(ScriptVerifyBip143SigHash) {
-		vm.uahf = true
 	}
 
 	vm.tx = *tx

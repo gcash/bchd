@@ -35,11 +35,11 @@ const (
 
 	// DifficultyEDA (Emergency Difficulty Adjustment) was a short lived changed
 	// right after the August 1st, 2017 hardfork and lasted until November 15th, 2017.
-	DifficultyEDA    DifficultyAlgorithm = 1
+	DifficultyEDA DifficultyAlgorithm = 1
 
 	// DifficultyDAA (Difficulty Adjustment Algorithm) is the current Bitcoin Cash
 	// difficulty algorithm in effect since Novemeber 15th, 2017.
-	DifficultyDAA    DifficultyAlgorithm = 2
+	DifficultyDAA DifficultyAlgorithm = 2
 )
 
 // SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
@@ -293,7 +293,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 				return 0, AssertError("unable to obtain previous retarget block")
 			}
 			mtp6Blocks := lastNode.CalcPastMedianTime().Sub(firstNode.CalcPastMedianTime())
-			if mtp6Blocks >= 12 * time.Hour {
+			if mtp6Blocks >= 12*time.Hour {
 				// If producing the last 6 block took more than 12h, increase the difficulty
 				// target by 1/4 (which reduces the difficulty by 20%). This ensure the
 				// chain do not get stuck in case we lose hashrate abruptly.

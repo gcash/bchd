@@ -1697,7 +1697,6 @@ nexttest:
 			sigScriptTests[i].inputs[0].inputValidates = false
 		}
 
-
 		// Validate tx input scripts
 		scriptFlags := ScriptBip16 | ScriptVerifyDERSignatures | ScriptVerifyBip143SigHash
 		for j := range tx.TxIn {
