@@ -96,7 +96,7 @@ func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
 	return (limit / 1000000) * MaxBlockSigOpsPerMB
 }
 
-// getMaxOutputsPerBlock returns the maximum possible number of outputs
+// MaxOutputsPerBlock returns the maximum possible number of outputs
 // in a block based on the excessiveBlockSize Settings. This is only used
 // by the UtxoViewPoint to limit the number of iterations performed
 // when searching for a Utxo via a txid.
