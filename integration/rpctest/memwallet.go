@@ -519,7 +519,7 @@ func (m *memWallet) CreateTransaction(outputs []*wire.TxOut,
 			return nil, err
 		}
 
-		sigScript, err := txscript.SignatureScript(tx, i, utxo.pkScript,
+		sigScript, err := txscript.LegacySignatureScript(tx, i, utxo.pkScript,
 			txscript.SigHashAll, privKey, true)
 		if err != nil {
 			return nil, err

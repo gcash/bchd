@@ -82,6 +82,24 @@ func SignatureScript(tx *wire.MsgTx, idx int, amt int64, subscript []byte,
 	return NewScriptBuilder().AddData(sig).AddData(pkData).Script()
 }
 
+func LegacySignatureScript(tx *wire.MsgTx, idx int, subscript []byte,
+	hashType SigHashType, privKey *bchec.PrivateKey, compress bool) ([]byte, error) {
+	sig, err := LegacyTxInSignature(tx, idx, subscript, hashType, privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	pk := (*bchec.PublicKey)(&privKey.PublicKey)
+	var pkData []byte
+	if compress {
+		pkData = pk.SerializeCompressed()
+	} else {
+		pkData = pk.SerializeUncompressed()
+	}
+
+	return NewScriptBuilder().AddData(sig).AddData(pkData).Script()
+}
+
 func p2pkSignatureScript(tx *wire.MsgTx, idx int, amt int64, subScript []byte,
 	hashType SigHashType, privKey *bchec.PrivateKey) ([]byte, error) {
 	sig, err := RawTxInSignature(tx, idx, subScript, hashType, privKey, amt)

@@ -14,6 +14,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"math/rand"
 )
 
 type addressToKey struct {
@@ -56,7 +57,7 @@ func mkGetScript(scripts map[string][]byte) ScriptDB {
 func checkScripts(msg string, tx *wire.MsgTx, idx int, inputAmt int64, sigScript, pkScript []byte) error {
 	tx.TxIn[idx].SignatureScript = sigScript
 	vm, err := NewEngine(pkScript, tx, idx,
-		ScriptBip16|ScriptVerifyDERSignatures, nil, nil, inputAmt)
+		ScriptBip16|ScriptVerifyDERSignatures|ScriptVerifyBip143SigHash, nil, nil, inputAmt)
 	if err != nil {
 		return fmt.Errorf("failed to make script engine for %s: %v",
 			msg, err)
@@ -1627,6 +1628,12 @@ var sigScriptTests = []tstSigScript{
 	},
 }
 
+func newOutpoint() *wire.OutPoint {
+	return &wire.OutPoint{
+		Index: uint32(rand.Int31()),
+	}
+}
+
 // Test the sigscript generation for valid and invalid inputs, all
 // hashTypes, and with and without compression.  This test creates
 // sigscripts to spend fake coinbase inputs, as sigscripts cannot be
@@ -1645,7 +1652,7 @@ nexttest:
 		tx.AddTxOut(output)
 
 		for range sigScriptTests[i].inputs {
-			txin := wire.NewTxIn(coinbaseOutPoint, nil)
+			txin := wire.NewTxIn(newOutpoint(), nil)
 			tx.AddTxIn(txin)
 		}
 
@@ -1659,6 +1666,7 @@ nexttest:
 			} else {
 				idx = j
 			}
+
 			script, err = SignatureScript(tx, idx, 0,
 				sigScriptTests[i].inputs[j].txout.PkScript,
 				sigScriptTests[i].hashType, privKey,
@@ -1678,7 +1686,6 @@ nexttest:
 				// done with this test
 				continue nexttest
 			}
-
 			tx.TxIn[j].SignatureScript = script
 		}
 
@@ -1690,8 +1697,9 @@ nexttest:
 			sigScriptTests[i].inputs[0].inputValidates = false
 		}
 
+
 		// Validate tx input scripts
-		scriptFlags := ScriptBip16 | ScriptVerifyDERSignatures
+		scriptFlags := ScriptBip16 | ScriptVerifyDERSignatures | ScriptVerifyBip143SigHash
 		for j := range tx.TxIn {
 			vm, err := NewEngine(sigScriptTests[i].
 				inputs[j].txout.PkScript, tx, j, scriptFlags, nil, nil, 0)

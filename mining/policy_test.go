@@ -14,6 +14,8 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const MockMaxOutputsPerBlock = 32000000 / wire.MinTxOutPayload
+
 // newHashFromStr converts the passed big-endian hex string into a
 // chainhash.Hash.  It only differs from the one available in chainhash in that
 // it panics on an error since it will only (and must only) be called with
@@ -47,7 +49,7 @@ func newUtxoViewpoint(sourceTxns []*wire.MsgTx, sourceTxHeights []int32) *blockc
 		panic("each transaction must have its block height specified")
 	}
 
-	view := blockchain.NewUtxoViewpoint()
+	view := blockchain.NewUtxoViewpoint(MockMaxOutputsPerBlock)
 	for i, tx := range sourceTxns {
 		view.AddTxOuts(bchutil.NewTx(tx), sourceTxHeights[i])
 	}
