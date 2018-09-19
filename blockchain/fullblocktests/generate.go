@@ -1335,7 +1335,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 			// associated p2sh output in b39.
 			spend := makeSpendableOutForTx(b39.Transactions[i+2], 2)
 			tx := createSpendTx(&spend, lowFee)
-			sig, err := txscript.RawTxInSignature(tx, 0,
+			sig, err := txscript.LegacyTxInSignature(tx, 0,
 				redeemScript, txscript.SigHashAll, g.privKey)
 			if err != nil {
 				panic(err)
@@ -1367,7 +1367,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 			spend := makeSpendableOutForTx(b39.Transactions[i+2], 2)
 			tx := createSpendTx(&spend, lowFee)
 			sig, err := txscript.RawTxInSignature(tx, 0,
-				redeemScript, txscript.SigHashAll, g.privKey)
+				redeemScript, txscript.SigHashAll, g.privKey, int64(spend.amount.ToUnit(bchutil.AmountSatoshi)))
 			if err != nil {
 				panic(err)
 			}

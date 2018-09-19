@@ -46,9 +46,10 @@ func ExampleBlockChain_ProcessBlock() {
 	// values obtained from other peers on the network so the local time is
 	// adjusted to be in agreement with other peers.
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:          db,
-		ChainParams: &chaincfg.MainNetParams,
-		TimeSource:  blockchain.NewMedianTime(),
+		DB:                 db,
+		ChainParams:        &chaincfg.MainNetParams,
+		TimeSource:         blockchain.NewMedianTime(),
+		ExcessiveBlockSize: 1000000,
 	})
 	if err != nil {
 		fmt.Printf("Failed to create chain instance: %v\n", err)

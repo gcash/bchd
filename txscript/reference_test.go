@@ -740,8 +740,8 @@ testloop:
 // TestCalcSignatureHash runs the Bitcoin Core signature hash calculation tests
 // in sighash.json.
 // https://github.com/bitcoin/bitcoin/blob/master/src/test/data/sighash.json
-func TestCalcSignatureHash(t *testing.T) {
-	file, err := ioutil.ReadFile("data/sighash.json")
+func TestCalcLegacySignatureHash(t *testing.T) {
+	file, err := ioutil.ReadFile("data/sighash_legacy.json")
 	if err != nil {
 		t.Fatalf("TestCalcSignatureHash: %v\n", err)
 	}
@@ -780,13 +780,78 @@ func TestCalcSignatureHash(t *testing.T) {
 		}
 
 		hashType := SigHashType(testVecF64ToUint32(test[3].(float64)))
-		hash := calcSignatureHash(parsedScript, hashType, &tx,
+		var hash []byte
+		hash, err = calcLegacySignatureHash(parsedScript, hashType, &tx,
 			int(test[2].(float64)))
-
+		if err != nil {
+			t.Errorf("TestCalcLegacySignatureHash failed test #%d: "+
+				"calcLegacySignatureHash returned error: %v", i, err)
+			continue
+		}
 		expectedHash, _ := chainhash.NewHashFromStr(test[4].(string))
 		if !bytes.Equal(hash, expectedHash[:]) {
-			t.Errorf("TestCalcSignatureHash failed test #%d: "+
+			t.Errorf("TestCalcLegacySignatureHash failed test #%d: "+
 				"Signature hash mismatch.", i)
+		}
+	}
+}
+
+// This test data is pull out of the Bitcoin Cash mainnet blockchain
+func TestCalcBip143SignatureHash(t *testing.T) {
+	file, err := ioutil.ReadFile("data/sighash_bip143.json")
+	if err != nil {
+		t.Fatalf("TestCalcSignatureHash: %v\n", err)
+	}
+
+	var tests [][]interface{}
+	err = json.Unmarshal(file, &tests)
+	if err != nil {
+		t.Fatalf("TestCalcSignatureHash couldn't Unmarshal: %v\n",
+			err)
+	}
+	fails := 0
+	for i, test := range tests {
+		if i == 0 {
+			// Skip first line -- contains comments only.
+			continue
+		}
+		if len(test) != 5 {
+			t.Fatalf("TestCalcSignatureHash: Test #%d has "+
+				"wrong length.", i)
+		}
+		var tx wire.MsgTx
+		rawTx, _ := hex.DecodeString(test[0].(string))
+		err := tx.Deserialize(bytes.NewReader(rawTx))
+		if err != nil {
+			t.Errorf("TestCalcSignatureHash failed test #%d: "+
+				"Failed to parse transaction: %v", i, err)
+			continue
+		}
+
+		subScript, _ := hex.DecodeString(test[1].(string))
+		parsedScript, err := parseScript(subScript)
+		if err != nil {
+			t.Errorf("TestCalcSignatureHash failed test #%d: "+
+				"Failed to parse sub-script: %v", i, err)
+			continue
+		}
+
+		hashType := SigHashType(testVecF64ToUint32(test[3].(float64)))
+		var hash []byte
+
+		sigHashes := NewTxSigHashes(&tx)
+		hash, err = calcBip143SignatureHash(parsedScript, sigHashes, hashType, &tx,
+			int(test[2].(float64)), 0)
+		if err != nil {
+			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+
+				"calcLegacySignatureHash returned error: %v", i, err)
+			continue
+		}
+		expectedHash, _ := chainhash.NewHashFromStr(test[4].(string))
+		if !bytes.Equal(hash, expectedHash[:]) {
+			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+
+				"Signature hash mismatch.", i)
+			fails++
 		}
 	}
 }

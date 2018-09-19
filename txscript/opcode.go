@@ -10,13 +10,13 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"hash"
 
 	"golang.org/x/crypto/ripemd160"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"hash"
 )
 
 // An opcode defines the information related to a txscript opcode.  opfunc, if
@@ -2059,7 +2059,14 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	// to sign itself.
 	subScript = removeOpcodeByData(subScript, fullSigBytes)
 
-	hash = calcSignatureHash(subScript, hashType, &vm.tx, vm.txIdx)
+	sigHashes := NewTxSigHashes(&vm.tx)
+
+	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
+		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+	if err != nil {
+		vm.dstack.PushBool(false)
+		return nil
+	}
 
 	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
 	if err != nil {
@@ -2233,6 +2240,10 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	numPubKeys++
 	pubKeyIdx := -1
 	signatureIdx := 0
+	var sigHashes *TxSigHashes
+	if vm.hasFlag(ScriptVerifyBip143SigHash) {
+		sigHashes = NewTxSigHashes(&vm.tx)
+	}
 	for numSignatures > 0 {
 		// When there are more signatures than public keys remaining,
 		// there is no way to succeed since too many signatures are
@@ -2308,20 +2319,25 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		}
 
 		// Generate the signature hash based on the signature hash type.
-		hash := calcSignatureHash(script, hashType, &vm.tx, vm.txIdx)
+		signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+			vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+		if err != nil {
+			vm.dstack.PushBool(false)
+			return nil
+		}
 
 		var valid bool
 		if vm.sigCache != nil {
 			var sigHash chainhash.Hash
-			copy(sigHash[:], hash)
+			copy(sigHash[:], signatureHash)
 
 			valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
-			if !valid && parsedSig.Verify(hash, parsedPubKey) {
+			if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
 				vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
 				valid = true
 			}
 		} else {
-			valid = parsedSig.Verify(hash, parsedPubKey)
+			valid = parsedSig.Verify(signatureHash, parsedPubKey)
 		}
 
 		if valid {

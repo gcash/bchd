@@ -210,6 +210,12 @@ type BlockTemplate struct {
 	// NewBlockTemplate for details on which this can be useful to generate
 	// templates without a coinbase payment address.
 	ValidPayAddress bool
+
+	// MaxBlockSize is the block size consensus rule used when creating the block
+	MaxBlockSize uint32
+
+	// MaxSigOps is the block size consensus rule used when creating the block
+	MaxSigOps uint32
 }
 
 // mergeUtxoView adds all of the entries in viewB to viewA.  The result is that
@@ -438,6 +444,11 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	best := g.chain.BestSnapshot()
 	nextBlockHeight := best.Height + 1
 
+	uahfActive := nextBlockHeight >= g.chainParams.UahfForkHeight
+
+	maxBlockSize := g.chain.MaxBlockSize(uahfActive)
+	maxSigOps := g.chain.MaxBlockSigOps(uahfActive)
+
 	// Create a standard coinbase transaction paying to the provided
 	// address.  NOTE: The coinbase value will be updated to include the
 	// fees from the selected transactions later after they have actually
@@ -474,7 +485,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// avoided.
 	blockTxns := make([]*bchutil.Tx, 0, len(sourceTxns))
 	blockTxns = append(blockTxns, coinbaseTx)
-	blockUtxos := blockchain.NewUtxoViewpoint()
+	blockUtxos := blockchain.NewUtxoViewpoint(g.chain.MaxOutputsPerBlock())
 
 	// dependers is used to track transactions which depend on another
 	// transaction in the source pool.  This, in conjunction with the
@@ -627,7 +638,7 @@ mempoolLoop:
 			continue
 		}
 		if blockSigOps+int64(sigOps) < blockSigOps ||
-			blockSigOps+int64(sigOps) > blockchain.MaxBlockSigOps {
+			blockSigOps+int64(sigOps) > int64(maxSigOps) {
 			log.Tracef("Skipping tx %s because it would "+
 				"exceed the maximum sigops per block", tx.Hash())
 			logSkippedDeps(tx, deps)
@@ -789,6 +800,8 @@ mempoolLoop:
 		SigOpCosts:      txSigOps,
 		Height:          nextBlockHeight,
 		ValidPayAddress: payToAddress != nil,
+		MaxBlockSize:    uint32(maxBlockSize),
+		MaxSigOps:       uint32(maxSigOps),
 	}, nil
 }
 

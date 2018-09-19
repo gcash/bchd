@@ -132,4 +132,7 @@ var regressionNetParams = &chaincfg.Params{
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType: 1,
+
+	// For the purpose of this test we don't need to check the Uahf
+	UahfForkHeight: -1,
 }

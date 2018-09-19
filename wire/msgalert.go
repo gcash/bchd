@@ -66,38 +66,43 @@ import (
 //
 // Now we can define bounds on Alert size, SetCancel and SetSubVer
 
-// Fixed size of the alert payload
-const fixedAlertSize = 45
+const (
+	// Fixed size of the alert payload
+	fixedAlertSize = 45
 
-// maxSignatureSize is the max size of an ECDSA signature.
-// NOTE: Since this size is fixed and < 255, the size of VarInt required = 1.
-const maxSignatureSize = 72
+	// maxSignatureSize is the max size of an ECDSA signature.
+	// NOTE: Since this size is fixed and < 255, the size of VarInt required = 1.
+	maxSignatureSize = 72
+)
 
-// maxAlertSize is the maximum size an alert.
-//
-// MessagePayload = VarInt(Alert) + Alert + VarInt(Signature) + Signature
-// MaxMessagePayload = maxAlertSize + max(VarInt) + maxSignatureSize + 1
-const maxAlertSize = MaxMessagePayload - maxSignatureSize - MaxVarIntPayload - 1
+var (
 
-// maxCountSetCancel is the maximum number of cancel IDs that could possibly
-// fit into a maximum size alert.
-//
-// maxAlertSize = fixedAlertSize + max(SetCancel) + max(SetSubVer) + 3*(string)
-// for caculating maximum number of cancel IDs, set all other var  sizes to 0
-// maxAlertSize = fixedAlertSize + (MaxVarIntPayload-1) + x*sizeOf(int32)
-// x = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 4
-const maxCountSetCancel = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 4
+	// maxCountSetCancel is the maximum number of cancel IDs that could possibly
+	// fit into a maximum size alert.
+	//
+	// maxAlertSize = fixedAlertSize + max(SetCancel) + max(SetSubVer) + 3*(string)
+	// for caculating maximum number of cancel IDs, set all other var  sizes to 0
+	// maxAlertSize = fixedAlertSize + (MaxVarIntPayload-1) + x*sizeOf(int32)
+	// x = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 4
+	maxCountSetCancel = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 4
 
-// maxCountSetSubVer is the maximum number of subversions that could possibly
-// fit into a maximum size alert.
-//
-// maxAlertSize = fixedAlertSize + max(SetCancel) + max(SetSubVer) + 3*(string)
-// for caculating maximum number of subversions, set all other var sizes to 0
-// maxAlertSize = fixedAlertSize + (MaxVarIntPayload-1) + x*sizeOf(string)
-// x = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / sizeOf(string)
-// subversion would typically be something like "/Satoshi:0.7.2/" (15 bytes)
-// so assuming < 255 bytes, sizeOf(string) = sizeOf(uint8) + 255 = 256
-const maxCountSetSubVer = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 256
+	// maxAlertSize is the maximum size an alert.
+	//
+	// MessagePayload = VarInt(Alert) + Alert + VarInt(Signature) + Signature
+	// MaxMessagePayload = maxAlertSize + max(VarInt) + maxSignatureSize + 1
+	maxAlertSize = MaxMessagePayload - maxSignatureSize - MaxVarIntPayload - 1
+
+	// maxCountSetSubVer is the maximum number of subversions that could possibly
+	// fit into a maximum size alert.
+	//
+	// maxAlertSize = fixedAlertSize + max(SetCancel) + max(SetSubVer) + 3*(string)
+	// for caculating maximum number of subversions, set all other var sizes to 0
+	// maxAlertSize = fixedAlertSize + (MaxVarIntPayload-1) + x*sizeOf(string)
+	// x = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / sizeOf(string)
+	// subversion would typically be something like "/Satoshi:0.7.2/" (15 bytes)
+	// so assuming < 255 bytes, sizeOf(string) = sizeOf(uint8) + 255 = 256
+	maxCountSetSubVer = (maxAlertSize - fixedAlertSize - MaxVarIntPayload + 1) / 256
+)
 
 // Alert contains the data deserialized from the MsgAlert payload.
 type Alert struct {
@@ -156,7 +161,7 @@ func (alert *Alert) Serialize(w io.Writer, pver uint32) error {
 	}
 
 	count := len(alert.SetCancel)
-	if count > maxCountSetCancel {
+	if count > int(maxCountSetCancel) {
 		str := fmt.Sprintf("too many cancel alert IDs for alert "+
 			"[count %v, max %v]", count, maxCountSetCancel)
 		return messageError("Alert.Serialize", str)
@@ -178,7 +183,7 @@ func (alert *Alert) Serialize(w io.Writer, pver uint32) error {
 	}
 
 	count = len(alert.SetSubVer)
-	if count > maxCountSetSubVer {
+	if count > int(maxCountSetSubVer) {
 		str := fmt.Sprintf("too many sub versions for alert "+
 			"[count %v, max %v]", count, maxCountSetSubVer)
 		return messageError("Alert.Serialize", str)
@@ -225,7 +230,7 @@ func (alert *Alert) Deserialize(r io.Reader, pver uint32) error {
 	if err != nil {
 		return err
 	}
-	if count > maxCountSetCancel {
+	if count > uint64(maxCountSetCancel) {
 		str := fmt.Sprintf("too many cancel alert IDs for alert "+
 			"[count %v, max %v]", count, maxCountSetCancel)
 		return messageError("Alert.Deserialize", str)
@@ -249,7 +254,7 @@ func (alert *Alert) Deserialize(r io.Reader, pver uint32) error {
 	if err != nil {
 		return err
 	}
-	if count > maxCountSetSubVer {
+	if count > uint64(maxCountSetSubVer) {
 		str := fmt.Sprintf("too many sub versions for alert "+
 			"[count %v, max %v]", count, maxCountSetSubVer)
 		return messageError("Alert.Deserialize", str)

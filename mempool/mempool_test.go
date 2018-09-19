@@ -21,6 +21,8 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const MockMaxUtxosPerBlock = 32000000 / wire.MinTxOutPayload
+
 // fakeChain is used by the pool harness to provide generated test utxos and
 // a current faked chain height to the pool callbacks.  This, in turn, allows
 // transactions to appear as though they are spending completely valid utxos.
@@ -45,7 +47,7 @@ func (s *fakeChain) FetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, er
 	// do not affect the fake chain's view.
 
 	// Add an entry for the tx itself to the new view.
-	viewpoint := blockchain.NewUtxoViewpoint()
+	viewpoint := blockchain.NewUtxoViewpoint(MockMaxUtxosPerBlock)
 	prevOut := wire.OutPoint{Hash: *tx.Hash()}
 	for txOutIdx := range tx.MsgTx().TxOut {
 		prevOut.Index = uint32(txOutIdx)
@@ -220,7 +222,7 @@ func (p *poolHarness) CreateSignedTx(inputs []spendableOutput, numOutputs uint32
 
 	// Sign the new transaction.
 	for i := range tx.TxIn {
-		sigScript, err := txscript.SignatureScript(tx, i, p.payScript,
+		sigScript, err := txscript.LegacySignatureScript(tx, i, p.payScript,
 			txscript.SigHashAll, p.signKey, true)
 		if err != nil {
 			return nil, err
@@ -255,7 +257,7 @@ func (p *poolHarness) CreateTxChain(firstOutput spendableOutput, numTxns uint32)
 		})
 
 		// Sign the new transaction.
-		sigScript, err := txscript.SignatureScript(tx, 0, p.payScript,
+		sigScript, err := txscript.SignatureScript(tx, 0, int64(spendableAmount), p.payScript,
 			txscript.SigHashAll, p.signKey, true)
 		if err != nil {
 			return nil, err
@@ -299,7 +301,7 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 	}
 
 	// Create a new fake chain and harness bound to it.
-	chain := &fakeChain{utxos: blockchain.NewUtxoViewpoint()}
+	chain := &fakeChain{utxos: blockchain.NewUtxoViewpoint(MockMaxUtxosPerBlock)}
 	harness := poolHarness{
 		signKey:     signKey,
 		payAddr:     payAddr,

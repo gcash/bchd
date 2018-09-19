@@ -99,6 +99,7 @@ type BlockChain struct {
 	sigCache            *txscript.SigCache
 	indexManager        IndexManager
 	hashCache           *txscript.HashCache
+	excessiveBlockSize  uint32
 
 	// The following fields are calculated based upon the provided chain
 	// parameters.  They are also set when the instance is created and
@@ -861,7 +862,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 	// entails loading the blocks and their associated spent txos from the
 	// database and using that information to unspend all of the spent txos
 	// and remove the utxos created by the blocks.
-	view := NewUtxoViewpoint()
+	view := NewUtxoViewpoint(b.MaxOutputsPerBlock())
 	view.SetBestHash(&oldBest.hash)
 	for e := detachNodes.Front(); e != nil; e = e.Next() {
 		n := e.Value.(*blockNode)
@@ -991,7 +992,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 	// the reorg would be successful and the connection code requires the
 	// view to be valid from the viewpoint of each block being connected or
 	// disconnected.
-	view = NewUtxoViewpoint()
+	view = NewUtxoViewpoint(b.MaxOutputsPerBlock())
 	view.SetBestHash(&b.bestChain.Tip().hash)
 
 	// Disconnect blocks from the main chain.
@@ -1102,7 +1103,7 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 		// Perform several checks to verify the block can be connected
 		// to the main chain without violating any rules and without
 		// actually connecting the block.
-		view := NewUtxoViewpoint()
+		view := NewUtxoViewpoint(b.MaxOutputsPerBlock())
 		view.SetBestHash(parentHash)
 		stxos := make([]SpentTxOut, 0, countSpentOutputs(block))
 		if !fastAdd {
@@ -1707,6 +1708,9 @@ type Config struct {
 	// This field can be nil if the caller is not interested in using a
 	// signature cache.
 	HashCache *txscript.HashCache
+
+	// The user-configurable max block size
+	ExcessiveBlockSize uint32
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -1721,6 +1725,13 @@ func New(config *Config) (*BlockChain, error) {
 	if config.TimeSource == nil {
 		return nil, AssertError("blockchain.New timesource is nil")
 	}
+	if config.ExcessiveBlockSize < LegacyMaxBlockSize {
+		return nil, AssertError("blockchain.New excessive block size set lower than LegacyBlockSize")
+	}
+
+	// Set the MaxMessagePayload size in the wire package based on the excessive block configuration
+	// The default is set to 64MB but should go higher if the user enters a larger ExcessiveBlockSize
+	wire.MaxMessagePayload = ((config.ExcessiveBlockSize / 1000000) * 1024 * 1024) * 2
 
 	// Generate a checkpoint by height map from the provided checkpoints
 	// and assert the provided checkpoints are sorted by height as required.
@@ -1751,6 +1762,7 @@ func New(config *Config) (*BlockChain, error) {
 		chainParams:         params,
 		timeSource:          config.TimeSource,
 		sigCache:            config.SigCache,
+		excessiveBlockSize:  config.ExcessiveBlockSize,
 		indexManager:        config.IndexManager,
 		minRetargetTimespan: targetTimespan / adjustmentFactor,
 		maxRetargetTimespan: targetTimespan * adjustmentFactor,

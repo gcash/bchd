@@ -210,6 +210,11 @@ const (
 	// current chain tip. This is not a block validation rule, but is required
 	// for block proposals submitted via getblocktemplate RPC.
 	ErrPrevBlockNotBest
+
+	// ErrBlockTooSmall indicates the serialized block size is less than the
+	// minimum allowed size. This consensus rule currently only applies to
+	// the first block after the Uahf.
+	ErrBlockTooSmall
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.

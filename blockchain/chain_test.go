@@ -145,7 +145,7 @@ func TestCalcSequenceLock(t *testing.T) {
 			Value:    10,
 		}},
 	})
-	utxoView := NewUtxoViewpoint()
+	utxoView := NewUtxoViewpoint(chain.MaxOutputsPerBlock())
 	utxoView.AddTxOuts(targetTx, int32(numBlocksToActivate)-4)
 	utxoView.SetBestHash(&node.hash)
 

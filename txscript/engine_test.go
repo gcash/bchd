@@ -425,3 +425,145 @@ func TestCheckSignatureEncoding(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckHashTypeEncoding(t *testing.T) {
+	encodingTests := []struct {
+		SigHash     SigHashType
+		EngineFlags ScriptFlags
+		ShouldFail  bool
+	}{
+		{
+			SigHashAll,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+		{
+			SigHashNone,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+		{
+			SigHashSingle,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+		{
+			SigHashAll | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+		{
+			SigHashNone | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+		{
+			SigHashSingle | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding,
+			false,
+		},
+
+		{
+			SigHashAll | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+		{
+			SigHashNone | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+		{
+			SigHashSingle | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+		{
+			SigHashAll | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+		{
+			SigHashNone | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+		{
+			SigHashSingle | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding,
+			true,
+		},
+
+		{
+			SigHashAll | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+		{
+			SigHashNone | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+		{
+			SigHashSingle | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+		{
+			SigHashAll | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+		{
+			SigHashNone | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+		{
+			SigHashSingle | SigHashAnyOneCanPay | SigHashForkID,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			false,
+		},
+
+		{
+			SigHashAll,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashNone,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashSingle,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashAll | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashNone | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashSingle | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+	}
+
+	for i, test := range encodingTests {
+		e := Engine{flags: test.EngineFlags}
+		err := e.checkHashTypeEncoding(test.SigHash)
+		if test.ShouldFail && err == nil {
+			t.Errorf("Expected test %d to fail", i)
+		} else if !test.ShouldFail && err != nil {
+			t.Errorf("Expected test %d not to fail", i)
+		}
+	}
+}
