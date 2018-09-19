@@ -1248,12 +1248,12 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 
 // OnReject logs all reject messages received from the remote peer.
 func (sp *serverPeer) OnReject(p *peer.Peer, msg *wire.MsgReject) {
-	peerLog.Warn("Received reject message from peer %s, code: %s, reason: %s", p, msg.Code.String(), msg.Reason)
+	peerLog.Warnf("Received reject message from peer %s, code: %s, reason: %s", p, msg.Code.String(), msg.Reason)
 }
 
 // OnNotFound logs all not found messages received from the remote peer.
 func (sp *serverPeer) OnNotFound(p *peer.Peer, msg *wire.MsgNotFound) {
-	peerLog.Warn("Received not found message from peer %s, %d not found invs", p, len(msg.InvList))
+	peerLog.Warnf("Received not found message from peer %s, %d not found invs", p, len(msg.InvList))
 }
 
 // OnRead is invoked when a peer receives a message and it is used to update
