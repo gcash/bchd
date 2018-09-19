@@ -780,10 +780,12 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 
 	// The August 1st, 2017 (Uahf) hardfork has a consensus rule which
 	// says the first block after the fork date must be larger than 1MB.
-	if block.Height() == b.chainParams.UahfForkHeight+1 {
+	// We can skip this check on regtest and simnet.
+	if (b.chainParams == &chaincfg.MainNetParams || b.chainParams == &chaincfg.TestNet3Params) &&
+		block.Height() == b.chainParams.UahfForkHeight+1 {
 		if block.MsgBlock().SerializeSize() <= LegacyMaxBlockSize {
 			str := fmt.Sprintf("the first block after uahf fork block is not greater than 1MB")
-			return ruleError(ErrBlockTooBig, str)
+			return ruleError(ErrBlockTooSmall, str)
 		}
 	}
 

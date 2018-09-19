@@ -1366,8 +1366,8 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		for i := 0; i < txnsNeeded; i++ {
 			spend := makeSpendableOutForTx(b39.Transactions[i+2], 2)
 			tx := createSpendTx(&spend, lowFee)
-			sig, err := txscript.LegacyTxInSignature(tx, 0,
-				redeemScript, txscript.SigHashAll, g.privKey)
+			sig, err := txscript.RawTxInSignature(tx, 0,
+				redeemScript, txscript.SigHashAll, g.privKey, int64(spend.amount.ToUnit(bchutil.AmountSatoshi)))
 			if err != nil {
 				panic(err)
 			}

@@ -257,7 +257,7 @@ func (p *poolHarness) CreateTxChain(firstOutput spendableOutput, numTxns uint32)
 		})
 
 		// Sign the new transaction.
-		sigScript, err := txscript.LegacySignatureScript(tx, 0, p.payScript,
+		sigScript, err := txscript.SignatureScript(tx, 0, int64(spendableAmount), p.payScript,
 			txscript.SigHashAll, p.signKey, true)
 		if err != nil {
 			return nil, err
