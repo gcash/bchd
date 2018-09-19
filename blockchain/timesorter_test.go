@@ -45,3 +45,42 @@ func TestTimeSorter(t *testing.T) {
 		}
 	}
 }
+
+// TestBlockSorter tests the blockSorter implementation.
+func TestBlockSorter(t *testing.T) {
+	a := &blockNode{timestamp: 1305758502}
+	b := &blockNode{timestamp: 1348310759}
+	c := &blockNode{timestamp: 1348310759}
+	d := &blockNode{timestamp: 1351228575}
+
+	tests := []struct {
+		in   []*blockNode
+		want []*blockNode
+	}{
+		{
+			in: []*blockNode{
+				d,
+				a,
+				b,
+				c,
+			},
+			want: []*blockNode{
+				a,
+				b,
+				c,
+				d,
+			},
+		},
+	}
+
+	for i, test := range tests {
+		result := make([]*blockNode, len(test.in))
+		copy(result, test.in)
+		sort.Sort(blockSorter(result))
+		if !reflect.DeepEqual(result, test.want) {
+			t.Errorf("blockSorter #%d got %v want %v", i, result,
+				test.want)
+			continue
+		}
+	}
+}

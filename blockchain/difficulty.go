@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"sort"
 )
 
 var (
@@ -245,6 +246,22 @@ func (b *BlockChain) findPrevTestNetDifficulty(startNode *blockNode) uint32 {
 	return lastBits
 }
 
+// GetSuitableBlock locates the two parents of passed in block, sorts the three
+// blocks by timestamp and returns the median.
+func (b *BlockChain) GetSuitableBlock(node0 *blockNode) (*blockNode, error) {
+	node1 := node0.RelativeAncestor(1)
+	if node1 == nil {
+		return nil, AssertError("unable to obtain relative ancestor")
+	}
+	node2 := node1.RelativeAncestor(1)
+	if node2 == nil {
+		return nil, AssertError("unable to obtain relative ancestor")
+	}
+	blocks := []*blockNode{node0, node1, node2}
+	sort.Sort(blockSorter(blocks))
+	return blocks[1], nil
+}
+
 // calcNextRequiredDifficulty calculates the required difficulty for the block
 // after the passed previous block node based on the difficulty retarget rules.
 // This function differs from the exported CalcNextRequiredDifficulty in that
@@ -256,6 +273,78 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return b.chainParams.PowLimitBits, nil
 	}
 
+	// If we're still using a legacy algorithm
+	if algorithm != DifficultyDAA {
+		return b.calcLegacyRequiredDifficulty(lastNode, newBlockTime, algorithm)
+	}
+
+	// For networks that support it, allow special reduction of the
+	// required difficulty once too much time has elapsed without
+	// mining a block.
+	if b.chainParams.ReduceMinDifficulty {
+		// Return minimum difficulty when more than the desired
+		// amount of time has elapsed without mining a block.
+		reductionTime := int64(b.chainParams.MinDiffReductionTime /
+			time.Second)
+		allowMinTime := lastNode.timestamp + reductionTime
+		if newBlockTime.Unix() > allowMinTime {
+			return b.chainParams.PowLimitBits, nil
+		}
+
+		// The block was mined within the desired timeframe, so
+		// return the difficulty for the last block which did
+		// not have the special minimum difficulty rule applied.
+		return b.findPrevTestNetDifficulty(lastNode), nil
+	}
+
+	// Get the block node at the previous retarget (targetTimespan days
+	// worth of blocks).
+	firstNode := lastNode.RelativeAncestor(b.blocksPerRetarget - 1)
+	if firstNode == nil {
+		return 0, AssertError("unable to obtain previous retarget block")
+	}
+
+	// Find the suitable blocks to use as the first and last nodes for the
+	// purpose of the difficulty calculation. A suitable block is the median
+	// timestamp out of the three prior.
+	suitableLastNode, err := b.GetSuitableBlock(lastNode)
+	if err != nil {
+		return 0, err
+	}
+	suitableFirstNode, err := b.GetSuitableBlock(firstNode)
+	if err != nil {
+		return 0, err
+	}
+
+	work := new(big.Int).Sub(suitableLastNode.workSum, suitableFirstNode.workSum)
+
+	// In order to avoid difficulty cliffs, we bound the amplitude of the
+	// adjustement we are going to do.
+	duration := suitableLastNode.timestamp - suitableFirstNode.timestamp
+	if duration > 288*int64(b.blocksPerRetarget) {
+		duration = 288 * int64(b.blocksPerRetarget)
+	} else if duration < 72*int64(b.blocksPerRetarget) {
+		duration = 72 * int64(b.blocksPerRetarget)
+	}
+
+	projectedWork := new(big.Int).Mul(work, big.NewInt(int64(b.blocksPerRetarget)))
+
+	pw := new(big.Int).Div(projectedWork, big.NewInt(duration))
+
+	e := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+
+	nt := new(big.Int).Sub(e, pw)
+
+	newTarget := new(big.Int).Div(nt, pw)
+
+	// clip again if above minimum target (too easy)
+	if newTarget.Cmp(b.chainParams.PowLimit) > 0 {
+		newTarget.Set(b.chainParams.PowLimit)
+	}
+	return BigToCompact(newTarget), nil
+}
+
+func (b *BlockChain) calcLegacyRequiredDifficulty(lastNode *blockNode, newBlockTime time.Time, algorithm DifficultyAlgorithm) (uint32, error) {
 	// Return the previous block's difficulty requirements if this block
 	// is not at a difficulty retarget interval.
 	if (lastNode.height+1)%b.blocksPerRetarget != 0 {

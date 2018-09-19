@@ -1044,6 +1044,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// LegacyBlockSize
 	uahfActive := node.height > b.chainParams.UahfForkHeight
 
+	// If Daa hardfork is active then we need to use the new difficulty
+	// adjustment algorithm and also enforce Low S and Nullfail.
+	daaActive := node.height > b.chainParams.DaaForkHeight
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1204,6 +1208,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// the replay protected sighash.
 	if uahfActive {
 		scriptFlags |= txscript.ScriptVerifyStrictEncoding | txscript.ScriptVerifyBip143SigHash
+	}
+
+	// If Daa is active enforce Low S and Nullfail script validation rules.
+	if daaActive {
+		scriptFlags |= txscript.ScriptVerifyLowS | txscript.ScriptVerifyNullFail
 	}
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
