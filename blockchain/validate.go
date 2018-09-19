@@ -763,7 +763,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return err
 	}
 
-	uahfActive := block.Height() >= b.chainParams.UahfForkHeight
+	uahfActive := block.Height() > b.chainParams.UahfForkHeight
 
 	// A block must not have more transactions than the max block payload or
 	// else it is certainly over the size limit.
@@ -780,9 +780,9 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 
 	// The August 1st, 2017 (Uahf) hardfork has a consensus rule which
 	// says the first block after the fork date must be larger than 1MB.
-	if block.Height() == b.chainParams.UahfForkHeight {
+	if block.Height() == b.chainParams.UahfForkHeight+1 {
 		if block.MsgBlock().SerializeSize() <= LegacyMaxBlockSize {
-			str := fmt.Sprintf("uahf fork block is not greater than 1MB")
+			str := fmt.Sprintf("the first block after uahf fork block is not greater than 1MB")
 			return ruleError(ErrBlockTooBig, str)
 		}
 	}
@@ -1040,7 +1040,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If Uahf is active then we need to calculate the max block size
 	// and max sigops using the excessiveBlockSize rather than the
 	// LegacyBlockSize
-	uahfActive := node.height >= b.chainParams.UahfForkHeight
+	uahfActive := node.height > b.chainParams.UahfForkHeight
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
@@ -1200,7 +1200,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If Uahf is active we must enforce strict encoding on all signatures and enforce
 	// the replay protected sighash.
-	if node.height >= b.chainParams.UahfForkHeight {
+	if uahfActive {
 		scriptFlags |= txscript.ScriptVerifyStrictEncoding | txscript.ScriptVerifyBip143SigHash
 	}
 

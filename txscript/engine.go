@@ -413,12 +413,15 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 		return nil
 	}
 
-	if vm.hasFlag(ScriptVerifyBip143SigHash) && hashType&SigHashForkID != SigHashForkID {
-		str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
-		return scriptError(ErrInvalidSigHashType, str)
+	sigHashType := hashType & ^SigHashAnyOneCanPay
+	if vm.hasFlag(ScriptVerifyBip143SigHash) {
+		sigHashType ^= SigHashForkID
+		if hashType&SigHashForkID == 0 {
+			str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
+			return scriptError(ErrInvalidSigHashType, str)
+		}
 	}
 
-	sigHashType := hashType & ^SigHashAnyOneCanPay
 	if sigHashType < SigHashAll || sigHashType > SigHashSingle {
 		str := fmt.Sprintf("invalid hash type 0x%x", hashType)
 		return scriptError(ErrInvalidSigHashType, str)
