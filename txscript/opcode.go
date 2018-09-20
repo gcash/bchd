@@ -163,9 +163,9 @@ const (
 	OP_SWAP                = 0x7c // 124
 	OP_TUCK                = 0x7d // 125
 	OP_CAT                 = 0x7e // 126
-	OP_SUBSTR              = 0x7f // 127
-	OP_LEFT                = 0x80 // 128
-	OP_RIGHT               = 0x81 // 129
+	OP_SPLIT               = 0x7f // 127
+	OP_NUM2BIN             = 0x80 // 128
+	OP_BIN2NUM             = 0x81 // 129
 	OP_SIZE                = 0x82 // 130
 	OP_INVERT              = 0x83 // 131
 	OP_AND                 = 0x84 // 132
@@ -442,17 +442,17 @@ var opcodeArray = [256]opcode{
 	OP_TUCK:         {OP_TUCK, "OP_TUCK", 1, opcodeTuck},
 
 	// Splice opcodes.
-	OP_CAT:    {OP_CAT, "OP_CAT", 1, opcodeDisabled},
-	OP_SUBSTR: {OP_SUBSTR, "OP_SUBSTR", 1, opcodeDisabled},
-	OP_LEFT:   {OP_LEFT, "OP_LEFT", 1, opcodeDisabled},
-	OP_RIGHT:  {OP_RIGHT, "OP_RIGHT", 1, opcodeDisabled},
-	OP_SIZE:   {OP_SIZE, "OP_SIZE", 1, opcodeSize},
+	OP_CAT:     {OP_CAT, "OP_CAT", 1, opcodeCat},
+	OP_SPLIT:   {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
+	OP_NUM2BIN: {OP_NUM2BIN, "OP_NUM2BIN", 1, opcodeNum2bin},
+	OP_BIN2NUM: {OP_BIN2NUM, "OP_BIN2NUM", 1, opcodeBin2num},
+	OP_SIZE:    {OP_SIZE, "OP_SIZE", 1, opcodeSize},
 
 	// Bitwise logic opcodes.
 	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
-	OP_AND:         {OP_AND, "OP_AND", 1, opcodeDisabled},
-	OP_OR:          {OP_OR, "OP_OR", 1, opcodeDisabled},
-	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeDisabled},
+	OP_AND:         {OP_AND, "OP_AND", 1, opcodeAnd},
+	OP_OR:          {OP_OR, "OP_OR", 1, opcodeOr},
+	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeXor},
 	OP_EQUAL:       {OP_EQUAL, "OP_EQUAL", 1, opcodeEqual},
 	OP_EQUALVERIFY: {OP_EQUALVERIFY, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
 	OP_RESERVED1:   {OP_RESERVED1, "OP_RESERVED1", 1, opcodeReserved},
@@ -470,8 +470,8 @@ var opcodeArray = [256]opcode{
 	OP_ADD:                {OP_ADD, "OP_ADD", 1, opcodeAdd},
 	OP_SUB:                {OP_SUB, "OP_SUB", 1, opcodeSub},
 	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeDisabled},
-	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDisabled},
-	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeDisabled},
+	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDiv},
+	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeMod},
 	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeDisabled},
 	OP_RSHIFT:             {OP_RSHIFT, "OP_RSHIFT", 1, opcodeDisabled},
 	OP_BOOLAND:            {OP_BOOLAND, "OP_BOOLAND", 1, opcodeBoolAnd},
@@ -621,31 +621,13 @@ type parsedOpcode struct {
 // bad to see in the instruction stream (even if turned off by a conditional).
 func (pop *parsedOpcode) isDisabled() bool {
 	switch pop.opcode.value {
-	case OP_CAT:
-		return true
-	case OP_SUBSTR:
-		return true
-	case OP_LEFT:
-		return true
-	case OP_RIGHT:
-		return true
 	case OP_INVERT:
-		return true
-	case OP_AND:
-		return true
-	case OP_OR:
-		return true
-	case OP_XOR:
 		return true
 	case OP_2MUL:
 		return true
 	case OP_2DIV:
 		return true
 	case OP_MUL:
-		return true
-	case OP_DIV:
-		return true
-	case OP_MOD:
 		return true
 	case OP_LSHIFT:
 		return true
@@ -1416,6 +1398,134 @@ func opcodeTuck(op *parsedOpcode, vm *Engine) error {
 	return vm.dstack.Tuck()
 }
 
+// opcodeCat concatenates two byte sequences. The result must
+// not be larger than MaxScriptElementSize.
+//
+// Stack transformation: {Ox11} {0x22, 0x33} OP_CAT -> 0x112233
+func opcodeCat(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	c := append(a, b...)
+	if len(c) > MaxScriptElementSize {
+		str := fmt.Sprintf("concatenated size %d exceeds max allowed size %d",
+			len(c), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
+}
+
+// opcodeSplit splits the operand at the given position.
+// This operation is the exact inverse of OP_CAT
+//
+// Stack transformation: x n OP_SPLIT -> x1 x2
+func opcodeSplit(op *parsedOpcode, vm *Engine) error {
+	n, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	c, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if n.Int32() > int32(len(c)) {
+		return scriptError(ErrNumberTooBig, "n is larger than length of array")
+	}
+	if n < 0 {
+		return scriptError(ErrNumberTooSmall, "n is negative")
+	}
+	a := c[:n]
+	b := c[n:]
+	vm.dstack.PushByteArray(a)
+	vm.dstack.PushByteArray(b)
+	return nil
+}
+
+// opcodeNum2Bin converts the numeric value into a byte sequence of a
+// certain size, taking account of the sign bit. The byte sequence
+// produced uses the little-endian encoding.
+//
+// Stack transformation: a b OP_NUM2BIN -> x
+func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
+	n, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	size := int(n.Int32())
+
+	if size > MaxScriptElementSize {
+		return scriptError(ErrNumberTooBig,
+			fmt.Sprintf("n is larger than the max of %d", defaultScriptNumLen))
+	}
+
+	// encode a as a script num so that we we take the bytes it
+	// will be minimally encoded.
+	sn, err := makeScriptNum(a, false, len(a))
+	if err != nil {
+		return err
+	}
+
+
+	b := sn.Bytes()
+	if len(b) > size {
+		return scriptError(ErrNumberTooSmall, "cannot fit it into n sized array")
+	}
+	if len(b) == size {
+		vm.dstack.PushByteArray(b)
+		return nil
+	}
+
+	signbit := byte(0x00)
+
+	if len(b) > 0 {
+		signbit = b[0] & 0x80
+		b[len(b)-1] &= 0x7f
+	}
+	for len(b) < size - 1 {
+		b = append(b, 0x00)
+	}
+
+	b = append(b, signbit)
+
+	vm.dstack.PushByteArray(b)
+	return nil
+}
+
+// opcodeBin2num converts the byte sequence into a numeric value,
+// including minimal encoding. The byte sequence must encode the
+// value in little-endian encoding.
+//
+// Stack transformation: a OP_BIN2NUM -> x
+func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	n, err := makeScriptNum(a, false, len(a))
+	if err != nil {
+		return err
+	}
+	if len(n.Bytes()) > defaultScriptNumLen {
+		return scriptError(ErrNumberTooBig,
+			fmt.Sprintf("script numbers are limited to %d bytes", defaultScriptNumLen))
+	}
+
+	vm.dstack.PushInt(n)
+	return nil
+}
+
 // opcodeSize pushes the size of the top item of the data stack onto the data
 // stack.
 //
@@ -1427,6 +1537,75 @@ func opcodeSize(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(scriptNum(len(so)))
+	return nil
+}
+
+// opcodeAnd executes a boolean and between each bit in the operands
+//
+// Stack transformation: x1 x2 OP_AND -> out
+func opcodeAnd(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(a) != len(b) {
+		return scriptError(ErrInvalidInputLength, "byte arrays are not the same length")
+	}
+	c := make([]byte, len(a))
+	for i := range a {
+		c[i] = a[i] & b[i]
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
+}
+
+// opcodeOr executes a boolean or between each bit in the operands
+//
+// Stack transformation: x1 x2 OP_OR -> out
+func opcodeOr(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(a) != len(b) {
+		return scriptError(ErrInvalidInputLength, "byte arrays are not the same length")
+	}
+	c := make([]byte, len(a))
+	for i := range a {
+		c[i] = a[i] | b[i]
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
+}
+
+// opcodeXor executes a boolean xor between each bit in the operands
+//
+// Stack transformation: x1 x2 OP_XOR -> out
+func opcodeXor(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(a) != len(b) {
+		return scriptError(ErrInvalidInputLength, "byte arrays are not the same length")
+	}
+	c := make([]byte, len(a))
+	for i := range a {
+		c[i] = a[i] ^ b[i]
+	}
+	vm.dstack.PushByteArray(c)
 	return nil
 }
 
@@ -1603,6 +1782,50 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(v1 - v0)
+	return nil
+}
+
+// opcodeDiv return the integer quotient of a and b. If the result
+// would be a non-integer it is rounded towards zero.
+//
+// Stack transformation: a b OP_DIV -> out
+func opcodeDiv(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	a, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if b == 0 {
+		return scriptError(ErrNumberTooSmall, "divide by zero")
+	}
+	vm.dstack.PushInt(a / b)
+	return nil
+}
+
+// opcodeMod returns the remainder after dividing a by b. The output will
+// be represented using the least number of bytes required.
+//
+// Stack transformation: a b OP_MOD -> out
+func opcodeMod(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	a, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if b == 0 {
+		return scriptError(ErrNumberTooSmall, "mod by zero")
+	}
+	vm.dstack.PushInt(a % b)
 	return nil
 }
 

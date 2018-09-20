@@ -405,8 +405,17 @@
 ["1 0 0", "ROT", "P2SH,STRICTENC", "OK"],
 ["1 0", "SWAP", "P2SH,STRICTENC", "OK"],
 ["0 1", "TUCK", "P2SH,STRICTENC", "OK"],
+["'a' 'b'", "CAT", "P2SH,STRICTENC", "OK", "CAT"],
+["'a' 'b' 0", "IF CAT ELSE 1 ENDIF", "P2SH,STRICTENC", "OK", "CAT"],
+["'abc' 1", "SPLIT", "P2SH,STRICTENC", "OK", "SPLIT"],
+["'abc' 1 0", "IF SPLIT ELSE 1 ENDIF", "P2SH,STRICTENC", "OK", "SPLIT"],
+["-5 4", "NUM2BIN", "P2SH,STRICTENC", "OK", "NUM2BIN"],
+["'aabb'", "BIN2NUM", "P2SH,STRICTENC", "OK", "BIN2NUM"],
 
 ["1", "SIZE", "P2SH,STRICTENC", "OK"],
+["'aa' 'bb'", "AND", "P2SH,STRICTENC", "OK", "AND"],
+["'aa' 'bb'", "OR", "P2SH,STRICTENC", "OK", "OR"],
+["'aa' 'bb'", "XOR", "P2SH,STRICTENC", "OK", "XOR"],
 
 ["0 0", "EQUAL", "P2SH,STRICTENC", "OK"],
 ["0 0", "EQUALVERIFY 1", "P2SH,STRICTENC", "OK"],
@@ -421,6 +430,8 @@
 
 ["1 0", "ADD", "P2SH,STRICTENC", "OK"],
 ["1 0", "SUB", "P2SH,STRICTENC", "OK"],
+["4 2", "DIV", "P2SH,STRICTENC", "OK"],
+["4 3", "MOD", "P2SH,STRICTENC", "OK"],
 ["-1 -1", "BOOLAND", "P2SH,STRICTENC", "OK"],
 ["-1 0", "BOOLOR", "P2SH,STRICTENC", "OK"],
 ["0 0", "NUMEQUAL", "P2SH,STRICTENC", "OK"],
@@ -817,24 +828,12 @@
 ["NOP", "2SWAP 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 ["1", "2 3 2SWAP 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 
-["'a' 'b'", "CAT", "P2SH,STRICTENC", "DISABLED_OPCODE", "CAT disabled"],
-["'a' 'b' 0", "IF CAT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "CAT disabled"],
-["'abc' 1 1", "SUBSTR", "P2SH,STRICTENC", "DISABLED_OPCODE", "SUBSTR disabled"],
-["'abc' 1 1 0", "IF SUBSTR ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "SUBSTR disabled"],
-["'abc' 2 0", "IF LEFT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "LEFT disabled"],
-["'abc' 2 0", "IF RIGHT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "RIGHT disabled"],
-
 ["NOP", "SIZE 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 
 ["'abc'", "IF INVERT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "INVERT disabled"],
-["1 2 0 IF AND ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "AND disabled"],
-["1 2 0 IF OR ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "OR disabled"],
-["1 2 0 IF XOR ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "XOR disabled"],
 ["2 0 IF 2MUL ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "2MUL disabled"],
 ["2 0 IF 2DIV ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "2DIV disabled"],
 ["2 2 0 IF MUL ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "MUL disabled"],
-["2 2 0 IF DIV ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "DIV disabled"],
-["2 2 0 IF MOD ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "MOD disabled"],
 ["2 2 0 IF LSHIFT ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "LSHIFT disabled"],
 ["2 2 0 IF RSHIFT ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "RSHIFT disabled"],
 
@@ -850,10 +849,8 @@
 ["'abcdef' NOT", "0 EQUAL", "P2SH,STRICTENC", "UNKNOWN_ERROR", "NOT is an arithmetic operand"],
 
 ["2 DUP MUL", "4 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
-["2 DUP DIV", "1 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
 ["2 2MUL", "4 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
 ["2 2DIV", "1 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
-["7 3 MOD", "1 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
 ["2 2 LSHIFT", "8 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
 ["2 1 RSHIFT", "1 EQUAL", "P2SH,STRICTENC", "DISABLED_OPCODE", "disabled"],
 
@@ -992,6 +989,22 @@
 "P2SH,STRICTENC",
 "SCRIPT_SIZE",
 "10,001-byte scriptPubKey"],
+
+["'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'", "CAT", "P2SH,STRICTENC", "ELEMENT_SIZE", "CAT_FALSE"],
+
+["'abc' 4", "SPLIT", "P2SH,STRICTENC", "UNKNOWN_ERROR", "SPLIT_FAIL"],
+["'abc' -1 1", "IF SPLIT ELSE 1 ENDIF", "P2SH,STRICTENC", "UNKNOWN_ERROR", "SPLIT_FAIL"],
+
+["-5 521", "NUM2BIN", "P2SH,STRICTENC", "UNKNOWN_ERROR", "NUM2BIN_FAIL"],
+["22342 1", "NUM2BIN", "P2SH,STRICTENC", "UNKNOWN_ERROR", "NUM2BIN_FAIL"],
+["'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'", "BIN2NUM", "P2SH,STRICTENC", "UNKNOWN_ERROR", "BIN2NUM_FAIL"],
+
+["'aa' 'bbbb'", "AND", "P2SH,STRICTENC", "UNKNOWN_ERROR", "AND_FAIL"],
+["'aa' 'bbbb'", "OR", "P2SH,STRICTENC", "UNKNOWN_ERROR", "OR_FAIL"],
+["'aa' 'bbbb'", "XOR", "P2SH,STRICTENC", "UNKNOWN_ERROR", "XOR_FAIL"],
+
+["5 0", "DIV", "P2SH,STRICTENC", "UNKNOWN_ERROR", "DIV_FAIL"],
+["5 0", "MOD", "P2SH,STRICTENC", "UNKNOWN_ERROR", "MOD_FAIL"],
 
 ["NOP1","NOP10", "P2SH,STRICTENC", "EVAL_FALSE"],
 
