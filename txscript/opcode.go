@@ -451,7 +451,7 @@ var opcodeArray = [256]opcode{
 	// Bitwise logic opcodes.
 	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
 	OP_AND:         {OP_AND, "OP_AND", 1, opcodeAnd},
-	OP_OR:          {OP_OR, "OP_OR", 1, opcodeDisabled},
+	OP_OR:          {OP_OR, "OP_OR", 1, opcodeOr},
 	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeDisabled},
 	OP_EQUAL:       {OP_EQUAL, "OP_EQUAL", 1, opcodeEqual},
 	OP_EQUALVERIFY: {OP_EQUALVERIFY, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
@@ -626,8 +626,6 @@ func (pop *parsedOpcode) isDisabled() bool {
 	case OP_RIGHT:
 		return true
 	case OP_INVERT:
-		return true
-	case OP_OR:
 		return true
 	case OP_XOR:
 		return true
@@ -1491,6 +1489,29 @@ func opcodeAnd(op *parsedOpcode, vm *Engine) error {
 	c := make([]byte, len(a))
 	for i := range a {
 		c[i] = a[i] & b[i]
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
+}
+
+// opcodeOr executes a boolean or between each bit in the operands
+//
+// Stack transformation: x1 x2 OP_OR -> out
+func opcodeOr(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(a) != len(b) {
+		return scriptError(ErrInvalidInputLength, "byte arrays are not the same length")
+	}
+	c := make([]byte, len(a))
+	for i := range a {
+		c[i] = a[i] | b[i]
 	}
 	vm.dstack.PushByteArray(c)
 	return nil
