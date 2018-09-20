@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"sort"
 )
 
 var (
@@ -20,6 +21,13 @@ var (
 	// the overhead of creating it multiple times.
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 )
+
+// DifficultyAdjustmentWindow is the size of the window used by the DAA adjustment
+// algorithm when calculating the current difficulty. The algorithm requires fetching
+// a 'suitable' block out of blocks n-144, n-145, and n-146. We set this value equal
+// to n-144 as that is the first of the three candidate blocks and we will use it
+// to fetch the previous two.
+const DifficultyAdjustmentWindow = 144
 
 // Bitcoin Cash has had three different difficulty adjustment algorithms during
 // its life. What this means for us is our node needs to select which algorithm
@@ -45,9 +53,9 @@ const (
 // SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
 // should be used when validating a block at the given height.
 func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(height int32) DifficultyAlgorithm {
-	if height >= b.chainParams.UahfForkHeight && height < b.chainParams.DaaForkHeight {
+	if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
 		return DifficultyEDA
-	} else if height >= b.chainParams.DaaForkHeight {
+	} else if height > b.chainParams.DaaForkHeight {
 		return DifficultyDAA
 	}
 	return DifficultyLegacy
@@ -245,6 +253,22 @@ func (b *BlockChain) findPrevTestNetDifficulty(startNode *blockNode) uint32 {
 	return lastBits
 }
 
+// GetSuitableBlock locates the two parents of passed in block, sorts the three
+// blocks by timestamp and returns the median.
+func (b *BlockChain) GetSuitableBlock(node0 *blockNode) (*blockNode, error) {
+	node1 := node0.RelativeAncestor(1)
+	if node1 == nil {
+		return nil, AssertError("unable to obtain relative ancestor")
+	}
+	node2 := node1.RelativeAncestor(1)
+	if node2 == nil {
+		return nil, AssertError("unable to obtain relative ancestor")
+	}
+	blocks := []*blockNode{node0, node1, node2}
+	sort.Sort(blockSorter(blocks))
+	return blocks[1], nil
+}
+
 // calcNextRequiredDifficulty calculates the required difficulty for the block
 // after the passed previous block node based on the difficulty retarget rules.
 // This function differs from the exported CalcNextRequiredDifficulty in that
@@ -256,6 +280,77 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return b.chainParams.PowLimitBits, nil
 	}
 
+	// If we're still using a legacy algorithm
+	if algorithm != DifficultyDAA {
+		return b.calcLegacyRequiredDifficulty(lastNode, newBlockTime, algorithm)
+	}
+
+	// For networks that support it, allow special reduction of the
+	// required difficulty once too much time has elapsed without
+	// mining a block.
+	if b.chainParams.ReduceMinDifficulty {
+		// Return minimum difficulty when more than the desired
+		// amount of time has elapsed without mining a block.
+		reductionTime := int64(b.chainParams.MinDiffReductionTime /
+			time.Second)
+		allowMinTime := lastNode.timestamp + reductionTime
+		if newBlockTime.Unix() > allowMinTime {
+			return b.chainParams.PowLimitBits, nil
+		}
+
+		// The block was mined within the desired timeframe, so
+		// return the difficulty for the last block which did
+		// not have the special minimum difficulty rule applied.
+		return b.findPrevTestNetDifficulty(lastNode), nil
+	}
+
+	// Get the block node at the beginning of the window (n-144)
+	firstNode := lastNode.RelativeAncestor(DifficultyAdjustmentWindow)
+	if firstNode == nil {
+		return 0, AssertError("unable to obtain previous retarget block")
+	}
+
+	// Find the suitable blocks to use as the first and last nodes for the
+	// purpose of the difficulty calculation. A suitable block is the median
+	// timestamp out of the three prior.
+	suitableLastNode, err := b.GetSuitableBlock(lastNode)
+	if err != nil {
+		return 0, err
+	}
+	suitableFirstNode, err := b.GetSuitableBlock(firstNode)
+	if err != nil {
+		return 0, err
+	}
+
+	work := new(big.Int).Sub(suitableLastNode.workSum, suitableFirstNode.workSum)
+
+	// In order to avoid difficulty cliffs, we bound the amplitude of the
+	// adjustement we are going to do.
+	duration := suitableLastNode.timestamp - suitableFirstNode.timestamp
+	if duration > 288*int64(b.chainParams.TargetTimePerBlock.Seconds()) {
+		duration = 288 * int64(b.chainParams.TargetTimePerBlock.Seconds())
+	} else if duration < 72*int64(b.chainParams.TargetTimePerBlock.Seconds()) {
+		duration = 72 * int64(b.chainParams.TargetTimePerBlock.Seconds())
+	}
+
+	projectedWork := new(big.Int).Mul(work, big.NewInt(int64(b.chainParams.TargetTimePerBlock.Seconds())))
+
+	pw := new(big.Int).Div(projectedWork, big.NewInt(duration))
+
+	e := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+
+	nt := new(big.Int).Sub(e, pw)
+
+	newTarget := new(big.Int).Div(nt, pw)
+
+	// clip again if above minimum target (too easy)
+	if newTarget.Cmp(b.chainParams.PowLimit) > 0 {
+		newTarget.Set(b.chainParams.PowLimit)
+	}
+	return BigToCompact(newTarget), nil
+}
+
+func (b *BlockChain) calcLegacyRequiredDifficulty(lastNode *blockNode, newBlockTime time.Time, algorithm DifficultyAlgorithm) (uint32, error) {
 	// Return the previous block's difficulty requirements if this block
 	// is not at a difficulty retarget interval.
 	if (lastNode.height+1)%b.blocksPerRetarget != 0 {
