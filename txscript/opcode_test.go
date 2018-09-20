@@ -18,7 +18,7 @@ import (
 func TestOpcodeDisabled(t *testing.T) {
 	t.Parallel()
 
-	tests := []byte{OP_CAT, OP_SUBSTR, OP_LEFT, OP_RIGHT, OP_INVERT,
+	tests := []byte{OP_LEFT, OP_RIGHT, OP_INVERT,
 		OP_AND, OP_OR, OP_2MUL, OP_2DIV, OP_MUL, OP_DIV, OP_MOD,
 		OP_LSHIFT, OP_RSHIFT,
 	}

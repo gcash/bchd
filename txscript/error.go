@@ -109,6 +109,14 @@ const (
 	// input may fail with this code.
 	ErrNumberTooBig
 
+	// ErrNumberTooSmall is returned when the argument for an opcode that
+	// expects numeric input is smaller than the expected maximum number of
+	// bytes.  For the most part, opcodes that deal with stack manipulation
+	// via offsets, arithmetic, numeric comparison, and boolean logic are
+	// those that this applies to.  However, any opcode that expects numeric
+	// input may fail with this code.
+	ErrNumberTooSmall
+
 	// --------------------------------------------
 	// Failures related to verification operations.
 	// --------------------------------------------
@@ -253,6 +261,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidPubKeyCount:       "ErrInvalidPubKeyCount",
 	ErrInvalidSignatureCount:    "ErrInvalidSignatureCount",
 	ErrNumberTooBig:             "ErrNumberTooBig",
+	ErrNumberTooSmall:           "ErrNumberTooSmall",
 	ErrVerify:                   "ErrVerify",
 	ErrEqualVerify:              "ErrEqualVerify",
 	ErrNumEqualVerify:           "ErrNumEqualVerify",
