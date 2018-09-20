@@ -405,6 +405,8 @@
 ["1 0 0", "ROT", "P2SH,STRICTENC", "OK"],
 ["1 0", "SWAP", "P2SH,STRICTENC", "OK"],
 ["0 1", "TUCK", "P2SH,STRICTENC", "OK"],
+["'a' 'b'", "CAT", "P2SH,STRICTENC", "OK", "CAT"],
+["'a' 'b' 0", "IF CAT ELSE 1 ENDIF", "P2SH,STRICTENC", "OK", "CAT"],
 
 ["1", "SIZE", "P2SH,STRICTENC", "OK"],
 
@@ -817,8 +819,6 @@
 ["NOP", "2SWAP 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 ["1", "2 3 2SWAP 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 
-["'a' 'b'", "CAT", "P2SH,STRICTENC", "DISABLED_OPCODE", "CAT disabled"],
-["'a' 'b' 0", "IF CAT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "CAT disabled"],
 ["'abc' 1 1", "SUBSTR", "P2SH,STRICTENC", "DISABLED_OPCODE", "SUBSTR disabled"],
 ["'abc' 1 1 0", "IF SUBSTR ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "SUBSTR disabled"],
 ["'abc' 2 0", "IF LEFT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "LEFT disabled"],
@@ -992,6 +992,8 @@
 "P2SH,STRICTENC",
 "SCRIPT_SIZE",
 "10,001-byte scriptPubKey"],
+
+["'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'", "CAT", "P2SH,STRICTENC", "ELEMENT_SIZE", "CAT_FALSE"],
 
 ["NOP1","NOP10", "P2SH,STRICTENC", "EVAL_FALSE"],
 

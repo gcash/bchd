@@ -442,7 +442,7 @@ var opcodeArray = [256]opcode{
 	OP_TUCK:         {OP_TUCK, "OP_TUCK", 1, opcodeTuck},
 
 	// Splice opcodes.
-	OP_CAT:    {OP_CAT, "OP_CAT", 1, opcodeDisabled},
+	OP_CAT:    {OP_CAT, "OP_CAT", 1, opcodeCat},
 	OP_SUBSTR: {OP_SUBSTR, "OP_SUBSTR", 1, opcodeDisabled},
 	OP_LEFT:   {OP_LEFT, "OP_LEFT", 1, opcodeDisabled},
 	OP_RIGHT:  {OP_RIGHT, "OP_RIGHT", 1, opcodeDisabled},
@@ -621,8 +621,6 @@ type parsedOpcode struct {
 // bad to see in the instruction stream (even if turned off by a conditional).
 func (pop *parsedOpcode) isDisabled() bool {
 	switch pop.opcode.value {
-	case OP_CAT:
-		return true
 	case OP_SUBSTR:
 		return true
 	case OP_LEFT:
@@ -1414,6 +1412,29 @@ func opcodeSwap(op *parsedOpcode, vm *Engine) error {
 // Stack transformation: [... x1 x2] -> [... x2 x1 x2]
 func opcodeTuck(op *parsedOpcode, vm *Engine) error {
 	return vm.dstack.Tuck()
+}
+
+// opcodeCat concatenates two byte sequences. The result must
+// not be larger than MaxScriptElementSize.
+//
+// Stack transformation: {Ox11} {0x22, 0x33} OP_CAT -> 0x112233
+func opcodeCat(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	c := append(a, b...)
+	if len(c) > MaxScriptElementSize {
+		str := fmt.Sprintf("concatenated size %d exceeds max allowed size %d",
+			len(c), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
 }
 
 // opcodeSize pushes the size of the top item of the data stack onto the data

@@ -221,6 +221,8 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 		return []ErrorCode{ErrStackOverflow}, nil
 	case "SCRIPT_SIZE":
 		return []ErrorCode{ErrScriptTooBig}, nil
+	case "ELEMENT_SIZE":
+		return []ErrorCode{ErrElementTooBig}, nil
 	case "PUBKEY_COUNT":
 		return []ErrorCode{ErrInvalidPubKeyCount}, nil
 	case "SIG_COUNT":
