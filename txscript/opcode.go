@@ -164,7 +164,7 @@ const (
 	OP_TUCK                = 0x7d // 125
 	OP_CAT                 = 0x7e // 126
 	OP_SPLIT               = 0x7f // 127
-	OP_LEFT                = 0x80 // 128
+	OP_NUM2BIN             = 0x80 // 128
 	OP_RIGHT               = 0x81 // 129
 	OP_SIZE                = 0x82 // 130
 	OP_INVERT              = 0x83 // 131
@@ -442,11 +442,11 @@ var opcodeArray = [256]opcode{
 	OP_TUCK:         {OP_TUCK, "OP_TUCK", 1, opcodeTuck},
 
 	// Splice opcodes.
-	OP_CAT:   {OP_CAT, "OP_CAT", 1, opcodeCat},
-	OP_SPLIT: {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
-	OP_LEFT:  {OP_LEFT, "OP_LEFT", 1, opcodeDisabled},
-	OP_RIGHT: {OP_RIGHT, "OP_RIGHT", 1, opcodeDisabled},
-	OP_SIZE:  {OP_SIZE, "OP_SIZE", 1, opcodeSize},
+	OP_CAT:     {OP_CAT, "OP_CAT", 1, opcodeCat},
+	OP_SPLIT:   {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
+	OP_NUM2BIN: {OP_NUM2BIN, "OP_NUM2BIN", 1, opcodeNum2bin},
+	OP_RIGHT:   {OP_RIGHT, "OP_RIGHT", 1, opcodeDisabled},
+	OP_SIZE:    {OP_SIZE, "OP_SIZE", 1, opcodeSize},
 
 	// Bitwise logic opcodes.
 	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
@@ -621,8 +621,6 @@ type parsedOpcode struct {
 // bad to see in the instruction stream (even if turned off by a conditional).
 func (pop *parsedOpcode) isDisabled() bool {
 	switch pop.opcode.value {
-	case OP_LEFT:
-		return true
 	case OP_RIGHT:
 		return true
 	case OP_INVERT:
@@ -1441,12 +1439,54 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 	if n.Int32() > int32(len(c)) {
 		return scriptError(ErrNumberTooBig, "n is larger than length of array")
 	}
-	if n.Int32() < 0 {
+	if n < 0 {
 		return scriptError(ErrNumberTooSmall, "n is negative")
 	}
 	a := c[:n]
 	b := c[n:]
 	vm.dstack.PushByteArray(a)
+	vm.dstack.PushByteArray(b)
+	return nil
+}
+
+// opcodeNum2Bin converts the numeric value into a byte sequence of a
+// certain size, taking account of the sign bit. The byte sequence
+// produced uses the little-endian encoding.
+//
+// Stack transformation: a b OP_NUM2BIN -> x
+func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
+	n, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	a, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	size := int(n.Int32())
+
+	if size > MaxScriptElementSize {
+		return scriptError(ErrNumberTooBig,
+			fmt.Sprintf("n is larger than the max of %d", defaultScriptNumLen))
+	}
+
+	b := a.Bytes()
+	if len(b) > size {
+		return scriptError(ErrNumberTooSmall, "cannot fit it into n sized array")
+	}
+
+	if len(b) < size {
+		signbit := byte(0x00)
+		if len(b) > 0 {
+			signbit = b[0] & 0x80
+			b[len(b)-1] &= 0x7f
+		}
+		for i := 0; i < size-len(b); i++ {
+			b = append(b, 0x00)
+		}
+		b = append(b, signbit)
+	}
 	vm.dstack.PushByteArray(b)
 	return nil
 }

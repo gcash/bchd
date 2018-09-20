@@ -2675,33 +2675,33 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_LEFT",
+			name: "OP_NUM2BIN",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_LEFT],
+				opcode: &opcodeArray[OP_NUM2BIN],
 				data:   nil,
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "OP_LEFT long",
+			name: "OP_NUM2BIN long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_LEFT],
+				opcode: &opcodeArray[OP_NUM2BIN],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_LEFT",
+			name: "OP_NUM2BIN",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_LEFT],
+				opcode: &opcodeArray[OP_NUM2BIN],
 				data:   nil,
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "OP_LEFT long",
+			name: "OP_NUM2BIN long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_LEFT],
+				opcode: &opcodeArray[OP_NUM2BIN],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
