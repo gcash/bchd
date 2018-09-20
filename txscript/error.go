@@ -170,6 +170,10 @@ const (
 	// an OP_IF or OP_NOTIF was previously encountered.
 	ErrUnbalancedConditional
 
+	// ErrInvalidInputLength is returned when an input to an opcode is not
+	// the correct length as required by that opcode.
+	ErrInvalidInputLength
+
 	// ---------------------------------
 	// Failures related to malleability.
 	// ---------------------------------
@@ -272,6 +276,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrMalformedPush:            "ErrMalformedPush",
 	ErrInvalidStackOperation:    "ErrInvalidStackOperation",
 	ErrUnbalancedConditional:    "ErrUnbalancedConditional",
+	ErrInvalidInputLength:       "ErrInvalidInputLength",
 	ErrMinimalData:              "ErrMinimalData",
 	ErrInvalidSigHashType:       "ErrInvalidSigHashType",
 	ErrSigDER:                   "ErrSigDER",

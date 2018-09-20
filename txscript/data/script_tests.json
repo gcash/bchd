@@ -411,6 +411,7 @@
 ["'abc' 1 0", "IF SPLIT ELSE 1 ENDIF", "P2SH,STRICTENC", "OK", "SPLIT"],
 
 ["1", "SIZE", "P2SH,STRICTENC", "OK"],
+["'aa' 'bb'", "AND", "P2SH,STRICTENC", "OK", "AND"],
 
 ["0 0", "EQUAL", "P2SH,STRICTENC", "OK"],
 ["0 0", "EQUALVERIFY 1", "P2SH,STRICTENC", "OK"],
@@ -827,7 +828,6 @@
 ["NOP", "SIZE 1", "P2SH,STRICTENC", "INVALID_STACK_OPERATION"],
 
 ["'abc'", "IF INVERT ELSE 1 ENDIF", "P2SH,STRICTENC", "DISABLED_OPCODE", "INVERT disabled"],
-["1 2 0 IF AND ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "AND disabled"],
 ["1 2 0 IF OR ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "OR disabled"],
 ["1 2 0 IF XOR ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "XOR disabled"],
 ["2 0 IF 2MUL ELSE 1 ENDIF", "NOP", "P2SH,STRICTENC", "DISABLED_OPCODE", "2MUL disabled"],
@@ -996,7 +996,9 @@
 ["'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'", "CAT", "P2SH,STRICTENC", "ELEMENT_SIZE", "CAT_FALSE"],
 
 ["'abc' 4", "SPLIT", "P2SH,STRICTENC", "UNKNOWN_ERROR", "SPLIT_FAIL"],
-["'abc' -1 0", "IF SPLIT ELSE 1 ENDIF", "P2SH,STRICTENC", "UNKNOWN_ERROR", "SPLIT_FAIL"],
+["'abc' -1 1", "IF SPLIT ELSE 1 ENDIF", "P2SH,STRICTENC", "UNKNOWN_ERROR", "SPLIT_FAIL"],
+
+["'aa' 'bbbb'", "AND", "P2SH,STRICTENC", "UNKNOWN_ERROR", "AND"],
 
 ["NOP1","NOP10", "P2SH,STRICTENC", "EVAL_FALSE"],
 
