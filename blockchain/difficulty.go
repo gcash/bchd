@@ -22,6 +22,13 @@ var (
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 )
 
+// DifficultyAdjustmentWindow is the size of the window used by the DAA adjustment
+// algorithm when calculating the current difficulty. The algorithm requires fetching
+// a 'suitable' block out of blocks n-144, n-145, and n-146. We set this value equal
+// to n-144 as that is the first of the three candidate blocks and we will use it
+// to fetch the previous two.
+const DifficultyAdjustmentWindow = 144
+
 // Bitcoin Cash has had three different difficulty adjustment algorithms during
 // its life. What this means for us is our node needs to select which algorithm
 // to use when calculating difficulty based on where it is in the chain.
@@ -46,9 +53,9 @@ const (
 // SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
 // should be used when validating a block at the given height.
 func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(height int32) DifficultyAlgorithm {
-	if height >= b.chainParams.UahfForkHeight && height < b.chainParams.DaaForkHeight {
+	if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
 		return DifficultyEDA
-	} else if height >= b.chainParams.DaaForkHeight {
+	} else if height > b.chainParams.DaaForkHeight {
 		return DifficultyDAA
 	}
 	return DifficultyLegacy
@@ -297,9 +304,8 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return b.findPrevTestNetDifficulty(lastNode), nil
 	}
 
-	// Get the block node at the previous retarget (targetTimespan days
-	// worth of blocks).
-	firstNode := lastNode.RelativeAncestor(b.blocksPerRetarget - 1)
+	// Get the block node at the beginning of the window (n-144)
+	firstNode := lastNode.RelativeAncestor(DifficultyAdjustmentWindow)
 	if firstNode == nil {
 		return 0, AssertError("unable to obtain previous retarget block")
 	}
@@ -321,13 +327,13 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	// In order to avoid difficulty cliffs, we bound the amplitude of the
 	// adjustement we are going to do.
 	duration := suitableLastNode.timestamp - suitableFirstNode.timestamp
-	if duration > 288*int64(b.blocksPerRetarget) {
-		duration = 288 * int64(b.blocksPerRetarget)
-	} else if duration < 72*int64(b.blocksPerRetarget) {
-		duration = 72 * int64(b.blocksPerRetarget)
+	if duration > 288*int64(b.chainParams.TargetTimePerBlock.Seconds()) {
+		duration = 288 * int64(b.chainParams.TargetTimePerBlock.Seconds())
+	} else if duration < 72*int64(b.chainParams.TargetTimePerBlock.Seconds()) {
+		duration = 72 * int64(b.chainParams.TargetTimePerBlock.Seconds())
 	}
 
-	projectedWork := new(big.Int).Mul(work, big.NewInt(int64(b.blocksPerRetarget)))
+	projectedWork := new(big.Int).Mul(work, big.NewInt(int64(b.chainParams.TargetTimePerBlock.Seconds())))
 
 	pw := new(big.Int).Div(projectedWork, big.NewInt(duration))
 
