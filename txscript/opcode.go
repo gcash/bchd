@@ -165,7 +165,7 @@ const (
 	OP_CAT                 = 0x7e // 126
 	OP_SPLIT               = 0x7f // 127
 	OP_NUM2BIN             = 0x80 // 128
-	OP_RIGHT               = 0x81 // 129
+	OP_BIN2NUM             = 0x81 // 129
 	OP_SIZE                = 0x82 // 130
 	OP_INVERT              = 0x83 // 131
 	OP_AND                 = 0x84 // 132
@@ -445,7 +445,7 @@ var opcodeArray = [256]opcode{
 	OP_CAT:     {OP_CAT, "OP_CAT", 1, opcodeCat},
 	OP_SPLIT:   {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
 	OP_NUM2BIN: {OP_NUM2BIN, "OP_NUM2BIN", 1, opcodeNum2bin},
-	OP_RIGHT:   {OP_RIGHT, "OP_RIGHT", 1, opcodeDisabled},
+	OP_BIN2NUM: {OP_BIN2NUM, "OP_BIN2NUM", 1, opcodeBin2num},
 	OP_SIZE:    {OP_SIZE, "OP_SIZE", 1, opcodeSize},
 
 	// Bitwise logic opcodes.
@@ -621,8 +621,6 @@ type parsedOpcode struct {
 // bad to see in the instruction stream (even if turned off by a conditional).
 func (pop *parsedOpcode) isDisabled() bool {
 	switch pop.opcode.value {
-	case OP_RIGHT:
-		return true
 	case OP_INVERT:
 		return true
 	case OP_2MUL:
@@ -1488,6 +1486,30 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		b = append(b, signbit)
 	}
 	vm.dstack.PushByteArray(b)
+	return nil
+}
+
+// opcodeBin2num converts the byte sequence into a numeric value,
+// including minimal encoding. The byte sequence must encode the
+// value in little-endian encoding.
+//
+// Stack transformation: a OP_BIN2NUM -> x
+func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	n, err := makeScriptNum(a, false, len(a))
+	if err != nil {
+		return err
+	}
+	if len(n.Bytes()) > defaultScriptNumLen {
+		return scriptError(ErrNumberTooBig,
+			fmt.Sprintf("script numbers are limited to %d bytes", defaultScriptNumLen))
+	}
+
+	vm.dstack.PushInt(n)
 	return nil
 }
 
