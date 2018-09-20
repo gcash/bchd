@@ -452,7 +452,7 @@ var opcodeArray = [256]opcode{
 	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
 	OP_AND:         {OP_AND, "OP_AND", 1, opcodeAnd},
 	OP_OR:          {OP_OR, "OP_OR", 1, opcodeOr},
-	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeDisabled},
+	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeXor},
 	OP_EQUAL:       {OP_EQUAL, "OP_EQUAL", 1, opcodeEqual},
 	OP_EQUALVERIFY: {OP_EQUALVERIFY, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
 	OP_RESERVED1:   {OP_RESERVED1, "OP_RESERVED1", 1, opcodeReserved},
@@ -626,8 +626,6 @@ func (pop *parsedOpcode) isDisabled() bool {
 	case OP_RIGHT:
 		return true
 	case OP_INVERT:
-		return true
-	case OP_XOR:
 		return true
 	case OP_2MUL:
 		return true
@@ -1512,6 +1510,29 @@ func opcodeOr(op *parsedOpcode, vm *Engine) error {
 	c := make([]byte, len(a))
 	for i := range a {
 		c[i] = a[i] | b[i]
+	}
+	vm.dstack.PushByteArray(c)
+	return nil
+}
+
+// opcodeXor executes a boolean xor between each bit in the operands
+//
+// Stack transformation: x1 x2 OP_XOR -> out
+func opcodeXor(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(a) != len(b) {
+		return scriptError(ErrInvalidInputLength, "byte arrays are not the same length")
+	}
+	c := make([]byte, len(a))
+	for i := range a {
+		c[i] = a[i] ^ b[i]
 	}
 	vm.dstack.PushByteArray(c)
 	return nil
