@@ -470,7 +470,7 @@ var opcodeArray = [256]opcode{
 	OP_ADD:                {OP_ADD, "OP_ADD", 1, opcodeAdd},
 	OP_SUB:                {OP_SUB, "OP_SUB", 1, opcodeSub},
 	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeDisabled},
-	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDisabled},
+	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDiv},
 	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeDisabled},
 	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeDisabled},
 	OP_RSHIFT:             {OP_RSHIFT, "OP_RSHIFT", 1, opcodeDisabled},
@@ -632,8 +632,6 @@ func (pop *parsedOpcode) isDisabled() bool {
 	case OP_2DIV:
 		return true
 	case OP_MUL:
-		return true
-	case OP_DIV:
 		return true
 	case OP_MOD:
 		return true
@@ -1711,6 +1709,28 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(v1 - v0)
+	return nil
+}
+
+// opcodeDiv Return the integer quotient of a and b. If the result
+// would be a non-integer it is rounded towards zero.
+//
+// Stack transformation: a b OP_DIV -> out
+func opcodeDiv(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	a, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if b == 0 {
+		return scriptError(ErrNumberTooSmall, "divide by zero")
+	}
+	vm.dstack.PushInt(a / b)
 	return nil
 }
 
