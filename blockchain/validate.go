@@ -1227,6 +1227,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptVerifyLowS | txscript.ScriptVerifyNullFail
 	}
 
+	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
+	if b.IsMagneticAnomalyEnabled(node.parent) {
+		scriptFlags |= txscript.ScriptVerifySigPushOnly | txscript.ScriptVerifyCleanStack
+	}
+
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
 	// the soft-fork deployment is fully active.
 	csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
