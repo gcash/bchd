@@ -248,6 +248,8 @@ var MainNetParams = Params{
 	UahfForkHeight: 478558, // 0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43
 	DaaForkHeight:  504031, // 0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c
 
+	MagneticAnomalyActivationTime: 1542300000,
+
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -340,6 +342,8 @@ var RegressionNetParams = Params{
 	UahfForkHeight: 0, // Always active on regtest
 	DaaForkHeight:  0, // Always active on regtest
 
+	MagneticAnomalyActivationTime: 1542300000,
+
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
@@ -416,6 +420,8 @@ var TestNet3Params = Params{
 
 	UahfForkHeight: 1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
 	DaaForkHeight:  1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
+
+	MagneticAnomalyActivationTime: 1542300000,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -494,23 +500,24 @@ var SimNetParams = Params{
 	DNSSeeds:    []DNSSeed{}, // NOTE: There must NOT be any seeds.
 
 	// Chain parameters
-	GenesisBlock:             &simNetGenesisBlock,
-	GenesisHash:              &simNetGenesisHash,
-	PowLimit:                 simNetPowLimit,
-	PowLimitBits:             0x207fffff,
-	BIP0034Height:            0, // Always active on simnet
-	BIP0065Height:            0, // Always active on simnet
-	BIP0066Height:            0, // Always active on simnet
-	UahfForkHeight:           0, // Always active on simnet
-	DaaForkHeight:            0, // Always active on simnet
-	CoinbaseMaturity:         100,
-	SubsidyReductionInterval: 210000,
-	TargetTimespan:           time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
-	ReduceMinDifficulty:      true,
-	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
-	GenerateSupported:        true,
+	GenesisBlock:                  &simNetGenesisBlock,
+	GenesisHash:                   &simNetGenesisHash,
+	PowLimit:                      simNetPowLimit,
+	PowLimitBits:                  0x207fffff,
+	BIP0034Height:                 0, // Always active on simnet
+	BIP0065Height:                 0, // Always active on simnet
+	BIP0066Height:                 0, // Always active on simnet
+	UahfForkHeight:                0, // Always active on simnet
+	DaaForkHeight:                 0, // Always active on simnet
+	MagneticAnomalyActivationTime: 1542300000,
+	CoinbaseMaturity:              100,
+	SubsidyReductionInterval:      210000,
+	TargetTimespan:                time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:            time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:      4,                   // 25% less, 400% more
+	ReduceMinDifficulty:           true,
+	MinDiffReductionTime:          time.Minute * 20, // TargetTimePerBlock * 2
+	GenerateSupported:             true,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,

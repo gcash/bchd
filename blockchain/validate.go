@@ -74,6 +74,18 @@ var (
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
 
+// IsMagneticAnomalyEnabled returns whether or not the Novemeber 15, 2018
+// hardfork is active. `prevNode` is the block prior to the one being
+// validated. The consensus rules state that once the hardfork is active
+// the next block must follow the new rules.
+func (b *BlockChain) IsMagneticAnomalyEnabled(prevNode *blockNode) bool {
+	medianTime := prevNode.CalcPastMedianTime()
+	if medianTime.Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime) {
+		return true
+	}
+	return false
+}
+
 // Returns the is the maximum number of bytes allowed in a block.
 // If the UAHF hardfork is active the returned value is the excessive
 // blocksize. Otherwise it's the legacy blocksize.
