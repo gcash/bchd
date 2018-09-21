@@ -46,14 +46,18 @@ const (
 	// prior to the August 1st, 2018 UAHF hardfork
 	LegacyMaxBlockSize = 1000000
 
-	// The maximum number of allowed sigops allowed per one megabyte
-	// allowed in a block
+	// MaxBlockSigOpsPerMB is the maximum number of allowed sigops allowed
+	// per one megabyte allowed in a block
 	MaxBlockSigOpsPerMB = 20000
 
-	// The maximum allowable size of a transaction
+	// MaxTransactionSize is the maximum allowable size of a transaction
 	MaxTransactionSize = 1000000
 
-	// The maximum allowable number of sigops per transaction
+	// MinTransactionSize is the minimum transaction size allowed on the
+	// network after the magneticanomaly hardfork
+	MinTransactionSize = 100
+
+	// MaxTransactionSigOps the maximum allowable number of sigops per transaction
 	MaxTransactionSigOps = 20000
 )
 
@@ -79,6 +83,9 @@ var (
 // validated. The consensus rules state that once the hardfork is active
 // the next block must follow the new rules.
 func (b *BlockChain) IsMagneticAnomalyEnabled(prevNode *blockNode) bool {
+	if prevNode == nil || prevNode.parent == nil {
+		return false
+	}
 	medianTime := prevNode.CalcPastMedianTime()
 	if medianTime.Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime) {
 		return true
@@ -258,7 +265,7 @@ func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
 // ensure it is sane.  These checks are context free.
-func CheckTransactionSanity(tx *bchutil.Tx) error {
+func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
 	// A transaction must have at least one input.
 	msgTx := tx.MsgTx()
 	if len(msgTx.TxIn) == 0 {
@@ -277,6 +284,11 @@ func CheckTransactionSanity(tx *bchutil.Tx) error {
 		str := fmt.Sprintf("serialized transaction is too big - got "+
 			"%d, max %d", serializedTxSize, MaxTransactionSize)
 		return ruleError(ErrTxTooBig, str)
+	}
+	if enforceMinimumSize && serializedTxSize < MinTransactionSize {
+		str := fmt.Sprintf("serialized transaction is too small - got "+
+			"%d, max %d", serializedTxSize, MinTransactionSize)
+		return ruleError(ErrTxTooSmall, str)
 	}
 
 	sigOps := CountSigOps(tx)
@@ -574,8 +586,9 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	// Do some preliminary checks on each transaction to ensure they are
 	// sane before continuing.
+	enforceMinimumSize := flags&BFMagneticAnomaly == BFMagneticAnomaly
 	for _, tx := range transactions {
-		err := CheckTransactionSanity(tx)
+		err := CheckTransactionSanity(tx, enforceMinimumSize)
 		if err != nil {
 			return err
 		}
@@ -1310,6 +1323,12 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 		str := fmt.Sprintf("previous block must be the current chain tip %v, "+
 			"instead got %v", tip.hash, header.PrevBlock)
 		return ruleError(ErrPrevBlockNotBest, str)
+	}
+
+	// If magneticanomaly is active make sure the block sanity is checked using the
+	// new rule set.
+	if b.IsMagneticAnomalyEnabled(tip.parent) {
+		flags |= BFMagneticAnomaly
 	}
 
 	err := checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)

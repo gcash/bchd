@@ -111,6 +111,10 @@ const (
 	// when serialized.
 	ErrTxTooBig
 
+	// ErrTxTooSmall indicates a transaction is smaller than the minimum
+	// allowed size when serialized.
+	ErrTxTooSmall
+
 	// ErrTxTooManySigOps indicates a transaction exceeds the maximum allowable
 	// number of signature operations.
 	ErrTxTooManySigOps
@@ -237,6 +241,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrNoTxInputs:            "ErrNoTxInputs",
 	ErrNoTxOutputs:           "ErrNoTxOutputs",
 	ErrTxTooBig:              "ErrTxTooBig",
+	ErrTxTooSmall:            "ErrTxTooSmall",
 	ErrTxTooManySigOps:       "ErrTxTooManySigOps",
 	ErrBadTxOutValue:         "ErrBadTxOutValue",
 	ErrDuplicateTxInputs:     "ErrDuplicateTxInputs",
