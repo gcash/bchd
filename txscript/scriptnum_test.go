@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/gcash/bchd/wire"
 	"testing"
 )
 
@@ -269,5 +270,21 @@ func TestScriptNumInt32(t *testing.T) {
 				"got %d, want %d", test.in, got, test.want)
 			continue
 		}
+	}
+}
+
+func TestDisasmString(t *testing.T) {
+	script, _ := hex.DecodeString("3105abcdef4280548004abcdefc2877451a0637c757451a0637c757451a0637c757451a0637c757451a0637c756868686868")
+	prev, _ := hex.DecodeString("a91464902b04c3d9ea558b7f2edb24758b383343a2d587")
+	tx := wire.NewMsgTx(1)
+	in := wire.NewTxIn(&wire.OutPoint{}, script)
+	tx.TxIn = append(tx.TxIn, in)
+	vm, err := NewEngine(prev, tx, 0, ScriptBip16|ScriptVerifyCleanStack, nil, nil, 0)
+	if err != nil {
+		t.Error(err)
+	}
+	err = vm.Execute()
+	if err != nil {
+		t.Error(err)
 	}
 }

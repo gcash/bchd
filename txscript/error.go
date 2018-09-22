@@ -109,6 +109,14 @@ const (
 	// input may fail with this code.
 	ErrNumberTooBig
 
+	// ErrNumberTooSmall is returned when the argument for an opcode that
+	// expects numeric input is smaller than the expected maximum number of
+	// bytes.  For the most part, opcodes that deal with stack manipulation
+	// via offsets, arithmetic, numeric comparison, and boolean logic are
+	// those that this applies to.  However, any opcode that expects numeric
+	// input may fail with this code.
+	ErrNumberTooSmall
+
 	// --------------------------------------------
 	// Failures related to verification operations.
 	// --------------------------------------------
@@ -161,6 +169,10 @@ const (
 	// the end of script is reached without encountering an OP_ENDIF when
 	// an OP_IF or OP_NOTIF was previously encountered.
 	ErrUnbalancedConditional
+
+	// ErrInvalidInputLength is returned when an input to an opcode is not
+	// the correct length as required by that opcode.
+	ErrInvalidInputLength
 
 	// ---------------------------------
 	// Failures related to malleability.
@@ -253,6 +265,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidPubKeyCount:       "ErrInvalidPubKeyCount",
 	ErrInvalidSignatureCount:    "ErrInvalidSignatureCount",
 	ErrNumberTooBig:             "ErrNumberTooBig",
+	ErrNumberTooSmall:           "ErrNumberTooSmall",
 	ErrVerify:                   "ErrVerify",
 	ErrEqualVerify:              "ErrEqualVerify",
 	ErrNumEqualVerify:           "ErrNumEqualVerify",
@@ -263,6 +276,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrMalformedPush:            "ErrMalformedPush",
 	ErrInvalidStackOperation:    "ErrInvalidStackOperation",
 	ErrUnbalancedConditional:    "ErrUnbalancedConditional",
+	ErrInvalidInputLength:       "ErrInvalidInputLength",
 	ErrMinimalData:              "ErrMinimalData",
 	ErrInvalidSigHashType:       "ErrInvalidSigHashType",
 	ErrSigDER:                   "ErrSigDER",
