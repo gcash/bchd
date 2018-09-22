@@ -6,18 +6,18 @@
 # 4. gosimple      (https://github.com/dominikh/go-simple)
 # 5. unconvert     (https://github.com/mdempsky/unconvert)
 #
-# gometalinter (github.com/alecthomas/gometalinter) is used to run each static
+# gometalinter.v2 (gopkg.in/alecthomas/gometalinter.v2) is used to run each static
 # checker.
 
 set -ex
 
 # Make sure gometalinter is installed and $GOPATH/bin is in your path.
-if [ ! -x "$(type -p gometalinter)" ]; then
+if [ ! -x "$(type -p gometalinter.v2)" ]; then
   exit 1
 fi
 
 # Automatic checks
-test -z "$(gometalinter --disable-all \
+test -z "$(gometalinter.v2 --disable-all \
 --enable=gofmt \
 --enable=golint \
 --enable=vet \
