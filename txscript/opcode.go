@@ -1476,7 +1476,6 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-
 	b := sn.Bytes()
 	if len(b) > size {
 		return scriptError(ErrNumberTooSmall, "cannot fit it into n sized array")
@@ -1492,7 +1491,7 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		signbit = b[0] & 0x80
 		b[len(b)-1] &= 0x7f
 	}
-	for len(b) < size - 1 {
+	for len(b) < size-1 {
 		b = append(b, 0x00)
 	}
 

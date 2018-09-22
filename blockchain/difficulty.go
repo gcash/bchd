@@ -29,12 +29,12 @@ var (
 // to fetch the previous two.
 const DifficultyAdjustmentWindow = 144
 
+// The DifficultyAlgorithm specifies which algorithm to use and is passed into
+// the calcNextRequiredDifficulty function.
+//
 // Bitcoin Cash has had three different difficulty adjustment algorithms during
 // its life. What this means for us is our node needs to select which algorithm
 // to use when calculating difficulty based on where it is in the chain.
-//
-// The DifficultyAlgorithm specifies which algorithm to use and is passed into
-// the calcNextRequiredDifficulty function.
 type DifficultyAlgorithm uint32
 
 const (
@@ -253,9 +253,9 @@ func (b *BlockChain) findPrevTestNetDifficulty(startNode *blockNode) uint32 {
 	return lastBits
 }
 
-// GetSuitableBlock locates the two parents of passed in block, sorts the three
+// getSuitableBlock locates the two parents of passed in block, sorts the three
 // blocks by timestamp and returns the median.
-func (b *BlockChain) GetSuitableBlock(node0 *blockNode) (*blockNode, error) {
+func (b *BlockChain) getSuitableBlock(node0 *blockNode) (*blockNode, error) {
 	node1 := node0.RelativeAncestor(1)
 	if node1 == nil {
 		return nil, AssertError("unable to obtain relative ancestor")
@@ -313,11 +313,11 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	// Find the suitable blocks to use as the first and last nodes for the
 	// purpose of the difficulty calculation. A suitable block is the median
 	// timestamp out of the three prior.
-	suitableLastNode, err := b.GetSuitableBlock(lastNode)
+	suitableLastNode, err := b.getSuitableBlock(lastNode)
 	if err != nil {
 		return 0, err
 	}
-	suitableFirstNode, err := b.GetSuitableBlock(firstNode)
+	suitableFirstNode, err := b.getSuitableBlock(firstNode)
 	if err != nil {
 		return 0, err
 	}

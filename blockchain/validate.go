@@ -46,14 +46,14 @@ const (
 	// prior to the August 1st, 2018 UAHF hardfork
 	LegacyMaxBlockSize = 1000000
 
-	// The maximum number of allowed sigops allowed per one megabyte
+	// MaxBlockSigOpsPerMB is the maximum number of allowed sigops allowed per one megabyte
 	// allowed in a block
 	MaxBlockSigOpsPerMB = 20000
 
-	// The maximum allowable size of a transaction
+	// MaxTransactionSize is the maximum allowable size of a transaction
 	MaxTransactionSize = 1000000
 
-	// The maximum allowable number of sigops per transaction
+	// MaxTransactionSigOps is the maximum allowable number of sigops per transaction
 	MaxTransactionSigOps = 20000
 )
 
@@ -74,9 +74,9 @@ var (
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
 
-// Returns the is the maximum number of bytes allowed in a block.
-// If the UAHF hardfork is active the returned value is the excessive
-// blocksize. Otherwise it's the legacy blocksize.
+// MaxBlockSize returns the is the maximum number of bytes allowed in
+// a block. If the UAHF hardfork is active the returned value is the
+// excessive blocksize. Otherwise it's the legacy blocksize.
 func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 	if uahfActive {
 		return int(b.excessiveBlockSize)
@@ -84,10 +84,10 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 	return LegacyMaxBlockSize
 }
 
-// Returns the maximum allowable number of signature operations per block.
-// If the UAHF hardfork is active the returned value is a function
-// of the excessive blocksize. Otherwise it's a function of the
-// legacy blocksize.
+// MaxBlockSigOps returns the maximum allowable number of signature
+// operations per block. If the UAHF hardfork is active the returned
+// value is a function of the excessive blocksize. Otherwise it's a
+// function of the legacy blocksize.
 func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
 	limit := LegacyMaxBlockSize
 	if uahfActive {
@@ -419,7 +419,7 @@ func CountSigOps(tx *bchutil.Tx) int {
 	return totalSigOps
 }
 
-// GetSigOpCost returns the unified sig op cost for the passed transaction
+// GetSigOps returns the unified sig op cost for the passed transaction
 // respecting current active soft-forks which modified sig op cost counting.
 func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool) (int, error) {
 	numSigOps := CountSigOps(tx)

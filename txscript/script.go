@@ -336,6 +336,10 @@ func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 	return chainhash.DoubleHashH(b.Bytes())
 }
 
+// CalcSignatureHash returns a signature hash which can then be signed by the
+// input. Since Bitcoin Cash uses a different signature hashing algorithm
+// before and after the Uahf fork, the 'useBip143SigHashAlgo' bool is used
+// to specify which algorithm to use.
 func CalcSignatureHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
 	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, error) {
 
@@ -353,10 +357,8 @@ func calcSignatureHash(script []parsedOpcode, sigHashes *TxSigHashes, hType SigH
 	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, error) {
 	if !useBip143SigHashAlgo {
 		return calcLegacySignatureHash(script, hType, tx, idx)
-	} else {
-		return calcBip143SignatureHash(script, sigHashes, hType, tx, idx,
-			amt)
 	}
+	return calcBip143SignatureHash(script, sigHashes, hType, tx, idx, amt)
 }
 
 // shallowCopyTx creates a shallow copy of the transaction for use when
