@@ -358,6 +358,22 @@ func spendCSVOutput(redeemScript []byte, csvUTXO *wire.OutPoint,
 	}
 	tx.TxIn[0].SignatureScript = sigScript
 
+	// We need to pad this transaction with an OP_RETURN to get
+	// it over the min size.
+	b2 := txscript.NewScriptBuilder().
+		AddOp(txscript.OP_RETURN).
+		AddData([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
+	dataCarrierScript, err := b2.Script()
+	if err != nil {
+		return nil, err
+	}
+	output2 := &wire.TxOut{
+		PkScript: dataCarrierScript,
+		Value:    0,
+	}
+	tx.AddTxOut(output2)
+
 	return tx, nil
 }
 

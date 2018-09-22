@@ -86,11 +86,7 @@ func (b *BlockChain) IsMagneticAnomalyEnabled(prevNode *blockNode) bool {
 	if prevNode == nil || prevNode.parent == nil {
 		return false
 	}
-	medianTime := prevNode.CalcPastMedianTime()
-	if medianTime.Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime) {
-		return true
-	}
-	return false
+	return prevNode.CalcPastMedianTime().Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime)
 }
 
 // MaxBlockSize returns the is the maximum number of bytes allowed in
@@ -287,7 +283,7 @@ func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
 	}
 	if enforceMinimumSize && serializedTxSize < MinTransactionSize {
 		str := fmt.Sprintf("serialized transaction is too small - got "+
-			"%d, max %d", serializedTxSize, MinTransactionSize)
+			"%d, min %d", serializedTxSize, MinTransactionSize)
 		return ruleError(ErrTxTooSmall, str)
 	}
 
