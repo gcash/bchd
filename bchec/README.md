@@ -1,7 +1,7 @@
 bchec
 =====
 
-[![Build Status](https://travis-ci.org/btcsuite/btcd.png?branch=master)](https://travis-ci.org/btcsuite/bchec)
+[![Build Status](https://travis-ci.org/gcash/bchd.png?branch=master)](https://travis-ci.org/gcash/bchd)
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
 [![GoDoc](https://godoc.org/github.com/gcash/bchd/bchec?status.png)](http://godoc.org/github.com/gcash/bchd/bchec)
 
