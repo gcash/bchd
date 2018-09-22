@@ -870,20 +870,30 @@ var scriptClassTests = []struct {
 	{
 		// Nulldata with max allowed data to be considered standard.
 		name: "nulldata max standard push",
-		script: "RETURN PUSHDATA1 0x50 0x046708afdb0fe5548271967f1a67" +
+		script: "RETURN PUSHDATA1 0xDF 0x046708afdb0fe5548271967f1a67" +
 			"130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3" +
 			"046708afdb0fe5548271967f1a67130b7105cd6a828e03909a67" +
-			"962e0ea1f61deb649f6bc3f4cef3",
+			"962e0ea1f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61d" +
+			"eb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4" +
+			"cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb64" +
+			"9f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3" +
+			"f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6b" +
+			"c3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3aabbcc",
 		class: NullDataTy,
 	},
 	{
 		// Nulldata with more than max allowed data to be considered
 		// standard (so therefore nonstandard)
 		name: "nulldata exceed max standard push",
-		script: "RETURN PUSHDATA1 0x51 0x046708afdb0fe5548271967f1a67" +
+		script: "RETURN PUSHDATA1 0xE0 0x046708afdb0fe5548271967f1a67" +
 			"130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3" +
 			"046708afdb0fe5548271967f1a67130b7105cd6a828e03909a67" +
-			"962e0ea1f61deb649f6bc3f4cef308",
+			"962e0ea1f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61d" +
+			"eb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4" +
+			"cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb64" +
+			"9f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3" +
+			"f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6b" +
+			"c3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3aabbccdd",
 		class: NonStandardTy,
 	},
 	{
@@ -1070,10 +1080,27 @@ func TestNullDataScript(t *testing.T) {
 		},
 		{
 			name: "too big",
-			data: hexToBytes("000102030405060708090a0b0c0d0e0f101" +
-				"112131415161718191a1b1c1d1e1f202122232425262" +
-				"728292a2b2c2d2e2f303132333435363738393a3b3c3" +
-				"d3e3f404142434445464748494a4b4c4d4e4f50"),
+			data: hexToBytes("000102030405060708090a0b0c0d0e0f" +
+				"101728292a2b2c2d2e2f303132333435363738393a3" +
+				"b3c3a000102030405060708090a0b0c0d0e0f101728" +
+				"292a2b2c2d2e2f303132333435363738393a3b3c3a0" +
+				"00102030405060708090a0b0c0d0e0f101728292a2b" +
+				"2c2d2e2f303132333435363738393a3b3c3a0001020" +
+				"30405060708090a0b0c0d0e0f101728292a2b2c2d2e" +
+				"2f303132333435363738393a3b3c3a0001020304050" +
+				"60708090a0b0c0d0e0f101728292a2b2c2d2e2f3031" +
+				"32333435363738393a3b3c3a0001020304050607080" +
+				"90a0b0c0d0e0f101728292a2b2c2d2e2f3031323334" +
+				"35363738393a3b3c3a000102030405060708090a0b0" +
+				"c0d0e0f101728292a2b2c2d2e2f3031323334353637" +
+				"38393a3b3c3a000102030405060708090a0b0c0d0e0" +
+				"f101728292a2b2c2d2e2f303132333435363738393a" +
+				"3b3c3a000102030405060708090a0b0c0d0e0f10172" +
+				"8292a2b2c2d2e2f303132333435363738393a3b3c3a" +
+				"000102030405060708090a0b0c0d0e0f101728292a2" +
+				"b2c2d2e2f303132333435363738393a3b3c3a000102" +
+				"030405060708090a0b0c0d0e0f101728292a2b2c2d2" +
+				"e2f303132333435363738393a3b3c3aaabbccdd"),
 			expected: nil,
 			err:      scriptError(ErrTooMuchNullData, ""),
 			class:    NonStandardTy,
