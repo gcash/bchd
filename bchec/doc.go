@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-Package btcec implements support for the elliptic curves needed for bitcoin.
+Package bchec implements support for the elliptic curves needed for bitcoin.
 
 Bitcoin Cash uses elliptic curve cryptography using koblitz curves
 (specifically secp256k1) for cryptographic functions.  See
