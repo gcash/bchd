@@ -427,6 +427,7 @@ func TestCheckSignatureEncoding(t *testing.T) {
 }
 
 func TestCheckHashTypeEncoding(t *testing.T) {
+	var SigHashBug SigHashType = 0x20
 	encodingTests := []struct {
 		SigHash     SigHashType
 		EngineFlags ScriptFlags
@@ -552,6 +553,11 @@ func TestCheckHashTypeEncoding(t *testing.T) {
 		},
 		{
 			SigHashSingle | SigHashAnyOneCanPay,
+			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
+			true,
+		},
+		{
+			SigHashSingle | SigHashAnyOneCanPay | SigHashForkID | SigHashBug,
 			ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash,
 			true,
 		},
