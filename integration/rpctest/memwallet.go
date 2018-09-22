@@ -381,7 +381,7 @@ func (m *memWallet) NewAddress() (bchutil.Address, error) {
 //
 // NOTE: The memWallet's mutex must be held when this function is called.
 func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
-	feeRate bchutil.Amount, change bool) error {
+	feeRate bchutil.Amount, change bool) ([]bchutil.Amount, error) {
 
 	const (
 		// spendSize is the largest number of bytes of a sigScript
@@ -390,8 +390,9 @@ func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
 	)
 
 	var (
-		amtSelected bchutil.Amount
-		txSize      int
+		amtSelected  bchutil.Amount
+		txSize       int
+		inputAmounts []bchutil.Amount
 	)
 
 	for outPoint, utxo := range m.utxos {
@@ -407,6 +408,7 @@ func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
 		// current tx size while accounting for the size of the future
 		// sigScript.
 		tx.AddTxIn(wire.NewTxIn(&outPoint, nil))
+		inputAmounts = append(inputAmounts, utxo.value)
 		txSize = tx.SerializeSize() + spendSize*len(tx.TxIn)
 
 		// Calculate the fee required for the txn at this point
@@ -425,11 +427,11 @@ func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
 		if changeVal > 0 && change {
 			addr, err := m.newAddress()
 			if err != nil {
-				return err
+				return inputAmounts, err
 			}
 			pkScript, err := txscript.PayToAddrScript(addr)
 			if err != nil {
-				return err
+				return inputAmounts, err
 			}
 			changeOutput := &wire.TxOut{
 				Value:    int64(changeVal),
@@ -438,12 +440,12 @@ func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
 			tx.AddTxOut(changeOutput)
 		}
 
-		return nil
+		return inputAmounts, nil
 	}
 
 	// If we've reached this point, then coin selection failed due to an
 	// insufficient amount of coins.
-	return fmt.Errorf("not enough funds for coin selection")
+	return inputAmounts, fmt.Errorf("not enough funds for coin selection")
 }
 
 // SendOutputs creates, then sends a transaction paying to the specified output
@@ -497,7 +499,8 @@ func (m *memWallet) CreateTransaction(outputs []*wire.TxOut,
 	}
 
 	// Attempt to fund the transaction with spendable utxos.
-	if err := m.fundTx(tx, outputAmt, feeRate, change); err != nil {
+	inputAmounts, err := m.fundTx(tx, outputAmt, feeRate, change)
+	if err != nil {
 		return nil, err
 	}
 
@@ -519,7 +522,8 @@ func (m *memWallet) CreateTransaction(outputs []*wire.TxOut,
 			return nil, err
 		}
 
-		sigScript, err := txscript.LegacySignatureScript(tx, i, utxo.pkScript,
+		sigScript, err := txscript.SignatureScript(tx, i,
+			int64(inputAmounts[i].ToUnit(bchutil.AmountSatoshi)), utxo.pkScript,
 			txscript.SigHashAll, privKey, true)
 		if err != nil {
 			return nil, err
