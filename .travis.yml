@@ -3,15 +3,20 @@ go:
   - "1.9.5"
   - "1.10.1"
 sudo: false
-install:
-  - GLIDE_TAG=v0.12.3
-  - GLIDE_DOWNLOAD="https://github.com/Masterminds/glide/releases/download/$GLIDE_TAG/glide-$GLIDE_TAG-linux-amd64.tar.gz"
-  - curl -L $GLIDE_DOWNLOAD | tar -xvz
-  - export PATH=$PATH:$PWD/linux-amd64/
-  - glide install
-  - go install . ./cmd/...
-  - go get -u gopkg.in/alecthomas/gometalinter.v2
+
+before_install:
+  - >-
+    curl -L -s https://github.com/golang/dep/releases/download/v0.5.0/dep-linux-amd64
+    -o $GOPATH/bin/dep
+  - chmod +x $GOPATH/bin/dep
+  - go get gopkg.in/alecthomas/gometalinter.v2
   - gometalinter.v2 --install
+
+install:
+  - dep ensure
+  - go install . ./cmd/...
+
 script:
   - export PATH=$PATH:$HOME/gopath/bin
   - ./goclean.sh
+

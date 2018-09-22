@@ -57,7 +57,7 @@ const (
 	// network after the magneticanomaly hardfork
 	MinTransactionSize = 100
 
-	// MaxTransactionSigOps the maximum allowable number of sigops per transaction
+	// MaxTransactionSigOps is the maximum allowable number of sigops per transaction
 	MaxTransactionSigOps = 20000
 )
 
@@ -93,9 +93,9 @@ func (b *BlockChain) IsMagneticAnomalyEnabled(prevNode *blockNode) bool {
 	return false
 }
 
-// Returns the is the maximum number of bytes allowed in a block.
-// If the UAHF hardfork is active the returned value is the excessive
-// blocksize. Otherwise it's the legacy blocksize.
+// MaxBlockSize returns the is the maximum number of bytes allowed in
+// a block. If the UAHF hardfork is active the returned value is the
+// excessive blocksize. Otherwise it's the legacy blocksize.
 func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 	if uahfActive {
 		return int(b.excessiveBlockSize)
@@ -103,10 +103,10 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 	return LegacyMaxBlockSize
 }
 
-// Returns the maximum allowable number of signature operations per block.
-// If the UAHF hardfork is active the returned value is a function
-// of the excessive blocksize. Otherwise it's a function of the
-// legacy blocksize.
+// MaxBlockSigOps returns the maximum allowable number of signature
+// operations per block. If the UAHF hardfork is active the returned
+// value is a function of the excessive blocksize. Otherwise it's a
+// function of the legacy blocksize.
 func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
 	limit := LegacyMaxBlockSize
 	if uahfActive {
@@ -443,7 +443,7 @@ func CountSigOps(tx *bchutil.Tx) int {
 	return totalSigOps
 }
 
-// GetSigOpCost returns the unified sig op cost for the passed transaction
+// GetSigOps returns the unified sig op cost for the passed transaction
 // respecting current active soft-forks which modified sig op cost counting.
 func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool) (int, error) {
 	numSigOps := CountSigOps(tx)

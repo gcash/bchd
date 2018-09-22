@@ -75,7 +75,7 @@ const (
 	// public keys must follow the strict encoding requirements.
 	ScriptVerifyStrictEncoding
 
-	// ScriptVerifyBip43SigHash defines that signature hashes should
+	// ScriptVerifyBip143SigHash defines that signature hashes should
 	// be calculated using the bip0143 signature hashing algorithm.
 	ScriptVerifyBip143SigHash
 )
