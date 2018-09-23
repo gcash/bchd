@@ -75,7 +75,7 @@ func ExampleExtractPkScriptAddrs() {
 
 	// Output:
 	// Script Class: pubkeyhash
-	// Addresses: [12gpXQVcCL2qhTNQgyLVdCFG2Qs2px98nV]
+	// Addresses: [qqfgqp8l9l90zwetj84k2jcac2m8falvvydrpuu45u]
 	// Required Signatures: 1
 }
 
