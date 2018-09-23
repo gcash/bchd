@@ -439,7 +439,7 @@ func CountSigOps(tx *bchutil.Tx) int {
 	return totalSigOps
 }
 
-// GetSigOps returns the unified sig op cost for the passed transaction
+// GetSigOps returns the unified sig op count for the passed transaction
 // respecting current active soft-forks which modified sig op cost counting.
 func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool) (int, error) {
 	numSigOps := CountSigOps(tx)
@@ -1237,8 +1237,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
+	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY
 	if b.IsMagneticAnomalyEnabled(node.parent) {
-		scriptFlags |= txscript.ScriptVerifySigPushOnly | txscript.ScriptVerifyCleanStack
+		scriptFlags |= txscript.ScriptVerifySigPushOnly |
+			txscript.ScriptVerifyCleanStack |
+			txscript.ScriptVerifyCheckDataSig
 	}
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
