@@ -346,20 +346,30 @@ func PayToAddrScript(addr bchutil.Address) ([]byte, error) {
 	const nilAddrErrStr = "unable to generate payment script for nil address"
 
 	switch addr := addr.(type) {
+	case *bchutil.LegacyAddressPubKeyHash:
+		if addr == nil {
+			return nil, scriptError(ErrUnsupportedAddress,
+				nilAddrErrStr)
+		}
+		return payToPubKeyHashScript(addr.ScriptAddress())
 	case *bchutil.AddressPubKeyHash:
 		if addr == nil {
 			return nil, scriptError(ErrUnsupportedAddress,
 				nilAddrErrStr)
 		}
 		return payToPubKeyHashScript(addr.ScriptAddress())
-
+	case *bchutil.LegacyAddressScriptHash:
+		if addr == nil {
+			return nil, scriptError(ErrUnsupportedAddress,
+				nilAddrErrStr)
+		}
+		return payToScriptHashScript(addr.ScriptAddress())
 	case *bchutil.AddressScriptHash:
 		if addr == nil {
 			return nil, scriptError(ErrUnsupportedAddress,
 				nilAddrErrStr)
 		}
 		return payToScriptHashScript(addr.ScriptAddress())
-
 	case *bchutil.AddressPubKey:
 		if addr == nil {
 			return nil, scriptError(ErrUnsupportedAddress,

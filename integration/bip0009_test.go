@@ -129,7 +129,7 @@ func assertSoftForkStatus(r *rpctest.Harness, t *testing.T, forkKey string, stat
 // specific soft fork deployment to test.
 func testBIP0009(t *testing.T, forkKey string, deploymentID uint32) {
 	// Initialize the primary mining node with only the genesis block.
-	r, err := rpctest.New(&chaincfg.RegressionNetParams, nil, nil)
+	r, err := rpctest.New(&chaincfg.SimNetParams, nil, nil)
 	if err != nil {
 		t.Fatalf("unable to create primary harness: %v", err)
 	}
