@@ -882,10 +882,17 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			mp.cfg.Policy.FreeTxRelayLimit*10*1000)
 	}
 
+	// Check if MagneticAnomaly is enabled. If so let's admin CheckDataSig transactions
+	// into the mempool.
+	scriptFlags := txscript.StandardVerifyFlags
+	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.MagneticAnomalyActivationTime) {
+		scriptFlags |= txscript.ScriptVerifyCheckDataSig
+	}
+
 	// Verify crypto signatures for each input and reject the transaction if
 	// any don't verify.
 	err = blockchain.ValidateTransactionScripts(tx, utxoView,
-		txscript.StandardVerifyFlags, mp.cfg.SigCache,
+		scriptFlags, mp.cfg.SigCache,
 		mp.cfg.HashCache)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
