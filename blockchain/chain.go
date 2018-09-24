@@ -1138,13 +1138,21 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 		// utxos, spend them, and add the new utxos being created by
 		// this block.
 		if fastAdd {
-			err := view.fetchInputUtxos(b.db, block)
-			if err != nil {
-				return false, err
-			}
-			err = view.connectTransactions(block, &stxos)
-			if err != nil {
-				return false, err
+			if flags&BFMagneticAnomaly == BFMagneticAnomaly {
+				view.addBlockOutputs(block)
+				err := view.spendBlockInputs(block, &stxos)
+				if err != nil {
+					return false, err
+				}
+			} else {
+				err := view.fetchInputUtxos(b.db, block)
+				if err != nil {
+					return false, err
+				}
+				err = view.connectTransactions(block, &stxos)
+				if err != nil {
+					return false, err
+				}
 			}
 		}
 
