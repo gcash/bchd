@@ -343,53 +343,14 @@ func (view *UtxoViewpoint) disconnectTransactions(db database.DB, block *bchutil
 	}
 
 	// Loop backwards through all transactions so everything is unspent in
-	// reverse order.  This is necessary since transactions later in a block
-	// can spend from previous ones.
+	// reverse order.
 	stxoIdx := len(stxos) - 1
 	transactions := block.Transactions()
 	for txIdx := len(transactions) - 1; txIdx > -1; txIdx-- {
 		tx := transactions[txIdx]
 
 		// All entries will need to potentially be marked as a coinbase.
-		var packedFlags txoFlags
 		isCoinBase := txIdx == 0
-		if isCoinBase {
-			packedFlags |= tfCoinBase
-		}
-
-		// Mark all of the spendable outputs originally created by the
-		// transaction as spent.  It is instructive to note that while
-		// the outputs aren't actually being spent here, rather they no
-		// longer exist, since a pruned utxo set is used, there is no
-		// practical difference between a utxo that does not exist and
-		// one that has been spent.
-		//
-		// When the utxo does not already exist in the view, add an
-		// entry for it and then mark it spent.  This is done because
-		// the code relies on its existence in the view in order to
-		// signal modifications have happened.
-		txHash := tx.Hash()
-		prevOut := wire.OutPoint{Hash: *txHash}
-		for txOutIdx, txOut := range tx.MsgTx().TxOut {
-			if txscript.IsUnspendable(txOut.PkScript) {
-				continue
-			}
-
-			prevOut.Index = uint32(txOutIdx)
-			entry := view.entries[prevOut]
-			if entry == nil {
-				entry = &UtxoEntry{
-					amount:      txOut.Value,
-					pkScript:    txOut.PkScript,
-					blockHeight: block.Height(),
-					packedFlags: packedFlags,
-				}
-
-				view.entries[prevOut] = entry
-			}
-
-			entry.Spend()
-		}
 
 		// Loop backwards through all of the transaction inputs (except
 		// for the coinbase which has no inputs) and unspend the
@@ -423,6 +384,50 @@ func (view *UtxoViewpoint) disconnectTransactions(db database.DB, block *bchutil
 			if stxo.IsCoinBase {
 				entry.packedFlags |= tfCoinBase
 			}
+		}
+	}
+
+	// Mark all of the spendable outputs originally created by the
+	// transaction as spent.  It is instructive to note that while
+	// the outputs aren't actually being spent here, rather they no
+	// longer exist, since a pruned utxo set is used, there is no
+	// practical difference between a utxo that does not exist and
+	// one that has been spent.
+	//
+	// When the utxo does not already exist in the view, add an
+	// entry for it and then mark it spent.  This is done because
+	// the code relies on its existence in the view in order to
+	// signal modifications have happened.
+	for txIdx := len(transactions) - 1; txIdx > -1; txIdx-- {
+		tx := transactions[txIdx]
+
+		isCoinBase := txIdx == 0
+		var packedFlags txoFlags
+		if isCoinBase {
+			packedFlags |= tfCoinBase
+		}
+
+		txHash := tx.Hash()
+		prevOut := wire.OutPoint{Hash: *txHash}
+		for txOutIdx, txOut := range tx.MsgTx().TxOut {
+			if txscript.IsUnspendable(txOut.PkScript) {
+				continue
+			}
+
+			prevOut.Index = uint32(txOutIdx)
+			entry := view.entries[prevOut]
+			if entry == nil {
+				entry = &UtxoEntry{
+					amount:      txOut.Value,
+					pkScript:    txOut.PkScript,
+					blockHeight: block.Height(),
+					packedFlags: packedFlags,
+				}
+
+				view.entries[prevOut] = entry
+			}
+
+			entry.Spend()
 		}
 	}
 
