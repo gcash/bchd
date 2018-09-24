@@ -954,7 +954,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 			if err != nil {
 				return err
 			}
-			if b.IsMagneticAnomalyEnabled(n.parent) {
+			if n.parent != nil && b.IsMagneticAnomalyEnabled(n.parent.hash) {
 				view.addBlockOutputs(block)
 				err = view.spendBlockInputs(block, nil)
 			} else {
@@ -1044,7 +1044,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// to it.  Also, provide an stxo slice so the spent txout
 		// details are generated.
 		stxos := make([]SpentTxOut, 0, countSpentOutputs(block))
-		if b.IsMagneticAnomalyEnabled(n.parent) {
+		if n.parent != nil && b.IsMagneticAnomalyEnabled(n.parent.hash) {
 			view.addBlockOutputs(block)
 			err = view.spendBlockInputs(block, &stxos)
 		} else {

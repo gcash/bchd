@@ -15,6 +15,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"sort"
 )
 
 const (
@@ -484,7 +485,6 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// house all of the input transactions so multiple lookups can be
 	// avoided.
 	blockTxns := make([]*bchutil.Tx, 0, len(sourceTxns))
-	blockTxns = append(blockTxns, coinbaseTx)
 	blockUtxos := blockchain.NewUtxoViewpoint(g.chain.MaxOutputsPerBlock())
 
 	// dependers is used to track transactions which depend on another
@@ -763,6 +763,13 @@ mempoolLoop:
 	if err != nil {
 		return nil, err
 	}
+
+	// If MagneticAnomaly is enabled we need to sort transactions by txid to
+	// comply with the CTOR consensus rule.
+	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
+		sort.Sort(txSorter(blockTxns))
+	}
+	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)
 
 	// Create a new block ready to be solved.
 	merkles := blockchain.BuildMerkleTreeStore(blockTxns)

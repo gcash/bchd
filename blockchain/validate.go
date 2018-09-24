@@ -82,8 +82,9 @@ var (
 // hardfork is active. `prevNode` is the block prior to the one being
 // validated. The consensus rules state that once the hardfork is active
 // the next block must follow the new rules.
-func (b *BlockChain) IsMagneticAnomalyEnabled(prevNode *blockNode) bool {
-	if prevNode == nil || prevNode.parent == nil {
+func (b *BlockChain) IsMagneticAnomalyEnabled(prevBlock chainhash.Hash) bool {
+	prevNode := b.index.LookupNode(&prevBlock)
+	if prevNode == nil {
 		return false
 	}
 	return prevNode.CalcPastMedianTime().Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime)
@@ -1071,7 +1072,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
 	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY and CTOR.
-	magneticAnomalyActive := b.IsMagneticAnomalyEnabled(node.parent)
+	magneticAnomalyActive := node.parent != nil && b.IsMagneticAnomalyEnabled(node.parent.hash)
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
@@ -1353,9 +1354,9 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 		return ruleError(ErrPrevBlockNotBest, str)
 	}
 
-	// If magneticanomaly is active make sure the block sanity is checked using the
+	// If MagneticAnomaly is active make sure the block sanity is checked using the
 	// new rule set.
-	if b.IsMagneticAnomalyEnabled(tip.parent) {
+	if tip.parent != nil && b.IsMagneticAnomalyEnabled(tip.parent.hash) {
 		flags |= BFMagneticAnomaly
 	}
 

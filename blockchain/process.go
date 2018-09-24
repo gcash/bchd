@@ -170,7 +170,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	}
 
 	tip := b.bestChain.Tip()
-	if b.IsMagneticAnomalyEnabled(tip.parent) {
+	if tip.parent != nil && b.IsMagneticAnomalyEnabled(tip.parent.hash) {
 		flags |= BFMagneticAnomaly
 	}
 
