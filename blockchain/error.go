@@ -41,10 +41,6 @@ const (
 	// maximum allowed size.
 	ErrBlockTooBig
 
-	// ErrBlockWeightTooHigh indicates that the block's computed weight
-	// metric exceeds the maximum allowed value.
-	ErrBlockWeightTooHigh
-
 	// ErrBlockVersionTooOld indicates the block version is too old and is
 	// no longer accepted since the majority of the network has upgraded
 	// to a newer version.
@@ -219,6 +215,10 @@ const (
 	// minimum allowed size. This consensus rule currently only applies to
 	// the first block after the Uahf.
 	ErrBlockTooSmall
+
+	// ErrInvalidTxOrder indicates the order of the transactions in the block
+	// does not follow the active transaction ordering consensus rule.
+	ErrInvalidTxOrder
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -226,7 +226,6 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrDuplicateBlock:        "ErrDuplicateBlock",
 	ErrBlockTooBig:           "ErrBlockTooBig",
 	ErrBlockVersionTooOld:    "ErrBlockVersionTooOld",
-	ErrBlockWeightTooHigh:    "ErrBlockWeightTooHigh",
 	ErrInvalidTime:           "ErrInvalidTime",
 	ErrTimeTooOld:            "ErrTimeTooOld",
 	ErrTimeTooNew:            "ErrTimeTooNew",
@@ -265,6 +264,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrPreviousBlockUnknown:  "ErrPreviousBlockUnknown",
 	ErrInvalidAncestorBlock:  "ErrInvalidAncestorBlock",
 	ErrPrevBlockNotBest:      "ErrPrevBlockNotBest",
+	ErrInvalidTxOrder:        "ErrInvalidTxOrder",
 }
 
 // String returns the ErrorCode as a human-readable name.

@@ -1069,6 +1069,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// adjustment algorithm and also enforce Low S and Nullfail.
 	daaActive := node.height > b.chainParams.DaaForkHeight
 
+	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
+	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY and CTOR.
+	magneticAnomalyActive := b.IsMagneticAnomalyEnabled(node.parent)
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1149,7 +1153,21 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// against all the inputs when the signature operations are out of
 	// bounds.
 	var totalFees int64
-	for _, tx := range transactions {
+
+	// If MagneticAnomaly is active we validate the block Utxos by first adding
+	// all the outputs in the block then spending all of them.
+	if magneticAnomalyActive {
+		view.addBlockOutputs(block)
+	}
+
+	var lastTxid *chainhash.Hash
+	for i, tx := range transactions {
+		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
+		// the coinbase transaction.
+		if magneticAnomalyActive && i > 1 && lastTxid.Compare(tx.Hash()) >= 0 {
+			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
+		}
+		lastTxid = tx.Hash()
 		txFee, err := CheckTransactionInputs(tx, node.height, view,
 			b.chainParams)
 		if err != nil {
@@ -1169,7 +1187,18 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// provably unspendable as available utxos.  Also, the passed
 		// spent txos slice is updated to contain an entry for each
 		// spent txout in the order each transaction spends them.
-		err = view.connectTransaction(tx, node.height, stxos)
+		if !magneticAnomalyActive {
+			err = view.connectTransaction(tx, node.height, stxos)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Again, if MagneticAnomaly is enabled we will spend all the block
+	// inputs in one go.
+	if magneticAnomalyActive {
+		err = view.spendBlockInputs(block, stxos)
 		if err != nil {
 			return err
 		}
@@ -1238,7 +1267,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
 	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY
-	if b.IsMagneticAnomalyEnabled(node.parent) {
+	if magneticAnomalyActive {
 		scriptFlags |= txscript.ScriptVerifySigPushOnly |
 			txscript.ScriptVerifyCleanStack |
 			txscript.ScriptVerifyCheckDataSig
