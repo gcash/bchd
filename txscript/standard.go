@@ -432,6 +432,8 @@ func PushedData(script []byte) ([][]byte, error) {
 			data = append(data, pop.data)
 		} else if pop.opcode.value == OP_0 {
 			data = append(data, nil)
+		} else if pop.opcode.value >= OP_1 && pop.opcode.value <= OP_16 {
+			data = append(data, []byte{pop.opcode.value - OP_1 + 1})
 		}
 	}
 	return data, nil
