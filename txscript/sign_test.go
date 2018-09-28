@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"testing"
 
+	"math/rand"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"math/rand"
 )
 
 type addressToKey struct {
@@ -1426,8 +1427,8 @@ var (
 	shortPkScript = []byte{0x76, 0xa9, 0x14, 0xd1, 0x7c, 0xb5,
 		0xeb, 0xa4, 0x02, 0xcb, 0x68, 0xe0, 0x69, 0x56, 0xbf, 0x32,
 		0x53, 0x90, 0x0e, 0x0a, 0x88, 0xac}
-	uncompressedAddrStr = "1L6fd93zGmtzkK6CsZFVVoCwzZV3MUtJ4F"
-	compressedAddrStr   = "14apLppt9zTq6cNw8SDfiJhk9PhkZrQtYZ"
+	uncompressedAddrStr = "bitcoincash:qrghed0t5spvk68qd9tt7vjnjq8q4pkflgdlgejcmk"
+	compressedAddrStr   = "bitcoincash:qqn5m8mlv9l8c7sur7e827gsgdjksfuascqhpjhttt"
 )
 
 // Pretend output amounts.
