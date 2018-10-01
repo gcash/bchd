@@ -2,7 +2,7 @@ package mining
 
 import "github.com/gcash/bchutil"
 
-// txSorter implements sort.Interface to allow a slice of block headers to
+// TxSorter implements sort.Interface to allow a slice of block headers to
 // be sorted by timestamp.
 type TxSorter []*bchutil.Tx
 

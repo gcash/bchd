@@ -22,9 +22,11 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"sort"
 )
 
 const (
@@ -295,6 +297,13 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		Value:    blockchain.CalcBlockSubsidy(blockHeight, g.params),
 		PkScript: opTrueScript,
 	})
+	if tx.SerializeSize() < blockchain.MinTransactionSize {
+		padLen := blockchain.MinTransactionSize - tx.SerializeSize()
+		tx.AddTxOut(&wire.TxOut{
+			Value:    0,
+			PkScript: opReturnScript(make([]byte, padLen)),
+		})
+	}
 	return tx
 }
 
@@ -865,7 +874,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	// the current tip which expects the block to be accepted to the main
 	// chain.
 	//
-	// acceptedToSideChainWithExpectedTip creates an appends a two-instance
+	// acceptedToSideChainWithExpectedTip creates and appends a two-instance
 	// test.  The first instance is an acceptBlock test instance for the
 	// current tip which expects the block to be accepted to a side chain.
 	// The second instance is an expectBlockTip test instance for provided
@@ -2129,6 +2138,173 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 
 	g.nextBlock(fmt.Sprintf("br%d", g.tipHeight+2), nil)
 	chain1TipName = g.tipName
+	accepted()
+
+	return tests, nil
+}
+
+// GenerateWithTxs generates a test chain of chainLength length with the given number
+// of txsPerBlock. This function is primarily for use with CTOR tests as it will test
+// sort transactions into CTOR order.
+func GenerateWithTxs(chainLength int, txsPerBlock int) (tests [][]TestInstance, err error) {
+	// In order to simplify the generation code which really should never
+	// fail unless the test code itself is broken, panics are used
+	// internally.  This deferred func ensures any panics don't escape the
+	// generator by replacing the named error return with the underlying
+	// panic error.
+	defer func() {
+		if r := recover(); r != nil {
+			tests = nil
+
+			switch rt := r.(type) {
+			case string:
+				err = errors.New(rt)
+			case error:
+				err = rt
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+
+	// Create a test generator instance initialized with the genesis block
+	// as the tip.
+	g, err := makeTestGenerator(regressionNetParams)
+	if err != nil {
+		return nil, err
+	}
+
+	acceptBlock := func(blockName string, block *wire.MsgBlock, isMainChain, isOrphan bool) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return AcceptedBlock{blockName, block, blockHeight, isMainChain,
+			isOrphan}
+	}
+	rejectBlock := func(blockName string, block *wire.MsgBlock, code blockchain.ErrorCode) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return RejectedBlock{blockName, block, blockHeight, code}
+	}
+	expectTipBlock := func(blockName string, block *wire.MsgBlock) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return ExpectedTip{blockName, block, blockHeight}
+	}
+
+	accepted := func() {
+		tests = append(tests, []TestInstance{
+			acceptBlock(g.tipName, g.tip, true, false),
+		})
+	}
+	rejected := func(code blockchain.ErrorCode) {
+		tests = append(tests, []TestInstance{
+			rejectBlock(g.tipName, g.tip, code),
+		})
+	}
+	acceptedToSideChainWithExpectedTip := func(tipName string) {
+		tests = append(tests, []TestInstance{
+			acceptBlock(g.tipName, g.tip, false, false),
+			expectTipBlock(tipName, g.blocksByName[tipName]),
+		})
+	}
+
+	// ---------------------------------------------------------------------
+	// Generate enough blocks to have mature coinbase outputs to work with.
+	//
+	//   genesis -> bm0 -> bm1 -> ... -> bm100
+	// ---------------------------------------------------------------------
+
+	coinbaseMaturity := g.params.CoinbaseMaturity
+	var testInstances []TestInstance
+	for i := uint16(0); i < coinbaseMaturity+1; i++ {
+		blockName := fmt.Sprintf("bm%d", i)
+		g.nextBlock(blockName, nil)
+		g.saveTipCoinbaseOut()
+		testInstances = append(testInstances, acceptBlock(g.tipName,
+			g.tip, true, false))
+	}
+	tests = append(tests, testInstances)
+
+	// Collect spendable outputs.  This simplifies the code below.
+	var outs []*spendableOut
+	for i := uint16(0); i < coinbaseMaturity; i++ {
+		op := g.oldestCoinbaseOut()
+		outs = append(outs, &op)
+	}
+
+	// addAdditionalTxs is a munger that will increase the number of transactions
+	// in the block up to txsPerBlock.
+	lastUnspentOut := outs[0]
+	sortCTOR := false
+	addAdditionalTxs := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+		for i := 0; i < txsPerBlock; i++ {
+			tx := createSpendTx(lastUnspentOut, 0)
+			if tx.SerializeSize() < blockchain.MinTransactionSize {
+				padLen := blockchain.MinTransactionSize - tx.SerializeSize()
+				tx.AddTxOut(&wire.TxOut{
+					Value:    0,
+					PkScript: opReturnScript(make([]byte, padLen)),
+				})
+			}
+			lastUnspentOut = &spendableOut{
+				amount: lastUnspentOut.amount,
+				prevOut: wire.OutPoint{
+					Hash:  tx.TxHash(),
+					Index: 0,
+				},
+			}
+			// Append to both the unsorted slice and the block tx slice
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+			block.Transactions = append(block.Transactions, tx)
+		}
+		if sortCTOR {
+			// Sort the unsortedTxs slice
+			sort.Sort(mining.TxSorter(unsortedTxs))
+			// Set block.Transactions to only the coinbase
+			block.Transactions = block.Transactions[:1]
+
+			// Add each tx from our (now sorted) slice
+			for _, tx := range unsortedTxs {
+				block.Transactions = append(block.Transactions, tx.MsgTx())
+			}
+		}
+	}
+	// r0 is not following the CTOR order
+	g.nextBlock("r0", nil, addAdditionalTxs)
+	rejected(blockchain.ErrInvalidTxOrder)
+
+	// r1 contains a tx that is too small
+	g.setTip("bm100")
+	g.nextBlock("r1", outs[0])
+	rejected(blockchain.ErrTxTooSmall)
+
+	//   ... -> b1 -> bn
+	// these blocks are in valid order
+	sortCTOR = true
+	g.setTip("bm100")
+	lastUnspentOut = outs[0]
+	for i := 0; i < chainLength; i++ {
+		blockName := fmt.Sprintf("b%d", i)
+		g.nextBlock(blockName, nil, addAdditionalTxs)
+		accepted()
+	}
+
+	// Start a reorg a b5
+	// s0..s3 should be accepted into a sidechain
+	g.setTip("b5")
+	lastUnspentOut = outs[1]
+	for i := 0; i < 4; i++ {
+		blockName := fmt.Sprintf("s%d", i)
+		g.nextBlock(blockName, nil, addAdditionalTxs)
+		acceptedToSideChainWithExpectedTip("b9")
+	}
+
+	// s4 should extend s3 and trigger a successful reorg
+	g.nextBlock("s4", nil, addAdditionalTxs)
 	accepted()
 
 	return tests, nil

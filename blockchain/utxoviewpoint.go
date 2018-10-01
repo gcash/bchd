@@ -225,6 +225,9 @@ func (view *UtxoViewpoint) addBlockOutputs(block *bchutil.Block) {
 // append an entry to it.
 func (view *UtxoViewpoint) spendBlockInputs(block *bchutil.Block, stxos *[]SpentTxOut) error {
 	for _, tx := range block.Transactions() {
+		if IsCoinBase(tx) {
+			continue
+		}
 		err := view.spendTransactionInputs(tx, stxos)
 		if err != nil {
 			return err
