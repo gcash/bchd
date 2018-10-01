@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"sort"
 )
 
 var (
@@ -264,8 +263,16 @@ func (b *BlockChain) getSuitableBlock(node0 *blockNode) (*blockNode, error) {
 	if node2 == nil {
 		return nil, AssertError("unable to obtain relative ancestor")
 	}
-	blocks := []*blockNode{node0, node1, node2}
-	sort.Sort(blockSorter(blocks))
+	blocks := []*blockNode{node2, node1, node0}
+	if blocks[0].timestamp > blocks[2].timestamp {
+		blocks[0], blocks[2] = blocks[2], blocks[0]
+	}
+	if blocks[0].timestamp > blocks[1].timestamp {
+		blocks[0], blocks[1] = blocks[1], blocks[0]
+	}
+	if blocks[1].timestamp > blocks[2].timestamp {
+		blocks[1], blocks[2] = blocks[2], blocks[1]
+	}
 	return blocks[1], nil
 }
 
