@@ -287,6 +287,11 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return b.chainParams.PowLimitBits, nil
 	}
 
+	// If regest or simnet we don't adjust the difficulty
+	if b.chainParams.NoDifficultyAdjustment {
+		return lastNode.bits, nil
+	}
+
 	// If we're still using a legacy algorithm
 	if algorithm != DifficultyDAA {
 		return b.calcLegacyRequiredDifficulty(lastNode, newBlockTime, algorithm)
