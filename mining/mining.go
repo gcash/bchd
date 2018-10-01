@@ -767,7 +767,7 @@ mempoolLoop:
 	// If MagneticAnomaly is enabled we need to sort transactions by txid to
 	// comply with the CTOR consensus rule.
 	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
-		sort.Sort(txSorter(blockTxns))
+		sort.Sort(TxSorter(blockTxns))
 	}
 	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)
 
