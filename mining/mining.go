@@ -30,7 +30,7 @@ const (
 	// CoinbaseFlags is added to the coinbase script of a generated block
 	// and is used to monitor BIP16 support as well as blocks that are
 	// generated via bchd.
-	CoinbaseFlags = "/P2SH/bchd/"
+	CoinbaseFlags = "/bchd/"
 )
 
 // TxDesc is a descriptor about a transaction in a transaction source along with
@@ -283,6 +283,11 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
 		PkScript: pkScript,
 	})
+	// Make sure the coinbase is above the minimum size threshold.
+	if tx.SerializeSize() < blockchain.MinTransactionSize {
+		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
+			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize()-1)...)
+	}
 	return bchutil.NewTx(tx), nil
 }
 
