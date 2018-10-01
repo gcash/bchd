@@ -135,6 +135,7 @@ type config struct {
 	NoOnion              bool          `long:"noonion" description:"Disable connecting to tor hidden services"`
 	TorIsolation         bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TestNet3             bool          `long:"testnet" description:"Use the test network"`
+	TestNet1             bool          `long:"testnet1" description:"Use the testnet1 network"`
 	RegressionTest       bool          `long:"regtest" description:"Use the regression test network"`
 	SimNet               bool          `long:"simnet" description:"Use the simulation test network"`
 	AddCheckpoints       []string      `long:"addcheckpoint" description:"Add a custom checkpoint.  Format: '<height>:<hash>'"`
@@ -547,6 +548,11 @@ func loadConfig() (*config, []string, error) {
 		numNets++
 		// Also disable dns seeding on the simulation test network.
 		activeNetParams = &simNetParams
+		cfg.DisableDNSSeed = true
+	}
+	if cfg.TestNet1 {
+		numNets++
+		activeNetParams = &testNet1Params
 		cfg.DisableDNSSeed = true
 	}
 	if numNets > 1 {
