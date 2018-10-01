@@ -297,11 +297,6 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		if newBlockTime.Unix() > allowMinTime {
 			return b.chainParams.PowLimitBits, nil
 		}
-
-		// The block was mined within the desired timeframe, so
-		// return the difficulty for the last block which did
-		// not have the special minimum difficulty rule applied.
-		return b.findPrevTestNetDifficulty(lastNode), nil
 	}
 
 	// Get the block node at the beginning of the window (n-144)
