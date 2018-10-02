@@ -69,6 +69,33 @@ func (hash *Hash) IsEqual(target *Hash) bool {
 	return *hash == *target
 }
 
+// Compare returns 1 if hash > target, -1 if hash < target and
+// 0 if hash == target.
+func (hash *Hash) Compare(target *Hash) int {
+	if hash == nil && target == nil {
+		return 0
+	}
+	if hash != nil && target == nil {
+		return 1
+	}
+	if hash == nil && target != nil {
+		return -1
+	}
+	h := *hash
+	t := *target
+	for i := 0; i < len(h); i++ {
+		a := h[len(h)-1-i]
+		b := t[len(t)-1-i]
+		if a > b {
+			return 1
+		}
+		if a < b {
+			return -1
+		}
+	}
+	return 0
+}
+
 // NewHash returns a new Hash from a byte slice.  An error is returned if
 // the number of bytes passed in is not HashSize.
 func NewHash(newHash []byte) (*Hash, error) {

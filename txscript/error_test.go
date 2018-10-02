@@ -41,6 +41,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrNumEqualVerify, "ErrNumEqualVerify"},
 		{ErrCheckSigVerify, "ErrCheckSigVerify"},
 		{ErrCheckMultiSigVerify, "ErrCheckMultiSigVerify"},
+		{ErrCheckDataSigVerify, "ErrCheckDataSigVerify"},
 		{ErrDisabledOpcode, "ErrDisabledOpcode"},
 		{ErrReservedOpcode, "ErrReservedOpcode"},
 		{ErrMalformedPush, "ErrMalformedPush"},

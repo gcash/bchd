@@ -15,6 +15,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"sort"
 )
 
 const (
@@ -29,7 +30,7 @@ const (
 	// CoinbaseFlags is added to the coinbase script of a generated block
 	// and is used to monitor BIP16 support as well as blocks that are
 	// generated via bchd.
-	CoinbaseFlags = "/P2SH/bchd/"
+	CoinbaseFlags = "/bchd/"
 )
 
 // TxDesc is a descriptor about a transaction in a transaction source along with
@@ -282,6 +283,11 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
 		PkScript: pkScript,
 	})
+	// Make sure the coinbase is above the minimum size threshold.
+	if tx.SerializeSize() < blockchain.MinTransactionSize {
+		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
+			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize()-1)...)
+	}
 	return bchutil.NewTx(tx), nil
 }
 
@@ -484,7 +490,6 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// house all of the input transactions so multiple lookups can be
 	// avoided.
 	blockTxns := make([]*bchutil.Tx, 0, len(sourceTxns))
-	blockTxns = append(blockTxns, coinbaseTx)
 	blockUtxos := blockchain.NewUtxoViewpoint(g.chain.MaxOutputsPerBlock())
 
 	// dependers is used to track transactions which depend on another
@@ -763,6 +768,13 @@ mempoolLoop:
 	if err != nil {
 		return nil, err
 	}
+
+	// If MagneticAnomaly is enabled we need to sort transactions by txid to
+	// comply with the CTOR consensus rule.
+	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
+		sort.Sort(TxSorter(blockTxns))
+	}
+	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)
 
 	// Create a new block ready to be solved.
 	merkles := blockchain.BuildMerkleTreeStore(blockTxns)
