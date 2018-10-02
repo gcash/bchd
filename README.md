@@ -69,7 +69,7 @@ The documentation is a work-in-progress.  It is located in the [docs](https://gi
 
 ## Contributing
 
-Contributions are definitely welcome! Please read the contributing [guidelines](https://github.com/gcash/bchd/docs/code_contribution_guidelines.md) before starting.
+Contributions are definitely welcome! Please read the contributing [guidelines](https://github.com/gcash/bchd/blob/master/docs/code_contribution_guidelines.md) before starting.
 
 
 ## License

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"sort"
 )
 
 var (
@@ -264,8 +263,16 @@ func (b *BlockChain) getSuitableBlock(node0 *blockNode) (*blockNode, error) {
 	if node2 == nil {
 		return nil, AssertError("unable to obtain relative ancestor")
 	}
-	blocks := []*blockNode{node0, node1, node2}
-	sort.Sort(blockSorter(blocks))
+	blocks := []*blockNode{node2, node1, node0}
+	if blocks[0].timestamp > blocks[2].timestamp {
+		blocks[0], blocks[2] = blocks[2], blocks[0]
+	}
+	if blocks[0].timestamp > blocks[1].timestamp {
+		blocks[0], blocks[1] = blocks[1], blocks[0]
+	}
+	if blocks[1].timestamp > blocks[2].timestamp {
+		blocks[1], blocks[2] = blocks[2], blocks[1]
+	}
 	return blocks[1], nil
 }
 
@@ -278,6 +285,11 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	// Genesis block.
 	if lastNode == nil {
 		return b.chainParams.PowLimitBits, nil
+	}
+
+	// If regest or simnet we don't adjust the difficulty
+	if b.chainParams.NoDifficultyAdjustment {
+		return lastNode.bits, nil
 	}
 
 	// If we're still using a legacy algorithm
@@ -297,11 +309,6 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		if newBlockTime.Unix() > allowMinTime {
 			return b.chainParams.PowLimitBits, nil
 		}
-
-		// The block was mined within the desired timeframe, so
-		// return the difficulty for the last block which did
-		// not have the special minimum difficulty rule applied.
-		return b.findPrevTestNetDifficulty(lastNode), nil
 	}
 
 	// Get the block node at the beginning of the window (n-144)

@@ -882,7 +882,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			mp.cfg.Policy.FreeTxRelayLimit*10*1000)
 	}
 
-	// Check if MagneticAnomaly is enabled. If so let's admin CheckDataSig transactions
+	// Check if MagneticAnomaly is enabled. If so let's admit CheckDataSig transactions
 	// into the mempool.
 	scriptFlags := txscript.StandardVerifyFlags
 	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.MagneticAnomalyActivationTime) {

@@ -173,6 +173,10 @@ type Params struct {
 	// networks and should not be set on a main network.
 	ReduceMinDifficulty bool
 
+	// NoDifficultyAdjustment defines whether the network should skip the
+	// normal difficulty adjustment and keep the current difficulty.
+	NoDifficultyAdjustment bool
+
 	// MinDiffReductionTime is the amount of time after which the minimum
 	// required difficulty should be reduced when a block hasn't been found.
 	//
@@ -256,6 +260,7 @@ var MainNetParams = Params{
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
 	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
 	ReduceMinDifficulty:      false,
+	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     0,
 	GenerateSupported:        false,
 
@@ -349,6 +354,7 @@ var RegressionNetParams = Params{
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
 	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
 	ReduceMinDifficulty:      true,
+	NoDifficultyAdjustment:   true,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
 	GenerateSupported:        true,
 
@@ -429,6 +435,7 @@ var TestNet3Params = Params{
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
 	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
 	ReduceMinDifficulty:      true,
+	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
 	GenerateSupported:        false,
 
@@ -516,6 +523,7 @@ var SimNetParams = Params{
 	TargetTimePerBlock:            time.Minute * 10,    // 10 minutes
 	RetargetAdjustmentFactor:      4,                   // 25% less, 400% more
 	ReduceMinDifficulty:           true,
+	NoDifficultyAdjustment:        true,
 	MinDiffReductionTime:          time.Minute * 20, // TargetTimePerBlock * 2
 	GenerateSupported:             true,
 
