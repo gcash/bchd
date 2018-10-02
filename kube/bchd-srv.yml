@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bchd
+  namespace: default
+spec:
+  ports:
+    - port: 8333
+      targetPort: 8333
+  selector:
+    service: bchd
+  type: LoadBalancer
+  externalTrafficPolicy: Local
