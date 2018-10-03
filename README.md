@@ -62,15 +62,37 @@ $ ./bchd
 You'll find a large number of runtime options on the help menu. All of which can also be set in a config file.
 See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf) for an example of how to use it.
 
+## Docker
+
+Building and running `bchd` in docker is quite painless. To build the image:
+
+```
+docker build . -t bchd
+```
+
+To run the image:
+
+```
+docker run bchd
+```
+
+To run `bchctl` and connect to your `bchd` instance:
+
+```
+# Find the running bchd container.
+docker ps
+
+# Exec bchctl.
+docker exec <container> bchctl <command>
+```
+
 ## Documentation
 
 The documentation is a work-in-progress.  It is located in the [docs](https://github.com/gcash/bchd/tree/master/docs) folder.
 
-
 ## Contributing
 
 Contributions are definitely welcome! Please read the contributing [guidelines](https://github.com/gcash/bchd/blob/master/docs/code_contribution_guidelines.md) before starting.
-
 
 ## License
 
