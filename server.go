@@ -2583,6 +2583,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	var err error
 	s.chain, err = blockchain.New(&blockchain.Config{
 		DB:                 s.db,
+		UtxoCacheMaxSize:   uint64(cfg.UtxoCacheMaxSizeMiB) * 1024 * 1024,
 		Interrupt:          interrupt,
 		ChainParams:        s.chainParams,
 		Checkpoints:        checkpoints,

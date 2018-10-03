@@ -694,7 +694,7 @@ func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, bip16 bool) int {
 }
 
 // IsUnspendable returns whether the passed public key script is unspendable, or
-// guaranteed to fail at execution.  This allows inputs to be pruned instantly
+// guaranteed to fail at execution.  This allows outputs to be pruned instantly
 // when entering the UTXO set.
 func IsUnspendable(pkScript []byte) bool {
 	pops, err := parseScript(pkScript)
