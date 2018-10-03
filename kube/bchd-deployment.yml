@@ -27,7 +27,7 @@ spec:
             secretKeyRef:
               name: bchd
               key: rpcpass
-        image: zquestz/bchd:0.12.0-beta
+        image: zquestz/bchd:latest
         command: ["./bchd"]
         args: ["-u", "$(BCHD_RPC_USER)", "-P", "$(BCHD_RPC_PASSWORD)", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf"]
         name: bchd
