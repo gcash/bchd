@@ -1,6 +1,9 @@
 # Temp files
 *~
 
+# Binaries
+bchd
+
 # Databases
 btcd.db
 *-shm

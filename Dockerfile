@@ -14,8 +14,14 @@ WORKDIR /go/src/github.com/gcash/bchd
 RUN go get -u github.com/golang/dep/cmd/dep
 RUN dep ensure
 
-# Build the code.
-RUN go build .
+# Build the code and the cli client.
+RUN go install .
+RUN go install ./cmd/bchctl
+
+# Symlink the config to /root/.bchd/bchd.conf
+# so bchctl requires fewer flags.
+RUN mkdir -p /root/.bchd
+RUN ln -s /data/bchd.conf /root/.bchd/bchd.conf
 
 # Create the data volume.
 VOLUME ["/data"]
@@ -23,7 +29,7 @@ VOLUME ["/data"]
 # Set the start command. This starts bchd with
 # flags to save the blockchain data and the
 # config on a docker volume.
-ENTRYPOINT ["./bchd", "-b", "/data", "-C", "/data/bchd.conf"]
+ENTRYPOINT ["bchd", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf"]
 
 # Document that the service listens on port 8333.
 EXPOSE 8333
