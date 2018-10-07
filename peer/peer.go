@@ -1540,8 +1540,18 @@ out:
 func (p *Peer) queueHandler() {
 	pendingMsgs := list.New()
 	invSendQueue := list.New()
-	trickleTicker := time.NewTicker(p.cfg.TrickleInterval)
-	defer trickleTicker.Stop()
+
+	// If the trickle interval is 0 we create an unstarted Ticker. This will allow
+	// us to select on it without it ever firing. If the trickle interval is
+	// greater than 0 the ticker and trickle queue are used normally.
+	var trickleTicker *time.Ticker
+	sendInvImmediately := p.cfg.TrickleInterval <= 0
+	if sendInvImmediately {
+		trickleTicker = &time.Ticker{C: make(chan (time.Time))}
+	} else {
+		trickleTicker = time.NewTicker(p.cfg.TrickleInterval)
+		defer trickleTicker.Stop()
+	}
 
 	// We keep the waiting flag so that we know if we have a message queued
 	// to the outHandler or not.  We could use the presence of a head of
@@ -1590,12 +1600,21 @@ out:
 				// If this is a new block, then we'll blast it
 				// out immediately, sipping the inv trickle
 				// queue.
+				// If it's a new tx and the trickle interval is 0 send it immediately.
+				// Otherwise enqueue for sending later.
 				if iv.Type == wire.InvTypeBlock {
-
 					invMsg := wire.NewMsgInvSizeHint(1)
 					invMsg.AddInvVect(iv)
 					waiting = queuePacket(outMsg{msg: invMsg},
 						pendingMsgs, waiting)
+				} else if sendInvImmediately {
+					if p.knownInventory.Exists(iv) {
+						continue
+					}
+
+					invMsg := wire.NewMsgInvSizeHint(1)
+					invMsg.AddInvVect(iv)
+					waiting = queuePacket(outMsg{msg: invMsg}, pendingMsgs, waiting)
 				} else {
 					invSendQueue.PushBack(iv)
 				}
