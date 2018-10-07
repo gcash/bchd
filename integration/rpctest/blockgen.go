@@ -14,9 +14,11 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"sort"
 )
 
 // solveBlock attempts to find a nonce which makes the passed block header hash
@@ -177,10 +179,15 @@ func CreateBlock(prevBlock *bchutil.Block, inclusionTxs []*bchutil.Tx,
 	}
 
 	// Create a new block ready to be solved.
-	blockTxns := []*bchutil.Tx{coinbaseTx}
+	var blockTxns []*bchutil.Tx
 	if inclusionTxs != nil {
 		blockTxns = append(blockTxns, inclusionTxs...)
 	}
+	// If magnetic anomaly is enabled ally CTOR sorting
+	if prevBlock != nil && uint64(prevBlock.MsgBlock().Header.Timestamp.Unix()) >= net.MagneticAnomalyActivationTime {
+		sort.Sort(mining.TxSorter(blockTxns))
+	}
+	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)
 	merkles := blockchain.BuildMerkleTreeStore(blockTxns)
 	var block wire.MsgBlock
 	block.Header = wire.BlockHeader{

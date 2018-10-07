@@ -954,7 +954,12 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 			if err != nil {
 				return err
 			}
-			err = view.connectTransactions(block, nil)
+			if n.parent != nil && b.IsMagneticAnomalyEnabled(n.parent.hash) {
+				view.addBlockOutputs(block)
+				err = view.spendBlockInputs(block, nil)
+			} else {
+				err = view.connectTransactions(block, nil)
+			}
 			if err != nil {
 				return err
 			}
@@ -1039,7 +1044,12 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// to it.  Also, provide an stxo slice so the spent txout
 		// details are generated.
 		stxos := make([]SpentTxOut, 0, countSpentOutputs(block))
-		err = view.connectTransactions(block, &stxos)
+		if n.parent != nil && b.IsMagneticAnomalyEnabled(n.parent.hash) {
+			view.addBlockOutputs(block)
+			err = view.spendBlockInputs(block, &stxos)
+		} else {
+			err = view.connectTransactions(block, &stxos)
+		}
 		if err != nil {
 			return err
 		}
@@ -1132,9 +1142,17 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 			if err != nil {
 				return false, err
 			}
-			err = view.connectTransactions(block, &stxos)
-			if err != nil {
-				return false, err
+			if flags&BFMagneticAnomaly == BFMagneticAnomaly {
+				view.addBlockOutputs(block)
+				err := view.spendBlockInputs(block, &stxos)
+				if err != nil {
+					return false, err
+				}
+			} else {
+				err = view.connectTransactions(block, &stxos)
+				if err != nil {
+					return false, err
+				}
 			}
 		}
 

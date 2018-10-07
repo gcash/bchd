@@ -3459,6 +3459,38 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
+			name: "OP_CHECKDATASIG",
+			pop: &parsedOpcode{
+				opcode: &opcodeArray[OP_CHECKDATASIG],
+				data:   nil,
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "OP_CHECKDATASIG long",
+			pop: &parsedOpcode{
+				opcode: &opcodeArray[OP_CHECKDATASIG],
+				data:   make([]byte, 1),
+			},
+			expectedErr: scriptError(ErrInternal, ""),
+		},
+		{
+			name: "OP_CHECKDATASIGVERIFY",
+			pop: &parsedOpcode{
+				opcode: &opcodeArray[OP_CHECKDATASIGVERIFY],
+				data:   nil,
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "OP_CHECKDATASIGVERIFY long",
+			pop: &parsedOpcode{
+				opcode: &opcodeArray[OP_CHECKDATASIGVERIFY],
+				data:   make([]byte, 1),
+			},
+			expectedErr: scriptError(ErrInternal, ""),
+		},
+		{
 			name: "OP_NOP1",
 			pop: &parsedOpcode{
 				opcode: &opcodeArray[OP_NOP1],
@@ -4031,9 +4063,9 @@ func TestRemoveOpcodeByData(t *testing.T) {
 		},
 		{
 			name:   "invalid opcode ",
-			before: []byte{OP_UNKNOWN187},
+			before: []byte{OP_UNKNOWN188},
 			remove: []byte{1, 2, 3, 4},
-			after:  []byte{OP_UNKNOWN187},
+			after:  []byte{OP_UNKNOWN188},
 		},
 		{
 			name:   "invalid length (instruction)",

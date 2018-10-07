@@ -1964,8 +1964,6 @@ func chainErrToGBTErrString(err error) string {
 		return "duplicate"
 	case blockchain.ErrBlockTooBig:
 		return "bad-blk-length"
-	case blockchain.ErrBlockWeightTooHigh:
-		return "bad-blk-weight"
 	case blockchain.ErrBlockVersionTooOld:
 		return "bad-version"
 	case blockchain.ErrInvalidTime:
@@ -1995,7 +1993,11 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrNoTxOutputs:
 		return "bad-txns-nooutputs"
 	case blockchain.ErrTxTooBig:
-		return "bad-txns-size"
+		return "bad-txns-size-too-large"
+	case blockchain.ErrTxTooSmall:
+		return "bad-txns-size-too-small"
+	case blockchain.ErrTxTooManySigOps:
+		return "bad-txns-too-many-sigops"
 	case blockchain.ErrBadTxOutValue:
 		return "bad-txns-outputvalue"
 	case blockchain.ErrDuplicateTxInputs:
@@ -2040,6 +2042,8 @@ func chainErrToGBTErrString(err error) string {
 		return "bad-prevblk"
 	case blockchain.ErrPrevBlockNotBest:
 		return "inconclusive-not-best-prvblk"
+	case blockchain.ErrInvalidTxOrder:
+		return "invalid-transaction-order"
 	}
 
 	return "rejected: " + err.Error()
@@ -2271,7 +2275,7 @@ func handleGetInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (in
 		Connections:     s.cfg.ConnMgr.ConnectedCount(),
 		Proxy:           cfg.Proxy,
 		Difficulty:      getDifficultyRatio(best.Bits, s.cfg.ChainParams),
-		TestNet:         cfg.TestNet3,
+		TestNet:         cfg.TestNet3 || cfg.TestNet1,
 		RelayFee:        cfg.minRelayTxFee.ToBCH(),
 	}
 

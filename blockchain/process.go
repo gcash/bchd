@@ -29,6 +29,11 @@ const (
 	// not be performed.
 	BFNoPoWCheck
 
+	// BFMagneticAnomaly signals that the magnetic anomaly hardfork is
+	// active and the block should be validated according the new rule
+	// set.
+	BFMagneticAnomaly
+
 	// BFNone is a convenience value to specifically indicate no flags.
 	BFNone BehaviorFlags = 0
 )
@@ -162,6 +167,11 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	if _, exists := b.orphans[*blockHash]; exists {
 		str := fmt.Sprintf("already have block (orphan) %v", blockHash)
 		return false, false, ruleError(ErrDuplicateBlock, str)
+	}
+
+	tip := b.bestChain.Tip()
+	if tip.parent != nil && b.IsMagneticAnomalyEnabled(tip.parent.hash) {
+		flags |= BFMagneticAnomaly
 	}
 
 	// Perform preliminary sanity checks on the block and its transactions.

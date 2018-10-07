@@ -1,0 +1,45 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: default
+  labels:
+    service: bchd
+    version: 0.12.0-beta
+  name: bchd
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        service: bchd
+    spec:
+      containers:
+      - env:
+        - name: BCHD_RPC_USER
+          valueFrom:
+            secretKeyRef:
+              name: bchd
+              key: rpcuser
+        - name: BCHD_RPC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bchd
+              key: rpcpass
+        image: zquestz/bchd:latest
+        command: ["bchd"]
+        args: ["-u", "$(BCHD_RPC_USER)", "-P", "$(BCHD_RPC_PASSWORD)", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf"]
+        name: bchd
+        volumeMounts:
+          - mountPath: /data
+            name: bchd-data
+        resources:
+          requests:
+            memory: "3Gi"
+      restartPolicy: Always
+      volumes:
+        - name: bchd-data
+          gcePersistentDisk:
+            pdName: bchd-data
+            fsType: ext4

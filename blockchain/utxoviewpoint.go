@@ -212,22 +212,33 @@ func (view *UtxoViewpoint) AddTxOuts(tx *bchutil.Tx, blockHeight int32) {
 	}
 }
 
-// connectTransaction updates the view by adding all new utxos created by the
-// passed transaction and marking all utxos that the transactions spend as
-// spent.  In addition, when the 'stxos' argument is not nil, it will be updated
-// to append an entry for each spent txout.  An error will be returned if the
-// view does not contain the required utxos.
-func (view *UtxoViewpoint) connectTransaction(tx *bchutil.Tx, blockHeight int32, stxos *[]SpentTxOut) error {
-	// Coinbase transactions don't have any inputs to spend.
-	if IsCoinBase(tx) {
-		// Add the transaction's outputs as available utxos.
-		view.AddTxOuts(tx, blockHeight)
-		return nil
+// addBlockOutputs loops through each transaction in the block and adds
+// all of it's outputs to the view.
+func (view *UtxoViewpoint) addBlockOutputs(block *bchutil.Block) {
+	for _, tx := range block.Transactions() {
+		view.AddTxOuts(tx, block.Height())
 	}
+}
 
-	// Spend the referenced utxos by marking them spent in the view and,
-	// if a slice was provided for the spent txout details, append an entry
-	// to it.
+// spendBlockInputs loops through each transaction in the block and spends
+// all of it's inputs. If a slice was provided for the spent txout details,
+// append an entry to it.
+func (view *UtxoViewpoint) spendBlockInputs(block *bchutil.Block, stxos *[]SpentTxOut) error {
+	for _, tx := range block.Transactions() {
+		if IsCoinBase(tx) {
+			continue
+		}
+		err := view.spendTransactionInputs(tx, stxos)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// spendTransactionInputs spends the referenced utxos by marking them spent in the view and,
+// if a slice was provided for the spent txout details, append an entry to it.
+func (view *UtxoViewpoint) spendTransactionInputs(tx *bchutil.Tx, stxos *[]SpentTxOut) error {
 	for _, txIn := range tx.MsgTx().TxIn {
 		// Ensure the referenced utxo exists in the view.  This should
 		// never happen unless there is a bug is introduced in the code.
@@ -254,6 +265,24 @@ func (view *UtxoViewpoint) connectTransaction(tx *bchutil.Tx, blockHeight int32,
 		// clear the fields from memory in the future.
 		entry.Spend()
 	}
+	return nil
+}
+
+// connectTransaction updates the view by adding all new utxos created by the
+// passed transaction and marking all utxos that the transactions spend as
+// spent.  In addition, when the 'stxos' argument is not nil, it will be updated
+// to append an entry for each spent txout.  An error will be returned if the
+// view does not contain the required utxos.
+func (view *UtxoViewpoint) connectTransaction(tx *bchutil.Tx, blockHeight int32, stxos *[]SpentTxOut) error {
+	// Coinbase transactions don't have any inputs to spend.
+	if IsCoinBase(tx) {
+		// Add the transaction's outputs as available utxos.
+		view.AddTxOuts(tx, blockHeight)
+		return nil
+	}
+
+	// Loop through inputs and remove them from the utxo view.
+	view.spendTransactionInputs(tx, stxos)
 
 	// Add the transaction's outputs as available utxos.
 	view.AddTxOuts(tx, blockHeight)
@@ -317,53 +346,14 @@ func (view *UtxoViewpoint) disconnectTransactions(db database.DB, block *bchutil
 	}
 
 	// Loop backwards through all transactions so everything is unspent in
-	// reverse order.  This is necessary since transactions later in a block
-	// can spend from previous ones.
+	// reverse order.
 	stxoIdx := len(stxos) - 1
 	transactions := block.Transactions()
 	for txIdx := len(transactions) - 1; txIdx > -1; txIdx-- {
 		tx := transactions[txIdx]
 
 		// All entries will need to potentially be marked as a coinbase.
-		var packedFlags txoFlags
 		isCoinBase := txIdx == 0
-		if isCoinBase {
-			packedFlags |= tfCoinBase
-		}
-
-		// Mark all of the spendable outputs originally created by the
-		// transaction as spent.  It is instructive to note that while
-		// the outputs aren't actually being spent here, rather they no
-		// longer exist, since a pruned utxo set is used, there is no
-		// practical difference between a utxo that does not exist and
-		// one that has been spent.
-		//
-		// When the utxo does not already exist in the view, add an
-		// entry for it and then mark it spent.  This is done because
-		// the code relies on its existence in the view in order to
-		// signal modifications have happened.
-		txHash := tx.Hash()
-		prevOut := wire.OutPoint{Hash: *txHash}
-		for txOutIdx, txOut := range tx.MsgTx().TxOut {
-			if txscript.IsUnspendable(txOut.PkScript) {
-				continue
-			}
-
-			prevOut.Index = uint32(txOutIdx)
-			entry := view.entries[prevOut]
-			if entry == nil {
-				entry = &UtxoEntry{
-					amount:      txOut.Value,
-					pkScript:    txOut.PkScript,
-					blockHeight: block.Height(),
-					packedFlags: packedFlags,
-				}
-
-				view.entries[prevOut] = entry
-			}
-
-			entry.Spend()
-		}
 
 		// Loop backwards through all of the transaction inputs (except
 		// for the coinbase which has no inputs) and unspend the
@@ -388,39 +378,6 @@ func (view *UtxoViewpoint) disconnectTransactions(db database.DB, block *bchutil
 				view.entries[*originOut] = entry
 			}
 
-			// The legacy v1 spend journal format only stored the
-			// coinbase flag and height when the output was the last
-			// unspent output of the transaction.  As a result, when
-			// the information is missing, search for it by scanning
-			// all possible outputs of the transaction since it must
-			// be in one of them.
-			//
-			// It should be noted that this is quite inefficient,
-			// but it realistically will almost never run since all
-			// new entries include the information for all outputs
-			// and thus the only way this will be hit is if a long
-			// enough reorg happens such that a block with the old
-			// spend data is being disconnected.  The probability of
-			// that in practice is extremely low to begin with and
-			// becomes vanishingly small the more new blocks are
-			// connected.  In the case of a fresh database that has
-			// only ever run with the new v2 format, this code path
-			// will never run.
-			if stxo.Height == 0 {
-				utxo, err := view.fetchEntryByHash(db, txHash)
-				if err != nil {
-					return err
-				}
-				if utxo == nil {
-					return AssertError(fmt.Sprintf("unable "+
-						"to resurrect legacy stxo %v",
-						*originOut))
-				}
-
-				stxo.Height = utxo.BlockHeight()
-				stxo.IsCoinBase = utxo.IsCoinBase()
-			}
-
 			// Restore the utxo using the stxo data from the spend
 			// journal and mark it as modified.
 			entry.amount = stxo.Amount
@@ -430,6 +387,50 @@ func (view *UtxoViewpoint) disconnectTransactions(db database.DB, block *bchutil
 			if stxo.IsCoinBase {
 				entry.packedFlags |= tfCoinBase
 			}
+		}
+	}
+
+	// Mark all of the spendable outputs originally created by the
+	// transaction as spent.  It is instructive to note that while
+	// the outputs aren't actually being spent here, rather they no
+	// longer exist, since a pruned utxo set is used, there is no
+	// practical difference between a utxo that does not exist and
+	// one that has been spent.
+	//
+	// When the utxo does not already exist in the view, add an
+	// entry for it and then mark it spent.  This is done because
+	// the code relies on its existence in the view in order to
+	// signal modifications have happened.
+	for txIdx := len(transactions) - 1; txIdx > -1; txIdx-- {
+		tx := transactions[txIdx]
+
+		isCoinBase := txIdx == 0
+		var packedFlags txoFlags
+		if isCoinBase {
+			packedFlags |= tfCoinBase
+		}
+
+		txHash := tx.Hash()
+		prevOut := wire.OutPoint{Hash: *txHash}
+		for txOutIdx, txOut := range tx.MsgTx().TxOut {
+			if txscript.IsUnspendable(txOut.PkScript) {
+				continue
+			}
+
+			prevOut.Index = uint32(txOutIdx)
+			entry := view.entries[prevOut]
+			if entry == nil {
+				entry = &UtxoEntry{
+					amount:      txOut.Value,
+					pkScript:    txOut.PkScript,
+					blockHeight: block.Height(),
+					packedFlags: packedFlags,
+				}
+
+				view.entries[prevOut] = entry
+			}
+
+			entry.Spend()
 		}
 	}
 

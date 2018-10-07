@@ -41,10 +41,6 @@ const (
 	// maximum allowed size.
 	ErrBlockTooBig
 
-	// ErrBlockWeightTooHigh indicates that the block's computed weight
-	// metric exceeds the maximum allowed value.
-	ErrBlockWeightTooHigh
-
 	// ErrBlockVersionTooOld indicates the block version is too old and is
 	// no longer accepted since the majority of the network has upgraded
 	// to a newer version.
@@ -110,6 +106,10 @@ const (
 	// ErrTxTooBig indicates a transaction exceeds the maximum allowed size
 	// when serialized.
 	ErrTxTooBig
+
+	// ErrTxTooSmall indicates a transaction is smaller than the minimum
+	// allowed size when serialized.
+	ErrTxTooSmall
 
 	// ErrTxTooManySigOps indicates a transaction exceeds the maximum allowable
 	// number of signature operations.
@@ -215,6 +215,10 @@ const (
 	// minimum allowed size. This consensus rule currently only applies to
 	// the first block after the Uahf.
 	ErrBlockTooSmall
+
+	// ErrInvalidTxOrder indicates the order of the transactions in the block
+	// does not follow the active transaction ordering consensus rule.
+	ErrInvalidTxOrder
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -222,7 +226,6 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrDuplicateBlock:        "ErrDuplicateBlock",
 	ErrBlockTooBig:           "ErrBlockTooBig",
 	ErrBlockVersionTooOld:    "ErrBlockVersionTooOld",
-	ErrBlockWeightTooHigh:    "ErrBlockWeightTooHigh",
 	ErrInvalidTime:           "ErrInvalidTime",
 	ErrTimeTooOld:            "ErrTimeTooOld",
 	ErrTimeTooNew:            "ErrTimeTooNew",
@@ -237,6 +240,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrNoTxInputs:            "ErrNoTxInputs",
 	ErrNoTxOutputs:           "ErrNoTxOutputs",
 	ErrTxTooBig:              "ErrTxTooBig",
+	ErrTxTooSmall:            "ErrTxTooSmall",
 	ErrTxTooManySigOps:       "ErrTxTooManySigOps",
 	ErrBadTxOutValue:         "ErrBadTxOutValue",
 	ErrDuplicateTxInputs:     "ErrDuplicateTxInputs",
@@ -260,6 +264,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrPreviousBlockUnknown:  "ErrPreviousBlockUnknown",
 	ErrInvalidAncestorBlock:  "ErrInvalidAncestorBlock",
 	ErrPrevBlockNotBest:      "ErrPrevBlockNotBest",
+	ErrInvalidTxOrder:        "ErrInvalidTxOrder",
 }
 
 // String returns the ErrorCode as a human-readable name.

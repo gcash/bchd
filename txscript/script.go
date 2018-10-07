@@ -611,6 +611,10 @@ func getSigOpCount(pops []parsedOpcode, precise bool) int {
 			fallthrough
 		case OP_CHECKSIGVERIFY:
 			nSigs++
+		case OP_CHECKDATASIG:
+			fallthrough
+		case OP_CHECKDATASIGVERIFY:
+			nSigs++
 		case OP_CHECKMULTISIG:
 			fallthrough
 		case OP_CHECKMULTISIGVERIFY:
