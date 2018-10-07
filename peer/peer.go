@@ -32,7 +32,7 @@ const (
 
 	// DefaultTrickleInterval is the min time between attempts to send an
 	// inv message to a peer.
-	DefaultTrickleInterval = 1 * time.Millisecond
+	DefaultTrickleInterval = 50 * time.Millisecond
 
 	// minAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
