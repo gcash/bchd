@@ -2397,7 +2397,7 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// Find the min and max block timestamps as well as calculate the total
 	// amount of work that happened between the start and end blocks.
 	var minTimestamp, maxTimestamp time.Time
-	totalWork := big.NewInt(0)
+	totalWork := big.NewFloat(0.0)
 	for curHeight := startHeight; curHeight <= endHeight; curHeight++ {
 		hash, err := s.cfg.Chain.BlockHashByHeight(curHeight)
 		if err != nil {
@@ -2416,7 +2416,7 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 			minTimestamp = header.Timestamp
 			maxTimestamp = minTimestamp
 		} else {
-			totalWork.Add(totalWork, blockchain.CalcWork(header.Bits))
+			totalWork.Add(totalWork, new(big.Float).SetInt(blockchain.CalcWork(header.Bits)))
 
 			if minTimestamp.After(header.Timestamp) {
 				minTimestamp = header.Timestamp
@@ -2432,10 +2432,10 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// time difference.
 	timeDiff := int64(maxTimestamp.Sub(minTimestamp) / time.Second)
 	if timeDiff == 0 {
-		return int64(0), nil
+		return float64(0), nil
 	}
 
-	hashesPerSec := new(big.Int).Div(totalWork, big.NewInt(timeDiff))
+	hashesPerSec := new(big.Float).Quo(totalWork, new(big.Float).SetInt64(timeDiff))
 	return hashesPerSec.Int64(), nil
 }
 
