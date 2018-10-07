@@ -1540,17 +1540,17 @@ out:
 func (p *Peer) queueHandler() {
 	pendingMsgs := list.New()
 	invSendQueue := list.New()
-
-	// If the trickle interval is 0 we create an unstarted Ticker. This will allow
-	// us to select on it without it ever firing. If the trickle interval is
-	// greater than 0 the ticker and trickle queue are used normally.
+	useTrickleQueue := p.cfg.TrickleInterval > 0
 	var trickleTicker *time.Ticker
-	sendInvImmediately := p.cfg.TrickleInterval <= 0
-	if sendInvImmediately {
-		trickleTicker = &time.Ticker{C: make(chan (time.Time))}
-	} else {
+
+	// If the trickle interval is 0 we create an unstarted Ticker. This allows
+	// selecting on it without it ever firing. If the trickle interval is
+	// greater than 0 the ticker and trickle queue are used normally.
+	if useTrickleQueue {
 		trickleTicker = time.NewTicker(p.cfg.TrickleInterval)
 		defer trickleTicker.Stop()
+	} else {
+		trickleTicker = &time.Ticker{C: make(chan (time.Time))}
 	}
 
 	// We keep the waiting flag so that we know if we have a message queued
@@ -1596,29 +1596,35 @@ out:
 
 		case iv := <-p.outputInvChan:
 			// No handshake?  They'll find out soon enough.
-			if p.VersionKnown() {
-				// If this is a new block, then we'll blast it
-				// out immediately, sipping the inv trickle
-				// queue.
-				// If it's a new tx and the trickle interval is 0 send it immediately.
-				// Otherwise enqueue for sending later.
-				if iv.Type == wire.InvTypeBlock {
-					invMsg := wire.NewMsgInvSizeHint(1)
-					invMsg.AddInvVect(iv)
-					waiting = queuePacket(outMsg{msg: invMsg},
-						pendingMsgs, waiting)
-				} else if sendInvImmediately {
-					if p.knownInventory.Exists(iv) {
-						continue
-					}
-
-					invMsg := wire.NewMsgInvSizeHint(1)
-					invMsg.AddInvVect(iv)
-					waiting = queuePacket(outMsg{msg: invMsg}, pendingMsgs, waiting)
-				} else {
-					invSendQueue.PushBack(iv)
-				}
+			if !p.VersionKnown() {
+				continue
 			}
+
+			// If this is a new block, then we'll blast it
+			// out immediately, skipping the inv trickle
+			// queue.
+			if iv.Type == wire.InvTypeBlock {
+				invMsg := wire.NewMsgInvSizeHint(1)
+				invMsg.AddInvVect(iv)
+				waiting = queuePacket(outMsg{msg: invMsg},
+					pendingMsgs, waiting)
+				continue
+			}
+
+			// If it's a new tx and the trickle queue is enabled then enqueue the inv.
+			if useTrickleQueue {
+				invSendQueue.PushBack(iv)
+				continue
+			}
+
+			// Otherwise send it immediately
+			if p.knownInventory.Exists(iv) {
+				continue
+			}
+
+			invMsg := wire.NewMsgInvSizeHint(1)
+			invMsg.AddInvVect(iv)
+			waiting = queuePacket(outMsg{msg: invMsg}, pendingMsgs, waiting)
 
 		case <-trickleTicker.C:
 			// Don't send anything if we're disconnecting or there
