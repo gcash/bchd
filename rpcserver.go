@@ -2310,7 +2310,7 @@ func handleGetMiningInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	if err != nil {
 		return nil, err
 	}
-	networkHashesPerSec, ok := networkHashesPerSecIface.(int64)
+	networkHashesPerSec, ok := networkHashesPerSecIface.(float64)
 	if !ok {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInternal.Code,
@@ -2435,8 +2435,8 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 		return float64(0), nil
 	}
 
-	hashesPerSec := new(big.Float).Quo(totalWork, new(big.Float).SetInt64(timeDiff))
-	return hashesPerSec.Int64(), nil
+	hashesPerSec, _ := new(big.Float).Quo(totalWork, new(big.Float).SetInt64(timeDiff)).Float64()
+	return hashesPerSec, nil
 }
 
 // handleGetPeerInfo implements the getpeerinfo command.
