@@ -32,7 +32,7 @@ const (
 
 	// DefaultTrickleInterval is the min time between attempts to send an
 	// inv message to a peer.
-	DefaultTrickleInterval = 10 * time.Second
+	DefaultTrickleInterval = 50 * time.Millisecond
 
 	// minAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
@@ -43,7 +43,7 @@ const (
 
 	// invTrickleSize is the maximum amount of inventory to send in a single
 	// message when trickling inventory to remote peers.
-	maxInvTrickleSize = 1000
+	maxInvTrickleSize = 5000
 
 	// maxKnownInventory is the maximum number of items to keep in the known
 	// inventory cache.
