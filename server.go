@@ -158,12 +158,18 @@ type peerState struct {
 	persistentPeers map[int32]*serverPeer
 	banned          map[string]time.Time
 	outboundGroups  map[string]int
+	connectionCount map[string]int
 }
 
 // Count returns the count of all known peers.
 func (ps *peerState) Count() int {
 	return len(ps.inboundPeers) + len(ps.outboundPeers) +
 		len(ps.persistentPeers)
+}
+
+// CountIP returns the count of all peers matching the IP.
+func (ps *peerState) CountIP(host string) int {
+	return ps.connectionCount[host]
 }
 
 // forAllOutboundPeers is a helper function that runs closure on all outbound
@@ -1562,7 +1568,14 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		delete(state.banned, host)
 	}
 
-	// TODO: Check for max peers from a single IP.
+	// Limit max number of total peers per ip.
+	if state.CountIP(host) >= cfg.MaxPeersPerIP {
+		srvrLog.Infof("Max peers per IP reached [%d] - disconnecting peer %s",
+			cfg.MaxPeersPerIP, sp)
+		sp.Disconnect()
+
+		return false
+	}
 
 	// Limit max number of total peers.
 	if state.Count() >= cfg.MaxPeers {
@@ -1576,14 +1589,18 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 
 	// Add the new peer and start it.
 	srvrLog.Debugf("New peer %s", sp)
+
 	if sp.Inbound() {
 		state.inboundPeers[sp.ID()] = sp
+		state.connectionCount[host]++
 	} else {
 		state.outboundGroups[addrmgr.GroupKey(sp.NA())]++
+
 		if sp.persistent {
 			state.persistentPeers[sp.ID()] = sp
 		} else {
 			state.outboundPeers[sp.ID()] = sp
+			state.connectionCount[host]++
 		}
 	}
 
@@ -1594,6 +1611,7 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 // invoked from the peerHandler goroutine.
 func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 	var list map[int32]*serverPeer
+
 	if sp.persistent {
 		list = state.persistentPeers
 	} else if sp.Inbound() {
@@ -1601,14 +1619,23 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 	} else {
 		list = state.outboundPeers
 	}
+
 	if _, ok := list[sp.ID()]; ok {
 		if !sp.Inbound() && sp.VersionKnown() {
 			state.outboundGroups[addrmgr.GroupKey(sp.NA())]--
 		}
+
 		if !sp.Inbound() && sp.connReq != nil {
 			s.connManager.Disconnect(sp.connReq.ID())
 		}
+
 		delete(list, sp.ID())
+
+		host, _, err := net.SplitHostPort(sp.Addr())
+		if err == nil && !sp.persistent {
+			state.connectionCount[host]--
+		}
+
 		srvrLog.Debugf("Removed peer %s", sp)
 		return
 	}
@@ -2014,6 +2041,7 @@ func (s *server) peerHandler() {
 		outboundPeers:   make(map[int32]*serverPeer),
 		banned:          make(map[string]time.Time),
 		outboundGroups:  make(map[string]int),
+		connectionCount: make(map[string]int),
 	}
 
 	if !cfg.DisableDNSSeed {
