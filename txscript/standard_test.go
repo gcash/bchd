@@ -464,7 +464,7 @@ func TestCalcScriptInfo(t *testing.T) {
 		sigScript := mustParseShortForm(test.sigScript)
 		pkScript := mustParseShortForm(test.pkScript)
 
-		si, err := CalcScriptInfo(sigScript, pkScript, test.bip16)
+		si, err := CalcScriptInfo(sigScript, pkScript, test.bip16, true)
 		if e := tstCheckScriptError(err, test.scriptInfoErr); e != nil {
 			t.Errorf("scriptinfo test %q: %v", test.name, e)
 			continue

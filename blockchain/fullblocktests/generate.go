@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"time"
 
+	"sort"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -26,7 +28,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"sort"
 )
 
 const (
@@ -671,7 +672,7 @@ func repeatOpcode(opcode uint8, numRepeats int) []byte {
 // assertScriptSigOpsCount panics if the provided script does not have the
 // specified number of signature operations.
 func assertScriptSigOpsCount(script []byte, expected int) {
-	numSigOps := txscript.GetSigOpCount(script)
+	numSigOps := txscript.GetSigOpCount(script, true)
 	if numSigOps != expected {
 		_, file, line, _ := runtime.Caller(1)
 		panic(fmt.Sprintf("assertion failed at %s:%d: generated number "+
@@ -686,11 +687,11 @@ func countBlockSigOps(block *wire.MsgBlock) int {
 	totalSigOps := 0
 	for _, tx := range block.Transactions {
 		for _, txIn := range tx.TxIn {
-			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript)
+			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, true)
 			totalSigOps += numSigOps
 		}
 		for _, txOut := range tx.TxOut {
-			numSigOps := txscript.GetSigOpCount(txOut.PkScript)
+			numSigOps := txscript.GetSigOpCount(txOut.PkScript, true)
 			totalSigOps += numSigOps
 		}
 	}
