@@ -9,13 +9,14 @@ import (
 	"fmt"
 	"time"
 
+	"sort"
+
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"sort"
 )
 
 const (
@@ -473,7 +474,8 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	if err != nil {
 		return nil, err
 	}
-	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx))
+
+	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, g.chain.IsMagneticAnomalyEnabled(best.Hash)))
 
 	// Get the current source transactions and create a priority queue to
 	// hold the transactions which are ready for inclusion into a block
@@ -635,7 +637,7 @@ mempoolLoop:
 		// Enforce maximum signature operation cost per block.  Also
 		// check for overflow.
 		sigOps, err := blockchain.GetSigOps(tx, false,
-			blockUtxos, true)
+			blockUtxos, true, g.chain.IsMagneticAnomalyEnabled(best.Hash))
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"GetSigOpCost: %v", tx.Hash(), err)

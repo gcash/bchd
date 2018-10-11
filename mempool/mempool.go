@@ -782,10 +782,15 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		return nil, nil, err
 	}
 
+	magneticAnomalyActive := false
+	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.MagneticAnomalyActivationTime) {
+		magneticAnomalyActive = true
+	}
+
 	// Don't allow transactions with non-standard inputs if the network
 	// parameters forbid their acceptance.
 	if !mp.cfg.Policy.AcceptNonStd {
-		err := checkInputsStandard(tx, utxoView)
+		err := checkInputsStandard(tx, utxoView, magneticAnomalyActive)
 		if err != nil {
 			// Attempt to extract a reject code from the error so
 			// it can be retained.  When not possible, fall back to
@@ -809,7 +814,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// the coinbase address itself can contain signature operations, the
 	// maximum allowed signature operations per transaction is less than
 	// the maximum allowed signature operations per block.
-	sigOps, err := blockchain.GetSigOps(tx, false, utxoView, true)
+	sigOps, err := blockchain.GetSigOps(tx, false, utxoView, true, magneticAnomalyActive)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)
@@ -885,7 +890,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// Check if MagneticAnomaly is enabled. If so let's admit CheckDataSig transactions
 	// into the mempool.
 	scriptFlags := txscript.StandardVerifyFlags
-	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.MagneticAnomalyActivationTime) {
+	if magneticAnomalyActive {
 		scriptFlags |= txscript.ScriptVerifyCheckDataSig
 	}
 
