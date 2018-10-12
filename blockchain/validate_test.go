@@ -63,6 +63,47 @@ func TestSequenceLocksActive(t *testing.T) {
 	}
 }
 
+// TestCountSigOps counts the numberof SigOps in a transaction. If OP_CHECKDATASIG is
+// used then it should only be counted after the November hard fork.
+func TestCountSigOps(t *testing.T) {
+	// Invalid tx below, but we are just testing sigop counts.
+	msgTx := wire.MsgTx{
+		Version: 1,
+		TxIn: []*wire.TxIn{
+			{
+				PreviousOutPoint: wire.OutPoint{
+					Hash:  chainhash.Hash{},
+					Index: 0xffffffff,
+				},
+				SignatureScript: []byte{},
+				Sequence:        0xffffffff,
+			},
+		},
+		TxOut: []*wire.TxOut{
+			{
+				Value: 0x12a05f200, // 5000000000
+				PkScript: []byte{
+					0xba, // OP_CHECKDATASIG
+				},
+			},
+		},
+		LockTime: 0,
+	}
+	tx := bchutil.NewTx(&msgTx)
+
+	// Before the Nov fork.
+	sigOps := CountSigOps(tx, false)
+	if sigOps != 0 {
+		t.Fatalf("Incorrect number of SigOps, expected 0 got %v\n", sigOps)
+	}
+
+	// After the Nov fork.
+	sigOps = CountSigOps(tx, true)
+	if sigOps != 1 {
+		t.Fatalf("Incorrect number of SigOps, expected 1 got %v\n", sigOps)
+	}
+}
+
 // TestCheckConnectBlockTemplate tests the CheckConnectBlockTemplate function to
 // ensure it fails.
 func TestCheckConnectBlockTemplate(t *testing.T) {
@@ -154,7 +195,7 @@ func TestCheckBlockSanity(t *testing.T) {
 	powLimit := chaincfg.MainNetParams.PowLimit
 	block := bchutil.NewBlock(&Block100000)
 	timeSource := NewMedianTime()
-	err := CheckBlockSanity(block, powLimit, timeSource)
+	err := CheckBlockSanity(block, powLimit, timeSource, true)
 	if err != nil {
 		t.Errorf("CheckBlockSanity: %v", err)
 	}
@@ -163,7 +204,7 @@ func TestCheckBlockSanity(t *testing.T) {
 	// second fails.
 	timestamp := block.MsgBlock().Header.Timestamp
 	block.MsgBlock().Header.Timestamp = timestamp.Add(time.Nanosecond)
-	err = CheckBlockSanity(block, powLimit, timeSource)
+	err = CheckBlockSanity(block, powLimit, timeSource, true)
 	if err == nil {
 		t.Errorf("CheckBlockSanity: error is nil when it shouldn't be")
 	}

@@ -234,7 +234,7 @@ type ScriptInfo struct {
 // pair.  It will error if the pair is in someway invalid such that they can not
 // be analysed, i.e. if they do not parse or the pkScript is not a push-only
 // script
-func CalcScriptInfo(sigScript, pkScript []byte, bip16 bool) (*ScriptInfo, error) {
+func CalcScriptInfo(sigScript, pkScript []byte, bip16 bool, magneticAnomalyActive bool) (*ScriptInfo, error) {
 
 	sigPops, err := parseScript(sigScript)
 	if err != nil {
@@ -275,14 +275,14 @@ func CalcScriptInfo(sigScript, pkScript []byte, bip16 bool) (*ScriptInfo, error)
 		} else {
 			si.ExpectedInputs += shInputs
 		}
-		si.SigOps = getSigOpCount(shPops, true)
+		si.SigOps = getSigOpCount(shPops, true, magneticAnomalyActive)
 
 		// All entries pushed to stack (or are OP_RESERVED and exec
 		// will fail).
 		si.NumInputs = len(sigPops)
 
 	default:
-		si.SigOps = getSigOpCount(pkPops, true)
+		si.SigOps = getSigOpCount(pkPops, true, magneticAnomalyActive)
 
 		// All entries pushed to stack (or are OP_RESERVED and exec
 		// will fail).

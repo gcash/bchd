@@ -262,7 +262,7 @@ func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
 // ensure it is sane.  These checks are context free.
-func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
+func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool) error {
 	// A transaction must have at least one input.
 	msgTx := tx.MsgTx()
 	if len(msgTx.TxIn) == 0 {
@@ -282,13 +282,13 @@ func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
 			"%d, max %d", serializedTxSize, MaxTransactionSize)
 		return ruleError(ErrTxTooBig, str)
 	}
-	if enforceMinimumSize && serializedTxSize < MinTransactionSize {
+	if magneticAnomalyActive && serializedTxSize < MinTransactionSize {
 		str := fmt.Sprintf("serialized transaction is too small - got "+
 			"%d, min %d", serializedTxSize, MinTransactionSize)
 		return ruleError(ErrTxTooSmall, str)
 	}
 
-	sigOps := CountSigOps(tx)
+	sigOps := CountSigOps(tx, magneticAnomalyActive)
 	if sigOps > MaxTransactionSigOps {
 		str := fmt.Sprintf("transaction has too many sigops - got "+
 			"%d, max %d", sigOps, MaxTransactionSigOps)
@@ -419,21 +419,21 @@ func CheckProofOfWork(block *bchutil.Block, powLimit *big.Int) error {
 // input and output scripts in the provided transaction.  This uses the
 // quicker, but imprecise, signature operation counting mechanism from
 // txscript.
-func CountSigOps(tx *bchutil.Tx) int {
+func CountSigOps(tx *bchutil.Tx, magneticAnomalyActive bool) int {
 	msgTx := tx.MsgTx()
 
 	// Accumulate the number of signature operations in all transaction
 	// inputs.
 	totalSigOps := 0
 	for _, txIn := range msgTx.TxIn {
-		numSigOps := txscript.GetSigOpCount(txIn.SignatureScript)
+		numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, magneticAnomalyActive)
 		totalSigOps += numSigOps
 	}
 
 	// Accumulate the number of signature operations in all transaction
 	// outputs.
 	for _, txOut := range msgTx.TxOut {
-		numSigOps := txscript.GetSigOpCount(txOut.PkScript)
+		numSigOps := txscript.GetSigOpCount(txOut.PkScript, magneticAnomalyActive)
 		totalSigOps += numSigOps
 	}
 
@@ -442,10 +442,10 @@ func CountSigOps(tx *bchutil.Tx) int {
 
 // GetSigOps returns the unified sig op count for the passed transaction
 // respecting current active soft-forks which modified sig op cost counting.
-func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool) (int, error) {
-	numSigOps := CountSigOps(tx)
+func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool, magneticAnomalyActive bool) (int, error) {
+	numSigOps := CountSigOps(tx, magneticAnomalyActive)
 	if bip16 {
-		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView)
+		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView, magneticAnomalyActive)
 		if err != nil {
 			return 0, nil
 		}
@@ -458,7 +458,7 @@ func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16
 // transactions which are of the pay-to-script-hash type.  This uses the
 // precise, signature operation counting mechanism from the script engine which
 // requires access to the input transaction scripts.
-func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint) (int, error) {
+func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, magneticAnomalyActive bool) (int, error) {
 	// Coinbase transactions have no interesting inputs.
 	if isCoinBaseTx {
 		return 0, nil
@@ -490,7 +490,7 @@ func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint)
 		// referenced public key script.
 		sigScript := txIn.SignatureScript
 		numSigOps := txscript.GetPreciseSigOpCount(sigScript, pkScript,
-			true)
+			true, magneticAnomalyActive)
 
 		// We could potentially overflow the accumulator so check for
 		// overflow.
@@ -625,7 +625,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 // CheckBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context free.
-func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource) error {
+func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool) error {
 	return checkBlockSanity(block, powLimit, timeSource, BFNone)
 }
 
@@ -1129,7 +1129,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// countP2SHSigOps for whether or not the transaction is
 		// a coinbase transaction rather than having to do a
 		// full coinbase check again.
-		sigOpCost, err := GetSigOps(tx, i == 0, view, enforceBIP0016)
+		sigOpCost, err := GetSigOps(tx, i == 0, view, enforceBIP0016, magneticAnomalyActive)
 		if err != nil {
 			return err
 		}
