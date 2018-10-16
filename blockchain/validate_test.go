@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -92,13 +93,18 @@ func TestCountSigOps(t *testing.T) {
 	tx := bchutil.NewTx(&msgTx)
 
 	// Before the Nov fork.
-	sigOps := CountSigOps(tx, false)
+	var scriptFlags txscript.ScriptFlags
+	sigOps := CountSigOps(tx, scriptFlags)
 	if sigOps != 0 {
 		t.Fatalf("Incorrect number of SigOps, expected 0 got %v\n", sigOps)
 	}
 
 	// After the Nov fork.
-	sigOps = CountSigOps(tx, true)
+	scriptFlags |= txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckDataSig
+
+	sigOps = CountSigOps(tx, scriptFlags)
 	if sigOps != 1 {
 		t.Fatalf("Incorrect number of SigOps, expected 1 got %v\n", sigOps)
 	}
