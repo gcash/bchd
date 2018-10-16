@@ -475,7 +475,20 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 		return nil, err
 	}
 
-	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, g.chain.IsMagneticAnomalyEnabled(best.Hash)))
+	// TODO: This set of flags is currently incomplete and
+	// only includes the latest DSV changes.
+	var scriptFlags txscript.ScriptFlags
+
+	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
+		scriptFlags |= txscript.ScriptVerifySigPushOnly |
+			txscript.ScriptVerifyCleanStack |
+			txscript.ScriptVerifyCheckDataSig
+	}
+
+	// Enable BIP-16
+	scriptFlags |= txscript.ScriptBip16
+
+	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, scriptFlags))
 
 	// Get the current source transactions and create a priority queue to
 	// hold the transactions which are ready for inclusion into a block
@@ -637,7 +650,7 @@ mempoolLoop:
 		// Enforce maximum signature operation cost per block.  Also
 		// check for overflow.
 		sigOps, err := blockchain.GetSigOps(tx, false,
-			blockUtxos, true, g.chain.IsMagneticAnomalyEnabled(best.Hash))
+			blockUtxos, scriptFlags)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"GetSigOpCost: %v", tx.Hash(), err)
