@@ -394,7 +394,7 @@ func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags Behavio
 
 	// The block hash must be less than the claimed target unless the flag
 	// to avoid proof of work checks is set.
-	if flags&BFNoPoWCheck != BFNoPoWCheck {
+	if !flags.HasFlag(BFNoPoWCheck) {
 		// The block hash must be less than the claimed target.
 		hash := header.BlockHash()
 		hashNum := HashToBig(&hash)
@@ -444,7 +444,7 @@ func CountSigOps(tx *bchutil.Tx, scriptFlags txscript.ScriptFlags) int {
 // respecting current active soft-forks which modified sig op cost counting.
 func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, scriptFlags txscript.ScriptFlags) (int, error) {
 	numSigOps := CountSigOps(tx, scriptFlags)
-	if scriptFlags&txscript.ScriptBip16 == txscript.ScriptBip16 {
+	if scriptFlags.HasFlag(txscript.ScriptBip16) {
 		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView, scriptFlags)
 		if err != nil {
 			return 0, nil
@@ -581,7 +581,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 		}
 	}
 
-	magneticAnomaly := flags&BFMagneticAnomaly == BFMagneticAnomaly
+	magneticAnomaly := flags.HasFlag(BFMagneticAnomaly)
 
 	// TODO: This is not a full set of ScriptFlags and only
 	// covers the Nov 2018 fork.
@@ -716,7 +716,7 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 	// block.
 	blockHeight := prevNode.height + 1
 
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Ensure the difficulty specified in the block header matches
 		// the calculated difficulty based on the previous block and
@@ -836,7 +836,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return ruleError(ErrBlockTooBig, str)
 	}
 
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Obtain the latest state of the deployed CSV soft-fork in
 		// order to properly guard the new validation behavior based on

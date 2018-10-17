@@ -86,6 +86,11 @@ const (
 	ScriptVerifyCheckDataSig
 )
 
+// HasFlag returns whether the ScriptFlags has the passed flag set.
+func (scriptFlags ScriptFlags) HasFlag(flag ScriptFlags) bool {
+	return scriptFlags&flag == flag
+}
+
 const (
 	// MaxStackSize is the maximum combined height of stack and alt stack
 	// during execution.
@@ -120,7 +125,7 @@ type Engine struct {
 
 // hasFlag returns whether the script engine instance has the passed flag set.
 func (vm *Engine) hasFlag(flag ScriptFlags) bool {
-	return vm.flags&flag == flag
+	return vm.flags.HasFlag(flag)
 }
 
 // isBranchExecuting returns whether or not the current conditional branch is

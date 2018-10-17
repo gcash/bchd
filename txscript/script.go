@@ -614,7 +614,7 @@ func getSigOpCount(pops []parsedOpcode, precise bool, scriptFlags ScriptFlags) i
 		case OP_CHECKDATASIG:
 			fallthrough
 		case OP_CHECKDATASIGVERIFY:
-			if scriptFlags&ScriptVerifyCheckDataSig == ScriptVerifyCheckDataSig {
+			if scriptFlags.HasFlag(ScriptVerifyCheckDataSig) {
 				nSigs++
 			}
 		case OP_CHECKMULTISIG:
@@ -661,7 +661,7 @@ func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, scriptFlags ScriptFlag
 	pops, _ := parseScript(scriptPubKey)
 
 	// Treat non P2SH transactions as normal.
-	if !(scriptFlags&ScriptBip16 == ScriptBip16 && isScriptHash(pops)) {
+	if !(scriptFlags.HasFlag(ScriptBip16) && isScriptHash(pops)) {
 		return getSigOpCount(pops, true, scriptFlags)
 	}
 
