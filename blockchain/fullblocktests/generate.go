@@ -672,7 +672,12 @@ func repeatOpcode(opcode uint8, numRepeats int) []byte {
 // assertScriptSigOpsCount panics if the provided script does not have the
 // specified number of signature operations.
 func assertScriptSigOpsCount(script []byte, expected int) {
-	numSigOps := txscript.GetSigOpCount(script, true)
+	var scriptFlags txscript.ScriptFlags
+	scriptFlags |= txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckDataSig
+
+	numSigOps := txscript.GetSigOpCount(script, scriptFlags)
 	if numSigOps != expected {
 		_, file, line, _ := runtime.Caller(1)
 		panic(fmt.Sprintf("assertion failed at %s:%d: generated number "+
@@ -685,13 +690,18 @@ func assertScriptSigOpsCount(script []byte, expected int) {
 // scripts in the passed block.
 func countBlockSigOps(block *wire.MsgBlock) int {
 	totalSigOps := 0
+	var scriptFlags txscript.ScriptFlags
+	scriptFlags |= txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckDataSig
+
 	for _, tx := range block.Transactions {
 		for _, txIn := range tx.TxIn {
-			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, true)
+			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, scriptFlags)
 			totalSigOps += numSigOps
 		}
 		for _, txOut := range tx.TxOut {
-			numSigOps := txscript.GetSigOpCount(txOut.PkScript, true)
+			numSigOps := txscript.GetSigOpCount(txOut.PkScript, scriptFlags)
 			totalSigOps += numSigOps
 		}
 	}

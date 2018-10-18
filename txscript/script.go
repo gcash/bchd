@@ -603,7 +603,7 @@ func asSmallInt(op *opcode) int {
 // signature operations in the script provided by pops. If precise mode is
 // requested then we attempt to count the number of operations for a multisig
 // op. Otherwise we use the maximum.
-func getSigOpCount(pops []parsedOpcode, precise bool, magneticAnomalyActive bool) int {
+func getSigOpCount(pops []parsedOpcode, precise bool, scriptFlags ScriptFlags) int {
 	nSigs := 0
 	for i, pop := range pops {
 		switch pop.opcode.value {
@@ -614,7 +614,7 @@ func getSigOpCount(pops []parsedOpcode, precise bool, magneticAnomalyActive bool
 		case OP_CHECKDATASIG:
 			fallthrough
 		case OP_CHECKDATASIGVERIFY:
-			if magneticAnomalyActive {
+			if scriptFlags.HasFlag(ScriptVerifyCheckDataSig) {
 				nSigs++
 			}
 		case OP_CHECKMULTISIG:
@@ -643,11 +643,11 @@ func getSigOpCount(pops []parsedOpcode, precise bool, magneticAnomalyActive bool
 // in a script. a CHECKSIG operations counts for 1, and a CHECK_MULTISIG for 20.
 // If the script fails to parse, then the count up to the point of failure is
 // returned.
-func GetSigOpCount(script []byte, magneticAnomalyActive bool) int {
+func GetSigOpCount(script []byte, scriptFlags ScriptFlags) int {
 	// Don't check error since parseScript returns the parsed-up-to-error
 	// list of pops.
 	pops, _ := parseScript(script)
-	return getSigOpCount(pops, false, magneticAnomalyActive)
+	return getSigOpCount(pops, false, scriptFlags)
 }
 
 // GetPreciseSigOpCount returns the number of signature operations in
@@ -655,14 +655,14 @@ func GetSigOpCount(script []byte, magneticAnomalyActive bool) int {
 // Pay-To-Script-Hash script in order to find the precise number of signature
 // operations in the transaction.  If the script fails to parse, then the count
 // up to the point of failure is returned.
-func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, bip16 bool, magneticAnomalyActive bool) int {
+func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, scriptFlags ScriptFlags) int {
 	// Don't check error since parseScript returns the parsed-up-to-error
 	// list of pops.
 	pops, _ := parseScript(scriptPubKey)
 
 	// Treat non P2SH transactions as normal.
-	if !(bip16 && isScriptHash(pops)) {
-		return getSigOpCount(pops, true, magneticAnomalyActive)
+	if !(scriptFlags.HasFlag(ScriptBip16) && isScriptHash(pops)) {
+		return getSigOpCount(pops, true, scriptFlags)
 	}
 
 	// The public key script is a pay-to-script-hash, so parse the signature
@@ -692,7 +692,7 @@ func GetPreciseSigOpCount(scriptSig, scriptPubKey []byte, bip16 bool, magneticAn
 	// dictate signature operations are counted up to the first parse
 	// failure.
 	shPops, _ := parseScript(shScript)
-	return getSigOpCount(shPops, true, magneticAnomalyActive)
+	return getSigOpCount(shPops, true, scriptFlags)
 }
 
 // IsUnspendable returns whether the passed public key script is unspendable, or
