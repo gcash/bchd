@@ -3,6 +3,7 @@
 
 # Binaries
 bchd
+bchctl
 
 # Databases
 btcd.db
