@@ -94,6 +94,20 @@ The documentation is a work-in-progress.  It is located in the [docs](https://gi
 
 Contributions are definitely welcome! Please read the contributing [guidelines](https://github.com/gcash/bchd/blob/master/docs/code_contribution_guidelines.md) before starting.
 
+## Security Disclosures
+
+To report security issues please contact:
+
+Chris Pacia
+Email: ctpacia@gmail.com
+GPG Fingerprint: 0150 2502 DD3A 928D CE52 8CB9 B895 6DBF EE7C 105C
+
+or
+
+Josh Ellithorpe
+Email: quest@mac.com
+GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD 
+
 ## License
 
 bchd is licensed under the [copyfree](http://copyfree.org) ISC License.
