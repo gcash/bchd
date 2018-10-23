@@ -98,15 +98,11 @@ Contributions are definitely welcome! Please read the contributing [guidelines](
 
 To report security issues please contact:
 
-Chris Pacia
-Email: ctpacia@gmail.com
-GPG Fingerprint: 0150 2502 DD3A 928D CE52 8CB9 B895 6DBF EE7C 105C
+Chris Pacia (ctpacia@gmail.com) - GPG Fingerprint: 0150 2502 DD3A 928D CE52 8CB9 B895 6DBF EE7C 105C
 
 or
 
-Josh Ellithorpe
-Email: quest@mac.com
-GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD 
+Josh Ellithorpe (quest@mac.com) - GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD 
 
 ## License
 
