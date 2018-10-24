@@ -1746,7 +1746,6 @@ func testClosedTxInterface(tc *testContext, tx database.Tx) bool {
 	}
 
 	// Ensure Get returns expected error.
-	testName = "Get on closed tx"
 	if k := bucket.Get(keyName); k != nil {
 		tc.t.Errorf("Get: did not return nil on closed tx")
 		return false

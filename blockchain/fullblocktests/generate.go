@@ -2119,9 +2119,8 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//      \-> bralt0 -> ... -> bralt#
 	g.setTip(reorgStartBlockName)
 	testInstances = nil
-	chain2TipName := g.tipName
 	for i := uint16(0); i < numLargeReorgBlocks; i++ {
-		chain2TipName = fmt.Sprintf("bralt%d", i)
+		chain2TipName := fmt.Sprintf("bralt%d", i)
 		g.nextBlock(chain2TipName, nil)
 		testInstances = append(testInstances, acceptBlock(g.tipName,
 			g.tip, false, false))
@@ -2135,7 +2134,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> bralt0 -> ... -> bralt# -> bralt#+1
 	//      \-> br0    -> ... -> br#
 	g.nextBlock(fmt.Sprintf("bralt%d", g.tipHeight+1), nil)
-	chain2TipName = g.tipName
+	chain2TipName := g.tipName
 	accepted()
 
 	// Extend the first chain by two to force a large reorg back to it.
@@ -2144,11 +2143,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//      \-> bralt0 -> ... -> bralt# -> bralt#+1
 	g.setTip(chain1TipName)
 	g.nextBlock(fmt.Sprintf("br%d", g.tipHeight+1), nil)
-	chain1TipName = g.tipName
 	acceptedToSideChainWithExpectedTip(chain2TipName)
 
 	g.nextBlock(fmt.Sprintf("br%d", g.tipHeight+2), nil)
-	chain1TipName = g.tipName
 	accepted()
 
 	return tests, nil
