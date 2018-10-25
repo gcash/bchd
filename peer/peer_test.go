@@ -224,22 +224,24 @@ func TestPeerConnection(t *testing.T) {
 				}
 			},
 		},
-		UserAgentName:     "peer",
-		UserAgentVersion:  "1.0",
-		UserAgentComments: []string{"comment"},
-		ChainParams:       &chaincfg.MainNetParams,
-		ProtocolVersion:   wire.RejectVersion, // Configure with older version
-		Services:          0,
-		TrickleInterval:   time.Second * 10,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		UserAgentComments:      []string{"comment"},
+		ChainParams:            &chaincfg.MainNetParams,
+		ProtocolVersion:        wire.RejectVersion, // Configure with older version
+		Services:               0,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 	peer2Cfg := &peer.Config{
-		Listeners:         peer1Cfg.Listeners,
-		UserAgentName:     "peer",
-		UserAgentVersion:  "1.0",
-		UserAgentComments: []string{"comment"},
-		ChainParams:       &chaincfg.MainNetParams,
-		Services:          wire.SFNodeNetwork,
-		TrickleInterval:   time.Second * 10,
+		Listeners:              peer1Cfg.Listeners,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		UserAgentComments:      []string{"comment"},
+		ChainParams:            &chaincfg.MainNetParams,
+		Services:               wire.SFNodeNetwork,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 
 	wantStats1 := peerStats{
@@ -437,12 +439,13 @@ func TestPeerListeners(t *testing.T) {
 				ok <- msg
 			},
 		},
-		UserAgentName:     "peer",
-		UserAgentVersion:  "1.0",
-		UserAgentComments: []string{"comment"},
-		ChainParams:       &chaincfg.MainNetParams,
-		Services:          wire.SFNodeBloom,
-		TrickleInterval:   time.Second * 10,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		UserAgentComments:      []string{"comment"},
+		ChainParams:            &chaincfg.MainNetParams,
+		Services:               wire.SFNodeBloom,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 	inConn, outConn := pipe(
 		&conn{raddr: "10.0.0.1:8333"},
@@ -608,12 +611,13 @@ func TestOutboundPeer(t *testing.T) {
 		NewestBlock: func() (*chainhash.Hash, int32, error) {
 			return nil, 0, errors.New("newest block not found")
 		},
-		UserAgentName:     "peer",
-		UserAgentVersion:  "1.0",
-		UserAgentComments: []string{"comment"},
-		ChainParams:       &chaincfg.MainNetParams,
-		Services:          0,
-		TrickleInterval:   time.Second * 10,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		UserAgentComments:      []string{"comment"},
+		ChainParams:            &chaincfg.MainNetParams,
+		Services:               0,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 
 	r, w := io.Pipe()
@@ -749,12 +753,13 @@ func TestOutboundPeer(t *testing.T) {
 // version.
 func TestUnsupportedVersionPeer(t *testing.T) {
 	peerCfg := &peer.Config{
-		UserAgentName:     "peer",
-		UserAgentVersion:  "1.0",
-		UserAgentComments: []string{"comment"},
-		ChainParams:       &chaincfg.MainNetParams,
-		Services:          0,
-		TrickleInterval:   time.Second * 10,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		UserAgentComments:      []string{"comment"},
+		ChainParams:            &chaincfg.MainNetParams,
+		Services:               0,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 
 	localNA := wire.NewNetAddressIPPort(
@@ -861,10 +866,11 @@ func TestDuplicateVersionMsg(t *testing.T) {
 				verack <- struct{}{}
 			},
 		},
-		UserAgentName:    "peer",
-		UserAgentVersion: "1.0",
-		ChainParams:      &chaincfg.MainNetParams,
-		Services:         0,
+		UserAgentName:          "peer",
+		UserAgentVersion:       "1.0",
+		ChainParams:            &chaincfg.MainNetParams,
+		Services:               0,
+		TstAllowSelfConnection: true,
 	}
 	inConn, outConn := pipe(
 		&conn{laddr: "10.0.0.1:9108", raddr: "10.0.0.2:9108"},
@@ -906,9 +912,4 @@ func TestDuplicateVersionMsg(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("peer did not disconnect")
 	}
-}
-
-func init() {
-	// Allow self connection when running the tests.
-	peer.TstAllowSelfConns()
 }
