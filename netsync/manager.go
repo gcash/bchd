@@ -45,7 +45,8 @@ var zeroHash chainhash.Hash
 
 // newPeerMsg signifies a newly connected peer to the block handler.
 type newPeerMsg struct {
-	peer *peerpkg.Peer
+	peer  *peerpkg.Peer
+	reply chan struct{}
 }
 
 // blockMsg packages a bitcoin block message and the peer it came from together
@@ -72,7 +73,8 @@ type headersMsg struct {
 
 // donePeerMsg signifies a newly disconnected peer to the block handler.
 type donePeerMsg struct {
-	peer *peerpkg.Peer
+	peer  *peerpkg.Peer
+	reply chan struct{}
 }
 
 // txMsg packages a bitcoin tx message and the peer it came from together
@@ -464,7 +466,9 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		return
 	}
 
-	sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
+	if len(acceptedTxs) > 0 {
+		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
+	}
 }
 
 // current returns true if we believe we are synced with our peers, false if we
@@ -1101,14 +1105,21 @@ out:
 			switch msg := m.(type) {
 			case *newPeerMsg:
 				sm.handleNewPeerMsg(msg.peer)
+				if msg.reply != nil {
+					msg.reply <- struct{}{}
+				}
 
 			case *txMsg:
 				sm.handleTxMsg(msg)
-				msg.reply <- struct{}{}
+				if msg.reply != nil {
+					msg.reply <- struct{}{}
+				}
 
 			case *blockMsg:
 				sm.handleBlockMsg(msg)
-				msg.reply <- struct{}{}
+				if msg.reply != nil {
+					msg.reply <- struct{}{}
+				}
 
 			case *invMsg:
 				sm.handleInvMsg(msg)
@@ -1118,6 +1129,9 @@ out:
 
 			case *donePeerMsg:
 				sm.handleDonePeerMsg(msg.peer)
+				if msg.reply != nil {
+					msg.reply <- struct{}{}
+				}
 
 			case getSyncPeerMsg:
 				var peerID int32
@@ -1253,12 +1267,13 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 }
 
 // NewPeer informs the sync manager of a newly active peer.
-func (sm *SyncManager) NewPeer(peer *peerpkg.Peer) {
+func (sm *SyncManager) NewPeer(peer *peerpkg.Peer, done chan struct{}) {
 	// Ignore if we are shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		done <- struct{}{}
 		return
 	}
-	sm.msgChan <- &newPeerMsg{peer: peer}
+	sm.msgChan <- &newPeerMsg{peer: peer, reply: done}
 }
 
 // QueueTx adds the passed transaction message and peer to the block handling
@@ -1311,13 +1326,14 @@ func (sm *SyncManager) QueueHeaders(headers *wire.MsgHeaders, peer *peerpkg.Peer
 }
 
 // DonePeer informs the blockmanager that a peer has disconnected.
-func (sm *SyncManager) DonePeer(peer *peerpkg.Peer) {
+func (sm *SyncManager) DonePeer(peer *peerpkg.Peer, done chan struct{}) {
 	// Ignore if we are shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		done <- struct{}{}
 		return
 	}
 
-	sm.msgChan <- &donePeerMsg{peer: peer}
+	sm.msgChan <- &donePeerMsg{peer: peer, reply: done}
 }
 
 // Start begins the core block handler which processes block and inv messages.

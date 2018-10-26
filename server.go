@@ -471,7 +471,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	sp.server.timeSource.AddTimeSample(sp.Addr(), msg.Timestamp)
 
 	// Signal the sync manager this peer is a new sync candidate.
-	sp.server.syncManager.NewPeer(sp.Peer)
+	sp.server.syncManager.NewPeer(sp.Peer, nil)
 
 	// Choose whether or not to relay transactions before a filter command
 	// is received.
@@ -2044,7 +2044,7 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 
 	// Only tell sync manager we are gone if we ever told it we existed.
 	if sp.VersionKnown() {
-		s.syncManager.DonePeer(sp.Peer)
+		s.syncManager.DonePeer(sp.Peer, nil)
 
 		// Evict any remaining orphans that were sent by the peer.
 		numEvicted := s.txMemPool.RemoveOrphansByTag(mempool.Tag(sp.ID()))
