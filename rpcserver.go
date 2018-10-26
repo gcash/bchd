@@ -1126,7 +1126,8 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 
 		blockReply = btcjson.GetBlockVerboseResult{
 			GetBlockBaseVerboseResult: baseBlockReply,
-			Tx:                        txNames,
+
+			Tx: txNames,
 		}
 	} else {
 		txns := blk.Transactions()
@@ -1143,7 +1144,8 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 
 		blockReply = btcjson.GetBlockVerboseTxResult{
 			GetBlockBaseVerboseResult: baseBlockReply,
-			Tx:                        rawTxns,
+
+			Tx: rawTxns,
 		}
 	}
 
