@@ -208,7 +208,15 @@ func addPKCSPadding(src []byte) []byte {
 func removePKCSPadding(src []byte) ([]byte, error) {
 	length := len(src)
 	padLength := int(src[length-1])
-	if padLength > aes.BlockSize || length < aes.BlockSize {
+
+	// Padding length must be between 1 and aes block size (16), else invalid:
+	if padLength > aes.BlockSize || length < aes.BlockSize || padLength == 0 {
+		return nil, errInvalidPadding
+	}
+
+	// Padding must contain the padding length byte, repeated (RFC2315 10.3.2)
+	expectedPadding := bytes.Repeat(src[length-1:], padLength)
+	if !bytes.Equal(src[length-padLength:length], expectedPadding) {
 		return nil, errInvalidPadding
 	}
 
