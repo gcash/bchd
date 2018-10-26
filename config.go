@@ -1093,7 +1093,11 @@ func createDefaultConfigFile(destinationPath string) error {
 	}
 	generatedRPCPass := base64.StdEncoding.EncodeToString(randomBytes)
 
-	src := bytes.NewReader([]byte(sampleBchdConf))
+	sampleBytes, err := Asset("sample-bchd.conf")
+	if err != nil {
+		return err
+	}
+	src := bytes.NewReader(sampleBytes)
 
 	dest, err := os.OpenFile(destinationPath,
 		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
