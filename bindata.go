@@ -182,7 +182,7 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"sample-bchd.conf": &bintree{sampleBchdConf, map[string]*bintree{}},
+	"sample-bchd.conf": {sampleBchdConf, map[string]*bintree{}},
 }}
 
 // RestoreAsset restores an asset under the given directory
