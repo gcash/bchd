@@ -10,6 +10,6 @@ package ffldb
 // 1 byte greater than the disk space that prevents writes.
 // Unfortunately there is not a good way to get the current
 // disk space on these platforms in Go at this time.
-func getAvailableDiskSpace() (uint64, error) {
+func getAvailableDiskSpace(path string) (uint64, error) {
 	return minAvailableSpaceUpdate + 1, nil
 }
