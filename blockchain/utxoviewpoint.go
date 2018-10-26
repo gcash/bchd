@@ -241,7 +241,7 @@ func (view *UtxoViewpoint) spendBlockInputs(block *bchutil.Block, stxos *[]Spent
 func (view *UtxoViewpoint) spendTransactionInputs(tx *bchutil.Tx, stxos *[]SpentTxOut) error {
 	for _, txIn := range tx.MsgTx().TxIn {
 		// Ensure the referenced utxo exists in the view.  This should
-		// never happen unless there is a bug is introduced in the code.
+		// never happen unless a bug is introduced in the code.
 		entry := view.entries[txIn.PreviousOutPoint]
 		if entry == nil {
 			return AssertError(fmt.Sprintf("view missing input %v",
