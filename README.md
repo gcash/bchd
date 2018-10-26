@@ -60,7 +60,7 @@ $ ./bchd
 ```
 
 You'll find a large number of runtime options on the help menu. All of which can also be set in a config file.
-See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf) for an example of how to use it.
+See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf.go) for an example of how to use it.
 
 ## Docker
 

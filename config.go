@@ -6,6 +6,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -58,7 +59,6 @@ const (
 	defaultMaxOrphanTransactions = 100
 	defaultMaxOrphanTxSize       = 100000
 	defaultSigCacheMaxSize       = 100000
-	sampleConfigFilename         = "sample-bchd.conf"
 	defaultTxIndex               = false
 	defaultAddrIndex             = false
 )
@@ -1070,7 +1070,7 @@ func loadConfig() (*config, []string, error) {
 	return &cfg, remainingArgs, nil
 }
 
-// createDefaultConfig copies the file sample-bchd.conf to the given destination path,
+// createDefaultConfig copies the sample-bchd.conf.go content to the given destination path,
 // and populates it with some randomly generated RPC username and password.
 func createDefaultConfigFile(destinationPath string) error {
 	// Create the destination directory if it does not exists
@@ -1078,13 +1078,6 @@ func createDefaultConfigFile(destinationPath string) error {
 	if err != nil {
 		return err
 	}
-
-	// We assume sample config file path is same as binary
-	path, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		return err
-	}
-	sampleConfigPath := filepath.Join(path, sampleConfigFilename)
 
 	// We generate a random user and password
 	randomBytes := make([]byte, 20)
@@ -1100,11 +1093,7 @@ func createDefaultConfigFile(destinationPath string) error {
 	}
 	generatedRPCPass := base64.StdEncoding.EncodeToString(randomBytes)
 
-	src, err := os.Open(sampleConfigPath)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
+	src := bytes.NewReader([]byte(sampleBchdConf))
 
 	dest, err := os.OpenFile(destinationPath,
 		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
