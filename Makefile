@@ -16,6 +16,7 @@ compile:
 	@for dir in $(DIRS) ; do \
 		(cp README.md $(OUTDIR)/$(APPNAME)-$$dir/README.md) ;\
 		(cp LICENSE $(OUTDIR)/$(APPNAME)-$$dir/LICENSE) ;\
+		(cp sample-bchd.conf $(OUTDIR)/$(APPNAME)-$$dir/sample-bchd.conf) ;\
 		(cd $(OUTDIR) && zip -q $(APPNAME)-$$dir.zip -r $(APPNAME)-$$dir) ;\
 		echo "make $(OUTDIR)/$(APPNAME)-$$dir.zip" ;\
 	done

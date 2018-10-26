@@ -1070,7 +1070,7 @@ func loadConfig() (*config, []string, error) {
 	return &cfg, remainingArgs, nil
 }
 
-// createDefaultConfig copies the sample-bchd.conf.go content to the given destination path,
+// createDefaultConfig copies the sample-bchd.conf content to the given destination path,
 // and populates it with some randomly generated RPC username and password.
 func createDefaultConfigFile(destinationPath string) error {
 	// Create the destination directory if it does not exists
