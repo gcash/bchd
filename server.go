@@ -271,7 +271,7 @@ type serverPeer struct {
 	sentAddrs      bool
 	isWhitelisted  bool
 	filter         *bloom.Filter
-	addrMtx        sync.Mutex
+	addrMtx        sync.RWMutex
 	knownAddresses map[string]struct{}
 	banScore       connmgr.DynamicBanScore
 	quit           chan struct{}
@@ -313,9 +313,9 @@ func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddress) {
 
 // addressKnown true if the given address is already known to the peer.
 func (sp *serverPeer) addressKnown(na *wire.NetAddress) bool {
-	sp.addrMtx.Lock()
+	sp.addrMtx.RLock()
+	defer sp.addrMtx.RUnlock()
 	_, exists := sp.knownAddresses[addrmgr.NetAddressKey(na)]
-	sp.addrMtx.Unlock()
 	return exists
 }
 
