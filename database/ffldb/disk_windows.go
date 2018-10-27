@@ -7,23 +7,17 @@
 package ffldb
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
 
 // getAvailableDiskSpace returns the number of bytes of available disk space.
-func getAvailableDiskSpace() (uint64, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return 0, err
-	}
-
+func getAvailableDiskSpace(path string) (uint64, error) {
 	h := syscall.MustLoadDLL("kernel32.dll")
 	c := h.MustFindProc("GetDiskFreeSpaceExW")
 
 	var freeBytes, totalBytes, availBytes int64
-	_, _, err = c.Call(uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(wd))),
+	_, _, err := c.Call(uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(path))),
 		uintptr(unsafe.Pointer(&freeBytes)), uintptr(unsafe.Pointer(&totalBytes)), uintptr(unsafe.Pointer(&availBytes)))
 	if err != nil {
 		return 0, err
