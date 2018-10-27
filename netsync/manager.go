@@ -6,6 +6,7 @@ package netsync
 
 import (
 	"container/list"
+	"math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -229,26 +230,40 @@ func (sm *SyncManager) startSync() {
 	}
 
 	best := sm.chain.BestSnapshot()
-	var bestPeer *peerpkg.Peer
+	bestPeers := []*peerpkg.Peer{}
+	okPeers := []*peerpkg.Peer{}
 	for peer, state := range sm.peerStates {
 		if !state.syncCandidate {
 			continue
 		}
 
+		// Add any peers on the same block to okPeers. These should
+		// only be used as a last resort.
+		if peer.LastBlock() == best.Height {
+			okPeers = append(okPeers, peer)
+			continue
+		}
+
 		// Remove sync candidate peers that are no longer candidates due
-		// to passing their latest known block.  NOTE: The < is
-		// intentional as opposed to <=.  While technically the peer
-		// doesn't have a later block when it's equal, it will likely
-		// have one soon so it is a reasonable choice.  It also allows
-		// the case where both are at 0 such as during regression test.
+		// to passing their latest known block.
 		if peer.LastBlock() < best.Height {
 			state.syncCandidate = false
 			continue
 		}
 
-		// TODO(davec): Use a better algorithm to choose the best peer.
-		// For now, just pick the first available candidate.
-		bestPeer = peer
+		// Append each good peer to bestPeers for selection later.
+		bestPeers = append(bestPeers, peer)
+	}
+
+	var bestPeer *peerpkg.Peer
+
+	// Try to select a random peer that is at a higher block height,
+	// if that is not available then use a random peer at the same
+	// height and hope they find blocks.
+	if len(bestPeers) > 0 {
+		bestPeer = bestPeers[rand.Intn(len(bestPeers))]
+	} else if len(okPeers) > 0 {
+		bestPeer = okPeers[rand.Intn(len(okPeers))]
 	}
 
 	// Start syncing from the best peer if one was selected.

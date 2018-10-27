@@ -185,8 +185,8 @@ func TestPeerConnections(t *testing.T) {
 			localNode2.ID())
 	}
 	if syncMgr.SyncPeerID() != localNode2.ID() {
-		t.Fatalf("Expected sync manager to be syncing from peer %d",
-			localNode2.ID())
+		t.Fatalf("Expected sync manager to be syncing from peer %d got %d",
+			localNode2.ID(), syncMgr.SyncPeerID())
 	}
 
 	// Register another full node peer with the manager. Even though the new
