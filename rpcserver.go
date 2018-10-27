@@ -1059,13 +1059,13 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		}
 	}
 
-	// When the verbose flag isn't set, simply return the serialized block
+	// When the verbosity value set to 0, simply return the serialized block
 	// as a hex-encoded string.
-	if c.Verbose != nil && !*c.Verbose {
+	if *c.Verbosity == 0 {
 		return hex.EncodeToString(blkBytes), nil
 	}
 
-	// The verbose flag is set, so generate the JSON object and return it.
+	// Generate the JSON object and return it.
 
 	// Deserialize the block.
 	blk, err := bchutil.NewBlockFromBytes(blkBytes)
@@ -1094,9 +1094,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		nextHashString = nextHash.String()
 	}
 
-	params := s.cfg.ChainParams
-	blockHeader := &blk.MsgBlock().Header
-	blockReply := btcjson.GetBlockVerboseResult{
+	var (
+		blockReply  interface{}
+		params      = s.cfg.ChainParams
+		blockHeader = &blk.MsgBlock().Header
+	)
+	baseBlockReply := &btcjson.GetBlockBaseVerboseResult{
 		Hash:          c.Hash,
 		Version:       blockHeader.Version,
 		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
@@ -1112,14 +1115,20 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		NextHash:      nextHashString,
 	}
 
-	if c.VerboseTx == nil || !*c.VerboseTx {
+	// If verbose level does not match 0 or 1
+	// we can consider it 2 (current bitcoin core behavior)
+	if *c.Verbosity == 1 {
 		transactions := blk.Transactions()
 		txNames := make([]string, len(transactions))
 		for i, tx := range transactions {
 			txNames[i] = tx.Hash().String()
 		}
 
-		blockReply.Tx = txNames
+		blockReply = btcjson.GetBlockVerboseResult{
+			GetBlockBaseVerboseResult: baseBlockReply,
+
+			Tx: txNames,
+		}
 	} else {
 		txns := blk.Transactions()
 		rawTxns := make([]btcjson.TxRawResult, len(txns))
@@ -1132,7 +1141,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 			}
 			rawTxns[i] = *rawTxn
 		}
-		blockReply.RawTx = rawTxns
+
+		blockReply = btcjson.GetBlockVerboseTxResult{
+			GetBlockBaseVerboseResult: baseBlockReply,
+
+			Tx: rawTxns,
+		}
 	}
 
 	return blockReply, nil
