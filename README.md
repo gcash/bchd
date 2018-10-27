@@ -51,6 +51,13 @@ $ go get github.com/gcash/bchd
 
 This will download and compile `bchd` and put it in your path.
 
+If you are a bchd contributor and would like to change the default config file (`bchd.conf`), make any changes to `sample-bchd.conf` and then run the following commands:
+
+```bash
+$ go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
+$ gofmt -s -w bindata.go
+```
+
 ## Getting Started
 
 To start bchd with default options just run:
