@@ -57,6 +57,13 @@ type GetBlockVerboseTxResult struct {
 	Tx []TxRawResult `json:"tx,omitempty"`
 }
 
+// AddMultisigAddressResult models the data returned from the addmultisigaddress
+// command.
+type AddMultisigAddressResult struct {
+	Address      string `json:"address"`
+	RedeemScript string `json:"redeemScript"`
+}
+
 // CreateMultiSigResult models the data returned from the createmultisig
 // command.
 type CreateMultiSigResult struct {

@@ -783,14 +783,14 @@ func (r FutureAddMultisigAddressResult) Receive() (bchutil.Address, error) {
 		return nil, err
 	}
 
-	// Unmarshal result as a string.
-	var addr string
-	err = json.Unmarshal(res, &addr)
+	// Unmarshal result as a addmultisigaddress result object.
+	var addmultisigRes btcjson.AddMultisigAddressResult
+	err = json.Unmarshal(res, &addmultisigRes)
 	if err != nil {
 		return nil, err
 	}
 
-	return bchutil.DecodeAddress(addr, &chaincfg.MainNetParams)
+	return bchutil.DecodeAddress(addmultisigRes.Address, &chaincfg.MainNetParams)
 }
 
 // AddMultisigAddressAsync returns an instance of a type that can be used to get
