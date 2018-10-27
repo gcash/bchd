@@ -520,7 +520,7 @@ var SimNetParams = Params{
 	BIP0065Height:                 0, // Always active on simnet
 	BIP0066Height:                 0, // Always active on simnet
 	UahfForkHeight:                0, // Always active on simnet
-	DaaForkHeight:                 0, // Always active on simnet
+	DaaForkHeight:                 500,
 	MagneticAnomalyActivationTime: 1542300000,
 	CoinbaseMaturity:              100,
 	SubsidyReductionInterval:      210000,
