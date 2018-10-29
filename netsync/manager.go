@@ -164,9 +164,9 @@ type SyncManager struct {
 	requestedBlocks map[chainhash.Hash]struct{}
 
 	// This mutex protects the syncPeer and peerStates!
-	syncPeerMutex   sync.RWMutex
-	syncPeer        *peerpkg.Peer
-	peerStates      map[*peerpkg.Peer]*peerSyncState
+	syncPeerMutex sync.RWMutex
+	syncPeer      *peerpkg.Peer
+	peerStates    map[*peerpkg.Peer]*peerSyncState
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
