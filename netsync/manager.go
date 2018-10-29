@@ -162,6 +162,8 @@ type SyncManager struct {
 	rejectedTxns    map[chainhash.Hash]struct{}
 	requestedTxns   map[chainhash.Hash]struct{}
 	requestedBlocks map[chainhash.Hash]struct{}
+
+	// This mutex protects the syncPeer and peerStates!
 	syncPeerMutex   sync.RWMutex
 	syncPeer        *peerpkg.Peer
 	peerStates      map[*peerpkg.Peer]*peerSyncState
