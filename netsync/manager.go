@@ -162,8 +162,11 @@ type SyncManager struct {
 	rejectedTxns    map[chainhash.Hash]struct{}
 	requestedTxns   map[chainhash.Hash]struct{}
 	requestedBlocks map[chainhash.Hash]struct{}
-	syncPeer        *peerpkg.Peer
-	peerStates      map[*peerpkg.Peer]*peerSyncState
+
+	// This mutex protects the syncPeer and peerStates!
+	syncPeerMutex sync.RWMutex
+	syncPeer      *peerpkg.Peer
+	peerStates    map[*peerpkg.Peer]*peerSyncState
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
@@ -173,6 +176,14 @@ type SyncManager struct {
 
 	// An optional fee estimator.
 	feeEstimator *mempool.FeeEstimator
+}
+
+// SyncPeer returns the currrent syncPeer in a read mutex.
+func (sm *SyncManager) SyncPeer() *peerpkg.Peer {
+	sm.syncPeerMutex.RLock()
+	defer sm.syncPeerMutex.RUnlock()
+
+	return sm.syncPeer
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -361,6 +372,11 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 
 	// Initialize the peer state
 	isSyncCandidate := sm.isSyncCandidate(peer)
+
+	// Adding to the map and startSync() should
+	// be protected by the mutex.
+	sm.syncPeerMutex.Lock()
+	defer sm.syncPeerMutex.Unlock()
 	sm.peerStates[peer] = &peerSyncState{
 		syncCandidate:   isSyncCandidate,
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
@@ -378,6 +394,9 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 // the current sync peer, attempts to select a new best peer to sync from.  It
 // is invoked from the syncHandler goroutine.
 func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
+	sm.syncPeerMutex.Lock()
+	defer sm.syncPeerMutex.Unlock()
+
 	state, exists := sm.peerStates[peer]
 	if !exists {
 		log.Warnf("Received done peer message for unknown peer %s", peer)
@@ -404,7 +423,7 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	}
 
 	// Attempt to find a new peer to sync from if the quitting peer is the
-	// sync peer.  Also, reset the headers-first state if in headers-first
+	// sync peer. Also, reset the headers-first state if in headers-first
 	// mode so
 	if sm.syncPeer == peer {
 		sm.syncPeer = nil
@@ -419,7 +438,9 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 // handleTxMsg handles transaction messages from all peers.
 func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	peer := tmsg.peer
+	sm.syncPeerMutex.RLock()
 	state, exists := sm.peerStates[peer]
+	sm.syncPeerMutex.RUnlock()
 	if !exists {
 		log.Warnf("Received tx message from unknown peer %s", peer)
 		return
@@ -494,7 +515,10 @@ func (sm *SyncManager) current() bool {
 	}
 
 	// if blockChain thinks we are current and we have no syncPeer it
-	// is probably right.
+	// is probably right. Handle the mutex manually here, we need to make sure
+	// syncPeer doesn't change between the nil check and the LastBlock() call.
+	sm.syncPeerMutex.Lock()
+	defer sm.syncPeerMutex.Unlock()
 	if sm.syncPeer == nil {
 		return true
 	}
@@ -510,7 +534,9 @@ func (sm *SyncManager) current() bool {
 // handleBlockMsg handles block messages from all peers.
 func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	peer := bmsg.peer
+	sm.syncPeerMutex.RLock()
 	state, exists := sm.peerStates[peer]
+	sm.syncPeerMutex.RUnlock()
 	if !exists {
 		log.Warnf("Received block message from unknown peer %s", peer)
 		return
@@ -689,9 +715,13 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 				"peer %s: %v", peer.Addr(), err)
 			return
 		}
-		log.Infof("Downloading headers for blocks %d to %d from "+
-			"peer %s", prevHeight+1, sm.nextCheckpoint.Height,
-			sm.syncPeer.Addr())
+		sm.syncPeerMutex.RLock()
+		defer sm.syncPeerMutex.RUnlock()
+		if sm.syncPeer != nil {
+			log.Infof("Downloading headers for blocks %d to %d from "+
+				"peer %s", prevHeight+1, sm.nextCheckpoint.Height,
+				sm.syncPeer.Addr())
+		}
 		return
 	}
 
@@ -713,6 +743,15 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 // fetchHeaderBlocks creates and sends a request to the syncPeer for the next
 // list of blocks to be downloaded based on the current list of headers.
 func (sm *SyncManager) fetchHeaderBlocks() {
+	sm.syncPeerMutex.Lock()
+	defer sm.syncPeerMutex.Unlock()
+
+	// Nothing to do if there is no sync peer.
+	if sm.syncPeer == nil {
+		log.Warnf("fetchHeaderBlocks called with no sync peer")
+		return
+	}
+
 	// Nothing to do if there is no start header.
 	if sm.startHeader == nil {
 		log.Warnf("fetchHeaderBlocks called with no start header")
@@ -761,7 +800,9 @@ func (sm *SyncManager) fetchHeaderBlocks() {
 // requested when performing a headers-first sync.
 func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 	peer := hmsg.peer
+	sm.syncPeerMutex.RLock()
 	_, exists := sm.peerStates[peer]
+	sm.syncPeerMutex.RUnlock()
 	if !exists {
 		log.Warnf("Received headers message from unknown peer %s", peer)
 		return
@@ -916,7 +957,9 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 // We examine the inventory advertised by the remote peer and act accordingly.
 func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 	peer := imsg.peer
+	sm.syncPeerMutex.RLock()
 	state, exists := sm.peerStates[peer]
+	sm.syncPeerMutex.RUnlock()
 	if !exists {
 		log.Warnf("Received inv message from unknown peer %s", peer)
 		return
@@ -938,13 +981,13 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 	// announced block for this peer. We'll use this information later to
 	// update the heights of peers based on blocks we've accepted that they
 	// previously announced.
-	if lastBlock != -1 && (peer != sm.syncPeer || sm.current()) {
+	if lastBlock != -1 && (peer != sm.SyncPeer() || sm.current()) {
 		peer.UpdateLastAnnouncedBlock(&invVects[lastBlock].Hash)
 	}
 
 	// Ignore invs from peers that aren't the sync if we are not current.
 	// Helps prevent fetching a mass of orphans.
-	if peer != sm.syncPeer && !sm.current() {
+	if peer != sm.SyncPeer() && !sm.current() {
 		return
 	}
 
@@ -1150,9 +1193,12 @@ out:
 
 			case getSyncPeerMsg:
 				var peerID int32
+
+				sm.syncPeerMutex.RLock()
 				if sm.syncPeer != nil {
 					peerID = sm.syncPeer.ID()
 				}
+				sm.syncPeerMutex.RUnlock()
 				msg.reply <- peerID
 
 			case processBlockMsg:
