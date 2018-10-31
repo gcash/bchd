@@ -411,6 +411,8 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	// blocks.
 	best := sm.chain.BestSnapshot()
 	if sm.syncPeer.LastBlock() == best.Height {
+		// Update the time to prevent disconnects.
+		sm.lastBlockTime = time.Now()
 		return
 	}
 
