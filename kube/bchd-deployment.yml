@@ -29,7 +29,7 @@ spec:
               key: rpcpass
         image: zquestz/bchd:latest
         command: ["bchd"]
-        args: ["-u", "$(BCHD_RPC_USER)", "-P", "$(BCHD_RPC_PASSWORD)", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf"]
+        args: ["-u", "$(BCHD_RPC_USER)", "-P", "$(BCHD_RPC_PASSWORD)", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf", "--externalip", "35.202.172.160"]
         name: bchd
         volumeMounts:
           - mountPath: /data
