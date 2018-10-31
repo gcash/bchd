@@ -172,8 +172,8 @@ type SyncManager struct {
 	requestedTxns   map[chainhash.Hash]struct{}
 	requestedBlocks map[chainhash.Hash]struct{}
 
-	syncPeer      *peerpkg.Peer
-	peerStates    map[*peerpkg.Peer]*peerSyncState
+	syncPeer   *peerpkg.Peer
+	peerStates map[*peerpkg.Peer]*peerSyncState
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
@@ -185,7 +185,7 @@ type SyncManager struct {
 	feeEstimator *mempool.FeeEstimator
 
 	// The last time we processed an unorphaned block.
-	lastBlockTime      time.Time
+	lastBlockTime time.Time
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -1199,7 +1199,7 @@ func (sm *SyncManager) blockHandler() {
 out:
 	for {
 		select {
-		case  <- ticker.C:
+		case <-ticker.C:
 			sm.handleCheckSyncPeer()
 		case m := <-sm.msgChan:
 			switch msg := m.(type) {
