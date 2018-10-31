@@ -403,8 +403,8 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 	}
 }
 
-// handleNewSyncPeerMsg selects a new sync peer.
-func (sm *SyncManager) handleNewSyncPeerMsg() {
+// handleCheckSyncPeer selects a new sync peer.
+func (sm *SyncManager) handleCheckSyncPeer() {
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
 		return
 	}
@@ -1235,7 +1235,7 @@ out:
 	for {
 		select {
 		case  <- ticker.C:
-			sm.handleNewSyncPeerMsg()
+			sm.handleCheckSyncPeer()
 		case m := <-sm.msgChan:
 			switch msg := m.(type) {
 			case *newPeerMsg:
