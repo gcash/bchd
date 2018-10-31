@@ -38,4 +38,6 @@ type Config struct {
 	MaxPeers           int
 
 	FeeEstimator *mempool.FeeEstimator
+
+	MinSyncPeerNetworkSpeed uint64
 }

@@ -28,6 +28,10 @@ const (
 	// more.
 	minInFlightBlocks = 10
 
+	// maxNetworkViolations is the max number of network violations a
+	// sync peer can have before a new sync peer is found.
+	maxNetworkViolations = 3
+
 	// maxRejectedTxns is the maximum number of rejected transactions
 	// hashes to store in memory.
 	maxRejectedTxns = 1000
@@ -45,9 +49,9 @@ const (
 	// Set to 3 minutes.
 	maxLastBlockTime = 60 * 3 * time.Second
 
-	// lastBlockTimeTickerInterval is how often we check the current
+	// syncPeerTickerInterval is how often we check the current
 	// syncPeer. Set to 30 seconds.
-	lastBlockTimeTickerInterval = 30 * time.Second
+	syncPeerTickerInterval = 30 * time.Second
 )
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
@@ -150,6 +154,47 @@ type peerSyncState struct {
 	requestedBlocks map[chainhash.Hash]struct{}
 }
 
+// syncPeerState stores additional info about the sync peer.
+type syncPeerState struct {
+	recvBytes         uint64
+	recvBytesLastTick uint64
+	lastBlockTime     time.Time
+	violations        int
+	ticks             uint64
+}
+
+// validNetworkSpeed checks if the peer is slow and
+// returns an integer representing the number of network
+// violations the sync peer has.
+func (sps *syncPeerState) validNetworkSpeed(minSyncPeerNetworkSpeed uint64) int {
+	// Fresh sync peer. We need another tick.
+	if sps.ticks == 0 {
+		return 0
+	}
+
+	// Number of bytes received in the last tick.
+	recvDiff := sps.recvBytes - sps.recvBytesLastTick
+
+	// If the peer was below the threshold, mark a violation and return.
+	if recvDiff/uint64(syncPeerTickerInterval.Seconds()) < minSyncPeerNetworkSpeed {
+		sps.violations++
+		return sps.violations
+	}
+
+	// No violation found, reset the violation counter.
+	sps.violations = 0
+
+	return sps.violations
+}
+
+// updateNetwork updates the received bytes. Just tracks 2 ticks
+// worth of network bandwidth.
+func (sps *syncPeerState) updateNetwork(syncPeer *peerpkg.Peer) {
+	sps.ticks++
+	sps.recvBytesLastTick = sps.recvBytes
+	sps.recvBytes = syncPeer.BytesReceived()
+}
+
 // SyncManager is used to communicate block related messages with peers. The
 // SyncManager is started as by executing Start() in a goroutine. Once started,
 // it selects peers to sync from and starts the initial block download. Once the
@@ -171,9 +216,9 @@ type SyncManager struct {
 	rejectedTxns    map[chainhash.Hash]struct{}
 	requestedTxns   map[chainhash.Hash]struct{}
 	requestedBlocks map[chainhash.Hash]struct{}
-
-	syncPeer   *peerpkg.Peer
-	peerStates map[*peerpkg.Peer]*peerSyncState
+	syncPeer        *peerpkg.Peer
+	syncPeerState   *syncPeerState
+	peerStates      map[*peerpkg.Peer]*peerSyncState
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
@@ -184,8 +229,9 @@ type SyncManager struct {
 	// An optional fee estimator.
 	feeEstimator *mempool.FeeEstimator
 
-	// The last time we processed an unorphaned block.
-	lastBlockTime time.Time
+	// minSyncPeerNetworkSpeed is the minimum speed allowed for
+	// a sync peer.
+	minSyncPeerNetworkSpeed uint64
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -328,6 +374,11 @@ func (sm *SyncManager) startSync() {
 
 		bestPeer.SetSyncPeer(true)
 		sm.syncPeer = bestPeer
+		sm.syncPeerState = &syncPeerState{
+			lastBlockTime:     time.Now(),
+			recvBytes:         bestPeer.BytesReceived(),
+			recvBytesLastTick: uint64(0),
+		}
 	} else {
 		log.Warnf("No sync peer candidates available")
 	}
@@ -395,13 +446,17 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	// Do nothing if we haven't hit our time threshold.
-	if time.Since(sm.lastBlockTime) <= maxLastBlockTime {
+	// If we don't have a sync peer, then there is nothing to do.
+	if sm.syncPeer == nil {
 		return
 	}
 
-	// This should never happen.
-	if sm.syncPeer == nil {
+	// Update network stats at the end of this tick.
+	defer sm.syncPeerState.updateNetwork(sm.syncPeer)
+
+	// Check network speed of the sync peer and its last block time.
+	if (sm.syncPeerState.validNetworkSpeed(sm.minSyncPeerNetworkSpeed) < maxNetworkViolations) &&
+		(time.Since(sm.syncPeerState.lastBlockTime) <= maxLastBlockTime) {
 		return
 	}
 
@@ -413,10 +468,12 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	} else {
 		topBlock = sm.syncPeer.StartingHeight()
 	}
+
 	best := sm.chain.BestSnapshot()
 	if topBlock == best.Height {
-		// Update the time to prevent disconnects.
-		sm.lastBlockTime = time.Now()
+		// Update the time and violations to prevent disconnects.
+		sm.syncPeerState.lastBlockTime = time.Now()
+		sm.syncPeerState.violations = 0
 		return
 	}
 
@@ -472,7 +529,7 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 
 // updateSyncPeer picks a new peer to sync from.
 func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
-	log.Infof("Updating sync peer, no blocks since: %v", sm.lastBlockTime)
+	log.Infof("Updating sync peer, last block: %v, violations: %v", sm.syncPeerState.lastBlockTime, sm.syncPeerState.violations)
 
 	// Disconnect from the misbehaving peer.
 	sm.syncPeer.Disconnect()
@@ -481,9 +538,7 @@ func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
 	// Also, reset the headers-first state.
 	sm.syncPeer.SetSyncPeer(false)
 	sm.syncPeer = nil
-
-	// Set the last block time to reset the timer.
-	sm.lastBlockTime = time.Now()
+	sm.syncPeerState = nil
 
 	if sm.headersFirstMode {
 		best := sm.chain.BestSnapshot()
@@ -711,7 +766,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	} else {
 		// Only consider non-orphans for the timer.
 		if peer == sm.syncPeer {
-			sm.lastBlockTime = time.Now()
+			sm.syncPeerState.lastBlockTime = time.Now()
 		}
 
 		// When the block is not an orphan, log information about it and
@@ -1204,7 +1259,7 @@ func (sm *SyncManager) limitMap(m map[chainhash.Hash]struct{}, limit int) {
 // important because the sync manager controls which blocks are needed and how
 // the fetching should proceed.
 func (sm *SyncManager) blockHandler() {
-	ticker := time.NewTicker(lastBlockTimeTickerInterval)
+	ticker := time.NewTicker(syncPeerTickerInterval)
 	defer ticker.Stop()
 
 out:
@@ -1265,8 +1320,10 @@ out:
 				}
 
 				// Only consider non-orphans for the timer.
-				if !isOrphan {
-					sm.lastBlockTime = time.Now()
+				// Need the nil check because of RPC tests that
+				// process blocks but don't have a sync peer.
+				if !isOrphan && (sm.syncPeerState != nil) {
+					sm.syncPeerState.lastBlockTime = time.Now()
 				}
 
 				msg.reply <- processBlockResponse{
@@ -1520,20 +1577,20 @@ func (sm *SyncManager) Pause() chan<- struct{} {
 // block, tx, and inv updates.
 func New(config *Config) (*SyncManager, error) {
 	sm := SyncManager{
-		peerNotifier:    config.PeerNotifier,
-		chain:           config.Chain,
-		txMemPool:       config.TxMemPool,
-		chainParams:     config.ChainParams,
-		rejectedTxns:    make(map[chainhash.Hash]struct{}),
-		requestedTxns:   make(map[chainhash.Hash]struct{}),
-		requestedBlocks: make(map[chainhash.Hash]struct{}),
-		peerStates:      make(map[*peerpkg.Peer]*peerSyncState),
-		progressLogger:  newBlockProgressLogger("Processed", log),
-		msgChan:         make(chan interface{}, config.MaxPeers*3),
-		headerList:      list.New(),
-		quit:            make(chan struct{}),
-		feeEstimator:    config.FeeEstimator,
-		lastBlockTime:   time.Now(),
+		peerNotifier:            config.PeerNotifier,
+		chain:                   config.Chain,
+		txMemPool:               config.TxMemPool,
+		chainParams:             config.ChainParams,
+		rejectedTxns:            make(map[chainhash.Hash]struct{}),
+		requestedTxns:           make(map[chainhash.Hash]struct{}),
+		requestedBlocks:         make(map[chainhash.Hash]struct{}),
+		peerStates:              make(map[*peerpkg.Peer]*peerSyncState),
+		progressLogger:          newBlockProgressLogger("Processed", log),
+		msgChan:                 make(chan interface{}, config.MaxPeers*3),
+		headerList:              list.New(),
+		quit:                    make(chan struct{}),
+		feeEstimator:            config.FeeEstimator,
+		minSyncPeerNetworkSpeed: config.MinSyncPeerNetworkSpeed,
 	}
 
 	best := sm.chain.BestSnapshot()
