@@ -186,28 +186,28 @@ func testPeer(t *testing.T, p *peer.Peer, s peerStats) {
 		return
 	}
 
-	// These tests are inherently racy. Call the snapshot
-	// right before testing the values!
+	// These tests are inherently racy. Do range tests on time
+	// based attributes.
+	lastSend := p.LastSend()
+	lastRecv := p.LastRecv()
+
 	stats := p.StatsSnapshot()
 	if p.ID() != stats.ID {
 		t.Errorf("testPeer: wrong ID - got %v, want %v", p.ID(), stats.ID)
 		return
 	}
 
-	stats = p.StatsSnapshot()
 	if p.Addr() != stats.Addr {
 		t.Errorf("testPeer: wrong Addr - got %v, want %v", p.Addr(), stats.Addr)
 		return
 	}
 
-	stats = p.StatsSnapshot()
-	if p.LastSend() != stats.LastSend {
+	if !stats.LastSend.Equal(p.LastSend()) && (stats.LastSend.Before(lastSend) || stats.LastSend.After(p.LastSend())) {
 		t.Errorf("testPeer: wrong LastSend - got %v, want %v", p.LastSend(), stats.LastSend)
 		return
 	}
 
-	stats = p.StatsSnapshot()
-	if p.LastRecv() != stats.LastRecv {
+	if !stats.LastRecv.Equal(p.LastRecv()) && (stats.LastRecv.Before(lastRecv) || stats.LastRecv.After(p.LastRecv())) {
 		t.Errorf("testPeer: wrong LastRecv - got %v, want %v", p.LastRecv(), stats.LastRecv)
 		return
 	}
