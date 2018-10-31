@@ -43,11 +43,11 @@ const (
 	// maxLastBlockTime is the longest time in seconds that we will
 	// stay with a sync peer while below the current blockchain height.
 	// Set to 3 minutes.
-	maxLastBlockTime = 60 * 3
+	maxLastBlockTime = 60 * 3 * time.Second
 
 	// lastBlockTimeTickerInterval is how often we check the current
 	// syncPeer. Set to 30 seconds.
-	lastBlockTimeTickerInterval = 30
+	lastBlockTimeTickerInterval = 30 * time.Second
 )
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
@@ -412,7 +412,7 @@ func (sm *SyncManager) handleNewSyncPeerMsg() {
 	log.Debugf("Checking Sync Peer, time since last block: %v", sm.lastBlockTime)
 
 	// Do nothing if we haven't hit our time threshold.
-	if time.Since(sm.lastBlockTime) <= maxLastBlockTime*time.Second {
+	if time.Since(sm.lastBlockTime) <= maxLastBlockTime {
 		return
 	}
 
@@ -1228,7 +1228,7 @@ func (sm *SyncManager) limitMap(m map[chainhash.Hash]struct{}, limit int) {
 // important because the sync manager controls which blocks are needed and how
 // the fetching should proceed.
 func (sm *SyncManager) blockHandler() {
-	ticker := time.NewTicker(time.Second * lastBlockTimeTickerInterval)
+	ticker := time.NewTicker(lastBlockTimeTickerInterval)
 	defer ticker.Stop()
 
 out:
