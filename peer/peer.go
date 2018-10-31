@@ -578,7 +578,7 @@ func (p *Peer) ID() int32 {
 func (p *Peer) SyncPeer() bool {
 	p.flagsMtx.Lock()
 	sp := p.syncPeer
-	defer p.flagsMtx.Unlock()
+	p.flagsMtx.Unlock()
 
 	return sp
 }
