@@ -4,7 +4,7 @@ metadata:
   namespace: default
   labels:
     service: bchd
-    version: 0.12.0-beta
+    version: 0.12.0-beta2
   name: bchd
 spec:
   strategy:

@@ -33,3 +33,32 @@ func TestMustRegisterPanic(t *testing.T) {
 	// Intentionally try to register duplicate params to force a panic.
 	mustRegister(&MainNetParams)
 }
+
+// TestSeeds ensures the right seeds are defined.
+func TestSeeds(t *testing.T) {
+	expectedSeeds := []DNSSeed{
+		{"seed.bchd.cash", true},
+		{"seed.bitcoinabc.org", true},
+		{"seed-abc.bitcoinforks.org", true},
+		{"btccash-seeder.bitcoinunlimited.info", true},
+		{"seed.bitprim.org", true},
+		{"seed.deadalnix.me", true},
+	}
+
+	if MainNetParams.DNSSeeds == nil {
+		t.Error("Seed values are not set")
+		return
+	}
+
+	if len(MainNetParams.DNSSeeds) != len(expectedSeeds) {
+		t.Error("Incorrect number of seed values")
+		return
+	}
+
+	for i := range MainNetParams.DNSSeeds {
+		if MainNetParams.DNSSeeds[i] != expectedSeeds[i] {
+			t.Error("Seed values are incorrect")
+			return
+		}
+	}
+}
