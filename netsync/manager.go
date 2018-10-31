@@ -515,6 +515,9 @@ func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
 	sm.syncPeer.SetSyncPeer(false)
 	sm.syncPeer = nil
 
+	// Set the last block time to reset the timer.
+	sm.SetLastBlockTime(time.Now())
+
 	if sm.headersFirstMode {
 		best := sm.chain.BestSnapshot()
 		sm.resetHeaderState(&best.Hash, best.Height)
