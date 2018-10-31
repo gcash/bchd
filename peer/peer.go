@@ -379,6 +379,7 @@ type StatsSnap struct {
 	LastPingNonce  uint64
 	LastPingTime   time.Time
 	LastPingMicros int64
+	SyncPeer       bool
 }
 
 // HashFunc is a function which returns a block hash, height and error
@@ -446,6 +447,7 @@ type Peer struct {
 	protocolVersion      uint32 // negotiated protocol version
 	sendHeadersPreferred bool   // peer sent a sendheaders message
 	verAckReceived       bool
+	syncPeer             bool
 
 	wireEncoding wire.MessageEncoding
 
@@ -552,6 +554,7 @@ func (p *Peer) StatsSnapshot() *StatsSnap {
 		LastPingNonce:  p.lastPingNonce,
 		LastPingMicros: p.lastPingMicros,
 		LastPingTime:   p.lastPingTime,
+		SyncPeer:       p.SyncPeer(),
 	}
 
 	p.statsMtx.RUnlock()
@@ -567,6 +570,27 @@ func (p *Peer) ID() int32 {
 	p.flagsMtx.Unlock()
 
 	return id
+}
+
+// SyncPeer returns if this is the sync peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) SyncPeer() bool {
+	p.flagsMtx.Lock()
+	sp := p.syncPeer
+	defer p.flagsMtx.Unlock()
+
+	return sp
+}
+
+// SetSyncPeer sets the syncPeer flag.
+//
+// This function is safe for concurrent access.
+func (p *Peer) SetSyncPeer(val bool) {
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
+
+	p.syncPeer = val
 }
 
 // NA returns the peer network address.
@@ -1208,7 +1232,6 @@ out:
 					delete(pendingResponses, wire.CmdMerkleBlock)
 					delete(pendingResponses, wire.CmdTx)
 					delete(pendingResponses, wire.CmdNotFound)
-
 				default:
 					delete(pendingResponses, msgCmd)
 				}
@@ -2184,6 +2207,7 @@ func newPeerBase(origCfg *Config, inbound bool) *Peer {
 		cfg:             cfg, // Copy so caller can't mutate.
 		services:        cfg.Services,
 		protocolVersion: cfg.ProtocolVersion,
+		syncPeer:        false,
 	}
 	return &p
 }

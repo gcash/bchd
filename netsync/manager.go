@@ -39,6 +39,15 @@ const (
 	// maxRequestedTxns is the maximum number of requested transactions
 	// hashes to store in memory.
 	maxRequestedTxns = wire.MaxInvPerMsg
+
+	// maxLastBlockTime is the longest time in seconds that we will
+	// stay with a sync peer while below the current blockchain height.
+	// Set to 3 minutes.
+	maxLastBlockTime = 60 * 3
+
+	// lastBlockTimeTickerInterval is how often we check the current
+	// syncPeer. Set to 30 seconds.
+	lastBlockTimeTickerInterval = 30
 )
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
@@ -57,6 +66,10 @@ type blockMsg struct {
 	peer  *peerpkg.Peer
 	reply chan struct{}
 }
+
+// newSyncPeerMsg signals the run loop in blockhandler to select a new
+// sync peer.
+type newSyncPeerMsg struct{}
 
 // invMsg packages a bitcoin inv message and the peer it came from together
 // so the block handler has access to that information.
@@ -158,7 +171,7 @@ type SyncManager struct {
 	wg             sync.WaitGroup
 	quit           chan struct{}
 
-	// These fields should only be accessed from the blockHandler thread
+	// These fields should only be accessed from the blockHandler thread.
 	rejectedTxns    map[chainhash.Hash]struct{}
 	requestedTxns   map[chainhash.Hash]struct{}
 	requestedBlocks map[chainhash.Hash]struct{}
@@ -176,6 +189,10 @@ type SyncManager struct {
 
 	// An optional fee estimator.
 	feeEstimator *mempool.FeeEstimator
+
+	// The last time we processed an unorphaned block.
+	lastBlockTimeMutex sync.RWMutex
+	lastBlockTime      time.Time
 }
 
 // SyncPeer returns the currrent syncPeer in a read mutex.
@@ -184,6 +201,27 @@ func (sm *SyncManager) SyncPeer() *peerpkg.Peer {
 	defer sm.syncPeerMutex.RUnlock()
 
 	return sm.syncPeer
+}
+
+// LastBlockTime returns the latest time we processed a block.
+//
+// This function is safe for concurrent access.
+func (sm *SyncManager) LastBlockTime() time.Time {
+	sm.lastBlockTimeMutex.RLock()
+	lbt := sm.lastBlockTime
+	defer sm.lastBlockTimeMutex.RUnlock()
+
+	return lbt
+}
+
+// SetLastBlockTime sets the time the last block was processed.
+//
+// This function is safe for concurrent access.
+func (sm *SyncManager) SetLastBlockTime(t time.Time) {
+	sm.lastBlockTimeMutex.Lock()
+	defer sm.lastBlockTimeMutex.Unlock()
+
+	sm.lastBlockTime = time.Now()
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -323,6 +361,8 @@ func (sm *SyncManager) startSync() {
 		} else {
 			bestPeer.PushGetBlocksMsg(locator, &zeroHash)
 		}
+
+		bestPeer.SetSyncPeer(true)
 		sm.syncPeer = bestPeer
 	} else {
 		log.Warnf("No sync peer candidates available")
@@ -389,6 +429,36 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 	}
 }
 
+// handleNewSyncPeerMsg selects a new sync peer.
+func (sm *SyncManager) handleNewSyncPeerMsg() {
+	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		return
+	}
+
+	sm.syncPeerMutex.Lock()
+	defer sm.syncPeerMutex.Unlock()
+
+	// This should never happen.
+	if sm.syncPeer == nil {
+		return
+	}
+
+	// Don't update sync peers if you have all the available
+	// blocks.
+	best := sm.chain.BestSnapshot()
+	if sm.syncPeer.LastBlock() == best.Height {
+		return
+	}
+
+	state, exists := sm.peerStates[sm.syncPeer]
+	if !exists {
+		return
+	}
+
+	sm.clearRequestedState(state)
+	sm.updateSyncPeer(state)
+}
+
 // handleDonePeerMsg deals with peers that have signalled they are done.  It
 // removes the peer as a candidate for syncing and in the case where it was
 // the current sync peer, attempts to select a new best peer to sync from.  It
@@ -408,6 +478,18 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 
 	log.Infof("Lost peer %s", peer)
 
+	// Cleanup state of requested items.
+	sm.clearRequestedState(state)
+
+	// Fetch a new sync peer if this is the sync peer.
+	if peer.SyncPeer() {
+		sm.updateSyncPeer(state)
+	}
+}
+
+// updateRequestedState removes requested transactions
+// and blocks from the global map.
+func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 	// Remove requested transactions from the global map so that they will
 	// be fetched from elsewhere next time we get an inv.
 	for txHash := range state.requestedTxns {
@@ -416,23 +498,26 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 
 	// Remove requested blocks from the global map so that they will be
 	// fetched from elsewhere next time we get an inv.
-	// TODO: we could possibly here check which peers have these blocks
-	// and request them now to speed things up a little.
 	for blockHash := range state.requestedBlocks {
 		delete(sm.requestedBlocks, blockHash)
 	}
+}
 
-	// Attempt to find a new peer to sync from if the quitting peer is the
-	// sync peer. Also, reset the headers-first state if in headers-first
-	// mode so
-	if sm.syncPeer == peer {
-		sm.syncPeer = nil
-		if sm.headersFirstMode {
-			best := sm.chain.BestSnapshot()
-			sm.resetHeaderState(&best.Hash, best.Height)
-		}
-		sm.startSync()
+// updateSyncPeer picks a new peer to sync from.
+func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
+	log.Infof("Updating sync peer, no blocks since: %v", sm.LastBlockTime())
+
+	// Attempt to find a new peer to sync from
+	// Also, reset the headers-first state.
+	sm.syncPeer.SetSyncPeer(false)
+	sm.syncPeer = nil
+
+	if sm.headersFirstMode {
+		best := sm.chain.BestSnapshot()
+		sm.resetHeaderState(&best.Hash, best.Height)
 	}
+
+	sm.startSync()
 }
 
 // handleTxMsg handles transaction messages from all peers.
@@ -1156,6 +1241,8 @@ func (sm *SyncManager) limitMap(m map[chainhash.Hash]struct{}, limit int) {
 // important because the sync manager controls which blocks are needed and how
 // the fetching should proceed.
 func (sm *SyncManager) blockHandler() {
+	go sm.lastBlockTimeTicker(lastBlockTimeTickerInterval * time.Second)
+
 out:
 	for {
 		select {
@@ -1191,6 +1278,9 @@ out:
 					msg.reply <- struct{}{}
 				}
 
+			case newSyncPeerMsg:
+				sm.handleNewSyncPeerMsg()
+
 			case getSyncPeerMsg:
 				var peerID int32
 
@@ -1211,6 +1301,11 @@ out:
 					}
 
 					continue out
+				}
+
+				// Only consider non-orphans for the timer.
+				if !isOrphan {
+					sm.SetLastBlockTime(time.Now())
 				}
 
 				msg.reply <- processBlockResponse{
@@ -1477,6 +1572,7 @@ func New(config *Config) (*SyncManager, error) {
 		headerList:      list.New(),
 		quit:            make(chan struct{}),
 		feeEstimator:    config.FeeEstimator,
+		lastBlockTime:   time.Now(),
 	}
 
 	best := sm.chain.BestSnapshot()
@@ -1493,4 +1589,15 @@ func New(config *Config) (*SyncManager, error) {
 	sm.chain.Subscribe(sm.handleBlockchainNotification)
 
 	return &sm, nil
+}
+
+func (sm *SyncManager) lastBlockTimeTicker(d time.Duration) {
+	ticker := time.NewTicker(d)
+	for range ticker.C {
+		log.Debugf("Checking Sync Peer, time since last block: %v", sm.LastBlockTime())
+
+		if time.Since(sm.LastBlockTime()) > maxLastBlockTime*time.Second {
+			sm.msgChan <- newSyncPeerMsg{}
+		}
+	}
 }
