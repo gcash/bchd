@@ -507,6 +507,9 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
 	log.Infof("Updating sync peer, no blocks since: %v", sm.LastBlockTime())
 
+	// Disconnect from the misbehaving peer.
+	sm.syncPeer.Disconnect()
+
 	// Attempt to find a new peer to sync from
 	// Also, reset the headers-first state.
 	sm.syncPeer.SetSyncPeer(false)
