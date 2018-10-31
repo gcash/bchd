@@ -1247,7 +1247,9 @@ func (sm *SyncManager) limitMap(m map[chainhash.Hash]struct{}, limit int) {
 // important because the sync manager controls which blocks are needed and how
 // the fetching should proceed.
 func (sm *SyncManager) blockHandler() {
-	go sm.lastBlockTimeTicker(lastBlockTimeTickerInterval * time.Second)
+	ticker := time.NewTicker(time.Second * lastBlockTimeTickerInterval)
+	defer ticker.Stop()
+	go sm.lastBlockTimeTicker(ticker)
 
 out:
 	for {
@@ -1597,8 +1599,7 @@ func New(config *Config) (*SyncManager, error) {
 	return &sm, nil
 }
 
-func (sm *SyncManager) lastBlockTimeTicker(d time.Duration) {
-	ticker := time.NewTicker(d)
+func (sm *SyncManager) lastBlockTimeTicker(ticker *time.Ticker) {
 	for range ticker.C {
 		log.Debugf("Checking Sync Peer, time since last block: %v", sm.LastBlockTime())
 
