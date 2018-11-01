@@ -395,8 +395,6 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	log.Debugf("Checking Sync Peer, time since last block: %v", sm.lastBlockTime)
-
 	// Do nothing if we haven't hit our time threshold.
 	if time.Since(sm.lastBlockTime) <= maxLastBlockTime {
 		return
@@ -450,7 +448,7 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	}
 }
 
-// updateRequestedState removes requested transactions
+// clearRequestedState removes requested transactions
 // and blocks from the global map.
 func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 	// Remove requested transactions from the global map so that they will
