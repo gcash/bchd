@@ -407,8 +407,14 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	// Don't update sync peers if you have all the available
 	// blocks.
+	var topBlock int32
+	if sm.syncPeer.LastBlock() > sm.syncPeer.StartingHeight() {
+		topBlock = sm.syncPeer.LastBlock()
+	} else {
+		topBlock = sm.syncPeer.StartingHeight()
+	}
 	best := sm.chain.BestSnapshot()
-	if sm.syncPeer.LastBlock() == best.Height {
+	if topBlock == best.Height {
 		// Update the time to prevent disconnects.
 		sm.lastBlockTime = time.Now()
 		return
@@ -703,6 +709,11 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 			peer.PushGetBlocksMsg(locator, orphanRoot)
 		}
 	} else {
+		// Only consider non-orphans for the timer.
+		if peer == sm.syncPeer {
+			sm.lastBlockTime = time.Now()
+		}
+
 		// When the block is not an orphan, log information about it and
 		// update the chain state.
 		sm.progressLogger.LogBlockHeight(bmsg.block)
