@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"time"
 
+	"sort"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -26,7 +28,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"sort"
 )
 
 const (
@@ -671,7 +672,12 @@ func repeatOpcode(opcode uint8, numRepeats int) []byte {
 // assertScriptSigOpsCount panics if the provided script does not have the
 // specified number of signature operations.
 func assertScriptSigOpsCount(script []byte, expected int) {
-	numSigOps := txscript.GetSigOpCount(script)
+	var scriptFlags txscript.ScriptFlags
+	scriptFlags |= txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckDataSig
+
+	numSigOps := txscript.GetSigOpCount(script, scriptFlags)
 	if numSigOps != expected {
 		_, file, line, _ := runtime.Caller(1)
 		panic(fmt.Sprintf("assertion failed at %s:%d: generated number "+
@@ -684,13 +690,18 @@ func assertScriptSigOpsCount(script []byte, expected int) {
 // scripts in the passed block.
 func countBlockSigOps(block *wire.MsgBlock) int {
 	totalSigOps := 0
+	var scriptFlags txscript.ScriptFlags
+	scriptFlags |= txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckDataSig
+
 	for _, tx := range block.Transactions {
 		for _, txIn := range tx.TxIn {
-			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript)
+			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, scriptFlags)
 			totalSigOps += numSigOps
 		}
 		for _, txOut := range tx.TxOut {
-			numSigOps := txscript.GetSigOpCount(txOut.PkScript)
+			numSigOps := txscript.GetSigOpCount(txOut.PkScript, scriptFlags)
 			totalSigOps += numSigOps
 		}
 	}
@@ -1522,7 +1533,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 
 	// Create block with duplicate transactions.
 	//
-	// This test relies on the shape of the shape of the merkle tree to test
+	// This test relies on the shape of the merkle tree to test
 	// the intended condition and thus is asserted below.
 	//
 	//   ... -> b43(13)
@@ -2108,9 +2119,8 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//      \-> bralt0 -> ... -> bralt#
 	g.setTip(reorgStartBlockName)
 	testInstances = nil
-	chain2TipName := g.tipName
 	for i := uint16(0); i < numLargeReorgBlocks; i++ {
-		chain2TipName = fmt.Sprintf("bralt%d", i)
+		chain2TipName := fmt.Sprintf("bralt%d", i)
 		g.nextBlock(chain2TipName, nil)
 		testInstances = append(testInstances, acceptBlock(g.tipName,
 			g.tip, false, false))
@@ -2124,7 +2134,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> bralt0 -> ... -> bralt# -> bralt#+1
 	//      \-> br0    -> ... -> br#
 	g.nextBlock(fmt.Sprintf("bralt%d", g.tipHeight+1), nil)
-	chain2TipName = g.tipName
+	chain2TipName := g.tipName
 	accepted()
 
 	// Extend the first chain by two to force a large reorg back to it.
@@ -2133,11 +2143,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//      \-> bralt0 -> ... -> bralt# -> bralt#+1
 	g.setTip(chain1TipName)
 	g.nextBlock(fmt.Sprintf("br%d", g.tipHeight+1), nil)
-	chain1TipName = g.tipName
 	acceptedToSideChainWithExpectedTip(chain2TipName)
 
 	g.nextBlock(fmt.Sprintf("br%d", g.tipHeight+2), nil)
-	chain1TipName = g.tipName
 	accepted()
 
 	return tests, nil

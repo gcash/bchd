@@ -39,12 +39,12 @@
   revision = "3fd0373267b6461dbefe91cef614278064d05465"
 
 [[projects]]
-  branch = "vendor"
-  digest = "1:50da27383f97dd545cbaa0ff6c5fb0757588dd5d2b3048d5425a34de13c9f421"
+  digest = "1:f9bf7ab1aef6d501f1c51179e96d75a75526a85fd0f18bb2b285eaae058df084"
   name = "github.com/btcsuite/snappy-go"
   packages = ["."]
   pruneopts = "UT"
-  revision = "0bdef8d067237991ddaa1bb6072a740bc40601ba"
+  revision = "b3db38edf0a9a11a115eb6b022d8c946024a9ac0"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -86,7 +86,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c82cf0e2bd1d5fe006dae6c5296b99b8e4ef39676a55f7d797c41c183586da3e"
+  digest = "1:7eb4577517abdf0f214f577e4e85c868c3fdf163ed476fe9ba27d676b9536eb8"
   name = "github.com/gcash/bchutil"
   packages = [
     ".",
@@ -97,15 +97,15 @@
     "hdkeychain",
   ]
   pruneopts = "UT"
-  revision = "d47a672722c7f298641c49385d91b3558ceb6862"
+  revision = "d51537ee11a6e6c31ba74f4b4accbc0edaf7a5d4"
 
 [[projects]]
   branch = "master"
-  digest = "1:3217800110ab50cd0e0784307be46b5344c0c103dbd15a16d0994ae4abdc96ab"
+  digest = "1:4bad3a84294a8b7ebe2b3227fe7ce6338cc4ca96056e1ef48b9f7ddc0b1e9033"
   name = "github.com/jessevdk/go-flags"
   packages = ["."]
   pruneopts = "UT"
-  revision = "1c38ed7ad0cc3d9e66649ac398c30e45f395c4eb"
+  revision = "9c49a3351d49777ccd40148b5cdf6f2998f51087"
 
 [[projects]]
   branch = "master"
@@ -116,11 +116,12 @@
   revision = "a93b200c26cbae3bb09dd0dc2c7c7fe1468a034a"
 
 [[projects]]
-  digest = "1:ed05f40f6e39c5040819444f4379192346008107ddcc79f02f0729985b5160b4"
+  branch = "master"
+  digest = "1:a6303215c6d4578f058f8a10b14fa675c4f9bec7630d171f49bb489e877629eb"
   name = "github.com/kkdai/bstream"
   packages = ["."]
   pruneopts = "UT"
-  revision = "f391b8402d23024e7c0f624b31267a89998fca95"
+  revision = "f71540b9dfdcfe64dbf2818e9b66423c6aafcacd"
 
 [[projects]]
   branch = "master"
@@ -128,7 +129,7 @@
   name = "golang.org/x/crypto"
   packages = ["ripemd160"]
   pruneopts = "UT"
-  revision = "0e37d006457bf46f9e6692014ba72ef82c33022c"
+  revision = "e84da0312774c21d64ee2317962ef669b27ffb41"
 
 [solve-meta]
   analyzer-name = "dep"

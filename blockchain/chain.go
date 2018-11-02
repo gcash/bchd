@@ -1104,7 +1104,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, flags BehaviorFlags) (bool, error) {
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 
 	flushIndexState := func() {
 		// Intentionally ignore errors writing updated node status to DB. If

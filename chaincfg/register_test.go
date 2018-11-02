@@ -15,6 +15,7 @@ import (
 var mockNetParams = Params{
 	Name: "mocknet",
 	Net:  1<<32 - 1,
+
 	LegacyPubKeyHashAddrID: 0x9f,
 	LegacyScriptHashAddrID: 0xf9,
 	HDPrivateKeyID:         [4]byte{0x01, 0x02, 0x03, 0x04},

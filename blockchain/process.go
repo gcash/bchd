@@ -38,6 +38,11 @@ const (
 	BFNone BehaviorFlags = 0
 )
 
+// HasFlag returns whether the BehaviorFlags has the passed flag set.
+func (behaviorFlags BehaviorFlags) HasFlag(flag BehaviorFlags) bool {
+	return behaviorFlags&flag == flag
+}
+
 // blockExists determines whether a block with the given hash exists either in
 // the main chain or any side chains.
 //
@@ -148,7 +153,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 
 	blockHash := block.Hash()
 	log.Tracef("Processing block %v", blockHash)

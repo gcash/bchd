@@ -74,7 +74,7 @@ const (
 	gbtRegenerateSeconds = 60
 
 	// maxProtocolVersion is the max protocol version the server supports.
-	maxProtocolVersion = 70002
+	maxProtocolVersion = wire.FeeFilterVersion
 )
 
 var (
@@ -1059,13 +1059,13 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		}
 	}
 
-	// When the verbose flag isn't set, simply return the serialized block
+	// When the verbosity value set to 0, simply return the serialized block
 	// as a hex-encoded string.
-	if c.Verbose != nil && !*c.Verbose {
+	if *c.Verbosity == 0 {
 		return hex.EncodeToString(blkBytes), nil
 	}
 
-	// The verbose flag is set, so generate the JSON object and return it.
+	// Generate the JSON object and return it.
 
 	// Deserialize the block.
 	blk, err := bchutil.NewBlockFromBytes(blkBytes)
@@ -1094,9 +1094,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		nextHashString = nextHash.String()
 	}
 
-	params := s.cfg.ChainParams
-	blockHeader := &blk.MsgBlock().Header
-	blockReply := btcjson.GetBlockVerboseResult{
+	var (
+		blockReply  interface{}
+		params      = s.cfg.ChainParams
+		blockHeader = &blk.MsgBlock().Header
+	)
+	baseBlockReply := &btcjson.GetBlockBaseVerboseResult{
 		Hash:          c.Hash,
 		Version:       blockHeader.Version,
 		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
@@ -1112,14 +1115,20 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		NextHash:      nextHashString,
 	}
 
-	if c.VerboseTx == nil || !*c.VerboseTx {
+	// If verbose level does not match 0 or 1
+	// we can consider it 2 (current bitcoin core behavior)
+	if *c.Verbosity == 1 {
 		transactions := blk.Transactions()
 		txNames := make([]string, len(transactions))
 		for i, tx := range transactions {
 			txNames[i] = tx.Hash().String()
 		}
 
-		blockReply.Tx = txNames
+		blockReply = btcjson.GetBlockVerboseResult{
+			GetBlockBaseVerboseResult: baseBlockReply,
+
+			Tx: txNames,
+		}
 	} else {
 		txns := blk.Transactions()
 		rawTxns := make([]btcjson.TxRawResult, len(txns))
@@ -1132,7 +1141,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 			}
 			rawTxns[i] = *rawTxn
 		}
-		blockReply.RawTx = rawTxns
+
+		blockReply = btcjson.GetBlockVerboseTxResult{
+			GetBlockBaseVerboseResult: baseBlockReply,
+
+			Tx: rawTxns,
+		}
 	}
 
 	return blockReply, nil
@@ -2310,7 +2324,7 @@ func handleGetMiningInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	if err != nil {
 		return nil, err
 	}
-	networkHashesPerSec, ok := networkHashesPerSecIface.(int64)
+	networkHashesPerSec, ok := networkHashesPerSecIface.(float64)
 	if !ok {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInternal.Code,
@@ -2397,7 +2411,7 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// Find the min and max block timestamps as well as calculate the total
 	// amount of work that happened between the start and end blocks.
 	var minTimestamp, maxTimestamp time.Time
-	totalWork := big.NewInt(0)
+	totalWork := big.NewFloat(0.0)
 	for curHeight := startHeight; curHeight <= endHeight; curHeight++ {
 		hash, err := s.cfg.Chain.BlockHashByHeight(curHeight)
 		if err != nil {
@@ -2416,7 +2430,7 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 			minTimestamp = header.Timestamp
 			maxTimestamp = minTimestamp
 		} else {
-			totalWork.Add(totalWork, blockchain.CalcWork(header.Bits))
+			totalWork.Add(totalWork, new(big.Float).SetInt(blockchain.CalcWork(header.Bits)))
 
 			if minTimestamp.After(header.Timestamp) {
 				minTimestamp = header.Timestamp
@@ -2432,11 +2446,11 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// time difference.
 	timeDiff := int64(maxTimestamp.Sub(minTimestamp) / time.Second)
 	if timeDiff == 0 {
-		return int64(0), nil
+		return float64(0), nil
 	}
 
-	hashesPerSec := new(big.Int).Div(totalWork, big.NewInt(timeDiff))
-	return hashesPerSec.Int64(), nil
+	hashesPerSec, _ := new(big.Float).Quo(totalWork, new(big.Float).SetInt64(timeDiff)).Float64()
+	return hashesPerSec, nil
 }
 
 // handleGetPeerInfo implements the getpeerinfo command.
@@ -2451,6 +2465,7 @@ func handleGetPeerInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 			Addr:           statsSnap.Addr,
 			AddrLocal:      p.ToPeer().LocalAddr().String(),
 			Services:       fmt.Sprintf("%08d", uint64(statsSnap.Services)),
+			ServicesStr:    statsSnap.Services.String(),
 			RelayTxes:      !p.IsTxRelayDisabled(),
 			LastSend:       statsSnap.LastSend.Unix(),
 			LastRecv:       statsSnap.LastRecv.Unix(),
@@ -2465,6 +2480,7 @@ func handleGetPeerInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 			StartingHeight: statsSnap.StartingHeight,
 			CurrentHeight:  statsSnap.LastBlock,
 			BanScore:       int32(p.BanScore()),
+			Whitelisted:    p.IsWhitelisted(),
 			FeeFilter:      p.FeeFilter(),
 			SyncNode:       statsSnap.ID == syncPeerID,
 		}
@@ -3451,10 +3467,26 @@ func verifyChain(s *rpcServer, level, depth int32) error {
 			return err
 		}
 
+		magneticAnomalyActive := false
+
+		prevHeight := height - 1
+		if prevHeight > 0 {
+			prevBlock, err := s.cfg.Chain.BlockByHeight(height - 1)
+			if err != nil {
+				rpcsLog.Errorf("Verify is unable to fetch block at "+
+					"height %d: %v", height, err)
+				return err
+			}
+
+			if s.cfg.Chain.IsMagneticAnomalyEnabled(*prevBlock.Hash()) {
+				magneticAnomalyActive = true
+			}
+		}
+
 		// Level 1 does basic chain sanity checks.
 		if level > 0 {
 			err := blockchain.CheckBlockSanity(block,
-				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource)
+				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource, magneticAnomalyActive)
 			if err != nil {
 				rpcsLog.Errorf("Verify is unable to validate "+
 					"block at hash %v height %d: %v",
@@ -4090,6 +4122,9 @@ type rpcserverPeer interface {
 	// the peer is to being banned.
 	BanScore() uint32
 
+	// IsWhitelisted returns whether or not the peer is whitelisted.
+	IsWhitelisted() bool
+
 	// FeeFilter returns the requested current minimum fee rate for which
 	// transactions should be announced.
 	FeeFilter() int64
@@ -4241,6 +4276,7 @@ func newRPCServer(config *rpcserverConfig) (*rpcServer, error) {
 		gbtWorkState:           newGbtWorkState(config.TimeSource),
 		helpCacher:             newHelpCacher(),
 		requestProcessShutdown: make(chan struct{}),
+
 		quit: make(chan int),
 	}
 	if cfg.RPCUser != "" && cfg.RPCPass != "" {

@@ -28,7 +28,7 @@ that communicates with your running bchd instance via the API.
 
 ## Requirements
 
-[Go](http://golang.org) 1.8 or newer.
+[Go](http://golang.org) 1.9 or newer.
 
 ## Install
 
@@ -51,6 +51,13 @@ $ go get github.com/gcash/bchd
 
 This will download and compile `bchd` and put it in your path.
 
+If you are a bchd contributor and would like to change the default config file (`bchd.conf`), make any changes to `sample-bchd.conf` and then run the following commands:
+
+```bash
+$ go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
+$ gofmt -s -w bindata.go
+```
+
 ## Getting Started
 
 To start bchd with default options just run:
@@ -62,15 +69,47 @@ $ ./bchd
 You'll find a large number of runtime options on the help menu. All of which can also be set in a config file.
 See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf) for an example of how to use it.
 
+## Docker
+
+Building and running `bchd` in docker is quite painless. To build the image:
+
+```
+docker build . -t bchd
+```
+
+To run the image:
+
+```
+docker run bchd
+```
+
+To run `bchctl` and connect to your `bchd` instance:
+
+```
+# Find the running bchd container.
+docker ps
+
+# Exec bchctl.
+docker exec <container> bchctl <command>
+```
+
 ## Documentation
 
 The documentation is a work-in-progress.  It is located in the [docs](https://github.com/gcash/bchd/tree/master/docs) folder.
-
 
 ## Contributing
 
 Contributions are definitely welcome! Please read the contributing [guidelines](https://github.com/gcash/bchd/blob/master/docs/code_contribution_guidelines.md) before starting.
 
+## Security Disclosures
+
+To report security issues please contact:
+
+Chris Pacia (ctpacia@gmail.com) - GPG Fingerprint: 0150 2502 DD3A 928D CE52 8CB9 B895 6DBF EE7C 105C
+
+or
+
+Josh Ellithorpe (quest@mac.com) - GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD 
 
 ## License
 

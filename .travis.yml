@@ -1,7 +1,10 @@
 language: go
 go:
-  - "1.9.5"
-  - "1.10.1"
+  - "1.9.7"
+  - "1.10.4"
+  - "1.11.1"
+  - "tip"
+
 sudo: false
 
 before_install:
@@ -20,3 +23,8 @@ script:
   - export PATH=$PATH:$HOME/gopath/bin
   - ./goclean.sh
 
+after_script:
+  - if [ "$TRAVIS_GO_VERSION" = "1.11.1" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/inconshreveable/mousetrap; fi
+  - if [ "$TRAVIS_GO_VERSION" = "1.11.1" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/mitchellh/gox; fi
+  - if [ "$TRAVIS_GO_VERSION" = "1.11.1" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/tcnksm/ghr; fi
+  - if [ "$TRAVIS_GO_VERSION" = "1.11.1" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then make compile; ghr --username zquestz --token $GITHUB_TOKEN --replace $TRAVIS_TAG pkg/; fi

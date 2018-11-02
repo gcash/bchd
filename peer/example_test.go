@@ -1,4 +1,5 @@
-// Copyright (c) 2015-2016 The btcsuite developers
+// Copyright (c) 2015-2018 The btcsuite developers
+// Copyright (c) 2016-2018 The Decred developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -20,10 +21,11 @@ import (
 func mockRemotePeer() error {
 	// Configure peer to act as a simnet node that offers no services.
 	peerCfg := &peer.Config{
-		UserAgentName:    "peer",  // User agent name to advertise.
-		UserAgentVersion: "1.0.0", // User agent version to advertise.
-		ChainParams:      &chaincfg.SimNetParams,
-		TrickleInterval:  time.Second * 10,
+		UserAgentName:          "peer",  // User agent name to advertise.
+		UserAgentVersion:       "1.0.0", // User agent version to advertise.
+		ChainParams:            &chaincfg.SimNetParams,
+		TrickleInterval:        time.Second * 10,
+		TstAllowSelfConnection: true,
 	}
 
 	// Accept connections on the simnet port.
@@ -72,13 +74,15 @@ func Example_newOutboundPeer() {
 		Services:         0,
 		TrickleInterval:  time.Second * 10,
 		Listeners: peer.MessageListeners{
-			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
+			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) *wire.MsgReject {
 				fmt.Println("outbound: received version")
+				return nil
 			},
 			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
 		},
+		TstAllowSelfConnection: true,
 	}
 	p, err := peer.NewOutboundPeer(peerCfg, "127.0.0.1:18555")
 	if err != nil {

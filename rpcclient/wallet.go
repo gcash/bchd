@@ -141,6 +141,25 @@ func (c *Client) ListTransactionsCountFrom(account string, count, from int) ([]b
 	return c.ListTransactionsCountFromAsync(account, count, from).Receive()
 }
 
+// ListTransactionsCountFromWatchOnlyAsync returns an instance of a type that can be used
+// to get the result of the RPC at some future time by invoking the Receive
+// function on the returned instance.
+//
+// See ListTransactionsCountFromWatchOnly for the blocking version and more details.
+func (c *Client) ListTransactionsCountFromWatchOnlyAsync(account string, count, from int, watchOnly bool) FutureListTransactionsResult {
+	cmd := btcjson.NewListTransactionsCmd(&account, &count, &from, &watchOnly)
+	return c.sendCmd(cmd)
+}
+
+// ListTransactionsCountFromWatchOnly returns a list of the most recent transactions up
+// to the passed count while skipping the first 'from' transactions. It will include or
+// exclude transactions from watch-only addresses based on the passed value for the watchOnly parameter
+//
+// See the ListTransactions and ListTransactionsCount functions to use defaults.
+func (c *Client) ListTransactionsCountFromWatchOnly(account string, count, from int, watchOnly bool) ([]btcjson.ListTransactionsResult, error) {
+	return c.ListTransactionsCountFromWatchOnlyAsync(account, count, from, watchOnly).Receive()
+}
+
 // FutureListUnspentResult is a future promise to deliver the result of a
 // ListUnspentAsync, ListUnspentMinAsync, ListUnspentMinMaxAsync, or
 // ListUnspentMinMaxAddressesAsync RPC invocation (or an applicable error).
@@ -471,7 +490,7 @@ func (r FutureSendToAddressResult) Receive() (*chainhash.Hash, error) {
 // See SendToAddress for the blocking version and more details.
 func (c *Client) SendToAddressAsync(address bchutil.Address, amount bchutil.Amount) FutureSendToAddressResult {
 	addr := address.EncodeAddress()
-	cmd := btcjson.NewSendToAddressCmd(addr, amount.ToBCH(), nil, nil)
+	cmd := btcjson.NewSendToAddressCmd(addr, amount.ToBCH(), nil, nil, nil)
 	return c.sendCmd(cmd)
 }
 
@@ -498,7 +517,7 @@ func (c *Client) SendToAddressCommentAsync(address bchutil.Address,
 
 	addr := address.EncodeAddress()
 	cmd := btcjson.NewSendToAddressCmd(addr, amount.ToBCH(), &comment,
-		&commentTo)
+		&commentTo, nil)
 	return c.sendCmd(cmd)
 }
 
@@ -517,6 +536,37 @@ func (c *Client) SendToAddressCommentAsync(address bchutil.Address,
 func (c *Client) SendToAddressComment(address bchutil.Address, amount bchutil.Amount, comment, commentTo string) (*chainhash.Hash, error) {
 	return c.SendToAddressCommentAsync(address, amount, comment,
 		commentTo).Receive()
+}
+
+// SendToAddressCommentSubFeeAsync returns an instance of a type that can be used to
+// get the result of the RPC at some future time by invoking the Receive
+// function on the returned instance.
+//
+// See SendToAddressCommentSubFee for the blocking version and more details.
+func (c *Client) SendToAddressCommentSubFeeAsync(address bchutil.Address, amount bchutil.Amount, comment, commentTo string, subtractFeeFromAmount bool) FutureSendToAddressResult {
+	addr := address.EncodeAddress()
+	cmd := btcjson.NewSendToAddressCmd(addr, amount.ToBCH(), &comment, &commentTo, &subtractFeeFromAmount)
+
+	return c.sendCmd(cmd)
+}
+
+// SendToAddressCommentSubFee sends the passed amount to the given address and stores
+// the provided comment and comment to in the wallet. The fee is subtracted from the amount.
+// The comment parameter is intended to be used for the purpose of the transaction while the commentTo
+// parameter is indended to be used for who the transaction is being sent to.
+//
+// The comments are not part of the transaction and are only internal
+// to the wallet.
+//
+// The transaction fee is subtracted from the amount.
+//
+// See SendToAddressComment to avoid using subtractFeeFromAmount.
+// See SendToAddress to avoid using comments.
+//
+// NOTE: This function requires to the wallet to be unlocked.  See the
+// WalletPassphrase function for more details.
+func (c *Client) SendToAddressCommentSubFee(address bchutil.Address, amount bchutil.Amount, comment, commentTo string, subtractFeeFromAmount bool) (*chainhash.Hash, error) {
+	return c.SendToAddressCommentSubFeeAsync(address, amount, comment, commentTo, subtractFeeFromAmount).Receive()
 }
 
 // FutureSendFromResult is a future promise to deliver the result of a
@@ -764,14 +814,14 @@ func (r FutureAddMultisigAddressResult) Receive() (bchutil.Address, error) {
 		return nil, err
 	}
 
-	// Unmarshal result as a string.
-	var addr string
-	err = json.Unmarshal(res, &addr)
+	// Unmarshal result as a addmultisigaddress result object.
+	var addmultisigRes btcjson.AddMultisigAddressResult
+	err = json.Unmarshal(res, &addmultisigRes)
 	if err != nil {
 		return nil, err
 	}
 
-	return bchutil.DecodeAddress(addr, &chaincfg.MainNetParams)
+	return bchutil.DecodeAddress(addmultisigRes.Address, &chaincfg.MainNetParams)
 }
 
 // AddMultisigAddressAsync returns an instance of a type that can be used to get
@@ -2040,7 +2090,7 @@ func (r FutureImportAddressResult) Receive() error {
 //
 // See ImportAddress for the blocking version and more details.
 func (c *Client) ImportAddressAsync(address string) FutureImportAddressResult {
-	cmd := btcjson.NewImportAddressCmd(address, nil)
+	cmd := btcjson.NewImportAddressCmd(address, "", nil)
 	return c.sendCmd(cmd)
 }
 
@@ -2054,15 +2104,15 @@ func (c *Client) ImportAddress(address string) error {
 // returned instance.
 //
 // See ImportAddress for the blocking version and more details.
-func (c *Client) ImportAddressRescanAsync(address string, rescan bool) FutureImportAddressResult {
-	cmd := btcjson.NewImportAddressCmd(address, &rescan)
+func (c *Client) ImportAddressRescanAsync(address string, account string, rescan bool) FutureImportAddressResult {
+	cmd := btcjson.NewImportAddressCmd(address, account, &rescan)
 	return c.sendCmd(cmd)
 }
 
 // ImportAddressRescan imports the passed public address. When rescan is true,
 // the block history is scanned for transactions addressed to provided address.
-func (c *Client) ImportAddressRescan(address string, rescan bool) error {
-	return c.ImportAddressRescanAsync(address, rescan).Receive()
+func (c *Client) ImportAddressRescan(address string, account string, rescan bool) error {
+	return c.ImportAddressRescanAsync(address, account, rescan).Receive()
 }
 
 // FutureImportPrivKeyResult is a future promise to deliver the result of an

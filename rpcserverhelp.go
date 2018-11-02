@@ -162,11 +162,13 @@ var helpDescsEnUS = map[string]string{
 	// GetBlockCmd help.
 	"getblock--synopsis":   "Returns information about a block given its hash.",
 	"getblock-hash":        "The hash of the block",
-	"getblock-verbose":     "Specifies the block is returned as a JSON object instead of hex-encoded string",
-	"getblock-verbosetx":   "Specifies that each transaction is returned as a JSON object and only applies if the verbose flag is true (bchd extension)",
-	"getblock--condition0": "verbose=false",
-	"getblock--condition1": "verbose=true",
+	"getblock-verbosity":   "Specifies the block format returns",
+	"getblock--condition0": "verbosity=0",
+	"getblock--condition1": "verbosity=1",
+	"getblock--condition2": "verbosity=2",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
+	"getblock--result1":    "JSON object with information about block",
+	"getblock--result2":    "JSON object with information about block and information about each transaction.",
 
 	// GetBlockChainInfoCmd help.
 	"getblockchaininfo--synopsis": "Returns information about the current blockchain state and the status of any active soft-fork deployments.",
@@ -225,23 +227,25 @@ var helpDescsEnUS = map[string]string{
 	"searchrawtransactionsresult-vsize":         "The virtual size of the transaction in bytes",
 
 	// GetBlockVerboseResult help.
-	"getblockverboseresult-hash":              "The hash of the block (same as provided)",
-	"getblockverboseresult-confirmations":     "The number of confirmations",
-	"getblockverboseresult-size":              "The size of the block",
-	"getblockverboseresult-height":            "The height of the block in the block chain",
-	"getblockverboseresult-version":           "The block version",
-	"getblockverboseresult-versionHex":        "The block version in hexadecimal",
-	"getblockverboseresult-merkleroot":        "Root hash of the merkle tree",
-	"getblockverboseresult-tx":                "The transaction hashes (only when verbosetx=false)",
-	"getblockverboseresult-rawtx":             "The transactions as JSON objects (only when verbosetx=true)",
-	"getblockverboseresult-time":              "The block time in seconds since 1 Jan 1970 GMT",
-	"getblockverboseresult-nonce":             "The block nonce",
-	"getblockverboseresult-bits":              "The bits which represent the block difficulty",
-	"getblockverboseresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
-	"getblockverboseresult-previousblockhash": "The hash of the previous block",
-	"getblockverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
-	"getblockverboseresult-strippedsize":      "The size of the block without witness data",
-	"getblockverboseresult-weight":            "The weight of the block",
+	"getblockverboseresult-tx": "The transaction hashes",
+
+	// GetBlockVerboseTxResult help
+	"getblockverbosetxresult-tx": "The transaction hashes (verbosity = 1) or the transactions as JSON objects (verbosity = 2)",
+
+	// GetBlockBaseVerboseResult help.
+	"getblockbaseverboseresult-hash":              "The hash of the block (same as provided)",
+	"getblockbaseverboseresult-confirmations":     "The number of confirmations",
+	"getblockbaseverboseresult-size":              "The size of the block",
+	"getblockbaseverboseresult-height":            "The height of the block in the block chain",
+	"getblockbaseverboseresult-version":           "The block version",
+	"getblockbaseverboseresult-versionHex":        "The block version in hexadecimal",
+	"getblockbaseverboseresult-merkleroot":        "Root hash of the merkle tree",
+	"getblockbaseverboseresult-time":              "The block time in seconds since 1 Jan 1970 GMT",
+	"getblockbaseverboseresult-nonce":             "The block nonce",
+	"getblockbaseverboseresult-bits":              "The bits which represent the block difficulty",
+	"getblockbaseverboseresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
+	"getblockbaseverboseresult-previousblockhash": "The hash of the previous block",
+	"getblockbaseverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
 
 	// GetBlockCountCmd help.
 	"getblockcount--synopsis": "Returns the number of blocks in the longest block chain.",
@@ -321,7 +325,6 @@ var helpDescsEnUS = map[string]string{
 	"getblocktemplateresult-capabilities":               "List of server capabilities including 'proposal' to indicate support for block proposals",
 	"getblocktemplateresult-reject-reason":              "Reason the proposal was invalid as-is (only applies to proposal responses)",
 	"getblocktemplateresult-default_witness_commitment": "The witness commitment itself. Will be populated if the block has witness data",
-	"getblocktemplateresult-weightlimit":                "The current limit on the max allowed weight of a block",
 
 	// GetBlockTemplateCmd help.
 	"getblocktemplate--synopsis": "Returns a JSON object with information necessary to construct a block to mine or accepts a proposal to validate.\n" +
@@ -411,18 +414,17 @@ var helpDescsEnUS = map[string]string{
 	"getmempoolinforesult-size":  "Number of transactions in the mempool",
 
 	// GetMiningInfoResult help.
-	"getmininginforesult-blocks":             "Height of the latest best block",
-	"getmininginforesult-currentblocksize":   "Size of the latest best block",
-	"getmininginforesult-currentblockweight": "Weight of the latest best block",
-	"getmininginforesult-currentblocktx":     "Number of transactions in the latest best block",
-	"getmininginforesult-difficulty":         "Current target difficulty",
-	"getmininginforesult-errors":             "Any current errors",
-	"getmininginforesult-generate":           "Whether or not server is set to generate coins",
-	"getmininginforesult-genproclimit":       "Number of processors to use for coin generation (-1 when disabled)",
-	"getmininginforesult-hashespersec":       "Recent hashes per second performance measurement while generating coins",
-	"getmininginforesult-networkhashps":      "Estimated network hashes per second for the most recent blocks",
-	"getmininginforesult-pooledtx":           "Number of transactions in the memory pool",
-	"getmininginforesult-testnet":            "Whether or not server is using testnet",
+	"getmininginforesult-blocks":           "Height of the latest best block",
+	"getmininginforesult-currentblocksize": "Size of the latest best block",
+	"getmininginforesult-currentblocktx":   "Number of transactions in the latest best block",
+	"getmininginforesult-difficulty":       "Current target difficulty",
+	"getmininginforesult-errors":           "Any current errors",
+	"getmininginforesult-generate":         "Whether or not server is set to generate coins",
+	"getmininginforesult-genproclimit":     "Number of processors to use for coin generation (-1 when disabled)",
+	"getmininginforesult-hashespersec":     "Recent hashes per second performance measurement while generating coins",
+	"getmininginforesult-networkhashps":    "Estimated network hashes per second for the most recent blocks",
+	"getmininginforesult-pooledtx":         "Number of transactions in the memory pool",
+	"getmininginforesult-testnet":          "Whether or not server is using testnet",
 
 	// GetMiningInfoCmd help.
 	"getmininginfo--synopsis": "Returns a JSON object containing mining-related information.",
@@ -446,6 +448,7 @@ var helpDescsEnUS = map[string]string{
 	"getpeerinforesult-addr":           "The ip address and port of the peer",
 	"getpeerinforesult-addrlocal":      "Local address",
 	"getpeerinforesult-services":       "Services bitmask which represents the services supported by the peer",
+	"getpeerinforesult-servicesStr":    "Services string which represents the services supported by the peer",
 	"getpeerinforesult-relaytxes":      "Peer has requested transactions be relayed to it",
 	"getpeerinforesult-lastsend":       "Time the last message was received in seconds since 1 Jan 1970 GMT",
 	"getpeerinforesult-lastrecv":       "Time the last message was sent in seconds since 1 Jan 1970 GMT",
@@ -461,6 +464,7 @@ var helpDescsEnUS = map[string]string{
 	"getpeerinforesult-startingheight": "The latest block height the peer knew about when the connection was established",
 	"getpeerinforesult-currentheight":  "The current height of the peer",
 	"getpeerinforesult-banscore":       "The ban score",
+	"getpeerinforesult-whitelisted":    "Peer IP is whitelisted",
 	"getpeerinforesult-feefilter":      "The requested minimum fee a transaction must have to be announced to the peer",
 	"getpeerinforesult-syncnode":       "Whether or not the peer is the sync peer",
 
@@ -684,7 +688,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getaddednodeinfo":      {(*[]string)(nil), (*[]btcjson.GetAddedNodeInfoResult)(nil)},
 	"getbestblock":          {(*btcjson.GetBestBlockResult)(nil)},
 	"getbestblockhash":      {(*string)(nil)},
-	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil)},
+	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil), (*btcjson.GetBlockVerboseTxResult)(nil)},
 	"getblockcount":         {(*int64)(nil)},
 	"getblockhash":          {(*string)(nil)},
 	"getblockheader":        {(*string)(nil), (*btcjson.GetBlockHeaderVerboseResult)(nil)},

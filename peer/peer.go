@@ -32,18 +32,18 @@ const (
 
 	// DefaultTrickleInterval is the min time between attempts to send an
 	// inv message to a peer.
-	DefaultTrickleInterval = 10 * time.Second
+	DefaultTrickleInterval = 50 * time.Millisecond
 
-	// minAcceptableProtocolVersion is the lowest protocol version that a
+	// MinAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
-	minAcceptableProtocolVersion = wire.MultipleAddressVersion
+	MinAcceptableProtocolVersion = wire.MultipleAddressVersion
 
 	// outputBufferSize is the number of elements the output channels use.
 	outputBufferSize = 50
 
 	// invTrickleSize is the maximum amount of inventory to send in a single
 	// message when trickling inventory to remote peers.
-	maxInvTrickleSize = 1000
+	maxInvTrickleSize = 5000
 
 	// maxKnownInventory is the maximum number of items to keep in the known
 	// inventory cache.
@@ -83,11 +83,6 @@ var (
 	// sentNonces houses the unique nonces that are generated when pushing
 	// version messages that are used to detect self connections.
 	sentNonces = newMruNonceMap(50)
-
-	// allowSelfConns is only used to allow the tests to bypass the self
-	// connection detecting and disconnect logic since they intentionally
-	// do so for testing purposes.
-	allowSelfConns bool
 )
 
 // MessageListeners defines callback function pointers to invoke with message
@@ -187,7 +182,9 @@ type MessageListeners struct {
 	OnMerkleBlock func(p *Peer, msg *wire.MsgMerkleBlock)
 
 	// OnVersion is invoked when a peer receives a version bitcoin message.
-	OnVersion func(p *Peer, msg *wire.MsgVersion)
+	// The caller may return a reject message in which case the message will
+	// be sent to the peer and the peer will be disconnected.
+	OnVersion func(p *Peer, msg *wire.MsgVersion) *wire.MsgReject
 
 	// OnVerAck is invoked when a peer receives a verack bitcoin message.
 	OnVerAck func(p *Peer, msg *wire.MsgVerAck)
@@ -273,6 +270,11 @@ type Config struct {
 	// TrickleInterval is the duration of the ticker which trickles down the
 	// inventory to a peer.
 	TrickleInterval time.Duration
+
+	// TstAllowSelfConnection is only used to allow the tests to bypass the self
+	// connection detecting and disconnect logic since they intentionally
+	// do so for testing purposes.
+	TstAllowSelfConnection bool
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.
@@ -377,6 +379,7 @@ type StatsSnap struct {
 	LastPingNonce  uint64
 	LastPingTime   time.Time
 	LastPingMicros int64
+	SyncPeer       bool
 }
 
 // HashFunc is a function which returns a block hash, height and error
@@ -444,6 +447,7 @@ type Peer struct {
 	protocolVersion      uint32 // negotiated protocol version
 	sendHeadersPreferred bool   // peer sent a sendheaders message
 	verAckReceived       bool
+	syncPeer             bool
 
 	wireEncoding wire.MessageEncoding
 
@@ -550,6 +554,7 @@ func (p *Peer) StatsSnapshot() *StatsSnap {
 		LastPingNonce:  p.lastPingNonce,
 		LastPingMicros: p.lastPingMicros,
 		LastPingTime:   p.lastPingTime,
+		SyncPeer:       p.SyncPeer(),
 	}
 
 	p.statsMtx.RUnlock()
@@ -565,6 +570,27 @@ func (p *Peer) ID() int32 {
 	p.flagsMtx.Unlock()
 
 	return id
+}
+
+// SyncPeer returns if this is the sync peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) SyncPeer() bool {
+	p.flagsMtx.Lock()
+	sp := p.syncPeer
+	p.flagsMtx.Unlock()
+
+	return sp
+}
+
+// SetSyncPeer sets the syncPeer flag.
+//
+// This function is safe for concurrent access.
+func (p *Peer) SetSyncPeer(val bool) {
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
+
+	p.syncPeer = val
 }
 
 // NA returns the peer network address.
@@ -1206,7 +1232,6 @@ out:
 					delete(pendingResponses, wire.CmdMerkleBlock)
 					delete(pendingResponses, wire.CmdTx)
 					delete(pendingResponses, wire.CmdNotFound)
-
 				default:
 					delete(pendingResponses, msgCmd)
 				}
@@ -1337,15 +1362,17 @@ out:
 					log.Errorf(errMsg)
 				}
 
-				// Push a reject message for the malformed message and wait for
-				// the message to be sent before disconnecting.
+				// Push a reject message for the malformed message and disconnect
+				// from the peer immediately to prevent sync issues.
 				//
-				// NOTE: Ideally this would include the command in the header if
+				// Ideally this would include the command in the header if
 				// at least that much of the message was valid, but that is not
 				// currently exposed by wire, so just used malformed for the
 				// command.
 				p.PushRejectMsg("malformed", wire.RejectMalformed, errMsg, nil,
 					true)
+
+				p.Disconnect()
 			}
 			break out
 		}
@@ -1356,7 +1383,7 @@ out:
 		p.stallControl <- stallControlMsg{sccHandlerStart, rmsg}
 		switch msg := rmsg.(type) {
 		case *wire.MsgVersion:
-
+			// Limit to one version message per peer.
 			p.PushRejectMsg(msg.Command(), wire.RejectDuplicate,
 				"duplicate version message", nil, true)
 			break out
@@ -1540,8 +1567,18 @@ out:
 func (p *Peer) queueHandler() {
 	pendingMsgs := list.New()
 	invSendQueue := list.New()
-	trickleTicker := time.NewTicker(p.cfg.TrickleInterval)
-	defer trickleTicker.Stop()
+	useTrickleQueue := p.cfg.TrickleInterval > 0
+	var trickleTicker *time.Ticker
+
+	// If the trickle interval is 0 we create an unstarted Ticker. This allows
+	// selecting on it without it ever firing. If the trickle interval is
+	// greater than 0 the ticker and trickle queue are used normally.
+	if useTrickleQueue {
+		trickleTicker = time.NewTicker(p.cfg.TrickleInterval)
+		defer trickleTicker.Stop()
+	} else {
+		trickleTicker = &time.Ticker{C: make(chan (time.Time))}
+	}
 
 	// We keep the waiting flag so that we know if we have a message queued
 	// to the outHandler or not.  We could use the presence of a head of
@@ -1586,20 +1623,35 @@ out:
 
 		case iv := <-p.outputInvChan:
 			// No handshake?  They'll find out soon enough.
-			if p.VersionKnown() {
-				// If this is a new block, then we'll blast it
-				// out immediately, sipping the inv trickle
-				// queue.
-				if iv.Type == wire.InvTypeBlock {
-
-					invMsg := wire.NewMsgInvSizeHint(1)
-					invMsg.AddInvVect(iv)
-					waiting = queuePacket(outMsg{msg: invMsg},
-						pendingMsgs, waiting)
-				} else {
-					invSendQueue.PushBack(iv)
-				}
+			if !p.VersionKnown() {
+				continue
 			}
+
+			// If this is a new block, then we'll blast it
+			// out immediately, skipping the inv trickle
+			// queue.
+			if iv.Type == wire.InvTypeBlock {
+				invMsg := wire.NewMsgInvSizeHint(1)
+				invMsg.AddInvVect(iv)
+				waiting = queuePacket(outMsg{msg: invMsg},
+					pendingMsgs, waiting)
+				continue
+			}
+
+			// If it's a new tx and the trickle queue is enabled then enqueue the inv.
+			if useTrickleQueue {
+				invSendQueue.PushBack(iv)
+				continue
+			}
+
+			// Otherwise send it immediately
+			if p.knownInventory.Exists(iv) {
+				continue
+			}
+
+			invMsg := wire.NewMsgInvSizeHint(1)
+			invMsg.AddInvVect(iv)
+			waiting = queuePacket(outMsg{msg: invMsg}, pendingMsgs, waiting)
 
 		case <-trickleTicker.C:
 			// Don't send anything if we're disconnecting or there
@@ -1861,26 +1913,42 @@ func (p *Peer) Disconnect() {
 	close(p.quit)
 }
 
-// handleRemoteVersionMsg is invoked when a version bitcoin message is received
-// from the remote peer.  It will return an error if the remote peer's version
-// is not compatible with ours.
-func (p *Peer) handleRemoteVersionMsg(msg *wire.MsgVersion) error {
+// readRemoteVersionMsg waits for the next message to arrive from the remote
+// peer.  If the next message is not a version message or the version is not
+// acceptable then return an error.
+func (p *Peer) readRemoteVersionMsg() error {
+	// Read their version message.
+	remoteMsg, _, err := p.readMessage(wire.LatestEncoding)
+	if err != nil {
+		return err
+	}
+
+	// Notify and disconnect clients if the first message is not a version
+	// message.
+	msg, ok := remoteMsg.(*wire.MsgVersion)
+	if !ok {
+		reason := "a version message must precede all others"
+		rejectMsg := wire.NewMsgReject(msg.Command(), wire.RejectMalformed,
+			reason)
+		_ = p.writeMessage(rejectMsg, wire.LatestEncoding)
+		return errors.New(reason)
+	}
+
 	// Detect self connections.
-	if !allowSelfConns && sentNonces.Exists(msg.Nonce) {
+	if !p.cfg.TstAllowSelfConnection && sentNonces.Exists(msg.Nonce) {
 		return errors.New("disconnecting peer connected to self")
 	}
 
-	// Notify and disconnect clients that have a protocol version that is
-	// too old.
-	//
-	// NOTE: If minAcceptableProtocolVersion is raised to be higher than
-	// wire.RejectVersion, this should send a reject packet before
-	// disconnecting.
-	if uint32(msg.ProtocolVersion) < minAcceptableProtocolVersion {
-		reason := fmt.Sprintf("protocol version must be %d or greater",
-			minAcceptableProtocolVersion)
-		return errors.New(reason)
-	}
+	// Negotiate the protocol version and set the services to what the remote
+	// peer advertised.
+	p.flagsMtx.Lock()
+	p.advertisedProtoVer = uint32(msg.ProtocolVersion)
+	p.protocolVersion = minUint32(p.protocolVersion, p.advertisedProtoVer)
+	p.versionKnown = true
+	p.services = msg.Services
+	p.flagsMtx.Unlock()
+	log.Debugf("Negotiated protocol version %d for peer %s",
+		p.protocolVersion, p)
 
 	// Updating a bunch of stats including block based stats, and the
 	// peer's time offset.
@@ -1890,55 +1958,39 @@ func (p *Peer) handleRemoteVersionMsg(msg *wire.MsgVersion) error {
 	p.timeOffset = msg.Timestamp.Unix() - time.Now().Unix()
 	p.statsMtx.Unlock()
 
-	// Negotiate the protocol version.
+	// Set the peer's ID, user agent, and potentially the flag which
+	// specifies the witness support is enabled.
 	p.flagsMtx.Lock()
-	p.advertisedProtoVer = uint32(msg.ProtocolVersion)
-	p.protocolVersion = minUint32(p.protocolVersion, p.advertisedProtoVer)
-	p.versionKnown = true
-	log.Debugf("Negotiated protocol version %d for peer %s",
-		p.protocolVersion, p)
-
-	// Set the peer's ID.
 	p.id = atomic.AddInt32(&nodeCount, 1)
-
-	// Set the supported services for the peer to what the remote peer
-	// advertised.
-	p.services = msg.Services
-
-	// Set the remote peer's user agent.
 	p.userAgent = msg.UserAgent
 
 	p.flagsMtx.Unlock()
 
-	return nil
-}
-
-// readRemoteVersionMsg waits for the next message to arrive from the remote
-// peer.  If the next message is not a version message or the version is not
-// acceptable then return an error.
-func (p *Peer) readRemoteVersionMsg() error {
-	// Read their version message.
-	msg, _, err := p.readMessage(wire.LatestEncoding)
-	if err != nil {
-		return err
-	}
-
-	remoteVerMsg, ok := msg.(*wire.MsgVersion)
-	if !ok {
-		errStr := "A version message must precede all others"
-		log.Errorf(errStr)
-
-		rejectMsg := wire.NewMsgReject(msg.Command(), wire.RejectMalformed,
-			errStr)
-		return p.writeMessage(rejectMsg, wire.LatestEncoding)
-	}
-
-	if err := p.handleRemoteVersionMsg(remoteVerMsg); err != nil {
-		return err
-	}
-
+	// Invoke the callback if specified.
 	if p.cfg.Listeners.OnVersion != nil {
-		p.cfg.Listeners.OnVersion(p, remoteVerMsg)
+		rejectMsg := p.cfg.Listeners.OnVersion(p, msg)
+		if rejectMsg != nil {
+			_ = p.writeMessage(rejectMsg, wire.LatestEncoding)
+			return errors.New(rejectMsg.Reason)
+		}
+	}
+
+	// Notify and disconnect clients that have a protocol version that is
+	// too old.
+	//
+	// NOTE: If minAcceptableProtocolVersion is raised to be higher than
+	// wire.RejectVersion, this should send a reject packet before
+	// disconnecting.
+	if uint32(msg.ProtocolVersion) < MinAcceptableProtocolVersion {
+		// Send a reject message indicating the protocol version is
+		// obsolete and wait for the message to be sent before
+		// disconnecting.
+		reason := fmt.Sprintf("protocol version must be %d or greater",
+			MinAcceptableProtocolVersion)
+		rejectMsg := wire.NewMsgReject(msg.Command(), wire.RejectObsolete,
+			reason)
+		_ = p.writeMessage(rejectMsg, wire.LatestEncoding)
+		return errors.New(reason)
 	}
 	return nil
 }
@@ -1964,7 +2016,8 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 		proxyaddress, _, err := net.SplitHostPort(p.cfg.Proxy)
 		// invalid proxy means poorly configured, be on the safe side.
 		if err != nil || p.na.IP.String() == proxyaddress {
-			theirNA = wire.NewNetAddressIPPort(net.IP([]byte{0, 0, 0, 0}), 0, 0)
+			theirNA = wire.NewNetAddressIPPort(net.IP([]byte{0, 0, 0, 0}), 0,
+				theirNA.Services)
 		}
 	}
 
@@ -1992,25 +2045,7 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 	msg.AddUserAgent(p.cfg.UserAgentName, p.cfg.UserAgentVersion,
 		p.cfg.UserAgentComments...)
 
-	// XXX: bitcoind appears to always enable the full node services flag
-	// of the remote peer netaddress field in the version message regardless
-	// of whether it knows it supports it or not.  Also, bitcoind sets
-	// the services field of the local peer to 0 regardless of support.
-	//
-	// Realistically, this should be set as follows:
-	// - For outgoing connections:
-	//    - Set the local netaddress services to what the local peer
-	//      actually supports
-	//    - Set the remote netaddress services to 0 to indicate no services
-	//      as they are still unknown
-	// - For incoming connections:
-	//    - Set the local netaddress services to what the local peer
-	//      actually supports
-	//    - Set the remote netaddress services to the what was advertised by
-	//      by the remote peer in its version message
-	msg.AddrYou.Services = wire.SFNodeNetwork
-
-	// Advertise the services flag
+	// Advertise local services.
 	msg.Services = p.cfg.Services
 
 	// Advertise our max supported protocol version.
@@ -2071,9 +2106,11 @@ func (p *Peer) start() error {
 	select {
 	case err := <-negotiateErr:
 		if err != nil {
+			p.Disconnect()
 			return err
 		}
 	case <-time.After(negotiateTimeout):
+		p.Disconnect()
 		return errors.New("protocol negotiation timeout")
 	}
 	log.Debugf("Connected to %s", p.Addr())
@@ -2170,6 +2207,7 @@ func newPeerBase(origCfg *Config, inbound bool) *Peer {
 		cfg:             cfg, // Copy so caller can't mutate.
 		services:        cfg.Services,
 		protocolVersion: cfg.ProtocolVersion,
+		syncPeer:        false,
 	}
 	return &p
 }
@@ -2196,14 +2234,13 @@ func NewOutboundPeer(cfg *Config, addr string) (*Peer, error) {
 	}
 
 	if cfg.HostToNetAddress != nil {
-		na, err := cfg.HostToNetAddress(host, uint16(port), cfg.Services)
+		na, err := cfg.HostToNetAddress(host, uint16(port), 0)
 		if err != nil {
 			return nil, err
 		}
 		p.na = na
 	} else {
-		p.na = wire.NewNetAddressIPPort(net.ParseIP(host), uint16(port),
-			cfg.Services)
+		p.na = wire.NewNetAddressIPPort(net.ParseIP(host), uint16(port), 0)
 	}
 
 	return p, nil

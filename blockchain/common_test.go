@@ -89,8 +89,6 @@ func loadBlocks(filename string) (blocks []*bchutil.Block, err error) {
 		var rintbuf uint32
 		err = binary.Read(dr, binary.LittleEndian, &rintbuf)
 		if err == io.EOF {
-			// hit end of file at expected offset: no warning
-			height--
 			err = nil
 			break
 		}

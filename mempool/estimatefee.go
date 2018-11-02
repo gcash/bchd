@@ -487,12 +487,12 @@ func (b *estimateFeeSet) estimateFee(confirmations int) SatoshiPerByte {
 		return 0
 	}
 
-	var min, max int = 0, 0
+	var min int
 	for i := 0; i < confirmations-1; i++ {
 		min += int(b.bin[i])
 	}
 
-	max = min + int(b.bin[confirmations-1]) - 1
+	max := min + int(b.bin[confirmations-1]) - 1
 	if max < min {
 		max = min
 	}
@@ -510,7 +510,7 @@ func (ef *FeeEstimator) newEstimateFeeSet() *estimateFeeSet {
 	set := &estimateFeeSet{}
 
 	capacity := 0
-	for i, b := range ef.bin {
+	for i, b := range &ef.bin {
 		l := len(b)
 		set.bin[i] = uint32(l)
 		capacity += l
@@ -519,7 +519,7 @@ func (ef *FeeEstimator) newEstimateFeeSet() *estimateFeeSet {
 	set.feeRate = make([]SatoshiPerByte, capacity)
 
 	i := 0
-	for _, b := range ef.bin {
+	for _, b := range &ef.bin {
 		for _, o := range b {
 			set.feeRate[i] = o.feeRate
 			i++
@@ -656,7 +656,7 @@ func (ef *FeeEstimator) Save() FeeEstimatorState {
 	}
 
 	// Save all the right bins.
-	for _, list := range ef.bin {
+	for _, list := range &ef.bin {
 
 		binary.Write(w, binary.BigEndian, uint32(len(list)))
 

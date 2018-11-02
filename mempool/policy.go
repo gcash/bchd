@@ -60,7 +60,7 @@ const (
 func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amount) int64 {
 	// Calculate the minimum fee for a transaction to be allowed into the
 	// mempool and relayed by scaling the base fee (which is the minimum
-	// free transaction relay fee).  minTxRelayFee is in Satoshi/kB so
+	// free transaction relay fee).  minRelayTxFee is in Satoshi/kB so
 	// multiply by serializedSize (which is in bytes) and divide by 1000 to
 	// get minimum Satoshis.
 	minFee := (serializedSize * int64(minRelayTxFee)) / 1000
@@ -88,7 +88,7 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amoun
 // not perform those checks because the script engine already does this more
 // accurately and concisely via the txscript.ScriptVerifyCleanStack and
 // txscript.ScriptVerifySigPushOnly flags.
-func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint) error {
+func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {
 	// NOTE: The reference implementation also does a coinbase check here,
 	// but coinbases have already been rejected prior to calling this
 	// function so no need to recheck.
@@ -102,7 +102,7 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint) err
 		switch txscript.GetScriptClass(originPkScript) {
 		case txscript.ScriptHashTy:
 			numSigOps := txscript.GetPreciseSigOpCount(
-				txIn.SignatureScript, originPkScript, true)
+				txIn.SignatureScript, originPkScript, scriptFlags)
 			if numSigOps > maxStandardP2SHSigOps {
 				str := fmt.Sprintf("transaction input #%d has "+
 					"%d signature operations which is more "+

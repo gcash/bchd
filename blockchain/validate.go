@@ -197,7 +197,7 @@ func IsFinalizedTransaction(tx *bchutil.Tx, blockHeight int32, blockTime time.Ti
 	// which the transaction is finalized or a timestamp depending on if the
 	// value is before the txscript.LockTimeThreshold.  When it is under the
 	// threshold it is a block height.
-	blockTimeOrHeight := int64(0)
+	var blockTimeOrHeight int64
 	if lockTime < txscript.LockTimeThreshold {
 		blockTimeOrHeight = int64(blockHeight)
 	} else {
@@ -254,7 +254,7 @@ func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
 // ensure it is sane.  These checks are context free.
-func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
+func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFlags txscript.ScriptFlags) error {
 	// A transaction must have at least one input.
 	msgTx := tx.MsgTx()
 	if len(msgTx.TxIn) == 0 {
@@ -274,13 +274,13 @@ func CheckTransactionSanity(tx *bchutil.Tx, enforceMinimumSize bool) error {
 			"%d, max %d", serializedTxSize, MaxTransactionSize)
 		return ruleError(ErrTxTooBig, str)
 	}
-	if enforceMinimumSize && serializedTxSize < MinTransactionSize {
+	if magneticAnomalyActive && serializedTxSize < MinTransactionSize {
 		str := fmt.Sprintf("serialized transaction is too small - got "+
 			"%d, min %d", serializedTxSize, MinTransactionSize)
 		return ruleError(ErrTxTooSmall, str)
 	}
 
-	sigOps := CountSigOps(tx)
+	sigOps := CountSigOps(tx, scriptFlags)
 	if sigOps > MaxTransactionSigOps {
 		str := fmt.Sprintf("transaction has too many sigops - got "+
 			"%d, max %d", sigOps, MaxTransactionSigOps)
@@ -386,7 +386,7 @@ func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags Behavio
 
 	// The block hash must be less than the claimed target unless the flag
 	// to avoid proof of work checks is set.
-	if flags&BFNoPoWCheck != BFNoPoWCheck {
+	if !flags.HasFlag(BFNoPoWCheck) {
 		// The block hash must be less than the claimed target.
 		hash := header.BlockHash()
 		hashNum := HashToBig(&hash)
@@ -411,21 +411,21 @@ func CheckProofOfWork(block *bchutil.Block, powLimit *big.Int) error {
 // input and output scripts in the provided transaction.  This uses the
 // quicker, but imprecise, signature operation counting mechanism from
 // txscript.
-func CountSigOps(tx *bchutil.Tx) int {
+func CountSigOps(tx *bchutil.Tx, scriptFlags txscript.ScriptFlags) int {
 	msgTx := tx.MsgTx()
 
 	// Accumulate the number of signature operations in all transaction
 	// inputs.
 	totalSigOps := 0
 	for _, txIn := range msgTx.TxIn {
-		numSigOps := txscript.GetSigOpCount(txIn.SignatureScript)
+		numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, scriptFlags)
 		totalSigOps += numSigOps
 	}
 
 	// Accumulate the number of signature operations in all transaction
 	// outputs.
 	for _, txOut := range msgTx.TxOut {
-		numSigOps := txscript.GetSigOpCount(txOut.PkScript)
+		numSigOps := txscript.GetSigOpCount(txOut.PkScript, scriptFlags)
 		totalSigOps += numSigOps
 	}
 
@@ -434,10 +434,10 @@ func CountSigOps(tx *bchutil.Tx) int {
 
 // GetSigOps returns the unified sig op count for the passed transaction
 // respecting current active soft-forks which modified sig op cost counting.
-func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16 bool) (int, error) {
-	numSigOps := CountSigOps(tx)
-	if bip16 {
-		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView)
+func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, scriptFlags txscript.ScriptFlags) (int, error) {
+	numSigOps := CountSigOps(tx, scriptFlags)
+	if scriptFlags.HasFlag(txscript.ScriptBip16) {
+		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView, scriptFlags)
 		if err != nil {
 			return 0, nil
 		}
@@ -450,7 +450,7 @@ func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, bip16
 // transactions which are of the pay-to-script-hash type.  This uses the
 // precise, signature operation counting mechanism from the script engine which
 // requires access to the input transaction scripts.
-func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint) (int, error) {
+func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, scriptFlags txscript.ScriptFlags) (int, error) {
 	// Coinbase transactions have no interesting inputs.
 	if isCoinBaseTx {
 		return 0, nil
@@ -482,7 +482,7 @@ func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint)
 		// referenced public key script.
 		sigScript := txIn.SignatureScript
 		numSigOps := txscript.GetPreciseSigOpCount(sigScript, pkScript,
-			true)
+			scriptFlags)
 
 		// We could potentially overflow the accumulator so check for
 		// overflow.
@@ -573,11 +573,21 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 		}
 	}
 
+	magneticAnomaly := flags.HasFlag(BFMagneticAnomaly)
+
+	// TODO: This is not a full set of ScriptFlags and only
+	// covers the Nov 2018 fork.
+	var scriptFlags txscript.ScriptFlags
+	if magneticAnomaly {
+		scriptFlags |= txscript.ScriptVerifySigPushOnly |
+			txscript.ScriptVerifyCleanStack |
+			txscript.ScriptVerifyCheckDataSig
+	}
+
 	// Do some preliminary checks on each transaction to ensure they are
 	// sane before continuing.
-	enforceMinimumSize := flags&BFMagneticAnomaly == BFMagneticAnomaly
 	for _, tx := range transactions {
-		err := CheckTransactionSanity(tx, enforceMinimumSize)
+		err := CheckTransactionSanity(tx, magneticAnomaly, scriptFlags)
 		if err != nil {
 			return err
 		}
@@ -617,8 +627,14 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 // CheckBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context free.
-func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource) error {
-	return checkBlockSanity(block, powLimit, timeSource, BFNone)
+func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool) error {
+	behaviorFlags := BFNone
+
+	if magneticAnomalyActive {
+		behaviorFlags |= BFMagneticAnomaly
+	}
+
+	return checkBlockSanity(block, powLimit, timeSource, behaviorFlags)
 }
 
 // ExtractCoinbaseHeight attempts to extract the height of the block from the
@@ -692,7 +708,7 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 	// block.
 	blockHeight := prevNode.height + 1
 
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Ensure the difficulty specified in the block header matches
 		// the calculated difficulty based on the previous block and
@@ -812,7 +828,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return ruleError(ErrBlockTooBig, str)
 	}
 
-	fastAdd := flags&BFFastAdd == BFFastAdd
+	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Obtain the latest state of the deployed CSV soft-fork in
 		// order to properly guard the new validation behavior based on
@@ -1095,6 +1111,45 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// https://en.bitcoin.it/wiki/BIP_0016 for more details.
 	enforceBIP0016 := node.timestamp >= txscript.Bip16Activation.Unix()
 
+	// Blocks created after the BIP0016 activation time need to have the
+	// pay-to-script-hash checks enabled.
+	var scriptFlags txscript.ScriptFlags
+	if enforceBIP0016 {
+		scriptFlags |= txscript.ScriptBip16
+	}
+
+	// Enforce DER signatures for block versions 3+ once the historical
+	// activation threshold has been reached.  This is part of BIP0066.
+	blockHeader := &block.MsgBlock().Header
+	if blockHeader.Version >= 3 && node.height >= b.chainParams.BIP0066Height {
+		scriptFlags |= txscript.ScriptVerifyDERSignatures
+	}
+
+	// Enforce CHECKLOCKTIMEVERIFY for block versions 4+ once the historical
+	// activation threshold has been reached.  This is part of BIP0065.
+	if blockHeader.Version >= 4 && node.height >= b.chainParams.BIP0065Height {
+		scriptFlags |= txscript.ScriptVerifyCheckLockTimeVerify
+	}
+
+	// If Uahf is active we must enforce strict encoding on all signatures and enforce
+	// the replay protected sighash.
+	if uahfActive {
+		scriptFlags |= txscript.ScriptVerifyStrictEncoding | txscript.ScriptVerifyBip143SigHash
+	}
+
+	// If Daa is active enforce Low S and Nullfail script validation rules.
+	if daaActive {
+		scriptFlags |= txscript.ScriptVerifyLowS | txscript.ScriptVerifyNullFail
+	}
+
+	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
+	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY
+	if magneticAnomalyActive {
+		scriptFlags |= txscript.ScriptVerifySigPushOnly |
+			txscript.ScriptVerifyCleanStack |
+			txscript.ScriptVerifyCheckDataSig
+	}
+
 	// The number of signature operations must be less than the maximum
 	// allowed per block.  Note that the preliminary sanity checks on a
 	// block also include a check similar to this one, but this check
@@ -1111,7 +1166,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// countP2SHSigOps for whether or not the transaction is
 		// a coinbase transaction rather than having to do a
 		// full coinbase check again.
-		sigOpCost, err := GetSigOps(tx, i == 0, view, enforceBIP0016)
+		sigOpCost, err := GetSigOps(tx, i == 0, view, scriptFlags)
 		if err != nil {
 			return err
 		}
@@ -1212,45 +1267,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	runScripts := true
 	if checkpoint != nil && node.height <= checkpoint.Height {
 		runScripts = false
-	}
-
-	// Blocks created after the BIP0016 activation time need to have the
-	// pay-to-script-hash checks enabled.
-	var scriptFlags txscript.ScriptFlags
-	if enforceBIP0016 {
-		scriptFlags |= txscript.ScriptBip16
-	}
-
-	// Enforce DER signatures for block versions 3+ once the historical
-	// activation threshold has been reached.  This is part of BIP0066.
-	blockHeader := &block.MsgBlock().Header
-	if blockHeader.Version >= 3 && node.height >= b.chainParams.BIP0066Height {
-		scriptFlags |= txscript.ScriptVerifyDERSignatures
-	}
-
-	// Enforce CHECKLOCKTIMEVERIFY for block versions 4+ once the historical
-	// activation threshold has been reached.  This is part of BIP0065.
-	if blockHeader.Version >= 4 && node.height >= b.chainParams.BIP0065Height {
-		scriptFlags |= txscript.ScriptVerifyCheckLockTimeVerify
-	}
-
-	// If Uahf is active we must enforce strict encoding on all signatures and enforce
-	// the replay protected sighash.
-	if uahfActive {
-		scriptFlags |= txscript.ScriptVerifyStrictEncoding | txscript.ScriptVerifyBip143SigHash
-	}
-
-	// If Daa is active enforce Low S and Nullfail script validation rules.
-	if daaActive {
-		scriptFlags |= txscript.ScriptVerifyLowS | txscript.ScriptVerifyNullFail
-	}
-
-	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
-	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY
-	if magneticAnomalyActive {
-		scriptFlags |= txscript.ScriptVerifySigPushOnly |
-			txscript.ScriptVerifyCleanStack |
-			txscript.ScriptVerifyCheckDataSig
 	}
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once

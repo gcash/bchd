@@ -84,6 +84,9 @@ const (
 	// SFNodeGraphene is a flag used to indicate a peer supports graphene block relay.
 	SFNodeGraphene
 
+	// SFNodeWeakBlocks is a flag used to indicate a peer supports the weak block protocol.
+	SFNodeWeakBlocks
+
 	// SFNodeCF is a flag used to indicate a peer supports committed
 	// filters (CFs).
 	SFNodeCF
@@ -98,6 +101,7 @@ var sfStrings = map[ServiceFlag]string{
 	SFNodeXthin:       "SFNodeXthin",
 	SFNodeBitcoinCash: "SFNodeBitcoinCash",
 	SFNodeGraphene:    "SFNodeGraphene",
+	SFNodeWeakBlocks:  "SFNodeWeakBlocks",
 	SFNodeCF:          "SFNodeCF",
 }
 
@@ -111,6 +115,7 @@ var orderedSFStrings = []ServiceFlag{
 	SFNodeXthin,
 	SFNodeBitcoinCash,
 	SFNodeGraphene,
+	SFNodeWeakBlocks,
 	SFNodeCF,
 }
 

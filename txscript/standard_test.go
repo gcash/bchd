@@ -464,7 +464,16 @@ func TestCalcScriptInfo(t *testing.T) {
 		sigScript := mustParseShortForm(test.sigScript)
 		pkScript := mustParseShortForm(test.pkScript)
 
-		si, err := CalcScriptInfo(sigScript, pkScript, test.bip16)
+		var scriptFlags ScriptFlags
+		scriptFlags |= ScriptVerifySigPushOnly |
+			ScriptVerifyCleanStack |
+			ScriptVerifyCheckDataSig
+
+		if test.bip16 {
+			scriptFlags |= ScriptBip16
+		}
+
+		si, err := CalcScriptInfo(sigScript, pkScript, scriptFlags)
 		if e := tstCheckScriptError(err, test.scriptInfoErr); e != nil {
 			t.Errorf("scriptinfo test %q: %v", test.name, e)
 			continue

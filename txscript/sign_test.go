@@ -642,7 +642,7 @@ func TestSignTxOutput(t *testing.T) {
 				break
 			}
 
-			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
+			_, err = SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, false},
@@ -657,7 +657,7 @@ func TestSignTxOutput(t *testing.T) {
 
 			// by the above loop, this should be valid, now sign
 			// again and merge.
-			sigScript, err = SignTxOutput(&chaincfg.TestNet3Params,
+			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, false},
@@ -781,7 +781,7 @@ func TestSignTxOutput(t *testing.T) {
 				break
 			}
 
-			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
+			_, err = SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, true},
@@ -796,7 +796,7 @@ func TestSignTxOutput(t *testing.T) {
 
 			// by the above loop, this should be valid, now sign
 			// again and merge.
-			sigScript, err = SignTxOutput(&chaincfg.TestNet3Params,
+			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, true},
@@ -919,7 +919,7 @@ func TestSignTxOutput(t *testing.T) {
 				break
 			}
 
-			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
+			_, err = SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, false},
@@ -934,7 +934,7 @@ func TestSignTxOutput(t *testing.T) {
 
 			// by the above loop, this should be valid, now sign
 			// again and merge.
-			sigScript, err = SignTxOutput(&chaincfg.TestNet3Params,
+			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, false},
@@ -1056,7 +1056,7 @@ func TestSignTxOutput(t *testing.T) {
 				break
 			}
 
-			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
+			_, err = SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, true},
@@ -1071,7 +1071,7 @@ func TestSignTxOutput(t *testing.T) {
 
 			// by the above loop, this should be valid, now sign
 			// again and merge.
-			sigScript, err = SignTxOutput(&chaincfg.TestNet3Params,
+			sigScript, err := SignTxOutput(&chaincfg.TestNet3Params,
 				tx, i, inputAmounts[i], scriptPkScript, hashType,
 				mkGetKey(map[string]addressToKey{
 					address.EncodeAddress(): {key, true},

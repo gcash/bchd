@@ -999,31 +999,33 @@ func TestWalletSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("sendtoaddress", "1Address", 0.5)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewSendToAddressCmd("1Address", 0.5, nil, nil)
+				return btcjson.NewSendToAddressCmd("1Address", 0.5, nil, nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"sendtoaddress","params":["1Address",0.5],"id":1}`,
 			unmarshalled: &btcjson.SendToAddressCmd{
-				Address:   "1Address",
-				Amount:    0.5,
-				Comment:   nil,
-				CommentTo: nil,
+				Address:               "1Address",
+				Amount:                0.5,
+				Comment:               nil,
+				CommentTo:             nil,
+				SubtractFeeFromAmount: nil,
 			},
 		},
 		{
 			name: "sendtoaddress optional1",
 			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("sendtoaddress", "1Address", 0.5, "comment", "commentto")
+				return btcjson.NewCmd("sendtoaddress", "1Address", 0.5, "comment", "commentto", true)
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSendToAddressCmd("1Address", 0.5, btcjson.String("comment"),
-					btcjson.String("commentto"))
+					btcjson.String("commentto"), btcjson.Bool(true))
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"sendtoaddress","params":["1Address",0.5,"comment","commentto"],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"sendtoaddress","params":["1Address",0.5,"comment","commentto",true],"id":1}`,
 			unmarshalled: &btcjson.SendToAddressCmd{
-				Address:   "1Address",
-				Amount:    0.5,
-				Comment:   btcjson.String("comment"),
-				CommentTo: btcjson.String("commentto"),
+				Address:               "1Address",
+				Amount:                0.5,
+				Comment:               btcjson.String("comment"),
+				CommentTo:             btcjson.String("commentto"),
+				SubtractFeeFromAmount: btcjson.Bool(true),
 			},
 		},
 		{
@@ -1086,7 +1088,7 @@ func TestWalletSvrCmds(t *testing.T) {
 		{
 			name: "signrawtransaction optional1",
 			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("signrawtransaction", "001122", `[{"txid":"123","vout":1,"scriptPubKey":"00","redeemScript":"01"}]`)
+				return btcjson.NewCmd("signrawtransaction", "001122", `[{"txid":"123","vout":1,"scriptPubKey":"00","redeemScript":"01","amount":0.0001}]`)
 			},
 			staticCmd: func() interface{} {
 				txInputs := []btcjson.RawTxInput{
@@ -1095,12 +1097,13 @@ func TestWalletSvrCmds(t *testing.T) {
 						Vout:         1,
 						ScriptPubKey: "00",
 						RedeemScript: "01",
+						Amount:       0.0001,
 					},
 				}
 
 				return btcjson.NewSignRawTransactionCmd("001122", &txInputs, nil, nil)
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"signrawtransaction","params":["001122",[{"txid":"123","vout":1,"scriptPubKey":"00","redeemScript":"01"}]],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"signrawtransaction","params":["001122",[{"txid":"123","vout":1,"scriptPubKey":"00","redeemScript":"01","amount":0.0001}]],"id":1}`,
 			unmarshalled: &btcjson.SignRawTransactionCmd{
 				RawTx: "001122",
 				Inputs: &[]btcjson.RawTxInput{
@@ -1109,6 +1112,7 @@ func TestWalletSvrCmds(t *testing.T) {
 						Vout:         1,
 						ScriptPubKey: "00",
 						RedeemScript: "01",
+						Amount:       0.0001,
 					},
 				},
 				PrivKeys: nil,
