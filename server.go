@@ -2722,13 +2722,14 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	s.txMemPool = mempool.New(&txC)
 
 	s.syncManager, err = netsync.New(&netsync.Config{
-		PeerNotifier:       &s,
-		Chain:              s.chain,
-		TxMemPool:          s.txMemPool,
-		ChainParams:        s.chainParams,
-		DisableCheckpoints: cfg.DisableCheckpoints,
-		MaxPeers:           cfg.MaxPeers,
-		FeeEstimator:       s.feeEstimator,
+		PeerNotifier:            &s,
+		Chain:                   s.chain,
+		TxMemPool:               s.txMemPool,
+		ChainParams:             s.chainParams,
+		DisableCheckpoints:      cfg.DisableCheckpoints,
+		MaxPeers:                cfg.MaxPeers,
+		FeeEstimator:            s.feeEstimator,
+		MinSyncPeerNetworkSpeed: cfg.MinSyncPeerNetworkSpeed,
 	})
 	if err != nil {
 		return nil, err
