@@ -166,18 +166,9 @@ type utxoView interface {
 	// addEntry adds a new entry to the view.  Set overwrite to true if this
 	// entry should overwrite any existing entry for the same outpoint.
 	addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite bool) error
+
 	// spendEntry marks an entry as spent.
 	spendEntry(outpoint wire.OutPoint, entry *UtxoEntry) error
-}
-
-// utxoByHashSource is an interface that allows fetching UTXO entries by
-// transaction hash.
-// This interface exists due to the legacy spend journal database structure.
-type utxoByHashSource interface {
-	// getEntryByHash looks for an entry with the given transaction hash.
-	// This method exists due to the legacy spend journal database structure.
-	// Its execution is very inefficient, but it's almost never used.
-	getEntryByHash(hash *chainhash.Hash) (*UtxoEntry, error)
 }
 
 // utxoCache is a cached utxo view in the chainstate of a BlockChain.
@@ -203,22 +194,16 @@ type utxoCache struct {
 	cachedEntries    map[wire.OutPoint]*UtxoEntry
 	totalEntryMemory uint64 // Total memory usage in bytes.
 	lastFlushHash    chainhash.Hash
-
-	// maxOutputsPerBlock is the maximum number of outputs possible in a block.
-	// This is used to limit the number of index permutations when searching for
-	// a Utxo by hash.
-	maxOutputsPerBlock uint32
 }
 
 // newUtxoCache initiates a new utxo cache instance with its memory usage limited
 // to the given maximum.
-func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64, maxOutputsPerBlock uint32) *utxoCache {
+func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 	return &utxoCache{
 		db:                  db,
 		maxTotalMemoryUsage: maxTotalMemoryUsage,
 
-		cachedEntries: make(map[wire.OutPoint]*UtxoEntry),
-		maxOutputsPerBlock: maxOutputsPerBlock,
+		cachedEntries:      make(map[wire.OutPoint]*UtxoEntry),
 	}
 }
 
@@ -313,44 +298,6 @@ func (b *BlockChain) FetchUtxoEntry(outpoint wire.OutPoint) (*UtxoEntry, error) 
 	return entry, err
 }
 
-// getEntryByHash attempts to find any available UTXO for the given hash by
-// searching the entire set of possible outputs for the given hash.
-//
-// This method is part of the utxoByHashSource interface.
-// This method should be called with the state lock held.
-func (s *utxoCache) getEntryByHash(hash *chainhash.Hash) (*UtxoEntry, error) {
-	// First attempt to find a utxo with the provided hash in the cache.
-	prevOut := wire.OutPoint{Hash: *hash}
-	for idx := uint32(0); idx < s.maxOutputsPerBlock; idx++ {
-		prevOut.Index = idx
-		if entry, _ := s.cachedEntries[prevOut]; entry != nil {
-			return entry.Clone(), nil
-		}
-	}
-
-	// Then fall back to the database.
-	var entry *UtxoEntry
-	err := s.db.View(func(dbTx database.Tx) error {
-		var err error
-		entry, err = dbFetchUtxoEntryByHash(dbTx, hash)
-		return err
-	})
-
-	// Since we don't know the entries outpoint, we can't cache it.
-	return entry, err
-}
-
-// FetchEntryByHash attempts to find any available UTXO for the given hash by
-// searching the entire set of possible outputs for the given hash.
-//
-// This method is safe for concurrent access.
-func (s *utxoCache) FetchEntryByHash(hash *chainhash.Hash) (*UtxoEntry, error) {
-	s.mtx.Lock()
-	entry, err := s.getEntryByHash(hash)
-	s.mtx.Unlock()
-	return entry.Clone(), err
-}
-
 // spendEntry marks the output as spent.  Spending an output that is already
 // spent has no effect.  Entries that need not be stored anymore after being
 // spent will be removed from the cache.
@@ -408,7 +355,7 @@ func (s *utxoCache) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite
 		return nil
 	}
 
-	cachedEntry, _ := s.cachedEntries[outpoint]
+	cachedEntry := s.cachedEntries[outpoint]
 
 	// In overwrite mode, simply add the entry without doing these checks.
 	if !overwrite {
@@ -636,7 +583,7 @@ func (s *utxoCache) Flush(mode FlushMode, bestState *BestState) error {
 //
 // This method should be called with the state lock held.
 func (s *utxoCache) rollBackBlock(block *bchutil.Block, stxos []SpentTxOut) error {
-	return disconnectTransactions(s, block, stxos, s)
+	return disconnectTransactions(s, block, stxos)
 }
 
 // rollForwardBlock rolls forward the effects of the block when the state was

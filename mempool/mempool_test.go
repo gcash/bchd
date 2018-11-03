@@ -47,7 +47,7 @@ func (s *fakeChain) FetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, er
 	// do not affect the fake chain's view.
 
 	// Add an entry for the tx itself to the new view.
-	viewpoint := blockchain.NewUtxoViewpoint(MockMaxUtxosPerBlock)
+	viewpoint := blockchain.NewUtxoViewpoint()
 	prevOut := wire.OutPoint{Hash: *tx.Hash()}
 	for txOutIdx := range tx.MsgTx().TxOut {
 		prevOut.Index = uint32(txOutIdx)
@@ -301,7 +301,7 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 	}
 
 	// Create a new fake chain and harness bound to it.
-	chain := &fakeChain{utxos: blockchain.NewUtxoViewpoint(MockMaxUtxosPerBlock)}
+	chain := &fakeChain{utxos: blockchain.NewUtxoViewpoint()}
 	harness := poolHarness{
 		signKey:     signKey,
 		payAddr:     payAddr,

@@ -21,12 +21,8 @@ import (
 // The unspent outputs are needed by other transactions for things such as
 // script validation and double spend prevention.
 type UtxoViewpoint struct {
-	entries            map[wire.OutPoint]*UtxoEntry
-	bestHash           chainhash.Hash
-
-	// getEntryByHashSource is used to fulfill the method getEntryByHash, which
-	// is only used for chains with a legacy database.
-	getEntryByHashSource *utxoCache
+	entries  map[wire.OutPoint]*UtxoEntry
+	bestHash chainhash.Hash
 }
 
 // LookupEntry returns information about a given transaction output according to
@@ -62,7 +58,6 @@ func (view *UtxoViewpoint) spendEntry(outpoint wire.OutPoint, putIfNil *UtxoEntr
 	entry.Spend()
 	return nil
 }
-
 
 // addTxOut adds the specified output to the view if it is not provably
 // unspendable.  When the view already has an entry for the output, it will be
@@ -311,7 +306,7 @@ func connectTransactions(view utxoView, block *bchutil.Block, stxos *[]SpentTxOu
 //
 // This function is safe to use on both TTOR and CTOR blocks. It will not,
 // however, validate any ordering.
-func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTxOut, byHashSource utxoByHashSource) error {
+func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTxOut) error {
 	// Sanity check the correct number of stxos are provided.
 	if len(stxos) != countSpentOutputs(block) {
 		return AssertError("disconnectTransactions called with bad " +
@@ -428,6 +423,6 @@ func (view *UtxoViewpoint) prune() {
 // NewUtxoViewpoint returns a new empty unspent transaction output view.
 func NewUtxoViewpoint() *UtxoViewpoint {
 	return &UtxoViewpoint{
-		entries:            make(map[wire.OutPoint]*UtxoEntry),
+		entries: make(map[wire.OutPoint]*UtxoEntry),
 	}
 }

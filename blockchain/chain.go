@@ -692,11 +692,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size.
-	if err := b.utxoCache.Flush(FlushIfNeeded, state); err != nil {
-		return err
-	}
-
-	return nil
+	return b.utxoCache.Flush(FlushIfNeeded, state)
 }
 
 // disconnectBlock handles disconnecting the passed node/block from the end of
@@ -808,11 +804,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size.
-	if err := b.utxoCache.Flush(FlushIfNeeded, state); err != nil {
-		return err
-	}
-
-	return nil
+	return b.utxoCache.Flush(FlushIfNeeded, state)
 }
 
 // countSpentOutputs returns the number of utxos the passed block spends.
@@ -922,7 +914,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		detachBlocks = append(detachBlocks, block)
 		detachSpentTxOuts = append(detachSpentTxOuts, stxos)
 
-		err = disconnectTransactions(view, block, stxos, b.utxoCache)
+		err = disconnectTransactions(view, block, stxos)
 		if err != nil {
 			return err
 		}
@@ -1027,7 +1019,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 
 		// Update the view to unspend all of the spent txos and remove
 		// the utxos created by the block.
-		err = disconnectTransactions(view, block, detachSpentTxOuts[i], b.utxoCache)
+		err = disconnectTransactions(view, block, detachSpentTxOuts[i])
 		if err != nil {
 			return err
 		}
@@ -1796,7 +1788,7 @@ func New(config *Config) (*BlockChain, error) {
 		maxRetargetTimespan: targetTimespan * adjustmentFactor,
 		blocksPerRetarget:   int32(targetTimespan / targetTimePerBlock),
 		index:               newBlockIndex(config.DB, params),
-		utxoCache:           newUtxoCache(config.DB, config.UtxoCacheMaxSize, config.ExcessiveBlockSize / wire.MinTxOutPayload),
+		utxoCache:           newUtxoCache(config.DB, config.UtxoCacheMaxSize),
 		hashCache:           config.HashCache,
 		bestChain:           newChainView(nil),
 		orphans:             make(map[chainhash.Hash]*orphanBlock),

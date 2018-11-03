@@ -61,7 +61,7 @@ const (
 	defaultSigCacheMaxSize         = 100000
 	defaultTxIndex                 = false
 	defaultAddrIndex               = false
-	defaultUtxoCacheMaxSizeMiB   = 250
+	defaultUtxoCacheMaxSizeMiB     = 250
 	defaultMinSyncPeerNetworkSpeed = 51200
 )
 
@@ -438,7 +438,7 @@ func loadConfig() (*config, []string, error) {
 		BlockPrioritySize:       mempool.DefaultBlockPrioritySize,
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
 		SigCacheMaxSize:         defaultSigCacheMaxSize,
-		UtxoCacheMaxSizeMiB:  defaultUtxoCacheMaxSizeMiB,
+		UtxoCacheMaxSizeMiB:     defaultUtxoCacheMaxSizeMiB,
 		Generate:                defaultGenerate,
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,
