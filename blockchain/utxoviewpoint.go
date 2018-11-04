@@ -132,47 +132,19 @@ func (view *UtxoViewpoint) AddTxOuts(tx *bchutil.Tx, blockHeight int32) {
 // entries that are earlier in the block are added to the view and entries that
 // are already in the view are not modified.
 func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block) error {
-	// Build a map of in-flight transactions because some of the inputs in
-	// this block could be referencing other transactions earlier in this
-	// block which are not yet in the chain.
-	txInFlight := map[chainhash.Hash]int{}
-	transactions := block.Transactions()
-	for i, tx := range transactions {
-		txInFlight[*tx.Hash()] = i
-	}
 	// Loop through all of the transaction inputs (except for the coinbase
-	// which has no inputs) collecting them into sets of what is needed and
-	// what is already known (in-flight).
-	for i, tx := range transactions[1:] {
+	// which has no inputs).
+	for _, tx := range block.Transactions()[1:] {
 		for _, txIn := range tx.MsgTx().TxIn {
 			// Don't do anything for entries that are already in the view.
 			if _, ok := view.entries[txIn.PreviousOutPoint]; ok {
 				continue
 			}
-			// It is acceptable for a transaction input to reference
-			// the output of another transaction in this block only
-			// if the referenced transaction comes before the
-			// current one in this block.  Add the outputs of the
-			// referenced transaction as available utxos when this
-			// is the case.  Otherwise, the utxo details are still
-			// needed.
-			//
-			// NOTE: The >= is correct here because i is one less
-			// than the actual position of the transaction within
-			// the block due to skipping the coinbase.
-			originHash := &txIn.PreviousOutPoint.Hash
-			if inFlightIndex, ok := txInFlight[*originHash]; ok &&
-				i >= inFlightIndex {
-				originTx := transactions[inFlightIndex]
-				view.AddTxOuts(originTx, block.Height())
-				continue
-			}
 			// Add the entry from the source.
 			entry, err := source.getEntry(txIn.PreviousOutPoint)
-			if err != nil {
-				return err
+			if err == nil && entry != nil {
+				view.entries[txIn.PreviousOutPoint] = entry.Clone()
 			}
-			view.entries[txIn.PreviousOutPoint] = entry.Clone()
 		}
 	}
 	return nil

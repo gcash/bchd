@@ -1231,7 +1231,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	// If magneticAnomaly is active we can use Outputs-then-inputs validation
-	// to validate the Utxos.
+	// to validate the utxos.
 	if magneticAnomalyActive {
 		err := connectTransactions(view, block, stxos, false)
 		if err != nil {
