@@ -25,6 +25,12 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const fixedExcessiveBlockSize uint32 = 64000000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 var (
 	// blockDataNet is the expected network in the test block data.
 	// The serialized test data uses the Bitcoin Core network magic.

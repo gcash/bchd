@@ -38,7 +38,7 @@ func TestMerkleBlock(t *testing.T) {
 
 	// Ensure max payload is expected value for latest protocol version.
 	// Num addresses (varInt) + max allowed addresses.
-	wantPayload := uint32(32000000)
+	wantPayload := fixedExcessiveBlockSize
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+
@@ -48,7 +48,7 @@ func TestMerkleBlock(t *testing.T) {
 
 	// Load maxTxPerBlock hashes
 	data := make([]byte, 32)
-	for i := 0; i < maxTxPerBlock; i++ {
+	for i := uint32(0); i < maxTxPerBlock(); i++ {
 		rand.Read(data)
 		hash, err := chainhash.NewHash(data)
 		if err != nil {
@@ -101,7 +101,7 @@ func TestMerkleBlock(t *testing.T) {
 	// Force too many flag bytes to test maxFlagsPerMerkleBlock.
 	// Reset the number of hashes back to a valid value.
 	msg.Hashes = msg.Hashes[len(msg.Hashes)-1:]
-	msg.Flags = make([]byte, maxFlagsPerMerkleBlock+1)
+	msg.Flags = make([]byte, int(maxFlagsPerMerkleBlock())+1)
 	err = msg.BchEncode(&buf, pver, enc)
 	if err == nil {
 		t.Errorf("encode of MsgMerkleBlock succeeded with too many " +
@@ -330,7 +330,7 @@ func TestMerkleBlockOverflowErrors(t *testing.T) {
 	// Create bytes for a merkle block that claims to have more than the max
 	// allowed tx hashes.
 	var buf bytes.Buffer
-	WriteVarInt(&buf, pver, maxTxPerBlock+1)
+	WriteVarInt(&buf, pver, uint64(maxTxPerBlock())+1)
 	numHashesOffset := 84
 	exceedMaxHashes := make([]byte, numHashesOffset)
 	copy(exceedMaxHashes, merkleBlockOneBytes[:numHashesOffset])
@@ -339,7 +339,7 @@ func TestMerkleBlockOverflowErrors(t *testing.T) {
 	// Create bytes for a merkle block that claims to have more than the max
 	// allowed flag bytes.
 	buf.Reset()
-	WriteVarInt(&buf, pver, maxFlagsPerMerkleBlock+1)
+	WriteVarInt(&buf, pver, uint64(maxFlagsPerMerkleBlock())+1)
 	numFlagBytesOffset := 117
 	exceedMaxFlagBytes := make([]byte, numFlagBytesOffset)
 	copy(exceedMaxFlagBytes, merkleBlockOneBytes[:numFlagBytesOffset])

@@ -15,6 +15,12 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const fixedExcessiveBlockSize uint32 = 64000000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 // TestHaveBlock tests the HaveBlock API to ensure proper functionality.
 func TestHaveBlock(t *testing.T) {
 	// Load up blocks such that there is a side chain.

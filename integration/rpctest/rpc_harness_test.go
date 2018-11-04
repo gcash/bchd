@@ -20,6 +20,12 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const fixedExcessiveBlockSize uint32 = 64000000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 func testSendOutputs(r *Harness, t *testing.T) {
 	genSpend := func(amt bchutil.Amount) *chainhash.Hash {
 		// Grab a fresh address from the wallet.

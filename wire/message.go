@@ -22,9 +22,28 @@ const MessageHeaderSize = 24
 // header.  Shorter commands must be zero padded.
 const CommandSize = 12
 
-// MaxMessagePayload is the maximum bytes a message can be regardless of other
-// individual limits imposed by messages themselves.
-var MaxMessagePayload = uint32(1024*1024*32) * 2 // 32MB
+// ebs is the excessive block size, used to determine reasonable maximum message sizes.
+var ebs uint32
+
+// SetLimits initializes various message limits which change depending on the maximum
+// block size we will deal with.
+func SetLimits(excessiveBlockSize uint32) {
+	ebs = excessiveBlockSize
+}
+
+func getEBS() uint32 {
+	if ebs == 0 {
+		panic("message size limits have not been initialized")
+	}
+	return ebs
+}
+
+// MaxMessagePayload returns is the maximum bytes a message can be regardless of other
+// individual limits imposed by messages themselves. It will panic if the value
+// has not been initialized.
+func maxMessagePayload() uint32 {
+	return ((getEBS() / 1000000) * 1024 * 1024) * 2
+}
 
 // Commands used in bitcoin message headers which describe the type of message.
 const (
@@ -276,10 +295,10 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	lenp := len(payload)
 
 	// Enforce maximum overall message payload.
-	if lenp > int(MaxMessagePayload) {
+	if lenp > int(maxMessagePayload()) {
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload is %d bytes",
-			lenp, MaxMessagePayload)
+			lenp, maxMessagePayload())
 		return totalBytes, messageError("WriteMessage", str)
 	}
 
@@ -335,10 +354,10 @@ func ReadMessageWithEncodingN(r io.Reader, pver uint32, bchnet BitcoinNet,
 	}
 
 	// Enforce maximum message payload.
-	if hdr.length > MaxMessagePayload {
+	if hdr.length > maxMessagePayload() {
 		str := fmt.Sprintf("message payload is too large - header "+
 			"indicates %d bytes, but max message payload is %d "+
-			"bytes.", hdr.length, MaxMessagePayload)
+			"bytes.", hdr.length, maxMessagePayload())
 		return totalBytes, nil, nil, messageError("ReadMessage", str)
 
 	}

@@ -20,6 +20,12 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const fixedExcessiveBlockSize uint32 = 64000000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 /* This file contains mock structs and helper functions that are shared by tests
  * in the netsync_test package.
  */

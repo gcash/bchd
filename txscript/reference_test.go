@@ -20,6 +20,12 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+const fixedExcessiveBlockSize uint32 = 64000000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 // scriptTestName returns a descriptive test name for the given reference script
 // test data.
 func scriptTestName(test []interface{}) (string, error) {
