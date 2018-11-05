@@ -788,7 +788,9 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
 	b.stateLock.Lock()
-	b.utxoCache.Commit(view)
+	if err := b.utxoCache.Commit(view); err != nil {
+		log.Errorf("error committing disconnected block %s(%d) to utxo cache: %s", block.Hash(), block.Height(), err.Error())
+	}
 	b.stateLock.Unlock()
 
 	// This node's parent is now the end of the best chain.
@@ -904,7 +906,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 
 		// Load all of the utxos referenced by the block that aren't
 		// already in the view.
-		err = view.addInputUtxos(b.utxoCache, block)
+		err = view.addInputUtxos(b.utxoCache, block, true)
 		if err != nil {
 			return err
 		}
@@ -971,7 +973,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// checkConnectBlock gets skipped, we still need to update the UTXO
 		// view.
 		if b.index.NodeStatus(n).KnownValid() {
-			err = view.addInputUtxos(b.utxoCache, block)
+			err = view.addInputUtxos(b.utxoCache, block, true)
 			if err != nil {
 				return err
 			}
@@ -1022,7 +1024,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 
 		// Load all of the utxos referenced by the block that aren't
 		// already in the view.
-		err := view.addInputUtxos(b.utxoCache, block)
+		err := view.addInputUtxos(b.utxoCache, block, true)
 		if err != nil {
 			return err
 		}
@@ -1048,7 +1050,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 
 		// Load all of the utxos referenced by the block that aren't
 		// already in the view.
-		err := view.addInputUtxos(b.utxoCache, block)
+		err := view.addInputUtxos(b.utxoCache, block, true)
 		if err != nil {
 			return err
 		}
@@ -1153,7 +1155,7 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 		// utxos, spend them, and add the new utxos being created by
 		// this block.
 		if fastAdd {
-			err := view.addInputUtxos(b.utxoCache, block)
+			err := view.addInputUtxos(b.utxoCache, block, true)
 			if err != nil {
 				return false, err
 			}

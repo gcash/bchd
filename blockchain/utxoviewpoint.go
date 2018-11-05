@@ -131,11 +131,28 @@ func (view *UtxoViewpoint) AddTxOuts(tx *bchutil.Tx, blockHeight int32) {
 // by the transactions in the given block to the view.  In particular, referenced
 // entries that are earlier in the block are added to the view and entries that
 // are already in the view are not modified.
-func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block) error {
+func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, ignoreOutOfOrder bool) error {
+	// Build a map of in-flight transactions because some of the inputs in
+	// this block could be referencing other transactions earlier in this
+	// block which are not yet in the chain.
+	txInFlight := map[chainhash.Hash]int{}
+	transactions := block.Transactions()
+	for i, tx := range transactions {
+		txInFlight[*tx.Hash()] = i
+	}
+
 	// Loop through all of the transaction inputs (except for the coinbase
 	// which has no inputs).
-	for _, tx := range block.Transactions()[1:] {
+	for i, tx := range block.Transactions()[1:] {
 		for _, txIn := range tx.MsgTx().TxIn {
+			originHash := &txIn.PreviousOutPoint.Hash
+			if inFlightIndex, ok := txInFlight[*originHash]; ok &&
+				(i >= inFlightIndex || ignoreOutOfOrder) {
+				originTx := transactions[inFlightIndex]
+				view.AddTxOuts(originTx, block.Height())
+				continue
+			}
+
 			// Don't do anything for entries that are already in the view.
 			if _, ok := view.entries[txIn.PreviousOutPoint]; ok {
 				continue

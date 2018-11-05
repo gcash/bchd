@@ -1100,7 +1100,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	//
 	// These utxo entries are needed for verification of things such as
 	// transaction inputs, counting pay-to-script-hashes, and scripts.
-	err := view.addInputUtxos(b.utxoCache, block)
+	err := view.addInputUtxos(b.utxoCache, block, magneticAnomalyActive)
 	if err != nil {
 		return err
 	}
@@ -1199,8 +1199,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
 		}
 		lastTxid = tx.Hash()
-		txFee, err := CheckTransactionInputs(tx, node.height, view,
-			b.chainParams)
+		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
 		if err != nil {
 			return err
 		}

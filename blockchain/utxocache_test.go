@@ -307,7 +307,7 @@ func utxoCacheTestChain(testName string) (*BlockChain, *chaincfg.Params, func())
 }
 
 func TestUtxoCache_SimpleFlush(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_SimpleFlush")
 	defer tearDown()
@@ -361,7 +361,7 @@ func TestUtxoCache_SimpleFlush(t *testing.T) {
 }
 
 func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_ThresholdPeriodicFlush")
 	defer tearDown()
@@ -404,7 +404,7 @@ func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
 }
 
 func TestUtxoCache_Reorg(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_Reorg")
 	defer tearDown()
