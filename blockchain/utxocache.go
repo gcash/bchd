@@ -194,6 +194,9 @@ type utxoCache struct {
 	cachedEntries    map[wire.OutPoint]*UtxoEntry
 	totalEntryMemory uint64 // Total memory usage in bytes.
 	lastFlushHash    chainhash.Hash
+
+	// flushInProgress reports whether the cache is currently being flushed
+	flushInProgress bool
 }
 
 // newUtxoCache initiates a new utxo cache instance with its memory usage limited
@@ -530,6 +533,8 @@ func (s *utxoCache) flush(bestState *BestState) error {
 		}
 		return nil
 	}
+	s.flushInProgress = true
+	defer func() { s.flushInProgress = false }()
 	for len(s.cachedEntries) > 0 {
 		log.Tracef("Flushing %d more entries...", len(s.cachedEntries))
 		err := s.db.Update(func(dbTx database.Tx) error {

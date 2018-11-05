@@ -242,6 +242,12 @@ func (b *BlockChain) IsKnownOrphan(hash *chainhash.Hash) bool {
 	return exists
 }
 
+// UtxoCacheFlushInProgress returns whether or not we are currently flushing the
+// utxo cache to disk.
+func (b *BlockChain) UtxoCacheFlushInProgress() bool {
+	return b.utxoCache.flushInProgress
+}
+
 // GetOrphanRoot returns the head of the chain for the provided hash from the
 // map of orphan blocks.
 //
