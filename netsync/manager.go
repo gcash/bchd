@@ -388,6 +388,10 @@ func (sm *SyncManager) startSync() {
 
 // SyncHeight returns latest known block being synced to.
 func (sm *SyncManager) SyncHeight() uint64 {
+	if sm.syncPeer == nil {
+		return 0
+	}
+
 	return sm.syncPeerState.syncHeight
 }
 
