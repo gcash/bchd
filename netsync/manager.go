@@ -161,6 +161,7 @@ type syncPeerState struct {
 	lastBlockTime     time.Time
 	violations        int
 	ticks             uint64
+	syncHeight        uint64
 }
 
 // validNetworkSpeed checks if the peer is slow and
@@ -378,10 +379,20 @@ func (sm *SyncManager) startSync() {
 			lastBlockTime:     time.Now(),
 			recvBytes:         bestPeer.BytesReceived(),
 			recvBytesLastTick: uint64(0),
+			syncHeight:        uint64(bestPeer.LastBlock()),
 		}
 	} else {
 		log.Warnf("No sync peer candidates available")
 	}
+}
+
+// SyncHeight returns latest known block being synced to.
+func (sm *SyncManager) SyncHeight() uint64 {
+	if sm.syncPeer == nil {
+		return 0
+	}
+
+	return sm.syncPeerState.syncHeight
 }
 
 // isSyncCandidate returns whether or not the peer is a candidate to consider
@@ -771,7 +782,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 
 		// When the block is not an orphan, log information about it and
 		// update the chain state.
-		sm.progressLogger.LogBlockHeight(bmsg.block)
+		sm.progressLogger.LogBlockHeight(bmsg.block, sm.SyncHeight())
 
 		// Update this peer's latest block height, for future
 		// potential sync node candidacy.

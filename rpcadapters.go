@@ -285,3 +285,8 @@ func (b *rpcSyncMgr) SyncPeerID() int32 {
 func (b *rpcSyncMgr) LocateHeaders(locators []*chainhash.Hash, hashStop *chainhash.Hash) []wire.BlockHeader {
 	return b.server.chain.LocateHeaders(locators, hashStop)
 }
+
+// SyncHeight returns the block height of the best peer selected to sync from
+func (b *rpcSyncMgr) SyncHeight() uint64 {
+	return b.syncMgr.SyncHeight()
+}

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/big"
 	"math/rand"
 	"net"
@@ -1179,15 +1180,24 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeChan <-chan str
 	chain := s.cfg.Chain
 	chainSnapshot := chain.BestSnapshot()
 
+	// Estimate the verification (sync) progress of the node.
+	syncHeight := s.cfg.SyncMgr.SyncHeight()
+	var verifyProgress float64
+	if syncHeight > 0 {
+		verifyProgress = math.Min(float64(chainSnapshot.Height)/float64(syncHeight), 1.0)
+	}
+
 	chainInfo := &btcjson.GetBlockChainInfoResult{
-		Chain:         params.Name,
-		Blocks:        chainSnapshot.Height,
-		Headers:       chainSnapshot.Height,
-		BestBlockHash: chainSnapshot.Hash.String(),
-		Difficulty:    getDifficultyRatio(chainSnapshot.Bits, params),
-		MedianTime:    chainSnapshot.MedianTime.Unix(),
-		Pruned:        false,
-		Bip9SoftForks: make(map[string]*btcjson.Bip9SoftForkDescription),
+		Chain:                params.Name,
+		Blocks:               chainSnapshot.Height,
+		Headers:              chainSnapshot.Height,
+		BestBlockHash:        chainSnapshot.Hash.String(),
+		Difficulty:           getDifficultyRatio(chainSnapshot.Bits, params),
+		MedianTime:           chainSnapshot.MedianTime.Unix(),
+		Pruned:               false,
+		Bip9SoftForks:        make(map[string]*btcjson.Bip9SoftForkDescription),
+		VerificationProgress: verifyProgress,
+		SyncHeight:           syncHeight,
 	}
 
 	// Next, populate the response with information describing the current
@@ -4210,6 +4220,9 @@ type rpcserverSyncManager interface {
 	// SyncPeerID returns the ID of the peer that is currently the peer being
 	// used to sync from or 0 if there is none.
 	SyncPeerID() int32
+
+	// SyncHeight returns the block height of the best peer selected to sync from
+	SyncHeight() uint64
 
 	// LocateHeaders returns the headers of the blocks after the first known
 	// block in the provided locators until the provided stop hash or the

@@ -181,6 +181,7 @@ var helpDescsEnUS = map[string]string{
 	"getblockchaininforesult-difficulty":            "The current chain difficulty",
 	"getblockchaininforesult-mediantime":            "The median time from the PoV of the best block in the chain",
 	"getblockchaininforesult-verificationprogress":  "An estimate for how much of the best chain we've verified",
+	"getblockchaininforesult-syncheight":            "The block height obtained from the best peer",
 	"getblockchaininforesult-pruned":                "A bool that indicates if the node is pruned or not",
 	"getblockchaininforesult-pruneheight":           "The lowest block retained in the current pruned chain",
 	"getblockchaininforesult-chainwork":             "The total cumulative work in the best chain",
