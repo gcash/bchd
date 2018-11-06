@@ -124,6 +124,7 @@ type GetBlockChainInfoResult struct {
 	Difficulty           float64                             `json:"difficulty"`
 	MedianTime           int64                               `json:"mediantime"`
 	VerificationProgress float64                             `json:"verificationprogress,omitempty"`
+	SyncHeight           uint64                              `json:"syncheight,omitempty"`
 	Pruned               bool                                `json:"pruned"`
 	PruneHeight          int32                               `json:"pruneheight,omitempty"`
 	ChainWork            string                              `json:"chainwork,omitempty"`
