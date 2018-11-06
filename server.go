@@ -35,6 +35,7 @@ import (
 	"github.com/gcash/bchd/netsync"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/txscript"
+	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/bloom"
@@ -66,7 +67,7 @@ var (
 
 	// userAgentVersion is the user agent version and is used to help
 	// identify ourselves to other bitcoin peers.
-	userAgentVersion = fmt.Sprintf("%d.%d.%d", appMajor, appMinor, appPatch)
+	userAgentVersion = fmt.Sprintf("%d.%d.%d", version.AppMajor, version.AppMinor, version.AppPatch)
 )
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.

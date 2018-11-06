@@ -41,6 +41,7 @@ import (
 	"github.com/gcash/bchd/mining/cpuminer"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/txscript"
+	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -2292,7 +2293,7 @@ func handleGetHeaders(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) 
 func handleGetInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
 	best := s.cfg.Chain.BestSnapshot()
 	ret := &btcjson.InfoChainResult{
-		Version:         int32(1000000*appMajor + 10000*appMinor + 100*appPatch),
+		Version:         int32(1000000*version.AppMajor + 10000*version.AppMinor + 100*version.AppPatch),
 		ProtocolVersion: int32(maxProtocolVersion),
 		Blocks:          best.Height,
 		TimeOffset:      int64(s.cfg.TimeSource.Offset().Seconds()),

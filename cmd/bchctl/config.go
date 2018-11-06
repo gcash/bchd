@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchutil"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -199,7 +200,7 @@ func loadConfig() (*config, []string, error) {
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	usageMessage := fmt.Sprintf("Use %s -h to show options", appName)
 	if preCfg.ShowVersion {
-		fmt.Println(appName, "version", version())
+		fmt.Println(appName, "version", version.String())
 		os.Exit(0)
 	}
 
