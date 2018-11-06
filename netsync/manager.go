@@ -456,8 +456,8 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	// Check network speed of the sync peer and its last block time. If we're currently
 	// flushing the cache skip this round.
-	if ((sm.syncPeerState.validNetworkSpeed(sm.minSyncPeerNetworkSpeed) < maxNetworkViolations) &&
-		(time.Since(sm.syncPeerState.lastBlockTime) <= maxLastBlockTime)) || sm.chain.UtxoCacheFlushInProgress() {
+	if (sm.syncPeerState.validNetworkSpeed(sm.minSyncPeerNetworkSpeed) < maxNetworkViolations) &&
+		(time.Since(sm.syncPeerState.lastBlockTime) <= maxLastBlockTime) {
 		return
 	}
 
@@ -471,7 +471,7 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	}
 
 	best := sm.chain.BestSnapshot()
-	if topBlock == best.Height {
+	if topBlock == best.Height || sm.chain.UtxoCacheFlushInProgress() {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0
