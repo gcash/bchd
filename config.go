@@ -61,7 +61,7 @@ const (
 	defaultSigCacheMaxSize         = 100000
 	defaultTxIndex                 = false
 	defaultAddrIndex               = false
-	defaultUtxoCacheMaxSizeMiB     = 250
+	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 )
 
