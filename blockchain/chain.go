@@ -1076,13 +1076,6 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		if err != nil {
 			return err
 		}
-
-		spent := 0
-		for _, entry := range view.entries {
-			if entry.IsSpent() {
-				spent++
-			}
-		}
 	}
 
 	// Log the point where the chain forked and old and new best chain
