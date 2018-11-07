@@ -335,6 +335,9 @@ func newBlockImporter(db database.DB, r io.ReadSeeker) (*blockImporter, error) {
 		ChainParams:  activeNetParams,
 		TimeSource:   blockchain.NewMedianTime(),
 		IndexManager: indexManager,
+		// No nice way to get the main configuration here.
+		// For now just accept up to the default.
+		ExcessiveBlockSize: 32000000,
 	})
 	if err != nil {
 		return nil, err
