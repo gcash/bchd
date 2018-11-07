@@ -445,7 +445,7 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 		}
 
 		// Log indexing progress.
-		progressLogger.LogBlockHeight(block)
+		progressLogger.LogBlockHeight(block, uint64(bestHeight))
 
 		if interruptRequested(interrupt) {
 			return errInterruptRequested

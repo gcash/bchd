@@ -649,7 +649,6 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	log.Info("Reconstructing UTXO state after unclean shutdown. This may take " +
 		"a long time...")
 
-
 	// Even though this should always be true, make sure the fetched hash is in
 	// the best chain.
 	var statusNode *blockNode

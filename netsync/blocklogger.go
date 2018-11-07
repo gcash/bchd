@@ -5,6 +5,7 @@
 package netsync
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -42,7 +43,7 @@ func newBlockProgressLogger(progressMessage string, logger bchlog.Logger) *block
 // LogBlockHeight logs a new block height as an information message to show
 // progress to the user. In order to prevent spam, it limits logging to one
 // message every 10 seconds with duration and totals included.
-func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, chain *blockchain.BlockChain) {
+func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight uint64, chain *blockchain.BlockChain) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -68,10 +69,15 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, chain *blockc
 	if b.receivedLogTx == 1 {
 		txStr = "transaction"
 	}
+
+	progress := float64(0.0)
+	if bestHeight > 0 {
+		progress = math.Min(float64(block.Height())/float64(bestHeight), 1.0) * 100
+	}
 	cacheSizeStr := fmt.Sprintf("~%d MiB", chain.CachedStateSize()/1024/1024)
-	b.subsystemLogger.Infof("%s %d %s in the last %s (%d %s, height %d, %s, %s cache)",
+	b.subsystemLogger.Infof("%s %d %s in the last %s (%d %s, height %d of %d, progress %.2f%%, %s, %s cache)",
 		b.progressAction, b.receivedLogBlocks, blockStr, tDuration, b.receivedLogTx,
-		txStr, block.Height(), block.MsgBlock().Header.Timestamp, cacheSizeStr)
+		txStr, block.Height(), bestHeight, progress, block.MsgBlock().Header.Timestamp, cacheSizeStr)
 
 	b.receivedLogBlocks = 0
 	b.receivedLogTx = 0
