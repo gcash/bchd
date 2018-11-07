@@ -38,6 +38,7 @@ spec:
           requests:
             memory: "3Gi"
       restartPolicy: Always
+      terminationGracePeriodSeconds: 300
       volumes:
         - name: bchd-data
           gcePersistentDisk:
