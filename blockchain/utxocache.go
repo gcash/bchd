@@ -671,7 +671,7 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	// If data was in the middle of a flush, we have to roll back all blocks from
 	// the last best block all the way back to the last consistent block.
 	if statusCode == ucsFlushOngoing {
-		log.Debugf("btcd was shut down during a UTXO cache flush, "+
+		log.Debugf("bchd was shut down during a UTXO cache flush, "+
 			"rolling back %d blocks...", tip.height-statusNode.height)
 
 		// Roll back blocks in batches.
