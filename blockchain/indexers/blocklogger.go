@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -69,13 +70,25 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 	}
 
 	progress := float64(0.0)
+
 	if bestHeight > 0 {
 		progress = math.Min(float64(block.Height())/float64(bestHeight), 1.0) * 100
 	}
 
-	b.subsystemLogger.Infof("%s %d %s in the last %s (%d %s, height %d of %d, progress %.2f%%, %s)",
+	var heightStr string
+
+	if uint64(block.Height()) >= bestHeight {
+		// sync is up to date so shorten the height output
+		heightStr = fmt.Sprintf("%d (%.2f%%)", block.Height(), progress)
+	} else {
+		// sync is partial and in progress
+		heightStr = fmt.Sprintf("%d/%d (%.2f%%)", block.Height(),
+			bestHeight, progress)
+	}
+
+	b.subsystemLogger.Infof("%s %d %s in the last %s (%d %s, height %s, %s)",
 		b.progressAction, b.receivedLogBlocks, blockStr, tDuration, b.receivedLogTx,
-		txStr, block.Height(), bestHeight, progress, block.MsgBlock().Header.Timestamp)
+		txStr, heightStr, block.MsgBlock().Header.Timestamp)
 
 	b.receivedLogBlocks = 0
 	b.receivedLogTx = 0
