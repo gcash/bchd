@@ -216,7 +216,7 @@ func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 // This method should be called with the state lock held.
 func (s *utxoCache) totalMemoryUsage() uint64 {
 	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(wire.OutPoint{})
+	// unsafe.Sizeof(wire.OutPoint{})
 	outpointSize := uint64(36)
 
 	// Total memory is all the keys plus the total memory of all the entries.
@@ -722,7 +722,6 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	if err != nil {
 		return err
 	}
-
 
 	log.Debugf("Replaying %d blocks to rebuild UTXO state...",
 		tip.height-statusNodeNext.height)

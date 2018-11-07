@@ -374,10 +374,6 @@ func TestCTORActivation(t *testing.T) {
 		t.Logf("Testing block %s (hash %s, height %d)",
 			item.Name, block.Hash(), blockHeight)
 
-		if item.Name == "r0" {
-			fmt.Println("fadf")
-		}
-
 		_, _, err := chain.ProcessBlock(block, blockchain.BFNone)
 		if err == nil {
 			t.Fatalf("block %q (hash %s, height %d) should not "+

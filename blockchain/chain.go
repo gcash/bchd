@@ -143,14 +143,14 @@ type BlockChain struct {
 	index     *blockIndex
 	bestChain *chainView
 
-	// The UTXO state holds a cached view of the UTXO state of the chain.
+	// The utxoCache holds a cached view of the UTXO state of the chain.
 	//
 	// It has its own lock, however it is often also protected by the chain lock
 	// to help prevent logic races when blocks are being processed.
 	utxoCache *utxoCache
 
-	// These fields are related to handling of orphan blocks.  They are
-	// protected by a combination of the chain lock and the orphan lock.
+	// orphanLock protects the fields related to handling of orphan blocks.
+	// They are protected by a combination of the chain lock and the orphan lock.
 	orphanLock   sync.RWMutex
 	orphans      map[chainhash.Hash]*orphanBlock
 	prevOrphans  map[chainhash.Hash][]*orphanBlock
