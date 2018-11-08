@@ -674,7 +674,7 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	// Roll back blocks in batches.
 	rollbackBatch := func(dbTx database.Tx, node *blockNode) (*blockNode, error) {
 		nbBatchBlocks := 0
-		for ; node.height > statusNode.height; node = node.parent {
+		for ; node.height >= statusNode.height; node = node.parent {
 			block, err := dbFetchBlockByNode(dbTx, node)
 			if err != nil {
 				return nil, err
@@ -693,10 +693,14 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 			if nbBatchBlocks >= utxoBatchSizeBlocks {
 				break
 			}
+
+			if node.height == statusNode.height {
+				break
+			}
 		}
 		return node, nil
 	}
-	for node := tip; node.height > statusNode.height; {
+	for node := tip; node.height >= statusNode.height; {
 		log.Tracef("Rolling back %d more blocks...",
 			node.height-statusNode.height)
 		err := s.db.Update(func(dbTx database.Tx) error {
@@ -711,6 +715,10 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 		if interruptRequested(interrupt) {
 			log.Warn("UTXO state reconstruction interrupted")
 			return errInterruptRequested
+		}
+
+		if node.height == statusNode.height {
+			break
 		}
 	}
 
