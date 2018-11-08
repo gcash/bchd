@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"fmt"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
@@ -76,8 +75,8 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 	if bestHeight > 0 {
 		progress = math.Min(float64(block.Height())/float64(bestHeight), 1.0) * 100
 	}
-  
-  var heightStr string
+
+	var heightStr string
 
 	if uint64(block.Height()) >= bestHeight {
 		// sync is up to date so shorten the height output
@@ -87,7 +86,7 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 		heightStr = fmt.Sprintf("%d/%d (%.2f%%)", block.Height(),
 			bestHeight, progress)
 	}
-  
+
 	cacheSizeStr := fmt.Sprintf("~%d MiB", chain.CachedStateSize()/1024/1024)
 	b.subsystemLogger.Infof("%s %d %s in %s (%d %s, height %s, %s, %s cache)",
 		b.progressAction, b.receivedLogBlocks, blockStr, tDuration, b.receivedLogTx,
