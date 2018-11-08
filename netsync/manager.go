@@ -161,7 +161,6 @@ type syncPeerState struct {
 	lastBlockTime     time.Time
 	violations        int
 	ticks             uint64
-	syncHeight        uint64
 }
 
 // validNetworkSpeed checks if the peer is slow and
@@ -379,7 +378,6 @@ func (sm *SyncManager) startSync() {
 			lastBlockTime:     time.Now(),
 			recvBytes:         bestPeer.BytesReceived(),
 			recvBytesLastTick: uint64(0),
-			syncHeight:        uint64(bestPeer.LastBlock()),
 		}
 	} else {
 		log.Warnf("No sync peer candidates available")
@@ -392,7 +390,7 @@ func (sm *SyncManager) SyncHeight() uint64 {
 		return 0
 	}
 
-	return sm.syncPeerState.syncHeight
+	return uint64(sm.topBlock())
 }
 
 // isSyncCandidate returns whether or not the peer is a candidate to consider
@@ -474,15 +472,10 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	// Don't update sync peers if you have all the available
 	// blocks.
-	var topBlock int32
-	if sm.syncPeer.LastBlock() > sm.syncPeer.StartingHeight() {
-		topBlock = sm.syncPeer.LastBlock()
-	} else {
-		topBlock = sm.syncPeer.StartingHeight()
-	}
 
 	best := sm.chain.BestSnapshot()
-	if topBlock == best.Height || sm.chain.UtxoCacheFlushInProgress() {
+
+  if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0
@@ -496,6 +489,16 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	sm.clearRequestedState(state)
 	sm.updateSyncPeer(state)
+}
+
+// topBlock returns the best chains top block height
+func (sm *SyncManager) topBlock() int32 {
+
+	if sm.syncPeer.LastBlock() > sm.syncPeer.StartingHeight() {
+		return sm.syncPeer.LastBlock()
+	}
+
+	return sm.syncPeer.StartingHeight()
 }
 
 // handleDonePeerMsg deals with peers that have signalled they are done.  It
