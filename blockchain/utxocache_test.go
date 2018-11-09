@@ -284,12 +284,6 @@ func assertNbEntriesOnDisk(t *testing.T, chain *BlockChain, expectedNumber int) 
 	t.Log("Assertion done")
 }
 
-func init() {
-	//TODO(stevenroose) remove
-	UseLogger(bchlog.NewBackend(os.Stdout).Logger("TST"))
-	log.SetLevel(bchlog.LevelTrace)
-}
-
 // utxoCacheTestChain creates a test BlockChain to be used for utxo cache tests.
 // It uses the regression test parameters, a coin maturity of 1 block and sets
 // the cache size limit to 10 MiB.
@@ -307,8 +301,6 @@ func utxoCacheTestChain(testName string) (*BlockChain, *chaincfg.Params, func())
 }
 
 func TestUtxoCache_SimpleFlush(t *testing.T) {
-	//t.Parallel()
-
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_SimpleFlush")
 	defer tearDown()
 	cache := chain.utxoCache
@@ -361,8 +353,6 @@ func TestUtxoCache_SimpleFlush(t *testing.T) {
 }
 
 func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
-	//t.Parallel()
-
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_ThresholdPeriodicFlush")
 	defer tearDown()
 	cache := chain.utxoCache
@@ -404,8 +394,6 @@ func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
 }
 
 func TestUtxoCache_Reorg(t *testing.T) {
-	//t.Parallel()
-
 	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_Reorg")
 	defer tearDown()
 	tip := bchutil.NewBlock(params.GenesisBlock)

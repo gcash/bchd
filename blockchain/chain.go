@@ -1815,7 +1815,7 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, err
 	}
 
-	// Make sure the utxo state is catched up if it was left in an inconsistent
+	// Make sure the utxo state is caught up if it was left in an inconsistent
 	// state.
 	bestNode := b.bestChain.Tip()
 	if err := b.utxoCache.InitConsistentState(bestNode, config.Interrupt); err != nil {

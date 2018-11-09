@@ -297,9 +297,8 @@ func (s *utxoCache) FetchEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 // This function is safe for concurrent access.
 func (b *BlockChain) FetchUtxoEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 	b.chainLock.RLock()
-	entry, err := b.utxoCache.FetchEntry(outpoint)
-	b.chainLock.RUnlock()
-	return entry, err
+	defer b.chainLock.RUnlock()
+	return b.utxoCache.FetchEntry(outpoint)
 }
 
 // spendEntry marks the output as spent.  Spending an output that is already
@@ -427,9 +426,8 @@ func (s *utxoCache) FetchTxView(tx *bchutil.Tx) (*UtxoViewpoint, error) {
 // This function is safe for concurrent access however the returned view is NOT.
 func (b *BlockChain) FetchUtxoView(tx *bchutil.Tx) (*UtxoViewpoint, error) {
 	b.chainLock.RLock()
-	view, err := b.utxoCache.FetchTxView(tx)
-	b.chainLock.RUnlock()
-	return view, err
+	defer b.chainLock.RUnlock()
+	return b.utxoCache.FetchTxView(tx)
 }
 
 // Commit commits all the entries in the view to the cache.
