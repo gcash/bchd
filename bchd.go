@@ -18,6 +18,7 @@ import (
 	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/limits"
+	"github.com/gcash/bchd/version"
 )
 
 const (
@@ -61,7 +62,7 @@ func bchdMain(serverChan chan<- *server) error {
 	defer bchdLog.Info("Shutdown complete")
 
 	// Show version at startup.
-	bchdLog.Infof("Version %s", version())
+	bchdLog.Infof("Version %s", version.String())
 
 	// Enable http profiling server if requested.
 	if cfg.Profile != "" {

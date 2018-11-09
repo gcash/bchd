@@ -29,6 +29,7 @@ import (
 	_ "github.com/gcash/bchd/database/ffldb"
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/peer"
+	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchutil"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -463,7 +464,7 @@ func loadConfig() (*config, []string, error) {
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	usageMessage := fmt.Sprintf("Use %s -h to show usage", appName)
 	if preCfg.ShowVersion {
-		fmt.Println(appName, "version", version())
+		fmt.Println(appName, "version", version.String())
 		os.Exit(0)
 	}
 
