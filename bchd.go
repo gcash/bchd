@@ -62,7 +62,7 @@ func bchdMain(serverChan chan<- *server) error {
 	defer bchdLog.Info("Shutdown complete")
 
 	// Show version at startup.
-	bchdLog.Infof("String %s", version.String())
+	bchdLog.Infof("Version %s", version.String())
 
 	// Enable http profiling server if requested.
 	if cfg.Profile != "" {
