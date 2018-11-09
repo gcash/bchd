@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
-	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
 )
 
