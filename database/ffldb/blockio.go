@@ -72,6 +72,8 @@ type filer interface {
 	io.ReaderAt
 	Truncate(size int64) error
 	Sync() error
+	Stat() (os.FileInfo, error)
+	Read(b []byte) (n int, err error)
 }
 
 // lockableFile represents a block file on disk that has been opened for either
@@ -551,6 +553,77 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 	// The raw block excludes the network, length of the block, and
 	// checksum.
 	return serializedData[8 : n-4], nil
+}
+
+// deleteBlock will delete block from the blockstore. If the block was the only block
+// in the file it will delete the file as well.
+func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error) {
+	// Get the referenced block file handle opening the file as needed.  The
+	// function also handles closing files as needed to avoid going over the
+	// max allowed open files.
+	blockFile, err := s.blockFile(loc.blockFileNum)
+	if err != nil {
+		return err
+	}
+
+	// If the size of the block file is less than or equal to the size of the
+	// block then we are deleting the last block in the file and can just
+	// delete the entire file.
+	fi, err := blockFile.file.Stat()
+	if err != nil {
+		return err
+	}
+	if fi.Size() <= int64(loc.blockLen) {
+		blockFile.file.Close()
+		if err := s.deleteFile(loc.blockFileNum); err != nil {
+			return err
+		}
+	}
+
+	// Next we create a copy of the original block file.
+	tmpFilePath := blockFilePath(s.basePath, loc.blockFileNum)
+	tmpFilePath = fmt.Sprintf("%s-copy", tmpFilePath)
+	tmpFile, err := os.OpenFile(tmpFilePath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(tmpFile, blockFile.file)
+	if err != nil {
+		return err
+	}
+
+	// Truncate the tmpFile after the file offset
+	err = tmpFile.Truncate(int64(loc.fileOffset))
+	if err != nil {
+		return err
+	}
+
+	// Write everything after the block to the tmpFile
+	remainingBytes := fi.Size() - int64(loc.fileOffset) - int64(loc.blockLen)
+	pos := int64(loc.fileOffset + loc.blockLen)
+	for pos < fi.Size() {
+		bufSize := int64(1000000)
+		if remainingBytes < bufSize {
+			bufSize = remainingBytes
+		}
+		buf := make([]byte, bufSize)
+		blockFile.file.ReadAt(buf, pos)
+		_, err := tmpFile.Write(buf)
+		if err != nil {
+			return err
+		}
+		pos += bufSize
+	}
+
+	// Delete the origin file
+	tmpFile.Close()
+	blockFile.file.Close()
+	if err := s.deleteFile(loc.blockFileNum); err != nil {
+		return err
+	}
+
+	// Rename the copy
+	return os.Rename(tmpFilePath, blockFilePath(s.basePath, loc.blockFileNum))
 }
 
 // readBlockRegion reads the specified amount of data at the provided offset for

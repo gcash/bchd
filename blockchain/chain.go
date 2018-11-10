@@ -207,6 +207,11 @@ type BlockChain struct {
 	// certain blockchain events.
 	notificationsLock sync.RWMutex
 	notifications     []NotificationCallback
+
+	// The following fields are set if the blockchain is configured to prune
+	// historical blocks.
+	prune bool
+	pruneDepth uint32
 }
 
 // HaveBlock returns whether or not the chain instance has the block represented
@@ -1740,8 +1745,17 @@ type Config struct {
 	// signature cache.
 	HashCache *txscript.HashCache
 
-	// The user-configurable max block size
+	// ExcessiveBlockSize is the user-configurable max block size
 	ExcessiveBlockSize uint32
+
+	// Prune controls whether or not the blockchain should delete
+	// historical blocks and metadata.
+	Prune bool
+
+	// PruneDepth is the minimum amount of blocks to keep to protect
+	// against a reorg. Everything after the depth will be deleted
+	// whenever we connect a new block.
+	PruneDepth uint32
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -1806,6 +1820,8 @@ func New(config *Config) (*BlockChain, error) {
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
+		prune:               config.Prune,
+		pruneDepth:          config.PruneDepth,
 	}
 
 	// Initialize the chain state from the passed database.  When the db

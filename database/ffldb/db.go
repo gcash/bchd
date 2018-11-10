@@ -973,6 +973,9 @@ type transaction struct {
 	pendingBlocks    map[chainhash.Hash]int
 	pendingBlockData []pendingBlock
 
+	// Blocks that need to be deleted on commit.
+	pendingBlockDeletes []*chainhash.Hash
+
 	// Keys that need to be stored or deleted on commit.
 	pendingKeys   *treap.Mutable
 	pendingRemove *treap.Mutable
@@ -1192,6 +1195,41 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 		bytes: blockBytes,
 	})
 	log.Tracef("Added block %s to pending blocks", blockHash)
+
+	return nil
+}
+
+// DeleteBlock deletes the provided block from the database if it
+// exists. Not error will be returned if it does not exist.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxNotWritable if attempted against a read-only transaction
+//   - ErrTxClosed if the transaction has already been closed
+//
+// Other errors are possible depending on the implementation.
+func (tx *transaction) DeleteBlock(block *bchutil.Block) error {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return err
+	}
+
+	// Ensure the transaction is writable.
+	if !tx.writable {
+		str := "delete block requires a writable database transaction"
+		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	// Exit if the block does not exist.
+	blockHash := block.Hash()
+	if !tx.hasBlock(blockHash) {
+		return nil
+	}
+
+	// Add the block to be deleted to the list of pending delete blocks to delete
+	// when the transaction is committed.
+	tx.pendingBlockDeletes = append(tx.pendingBlockDeletes, blockHash)
+	log.Tracef("Added block %s to pending delete blocks", blockHash)
 
 	return nil
 }
@@ -1658,6 +1696,25 @@ func (tx *transaction) writePendingAndCommit() error {
 		// so commonly needed.
 		blockRow := serializeBlockLoc(location)
 		err = tx.blockIdxBucket.Put(blockData.hash[:], blockRow)
+		if err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	// Loop through all pending deletes and delete them.
+	for _, blockHash := range tx.pendingBlockDeletes {
+		blockRow := tx.blockIdxBucket.Get(blockHash[:])
+		if len(blockRow) == 16 {
+			continue
+		}
+		location := deserializeBlockLoc(blockRow)
+		err := tx.db.store.deleteBlock(blockHash, location)
+		if err != nil {
+			rollback()
+			return err
+		}
+		err = tx.blockIdxBucket.Delete(blockHash[:])
 		if err != nil {
 			rollback()
 			return err
