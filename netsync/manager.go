@@ -463,7 +463,8 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	// Update network stats at the end of this tick.
 	defer sm.syncPeerState.updateNetwork(sm.syncPeer)
 
-	// Check network speed of the sync peer and its last block time.
+	// Check network speed of the sync peer and its last block time. If we're currently
+	// flushing the cache skip this round.
 	if (sm.syncPeerState.validNetworkSpeed(sm.minSyncPeerNetworkSpeed) < maxNetworkViolations) &&
 		(time.Since(sm.syncPeerState.lastBlockTime) <= maxLastBlockTime) {
 		return
@@ -473,7 +474,8 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	// blocks.
 
 	best := sm.chain.BestSnapshot()
-	if sm.topBlock() == best.Height {
+
+	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0
@@ -784,7 +786,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 
 		// When the block is not an orphan, log information about it and
 		// update the chain state.
-		sm.progressLogger.LogBlockHeight(bmsg.block, sm.SyncHeight())
+		sm.progressLogger.LogBlockHeight(bmsg.block, sm.SyncHeight(), sm.chain)
 
 		// Update this peer's latest block height, for future
 		// potential sync node candidacy.
@@ -808,8 +810,13 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		}
 	}
 
-	// Nothing more to do if we aren't in headers-first mode.
+	// If we are not in headers first mode, it's a good time to periodically
+	// flush the blockchain cache because we don't expect new blocks immediately.
+	// After that, there is nothing more to do.
 	if !sm.headersFirstMode {
+		if err := sm.chain.FlushCachedState(blockchain.FlushPeriodic); err != nil {
+			log.Errorf("Error while flushing the blockchain cache: %v", err)
+		}
 		return
 	}
 
@@ -1359,6 +1366,10 @@ out:
 		case <-sm.quit:
 			break out
 		}
+	}
+	log.Debug("Block handler shutting down: flushing blockchain caches...")
+	if err := sm.chain.FlushCachedState(blockchain.FlushRequired); err != nil {
+		log.Errorf("Error while flushing blockchain caches: %v", err)
 	}
 
 	sm.wg.Done()

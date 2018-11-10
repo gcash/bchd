@@ -120,6 +120,7 @@ func chainSetup(dbName string, params *chaincfg.Params) (*blockchain.BlockChain,
 		Checkpoints:        nil,
 		TimeSource:         blockchain.NewMedianTime(),
 		SigCache:           txscript.NewSigCache(1000),
+		UtxoCacheMaxSize:   250 * 1024 * 1024,
 		ExcessiveBlockSize: 1000000,
 	})
 	if err != nil {

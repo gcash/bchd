@@ -62,6 +62,7 @@ const (
 	defaultSigCacheMaxSize         = 100000
 	defaultTxIndex                 = false
 	defaultAddrIndex               = false
+	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 )
 
@@ -166,6 +167,7 @@ type config struct {
 	NoCFilters              bool          `long:"nocfilters" description:"Disable committed filtering (CF) support"`
 	DropCfIndex             bool          `long:"dropcfindex" description:"Deletes the index used for committed filtering (CF) support from the database on start up and then exits."`
 	SigCacheMaxSize         uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
+	UtxoCacheMaxSizeMiB     uint          `long:"utxocachemaxsize" description:"The maximum size in MiB of the UTXO cache"`
 	BlocksOnly              bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
 	TxIndex                 bool          `long:"txindex" description:"Maintain a full hash-based transaction index which makes all transactions available via the getrawtransaction RPC"`
 	DropTxIndex             bool          `long:"droptxindex" description:"Deletes the hash-based transaction index from the database on start up and then exits."`
@@ -437,6 +439,7 @@ func loadConfig() (*config, []string, error) {
 		BlockPrioritySize:       mempool.DefaultBlockPrioritySize,
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
 		SigCacheMaxSize:         defaultSigCacheMaxSize,
+		UtxoCacheMaxSizeMiB:     defaultUtxoCacheMaxSizeMiB,
 		Generate:                defaultGenerate,
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,

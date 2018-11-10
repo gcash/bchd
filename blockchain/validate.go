@@ -112,14 +112,6 @@ func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
 	return (limit / 1000000) * MaxBlockSigOpsPerMB
 }
 
-// MaxOutputsPerBlock returns the maximum possible number of outputs
-// in a block based on the excessiveBlockSize Settings. This is only used
-// by the UtxoViewPoint to limit the number of iterations performed
-// when searching for a Utxo via a txid.
-func (b *BlockChain) MaxOutputsPerBlock() uint32 {
-	return b.excessiveBlockSize / wire.MinTxOutPayload
-}
-
 // isNullOutpoint determines whether or not a previous transaction output point
 // is set.
 func isNullOutpoint(outpoint *wire.OutPoint) bool {
@@ -898,31 +890,29 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 // http://r6.ca/blog/20120206T005236Z.html.
 //
 // This function MUST be called with the chain state lock held (for reads).
-func (b *BlockChain) checkBIP0030(node *blockNode, block *bchutil.Block, view *UtxoViewpoint) error {
+func (b *BlockChain) checkBIP0030(block *bchutil.Block, view *UtxoViewpoint) error {
 	// Fetch utxos for all of the transaction ouputs in this block.
 	// Typically, there will not be any utxos for any of the outputs.
-	fetchSet := make(map[wire.OutPoint]struct{})
 	for _, tx := range block.Transactions() {
 		prevOut := wire.OutPoint{Hash: *tx.Hash()}
 		for txOutIdx := range tx.MsgTx().TxOut {
 			prevOut.Index = uint32(txOutIdx)
-			fetchSet[prevOut] = struct{}{}
-		}
-	}
-	err := view.fetchUtxos(b.db, fetchSet)
-	if err != nil {
-		return err
-	}
 
-	// Duplicate transactions are only allowed if the previous transaction
-	// is fully spent.
-	for outpoint := range fetchSet {
-		utxo := view.LookupEntry(outpoint)
-		if utxo != nil && !utxo.IsSpent() {
-			str := fmt.Sprintf("tried to overwrite transaction %v "+
-				"at block height %d that is not fully spent",
-				outpoint.Hash, utxo.BlockHeight())
-			return ruleError(ErrOverwriteTx, str)
+			// First check if the view has the entry, otherwise fetch from state.
+			utxo := view.LookupEntry(prevOut)
+			if utxo == nil {
+				var err error
+				utxo, err = b.utxoCache.FetchEntry(prevOut)
+				if err != nil {
+					return err
+				}
+			}
+			if utxo != nil && !utxo.IsSpent() {
+				str := fmt.Sprintf("tried to overwrite transaction %v "+
+					"at block height %d that is not fully spent",
+					prevOut.Hash, utxo.BlockHeight())
+				return ruleError(ErrOverwriteTx, str)
+			}
 		}
 	}
 
@@ -1069,14 +1059,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		return ruleError(ErrMissingTxOut, str)
 	}
 
-	// Ensure the view is for the node being checked.
-	parentHash := &block.MsgBlock().Header.PrevBlock
-	if !view.BestHash().IsEqual(parentHash) {
-		return AssertError(fmt.Sprintf("inconsistent view when "+
-			"checking block connection: best hash is %v instead "+
-			"of expected %v", view.BestHash(), parentHash))
-	}
-
 	// If Uahf is active then we need to calculate the max block size
 	// and max sigops using the excessiveBlockSize rather than the
 	// LegacyBlockSize
@@ -1107,18 +1089,18 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// BIP0030 check is expensive since it involves a ton of cache misses in
 	// the utxoset.
 	if !isBIP0030Node(node) && (node.height < b.chainParams.BIP0034Height) {
-		err := b.checkBIP0030(node, block, view)
+		err := b.checkBIP0030(block, view)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Load all of the utxos referenced by the inputs for all transactions
-	// in the block don't already exist in the utxo view from the database.
+	// in the block don't already exist in the utxo view from the cache.
 	//
 	// These utxo entries are needed for verification of things such as
 	// transaction inputs, counting pay-to-script-hashes, and scripts.
-	err := view.fetchInputUtxos(b.db, block)
+	err := view.addInputUtxos(b.utxoCache, block, magneticAnomalyActive)
 	if err != nil {
 		return err
 	}
@@ -1209,13 +1191,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// against all the inputs when the signature operations are out of
 	// bounds.
 	var totalFees int64
-
-	// If MagneticAnomaly is active we validate the block Utxos by first adding
-	// all the outputs in the block then spending all of them.
-	if magneticAnomalyActive {
-		view.addBlockOutputs(block)
-	}
-
 	var lastTxid *chainhash.Hash
 	for i, tx := range transactions {
 		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
@@ -1224,8 +1199,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
 		}
 		lastTxid = tx.Hash()
-		txFee, err := CheckTransactionInputs(tx, node.height, view,
-			b.chainParams)
+		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
 		if err != nil {
 			return err
 		}
@@ -1243,20 +1217,24 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		// provably unspendable as available utxos.  Also, the passed
 		// spent txos slice is updated to contain an entry for each
 		// spent txout in the order each transaction spends them.
+		//
+		// If magneticAnomaly is not active we connect each transaction
+		// one at a time so that we can validate the topological order
+		// in the process.
 		if !magneticAnomalyActive {
-			err = view.connectTransaction(tx, node.height, stxos)
+			err = connectTransaction(view, tx, node.height, stxos, false)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	// Again, if MagneticAnomaly is enabled we will spend all the block
-	// inputs in one go.
+	// If magneticAnomaly is active we can use Outputs-then-inputs validation
+	// to validate the utxos.
 	if magneticAnomalyActive {
-		err = view.spendBlockInputs(block, stxos)
+		err := connectTransactions(view, block, stxos, false)
 		if err != nil {
-			return err
+			return nil
 		}
 	}
 
@@ -1341,10 +1319,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		}
 	}
 
-	// Update the best hash for view to include this block since all of its
-	// transactions have been connected.
-	view.SetBestHash(&node.hash)
-
 	return nil
 }
 
@@ -1388,8 +1362,7 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 
 	// Leave the spent txouts entry nil in the state since the information
 	// is not needed and thus extra work can be avoided.
-	view := NewUtxoViewpoint(b.MaxOutputsPerBlock())
-	view.SetBestHash(&tip.hash)
+	view := NewUtxoViewpoint()
 	newNode := newBlockNode(&header, tip)
 	return b.checkConnectBlock(newNode, block, view, nil)
 }

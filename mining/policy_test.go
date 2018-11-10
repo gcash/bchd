@@ -49,7 +49,7 @@ func newUtxoViewpoint(sourceTxns []*wire.MsgTx, sourceTxHeights []int32) *blockc
 		panic("each transaction must have its block height specified")
 	}
 
-	view := blockchain.NewUtxoViewpoint(MockMaxOutputsPerBlock)
+	view := blockchain.NewUtxoViewpoint()
 	for i, tx := range sourceTxns {
 		view.AddTxOuts(bchutil.NewTx(tx), sourceTxHeights[i])
 	}

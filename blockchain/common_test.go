@@ -179,6 +179,7 @@ func chainSetup(dbName string, params *chaincfg.Params) (*BlockChain, func(), er
 		Checkpoints:        nil,
 		TimeSource:         NewMedianTime(),
 		SigCache:           txscript.NewSigCache(1000),
+		UtxoCacheMaxSize:   250 * 1024 * 1024,
 		ExcessiveBlockSize: 1000000,
 	})
 	if err != nil {
@@ -212,7 +213,7 @@ func loadUtxoView(filename string) (*UtxoViewpoint, error) {
 	}
 	defer fi.Close()
 
-	view := NewUtxoViewpoint(3555555)
+	view := NewUtxoViewpoint()
 	for {
 		// Hash of the utxo entry.
 		var hash chainhash.Hash

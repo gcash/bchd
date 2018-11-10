@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
 )
@@ -42,7 +43,7 @@ func newBlockProgressLogger(progressMessage string, logger bchlog.Logger) *block
 // LogBlockHeight logs a new block height as an information message to show
 // progress to the user. In order to prevent spam, it limits logging to one
 // message every 10 seconds with duration and totals included.
-func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight uint64) {
+func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight uint64, chain *blockchain.BlockChain) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -86,9 +87,10 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 			bestHeight, progress)
 	}
 
-	b.subsystemLogger.Infof("%s %d %s in the last %s (%d %s, height %s, %s)",
+	cacheSizeStr := fmt.Sprintf("~%d MiB", chain.CachedStateSize()/1024/1024)
+	b.subsystemLogger.Infof("%s %d %s in %s (%d %s, height %s, %s, %s cache)",
 		b.progressAction, b.receivedLogBlocks, blockStr, tDuration, b.receivedLogTx,
-		txStr, heightStr, block.MsgBlock().Header.Timestamp)
+		txStr, heightStr, block.MsgBlock().Header.Timestamp, cacheSizeStr)
 
 	b.receivedLogBlocks = 0
 	b.receivedLogTx = 0
