@@ -124,8 +124,9 @@ certificate into the default system Certificate Authority list.
 
 **Ubuntu**
 
-1. Copy rpc.cert to /usr/share/ca-certificates: `# cp /home/user/.bchd/rpc.cert /usr/share/ca-certificates/bchd.crt`
-2. Add bchd.crt to /etc/ca-certificates.conf: `# echo bchd.crt >> /etc/ca-certificates.conf`
+1. Grant root privileges: `# sudo u -`
+2. Copy rpc.cert to /usr/share/ca-certificates: `# cp /home/user/.bchd/rpc.cert /usr/share/ca-certificates/bchd.crt`
+2. Add bchd.crt to /etc/ca-certificates.conf: `# echo /usr/share/ca-certificates/bchd.crt >> /etc/ca-certificates.conf`
 3. Update the CA certificate list: `# update-ca-certificates`
 
 **3. Set your mining software url to use https.**
