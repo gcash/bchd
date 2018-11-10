@@ -1841,7 +1841,6 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, err
 	}
 
-	bestNode = b.bestChain.Tip()
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",
 		bestNode.height, bestNode.hash, b.stateSnapshot.TotalTxns,
 		bestNode.workSum)
