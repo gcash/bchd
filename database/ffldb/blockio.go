@@ -74,6 +74,7 @@ type filer interface {
 	Sync() error
 	Stat() (os.FileInfo, error)
 	Read(b []byte) (n int, err error)
+	Seek(offset int64, whence int) (ret int64, err error)
 }
 
 // lockableFile represents a block file on disk that has been opened for either
@@ -598,24 +599,15 @@ func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error
 		return err
 	}
 
-	// Write everything after the block to the tmpFile
-	remainingBytes := fi.Size() - int64(loc.fileOffset) - int64(loc.blockLen)
-	pos := int64(loc.fileOffset + loc.blockLen)
-	for pos < fi.Size() {
-		bufSize := int64(1000000)
-		if remainingBytes < bufSize {
-			bufSize = remainingBytes
-		}
-		buf := make([]byte, bufSize)
-		blockFile.file.ReadAt(buf, pos)
-		_, err := tmpFile.Write(buf)
-		if err != nil {
-			return err
-		}
-		pos += bufSize
+	// Seek the original file to right after the block and then copy the remaining
+	// data to the end of the tmpFile.
+	blockFile.file.Seek(int64(loc.fileOffset)+int64(loc.blockLen), 0)
+	_, err = io.Copy(tmpFile, blockFile.file)
+	if err != nil {
+		return err
 	}
 
-	// Delete the origin file
+	// Delete the original file
 	tmpFile.Close()
 	blockFile.file.Close()
 	if err := s.deleteFile(loc.blockFileNum); err != nil {
