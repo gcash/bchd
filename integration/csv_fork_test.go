@@ -113,10 +113,10 @@ func TestBIP0113Activation(t *testing.T) {
 	if err != nil {
 		t.Fatal("unable to create primary harness: ", err)
 	}
+	defer r.TearDown()
 	if err := r.SetUp(true, 1); err != nil {
 		t.Fatalf("unable to setup test chain: %v", err)
 	}
-	defer r.TearDown()
 
 	// Create a fresh output for usage within the test below.
 	const outputValue = bchutil.SatoshiPerBitcoin
@@ -425,10 +425,10 @@ func TestBIP0068AndBIP0112Activation(t *testing.T) {
 	if err != nil {
 		t.Fatal("unable to create primary harness: ", err)
 	}
+	defer r.TearDown()
 	if err := r.SetUp(true, 1); err != nil {
 		t.Fatalf("unable to setup test chain: %v", err)
 	}
-	defer r.TearDown()
 
 	assertSoftForkStatus(r, t, csvKey, blockchain.ThresholdStarted)
 

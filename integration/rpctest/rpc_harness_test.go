@@ -109,10 +109,10 @@ func testConnectNode(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer harness.TearDown()
 	if err := harness.SetUp(false, 0); err != nil {
 		t.Fatalf("unable to complete rpctest setup: %v", err)
 	}
-	defer harness.TearDown()
 
 	// Establish a p2p connection from our new local harness to the main
 	// harness.
@@ -185,10 +185,10 @@ func testJoinMempools(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer harness.TearDown()
 	if err := harness.SetUp(false, 0); err != nil {
 		t.Fatalf("unable to complete rpctest setup: %v", err)
 	}
-	defer harness.TearDown()
 
 	nodeSlice := []*Harness{r, harness}
 
@@ -288,10 +288,10 @@ func testJoinBlocks(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer harness.TearDown()
 	if err := harness.SetUp(false, 0); err != nil {
 		t.Fatalf("unable to complete rpctest setup: %v", err)
 	}
-	defer harness.TearDown()
 
 	nodeSlice := []*Harness{r, harness}
 	blocksSynced := make(chan struct{})
@@ -476,10 +476,10 @@ func testMemWalletReorg(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer harness.TearDown()
 	if err := harness.SetUp(true, 5); err != nil {
 		t.Fatalf("unable to complete rpctest setup: %v", err)
 	}
-	defer harness.TearDown()
 
 	// The internal wallet of this harness should now have 250 BCH.
 	expectedBalance := bchutil.Amount(250 * bchutil.SatoshiPerBitcoin)
@@ -568,39 +568,46 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	var err error
+	var (
+		err      error
+		exitCode int
+	)
+	// Whatever happens, clean up active harnesses and exit with the last exit code.
+	// Note that Exit at the end of the function would ignore any defers.
+	defer func() {
+		// Clean up any active harnesses that are still currently running.This
+		// includes removing all temporary directories, and shutting down any
+		// created processes.
+		if err := TearDownAll(); err != nil {
+			// Don't set exitCode for a teardown error. Just make it visible.
+			fmt.Println("unable to tear down chain: ", err)
+		}
+		os.Exit(exitCode)
+	}()
+
 	mainHarness, err = New(&chaincfg.SimNetParams, nil, nil)
 	if err != nil {
 		fmt.Println("unable to create main harness: ", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
+	defer func() {
+		if err := mainHarness.TearDown(); err != nil {
+			// Don't set exitCode for a teardown error. Just make it visible.
+			fmt.Println("error tearing down main harness:", err)
+		}
+	}()
 
 	// Initialize the main mining node with a chain of length 125,
 	// providing 25 mature coinbases to allow spending from for testing
 	// purposes.
 	if err = mainHarness.SetUp(true, numMatureOutputs); err != nil {
 		fmt.Println("unable to setup test chain: ", err)
-
-		// Even though the harness was not fully setup, it still needs
-		// to be torn down to ensure all resources such as temp
-		// directories are cleaned up.  The error is intentionally
-		// ignored since this is already an error path and nothing else
-		// could be done about it anyways.
-		_ = mainHarness.TearDown()
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
-	exitCode := m.Run()
-
-	// Clean up any active harnesses that are still currently running.
-	if len(ActiveHarnesses()) > 0 {
-		if err := TearDownAll(); err != nil {
-			fmt.Println("unable to tear down chain: ", err)
-			os.Exit(1)
-		}
-	}
-
-	os.Exit(exitCode)
+	exitCode = m.Run()
 }
 
 func TestHarness(t *testing.T) {
