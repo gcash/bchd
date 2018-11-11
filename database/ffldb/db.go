@@ -962,8 +962,9 @@ func (b *bucket) Delete(key []byte) error {
 // pendingBlock houses a block that will be written to disk when the database
 // transaction is committed.
 type pendingBlock struct {
-	hash  *chainhash.Hash
-	bytes []byte
+	hash   *chainhash.Hash
+	height uint32
+	bytes  []byte
 }
 
 // transaction represents a database transaction.  It can either be read-only or
@@ -984,8 +985,8 @@ type transaction struct {
 	pendingBlocks    map[chainhash.Hash]int
 	pendingBlockData []pendingBlock
 
-	// Blocks that need to be deleted on commit.
-	pendingBlockDeletes []*chainhash.Hash
+	// Block heights that need to be deleted if possible
+	pendingBlockDeletes []uint32
 
 	// Keys that need to be stored or deleted on commit.
 	pendingKeys   *treap.Mutable
@@ -1193,6 +1194,8 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 		return makeDbErr(database.ErrDriverSpecific, str, err)
 	}
 
+	blockHeight := block.Height()
+
 	// Add the block to be stored to the list of pending blocks to store
 	// when the transaction is committed.  Also, add it to pending blocks
 	// map so it is easy to determine the block is pending based on the
@@ -1202,8 +1205,9 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 	}
 	tx.pendingBlocks[*blockHash] = len(tx.pendingBlockData)
 	tx.pendingBlockData = append(tx.pendingBlockData, pendingBlock{
-		hash:  blockHash,
-		bytes: blockBytes,
+		hash:   blockHash,
+		height: uint32(blockHeight),
+		bytes:  blockBytes,
 	})
 	log.Tracef("Added block %s to pending blocks", blockHash)
 
@@ -1219,7 +1223,7 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 //   - ErrTxClosed if the transaction has already been closed
 //
 // Other errors are possible depending on the implementation.
-func (tx *transaction) DeleteBlock(blockHash *chainhash.Hash) error {
+func (tx *transaction) DeleteBlocks(beforeHeight uint32) error {
 	// Ensure transaction state is valid.
 	if err := tx.checkClosed(); err != nil {
 		return err
@@ -1231,15 +1235,10 @@ func (tx *transaction) DeleteBlock(blockHash *chainhash.Hash) error {
 		return makeDbErr(database.ErrTxNotWritable, str, nil)
 	}
 
-	// Exit if the block does not exist.
-	if !tx.hasBlock(blockHash) {
-		return nil
-	}
-
 	// Add the block to be deleted to the list of pending delete blocks to delete
 	// when the transaction is committed.
-	tx.pendingBlockDeletes = append(tx.pendingBlockDeletes, blockHash)
-	log.Tracef("Added block %s to pending delete blocks", blockHash)
+	tx.pendingBlockDeletes = append(tx.pendingBlockDeletes, beforeHeight)
+	log.Tracef("Added block height %d to pending delete blocks", beforeHeight)
 
 	return nil
 }
@@ -1694,7 +1693,7 @@ func (tx *transaction) writePendingAndCommit() error {
 	// Loop through all of the pending blocks to store and write them.
 	for _, blockData := range tx.pendingBlockData {
 		log.Tracef("Storing block %s", blockData.hash)
-		location, err := tx.db.store.writeBlock(blockData.bytes)
+		location, err := tx.db.store.writeBlock(blockData.bytes, blockData.height)
 		if err != nil {
 			rollback()
 			return err
@@ -1710,82 +1709,11 @@ func (tx *transaction) writePendingAndCommit() error {
 			rollback()
 			return err
 		}
-
-		// Load the file index for the file and append the block hash
-		// to it and re-save.
-		fileNum := make([]byte, 4)
-		binary.BigEndian.PutUint32(fileNum, location.blockFileNum)
-
-		fileIndex := tx.fileIdxBucket.Get(fileNum)
-		fileIndex = append(fileIndex, blockData.hash[:]...)
-
-		err = tx.fileIdxBucket.Put(fileNum, fileIndex)
-		if err != nil {
-			rollback()
-			return err
-		}
 	}
 
 	// Loop through all pending deletes and delete them.
-	for _, blockHash := range tx.pendingBlockDeletes {
-		// Get block location
-		blockRow := tx.blockIdxBucket.Get(blockHash[:])
-		if len(blockRow) != 12 {
-			continue
-		}
-		location := deserializeBlockLoc(blockRow)
-
-		// Delete the block
-		err := tx.db.store.deleteBlock(location)
-		if err != nil {
-			rollback()
-			return err
-		}
-
-		// Delete the location from the index
-		err = tx.blockIdxBucket.Delete(blockHash[:])
-		if err != nil {
-			rollback()
-			return err
-		}
-
-		// Load the file index
-		fileNum := make([]byte, 4)
-		binary.BigEndian.PutUint32(fileNum, location.blockFileNum)
-		fileIndex := tx.fileIdxBucket.Get(fileNum)
-		index, err := deserializeFileIndex(fileIndex)
-		if err != nil {
-			rollback()
-			return err
-		}
-
-		// Iterate over each block in the index and update the offset
-		// to reflect the change deletion.
-		for _, block := range index {
-			blockRow := tx.blockIdxBucket.Get(block[:])
-			if len(blockRow) != 12 {
-				continue
-			}
-			blockLoc := deserializeBlockLoc(blockRow)
-			if blockLoc.fileOffset > location.fileOffset {
-				blockLoc.fileOffset -= location.blockLen
-			}
-			serializedLoc := serializeBlockLoc(blockLoc)
-			err = tx.blockIdxBucket.Put(block[:], serializedLoc)
-			if err != nil {
-				rollback()
-				return err
-			}
-		}
-
-		// Update the file index with the deleted file
-		fileIndex, err = removeHashFromFileIndex(fileIndex, blockHash)
-		if err != nil {
-			rollback()
-			return err
-		}
-		err = tx.fileIdxBucket.Put(fileNum, fileIndex)
-		if err != nil {
+	for _, blockHeight := range tx.pendingBlockDeletes {
+		if err := tx.db.store.deleteBlocks(blockHeight); err != nil {
 			rollback()
 			return err
 		}
@@ -2170,7 +2098,10 @@ func openDB(dbPath string, network wire.BitcoinNet, create bool) (database.DB, e
 	// according to the data that is actually on disk.  Also create the
 	// database cache which wraps the underlying leveldb database to provide
 	// write caching.
-	store := newBlockStore(dbPath, network)
+	store, err := newBlockStore(dbPath, network)
+	if err != nil {
+		return nil, err
+	}
 	cache := newDbCache(ldb, store, defaultCacheSize, defaultFlushSecs)
 	pdb := &db{store: store, cache: cache}
 

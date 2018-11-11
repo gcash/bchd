@@ -1657,19 +1657,32 @@ func (b *BlockChain) Prune() error {
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) prune() error {
 	return b.db.Update(func(tx database.Tx) error {
-		pruneHeight := dbFetchPruneHeight(tx)
 		tip := b.bestChain.Tip()
+		if tip.height <= int32(b.pruneDepth) {
+			return nil
+		}
+		pruneHeight := dbFetchPruneHeight(tx)
+
 		node := b.bestChain.NodeByHeight(tip.height - int32(b.pruneDepth) - 1)
+
+		// Delete blocks before the height
+		if err := tx.DeleteBlocks(uint32(node.height)); err != nil {
+			return err
+		}
+
+		// Loop backwards through the chain and delete the spend journals
 		for ; node.height >= int32(pruneHeight); node = node.parent {
 			hdr := node.Header()
 			blockHash := hdr.BlockHash()
-			if err := tx.DeleteBlock(&blockHash); err != nil {
-				return err
-			}
 			if err := dbRemoveSpendJournalEntry(tx, &blockHash); err != nil {
 				return err
 			}
+			if node.height == 0 {
+				break
+			}
 		}
+
+		// Put the prune height to the database
 		return dbPutPruneHeight(tx, uint32(tip.height)-b.pruneDepth)
 	})
 }

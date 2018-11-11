@@ -229,8 +229,8 @@ type Tx interface {
 	// Other errors are possible depending on the implementation.
 	StoreBlock(block *bchutil.Block) error
 
-	// DeleteBlock deletes the provided block from the database if it
-	// exists. Not error will be returned if it does not exist.
+	// DeleteBlocks will delete all block files which contain blocks before
+	// the provided height. It will not delete the current block.
 	//
 	// The interface contract guarantees at least the following errors will
 	// be returned (other implementation-specific errors are possible):
@@ -238,7 +238,7 @@ type Tx interface {
 	//   - ErrTxClosed if the transaction has already been closed
 	//
 	// Other errors are possible depending on the implementation.
-	DeleteBlock(blockHash *chainhash.Hash) error
+	DeleteBlocks(beforeHeight uint32) error
 
 	// HasBlock returns whether or not a block with the given hash exists
 	// in the database.

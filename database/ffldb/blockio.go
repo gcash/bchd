@@ -16,6 +16,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -134,6 +136,8 @@ type blockStore struct {
 	// lruMutex protects concurrent access to the least recently used list
 	// and lookup map.
 	//
+	// fbhMutex protects concurrent access to the fileBlockHeights map.
+	//
 	// openBlocksLRU tracks how the open files are refenced by pushing the
 	// most recently used files to the front of the list thereby trickling
 	// the least recently used files to end of the list.  When a file needs
@@ -164,6 +168,7 @@ type blockStore struct {
 	// write locks should only be held for the minimum time necessary.
 	obfMutex         sync.RWMutex
 	lruMutex         sync.Mutex
+	fbhMutex         sync.RWMutex
 	openBlocksLRU    *list.List // Contains uint32 block file numbers.
 	fileNumToLRUElem map[uint32]*list.Element
 	openBlockFiles   map[uint32]*lockableFile
@@ -178,6 +183,8 @@ type blockStore struct {
 	openFileFunc      func(fileNum uint32) (*lockableFile, error)
 	openWriteFileFunc func(fileNum uint32) (filer, error)
 	deleteFileFunc    func(fileNum uint32) error
+
+	fileBlockHeights map[uint32]uint32
 }
 
 // blockLocation identifies a particular block file and location.
@@ -434,7 +441,7 @@ func (s *blockStore) writeData(data []byte, fieldName string) error {
 // in the event of failure.
 //
 // Format: <network><block length><serialized block><checksum>
-func (s *blockStore) writeBlock(rawBlock []byte) (blockLocation, error) {
+func (s *blockStore) writeBlock(rawBlock []byte, height uint32) (blockLocation, error) {
 	// Compute how many bytes will be written.
 	// 4 bytes each for block network + 4 bytes for block length +
 	// length of raw block + 4 bytes for checksum.
@@ -453,6 +460,21 @@ func (s *blockStore) writeBlock(rawBlock []byte) (blockLocation, error) {
 	wc := s.writeCursor
 	finalOffset := wc.curOffset + fullLen
 	if finalOffset < wc.curOffset || finalOffset > s.maxBlockFileSize {
+		// Before we load the new file write the height of the final block
+		// to the end of the file.
+		wc.curFile.Lock()
+		heightBytes := make([]byte, 4)
+		byteOrder.PutUint32(heightBytes, height-1)
+		if err := s.writeData(heightBytes, "last block height"); err != nil {
+			wc.curFile.Unlock()
+			return blockLocation{}, nil
+		}
+		// Put the block height into the map
+		s.fbhMutex.Lock()
+		s.fileBlockHeights[wc.curFileNum] = height - 1
+		s.fbhMutex.Unlock()
+		wc.curFile.Unlock()
+
 		// This is done under the write cursor lock since the curFileNum
 		// field is accessed elsewhere by readers.
 		//
@@ -588,79 +610,35 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 	return serializedData[8 : n-4], nil
 }
 
-// deleteBlock will delete block from the blockstore. If the block was the only block
-// in the file it will delete the file as well.
-func (s *blockStore) deleteBlock(loc blockLocation) error {
-	// Get the referenced block file handle opening the file as needed.  The
-	// function also handles closing files as needed to avoid going over the
-	// max allowed open files.
-	blockFile, err := s.blockFile(loc.blockFileNum)
-	if err != nil {
-		return err
+// deleteBlocks will delete all blocks in the blockstore where the height of the
+// last block in the file is less than the provided height.
+func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
+	var toDelete []uint32
+	s.fbhMutex.RLock()
+	for blockNum, lastHeight := range s.fileBlockHeights {
+		if lastHeight < deleteBefore && blockNum != s.writeCursor.curFileNum {
+			toDelete = append(toDelete, blockNum)
+		}
+	}
+	s.fbhMutex.RUnlock()
+
+	if len(toDelete) == 0 {
+		return nil
 	}
 
-	// If the size of the block file is less than or equal to the size of the
-	// block then we are deleting the last block in the file and can just
-	// delete the entire file.
-	fi, err := blockFile.file.Stat()
-	if err != nil {
-		return err
-	}
-	if fi.Size() <= int64(loc.blockLen) {
+	s.fbhMutex.Lock()
+	for _, n := range toDelete {
+		blockFile, err := s.blockFile(n)
+		if err != nil {
+			return err
+		}
 		blockFile.file.Close()
-		return s.deleteFile(loc.blockFileNum)
+		if err := s.deleteFile(n); err != nil {
+			return err
+		}
+		delete(s.fileBlockHeights, n)
 	}
-
-	// Next we create a copy of the original block file.
-	tmpFilePath := blockFilePath(s.basePath, loc.blockFileNum)
-	tmpFilePath = fmt.Sprintf("%s-copy", tmpFilePath)
-	tmpFile, err := os.OpenFile(tmpFilePath, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(tmpFile, blockFile.file)
-	if err != nil {
-		return err
-	}
-
-	// Truncate the tmpFile after the file offset
-	err = tmpFile.Truncate(int64(loc.fileOffset))
-	if err != nil {
-		return err
-	}
-
-	// Seek the original file to right after the block and then copy the remaining
-	// data to the end of the tmpFile.
-	_, err = blockFile.file.Seek(int64(loc.fileOffset)+int64(loc.blockLen), 0)
-	if err != nil {
-		return err
-	}
-	_, err = tmpFile.Seek(0, 2)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(tmpFile, blockFile.file)
-	if err != nil {
-		return err
-	}
-
-	// Delete the original file
-	tmpFile.Close()
-	blockFile.file.Close()
-	if err := s.deleteFile(loc.blockFileNum); err != nil {
-		return err
-	}
-
-	// Rename the copy
-	if err := os.Rename(tmpFilePath, blockFilePath(s.basePath, loc.blockFileNum)); err != nil {
-		return err
-	}
-	newFile, err := os.OpenFile(blockFilePath(s.basePath, loc.blockFileNum), os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return err
-	}
-	blockFile.file = newFile
+	s.fbhMutex.Unlock()
 	return nil
 }
 
@@ -813,6 +791,11 @@ func (s *blockStore) handleRollback(oldBlockFileNum, oldBlockOffset uint32) {
 		return
 	}
 
+	// Delete the current file number from the block height map
+	s.fbhMutex.Lock()
+	delete(s.fileBlockHeights, wc.curFileNum)
+	s.fbhMutex.Unlock()
+
 	// Sync the file to disk.
 	err := wc.curFile.file.Sync()
 	wc.curFile.Unlock()
@@ -828,32 +811,90 @@ func (s *blockStore) handleRollback(oldBlockFileNum, oldBlockOffset uint32) {
 // current write cursor which is also stored in the metadata.  Thus, it is used
 // to detect unexpected shutdowns in the middle of writes so the block files
 // can be reconciled.
-func scanBlockFiles(dbPath string) (int, uint32) {
+func scanBlockFiles(dbPath string) (int, uint32, error) {
 	lastFile := -1
 	fileLen := uint32(0)
-	for i := 0; ; i++ {
-		filePath := blockFilePath(dbPath, uint32(i))
-		st, err := os.Stat(filePath)
+	err := filepath.Walk(dbPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			break
+			return err
 		}
-		lastFile = i
-
-		fileLen = uint32(st.Size())
+		if info.IsDir() && info.Name() == "metadata" {
+			return filepath.SkipDir
+		}
+		if !info.IsDir() {
+			fileName := strings.TrimSuffix(info.Name(), ".fdb")
+			fileNum, err := strconv.Atoi(fileName)
+			if err != nil {
+				return err
+			}
+			if fileNum > lastFile {
+				lastFile = fileNum
+				st, err := os.Stat(path)
+				if err != nil {
+					return err
+				}
+				fileLen = uint32(st.Size())
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
 	}
 
 	log.Tracef("Scan found latest block file #%d with length %d", lastFile,
 		fileLen)
-	return lastFile, fileLen
+	return lastFile, fileLen, nil
+}
+
+// loadLastBlockHeights searches the database directory for all flat block files. For
+// each file that is not our current file it seeks to four bytes from the end of the
+// file and reads the height of the last block into the fileBlockHeights map.
+func (s *blockStore) loadLastBlockHeights(dbPath string) error {
+	s.writeCursor.RLock()
+	defer s.writeCursor.RUnlock()
+	s.fbhMutex.Lock()
+	defer s.fbhMutex.Unlock()
+	for i := 0; ; i++ {
+		if uint32(i) == s.writeCursor.curFileNum {
+			continue
+		}
+		filePath := blockFilePath(dbPath, uint32(i))
+		_, err := os.Stat(filePath)
+		if err != nil {
+			break
+		}
+		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
+		if err != nil {
+			return err
+		}
+		if _, err := file.Seek(4, 2); err != nil {
+			return err
+		}
+		heightBytes := make([]byte, 4)
+		_, err = file.Read(heightBytes)
+		if err != nil {
+			return err
+		}
+		height := byteOrder.Uint32(heightBytes)
+		s.fileBlockHeights[uint32(i)] = height
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // newBlockStore returns a new block store with the current block file number
 // and offset set and all fields initialized.
-func newBlockStore(basePath string, network wire.BitcoinNet) *blockStore {
+func newBlockStore(basePath string, network wire.BitcoinNet) (*blockStore, error) {
 	// Look for the end of the latest block to file to determine what the
 	// write cursor position is from the viewpoing of the block files on
 	// disk.
-	fileNum, fileOff := scanBlockFiles(basePath)
+	fileNum, fileOff, err := scanBlockFiles(basePath)
+	if err != nil {
+		return nil, err
+	}
 	if fileNum == -1 {
 		fileNum = 0
 		fileOff = 0
@@ -872,9 +913,14 @@ func newBlockStore(basePath string, network wire.BitcoinNet) *blockStore {
 			curFileNum: uint32(fileNum),
 			curOffset:  fileOff,
 		},
+		fileBlockHeights: make(map[uint32]uint32),
 	}
 	store.openFileFunc = store.openFile
 	store.openWriteFileFunc = store.openWriteFile
 	store.deleteFileFunc = store.deleteFile
-	return store
+
+	if err := store.loadLastBlockHeights(basePath); err != nil {
+		return nil, err
+	}
+	return store, nil
 }
