@@ -90,19 +90,31 @@ const (
 	// SFNodeCF is a flag used to indicate a peer supports committed
 	// filters (CFs).
 	SFNodeCF
+
+	// SFNodeXThinner is a placeholder for the xthinner block compression protocol being
+	// developed by Johnathan Toomim.
+	SFNodeXThinner
+
+	// SFNodeNetworkLimited is used to indicate the node is a pruned node and may only
+	// be capable of limited services. In particular it is only guaranteed to be able
+	// to serve the last 288 blocks though it will respond to requests for earlier blocks
+	// if it has them.
+	SFNodeNetworkLimited
 )
 
 // Map of service flags back to their constant names for pretty printing.
 var sfStrings = map[ServiceFlag]string{
-	SFNodeNetwork:     "SFNodeNetwork",
-	SFNodeGetUTXO:     "SFNodeGetUTXO",
-	SFNodeBloom:       "SFNodeBloom",
-	SFNodeWitness:     "SFNodeWitness",
-	SFNodeXthin:       "SFNodeXthin",
-	SFNodeBitcoinCash: "SFNodeBitcoinCash",
-	SFNodeGraphene:    "SFNodeGraphene",
-	SFNodeWeakBlocks:  "SFNodeWeakBlocks",
-	SFNodeCF:          "SFNodeCF",
+	SFNodeNetwork:        "SFNodeNetwork",
+	SFNodeGetUTXO:        "SFNodeGetUTXO",
+	SFNodeBloom:          "SFNodeBloom",
+	SFNodeWitness:        "SFNodeWitness",
+	SFNodeXthin:          "SFNodeXthin",
+	SFNodeBitcoinCash:    "SFNodeBitcoinCash",
+	SFNodeGraphene:       "SFNodeGraphene",
+	SFNodeWeakBlocks:     "SFNodeWeakBlocks",
+	SFNodeCF:             "SFNodeCF",
+	SFNodeXThinner:       "SFNodeXThinner",
+	SFNodeNetworkLimited: "SFNodeNetworkLimited",
 }
 
 // orderedSFStrings is an ordered list of service flags from highest to
@@ -117,6 +129,8 @@ var orderedSFStrings = []ServiceFlag{
 	SFNodeGraphene,
 	SFNodeWeakBlocks,
 	SFNodeCF,
+	SFNodeXThinner,
+	SFNodeNetworkLimited,
 }
 
 // String returns the ServiceFlag in human-readable form.

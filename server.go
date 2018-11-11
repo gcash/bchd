@@ -2577,6 +2577,10 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if cfg.NoCFilters {
 		services &^= wire.SFNodeCF
 	}
+	if cfg.Prune {
+		services &^= wire.SFNodeNetwork
+		services |= wire.SFNodeNetworkLimited
+	}
 
 	amgr := addrmgr.New(cfg.DataDir, bchdLookup)
 
