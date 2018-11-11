@@ -220,6 +220,18 @@ func serializeBlockLoc(loc blockLocation) []byte {
 	return serializedData[:]
 }
 
+func deserializeFileIndex(serializedIdx []byte) ([]*chainhash.Hash, error) {
+	var hashes []*chainhash.Hash
+	for i := 0; i < len(serializedIdx); i += 32 {
+		hash, err := chainhash.NewHash(serializedIdx[i : i+32])
+		if err != nil {
+			return hashes, nil
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
+}
+
 // blockFilePath return the file path for the provided block file number.
 func blockFilePath(dbPath string, fileNum uint32) string {
 	fileName := fmt.Sprintf(blockFilenameTemplate, fileNum)
@@ -558,7 +570,7 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 
 // deleteBlock will delete block from the blockstore. If the block was the only block
 // in the file it will delete the file as well.
-func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error) {
+func (s *blockStore) deleteBlock(loc blockLocation) error {
 	// Get the referenced block file handle opening the file as needed.  The
 	// function also handles closing files as needed to avoid going over the
 	// max allowed open files.
@@ -576,9 +588,7 @@ func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error
 	}
 	if fi.Size() <= int64(loc.blockLen) {
 		blockFile.file.Close()
-		if err := s.deleteFile(loc.blockFileNum); err != nil {
-			return err
-		}
+		return s.deleteFile(loc.blockFileNum)
 	}
 
 	// Next we create a copy of the original block file.
@@ -601,7 +611,15 @@ func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error
 
 	// Seek the original file to right after the block and then copy the remaining
 	// data to the end of the tmpFile.
-	blockFile.file.Seek(int64(loc.fileOffset)+int64(loc.blockLen), 0)
+	_, err = blockFile.file.Seek(int64(loc.fileOffset)+int64(loc.blockLen), 0)
+	if err != nil {
+		return err
+	}
+	_, err = tmpFile.Seek(0, 2)
+	if err != nil {
+		return err
+	}
+
 	_, err = io.Copy(tmpFile, blockFile.file)
 	if err != nil {
 		return err
@@ -615,7 +633,15 @@ func (s *blockStore) deleteBlock(hash *chainhash.Hash, loc blockLocation) (error
 	}
 
 	// Rename the copy
-	return os.Rename(tmpFilePath, blockFilePath(s.basePath, loc.blockFileNum))
+	if err := os.Rename(tmpFilePath, blockFilePath(s.basePath, loc.blockFileNum)); err != nil {
+		return err
+	}
+	newFile, err := os.OpenFile(blockFilePath(s.basePath, loc.blockFileNum), os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	blockFile.file = newFile
+	return nil
 }
 
 // readBlockRegion reads the specified amount of data at the provided offset for

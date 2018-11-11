@@ -210,7 +210,7 @@ type BlockChain struct {
 
 	// The following fields are set if the blockchain is configured to prune
 	// historical blocks.
-	prune bool
+	prune      bool
 	pruneDepth uint32
 }
 

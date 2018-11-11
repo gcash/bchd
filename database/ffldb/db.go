@@ -74,9 +74,17 @@ var (
 	// It is the value 1 encoded as an unsigned big-endian uint32.
 	blockIdxBucketID = [4]byte{0x00, 0x00, 0x00, 0x01}
 
+	// fileIdxBucketID is the ID of the internal file metadata bucket.
+	// It is the value 2 encoded as an unsigned big-endian uint32.
+	fileIdxBucketID = [4]byte{0x00, 0x00, 0x00, 0x02}
+
 	// blockIdxBucketName is the bucket used internally to track block
 	// metadata.
 	blockIdxBucketName = []byte("ffldb-blockidx")
+
+	// fileIdxBucketName is the bucket used internally to track file
+	// metadata.
+	fileIdxBucketName = []byte("ffldb-fileidx")
 
 	// writeLocKeyName is the key used to store the current write file
 	// location.
@@ -654,6 +662,8 @@ func (b *bucket) CreateBucket(key []byte) (database.Bucket, error) {
 	var childID [4]byte
 	if b.id == metadataBucketID && bytes.Equal(key, blockIdxBucketName) {
 		childID = blockIdxBucketID
+	} else if b.id == metadataBucketID && bytes.Equal(key, fileIdxBucketName) {
+		childID = fileIdxBucketID
 	} else {
 		var err error
 		childID, err = b.tx.nextBucketID()
@@ -967,6 +977,7 @@ type transaction struct {
 	snapshot       *dbCacheSnapshot // Underlying snapshot for txns.
 	metaBucket     *bucket          // The root metadata bucket.
 	blockIdxBucket *bucket          // The block index bucket.
+	fileIdxBucket  *bucket          // The file index bucket.
 
 	// Blocks that need to be stored on commit.  The pendingBlocks map is
 	// kept to allow quick lookups of pending data by block hash.
@@ -1700,24 +1711,72 @@ func (tx *transaction) writePendingAndCommit() error {
 			rollback()
 			return err
 		}
+
+		// Load the file index for the file and append the block hash
+		// to it and re-save.
+		fileNum := make([]byte, 4)
+		binary.BigEndian.PutUint32(fileNum, location.blockFileNum)
+
+		fileIndex := tx.fileIdxBucket.Get(fileNum)
+		fileIndex = append(fileIndex, blockData.hash[:]...)
+
+		err = tx.fileIdxBucket.Put(fileNum, fileIndex)
+		if err != nil {
+			rollback()
+			return err
+		}
 	}
 
 	// Loop through all pending deletes and delete them.
 	for _, blockHash := range tx.pendingBlockDeletes {
+		// Get block location
 		blockRow := tx.blockIdxBucket.Get(blockHash[:])
-		if len(blockRow) == 16 {
+		if len(blockRow) != 12 {
 			continue
 		}
 		location := deserializeBlockLoc(blockRow)
-		err := tx.db.store.deleteBlock(blockHash, location)
+
+		// Delete the block
+		err := tx.db.store.deleteBlock(location)
 		if err != nil {
 			rollback()
 			return err
 		}
+
+		// Delete the location from the index
 		err = tx.blockIdxBucket.Delete(blockHash[:])
 		if err != nil {
 			rollback()
 			return err
+		}
+
+		// Load the file index
+		fileNum := make([]byte, 4)
+		binary.BigEndian.PutUint32(fileNum, location.blockFileNum)
+		fileIndex := tx.fileIdxBucket.Get(fileNum)
+		index, err := deserializeFileIndex(fileIndex)
+		if err != nil {
+			rollback()
+			return err
+		}
+
+		// Iterate over each block in the index and update the offset
+		// to reflect the change deletion.
+		for _, block := range index {
+			blockRow := tx.blockIdxBucket.Get(block[:])
+			if len(blockRow) != 12 {
+				continue
+			}
+			blockLoc := deserializeBlockLoc(blockRow)
+			if blockLoc.fileOffset > location.fileOffset {
+				blockLoc.fileOffset -= location.blockLen
+			}
+			serializedLoc := serializeBlockLoc(blockLoc)
+			err = tx.blockIdxBucket.Put(block[:], serializedLoc)
+			if err != nil {
+				rollback()
+				return err
+			}
 		}
 	}
 
@@ -1878,6 +1937,7 @@ func (db *db) begin(writable bool) (*transaction, error) {
 	}
 	tx.metaBucket = &bucket{tx: tx, id: metadataBucketID}
 	tx.blockIdxBucket = &bucket{tx: tx, id: blockIdxBucketID}
+	tx.fileIdxBucket = &bucket{tx: tx, id: fileIdxBucketID}
 	return tx, nil
 }
 
@@ -2041,7 +2101,7 @@ func initDB(ldb *leveldb.DB) error {
 	batch.Put(bucketizedKey(metadataBucketID, writeLocKeyName),
 		serializeWriteRow(0, 0))
 
-	// Create block index bucket and set the current bucket id.
+	// Create block and file index buckets and set the current bucket id.
 	//
 	// NOTE: Since buckets are virtualized through the use of prefixes,
 	// there is no need to store the bucket index data for the metadata
@@ -2049,7 +2109,9 @@ func initDB(ldb *leveldb.DB) error {
 	// need to account for it to ensure there are no key collisions.
 	batch.Put(bucketIndexKey(metadataBucketID, blockIdxBucketName),
 		blockIdxBucketID[:])
-	batch.Put(curBucketIDKeyName, blockIdxBucketID[:])
+	batch.Put(bucketIndexKey(metadataBucketID, fileIdxBucketName),
+		fileIdxBucketID[:])
+	batch.Put(curBucketIDKeyName, fileIdxBucketID[:])
 
 	// Write everything as a single batch.
 	if err := ldb.Write(batch, nil); err != nil {
