@@ -950,3 +950,41 @@ func (c *Client) GetCFilterHeader(blockHash *chainhash.Hash,
 	filterType wire.FilterType) (*wire.MsgCFHeaders, error) {
 	return c.GetCFilterHeaderAsync(blockHash, filterType).Receive()
 }
+
+// FutureGetMempoolInfoResult is a future promize to deliver the result of a
+// GetMempoolInfoAsync RPC invocation (or an applicable error).
+type FutureGetMempoolInfoResult chan *response
+
+// Receive waits for the response promised by the future and returns a data
+// structure with information about the details of the memory pool
+func (r FutureGetMempoolInfoResult) Receive() (*btcjson.GetMempoolInfoResult, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal result as a getmempoolinfo result object.
+	var mempoolInfoResult btcjson.GetMempoolInfoResult
+	err = json.Unmarshal(res, &mempoolInfoResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mempoolInfoResult, nil
+}
+
+// GetMempoolInfoAsync returns and instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See GetMempoolInfo for the blocking version and more details.
+func (c *Client) GetMempoolInfoAsync() FutureGetMempoolInfoResult {
+	cmd := btcjson.NewGetMempoolInfoCmd()
+	return c.sendCmd(cmd)
+}
+
+// GetMempoolInfo returns the number of transactions in the mempool and byte
+// size it consumes
+func (c *Client) GetMempoolInfo() (*btcjson.GetMempoolInfoResult, error) {
+	return c.GetMempoolInfoAsync().Receive()
+}
