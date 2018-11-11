@@ -8,6 +8,7 @@
 package ffldb
 
 import (
+	"bytes"
 	"container/list"
 	"encoding/binary"
 	"fmt"
@@ -220,6 +221,7 @@ func serializeBlockLoc(loc blockLocation) []byte {
 	return serializedData[:]
 }
 
+// deserializeFileIndex will deserialize the file index into a list of chainhashes
 func deserializeFileIndex(serializedIdx []byte) ([]*chainhash.Hash, error) {
 	var hashes []*chainhash.Hash
 	for i := 0; i < len(serializedIdx); i += 32 {
@@ -230,6 +232,24 @@ func deserializeFileIndex(serializedIdx []byte) ([]*chainhash.Hash, error) {
 		hashes = append(hashes, hash)
 	}
 	return hashes, nil
+}
+
+// removeHashFromFileIndex will remove the given hash from the file index
+func removeHashFromFileIndex(serializedIdx []byte, hash *chainhash.Hash) ([]byte, error) {
+	var ret []byte
+	for i := 0; i < len(serializedIdx); i += 32 {
+		cmpHash, err := chainhash.NewHash(serializedIdx[i : i+32])
+		if err != nil {
+			return ret, nil
+		}
+		if !bytes.Equal(hash[:], cmpHash[:]) {
+			ret = append(ret, cmpHash[:]...)
+		} else {
+			ret = append(ret, serializedIdx[i+32:]...)
+			break
+		}
+	}
+	return ret, nil
 }
 
 // blockFilePath return the file path for the provided block file number.

@@ -1778,6 +1778,18 @@ func (tx *transaction) writePendingAndCommit() error {
 				return err
 			}
 		}
+
+		// Update the file index with the deleted file
+		fileIndex, err = removeHashFromFileIndex(fileIndex, blockHash)
+		if err != nil {
+			rollback()
+			return err
+		}
+		err = tx.fileIdxBucket.Put(fileNum, fileIndex)
+		if err != nil {
+			rollback()
+			return err
+		}
 	}
 
 	// Update the metadata for the current write file and offset.
