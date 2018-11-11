@@ -253,6 +253,11 @@ func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 	return b.utxoCache.flushInProgress
 }
 
+// PruneMode returns whether or not the blockchain is running in prune mode.
+func (b *BlockChain) PruneMode() bool {
+	return b.pruneMode
+}
+
 // GetOrphanRoot returns the head of the chain for the provided hash from the
 // map of orphan blocks.
 //
@@ -722,7 +727,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	flushMode := FlushIfNeeded
 	if b.pruneMode {
 		node := b.index.LookupNode(&b.utxoCache.lastFlushHash)
-		if node.height <= block.Height() - int32(b.pruneDepth) {
+		if node.height <= block.Height()-int32(b.pruneDepth) {
 			flushMode = FlushRequired
 		}
 	}
@@ -1533,7 +1538,7 @@ func (b *BlockChain) IntervalBlockHashes(endHash *chainhash.Hash, interval int,
 // functions.
 //
 // This function MUST be called with the chain state lock held (for reads).
-func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.Hash, maxEntries uint32) (*blockNode, uint32) {
+func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.Hash, maxEntries uint32, headersOnly bool) (*blockNode, uint32) {
 	// There are no block locators so a specific block is being requested
 	// as identified by the stop hash.
 	stopNode := b.index.LookupNode(hashStop)
@@ -1555,6 +1560,16 @@ func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.H
 		if node != nil && b.bestChain.Contains(node) {
 			startNode = node
 			break
+		}
+	}
+
+	// If we're in prune mode and the blocks that are being requested
+	// are below our prune depth then just return nil as we can't
+	// serve these blocks if requested.
+	if b.pruneMode && !headersOnly {
+		tip := b.bestChain.Tip()
+		if startNode.height < tip.height-int32(b.pruneDepth) {
+			return nil, 0
 		}
 	}
 
@@ -1591,7 +1606,7 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 	// Find the node after the first known block in the locator and the
 	// total number of nodes after it needed while respecting the stop hash
 	// and max entries.
-	node, total := b.locateInventory(locator, hashStop, maxHashes)
+	node, total := b.locateInventory(locator, hashStop, maxHashes, false)
 	if total == 0 {
 		return nil
 	}
@@ -1636,7 +1651,7 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	// Find the node after the first known block in the locator and the
 	// total number of nodes after it needed while respecting the stop hash
 	// and max entries.
-	node, total := b.locateInventory(locator, hashStop, maxHeaders)
+	node, total := b.locateInventory(locator, hashStop, maxHeaders, true)
 	if total == 0 {
 		return nil
 	}
