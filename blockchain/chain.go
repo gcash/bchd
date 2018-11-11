@@ -210,7 +210,7 @@ type BlockChain struct {
 
 	// The following fields are set if the blockchain is configured to prune
 	// historical blocks.
-	prune      bool
+	pruneMode  bool
 	pruneDepth uint32
 }
 
@@ -705,10 +705,18 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	b.sendNotification(NTBlockConnected, block)
 	b.chainLock.Lock()
 
-	// Since we just changed the UTXO cache, we make sure it didn't exceed its
-	// maximum size.
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
+
+	// Prune the blockchain if we're in prune mode.
+	if b.pruneMode {
+		if err := b.prune(); err != nil {
+			return err
+		}
+	}
+
+	// Since we just changed the UTXO cache, we make sure it didn't exceed its
+	// maximum size.
 	return b.utxoCache.Flush(FlushIfNeeded, state)
 }
 
@@ -1633,6 +1641,39 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	return headers
 }
 
+// Prune deletes the block data and spend journals for all blocks deeper than
+// the set prune depth.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) Prune() error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+	return b.prune()
+}
+
+// Prune deletes the block data and spend journals for all blocks deeper than
+// the set prune depth.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) prune() error {
+	return b.db.Update(func(tx database.Tx) error {
+		pruneHeight := dbFetchPruneHeight(tx)
+		tip := b.bestChain.Tip()
+		node := b.bestChain.NodeByHeight(tip.height - int32(b.pruneDepth) - 1)
+		for ; node.height >= int32(pruneHeight); node = node.parent {
+			hdr := node.Header()
+			blockHash := hdr.BlockHash()
+			if err := tx.DeleteBlock(&blockHash); err != nil {
+				return err
+			}
+			if err := dbRemoveSpendJournalEntry(tx, &blockHash); err != nil {
+				return err
+			}
+		}
+		return dbPutPruneHeight(tx, uint32(tip.height)-b.pruneDepth)
+	})
+}
+
 // LocateHeaders returns the headers of the blocks after the first known block
 // in the locator until the provided stop hash is reached, or up to a max of
 // wire.MaxBlockHeadersPerMsg headers.
@@ -1820,7 +1861,7 @@ func New(config *Config) (*BlockChain, error) {
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
-		prune:               config.Prune,
+		pruneMode:           config.Prune,
 		pruneDepth:          config.PruneDepth,
 	}
 
@@ -1855,6 +1896,13 @@ func New(config *Config) (*BlockChain, error) {
 	// Initialize rule change threshold state caches.
 	if err := b.initThresholdCaches(); err != nil {
 		return nil, err
+	}
+
+	// Run an initial prune if prune mode is set
+	if b.pruneMode {
+		if err := b.Prune(); err != nil {
+			return nil, err
+		}
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

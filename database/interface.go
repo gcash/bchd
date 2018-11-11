@@ -238,7 +238,7 @@ type Tx interface {
 	//   - ErrTxClosed if the transaction has already been closed
 	//
 	// Other errors are possible depending on the implementation.
-	DeleteBlock(block *bchutil.Block) error
+	DeleteBlock(blockHash *chainhash.Hash) error
 
 	// HasBlock returns whether or not a block with the given hash exists
 	// in the database.

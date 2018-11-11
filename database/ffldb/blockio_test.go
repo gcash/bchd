@@ -48,7 +48,7 @@ func TestDeleteBlocks(t *testing.T) {
 			return err
 		}
 		for _, block := range blocks {
-			err := tx.DeleteBlock(block)
+			err := tx.DeleteBlock(block.Hash())
 			if err != nil {
 				return err
 			}

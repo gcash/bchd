@@ -1219,7 +1219,7 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 //   - ErrTxClosed if the transaction has already been closed
 //
 // Other errors are possible depending on the implementation.
-func (tx *transaction) DeleteBlock(block *bchutil.Block) error {
+func (tx *transaction) DeleteBlock(blockHash *chainhash.Hash) error {
 	// Ensure transaction state is valid.
 	if err := tx.checkClosed(); err != nil {
 		return err
@@ -1232,7 +1232,6 @@ func (tx *transaction) DeleteBlock(block *bchutil.Block) error {
 	}
 
 	// Exit if the block does not exist.
-	blockHash := block.Hash()
 	if !tx.hasBlock(blockHash) {
 		return nil
 	}
