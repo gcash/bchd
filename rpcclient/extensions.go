@@ -471,3 +471,40 @@ func (c *Client) VersionAsync() FutureVersionResult {
 func (c *Client) Version() (map[string]btcjson.VersionResult, error) {
 	return c.VersionAsync().Receive()
 }
+
+// FutureGetUptimeResult is a future promise to deliver the result of a
+// GetUptimeAsync RPC invocation (or an applicable error).
+type FutureGetUptimeResult chan *response
+
+// Receive waits for the response promised by the future and returns the number
+// of seconds the server has been running
+func (r FutureGetUptimeResult) Receive() (int64, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return -1, err
+	}
+
+	// Unmarshal result as number of seconds
+	var seconds int64
+	err = json.Unmarshal(res, &seconds)
+	if err != nil {
+		return -1, err
+	}
+
+	return seconds, nil
+}
+
+// GetUptimeAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See GetUptime for the blocking version and more details.
+func (c *Client) GetUptimeAsync() FutureGetUptimeResult {
+	cmd := btcjson.NewUptimeCmd()
+	return c.sendCmd(cmd)
+}
+
+// GetUptime returns the number of seconds the server has been running
+func (c *Client) GetUptime() (int64, error) {
+	return c.GetUptimeAsync().Receive()
+}
