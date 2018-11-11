@@ -74,17 +74,9 @@ var (
 	// It is the value 1 encoded as an unsigned big-endian uint32.
 	blockIdxBucketID = [4]byte{0x00, 0x00, 0x00, 0x01}
 
-	// fileIdxBucketID is the ID of the internal file metadata bucket.
-	// It is the value 2 encoded as an unsigned big-endian uint32.
-	fileIdxBucketID = [4]byte{0x00, 0x00, 0x00, 0x02}
-
 	// blockIdxBucketName is the bucket used internally to track block
 	// metadata.
 	blockIdxBucketName = []byte("ffldb-blockidx")
-
-	// fileIdxBucketName is the bucket used internally to track file
-	// metadata.
-	fileIdxBucketName = []byte("ffldb-fileidx")
 
 	// writeLocKeyName is the key used to store the current write file
 	// location.
@@ -662,8 +654,6 @@ func (b *bucket) CreateBucket(key []byte) (database.Bucket, error) {
 	var childID [4]byte
 	if b.id == metadataBucketID && bytes.Equal(key, blockIdxBucketName) {
 		childID = blockIdxBucketID
-	} else if b.id == metadataBucketID && bytes.Equal(key, fileIdxBucketName) {
-		childID = fileIdxBucketID
 	} else {
 		var err error
 		childID, err = b.tx.nextBucketID()
@@ -978,7 +968,6 @@ type transaction struct {
 	snapshot       *dbCacheSnapshot // Underlying snapshot for txns.
 	metaBucket     *bucket          // The root metadata bucket.
 	blockIdxBucket *bucket          // The block index bucket.
-	fileIdxBucket  *bucket          // The file index bucket.
 
 	// Blocks that need to be stored on commit.  The pendingBlocks map is
 	// kept to allow quick lookups of pending data by block hash.
@@ -1876,7 +1865,6 @@ func (db *db) begin(writable bool) (*transaction, error) {
 	}
 	tx.metaBucket = &bucket{tx: tx, id: metadataBucketID}
 	tx.blockIdxBucket = &bucket{tx: tx, id: blockIdxBucketID}
-	tx.fileIdxBucket = &bucket{tx: tx, id: fileIdxBucketID}
 	return tx, nil
 }
 
@@ -2048,9 +2036,7 @@ func initDB(ldb *leveldb.DB) error {
 	// need to account for it to ensure there are no key collisions.
 	batch.Put(bucketIndexKey(metadataBucketID, blockIdxBucketName),
 		blockIdxBucketID[:])
-	batch.Put(bucketIndexKey(metadataBucketID, fileIdxBucketName),
-		fileIdxBucketID[:])
-	batch.Put(curBucketIDKeyName, fileIdxBucketID[:])
+	batch.Put(curBucketIDKeyName, blockIdxBucketID[:])
 
 	// Write everything as a single batch.
 	if err := ldb.Write(batch, nil); err != nil {

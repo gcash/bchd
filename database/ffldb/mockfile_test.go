@@ -10,7 +10,6 @@ package ffldb
 import (
 	"errors"
 	"io"
-	"os"
 	"sync"
 )
 
@@ -158,19 +157,6 @@ func (f *mockFile) Sync() error {
 	}
 
 	return nil
-}
-
-// The following three methods are not implemented because they are not used in the tests
-func (f *mockFile) Stat() (os.FileInfo, error) {
-	return nil, nil
-}
-
-func (f *mockFile) Read(b []byte) (n int, err error) {
-	return 0, nil
-}
-
-func (f *mockFile) Seek(offset int64, whence int) (ret int64, err error) {
-	return 0, nil
 }
 
 // Ensure the mockFile type implements the filer interface.

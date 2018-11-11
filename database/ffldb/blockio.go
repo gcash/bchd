@@ -8,7 +8,6 @@
 package ffldb
 
 import (
-	"bytes"
 	"container/list"
 	"encoding/binary"
 	"fmt"
@@ -75,9 +74,6 @@ type filer interface {
 	io.ReaderAt
 	Truncate(size int64) error
 	Sync() error
-	Stat() (os.FileInfo, error)
-	Read(b []byte) (n int, err error)
-	Seek(offset int64, whence int) (ret int64, err error)
 }
 
 // lockableFile represents a block file on disk that has been opened for either
@@ -226,37 +222,6 @@ func serializeBlockLoc(loc blockLocation) []byte {
 	byteOrder.PutUint32(serializedData[4:8], loc.fileOffset)
 	byteOrder.PutUint32(serializedData[8:12], loc.blockLen)
 	return serializedData[:]
-}
-
-// deserializeFileIndex will deserialize the file index into a list of chainhashes
-func deserializeFileIndex(serializedIdx []byte) ([]*chainhash.Hash, error) {
-	var hashes []*chainhash.Hash
-	for i := 0; i < len(serializedIdx); i += 32 {
-		hash, err := chainhash.NewHash(serializedIdx[i : i+32])
-		if err != nil {
-			return hashes, nil
-		}
-		hashes = append(hashes, hash)
-	}
-	return hashes, nil
-}
-
-// removeHashFromFileIndex will remove the given hash from the file index
-func removeHashFromFileIndex(serializedIdx []byte, hash *chainhash.Hash) ([]byte, error) {
-	var ret []byte
-	for i := 0; i < len(serializedIdx); i += 32 {
-		cmpHash, err := chainhash.NewHash(serializedIdx[i : i+32])
-		if err != nil {
-			return ret, nil
-		}
-		if !bytes.Equal(hash[:], cmpHash[:]) {
-			ret = append(ret, cmpHash[:]...)
-		} else {
-			ret = append(ret, serializedIdx[i+32:]...)
-			break
-		}
-	}
-	return ret, nil
 }
 
 // blockFilePath return the file path for the provided block file number.
