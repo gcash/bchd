@@ -716,8 +716,17 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	}
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
-	// maximum size.
-	return b.utxoCache.Flush(FlushIfNeeded, state)
+	// maximum size. If we're in prune mode we have to flush whenever our last
+	// flush is at the tail end of the prune depth so that we can continue to
+	// recover from a hard shutdown.
+	flushMode := FlushIfNeeded
+	if b.pruneMode {
+		node := b.index.LookupNode(&b.utxoCache.lastFlushHash)
+		if node.height <= block.Height() - int32(b.pruneDepth) {
+			flushMode = FlushRequired
+		}
+	}
+	return b.utxoCache.Flush(flushMode, state)
 }
 
 // disconnectBlock handles disconnecting the passed node/block from the end of
