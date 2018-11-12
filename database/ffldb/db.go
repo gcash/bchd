@@ -1701,11 +1701,15 @@ func (tx *transaction) writePendingAndCommit() error {
 	}
 
 	// Loop through all pending deletes and delete them.
+	maxPruneHeight := uint32(0)
 	for _, blockHeight := range tx.pendingBlockDeletes {
-		if err := tx.db.store.deleteBlocks(blockHeight); err != nil {
-			rollback()
-			return err
+		if blockHeight > maxPruneHeight {
+			maxPruneHeight = blockHeight
 		}
+	}
+	if err := tx.db.store.deleteBlocks(maxPruneHeight); err != nil {
+		rollback()
+		return err
 	}
 
 	// Update the metadata for the current write file and offset.
