@@ -578,8 +578,8 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 // deleteBlocks will delete all blocks in the blockstore where the height of the
 // last block in the file is less than the provided height.
 func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
-	var toDelete []uint32
 	s.fbhMutex.RLock()
+	toDelete := make([]uint32, 0, len(s.fileBlockHeights))
 	for blockNum, lastHeight := range s.fileBlockHeights {
 		if lastHeight < deleteBefore && blockNum != s.writeCursor.curFileNum {
 			toDelete = append(toDelete, blockNum)
