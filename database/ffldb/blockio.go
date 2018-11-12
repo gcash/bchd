@@ -833,19 +833,17 @@ func (s *blockStore) loadLastBlockHeights(dbPath string) error {
 		if err != nil {
 			return err
 		}
+		defer file.Close()
 		if _, err := file.Seek(4, 2); err != nil {
 			return err
 		}
 		heightBytes := make([]byte, 4)
 		_, err = file.Read(heightBytes)
 		if err != nil {
-			return err
+			continue
 		}
 		height := byteOrder.Uint32(heightBytes)
 		s.fileBlockHeights[uint32(i)] = height
-		if err := file.Close(); err != nil {
-			return err
-		}
 	}
 	return nil
 }
