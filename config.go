@@ -663,8 +663,8 @@ func loadConfig() (*config, []string, error) {
 	}
 
 	if cfg.Prune && cfg.PruneDepth < minPruneDepth {
-		str := "%s: The pruneheight option may not be less than 288 -- parsed [%d]"
-		err := fmt.Errorf(str, funcName, cfg.PruneDepth)
+		str := "%s: The pruneheight option may not be less than %d -- parsed [%d]"
+		err := fmt.Errorf(str, minPruneDepth, funcName, cfg.PruneDepth)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
