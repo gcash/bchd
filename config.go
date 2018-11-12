@@ -65,6 +65,7 @@ const (
 	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
+	minPruneDepth                  = 288
 )
 
 var (
@@ -661,7 +662,7 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	if cfg.Prune && cfg.PruneDepth < 288 {
+	if cfg.Prune && cfg.PruneDepth < minPruneDepth {
 		str := "%s: The pruneheight option may not be less than 288 -- parsed [%d]"
 		err := fmt.Errorf(str, funcName, cfg.PruneDepth)
 		fmt.Fprintln(os.Stderr, err)
