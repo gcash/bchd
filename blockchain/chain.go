@@ -1675,7 +1675,7 @@ func (b *BlockChain) Prune() error {
 	return b.prune()
 }
 
-// Prune deletes the block data and spend journals for all blocks deeper than
+// prune deletes the block data and spend journals for all blocks deeper than
 // the set prune depth.
 //
 // This function MUST be called with the chain state lock held (for writes).
