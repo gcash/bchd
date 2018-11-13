@@ -137,7 +137,10 @@ func (n *nodeConfig) arguments() []string {
 
 // command returns the exec.Cmd which will be used to start the btcd process.
 func (n *nodeConfig) command() *exec.Cmd {
-	return exec.Command(n.exe, n.arguments()...)
+	c := exec.Command(n.exe, n.arguments()...)
+	// allow visibility to node (mis)behavior
+	c.Stdout, c.Stderr = os.Stdout, os.Stderr
+	return c
 }
 
 // rpcConnConfig returns the rpc connection config that can be used to connect

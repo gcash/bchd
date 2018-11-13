@@ -7,6 +7,7 @@ package rpctest
 import (
 	"fmt"
 	"go/build"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -62,6 +63,7 @@ func bchdExecutablePath() (string, error) {
 		outputPath += ".exe"
 	}
 	cmd := exec.Command("go", "build", "-o", outputPath, bchdPkg.ImportPath)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	err = cmd.Run()
 	if err != nil {
 		return "", fmt.Errorf("Failed to build bchd: %v", err)

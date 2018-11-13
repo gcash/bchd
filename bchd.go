@@ -329,6 +329,7 @@ func main() {
 
 	// Work around defer not working after os.Exit()
 	if err := bchdMain(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "error running node: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -272,21 +272,26 @@ func (h *Harness) SetUp(createTestChain bool, numMatureOutputs uint32) error {
 //
 // This function MUST be called with the harness state mutex held (for writes).
 func (h *Harness) tearDown() error {
+	var returnErr error
+
+	// try to do all shutdown steps and return the last error, if any
 	if h.Node != nil {
 		h.Node.Shutdown()
 	}
 
 	if err := h.node.shutdown(); err != nil {
-		return err
+		fmt.Println("error shutting down node:", err)
+		returnErr = err
 	}
 
 	if err := os.RemoveAll(h.testNodeDir); err != nil {
-		return err
+		fmt.Println("error removing test node artifacts:", err)
+		returnErr = err
 	}
 
 	delete(testInstances, h.testNodeDir)
 
-	return nil
+	return returnErr
 }
 
 // TearDown stops the running rpc test instance. All created processes are

@@ -133,10 +133,10 @@ func testBIP0009(t *testing.T, forkKey string, deploymentID uint32) {
 	if err != nil {
 		t.Fatalf("unable to create primary harness: %v", err)
 	}
+	defer r.TearDown()
 	if err := r.SetUp(false, 0); err != nil {
 		t.Fatalf("unable to setup test chain: %v", err)
 	}
-	defer r.TearDown()
 
 	// *** ThresholdDefined ***
 	//
@@ -323,10 +323,10 @@ func TestBIP0009Mining(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create primary harness: %v", err)
 	}
+	defer r.TearDown()
 	if err := r.SetUp(true, 0); err != nil {
 		t.Fatalf("unable to setup test chain: %v", err)
 	}
-	defer r.TearDown()
 
 	// Assert the chain only consists of the gensis block.
 	assertChainHeight(r, t, 0)
