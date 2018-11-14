@@ -71,6 +71,10 @@ var (
 	// unspent transaction output set.
 	utxoSetBucketName = []byte("utxosetv2")
 
+	// pruneHeightKeyName is the name of the db key used to store the
+	// height at which the blockchain is pruned.
+	pruneHeightKeyName = []byte("pruneheight")
+
 	// byteOrder is the preferred byte order used for serializing numeric
 	// fields for storage in the database.
 	byteOrder = binary.LittleEndian
@@ -1085,6 +1089,28 @@ func dbFetchUtxoStateConsistency(dbTx database.Tx) (byte, *chainhash.Hash, error
 	}
 	// Deserialize to the consistency status.
 	return deserializeUtxoStateConsistency(serialized)
+}
+
+// dbPutPruneHeight uses an existing database transaction to
+// update the prune height.
+func dbPutPruneHeight(dbTx database.Tx, height uint32) error {
+	buf := make([]byte, 4)
+	byteOrder.PutUint32(buf, height)
+	// Store the height into the database.
+	return dbTx.Metadata().Put(pruneHeightKeyName, buf)
+}
+
+// dbFetchPruneHeight uses an existing database transaction to retrieve
+// the prune height from the database. If the height comes back nil we
+// return zero.
+func dbFetchPruneHeight(dbTx database.Tx) uint32 {
+	// Fetch the serialized data from the database.
+	serialized := dbTx.Metadata().Get(pruneHeightKeyName)
+	if serialized == nil {
+		return 0
+	}
+	// Deserialize to the height.
+	return byteOrder.Uint32(serialized)
 }
 
 // createChainState initializes both the database and the chain state to the

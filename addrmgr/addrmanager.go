@@ -938,7 +938,7 @@ func (a *AddrManager) Good(addr *wire.NetAddress) {
 	a.addrNew[newBucket][rmkey] = rmka
 }
 
-// SetServices sets the services for the giiven address to the provided value.
+// SetServices sets the services for the given address to the provided value.
 func (a *AddrManager) SetServices(addr *wire.NetAddress, services wire.ServiceFlag) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()

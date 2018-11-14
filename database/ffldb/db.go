@@ -952,8 +952,9 @@ func (b *bucket) Delete(key []byte) error {
 // pendingBlock houses a block that will be written to disk when the database
 // transaction is committed.
 type pendingBlock struct {
-	hash  *chainhash.Hash
-	bytes []byte
+	hash   *chainhash.Hash
+	height uint32
+	bytes  []byte
 }
 
 // transaction represents a database transaction.  It can either be read-only or
@@ -972,6 +973,9 @@ type transaction struct {
 	// kept to allow quick lookups of pending data by block hash.
 	pendingBlocks    map[chainhash.Hash]int
 	pendingBlockData []pendingBlock
+
+	// Block heights that need to be deleted if possible
+	pendingBlockDeletes []uint32
 
 	// Keys that need to be stored or deleted on commit.
 	pendingKeys   *treap.Mutable
@@ -1179,6 +1183,8 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 		return makeDbErr(database.ErrDriverSpecific, str, err)
 	}
 
+	blockHeight := block.Height()
+
 	// Add the block to be stored to the list of pending blocks to store
 	// when the transaction is committed.  Also, add it to pending blocks
 	// map so it is easy to determine the block is pending based on the
@@ -1188,10 +1194,40 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 	}
 	tx.pendingBlocks[*blockHash] = len(tx.pendingBlockData)
 	tx.pendingBlockData = append(tx.pendingBlockData, pendingBlock{
-		hash:  blockHash,
-		bytes: blockBytes,
+		hash:   blockHash,
+		height: uint32(blockHeight),
+		bytes:  blockBytes,
 	})
 	log.Tracef("Added block %s to pending blocks", blockHash)
+
+	return nil
+}
+
+// DeleteBlock deletes the provided block from the database if it
+// exists. Not error will be returned if it does not exist.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxNotWritable if attempted against a read-only transaction
+//   - ErrTxClosed if the transaction has already been closed
+//
+// Other errors are possible depending on the implementation.
+func (tx *transaction) DeleteBlocks(beforeHeight uint32) error {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return err
+	}
+
+	// Ensure the transaction is writable.
+	if !tx.writable {
+		str := "delete block requires a writable database transaction"
+		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	// Add the block to be deleted to the list of pending delete blocks to delete
+	// when the transaction is committed.
+	tx.pendingBlockDeletes = append(tx.pendingBlockDeletes, beforeHeight)
+	log.Tracef("Added block height %d to pending delete blocks", beforeHeight)
 
 	return nil
 }
@@ -1646,7 +1682,7 @@ func (tx *transaction) writePendingAndCommit() error {
 	// Loop through all of the pending blocks to store and write them.
 	for _, blockData := range tx.pendingBlockData {
 		log.Tracef("Storing block %s", blockData.hash)
-		location, err := tx.db.store.writeBlock(blockData.bytes)
+		location, err := tx.db.store.writeBlock(blockData.bytes, blockData.height)
 		if err != nil {
 			rollback()
 			return err
@@ -1662,6 +1698,18 @@ func (tx *transaction) writePendingAndCommit() error {
 			rollback()
 			return err
 		}
+	}
+
+	// Loop through all pending deletes and delete them.
+	maxPruneHeight := uint32(0)
+	for _, blockHeight := range tx.pendingBlockDeletes {
+		if blockHeight > maxPruneHeight {
+			maxPruneHeight = blockHeight
+		}
+	}
+	if err := tx.db.store.deleteBlocks(maxPruneHeight); err != nil {
+		rollback()
+		return err
 	}
 
 	// Update the metadata for the current write file and offset.
@@ -1984,7 +2032,7 @@ func initDB(ldb *leveldb.DB) error {
 	batch.Put(bucketizedKey(metadataBucketID, writeLocKeyName),
 		serializeWriteRow(0, 0))
 
-	// Create block index bucket and set the current bucket id.
+	// Create block and file index buckets and set the current bucket id.
 	//
 	// NOTE: Since buckets are virtualized through the use of prefixes,
 	// there is no need to store the bucket index data for the metadata
@@ -2040,7 +2088,10 @@ func openDB(dbPath string, network wire.BitcoinNet, create bool) (database.DB, e
 	// according to the data that is actually on disk.  Also create the
 	// database cache which wraps the underlying leveldb database to provide
 	// write caching.
-	store := newBlockStore(dbPath, network)
+	store, err := newBlockStore(dbPath, network)
+	if err != nil {
+		return nil, err
+	}
 	cache := newDbCache(ldb, store, defaultCacheSize, defaultFlushSecs)
 	pdb := &db{store: store, cache: cache}
 

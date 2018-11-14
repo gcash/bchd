@@ -742,6 +742,18 @@ func (sp *serverPeer) OnGetBlocks(_ *peer.Peer, msg *wire.MsgGetBlocks) {
 			sp.continueHash = &continueHash
 		}
 		sp.QueueMessage(invMsg, nil)
+	} else if sp.server.chain.PruneMode() {
+		// Typically nodes will just not respond to a GetBlocks message
+		// if they don't have any blocks. However, since we are implementing
+		// NodeNetworkLimited we need a better way to communicate to the remote
+		// peer that we don't have that portion of the chain than just letting
+		// the request timeout. So for this purpose we will respond with a
+		// not found message.
+		notFound := wire.NewMsgNotFound()
+		for _, inv := range invMsg.InvList {
+			notFound.AddInvVect(inv)
+		}
+		sp.QueueMessage(notFound, nil)
 	}
 }
 
@@ -2557,6 +2569,10 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if cfg.NoCFilters {
 		services &^= wire.SFNodeCF
 	}
+	if cfg.Prune {
+		services &^= wire.SFNodeNetwork
+		services |= wire.SFNodeNetworkLimited
+	}
 
 	amgr := addrmgr.New(cfg.DataDir, bchdLookup)
 
@@ -2652,6 +2668,8 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		IndexManager:       indexManager,
 		HashCache:          s.hashCache,
 		ExcessiveBlockSize: cfg.ExcessiveBlockSize,
+		Prune:              cfg.Prune,
+		PruneDepth:         cfg.PruneDepth,
 	})
 	if err != nil {
 		return nil, err

@@ -552,7 +552,7 @@ func (s *utxoCache) flush(bestState *BestState) error {
 	if err != nil {
 		return err
 	}
-
+	s.lastFlushHash = bestState.Hash
 	log.Debug("Done flushing UTXO cache to disk")
 	return nil
 }

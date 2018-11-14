@@ -207,6 +207,11 @@ type BlockChain struct {
 	// certain blockchain events.
 	notificationsLock sync.RWMutex
 	notifications     []NotificationCallback
+
+	// The following fields are set if the blockchain is configured to prune
+	// historical blocks.
+	pruneMode  bool
+	pruneDepth uint32
 }
 
 // HaveBlock returns whether or not the chain instance has the block represented
@@ -246,6 +251,11 @@ func (b *BlockChain) IsKnownOrphan(hash *chainhash.Hash) bool {
 // utxo cache to disk.
 func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 	return b.utxoCache.flushInProgress
+}
+
+// PruneMode returns whether or not the blockchain is running in prune mode.
+func (b *BlockChain) PruneMode() bool {
+	return b.pruneMode
 }
 
 // GetOrphanRoot returns the head of the chain for the provided hash from the
@@ -700,11 +710,28 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	b.sendNotification(NTBlockConnected, block)
 	b.chainLock.Lock()
 
-	// Since we just changed the UTXO cache, we make sure it didn't exceed its
-	// maximum size.
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
-	return b.utxoCache.Flush(FlushIfNeeded, state)
+
+	// Prune the blockchain if we're in prune mode.
+	if b.pruneMode {
+		if err := b.prune(); err != nil {
+			return err
+		}
+	}
+
+	// Since we just changed the UTXO cache, we make sure it didn't exceed its
+	// maximum size. If we're in prune mode we have to flush whenever our last
+	// flush is at the tail end of the prune depth so that we can continue to
+	// recover from a hard shutdown.
+	flushMode := FlushIfNeeded
+	if b.pruneMode {
+		node := b.index.LookupNode(&b.utxoCache.lastFlushHash)
+		if node.height <= block.Height()-int32(b.pruneDepth) {
+			flushMode = FlushRequired
+		}
+	}
+	return b.utxoCache.Flush(flushMode, state)
 }
 
 // disconnectBlock handles disconnecting the passed node/block from the end of
@@ -1511,7 +1538,7 @@ func (b *BlockChain) IntervalBlockHashes(endHash *chainhash.Hash, interval int,
 // functions.
 //
 // This function MUST be called with the chain state lock held (for reads).
-func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.Hash, maxEntries uint32) (*blockNode, uint32) {
+func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.Hash, maxEntries uint32, headersOnly bool) (*blockNode, uint32) {
 	// There are no block locators so a specific block is being requested
 	// as identified by the stop hash.
 	stopNode := b.index.LookupNode(hashStop)
@@ -1533,6 +1560,16 @@ func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.H
 		if node != nil && b.bestChain.Contains(node) {
 			startNode = node
 			break
+		}
+	}
+
+	// If we're in prune mode and the blocks that are being requested
+	// are below our prune depth then just return nil as we can't
+	// serve these blocks if requested.
+	if b.pruneMode && !headersOnly {
+		tip := b.bestChain.Tip()
+		if startNode.height < tip.height-int32(b.pruneDepth) {
+			return nil, 0
 		}
 	}
 
@@ -1569,7 +1606,7 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 	// Find the node after the first known block in the locator and the
 	// total number of nodes after it needed while respecting the stop hash
 	// and max entries.
-	node, total := b.locateInventory(locator, hashStop, maxHashes)
+	node, total := b.locateInventory(locator, hashStop, maxHashes, false)
 	if total == 0 {
 		return nil
 	}
@@ -1614,7 +1651,7 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	// Find the node after the first known block in the locator and the
 	// total number of nodes after it needed while respecting the stop hash
 	// and max entries.
-	node, total := b.locateInventory(locator, hashStop, maxHeaders)
+	node, total := b.locateInventory(locator, hashStop, maxHeaders, true)
 	if total == 0 {
 		return nil
 	}
@@ -1626,6 +1663,52 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 		node = b.bestChain.Next(node)
 	}
 	return headers
+}
+
+// Prune deletes the block data and spend journals for all blocks deeper than
+// the set prune depth.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) Prune() error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+	return b.prune()
+}
+
+// prune deletes the block data and spend journals for all blocks deeper than
+// the set prune depth.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) prune() error {
+	return b.db.Update(func(tx database.Tx) error {
+		tip := b.bestChain.Tip()
+		if tip.height <= int32(b.pruneDepth) {
+			return nil
+		}
+		pruneHeight := dbFetchPruneHeight(tx)
+
+		node := b.bestChain.NodeByHeight(tip.height - int32(b.pruneDepth) - 1)
+
+		// Delete blocks before the height
+		if err := tx.DeleteBlocks(uint32(node.height)); err != nil {
+			return err
+		}
+
+		// Loop backwards through the chain and delete the spend journals
+		for ; node.height >= int32(pruneHeight); node = node.parent {
+			hdr := node.Header()
+			blockHash := hdr.BlockHash()
+			if err := dbRemoveSpendJournalEntry(tx, &blockHash); err != nil {
+				return err
+			}
+			if node.height == 0 {
+				break
+			}
+		}
+
+		// Put the prune height to the database
+		return dbPutPruneHeight(tx, uint32(tip.height)-b.pruneDepth)
+	})
 }
 
 // LocateHeaders returns the headers of the blocks after the first known block
@@ -1740,8 +1823,17 @@ type Config struct {
 	// signature cache.
 	HashCache *txscript.HashCache
 
-	// The user-configurable max block size
+	// ExcessiveBlockSize is the user-configurable max block size
 	ExcessiveBlockSize uint32
+
+	// Prune controls whether or not the blockchain should delete
+	// historical blocks and metadata.
+	Prune bool
+
+	// PruneDepth is the minimum amount of blocks to keep to protect
+	// against a reorg. Everything after the depth will be deleted
+	// whenever we connect a new block.
+	PruneDepth uint32
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -1806,6 +1898,8 @@ func New(config *Config) (*BlockChain, error) {
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
+		pruneMode:           config.Prune,
+		pruneDepth:          config.PruneDepth,
 	}
 
 	// Initialize the chain state from the passed database.  When the db
@@ -1839,6 +1933,13 @@ func New(config *Config) (*BlockChain, error) {
 	// Initialize rule change threshold state caches.
 	if err := b.initThresholdCaches(); err != nil {
 		return nil, err
+	}
+
+	// Run an initial prune if prune mode is set
+	if b.pruneMode {
+		if err := b.Prune(); err != nil {
+			return nil, err
+		}
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",
