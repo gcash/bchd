@@ -321,7 +321,7 @@ func TestCTORActivation(t *testing.T) {
 
 	// Create a new database and chain instance to run tests against.
 	params := &chaincfg.RegressionNetParams
-	params.MagneticAnomalyActivationTime = 0
+	params.MagneticAnonomalyForkHeight = 0
 	chain, teardownFunc, err := chainSetup("fullblocktest",
 		params)
 	if err != nil {
