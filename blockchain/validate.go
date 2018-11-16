@@ -574,7 +574,14 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	// Do some preliminary checks on each transaction to ensure they are
 	// sane before continuing.
-	for _, tx := range transactions {
+	var lastTxid *chainhash.Hash
+	for i, tx := range transactions {
+		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
+		// the coinbase transaction.
+		if magneticAnomaly && i > 1 && lastTxid.Compare(tx.Hash()) >= 0 {
+			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
+		}
+		lastTxid = tx.Hash()
 		err := CheckTransactionSanity(tx, magneticAnomaly, scriptFlags)
 		if err != nil {
 			return err
@@ -1179,14 +1186,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// against all the inputs when the signature operations are out of
 	// bounds.
 	var totalFees int64
-	var lastTxid *chainhash.Hash
-	for i, tx := range transactions {
-		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
-		// the coinbase transaction.
-		if magneticAnomalyActive && i > 1 && lastTxid.Compare(tx.Hash()) >= 0 {
-			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
-		}
-		lastTxid = tx.Hash()
+	for _, tx := range transactions {
 		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
 		if err != nil {
 			return err

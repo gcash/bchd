@@ -201,7 +201,7 @@ func TestCheckBlockSanity(t *testing.T) {
 	powLimit := chaincfg.MainNetParams.PowLimit
 	block := bchutil.NewBlock(&Block100000)
 	timeSource := NewMedianTime()
-	err := CheckBlockSanity(block, powLimit, timeSource, true)
+	err := CheckBlockSanity(block, powLimit, timeSource, false)
 	if err != nil {
 		t.Errorf("CheckBlockSanity: %v", err)
 	}
