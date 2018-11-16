@@ -652,8 +652,14 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 
 	medianTimePast := mp.cfg.MedianTimePast()
 
+	// Get the current height of the main chain.  A standalone transaction
+	// will be mined into the next block at best, so its height is at least
+	// one more than the current height.
+	bestHeight := mp.cfg.BestHeight()
+	nextBlockHeight := bestHeight + 1
+
 	magneticAnomalyActive := false
-	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.MagneticAnomalyActivationTime) {
+	if nextBlockHeight > mp.cfg.ChainParams.MagneticAnonomalyForkHeight {
 		magneticAnomalyActive = true
 	}
 
@@ -683,12 +689,6 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			txHash)
 		return nil, nil, txRuleError(wire.RejectInvalid, str)
 	}
-
-	// Get the current height of the main chain.  A standalone transaction
-	// will be mined into the next block at best, so its height is at least
-	// one more than the current height.
-	bestHeight := mp.cfg.BestHeight()
-	nextBlockHeight := bestHeight + 1
 
 	// Don't allow non-standard transactions if the network parameters
 	// forbid their acceptance.

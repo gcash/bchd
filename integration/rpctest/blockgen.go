@@ -184,7 +184,7 @@ func CreateBlock(prevBlock *bchutil.Block, inclusionTxs []*bchutil.Tx,
 		blockTxns = append(blockTxns, inclusionTxs...)
 	}
 	// If magnetic anomaly is enabled ally CTOR sorting
-	if prevBlock != nil && uint64(prevBlock.MsgBlock().Header.Timestamp.Unix()) >= net.MagneticAnomalyActivationTime {
+	if blockHeight > net.MagneticAnonomalyForkHeight {
 		sort.Sort(mining.TxSorter(blockTxns))
 	}
 	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)

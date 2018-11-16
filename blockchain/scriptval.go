@@ -191,7 +191,6 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
 	hashCache *txscript.HashCache) error {
 
-	// TODO: [issue#4] this will be needed for the sighash after the Bitcoin Cash fork
 	var cachedHashes *txscript.TxSigHashes
 
 	// Collect all of the transaction inputs and required information for
@@ -233,7 +232,6 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	txValItems := make([]*txValidateItem, 0, numInputs)
 	for _, tx := range block.Transactions() {
 
-		// TODO: [issue#4] use cache after fork activation
 		// If the HashCache is present, and it doesn't yet contain the
 		// partial sighashes for this transaction, then we add the
 		// sighashes for the transaction. This allows us to take
@@ -248,7 +246,6 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 			}*/
 
 		var cachedHashes *txscript.TxSigHashes
-		// TODO: [issue#4] make use of cached hashes after fork
 		/*if hashCache != nil {
 			cachedHashes, _ = hashCache.GetSigHashes(hash)
 		} else {

@@ -174,8 +174,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 		return false, false, ruleError(ErrDuplicateBlock, str)
 	}
 
-	tip := b.bestChain.Tip()
-	if tip.parent != nil && b.IsMagneticAnomalyEnabled(tip.parent.hash) {
+	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
 		flags |= BFMagneticAnomaly
 	}
 
