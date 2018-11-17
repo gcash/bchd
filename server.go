@@ -70,6 +70,9 @@ var (
 	userAgentVersion = fmt.Sprintf("%d.%d.%d", version.AppMajor, version.AppMinor, version.AppPatch)
 )
 
+// addrMe specifies the server address to send peers.
+var addrMe *wire.NetAddress
+
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
 var zeroHash chainhash.Hash
 
@@ -2002,6 +2005,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
 		},
+		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
 		HostToNetAddress:  sp.server.addrManager.HostToNetAddress,
 		Proxy:             cfg.Proxy,
@@ -2940,6 +2944,13 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 			if err != nil {
 				srvrLog.Warnf("Not adding %s as externalip: %v", sip, err)
 				continue
+			}
+
+			// Found a valid external IP, make sure we use these details
+			// so peers get the correct IP information. Since we can only
+			// advertise one IP, use the first seen.
+			if addrMe == nil {
+				addrMe = na
 			}
 
 			err = amgr.AddLocalAddress(na, addrmgr.ManualPrio)
