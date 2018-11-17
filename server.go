@@ -430,6 +430,13 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		return nil
 	}
 
+	// Do not allow connections to Bitcoin SV peers
+	if strings.Contains(msg.UserAgent, "Bitcoin SV") {
+		srvrLog.Debugf("Rejecting peer %s for running Bitcoin SV", sp.Peer)
+		reason := fmt.Sprint("Not Bitcoin Cash node")
+		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
+	}
+
 	// Reject outbound peers that are not full nodes.
 	wantServices := wire.SFNodeNetwork
 	if !isInbound && !hasServices(msg.Services, wantServices) {
