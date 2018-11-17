@@ -211,6 +211,10 @@ type MessageListeners struct {
 
 // Config is the struct to hold configuration options useful to Peer.
 type Config struct {
+	// AddrMe specifies the server address to send peers. This is only
+	// set when an external IP is used.
+	AddrMe *wire.NetAddress
+
 	// NewestBlock specifies a callback which provides the newest block
 	// details to the peer as needed.  This can be nil in which case the
 	// peer will report a block height of 0, however it is good practice for
@@ -2013,24 +2017,28 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 		}
 	}
 
-	// Create a wire.NetAddress with only the services set to use as the
-	// "addrme" in the version message.
-	//
-	// Older nodes previously added the IP and port information to the
-	// address manager which proved to be unreliable as an inbound
-	// connection from a peer didn't necessarily mean the peer itself
-	// accepted inbound connections.
-	//
-	// Also, the timestamp is unused in the version message.
-	ourNA := &wire.NetAddress{
-		Services: p.cfg.Services,
-	}
-
 	// Generate a unique nonce for this peer so self connections can be
 	// detected.  This is accomplished by adding it to a size-limited map of
 	// recently seen nonces.
 	nonce := uint64(rand.Int63())
 	sentNonces.Add(nonce)
+
+	// Create a wire.NetAddress to use as "addrme" in the
+	// version message.
+	//
+	// If AddrMe was included in the peerConfig then use that as
+	// it has already been setup with the configured External IP.
+	//
+	// Otherwise just set it up with the supported services.
+	var ourNA *wire.NetAddress
+
+	if p.cfg.AddrMe != nil {
+		ourNA = p.cfg.AddrMe
+	} else {
+		ourNA = &wire.NetAddress{
+			Services: p.cfg.Services,
+		}
+	}
 
 	// Version message.
 	msg := wire.NewMsgVersion(ourNA, theirNA, nonce, blockNum)

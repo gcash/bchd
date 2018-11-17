@@ -70,6 +70,9 @@ var (
 	userAgentVersion = fmt.Sprintf("%d.%d.%d", version.AppMajor, version.AppMinor, version.AppPatch)
 )
 
+// addrMe specifies the server address to send peers.
+var addrMe *wire.NetAddress
+
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
 var zeroHash chainhash.Hash
 
@@ -2009,6 +2012,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
 		},
+		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
 		HostToNetAddress:  sp.server.addrManager.HostToNetAddress,
 		Proxy:             cfg.Proxy,
@@ -2920,14 +2924,13 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 	}
 
 	var nat NAT
+	defaultPort, err := strconv.ParseUint(activeNetParams.DefaultPort, 10, 16)
+	if err != nil {
+		srvrLog.Errorf("Can not parse default port %s for active chain: %v",
+			activeNetParams.DefaultPort, err)
+		return nil, nil, err
+	}
 	if len(cfg.ExternalIPs) != 0 {
-		defaultPort, err := strconv.ParseUint(activeNetParams.DefaultPort, 10, 16)
-		if err != nil {
-			srvrLog.Errorf("Can not parse default port %s for active chain: %v",
-				activeNetParams.DefaultPort, err)
-			return nil, nil, err
-		}
-
 		for _, sip := range cfg.ExternalIPs {
 			eport := uint16(defaultPort)
 			host, portstr, err := net.SplitHostPort(sip)
@@ -2949,6 +2952,13 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 				continue
 			}
 
+			// Found a valid external IP, make sure we use these details
+			// so peers get the correct IP information. Since we can only
+			// advertise one IP, use the first seen.
+			if addrMe == nil {
+				addrMe = na
+			}
+
 			err = amgr.AddLocalAddress(na, addrmgr.ManualPrio)
 			if err != nil {
 				amgrLog.Warnf("Skipping specified external IP: %v", err)
@@ -2962,6 +2972,22 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 				srvrLog.Warnf("Can't discover upnp: %v", err)
 			}
 			// nil nat here is fine, just means no upnp on network.
+
+			// Found a valid external IP, make sure we use these details
+			// so peers get the correct IP information.
+			if nat != nil {
+				addr, err := nat.GetExternalAddress()
+				if err == nil {
+					eport := uint16(defaultPort)
+					na, err := amgr.HostToNetAddress(addr.String(), eport, services)
+					if err == nil {
+						if addrMe == nil {
+							addrMe = na
+						}
+					}
+
+				}
+			}
 		}
 
 		// Add bound addresses to address manager to be advertised to peers.
