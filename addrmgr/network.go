@@ -259,8 +259,8 @@ func GroupKey(na *wire.NetAddress) string {
 		// teredo tunnels have the last 4 bytes as the v4 address XOR
 		// 0xff.
 		ip := net.IP(make([]byte, 4))
-		for i, byte := range na.IP[12:16] {
-			ip[i] = byte ^ 0xff
+		for i, ipByte := range na.IP[12:16] {
+			ip[i] = ipByte ^ 0xff
 		}
 		return ip.Mask(net.CIDRMask(16, 32)).String()
 	}
