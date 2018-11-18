@@ -19,6 +19,8 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/limits"
 	"github.com/gcash/bchd/version"
+
+	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -46,6 +48,10 @@ func bchdMain(serverChan chan<- *server) error {
 	// initializes logging and configures it accordingly.
 	tcfg, _, err := loadConfig()
 	if err != nil {
+		// If it is a help error we have already handled it.
+		if e, ok := err.(*flags.Error); ok && e.Type == flags.ErrHelp {
+			return nil
+		}
 		return err
 	}
 	cfg = tcfg
