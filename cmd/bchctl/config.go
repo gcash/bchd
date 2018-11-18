@@ -68,7 +68,7 @@ func listCommands() {
 			continue
 		}
 
-		// Categorize the command based on the usage usageFlags.
+		// Categorize the command based on the usageFlags.
 		category := categoryChain
 		if usageFlags&btcjson.UFWalletOnly != 0 {
 			category = categoryWallet
