@@ -719,8 +719,8 @@ func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.S
 func ipString(na *wire.NetAddress) string {
 	if IsOnionCatTor(na) {
 		// We know now that na.IP is long enough.
-		base32 := base32.StdEncoding.EncodeToString(na.IP[6:])
-		return strings.ToLower(base32) + ".onion"
+		base32str := base32.StdEncoding.EncodeToString(na.IP[6:])
+		return strings.ToLower(base32str) + ".onion"
 	}
 
 	return na.IP.String()
