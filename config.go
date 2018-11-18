@@ -31,6 +31,7 @@ import (
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchutil"
+
 	flags "github.com/jessevdk/go-flags"
 )
 
