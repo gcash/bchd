@@ -1262,6 +1262,17 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 	// Get the current known addresses from the address manager.
 	addrCache := sp.server.addrManager.AddressCache()
 
+	// Add our best net address for peers to discover us. If the port
+	// is 0 that indicates no worthy address was found, therefore
+	// we do not broadcast it. We also must trim the cache by one
+	// entry if we insert a record to prevent sending past the max
+	// send size.
+	bestAddress := sp.server.addrManager.GetBestLocalAddress(sp.NA())
+	if bestAddress.Port != 0 {
+		addrCache = addrCache[1:]
+		addrCache = append(addrCache, bestAddress)
+	}
+
 	// Push the addresses.
 	sp.pushAddrMsg(addrCache)
 }
