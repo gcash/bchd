@@ -2036,7 +2036,8 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 		ourNA = p.cfg.AddrMe
 	} else {
 		ourNA = &wire.NetAddress{
-			Services: p.cfg.Services,
+			Services:  p.cfg.Services,
+			Timestamp: time.Now(),
 		}
 	}
 
