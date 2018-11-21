@@ -26,8 +26,10 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 		t.Fatal("Expected EB UserAgentComment")
 	}
 
-	if cfg.UserAgentComments[0] != "EB32.0" {
-		t.Fatal("Expected UserAgentComments to contain EB32.0")
+	uac := cfg.UserAgentComments[0]
+	uacExpected := "EB32.0"
+	if uac != uacExpected {
+		t.Fatalf("Expected UserAgentComments to contain %s but got %s", uacExpected, uac)
 	}
 
 	// Custom excessive block size.
@@ -39,11 +41,13 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 	}
 
 	if len(cfg.UserAgentComments) != 1 {
-		t.Fatal("Expected EB UserAgentComment")
+		t.Fatalf("Expected EB UserAgentComment")
 	}
 
-	if cfg.UserAgentComments[0] != "EB64.0" {
-		t.Fatal("Expected UserAgentComments to contain EB64.0")
+	uac = cfg.UserAgentComments[0]
+	uacExpected = "EB64.0"
+	if uac != uacExpected {
+		t.Fatalf("Expected UserAgentComments to contain %s but got %s", uacExpected, uac)
 	}
 }
 
