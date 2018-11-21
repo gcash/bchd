@@ -19,7 +19,7 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 
 	cfg, _, err := loadConfig()
 	if err != nil {
-		t.Fatalf("Failed to load configuration")
+		t.Fatal("Failed to load configuration")
 	}
 
 	if len(cfg.UserAgentComments) != 1 {
@@ -37,11 +37,11 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 
 	cfg, _, err = loadConfig()
 	if err != nil {
-		t.Fatalf("Failed to load configuration")
+		t.Fatal("Failed to load configuration")
 	}
 
 	if len(cfg.UserAgentComments) != 1 {
-		t.Fatalf("Expected EB UserAgentComment")
+		t.Fatal("Expected EB UserAgentComment")
 	}
 
 	uac = cfg.UserAgentComments[0]
