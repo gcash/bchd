@@ -41,7 +41,8 @@ type fakeRandReader struct {
 	err error
 }
 
-const fixedExcessiveBlockSize uint32 = 64000000
+// fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
+const fixedExcessiveBlockSize uint32 = 42111000
 
 func init() {
 	// Wire package requires initialization
