@@ -23,26 +23,18 @@ const MessageHeaderSize = 24
 const CommandSize = 12
 
 // ebs is the excessive block size, used to determine reasonable maximum message sizes.
-var ebs uint32
+// 32MB is the current default value
+var ebs uint32 = 32000000
 
-// SetLimits initializes various message limits which change depending on the maximum
-// block size we will deal with.
+// SetLimits adjusts various message limits based on max block size configuration.
 func SetLimits(excessiveBlockSize uint32) {
 	ebs = excessiveBlockSize
 }
 
-func getEBS() uint32 {
-	if ebs == 0 {
-		panic("message size limits have not been initialized")
-	}
-	return ebs
-}
-
 // MaxMessagePayload returns is the maximum bytes a message can be regardless of other
-// individual limits imposed by messages themselves. It will panic if the value
-// has not been initialized.
+// individual limits imposed by messages themselves.
 func maxMessagePayload() uint32 {
-	return ((getEBS() / 1000000) * 1024 * 1024) * 2
+	return ((ebs / 1000000) * 1024 * 1024) * 2
 }
 
 // Commands used in bitcoin message headers which describe the type of message.
