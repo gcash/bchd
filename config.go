@@ -819,6 +819,9 @@ func loadConfig() (*config, []string, error) {
 	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
 	cfg.BlockMinSize = minUint32(cfg.BlockMinSize, cfg.BlockMaxSize)
 
+	// Prepend ExcessiveBlockSize signaling to the UserAgentComments
+	cfg.UserAgentComments = append([]string{fmt.Sprintf("EB%.1f", float64(cfg.ExcessiveBlockSize)/1000000)}, cfg.UserAgentComments...)
+
 	// Look for illegal characters in the user agent comments.
 	for _, uaComment := range cfg.UserAgentComments {
 		if strings.ContainsAny(uaComment, "/:()") {
