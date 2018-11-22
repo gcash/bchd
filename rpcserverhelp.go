@@ -511,6 +511,12 @@ var helpDescsEnUS = map[string]string{
 	"gettxout-vout":           "The index of the output",
 	"gettxout-includemempool": "Include the mempool when true",
 
+	// GetTxOutProofCmd help.
+	"gettxoutproof--synopsis": "Returns hex encoded merkle proof for a given transaction set",
+	"gettxoutproof-txids":     "A list of transaction hashes to generate proof for",
+	"gettxoutproof-blockhash": "The block hash the transactions are in",
+	"gettxoutproof--result0":  "Hex encoded merkle proof",
+
 	// HelpCmd help.
 	"help--synopsis":   "Returns a list of all commands or help for a specified command.",
 	"help-command":     "The command to retrieve help for",
@@ -712,6 +718,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getrawmempool":         {(*[]string)(nil), (*btcjson.GetRawMempoolVerboseResult)(nil)},
 	"getrawtransaction":     {(*string)(nil), (*btcjson.TxRawResult)(nil)},
 	"gettxout":              {(*btcjson.GetTxOutResult)(nil)},
+	"gettxoutproof":         {(*string)(nil)},
 	"node":                  nil,
 	"help":                  {(*string)(nil), (*string)(nil)},
 	"ping":                  nil,
