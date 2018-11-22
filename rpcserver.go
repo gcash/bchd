@@ -176,6 +176,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"validateaddress":       handleValidateAddress,
 	"verifychain":           handleVerifyChain,
 	"verifymessage":         handleVerifyMessage,
+	"verifytxoutproof":      handleVerifyTxOutProof,
 	"version":               handleVersion,
 }
 
@@ -283,6 +284,7 @@ var rpcLimited = map[string]struct{}{
 	"uptime":                {},
 	"validateaddress":       {},
 	"verifymessage":         {},
+	"verifytxoutproof":      {},
 	"version":               {},
 }
 
@@ -2850,8 +2852,10 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 
 	block, err := bchutil.NewBlockFromBytes(blkBytes)
 	if err != nil {
-		context := "Failed to deserialize block"
-		return nil, internalRPCError(err.Error(), context)
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Failed to deserialize block",
+		}
 	}
 
 	found := 0
@@ -2884,6 +2888,96 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	}
 
 	return hex.EncodeToString(buf.Bytes()), nil
+}
+
+// handleVerifyTxOutProof implements the verifytxoutproof command.
+func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.VerifyTxOutProofCmd)
+
+	// decode proof from hex to []bytes
+	dec, err := hex.DecodeString(c.Proof)
+
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Proof)
+	}
+
+	// decode proof into MsgMerkleBlock
+	var msg wire.MsgMerkleBlock
+	msg = wire.MsgMerkleBlock{}
+
+	rbuf := bytes.NewReader(dec)
+
+	err = msg.BchDecode(rbuf, wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "BchDecode error: " + err.Error(),
+		}
+	}
+
+	// create partial merkle block from wire message and extract transaction
+	// matches
+	mBlock := merkleblock.NewMerkleBlockFromMsg(msg)
+	merkleRoot := mBlock.ExtractMatches()
+
+	// check if tree traversal was bad or extraction failed
+	if merkleRoot == nil || mBlock.BadTree() == true || len(mBlock.GetMatches()) == 0 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Error extracting txn matches from merkle tree traversal",
+		}
+	}
+
+	// lookup the block using the merkleroot to see if it really exists
+	// use the first transaction to get the block and then compare merkleRoot
+	blockRegion, err := s.cfg.TxIndex.TxBlockRegion(mBlock.GetMatches()[0])
+
+	if err != nil || blockRegion == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCNoTxInfo,
+			Message: "Unable to find block using matched transaction",
+		}
+	}
+
+	// load block from database
+	var blkBytes []byte
+	err = s.cfg.DB.View(func(dbTx database.Tx) error {
+		var err error
+		blkBytes, err = dbTx.FetchBlock(blockRegion.Hash)
+		return err
+	})
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Can't read block from disk",
+		}
+	}
+
+	block, err := bchutil.NewBlockFromBytes(blkBytes)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Failed to deserialize block",
+		}
+	}
+
+	// compare merkle root from loaded block and that returned from our tree
+	// traversal
+	if block.MsgBlock().Header.MerkleRoot.IsEqual(merkleRoot) == false {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Merkle root clock header check failed",
+		}
+	}
+
+	// return transaction matches list
+	list := make([]string, 0, len(mBlock.GetMatches()))
+
+	for _, hash := range mBlock.GetMatches() {
+		list = append(list, hash.String())
+	}
+
+	return list, nil
 }
 
 // handleHelp implements the help command.
