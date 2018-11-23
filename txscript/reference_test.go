@@ -20,6 +20,13 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+// fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
+const fixedExcessiveBlockSize uint32 = 42111000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 // scriptTestName returns a descriptive test name for the given reference script
 // test data.
 func scriptTestName(test []interface{}) (string, error) {

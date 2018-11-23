@@ -56,7 +56,6 @@ const (
 	defaultBlockMinSize            = 0
 	defaultBlockMaxSize            = 750000
 	blockMaxSizeMin                = 1000
-	blockMaxSizeMax                = defaultExcessiveBlockSize - 1000
 	defaultGenerate                = false
 	defaultMaxOrphanTransactions   = 100
 	defaultMaxOrphanTxSize         = 100000
@@ -789,19 +788,6 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Limit the max block size to a sane value.
-	if cfg.BlockMaxSize < blockMaxSizeMin || cfg.BlockMaxSize >
-		blockMaxSizeMax {
-
-		str := "%s: The blockmaxsize option must be in between %d " +
-			"and %d -- parsed [%d]"
-		err := fmt.Errorf(str, funcName, blockMaxSizeMin,
-			blockMaxSizeMax, cfg.BlockMaxSize)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, usageMessage)
-		return nil, nil, err
-	}
-
 	// Limit the max orphan count to a sane vlue.
 	if cfg.MaxOrphanTxs < 0 {
 		str := "%s: The maxorphantx option may not be less than 0 " +
@@ -815,6 +801,19 @@ func loadConfig() (*config, []string, error) {
 	// Excessive blocksize cannot be set less than the default but it can be higher.
 	cfg.ExcessiveBlockSize = maxUint32(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
 
+	// Limit the max block size to a sane value.
+	blockMaxSizeMax := cfg.ExcessiveBlockSize - 1000
+	if cfg.BlockMaxSize < blockMaxSizeMin || cfg.BlockMaxSize >
+		blockMaxSizeMax {
+
+		str := "%s: The blockmaxsize option must be in between %d " +
+			"and %d -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, blockMaxSizeMin,
+			blockMaxSizeMax, cfg.BlockMaxSize)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
 	// Limit the block priority and minimum block sizes to max block size.
 	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
 	cfg.BlockMinSize = minUint32(cfg.BlockMinSize, cfg.BlockMaxSize)

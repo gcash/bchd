@@ -41,6 +41,14 @@ type fakeRandReader struct {
 	err error
 }
 
+// fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
+const fixedExcessiveBlockSize uint32 = 42111000
+
+func init() {
+	// Wire package requires initialization
+	SetLimits(fixedExcessiveBlockSize)
+}
+
 // Read returns the fake reader error and the lesser of the fake reader value
 // and the length of p.
 func (r *fakeRandReader) Read(p []byte) (int, error) {
@@ -614,7 +622,7 @@ func TestVarBytesWire(t *testing.T) {
 
 		// Decode from wire format.
 		rbuf := bytes.NewReader(test.buf)
-		val, err := ReadVarBytes(rbuf, test.pver, MaxMessagePayload,
+		val, err := ReadVarBytes(rbuf, test.pver, maxMessagePayload(),
 			"test payload")
 		if err != nil {
 			t.Errorf("ReadVarBytes #%d error %v", i, err)
@@ -666,7 +674,7 @@ func TestVarBytesWireErrors(t *testing.T) {
 
 		// Decode from wire format.
 		r := newFixedReader(test.max, test.buf)
-		_, err = ReadVarBytes(r, test.pver, MaxMessagePayload,
+		_, err = ReadVarBytes(r, test.pver, maxMessagePayload(),
 			"test payload")
 		if err != test.readErr {
 			t.Errorf("ReadVarBytes #%d wrong error got: %v, want: %v",
@@ -698,7 +706,7 @@ func TestVarBytesOverflowErrors(t *testing.T) {
 	for i, test := range tests {
 		// Decode from wire format.
 		rbuf := bytes.NewReader(test.buf)
-		_, err := ReadVarBytes(rbuf, test.pver, MaxMessagePayload,
+		_, err := ReadVarBytes(rbuf, test.pver, maxMessagePayload(),
 			"test payload")
 		if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
 			t.Errorf("ReadVarBytes #%d wrong error got: %v, "+

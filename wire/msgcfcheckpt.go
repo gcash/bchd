@@ -149,7 +149,7 @@ func (msg *MsgCFCheckpt) Command() string {
 func (msg *MsgCFCheckpt) MaxPayloadLength(pver uint32) uint32 {
 	// Message size depends on the blockchain height, so return general limit
 	// for all messages.
-	return MaxMessagePayload
+	return maxMessagePayload()
 }
 
 // NewMsgCFCheckpt returns a new bitcoin cfheaders message that conforms to
