@@ -2768,8 +2768,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	}
 
 	// store our validated transactions
-	var txnSet []*chainhash.Hash
-	txnSet = make([]*chainhash.Hash, 0, len(c.TxIDs))
+	txnSet := make([]*chainhash.Hash, 0, len(c.TxIDs))
 
 	// check if transactions are valid and there are no duplicates
 	for _, txnStr := range c.TxIDs {
@@ -2782,7 +2781,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 			}
 		}
 
-		if merkleblock.TxInSet(txnHash, txnSet) == true {
+		if merkleblock.TxInSet(txnHash, txnSet) {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCInvalidParameter,
 				Message: fmt.Sprintf("Duplicate txid %s in set", txnStr),
@@ -2810,7 +2809,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 		// check if block exists
 		has, err := s.cfg.Chain.HaveBlock(blkHash)
 
-		if err != nil || has == false {
+		if err != nil || !has {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCBlockNotFound,
 				Message: "Block not found",
@@ -2902,8 +2901,7 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	}
 
 	// decode proof into MsgMerkleBlock
-	var msg wire.MsgMerkleBlock
-	msg = wire.MsgMerkleBlock{}
+	msg := wire.MsgMerkleBlock{}
 
 	rbuf := bytes.NewReader(dec)
 
@@ -2921,7 +2919,7 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	merkleRoot := mBlock.ExtractMatches()
 
 	// check if tree traversal was bad or extraction failed
-	if merkleRoot == nil || mBlock.BadTree() == true || len(mBlock.GetMatches()) == 0 {
+	if merkleRoot == nil || mBlock.BadTree() || len(mBlock.GetMatches()) == 0 {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCDeserialization,
 			Message: "Error extracting txn matches from merkle tree traversal",
@@ -2963,7 +2961,7 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan stru
 
 	// compare merkle root from loaded block and that returned from our tree
 	// traversal
-	if block.MsgBlock().Header.MerkleRoot.IsEqual(merkleRoot) == false {
+	if !block.MsgBlock().Header.MerkleRoot.IsEqual(merkleRoot) {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidAddressOrKey,
 			Message: "Merkle root clock header check failed",
