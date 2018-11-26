@@ -65,6 +65,7 @@ const (
 	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
+	defaultTargetOutboundPeers     = uint32(8)
 	minPruneDepth                  = 288
 )
 
@@ -178,6 +179,7 @@ type config struct {
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
 	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
+	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"number of outbound connections to maintain"`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -447,6 +449,7 @@ func loadConfig() (*config, []string, error) {
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,
 		PruneDepth:              defaultPruneDepth,
+		TargetOutboundPeers:     defaultTargetOutboundPeers,
 	}
 
 	// Service options which are only added on Windows.
