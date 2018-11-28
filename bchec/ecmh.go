@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"math/big"
+	"sync"
 )
 
 // Multiset tracks the state of a multiset as used to calculate the ECMH
@@ -16,12 +17,13 @@ type Multiset struct {
 	curve *KoblitzCurve
 	x     *big.Int
 	y     *big.Int
+	mtx   sync.RWMutex
 }
 
 // NewMultiset returns an empty multiset. The hash of an empty set
 // is the 32 byte value of zero.
 func NewMultiset(curve *KoblitzCurve) *Multiset {
-	return &Multiset{curve: curve}
+	return &Multiset{curve: curve, mtx: sync.RWMutex{}}
 }
 
 // NewMultisetFromPoint initializes a new multiset with the given x, y
@@ -31,12 +33,15 @@ func NewMultisetFromPoint(curve *KoblitzCurve, x, y *big.Int) *Multiset {
 	if x != nil && y != nil {
 		copyX, copyY = *x, *y
 	}
-	return &Multiset{curve: curve, x: &copyX, y: &copyY}
+	return &Multiset{curve: curve, x: &copyX, y: &copyY, mtx: sync.RWMutex{}}
 }
 
 // Add hashes the data onto the curve and updates the state
 // of the multiset.
 func (ms *Multiset) Add(data []byte) {
+	ms.mtx.Lock()
+	defer ms.mtx.Unlock()
+
 	x, y := hashToPoint(ms.curve, data)
 	if ms.x == nil || ms.y == nil {
 		ms.x, ms.y = x, y
@@ -51,6 +56,9 @@ func (ms *Multiset) Add(data []byte) {
 // adding a bunch of elements and then removing them all will not
 // result in a zero hash.
 func (ms *Multiset) Remove(data []byte) {
+	ms.mtx.Lock()
+	defer ms.mtx.Unlock()
+
 	x, y := hashToPoint(ms.curve, data)
 	fx1, fy1 := ms.curve.bigAffineToField(x, y)
 	fy1 = fy1.Negate(1)
@@ -65,6 +73,9 @@ func (ms *Multiset) Remove(data []byte) {
 // set is the 32 byte value of zero. The hash of a non-empty multiset is the
 // sha256 hash of the 32 byte x value concatenated with the 32 byte y value.
 func (ms *Multiset) Hash() chainhash.Hash {
+	ms.mtx.RLock()
+	defer ms.mtx.RUnlock()
+
 	if ms.x == nil || ms.y == nil {
 		return chainhash.Hash{}
 	}
@@ -78,6 +89,9 @@ func (ms *Multiset) Hash() chainhash.Hash {
 
 // Point returns a copy of the x and y coordinates of the current multiset state.
 func (ms *Multiset) Point() (x *big.Int, y *big.Int) {
+	ms.mtx.RLock()
+	defer ms.mtx.RUnlock()
+
 	if ms.x == nil || ms.y == nil {
 		return
 	}
