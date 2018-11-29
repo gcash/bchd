@@ -23,15 +23,18 @@ type Multiset struct {
 // NewMultiset returns an empty multiset. The hash of an empty set
 // is the 32 byte value of zero.
 func NewMultiset(curve *KoblitzCurve) *Multiset {
-	return &Multiset{curve: curve, mtx: sync.RWMutex{}}
+	return &Multiset{curve: curve, x: big.NewInt(0), y: big.NewInt(0), mtx: sync.RWMutex{}}
 }
 
 // NewMultisetFromPoint initializes a new multiset with the given x, y
 // coordinate.
 func NewMultisetFromPoint(curve *KoblitzCurve, x, y *big.Int) *Multiset {
 	var copyX, copyY big.Int
-	if x != nil && y != nil {
-		copyX, copyY = *x, *y
+	if x != nil {
+		copyX = *x
+	}
+	if y != nil {
+		copyY = *y
 	}
 	return &Multiset{curve: curve, x: &copyX, y: &copyY, mtx: sync.RWMutex{}}
 }
@@ -43,21 +46,22 @@ func (ms *Multiset) Add(data []byte) {
 	defer ms.mtx.Unlock()
 
 	x, y := hashToPoint(ms.curve, data)
-	if ms.x == nil || ms.y == nil {
-		ms.x, ms.y = x, y
-	} else {
-		ms.x, ms.y = ms.curve.Add(ms.x, ms.y, x, y)
-	}
+	ms.x, ms.y = ms.curve.Add(ms.x, ms.y, x, y)
 }
 
 // Remove hashes the data onto the curve and subtracts the value
 // from the state. This function will execute regardless of whether
-// or not the passed data was previously added to the set. Hence,
-// adding a bunch of elements and then removing them all will not
-// result in a zero hash.
+// or not the passed data was previously added to the set. Hence if
+// you remove and element that was never added and also remove all the
+// elements that were added, you will not get back to the point at
+// infinity (empty set).
 func (ms *Multiset) Remove(data []byte) {
 	ms.mtx.Lock()
 	defer ms.mtx.Unlock()
+
+	if ms.x.Sign() == 0 && ms.y.Sign() == 0 {
+		return
+	}
 
 	x, y := hashToPoint(ms.curve, data)
 	fx1, fy1 := ms.curve.bigAffineToField(x, y)
@@ -76,9 +80,10 @@ func (ms *Multiset) Hash() chainhash.Hash {
 	ms.mtx.RLock()
 	defer ms.mtx.RUnlock()
 
-	if ms.x == nil || ms.y == nil {
+	if ms.x.Sign() == 0 && ms.y.Sign() == 0 {
 		return chainhash.Hash{}
 	}
+
 	h := sha256.Sum256(append(ms.x.Bytes(), ms.y.Bytes()...))
 	var reversed [32]byte
 	for i, b := range h {
@@ -92,9 +97,6 @@ func (ms *Multiset) Point() (x *big.Int, y *big.Int) {
 	ms.mtx.RLock()
 	defer ms.mtx.RUnlock()
 
-	if ms.x == nil || ms.y == nil {
-		return
-	}
 	copyX, copyY := *ms.x, *ms.y
 	return &copyX, &copyY
 }
