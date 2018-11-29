@@ -64,13 +64,8 @@ func (ms *Multiset) Remove(data []byte) {
 	}
 
 	x, y := hashToPoint(ms.curve, data)
-	fx1, fy1 := ms.curve.bigAffineToField(x, y)
-	fy1 = fy1.Negate(1)
-	fx2, fy2 := ms.curve.bigAffineToField(ms.x, ms.y)
-	fx3, fy3, fz3 := new(fieldVal), new(fieldVal), new(fieldVal)
-	fOne := new(fieldVal).SetInt(1)
-	ms.curve.addJacobian(fx1, fy1, fOne, fx2, fy2, fOne, fx3, fy3, fz3)
-	ms.x, ms.y = ms.curve.fieldJacobianToBigAffine(fx3, fy3, fz3)
+	y = y.Neg(y).Mod(y, ms.curve.P)
+	ms.x, ms.y = ms.curve.Add(ms.x, ms.y, x, y)
 }
 
 // Hash serializes and returns the hash of the multiset. The hash of an empty
