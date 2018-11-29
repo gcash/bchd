@@ -116,8 +116,9 @@ func hashToPoint(curve *KoblitzCurve, data []byte) (*big.Int, *big.Int) {
 		h2 := sha256.Sum256(append(n, h[:]...))
 
 		x = new(big.Int).SetBytes(h2[:])
+
 		y, err = decompressPoint(curve, x, false)
-		if err == nil {
+		if err == nil && x.Cmp(curve.N) < 0 {
 			break
 		}
 		i++
