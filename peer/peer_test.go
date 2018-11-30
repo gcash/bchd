@@ -20,6 +20,13 @@ import (
 	"github.com/gcash/bchd/wire"
 )
 
+// fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
+const fixedExcessiveBlockSize uint32 = 42111000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
+
 // conn mocks a network connection by implementing the net.Conn interface.  It
 // is used to test peer connection without actually opening a network
 // connection.

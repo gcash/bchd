@@ -479,7 +479,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// only includes the latest DSV changes.
 	var scriptFlags txscript.ScriptFlags
 
-	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
+	if nextBlockHeight > g.chainParams.MagneticAnonomalyForkHeight {
 		scriptFlags |= txscript.ScriptVerifySigPushOnly |
 			txscript.ScriptVerifyCleanStack |
 			txscript.ScriptVerifyCheckDataSig
@@ -786,7 +786,7 @@ mempoolLoop:
 
 	// If MagneticAnomaly is enabled we need to sort transactions by txid to
 	// comply with the CTOR consensus rule.
-	if g.chain.IsMagneticAnomalyEnabled(best.Hash) {
+	if nextBlockHeight > g.chainParams.MagneticAnonomalyForkHeight {
 		sort.Sort(TxSorter(blockTxns))
 	}
 	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)

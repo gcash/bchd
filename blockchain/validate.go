@@ -78,18 +78,6 @@ var (
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
 
-// IsMagneticAnomalyEnabled returns whether or not the Novemeber 15, 2018
-// hardfork is active. `prevNode` is the block prior to the one being
-// validated. The consensus rules state that once the hardfork is active
-// the next block must follow the new rules.
-func (b *BlockChain) IsMagneticAnomalyEnabled(prevBlock chainhash.Hash) bool {
-	prevNode := b.index.LookupNode(&prevBlock)
-	if prevNode == nil {
-		return false
-	}
-	return prevNode.CalcPastMedianTime().Unix() >= int64(b.chainParams.MagneticAnomalyActivationTime)
-}
-
 // MaxBlockSize returns the is the maximum number of bytes allowed in
 // a block. If the UAHF hardfork is active the returned value is the
 // excessive blocksize. Otherwise it's the legacy blocksize.
@@ -586,7 +574,14 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	// Do some preliminary checks on each transaction to ensure they are
 	// sane before continuing.
-	for _, tx := range transactions {
+	var lastTxid *chainhash.Hash
+	for i, tx := range transactions {
+		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
+		// the coinbase transaction.
+		if magneticAnomaly && i > 1 && lastTxid.Compare(tx.Hash()) >= 0 {
+			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
+		}
+		lastTxid = tx.Hash()
 		err := CheckTransactionSanity(tx, magneticAnomaly, scriptFlags)
 		if err != nil {
 			return err
@@ -1070,7 +1065,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
 	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY and CTOR.
-	magneticAnomalyActive := node.parent != nil && b.IsMagneticAnomalyEnabled(node.parent.hash)
+	magneticAnomalyActive := node.height > b.chainParams.MagneticAnonomalyForkHeight
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
@@ -1191,14 +1186,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// against all the inputs when the signature operations are out of
 	// bounds.
 	var totalFees int64
-	var lastTxid *chainhash.Hash
-	for i, tx := range transactions {
-		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
-		// the coinbase transaction.
-		if magneticAnomalyActive && i > 1 && lastTxid.Compare(tx.Hash()) >= 0 {
-			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
-		}
-		lastTxid = tx.Hash()
+	for _, tx := range transactions {
 		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
 		if err != nil {
 			return err
@@ -1346,7 +1334,7 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 
 	// If MagneticAnomaly is active make sure the block sanity is checked using the
 	// new rule set.
-	if tip.parent != nil && b.IsMagneticAnomalyEnabled(tip.parent.hash) {
+	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
 		flags |= BFMagneticAnomaly
 	}
 

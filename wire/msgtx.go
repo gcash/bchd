@@ -87,15 +87,17 @@ const (
 	freeListMaxItems = 12500
 )
 
-var (
-	// maxTxInPerMessage is the maximum number of transactions inputs that
-	// a transaction which fits into a message could possibly have.
-	maxTxInPerMessage = (MaxMessagePayload / minTxInPayload) + 1
+// maxTxInPerMessage returnsthe maximum number of transactions inputs that
+// a transaction which fits into a message could possibly have.
+func maxTxInPerMessage() uint32 {
+	return (maxMessagePayload() / minTxInPayload) + 1
+}
 
-	// maxTxOutPerMessage is the maximum number of transactions outputs that
-	// a transaction which fits into a message could possibly have.
-	maxTxOutPerMessage = (MaxMessagePayload / MinTxOutPayload) + 1
-)
+// maxTxOutPerMessage returns the maximum number of transactions outputs that
+// a transaction which fits into a message could possibly have.
+func maxTxOutPerMessage() uint32 {
+	return (maxMessagePayload() / MinTxOutPayload) + 1
+}
 
 // scriptFreeList defines a free list of byte slices (up to the maximum number
 // defined by the freeListMaxItems constant) that have a cap according to the
@@ -352,10 +354,9 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// Prevent more input transactions than could possibly fit into a
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
-	if count > uint64(maxTxInPerMessage) {
+	if count > uint64(maxTxInPerMessage()) {
 		str := fmt.Sprintf("too many input transactions to fit into "+
-			"max message size [count %d, max %d]", count,
-			maxTxInPerMessage)
+			"max message size [count %d, max %d]", count, maxTxInPerMessage())
 		return messageError("MsgTx.BchDecode", str)
 	}
 
@@ -408,11 +409,10 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// Prevent more output transactions than could possibly fit into a
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
-	if count > uint64(maxTxOutPerMessage) {
+	if count > uint64(maxTxOutPerMessage()) {
 		returnScriptBuffers()
 		str := fmt.Sprintf("too many output transactions to fit into "+
-			"max message size [count %d, max %d]", count,
-			maxTxOutPerMessage)
+			"max message size [count %d, max %d]", count, maxTxOutPerMessage())
 		return messageError("MsgTx.BchDecode", str)
 	}
 
@@ -597,7 +597,7 @@ func (msg *MsgTx) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgTx) MaxPayloadLength(pver uint32) uint32 {
-	return MaxBlockPayload
+	return MaxBlockPayload()
 }
 
 // PkScriptLocs returns a slice containing the start of each public key script
@@ -712,7 +712,7 @@ func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
 		return err
 	}
 
-	ti.SignatureScript, err = readScript(r, pver, MaxMessagePayload,
+	ti.SignatureScript, err = readScript(r, pver, maxTxInPerMessage(),
 		"transaction input signature script")
 	if err != nil {
 		return err
@@ -745,7 +745,7 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) error {
 		return err
 	}
 
-	to.PkScript, err = readScript(r, pver, MaxMessagePayload,
+	to.PkScript, err = readScript(r, pver, maxMessagePayload(),
 		"transaction output public key script")
 	return err
 }

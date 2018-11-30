@@ -78,7 +78,10 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 
 	var heightStr string
 
-	if uint64(block.Height()) >= bestHeight {
+	if bestHeight == 0 {
+		// We don't have a best height due to no sync peer. Don't log the percentage.
+		heightStr = fmt.Sprintf("%d", block.Height())
+	} else if uint64(block.Height()) >= bestHeight {
 		// sync is up to date so shorten the height output
 		heightStr = fmt.Sprintf("%d (%.2f%%)", block.Height(), progress)
 	} else {

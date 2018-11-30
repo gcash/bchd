@@ -22,12 +22,16 @@ const defaultTransactionAlloc = 2048
 // MaxBlocksPerMsg is the maximum number of blocks allowed per message.
 const MaxBlocksPerMsg = 500
 
-// MaxBlockPayload is the maximum bytes a block message can be in bytes.
-const MaxBlockPayload = 32000000
+// MaxBlockPayload returns the maximum bytes a block message can be in bytes.
+func MaxBlockPayload() uint32 {
+	return ebs
+}
 
-// maxTxPerBlock is the maximum number of transactions that could
+// maxTxPerBlock returns the maximum number of transactions that could
 // possibly fit into a block.
-const maxTxPerBlock = (MaxBlockPayload / minTxPayload) + 1
+func maxTxPerBlock() uint32 {
+	return (MaxBlockPayload() / minTxPayload) + 1
+}
 
 // TxLoc holds locator data for the offset and length of where a transaction is
 // located within a MsgBlock data buffer.
@@ -74,9 +78,9 @@ func (msg *MsgBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 	// Prevent more transactions than could possibly fit into a block.
 	// It would be possible to cause memory exhaustion and panics without
 	// a sane upper bound on this count.
-	if txCount > maxTxPerBlock {
+	if txCount > uint64(maxTxPerBlock()) {
 		str := fmt.Sprintf("too many transactions to fit into a block "+
-			"[count %d, max %d]", txCount, maxTxPerBlock)
+			"[count %d, max %d]", txCount, maxTxPerBlock())
 		return messageError("MsgBlock.BchDecode", str)
 	}
 
@@ -132,9 +136,9 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	// Prevent more transactions than could possibly fit into a block.
 	// It would be possible to cause memory exhaustion and panics without
 	// a sane upper bound on this count.
-	if txCount > maxTxPerBlock {
+	if txCount > uint64(maxTxPerBlock()) {
 		str := fmt.Sprintf("too many transactions to fit into a block "+
-			"[count %d, max %d]", txCount, maxTxPerBlock)
+			"[count %d, max %d]", txCount, maxTxPerBlock())
 		return nil, messageError("MsgBlock.DeserializeTxLoc", str)
 	}
 
@@ -223,7 +227,7 @@ func (msg *MsgBlock) MaxPayloadLength(pver uint32) uint32 {
 	// Block header at 80 bytes + transaction count + max transactions
 	// which can vary up to the MaxBlockPayload (including the block header
 	// and transaction count).
-	return MaxBlockPayload
+	return MaxBlockPayload()
 }
 
 // BlockHash computes the block identifier hash for this block.

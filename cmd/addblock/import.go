@@ -72,10 +72,10 @@ func (bi *blockImporter) readBlock() ([]byte, error) {
 	if err := binary.Read(bi.r, binary.LittleEndian, &blockLen); err != nil {
 		return nil, err
 	}
-	if blockLen > wire.MaxBlockPayload {
+	if blockLen > wire.MaxBlockPayload() {
 		return nil, fmt.Errorf("block payload of %d bytes is larger "+
 			"than the max allowed %d bytes", blockLen,
-			wire.MaxBlockPayload)
+			wire.MaxBlockPayload())
 	}
 
 	serializedBlock := make([]byte, blockLen)
@@ -156,7 +156,7 @@ out:
 		// notify the status handler with the error and bail.
 		serializedBlock, err := bi.readBlock()
 		if err != nil {
-			bi.errChan <- fmt.Errorf("Error reading from input "+
+			bi.errChan <- fmt.Errorf("error reading from input "+
 				"file: %v", err.Error())
 			break out
 		}

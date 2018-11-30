@@ -55,14 +55,6 @@ var simNetParams = params{
 	rpcPort: "18556",
 }
 
-// testNet1Params contains parameters specific to the test network (version 1)
-// (wire.TestNet1).  NOTE: The RPC port is intentionally different than the
-// reference implementation - see the mainNetParams comment for details.
-var testNet1Params = params{
-	Params:  &chaincfg.TestNet1Params,
-	rpcPort: "18334",
-}
-
 // netName returns the name used when referring to a bitcoin network.  At the
 // time of writing, bchd currently places blocks for testnet version 3 in the
 // data and log directory "testnet", which does not match the Name field of the

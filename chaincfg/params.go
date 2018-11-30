@@ -137,12 +137,12 @@ type Params struct {
 
 	// The following are the heights at which the Bitcoin Cash specific forks
 	// became active.
-	UahfForkHeight int32 // August 1, 2017 hard fork
-	DaaForkHeight  int32 // November 13, 2017 hard fork
+	UahfForkHeight              int32 // August 1, 2017 hard fork
+	DaaForkHeight               int32 // November 13, 2017 hard fork
+	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
 
 	// Planned hardforks
-	MagneticAnomalyActivationTime uint64 // Nov 15, 2018 hard fork
-	GreatWallActivationTime       uint64 // May 15, 2019 hard fork
+	GreatWallActivationTime uint64 // May 15, 2019 hard fork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -249,10 +249,9 @@ var MainNetParams = Params{
 	BIP0065Height: 388381, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
 	BIP0066Height: 363725, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
 
-	UahfForkHeight: 478558, // 0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43
-	DaaForkHeight:  504031, // 0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c
-
-	MagneticAnomalyActivationTime: 1542300000,
+	UahfForkHeight:              478558, // 0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43
+	DaaForkHeight:               504031, // 0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c
+	MagneticAnonomalyForkHeight: 556766, // 00000000000000000102d94fde9bd0807a2cc7582fe85dd6349b73ce4e8d9322
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -289,6 +288,7 @@ var MainNetParams = Params{
 		{470000, newHashFromStr("0000000000000000006c539c722e280a0769abd510af0073430159d71e6d7589")},
 		{510000, newHashFromStr("00000000000000000367922b6457e21d591ef86b360d78a598b14c2f1f6b0e04")},
 		{552979, newHashFromStr("0000000000000000015648768ac1b788a83187d706f858919fcc5c096b76fbf2")},
+		{556767, newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c")},
 	},
 
 	// Consensus rule change deployments.
@@ -349,10 +349,9 @@ var RegressionNetParams = Params{
 	BIP0065Height:    1351,      // Used by regression tests
 	BIP0066Height:    1251,      // Used by regression tests
 
-	UahfForkHeight: 0, // Always active on regtest
-	DaaForkHeight:  0, // Always active on regtest
-
-	MagneticAnomalyActivationTime: 1542300000,
+	UahfForkHeight:              0, // Always active on regtest
+	DaaForkHeight:               0, // Always active on regtest
+	MagneticAnonomalyForkHeight: 1000,
 
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -429,10 +428,9 @@ var TestNet3Params = Params{
 	BIP0065Height: 581885, // 00000000007f6655f22f98e72ed80d8b06dc761d5da09df0fa1dc4be4f861eb6
 	BIP0066Height: 330776, // 000000002104c8c45e99a8853285a3b592602a3ccde2b832481da85e9e4ba182
 
-	UahfForkHeight: 1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
-	DaaForkHeight:  1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
-
-	MagneticAnomalyActivationTime: 1542300000,
+	UahfForkHeight:              1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
+	DaaForkHeight:               1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
+	MagneticAnonomalyForkHeight: 1267996, // 00000000000001fae0095cd4bea16f1ce8ab63f3f660a03c6d8171485f484b24
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -512,25 +510,25 @@ var SimNetParams = Params{
 	DNSSeeds:    []DNSSeed{}, // NOTE: There must NOT be any seeds.
 
 	// Chain parameters
-	GenesisBlock:                  &simNetGenesisBlock,
-	GenesisHash:                   &simNetGenesisHash,
-	PowLimit:                      simNetPowLimit,
-	PowLimitBits:                  0x207fffff,
-	BIP0034Height:                 0, // Always active on simnet
-	BIP0065Height:                 0, // Always active on simnet
-	BIP0066Height:                 0, // Always active on simnet
-	UahfForkHeight:                0, // Always active on simnet
-	DaaForkHeight:                 2000,
-	MagneticAnomalyActivationTime: 1542300000,
-	CoinbaseMaturity:              100,
-	SubsidyReductionInterval:      210000,
-	TargetTimespan:                time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:            time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor:      4,                   // 25% less, 400% more
-	ReduceMinDifficulty:           true,
-	NoDifficultyAdjustment:        true,
-	MinDiffReductionTime:          time.Minute * 20, // TargetTimePerBlock * 2
-	GenerateSupported:             true,
+	GenesisBlock:                &simNetGenesisBlock,
+	GenesisHash:                 &simNetGenesisHash,
+	PowLimit:                    simNetPowLimit,
+	PowLimitBits:                0x207fffff,
+	BIP0034Height:               0, // Always active on simnet
+	BIP0065Height:               0, // Always active on simnet
+	BIP0066Height:               0, // Always active on simnet
+	UahfForkHeight:              0, // Always active on simnet
+	DaaForkHeight:               2000,
+	MagneticAnonomalyForkHeight: 3000,
+	CoinbaseMaturity:            100,
+	SubsidyReductionInterval:    210000,
+	TargetTimespan:              time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:          time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:    4,                   // 25% less, 400% more
+	ReduceMinDifficulty:         true,
+	NoDifficultyAdjustment:      true,
+	MinDiffReductionTime:        time.Minute * 20, // TargetTimePerBlock * 2
+	GenerateSupported:           true,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
@@ -574,92 +572,6 @@ var SimNetParams = Params{
 	HDCoinType: 115, // ASCII for s
 }
 
-// TestNet1Params defines the network parameters for a dedicated testnet
-// to use to test the upcoming Nov 15 hardfork changes. To use it set
-// addpeer=144.217.126.201.
-var TestNet1Params = Params{
-	Name:        "testnet1",
-	Net:         wire.TestNet3,
-	DefaultPort: "18333",
-	DNSSeeds:    []DNSSeed{},
-
-	// Chain parameters
-	GenesisBlock:  &testNet3GenesisBlock,
-	GenesisHash:   &testNet3GenesisHash,
-	PowLimit:      testNet3PowLimit,
-	PowLimitBits:  0x1d00ffff,
-	BIP0034Height: 21111,  // 0000000023b3a96d3484e5abb3755c413e7d41500f8e2a5c3f0dd01299cd8ef8
-	BIP0065Height: 581885, // 00000000007f6655f22f98e72ed80d8b06dc761d5da09df0fa1dc4be4f861eb6
-	BIP0066Height: 330776, // 000000002104c8c45e99a8853285a3b592602a3ccde2b832481da85e9e4ba182
-
-	UahfForkHeight: 1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
-	DaaForkHeight:  1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
-
-	MagneticAnomalyActivationTime: 1535500000,
-
-	CoinbaseMaturity:         100,
-	SubsidyReductionInterval: 210000,
-	TargetTimespan:           time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
-	ReduceMinDifficulty:      true,
-	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
-	GenerateSupported:        false,
-
-	// Checkpoints ordered from oldest to newest.
-	Checkpoints: []Checkpoint{
-		{546, newHashFromStr("000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")},
-		{100000, newHashFromStr("00000000009e2958c15ff9290d571bf9459e93b19765c6801ddeccadbb160a1e")},
-		{200000, newHashFromStr("0000000000287bffd321963ef05feab753ebe274e1d78b2fd4e2bfe9ad3aa6f2")},
-		{300001, newHashFromStr("0000000000004829474748f3d1bc8fcf893c88be255e6d7f571c548aff57abf4")},
-		{400002, newHashFromStr("0000000005e2c73b8ecb82ae2dbc2e8274614ebad7172b53528aba7501f5a089")},
-		{500011, newHashFromStr("00000000000929f63977fbac92ff570a9bd9e7715401ee96f2848f7b07750b02")},
-		{600002, newHashFromStr("000000000001f471389afd6ee94dcace5ccc44adc18e8bff402443f034b07240")},
-		{700000, newHashFromStr("000000000000406178b12a4dea3b27e13b3c4fe4510994fd667d7c1e6a3f4dc1")},
-		{800010, newHashFromStr("000000000017ed35296433190b6829db01e657d80631d43f5983fa403bfdb4c1")},
-		{900000, newHashFromStr("0000000000356f8d8924556e765b7a94aaebc6b5c8685dcfa2b1ee8b41acd89b")},
-		{1000007, newHashFromStr("00000000001ccb893d8a1f25b70ad173ce955e5f50124261bbbc50379a612ddf")},
-	},
-
-	// Consensus rule change deployments.
-	//
-	// The miner confirmation window is defined as:
-	//   target proof of work timespan / target proof of work spacing
-	RuleChangeActivationThreshold: 1512, // 75% of MinerConfirmationWindow
-	MinerConfirmationWindow:       2016,
-	Deployments: [DefinedDeployments]ConsensusDeployment{
-		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  1199145601, // January 1, 2008 UTC
-			ExpireTime: 1230767999, // December 31, 2008 UTC
-		},
-		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  1456790400, // March 1st, 2016
-			ExpireTime: 1493596800, // May 1st, 2017
-		},
-	},
-
-	// Mempool parameters
-	RelayNonStdTxs: true,
-
-	// The prefix for the cashaddress
-	CashAddressPrefix: "bchtest", // always bchtest for testnet
-
-	// Address encoding magics
-	LegacyPubKeyHashAddrID: 0x6f, // starts with m or n
-	LegacyScriptHashAddrID: 0xc4, // starts with 2
-	PrivateKeyID:           0xef, // starts with 9 (uncompressed) or c (compressed)
-
-	// BIP32 hierarchical deterministic extended key magics
-	HDPrivateKeyID: [4]byte{0x04, 0x35, 0x83, 0x94}, // starts with tprv
-	HDPublicKeyID:  [4]byte{0x04, 0x35, 0x87, 0xcf}, // starts with tpub
-
-	// BIP44 coin type used in the hierarchical deterministic path for
-	// address generation.
-	HDCoinType: 1, // all coins use 1
-}
-
 var (
 	// ErrDuplicateNet describes an error where the parameters for a Bitcoin
 	// network could not be set due to the network already being a standard
@@ -695,7 +607,7 @@ func (d DNSSeed) String() string {
 // parameters based on inputs and work regardless of the network being standard
 // or not.
 func Register(params *Params) error {
-	if _, ok := registeredNets[params.Net]; ok && params != &TestNet1Params {
+	if _, ok := registeredNets[params.Net]; ok {
 		return ErrDuplicateNet
 	}
 	registeredNets[params.Net] = struct{}{}
@@ -790,5 +702,4 @@ func init() {
 	mustRegister(&TestNet3Params)
 	mustRegister(&RegressionNetParams)
 	mustRegister(&SimNetParams)
-	mustRegister(&TestNet1Params)
 }

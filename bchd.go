@@ -19,6 +19,7 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/limits"
 	"github.com/gcash/bchd/version"
+	"github.com/gcash/bchd/wire"
 )
 
 const (
@@ -54,6 +55,9 @@ func bchdMain(serverChan chan<- *server) error {
 			logRotator.Close()
 		}
 	}()
+
+	// Do required one-time initialization on wire
+	wire.SetLimits(cfg.ExcessiveBlockSize)
 
 	// Get a channel that will be closed when a shutdown signal has been
 	// triggered either from an OS signal such as SIGINT (Ctrl+C) or from
@@ -329,7 +333,6 @@ func main() {
 
 	// Work around defer not working after os.Exit()
 	if err := bchdMain(nil); err != nil {
-		fmt.Fprintf(os.Stderr, "error running node: %v\n", err)
 		os.Exit(1)
 	}
 }

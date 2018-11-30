@@ -35,7 +35,7 @@ func TestTx(t *testing.T) {
 	}
 
 	// Ensure max payload is expected value for latest protocol version.
-	wantPayload := uint32(32000000)
+	wantPayload := fixedExcessiveBlockSize
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+

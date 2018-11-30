@@ -22,9 +22,20 @@ const MessageHeaderSize = 24
 // header.  Shorter commands must be zero padded.
 const CommandSize = 12
 
-// MaxMessagePayload is the maximum bytes a message can be regardless of other
+// ebs is the excessive block size, used to determine reasonable maximum message sizes.
+// 32MB is the current default value
+var ebs uint32 = 32000000
+
+// SetLimits adjusts various message limits based on max block size configuration.
+func SetLimits(excessiveBlockSize uint32) {
+	ebs = excessiveBlockSize
+}
+
+// MaxMessagePayload returns is the maximum bytes a message can be regardless of other
 // individual limits imposed by messages themselves.
-var MaxMessagePayload = uint32(1024*1024*32) * 2 // 32MB
+func maxMessagePayload() uint32 {
+	return ((ebs / 1000000) * 1024 * 1024) * 2
+}
 
 // Commands used in bitcoin message headers which describe the type of message.
 const (
@@ -276,10 +287,10 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	lenp := len(payload)
 
 	// Enforce maximum overall message payload.
-	if lenp > int(MaxMessagePayload) {
+	if lenp > int(maxMessagePayload()) {
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload is %d bytes",
-			lenp, MaxMessagePayload)
+			lenp, maxMessagePayload())
 		return totalBytes, messageError("WriteMessage", str)
 	}
 
@@ -335,10 +346,10 @@ func ReadMessageWithEncodingN(r io.Reader, pver uint32, bchnet BitcoinNet,
 	}
 
 	// Enforce maximum message payload.
-	if hdr.length > MaxMessagePayload {
+	if hdr.length > maxMessagePayload() {
 		str := fmt.Sprintf("message payload is too large - header "+
 			"indicates %d bytes, but max message payload is %d "+
-			"bytes.", hdr.length, MaxMessagePayload)
+			"bytes.", hdr.length, maxMessagePayload())
 		return totalBytes, nil, nil, messageError("ReadMessage", str)
 
 	}

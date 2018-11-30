@@ -49,7 +49,7 @@ func listCommands() {
 	cmdMethods := btcjson.RegisteredCmdMethods()
 	categorized := make([][]string, numCategories)
 	for _, method := range cmdMethods {
-		flags, err := btcjson.MethodUsageFlags(method)
+		usageFlags, err := btcjson.MethodUsageFlags(method)
 		if err != nil {
 			// This should never happen since the method was just
 			// returned from the package, but be safe.
@@ -57,7 +57,7 @@ func listCommands() {
 		}
 
 		// Skip the commands that aren't usable from this utility.
-		if flags&unusableFlags != 0 {
+		if usageFlags&unusableFlags != 0 {
 			continue
 		}
 
@@ -68,9 +68,9 @@ func listCommands() {
 			continue
 		}
 
-		// Categorize the command based on the usage flags.
+		// Categorize the command based on the usageFlags.
 		category := categoryChain
-		if flags&btcjson.UFWalletOnly != 0 {
+		if usageFlags&btcjson.UFWalletOnly != 0 {
 			category = categoryWallet
 		}
 		categorized[category] = append(categorized[category], usage)

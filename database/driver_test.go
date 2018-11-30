@@ -10,7 +10,15 @@ import (
 
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/wire"
 )
+
+// fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
+const fixedExcessiveBlockSize uint32 = 42111000
+
+func init() {
+	wire.SetLimits(fixedExcessiveBlockSize)
+}
 
 var (
 	// ignoreDbTypes are types which should be ignored when running tests

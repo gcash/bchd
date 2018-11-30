@@ -2300,7 +2300,7 @@ func handleGetInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (in
 		Connections:     s.cfg.ConnMgr.ConnectedCount(),
 		Proxy:           cfg.Proxy,
 		Difficulty:      getDifficultyRatio(best.Bits, s.cfg.ChainParams),
-		TestNet:         cfg.TestNet3 || cfg.TestNet1,
+		TestNet:         cfg.TestNet3,
 		RelayFee:        cfg.minRelayTxFee.ToBCH(),
 	}
 
@@ -3482,14 +3482,7 @@ func verifyChain(s *rpcServer, level, depth int32) error {
 
 		prevHeight := height - 1
 		if prevHeight > 0 {
-			prevBlock, err := s.cfg.Chain.BlockByHeight(height - 1)
-			if err != nil {
-				rpcsLog.Errorf("Verify is unable to fetch block at "+
-					"height %d: %v", height, err)
-				return err
-			}
-
-			if s.cfg.Chain.IsMagneticAnomalyEnabled(*prevBlock.Hash()) {
+			if height > s.cfg.ChainParams.MagneticAnonomalyForkHeight {
 				magneticAnomalyActive = true
 			}
 		}

@@ -51,9 +51,6 @@ const (
 	// required to be supported by outbound peers.
 	defaultRequiredServices = wire.SFNodeNetwork
 
-	// defaultTargetOutbound is the default number of outbound peers to target.
-	defaultTargetOutbound = 8
-
 	// connectionRetryInterval is the base amount of time to wait in between
 	// retries when connecting to persistent peers.  It is adjusted by the
 	// number of retries such that there is a retry backoff.
@@ -69,6 +66,9 @@ var (
 	// identify ourselves to other bitcoin peers.
 	userAgentVersion = fmt.Sprintf("%d.%d.%d", version.AppMajor, version.AppMinor, version.AppPatch)
 )
+
+// addrMe specifies the server address to send peers.
+var addrMe *wire.NetAddress
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
 var zeroHash chainhash.Hash
@@ -428,6 +428,13 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// negotiation logic will disconnect it after this callback returns.
 	if msg.ProtocolVersion < int32(peer.MinAcceptableProtocolVersion) {
 		return nil
+	}
+
+	// Do not allow connections to Bitcoin SV peers
+	if strings.Contains(msg.UserAgent, "Bitcoin SV") {
+		srvrLog.Debugf("Rejecting peer %s for running Bitcoin SV", sp.Peer)
+		reason := fmt.Sprint("Not Bitcoin Cash node")
+		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
 	}
 
 	// Reject outbound peers that are not full nodes.
@@ -1252,6 +1259,17 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 	// Get the current known addresses from the address manager.
 	addrCache := sp.server.addrManager.AddressCache()
 
+	// Add our best net address for peers to discover us. If the port
+	// is 0 that indicates no worthy address was found, therefore
+	// we do not broadcast it. We also must trim the cache by one
+	// entry if we insert a record to prevent sending past the max
+	// send size.
+	bestAddress := sp.server.addrManager.GetBestLocalAddress(sp.NA())
+	if bestAddress.Port != 0 {
+		addrCache = addrCache[1:]
+		addrCache = append(addrCache, bestAddress)
+	}
+
 	// Push the addresses.
 	sp.pushAddrMsg(addrCache)
 }
@@ -2002,6 +2020,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
 		},
+		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
 		HostToNetAddress:  sp.server.addrManager.HostToNetAddress,
 		Proxy:             cfg.Proxy,
@@ -2815,15 +2834,15 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 
 	// Create a connection manager.
-	targetOutbound := defaultTargetOutbound
-	if cfg.MaxPeers < targetOutbound {
-		targetOutbound = cfg.MaxPeers
+	targetOutbound := cfg.TargetOutboundPeers
+	if cfg.MaxPeers < int(targetOutbound) {
+		targetOutbound = uint32(cfg.MaxPeers)
 	}
 	cmgr, err := connmgr.New(&connmgr.Config{
 		Listeners:      listeners,
 		OnAccept:       s.inboundPeerConnected,
 		RetryDuration:  connectionRetryInterval,
-		TargetOutbound: uint32(targetOutbound),
+		TargetOutbound: targetOutbound,
 		Dial:           bchdDial,
 		OnConnection:   s.outboundPeerConnected,
 		GetNewAddress:  newAddressFunc,
@@ -2913,14 +2932,13 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 	}
 
 	var nat NAT
+	defaultPort, err := strconv.ParseUint(activeNetParams.DefaultPort, 10, 16)
+	if err != nil {
+		srvrLog.Errorf("Can not parse default port %s for active chain: %v",
+			activeNetParams.DefaultPort, err)
+		return nil, nil, err
+	}
 	if len(cfg.ExternalIPs) != 0 {
-		defaultPort, err := strconv.ParseUint(activeNetParams.DefaultPort, 10, 16)
-		if err != nil {
-			srvrLog.Errorf("Can not parse default port %s for active chain: %v",
-				activeNetParams.DefaultPort, err)
-			return nil, nil, err
-		}
-
 		for _, sip := range cfg.ExternalIPs {
 			eport := uint16(defaultPort)
 			host, portstr, err := net.SplitHostPort(sip)
@@ -2942,6 +2960,13 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 				continue
 			}
 
+			// Found a valid external IP, make sure we use these details
+			// so peers get the correct IP information. Since we can only
+			// advertise one IP, use the first seen.
+			if addrMe == nil {
+				addrMe = na
+			}
+
 			err = amgr.AddLocalAddress(na, addrmgr.ManualPrio)
 			if err != nil {
 				amgrLog.Warnf("Skipping specified external IP: %v", err)
@@ -2955,6 +2980,22 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 				srvrLog.Warnf("Can't discover upnp: %v", err)
 			}
 			// nil nat here is fine, just means no upnp on network.
+
+			// Found a valid external IP, make sure we use these details
+			// so peers get the correct IP information.
+			if nat != nil {
+				addr, err := nat.GetExternalAddress()
+				if err == nil {
+					eport := uint16(defaultPort)
+					na, err := amgr.HostToNetAddress(addr.String(), eport, services)
+					if err == nil {
+						if addrMe == nil {
+							addrMe = na
+						}
+					}
+
+				}
+			}
 		}
 
 		// Add bound addresses to address manager to be advertised to peers.

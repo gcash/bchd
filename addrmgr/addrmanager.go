@@ -494,7 +494,7 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 		for _, val := range sam.TriedBuckets[i] {
 			ka, ok := a.addrIndex[val]
 			if !ok {
-				return fmt.Errorf("Newbucket contains %s but "+
+				return fmt.Errorf("newbucket contains %s but "+
 					"none in address list", val)
 			}
 
@@ -513,7 +513,7 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 
 		if v.refs > 0 && v.tried {
 			return fmt.Errorf("address %s after serialisation "+
-				"which is both new and tried!", k)
+				"which is both new and tried", k)
 		}
 	}
 
@@ -719,8 +719,8 @@ func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.S
 func ipString(na *wire.NetAddress) string {
 	if IsOnionCatTor(na) {
 		// We know now that na.IP is long enough.
-		base32 := base32.StdEncoding.EncodeToString(na.IP[6:])
-		return strings.ToLower(base32) + ".onion"
+		base32str := base32.StdEncoding.EncodeToString(na.IP[6:])
+		return strings.ToLower(base32str) + ".onion"
 	}
 
 	return na.IP.String()

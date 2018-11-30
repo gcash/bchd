@@ -31,6 +31,7 @@ import (
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchutil"
+
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -55,7 +56,6 @@ const (
 	defaultBlockMinSize            = 0
 	defaultBlockMaxSize            = 750000
 	blockMaxSizeMin                = 1000
-	blockMaxSizeMax                = defaultExcessiveBlockSize - 1000
 	defaultGenerate                = false
 	defaultMaxOrphanTransactions   = 100
 	defaultMaxOrphanTxSize         = 100000
@@ -65,6 +65,7 @@ const (
 	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
+	defaultTargetOutboundPeers     = uint32(8)
 	minPruneDepth                  = 288
 )
 
@@ -143,7 +144,6 @@ type config struct {
 	NoOnion                 bool          `long:"noonion" description:"Disable connecting to tor hidden services"`
 	TorIsolation            bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TestNet3                bool          `long:"testnet" description:"Use the test network"`
-	TestNet1                bool          `long:"testnet1" description:"Use the testnet1 network"`
 	RegressionTest          bool          `long:"regtest" description:"Use the regression test network"`
 	SimNet                  bool          `long:"simnet" description:"Use the simulation test network"`
 	AddCheckpoints          []string      `long:"addcheckpoint" description:"Add a custom checkpoint.  Format: '<height>:<hash>'"`
@@ -179,6 +179,7 @@ type config struct {
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
 	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
+	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"number of outbound connections to maintain"`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -448,6 +449,7 @@ func loadConfig() (*config, []string, error) {
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,
 		PruneDepth:              defaultPruneDepth,
+		TargetOutboundPeers:     defaultTargetOutboundPeers,
 	}
 
 	// Service options which are only added on Windows.
@@ -563,11 +565,6 @@ func loadConfig() (*config, []string, error) {
 		numNets++
 		// Also disable dns seeding on the simulation test network.
 		activeNetParams = &simNetParams
-		cfg.DisableDNSSeed = true
-	}
-	if cfg.TestNet1 {
-		numNets++
-		activeNetParams = &testNet1Params
 		cfg.DisableDNSSeed = true
 	}
 	if numNets > 1 {
@@ -794,19 +791,6 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Limit the max block size to a sane value.
-	if cfg.BlockMaxSize < blockMaxSizeMin || cfg.BlockMaxSize >
-		blockMaxSizeMax {
-
-		str := "%s: The blockmaxsize option must be in between %d " +
-			"and %d -- parsed [%d]"
-		err := fmt.Errorf(str, funcName, blockMaxSizeMin,
-			blockMaxSizeMax, cfg.BlockMaxSize)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, usageMessage)
-		return nil, nil, err
-	}
-
 	// Limit the max orphan count to a sane vlue.
 	if cfg.MaxOrphanTxs < 0 {
 		str := "%s: The maxorphantx option may not be less than 0 " +
@@ -820,9 +804,25 @@ func loadConfig() (*config, []string, error) {
 	// Excessive blocksize cannot be set less than the default but it can be higher.
 	cfg.ExcessiveBlockSize = maxUint32(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
 
+	// Limit the max block size to a sane value.
+	blockMaxSizeMax := cfg.ExcessiveBlockSize - 1000
+	if cfg.BlockMaxSize < blockMaxSizeMin || cfg.BlockMaxSize >
+		blockMaxSizeMax {
+
+		str := "%s: The blockmaxsize option must be in between %d " +
+			"and %d -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, blockMaxSizeMin,
+			blockMaxSizeMax, cfg.BlockMaxSize)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
 	// Limit the block priority and minimum block sizes to max block size.
 	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
 	cfg.BlockMinSize = minUint32(cfg.BlockMinSize, cfg.BlockMaxSize)
+
+	// Prepend ExcessiveBlockSize signaling to the UserAgentComments
+	cfg.UserAgentComments = append([]string{fmt.Sprintf("EB%.1f", float64(cfg.ExcessiveBlockSize)/1000000)}, cfg.UserAgentComments...)
 
 	// Look for illegal characters in the user agent comments.
 	for _, uaComment := range cfg.UserAgentComments {
