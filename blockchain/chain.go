@@ -1700,7 +1700,7 @@ func (b *BlockChain) RollbackUtxoSet(height int32) (*UtxoViewpoint, error) {
 
 	log.Infof("Rolling back %d blocks", tip.height-height)
 
-	// Disconnect all of the blocks back to the point of the fork.  This
+	// Disconnect all of the blocks back to the provided height.  This
 	// entails loading the blocks and their associated spent txos from the
 	// database and using that information to unspend all of the spent txos
 	// and remove the utxos created by the blocks.

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultDbType   = "ffldb"
+	defaultDbType = "ffldb"
 )
 
 var (

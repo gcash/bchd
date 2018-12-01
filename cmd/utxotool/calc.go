@@ -86,8 +86,10 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 			}
 			outpoint = blockchain.DeserializeOutpointKey(k)
 
+			// If it's in the view let's just exit as we'll deal
+			// with the view later.
 			viewEntry = view.LookupEntry(*outpoint)
-			if viewEntry != nil && viewEntry.IsSpent() {
+			if viewEntry != nil {
 				return nil
 			}
 			serializedUtxo, size = serializeV0Utxo(entry, outpoint)
@@ -105,6 +107,23 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 	if err != nil {
 		return nil, err
 	}
+
+	// Finally loop through the entries in the view and add all that aren't spent.
+	for outpoint, entry := range view.Entries() {
+		if entry.IsSpent() {
+			continue
+		}
+		serializedUtxo, size = serializeV0Utxo(entry, &outpoint)
+		m.Add(serializedUtxo[:size])
+
+		if utxoWriter != nil {
+			_, err = utxoWriter.Write(serializedUtxo[:size])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	h := m.Hash()
 	return &h, nil
 }
