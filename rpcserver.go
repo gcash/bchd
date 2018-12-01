@@ -2031,6 +2031,8 @@ func chainErrToGBTErrString(err error) string {
 		return "bad-txns-badinput"
 	case blockchain.ErrMissingTxOut:
 		return "bad-txns-missinginput"
+	case blockchain.ErrSpentTxOut:
+		return "bad-txns-spentinput"
 	case blockchain.ErrUnfinalizedTx:
 		return "bad-txns-unfinalizedtx"
 	case blockchain.ErrDuplicateTx:

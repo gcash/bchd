@@ -1298,7 +1298,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	doubleSpendTx := createSpendTx(outs[11], lowFee)
 	g.nextBlock("b37", outs[11], additionalTx(doubleSpendTx))
 	b37Tx1Out := makeSpendableOut(g.tip, 1, 0)
-	rejected(blockchain.ErrMissingTxOut)
+	rejected(blockchain.ErrSpentTxOut)
 
 	g.setTip("b35")
 	g.nextBlock("b38", &b37Tx1Out)
@@ -1851,7 +1851,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		b.AddTransaction(tx3)
 		b.AddTransaction(tx4)
 	})
-	rejected(blockchain.ErrMissingTxOut)
+	rejected(blockchain.ErrSpentTxOut)
 
 	// ---------------------------------------------------------------------
 	// Extra subsidy tests.

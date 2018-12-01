@@ -129,8 +129,12 @@ const (
 	ErrBadTxInput
 
 	// ErrMissingTxOut indicates a transaction output referenced by an input
-	// either does not exist or has already been spent.
+	// that does not exist
 	ErrMissingTxOut
+
+	// ErrSpentTxOut indicates a transaction output referenced by an input
+	// that has already been spent.
+	ErrSpentTxOut
 
 	// ErrUnfinalizedTx indicates a transaction has not been finalized.
 	// A valid block may only contain finalized transactions.
@@ -246,6 +250,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrDuplicateTxInputs:     "ErrDuplicateTxInputs",
 	ErrBadTxInput:            "ErrBadTxInput",
 	ErrMissingTxOut:          "ErrMissingTxOut",
+	ErrSpentTxOut:            "ErrSpentTxOut",
 	ErrUnfinalizedTx:         "ErrUnfinalizedTx",
 	ErrDuplicateTx:           "ErrDuplicateTx",
 	ErrOverwriteTx:           "ErrOverwriteTx",
