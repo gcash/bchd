@@ -262,7 +262,7 @@ func assertNbEntriesOnDisk(t *testing.T, chain *BlockChain, expectedNumber int) 
 		nb = 0
 		for b := cursor.First(); b; b = cursor.Next() {
 			nb++
-			entry, err := deserializeUtxoEntry(cursor.Value())
+			entry, err := DeserializeUtxoEntry(cursor.Value())
 			if err != nil {
 				t.Fatalf("Failed to deserialize entry: %v", err)
 			}

@@ -611,6 +611,14 @@ func outpointKey(outpoint wire.OutPoint) *[]byte {
 	return key
 }
 
+// DeserializeOutpointKey takes in a Utxo database key and deserializes
+// it into an outpoint.
+func DeserializeOutpointKey(key []byte) *wire.OutPoint {
+	h := chainhash.HashH(key[:chainhash.HashSize])
+	idx, _ := deserializeVLQ(key[chainhash.HashSize:])
+	return wire.NewOutPoint(&h, uint32(idx))
+}
+
 // recycleOutpointKey puts the provided byte slice, which should have been
 // obtained via the outpointKey function, back on the free list.
 func recycleOutpointKey(key *[]byte) {
@@ -663,10 +671,10 @@ func serializeUtxoEntry(entry *UtxoEntry) ([]byte, error) {
 	return serialized, nil
 }
 
-// deserializeUtxoEntry decodes a utxo entry from the passed serialized byte
+// DeserializeUtxoEntry decodes a utxo entry from the passed serialized byte
 // slice into a new UtxoEntry using a format that is suitable for long-term
 // storage.  The format is described in detail above.
-func deserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
+func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 	// Deserialize the header code.
 	code, offset := deserializeVLQ(serialized)
 	if offset >= len(serialized) {
@@ -729,7 +737,7 @@ func dbFetchUtxoEntryByHash(dbTx database.Tx, hash *chainhash.Hash) (*UtxoEntry,
 		return nil, nil
 	}
 
-	return deserializeUtxoEntry(cursor.Value())
+	return DeserializeUtxoEntry(cursor.Value())
 }
 
 // dbFetchUtxoEntry uses an existing database transaction to fetch the specified
@@ -756,7 +764,7 @@ func dbFetchUtxoEntry(dbTx database.Tx, outpoint wire.OutPoint) (*UtxoEntry, err
 	}
 
 	// Deserialize the utxo entry and return it.
-	entry, err := deserializeUtxoEntry(serializedUtxo)
+	entry, err := DeserializeUtxoEntry(serializedUtxo)
 	if err != nil {
 		// Ensure any deserialization errors are returned as database
 		// corruption errors.

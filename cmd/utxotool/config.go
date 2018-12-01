@@ -19,8 +19,6 @@ import (
 
 const (
 	defaultDbType   = "ffldb"
-	defaultDataFile = "bootstrap.dat"
-	defaultProgress = 10
 )
 
 var (
@@ -34,24 +32,13 @@ var (
 //
 // See loadConfig for details on the configuration load process.
 type config struct {
-	DataDir        string `short:"b" long:"datadir" description:"Location of the bchd data directory"`
+	DataDir        string `short:"d" long:"datadir" description:"Location of the bchd data directory"`
 	DbType         string `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	TestNet3       bool   `long:"testnet" description:"Use the test network"`
 	RegressionTest bool   `long:"regtest" description:"Use the regression test network"`
 	SimNet         bool   `long:"simnet" description:"Use the simulation test network"`
-	BlockHeight    int    `short:"h" long:"height" description:"The height at which to calculate the utxo cache for"`
+	BlockHeight    int32  `short:"b" long:"height" description:"The height at which to calculate the utxo cache for"`
 	OutFile        string `short:"o" long:"out" description:"Export the serialized utxo set to this file. Leave empty if you do not want to export to file"`
-	Progress       int    `short:"p" long:"progress" description:"Show a progress message each time this number of seconds have passed -- Use 0 to disable progress announcements"`
-}
-
-// filesExists reports whether the named file or directory exists.
-func fileExists(name string) bool {
-	if _, err := os.Stat(name); err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
 }
 
 // validDbType returns whether or not dbType is a supported database type.
@@ -87,9 +74,8 @@ func netName(chainParams *chaincfg.Params) string {
 func loadConfig() (*config, []string, error) {
 	// Default config.
 	cfg := config{
-		DataDir:  defaultDataDir,
-		DbType:   defaultDbType,
-		Progress: defaultProgress,
+		DataDir: defaultDataDir,
+		DbType:  defaultDbType,
 	}
 
 	// Parse command line options.

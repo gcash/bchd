@@ -5,9 +5,13 @@
 package main
 
 import (
+	"compress/gzip"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -84,30 +88,35 @@ func realMain() error {
 	}
 	defer db.Close()
 
-	// Create a utxo processor for the database and input file and start it.
-	// The done channel returned from start will contain an error if
-	// anything went wrong.
-	processor, err := newUtxoProcessor(db)
-	if err != nil {
-		log.Errorf("Failed create block importer: %v", err)
-		return err
+	var utxoWriter io.Writer
+	if cfg.OutFile != "" {
+		utxoFile, err := os.Create(cfg.OutFile)
+		if err != nil {
+			log.Errorf("Unable to create file at: %s", cfg.OutFile)
+			return err
+		}
+		defer utxoFile.Close()
+		zw := gzip.NewWriter(utxoFile)
+
+		zw.Name = utxoFile.Name()
+		zw.Comment = fmt.Sprintf("Serialized Utxo Set at Height %d", cfg.BlockHeight)
+		zw.ModTime = time.Now()
+
+		utxoWriter = zw
 	}
 
 	// Perform the import asynchronously.  This allows blocks to be
 	// processed and read in parallel.  The results channel returned from
 	// Import contains the statistics about the import including an error
 	// if something went wrong.
-	log.Info("Starting rollback ")
-	resultsChan := processor.CalcUtxoSet(cfg.BlockHeight)
-	results := <-resultsChan
-	if results.err != nil {
-		log.Errorf("%v", results.err)
-		return results.err
+	log.Info("Starting Utxo hash calculation")
+	utxoHash, err := CalcUtxoSet(db, cfg.BlockHeight, utxoWriter)
+	if err != nil {
+		log.Errorf("%v", err)
+		return err
 	}
 
-	log.Infof("Processed a total of %d blocks (%d imported, %d already "+
-		"known)", results.blocksProcessed, results.blocksImported,
-		results.blocksProcessed-results.blocksImported)
+	log.Infof("Utxo set ECMH hash at height %d: %s", cfg.BlockHeight, utxoHash.String())
 	return nil
 }
 
