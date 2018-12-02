@@ -614,9 +614,9 @@ func outpointKey(outpoint wire.OutPoint) *[]byte {
 // DeserializeOutpointKey takes in a Utxo database key and deserializes
 // it into an outpoint.
 func DeserializeOutpointKey(key []byte) *wire.OutPoint {
-	h := chainhash.HashH(key[:chainhash.HashSize])
+	h, _ := chainhash.NewHash(key[:chainhash.HashSize])
 	idx, _ := deserializeVLQ(key[chainhash.HashSize:])
-	return wire.NewOutPoint(&h, uint32(idx))
+	return wire.NewOutPoint(h, uint32(idx))
 }
 
 // recycleOutpointKey puts the provided byte slice, which should have been

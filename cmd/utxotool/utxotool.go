@@ -5,13 +5,10 @@
 package main
 
 import (
-	"compress/gzip"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -95,14 +92,15 @@ func realMain() error {
 			log.Errorf("Unable to create file at: %s", cfg.OutFile)
 			return err
 		}
+		/*zw := gzip.NewWriter(utxoFile)
+		defer zw.Close()
 		defer utxoFile.Close()
-		zw := gzip.NewWriter(utxoFile)
 
 		zw.Name = utxoFile.Name()
 		zw.Comment = fmt.Sprintf("Serialized Utxo Set at Height %d", cfg.BlockHeight)
-		zw.ModTime = time.Now()
+		zw.ModTime = time.Now()*/
 
-		utxoWriter = zw
+		utxoWriter = utxoFile
 	}
 
 	// Perform the import asynchronously.  This allows blocks to be
@@ -110,13 +108,13 @@ func realMain() error {
 	// Import contains the statistics about the import including an error
 	// if something went wrong.
 	log.Info("Starting Utxo hash calculation")
-	utxoHash, err := CalcUtxoSet(db, cfg.BlockHeight, utxoWriter)
+	utxoHash, totalSize, err := CalcUtxoSet(db, cfg.BlockHeight, utxoWriter)
 	if err != nil {
 		log.Errorf("%v", err)
 		return err
 	}
 
-	log.Infof("Utxo set ECMH hash at height %d: %s", cfg.BlockHeight, utxoHash.String())
+	log.Infof("Utxo set ECMH hash at height %d: %s (serialized size %d)", cfg.BlockHeight, utxoHash.String(), totalSize)
 	return nil
 }
 

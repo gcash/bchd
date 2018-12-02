@@ -7,12 +7,9 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
-	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"io"
 )
-
-const baseSerializedUtxoSize = 52
 
 var (
 	utxoSetBucketName = []byte("utxosetv2")
@@ -22,8 +19,8 @@ var (
 )
 
 // serializeV0Utxo returns a Utxo serialized into the v0 Utxo commitment format
-func serializeV0Utxo(entry *blockchain.UtxoEntry, outpoint *wire.OutPoint) ([]byte, int) {
-	buf.Reset()
+func serializeV0Utxo(entry *blockchain.UtxoEntry, outpoint *wire.OutPoint) []byte {
+	buf = bytes.Buffer{}
 
 	buf.Write(outpoint.Hash.CloneBytes())
 
@@ -33,7 +30,7 @@ func serializeV0Utxo(entry *blockchain.UtxoEntry, outpoint *wire.OutPoint) ([]by
 	binary.LittleEndian.PutUint32(byteBuf32, uint32(entry.BlockHeight()))
 	// If this is a coinbase then the least significant bit of the height should be set to 1
 	if entry.IsCoinBase() {
-		byteBuf32[3] |= 0x00000001
+		byteBuf32[3] |= 0x01
 	}
 	buf.Write(byteBuf32)
 
@@ -44,12 +41,12 @@ func serializeV0Utxo(entry *blockchain.UtxoEntry, outpoint *wire.OutPoint) ([]by
 	buf.Write(byteBuf32)
 
 	buf.Write(entry.PkScript())
-	return buf.Bytes(), baseSerializedUtxoSize + len(entry.PkScript())
+	return buf.Bytes()
 }
 
 // CalcUtxoSet rolls back the chain to the given block height then loads
 // the Utxo set and calculates the ECMH hash.
-func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash.Hash, error) {
+func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash.Hash, int, error) {
 	chain, err := blockchain.New(&blockchain.Config{
 		DB:          db,
 		ChainParams: activeNetParams,
@@ -59,12 +56,12 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 		ExcessiveBlockSize: 32000000,
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	view, err := chain.RollbackUtxoSet(height)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	log.Info("Loading Utxo set from disk. This is going to take a while...")
 	m := bchec.NewMultiset(bchec.S256())
@@ -74,9 +71,10 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 		entry          *blockchain.UtxoEntry
 		viewEntry      *blockchain.UtxoEntry
 		outpoint       *wire.OutPoint
-		serializedUtxo = make([]byte, txscript.MaxScriptSize)
-		size           int
+		serializedUtxo []byte
+		totalSize      int
 	)
+
 	err = db.View(func(tx database.Tx) error {
 		utxoBucket := tx.Metadata().Bucket(utxoSetBucketName)
 		return utxoBucket.ForEach(func(k, v []byte) error {
@@ -92,11 +90,12 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 			if viewEntry != nil {
 				return nil
 			}
-			serializedUtxo, size = serializeV0Utxo(entry, outpoint)
-			m.Add(serializedUtxo[:size])
+			serializedUtxo = serializeV0Utxo(entry, outpoint)
+			m.Add(serializedUtxo)
+			totalSize += len(serializedUtxo)
 
 			if utxoWriter != nil {
-				_, err = utxoWriter.Write(serializedUtxo[:size])
+				_, err = utxoWriter.Write(serializedUtxo)
 				if err != nil {
 					return err
 				}
@@ -105,7 +104,7 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 		})
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Finally loop through the entries in the view and add all that aren't spent.
@@ -113,17 +112,18 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 		if entry.IsSpent() {
 			continue
 		}
-		serializedUtxo, size = serializeV0Utxo(entry, &outpoint)
-		m.Add(serializedUtxo[:size])
+		serializedUtxo = serializeV0Utxo(entry, &outpoint)
+		m.Add(serializedUtxo)
+		totalSize += len(serializedUtxo)
 
 		if utxoWriter != nil {
-			_, err = utxoWriter.Write(serializedUtxo[:size])
+			_, err = utxoWriter.Write(serializedUtxo)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		}
 	}
 
 	h := m.Hash()
-	return &h, nil
+	return &h, totalSize, nil
 }

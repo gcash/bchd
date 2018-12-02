@@ -1680,9 +1680,9 @@ func (b *BlockChain) Prune() error {
 }
 
 // RollbackUtxoSet will perform an in-memory rollback of the Utxo set to the
-// given block height and return a UtxoViewpoint containing diff between current
-// Utxo set and the Utxo set at the provided height. Calling this function will
-// not modify the current Utxo state either in the memory cache or on disk.
+// given block height and return a UtxoViewpoint containing the diff between the
+// current Utxo set and the Utxo set at the provided height. Calling this function
+// will not modify the current Utxo state either in the memory cache or on disk.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) RollbackUtxoSet(height int32) (*UtxoViewpoint, error) {
