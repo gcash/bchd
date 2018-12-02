@@ -97,7 +97,7 @@
     "hdkeychain",
   ]
   pruneopts = "UT"
-  revision = "d51537ee11a6e6c31ba74f4b4accbc0edaf7a5d4"
+  revision = "64c691e106aa5321e47a3b3eba65b3c42fbc1f75"
 
 [[projects]]
   branch = "master"
