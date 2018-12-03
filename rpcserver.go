@@ -44,6 +44,7 @@ import (
 	"github.com/gcash/bchd/version"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/bchutil/merkleblock"
 )
 
 // API version constants
@@ -162,6 +163,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getrawmempool":         handleGetRawMempool,
 	"getrawtransaction":     handleGetRawTransaction,
 	"gettxout":              handleGetTxOut,
+	"gettxoutproof":         handleGetTxOutProof,
 	"help":                  handleHelp,
 	"node":                  handleNode,
 	"ping":                  handlePing,
@@ -174,6 +176,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"validateaddress":       handleValidateAddress,
 	"verifychain":           handleVerifyChain,
 	"verifymessage":         handleVerifyMessage,
+	"verifytxoutproof":      handleVerifyTxOutProof,
 	"version":               handleVersion,
 }
 
@@ -274,12 +277,14 @@ var rpcLimited = map[string]struct{}{
 	"getrawmempool":         {},
 	"getrawtransaction":     {},
 	"gettxout":              {},
+	"gettxoutproof":         {},
 	"searchrawtransactions": {},
 	"sendrawtransaction":    {},
 	"submitblock":           {},
 	"uptime":                {},
 	"validateaddress":       {},
 	"verifymessage":         {},
+	"verifytxoutproof":      {},
 	"version":               {},
 }
 
@@ -2750,6 +2755,229 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		Coinbase: isCoinbase,
 	}
 	return txOutReply, nil
+}
+
+// handleGetTxOutProof implements the gettxoutproof command.
+func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetTxOutProofCmd)
+
+	// check for a excessively high number of transactions
+	if uint32(len(c.TxIDs)) > merkleblock.MaxTxnCount {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "Too many txid's have been passed",
+		}
+	}
+
+	// store our validated transactions
+	txnSet := make([]*chainhash.Hash, 0, len(c.TxIDs))
+
+	// check if transactions are valid and there are no duplicates
+	for _, txnStr := range c.TxIDs {
+		txnHash, err := chainhash.NewHashFromStr(txnStr)
+
+		if err != nil || len(txnStr) != chainhash.MaxHashStringSize {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: fmt.Sprintf("Invalid txid %s", txnStr),
+			}
+		}
+
+		if merkleblock.TxInSet(txnHash, txnSet) {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: fmt.Sprintf("Duplicate txid %s in set", txnStr),
+			}
+		}
+
+		// add valid hash to our set
+		txnSet = append(txnSet, txnHash)
+	}
+
+	var blkHash *chainhash.Hash
+
+	// check if block hash was passed as a parameter
+	if c.BlockHash != nil {
+		var err error
+		blkHash, err = chainhash.NewHashFromStr(*c.BlockHash)
+
+		if err != nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: "Block hash is not valid",
+			}
+		}
+
+		// check if block exists
+		has, err := s.cfg.Chain.HaveBlock(blkHash)
+
+		if err != nil || !has {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCBlockNotFound,
+				Message: "Block not found",
+			}
+		}
+
+	} else {
+		// no block hash was passed so use the first txn to lookup the block
+		// it appears in.  all transaction must be in the same block so which
+		// transaction is used for the lookup does not matter.
+
+		// lookup location of the transaction
+		blockRegion, err := s.cfg.TxIndex.TxBlockRegion(txnSet[0])
+
+		if err != nil || blockRegion == nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCNoTxInfo,
+				Message: "Unable to find block for given transaction",
+			}
+		}
+
+		blkHash = blockRegion.Hash
+	}
+
+	// load block and check that all transactions passed in the set exist in
+	// the loaded block
+	var blkBytes []byte
+	err := s.cfg.DB.View(func(dbTx database.Tx) error {
+		var err error
+		blkBytes, err = dbTx.FetchBlock(blkHash)
+		return err
+	})
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Can't read block from disk",
+		}
+	}
+
+	block, err := bchutil.NewBlockFromBytes(blkBytes)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Failed to deserialize block",
+		}
+	}
+
+	found := 0
+
+	for _, tx := range block.Transactions() {
+		if merkleblock.TxInSet(tx.Hash(), txnSet) {
+			found++
+		}
+	}
+
+	if found != len(txnSet) {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Not all transactions found in the specified or retrieved block",
+		}
+	}
+
+	// create merkle proof
+	mBlock, _ := merkleblock.NewMerkleBlockWithTxnSet(block, txnSet)
+
+	// encode proof to hex
+	var buf bytes.Buffer
+	err = mBlock.BchEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Error serializing merkle proof: " + err.Error(),
+		}
+	}
+
+	return hex.EncodeToString(buf.Bytes()), nil
+}
+
+// handleVerifyTxOutProof implements the verifytxoutproof command.
+func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.VerifyTxOutProofCmd)
+
+	// decode proof from hex to []bytes
+	dec, err := hex.DecodeString(c.Proof)
+
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Proof)
+	}
+
+	// decode proof into MsgMerkleBlock
+	msg := wire.MsgMerkleBlock{}
+
+	rbuf := bytes.NewReader(dec)
+
+	err = msg.BchDecode(rbuf, wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "BchDecode error: " + err.Error(),
+		}
+	}
+
+	// create partial merkle block from wire message and extract transaction
+	// matches
+	mBlock := merkleblock.NewMerkleBlockFromMsg(msg)
+	merkleRoot := mBlock.ExtractMatches()
+
+	// check if tree traversal was bad or extraction failed
+	if merkleRoot == nil || mBlock.BadTree() || len(mBlock.GetMatches()) == 0 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Error extracting txn matches from merkle tree traversal",
+		}
+	}
+
+	// lookup the block using the merkleroot to see if it really exists
+	// use the first transaction to get the block and then compare merkleRoot
+	blockRegion, err := s.cfg.TxIndex.TxBlockRegion(mBlock.GetMatches()[0])
+
+	if err != nil || blockRegion == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCNoTxInfo,
+			Message: "Unable to find block using matched transaction",
+		}
+	}
+
+	// load block from database
+	var blkBytes []byte
+	err = s.cfg.DB.View(func(dbTx database.Tx) error {
+		var err error
+		blkBytes, err = dbTx.FetchBlock(blockRegion.Hash)
+		return err
+	})
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Can't read block from disk",
+		}
+	}
+
+	block, err := bchutil.NewBlockFromBytes(blkBytes)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Failed to deserialize block",
+		}
+	}
+
+	// compare merkle root from loaded block and that returned from our tree
+	// traversal
+	if !block.MsgBlock().Header.MerkleRoot.IsEqual(merkleRoot) {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Merkle root clock header check failed",
+		}
+	}
+
+	// return transaction matches list
+	list := make([]string, 0, len(mBlock.GetMatches()))
+
+	for _, hash := range mBlock.GetMatches() {
+		list = append(list, hash.String())
+	}
+
+	return list, nil
 }
 
 // handleHelp implements the help command.

@@ -988,3 +988,78 @@ func (c *Client) GetMempoolInfoAsync() FutureGetMempoolInfoResult {
 func (c *Client) GetMempoolInfo() (*btcjson.GetMempoolInfoResult, error) {
 	return c.GetMempoolInfoAsync().Receive()
 }
+
+// FutureGetTxOutProofResult is a future promise to deliver the result of a
+// GetTxOutProofAsync RPC invocation (or an applicable error).
+type FutureGetTxOutProofResult chan *response
+
+// Receive waits for the response promised by the future and returns the merkle
+// transaction proof hex encoded
+func (r FutureGetTxOutProofResult) Receive() (string, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return "", err
+	}
+
+	// Unmarshal result as string
+	var proof string
+	err = json.Unmarshal(res, &proof)
+	if err != nil {
+		return "", err
+	}
+
+	return proof, nil
+}
+
+// GetTxOutProofAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See GetTxOutProof for the blocking version and more details.
+func (c *Client) GetTxOutProofAsync(txIDs []string, blockHash *string) FutureGetTxOutProofResult {
+	cmd := btcjson.NewGetTxOutProofCmd(txIDs, blockHash)
+	return c.sendCmd(cmd)
+}
+
+// GetTxOutProof returns the merkle transaction proof hex encoded
+func (c *Client) GetTxOutProof(txIDs []string, blockHash *string) (string, error) {
+	return c.GetTxOutProofAsync(txIDs, blockHash).Receive()
+}
+
+// FutureVerifyTxOutProofResult is a future promise to deliver the result of a
+// VerifyTxOutProofAsync RPC invocation (or an applicable error).
+type FutureVerifyTxOutProofResult chan *response
+
+// Receive waits for the response promised by the future and returns the list
+// of transactions matched in the merkle proof provided
+func (r FutureVerifyTxOutProofResult) Receive() ([]string, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal result as []string
+	var txIDs []string
+	err = json.Unmarshal(res, &txIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return txIDs, nil
+}
+
+// VerifyTxOutProofAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See VerifyTxOutProof for the blocking version and more details.
+func (c *Client) VerifyTxOutProofAsync(proof string) FutureVerifyTxOutProofResult {
+	cmd := btcjson.NewVerifyTxOutProofCmd(proof)
+	return c.sendCmd(cmd)
+}
+
+// VerifyTxOutProof returns the list of matched transactions from the provided
+// merkle proof
+func (c *Client) VerifyTxOutProof(proof string) ([]string, error) {
+	return c.VerifyTxOutProofAsync(proof).Receive()
+}
