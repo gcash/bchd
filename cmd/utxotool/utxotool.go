@@ -92,13 +92,7 @@ func realMain() error {
 			log.Errorf("Unable to create file at: %s", cfg.OutFile)
 			return err
 		}
-		/*zw := gzip.NewWriter(utxoFile)
-		defer zw.Close()
 		defer utxoFile.Close()
-
-		zw.Name = utxoFile.Name()
-		zw.Comment = fmt.Sprintf("Serialized Utxo Set at Height %d", cfg.BlockHeight)
-		zw.ModTime = time.Now()*/
 
 		utxoWriter = utxoFile
 	}

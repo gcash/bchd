@@ -33,6 +33,7 @@ var (
 // See loadConfig for details on the configuration load process.
 type config struct {
 	DataDir        string `short:"d" long:"datadir" description:"Location of the bchd data directory"`
+	Force          bool   `short:"f" long:"force" description:"Allow rollbacks deeper than the last checkpoint. This will use a lot of memory."`
 	DbType         string `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	TestNet3       bool   `long:"testnet" description:"Use the test network"`
 	RegressionTest bool   `long:"regtest" description:"Use the regression test network"`
@@ -112,6 +113,14 @@ func loadConfig() (*config, []string, error) {
 		fmt.Fprintln(os.Stderr, err)
 		parser.WriteHelp(os.Stderr)
 		return nil, nil, err
+	}
+
+	if cfg.BlockHeight < activeNetParams.Checkpoints[len(activeNetParams.Checkpoints)-1].Height && !cfg.Force {
+		str := "%s: You are attempting a rollback deeper than the last checkpoint height of %d. " +
+			"This is expected to use a lot of memory as the utxos for each block that gets " +
+			"rolled back are held in memory. If you wish to continue use --force."
+		err := fmt.Errorf(str, funcName, activeNetParams.Checkpoints[len(activeNetParams.Checkpoints)-1].Height)
+		fmt.Fprintln(os.Stderr, err)
 	}
 
 	// Validate database type.
