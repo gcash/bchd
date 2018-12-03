@@ -451,12 +451,16 @@ func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint,
 	for txInIndex, txIn := range msgTx.TxIn {
 		// Ensure the referenced input transaction is available.
 		utxo := utxoView.LookupEntry(txIn.PreviousOutPoint)
-		if utxo == nil || utxo.IsSpent() {
+		if utxo == nil {
 			str := fmt.Sprintf("output %v referenced from "+
-				"transaction %s:%d either does not exist or "+
-				"has already been spent", txIn.PreviousOutPoint,
+				"transaction %s:%d does not exist", txIn.PreviousOutPoint,
 				tx.Hash(), txInIndex)
 			return 0, ruleError(ErrMissingTxOut, str)
+		} else if utxo.IsSpent() {
+			str := fmt.Sprintf("output %v referenced from "+
+				"transaction %s:%d has already been spent", txIn.PreviousOutPoint,
+				tx.Hash(), txInIndex)
+			return 0, ruleError(ErrSpentTxOut, str)
 		}
 
 		// We're only interested in pay-to-script-hash types, so skip
@@ -936,12 +940,16 @@ func CheckTransactionInputs(tx *bchutil.Tx, txHeight int32, utxoView *UtxoViewpo
 	for txInIndex, txIn := range tx.MsgTx().TxIn {
 		// Ensure the referenced input transaction is available.
 		utxo := utxoView.LookupEntry(txIn.PreviousOutPoint)
-		if utxo == nil || utxo.IsSpent() {
+		if utxo == nil {
 			str := fmt.Sprintf("output %v referenced from "+
-				"transaction %s:%d either does not exist or "+
-				"has already been spent", txIn.PreviousOutPoint,
+				"transaction %s:%d does not exist", txIn.PreviousOutPoint,
 				tx.Hash(), txInIndex)
 			return 0, ruleError(ErrMissingTxOut, str)
+		} else if utxo.IsSpent() {
+			str := fmt.Sprintf("output %v referenced from "+
+				"transaction %s:%d has already been spent", txIn.PreviousOutPoint,
+				tx.Hash(), txInIndex)
+			return 0, ruleError(ErrSpentTxOut, str)
 		}
 
 		// Ensure the transaction is not spending coins which have not

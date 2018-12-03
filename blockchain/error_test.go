@@ -36,6 +36,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrBadTxInput, "ErrBadTxInput"},
 		{ErrBadCheckpoint, "ErrBadCheckpoint"},
 		{ErrMissingTxOut, "ErrMissingTxOut"},
+		{ErrSpentTxOut, "ErrSpentTxOut"},
 		{ErrUnfinalizedTx, "ErrUnfinalizedTx"},
 		{ErrDuplicateTx, "ErrDuplicateTx"},
 		{ErrOverwriteTx, "ErrOverwriteTx"},
