@@ -86,7 +86,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7eb4577517abdf0f214f577e4e85c868c3fdf163ed476fe9ba27d676b9536eb8"
+  digest = "1:8eaa30c3dfebd0911211eb0bfa02942cb54e4c33d40b789b15f8f1dfecbb5051"
   name = "github.com/gcash/bchutil"
   packages = [
     ".",
@@ -95,9 +95,10 @@
     "gcs",
     "gcs/builder",
     "hdkeychain",
+    "merkleblock",
   ]
   pruneopts = "UT"
-  revision = "64c691e106aa5321e47a3b3eba65b3c42fbc1f75"
+  revision = "1a66872105f0d2d75098f1ba81f8c14c778099ac"
 
 [[projects]]
   branch = "master"
@@ -154,6 +155,7 @@
     "github.com/gcash/bchutil/gcs",
     "github.com/gcash/bchutil/gcs/builder",
     "github.com/gcash/bchutil/hdkeychain",
+    "github.com/gcash/bchutil/merkleblock",
     "github.com/jessevdk/go-flags",
     "github.com/jrick/logrotate/rotator",
     "golang.org/x/crypto/ripemd160",
