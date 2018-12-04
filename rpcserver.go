@@ -2819,6 +2819,12 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 		}
 
 	} else {
+		if s.cfg.TxIndex == nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: "Block hash must be set when not using txindex",
+			}
+		}
 		// no block hash was passed so use the first txn to lookup the block
 		// it appears in.  all transaction must be in the same block so which
 		// transaction is used for the lookup does not matter.
