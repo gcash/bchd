@@ -2029,6 +2029,10 @@ type Config struct {
 	// ReIndexChainState will delete the UTXO db bucket and rebuild the
 	// UTXO set from blocks on disk on startup.
 	ReIndexChainState bool
+
+	// FastSync will download, validate, and save the UTXO at the last
+	// checkpoint. 
+	FastSync bool
 }
 
 // New returns a BlockChain instance using the provided configuration details.

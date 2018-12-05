@@ -2690,6 +2690,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		Prune:              cfg.Prune,
 		PruneDepth:         cfg.PruneDepth,
 		ReIndexChainState:  cfg.ReIndexChainState,
+		FastSync:           cfg.FastSync,
 	})
 	if err != nil {
 		return nil, err
