@@ -2031,7 +2031,7 @@ type Config struct {
 	ReIndexChainState bool
 
 	// FastSync will download, validate, and save the UTXO at the last
-	// checkpoint. 
+	// checkpoint.
 	FastSync bool
 }
 
@@ -2143,6 +2143,10 @@ func New(config *Config) (*BlockChain, error) {
 			return nil, err
 		}
 		log.Info("Re-indexing complete")
+	}
+
+	if config.FastSync && bestNode.height == 0 {
+		// TODO: Start UTXO set download in a separate goroutine.
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

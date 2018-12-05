@@ -2752,6 +2752,13 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 	s.txMemPool = mempool.New(&txC)
 
+	// Ignore the fast sync config option if the blockchain is not
+	// at genesis. Attempting to fast sync at this point would only
+	// mess up the state.
+	if s.chain.BestSnapshot().Height > 0 {
+		cfg.FastSync = false
+	}
+
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
 		Chain:                   s.chain,
@@ -2761,6 +2768,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		MaxPeers:                cfg.MaxPeers,
 		FeeEstimator:            s.feeEstimator,
 		MinSyncPeerNetworkSpeed: cfg.MinSyncPeerNetworkSpeed,
+		FastSyncMode:            cfg.FastSync,
 	})
 	if err != nil {
 		return nil, err

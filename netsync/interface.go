@@ -40,4 +40,6 @@ type Config struct {
 	FeeEstimator *mempool.FeeEstimator
 
 	MinSyncPeerNetworkSpeed uint64
+
+	FastSyncMode bool
 }

@@ -232,6 +232,15 @@ type SyncManager struct {
 	// minSyncPeerNetworkSpeed is the minimum speed allowed for
 	// a sync peer.
 	minSyncPeerNetworkSpeed uint64
+
+	// fastSyncMode uses different behavior from the normal sync.
+	// In particular it will download the full header chain from genesis
+	// up to the most recent checkpoint rather than only downloading
+	// headers up to the first checkpoint and then back filling blocks.
+	// After the headers are downloaded it will wait for the chain to
+	// signal that it has finished the UTXO set download before proceeding
+	// to make the standard getblocks request.
+	fastSyncMode bool
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -1615,6 +1624,7 @@ func New(config *Config) (*SyncManager, error) {
 		quit:                    make(chan struct{}),
 		feeEstimator:            config.FeeEstimator,
 		minSyncPeerNetworkSpeed: config.MinSyncPeerNetworkSpeed,
+		fastSyncMode:            config.FastSyncMode,
 	}
 
 	best := sm.chain.BestSnapshot()
