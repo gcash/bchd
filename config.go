@@ -180,6 +180,7 @@ type config struct {
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
 	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"number of outbound connections to maintain"`
+	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -570,6 +571,15 @@ func loadConfig() (*config, []string, error) {
 	if numNets > 1 {
 		str := "%s: The testnet, regtest, segnet, and simnet params " +
 			"can't be used together -- choose one of the four"
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Re-indexing and pruning don't mix.
+	if cfg.ReIndexChainState && cfg.Prune {
+		str := "%s: reindexchainstate can not be used with a pruned blockchain."
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
