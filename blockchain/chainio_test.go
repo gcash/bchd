@@ -485,9 +485,9 @@ func TestUtxoSerialization(t *testing.T) {
 		}
 
 		// Deserialize to a utxo entry.
-		utxoEntry, err := deserializeUtxoEntry(test.serialized)
+		utxoEntry, err := DeserializeUtxoEntry(test.serialized)
 		if err != nil {
-			t.Errorf("deserializeUtxoEntry #%d (%s) unexpected "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) unexpected "+
 				"error: %v", i, test.name, err)
 			continue
 		}
@@ -495,7 +495,7 @@ func TestUtxoSerialization(t *testing.T) {
 		// The deserialized entry must not be marked spent since unspent
 		// entries are not serialized.
 		if utxoEntry.IsSpent() {
-			t.Errorf("deserializeUtxoEntry #%d (%s) output should "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) output should "+
 				"not be marked spent", i, test.name)
 			continue
 		}
@@ -503,26 +503,26 @@ func TestUtxoSerialization(t *testing.T) {
 		// Ensure the deserialized entry has the same properties as the
 		// ones in the test entry.
 		if utxoEntry.Amount() != test.entry.Amount() {
-			t.Errorf("deserializeUtxoEntry #%d (%s) mismatched "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) mismatched "+
 				"amounts: got %d, want %d", i, test.name,
 				utxoEntry.Amount(), test.entry.Amount())
 			continue
 		}
 
 		if !bytes.Equal(utxoEntry.PkScript(), test.entry.PkScript()) {
-			t.Errorf("deserializeUtxoEntry #%d (%s) mismatched "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) mismatched "+
 				"scripts: got %x, want %x", i, test.name,
 				utxoEntry.PkScript(), test.entry.PkScript())
 			continue
 		}
 		if utxoEntry.BlockHeight() != test.entry.BlockHeight() {
-			t.Errorf("deserializeUtxoEntry #%d (%s) mismatched "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) mismatched "+
 				"block height: got %d, want %d", i, test.name,
 				utxoEntry.BlockHeight(), test.entry.BlockHeight())
 			continue
 		}
 		if utxoEntry.IsCoinBase() != test.entry.IsCoinBase() {
-			t.Errorf("deserializeUtxoEntry #%d (%s) mismatched "+
+			t.Errorf("DeserializeUtxoEntry #%d (%s) mismatched "+
 				"coinbase flag: got %v, want %v", i, test.name,
 				utxoEntry.IsCoinBase(), test.entry.IsCoinBase())
 			continue
@@ -590,15 +590,15 @@ func TestUtxoEntryDeserializeErrors(t *testing.T) {
 	for _, test := range tests {
 		// Ensure the expected error type is returned and the returned
 		// entry is nil.
-		entry, err := deserializeUtxoEntry(test.serialized)
+		entry, err := DeserializeUtxoEntry(test.serialized)
 		if reflect.TypeOf(err) != reflect.TypeOf(test.errType) {
-			t.Errorf("deserializeUtxoEntry (%s): expected error "+
+			t.Errorf("DeserializeUtxoEntry (%s): expected error "+
 				"type does not match - got %T, want %T",
 				test.name, err, test.errType)
 			continue
 		}
 		if entry != nil {
-			t.Errorf("deserializeUtxoEntry (%s): returned entry "+
+			t.Errorf("DeserializeUtxoEntry (%s): returned entry "+
 				"is not nil", test.name)
 			continue
 		}

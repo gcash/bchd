@@ -1728,6 +1728,75 @@ func (b *BlockChain) Prune() error {
 	return b.prune()
 }
 
+// RollbackUtxoSet will perform an in-memory rollback of the Utxo set to the
+// given block height and return a UtxoViewpoint containing the diff between the
+// current Utxo set and the Utxo set at the provided height. Calling this function
+// will not modify the current Utxo state either in the memory cache or on disk.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) RollbackUtxoSet(height int32) (*UtxoViewpoint, error) {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	tip := b.bestChain.tip()
+	if height > tip.height {
+		return nil, AssertError(fmt.Sprintf("requested rollback height %d is greater"+
+			" than chain tip of %d", height, tip.height))
+	}
+	if height == tip.height {
+		return NewUtxoViewpoint(), nil
+	}
+
+	log.Infof("Rolling back %d blocks", tip.height-height)
+
+	// Disconnect all of the blocks back to the provided height.  This
+	// entails loading the blocks and their associated spent txos from the
+	// database and using that information to unspend all of the spent txos
+	// and remove the utxos created by the blocks.
+	view := NewUtxoViewpoint()
+	for n := tip; n.height > height; n = n.parent {
+		var block *bchutil.Block
+		err := b.db.View(func(dbTx database.Tx) error {
+			var err error
+			block, err = dbFetchBlockByNode(dbTx, n)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		if n.hash != *block.Hash() {
+			return nil, AssertError(fmt.Sprintf("detach block node hash %v (height "+
+				"%v) does not match previous parent block hash %v", &n.hash,
+				n.height, block.Hash()))
+		}
+
+		// Load all of the utxos referenced by the block that aren't
+		// already in the view.
+		err = view.addInputUtxos(b.utxoCache, block, true)
+		if err != nil {
+			return nil, err
+		}
+
+		// Load all of the spent txos for the block from the spend
+		// journal.
+		var stxos []SpentTxOut
+		err = b.db.View(func(dbTx database.Tx) error {
+			stxos, err = dbFetchSpendJournalEntry(dbTx, block)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		err = disconnectTransactions(view, block, stxos)
+		if err != nil {
+			return nil, err
+		}
+	}
+	log.Info("Finished rolling back blocks")
+	return view, nil
+}
+
 // prune deletes the block data and spend journals for all blocks deeper than
 // the set prune depth.
 //
