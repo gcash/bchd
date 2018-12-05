@@ -1717,7 +1717,7 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 
 	// Process it all again. This will take care of the
 	// orphans as well.
-	_, _, err = b.ProcessBlock(blk, BFNone)
+	_, _, err = b.ProcessBlock(blk, BFNoCheckBlockExists)
 	return err
 }
 
