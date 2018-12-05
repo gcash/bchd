@@ -1684,35 +1684,41 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
-	// No need to reconsider, it is already valid
+	// No need to reconsider, it is already valid.
 	if node.status.KnownValid() {
 		return nil
 	}
 
-	// Find fork point if one exists
-	forkNode := b.bestChain.FindFork(node)
-	if forkNode != nil {
-		// Roll back to the fork point and load all the nodes into a list
-		nodes := list.New()
-		for n := node; n != nil && n != forkNode; n = n.parent {
-			nodes.PushFront(n)
-		}
+	// Keep a reference to the first node in the chain of invalid
+	// blocks so we can reprocess after status flags are updated.
+	firstNode := node
 
-		// Iterate over the list in reverse order so that the forkNode is processed first
-		for e := nodes.Front(); e != nil; e = e.Next() {
-			n := nodes.Remove(e).(*blockNode)
+	// Find previous node to the point where the blocks are valid again.
+	for n := node; n.status.KnownInvalid(); n = n.parent {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
 
-			// Remove both possible invalid flags from child node.
-			b.index.UnsetStatusFlags(n, statusInvalidAncestor)
-			b.index.UnsetStatusFlags(n, statusValidateFailed)
-		}
+		firstNode = n
 	}
 
-	// Remove flags from the final block (the one that is being reconsidered)
-	b.index.UnsetStatusFlags(node, statusInvalidAncestor)
-	b.index.UnsetStatusFlags(node, statusValidateFailed)
+	// Remove flags from the first block.
+	b.index.UnsetStatusFlags(firstNode, statusInvalidAncestor)
+	b.index.UnsetStatusFlags(firstNode, statusValidateFailed)
 
-	return nil
+	var blk *bchutil.Block
+	err := b.db.View(func(dbTx database.Tx) error {
+		var err error
+		blk, err = dbFetchBlockByNode(dbTx, firstNode)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// Process it all again. This will take care of the
+	// orphans as well.
+	_, _, err = b.ProcessBlock(blk, BFNone)
+	return err
 }
 
 // Prune deletes the block data and spend journals for all blocks deeper than
