@@ -1701,10 +1701,6 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		firstNode = n
 	}
 
-	// Remove flags from the first block.
-	b.index.UnsetStatusFlags(firstNode, statusInvalidAncestor)
-	b.index.UnsetStatusFlags(firstNode, statusValidateFailed)
-
 	var blk *bchutil.Block
 	err := b.db.View(func(dbTx database.Tx) error {
 		var err error
