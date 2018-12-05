@@ -1689,8 +1689,6 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return nil
 	}
 
-	var blk *bchutil.Block
-
 	// Find fork point if one exists
 	forkNode := b.bestChain.FindFork(node)
 	if forkNode != nil {
