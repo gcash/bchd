@@ -8,6 +8,7 @@ package blockchain
 import (
 	"container/list"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -1715,6 +1716,75 @@ func (b *BlockChain) prune() error {
 	})
 }
 
+// ReIndexChainState will delete the UTXO database bucket and rebuild the UTXO
+// set from blocks on disk. This will take a while.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) ReIndexChainState() error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	// Delete the UTXO bucket and create a new one
+	log.Info("Deleting UTXO database bucket...")
+	err := b.db.Update(func(tx database.Tx) error {
+		if err := tx.Metadata().DeleteBucket(utxoSetBucketName); err != nil {
+			return err
+		}
+		if _, err := tx.Metadata().CreateBucket(utxoSetBucketName); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	log.Info("Deletion complete. Re-indexing UTXO set...")
+
+	var (
+		blk           *bchutil.Block
+		currentHeight int32 = 1
+		view          *UtxoViewpoint
+		state         *BestState
+	)
+	ticker := time.NewTicker(time.Minute * 5)
+	defer ticker.Stop()
+
+	var heightStr string
+	progress := float64(0.0)
+	go func() {
+		for range ticker.C {
+			progress = math.Min(float64(currentHeight)/float64(len(b.bestChain.nodes)), 1.0) * 100
+			heightStr = fmt.Sprintf("%d/%d (%.2f%%)", currentHeight, len(b.bestChain.nodes), progress)
+			log.Infof("Re-index progress: processed %s", heightStr)
+		}
+	}()
+	for _, node := range b.bestChain.nodes[1:] {
+		view = NewUtxoViewpoint()
+		currentHeight = node.height
+		err := b.db.View(func(tx database.Tx) error {
+			blk, err = dbFetchBlockByNode(tx, node)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		if err = view.addInputUtxos(b.utxoCache, blk, blk.Height() < b.chainParams.MagneticAnonomalyForkHeight); err != nil {
+			return err
+		}
+		if err = connectTransactions(view, blk, nil, false); err != nil {
+			return err
+		}
+		if err = b.utxoCache.Commit(view); err != nil {
+			return err
+		}
+		state = newBestState(node, 0, 0, 0, time.Time{})
+		if err = b.utxoCache.Flush(FlushIfNeeded, state); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // LocateHeaders returns the headers of the blocks after the first known block
 // in the locator until the provided stop hash is reached, or up to a max of
 // wire.MaxBlockHeadersPerMsg headers.
@@ -1838,6 +1908,10 @@ type Config struct {
 	// against a reorg. Everything after the depth will be deleted
 	// whenever we connect a new block.
 	PruneDepth uint32
+
+	// ReIndexChainState will delete the UTXO db bucket and rebuild the
+	// UTXO set from blocks on disk on startup.
+	ReIndexChainState bool
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -1940,6 +2014,14 @@ func New(config *Config) (*BlockChain, error) {
 		if err := b.Prune(); err != nil {
 			return nil, err
 		}
+	}
+
+	if config.ReIndexChainState {
+		log.Info("Re-indexing UTXO set from disk. This will take a while...")
+		if err := b.ReIndexChainState(); err != nil {
+			return nil, err
+		}
+		log.Info("Re-indexing complete")
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",
