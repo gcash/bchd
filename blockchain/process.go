@@ -34,9 +34,9 @@ const (
 	// set.
 	BFMagneticAnomaly
 
-	// BFNoCheckBlockExists signals if the block should skip existence
+	// BFNoDupBlockCheck signals if the block should skip existence
 	// checks.
-	BFNoCheckBlockExists
+	BFNoDupBlockCheck
 
 	// BFNone is a convenience value to specifically indicate no flags.
 	BFNone BehaviorFlags = 0
@@ -162,7 +162,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	blockHash := block.Hash()
 	log.Tracef("Processing block %v", blockHash)
 
-	if !flags.HasFlag(BFNoCheckBlockExists) {
+	if !flags.HasFlag(BFNoDupBlockCheck) {
 		// The block must not already exist in the main chain or side chains.
 		exists, err := b.blockExists(blockHash)
 		if err != nil {
