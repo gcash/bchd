@@ -557,6 +557,10 @@ var helpDescsEnUS = map[string]string{
 	"sendrawtransaction-allowhighfees": "Whether or not to allow insanely high fees (bchd does not yet implement this parameter, so it has no effect)",
 	"sendrawtransaction--result0":      "The hash of the transaction",
 
+	// ReconsiderBlockCmd
+	"reconsiderblock--synopsis": "Reconsider a block for validation.",
+	"reconsiderblock-blockhash": "Hash of the block you want to reconsider",
+
 	// SetGenerateCmd help.
 	"setgenerate--synopsis":    "Set the server to generate coins (mine) or not.",
 	"setgenerate-generate":     "Use true to enable generation, false to disable it",
@@ -727,6 +731,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"node":                  nil,
 	"help":                  {(*string)(nil), (*string)(nil)},
 	"ping":                  nil,
+	"reconsiderblock":       nil,
 	"searchrawtransactions": {(*string)(nil), (*[]btcjson.SearchRawTransactionsResult)(nil)},
 	"sendrawtransaction":    {(*string)(nil)},
 	"setgenerate":           nil,

@@ -1669,6 +1669,54 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	return headers
 }
 
+// ReconsiderBlock takes a block hash and allows it to be revalidated.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) ReconsiderBlock(hash *chainhash.Hash) error {
+	return b.reconsiderBlock(hash)
+}
+
+// reconsiderBlock takes a block hash and allows it to be revalidated.
+func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		err := fmt.Errorf("block %s is not known", hash)
+		return err
+	}
+
+	// No need to reconsider, it is already valid.
+	if node.status.KnownValid() {
+		return nil
+	}
+
+	// Keep a reference to the first node in the chain of invalid
+	// blocks so we can reprocess after status flags are updated.
+	firstNode := node
+
+	// Find previous node to the point where the blocks are valid again.
+	for n := node; n.status.KnownInvalid(); n = n.parent {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
+
+		firstNode = n
+	}
+
+	var blk *bchutil.Block
+	err := b.db.View(func(dbTx database.Tx) error {
+		var err error
+		blk, err = dbFetchBlockByNode(dbTx, firstNode)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// Process it all again. This will take care of the
+	// orphans as well.
+	_, _, err = b.ProcessBlock(blk, BFNoDupBlockCheck)
+	return err
+}
+
 // Prune deletes the block data and spend journals for all blocks deeper than
 // the set prune depth.
 //

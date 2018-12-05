@@ -34,6 +34,10 @@ const (
 	// set.
 	BFMagneticAnomaly
 
+	// BFNoDupBlockCheck signals if the block should skip existence
+	// checks.
+	BFNoDupBlockCheck
+
 	// BFNone is a convenience value to specifically indicate no flags.
 	BFNone BehaviorFlags = 0
 )
@@ -158,20 +162,22 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	blockHash := block.Hash()
 	log.Tracef("Processing block %v", blockHash)
 
-	// The block must not already exist in the main chain or side chains.
-	exists, err := b.blockExists(blockHash)
-	if err != nil {
-		return false, false, err
-	}
-	if exists {
-		str := fmt.Sprintf("already have block %v", blockHash)
-		return false, false, ruleError(ErrDuplicateBlock, str)
-	}
+	if !flags.HasFlag(BFNoDupBlockCheck) {
+		// The block must not already exist in the main chain or side chains.
+		exists, err := b.blockExists(blockHash)
+		if err != nil {
+			return false, false, err
+		}
+		if exists {
+			str := fmt.Sprintf("already have block %v", blockHash)
+			return false, false, ruleError(ErrDuplicateBlock, str)
+		}
 
-	// The block must not already exist as an orphan.
-	if _, exists := b.orphans[*blockHash]; exists {
-		str := fmt.Sprintf("already have block (orphan) %v", blockHash)
-		return false, false, ruleError(ErrDuplicateBlock, str)
+		// The block must not already exist as an orphan.
+		if _, exists := b.orphans[*blockHash]; exists {
+			str := fmt.Sprintf("already have block (orphan) %v", blockHash)
+			return false, false, ruleError(ErrDuplicateBlock, str)
+		}
 	}
 
 	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
@@ -179,7 +185,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	}
 
 	// Perform preliminary sanity checks on the block and its transactions.
-	err = checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)
+	err := checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)
 	if err != nil {
 		return false, false, err
 	}

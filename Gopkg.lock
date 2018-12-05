@@ -102,11 +102,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4bad3a84294a8b7ebe2b3227fe7ce6338cc4ca96056e1ef48b9f7ddc0b1e9033"
+  digest = "1:4bb169ce06341a7c5e6c9a6734b25c606f59e2f765703301f92d159cf999672e"
   name = "github.com/jessevdk/go-flags"
   packages = ["."]
   pruneopts = "UT"
-  revision = "9c49a3351d49777ccd40148b5cdf6f2998f51087"
+  revision = "5de817a9aa209ed35a164cb04aec82b7df1a47a6"
 
 [[projects]]
   branch = "master"
@@ -118,19 +118,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a6303215c6d4578f058f8a10b14fa675c4f9bec7630d171f49bb489e877629eb"
+  digest = "1:39016aee9299043adc48cdab6eff2da3814ca210d561b0a0cdea103b1705ce26"
   name = "github.com/kkdai/bstream"
   packages = ["."]
   pruneopts = "UT"
-  revision = "f71540b9dfdcfe64dbf2818e9b66423c6aafcacd"
+  revision = "b3251f7901ec4dd4ec66b3210e8f4bd5c0f1c5a3"
 
 [[projects]]
   branch = "master"
-  digest = "1:f804354850ef747f20e387a75e04dfc64a205ab342f7086b7d77796865ff5ede"
+  digest = "1:b69153653dbbbd9b2be2be289dfb94014284c00bb92e73b800f8f8c239c1ca80"
   name = "golang.org/x/crypto"
   packages = ["ripemd160"]
   pruneopts = "UT"
-  revision = "e84da0312774c21d64ee2317962ef669b27ffb41"
+  revision = "505ab145d0a99da450461ae2c1a9f6cd10d1f447"
 
 [solve-meta]
   analyzer-name = "dep"
