@@ -63,6 +63,15 @@ var (
 	// consistency status of the utxo state.
 	utxoStateConsistencyKeyName = []byte("utxostateconsistency")
 
+	// blockchainTypeKeyName is the name of the db key used to store the
+	// prune status of the blockchain. If it was ever run in prune mode
+	// or fastsync mode then it should be treated as a pruned chain.
+	blockchainTypeKeyName = []byte("blockchaintype")
+
+	// prunedBlockchainEntryValue is the value the corresponds to a
+	// pruned blockchain.
+	prunedBlockchainEntryValue = []byte("prunedblockhain")
+
 	// utxoSetVersionKeyName is the name of the db key used to store the
 	// version of the utxo set currently in the database.
 	utxoSetVersionKeyName = []byte("utxosetversion")
@@ -1130,6 +1139,21 @@ func dbFetchUtxoStateConsistency(dbTx database.Tx) (byte, *chainhash.Hash, error
 	}
 	// Deserialize to the consistency status.
 	return deserializeUtxoStateConsistency(serialized)
+}
+
+// dbPutBlockchainType uses an existing database transaction to
+// update the blockchain type entry with the provided type.
+func dbPutBlockchainType(dbTx database.Tx, chainType []byte) error {
+	// Store the chain type into the database.
+	return dbTx.Metadata().Put(blockchainTypeKeyName, chainType)
+}
+
+// dbFetchBlockchainType uses an existing database transaction to retrieve
+// the blockchain type from the database.  The returned bytes is nil if
+// nothing is found.
+func dbFetchBlockchainType(dbTx database.Tx) []byte {
+	// Fetch the chain type from the database.
+	return dbTx.Metadata().Get(blockchainTypeKeyName)
 }
 
 // dbPutPruneHeight uses an existing database transaction to

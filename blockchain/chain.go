@@ -6,6 +6,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 	"math"
@@ -214,6 +215,10 @@ type BlockChain struct {
 	pruneMode  bool
 	pruneDepth uint32
 
+	// isPruned is set to true if the chain was ever run in prune mode or fast
+	// sync mode.
+	isPruned bool
+
 	// fastSyncDone chan is used to signal that the UTXO set download has
 	// finished.
 	fastSyncDone chan struct{}
@@ -261,6 +266,11 @@ func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 // PruneMode returns whether or not the blockchain is running in prune mode.
 func (b *BlockChain) PruneMode() bool {
 	return b.pruneMode
+}
+
+// IsPruned returns true if the chain was ever run in prune mode or fastsync mode.
+func (b *BlockChain) IsPruned() bool {
+	return b.isPruned
 }
 
 // FastSyncDoneChan returns a channel which signals that the fastsync UTXO download
@@ -2143,6 +2153,26 @@ func New(config *Config) (*BlockChain, error) {
 	// Initialize rule change threshold state caches.
 	if err := b.initThresholdCaches(); err != nil {
 		return nil, err
+	}
+
+	// If we're running in pruned mode or fast sync mode then set the chain type in the
+	// database. If not load the chain type from the database.
+	if config.Prune || config.FastSync {
+		err := b.db.Update(func(tx database.Tx) error {
+			return dbPutBlockchainType(tx, prunedBlockchainEntryValue)
+		})
+		if err != nil {
+			return nil, err
+		}
+		b.isPruned = true
+	} else {
+		b.db.View(func(tx database.Tx) error {
+			chainType := dbFetchBlockchainType(tx)
+			if bytes.Equal(chainType, prunedBlockchainEntryValue) {
+				b.isPruned = true
+			}
+			return nil
+		})
 	}
 
 	// Run an initial prune if prune mode is set

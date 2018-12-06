@@ -2588,10 +2588,6 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if cfg.NoCFilters {
 		services &^= wire.SFNodeCF
 	}
-	if cfg.Prune {
-		services &^= wire.SFNodeNetwork
-		services |= wire.SFNodeNetworkLimited
-	}
 
 	amgr := addrmgr.New(cfg.DataDir, bchdLookup)
 
@@ -2695,6 +2691,11 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if s.chain.IsPruned() {
+		services &^= wire.SFNodeNetwork
+		services |= wire.SFNodeNetworkLimited
 	}
 
 	// Search for a FeeEstimator state in the database. If none can be found
