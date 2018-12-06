@@ -2166,7 +2166,7 @@ func New(config *Config) (*BlockChain, error) {
 			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
 			return nil, AssertError(errStr)
 		}
-		// TODO: Start UTXO set download in a separate goroutine.
+		go b.fastSyncUtxoSet(lastCheckpoint, config.Proxy)
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",
