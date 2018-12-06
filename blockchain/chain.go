@@ -213,6 +213,10 @@ type BlockChain struct {
 	// historical blocks.
 	pruneMode  bool
 	pruneDepth uint32
+
+	// fastSyncDone chan is used to signal that the UTXO set download has
+	// finished.
+	fastSyncDone chan struct{}
 }
 
 // HaveBlock returns whether or not the chain instance has the block represented
@@ -257,6 +261,12 @@ func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 // PruneMode returns whether or not the blockchain is running in prune mode.
 func (b *BlockChain) PruneMode() bool {
 	return b.pruneMode
+}
+
+// FastSyncDoneChan returns a channel which signals that the fastsync UTXO download
+// has finished.
+func (b *BlockChain) FastSyncDoneChan() <-chan struct{} {
+	return b.fastSyncDone
 }
 
 // GetOrphanRoot returns the head of the chain for the provided hash from the
@@ -2033,6 +2043,10 @@ type Config struct {
 	// FastSync will download, validate, and save the UTXO at the last
 	// checkpoint.
 	FastSync bool
+
+	// Proxy is ip:port of an optional socks5 proxy to use when downloading
+	// the UTXO set in fast sync mode.
+	Proxy string
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -2095,6 +2109,7 @@ func New(config *Config) (*BlockChain, error) {
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 		pruneMode:           config.Prune,
 		pruneDepth:          config.PruneDepth,
+		fastSyncDone:        make(chan struct{}),
 	}
 
 	// Initialize the chain state from the passed database.  When the db
@@ -2146,6 +2161,11 @@ func New(config *Config) (*BlockChain, error) {
 	}
 
 	if config.FastSync && bestNode.height == 0 {
+		lastCheckpoint := b.LatestCheckpoint()
+		if lastCheckpoint == nil || (lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0) {
+			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
+			return nil, AssertError(errStr)
+		}
 		// TODO: Start UTXO set download in a separate goroutine.
 	}
 

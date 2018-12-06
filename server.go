@@ -2691,6 +2691,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		PruneDepth:         cfg.PruneDepth,
 		ReIndexChainState:  cfg.ReIndexChainState,
 		FastSync:           cfg.FastSync,
+		Proxy:              cfg.Proxy,
 	})
 	if err != nil {
 		return nil, err

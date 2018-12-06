@@ -708,6 +708,39 @@ func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 	return entry, nil
 }
 
+// deserializeUtxoCommitmentFormat takes a Utxo serialized in the commitment format and
+// deserializes it into an OutPoint and UtxoEntry.
+func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEntry, error) {
+	txid, err := chainhash.NewHash(serialized[:32])
+	if err != nil {
+		return nil, nil, err
+	}
+	index := binary.LittleEndian.Uint32(serialized[32:36])
+
+	serializedHeight := serialized[36:40]
+	coinbaseFlag := serializedHeight[3] & 0x01
+
+	serializedHeight[3] &= 0xFE
+
+	height := binary.LittleEndian.Uint32(serializedHeight)
+
+	value := binary.LittleEndian.Uint64(serialized[40:48])
+
+	pkScript := serialized[52:]
+
+	op := wire.NewOutPoint(txid, index)
+	entry := &UtxoEntry{
+		amount:      int64(value),
+		blockHeight: int32(height),
+		pkScript:    pkScript,
+		packedFlags: 0,
+	}
+	if coinbaseFlag > 0 {
+		entry.packedFlags |= tfCoinBase
+	}
+	return op, entry, nil
+}
+
 // dbFetchUtxoEntryByHash attempts to find and fetch a utxo for the given hash.
 // It uses a cursor and seek to try and do this as efficiently as possible.
 //
