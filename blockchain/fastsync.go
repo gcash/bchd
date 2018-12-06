@@ -2,13 +2,16 @@ package blockchain
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/wire"
 	"io"
+	"math"
 	"net"
 	"net/http"
+	"time"
 )
 
 // fastSyncUtxoSet will download the UTXO set from the sources provided in the checkpoint. Each
@@ -36,16 +39,28 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	}
 
 	var (
-		m         = bchec.NewMultiset(bchec.S256())
-		buf52     = make([]byte, 52)
-		pkScript  []byte
-		n         int
-		totalRead int
-		scriptLen uint32
-		entry     *UtxoEntry
-		outpoint  *wire.OutPoint
-		state     = &BestState{Hash: *checkpoint.UtxoSetHash}
+		m           = bchec.NewMultiset(bchec.S256())
+		buf52       = make([]byte, 52)
+		pkScript    []byte
+		n           int
+		totalRead   int
+		scriptLen   uint32
+		progress    float64
+		progressStr string
+		entry       *UtxoEntry
+		outpoint    *wire.OutPoint
+		state       = &BestState{Hash: *checkpoint.UtxoSetHash}
 	)
+
+	ticker := time.NewTicker(time.Minute * 5)
+	defer ticker.Stop()
+	go func() {
+		for range ticker.C {
+			progress = math.Min(float64(totalRead)/float64(checkpoint.UtxoSetSize), 1.0) * 100
+			progressStr = fmt.Sprintf("%d/%d bytes (%.2f%%)", totalRead, checkpoint.UtxoSetSize, progress)
+			log.Infof("UTXO download progress: processed %s", progressStr)
+		}
+	}()
 
 	for {
 		// Read the first 52 bytes of the utxo
