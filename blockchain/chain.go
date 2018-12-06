@@ -279,6 +279,22 @@ func (b *BlockChain) FastSyncDoneChan() <-chan struct{} {
 	return b.fastSyncDone
 }
 
+// AddHeader will add a new header to the tip of the index. This is primarily used
+// when syncing headers in fastsync mode.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	tip := b.bestChain.tip()
+	node := newBlockNode(header, tip)
+	b.index.AddNode(node)
+	b.bestChain.SetTip(node)
+	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	return b.index.flushToDB()
+}
+
 // GetOrphanRoot returns the head of the chain for the provided hash from the
 // map of orphan blocks.
 //

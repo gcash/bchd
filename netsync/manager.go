@@ -143,6 +143,7 @@ type pauseMsg struct {
 type headerNode struct {
 	height int32
 	hash   *chainhash.Hash
+	header *wire.BlockHeader
 }
 
 // peerSyncState stores additional information that the SyncManager tracks
@@ -257,6 +258,15 @@ func (sm *SyncManager) resetHeaderState(newestHash *chainhash.Hash, newestHeight
 		node := headerNode{height: newestHeight, hash: newestHash}
 		sm.headerList.PushBack(&node)
 	}
+}
+
+// lastCheckpoint returns the last checkpoint we have in the params.
+func (sm *SyncManager) lastCheckpoint() *chaincfg.Checkpoint {
+	checkpoints := sm.chain.Checkpoints()
+	if len(checkpoints) == 0 {
+		return nil
+	}
+	return &checkpoints[len(checkpoints)-1]
 }
 
 // findNextHeaderCheckpoint returns the next checkpoint after the passed height.
@@ -977,6 +987,9 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		// Ensure the header properly connects to the previous one and
 		// add it to the list of headers.
 		node := headerNode{hash: &blockHash}
+		if sm.fastSyncMode {
+			node.header = blockHeader
+		}
 		prevNode := prevNodeEl.Value.(*headerNode)
 		if prevNode.hash.IsEqual(&blockHeader.PrevBlock) {
 			node.height = prevNode.height + 1
@@ -1021,11 +1034,42 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		// the next header links properly, it must be removed before
 		// fetching the blocks.
 		sm.headerList.Remove(sm.headerList.Front())
-		log.Infof("Received %v block headers: Fetching blocks",
-			sm.headerList.Len())
-		sm.progressLogger.SetLastLogTime(time.Now())
-		sm.fetchHeaderBlocks()
-		return
+
+		// By this point we've downloaded and validated all headers from the previous
+		// checkpoint to the next checkpoint so we can add them to the block index
+		// all at once.
+		if sm.fastSyncMode {
+			var finalHeight int32
+			for e := sm.startHeader; e != nil; e = e.Next() {
+				node, ok := e.Value.(*headerNode)
+				if !ok {
+					log.Warn("Header list node type is not a headerNode")
+					continue
+				}
+				err := sm.chain.AddHeader(node.header)
+				if err != nil {
+					log.Warnf("Error saving header to block index: %s", err.Error())
+					continue
+				}
+				finalHeight = node.height
+				sm.startHeader = e.Next()
+			}
+			sm.nextCheckpoint = sm.findNextHeaderCheckpoint(finalHeight)
+			// If we've reached the last checkpoint then wait here for the UTXO download to complete before
+			// proceeding with chain sync as normal.
+			if sm.nextCheckpoint.Hash.IsEqual(sm.lastCheckpoint().Hash) {
+				<-sm.chain.FastSyncDoneChan()
+				locator := blockchain.BlockLocator([]*chainhash.Hash{finalHash})
+				peer.PushGetBlocksMsg(locator, &zeroHash)
+				return
+			}
+		} else {
+			log.Infof("Received %v block headers: Fetching blocks",
+				sm.headerList.Len())
+			sm.progressLogger.SetLastLogTime(time.Now())
+			sm.fetchHeaderBlocks()
+			return
+		}
 	}
 
 	// This header is not a checkpoint, so request the next batch of
