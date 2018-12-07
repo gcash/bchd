@@ -291,7 +291,15 @@ var MainNetParams = Params{
 		{Height: 470000, Hash: newHashFromStr("0000000000000000006c539c722e280a0769abd510af0073430159d71e6d7589")},
 		{Height: 510000, Hash: newHashFromStr("00000000000000000367922b6457e21d591ef86b360d78a598b14c2f1f6b0e04")},
 		{Height: 552979, Hash: newHashFromStr("0000000000000000015648768ac1b788a83187d706f858919fcc5c096b76fbf2")},
-		{Height: 556767, Hash: newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c")},
+		{
+			Height:      556767,
+			Hash:        newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c"),
+			UtxoSetHash: newHashFromStr("82c8c756a084332f5b1198a6009a0ca8ef68950245e1af0aa42d9d113c3fc506"),
+			UtxoSetSize: 3102076686,
+			UtxoSetSources: []string{
+				"http://localhost:8080/ipfs/Qmdb2x7JcGZcCogDJYuiiwCt7CoG7A8pYm62Ez46KgPDDN",
+			},
+		},
 	},
 
 	// Consensus rule change deployments.

@@ -148,6 +148,7 @@ func getUtxoReader(sources []string, proxy *socks.Proxy) (io.Reader, error) {
 			continue
 		}
 		reader = resp.Body
+		log.Infof("Downloading UTXO set from %s", src)
 		break
 	}
 	if reader == nil {
