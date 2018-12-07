@@ -1266,7 +1266,9 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 	// send size.
 	bestAddress := sp.server.addrManager.GetBestLocalAddress(sp.NA())
 	if bestAddress.Port != 0 {
-		addrCache = addrCache[1:]
+		if len(addrCache) > 0 {
+			addrCache = addrCache[1:]
+		}
 		addrCache = append(addrCache, bestAddress)
 	}
 
