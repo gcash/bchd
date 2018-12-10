@@ -150,9 +150,9 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		log.Errorf("Downloaded UTXO set hash does not match checkpoint."+
 			" Expected %s, got %s.", checkpoint.UtxoSetHash.String(), m.Hash().String())
 		return AssertError("downloaded invalid UTXO set")
-	} else {
-		log.Infof("Verification complete. UTXO hash %s.", m.Hash().String())
 	}
+
+	log.Infof("Verification complete. UTXO hash %s.", m.Hash().String())
 
 	// Signal fastsync complete
 	close(b.fastSyncDone)
