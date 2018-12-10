@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/bchec"
@@ -11,8 +12,12 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
+	"path"
 	"time"
 )
+
+const numWorkers = 8
 
 // fastSyncUtxoSet will download the UTXO set from the sources provided in the checkpoint. Each
 // UTXO will be saved to the database and the ECMH hash of the UTXO set will be validated against
@@ -32,24 +37,34 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		proxy = &socks.Proxy{Addr: proxyAddr}
 	}
 
-	utxoReader, err := getUtxoReader(checkpoint.UtxoSetSources, proxy)
+	tmpPath := path.Join(os.TempDir(), "bchd-utxo.dat")
+	err := downloadUtxoSet(checkpoint.UtxoSetSources, proxy, tmpPath)
 	if err != nil {
 		log.Errorf("Error downloading UTXO set: %s", err.Error())
 		return err
 	}
+	file, err := os.Open(tmpPath)
+	if err != nil {
+		log.Errorf("Error opening temp UTXO file: %s", err.Error())
+		return err
+	}
+
+	defer func() {
+		file.Close()
+		os.Remove(tmpPath)
+	}()
 
 	var (
-		m           = bchec.NewMultiset(bchec.S256())
-		buf52       = make([]byte, 52)
-		pkScript    []byte
-		n           int
-		totalRead   int
-		scriptLen   uint32
-		progress    float64
-		progressStr string
-		entry       *UtxoEntry
-		outpoint    *wire.OutPoint
-		state       = &BestState{Hash: *checkpoint.UtxoSetHash}
+		maxScriptLen   = uint32(1000000)
+		buf52          = make([]byte, 52)
+		pkScript       []byte
+		serializedUtxo []byte
+		n              int
+		totalRead      int
+		scriptLen      uint32
+		progress       float64
+		progressStr    string
+		state          = &BestState{Hash: *checkpoint.Hash}
 	)
 
 	ticker := time.NewTicker(time.Minute * 5)
@@ -57,14 +72,23 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	go func() {
 		for range ticker.C {
 			progress = math.Min(float64(totalRead)/float64(checkpoint.UtxoSetSize), 1.0) * 100
-			progressStr = fmt.Sprintf("%d/%d bytes (%.2f%%)", totalRead, checkpoint.UtxoSetSize, progress)
-			log.Infof("UTXO download progress: processed %s", progressStr)
+			progressStr = fmt.Sprintf("%d/%d MiB (%.2f%%)", totalRead/(1024*1024)+1, checkpoint.UtxoSetSize/(1024*1024)+1, progress)
+			log.Infof("UTXO verification progress: processed %s", progressStr)
 		}
 	}()
 
+	resultsChan := make(chan *result)
+	jobsChan := make(chan []byte)
+	for i := 0; i < numWorkers; i++ {
+		go worker(b.utxoCache, state, jobsChan, resultsChan)
+	}
+
+	// In this loop we're going read each serialized UTXO off the reader and then
+	// pass it off to a worker to deserialize, calculate the ECMH hash, and save
+	// to the UTXO cache.
 	for {
 		// Read the first 52 bytes of the utxo
-		n, err = utxoReader.Read(buf52)
+		n, err = file.Read(buf52)
 		if err == io.EOF { // We've hit the end
 			break
 		} else if err != nil {
@@ -75,48 +99,59 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 
 		// The last four bytes that we read is the length of the script
 		scriptLen = binary.LittleEndian.Uint32(buf52[48:])
+		if scriptLen > maxScriptLen {
+			log.Error("Read invalid UTXO script length", totalRead)
+			return errors.New("invalid script length")
+		}
 
 		// Read the script
 		pkScript = make([]byte, scriptLen)
-		n, err = utxoReader.Read(pkScript)
+		n, err = file.Read(pkScript)
 		if err != nil {
 			log.Errorf("Error reading UTXO set: %s", err.Error())
 			return err
 		}
 		totalRead += n
 
-		// Add the serialized utxo to the multiset
-		m.Add(append(buf52, pkScript...))
+		serializedUtxo = make([]byte, 52+scriptLen)
+		serializedUtxo = append(buf52, pkScript...)
 
-		// Deserialize
-		outpoint, entry, err = deserializeUtxoCommitmentFormat(append(buf52, pkScript...))
-		if err != nil {
-			log.Errorf("Error deserializing UTXO: %s", err.Error())
+		jobsChan <- serializedUtxo
+	}
+	close(jobsChan)
+
+	// Read each result and add the returned hash to the
+	// existing multiset.
+	m := bchec.NewMultiset(bchec.S256())
+	for i := 0; i < numWorkers; i++ {
+		result := <-resultsChan
+		if result.err != nil {
+			log.Errorf("Error processing UTXO set: %s", err.Error())
 			return err
 		}
+		m.Merge(result.m)
+	}
+	close(resultsChan)
 
-		// Add the utxo to the cache
-		err = b.utxoCache.addEntry(*outpoint, entry, true)
-		if err != nil {
-			log.Errorf("Error adding UTXO the cache: %s", err.Error())
-			return err
-		}
+	if err = b.utxoCache.Flush(FlushRequired, state); err != nil {
+		log.Errorf("Error processing UTXO set: %s", err.Error())
+		return err
+	}
 
-		// Maybe flush cache to disk
-		b.utxoCache.Flush(FlushIfNeeded, state)
-		if err != nil {
-			log.Errorf("Error flushing the UTXO cache: %s", err.Error())
-			return err
-		}
+	if err = b.index.flushToDB(); err != nil {
+		log.Errorf("Error processing UTXO set: %s", err.Error())
+		return err
 	}
 
 	utxoHash := m.Hash()
 
 	// Make sure the hash of the UTXO set we downloaded matches the expected hash.
-	if checkpoint.UtxoSetHash.IsEqual(&utxoHash) {
+	if !checkpoint.UtxoSetHash.IsEqual(&utxoHash) {
 		log.Errorf("Downloaded UTXO set hash does not match checkpoint."+
 			" Expected %s, got %s.", checkpoint.UtxoSetHash.String(), m.Hash().String())
 		return AssertError("downloaded invalid UTXO set")
+	} else {
+		log.Infof("Verification complete. UTXO hash %s.", m.Hash().String())
 	}
 
 	// Signal fastsync complete
@@ -125,12 +160,51 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	return nil
 }
 
-// getUTXOReader will attempt to connect to make an HTTP GET request to the
-// provided sources on at a time and return a reader upon successful connection.
-// If a proxy is provided it will use it for the HTTP connection.
-func getUtxoReader(sources []string, proxy *socks.Proxy) (io.Reader, error) {
-	var reader io.Reader
+// result holds a multiset with a hash of all the UTXOs read by
+// this worker and a possible error.
+type result struct {
+	m   *bchec.Multiset
+	err error
+}
 
+// worker handles the work of deserializing the UTXO, calculating the ECMH hash of
+// each serialized UTXO as well as saving it into the utxoCache. The resulting
+// multiset or an error will be returned over the results chan when the jobs
+// chan is closed.
+func worker(cache *utxoCache, state *BestState, jobs <-chan []byte, results chan<- *result) {
+	var (
+		err      error
+		m        = bchec.NewMultiset(bchec.S256())
+		entry    *UtxoEntry
+		outpoint *wire.OutPoint
+	)
+	for serializedUtxo := range jobs {
+		m.Add(serializedUtxo)
+
+		outpoint, entry, err = deserializeUtxoCommitmentFormat(serializedUtxo)
+		if err != nil {
+			log.Errorf("Error deserializing UTXO: %s", err.Error())
+			results <- &result{err: err}
+			return
+		}
+
+		if err = cache.AddEntry(*outpoint, entry, true); err != nil {
+			results <- &result{err: err}
+			return
+		}
+
+		if err = cache.Flush(FlushIfNeeded, state); err != nil {
+			results <- &result{err: err}
+			return
+		}
+	}
+	results <- &result{m: m}
+}
+
+// downloadUtxoSet will attempt to connect to make an HTTP GET request to the
+// provided sources one at a time and download the UTXO set to the provided path.
+// If a proxy is provided it will use it for the HTTP connection.
+func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) error {
 	dialFunc := net.Dial
 	if proxy != nil {
 		dialFunc = proxy.Dial
@@ -147,12 +221,17 @@ func getUtxoReader(sources []string, proxy *socks.Proxy) (io.Reader, error) {
 		if resp.StatusCode != http.StatusOK {
 			continue
 		}
-		reader = resp.Body
+		file, err := os.Create(pth)
+		if err != nil {
+			return err
+		}
 		log.Infof("Downloading UTXO set from %s", src)
-		break
+		_, err = io.Copy(file, resp.Body)
+		if err != nil {
+			return err
+		}
+		log.Info("UTXO download complete. Verifying integrity...")
+		return file.Close()
 	}
-	if reader == nil {
-		return nil, AssertError("all UTXO sources are unavailable")
-	}
-	return reader, nil
+	return AssertError("all UTXO sources are unavailable")
 }

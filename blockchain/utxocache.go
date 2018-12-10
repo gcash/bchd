@@ -7,11 +7,11 @@ package blockchain
 import (
 	"container/list"
 	"fmt"
+	"github.com/gcash/bchd/txscript"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
-	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -346,6 +346,17 @@ func (s *utxoCache) spendEntry(outpoint wire.OutPoint, addIfNil *UtxoEntry) erro
 	return nil
 }
 
+// AddEntry adds a new unspent entry if it is not probably unspendable.  Set
+// overwrite to true to skip validity and freshness checks and simply add the
+// item, possibly overwriting another entry that is not-fully-spent.
+//
+// This function is safe for concurrent access
+func (s *utxoCache) AddEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite bool) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	return s.addEntry(outpoint, entry, overwrite)
+}
+
 // addEntry adds a new unspent entry if it is not probably unspendable.  Set
 // overwrite to true to skip validity and freshness checks and simply add the
 // item, possibly overwriting another entry that is not-fully-spent.
@@ -628,6 +639,8 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	}
 	log.Tracef("UTXO cache consistency status from disk: [%d] hash %v",
 		statusCode, statusHash)
+
+	log.Info(statusHash, tip.hash, tip.height)
 
 	// We can set this variable now already because it will always be valid
 	// unless an error is returned, in which case the state is entirely invalid.

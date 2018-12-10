@@ -68,6 +68,12 @@ func (ms *Multiset) Remove(data []byte) {
 	ms.x, ms.y = ms.curve.Add(ms.x, ms.y, x, y)
 }
 
+// Merge will add the point of the passed in multiset instance to the point
+// of this multiset and save the new point in this instance.
+func (ms *Multiset) Merge(otherMultiset *Multiset) {
+	ms.x, ms.y = ms.curve.Add(ms.x, ms.y, otherMultiset.x, otherMultiset.y)
+}
+
 // Hash serializes and returns the hash of the multiset. The hash of an empty
 // set is the 32 byte value of zero. The hash of a non-empty multiset is the
 // sha256 hash of the 32 byte x value concatenated with the 32 byte y value.

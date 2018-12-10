@@ -387,7 +387,12 @@ func (sm *SyncManager) startSync() {
 			log.Infof("Downloading headers for blocks %d to "+
 				"%d from peer %s", best.Height+1,
 				sm.nextCheckpoint.Height, bestPeer.Addr())
-		} else {
+		} else if !sm.fastSyncMode {
+			// We will only send the getBlocks message if we are not
+			// in fast sync mode. If we are in fast sync mode we will
+			// set this bool to false once the UTXO download/verification
+			// finishes and then we can proceed as if we are syncing
+			// normally.
 			bestPeer.PushGetBlocksMsg(locator, &zeroHash)
 		}
 
@@ -1051,16 +1056,20 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 					log.Warnf("Error saving header to block index: %s", err.Error())
 					continue
 				}
-				finalHeight = node.height
 				sm.startHeader = e.Next()
+				finalHeight = node.height
 			}
 			sm.nextCheckpoint = sm.findNextHeaderCheckpoint(finalHeight)
 			// If we've reached the last checkpoint then wait here for the UTXO download to complete before
 			// proceeding with chain sync as normal.
-			if sm.nextCheckpoint.Hash.IsEqual(sm.lastCheckpoint().Hash) {
-				<-sm.chain.FastSyncDoneChan()
-				locator := blockchain.BlockLocator([]*chainhash.Hash{finalHash})
-				peer.PushGetBlocksMsg(locator, &zeroHash)
+			if finalHash.IsEqual(sm.lastCheckpoint().Hash) {
+				log.Info("Header download complete waiting for UTXO verification to finish...")
+				sm.headerList.Init()
+				go func() {
+					<-sm.chain.FastSyncDoneChan()
+					sm.fastSyncMode = false
+					sm.startSync()
+				}()
 				return
 			}
 		} else {
@@ -1163,7 +1172,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 
 	// Ignore invs from peers that aren't the sync if we are not current.
 	// Helps prevent fetching a mass of orphans.
-	if peer != sm.syncPeer && !sm.current() {
+	if peer != sm.syncPeer && !sm.current() || sm.fastSyncMode {
 		return
 	}
 

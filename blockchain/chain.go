@@ -292,6 +292,22 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	b.index.AddNode(node)
 	b.bestChain.SetTip(node)
 	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+
+	// Atomically insert info into the database.
+	err := b.db.Update(func(dbTx database.Tx) error {
+		// Update best block state.
+		if err := dbPutBestState(dbTx, b.stateSnapshot, node.workSum); err != nil {
+			return err
+		}
+
+		// Add the block hash and height to the block index which tracks
+		// the main chain.
+		headerHash := header.BlockHash()
+		return dbPutBlockIndex(dbTx, &headerHash, node.height)
+	})
+	if err != nil {
+		return err
+	}
 	return b.index.flushToDB()
 }
 
