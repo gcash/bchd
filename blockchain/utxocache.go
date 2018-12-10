@@ -640,8 +640,6 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	log.Tracef("UTXO cache consistency status from disk: [%d] hash %v",
 		statusCode, statusHash)
 
-	log.Info(statusHash, tip.hash, tip.height)
-
 	// We can set this variable now already because it will always be valid
 	// unless an error is returned, in which case the state is entirely invalid.
 	// Doing it here prevents forgetting it later.

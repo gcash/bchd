@@ -300,6 +300,15 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 			return err
 		}
 
+		if b.indexManager != nil {
+			msgBlock := wire.NewMsgBlock(header)
+			block := bchutil.NewBlock(msgBlock)
+			err := b.indexManager.ConnectBlock(dbTx, block, nil)
+			if err != nil {
+				return err
+			}
+		}
+
 		// Add the block hash and height to the block index which tracks
 		// the main chain.
 		headerHash := header.BlockHash()
