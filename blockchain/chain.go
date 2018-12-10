@@ -290,6 +290,7 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	tip := b.bestChain.tip()
 	node := newBlockNode(header, tip)
 	b.index.AddNode(node)
+	b.index.SetStatusFlags(node, statusValid)
 	b.bestChain.SetTip(node)
 	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
 
