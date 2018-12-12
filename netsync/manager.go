@@ -499,7 +499,7 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	best := sm.chain.BestSnapshot()
 
-	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() {
+	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0

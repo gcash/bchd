@@ -7,6 +7,7 @@ import (
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"io"
 	"math"
@@ -64,7 +65,6 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		scriptLen      uint32
 		progress       float64
 		progressStr    string
-		state          = &BestState{Hash: *checkpoint.Hash}
 	)
 
 	ticker := time.NewTicker(time.Minute * 5)
@@ -80,7 +80,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	resultsChan := make(chan *result)
 	jobsChan := make(chan []byte)
 	for i := 0; i < numWorkers; i++ {
-		go worker(b.utxoCache, state, jobsChan, resultsChan)
+		go worker(b.utxoCache, jobsChan, resultsChan)
 	}
 
 	// In this loop we're going read each serialized UTXO off the reader and then
@@ -133,7 +133,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	}
 	close(resultsChan)
 
-	if err = b.utxoCache.Flush(FlushRequired, state); err != nil {
+	if err = b.utxoCache.Flush(FlushRequired, &BestState{Hash: *checkpoint.Hash}); err != nil {
 		log.Errorf("Error processing UTXO set: %s", err.Error())
 		return err
 	}
@@ -171,12 +171,13 @@ type result struct {
 // each serialized UTXO as well as saving it into the utxoCache. The resulting
 // multiset or an error will be returned over the results chan when the jobs
 // chan is closed.
-func worker(cache *utxoCache, state *BestState, jobs <-chan []byte, results chan<- *result) {
+func worker(cache *utxoCache, jobs <-chan []byte, results chan<- *result) {
 	var (
 		err      error
 		m        = bchec.NewMultiset(bchec.S256())
 		entry    *UtxoEntry
 		outpoint *wire.OutPoint
+		state    = &BestState{Hash: chainhash.Hash{}}
 	)
 	for serializedUtxo := range jobs {
 		m.Add(serializedUtxo)

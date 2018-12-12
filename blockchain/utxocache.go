@@ -489,7 +489,10 @@ func (s *utxoCache) Commit(view *UtxoViewpoint) error {
 // This method should be called with the state lock held.
 func (s *utxoCache) flush(bestState *BestState) error {
 	// If we performed a flush in the current best state, we have nothing to do.
-	if bestState.Hash == s.lastFlushHash {
+	// If the bestState hash is the zero hash then skip this check and continue with
+	// the flush. The fastsync mode calls flush with the zerohash during initial utxo
+	// set download so we don't want to prevent it from flushing in this case.
+	if bestState.Hash == s.lastFlushHash && !bestState.Hash.IsEqual(&chainhash.Hash{}) {
 		return nil
 	}
 
@@ -625,7 +628,7 @@ func (s *utxoCache) rollForwardBlock(block *bchutil.Block) error {
 //
 // It needs to be ensured that the chainView passed to this method does not
 // get changed during the execution of this method.
-func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{}) error {
+func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt <-chan struct{}) error {
 	// Load the consistency status from the database.
 	var statusCode byte
 	var statusHash *chainhash.Hash
@@ -637,6 +640,32 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, interrupt <-chan struct{
 	if err != nil {
 		return err
 	}
+
+	if fastSync {
+		// If we're in fast sync mode and the status hash is not the zerohash then
+		// we must have previously started the node not in fastsync mode which means
+		// the UTXO set bucket will be dirty. In this case let's reset the UTXO
+		// bucket so we can get a fresh start.
+		if !statusHash.IsEqual(&chainhash.Hash{}) {
+			err := s.db.Update(func(tx database.Tx) error {
+				if err := tx.Metadata().DeleteBucket(utxoSetBucketName); err != nil {
+					return err
+				}
+				if _, err := tx.Metadata().CreateBucket(utxoSetBucketName); err != nil {
+					return err
+				}
+				return nil
+			})
+			return err
+		}
+		// If we're in fast sync mode and the status hash is the zero hash then
+		// this is either a completely new node or a node that suffered a hard
+		// shutdown during fast sync. In either case we don't need to repair
+		// the UTXO set as we can just write over existing entries as we download
+		// the UTXO set.
+		return nil
+	}
+
 	log.Tracef("UTXO cache consistency status from disk: [%d] hash %v",
 		statusCode, statusHash)
 

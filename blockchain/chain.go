@@ -304,6 +304,7 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 		if b.indexManager != nil {
 			msgBlock := wire.NewMsgBlock(header)
 			block := bchutil.NewBlock(msgBlock)
+			block.SetHeight(node.height)
 			err := b.indexManager.ConnectBlock(dbTx, block, nil)
 			if err != nil {
 				return err
@@ -2167,14 +2168,17 @@ func New(config *Config) (*BlockChain, error) {
 	// Initialize the chain state from the passed database.  When the db
 	// does not yet contain any chain state, both it and the chain state
 	// will be initialized to contain only the genesis block.
-	if err := b.initChainState(); err != nil {
+	if err := b.initChainState(config.FastSync); err != nil {
 		return nil, err
 	}
 
+	bestNode := b.bestChain.Tip()
+	lastCheckpoint := b.LatestCheckpoint()
+	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height < lastCheckpoint.Height
+
 	// Make sure the utxo state is caught up if it was left in an inconsistent
 	// state.
-	bestNode := b.bestChain.Tip()
-	if err := b.utxoCache.InitConsistentState(bestNode, config.Interrupt); err != nil {
+	if err := b.utxoCache.InitConsistentState(bestNode, config.FastSync, config.Interrupt); err != nil {
 		return nil, err
 	}
 
@@ -2232,9 +2236,8 @@ func New(config *Config) (*BlockChain, error) {
 		log.Info("Re-indexing complete")
 	}
 
-	if config.FastSync && bestNode.height == 0 {
-		lastCheckpoint := b.LatestCheckpoint()
-		if lastCheckpoint == nil || (lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0) {
+	if config.FastSync {
+		if lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0 {
 			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
 			return nil, AssertError(errStr)
 		}

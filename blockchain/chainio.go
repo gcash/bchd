@@ -1279,7 +1279,7 @@ func (b *BlockChain) createChainState() error {
 // initChainState attempts to load and initialize the chain state from the
 // database.  When the db does not yet contain any chain state, both it and the
 // chain state are initialized to the genesis block.
-func (b *BlockChain) initChainState() error {
+func (b *BlockChain) initChainState(fastSync bool) error {
 	// Determine the state of the chain database. We may need to initialize
 	// everything from scratch or upgrade certain buckets.
 	var initialized, hasBlockIndex bool
@@ -1390,14 +1390,18 @@ func (b *BlockChain) initChainState() error {
 		b.bestChain.SetTip(tip)
 
 		// Load the raw block bytes for the best block.
-		blockBytes, err := dbTx.FetchBlock(&state.hash)
-		if err != nil {
-			return err
-		}
 		var block wire.MsgBlock
-		err = block.Deserialize(bytes.NewReader(blockBytes))
-		if err != nil {
-			return err
+		var blockBytes []byte
+		lastCheckpoint := b.LatestCheckpoint()
+		if !fastSync || (lastCheckpoint != nil && tip.height > lastCheckpoint.Height) {
+			blockBytes, err = dbTx.FetchBlock(&state.hash)
+			if err != nil {
+				return err
+			}
+			err = block.Deserialize(bytes.NewReader(blockBytes))
+			if err != nil {
+				return err
+			}
 		}
 
 		// As a final consistency check, we'll run through all the
