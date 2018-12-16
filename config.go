@@ -596,6 +596,16 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// Indexing also doesn't work with fast sync as the indexes will not go
+	// back to genesis.
+	if (cfg.TxIndex || cfg.AddrIndex) && cfg.FastSync {
+		str := "%s: txindex and addrindex can not be used with fast sync mode."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Set the default policy for relaying non-standard transactions
 	// according to the default of the active network. The set
 	// configuration value takes precedence over the default value for the
