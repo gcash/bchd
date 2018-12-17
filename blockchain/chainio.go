@@ -70,7 +70,7 @@ var (
 
 	// prunedBlockchainEntryValue is the value the corresponds to a
 	// pruned blockchain.
-	prunedBlockchainEntryValue = []byte("prunedblockhain")
+	prunedBlockchainEntryValue = []byte("prunedblockchain")
 
 	// utxoSetVersionKeyName is the name of the db key used to store the
 	// version of the utxo set currently in the database.
