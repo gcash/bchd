@@ -387,6 +387,15 @@ func (sm *SyncManager) startSync() {
 			log.Infof("Downloading headers for blocks %d to "+
 				"%d from peer %s", best.Height+1,
 				sm.nextCheckpoint.Height, bestPeer.Addr())
+		} else if sm.fastSyncMode && sm.nextCheckpoint == nil {
+			// If fast sync mode is enabled and the next checkpoint is
+			// nil then we are waiting for the UTXO set to catch up with
+			// header chain. Let's wait here and then start the sync again.
+			go func() {
+				<-sm.chain.FastSyncDoneChan()
+				sm.fastSyncMode = false
+				sm.startSync()
+			}()
 		} else if !sm.fastSyncMode {
 			// We will only send the getBlocks message if we are not
 			// in fast sync mode. If we are in fast sync mode we will

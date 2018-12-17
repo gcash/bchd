@@ -606,6 +606,15 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// Checkpoints must not be disabled in fast sync mode
+	if cfg.FastSync && cfg.DisableCheckpoints {
+		str := "%s: disablecheckpoints can not be used with fast sync mode."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Set the default policy for relaying non-standard transactions
 	// according to the default of the active network. The set
 	// configuration value takes precedence over the default value for the

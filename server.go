@@ -2756,9 +2756,9 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 	s.txMemPool = mempool.New(&txC)
 
-	// Ignore the fast sync config option if the blockchain is at or past
+	// Ignore the fast sync config option if the blockchain is past
 	// the last checkpoint as we can't fast sync from here.
-	if s.chain.LatestCheckpoint() == nil || s.chain.BestSnapshot().Height >= s.chain.LatestCheckpoint().Height {
+	if s.chain.LatestCheckpoint() == nil || s.chain.BestSnapshot().Height > s.chain.LatestCheckpoint().Height {
 		cfg.FastSync = false
 	}
 

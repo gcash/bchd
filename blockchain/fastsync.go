@@ -24,6 +24,13 @@ const numWorkers = 8
 // UTXO will be saved to the database and the ECMH hash of the UTXO set will be validated against
 // the checkpoint. If a proxyAddr is provided it will use that proxy for the HTTP connection.
 func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr string) error {
+	// If the UTXO set is already caught up with the last checkpoint then
+	// we can just close the done chan and exit.
+	if b.utxoCache.lastFlushHash.IsEqual(checkpoint.Hash) {
+		close(b.fastSyncDone)
+		return nil
+	}
+
 	if checkpoint.UtxoSetHash == nil {
 		return AssertError("cannot perform fast sync with nil UTXO set hash")
 	}

@@ -2174,7 +2174,7 @@ func New(config *Config) (*BlockChain, error) {
 
 	bestNode := b.bestChain.Tip()
 	lastCheckpoint := b.LatestCheckpoint()
-	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height < lastCheckpoint.Height
+	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height <= lastCheckpoint.Height
 
 	// Make sure the utxo state is caught up if it was left in an inconsistent
 	// state.
