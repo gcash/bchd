@@ -298,7 +298,7 @@ var MainNetParams = Params{
 			UtxoSetSize: 3102076686,
 			UtxoSetSources: []string{
 				"http://localhost:8080/ipfs/QmcMpwyzvdbcoXN41cAG24nk9dNaSY1sAhRfuHAB9iirkb",
-				"https://bchd.cash/66cac93841cb1b1f7a62dc7b9d0285fa1b9a2f7fe4f867d58d6ff88dce377f64",
+				"https://ipfs.greyh.at/ipfs/QmcMpwyzvdbcoXN41cAG24nk9dNaSY1sAhRfuHAB9iirkb",
 			},
 		},
 	},
