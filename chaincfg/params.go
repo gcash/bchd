@@ -294,11 +294,11 @@ var MainNetParams = Params{
 		{
 			Height:      556767,
 			Hash:        newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c"),
-			UtxoSetHash: newHashFromStr("66cac93841cb1b1f7a62dc7b9d0285fa1b9a2f7fe4f867d58d6ff88dce377f64"),
+			UtxoSetHash: newHashFromStr("352a96fdd4dd229ced594b6bae5c658da514eb76e9b04eb469a7effaada6a14e"),
 			UtxoSetSize: 3102076686,
 			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmcMpwyzvdbcoXN41cAG24nk9dNaSY1sAhRfuHAB9iirkb",
-				"https://ipfs.greyh.at/ipfs/QmcMpwyzvdbcoXN41cAG24nk9dNaSY1sAhRfuHAB9iirkb",
+				"http://localhost:8080/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
+				"https://ipfs.greyh.at/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
 			},
 		},
 	},
