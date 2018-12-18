@@ -103,6 +103,23 @@ func IsPushOnlyScript(script []byte) bool {
 	return isPushOnly(pops)
 }
 
+// ExtractDataElements returns a slice of all the data elements in the
+// given script.
+func ExtractDataElements(script []byte) ([][]byte, error) {
+	var dataElements [][]byte
+	pops, err := parseScript(script)
+	if err != nil {
+		return nil, err
+	}
+	for _, pop := range pops {
+		// All opcodes up to OP_16 are data push instructions.
+		if pop.opcode.value <= OP_16 {
+			dataElements = append(dataElements, pop.data)
+		}
+	}
+	return dataElements, nil
+}
+
 // parseScriptTemplate is the same as parseScript but allows the passing of the
 // template list for testing purposes.  When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.
