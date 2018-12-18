@@ -3825,6 +3825,30 @@ func TestHasCanonicalPush(t *testing.T) {
 	}
 }
 
+// TestExtractDataElements ensures the ExtractDataElements function works as expected.
+func TestExtractDataElements(t *testing.T) {
+	for i := 0; i <= MaxScriptElementSize; i++ {
+		builder := NewScriptBuilder()
+		numElements := i % 3
+		for a := 0; a < numElements; a++ {
+			builder.AddData(bytes.Repeat([]byte{0x49}, i))
+		}
+		script, err := builder.Script()
+		if err != nil {
+			t.Errorf("ExtractDataElements test #%d unexpected error: %v\n", i, err)
+			continue
+		}
+		dataElements, err := ExtractDataElements(script)
+		if err != nil {
+			t.Errorf("ExtractDataElements test #%d unexpected error: %v\n", i, err)
+			continue
+		}
+		if len(dataElements) != numElements {
+			t.Errorf("ExtractDataElements test #%d expected length of %d got %d\n", i, numElements, len(dataElements))
+		}
+	}
+}
+
 // TestGetPreciseSigOps ensures the more precise signature operation counting
 // mechanism which includes signatures in P2SH scripts works as expected.
 func TestGetPreciseSigOps(t *testing.T) {
