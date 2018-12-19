@@ -181,6 +181,7 @@ type config struct {
 	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"number of outbound connections to maintain"`
 	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
+	FastSync                bool          `long:"fastsync" description:"Sync full blocks from the last checkpoint to the tip rather than from genesis."`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -580,6 +581,34 @@ func loadConfig() (*config, []string, error) {
 	// Re-indexing and pruning don't mix.
 	if cfg.ReIndexChainState && cfg.Prune {
 		str := "%s: reindexchainstate can not be used with a pruned blockchain."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Re-indexing and fast sync don't mix either.
+	if cfg.ReIndexChainState && cfg.FastSync {
+		str := "%s: reindexchainstate can not be used with fast sync mode."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Indexing also doesn't work with fast sync as the indexes will not go
+	// back to genesis.
+	if (cfg.TxIndex || cfg.AddrIndex) && cfg.FastSync {
+		str := "%s: txindex and addrindex can not be used with fast sync mode."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Checkpoints must not be disabled in fast sync mode
+	if cfg.FastSync && cfg.DisableCheckpoints {
+		str := "%s: disablecheckpoints can not be used with fast sync mode."
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)

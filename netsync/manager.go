@@ -143,6 +143,7 @@ type pauseMsg struct {
 type headerNode struct {
 	height int32
 	hash   *chainhash.Hash
+	header *wire.BlockHeader
 }
 
 // peerSyncState stores additional information that the SyncManager tracks
@@ -232,6 +233,15 @@ type SyncManager struct {
 	// minSyncPeerNetworkSpeed is the minimum speed allowed for
 	// a sync peer.
 	minSyncPeerNetworkSpeed uint64
+
+	// fastSyncMode uses different behavior from the normal sync.
+	// In particular it will download the full header chain from genesis
+	// up to the most recent checkpoint rather than only downloading
+	// headers up to the first checkpoint and then back filling blocks.
+	// After the headers are downloaded it will wait for the chain to
+	// signal that it has finished the UTXO set download before proceeding
+	// to make the standard getblocks request.
+	fastSyncMode bool
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -248,6 +258,15 @@ func (sm *SyncManager) resetHeaderState(newestHash *chainhash.Hash, newestHeight
 		node := headerNode{height: newestHeight, hash: newestHash}
 		sm.headerList.PushBack(&node)
 	}
+}
+
+// lastCheckpoint returns the last checkpoint we have in the params.
+func (sm *SyncManager) lastCheckpoint() *chaincfg.Checkpoint {
+	checkpoints := sm.chain.Checkpoints()
+	if len(checkpoints) == 0 {
+		return nil
+	}
+	return &checkpoints[len(checkpoints)-1]
 }
 
 // findNextHeaderCheckpoint returns the next checkpoint after the passed height.
@@ -368,7 +387,21 @@ func (sm *SyncManager) startSync() {
 			log.Infof("Downloading headers for blocks %d to "+
 				"%d from peer %s", best.Height+1,
 				sm.nextCheckpoint.Height, bestPeer.Addr())
-		} else {
+		} else if sm.fastSyncMode && sm.nextCheckpoint == nil {
+			// If fast sync mode is enabled and the next checkpoint is
+			// nil then we are waiting for the UTXO set to catch up with
+			// header chain. Let's wait here and then start the sync again.
+			go func() {
+				<-sm.chain.FastSyncDoneChan()
+				sm.fastSyncMode = false
+				sm.startSync()
+			}()
+		} else if !sm.fastSyncMode {
+			// We will only send the getBlocks message if we are not
+			// in fast sync mode. If we are in fast sync mode we will
+			// set this bool to false once the UTXO download/verification
+			// finishes and then we can proceed as if we are syncing
+			// normally.
 			bestPeer.PushGetBlocksMsg(locator, &zeroHash)
 		}
 
@@ -475,7 +508,7 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	best := sm.chain.BestSnapshot()
 
-	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() {
+	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0
@@ -968,6 +1001,9 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		// Ensure the header properly connects to the previous one and
 		// add it to the list of headers.
 		node := headerNode{hash: &blockHash}
+		if sm.fastSyncMode {
+			node.header = blockHeader
+		}
 		prevNode := prevNodeEl.Value.(*headerNode)
 		if prevNode.hash.IsEqual(&blockHeader.PrevBlock) {
 			node.height = prevNode.height + 1
@@ -1012,11 +1048,46 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		// the next header links properly, it must be removed before
 		// fetching the blocks.
 		sm.headerList.Remove(sm.headerList.Front())
-		log.Infof("Received %v block headers: Fetching blocks",
-			sm.headerList.Len())
-		sm.progressLogger.SetLastLogTime(time.Now())
-		sm.fetchHeaderBlocks()
-		return
+
+		// By this point we've downloaded and validated all headers from the previous
+		// checkpoint to the next checkpoint so we can add them to the block index
+		// all at once.
+		if sm.fastSyncMode {
+			var finalHeight int32
+			for e := sm.startHeader; e != nil; e = e.Next() {
+				node, ok := e.Value.(*headerNode)
+				if !ok {
+					log.Warn("Header list node type is not a headerNode")
+					continue
+				}
+				err := sm.chain.AddHeader(node.header)
+				if err != nil {
+					log.Warnf("Error saving header to block index: %s", err.Error())
+					continue
+				}
+				sm.startHeader = e.Next()
+				finalHeight = node.height
+			}
+			sm.nextCheckpoint = sm.findNextHeaderCheckpoint(finalHeight)
+			// If we've reached the last checkpoint then wait here for the UTXO download to complete before
+			// proceeding with chain sync as normal.
+			if finalHash.IsEqual(sm.lastCheckpoint().Hash) {
+				log.Info("Header download complete waiting for UTXO verification to finish...")
+				sm.headerList.Init()
+				go func() {
+					<-sm.chain.FastSyncDoneChan()
+					sm.fastSyncMode = false
+					sm.startSync()
+				}()
+				return
+			}
+		} else {
+			log.Infof("Received %v block headers: Fetching blocks",
+				sm.headerList.Len())
+			sm.progressLogger.SetLastLogTime(time.Now())
+			sm.fetchHeaderBlocks()
+			return
+		}
 	}
 
 	// This header is not a checkpoint, so request the next batch of
@@ -1110,7 +1181,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 
 	// Ignore invs from peers that aren't the sync if we are not current.
 	// Helps prevent fetching a mass of orphans.
-	if peer != sm.syncPeer && !sm.current() {
+	if peer != sm.syncPeer && !sm.current() || sm.fastSyncMode {
 		return
 	}
 
@@ -1615,6 +1686,7 @@ func New(config *Config) (*SyncManager, error) {
 		quit:                    make(chan struct{}),
 		feeEstimator:            config.FeeEstimator,
 		minSyncPeerNetworkSpeed: config.MinSyncPeerNetworkSpeed,
+		fastSyncMode:            config.FastSyncMode,
 	}
 
 	best := sm.chain.BestSnapshot()

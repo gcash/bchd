@@ -2590,10 +2590,6 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if cfg.NoCFilters {
 		services &^= wire.SFNodeCF
 	}
-	if cfg.Prune {
-		services &^= wire.SFNodeNetwork
-		services |= wire.SFNodeNetworkLimited
-	}
 
 	amgr := addrmgr.New(cfg.DataDir, bchdLookup)
 
@@ -2692,9 +2688,16 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		Prune:              cfg.Prune,
 		PruneDepth:         cfg.PruneDepth,
 		ReIndexChainState:  cfg.ReIndexChainState,
+		FastSync:           cfg.FastSync,
+		Proxy:              cfg.Proxy,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if s.chain.IsPruned() {
+		services &^= wire.SFNodeNetwork
+		services |= wire.SFNodeNetworkLimited
 	}
 
 	// Search for a FeeEstimator state in the database. If none can be found
@@ -2753,6 +2756,12 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 	s.txMemPool = mempool.New(&txC)
 
+	// Ignore the fast sync config option if the blockchain is past
+	// the last checkpoint as we can't fast sync from here.
+	if s.chain.LatestCheckpoint() == nil || s.chain.BestSnapshot().Height > s.chain.LatestCheckpoint().Height {
+		cfg.FastSync = false
+	}
+
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
 		Chain:                   s.chain,
@@ -2762,6 +2771,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		MaxPeers:                cfg.MaxPeers,
 		FeeEstimator:            s.feeEstimator,
 		MinSyncPeerNetworkSpeed: cfg.MinSyncPeerNetworkSpeed,
+		FastSyncMode:            cfg.FastSync,
 	})
 	if err != nil {
 		return nil, err

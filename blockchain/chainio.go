@@ -63,6 +63,15 @@ var (
 	// consistency status of the utxo state.
 	utxoStateConsistencyKeyName = []byte("utxostateconsistency")
 
+	// blockchainTypeKeyName is the name of the db key used to store the
+	// prune status of the blockchain. If it was ever run in prune mode
+	// or fastsync mode then it should be treated as a pruned chain.
+	blockchainTypeKeyName = []byte("blockchaintype")
+
+	// prunedBlockchainEntryValue is the value the corresponds to a
+	// pruned blockchain.
+	prunedBlockchainEntryValue = []byte("prunedblockchain")
+
 	// utxoSetVersionKeyName is the name of the db key used to store the
 	// version of the utxo set currently in the database.
 	utxoSetVersionKeyName = []byte("utxosetversion")
@@ -708,6 +717,39 @@ func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 	return entry, nil
 }
 
+// deserializeUtxoCommitmentFormat takes a Utxo serialized in the commitment format and
+// deserializes it into an OutPoint and UtxoEntry.
+func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEntry, error) {
+	txid, err := chainhash.NewHash(serialized[:32])
+	if err != nil {
+		return nil, nil, err
+	}
+	index := binary.LittleEndian.Uint32(serialized[32:36])
+
+	serializedHeight := serialized[36:40]
+	coinbaseFlag := serializedHeight[3] & 0x01
+
+	serializedHeight[3] &= 0xFE
+
+	height := binary.LittleEndian.Uint32(serializedHeight)
+
+	value := binary.LittleEndian.Uint64(serialized[40:48])
+
+	pkScript := serialized[52:]
+
+	op := wire.NewOutPoint(txid, index)
+	entry := &UtxoEntry{
+		amount:      int64(value),
+		blockHeight: int32(height),
+		pkScript:    pkScript,
+		packedFlags: 0,
+	}
+	if coinbaseFlag > 0 {
+		entry.packedFlags |= tfCoinBase
+	}
+	return op, entry, nil
+}
+
 // dbFetchUtxoEntryByHash attempts to find and fetch a utxo for the given hash.
 // It uses a cursor and seek to try and do this as efficiently as possible.
 //
@@ -1099,6 +1141,21 @@ func dbFetchUtxoStateConsistency(dbTx database.Tx) (byte, *chainhash.Hash, error
 	return deserializeUtxoStateConsistency(serialized)
 }
 
+// dbPutBlockchainType uses an existing database transaction to
+// update the blockchain type entry with the provided type.
+func dbPutBlockchainType(dbTx database.Tx, chainType []byte) error {
+	// Store the chain type into the database.
+	return dbTx.Metadata().Put(blockchainTypeKeyName, chainType)
+}
+
+// dbFetchBlockchainType uses an existing database transaction to retrieve
+// the blockchain type from the database.  The returned bytes is nil if
+// nothing is found.
+func dbFetchBlockchainType(dbTx database.Tx) []byte {
+	// Fetch the chain type from the database.
+	return dbTx.Metadata().Get(blockchainTypeKeyName)
+}
+
 // dbPutPruneHeight uses an existing database transaction to
 // update the prune height.
 func dbPutPruneHeight(dbTx database.Tx, height uint32) error {
@@ -1222,7 +1279,7 @@ func (b *BlockChain) createChainState() error {
 // initChainState attempts to load and initialize the chain state from the
 // database.  When the db does not yet contain any chain state, both it and the
 // chain state are initialized to the genesis block.
-func (b *BlockChain) initChainState() error {
+func (b *BlockChain) initChainState(fastSync bool) error {
 	// Determine the state of the chain database. We may need to initialize
 	// everything from scratch or upgrade certain buckets.
 	var initialized, hasBlockIndex bool
@@ -1333,14 +1390,18 @@ func (b *BlockChain) initChainState() error {
 		b.bestChain.SetTip(tip)
 
 		// Load the raw block bytes for the best block.
-		blockBytes, err := dbTx.FetchBlock(&state.hash)
-		if err != nil {
-			return err
-		}
 		var block wire.MsgBlock
-		err = block.Deserialize(bytes.NewReader(blockBytes))
-		if err != nil {
-			return err
+		var blockBytes []byte
+		lastCheckpoint := b.LatestCheckpoint()
+		if !fastSync || (lastCheckpoint != nil && tip.height > lastCheckpoint.Height) {
+			blockBytes, err = dbTx.FetchBlock(&state.hash)
+			if err != nil {
+				return err
+			}
+			err = block.Deserialize(bytes.NewReader(blockBytes))
+			if err != nil {
+				return err
+			}
 		}
 
 		// As a final consistency check, we'll run through all the

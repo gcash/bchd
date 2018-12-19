@@ -6,6 +6,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 	"math"
@@ -213,6 +214,14 @@ type BlockChain struct {
 	// historical blocks.
 	pruneMode  bool
 	pruneDepth uint32
+
+	// isPruned is set to true if the chain was ever run in prune mode or fast
+	// sync mode.
+	isPruned bool
+
+	// fastSyncDone chan is used to signal that the UTXO set download has
+	// finished.
+	fastSyncDone chan struct{}
 }
 
 // HaveBlock returns whether or not the chain instance has the block represented
@@ -257,6 +266,60 @@ func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 // PruneMode returns whether or not the blockchain is running in prune mode.
 func (b *BlockChain) PruneMode() bool {
 	return b.pruneMode
+}
+
+// IsPruned returns true if the chain was ever run in prune mode or fastsync mode.
+func (b *BlockChain) IsPruned() bool {
+	return b.isPruned
+}
+
+// FastSyncDoneChan returns a channel which signals that the fastsync UTXO download
+// has finished.
+func (b *BlockChain) FastSyncDoneChan() <-chan struct{} {
+	return b.fastSyncDone
+}
+
+// AddHeader will add a new header to the tip of the index. This is primarily used
+// when syncing headers in fastsync mode.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	tip := b.bestChain.tip()
+	node := newBlockNode(header, tip)
+	b.index.AddNode(node)
+	b.index.SetStatusFlags(node, statusValid)
+	b.bestChain.SetTip(node)
+	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+
+	// Atomically insert info into the database.
+	err := b.db.Update(func(dbTx database.Tx) error {
+		// Update best block state.
+		if err := dbPutBestState(dbTx, b.stateSnapshot, node.workSum); err != nil {
+			return err
+		}
+
+		if b.indexManager != nil {
+			msgBlock := wire.NewMsgBlock(header)
+			block := bchutil.NewBlock(msgBlock)
+			block.SetHeight(node.height)
+			err := b.indexManager.ConnectBlock(dbTx, block, nil)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Add the block hash and height to the block index which tracks
+		// the main chain.
+		headerHash := header.BlockHash()
+		return dbPutBlockIndex(dbTx, &headerHash, node.height)
+	})
+	if err != nil {
+		return err
+	}
+	return b.index.flushToDB()
 }
 
 // GetOrphanRoot returns the head of the chain for the provided hash from the
@@ -2029,6 +2092,14 @@ type Config struct {
 	// ReIndexChainState will delete the UTXO db bucket and rebuild the
 	// UTXO set from blocks on disk on startup.
 	ReIndexChainState bool
+
+	// FastSync will download, validate, and save the UTXO at the last
+	// checkpoint.
+	FastSync bool
+
+	// Proxy is ip:port of an optional socks5 proxy to use when downloading
+	// the UTXO set in fast sync mode.
+	Proxy string
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -2091,19 +2162,23 @@ func New(config *Config) (*BlockChain, error) {
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 		pruneMode:           config.Prune,
 		pruneDepth:          config.PruneDepth,
+		fastSyncDone:        make(chan struct{}),
 	}
 
 	// Initialize the chain state from the passed database.  When the db
 	// does not yet contain any chain state, both it and the chain state
 	// will be initialized to contain only the genesis block.
-	if err := b.initChainState(); err != nil {
+	if err := b.initChainState(config.FastSync); err != nil {
 		return nil, err
 	}
 
+	bestNode := b.bestChain.Tip()
+	lastCheckpoint := b.LatestCheckpoint()
+	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height <= lastCheckpoint.Height
+
 	// Make sure the utxo state is caught up if it was left in an inconsistent
 	// state.
-	bestNode := b.bestChain.Tip()
-	if err := b.utxoCache.InitConsistentState(bestNode, config.Interrupt); err != nil {
+	if err := b.utxoCache.InitConsistentState(bestNode, config.FastSync, config.Interrupt); err != nil {
 		return nil, err
 	}
 
@@ -2126,6 +2201,26 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, err
 	}
 
+	// If we're running in pruned mode or fast sync mode then set the chain type in the
+	// database. If not load the chain type from the database.
+	if config.Prune || config.FastSync {
+		err := b.db.Update(func(tx database.Tx) error {
+			return dbPutBlockchainType(tx, prunedBlockchainEntryValue)
+		})
+		if err != nil {
+			return nil, err
+		}
+		b.isPruned = true
+	} else {
+		b.db.View(func(tx database.Tx) error {
+			chainType := dbFetchBlockchainType(tx)
+			if bytes.Equal(chainType, prunedBlockchainEntryValue) {
+				b.isPruned = true
+			}
+			return nil
+		})
+	}
+
 	// Run an initial prune if prune mode is set
 	if b.pruneMode {
 		if err := b.Prune(); err != nil {
@@ -2139,6 +2234,14 @@ func New(config *Config) (*BlockChain, error) {
 			return nil, err
 		}
 		log.Info("Re-indexing complete")
+	}
+
+	if config.FastSync {
+		if lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0 {
+			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
+			return nil, AssertError(errStr)
+		}
+		go b.fastSyncUtxoSet(lastCheckpoint, config.Proxy)
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

@@ -121,6 +121,7 @@ func loadConfig() (*config, []string, error) {
 			"rolled back are held in memory. If you wish to continue use --force."
 		err := fmt.Errorf(str, funcName, activeNetParams.Checkpoints[len(activeNetParams.Checkpoints)-1].Height)
 		fmt.Fprintln(os.Stderr, err)
+		return nil, nil, err
 	}
 
 	// Validate database type.

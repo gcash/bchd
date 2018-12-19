@@ -332,6 +332,9 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 				blockHeight: stxo.Height,
 				packedFlags: tfModified,
 			}
+			if stxo.IsCoinBase {
+				entry.packedFlags |= tfCoinBase
+			}
 			// Then store the entry in the view.
 			if err := view.addEntry(originOut, entry, true); err != nil {
 				return err
