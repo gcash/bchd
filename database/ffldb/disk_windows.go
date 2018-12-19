@@ -19,7 +19,7 @@ func getAvailableDiskSpace(path string) (uint64, error) {
 	var freeBytes, totalBytes, availBytes int64
 	_, _, err := c.Call(uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(path))),
 		uintptr(unsafe.Pointer(&freeBytes)), uintptr(unsafe.Pointer(&totalBytes)), uintptr(unsafe.Pointer(&availBytes)))
-	if err != nil {
+	if err != nil && err.(syscall.Errno) != 0 {
 		return 0, err
 	}
 
