@@ -788,8 +788,8 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 		tip.height-statusNodeNext.height)
 
 	// Then we replay the blocks from the last consistent state up to the best
-	// state.  Iterate forward from the consistent node to the tip of the best
-	// chain.  After every batch, we can also update the consistency state to
+	// state. Iterate forward from the consistent node to the tip of the best
+	// chain. After every batch, we can also update the consistency state to
 	// avoid redoing the work when interrupted.
 	rollforwardBatch := func(dbTx database.Tx, node *blockNode) (*blockNode, error) {
 		nbBatchBlocks := 0
@@ -817,8 +817,8 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 		return node, dbPutUtxoStateConsistency(dbTx, ucsConsistent, &node.hash)
 	}
 
-	for node := statusNodeNext; node.height < tip.height; {
-		log.Tracef("Replaying %d more blocks...", tip.height-node.height)
+	for node := statusNodeNext; node.height <= tip.height; {
+		log.Tracef("Replaying %d more blocks...", tip.height-node.height+1)
 		err := s.db.Update(func(dbTx database.Tx) error {
 			var err error
 			node, err = rollforwardBatch(dbTx, node)
