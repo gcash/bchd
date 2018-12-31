@@ -46,7 +46,7 @@ If you prefer to install from source do the following:
 - Run the following commands to obtain btcd, all dependencies, and install it:
 
 ```bash
-$ go get github.com/gcash/bchd
+go get github.com/gcash/bchd
 ```
 
 This will download and compile `bchd` and put it in your path.
@@ -54,8 +54,8 @@ This will download and compile `bchd` and put it in your path.
 If you are a bchd contributor and would like to change the default config file (`bchd.conf`), make any changes to `sample-bchd.conf` and then run the following commands:
 
 ```bash
-$ go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
-$ gofmt -s -w bindata.go
+go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
+gofmt -s -w bindata.go
 ```
 
 ## Getting Started
@@ -63,29 +63,29 @@ $ gofmt -s -w bindata.go
 To start bchd with default options just run:
 
 ```bash
-$ ./bchd
+./bchd
 ```
 
 You'll find a large number of runtime options with the help flag. All of them can also be set in a config file.
 See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf) for an example of how to use it.
 
 ```bash
-$ ./bchd --help
+./bchd --help
 ```
 
 You can use the common json RPC interface through the `bchctl` command:
 
 ```bash
-$ ./bchctl --help
+./bchctl --help
 
-$ ./bchctl --listcommands
+./bchctl --listcommands
 ```
 
 Bchd separates the node and the wallet. Commands for the wallet will work when you are also running
 [bchwallet](https://github.com/gcash/bchwallet):
 
 ```bash
-$ ./bchctl -u username -P password --wallet getnewaddress
+./bchctl -u username -P password --wallet getnewaddress
 ```
 
 ## Docker
