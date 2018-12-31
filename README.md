@@ -66,8 +66,27 @@ To start bchd with default options just run:
 $ ./bchd
 ```
 
-You'll find a large number of runtime options on the help menu. All of which can also be set in a config file.
+You'll find a large number of runtime options with the help flag. All of them can also be set in a config file.
 See the [sample config file](https://github.com/gcash/bchd/blob/master/sample-bchd.conf) for an example of how to use it.
+
+```bash
+$ ./bchd --help
+```
+
+You can use the common json RPC interface through the `bchctl` command:
+
+```bash
+$ ./bchctl --help
+
+$ ./bchctl --listcommands
+```
+
+Bchd separates the node and the wallet. Commands for the wallet will work when you are also running
+[bchwallet](https://github.com/gcash/bchwallet):
+
+```bash
+$ ./bchctl -u username -P password --wallet getnewaddress
+```
 
 ## Docker
 
