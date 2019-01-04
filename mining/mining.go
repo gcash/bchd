@@ -454,7 +454,6 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	uahfActive := nextBlockHeight >= g.chainParams.UahfForkHeight
 
 	maxBlockSize := g.chain.MaxBlockSize(uahfActive)
-	maxSigOps := g.chain.MaxBlockSigOps(uahfActive)
 
 	// Create a standard coinbase transaction paying to the provided
 	// address.  NOTE: The coinbase value will be updated to include the
@@ -624,6 +623,7 @@ mempoolLoop:
 	blockSize := uint32(blockHeaderOverhead * coinbaseTx.MsgTx().SerializeSize())
 	blockSigOps := coinbaseSigOps
 	totalFees := int64(0)
+	maxSigOps := blockchain.MaxBlockSigOps(blockSize)
 
 	// Choose which transactions make it into the block.
 	for priorityQueue.Len() > 0 {
@@ -651,6 +651,7 @@ mempoolLoop:
 		// check for overflow.
 		sigOps, err := blockchain.GetSigOps(tx, false,
 			blockUtxos, scriptFlags)
+		maxSigOps = blockchain.MaxBlockSigOps(blockPlusTxSize)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"GetSigOpCost: %v", tx.Hash(), err)
