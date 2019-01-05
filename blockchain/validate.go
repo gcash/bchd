@@ -1062,8 +1062,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	// If Uahf is active then we need to calculate the max block size
-	// and max sigops using the excessiveBlockSize rather than the
-	// LegacyBlockSize
+	// using the excessiveBlockSize rather than the LegacyBlockSize
 	uahfActive := node.height > b.chainParams.UahfForkHeight
 
 	// If Daa hardfork is active then we need to use the new difficulty
