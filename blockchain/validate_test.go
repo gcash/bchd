@@ -110,6 +110,42 @@ func TestCountSigOps(t *testing.T) {
 	}
 }
 
+// TestMaxBlockSigOps confirms max sig ops rules:
+// 1) 20000 * integer block size in megabytes
+// 2) integer block size is rounded up when not perfectly divisible
+func TestMaxBlockSigOps(t *testing.T) {
+	testCases := []struct {
+		name              string
+		nBlockBytes       uint32
+		expectedMaxSigOps int
+	}{
+		{
+			"exactly 1 MB should be 1*opsPerMB",
+			oneMegabyte,
+			20000 * 1,
+		}, {
+			"over 1 MB should be rounded to 2*opsPerMB",
+			oneMegabyte + 1,
+			20000 * 2,
+		}, {
+			"under 1 MB should be rounded to 1*opsPerMB",
+			oneMegabyte - 1,
+			20000 * 1,
+		}, {
+			"exactly 31 MB should be 31*opsPerMB",
+			31 * oneMegabyte,
+			20000 * 31,
+		},
+	}
+	for _, tc := range testCases {
+		result := MaxBlockSigOps(tc.nBlockBytes)
+		if result != tc.expectedMaxSigOps {
+			t.Fatalf("%s: expected MaxBlockSigOps %d but got %d",
+				tc.name, tc.expectedMaxSigOps, result)
+		}
+	}
+}
+
 // TestCheckConnectBlockTemplate tests the CheckConnectBlockTemplate function to
 // ensure it fails.
 func TestCheckConnectBlockTemplate(t *testing.T) {
