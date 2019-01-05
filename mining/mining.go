@@ -740,7 +740,7 @@ mempoolLoop:
 		// save the fees and signature operation counts to the block
 		// template.
 		blockTxns = append(blockTxns, tx)
-		blockSize += txSize
+		blockSize = blockPlusTxSize
 		blockSigOps += int64(sigOps)
 		totalFees += prioItem.fee
 		txFees = append(txFees, prioItem.fee)
