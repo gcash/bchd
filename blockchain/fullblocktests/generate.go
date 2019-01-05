@@ -1236,7 +1236,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//
 	// OP_CHECKMULTISIG counts for 20 sigops.
 	tooManySigOps = repeatOpcode(txscript.OP_CHECKMULTISIG, maxBlockSigOps/20)
-	tooManySigOps = append(manySigOps, txscript.OP_CHECKSIG)
+	tooManySigOps = append(tooManySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b32", outs[9], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
