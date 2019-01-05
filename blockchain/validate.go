@@ -1163,11 +1163,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// scripts.
 	transactions := block.Transactions()
 	totalSigOpCost := 0
-	blockBytes, err := block.Bytes()
-	if err != nil {
-		return err
-	}
-	maxSigOps := MaxBlockSigOps(uint32(len(blockBytes)))
+	nBlockBytes := block.MsgBlock().SerializeSize()
+	maxSigOps := MaxBlockSigOps(uint32(nBlockBytes))
 	for i, tx := range transactions {
 		// Since the first (and only the first) transaction has
 		// already been verified to be a coinbase transaction,
