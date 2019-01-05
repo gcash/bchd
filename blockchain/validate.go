@@ -95,9 +95,6 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 // operations in a block. The value is a function of the serialized
 // block size in bytes.
 func MaxBlockSigOps(nBlockBytes uint32) int {
-
-	// todo: is nBlockMBytesRoundedUp based on total block with transactions
-
 	nBlockMBytesRoundedUp := 1 + ((int(nBlockBytes) - 1) / oneMegabyte)
 	return nBlockMBytesRoundedUp * MaxBlockSigOpsPerMB
 }
