@@ -50,17 +50,19 @@ const (
 	LegacyMaxBlockSize = 1000000
 
 	// MaxBlockSigOpsPerMB is the maximum number of allowed sigops allowed
-	// per one megabyte allowed in a block
+	// per one (or partial) megabyte of block size after the UAHF hard fork
 	MaxBlockSigOpsPerMB = 20000
 
 	// MaxTransactionSize is the maximum allowable size of a transaction
-	MaxTransactionSize = 1000000
+	// after the UAHF hard fork
+	MaxTransactionSize = oneMegabyte
 
 	// MinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
 	MinTransactionSize = 100
 
-	// MaxTransactionSigOps is the maximum allowable number of sigops per transaction
+	// MaxTransactionSigOps is the maximum allowable number of sigops per
+	// transaction after the UAHF hard fork
 	MaxTransactionSigOps = 20000
 )
 
