@@ -28,7 +28,6 @@ require (
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3 // indirect
 	golang.org/x/sys v0.0.0-20190412213103-97732733099d // indirect
 	golang.org/x/text v0.3.0
-	google.golang.org/appengine v1.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20190404172233-64821d5d2107 // indirect
 	google.golang.org/grpc v1.20.1
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect

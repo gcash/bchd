@@ -6,6 +6,8 @@ package netsync
 
 import (
 	"container/list"
+	"github.com/gcash/bchd/avalanche"
+	"github.com/gcash/bchd/mining"
 	"math/rand"
 	"net"
 	"sync"
@@ -209,16 +211,17 @@ func (sps *syncPeerState) updateNetwork(syncPeer *peerpkg.Peer) {
 // chain is in sync, the SyncManager handles incoming block and header
 // notifications and relays announcements of new blocks to peers.
 type SyncManager struct {
-	peerNotifier   PeerNotifier
-	started        int32
-	shutdown       int32
-	chain          *blockchain.BlockChain
-	txMemPool      *mempool.TxPool
-	chainParams    *chaincfg.Params
-	progressLogger *blockProgressLogger
-	msgChan        chan interface{}
-	wg             sync.WaitGroup
-	quit           chan struct{}
+	peerNotifier      PeerNotifier
+	avalancheNotifier AvalancheNotifier
+	started           int32
+	shutdown          int32
+	chain             *blockchain.BlockChain
+	txMemPool         *mempool.TxPool
+	chainParams       *chaincfg.Params
+	progressLogger    *blockProgressLogger
+	msgChan           chan interface{}
+	wg                sync.WaitGroup
+	quit              chan struct{}
 
 	// These fields should only be accessed from the blockHandler thread.
 	rejectedTxns    map[chainhash.Hash]struct{}
@@ -472,6 +475,7 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 		return
 	}
 
+	// If we'er already connected a peer with the avalanche pubkey then disconnect
 	log.Infof("New valid peer %s (%s)", peer, peer.UserAgent())
 
 	// Initialize the peer state
@@ -665,11 +669,23 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		// send it.
 		code, reason := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
+
+		sm.avalancheNotifier.NewTransaction(&avalanche.TxDesc{
+			TxDesc: &mempool.TxDesc{
+				TxDesc: mining.TxDesc{
+					Tx: tmsg.tx,
+				},
+			},
+			Code: &code,
+		})
 		return
 	}
 
 	if len(acceptedTxs) > 0 {
 		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
+	}
+	for _, accepted := range acceptedTxs {
+		sm.avalancheNotifier.NewTransaction(&avalanche.TxDesc{accepted, nil})
 	}
 }
 
@@ -1706,6 +1722,7 @@ func (sm *SyncManager) Pause() chan<- struct{} {
 func New(config *Config) (*SyncManager, error) {
 	sm := SyncManager{
 		peerNotifier:            config.PeerNotifier,
+		avalancheNotifier:       config.AvalancheNotifier,
 		chain:                   config.Chain,
 		txMemPool:               config.TxMemPool,
 		chainParams:             config.ChainParams,

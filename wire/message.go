@@ -74,6 +74,9 @@ const (
 	CmdCmpctBlock   = "cmpctblock"
 	CmdGetBlockTxns = "getblocktxn"
 	CmdBlockTxns    = "blocktxn"
+	CmdAvaPubkey    = "avapubkey"
+	CmdAvaRequest   = "avarequest"
+	CmdAvaResponse  = "avaresponse"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -209,6 +212,14 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdBlockTxns:
 		msg = &MsgBlockTxns{}
+	case CmdAvaPubkey:
+		msg = &MsgAvaPubkey{}
+
+	case CmdAvaRequest:
+		msg = &MsgAvaRequest{}
+
+	case CmdAvaResponse:
+		msg = &MsgAvaResponse{}
 
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)

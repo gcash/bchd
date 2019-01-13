@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gcash/bchd/bchrpc"
+	"github.com/gcash/bchd/avalanche"
 	"math"
 	"net"
 	"runtime"
@@ -48,7 +49,7 @@ const (
 	// defaultServices describes the default services that are supported by
 	// the server.
 	defaultServices = wire.SFNodeNetwork | wire.SFNodeBloom |
-		wire.SFNodeCF | wire.SFNodeBitcoinCash
+		wire.SFNodeCF | wire.SFNodeBitcoinCash | wire.SFNodeAvalanche
 
 	// defaultRequiredServices describes the default services that are
 	// required to be supported by outbound peers.
@@ -276,6 +277,9 @@ type server struct {
 	// messages for each filter type.
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
 	cfCheckptCachesMtx sync.RWMutex
+
+	// Avalanche
+	avalancheManager *avalanche.AvalancheManager
 }
 
 // spMsg represents a message over the wire from a specific peer.
@@ -527,8 +531,12 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		// Request known addresses if the server address manager needs
 		// more and the peer has a protocol version new enough to
 		// include a timestamp with addresses.
+		//
+		// If this is an avalance peer then send the getaddr away so
+		// we always connect to all avalanche peers.
 		hasTimestamp := sp.ProtocolVersion() >= wire.NetAddressTimeVersion
-		if addrManager.NeedMoreAddresses() && hasTimestamp {
+		if addrManager.NeedMoreAddresses() && hasTimestamp ||
+			sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
 			sp.QueueMessage(wire.NewMsgGetAddr(), nil)
 		}
 
@@ -565,6 +573,15 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 // OnXVersion is invoked when a peer receives an xversion message.
 func (sp *serverPeer) OnXVersion(_ *peer.Peer, msg *wire.MsgXVersion) {
 	sp.Peer.QueueMessage(wire.NewMsgXVerAck(), nil)
+}
+
+// OnAvaPubkey is invoked when a remote peer sends us their avalanche pubkey.
+// At this point we notify the avalanche manager of the connection.
+func (sp *serverPeer) OnAvaPubkey(p *peer.Peer, _ *wire.MsgAvaPubkey) {
+	// Signal the avalanche manager this peer is an avalanche peer
+	if sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		sp.server.avalancheManager.NewPeer(sp.Peer)
+	}
 }
 
 // OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -1089,6 +1106,17 @@ func (sp *serverPeer) OnGetHeaders(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 	sp.QueueMessage(&wire.MsgHeaders{Headers: blockHeaders}, nil)
 }
 
+// OnAvaRequest is invoked when a peer receives an avarequest bitcoin message.
+func (sp *serverPeer) OnAvaRequest(p *peer.Peer, msg *wire.MsgAvaRequest) {
+	resp := sp.server.avalancheManager.Query(msg)
+	p.QueueMessage(resp, nil)
+}
+
+// OnAvaResponse is invoked when a peer receives an avaresponse bitcoin message.
+func (sp *serverPeer) OnAvaResponse(p *peer.Peer, msg *wire.MsgAvaResponse) {
+	sp.server.avalancheManager.RegisterVotes(p, msg)
+}
+
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
 func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 	// Ignore getcfilters requests if not in sync.
@@ -1526,7 +1554,7 @@ func (sp *serverPeer) OnFilterLoad(_ *peer.Peer, msg *wire.MsgFilterLoad) {
 // OnGetAddr is invoked when a peer receives a getaddr bitcoin message
 // and is used to provide the peer with known addresses from the address
 // manager.
-func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
+func (sp *serverPeer) OnGetAddr(p *peer.Peer, msg *wire.MsgGetAddr) {
 	// Don't return any addresses when running on the simulation test
 	// network.  This helps prevent the network from becoming another
 	// public test network since it will not be able to learn about other
@@ -1554,6 +1582,10 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 
 	// Get the current known addresses from the address manager.
 	addrCache := sp.server.addrManager.AddressCache()
+	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		avalanchePeers := sp.server.addrManager.AvalanchePeers()
+		addrCache = append(avalanchePeers, addrCache[:len(addrCache)-len(avalanchePeers)]...)
+	}
 
 	// Add our best net address for peers to discover us. If the port
 	// is 0 that indicates no worthy address was found, therefore
@@ -1574,7 +1606,7 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 
 // OnAddr is invoked when a peer receives an addr bitcoin message and is
 // used to notify the server about advertised addresses.
-func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
+func (sp *serverPeer) OnAddr(p *peer.Peer, msg *wire.MsgAddr) {
 	// Ignore addresses when running on the simulation test network.  This
 	// helps prevent the network from becoming another public test network
 	// since it will not be able to learn about other peers that have not
@@ -1620,6 +1652,23 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 	// XXX bitcoind gives a 2 hour time penalty here, do we want to do the
 	// same?
 	sp.server.addrManager.AddAddresses(msg.AddrList, sp.NA())
+
+	// Connect to avalanche peers if we're not already connected to them
+	for _, na := range msg.AddrList {
+		if na.Services&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+			netAddr, err := addrStringToNetAddr(na.IP.String() + ":" + strconv.Itoa(int(na.Port)))
+			if err != nil {
+				continue
+			}
+			req := &connmgr.ConnReq{
+				Addr:      netAddr,
+				Permanent: true,
+			}
+			if !sp.server.avalancheManager.Connected(netAddr) {
+				sp.server.connManager.Connect(req)
+			}
+		}
+	}
 }
 
 // OnReject logs all reject messages received from the remote peer.
@@ -1728,6 +1777,17 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	// Notify the gRPC server of the new transaction.
 	if s.gRPCServer != nil {
 		s.gRPCServer.NotifyNewTransactions(txns)
+	}
+}
+
+// NotifyTxFinalized is fired whenever the avalanche manager finalizes a new transaction.
+func (s *server) NotifyTxFinalized(tx *bchutil.Tx, finalizationTime time.Duration) {
+	s.rpcServer.NotifyAvalanche(tx, finalizationTime)
+}
+
+func (s *server) onChainNotification(n *blockchain.Notification) {
+	if n.Type == blockchain.NTBlockConnected {
+		s.avalancheManager.BlockConnected(n.Data.(*bchutil.Block))
 	}
 }
 
@@ -2433,7 +2493,8 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 		Listeners: peer.MessageListeners{
 			OnVersion:      sp.OnVersion,
 			OnXVersion:     sp.OnXVersion,
-			OnMemPool:      sp.OnMemPool,
+			OnAvaPubkey:    sp.OnAvaPubkey,
+\			OnMemPool:      sp.OnMemPool,
 			OnTx:           sp.OnTx,
 			OnBlock:        sp.OnBlock,
 			OnCmpctBlock:   sp.OnCmpctBlock,
@@ -2457,6 +2518,8 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
+			OnAvaRequest:   sp.OnAvaRequest,
+			OnAvaResponse:  sp.OnAvaResponse,
 		},
 		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
@@ -2471,6 +2534,9 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 		ProtocolVersion:   peer.MaxProtocolVersion,
 		TrickleInterval:   cfg.TrickleInterval,
 		MaxKnownInventory: uint((cfg.ExcessiveBlockSize / 1000000) * peer.DefaultMaxKnownInventory),
+
+		// Avalanche
+		AvalanchePrivateKey: sp.server.avalancheManager.PrivateKey(),
 	}
 }
 
@@ -2515,6 +2581,7 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 	// Only tell sync manager we are gone if we ever told it we existed.
 	if sp.VersionKnown() {
 		s.syncManager.DonePeer(sp.Peer, nil)
+		s.avalancheManager.DonePeer(sp.Peer)
 
 		// Evict any remaining orphans that were sent by the peer.
 		numEvicted := s.txMemPool.RemoveOrphansByTag(mempool.Tag(sp.ID()))
@@ -2538,6 +2605,7 @@ func (s *server) peerHandler() {
 	// in this handler.
 	s.addrManager.Start()
 	s.syncManager.Start()
+	s.avalancheManager.Start()
 
 	srvrLog.Tracef("Starting peer handler")
 
@@ -2622,6 +2690,7 @@ out:
 	s.connManager.Stop()
 	s.syncManager.Stop()
 	s.addrManager.Stop()
+	s.avalancheManager.Stop()
 
 	// Drain channels before exiting so nothing is left waiting around
 	// to send.
@@ -3223,8 +3292,16 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		cfg.FastSync = false
 	}
 
+	s.avalancheManager, err = avalanche.New()
+	if err != nil {
+		return nil, err
+	}
+
+	s.chain.Subscribe(s.onChainNotification)
+
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
+		AvalancheNotifier:       s.avalancheManager,
 		Chain:                   s.chain,
 		TxMemPool:               s.txMemPool,
 		ChainParams:             s.chainParams,
@@ -3360,6 +3437,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			ConnMgr:      &rpcConnManager{&s},
 			AddrMgr:      amgr,
 			SyncMgr:      &rpcSyncMgr{&s, s.syncManager},
+			AvalancheMgr: s.avalancheManager,
 			TimeSource:   s.timeSource,
 			Chain:        s.chain,
 			ChainParams:  chainParams,
@@ -3395,6 +3473,9 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		if err != nil {
 			return nil, err
 		}
+
+		// Notify Avalanche
+		s.avalancheManager.SetNotificationCallback(s.NotifyTxFinalized)
 
 		// Signal process shutdown when the RPC server requests it.
 		go func() {

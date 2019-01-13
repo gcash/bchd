@@ -101,6 +101,28 @@ func TestChainSvrWsCmds(t *testing.T) {
 			unmarshalled: &btcjson.StopNotifyNewTransactionsCmd{},
 		},
 		{
+			name: "notifyavalanche",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("notifyavalanche")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewNotifyAvalancheCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"notifyavalanche","params":[],"id":1}`,
+			unmarshalled: &btcjson.NotifyAvalancheCmd{},
+		},
+		{
+			name: "stopnotifyavalanche",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("stopnotifyavalanche")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewStopNotifyAvalancheCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"stopnotifyavalanche","params":[],"id":1}`,
+			unmarshalled: &btcjson.StopNotifyAvalancheCmd{},
+		},
+		{
 			name: "notifyreceived",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("notifyreceived", []string{"1Address"})

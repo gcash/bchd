@@ -8,6 +8,8 @@
 
 package btcjson
 
+import "time"
+
 const (
 	// BlockConnectedNtfnMethod is the legacy, deprecated method used for
 	// notifications from the chain server that a block has been connected.
@@ -75,6 +77,10 @@ const (
 	// from the chain server that inform a client that a transaction that
 	// matches the loaded filter was accepted by the mempool.
 	RelevantTxAcceptedNtfnMethod = "relevanttxaccepted"
+
+	// TxFinalizedNtfnMethod is the method used for notifications from
+	// the avalanche manager that a transaction has been finalized by avalanche.
+	TxFinalizedNtfnMethod = "txfinalized"
 )
 
 // BlockConnectedNtfn defines the blockconnected JSON-RPC notification.
@@ -285,6 +291,19 @@ func NewRelevantTxAcceptedNtfn(txHex string) *RelevantTxAcceptedNtfn {
 	return &RelevantTxAcceptedNtfn{Transaction: txHex}
 }
 
+// TxFinalizedNtfn defines the parameters to the txfinalized
+// JSON-RPC notification.
+type TxFinalizedNtfn struct {
+	TxID             string `json:"txid"`
+	FinalizationTime string `json:"finalizationTime"`
+}
+
+// NewTxFinalizedNtfn returns a new instance which can be used to issue a
+// txfinalized JSON-RPC notification.
+func NewTxFinalizedNtfn(txid string, finalizationTime time.Duration) *TxFinalizedNtfn {
+	return &TxFinalizedNtfn{TxID: txid, FinalizationTime: finalizationTime.String()}
+}
+
 func init() {
 	// The commands in this file are only usable by websockets and are
 	// notifications.
@@ -301,4 +320,5 @@ func init() {
 	MustRegisterCmd(TxAcceptedNtfnMethod, (*TxAcceptedNtfn)(nil), flags)
 	MustRegisterCmd(TxAcceptedVerboseNtfnMethod, (*TxAcceptedVerboseNtfn)(nil), flags)
 	MustRegisterCmd(RelevantTxAcceptedNtfnMethod, (*RelevantTxAcceptedNtfn)(nil), flags)
+	MustRegisterCmd(TxFinalizedNtfnMethod, (*TxFinalizedNtfn)(nil), flags)
 }

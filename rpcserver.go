@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/addrmgr"
 	"io"
 	"io/ioutil"
 	"math"
@@ -28,6 +27,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchd/addrmgr"
+	"github.com/gcash/bchd/avalanche"
 
 	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/bchec"
@@ -250,6 +252,7 @@ var rpcLimited = map[string]struct{}{
 	"loadtxfilter":          {},
 	"notifyblocks":          {},
 	"notifynewtransactions": {},
+	"notifyavalanche":       {},
 	"notifyreceived":        {},
 	"notifyspent":           {},
 	"rescan":                {},
@@ -3717,6 +3720,11 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeChan <-chan st
 		return nil, internalRPCError(errStr, "")
 	}
 
+	// Pass the transactions to the avalanche manager
+	for _, accepted := range acceptedTxs {
+		s.cfg.AvalancheMgr.NewTransaction(&avalanche.TxDesc{TxDesc: accepted})
+	}
+
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions into the memory pool due to the original being
 	// accepted.
@@ -4087,6 +4095,12 @@ func (s *rpcServer) NotifyNewTransactions(txns []*mempool.TxDesc) {
 		// about stale block templates due to the new transaction.
 		s.gbtWorkState.NotifyMempoolTx(s.cfg.TxMemPool.LastUpdated())
 	}
+}
+
+// NotifyNewTransactions notifies the websocket. This function should be called
+// whenever avalanche finalizes a transaction.
+func (s *rpcServer) NotifyAvalanche(tx *bchutil.Tx, finalizationTime time.Duration) {
+	s.ntfnMgr.NotifyAvalanche(tx, finalizationTime)
 }
 
 // limitConnections responds with a 503 service unavailable and returns true if
@@ -4738,6 +4752,16 @@ type rpcserverSyncManager interface {
 	LocateHeaders(locators []*chainhash.Hash, hashStop *chainhash.Hash) []wire.BlockHeader
 }
 
+// rpcserverAvalancheManager represents a avalanche manager for use with the RPC server.
+//
+// The interface contract requires that all of these methods are safe for
+// concurrent access.
+type rpcserverAvalancheManager interface {
+
+	// NewTransaction submits the given transactions to the avalanche manager.
+	NewTransaction(tx *avalanche.TxDesc)
+}
+
 // rpcserverConfig is a descriptor containing the RPC server configuration.
 type rpcserverConfig struct {
 	// Listeners defines a slice of listeners for which the RPC server will
@@ -4761,6 +4785,9 @@ type rpcserverConfig struct {
 
 	// SyncMgr defines the sync manager for the RPC server to use.
 	SyncMgr rpcserverSyncManager
+
+	// AvalancheMgr defines the avalanche manager for the RPC server to use.
+	AvalancheMgr rpcserverAvalancheManager
 
 	// These fields allow the RPC server to interface with the local block
 	// chain data and state.

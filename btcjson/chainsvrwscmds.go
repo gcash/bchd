@@ -57,6 +57,18 @@ func NewNotifyNewTransactionsCmd(verbose *bool) *NotifyNewTransactionsCmd {
 	}
 }
 
+// NotifyAvalancheCmd defines the notifyavalanche JSON-RPC command.
+type NotifyAvalancheCmd struct{}
+
+// NewNotifyAvalancheCmd returns a new instance which can be used to issue
+// a notifyavalanche JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewNotifyAvalancheCmd() *NotifyAvalancheCmd {
+	return &NotifyAvalancheCmd{}
+}
+
 // SessionCmd defines the session JSON-RPC command.
 type SessionCmd struct{}
 
@@ -76,6 +88,18 @@ type StopNotifyNewTransactionsCmd struct{}
 // for optional parameters will use the default value.
 func NewStopNotifyNewTransactionsCmd() *StopNotifyNewTransactionsCmd {
 	return &StopNotifyNewTransactionsCmd{}
+}
+
+// StopNotifyAvalancheCmd defines the stopnotifyavalanche JSON-RPC command.
+type StopNotifyAvalancheCmd struct{}
+
+// NewStopNotifyAvalancheCmd returns a new instance which can be used to issue
+// a stopnotifyavalanche JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewStopNotifyAvalancheCmd() *StopNotifyAvalancheCmd {
+	return &StopNotifyAvalancheCmd{}
 }
 
 // NotifyReceivedCmd defines the notifyreceived JSON-RPC command.
@@ -229,11 +253,13 @@ func init() {
 	MustRegisterCmd("loadtxfilter", (*LoadTxFilterCmd)(nil), flags)
 	MustRegisterCmd("notifyblocks", (*NotifyBlocksCmd)(nil), flags)
 	MustRegisterCmd("notifynewtransactions", (*NotifyNewTransactionsCmd)(nil), flags)
+	MustRegisterCmd("notifyavalanche", (*NotifyAvalancheCmd)(nil), flags)
 	MustRegisterCmd("notifyreceived", (*NotifyReceivedCmd)(nil), flags)
 	MustRegisterCmd("notifyspent", (*NotifySpentCmd)(nil), flags)
 	MustRegisterCmd("session", (*SessionCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyblocks", (*StopNotifyBlocksCmd)(nil), flags)
 	MustRegisterCmd("stopnotifynewtransactions", (*StopNotifyNewTransactionsCmd)(nil), flags)
+	MustRegisterCmd("stopnotifyavalanche", (*StopNotifyAvalancheCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyspent", (*StopNotifySpentCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyreceived", (*StopNotifyReceivedCmd)(nil), flags)
 	MustRegisterCmd("rescan", (*RescanCmd)(nil), flags)

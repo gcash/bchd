@@ -110,6 +110,9 @@ const (
 	// to serve the last 288 blocks though it will respond to requests for earlier blocks
 	// if it has them.
 	SFNodeNetworkLimited
+
+	// SFNodeAvalanche signals this node understands the avalanche pre-consensus protocol.
+	SFNodeAvalanche = 33554432
 )
 
 // Map of service flags back to their constant names for pretty printing.
@@ -125,6 +128,7 @@ var sfStrings = map[ServiceFlag]string{
 	SFNodeCF:             "SFNodeCF",
 	SFNodeXThinner:       "SFNodeXThinner",
 	SFNodeNetworkLimited: "SFNodeNetworkLimited",
+	SFNodeAvalanche:      "SFNodeAvalanche",
 }
 
 // orderedSFStrings is an ordered list of service flags from highest to
@@ -141,6 +145,7 @@ var orderedSFStrings = []ServiceFlag{
 	SFNodeCF,
 	SFNodeXThinner,
 	SFNodeNetworkLimited,
+	SFNodeAvalanche,
 }
 
 // String returns the ServiceFlag in human-readable form.

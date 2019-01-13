@@ -569,7 +569,7 @@ func (mp *TxPool) checkPoolDoubleSpend(tx *bchutil.Tx) error {
 			str := fmt.Sprintf("output %v already spent by "+
 				"transaction %v in the memory pool",
 				txIn.PreviousOutPoint, txR.Hash())
-			return txRuleError(wire.RejectDuplicate, str)
+			return txRuleError(wire.RejectDoubleSpend, str)
 		}
 	}
 

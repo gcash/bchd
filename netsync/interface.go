@@ -5,6 +5,7 @@
 package netsync
 
 import (
+	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -27,12 +28,19 @@ type PeerNotifier interface {
 	TransactionConfirmed(tx *bchutil.Tx)
 }
 
+// AvalancheNotifier exposes a method to notify the avalanche manager of a new transaction.
+type AvalancheNotifier interface {
+	// NewTransaction submits the given transactions to the avalanche manager.
+	NewTransaction(tx *avalanche.TxDesc)
+}
+
 // Config is a configuration struct used to initialize a new SyncManager.
 type Config struct {
-	PeerNotifier PeerNotifier
-	Chain        *blockchain.BlockChain
-	TxMemPool    *mempool.TxPool
-	ChainParams  *chaincfg.Params
+	PeerNotifier      PeerNotifier
+	AvalancheNotifier AvalancheNotifier
+	Chain             *blockchain.BlockChain
+	TxMemPool         *mempool.TxPool
+	ChainParams       *chaincfg.Params
 
 	DisableCheckpoints bool
 	MaxPeers           int
