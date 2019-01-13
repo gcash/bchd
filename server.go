@@ -474,8 +474,12 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		// Request known addresses if the server address manager needs
 		// more and the peer has a protocol version new enough to
 		// include a timestamp with addresses.
+		//
+		// If this is an avalance peer then send the getaddr away so
+		// we always connect to all avalanche peers.
 		hasTimestamp := sp.ProtocolVersion() >= wire.NetAddressTimeVersion
-		if addrManager.NeedMoreAddresses() && hasTimestamp {
+		if addrManager.NeedMoreAddresses() && hasTimestamp ||
+			sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
 			sp.QueueMessage(wire.NewMsgGetAddr(), nil)
 		}
 
@@ -1240,7 +1244,7 @@ func (sp *serverPeer) OnFilterLoad(_ *peer.Peer, msg *wire.MsgFilterLoad) {
 // OnGetAddr is invoked when a peer receives a getaddr bitcoin message
 // and is used to provide the peer with known addresses from the address
 // manager.
-func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
+func (sp *serverPeer) OnGetAddr(p *peer.Peer, msg *wire.MsgGetAddr) {
 	// Don't return any addresses when running on the simulation test
 	// network.  This helps prevent the network from becoming another
 	// public test network since it will not be able to learn about other
@@ -1267,7 +1271,12 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 	sp.sentAddrs = true
 
 	// Get the current known addresses from the address manager.
-	addrCache := sp.server.addrManager.AddressCache()
+	var addrCache []*wire.NetAddress
+	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		addrCache = sp.server.addrManager.AvalanchePeers()
+	} else {
+		addrCache = sp.server.addrManager.AddressCache()
+	}
 
 	// Add our best net address for peers to discover us. If the port
 	// is 0 that indicates no worthy address was found, therefore
@@ -1288,7 +1297,7 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 
 // OnAddr is invoked when a peer receives an addr bitcoin message and is
 // used to notify the server about advertised addresses.
-func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
+func (sp *serverPeer) OnAddr(p *peer.Peer, msg *wire.MsgAddr) {
 	// Ignore addresses when running on the simulation test network.  This
 	// helps prevent the network from becoming another public test network
 	// since it will not be able to learn about other peers that have not
@@ -1334,6 +1343,21 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 	// XXX bitcoind gives a 2 hour time penalty here, do we want to do the
 	// same?
 	sp.server.addrManager.AddAddresses(msg.AddrList, sp.NA())
+
+	// Connect to avalanche peers if we're not already connected to them
+	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		for _, na := range msg.AddrList {
+			netAddr, err := addrStringToNetAddr(na.IP.String()+":"+strconv.Itoa(int(na.Port)))
+			if err != nil {
+				continue
+			}
+			req := &connmgr.ConnReq{
+				Addr:netAddr,
+				Permanent: true,
+			}
+			sp.server.connManager.Connect(req)
+		}
+	}
 }
 
 // OnReject logs all reject messages received from the remote peer.

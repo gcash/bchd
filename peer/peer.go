@@ -770,6 +770,12 @@ func (p *Peer) LocalAddr() net.Addr {
 	return localAddr
 }
 
+func (p *Peer) AvalanchePubkey() *bchec.PublicKey {
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
+	return p.remoteAvalancePubkey
+}
+
 // BytesSent returns the total number of bytes sent by the peer.
 //
 // This function is safe for concurrent access.
@@ -1419,6 +1425,12 @@ out:
 
 		case *wire.MsgAvaPubkey:
 			p.flagsMtx.Lock()
+			if p.remoteAvalancePubkey != nil {
+				log.Infof("Already received 'avapubkey' from peer %v -- "+
+					"disconnecting", p)
+				p.flagsMtx.Unlock()
+				break out
+			}
 			nonceBytes := make([]byte, 8)
 			binary.LittleEndian.PutUint64(nonceBytes, p.localVersionNone)
 			if !msg.Signature.Verify(nonceBytes, msg.Pubkey) {

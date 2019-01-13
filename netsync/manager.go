@@ -465,6 +465,14 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 		return
 	}
 
+	// If we'er already connected a peer with the avalanche pubkey then disconnect
+	for connectedPeer := range sm.peerStates {
+		if connectedPeer.AvalanchePubkey().IsEqual(peer.AvalanchePubkey()) {
+			peer.Disconnect()
+			return
+		}
+	}
+
 	log.Infof("New valid peer %s (%s)", peer, peer.UserAgent())
 
 	// Initialize the peer state
