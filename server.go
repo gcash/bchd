@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/bchec"
 	"math"
 	"net"
@@ -220,6 +221,7 @@ type server struct {
 	hashCache            *txscript.HashCache
 	rpcServer            *rpcServer
 	syncManager          *netsync.SyncManager
+	avalancheManager     *avalanche.AvalancheManager
 	chain                *blockchain.BlockChain
 	txMemPool            *mempool.TxPool
 	cpuMiner             *cpuminer.CPUMiner
@@ -255,8 +257,8 @@ type server struct {
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
 	cfCheckptCachesMtx sync.RWMutex
 
-	// avaanche privatekey used for signing messages
-	avalancePrivKey *bchec.PrivateKey
+	// avalanchePrivKey is the key used for signing avalanche messages
+	avalanchePrivKey *bchec.PrivateKey
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -493,6 +495,11 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 
 	// Signal the sync manager this peer is a new sync candidate.
 	sp.server.syncManager.NewPeer(sp.Peer, nil)
+
+	// Signal the avalanche manager this peer is an avalanche peer
+	if sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		sp.server.avalancheManager.NewPeer(sp.Peer)
+	}
 
 	// Choose whether or not to relay transactions before a filter command
 	// is received.
@@ -2069,7 +2076,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 		DisableRelayTx:      cfg.BlocksOnly,
 		ProtocolVersion:     peer.MaxProtocolVersion,
 		TrickleInterval:     cfg.TrickleInterval,
-		AvalanchePrivateKey: sp.server.avalancePrivKey,
+		AvalanchePrivateKey: sp.server.avalanchePrivKey,
 	}
 }
 
@@ -2114,6 +2121,7 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 	// Only tell sync manager we are gone if we ever told it we existed.
 	if sp.VersionKnown() {
 		s.syncManager.DonePeer(sp.Peer, nil)
+		s.avalancheManager.DonePeer(sp.Peer)
 
 		// Evict any remaining orphans that were sent by the peer.
 		numEvicted := s.txMemPool.RemoveOrphansByTag(mempool.Tag(sp.ID()))
@@ -2667,7 +2675,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		sigCache:             txscript.NewSigCache(cfg.SigCacheMaxSize),
 		hashCache:            txscript.NewHashCache(cfg.SigCacheMaxSize),
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
-		avalancePrivKey:      avalanchePrivkey,
+		avalanchePrivKey:     avalanchePrivkey,
 	}
 
 	// Create the transaction and address indexes if needed.
@@ -2818,6 +2826,8 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if err != nil {
 		return nil, err
 	}
+
+	s.avalancheManager = avalanche.New()
 
 	// Create the mining policy and block template generator based on the
 	// configuration options.

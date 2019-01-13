@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/gcash/bchd/avalanche"
 	"os"
 	"path/filepath"
 
@@ -69,6 +70,7 @@ var (
 	srvrLog = backendLog.Logger("SRVR")
 	syncLog = backendLog.Logger("SYNC")
 	txmpLog = backendLog.Logger("TXMP")
+	avalLog = backendLog.Logger("AVAL")
 )
 
 // Initialize package-global logger variables.
@@ -84,6 +86,7 @@ func init() {
 	txscript.UseLogger(scrpLog)
 	netsync.UseLogger(syncLog)
 	mempool.UseLogger(txmpLog)
+	avalanche.UseLogger(avalLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
