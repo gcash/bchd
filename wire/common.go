@@ -65,7 +65,7 @@ func (l binaryFreeList) Return(buf []byte) {
 	select {
 	case l <- buf:
 	default:
-		// Let it go to the garbage collector.
+		// Let it go to the garbage collector.}
 	}
 }
 

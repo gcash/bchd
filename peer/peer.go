@@ -8,8 +8,10 @@ package peer
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchd/bchec"
 	"io"
 	"math/rand"
 	"net"
@@ -193,6 +195,9 @@ type MessageListeners struct {
 	// message.
 	OnSendHeaders func(p *Peer, msg *wire.MsgSendHeaders)
 
+	//OnAvaPubkey is invoked when a peer receives a avapubkey bitcoin message.
+	OnAvaPubkey func(p *Peer, msg *wire.MsgAvaPubkey)
+
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
 	// an error in the read occurred.  Typically, callers will opt to use
@@ -276,6 +281,9 @@ type Config struct {
 	// connection detecting and disconnect logic since they intentionally
 	// do so for testing purposes.
 	TstAllowSelfConnection bool
+
+	// AvalanchePrivateKey is the private key used to sign avalanche messages.
+	AvalanchePrivateKey *bchec.PrivateKey
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.
@@ -449,6 +457,8 @@ type Peer struct {
 	sendHeadersPreferred bool   // peer sent a sendheaders message
 	verAckReceived       bool
 	syncPeer             bool
+	remoteVersionNonce   uint64
+	localVersionNone     uint64
 
 	wireEncoding wire.MessageEncoding
 
@@ -481,6 +491,8 @@ type Peer struct {
 	queueQuit     chan struct{}
 	outQuit       chan struct{}
 	quit          chan struct{}
+
+	remoteAvalancePubkey *bchec.PublicKey
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -1405,6 +1417,24 @@ out:
 				p.cfg.Listeners.OnVerAck(p, msg)
 			}
 
+		case *wire.MsgAvaPubkey:
+			p.flagsMtx.Lock()
+			nonceBytes := make([]byte, 8)
+			binary.LittleEndian.PutUint64(nonceBytes, p.localVersionNone)
+			if !msg.Signature.Verify(nonceBytes, msg.Pubkey) {
+				reason := "invalid signature on avalanche pubkey message"
+				rejectMsg := wire.NewMsgReject(msg.Command(), wire.RejectInvalid,
+					reason)
+				_ = p.writeMessage(rejectMsg, wire.LatestEncoding)
+				p.flagsMtx.Unlock()
+				break out
+			}
+			p.remoteAvalancePubkey = msg.Pubkey
+			p.flagsMtx.Unlock()
+			if p.cfg.Listeners.OnAvaPubkey != nil {
+				p.cfg.Listeners.OnAvaPubkey(p, msg)
+			}
+
 		case *wire.MsgGetAddr:
 			if p.cfg.Listeners.OnGetAddr != nil {
 				p.cfg.Listeners.OnGetAddr(p, msg)
@@ -1935,6 +1965,8 @@ func (p *Peer) readRemoteVersionMsg() error {
 		return errors.New("disconnecting peer connected to self")
 	}
 
+	p.remoteVersionNonce = msg.Nonce
+
 	// Negotiate the protocol version and set the services to what the remote
 	// peer advertised.
 	p.flagsMtx.Lock()
@@ -2022,6 +2054,7 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 	// recently seen nonces.
 	nonce := uint64(rand.Int63())
 	sentNonces.Add(nonce)
+	p.localVersionNone = nonce
 
 	// Create a wire.NetAddress to use as "addrme" in the
 	// version message.
@@ -2068,6 +2101,18 @@ func (p *Peer) writeLocalVersionMsg() error {
 	return p.writeMessage(localVerMsg, wire.LatestEncoding)
 }
 
+// writeLocalAvaPubkeyMsg writes our avalanche pubkey message to the remote peer.
+func (p *Peer) writeLocalAvaPubkeyMsg() error {
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, p.remoteVersionNonce)
+	sig, err := p.cfg.AvalanchePrivateKey.Sign(nonceBytes)
+	if err != nil {
+		return err
+	}
+	avaPubkeyMsg := wire.NewMsgAvaPubkey(p.cfg.AvalanchePrivateKey.PubKey(), sig)
+	return p.writeMessage(avaPubkeyMsg, wire.LatestEncoding)
+}
+
 // negotiateInboundProtocol waits to receive a version message from the peer
 // then sends our version message. If the events do not occur in that order then
 // it returns an error.
@@ -2076,7 +2121,15 @@ func (p *Peer) negotiateInboundProtocol() error {
 		return err
 	}
 
-	return p.writeLocalVersionMsg()
+	if err := p.writeLocalVersionMsg(); err != nil {
+		return err
+	}
+	if p.services&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		if err := p.writeLocalAvaPubkeyMsg(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // negotiateOutboundProtocol sends our version message then waits to receive a
@@ -2087,7 +2140,16 @@ func (p *Peer) negotiateOutboundProtocol() error {
 		return err
 	}
 
-	return p.readRemoteVersionMsg()
+	if err := p.readRemoteVersionMsg(); err != nil {
+		return err
+	}
+
+	if p.services&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		if err := p.writeLocalAvaPubkeyMsg(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // start begins processing input and output messages.

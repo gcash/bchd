@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchd/bchec"
 	"math"
 	"net"
 	"runtime"
@@ -45,7 +46,7 @@ const (
 	// defaultServices describes the default services that are supported by
 	// the server.
 	defaultServices = wire.SFNodeNetwork | wire.SFNodeBloom |
-		wire.SFNodeCF | wire.SFNodeBitcoinCash
+		wire.SFNodeCF | wire.SFNodeBitcoinCash | wire.SFNodeAvalanche
 
 	// defaultRequiredServices describes the default services that are
 	// required to be supported by outbound peers.
@@ -253,6 +254,9 @@ type server struct {
 	// messages for each filter type.
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
 	cfCheckptCachesMtx sync.RWMutex
+
+	// avaanche privatekey used for signing messages
+	avalancePrivKey *bchec.PrivateKey
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -493,6 +497,12 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Add valid peer to the server.
 	sp.server.AddPeer(sp)
 	return nil
+}
+
+// OnAvaPubkey is invoked when a peer receives a avapubkey bitcoin message
+// which sets the remote peer's avalanche pubkey on the connection.
+func (sp *serverPeer) OnAvaPubkey(_ *peer.Peer, msg *wire.MsgAvaPubkey) {
+	peerLog.Debugf("Avalanche public key set for peer %s", sp)
 }
 
 // OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -2021,19 +2031,21 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
+			OnAvaPubkey:    sp.OnAvaPubkey,
 		},
-		AddrMe:            addrMe,
-		NewestBlock:       sp.newestBlock,
-		HostToNetAddress:  sp.server.addrManager.HostToNetAddress,
-		Proxy:             cfg.Proxy,
-		UserAgentName:     userAgentName,
-		UserAgentVersion:  userAgentVersion,
-		UserAgentComments: cfg.UserAgentComments,
-		ChainParams:       sp.server.chainParams,
-		Services:          sp.server.services,
-		DisableRelayTx:    cfg.BlocksOnly,
-		ProtocolVersion:   peer.MaxProtocolVersion,
-		TrickleInterval:   cfg.TrickleInterval,
+		AddrMe:              addrMe,
+		NewestBlock:         sp.newestBlock,
+		HostToNetAddress:    sp.server.addrManager.HostToNetAddress,
+		Proxy:               cfg.Proxy,
+		UserAgentName:       userAgentName,
+		UserAgentVersion:    userAgentVersion,
+		UserAgentComments:   cfg.UserAgentComments,
+		ChainParams:         sp.server.chainParams,
+		Services:            sp.server.services,
+		DisableRelayTx:      cfg.BlocksOnly,
+		ProtocolVersion:     peer.MaxProtocolVersion,
+		TrickleInterval:     cfg.TrickleInterval,
+		AvalanchePrivateKey: sp.server.avalancePrivKey,
 	}
 }
 
@@ -2606,6 +2618,11 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		}
 	}
 
+	avalanchePrivkey, keyerr := bchec.NewPrivateKey(bchec.S256())
+	if keyerr != nil {
+		return nil, keyerr
+	}
+
 	s := server{
 		startupTime:          time.Now().Unix(),
 		chainParams:          chainParams,
@@ -2626,6 +2643,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		sigCache:             txscript.NewSigCache(cfg.SigCacheMaxSize),
 		hashCache:            txscript.NewHashCache(cfg.SigCacheMaxSize),
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
+		avalancePrivKey:      avalanchePrivkey,
 	}
 
 	// Create the transaction and address indexes if needed.
