@@ -145,7 +145,7 @@ func (am *AvalancheManager) Query(req *wire.MsgAvaRequest) *wire.MsgAvaResponse 
 }
 
 func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *wire.MsgAvaResponse) {
-	votes := make([]*wire.VoteRecord, len(req.InvList))
+	resp := wire.NewMsgAvaResponse(req.RequestID, nil)
 	for i := 0; i < len(req.InvList); i++ {
 		txid := req.InvList[i].Hash
 		vote := false
@@ -156,9 +156,8 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 		}
 
 		vr := wire.NewVoteRecord(vote, &txid)
-		votes[i] = vr
+		resp.AddVoteRecord(vr)
 	}
-	resp := wire.NewMsgAvaResponse(req.RequestID, nil)
 	sig, err := am.privKey.Sign(resp.SerializeForSignature())
 	if err != nil {
 		log.Error("Error signing response: %s", err.Error())
