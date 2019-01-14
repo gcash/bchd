@@ -1,6 +1,7 @@
 package avalanche
 
 import (
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"time"
 )
@@ -22,8 +23,12 @@ func (r RequestRecord) GetTimestamp() int64 {
 }
 
 // GetInvs returns the poll Invs for the request
-func (r RequestRecord) GetInvs() []wire.InvVect {
-	return r.invs
+func (r RequestRecord) GetInvs() map[chainhash.Hash]wire.InvVect {
+	m := make(map[chainhash.Hash]wire.InvVect)
+	for _, inv := range r.invs {
+		m[inv.Hash] = inv
+	}
+	return m
 }
 
 // IsExpired returns true if the request has expired

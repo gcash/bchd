@@ -1,5 +1,9 @@
 package avalanche
 
+import (
+	"github.com/gcash/bchd/mempool"
+)
+
 // Status is the status of consensus on a particular target
 type Status int
 
@@ -19,6 +23,7 @@ const (
 
 // VoteRecord keeps track of a series of votes for a target
 type VoteRecord struct {
+	txdesc     *mempool.TxDesc
 	votes      uint8
 	consider   uint8
 	confidence uint16
@@ -26,8 +31,8 @@ type VoteRecord struct {
 
 // NewVoteRecord instantiates a new base record for voting on a target
 // `accepted` indicates whether or not the initial state should be acceptance
-func NewVoteRecord(accepted bool) *VoteRecord {
-	return &VoteRecord{confidence: boolToUint16(accepted)}
+func NewVoteRecord(txdesc *mempool.TxDesc, accepted bool) *VoteRecord {
+	return &VoteRecord{txdesc: txdesc, confidence: boolToUint16(accepted)}
 }
 
 // isAccepted returns whether or not the voted state is acceptance or not

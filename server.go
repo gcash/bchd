@@ -1446,12 +1446,7 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions.
 	s.relayTransactions(txns)
-
-	var txids []*chainhash.Hash
-	for _, tx := range txns {
-		txids = append(txids, tx.Tx.Hash())
-	}
-	s.avalancheManager.NewTransactions(txids)
+	s.avalancheManager.NewTransactions(txns)
 
 	// Notify both websocket and getblocktemplate long poll clients of all
 	// newly accepted transactions.
