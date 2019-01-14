@@ -1279,11 +1279,10 @@ func (sp *serverPeer) OnGetAddr(p *peer.Peer, msg *wire.MsgGetAddr) {
 	sp.sentAddrs = true
 
 	// Get the current known addresses from the address manager.
-	var addrCache []*wire.NetAddress
+	addrCache := sp.server.addrManager.AddressCache()
 	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
-		addrCache = sp.server.addrManager.AvalanchePeers()
-	} else {
-		addrCache = sp.server.addrManager.AddressCache()
+		avalanchePeers := sp.server.addrManager.AvalanchePeers()
+		addrCache = append(avalanchePeers, addrCache[:len(addrCache)-len(avalanchePeers)]...)
 	}
 
 	// Add our best net address for peers to discover us. If the port
@@ -1353,8 +1352,8 @@ func (sp *serverPeer) OnAddr(p *peer.Peer, msg *wire.MsgAddr) {
 	sp.server.addrManager.AddAddresses(msg.AddrList, sp.NA())
 
 	// Connect to avalanche peers if we're not already connected to them
-	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
-		for _, na := range msg.AddrList {
+	for _, na := range msg.AddrList {
+		if na.Services&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
 			netAddr, err := addrStringToNetAddr(na.IP.String() + ":" + strconv.Itoa(int(na.Port)))
 			if err != nil {
 				continue
