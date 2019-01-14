@@ -198,6 +198,12 @@ type MessageListeners struct {
 	//OnAvaPubkey is invoked when a peer receives a avapubkey bitcoin message.
 	OnAvaPubkey func(p *Peer, msg *wire.MsgAvaPubkey)
 
+	//OnAvaRequest is invoked when a peer receives a avarequest bitcoin message.
+	OnAvaRequest func(p *Peer, msg *wire.MsgAvaRequest)
+
+	//OnAvaResponse is invoked when a peer receives a avaresponse bitcoin message.
+	OnAvaResponse func(p *Peer, msg *wire.MsgAvaResponse)
+
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
 	// an error in the read occurred.  Typically, callers will opt to use
@@ -1445,6 +1451,16 @@ out:
 			p.flagsMtx.Unlock()
 			if p.cfg.Listeners.OnAvaPubkey != nil {
 				p.cfg.Listeners.OnAvaPubkey(p, msg)
+			}
+
+		case *wire.MsgAvaRequest:
+			if p.cfg.Listeners.OnAvaRequest != nil {
+				p.cfg.Listeners.OnAvaRequest(p, msg)
+			}
+
+		case *wire.MsgAvaResponse:
+			if p.cfg.Listeners.OnAvaResponse != nil {
+				p.cfg.Listeners.OnAvaResponse(p, msg)
 			}
 
 		case *wire.MsgGetAddr:

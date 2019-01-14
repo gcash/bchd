@@ -5,10 +5,8 @@
 package wire
 
 import (
-	"errors"
 	"github.com/gcash/bchd/bchec"
 	"io"
-	"io/ioutil"
 )
 
 // MsgAvalanchePubkey implements the Message interface and represents a bitcoin
@@ -21,19 +19,23 @@ type MsgAvaPubkey struct {
 // BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgAvaPubkey) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	data, err := ioutil.ReadAll(r)
+	pubkeyBytes := make([]byte, 33)
+	if _, err := io.ReadFull(r, pubkeyBytes); err != nil {
+		return err
+	}
+	sigLen, err := ReadVarInt(r, ProtocolVersion)
 	if err != nil {
 		return err
 	}
-	if len(data) <= 33 {
-		return errors.New("MsgAvaPubkey invalid length")
+	sigBytes := make([]byte, sigLen)
+	if _, err := io.ReadFull(r, sigBytes); err != nil {
+		return err
 	}
-	msg.Pubkey, err = bchec.ParsePubKey(data[0:33], bchec.S256())
+	msg.Pubkey, err = bchec.ParsePubKey(pubkeyBytes, bchec.S256())
 	if err != nil {
 		return err
 	}
-
-	msg.Signature, err = bchec.ParseDERSignature(data[33:], bchec.S256())
+	msg.Signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
 	return err
 }
 
@@ -44,7 +46,11 @@ func (msg *MsgAvaPubkey) BchEncode(w io.Writer, pver uint32, enc MessageEncoding
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(msg.Signature.Serialize())
+	sig := msg.Signature.Serialize()
+	if err := WriteVarInt(w, ProtocolVersion, uint64(len(sig))); err != nil {
+		return err
+	}
+	_, err = w.Write(sig)
 	return err
 }
 

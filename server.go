@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gcash/bchd/avalanche"
-	"github.com/gcash/bchd/bchec"
 	"math"
 	"net"
 	"runtime"
@@ -256,9 +255,6 @@ type server struct {
 	// messages for each filter type.
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
 	cfCheckptCachesMtx sync.RWMutex
-
-	// avalanchePrivKey is the key used for signing avalanche messages
-	avalanchePrivKey *bchec.PrivateKey
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -508,12 +504,6 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Add valid peer to the server.
 	sp.server.AddPeer(sp)
 	return nil
-}
-
-// OnAvaPubkey is invoked when a peer receives a avapubkey bitcoin message
-// which sets the remote peer's avalanche pubkey on the connection.
-func (sp *serverPeer) OnAvaPubkey(_ *peer.Peer, msg *wire.MsgAvaPubkey) {
-	peerLog.Debugf("Avalanche public key set for peer %s", sp)
 }
 
 // OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -812,6 +802,17 @@ func (sp *serverPeer) OnGetHeaders(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 		blockHeaders[i] = &headers[i]
 	}
 	sp.QueueMessage(&wire.MsgHeaders{Headers: blockHeaders}, nil)
+}
+
+// OnAvaRequest is invoked when a peer receives an avarequest bitcoin message.
+func (sp *serverPeer) OnAvaRequest(p *peer.Peer, msg *wire.MsgAvaRequest) {
+	resp := sp.server.avalancheManager.Query(msg)
+	p.QueueMessage(resp, nil)
+}
+
+// OnAvaResponse is invoked when a peer receives an avaresponse bitcoin message.
+func (sp *serverPeer) OnAvaResponse(p *peer.Peer, msg *wire.MsgAvaResponse) {
+	sp.server.avalancheManager.RegisterVotes(p, msg)
 }
 
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
@@ -1354,12 +1355,12 @@ func (sp *serverPeer) OnAddr(p *peer.Peer, msg *wire.MsgAddr) {
 	// Connect to avalanche peers if we're not already connected to them
 	if p.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
 		for _, na := range msg.AddrList {
-			netAddr, err := addrStringToNetAddr(na.IP.String()+":"+strconv.Itoa(int(na.Port)))
+			netAddr, err := addrStringToNetAddr(na.IP.String() + ":" + strconv.Itoa(int(na.Port)))
 			if err != nil {
 				continue
 			}
 			req := &connmgr.ConnReq{
-				Addr:netAddr,
+				Addr:      netAddr,
 				Permanent: true,
 			}
 			sp.server.connManager.Connect(req)
@@ -1446,6 +1447,12 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions.
 	s.relayTransactions(txns)
+
+	var txids []*chainhash.Hash
+	for _, tx := range txns {
+		txids = append(txids, tx.Tx.Hash())
+	}
+	s.avalancheManager.NewTransactions(txids)
 
 	// Notify both websocket and getblocktemplate long poll clients of all
 	// newly accepted transactions.
@@ -2062,7 +2069,6 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
-			OnAvaPubkey:    sp.OnAvaPubkey,
 		},
 		AddrMe:              addrMe,
 		NewestBlock:         sp.newestBlock,
@@ -2076,7 +2082,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 		DisableRelayTx:      cfg.BlocksOnly,
 		ProtocolVersion:     peer.MaxProtocolVersion,
 		TrickleInterval:     cfg.TrickleInterval,
-		AvalanchePrivateKey: sp.server.avalanchePrivKey,
+		AvalanchePrivateKey: sp.server.avalancheManager.PrivateKey(),
 	}
 }
 
@@ -2145,6 +2151,7 @@ func (s *server) peerHandler() {
 	// in this handler.
 	s.addrManager.Start()
 	s.syncManager.Start()
+	s.avalancheManager.Start()
 
 	srvrLog.Tracef("Starting peer handler")
 
@@ -2215,6 +2222,7 @@ out:
 	s.connManager.Stop()
 	s.syncManager.Stop()
 	s.addrManager.Stop()
+	s.avalancheManager.Stop()
 
 	// Drain channels before exiting so nothing is left waiting around
 	// to send.
@@ -2650,11 +2658,6 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		}
 	}
 
-	avalanchePrivkey, keyerr := bchec.NewPrivateKey(bchec.S256())
-	if keyerr != nil {
-		return nil, keyerr
-	}
-
 	s := server{
 		startupTime:          time.Now().Unix(),
 		chainParams:          chainParams,
@@ -2675,7 +2678,6 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		sigCache:             txscript.NewSigCache(cfg.SigCacheMaxSize),
 		hashCache:            txscript.NewHashCache(cfg.SigCacheMaxSize),
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
-		avalanchePrivKey:     avalanchePrivkey,
 	}
 
 	// Create the transaction and address indexes if needed.
@@ -2827,7 +2829,10 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		return nil, err
 	}
 
-	s.avalancheManager = avalanche.New()
+	s.avalancheManager, err = avalanche.New()
+	if err != nil {
+		return nil, err
+	}
 
 	// Create the mining policy and block template generator based on the
 	// configuration options.

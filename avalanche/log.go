@@ -30,4 +30,3 @@ func DisableLog() {
 func UseLogger(logger bchlog.Logger) {
 	log = logger
 }
-
