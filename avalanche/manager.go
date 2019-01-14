@@ -26,6 +26,8 @@ const (
 	// AvalancheRequestTimeout is the amount of time to wait for a response to a
 	// query
 	AvalancheRequestTimeout = 1 * time.Minute
+
+	DeleteInventoryAfter = time.Minute * 30
 )
 
 // newPeerMsg signifies a newly connected peer to the handler.
@@ -207,6 +209,9 @@ func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 
 // NewTransactions passes new unconfirmed transactions into the manager to be processed.
 func (am *AvalancheManager) NewTransactions(txs []*mempool.TxDesc) {
+	for _, tx := range txs {
+		log.Infof("Starting avalanche for tx %s", tx.Tx.Hash().String())
+	}
 	am.msgChan <- &newTxsMsg{txs}
 }
 
@@ -375,7 +380,9 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		// When we finalize we want to remove our vote record, vote records of double spends and
 		// outpoints.
 		if vr.hasFinalized() {
-			am.removeVoteRecords(vr.txdesc)
+			time.AfterFunc(DeleteInventoryAfter, func() {
+				am.removeVoteRecords(vr.txdesc)
+			})
 			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
 			// TODO: double spends of the finalized transaction should be removed from the mempool.
 		}
