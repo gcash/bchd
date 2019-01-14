@@ -153,6 +153,13 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 		record, ok := am.voteRecords[txid]
 		if ok && record.isAccepted() {
 			vote = true
+		} else if !ok {
+			// TODO: we need to download this transaction from the peer and give it to
+			// the mempool for processing. If it is a double spend of a transaction
+			// we are currently processing it needs to be set aside to be re-processed
+			// after avalanche finishes on the first transaction. This is going to add
+			// some complexity as we don't want to allow an infinite number of double
+			// spends into memory as we do this.
 		}
 
 		vr := wire.NewVoteRecord(vote, &txid)
@@ -320,10 +327,20 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 			continue
 		}
 
+		// TODO: we need to keep a map[outpoint]VoteRecord in memory to track double spends
+		// Whenever process a vote we need to check if our confidence exceeds the confidence for
+		// any double spends. If se we need to reset our confidence on the double spends.
+
 		// When we finalize we want to remove our vote record
 		if vr.hasFinalized() {
-			log.Info("Avalanche finalized transaction %s", v.Hash.String())
 			delete(am.voteRecords, v.Hash)
+		}
+
+		switch vr.status() {
+		case StatusFinalized:
+			log.Info("Avalanche finalized transaction %s", v.Hash.String())
+		case StatusRejected:
+			// TODO: remove from mempool and mark as a bad transaction
 		}
 	}
 }
