@@ -31,7 +31,7 @@ func (msg *MsgAvaRequest) AddInvVect(iv *InvVect) error {
 // BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgAvaRequest) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	if err := readElement(r, msg.RequestID); err != nil {
+	if err := readElement(r, &msg.RequestID); err != nil {
 		return err
 	}
 	count, err := ReadVarInt(r, pver)

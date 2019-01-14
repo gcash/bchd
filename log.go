@@ -31,6 +31,8 @@ import (
 // the write-end pipe of an initialized log rotator.
 type logWriter struct{}
 
+var log bchlog.Logger
+
 func (logWriter) Write(p []byte) (n int, err error) {
 	os.Stdout.Write(p)
 	logRotator.Write(p)
@@ -87,6 +89,7 @@ func init() {
 	netsync.UseLogger(syncLog)
 	mempool.UseLogger(txmpLog)
 	avalanche.UseLogger(avalLog)
+	log = srvrLog
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.

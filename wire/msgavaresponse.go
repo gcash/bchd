@@ -5,6 +5,7 @@
 package wire
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/gcash/bchd/bchec"
@@ -34,18 +35,21 @@ func (msg *MsgAvaResponse) AddVoteRecord(vr *VoteRecord) error {
 // SerializeForSignature returns the serialization of the vote records and
 // the request ID that is suitable for signing.
 func (msg *MsgAvaResponse) SerializeForSignature() []byte {
-	var ser []byte
-	binary.LittleEndian.PutUint64(ser, msg.RequestID)
+	var buf bytes.Buffer
+	reqIDBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(reqIDBytes, msg.RequestID)
+
+	buf.Write(reqIDBytes)
 	for _, vr := range msg.VoteList {
-		ser = append(ser, vr.Serialize()...)
+		buf.Write(vr.Serialize())
 	}
-	return ser
+	return buf.Bytes()
 }
 
 // BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgAvaResponse) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	if err := readElement(r, msg.RequestID); err != nil {
+	if err := readElement(r, &msg.RequestID); err != nil {
 		return err
 	}
 	count, err := ReadVarInt(r, pver)
@@ -61,10 +65,9 @@ func (msg *MsgAvaResponse) BchDecode(r io.Reader, pver uint32, enc MessageEncodi
 
 	// Create a contiguous slice of inventory vectors to deserialize into in
 	// order to reduce the number of allocations.
-	voteList := make([]VoteRecord, count)
 	msg.VoteList = make([]*VoteRecord, 0, count)
 	for i := uint64(0); i < count; i++ {
-		vr := &voteList[i]
+		vr := new(VoteRecord)
 		err := readVoteRecord(r, pver, vr)
 		if err != nil {
 			return err

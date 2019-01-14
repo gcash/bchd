@@ -3590,6 +3590,9 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeChan <-chan st
 		return nil, internalRPCError(errStr, "")
 	}
 
+	// Pass the transactions to the avalanche manager
+	s.cfg.AvalancheMgr.NewTransactions(acceptedTxs)
+
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions into the memory pool due to the original being
 	// accepted.
@@ -4473,6 +4476,16 @@ type rpcserverSyncManager interface {
 	LocateHeaders(locators []*chainhash.Hash, hashStop *chainhash.Hash) []wire.BlockHeader
 }
 
+// rpcserverAvalancheManager represents a avalanche manager for use with the RPC server.
+//
+// The interface contract requires that all of these methods are safe for
+// concurrent access.
+type rpcserverAvalancheManager interface {
+
+	// NewTransactions submits the given transactions to the avalanche manager.
+	NewTransactions(txs []*mempool.TxDesc)
+}
+
 // rpcserverConfig is a descriptor containing the RPC server configuration.
 type rpcserverConfig struct {
 	// Listeners defines a slice of listeners for which the RPC server will
@@ -4493,6 +4506,9 @@ type rpcserverConfig struct {
 
 	// SyncMgr defines the sync manager for the RPC server to use.
 	SyncMgr rpcserverSyncManager
+
+	// AvalancheMgr defines the avalanche manager for the RPC server to use.
+	AvalancheMgr rpcserverAvalancheManager
 
 	// These fields allow the RPC server to interface with the local block
 	// chain data and state.

@@ -142,7 +142,7 @@ out:
 // Query processes an avalanche request and returns the response.
 func (am *AvalancheManager) Query(req *wire.MsgAvaRequest) *wire.MsgAvaResponse {
 	respChan := make(chan *wire.MsgAvaResponse)
-	am.msgChan <- queryMsg{req, respChan}
+	am.msgChan <- &queryMsg{req, respChan}
 	msg := <-respChan
 	return msg
 }
@@ -207,7 +207,7 @@ func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 
 // NewTransactions passes new unconfirmed transactions into the manager to be processed.
 func (am *AvalancheManager) NewTransactions(txs []*mempool.TxDesc) {
-	am.msgChan <- newTxsMsg{txs}
+	am.msgChan <- &newTxsMsg{txs}
 }
 
 func (am *AvalancheManager) handleNewTxs(txs []*mempool.TxDesc) {
@@ -216,7 +216,9 @@ func (am *AvalancheManager) handleNewTxs(txs []*mempool.TxDesc) {
 		// Add a new vote record
 		_, ok := am.voteRecords[*txid]
 		if !ok {
-			am.voteRecords[*txid] = NewVoteRecord(txdesc, false)
+			//TODO: make sure we don't have any double spends currently in the accepted
+			// state. If so then accepted should be set to false here.
+			am.voteRecords[*txid] = NewVoteRecord(txdesc, true)
 		}
 
 		// Iterate over the inputs and add each outpoint to our outpoint map
@@ -247,23 +249,26 @@ func (am *AvalancheManager) eventLoop() {
 		return
 	}
 
-	peer := am.getRandomPeerToQuery()
+	p := am.getRandomPeerToQuery()
+	if p == nil {
+		return
+	}
 	requestID, err := wire.RandomUint64()
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	key := queryKey(requestID, peer.ID())
+	key := queryKey(requestID, p.ID())
 	am.queries[key] = NewRequestRecord(time.Now().Unix(), invs)
 	time.AfterFunc(AvalancheRequestTimeout, func() {
-		am.msgChan <- requestExpirationMsg{key}
+		am.msgChan <- &requestExpirationMsg{key}
 	})
 
 	req := wire.NewMsgAvaRequest(requestID)
 	for _, inv := range invs {
 		req.AddInvVect(&inv)
 	}
-	peer.QueueMessage(req, nil)
+	p.QueueMessage(req, nil)
 }
 
 func (am *AvalancheManager) handleRequestExpiration(key string) {
@@ -271,7 +276,10 @@ func (am *AvalancheManager) handleRequestExpiration(key string) {
 }
 
 func (am *AvalancheManager) getRandomPeerToQuery() *peer.Peer {
-	i := rand.Intn(len(am.peers))
+	i := 0
+	if len(am.peers) > 0 {
+		i = rand.Intn(len(am.peers))
+	}
 	for p := range am.peers {
 		if i == 0 {
 			return p
@@ -306,7 +314,7 @@ func (am *AvalancheManager) RegisterVotes(p *peer.Peer, resp *wire.MsgAvaRespons
 		log.Errorf("Invalid signature on avalanche response from peer %s", p)
 		return
 	}
-	am.msgChan <- registerVotesMsg{p, resp}
+	am.msgChan <- &registerVotesMsg{p, resp}
 }
 
 func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaResponse) {
@@ -374,7 +382,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 
 		switch vr.status() {
 		case StatusFinalized:
-			log.Info("Avalanche finalized transaction %s", v.Hash.String())
+			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(time.Unix(r.timestamp, 0)))
 		case StatusRejected:
 			// TODO: remove tx and descendants from mempool and mark as a bad transaction
 		}
