@@ -38,5 +38,5 @@ In addition, if you are starting btcd with TLS and want to make it
 available via a hostname, then you will need to generate the TLS
 certificates for that host. For example,
  ```
-gencerts --host=myhostname.example.com --directory=/home/user/.btcd/
+gencerts --host=myhostname.example.com --directory=/home/user/.bchd/
 ```
