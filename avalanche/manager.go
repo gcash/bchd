@@ -210,7 +210,7 @@ func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 // NewTransactions passes new unconfirmed transactions into the manager to be processed.
 func (am *AvalancheManager) NewTransactions(txs []*mempool.TxDesc) {
 	for _, tx := range txs {
-		log.Infof("Starting avalanche for tx %s", tx.Tx.Hash().String())
+		log.Debugf("Starting avalanche for tx %s", tx.Tx.Hash().String())
 	}
 	am.msgChan <- &newTxsMsg{txs}
 }
@@ -295,6 +295,9 @@ func (am *AvalancheManager) getRandomPeerToQuery() *peer.Peer {
 }
 
 func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
+	// TODO: vote records should probably expire at some point. If a peer does not have
+	// a transaction for some reason they do not vote either way and it could keep the
+	// vote open forever. So a long-ish expiration seems appropriate.
 	invs := make([]wire.InvVect, 0, len(am.voteRecords))
 	for txid, r := range am.voteRecords {
 		if r.hasFinalized() {
@@ -335,6 +338,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 	delete(am.queries, key)
 
 	if r.IsExpired() {
+		log.Debugf("Received avalanche response from peer %s with an expired request", p)
 		return
 	}
 
@@ -380,6 +384,8 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		// When we finalize we want to remove our vote record, vote records of double spends and
 		// outpoints.
 		if vr.hasFinalized() {
+			// TODO: we should probably remove these after a block comes in that contains the transactions
+			// rather than after a timer.
 			time.AfterFunc(DeleteInventoryAfter, func() {
 				am.removeVoteRecords(vr.txdesc)
 			})
@@ -391,6 +397,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		case StatusFinalized:
 			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(time.Unix(r.timestamp, 0)))
 		case StatusRejected:
+			log.Infof("Avalanche rejected transaction %s", v.Hash.String())
 			// TODO: remove tx and descendants from mempool and mark as a bad transaction
 		}
 	}

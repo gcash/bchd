@@ -109,6 +109,7 @@ var subsystemLoggers = map[string]bchlog.Logger{
 	"SRVR": srvrLog,
 	"SYNC": syncLog,
 	"TXMP": txmpLog,
+	"AVAL": avalLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and
