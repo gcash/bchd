@@ -102,7 +102,7 @@ const (
 	SFNodeNetworkLimited
 
 	// SFNodeAvalanche signals this node understands the avalanche pre-consensus protocol.
-	SFNodeAvalanche
+	SFNodeAvalanche = 33554432
 )
 
 // Map of service flags back to their constant names for pretty printing.
