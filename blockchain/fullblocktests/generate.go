@@ -33,7 +33,7 @@ import (
 const (
 	// Intentionally defined here rather than using constants from codebase
 	// to ensure consensus changes are detected.
-	maxBlockSigOps       = 20000
+	maxBlockSigOpsPerMB  = 20000
 	maxBlockSize         = 1000000
 	minCoinbaseScriptLen = 2
 	maxCoinbaseScriptLen = 100
@@ -1071,9 +1071,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b5(2) -> b12(3) -> b13(4) -> b15(5)
 	//   \-> b3(1) -> b4(2)
 	g.setTip("b13")
-	manySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOps)
+	manySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOpsPerMB)
 	g.nextBlock("b15", outs[5], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// Attempt to add block with more than max allowed signature operations
@@ -1082,9 +1082,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b5(2) -> b12(3) -> b13(4) -> b15(5)
 	//   \                                         \-> b16(7)
 	//    \-> b3(1) -> b4(2)
-	tooManySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOps+1)
+	tooManySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b16", outs[6], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// ---------------------------------------------------------------------
@@ -1223,9 +1223,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b30(7) -> b31(8)
 	//
 	// OP_CHECKMULTISIG counts for 20 sigops.
-	manySigOps = repeatOpcode(txscript.OP_CHECKMULTISIG, maxBlockSigOps/20)
+	manySigOps = repeatOpcode(txscript.OP_CHECKMULTISIG, maxBlockSigOpsPerMB/20)
 	g.nextBlock("b31", outs[8], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// Create block with more than max allowed signature operations using
@@ -1235,19 +1235,19 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//                \-> b32(9)
 	//
 	// OP_CHECKMULTISIG counts for 20 sigops.
-	tooManySigOps = repeatOpcode(txscript.OP_CHECKMULTISIG, maxBlockSigOps/20)
+	tooManySigOps = repeatOpcode(txscript.OP_CHECKMULTISIG, maxBlockSigOpsPerMB/20)
 	tooManySigOps = append(tooManySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b32", outs[9], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKMULTISIGVERIFY.
 	//
 	//   ... -> b31(8) -> b33(9)
 	g.setTip("b31")
-	manySigOps = repeatOpcode(txscript.OP_CHECKMULTISIGVERIFY, maxBlockSigOps/20)
+	manySigOps = repeatOpcode(txscript.OP_CHECKMULTISIGVERIFY, maxBlockSigOpsPerMB/20)
 	g.nextBlock("b33", outs[9], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// Create block with more than max allowed signature operations using
@@ -1256,10 +1256,10 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b33(9)
 	//                \-> b34(10)
 	//
-	tooManySigOps = repeatOpcode(txscript.OP_CHECKMULTISIGVERIFY, maxBlockSigOps/20)
+	tooManySigOps = repeatOpcode(txscript.OP_CHECKMULTISIGVERIFY, maxBlockSigOpsPerMB/20)
 	tooManySigOps = append(manySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b34", outs[10], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKSIGVERIFY.
@@ -1267,9 +1267,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b33(9) -> b35(10)
 	//
 	g.setTip("b33")
-	manySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOps)
+	manySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOpsPerMB)
 	g.nextBlock("b35", outs[10], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// Create block with more than max allowed signature operations using
@@ -1278,9 +1278,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b35(10)
 	//                 \-> b36(11)
 	//
-	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOps+1)
+	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b36", outs[11], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// ---------------------------------------------------------------------
@@ -1330,7 +1330,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		// operations in those redeem scripts will be more than the
 		// max allowed per block.
 		p2shScript := payToScriptHashScript(redeemScript)
-		txnsNeeded := (maxBlockSigOps / redeemScriptSigOps) + 1
+		txnsNeeded := (maxBlockSigOpsPerMB / redeemScriptSigOps) + 1
 		prevTx := b.Transactions[1]
 		for i := 0; i < txnsNeeded; i++ {
 			prevTx = createSpendTxForTx(prevTx, lowFee)
@@ -1339,7 +1339,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 			b.AddTransaction(prevTx)
 		}
 	})
-	g.assertTipBlockNumTxns((maxBlockSigOps / redeemScriptSigOps) + 3)
+	g.assertTipBlockNumTxns((maxBlockSigOpsPerMB / redeemScriptSigOps) + 3)
 	accepted()
 
 	// Create a block with more than max allowed signature operations where
@@ -1349,7 +1349,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//                            \-> b40(12)
 	g.setTip("b39")
 	g.nextBlock("b40", outs[12], func(b *wire.MsgBlock) {
-		txnsNeeded := (maxBlockSigOps / redeemScriptSigOps)
+		txnsNeeded := (maxBlockSigOpsPerMB / redeemScriptSigOps)
 		for i := 0; i < txnsNeeded; i++ {
 			// Create a signed transaction that spends from the
 			// associated p2sh output in b39.
@@ -1368,7 +1368,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		// Create a final tx that includes a non-pay-to-script-hash
 		// output with the number of signature operations needed to push
 		// the block one over the max allowed.
-		fill := maxBlockSigOps - (txnsNeeded * redeemScriptSigOps) + 1
+		fill := maxBlockSigOpsPerMB - (txnsNeeded * redeemScriptSigOps) + 1
 		finalTx := b.Transactions[len(b.Transactions)-1]
 		tx := createSpendTxForTx(finalTx, lowFee)
 		tx.TxOut[0].PkScript = repeatOpcode(txscript.OP_CHECKSIG, fill)
@@ -1382,7 +1382,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b35(10) -> b39(11) -> b41(12)
 	g.setTip("b39")
 	g.nextBlock("b41", outs[12], func(b *wire.MsgBlock) {
-		txnsNeeded := (maxBlockSigOps / redeemScriptSigOps)
+		txnsNeeded := (maxBlockSigOpsPerMB / redeemScriptSigOps)
 		for i := 0; i < txnsNeeded; i++ {
 			spend := makeSpendableOutForTx(b39.Transactions[i+2], 2)
 			tx := createSpendTx(&spend, lowFee)
@@ -1399,7 +1399,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		// Create a final tx that includes a non-pay-to-script-hash
 		// output with the number of signature operations needed to push
 		// the block to exactly the max allowed.
-		fill := maxBlockSigOps - (txnsNeeded * redeemScriptSigOps)
+		fill := maxBlockSigOpsPerMB - (txnsNeeded * redeemScriptSigOps)
 		if fill == 0 {
 			return
 		}
@@ -1894,7 +1894,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	// The script generated consists of the following form:
 	//
 	//  Comment assumptions:
-	//    maxBlockSigOps = 20000
+	//    block size <= 1MB
+	//    maxTxSigOps = 20000
+	//    maxBlockSigOpsPerMB = 20000
 	//    maxScriptElementSize = 520
 	//
 	//  [0-19999]    : OP_CHECKSIG
@@ -1905,13 +1907,13 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//
 	//   ... -> b69(20)
 	//                 \-> b70(21)
-	scriptSize := maxBlockSigOps + 5 + (maxScriptElementSize + 1) + 1
+	scriptSize := maxBlockSigOpsPerMB + 5 + (maxScriptElementSize + 1) + 1
 	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIG, scriptSize)
-	tooManySigOps[maxBlockSigOps] = txscript.OP_PUSHDATA4
-	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOps+1:],
+	tooManySigOps[maxBlockSigOpsPerMB] = txscript.OP_PUSHDATA4
+	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOpsPerMB+1:],
 		maxScriptElementSize+1)
 	g.nextBlock("b70", outs[21], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// Create block with more than max allowed signature operations such
@@ -1922,12 +1924,12 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b69(20)
 	//                 \-> b71(21)
 	g.setTip("b69")
-	scriptSize = maxBlockSigOps + 5 + maxScriptElementSize + 1
+	scriptSize = maxBlockSigOpsPerMB + 5 + maxScriptElementSize + 1
 	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIG, scriptSize)
-	tooManySigOps[maxBlockSigOps+1] = txscript.OP_PUSHDATA4
-	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOps+2:], 0xffffffff)
+	tooManySigOps[maxBlockSigOpsPerMB+1] = txscript.OP_PUSHDATA4
+	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOpsPerMB+2:], 0xffffffff)
 	g.nextBlock("b71", outs[21], replaceSpendScript(tooManySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps + 1)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
 	rejected(blockchain.ErrTxTooManySigOps)
 
 	// Create block with the max allowed signature operations such that all
@@ -1938,12 +1940,12 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//
 	//   ... -> b69(20) -> b72(21)
 	g.setTip("b69")
-	scriptSize = maxBlockSigOps + 5 + maxScriptElementSize
+	scriptSize = maxBlockSigOpsPerMB + 5 + maxScriptElementSize
 	manySigOps = repeatOpcode(txscript.OP_CHECKSIG, scriptSize)
-	manySigOps[maxBlockSigOps] = txscript.OP_PUSHDATA4
-	binary.LittleEndian.PutUint32(manySigOps[maxBlockSigOps+1:], 0xffffffff)
+	manySigOps[maxBlockSigOpsPerMB] = txscript.OP_PUSHDATA4
+	binary.LittleEndian.PutUint32(manySigOps[maxBlockSigOpsPerMB+1:], 0xffffffff)
 	g.nextBlock("b72", outs[21], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// Create block with the max allowed signature operations such that all
@@ -1952,11 +1954,11 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	// be rejected if any of them were counted.
 	//
 	//   ... -> b72(21) -> b73(22)
-	scriptSize = maxBlockSigOps + 5 + (maxScriptElementSize + 1)
+	scriptSize = maxBlockSigOpsPerMB + 5 + (maxScriptElementSize + 1)
 	manySigOps = repeatOpcode(txscript.OP_CHECKSIG, scriptSize)
-	manySigOps[maxBlockSigOps] = txscript.OP_PUSHDATA4
+	manySigOps[maxBlockSigOpsPerMB] = txscript.OP_PUSHDATA4
 	g.nextBlock("b73", outs[22], replaceSpendScript(manySigOps))
-	g.assertTipBlockSigOpsCount(maxBlockSigOps)
+	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB)
 	accepted()
 
 	// ---------------------------------------------------------------------
