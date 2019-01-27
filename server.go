@@ -1461,6 +1461,12 @@ func (s *server) NotifyAvalanche(tx *avalanche.TxDesc) {
 	s.avalancheManager.NewTransaction(tx)
 }
 
+func (s *server) onChainNotification(n *blockchain.Notification) {
+	if n.Type == blockchain.NTBlockConnected {
+		s.avalancheManager.BlockConnected(n.Data.(*bchutil.Block))
+	}
+}
+
 // Transaction has one confirmation on the main chain. Now we can mark it as no
 // longer needing rebroadcasting.
 func (s *server) TransactionConfirmed(tx *bchutil.Tx) {
@@ -2836,6 +2842,8 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if err != nil {
 		return nil, err
 	}
+
+	s.chain.Subscribe(s.onChainNotification)
 
 	// Create the mining policy and block template generator based on the
 	// configuration options.

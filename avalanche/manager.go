@@ -7,6 +7,7 @@ import (
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 	"math/rand"
 	"sync"
 	"time"
@@ -27,7 +28,9 @@ const (
 	// query
 	AvalancheRequestTimeout = 1 * time.Minute
 
-	DeleteInventoryAfter = time.Minute * 30
+	// DeleteInventoryAfter is the maximum time we'll keep a transaction in memory
+	// if it hasn't been finalized by avalanche.
+	DeleteInventoryAfter = time.Hour * 6
 )
 
 // TxDesc wraps a mempool.TxDesc with a pointer to a reject code.
@@ -50,6 +53,10 @@ type donePeerMsg struct {
 // newTxsMsg signifies new transactions to be processed.
 type newTxsMsg struct {
 	tx *TxDesc
+}
+
+type blockConnectedMsg struct {
+	blk *bchutil.Block
 }
 
 // requestExpirationMsg signifies a request has expired and
@@ -133,6 +140,8 @@ out:
 				am.handleDonePeer(msg.peer)
 			case *newTxsMsg:
 				am.handleNewTx(msg.tx)
+			case *blockConnectedMsg:
+				am.handleBlockConnected(msg.blk)
 			case *requestExpirationMsg:
 				am.handleRequestExpiration(msg.key)
 			case *queryMsg:
@@ -224,7 +233,6 @@ func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 // NewTransactions passes new unconfirmed transactions into the manager to be processed.
 func (am *AvalancheManager) NewTransaction(tx *TxDesc) {
 	am.msgChan <- &newTxsMsg{tx}
-
 }
 
 func (am *AvalancheManager) handleNewTx(txd *TxDesc) {
@@ -294,6 +302,24 @@ func (am *AvalancheManager) handleNewTx(txd *TxDesc) {
 	}
 }
 
+// BlockConnected fires whenever a new block is connected to the chain.
+// When this happens we should go through the block and delete everything
+// that has confirmed from memory.
+func (am *AvalancheManager) BlockConnected(block *bchutil.Block) {
+	am.msgChan <- &blockConnectedMsg{block}
+}
+
+func (am *AvalancheManager) handleBlockConnected(block *bchutil.Block) {
+	for _, tx := range block.Transactions() {
+		txid := tx.Hash()
+		delete(am.voteRecords, *txid)
+		for _, in := range tx.MsgTx().TxIn {
+			delete(am.outpoints, in.PreviousOutPoint)
+		}
+		delete(am.rejectedTxs, *txid)
+	}
+}
+
 func (am *AvalancheManager) eventLoop() {
 	invs := am.getInvsForNextPoll()
 	if len(invs) == 0 {
@@ -341,11 +367,16 @@ func (am *AvalancheManager) getRandomPeerToQuery() *peer.Peer {
 }
 
 func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
-	// TODO: vote records should probably expire at some point. If a peer does not have
-	// a transaction for some reason they do not vote either way and it could keep the
-	// vote open forever. So a long-ish expiration seems appropriate.
 	invs := make([]wire.InvVect, 0, len(am.voteRecords))
+	var toDelete []chainhash.Hash
 	for txid, r := range am.voteRecords {
+
+		// Delete very old inventory that hasn't finalized
+		if time.Since(r.timestamp) > DeleteInventoryAfter {
+			toDelete = append(toDelete, txid)
+			continue
+		}
+
 		if r.hasFinalized() {
 			// If this has finalized we can just skip.
 			continue
@@ -357,6 +388,14 @@ func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
 
 	if len(invs) >= AvalancheMaxElementPoll {
 		invs = invs[:AvalancheMaxElementPoll]
+	}
+
+	for _, td := range toDelete {
+		r := am.voteRecords[td]
+		for _, in := range r.txdesc.Tx.MsgTx().TxIn {
+			delete(am.outpoints, in.PreviousOutPoint)
+		}
+		delete(am.voteRecords, td)
 	}
 
 	return invs
@@ -430,11 +469,6 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		// When we finalize we want to remove our vote record, vote records of double spends and
 		// outpoints.
 		if vr.hasFinalized() {
-			// TODO: we should probably remove these after a block comes in that contains the transactions
-			// rather than after a timer.
-			time.AfterFunc(DeleteInventoryAfter, func() {
-				am.removeVoteRecords(vr.txdesc)
-			})
 			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
 			// TODO: double spends of the finalized transaction should be removed from the mempool.
 		}

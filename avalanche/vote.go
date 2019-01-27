@@ -1,5 +1,7 @@
 package avalanche
 
+import "time"
+
 // Status is the status of consensus on a particular target
 type Status int
 
@@ -23,12 +25,13 @@ type VoteRecord struct {
 	votes      uint8
 	consider   uint8
 	confidence uint16
+	timestamp  time.Time
 }
 
 // NewVoteRecord instantiates a new base record for voting on a target
 // `accepted` indicates whether or not the initial state should be acceptance
 func NewVoteRecord(txdesc *TxDesc, accepted bool) *VoteRecord {
-	return &VoteRecord{txdesc: txdesc, confidence: boolToUint16(accepted)}
+	return &VoteRecord{txdesc: txdesc, confidence: boolToUint16(accepted), timestamp: time.Now()}
 }
 
 // isAccepted returns whether or not the voted state is acceptance or not
