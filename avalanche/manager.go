@@ -30,6 +30,13 @@ const (
 	DeleteInventoryAfter = time.Minute * 30
 )
 
+// TxDesc wraps a mempool.TxDesc with a pointer to a reject code.
+// A nil reject code means the transaction was accepted to the mempool.
+type TxDesc struct {
+	*mempool.TxDesc
+	Code *wire.RejectCode
+}
+
 // newPeerMsg signifies a newly connected peer to the handler.
 type newPeerMsg struct {
 	peer *peer.Peer
@@ -42,7 +49,7 @@ type donePeerMsg struct {
 
 // newTxsMsg signifies new transactions to be processed.
 type newTxsMsg struct {
-	txs []*mempool.TxDesc
+	tx *TxDesc
 }
 
 // requestExpirationMsg signifies a request has expired and
@@ -59,7 +66,7 @@ type queryMsg struct {
 
 // registerVotesMsg signifies a response to a query from another peer.
 type registerVotesMsg struct {
-	p *peer.Peer
+	p    *peer.Peer
 	resp *wire.MsgAvaResponse
 }
 
@@ -70,7 +77,8 @@ type AvalancheManager struct {
 	msgChan chan interface{}
 
 	voteRecords map[chainhash.Hash]*VoteRecord
-	outpoints map[wire.OutPoint][]*mempool.TxDesc
+	outpoints   map[wire.OutPoint][]*TxDesc
+	rejectedTxs map[chainhash.Hash]struct{}
 	round       int64
 	queries     map[string]RequestRecord
 
@@ -88,7 +96,8 @@ func New() (*AvalancheManager, error) {
 		quit:        make(chan struct{}),
 		msgChan:     make(chan interface{}),
 		voteRecords: make(map[chainhash.Hash]*VoteRecord),
-		outpoints:   make(map[wire.OutPoint][]*mempool.TxDesc),
+		outpoints:   make(map[wire.OutPoint][]*TxDesc),
+		rejectedTxs: make(map[chainhash.Hash]struct{}),
 		queries:     make(map[string]RequestRecord),
 		privKey:     avalanchePrivkey,
 	}, nil
@@ -123,7 +132,7 @@ out:
 			case *donePeerMsg:
 				am.handleDonePeer(msg.peer)
 			case *newTxsMsg:
-				am.handleNewTxs(msg.txs)
+				am.handleNewTx(msg.tx)
 			case *requestExpirationMsg:
 				am.handleRequestExpiration(msg.key)
 			case *queryMsg:
@@ -153,6 +162,11 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 	resp := wire.NewMsgAvaResponse(req.RequestID, nil)
 	for i := 0; i < len(req.InvList); i++ {
 		txid := req.InvList[i].Hash
+		if _, exists := am.rejectedTxs[txid]; exists {
+			vr := wire.NewVoteRecord(false, &txid)
+			resp.AddVoteRecord(vr)
+			continue
+		}
 		record, ok := am.voteRecords[txid]
 		if ok {
 			// We're only going to vote for items we have a record for.
@@ -208,43 +222,75 @@ func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 }
 
 // NewTransactions passes new unconfirmed transactions into the manager to be processed.
-func (am *AvalancheManager) NewTransactions(txs []*mempool.TxDesc) {
-	for _, tx := range txs {
-		log.Debugf("Starting avalanche for tx %s", tx.Tx.Hash().String())
-	}
-	am.msgChan <- &newTxsMsg{txs}
+func (am *AvalancheManager) NewTransaction(tx *TxDesc) {
+	am.msgChan <- &newTxsMsg{tx}
+
 }
 
-func (am *AvalancheManager) handleNewTxs(txs []*mempool.TxDesc) {
-	for _, txdesc := range txs {
-		txid := txdesc.Tx.Hash()
-		// Add a new vote record
-		_, ok := am.voteRecords[*txid]
-		if !ok {
-			//TODO: make sure we don't have any double spends currently in the accepted
-			// state. If so then accepted should be set to false here.
-			am.voteRecords[*txid] = NewVoteRecord(txdesc, true)
+func (am *AvalancheManager) handleNewTx(txd *TxDesc) {
+	accepted := true
+	if txd.Code != nil {
+		switch *txd.Code {
+		case wire.RejectDuplicate:
+			// We can ignore duplicates as we should have already processed it.
+			return
+		case wire.RejectInvalid:
+			// Invalid transactions are transactions which violate the consensus
+			// rules and must be permanently considered invalid.
+			am.rejectedTxs[*txd.Tx.Hash()] = struct{}{}
+			return
+		case wire.RejectDoubleSpend:
+			fallthrough
+		case wire.RejectInsufficientFee:
+			fallthrough
+		case wire.RejectDust:
+			fallthrough
+		case wire.RejectNonstandard:
+			// In all of the above cases we don't want to actually vote for this
+			// transaction.
+			accepted = false
 		}
+	}
 
-		// Iterate over the inputs and add each outpoint to our outpoint map
-		for _, in := range txdesc.Tx.MsgTx().TxIn {
-			doubleSpends, ok := am.outpoints[in.PreviousOutPoint]
-			if ok {
-				contains := false
-				for _, ds := range doubleSpends {
-					if txid.IsEqual(ds.Tx.Hash()) {
-						contains = true
-						break
-					}
+	// If a transaction reaches here it has either:
+	// - been accepted into the mempool
+	// - been rejected due to a policy violation
+	// - been rejected due to being a double spend
+	log.Debugf("Starting avalanche for tx %s", txd.Tx.Hash().String())
+
+	txid := txd.Tx.Hash()
+
+	// Iterate over the inputs and add each outpoint to our outpoint map
+	for _, in := range txd.Tx.MsgTx().TxIn {
+		doubleSpends, ok := am.outpoints[in.PreviousOutPoint]
+		if ok {
+			contains := false
+			for _, ds := range doubleSpends {
+				if txid.IsEqual(ds.Tx.Hash()) {
+					contains = true
 				}
-				if !contains {
-					doubleSpends = append(doubleSpends, txdesc)
-					am.outpoints[in.PreviousOutPoint] = doubleSpends
+
+				// If this double spend is in the accepted state then we need to set
+				// the new transaction to accepted = false so we don't vote for it.
+				dsTxid := ds.Tx.Hash()
+				vr, ok := am.voteRecords[*dsTxid]
+				if ok && vr.isAccepted(){
+					accepted = false
 				}
-			} else {
-				am.outpoints[in.PreviousOutPoint] = []*mempool.TxDesc{txdesc}
 			}
+			if !contains {
+				doubleSpends = append(doubleSpends, txd)
+				am.outpoints[in.PreviousOutPoint] = doubleSpends
+			}
+		} else {
+			am.outpoints[in.PreviousOutPoint] = []*TxDesc{txd}
 		}
+	}
+
+	// Add a new vote record
+	_, ok := am.voteRecords[*txid]
+	if !ok {
+		am.voteRecords[*txid] = NewVoteRecord(txd, accepted)
 	}
 }
 
@@ -398,13 +444,14 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(time.Unix(r.timestamp, 0)))
 		case StatusRejected:
 			log.Infof("Avalanche rejected transaction %s", v.Hash.String())
-			// TODO: remove tx and descendants from mempool and mark as a bad transaction
+			am.rejectedTxs[v.Hash] = struct{}{}
+			// TODO: remove tx and descendants from mempool
 		}
 	}
 }
 
 // removeVoteRecords recursively removes the vote record and any redeemers
-func (am *AvalancheManager) removeVoteRecords(txdesc *mempool.TxDesc) {
+func (am *AvalancheManager) removeVoteRecords(txdesc *TxDesc) {
 	txHash := txdesc.Tx.Hash()
 	// Remove any transactions which rely on this one.
 	for i := uint32(0); i < uint32(len(txdesc.Tx.MsgTx().TxOut)); i++ {

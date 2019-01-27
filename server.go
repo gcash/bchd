@@ -1446,13 +1446,19 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions.
 	s.relayTransactions(txns)
-	s.avalancheManager.NewTransactions(txns)
 
 	// Notify both websocket and getblocktemplate long poll clients of all
 	// newly accepted transactions.
 	if s.rpcServer != nil {
 		s.rpcServer.NotifyNewTransactions(txns)
 	}
+}
+
+// NotifyAvalanche is fired whenever a new transaction is processed regardless
+// of whether it was accepted to the mempool or not. The passed transaction is
+// then passed into the avalanche manager.
+func (s *server) NotifyAvalanche(tx *avalanche.TxDesc) {
+	s.avalancheManager.NewTransaction(tx)
 }
 
 // Transaction has one confirmation on the main chain. Now we can mark it as no
@@ -2812,6 +2818,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
+		AvalancheNotifier:       &s,
 		Chain:                   s.chain,
 		TxMemPool:               s.txMemPool,
 		ChainParams:             s.chainParams,

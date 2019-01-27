@@ -23,6 +23,7 @@ func TestRejectCodeStringer(t *testing.T) {
 		{RejectInvalid, "REJECT_INVALID"},
 		{RejectObsolete, "REJECT_OBSOLETE"},
 		{RejectDuplicate, "REJECT_DUPLICATE"},
+		{RejectDoubleSpend, "REJECT_DOUBLESPEND"},
 		{RejectNonstandard, "REJECT_NONSTANDARD"},
 		{RejectDust, "REJECT_DUST"},
 		{RejectInsufficientFee, "REJECT_INSUFFICIENTFEE"},
