@@ -1461,6 +1461,11 @@ func (s *server) NotifyAvalanche(tx *avalanche.TxDesc) {
 	s.avalancheManager.NewTransaction(tx)
 }
 
+// NotifyTxFinalized is fired whenever the avalanche manager finalizes a new transaction.
+func (s *server) NotifyTxFinalized(tx *bchutil.Tx, finalizationTime time.Duration) {
+	s.rpcServer.NotifyAvalanche(tx, finalizationTime)
+}
+
 func (s *server) onChainNotification(n *blockchain.Notification) {
 	if n.Type == blockchain.NTBlockConnected {
 		s.avalancheManager.BlockConnected(n.Data.(*bchutil.Block))
@@ -2838,7 +2843,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		return nil, err
 	}
 
-	s.avalancheManager, err = avalanche.New()
+	s.avalancheManager, err = avalanche.New(s.NotifyTxFinalized)
 	if err != nil {
 		return nil, err
 	}

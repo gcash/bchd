@@ -89,10 +89,12 @@ type AvalancheManager struct {
 	round       int64
 	queries     map[string]RequestRecord
 
+	notificationCallback func(tx *bchutil.Tx, finalizationTime time.Duration)
+
 	privKey *bchec.PrivateKey
 }
 
-func New() (*AvalancheManager, error) {
+func New(notificationCallback func(tx *bchutil.Tx, finalizationTime time.Duration)) (*AvalancheManager, error) {
 	avalanchePrivkey, err := bchec.NewPrivateKey(bchec.S256())
 	if err != nil {
 		return nil, err
@@ -107,6 +109,7 @@ func New() (*AvalancheManager, error) {
 		rejectedTxs: make(map[chainhash.Hash]struct{}),
 		queries:     make(map[string]RequestRecord),
 		privKey:     avalanchePrivkey,
+		notificationCallback: notificationCallback,
 	}, nil
 }
 
@@ -282,7 +285,7 @@ func (am *AvalancheManager) handleNewTx(txd *TxDesc) {
 				// the new transaction to accepted = false so we don't vote for it.
 				dsTxid := ds.Tx.Hash()
 				vr, ok := am.voteRecords[*dsTxid]
-				if ok && vr.isAccepted(){
+				if ok && vr.isAccepted() {
 					accepted = false
 				}
 			}

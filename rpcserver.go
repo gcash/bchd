@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchd/avalanche"
 	"io"
 	"io/ioutil"
 	"math"
@@ -246,6 +247,7 @@ var rpcLimited = map[string]struct{}{
 	"loadtxfilter":          {},
 	"notifyblocks":          {},
 	"notifynewtransactions": {},
+	"notifyavalanche":       {},
 	"notifyreceived":        {},
 	"notifyspent":           {},
 	"rescan":                {},
@@ -3591,7 +3593,9 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeChan <-chan st
 	}
 
 	// Pass the transactions to the avalanche manager
-	s.cfg.AvalancheMgr.NewTransactions(acceptedTxs)
+	for _, accepted := range acceptedTxs {
+		s.cfg.AvalancheMgr.NewTransaction(&avalanche.TxDesc{TxDesc: accepted})
+	}
 
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions into the memory pool due to the original being
@@ -3963,6 +3967,12 @@ func (s *rpcServer) NotifyNewTransactions(txns []*mempool.TxDesc) {
 		// about stale block templates due to the new transaction.
 		s.gbtWorkState.NotifyMempoolTx(s.cfg.TxMemPool.LastUpdated())
 	}
+}
+
+// NotifyNewTransactions notifies the websocket. This function should be called
+// whenever avalanche finalizes a transaction.
+func (s *rpcServer) NotifyAvalanche(tx *bchutil.Tx, finalizationTime time.Duration) {
+	s.ntfnMgr.NotifyAvalanche(tx, finalizationTime)
 }
 
 // limitConnections responds with a 503 service unavailable and returns true if
@@ -4482,8 +4492,8 @@ type rpcserverSyncManager interface {
 // concurrent access.
 type rpcserverAvalancheManager interface {
 
-	// NewTransactions submits the given transactions to the avalanche manager.
-	NewTransactions(txs []*mempool.TxDesc)
+	// NewTransaction submits the given transactions to the avalanche manager.
+	NewTransaction(tx *avalanche.TxDesc)
 }
 
 // rpcserverConfig is a descriptor containing the RPC server configuration.
