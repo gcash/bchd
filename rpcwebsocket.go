@@ -253,7 +253,7 @@ func (m *wsNotificationManager) NotifyMempoolTx(tx *bchutil.Tx, isNew bool) {
 // notification manager for avalanche notification processing.
 func (m *wsNotificationManager) NotifyAvalanche(tx *bchutil.Tx, finalizationTime time.Duration) {
 	n := &notificationTxFinalized{
-		tx:    tx,
+		tx:               tx,
 		finalizationTime: finalizationTime,
 	}
 
@@ -473,7 +473,7 @@ type notificationTxAcceptedByMempool struct {
 	tx    *bchutil.Tx
 }
 type notificationTxFinalized struct {
-	tx    *bchutil.Tx
+	tx               *bchutil.Tx
 	finalizationTime time.Duration
 }
 

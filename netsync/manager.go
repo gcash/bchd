@@ -670,7 +670,7 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		code, reason := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
 
-		sm.avalancheNotifier.NotifyAvalanche(&avalanche.TxDesc{
+		sm.avalancheNotifier.NewTransaction(&avalanche.TxDesc{
 			TxDesc: &mempool.TxDesc{
 				TxDesc: mining.TxDesc{
 					Tx: tmsg.tx,
@@ -685,7 +685,7 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
 	}
 	for _, accepted := range acceptedTxs {
-		sm.avalancheNotifier.NotifyAvalanche(&avalanche.TxDesc{accepted, nil})
+		sm.avalancheNotifier.NewTransaction(&avalanche.TxDesc{accepted, nil})
 	}
 }
 

@@ -294,7 +294,7 @@ func NewRelevantTxAcceptedNtfn(txHex string) *RelevantTxAcceptedNtfn {
 // TxFinalizedNtfn defines the parameters to the txfinalized
 // JSON-RPC notification.
 type TxFinalizedNtfn struct {
-	TxID             string        `json:"txid"`
+	TxID             string `json:"txid"`
 	FinalizationTime string `json:"finalizationTime"`
 }
 

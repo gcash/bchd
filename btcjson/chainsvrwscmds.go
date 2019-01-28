@@ -58,7 +58,7 @@ func NewNotifyNewTransactionsCmd(verbose *bool) *NotifyNewTransactionsCmd {
 }
 
 // NotifyAvalancheCmd defines the notifyavalanche JSON-RPC command.
-type NotifyAvalancheCmd struct {}
+type NotifyAvalancheCmd struct{}
 
 // NewNotifyAvalancheCmd returns a new instance which can be used to issue
 // a notifyavalanche JSON-RPC command.

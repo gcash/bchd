@@ -232,11 +232,11 @@ func TestChainSvrWsNtfns(t *testing.T) {
 				return btcjson.NewCmd("txfinalized", "123", "2s")
 			},
 			staticNtfn: func() interface{} {
-				return btcjson.NewTxFinalizedNtfn("123", time.Second * 2)
+				return btcjson.NewTxFinalizedNtfn("123", time.Second*2)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"txfinalized","params":["123","2s"],"id":null}`,
 			unmarshalled: &btcjson.TxFinalizedNtfn{
-				TxID: "123",
+				TxID:             "123",
 				FinalizationTime: "2s",
 			},
 		},

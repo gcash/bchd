@@ -1454,13 +1454,6 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	}
 }
 
-// NotifyAvalanche is fired whenever a new transaction is processed regardless
-// of whether it was accepted to the mempool or not. The passed transaction is
-// then passed into the avalanche manager.
-func (s *server) NotifyAvalanche(tx *avalanche.TxDesc) {
-	s.avalancheManager.NewTransaction(tx)
-}
-
 // NotifyTxFinalized is fired whenever the avalanche manager finalizes a new transaction.
 func (s *server) NotifyTxFinalized(tx *bchutil.Tx, finalizationTime time.Duration) {
 	s.rpcServer.NotifyAvalanche(tx, finalizationTime)
@@ -2829,7 +2822,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
-		AvalancheNotifier:       &s,
+		AvalancheNotifier:       s.avalancheManager,
 		Chain:                   s.chain,
 		TxMemPool:               s.txMemPool,
 		ChainParams:             s.chainParams,

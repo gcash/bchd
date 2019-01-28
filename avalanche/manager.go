@@ -100,15 +100,15 @@ func New(notificationCallback func(tx *bchutil.Tx, finalizationTime time.Duratio
 		return nil, err
 	}
 	return &AvalancheManager{
-		peers:       make(map[*peer.Peer]struct{}),
-		wg:          sync.WaitGroup{},
-		quit:        make(chan struct{}),
-		msgChan:     make(chan interface{}),
-		voteRecords: make(map[chainhash.Hash]*VoteRecord),
-		outpoints:   make(map[wire.OutPoint][]*TxDesc),
-		rejectedTxs: make(map[chainhash.Hash]struct{}),
-		queries:     make(map[string]RequestRecord),
-		privKey:     avalanchePrivkey,
+		peers:                make(map[*peer.Peer]struct{}),
+		wg:                   sync.WaitGroup{},
+		quit:                 make(chan struct{}),
+		msgChan:              make(chan interface{}),
+		voteRecords:          make(map[chainhash.Hash]*VoteRecord),
+		outpoints:            make(map[wire.OutPoint][]*TxDesc),
+		rejectedTxs:          make(map[chainhash.Hash]struct{}),
+		queries:              make(map[string]RequestRecord),
+		privKey:              avalanchePrivkey,
 		notificationCallback: notificationCallback,
 	}, nil
 }

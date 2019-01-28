@@ -30,8 +30,8 @@ type PeerNotifier interface {
 
 // AvalancheNotifier exposes a method to notify the avalanche manager of a new transaction.
 type AvalancheNotifier interface {
-	// NotifyAvalanche submits the given transactions to the avalanche manager.
-	NotifyAvalanche(tx *avalanche.TxDesc)
+	// NewTransaction submits the given transactions to the avalanche manager.
+	NewTransaction(tx *avalanche.TxDesc)
 }
 
 // Config is a configuration struct used to initialize a new SyncManager.
