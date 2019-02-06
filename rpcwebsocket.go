@@ -568,7 +568,9 @@ out:
 				m.notifyRelevantTxAccepted(n.tx, clients)
 
 			case *notificationTxFinalized:
-				m.notifyTxFinalized(clients, n.tx, n.finalizationTime)
+				if len(avalancheNotifications) != 0 {
+					m.notifyTxFinalized(avalancheNotifications, n.tx, n.finalizationTime)
+				}
 
 			case *notificationRegisterBlocks:
 				wsc := (*wsClient)(n)

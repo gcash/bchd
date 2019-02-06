@@ -2820,7 +2820,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		cfg.FastSync = false
 	}
 
-	s.avalancheManager, err = avalanche.New(s.NotifyTxFinalized)
+	s.avalancheManager, err = avalanche.New()
 	if err != nil {
 		return nil, err
 	}
@@ -2980,6 +2980,8 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		if err != nil {
 			return nil, err
 		}
+
+		s.avalancheManager.SetNotificationCallback(s.NotifyTxFinalized)
 
 		// Signal process shutdown when the RPC server requests it.
 		go func() {

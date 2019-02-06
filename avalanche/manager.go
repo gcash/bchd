@@ -94,7 +94,7 @@ type AvalancheManager struct {
 	privKey *bchec.PrivateKey
 }
 
-func New(notificationCallback func(tx *bchutil.Tx, finalizationTime time.Duration)) (*AvalancheManager, error) {
+func New() (*AvalancheManager, error) {
 	avalanchePrivkey, err := bchec.NewPrivateKey(bchec.S256())
 	if err != nil {
 		return nil, err
@@ -109,8 +109,11 @@ func New(notificationCallback func(tx *bchutil.Tx, finalizationTime time.Duratio
 		rejectedTxs:          make(map[chainhash.Hash]struct{}),
 		queries:              make(map[string]RequestRecord),
 		privKey:              avalanchePrivkey,
-		notificationCallback: notificationCallback,
 	}, nil
+}
+
+func (am *AvalancheManager) SetNotificationCallback(cb func(tx *bchutil.Tx, finalizationTime time.Duration)) {
+	am.notificationCallback = cb
 }
 
 func (am *AvalancheManager) PrivateKey() *bchec.PrivateKey {
@@ -478,6 +481,9 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 
 		switch vr.status() {
 		case StatusFinalized:
+			if am.notificationCallback != nil {
+				am.notificationCallback(vr.txdesc.Tx, time.Since(time.Unix(r.timestamp, 0)))
+			}
 			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(time.Unix(r.timestamp, 0)))
 		case StatusRejected:
 			log.Infof("Avalanche rejected transaction %s", v.Hash.String())

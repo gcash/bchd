@@ -144,6 +144,9 @@ type NotificationHandlers struct {
 	// Deprecated: Use OnRelevantTxAccepted instead.
 	OnRedeemingTx func(transaction *bchutil.Tx, details *btcjson.BlockDetails)
 
+	// OnTxFinalized is invoked when the avalanche manager finalizes a tranasction.
+	OnTxFinalized func(txid *chainhash.Hash, finalizationTime time.Duration)
+
 	// OnRelevantTxAccepted is invoked when an unmined transaction passes
 	// the client's transaction filter.
 	//
@@ -461,6 +464,22 @@ func (c *Client) handleNotification(ntfn *rawNotification) {
 		}
 
 		c.ntfnHandlers.OnWalletLockState(locked)
+	// OnTxFinalized
+	case btcjson.TxFinalizedNtfnMethod:
+		// Ignore the notification if the client is not interested in
+		// it.
+		if c.ntfnHandlers.OnTxFinalized == nil {
+			return
+		}
+
+		txid, t, err := parseTxFinalizeNtfnParams(ntfn.Params)
+		if err != nil {
+			log.Warnf("Received invalid recvtx notification: %v",
+				err)
+			return
+		}
+
+		c.ntfnHandlers.OnTxFinalized(txid, t)
 
 	// OnUnknownNotification
 	default:
@@ -676,6 +695,44 @@ func parseChainTxNtfnParams(params []json.RawMessage) (*bchutil.Tx,
 	// nicer types for details about the block (block hash as a
 	// chainhash.Hash, block time as a time.Time, etc.).
 	return bchutil.NewTx(&msgTx), block, nil
+}
+
+// parseTxFinalizeNtfnParams parses out the txid and duration
+// from the raw message
+func parseTxFinalizeNtfnParams(params []json.RawMessage) (*chainhash.Hash,
+	time.Duration, error) {
+
+	if len(params) == 0 || len(params) > 2 {
+		return nil, time.Second, wrongNumParams(len(params))
+	}
+
+	// Unmarshal first parameter as a string.
+	var txidStr string
+	err := json.Unmarshal(params[0], &txidStr)
+	if err != nil {
+		return nil, time.Second, err
+	}
+
+	// If present, unmarshal second optional parameter
+	var finalizationTimeStr string
+	if len(params) > 1 {
+		err = json.Unmarshal(params[1], &finalizationTimeStr)
+		if err != nil {
+			return nil, time.Second, err
+		}
+	}
+
+	// Hex decode and deserialize the transaction.
+	txid, err := chainhash.NewHashFromStr(txidStr)
+	if err != nil {
+		return nil, time.Second, err
+	}
+
+	t, err := time.ParseDuration(finalizationTimeStr)
+	if err != nil {
+		return nil, time.Second, err
+	}
+	return txid, t, nil
 }
 
 // parseRescanProgressParams parses out the height of the last rescanned block
@@ -900,6 +957,54 @@ func (c *Client) NotifyBlocksAsync() FutureNotifyBlocksResult {
 // NOTE: This is a bchd extension and requires a websocket connection.
 func (c *Client) NotifyBlocks() error {
 	return c.NotifyBlocksAsync().Receive()
+}
+
+// FutureNotifyAvalancheResult is a future promise to deliver the result of a
+// NotifyAvalancheAsync RPC invocation (or an applicable error).
+type FutureNotifyAvalancheResult chan *response
+
+// Receive waits for the response promised by the future and returns an error
+// if the registration was not successful.
+func (r FutureNotifyAvalancheResult) Receive() error {
+	_, err := receiveFuture(r)
+	return err
+}
+
+// NotifyAvalancheAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on
+// the returned instance.
+//
+// See NotifyBlocks for the blocking version and more details.
+//
+// NOTE: This is a bchd extension and requires a websocket connection.
+func (c *Client) NotifyAvalancheAsync() FutureNotifyAvalancheResult {
+	// Not supported in HTTP POST mode.
+	if c.config.HTTPPostMode {
+		return newFutureError(ErrWebsocketsRequired)
+	}
+
+	// Ignore the notification if the client is not interested in
+	// notifications.
+	if c.ntfnHandlers == nil {
+		return newNilFutureResult()
+	}
+
+	cmd := btcjson.NewNotifyAvalancheCmd()
+	return c.sendCmd(cmd)
+}
+
+// NotifyAvalanche registers the client to receive notifications when transactions
+// are finalized by avalanche. The notifications are delivered to the notification
+// handlers associated with the client.  Calling this function has no effect if
+// there are no notification handlers and will result in an error if the client
+// is configured to run in HTTP POST mode.
+//
+// The notifications delivered as a result of this call will be via one of
+// OnBlockConnected or OnBlockDisconnected.
+//
+// NOTE: This is a bchd extension and requires a websocket connection.
+func (c *Client) NotifyAvalanche() error {
+	return c.NotifyAvalancheAsync().Receive()
 }
 
 // FutureNotifySpentResult is a future promise to deliver the result of a
