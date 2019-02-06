@@ -648,7 +648,11 @@ func (a *AddrManager) AvalanchePeers() []*wire.NetAddress {
 			avaAddrs = append(avaAddrs, v.na)
 		}
 	}
-	return avaAddrs[0:getAddrMax]
+	numAddresses := len(avaAddrs)
+	if numAddresses > getAddrMax {
+		numAddresses = getAddrMax
+	}
+	return avaAddrs[0:numAddresses]
 }
 
 // AddressCache returns the current address cache.  It must be treated as

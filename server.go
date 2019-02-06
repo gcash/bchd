@@ -2820,6 +2820,13 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		cfg.FastSync = false
 	}
 
+	s.avalancheManager, err = avalanche.New(s.NotifyTxFinalized)
+	if err != nil {
+		return nil, err
+	}
+
+	s.chain.Subscribe(s.onChainNotification)
+
 	s.syncManager, err = netsync.New(&netsync.Config{
 		PeerNotifier:            &s,
 		AvalancheNotifier:       s.avalancheManager,
@@ -2835,13 +2842,6 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if err != nil {
 		return nil, err
 	}
-
-	s.avalancheManager, err = avalanche.New(s.NotifyTxFinalized)
-	if err != nil {
-		return nil, err
-	}
-
-	s.chain.Subscribe(s.onChainNotification)
 
 	// Create the mining policy and block template generator based on the
 	// configuration options.
