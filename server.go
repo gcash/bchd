@@ -1362,7 +1362,9 @@ func (sp *serverPeer) OnAddr(p *peer.Peer, msg *wire.MsgAddr) {
 				Addr:      netAddr,
 				Permanent: true,
 			}
-			sp.server.connManager.Connect(req)
+			if !sp.server.avalancheManager.Connected(netAddr) {
+				sp.server.connManager.Connect(req)
+			}
 		}
 	}
 }

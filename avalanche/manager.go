@@ -9,6 +9,8 @@ import (
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"math/rand"
+	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -75,6 +77,11 @@ type queryMsg struct {
 type registerVotesMsg struct {
 	p    *peer.Peer
 	resp *wire.MsgAvaResponse
+}
+
+type connectedPeerMsg struct {
+	addr net.Addr
+	respChan chan bool
 }
 
 type AvalancheManager struct {
@@ -154,6 +161,8 @@ out:
 				am.handleQuery(msg.request, msg.respChan)
 			case *registerVotesMsg:
 				am.handleRegisterVotes(msg.p, msg.resp)
+			case *connectedPeerMsg:
+				am.handleConnectedPeer(msg.addr, msg.respChan)
 			}
 		case <-eventLoopTicker.C:
 			am.eventLoop()
@@ -163,6 +172,26 @@ out:
 	}
 	eventLoopTicker.Stop()
 	am.wg.Done()
+}
+
+func (am *AvalancheManager) Connected(addr net.Addr) bool {
+	respChan := make(chan bool)
+	am.msgChan <- &connectedPeerMsg{addr, respChan}
+	connected := <- respChan
+	return connected
+}
+
+func (am *AvalancheManager) handleConnectedPeer(addr net.Addr, respChan chan bool) {
+	ip := strings.Split(addr.String(), ":")
+	for peer := range am.peers {
+		if peer.NA().IP.String() == ip[0]{
+			respChan <- true
+			close(respChan)
+			return
+		}
+	}
+	respChan <- false
+	close(respChan)
 }
 
 // Query processes an avalanche request and returns the response.
