@@ -21,11 +21,12 @@ const (
 
 // VoteRecord keeps track of a series of votes for a target
 type VoteRecord struct {
-	txdesc     *TxDesc
-	votes      uint8
-	consider   uint8
-	confidence uint16
-	timestamp  time.Time
+	txdesc           *TxDesc
+	votes            uint8
+	consider         uint8
+	confidence       uint16
+	inflightRequests uint8
+	timestamp        time.Time
 }
 
 // NewVoteRecord instantiates a new base record for voting on a target

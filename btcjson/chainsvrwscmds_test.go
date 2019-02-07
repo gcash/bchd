@@ -108,7 +108,7 @@ func TestChainSvrWsCmds(t *testing.T) {
 			staticCmd: func() interface{} {
 				return btcjson.NewNotifyAvalancheCmd()
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"notifyavalanche","params":[],"id":1}`,
+			marshalled:   `{"jsonrpc":"1.0","method":"notifyavalanche","params":[],"id":1}`,
 			unmarshalled: &btcjson.NotifyAvalancheCmd{},
 		},
 		{

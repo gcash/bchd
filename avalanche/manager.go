@@ -30,6 +30,10 @@ const (
 	// query
 	AvalancheRequestTimeout = 1 * time.Minute
 
+	// AvalancheMaxInflightPoll is the max outstanding requests that we can have
+	// for any inventory item.
+	AvalancheMaxInflightPoll = 10
+
 	// DeleteInventoryAfter is the maximum time we'll keep a transaction in memory
 	// if it hasn't been finalized by avalanche.
 	DeleteInventoryAfter = time.Hour * 6
@@ -80,7 +84,7 @@ type registerVotesMsg struct {
 }
 
 type connectedPeerMsg struct {
-	addr net.Addr
+	addr     net.Addr
 	respChan chan bool
 }
 
@@ -107,15 +111,15 @@ func New() (*AvalancheManager, error) {
 		return nil, err
 	}
 	return &AvalancheManager{
-		peers:                make(map[*peer.Peer]struct{}),
-		wg:                   sync.WaitGroup{},
-		quit:                 make(chan struct{}),
-		msgChan:              make(chan interface{}),
-		voteRecords:          make(map[chainhash.Hash]*VoteRecord),
-		outpoints:            make(map[wire.OutPoint][]*TxDesc),
-		rejectedTxs:          make(map[chainhash.Hash]struct{}),
-		queries:              make(map[string]RequestRecord),
-		privKey:              avalanchePrivkey,
+		peers:       make(map[*peer.Peer]struct{}),
+		wg:          sync.WaitGroup{},
+		quit:        make(chan struct{}),
+		msgChan:     make(chan interface{}),
+		voteRecords: make(map[chainhash.Hash]*VoteRecord),
+		outpoints:   make(map[wire.OutPoint][]*TxDesc),
+		rejectedTxs: make(map[chainhash.Hash]struct{}),
+		queries:     make(map[string]RequestRecord),
+		privKey:     avalanchePrivkey,
 	}, nil
 }
 
@@ -177,14 +181,14 @@ out:
 func (am *AvalancheManager) Connected(addr net.Addr) bool {
 	respChan := make(chan bool)
 	am.msgChan <- &connectedPeerMsg{addr, respChan}
-	connected := <- respChan
+	connected := <-respChan
 	return connected
 }
 
 func (am *AvalancheManager) handleConnectedPeer(addr net.Addr, respChan chan bool) {
 	ip := strings.Split(addr.String(), ":")
 	for peer := range am.peers {
-		if peer.NA().IP.String() == ip[0]{
+		if peer.NA().IP.String() == ip[0] {
 			respChan <- true
 			close(respChan)
 			return
@@ -416,6 +420,11 @@ func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
 			// If this has finalized we can just skip.
 			continue
 		}
+		if r.inflightRequests >= AvalancheMaxInflightPoll {
+			// If we are already at the max inflight then continue
+			continue
+		}
+		r.inflightRequests++
 
 		// We don't have a decision, we need more votes.
 		invs = append(invs, *wire.NewInvVect(wire.InvTypeTx, &txid))
@@ -463,6 +472,12 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 	}
 
 	invs := r.GetInvs()
+	for _, inv := range invs {
+		vr, ok := am.voteRecords[inv.Hash]
+		if ok {
+			vr.inflightRequests--
+		}
+	}
 	votes := resp.VoteList
 
 	for _, v := range votes {
