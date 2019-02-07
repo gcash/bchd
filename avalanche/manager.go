@@ -388,7 +388,19 @@ func (am *AvalancheManager) eventLoop() {
 }
 
 func (am *AvalancheManager) handleRequestExpiration(key string) {
+	r, ok := am.queries[key]
+	if !ok {
+		return
+	}
 	delete(am.queries, key)
+
+	invs := r.GetInvs()
+	for _, inv := range invs {
+		vr, ok := am.voteRecords[inv.Hash]
+		if ok {
+			vr.inflightRequests--
+		}
+	}
 }
 
 func (am *AvalancheManager) getRandomPeerToQuery() *peer.Peer {
