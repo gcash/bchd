@@ -1,4 +1,4 @@
-## Avalanche Spec
+## Avalanche Pre-consensus Spec
 The following is the specification for avalanche pre-consensus as implemented in this branch. 
 It is not intended to be a final spec and is likely not compatible with the implementation being
 developed by Bitcoin ABC. The primary purpose is to give other developers something tangible to look at, think about, and discuss.
@@ -77,14 +77,12 @@ must append a one byte vote to `votes` for each inv in the `avarequest`. The vot
 
 The following describes voting behavior:
  
-- The node should vote yes (0x01) for a transaction if the transaction is valid and is currently marked by avalanche as `accepted`.
-- The node should vote no (0x00) for a transaction if the transaction is invalid or if it's not currently marked by avalanche as `accepted`.
+- The node should vote yes (0x01) for a transaction if the transaction is valid and is currently marked by avalanche as `Accepted`.
+- The node should vote no (0x00) for a transaction if the transaction is invalid or if it's not currently marked by avalanche as `Rejected`.
 - A node should vote neutral (0x80) for a transaction if it does not know about the transaction. The reason for this requirement is because
 we don't want to block the response while the node attempts to download missing inventory.
 
-// TODO: obviously we can reduce the size of the response here by not sending back the full txid. Ideally we would just send
-back a bitfield with each bit representing a yes or no vote for each inv, however doing it this way does not allow us
-to abstain. Sending two bits per inv would probably work. 
+// TODO: We might be able to reduce the size of the response further by sending only two bits per inv rather than eight.
 
 The signature covers `cat(request ID, votes)`. A node must reject (and probably ban) a peer which returned an `avaresponse` with
 a bad signature.
@@ -130,18 +128,21 @@ spec will require this function to select from a list of connected avalanche pee
 Remote peers will respond the the `avarequest` message with an `avaresponse`. If the request ID in the response does not match any outstanding
 requests the node must ignore the message and may increment the remote peer's ban score. 
 
-For each `vote_record` in the `avaresponse` the node must adjust the confidence score for that item. In code the algorithm looks like this:
+For each `vote` in the `avaresponse` the node must adjust the confidence score for that item. In code the algorithm looks like this:
 
 ```go
-func (vr *VoteRecord) regsiterVote(vote bool) bool {
-	vr.votes = (vr.votes << 1) | boolToUint8(vote)
-	vr.consider = (vr.consider << 1) | boolToUint8(vote)
+func (vr *VoteRecord) regsiterVote(vote uint8) bool {
+	vr.votes = (vr.votes << 1) | boolToUint8(vote == 1)
+	vr.consider = (vr.consider << 1) | boolToUint8(int8(vote) >= 0)
 
 	yes := countBits8(vr.votes&vr.consider&0xff) > 6
 
 	// The round is inconclusive
-	if !yes && countBits8((-vr.votes-1)&vr.consider&0xff) <= 6 {
-		return false
+	if !yes {
+		no := countBits8((-vr.votes-1)&vr.consider&0xff) > 6
+		if !no {
+			return false
+		}
 	}
 
 	// Vote is conclusive and agrees with our current state
@@ -159,6 +160,26 @@ func (vr *VoteRecord) regsiterVote(vote bool) bool {
 
 In English:
 
+- Transactions start out in one of two states. Either `Accepted` or `Rejected` based on the node's local mempool policy.
 - We track the last eight votes for any given transaction.
-- If at least seven of the last eight votes are a `yes` we consider this "round" to be a conclusive `yes`11.
-- If 
+- If at least seven of the last eight votes are a `yes` we consider this "round" to be a conclusive `yes`.
+- If at least seven of the last eight votes are a `no` we consider this "round" to be a conclusive `no`.
+- Neutral votes are not counted towards the conclusive yes or no.
+- If the round was conclusive and agrees with our current state (either `Accepted` or `Rejected`) then we increment the confidence counter for this transaction.
+- If the round was conclusive and disagrees with our current state then we flip our state to match the result of the round and reset our confidence counter to zero.
+- If the confidence counter equals 128 we consider the transaction finalized. This means the transaction is either permanently accepted or permanently rejected.
+
+Assuming there are not any `no` votes then we expect it to take 134 queries to finalize a transaction. Since the event loop fires every 10 milliseconds this means it will 
+take a minimum of 1.34 seconds to send off enough requests to finalize the transaction. Add network latency on top of that and we expect most transactions
+to finalize in 2 to 3 seconds.
+
+If a transaction flips state from `Rejected` to `Accepted` the node must mark all double spends of that transaction as `Rejected` and
+reset their confidence counters to zero.
+
+When `Accepted` transactions are finalized they should be added into the mempool and double spends of the transaction
+should be removed.
+
+When `Rejected` transactions are finalized they should be removed from the mempool.
+
+Because the event loop is firing off requests every 10ms it will send more requests than are required to finalized the transaction. If any response arrive
+after the transaction has been finalized they should be ignored and not affect the state of the transaction.
