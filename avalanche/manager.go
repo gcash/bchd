@@ -418,10 +418,9 @@ func (am *AvalancheManager) getRandomPeerToQuery() *peer.Peer {
 }
 
 func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
-	invs := make([]wire.InvVect, 0, len(am.voteRecords))
+	var invs []wire.InvVect
 	var toDelete []chainhash.Hash
 	for txid, r := range am.voteRecords {
-
 		// Delete very old inventory that hasn't finalized
 		if time.Since(r.timestamp) > DeleteInventoryAfter {
 			toDelete = append(toDelete, txid)
@@ -437,6 +436,7 @@ func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
 			continue
 		}
 		r.inflightRequests++
+		am.voteRecords[txid] = r
 
 		// We don't have a decision, we need more votes.
 		invs = append(invs, *wire.NewInvVect(wire.InvTypeTx, &txid))
@@ -512,35 +512,32 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		// This transaction was either finalized or moved to accepted from
 		// a previously unaccepted state. Let's look up all the double spends
 		// of this transaction and reset their confidence back to zero.
-		for _, in := range vr.txdesc.Tx.MsgTx().TxIn {
-			doublespends, ok := am.outpoints[in.PreviousOutPoint]
-			if ok {
-				for _, ds := range doublespends {
-					dsid := ds.Tx.Hash()
-					if !v.Hash.IsEqual(dsid) {
-						dsvr, ok := am.voteRecords[*dsid]
-						if ok {
-							dsvr.confidence = 0
-							am.voteRecords[*dsid] = dsvr
+		if vr.isAccepted() {
+			for _, in := range vr.txdesc.Tx.MsgTx().TxIn {
+				doublespends, ok := am.outpoints[in.PreviousOutPoint]
+				if ok {
+					for _, ds := range doublespends {
+						dsid := ds.Tx.Hash()
+						if !v.Hash.IsEqual(dsid) {
+							dsvr, ok := am.voteRecords[*dsid]
+							if ok {
+								dsvr.confidence = 0
+								am.voteRecords[*dsid] = dsvr
+							}
 						}
 					}
 				}
 			}
 		}
 
-		// When we finalize we want to remove our vote record, vote records of double spends and
-		// outpoints.
-		if vr.hasFinalized() {
-			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
-			// TODO: double spends of the finalized transaction should be removed from the mempool.
-		}
-
 		switch vr.status() {
 		case StatusFinalized:
 			if am.notificationCallback != nil {
-				am.notificationCallback(vr.txdesc.Tx, time.Since(time.Unix(r.timestamp, 0)))
+				am.notificationCallback(vr.txdesc.Tx, time.Since(vr.timestamp))
 			}
-			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(time.Unix(r.timestamp, 0)))
+			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(vr.timestamp))
+			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
+			// TODO: double spends of the finalized transaction should be removed from the mempool.
 		case StatusRejected:
 			log.Infof("Avalanche rejected transaction %s", v.Hash.String())
 			am.rejectedTxs[v.Hash] = struct{}{}
