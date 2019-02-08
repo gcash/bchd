@@ -208,8 +208,8 @@ func (am *AvalancheManager) Query(req *wire.MsgAvaRequest) *wire.MsgAvaResponse 
 
 func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *wire.MsgAvaResponse) {
 	votes := make([]byte, len(req.InvList))
-	for i := 0; i < len(req.InvList); i++ {
-		txid := req.InvList[i].Hash
+	for i, inv := range req.InvList {
+		txid := inv.Hash
 		if _, exists := am.rejectedTxs[txid]; exists {
 			votes[i] = 0x00 // No vote
 			continue
@@ -484,9 +484,9 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 	}
 
 	invs := r.GetInvs()
-
 	if len(resp.Votes) != len(invs) {
 		log.Debugf("Received avalanche response from peer %s with incorrect number of votes", p)
+		return
 	}
 
 	i := -1
