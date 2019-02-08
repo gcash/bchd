@@ -78,7 +78,7 @@ must append a one byte vote to `votes` for each inv in the `avarequest`. The vot
 The following describes voting behavior:
  
 - The node should vote yes (0x01) for a transaction if the transaction is valid and is currently marked by avalanche as `Accepted`.
-- The node should vote no (0x00) for a transaction if the transaction is invalid or if it's not currently marked by avalanche as `Rejected`.
+- The node should vote no (0x00) for a transaction if the transaction is invalid or if it's currently marked by avalanche as `Rejected`.
 - A node should vote neutral (0x80) for a transaction if it does not know about the transaction. The reason for this requirement is because
 we don't want to block the response while the node attempts to download missing inventory.
 
@@ -181,5 +181,5 @@ should be removed.
 
 When `Rejected` transactions are finalized they should be removed from the mempool.
 
-Because the event loop is firing off requests every 10ms it will send more requests than are required to finalized the transaction. If any response arrive
+Because the event loop is firing off requests every 10ms it will send more requests than are required to finalized the transaction. If any responses arrive
 after the transaction has been finalized they should be ignored and not affect the state of the transaction.
