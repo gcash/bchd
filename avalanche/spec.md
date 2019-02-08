@@ -1,9 +1,9 @@
-## Avalanche Pre-consensus Spec
+# Avalanche Pre-consensus Spec
 The following is the specification for avalanche pre-consensus as implemented in this branch. 
 It is not intended to be a final spec and is likely not compatible with the implementation being
 developed by Bitcoin ABC. The primary purpose is to give other developers something tangible to look at, think about, and discuss.
 
-#### Service Bit
+### Service Bit
 The following service bit is used to signal support for this specification. This service bit is in the "experimental" range and is
 not intended to be the final service bit. 
 
@@ -13,7 +13,7 @@ NODE_AVALANCHE = (1 << 25)
 
 If a node receives any avalanche message (from below) from a peer not signaling `NODE_AVALANCHE` they should disconnect the peer.
 
-#### New Network Messages
+### New Network Messages
 
 #### `avapubkey`
 
@@ -87,7 +87,7 @@ we don't want to block the response while the node attempts to download missing 
 The signature covers `cat(request ID, votes)`. A node must reject (and probably ban) a peer which returned an `avaresponse` with
 a bad signature.
 
-#### Node Operation
+### Node Operation
 
 The node operation centers around the avalanche manager ― a single threaded process which manages the asynchronous request/response IO.
 
@@ -123,7 +123,7 @@ return invs for which there are 10 or more outstanding requests.
 At present this function just selects a random peer from among the connected avalanche peers. However, this is obviously not sybil resistant. Future iterations of this
 spec will require this function to select from a list of connected avalanche peers weighted by some anti-sybil metric. For example, peers which have mined previous blocks. 
 
-#### Recording Votes
+### Recording Votes
 
 Remote peers will respond the the `avarequest` message with an `avaresponse`. If the request ID in the response does not match any outstanding
 requests the node must ignore the message and may increment the remote peer's ban score. 
