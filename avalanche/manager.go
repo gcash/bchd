@@ -357,10 +357,7 @@ func (am *AvalancheManager) BlockConnected(block *bchutil.Block) {
 func (am *AvalancheManager) handleBlockConnected(block *bchutil.Block) {
 	for _, tx := range block.Transactions() {
 		txid := tx.Hash()
-		delete(am.voteRecords, *txid)
-		for _, in := range tx.MsgTx().TxIn {
-			delete(am.outpoints, in.PreviousOutPoint)
-		}
+		am.removeVoteRecords(tx)
 		delete(am.rejectedTxs, *txid)
 	}
 }
@@ -526,7 +523,6 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 							dsvr, ok := am.voteRecords[*dsid]
 							if ok {
 								dsvr.confidence = 0
-								am.voteRecords[*dsid] = dsvr
 							}
 						}
 					}
@@ -537,7 +533,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		switch vr.status() {
 		case StatusFinalized:
 			if am.notificationCallback != nil {
-				am.notificationCallback(vr.txdesc.Tx, time.Since(vr.timestamp))
+				go am.notificationCallback(vr.txdesc.Tx, time.Since(vr.timestamp))
 			}
 			log.Infof("Avalanche finalized transaction %s in %s", inv.Hash.String(), time.Since(vr.timestamp))
 			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
@@ -551,14 +547,14 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 }
 
 // removeVoteRecords recursively removes the vote record and any redeemers
-func (am *AvalancheManager) removeVoteRecords(txdesc *TxDesc) {
-	txHash := txdesc.Tx.Hash()
+func (am *AvalancheManager) removeVoteRecords(tx *bchutil.Tx) {
+	txHash := tx.Hash()
 	// Remove any transactions which rely on this one.
-	for i := uint32(0); i < uint32(len(txdesc.Tx.MsgTx().TxOut)); i++ {
+	for i := uint32(0); i < uint32(len(tx.MsgTx().TxOut)); i++ {
 		prevOut := wire.OutPoint{Hash: *txHash, Index: i}
 		if txRedeemers, exists := am.outpoints[prevOut]; exists {
 			for _, redeemer := range txRedeemers {
-				am.removeVoteRecords(redeemer)
+				am.removeVoteRecords(redeemer.Tx)
 			}
 		}
 	}
@@ -572,7 +568,7 @@ func (am *AvalancheManager) removeVoteRecords(txdesc *TxDesc) {
 			if ok {
 				for _, ds := range dstxs {
 					if !txHash.IsEqual(ds.Tx.Hash()) {
-						am.removeVoteRecords(ds)
+						am.removeVoteRecords(ds.Tx)
 					}
 				}
 			}
