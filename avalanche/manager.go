@@ -207,23 +207,21 @@ func (am *AvalancheManager) Query(req *wire.MsgAvaRequest) *wire.MsgAvaResponse 
 }
 
 func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *wire.MsgAvaResponse) {
-	resp := wire.NewMsgAvaResponse(req.RequestID, nil)
+	votes := make([]byte, 0, len(req.InvList))
 	for i := 0; i < len(req.InvList); i++ {
 		txid := req.InvList[i].Hash
 		if _, exists := am.rejectedTxs[txid]; exists {
-			vr := wire.NewVoteRecord(false, &txid)
-			resp.AddVoteRecord(vr)
+			votes[i] = 0x00 // No vote
 			continue
 		}
 		record, ok := am.voteRecords[txid]
 		if ok {
 			// We're only going to vote for items we have a record for.
-			vote := false
+			vote := byte(0x00) // No vote
 			if record.isAccepted() {
-				vote = true
+				vote = 0x01 // Yes vote
 			}
-			vr := wire.NewVoteRecord(vote, &txid)
-			resp.AddVoteRecord(vr)
+			votes[i] = vote
 		} else {
 			// TODO: we need to download this transaction from the peer and give it to
 			// the mempool for processing. If it is a double spend of a transaction
@@ -231,8 +229,10 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 			// after avalanche finishes on the first transaction. This is going to add
 			// some complexity as we don't want to allow an infinite number of double
 			// spends into memory as we do this.
+			votes[i] = 0x80 // Neutral vote
 		}
 	}
+	resp := wire.NewMsgAvaResponse(req.RequestID, votes, nil)
 	sig, err := am.privKey.Sign(resp.SerializeForSignature())
 	if err != nil {
 		log.Error("Error signing response: %s", err.Error())
@@ -436,7 +436,6 @@ func (am *AvalancheManager) getInvsForNextPoll() []wire.InvVect {
 			continue
 		}
 		r.inflightRequests++
-		am.voteRecords[txid] = r
 
 		// We don't have a decision, we need more votes.
 		invs = append(invs, *wire.NewInvVect(wire.InvTypeTx, &txid))
@@ -484,27 +483,22 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 	}
 
 	invs := r.GetInvs()
-	for _, inv := range invs {
-		vr, ok := am.voteRecords[inv.Hash]
-		if ok {
-			vr.inflightRequests--
-		}
-	}
-	votes := resp.VoteList
 
-	for _, v := range votes {
-		_, ok := invs[v.Hash]
-		if !ok {
-			log.Debugf("Received avalanche response from peer %s with an unrequested vote", p)
-			return
-		}
-		vr, ok := am.voteRecords[v.Hash]
+	if len(resp.Votes) != len(invs) {
+		log.Debugf("Received avalanche response from peer %s with incorrect number of votes", p)
+	}
+
+	i := -1
+	for _, inv := range invs {
+		i++
+		vr, ok := am.voteRecords[inv.Hash]
 		if !ok {
 			// We are not voting on this anymore
 			continue
 		}
+		vr.inflightRequests--
 
-		if !vr.regsiterVote(v.Vote) {
+		if !vr.regsiterVote(resp.Votes[i]) {
 			// This vote did not provide any extra information
 			continue
 		}
@@ -518,7 +512,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 				if ok {
 					for _, ds := range doublespends {
 						dsid := ds.Tx.Hash()
-						if !v.Hash.IsEqual(dsid) {
+						if !inv.Hash.IsEqual(dsid) {
 							dsvr, ok := am.voteRecords[*dsid]
 							if ok {
 								dsvr.confidence = 0
@@ -535,12 +529,12 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 			if am.notificationCallback != nil {
 				am.notificationCallback(vr.txdesc.Tx, time.Since(vr.timestamp))
 			}
-			log.Infof("Avalanche finalized transaction %s in %s", v.Hash.String(), time.Since(vr.timestamp))
+			log.Infof("Avalanche finalized transaction %s in %s", inv.Hash.String(), time.Since(vr.timestamp))
 			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
 			// TODO: double spends of the finalized transaction should be removed from the mempool.
 		case StatusRejected:
-			log.Infof("Avalanche rejected transaction %s", v.Hash.String())
-			am.rejectedTxs[v.Hash] = struct{}{}
+			log.Infof("Avalanche rejected transaction %s", inv.Hash.String())
+			am.rejectedTxs[inv.Hash] = struct{}{}
 			// TODO: remove tx and descendants from mempool
 		}
 	}

@@ -52,15 +52,18 @@ func (vr VoteRecord) hasFinalized() bool {
 
 // regsiterVote adds a new vote for an item and update confidence accordingly.
 // Returns true if the acceptance or finalization state changed.
-func (vr *VoteRecord) regsiterVote(vote bool) bool {
-	vr.votes = (vr.votes << 1) | boolToUint8(vote)
-	vr.consider = (vr.consider << 1) | boolToUint8(vote)
+func (vr *VoteRecord) regsiterVote(vote uint8) bool {
+	vr.votes = (vr.votes << 1) | boolToUint8(vote == 0)
+	vr.consider = (vr.consider << 1) | boolToUint8(int8(vote) >= 0)
 
 	yes := countBits8(vr.votes&vr.consider&0xff) > 6
 
 	// The round is inconclusive
-	if !yes && countBits8((-vr.votes-1)&vr.consider&0xff) <= 6 {
-		return false
+	if !yes {
+		no := countBits8((-vr.votes-1)&vr.consider&0xff) > 6
+		if !no {
+			return false
+		}
 	}
 
 	// Vote is conclusive and agrees with our current state
