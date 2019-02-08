@@ -67,34 +67,27 @@ The following transactions should *not* be included.
 | Field Size | Description      | Data Type     | Comments                                            |
 |------------|------------------|---------------|-----------------------------------------------------|
 | 8          | request ID       | uint64        | The request ID taken from the avarequest message    |
-| 1+         | count            | var_int       | The number of vote records included in this message |
-| 33x?       | vote records     | []vote_record | A list of vote records                              |
+| 1+         | count            | var_int       | The number of votes included in this message        |
+| ?          | votes            | []byte        | A byte array of votes. One byte per vote.           |
 | 1+         | signature length | var_int       | The varint signature length                         |
 | ?          | signature        | []byte        | A signature for this message                        |
 
-The `vote_record` data structure is as follows:
-
-| Field Size | Description | Data Type | Comments                                                                 |
-|------------|-------------|-----------|--------------------------------------------------------------------------|
-| 1          | vote        | bool      | True represents a vote in the affirmative. False a vote in the negative. |
-| 32         | hash        | [32]byte  | The hash if the item being voted on                                      |
-
 The request ID value should be copied from the `avarequest` message this message is responding to. The responding node
-should attach a `vote_record` object for each item they wish to vote for regardless of whether they are voting in the 
-affirmative or negative. The following describes voting behavior:
+must append a one byte vote to `votes` for each inv in the `avarequest`. The votes should be in the same order as the `invs`.
+
+The following describes voting behavior:
  
-- The node should vote yes for a transaction if the transaction is valid and is currently marked by avalanche as `accepted`.
-- The node should vote no for a transaction if the transaction is invalid or if it's not currently marked by avalanche as `accepted`.
-- A node should abstain from voting for a transaction if it does not know about the transaction. The reason for this requirement is because
-we don't want to block the response while the node attempts to download missing inventory. If we were to vote no for transactions we do not
-know about then we run the risk of a transaction finalizing a no by avalanche due to propagation delays. Empirically this was happening
-with our implementation which is why it was switching to having the ability to abstain.
+- The node should vote yes (0x01) for a transaction if the transaction is valid and is currently marked by avalanche as `accepted`.
+- The node should vote no (0x00) for a transaction if the transaction is invalid or if it's not currently marked by avalanche as `accepted`.
+- A node should vote neutral (0x80) for a transaction if it does not know about the transaction. The reason for this requirement is because
+we don't want to block the response while the node attempts to download missing inventory.
 
 // TODO: obviously we can reduce the size of the response here by not sending back the full txid. Ideally we would just send
 back a bitfield with each bit representing a yes or no vote for each inv, however doing it this way does not allow us
 to abstain. Sending two bits per inv would probably work. 
 
-The signature covers `request ID + vote_records[]` where the vote records are just serialized one after another.
+The signature covers `cat(request ID, votes)`. A node must reject (and probably ban) a peer which returned an `avaresponse` with
+a bad signature.
 
 #### Node Operation
 

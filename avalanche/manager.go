@@ -207,7 +207,7 @@ func (am *AvalancheManager) Query(req *wire.MsgAvaRequest) *wire.MsgAvaResponse 
 }
 
 func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *wire.MsgAvaResponse) {
-	votes := make([]byte, 0, len(req.InvList))
+	votes := make([]byte, len(req.InvList))
 	for i := 0; i < len(req.InvList); i++ {
 		txid := req.InvList[i].Hash
 		if _, exists := am.rejectedTxs[txid]; exists {
@@ -229,6 +229,7 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 			// after avalanche finishes on the first transaction. This is going to add
 			// some complexity as we don't want to allow an infinite number of double
 			// spends into memory as we do this.
+
 			votes[i] = 0x80 // Neutral vote
 		}
 	}
@@ -498,6 +499,10 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 		}
 		vr.inflightRequests--
 
+		if vr.hasFinalized() {
+			continue
+		}
+
 		if !vr.regsiterVote(resp.Votes[i]) {
 			// This vote did not provide any extra information
 			continue
@@ -532,7 +537,7 @@ func (am *AvalancheManager) handleRegisterVotes(p *peer.Peer, resp *wire.MsgAvaR
 			log.Infof("Avalanche finalized transaction %s in %s", inv.Hash.String(), time.Since(vr.timestamp))
 			// TODO: the finalized transaction should be added to the mempool if it isn't already in there
 			// TODO: double spends of the finalized transaction should be removed from the mempool.
-		case StatusRejected:
+		case StatusInvalid:
 			log.Infof("Avalanche rejected transaction %s", inv.Hash.String())
 			am.rejectedTxs[inv.Hash] = struct{}{}
 			// TODO: remove tx and descendants from mempool
