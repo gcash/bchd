@@ -492,11 +492,6 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Signal the sync manager this peer is a new sync candidate.
 	sp.server.syncManager.NewPeer(sp.Peer, nil)
 
-	// Signal the avalanche manager this peer is an avalanche peer
-	if sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
-		sp.server.avalancheManager.NewPeer(sp.Peer)
-	}
-
 	// Choose whether or not to relay transactions before a filter command
 	// is received.
 	sp.setDisableRelayTx(msg.DisableRelayTx)
@@ -504,6 +499,15 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Add valid peer to the server.
 	sp.server.AddPeer(sp)
 	return nil
+}
+
+// OnAvaPubkey is invoked when a remote peer sends us their avalanche pubkey.
+// At this point we notify the avalanche manager of the connection.
+func (sp *serverPeer) OnAvaPubkey(p *peer.Peer, _ *wire.MsgAvaPubkey) {
+	// Signal the avalanche manager this peer is an avalanche peer
+	if sp.Services()&wire.SFNodeAvalanche == wire.SFNodeAvalanche {
+		sp.server.avalancheManager.NewPeer(sp.Peer)
+	}
 }
 
 // OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -2054,6 +2058,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 	return &peer.Config{
 		Listeners: peer.MessageListeners{
 			OnVersion:      sp.OnVersion,
+			OnAvaPubkey:    sp.OnAvaPubkey,
 			OnMemPool:      sp.OnMemPool,
 			OnTx:           sp.OnTx,
 			OnBlock:        sp.OnBlock,

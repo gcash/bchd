@@ -248,6 +248,11 @@ func (am *AvalancheManager) NewPeer(p *peer.Peer) {
 }
 
 func (am *AvalancheManager) handleNewPeer(p *peer.Peer) {
+	for peer := range am.peers {
+		if peer.AvalanchePubkey().IsEqual(p.AvalanchePubkey()) {
+			return
+		}
+	}
 	log.Infof("New avalanche peer %s (%s)", p, p.UserAgent())
 	am.peers[p] = struct{}{}
 }
@@ -260,7 +265,7 @@ func (am *AvalancheManager) DonePeer(p *peer.Peer) {
 func (am *AvalancheManager) handleDonePeer(p *peer.Peer) {
 	_, exists := am.peers[p]
 	if !exists {
-		log.Warnf("Received done avalanche peer message for unknown peer %s", p)
+		log.Debugf("Received done avalanche peer message for unknown peer %s", p)
 		return
 	}
 
