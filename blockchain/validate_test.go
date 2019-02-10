@@ -7,6 +7,7 @@ package blockchain
 import (
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,14 +244,6 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	}
 	defer teardownFunc()
 
-	// Since we're not dealing with the real block chain, set the coinbase
-	// maturity to 1.
-	chain.TstSetCoinbaseMaturity(1)
-
-	chain.chainParams.UahfForkHeight = 2
-	chain.chainParams.ReduceMinDifficulty = true
-	chain.chainParams.MinDiffReductionTime = time.Second
-
 	// Load blocks #1 and #2 with transactions,
 	// then 144 empty blocks to make room for UAHF difficulty adjustment window,
 	// for a total of genesis + 146 blocks.
@@ -259,114 +252,162 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error loading file: %v\n", err)
 	}
-	easiestBits := chain.chainParams.PowLimitBits
 	blocks := make([]*wire.MsgBlock, 146)
 	blocks[0] = contentBlocks[1].MsgBlock()
 	blocks[1] = contentBlocks[2].MsgBlock()
+	tip := blocks[1]
+	baseBlock := blocks[1]
 	for i := 2; i < 146; i++ {
-		prevHash := blocks[i-1].BlockHash()
-		prevMRoot := blocks[i-1].Header.MerkleRoot
-		blocks[i] = wire.NewMsgBlock(wire.NewBlockHeader(
-			1, &prevHash, &prevMRoot, easiestBits, 2))
-		err := blocks[i].AddTransaction(blocks[i-1].Transactions[0].Copy())
+		blocks[i], err = newTestBlock(baseBlock, tip, 1, 1, 1)
 		if err != nil {
 			t.Fatalf("Unexpected error building difficulty adjustment "+
 				"window block %d: %v", i, err)
 		}
-		setValidMerkleRoot(blocks[i])
-		solveBlock(&blocks[i].Header)
-	}
-	// add all the blocks to the blockchain leading up to the test block
-	for i, wireBlock := range blocks {
-		b := bchutil.NewBlock(wireBlock)
-		b.SetHeight(int32(i) + 1)
-		_, _, err := chain.ProcessBlock(b, BFNone)
-		if err != nil {
-			t.Fatalf("TestSigOpsLimitsWithMultiMBBlocks: Received unexpected error "+
-				"processing block %d: %v", i+1, err)
-		}
+		tip = blocks[i]
 	}
 
-	// Setup block 3 to test sigOps limits
-	// Summary of block 3 from file:
-	// coinbase: 1 sigOp     <=1MB
-	// tx1:      1 sigOp     <=1MB
-	// tx2:      1 sigOp     <=1MB
-	// block:    3 sigOps    < 1MB
-	sigOpsBlock := contentBlocks[3].MsgBlock()
-	sigOpsBlock.Header.Timestamp = blocks[145].Header.Timestamp.Add(time.Second)
-	sigOpsBlock.Header.PrevBlock = blocks[145].Header.BlockHash()
-
-	// Add 20k sigOps to the coinbase to break the sigOps per-tx limit
-	// and
-	// Add just enough NOOPs to the coinbase to
-	// ensure that we are not breaking tx size limits and
-	// ensure that we are validating with >1MB block rules:
-	// coinbase: 20k + 1 sigOps (fail)   <=1MB (ok)
-	// tx1:            1 sigOp  (ok)     <=1MB (ok)
-	// tx2:            1 sigOp  (ok)     <=1MB (ok)
-	// block:    20k + 3 sigOps (ok)     > 1MB (ok)
-
-	coinbaseOut := sigOpsBlock.Transactions[0].TxOut[0]
-	coinbaseOut.PkScript = append(coinbaseOut.PkScript,
-		repeatScript(979338, txscript.OP_NOP)...)
-	coinbaseOut.PkScript = append(coinbaseOut.PkScript,
-		repeatScript(20000, txscript.OP_CHECKSIG)...)
-
-	validateBigBlock := func(mb *wire.MsgBlock, expectSuccess bool) {
-		setValidMerkleRoot(mb)
-		mb.Header.Bits = easiestBits
-		solveBlock(&mb.Header)
+	// Tests start here.
+	// We ensure blocks >1MB and then pass or break exactly one consensus limit at a time
+	validateBigBlock := func(mb *wire.MsgBlock) error {
 		var txSize, blockSize int
+
+		// Confirm that we never fail due to breaking tx size.
 		for i, tx := range mb.Transactions {
 			txSize = tx.SerializeSize()
 			if txSize > oneMegabyte {
 				t.Fatalf("expected tx %d to be <1MB but got %d bytes", i, txSize)
 			}
 		}
-		blockSize = mb.SerializeSize()
-		if blockSize <= oneMegabyte {
-			t.Fatalf("expected block to be >1MB but got %d bytes", blockSize)
-		}
-		b := bchutil.NewBlock(mb)
-		b.SetHeight(147)
-		// TODO: I could not find any way to build on the main chain without incurring
-		//       heavy solve costs. Using regressionnet means this becomes just an extension
-		//       of fullblocktests (which should be done also)
-		_, _, err = chain.ProcessBlock(b, BFNone)
-		//err = chain.CheckConnectBlockTemplate(b)
-		if !expectSuccess && (err == nil) {
-			t.Fatal("TestSigOpsLimitsWithMultiMBBlocks: Expected to fail validation " +
-				" but got no error")
-		} else if expectSuccess && (err != nil) {
-			t.Fatalf("TestSigOpsLimitsWithMultiMBBlocks: Expected to validate "+
-				" but got: %v", err)
-		}
-	}
-	validateBigBlock(sigOpsBlock, false)
 
-	// Set coinbase to exactly 20000 so we are not failing due to the coinbase transaction
-	// and
-	// Add to 19,999 sigOps to transaction 1:
+		// Confirm that the block is always in the interval (1MB, 2MB] so we are testing big block rules
+		blockSize = mb.SerializeSize()
+		if (blockSize <= oneMegabyte) || (blockSize > 2*oneMegabyte) {
+			t.Fatalf("expected block to be in the interval  (1MB, 2MB] but got %d bytes", blockSize)
+		}
+
+		b := bchutil.NewBlock(mb)
+		_, _, err = chain.ProcessBlock(b, BFNone)
+		return err
+	}
+
+	// Use the original block 3 content to test sigOps limits
+	// Summary of block 3 from file:
+	// coinbase: 1 sigOps    <=1MB
+	// tx1:      1 sigOps    <=1MB
+	// tx2:      1 sigOps    <=1MB
+	// block:    3 sigOps    < 1MB
+	baseBlock = contentBlocks[3].MsgBlock()
+	// Add 3 * 400k NOOPs to get >1MB block without breaking Tx size limits
+	manyNoOps := repeatScript(400000, txscript.OP_NOP)
+	for _, tx := range baseBlock.Transactions {
+		tx.TxOut[0].PkScript = append(tx.TxOut[0].PkScript, manyNoOps...)
+	}
+
+	// 1. Pass at per-Tx sigOps limit
+	// coinbase:     20k sigOps (ok)     <=1MB (ok)
+	// tx1:            1 sigOps (ok)     <=1MB (ok)
+	// tx2:            1 sigOps (ok)     <=1MB (ok)
+	// block:    20k + 2 sigOps (ok)     > 1MB (ok)
+	atTxLimit, err := newTestBlock(baseBlock, tip, 20000, 1, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
+	}
+	err = validateBigBlock(atTxLimit)
+	if err != nil {
+		t.Fatalf("Expected to validate but got: %v", err)
+	}
+	tip = atTxLimit
+
+	// 1. Fail at per-Tx sigOps limit +1
+	// coinbase: 20k + 1 sigOps (fail)   <=1MB (ok)
+	// tx1:            1 sigOps (ok)     <=1MB (ok)
+	// tx2:            1 sigOps (ok)     <=1MB (ok)
+	// block:    20k + 3 sigOps (ok)     > 1MB (ok)
+	overTxLimit, err := newTestBlock(baseBlock, tip, 20001, 1, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
+	}
+	err = validateBigBlock(overTxLimit)
+	if (err == nil) || !strings.Contains(err.Error(), "too many sigops") {
+		t.Fatalf("Expected to fail with sigops error but got %v", err)
+	}
+
+	// 2. Pass at per-block sigOps limit
+	// coinbase:     20k sigOps (ok)     <=1MB (ok)
+	// tx1:        19999 sigOps (ok)     <=1MB (ok)
+	// tx2:            1 sigOp  (ok)     <=1MB (ok)
+	// block:        40k sigOps (ok)     > 1MB (ok)
+	atBlockLimit, err := newTestBlock(baseBlock, tip, 20000, 19999, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
+	}
+	err = validateBigBlock(atBlockLimit)
+	if err != nil {
+		t.Fatalf("Expected to validate but got: %v", err)
+	}
+	tip = atTxLimit
+
+	// 2. Fail at per-block sigOps limit +1
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
 	// tx1:          20k sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOp  (ok)     <=1MB (ok)
 	// block:    40k + 1 sigOps (fail)   > 1MB (ok)
-	coinbaseOut.PkScript = coinbaseOut.PkScript[:len(coinbaseOut.PkScript)-1]
-	tx1Out := sigOpsBlock.Transactions[1].TxOut[0]
-	tx1Out.PkScript = append(tx1Out.PkScript,
-		repeatScript(20000, txscript.OP_CHECKSIGVERIFY)...)
-	validateBigBlock(sigOpsBlock, false)
-
-	// Finally set tx1 to 19,999 sigOps so that we should validate at the limit
-	// of both transaction and block sigOps:
-	// coinbase:    20k sigOps (ok)     <=1MB (ok)
-	// tx1:      19,999 sigOps (ok)     <=1MB (ok)
-	// tx2:           1 sigOp  (ok)     <=1MB (ok)
-	// block:       40k sigOps (ok)     > 1MB (ok)
-	tx1Out.PkScript = tx1Out.PkScript[:len(tx1Out.PkScript)-1]
-	validateBigBlock(sigOpsBlock, true)
+	overBlockLimit, err := newTestBlock(baseBlock, tip, 20000, 20000, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
+	}
+	err = validateBigBlock(overBlockLimit)
+	if (err == nil) || !strings.Contains(err.Error(), "asdf") {
+		t.Fatalf("Expected to fail with sigops error but got %v", err)
+	}
 }
+
+func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps int) (*wire.MsgBlock, error) {
+	prevHash := tip.Header.BlockHash()
+	prevMRoot := tip.Header.MerkleRoot
+	easyBits := chaincfg.RegressionNetParams.PowLimitBits
+	addSigOps := map[int]int {
+		0: coinbaseSigOps-1,
+		1: tx1SigOps-1,
+		2: tx2SigOps-1,
+	}
+
+	// make a new valid block with duplicate transactions of the base block
+	dup := wire.NewMsgBlock(wire.NewBlockHeader(
+		1, &prevHash, &prevMRoot, easyBits, 2))
+	dup.Header.Timestamp = tip.Header.Timestamp.Add(time.Second)
+	for i, tx := range base.Transactions {
+		err := dup.AddTransaction(tx.Copy())
+		if err != nil {
+			return nil, err
+		}
+		// also add the target number of sigOps
+		dupTxOut := dup.Transactions[i].TxOut[0]
+		dupTxOut.PkScript = append(dupTxOut.PkScript,
+			repeatScript(addSigOps[i], txscript.OP_CHECKSIG)...)
+	}
+
+	setValidMerkleRoot(dup)
+	solveBlock(&dup.Header)
+	return dup, nil
+}
+
+//func cloneBlock(b *wire.MsgBlock, easiestBits uint32) (*wire.MsgBlock, error) {
+//	prevHash := b.BlockHash()
+//	prevMRoot := b.Header.MerkleRoot
+//	dup := wire.NewMsgBlock(wire.NewBlockHeader(
+//		1, &prevHash, &prevMRoot, easiestBits, 2))
+//	for _, tx := range b.Transactions {
+//		err := dup.AddTransaction(tx.Copy())
+//		if err != nil {
+//			return nil, err
+//		}
+//	}
+//	setValidMerkleRoot(dup)
+//	solveBlock(&dup.Header)
+//
+//	return dup, nil
+//}
 
 // calcMerkleRoot recalculates the merkle root.
 func setValidMerkleRoot(b *wire.MsgBlock) {
