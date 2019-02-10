@@ -366,10 +366,10 @@ func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps
 	prevHash := tip.Header.BlockHash()
 	prevMRoot := tip.Header.MerkleRoot
 	easyBits := chaincfg.RegressionNetParams.PowLimitBits
-	addSigOps := map[int]int {
-		0: coinbaseSigOps-1,
-		1: tx1SigOps-1,
-		2: tx2SigOps-1,
+	addSigOps := map[int]int{
+		0: coinbaseSigOps - 1,
+		1: tx1SigOps - 1,
+		2: tx2SigOps - 1,
 	}
 
 	// make a new valid block with duplicate transactions of the base block
