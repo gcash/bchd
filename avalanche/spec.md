@@ -24,7 +24,12 @@ If a node receives any avalanche message (from below) from a peer not signaling 
 | ?          | signature        | []byte    | A signature covering the remote peer's version nonce |
 
 The `avapubkey` message must be sent to any remote peer signaling `NODE_AVALANCHE` after the receipt of the `version` message. The message consists of
-a compressed secp256k1 public key and a signature covering the nonce found in the remote peer's version message. The Bitcoin protocol does not
+a compressed secp256k1 public key and a signature covering the nonce found in the remote peer's version message.
+
+> What is the purpose of the pubkey?  Sybil resistance?  We need to know how this works.
+> Sybil attack vectors are: compromise local DNS (seeder), compromise WAN add/drop mux to isolate and MITM your data via CALEA, P2P -- outlast other peers and only recommend your sybils.
+
+The Bitcoin protocol does not
 require that the nonce values be unique per remote peer however this is recommend so that nodes can detect connections to self.
 However, this specification does require nodes signaling `NODE_AVALANCHE` to use unique nonces so that the nonce can serve
 as an appropriate challenge for the remote peer to prove they actually own the private key associated with the public key they send.
@@ -79,6 +84,9 @@ The following describes voting behavior:
  
 - The node should vote yes (0x01) for a transaction if the transaction is valid and is currently marked by avalanche as `Accepted`.
 - The node should vote no (0x00) for a transaction if the transaction is invalid or if it's currently marked by avalanche as `Rejected`.
+
+> If the node does not know about the transaction but it is a doublespend of something that is "Accepted", the node would need to respond with `Rejected`.
+
 - A node should vote neutral (0x80) for a transaction if it does not know about the transaction. The reason for this requirement is because
 we don't want to block the response while the node attempts to download missing inventory.
 
@@ -86,6 +94,9 @@ we don't want to block the response while the node attempts to download missing 
 
 The signature covers `cat(request ID, votes)`. A node must reject (and probably ban) a peer which returned an `avaresponse` with
 a bad signature.
+
+> Signature is expensive.  You are allowing attackers to force this node to do an ECDSA sig operation per request.  It would be easy for an attacker to chew up all available CPU
+> Consider forcing requester to do a gratituous signature or POW to get one back
 
 ### Node Operation
 
@@ -173,6 +184,9 @@ Assuming there are not any `no` votes then we expect it to take 134 queries to f
 take a minimum of 1.34 seconds to send off enough requests to finalize the transaction. Add network latency on top of that and we expect most transactions
 to finalize in 2 to 3 seconds.
 
+> So 134 round trip messages?  Given that transactions currently need 1 round trip, this will have a major effect on scalability.
+> Are we effectively trading CPU POW for network Proof-of-Bandwidth?
+
 If a transaction flips state from `Rejected` to `Accepted` the node must mark all double spends of that transaction as `Rejected` and
 reset their confidence counters to zero.
 
@@ -183,3 +197,11 @@ When `Rejected` transactions are finalized they should be removed from the mempo
 
 Because the event loop is firing off requests every 10ms it will send more requests than are required to finalized the transaction. If any responses arrive
 after the transaction has been finalized they should be ignored and not affect the state of the transaction.
+
+> This architecture has censorship issues
+> In BTC, nodes can attempt to censor transactions, by orphaning a block but they risk losing money if the majority does not also censor the tx.
+> And a clear record of the censorship exists in the form of the orphaned chain, so although the money did not move, in an important sense censorship cannot happen, since censorship is most effective when invisible.
+> But it seems like with this voting protocol a majority of nodes can vote "Rejected" to quite silently implement censorship.
+
+> A critical part of any Avalanche proposal is how nodes are chosen since Avalanche is susceptible to sybil attacks.  Regardless, we definitely need this part to be fully specified.  I heard rumors of POW being used...
+
