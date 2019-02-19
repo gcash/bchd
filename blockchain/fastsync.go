@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -218,9 +219,13 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) error {
 		dialFunc = proxy.Dial
 	}
 	tr := &http.Transport{
-		Dial: dialFunc,
+		Dial:            dialFunc,
+		TLSClientConfig: &tls.Config{},
+		TLSNextProto:    make(map[string]func(string, *tls.Conn) http.RoundTripper, 0),
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{
+		Transport: tr,
+	}
 	for _, src := range sources {
 		resp, err := client.Get(src)
 		if err != nil {
