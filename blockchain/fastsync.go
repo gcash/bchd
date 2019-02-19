@@ -221,7 +221,7 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) error {
 	tr := &http.Transport{
 		Dial:            dialFunc,
 		TLSClientConfig: &tls.Config{},
-		TLSNextProto:    make(map[string]func(string, *tls.Conn) http.RoundTripper, 0),
+		TLSNextProto:    make(map[string]func(string, *tls.Conn) http.RoundTripper),
 	}
 	client := &http.Client{
 		Transport: tr,
