@@ -218,9 +218,9 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, 
 	var fileName string
 
 	for _, src := range sources {
+		log.Infof("Downloading UTXO set from %s", src)
 		retry.Do(
 			func() error {
-				log.Infof("Downloading UTXO set from %s", src)
 				resp, err := grab.Get(pth, src)
 				if err != nil {
 					if strings.Contains(err.Error(), "connection refused") {
