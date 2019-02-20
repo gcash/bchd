@@ -4,18 +4,20 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/btcsuite/go-socks/socks"
+	"io"
+	"math"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"io"
-	"math"
-	"net"
-	"net/http"
-	"os"
-	"path"
-	"time"
+
+	"github.com/avast/retry-go"
+	"github.com/btcsuite/go-socks/socks"
+	"github.com/cavaliercoder/grab"
 )
 
 const numWorkers = 8
@@ -45,13 +47,13 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		proxy = &socks.Proxy{Addr: proxyAddr}
 	}
 
-	tmpPath := path.Join(os.TempDir(), "bchd-utxo.dat")
-	err := downloadUtxoSet(checkpoint.UtxoSetSources, proxy, tmpPath)
+	tmpPath := os.TempDir()
+	fileName, err := downloadUtxoSet(checkpoint.UtxoSetSources, proxy, tmpPath)
 	if err != nil {
 		log.Errorf("Error downloading UTXO set: %s", err.Error())
 		return err
 	}
-	file, err := os.Open(tmpPath)
+	file, err := os.Open(fileName)
 	if err != nil {
 		log.Errorf("Error opening temp UTXO file: %s", err.Error())
 		return err
@@ -212,34 +214,32 @@ func worker(cache *utxoCache, jobs <-chan []byte, results chan<- *result) {
 // downloadUtxoSet will attempt to connect to make an HTTP GET request to the
 // provided sources one at a time and download the UTXO set to the provided path.
 // If a proxy is provided it will use it for the HTTP connection.
-func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) error {
-	dialFunc := net.Dial
-	if proxy != nil {
-		dialFunc = proxy.Dial
-	}
-	tr := &http.Transport{
-		Dial: dialFunc,
-	}
-	client := &http.Client{Transport: tr}
+func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, error) {
+	var fileName string
+
 	for _, src := range sources {
-		resp, err := client.Get(src)
-		if err != nil {
-			continue
+		retry.Do(
+			func() error {
+				log.Infof("Downloading UTXO set from %s", src)
+				resp, err := grab.Get(pth, src)
+				if err != nil {
+					if strings.Contains(err.Error(), "connection refused") {
+						return nil
+					}
+					return err
+				}
+
+				fileName = resp.Filename
+				log.Info("UTXO download complete. Verifying integrity...")
+
+				return nil
+			},
+			retry.Attempts(3),
+		)
+		if fileName != "" {
+			return fileName, nil
 		}
-		if resp.StatusCode != http.StatusOK {
-			continue
-		}
-		file, err := os.Create(pth)
-		if err != nil {
-			return err
-		}
-		log.Infof("Downloading UTXO set from %s", src)
-		_, err = io.Copy(file, resp.Body)
-		if err != nil {
-			return err
-		}
-		log.Info("UTXO download complete. Verifying integrity...")
-		return file.Close()
 	}
-	return AssertError("all UTXO sources are unavailable")
+
+	return "", AssertError("all UTXO sources are unavailable")
 }

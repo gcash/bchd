@@ -10,6 +10,14 @@
   version = "v1.0.1"
 
 [[projects]]
+  digest = "1:1c9dffe45896d21dc8e183fdc3cdb405249e6c7dd3d00792e534af3597d5e4fc"
+  name = "github.com/avast/retry-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "08d411bf8302219fe47ca04dbdf9de892010c5e5"
+  version = "v2.2.0"
+
+[[projects]]
   branch = "master"
   digest = "1:1e6b2f7aa98b082c30a1303c29a702c369b2ec6d86b74a599bc8bbe2333db299"
   name = "github.com/btcsuite/go-socks"
@@ -67,6 +75,14 @@
   pruneopts = "UT"
   revision = "f8fb11f83f7e860e3769a08e6811d1b399a43722"
   version = "v1.0.0"
+
+[[projects]]
+  digest = "1:92af3af7106897c682e665f62136f343708e293e62792578a5753af0473c7975"
+  name = "github.com/cavaliercoder/grab"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "2c8601de6d9ac140430fd4c9de28509a0b855af5"
+  version = "v2.0.0"
 
 [[projects]]
   branch = "master"
@@ -136,6 +152,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/avast/retry-go",
     "github.com/btcsuite/go-socks/socks",
     "github.com/btcsuite/goleveldb/leveldb",
     "github.com/btcsuite/goleveldb/leveldb/comparer",
@@ -148,6 +165,7 @@
     "github.com/btcsuite/winsvc/eventlog",
     "github.com/btcsuite/winsvc/mgr",
     "github.com/btcsuite/winsvc/svc",
+    "github.com/cavaliercoder/grab",
     "github.com/davecgh/go-spew/spew",
     "github.com/gcash/bchlog",
     "github.com/gcash/bchutil",
