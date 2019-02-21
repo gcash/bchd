@@ -10,6 +10,7 @@ import (
 	"container/list"
 	"fmt"
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -218,6 +219,9 @@ type BlockChain struct {
 	// isPruned is set to true if the chain was ever run in prune mode or fast
 	// sync mode.
 	isPruned bool
+
+	// fastSyncDataDir is the directory used to download the UTXO set.
+	fastSyncDataDir string
 
 	// fastSyncDone chan is used to signal that the UTXO set download has
 	// finished.
@@ -2097,6 +2101,10 @@ type Config struct {
 	// checkpoint.
 	FastSync bool
 
+	// FastSyncDataDir is the download directory for the UTXO set. If this
+	// isn't set, it is defaulted to TempDir.
+	FastSyncDataDir string
+
 	// Proxy is ip:port of an optional socks5 proxy to use when downloading
 	// the UTXO set in fast sync mode.
 	Proxy string
@@ -2116,6 +2124,11 @@ func New(config *Config) (*BlockChain, error) {
 	}
 	if config.ExcessiveBlockSize < LegacyMaxBlockSize {
 		return nil, AssertError("blockchain.New excessive block size set lower than LegacyBlockSize")
+	}
+
+	// Default to TempDir if not set.
+	if config.FastSyncDataDir == "" {
+		config.FastSyncDataDir = os.TempDir()
 	}
 
 	// Generate a checkpoint by height map from the provided checkpoints
@@ -2162,6 +2175,7 @@ func New(config *Config) (*BlockChain, error) {
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 		pruneMode:           config.Prune,
 		pruneDepth:          config.PruneDepth,
+		fastSyncDataDir:     config.FastSyncDataDir,
 		fastSyncDone:        make(chan struct{}),
 	}
 

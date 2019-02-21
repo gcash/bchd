@@ -47,8 +47,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		proxy = &socks.Proxy{Addr: proxyAddr}
 	}
 
-	tmpPath := os.TempDir()
-	fileName, err := downloadUtxoSet(checkpoint.UtxoSetSources, proxy, tmpPath)
+	fileName, err := downloadUtxoSet(checkpoint.UtxoSetSources, proxy, b.fastSyncDataDir)
 	if err != nil {
 		log.Errorf("Error downloading UTXO set: %s", err.Error())
 		return err
@@ -61,7 +60,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 
 	defer func() {
 		file.Close()
-		os.Remove(tmpPath)
+		os.Remove(fileName)
 	}()
 
 	var (
