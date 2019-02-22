@@ -218,7 +218,7 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, 
 
 	for _, src := range sources {
 		log.Infof("Downloading UTXO set from %s", src)
-		retry.Do(
+		err := retry.Do(
 			func() error {
 				// TODO: add support for proxies to grab.
 				resp, err := grab.Get(pth, src)
@@ -230,14 +230,23 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, 
 				}
 
 				fileName = resp.Filename
-				log.Info("UTXO download complete. Verifying integrity...")
 
 				return nil
 			},
-			retry.Attempts(3),
+			retry.Attempts(3), retry.OnRetry(func(n uint, err error) {
+				log.Errorf("Retrying UTXO set download (%d/3): %s", n, err.Error())
+			}),
 		)
+
 		if fileName != "" {
+			log.Info("UTXO download complete. Verifying integrity...")
 			return fileName, nil
+		}
+
+		if err != nil {
+			log.Errorf("Failed downloading UTXO set: %s", err.Error())
+		} else {
+			log.Errorf("Failed downloading UTXO set: %s", errors.New("connection refused"))
 		}
 	}
 
