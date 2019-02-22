@@ -232,10 +232,7 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, 
 			},
 			retry.Attempts(3),
 			retry.RetryIf(func(err error) bool {
-				if strings.Contains(err.Error(), "connection refused") {
-					return false
-				}
-				return true
+				return !strings.Contains(err.Error(), "connection refused")
 			}),
 		)
 
