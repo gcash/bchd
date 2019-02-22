@@ -10,7 +10,6 @@ import (
 	"container/list"
 	"fmt"
 	"math"
-	"os"
 	"sync"
 	"time"
 
@@ -2124,11 +2123,6 @@ func New(config *Config) (*BlockChain, error) {
 	}
 	if config.ExcessiveBlockSize < LegacyMaxBlockSize {
 		return nil, AssertError("blockchain.New excessive block size set lower than LegacyBlockSize")
-	}
-
-	// Default to TempDir if not set.
-	if config.FastSyncDataDir == "" {
-		config.FastSyncDataDir = os.TempDir()
 	}
 
 	// Generate a checkpoint by height map from the provided checkpoints
