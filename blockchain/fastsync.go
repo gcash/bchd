@@ -220,7 +220,6 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, 
 		log.Infof("Downloading UTXO set from %s", src)
 		err := retry.Do(
 			func() error {
-				// TODO: add support for proxies to grab.
 				resp, err := grab.Get(pth, src)
 				if err != nil {
 					return err
