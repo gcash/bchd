@@ -219,6 +219,9 @@ type BlockChain struct {
 	// sync mode.
 	isPruned bool
 
+	// fastSyncDataDir is the directory used to download the UTXO set.
+	fastSyncDataDir string
+
 	// fastSyncDone chan is used to signal that the UTXO set download has
 	// finished.
 	fastSyncDone chan struct{}
@@ -2097,6 +2100,10 @@ type Config struct {
 	// checkpoint.
 	FastSync bool
 
+	// FastSyncDataDir is the download directory for the UTXO set. If this
+	// isn't set, it is defaulted to TempDir.
+	FastSyncDataDir string
+
 	// Proxy is ip:port of an optional socks5 proxy to use when downloading
 	// the UTXO set in fast sync mode.
 	Proxy string
@@ -2162,6 +2169,7 @@ func New(config *Config) (*BlockChain, error) {
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 		pruneMode:           config.Prune,
 		pruneDepth:          config.PruneDepth,
+		fastSyncDataDir:     config.FastSyncDataDir,
 		fastSyncDone:        make(chan struct{}),
 	}
 
