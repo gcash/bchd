@@ -17,7 +17,7 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/btcsuite/go-socks/socks"
-	"github.com/cavaliercoder/grab"
+	"github.com/zquestz/grab"
 )
 
 const numWorkers = 8
@@ -215,6 +215,8 @@ func worker(cache *utxoCache, jobs <-chan []byte, results chan<- *result) {
 // If a proxy is provided it will use it for the HTTP connection.
 func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, error) {
 	var fileName string
+
+	grab.SetDefaultClientWithProxy(proxy)
 
 	for _, src := range sources {
 		log.Infof("Downloading UTXO set from %s", src)
