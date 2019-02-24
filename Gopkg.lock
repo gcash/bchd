@@ -77,14 +77,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:92af3af7106897c682e665f62136f343708e293e62792578a5753af0473c7975"
-  name = "github.com/cavaliercoder/grab"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2c8601de6d9ac140430fd4c9de28509a0b855af5"
-  version = "v2.0.0"
-
-[[projects]]
   branch = "master"
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
@@ -118,11 +110,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4bb169ce06341a7c5e6c9a6734b25c606f59e2f765703301f92d159cf999672e"
+  digest = "1:459271b8268fe541549b299f65160b1df5abe9ffef0426cc38607f771dbc6bb4"
   name = "github.com/jessevdk/go-flags"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5de817a9aa209ed35a164cb04aec82b7df1a47a6"
+  revision = "c0795c8afcf41dd1d786bebce68636c199b3bb45"
 
 [[projects]]
   branch = "master"
@@ -142,11 +134,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b69153653dbbbd9b2be2be289dfb94014284c00bb92e73b800f8f8c239c1ca80"
+  digest = "1:4479bb99d61e9c3c22493799b4651cacfba699fc6d468cf998ea71fa2ff33bab"
+  name = "github.com/zquestz/grab"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "abcee96e61b1d6def96b6616dec78a8ef12793e5"
+
+[[projects]]
+  branch = "master"
+  digest = "1:1fa95129371749532e2ac8b93a0016c549ebe77f25c6fad296b6ee271fae2fd6"
   name = "golang.org/x/crypto"
   packages = ["ripemd160"]
   pruneopts = "UT"
-  revision = "505ab145d0a99da450461ae2c1a9f6cd10d1f447"
+  revision = "ffb98f73852f696ea2bb21a617a5c4b3e067a439"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -165,7 +165,6 @@
     "github.com/btcsuite/winsvc/eventlog",
     "github.com/btcsuite/winsvc/mgr",
     "github.com/btcsuite/winsvc/svc",
-    "github.com/cavaliercoder/grab",
     "github.com/davecgh/go-spew/spew",
     "github.com/gcash/bchlog",
     "github.com/gcash/bchutil",
@@ -176,6 +175,7 @@
     "github.com/gcash/bchutil/merkleblock",
     "github.com/jessevdk/go-flags",
     "github.com/jrick/logrotate/rotator",
+    "github.com/zquestz/grab",
     "golang.org/x/crypto/ripemd160",
   ]
   solver-name = "gps-cdcl"
