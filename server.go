@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchutil/gcs/builder"
 	"math"
 	"net"
 	"runtime"
@@ -541,6 +542,52 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 	if len(invMsg.InvList) > 0 {
 		sp.QueueMessage(invMsg, nil)
 	}
+}
+
+// OnGetCFMemPool is invoked when a peer receives a getcfmempool bitcoin message.
+// It creates a Cfilter of node's mempool and sends it to the resting peer in a
+// cfmempool message.
+func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
+	// Only allow cfmempool requests if the server has nodeCF enabled
+	if sp.server.services&wire.SFNodeCF != wire.SFNodeCF {
+		peerLog.Debugf("peer %v sent cfmempool request with NodeCF "+
+			"disabled -- disconnecting", sp)
+		sp.Disconnect()
+		return
+	}
+
+	// A decaying ban score increase is applied to prevent flooding.
+	// The ban score accumulates and passes the ban threshold if a burst of
+	// mempool messages comes from a peer. The score decays each minute to
+	// half of its value.
+	sp.addBanScore(0, 33, "mempool")
+
+	txMemPool := sp.server.txMemPool
+	txDescs := txMemPool.TxDescs()
+
+	// To build the filter we'll put all the mempool transactions into a mock block
+	block := wire.NewMsgBlock(nil)
+	var scripts [][]byte
+	for _, txDesc := range txDescs {
+		block.Transactions = append(block.Transactions, txDesc.Tx.MsgTx())
+		for _, in := range txDesc.Tx.MsgTx().TxIn {
+			entry, err := sp.server.chain.FetchUtxoEntry(in.PreviousOutPoint)
+			if err != nil {
+				continue
+			}
+			scripts = append(scripts, entry.PkScript())
+		}
+	}
+	filter, err := builder.BuildBasicFilter(block, scripts)
+	if err != nil {
+		return
+	}
+	filterBytes, err := filter.Bytes()
+	if err != nil {
+		return
+	}
+	resp := wire.NewMsgCFMempool(wire.GCSFilterRegular, filterBytes)
+	sp.QueueMessage(resp, nil)
 }
 
 // OnTx is invoked when a peer receives a tx bitcoin message.  It blocks
