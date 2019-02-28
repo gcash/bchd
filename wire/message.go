@@ -64,9 +64,11 @@ const (
 	CmdGetCFilters  = "getcfilters"
 	CmdGetCFHeaders = "getcfheaders"
 	CmdGetCFCheckpt = "getcfcheckpt"
+	CmdGetCFMempool = "getcfmempool"
 	CmdCFilter      = "cfilter"
 	CmdCFHeaders    = "cfheaders"
 	CmdCFCheckpt    = "cfcheckpt"
+	CmdCFMempool    = "cfmempool"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -181,6 +183,12 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdCFCheckpt:
 		msg = &MsgCFCheckpt{}
+
+	case CmdCFMempool:
+		msg = &MsgCFMempool{}
+
+	case CmdGetCFMempool:
+		msg = &MsgGetCFMempool{}
 
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)
