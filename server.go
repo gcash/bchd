@@ -2744,8 +2744,8 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 
 	if s.chain.IsPruned() {
-		services &^= wire.SFNodeNetwork
-		services |= wire.SFNodeNetworkLimited
+		s.services &^= wire.SFNodeNetwork
+		s.services |= wire.SFNodeNetworkLimited
 	}
 
 	// Search for a FeeEstimator state in the database. If none can be found
