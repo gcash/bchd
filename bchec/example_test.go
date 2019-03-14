@@ -27,7 +27,7 @@ func Example_signMessage() {
 	// Sign a message using the private key.
 	message := "test message"
 	messageHash := chainhash.DoubleHashB([]byte(message))
-	signature, err := privKey.Sign(messageHash)
+	signature, err := privKey.SignECDSA(messageHash)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -37,7 +37,7 @@ func Example_signMessage() {
 	fmt.Printf("Serialized Signature: %x\n", signature.Serialize())
 
 	// Verify the signature for the message using the public key.
-	verified := signature.Verify(messageHash, pubKey)
+	verified := signature.VerifyECDSA(messageHash, pubKey)
 	fmt.Printf("Signature Verified? %v\n", verified)
 
 	// Output:
@@ -80,7 +80,7 @@ func Example_verifySignature() {
 	// Verify the signature for the message using the public key.
 	message := "test message"
 	messageHash := chainhash.DoubleHashB([]byte(message))
-	verified := signature.Verify(messageHash, pubKey)
+	verified := signature.VerifyECDSA(messageHash, pubKey)
 	fmt.Println("Signature Verified?", verified)
 
 	// Output:

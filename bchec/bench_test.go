@@ -4,7 +4,9 @@
 
 package bchec
 
-import "testing"
+import (
+	"testing"
+)
 
 // BenchmarkAddJacobian benchmarks the secp256k1 curve addJacobian function with
 // Z values of 1 so that the associated optimizations are used.
@@ -82,9 +84,9 @@ func BenchmarkNAF(b *testing.B) {
 	}
 }
 
-// BenchmarkSigVerify benchmarks how long it takes the secp256k1 curve to
+// BenchmarkECDSASigVerify benchmarks how long it takes the secp256k1 curve to
 // verify signatures.
-func BenchmarkSigVerify(b *testing.B) {
+func BenchmarkECDSASigVerify(b *testing.B) {
 	b.StopTimer()
 	// Randomly generated keypair.
 	// Private key: 9e0699c91ca1e3b7e3c9ba71eb71c89890872be97576010fe593fbf3fd57e66d
@@ -101,14 +103,44 @@ func BenchmarkSigVerify(b *testing.B) {
 		S: fromHex("d47563f52aac6b04b55de236b7c515eb9311757db01e02cff079c3ca6efb063f"),
 	}
 
-	if !sig.Verify(msgHash.Bytes(), &pubKey) {
+	if !sig.VerifyECDSA(msgHash.Bytes(), &pubKey) {
 		b.Errorf("Signature failed to verify")
 		return
 	}
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		sig.Verify(msgHash.Bytes(), &pubKey)
+		sig.VerifyECDSA(msgHash.Bytes(), &pubKey)
+	}
+}
+
+// BenchmarkSchnorrSigVerify benchmarks how long it takes the secp256k1 curve to
+// verify signatures.
+func BenchmarkSchnorrSigVerify(b *testing.B) {
+	b.StopTimer()
+	// Randomly generated keypair.
+	// Private key: 9e0699c91ca1e3b7e3c9ba71eb71c89890872be97576010fe593fbf3fd57e66d
+	pubKey := PublicKey{
+		Curve: S256(),
+		X:     fromHex("d2e670a19c6d753d1a6d8b20bd045df8a08fb162cf508956c31268c6d81ffdab"),
+		Y:     fromHex("ab65528eefbb8057aa85d597258a3fbd481a24633bc9b47a9aa045c91371de52"),
+	}
+
+	// Double sha256 of []byte{0x01, 0x02, 0x03, 0x04}
+	msgHash := fromHex("8de472e2399610baaa7f84840547cd409434e31f5d3bd71e4d947f283874f9c0")
+	sig := Signature{
+		R: fromHex("a4769f67e977cb196bd241d8513924af353ad944667dcc40d277c697a6489b93"),
+		S: fromHex("d57f7444ffa09464ef6f49c0a036fb90ac985e89ef89b087b4139f91f53fac6f"),
+	}
+
+	if !sig.VerifySchnorr(msgHash.Bytes(), &pubKey) {
+		b.Errorf("Signature failed to verify")
+		return
+	}
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		sig.VerifySchnorr(msgHash.Bytes(), &pubKey)
 	}
 }
 
