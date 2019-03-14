@@ -120,7 +120,7 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
 	fieldR := new(fieldVal).SetByteSlice(sig.R.Bytes())
-	if !rx.Equals(rz.Square().Mul(fieldR)) {
+	if !rx.Equals(rz.Mul(rz).Mul(fieldR)) {
 		return false
 	}
 	return true
@@ -259,7 +259,7 @@ func parseSchnorrSig(sigStr []byte) (*Signature, error) {
 		return nil, errors.New("malformed schnorr signature: not 64 bytes")
 	}
 	bigR := new(big.Int).SetBytes(sigStr[:32])
-	bigS := new(big.Int).SetBytes(sigStr[33:])
+	bigS := new(big.Int).SetBytes(sigStr[32:64])
 	return &Signature{
 		R: bigR,
 		S: bigS,
@@ -527,7 +527,7 @@ func signSchnorr(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 		k = k.Neg(k)
 	}
 
-	// Compute scalar e = Hash(R.x || compressed(P) || m)
+	// Compute scalar e = Hash(R.x || compressed(P) || m) mod N
 	eBytes := sha256.Sum256(append(append(rx.Bytes(), privateKey.PubKey().SerializeCompressed()...), hash...))
 	e := new(big.Int).SetBytes(eBytes[:])
 	e.Mod(e, privateKey.Params().N)
@@ -565,7 +565,7 @@ func nonceRFC6979(privkey *big.Int, hash []byte, additionalData []byte) *big.Int
 
 	// Step D
 	if additionalData != nil {
-		k = mac(alg, k, append(append(append(v, 0x00), bx...), additionalData[:]...))
+		k = mac(alg, k, append(append(append(v, 0x00), bx...), additionalData...))
 	} else {
 		k = mac(alg, k, append(append(v, 0x00), bx...))
 	}
@@ -574,7 +574,11 @@ func nonceRFC6979(privkey *big.Int, hash []byte, additionalData []byte) *big.Int
 	v = mac(alg, k, v)
 
 	// Step F
-	k = mac(alg, k, append(append(v, 0x01), bx...))
+	if additionalData != nil {
+		k = mac(alg, k, append(append(append(v, 0x01), bx...), additionalData...))
+	} else {
+		k = mac(alg, k, append(append(v, 0x01), bx...))
+	}
 
 	// Step G
 	v = mac(alg, k, v)
