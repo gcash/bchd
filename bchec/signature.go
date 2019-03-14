@@ -122,11 +122,7 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
 	fieldR := new(fieldVal).SetByteSlice(sig.R.Bytes())
-	if !rx.Equals(rz.Square().Mul(fieldR)) {
-		return false
-	}
-
-	return true
+	return rx.Equals(rz.Square().Mul(fieldR))
 }
 
 // IsEqual compares this Signature instance to the one passed, returning true
@@ -312,7 +308,7 @@ func canonicalizeInt(val *big.Int) []byte {
 // are missing to get the length up to 32 bytes.
 func padIntBytes(val *big.Int) []byte {
 	b := val.Bytes()
-	pad := bytes.Repeat([]byte{0x00}, 32 -len(b))
+	pad := bytes.Repeat([]byte{0x00}, 32-len(b))
 	return append(pad, b...)
 }
 

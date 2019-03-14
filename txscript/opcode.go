@@ -2315,12 +2315,12 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		copy(sigHash[:], hash)
 
 		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.Verify(hash, pubKey) {
+		if !valid && signature.VerifyECDSA(hash, pubKey) {
 			vm.sigCache.Add(sigHash, signature, pubKey)
 			valid = true
 		}
 	} else {
-		valid = signature.Verify(hash, pubKey)
+		valid = signature.VerifyECDSA(hash, pubKey)
 	}
 
 	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {
@@ -2554,12 +2554,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			copy(sigHash[:], signatureHash)
 
 			valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
-			if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
+			if !valid && parsedSig.VerifyECDSA(signatureHash, parsedPubKey) {
 				vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
 				valid = true
 			}
 		} else {
-			valid = parsedSig.Verify(signatureHash, parsedPubKey)
+			valid = parsedSig.VerifyECDSA(signatureHash, parsedPubKey)
 		}
 
 		if valid {
@@ -2659,12 +2659,12 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 		copy(sigHash[:], messageHash[:])
 
 		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.Verify(messageHash[:], pubKey) {
+		if !valid && signature.VerifyECDSA(messageHash[:], pubKey) {
 			vm.sigCache.Add(sigHash, signature, pubKey)
 			valid = true
 		}
 	} else {
-		valid = signature.Verify(messageHash[:], pubKey)
+		valid = signature.VerifyECDSA(messageHash[:], pubKey)
 	}
 
 	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {

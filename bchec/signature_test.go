@@ -803,11 +803,9 @@ func TestSchnorrSignatureVerify(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i == 2 || i == 3 {
-			valid := sig.VerifySchnorr(test.message, pubkey)
-			if valid != test.valid {
-				t.Errorf("TestSchnorrSignatureVerify test %d didn't produce correct result", i)
-			}
+		valid := sig.VerifySchnorr(test.message, pubkey)
+		if valid != test.valid {
+			t.Errorf("TestSchnorrSignatureVerify test %d didn't produce correct result", i)
 		}
 	}
 }
