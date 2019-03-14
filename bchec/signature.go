@@ -94,14 +94,16 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	}
 
 	// Compute scalar e = Hash(r || compressed(P) || m) mod N
-	eBytes := sha256.Sum256(append(append(sig.R.Bytes(), pubKey.SerializeCompressed()...), hash...))
+	eBytes := sha256.Sum256(append(append(padIntBytes(sig.R), pubKey.SerializeCompressed()...), hash...))
 	e := new(big.Int).SetBytes(eBytes[:])
 	e.Mod(e, curve.Params().N)
+
+	// Negate e
+	e.Neg(e).Mod(e, curve.Params().N)
 
 	// Compute point R = s * G - e * P.
 	sgx, sgy, sgz := curve.scalarBaseMultJacobian(sig.S.Bytes())
 	epx, epy, epz := curve.scalarMultJacobian(pubKey.X, pubKey.Y, e.Bytes())
-	epy.Negate(1)
 	rx, ry, rz := new(fieldVal), new(fieldVal), new(fieldVal)
 	curve.addJacobian(sgx, sgy, sgz, epx, epy, epz, rx, ry, rz)
 
@@ -120,9 +122,10 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
 	fieldR := new(fieldVal).SetByteSlice(sig.R.Bytes())
-	if !rx.Equals(rz.Mul(rz).Mul(fieldR)) {
+	if !rx.Equals(rz.Square().Mul(fieldR)) {
 		return false
 	}
+
 	return true
 }
 
@@ -303,6 +306,14 @@ func canonicalizeInt(val *big.Int) []byte {
 		b = paddedBytes
 	}
 	return b
+}
+
+// padIntBytes pads a big int bytes with leading zeros if they
+// are missing to get the length up to 32 bytes.
+func padIntBytes(val *big.Int) []byte {
+	b := val.Bytes()
+	pad := bytes.Repeat([]byte{0x00}, 32 -len(b))
+	return append(pad, b...)
 }
 
 // canonicalPadding checks whether a big-endian encoded integer could
@@ -528,7 +539,7 @@ func signSchnorr(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 	}
 
 	// Compute scalar e = Hash(R.x || compressed(P) || m) mod N
-	eBytes := sha256.Sum256(append(append(rx.Bytes(), privateKey.PubKey().SerializeCompressed()...), hash...))
+	eBytes := sha256.Sum256(append(append(padIntBytes(rx), privateKey.PubKey().SerializeCompressed()...), hash...))
 	e := new(big.Int).SetBytes(eBytes[:])
 	e.Mod(e, privateKey.Params().N)
 

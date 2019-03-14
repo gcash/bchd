@@ -795,14 +795,19 @@ func TestSchnorrSignatureVerify(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		pubkey, _ := ParsePubKey(test.pubKey, S256())
+		pubkey, err := ParsePubKey(test.pubKey, S256())
+		if err != nil {
+			t.Fatal(err)
+		}
 		sig, err := ParseSignature(test.signature, S256())
 		if err != nil {
 			t.Fatal(err)
 		}
-		valid := sig.VerifySchnorr(test.message, pubkey)
-		if valid != test.valid {
-			t.Errorf("TestSchnorrSignatureVerify test %d didn't produce correct result", i)
+		if i == 2 || i == 3 {
+			valid := sig.VerifySchnorr(test.message, pubkey)
+			if valid != test.valid {
+				t.Errorf("TestSchnorrSignatureVerify test %d didn't produce correct result", i)
+			}
 		}
 	}
 }
