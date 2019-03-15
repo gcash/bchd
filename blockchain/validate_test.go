@@ -7,7 +7,6 @@ package blockchain
 import (
 	"math"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -328,8 +327,16 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
 	err = validateBigBlock(overTxLimit)
-	if (err == nil) || !strings.Contains(err.Error(), "too many sigops") {
-		t.Fatalf("Expected to fail with sigops error but got %v", err)
+	isExpectedErr := false
+	if err != nil {
+		if rule, ok := err.(RuleError); ok {
+			if rule.ErrorCode == ErrTxTooManySigOps {
+				isExpectedErr = true
+			}
+		}
+	}
+	if !isExpectedErr {
+		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 	}
 
 	// 2. Pass at per-block sigOps limit
@@ -357,8 +364,16 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
 	err = validateBigBlock(overBlockLimit)
-	if (err == nil) || !strings.Contains(err.Error(), "asdf") {
-		t.Fatalf("Expected to fail with sigops error but got %v", err)
+	isExpectedErr = false
+	if err != nil {
+		if rule, ok := err.(RuleError); ok {
+			if rule.ErrorCode == ErrTooManySigOps {
+				isExpectedErr = true
+			}
+		}
+	}
+	if !isExpectedErr {
+		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 	}
 }
 
