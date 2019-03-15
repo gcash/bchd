@@ -859,7 +859,6 @@ func (curve *KoblitzCurve) scalarMultJacobian(Bx, By *big.Int, k []byte) (*field
 		}
 	}
 
-	// Convert the Jacobian coordinate field values back to affine big.Ints.
 	return qx, qy, qz
 }
 

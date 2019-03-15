@@ -805,7 +805,7 @@ func TestSchnorrSignatureVerify(t *testing.T) {
 		}
 		valid := sig.VerifySchnorr(test.message, pubkey)
 		if valid != test.valid {
-			t.Errorf("TestSchnorrSignatureVerify test %d didn't produce correct result", i)
+			t.Errorf("Schnorr test vector %d didn't produce correct result", i)
 		}
 	}
 }

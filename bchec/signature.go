@@ -524,6 +524,12 @@ func signRFC6979(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 
 // signSchnorr signs the hash using the schnorr signature algorithm.
 func signSchnorr(privateKey *PrivateKey, hash []byte) (*Signature, error) {
+	// The rfc6979 nonce derivation function accepts additional entropy.
+	// We are using the same entropy that is used by bitcoin-abc so our test
+	// vectors will be compatible. This byte string is chosen to avoid collisions
+	// with ECDSA which would render the signature insecure.
+	//
+	// See https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/2019-05-15-schnorr.md#recommended-practices-for-secure-signature-generation
 	additionalData := []byte{'S', 'c', 'h', 'n', 'o', 'r', 'r', '+', 'S', 'H', 'A', '2', '5', '6', ' ', ' '}
 	k := nonceRFC6979(privateKey.D, hash, additionalData)
 	// Compute point R = k * G
