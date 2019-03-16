@@ -27,7 +27,7 @@ type SignatureType uint8
 
 const (
 	// SignatureTypeECDSA defines an ecdsa signature
-	SignatureTypeECDSA   SignatureType = iota
+	SignatureTypeECDSA SignatureType = iota
 
 	// SignatureTypeSchnorr defines a schnorr signature
 	SignatureTypeSchnorr
@@ -35,8 +35,8 @@ const (
 
 // Signature is a type representing either an ecdsa or schnorr signature.
 type Signature struct {
-	R *big.Int
-	S *big.Int
+	R       *big.Int
+	S       *big.Int
 	sigType SignatureType
 }
 
@@ -284,8 +284,8 @@ func parseSchnorrSig(sigStr []byte) (*Signature, error) {
 	bigR := new(big.Int).SetBytes(sigStr[:32])
 	bigS := new(big.Int).SetBytes(sigStr[32:64])
 	return &Signature{
-		R: bigR,
-		S: bigS,
+		R:       bigR,
+		S:       bigS,
 		sigType: SignatureTypeSchnorr,
 	}, nil
 }
@@ -575,8 +575,8 @@ func signSchnorr(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 	s.Add(s, k)
 	s.Mod(s, privateKey.Params().N)
 	return &Signature{
-		R: rx,
-		S: s,
+		R:       rx,
+		S:       s,
 		sigType: SignatureTypeSchnorr,
 	}, nil
 }

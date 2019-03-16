@@ -573,3 +573,74 @@ func TestCheckHashTypeEncoding(t *testing.T) {
 		}
 	}
 }
+
+func Test_isSegwitScript(t *testing.T) {
+	// Test vectors from https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/2019-05-15-segwit-recovery.md
+	tests := []struct {
+		Name   string
+		Script []byte
+		Valid  bool
+	}{
+		{
+			"Recovering P2SH-P2WPKH",
+			hexToBytes("160014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			true,
+		},
+		{
+			"Recovering P2SH-P2WSH",
+			hexToBytes("220020fc8b08ed636cb23afcb425ff260b3abd03380a2333b54cfa5d51ac52d803baf4"),
+			true,
+		},
+		{
+			"Recovering hypothetical v1 witness program",
+			hexToBytes("165114fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			true,
+		},
+		{
+			"Non-minimal push of redeemscript",
+			hexToBytes("4e160000000014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			true,
+		},
+		{
+			"Exempted, though ultimately invalid since a false boolean value is left on stack",
+			hexToBytes("1600140000000000000000000000000000000000000080"),
+			true,
+		},
+		{
+			"Four-byte witness program",
+			hexToBytes("0453020101"),
+			true,
+		},
+		{
+			"Pushes two items on stack",
+			hexToBytes("00160014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			false,
+		},
+		{
+			"Non-minimal push inside witness program",
+			hexToBytes("17010014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			false,
+		},
+		{
+			"Non-minimal push inside witness program",
+			hexToBytes("17004c14fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			false,
+		},
+		{
+			"OP_1NEGATE for witness program version byte",
+			hexToBytes("164914fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			false,
+		},
+	}
+
+	for _, test := range tests {
+		parsedScript, err := parseScript(test.Script)
+		if err != nil {
+			t.Fatal(err)
+		}
+		valid := isSegwitScript(parsedScript)
+		if valid != test.Valid {
+			t.Errorf("%s: expected %t got %t", test.Name, test.Valid, valid)
+		}
+	}
+}

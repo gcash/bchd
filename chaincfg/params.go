@@ -146,6 +146,7 @@ type Params struct {
 
 	// Planned hardforks
 	GreatWallActivationTime uint64 // May 15, 2019 hard fork
+	GravitonActivationTime  uint64 // Nov 15, 2019 hard fork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -255,6 +256,9 @@ var MainNetParams = Params{
 	UahfForkHeight:              478558, // 0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43
 	DaaForkHeight:               504031, // 0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c
 	MagneticAnonomalyForkHeight: 556766, // 00000000000000000102d94fde9bd0807a2cc7582fe85dd6349b73ce4e8d9322
+
+	GreatWallActivationTime: 1557921600,
+	GravitonActivationTime:  1573819200,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -443,6 +447,9 @@ var TestNet3Params = Params{
 	UahfForkHeight:              1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
 	DaaForkHeight:               1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
 	MagneticAnonomalyForkHeight: 1267996, // 00000000000001fae0095cd4bea16f1ce8ab63f3f660a03c6d8171485f484b24
+
+	GreatWallActivationTime: 1557921600,
+	GravitonActivationTime:  1573819200,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
