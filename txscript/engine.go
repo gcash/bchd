@@ -84,6 +84,11 @@ const (
 	// OP_CHECKDATASIGVERIFY opcodes. Without this flag the opcodes will
 	// behave as if they are disabled.
 	ScriptVerifyCheckDataSig
+
+	// ScriptVerifySchnorr enables verification of schnorr signatures,
+	// in addition to ECDSA signatures, in OP_CHECKSIG, OP_CHECKSIGVEERIFY,
+	// OP_CHECKDATASIG, and OP_CHECKDATASIGVERIFY.
+	ScriptVerifySchnorr
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -466,6 +471,10 @@ func (vm *Engine) checkSignatureEncoding(sig []byte) error {
 		!vm.hasFlag(ScriptVerifyLowS) &&
 		!vm.hasFlag(ScriptVerifyStrictEncoding) {
 
+		return nil
+	}
+
+	if vm.hasFlag(ScriptVerifySchnorr) && len(sig) == 64 {
 		return nil
 	}
 

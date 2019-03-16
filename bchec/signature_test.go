@@ -339,7 +339,7 @@ func TestSignatures(t *testing.T) {
 		if test.der {
 			_, err = ParseDERSignature(test.sig, S256())
 		} else {
-			_, err = ParseSignature(test.sig, S256())
+			_, err = ParseBERSignature(test.sig, S256())
 		}
 		if err != nil {
 			if test.isValid {
@@ -799,11 +799,11 @@ func TestSchnorrSignatureVerify(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sig, err := ParseSignature(test.signature, S256())
+		sig, err := ParseSchnorrSignature(test.signature)
 		if err != nil {
 			t.Fatal(err)
 		}
-		valid := sig.VerifySchnorr(test.message, pubkey)
+		valid := sig.Verify(test.message, pubkey)
 		if valid != test.valid {
 			t.Errorf("Schnorr test vector %d didn't produce correct result", i)
 		}

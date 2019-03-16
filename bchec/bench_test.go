@@ -101,16 +101,17 @@ func BenchmarkECDSASigVerify(b *testing.B) {
 	sig := Signature{
 		R: fromHex("fef45d2892953aa5bbcdb057b5e98b208f1617a7498af7eb765574e29b5d9c2c"),
 		S: fromHex("d47563f52aac6b04b55de236b7c515eb9311757db01e02cff079c3ca6efb063f"),
+		sigType: SignatureTypeECDSA,
 	}
 
-	if !sig.VerifyECDSA(msgHash.Bytes(), &pubKey) {
+	if !sig.Verify(msgHash.Bytes(), &pubKey) {
 		b.Errorf("Signature failed to verify")
 		return
 	}
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		sig.VerifyECDSA(msgHash.Bytes(), &pubKey)
+		sig.Verify(msgHash.Bytes(), &pubKey)
 	}
 }
 
@@ -131,16 +132,17 @@ func BenchmarkSchnorrSigVerify(b *testing.B) {
 	sig := Signature{
 		R: fromHex("a4769f67e977cb196bd241d8513924af353ad944667dcc40d277c697a6489b93"),
 		S: fromHex("d57f7444ffa09464ef6f49c0a036fb90ac985e89ef89b087b4139f91f53fac6f"),
+		sigType: SignatureTypeSchnorr,
 	}
 
-	if !sig.VerifySchnorr(msgHash.Bytes(), &pubKey) {
+	if !sig.Verify(msgHash.Bytes(), &pubKey) {
 		b.Errorf("Signature failed to verify")
 		return
 	}
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		sig.VerifySchnorr(msgHash.Bytes(), &pubKey)
+		sig.Verify(msgHash.Bytes(), &pubKey)
 	}
 }
 

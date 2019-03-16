@@ -37,7 +37,7 @@ func Example_signMessage() {
 	fmt.Printf("Serialized Signature: %x\n", signature.Serialize())
 
 	// Verify the signature for the message using the public key.
-	verified := signature.VerifyECDSA(messageHash, pubKey)
+	verified := signature.Verify(messageHash, pubKey)
 	fmt.Printf("Signature Verified? %v\n", verified)
 
 	// Output:
@@ -71,7 +71,7 @@ func Example_verifySignature() {
 		fmt.Println(err)
 		return
 	}
-	signature, err := bchec.ParseSignature(sigBytes, bchec.S256())
+	signature, err := bchec.ParseBERSignature(sigBytes, bchec.S256())
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -80,7 +80,7 @@ func Example_verifySignature() {
 	// Verify the signature for the message using the public key.
 	message := "test message"
 	messageHash := chainhash.DoubleHashB([]byte(message))
-	verified := signature.VerifyECDSA(messageHash, pubKey)
+	verified := signature.Verify(messageHash, pubKey)
 	fmt.Println("Signature Verified?", verified)
 
 	// Output:
