@@ -5,6 +5,8 @@
 package txscript
 
 import (
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchutil"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -575,6 +577,7 @@ func TestCheckHashTypeEncoding(t *testing.T) {
 }
 
 func Test_isSegwitScript(t *testing.T) {
+	t.Parallel()
 	// Test vectors from https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/2019-05-15-segwit-recovery.md
 	tests := []struct {
 		Name   string
@@ -642,5 +645,69 @@ func Test_isSegwitScript(t *testing.T) {
 		if valid != test.Valid {
 			t.Errorf("%s: expected %t got %t", test.Name, test.Valid, valid)
 		}
+	}
+}
+
+func TestSegwitExemption(t *testing.T) {
+	redeemScript := hexToBytes("0014fcf9969ce1c98a135ed293719721fb69f0b686cb")
+
+	addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.TestNet3Params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pkScript, err := PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// tx with almost empty scripts.
+	tx := &wire.MsgTx{
+		Version: 1,
+		TxIn: []*wire.TxIn{
+			{
+				PreviousOutPoint: wire.OutPoint{
+					Hash: chainhash.Hash([32]byte{
+						0xc9, 0x97, 0xa5, 0xe5,
+						0x6e, 0x10, 0x41, 0x02,
+						0xfa, 0x20, 0x9c, 0x6a,
+						0x85, 0x2d, 0xd9, 0x06,
+						0x60, 0xa2, 0x0b, 0x2d,
+						0x9c, 0x35, 0x24, 0x23,
+						0xed, 0xce, 0x25, 0x85,
+						0x7f, 0xcd, 0x37, 0x04,
+					}),
+					Index: 0,
+				},
+				SignatureScript: hexToBytes("160014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+				Sequence:        4294967295,
+			},
+		},
+		TxOut: []*wire.TxOut{
+			{
+				Value:    1000000000,
+				PkScript: nil,
+			},
+		},
+		LockTime: 0,
+	}
+
+	// This should fail the clean stack rule.
+	vm, err := NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16, nil, nil, 0)
+	if err != nil {
+		t.Errorf("failed to create script: %v", err)
+	}
+	if err := vm.Execute(); !IsErrorCode(err, ErrCleanStack) {
+		t.Errorf("TestSegwitExemption expected ErrCleanStack got "+
+			"error: %v", err)
+	}
+
+	// We add the segwit exemption flag and now the same input should pass.
+	vm, err = NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16|ScriptVerifyAllowSegwitRecovery, nil, nil, 0)
+	if err != nil {
+		t.Errorf("failed to create script: %v", err)
+	}
+	if err := vm.Execute(); err != nil {
+		t.Errorf("TestSegwitExemption expected segwit exemption to pass")
 	}
 }
