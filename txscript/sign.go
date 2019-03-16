@@ -29,7 +29,7 @@ func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	if err != nil {
 		return nil, err
 	}
-	signature, err := key.Sign(hash)
+	signature, err := key.SignECDSA(hash)
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign tx input: %s", err)
 	}
@@ -47,7 +47,7 @@ func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	if err != nil {
 		return nil, err
 	}
-	signature, err := key.Sign(hash)
+	signature, err := key.SignECDSA(hash)
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign tx input: %s", err)
 	}
@@ -357,7 +357,7 @@ sigLoop:
 			// If it matches we put it in the map. We only
 			// can take one signature per public key so if we
 			// already have one, we can throw this away.
-			if pSig.Verify(hash, pubKey) {
+			if pSig.VerifyECDSA(hash, pubKey) {
 				aStr := addr.EncodeAddress()
 				if _, ok := addrToSig[aStr]; !ok {
 					addrToSig[aStr] = sig

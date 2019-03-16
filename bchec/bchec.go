@@ -756,6 +756,12 @@ func NAF(k []byte) ([]byte, []byte) {
 // ScalarMult returns k*(Bx, By) where k is a big endian integer.
 // Part of the elliptic.Curve interface.
 func (curve *KoblitzCurve) ScalarMult(Bx, By *big.Int, k []byte) (*big.Int, *big.Int) {
+	// Convert the Jacobian coordinate field values back to affine big.Ints.
+	return curve.fieldJacobianToBigAffine(curve.scalarMultJacobian(Bx, By, k))
+}
+
+// scalarMultJacobian returns the Jacobian coordinates of k*(Bx, By) where k is a big endian integer.
+func (curve *KoblitzCurve) scalarMultJacobian(Bx, By *big.Int, k []byte) (*fieldVal, *fieldVal, *fieldVal) {
 	// Point Q = ∞ (point at infinity).
 	qx, qy, qz := new(fieldVal), new(fieldVal), new(fieldVal)
 
@@ -853,14 +859,19 @@ func (curve *KoblitzCurve) ScalarMult(Bx, By *big.Int, k []byte) (*big.Int, *big
 		}
 	}
 
-	// Convert the Jacobian coordinate field values back to affine big.Ints.
-	return curve.fieldJacobianToBigAffine(qx, qy, qz)
+	return qx, qy, qz
 }
 
 // ScalarBaseMult returns k*G where G is the base point of the group and k is a
 // big endian integer.
 // Part of the elliptic.Curve interface.
 func (curve *KoblitzCurve) ScalarBaseMult(k []byte) (*big.Int, *big.Int) {
+	return curve.fieldJacobianToBigAffine(curve.scalarBaseMultJacobian(k))
+}
+
+// scalarBaseMultJacobian returns the Jacobian coordinates k*G where G is the base point of
+// the group and k is a big endian integer.
+func (curve *KoblitzCurve) scalarBaseMultJacobian(k []byte) (*fieldVal, *fieldVal, *fieldVal) {
 	newK := curve.moduloReduce(k)
 	diff := len(curve.bytePoints) - len(newK)
 
@@ -876,7 +887,7 @@ func (curve *KoblitzCurve) ScalarBaseMult(k []byte) (*big.Int, *big.Int) {
 		p := curve.bytePoints[diff+i][byteVal]
 		curve.addJacobian(qx, qy, qz, &p[0], &p[1], &p[2], qx, qy, qz)
 	}
-	return curve.fieldJacobianToBigAffine(qx, qy, qz)
+	return qx, qy, qz
 }
 
 // QPlus1Div4 returns the Q+1/4 constant for the curve for use in calculating

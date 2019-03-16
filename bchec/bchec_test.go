@@ -8,6 +8,7 @@ package bchec
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"testing"
@@ -792,29 +793,57 @@ func TestKeyGeneration(t *testing.T) {
 	testKeyGeneration(t, S256(), "S256")
 }
 
-func testSignAndVerify(t *testing.T, c *KoblitzCurve, tag string) {
+func testSignAndVerifyECDSA(t *testing.T, c *KoblitzCurve, tag string) {
 	priv, _ := NewPrivateKey(c)
 	pub := priv.PubKey()
 
-	hashed := []byte("testing")
-	sig, err := priv.Sign(hashed)
-	if err != nil {
-		t.Errorf("%s: error signing: %s", tag, err)
-		return
-	}
+	for i := 0; i < 32; i++ {
+		s := []byte(fmt.Sprintf("testing %d", i))
+		hashed := sha256.Sum256(s)
+		sig, err := priv.SignECDSA(hashed[:])
+		if err != nil {
+			t.Errorf("%s: error signing: %s", tag, err)
+			return
+		}
 
-	if !sig.Verify(hashed, pub) {
-		t.Errorf("%s: Verify failed", tag)
-	}
+		if !sig.VerifyECDSA(hashed[:], pub) {
+			t.Errorf("%s: Verify failed", tag)
+		}
 
-	hashed[0] ^= 0xff
-	if sig.Verify(hashed, pub) {
-		t.Errorf("%s: Verify always works!", tag)
+		hashed[0] ^= 0xff
+		if sig.VerifyECDSA(hashed[:], pub) {
+			t.Errorf("%s: Verify always works!", tag)
+		}
+	}
+}
+
+func testSignAndVerifySchnorr(t *testing.T, c *KoblitzCurve, tag string) {
+	priv, _ := NewPrivateKey(c)
+	pub := priv.PubKey()
+
+	for i := 0; i < 32; i++ {
+		s := []byte(fmt.Sprintf("testing %d", i))
+		hashed := sha256.Sum256(s)
+		sig, err := priv.SignSchnorr(hashed[:])
+		if err != nil {
+			t.Errorf("%s: error signing: %s", tag, err)
+			return
+		}
+
+		if !sig.VerifySchnorr(hashed[:], pub) {
+			t.Errorf("%s: Verify failed", tag)
+		}
+
+		hashed[0] ^= 0xff
+		if sig.VerifySchnorr(hashed[:], pub) {
+			t.Errorf("%s: Verify always works!", tag)
+		}
 	}
 }
 
 func TestSignAndVerify(t *testing.T) {
-	testSignAndVerify(t, S256(), "S256")
+	testSignAndVerifyECDSA(t, S256(), "S256")
+	testSignAndVerifySchnorr(t, S256(), "S256")
 }
 
 func TestNAF(t *testing.T) {

@@ -54,12 +54,20 @@ func (p *PrivateKey) ToECDSA() *ecdsa.PrivateKey {
 	return (*ecdsa.PrivateKey)(p)
 }
 
-// Sign generates an ECDSA signature for the provided hash (which should be the result
+// SignECDSA generates an ECDSA signature for the provided hash (which should be the result
 // of hashing a larger message) using the private key. Produced signature
 // is deterministic (same message and same key yield the same signature) and canonical
 // in accordance with RFC6979 and BIP0062.
-func (p *PrivateKey) Sign(hash []byte) (*Signature, error) {
+func (p *PrivateKey) SignECDSA(hash []byte) (*Signature, error) {
 	return signRFC6979(p, hash)
+}
+
+// SignSchnorr generates a schnorr signature for the provided hash (which should be the result
+// of hashing a larger message) using the private key. Produced signature
+// is deterministic (same message and same key yield the same signature) and canonical
+// in accordance with RFC6979 and BIP0062.
+func (p *PrivateKey) SignSchnorr(hash []byte) (*Signature, error) {
+	return signSchnorr(p, hash)
 }
 
 // PrivKeyBytesLen defines the length in bytes of a serialized private key.

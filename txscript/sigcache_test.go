@@ -26,7 +26,7 @@ func genRandomSig() (*chainhash.Hash, *bchec.Signature, *bchec.PublicKey, error)
 		return nil, nil, nil, err
 	}
 
-	sig, err := privKey.Sign(msgHash[:])
+	sig, err := privKey.SignECDSA(msgHash[:])
 	if err != nil {
 		return nil, nil, nil, err
 	}
