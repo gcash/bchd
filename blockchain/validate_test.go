@@ -5,7 +5,6 @@
 package blockchain
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -248,50 +247,54 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// maturity to 1.
 	chain.TstSetCoinbaseMaturity(1)
 
-	// Load up precomputed blocks 1 and 2
-	blocks, err := loadBlocks("blk_0_to_4.dat.bz2")
-	if err != nil {
-		t.Fatalf("error loading file: %v\n", err)
+	// Load up blocks such that there is a side chain.
+	// (genesis block) -> 1 -> 2 -> 3 -> 4
+	//                          \-> 3a
+	testFiles := []string{
+		"blk_0_to_4.dat.bz2",
+		"blk_3A.dat.bz2",
 	}
 
-	for i := 1; i <= 2; i++ {
-		isMainChain, isOrphan, err := chain.ProcessBlock(blocks[i], BFNone)
-		if isOrphan {
-			t.Fatalf("unexpectedly orphaned block")
-		}
+	var blocks []*bchutil.Block
+	for _, file := range testFiles {
+		blockTmp, err := loadBlocks(file)
 		if err != nil {
-			t.Fatalf("unexpected error processing block %d: %v", i, err)
+			t.Fatalf("Error loading file: %v\n", err)
+		}
+		blocks = append(blocks, blockTmp...)
+	}
+
+	for i := 1; i <= 3; i++ {
+		isMainChain, _, err := chain.ProcessBlock(blocks[i], BFNone)
+		if err != nil {
+			t.Fatalf("CheckConnectBlockTemplate: Received unexpected error "+
+				"processing block %d: %v", i, err)
 		}
 		if !isMainChain {
-			t.Fatalf("expected block %d to connect to main chain", i)
+			t.Fatalf("CheckConnectBlockTemplate: Expected block %d to connect "+
+				"to main chain", i)
 		}
 	}
-	// Use precomputed block 3 as a template for test blocks
-	tip := blocks[2].MsgBlock()
+	tip := blocks[3].MsgBlock()
 	baseBlock := blocks[3].MsgBlock()
-	baseScriptForSize := baseBlock.Transactions[0].TxOut[0].PkScript
 
 	// Tests start here.
-	// We ensure blocks >1MB and then pass or break
-	// exactly one consensus limit at a time
-	attachBigBlock := func(mb *wire.MsgBlock) error {
+	// We ensure blocks >1MB and then pass or break exactly one consensus limit at a time
+	validateBigBlock := func(mb *wire.MsgBlock) error {
 		var txSize, blockSize int
 
 		// Confirm that we never fail due to breaking tx size.
 		for i, tx := range mb.Transactions {
 			txSize = tx.SerializeSize()
 			if txSize > oneMegabyte {
-				return fmt.Errorf("expected tx %d to be <1MB "+
-					"but got %d bytes", i, txSize)
+				t.Fatalf("expected tx %d to be <1MB but got %d bytes", i, txSize)
 			}
 		}
 
-		// Confirm that the block is always in the interval (1MB, 2MB]
-		// so we are testing big block rules
+		// Confirm that the block is always in the interval (1MB, 2MB] so we are testing big block rules
 		blockSize = mb.SerializeSize()
 		if (blockSize <= oneMegabyte) || (blockSize > 2*oneMegabyte) {
-			return fmt.Errorf("expected block to be in the interval "+
-				"(1MB, 2MB] but got %d bytes", blockSize)
+			t.Fatalf("expected block to be in the interval  (1MB, 2MB] but got %d bytes", blockSize)
 		}
 
 		node := &blockNode{
@@ -303,8 +306,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 			},
 		}
 		b := bchutil.NewBlock(mb)
-		err = chain.checkConnectBlock(node, b, NewUtxoViewpoint(), nil)
-		return err
+		return chain.checkConnectBlock(node, b, NewUtxoViewpoint(), nil)
 	}
 
 	// Use the original block 3 content to test sigOps limits
@@ -313,48 +315,48 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// tx1:      1 sigOps    <=1MB
 	// tx2:      1 sigOps    <=1MB
 	// block:    3 sigOps    < 1MB
-
-	// Add many NOOPs to the coinbase out script which can be arbitrary.
-	// This gets the block >1MB without breaking Tx size limits
-	bigEnoughScript := append(baseScriptForSize, repeatScript(979800, txscript.OP_NOP)...)
+	// Add 3 * 400k NOOPs to get >1MB block without breaking Tx size limits
+	manyNoOps := repeatScript(400000, txscript.OP_NOP)
+	for _, tx := range baseBlock.Transactions {
+		tx.TxOut[0].PkScript = append(tx.TxOut[0].PkScript, manyNoOps...)
+	}
 
 	// 1. Pass at per-Tx sigOps limit
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
 	// tx1:            1 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOps (ok)     <=1MB (ok)
 	// block:    20k + 2 sigOps (ok)     > 1MB (ok)
-	baseBlock.Transactions[0].TxOut[0].PkScript = bigEnoughScript
 	atTxLimit, err := newTestBlock(baseBlock, tip, 20000, 1, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = attachBigBlock(atTxLimit)
+	err = validateBigBlock(atTxLimit)
 	if err != nil {
-		t.Fatalf("Expected to validate but got: %v", err)
+		if rule, ok := err.(RuleError); ok {
+			if rule.ErrorCode == ErrTooManySigOps {
+				t.Fatalf("Expected to validate but got: %v", err)
+			}
+		}
+
 	}
 	tip = atTxLimit
 
 	// 1. Fail at per-Tx sigOps limit +1
-	// coinbase: 20k + 1 sigOps (fail)   <=1MB (ok)
+	// coinbase: 40k + 1 sigOps (fail)   <=1MB (ok)
 	// tx1:            1 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOps (ok)     <=1MB (ok)
-	// block:    20k + 3 sigOps (ok)     > 1MB (ok)
-	fmt.Println("1. Fail")
-	overTxLimit, err := newTestBlock(baseBlock, tip, 20001, 1, 1)
+	// block:    40k + 3 sigOps (ok)     > 1MB (ok)
+	overTxLimit, err := newTestBlock(baseBlock, tip, 40001, 1, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = attachBigBlock(overTxLimit)
-	isExpectedErr := false
+	err = validateBigBlock(overTxLimit)
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode == ErrTxTooManySigOps {
-				isExpectedErr = true
+			if rule.ErrorCode != ErrTooManySigOps {
+				t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 			}
 		}
-	}
-	if !isExpectedErr {
-		t.Fatalf("Expected to fail with TxTooManySigOps but got: %v", err)
 	}
 
 	// 2. Pass at per-block sigOps limit
@@ -362,17 +364,20 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// tx1:        19999 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOp  (ok)     <=1MB (ok)
 	// block:        40k sigOps (ok)     > 1MB (ok)
-	bigEnoughScript = append(baseScriptForSize, repeatScript(959800, txscript.OP_NOP)...)
-	baseBlock.Transactions[0].TxOut[0].PkScript = bigEnoughScript
 	atBlockLimit, err := newTestBlock(baseBlock, tip, 20000, 19999, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = attachBigBlock(atBlockLimit)
+	err = validateBigBlock(atBlockLimit)
 	if err != nil {
-		t.Fatalf("Expected to validate but got: %v", err)
+		if rule, ok := err.(RuleError); ok {
+			if rule.ErrorCode == ErrTooManySigOps {
+				t.Fatalf("Expected to validate but got: %v", err)
+			}
+		}
+
 	}
-	tip = atBlockLimit
+	tip = atTxLimit
 
 	// 2. Fail at per-block sigOps limit +1
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
@@ -383,17 +388,13 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = attachBigBlock(overBlockLimit)
-	isExpectedErr = false
+	err = validateBigBlock(overBlockLimit)
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode == ErrTooManySigOps {
-				isExpectedErr = true
+			if rule.ErrorCode != ErrTooManySigOps {
+				t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 			}
 		}
-	}
-	if !isExpectedErr {
-		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 	}
 }
 
