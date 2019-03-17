@@ -422,23 +422,6 @@ func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps
 	return dup, nil
 }
 
-//func cloneBlock(b *wire.MsgBlock, easiestBits uint32) (*wire.MsgBlock, error) {
-//	prevHash := b.BlockHash()
-//	prevMRoot := b.Header.MerkleRoot
-//	dup := wire.NewMsgBlock(wire.NewBlockHeader(
-//		1, &prevHash, &prevMRoot, easiestBits, 2))
-//	for _, tx := range b.Transactions {
-//		err := dup.AddTransaction(tx.Copy())
-//		if err != nil {
-//			return nil, err
-//		}
-//	}
-//	setValidMerkleRoot(dup)
-//	solveBlock(&dup.Header)
-//
-//	return dup, nil
-//}
-
 // calcMerkleRoot recalculates the merkle root.
 func setValidMerkleRoot(b *wire.MsgBlock) {
 	if len(b.Transactions) == 0 {
