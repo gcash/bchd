@@ -336,7 +336,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// coinbase: 20k + 1 sigOps (fail)   <=1MB (ok)
 	// tx1:            1 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOps (ok)     <=1MB (ok)
-	// block:    40k + 3 sigOps (ok)     > 1MB (ok)
+	// block:    20k + 3 sigOps (ok)     > 1MB (ok)
 	overTxLimit, err := newTestBlock(baseBlock, tip, 20001, 1, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
@@ -382,13 +382,13 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	isExpectedErr = false
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode == ErrTxTooManySigOps {
+			if rule.ErrorCode == ErrTooManySigOps {
 				isExpectedErr = true
 			}
 		}
 	}
 	if !isExpectedErr {
-		t.Fatalf("Expected to fail with TxTooManySigOps but got: %v", err)
+		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
 	}
 }
 
