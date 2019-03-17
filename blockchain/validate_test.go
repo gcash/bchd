@@ -235,8 +235,10 @@ func TestCheckConnectBlockTemplate(t *testing.T) {
 // validated at both the block and transaction levels with blocks > 1MB.
 func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// Create a new database and chain instance to run tests against.
+	params := chaincfg.MainNetParams
+	params.UahfForkHeight = 2
 	chain, teardownFunc, err := chainSetup("SigOpsLimitsWithMultiMBBlocks",
-		&chaincfg.MainNetParams)
+		&params)
 	if err != nil {
 		t.Errorf("Failed to setup chain instance: %v", err)
 		return
@@ -246,6 +248,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// Since we're not dealing with the real block chain, set the coinbase
 	// maturity to 1.
 	chain.TstSetCoinbaseMaturity(1)
+	chain.excessiveBlockSize = 32000000
 
 	// Load up blocks such that there is a side chain.
 	// (genesis block) -> 1 -> 2 -> 3 -> 4
@@ -264,7 +267,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 		blocks = append(blocks, blockTmp...)
 	}
 
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 2; i++ {
 		isMainChain, _, err := chain.ProcessBlock(blocks[i], BFNone)
 		if err != nil {
 			t.Fatalf("CheckConnectBlockTemplate: Received unexpected error "+
@@ -275,7 +278,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 				"to main chain", i)
 		}
 	}
-	tip := blocks[3].MsgBlock()
+	tip := blocks[2].MsgBlock()
 	baseBlock := blocks[3].MsgBlock()
 
 	// Tests start here.
@@ -297,16 +300,9 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 			t.Fatalf("expected block to be in the interval  (1MB, 2MB] but got %d bytes", blockSize)
 		}
 
-		node := &blockNode{
-			timestamp: time.Time{}.Unix(),
-			hash:      mb.BlockHash(),
-			height:    1,
-			parent: &blockNode{
-				hash: mb.Header.PrevBlock,
-			},
-		}
 		b := bchutil.NewBlock(mb)
-		return chain.checkConnectBlock(node, b, NewUtxoViewpoint(), nil)
+		_, _, err := chain.ProcessBlock(b, BFNoPoWCheck|BFFastAdd)
+		return err
 	}
 
 	// Use the original block 3 content to test sigOps limits
@@ -337,7 +333,6 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 				t.Fatalf("Expected to validate but got: %v", err)
 			}
 		}
-
 	}
 	tip = atTxLimit
 
@@ -346,15 +341,15 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// tx1:            1 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOps (ok)     <=1MB (ok)
 	// block:    40k + 3 sigOps (ok)     > 1MB (ok)
-	overTxLimit, err := newTestBlock(baseBlock, tip, 40001, 1, 1)
+	overTxLimit, err := newTestBlock(baseBlock, tip, 20001, 1, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
 	err = validateBigBlock(overTxLimit)
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode != ErrTooManySigOps {
-				t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
+			if rule.ErrorCode != ErrTxTooManySigOps {
+				t.Fatalf("Expected to fail with TxTooManySigOps but got: %v", err)
 			}
 		}
 	}
@@ -401,7 +396,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps int) (*wire.MsgBlock, error) {
 	prevHash := tip.Header.BlockHash()
 	prevMRoot := tip.Header.MerkleRoot
-	easyBits := chaincfg.RegressionNetParams.PowLimitBits
+	easyBits := chaincfg.MainNetParams.PowLimitBits
 	addSigOps := map[int]int{
 		0: coinbaseSigOps - 1,
 		1: tx1SigOps - 1,
@@ -424,7 +419,7 @@ func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps
 	}
 
 	setValidMerkleRoot(dup)
-	solveBlock(&dup.Header)
+	//solveBlock(&dup.Header)
 	return dup, nil
 }
 
