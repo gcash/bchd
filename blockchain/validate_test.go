@@ -236,56 +236,72 @@ func TestCheckConnectBlockTemplate(t *testing.T) {
 func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// Create a new database and chain instance to run tests against.
 	chain, teardownFunc, err := chainSetup("SigOpsLimitsWithMultiMBBlocks",
-		&chaincfg.RegressionNetParams)
+		&chaincfg.MainNetParams)
 	if err != nil {
 		t.Errorf("Failed to setup chain instance: %v", err)
 		return
 	}
 	defer teardownFunc()
 
-	// Load blocks #1 and #2 with transactions,
-	// then 144 empty blocks to make room for UAHF difficulty adjustment window,
-	// for a total of genesis + 146 blocks.
-	// Block #3 which has several transactions will be used at the tip.
-	contentBlocks, err := loadBlocks("blk_0_to_4.dat.bz2")
+	// Since we're not dealing with the real block chain, set the coinbase
+	// maturity to 1.
+	chain.TstSetCoinbaseMaturity(1)
+
+	// Load up precomputed blocks 1 and 2
+	blocks, err := loadBlocks("blk_0_to_4.dat.bz2")
 	if err != nil {
-		t.Fatalf("Error loading file: %v\n", err)
-	}
-	blocks := make([]*wire.MsgBlock, 146)
-	blocks[0] = contentBlocks[1].MsgBlock()
-	blocks[1] = contentBlocks[2].MsgBlock()
-	tip := blocks[1]
-	baseBlock := blocks[1]
-	for i := 2; i < 146; i++ {
-		blocks[i], err = newTestBlock(baseBlock, tip, 1, 1, 1)
-		if err != nil {
-			t.Fatalf("Unexpected error building difficulty adjustment "+
-				"window block %d: %v", i, err)
-		}
-		tip = blocks[i]
+		t.Fatalf("error loading file: %v\n", err)
 	}
 
+	for i := 1; i <= 2; i++ {
+		isMainChain, isOrphan, err := chain.ProcessBlock(blocks[i], BFNone)
+		if isOrphan {
+			t.Fatalf("unexpectedly orphaned block")
+		}
+		if err != nil {
+			t.Fatalf("unexpected error processing block %d: %v", i, err)
+		}
+		if !isMainChain {
+			t.Fatalf("expected block %d to connect to main chain", i)
+		}
+	}
+	// Use precomputed block 3 as a template for test blocks
+	tip := blocks[2].MsgBlock()
+	baseBlock := blocks[3].MsgBlock()
+
 	// Tests start here.
-	// We ensure blocks >1MB and then pass or break exactly one consensus limit at a time
-	validateBigBlock := func(mb *wire.MsgBlock) error {
+	// We ensure blocks >1MB and then pass or break
+	// exactly one consensus limit at a time
+	attachBigBlock := func(mb *wire.MsgBlock) error {
 		var txSize, blockSize int
 
 		// Confirm that we never fail due to breaking tx size.
 		for i, tx := range mb.Transactions {
 			txSize = tx.SerializeSize()
 			if txSize > oneMegabyte {
-				t.Fatalf("expected tx %d to be <1MB but got %d bytes", i, txSize)
+				t.Fatalf("expected tx %d to be <1MB but got %d bytes",
+					i, txSize)
 			}
 		}
 
-		// Confirm that the block is always in the interval (1MB, 2MB] so we are testing big block rules
+		// Confirm that the block is always in the interval (1MB, 2MB]
+		// so we are testing big block rules
 		blockSize = mb.SerializeSize()
 		if (blockSize <= oneMegabyte) || (blockSize > 2*oneMegabyte) {
-			t.Fatalf("expected block to be in the interval  (1MB, 2MB] but got %d bytes", blockSize)
+			t.Fatalf("expected block to be in the interval " +
+				"(1MB, 2MB] but got %d bytes", blockSize)
 		}
 
+		node := &blockNode{
+			timestamp: time.Time{}.Unix(),
+			hash: mb.BlockHash(),
+			height: 1,
+			parent: &blockNode {
+				hash: mb.Header.PrevBlock,
+			},
+		}
 		b := bchutil.NewBlock(mb)
-		_, _, err = chain.ProcessBlock(b, BFNone)
+		err = chain.checkConnectBlock(node, b, NewUtxoViewpoint(), nil)
 		return err
 	}
 
@@ -295,7 +311,6 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// tx1:      1 sigOps    <=1MB
 	// tx2:      1 sigOps    <=1MB
 	// block:    3 sigOps    < 1MB
-	baseBlock = contentBlocks[3].MsgBlock()
 	// Add 3 * 400k NOOPs to get >1MB block without breaking Tx size limits
 	manyNoOps := repeatScript(400000, txscript.OP_NOP)
 	for _, tx := range baseBlock.Transactions {
@@ -311,7 +326,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = validateBigBlock(atTxLimit)
+	err = attachBigBlock(atTxLimit)
 	if err != nil {
 		t.Fatalf("Expected to validate but got: %v", err)
 	}
@@ -321,12 +336,12 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	// coinbase: 20k + 1 sigOps (fail)   <=1MB (ok)
 	// tx1:            1 sigOps (ok)     <=1MB (ok)
 	// tx2:            1 sigOps (ok)     <=1MB (ok)
-	// block:    20k + 3 sigOps (ok)     > 1MB (ok)
+	// block:    40k + 3 sigOps (ok)     > 1MB (ok)
 	overTxLimit, err := newTestBlock(baseBlock, tip, 20001, 1, 1)
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = validateBigBlock(overTxLimit)
+	err = attachBigBlock(overTxLimit)
 	isExpectedErr := false
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
@@ -336,7 +351,7 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 		}
 	}
 	if !isExpectedErr {
-		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
+		t.Fatalf("Expected to fail with TxTooManySigOps but got: %v", err)
 	}
 
 	// 2. Pass at per-block sigOps limit
@@ -348,11 +363,11 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = validateBigBlock(atBlockLimit)
+	err = attachBigBlock(atBlockLimit)
 	if err != nil {
 		t.Fatalf("Expected to validate but got: %v", err)
 	}
-	tip = atTxLimit
+	tip = atBlockLimit
 
 	// 2. Fail at per-block sigOps limit +1
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
@@ -363,17 +378,17 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error creating sigOps test block: %v", err)
 	}
-	err = validateBigBlock(overBlockLimit)
+	err = attachBigBlock(overBlockLimit)
 	isExpectedErr = false
 	if err != nil {
 		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode == ErrTooManySigOps {
+			if rule.ErrorCode == ErrTxTooManySigOps {
 				isExpectedErr = true
 			}
 		}
 	}
 	if !isExpectedErr {
-		t.Fatalf("Expected to fail with TooManySigOps but got: %v", err)
+		t.Fatalf("Expected to fail with TxTooManySigOps but got: %v", err)
 	}
 }
 
