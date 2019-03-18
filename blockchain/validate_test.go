@@ -354,6 +354,12 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 		}
 	}
 
+	baseBlock = blocks[4].MsgBlock()
+	manyNoOps = repeatScript(600000, txscript.OP_NOP)
+	for _, tx := range baseBlock.Transactions {
+		tx.TxOut[0].PkScript = append(tx.TxOut[0].PkScript, manyNoOps...)
+	}
+
 	// 2. Pass at per-block sigOps limit
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
 	// tx1:        19999 sigOps (ok)     <=1MB (ok)
@@ -365,14 +371,9 @@ func TestSigOpsLimitsWithMultiMBBlocks(t *testing.T) {
 	}
 	err = validateBigBlock(atBlockLimit)
 	if err != nil {
-		if rule, ok := err.(RuleError); ok {
-			if rule.ErrorCode == ErrTooManySigOps {
-				t.Fatalf("Expected to validate but got: %v", err)
-			}
-		}
-
+		t.Fatalf("Unexpected error processing sigOps test block: %v", err)
 	}
-	tip = atTxLimit
+	tip = atBlockLimit
 
 	// 2. Fail at per-block sigOps limit +1
 	// coinbase:     20k sigOps (ok)     <=1MB (ok)
