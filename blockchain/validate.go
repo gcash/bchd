@@ -19,6 +19,9 @@ import (
 )
 
 const (
+	// semantic helpers
+	oneMegabyte = 1000000
+
 	// MaxTimeOffsetSeconds is the maximum number of seconds a block time
 	// is allowed to be ahead of the current time.  This is currently 2
 	// hours.
@@ -47,17 +50,19 @@ const (
 	LegacyMaxBlockSize = 1000000
 
 	// MaxBlockSigOpsPerMB is the maximum number of allowed sigops allowed
-	// per one megabyte allowed in a block
+	// per one (or partial) megabyte of block size after the UAHF hard fork
 	MaxBlockSigOpsPerMB = 20000
 
 	// MaxTransactionSize is the maximum allowable size of a transaction
-	MaxTransactionSize = 1000000
+	// after the UAHF hard fork
+	MaxTransactionSize = oneMegabyte
 
 	// MinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
 	MinTransactionSize = 100
 
-	// MaxTransactionSigOps is the maximum allowable number of sigops per transaction
+	// MaxTransactionSigOps is the maximum allowable number of sigops per
+	// transaction after the UAHF hard fork
 	MaxTransactionSigOps = 20000
 )
 
@@ -89,15 +94,11 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 }
 
 // MaxBlockSigOps returns the maximum allowable number of signature
-// operations per block. If the UAHF hardfork is active the returned
-// value is a function of the excessive blocksize. Otherwise it's a
-// function of the legacy blocksize.
-func (b *BlockChain) MaxBlockSigOps(uahfActive bool) int {
-	limit := LegacyMaxBlockSize
-	if uahfActive {
-		limit = int(b.excessiveBlockSize)
-	}
-	return (limit / 1000000) * MaxBlockSigOpsPerMB
+// operations in a block. The value is a function of the serialized
+// block size in bytes.
+func MaxBlockSigOps(nBlockBytes uint32) int {
+	nBlockMBytesRoundedUp := 1 + ((int(nBlockBytes) - 1) / oneMegabyte)
+	return nBlockMBytesRoundedUp * MaxBlockSigOpsPerMB
 }
 
 // isNullOutpoint determines whether or not a previous transaction output point
@@ -1063,8 +1064,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	// If Uahf is active then we need to calculate the max block size
-	// and max sigops using the excessiveBlockSize rather than the
-	// LegacyBlockSize
+	// using the excessiveBlockSize rather than the LegacyBlockSize
 	uahfActive := node.height > b.chainParams.UahfForkHeight
 
 	// If Daa hardfork is active then we need to use the new difficulty
@@ -1161,7 +1161,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// scripts.
 	transactions := block.Transactions()
 	totalSigOpCost := 0
-	maxSigOps := b.MaxBlockSigOps(uahfActive)
+	nBlockBytes := block.MsgBlock().SerializeSize()
+	maxSigOps := MaxBlockSigOps(uint32(nBlockBytes))
 	for i, tx := range transactions {
 		// Since the first (and only the first) transaction has
 		// already been verified to be a coinbase transaction,
