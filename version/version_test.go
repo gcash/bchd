@@ -6,7 +6,10 @@ import (
 )
 
 func TestString(t *testing.T) {
-	base := fmt.Sprintf("%d.%d.%d-%s", AppMajor, AppMinor, AppPatch, AppPreRelease)
+	base := fmt.Sprintf("%d.%d.%d", AppMajor, AppMinor, AppPatch)
+	if AppPreRelease != "" {
+		base = fmt.Sprintf("%s-%s", base, AppPreRelease)
+	}
 
 	testCases := []struct {
 		name     string
