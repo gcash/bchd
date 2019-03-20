@@ -566,7 +566,7 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	txDescs := txMemPool.TxDescs()
 
 	// To build the filter we'll put all the mempool transactions into a mock block
-	block := wire.NewMsgBlock(nil)
+	block := wire.NewMsgBlock(&wire.BlockHeader{})
 	var scripts [][]byte
 	for _, txDesc := range txDescs {
 		block.Transactions = append(block.Transactions, txDesc.Tx.MsgTx())
