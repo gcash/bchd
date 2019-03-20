@@ -37,6 +37,32 @@ func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	return append(signature.Serialize(), byte(hashType)), nil
 }
 
+// RawTxInSchnorrSignature returns the serialized Schnorr signature for the input idx of
+// the given transaction, with hashType appended to it.
+//
+// TODO: This function is only used in a test. After Great Wall activation we will switch
+// RawTxInSignature to generate schnorr signatures by default.
+func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
+	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
+
+	// If the forkID was not passed in with the hashtype then add it here
+	if hashType&SigHashForkID != SigHashForkID {
+		hashType |= SigHashForkID
+	}
+
+	sigHashes := NewTxSigHashes(tx)
+	hash, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := key.SignECDSA(hash)
+	if err != nil {
+		return nil, fmt.Errorf("cannot sign tx input: %s", err)
+	}
+
+	return append(signature.Serialize(), byte(hashType)), nil
+}
+
 // LegacyTxInSignature generates a signature using the pre-uahf signature
 // hashing algorithm
 func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
@@ -357,7 +383,7 @@ sigLoop:
 			// If it matches we put it in the map. We only
 			// can take one signature per public key so if we
 			// already have one, we can throw this away.
-			if pSig.VerifyECDSA(hash, pubKey) {
+			if pSig.Verify(hash, pubKey) {
 				aStr := addr.EncodeAddress()
 				if _, ok := addrToSig[aStr]; !ok {
 					addrToSig[aStr] = sig

@@ -436,3 +436,71 @@ func TestCTORActivation(t *testing.T) {
 		}
 	}
 }
+
+// TestGreatWallActivation tests that Schnorr signatures validate properly
+// and segwit clean stack exemption passes after GreatWall activation.
+func TestGreatWallActivation(t *testing.T) {
+	tests, err := fullblocktests.GenerateBlocksWithSchnorrSigs()
+	if err != nil {
+		t.Fatalf("failed to generate tests: %v", err)
+	}
+
+	// Create a new database and chain instance to run tests against.
+	params := &chaincfg.RegressionNetParams
+	params.GreatWallActivationTime = 0
+	params.MagneticAnonomalyForkHeight = 0
+	chain, teardownFunc, err := chainSetup("fullblocktest",
+		params)
+	if err != nil {
+		t.Errorf("Failed to setup chain instance: %v", err)
+		return
+	}
+	defer teardownFunc()
+
+	// testAcceptedBlock attempts to process the block in the provided test
+	// instance and ensures that it was accepted according to the flags
+	// specified in the test.
+	testAcceptedBlock := func(item fullblocktests.AcceptedBlock) {
+		blockHeight := item.Height
+		block := bchutil.NewBlock(item.Block)
+		block.SetHeight(blockHeight)
+		t.Logf("Testing block %s (hash %s, height %d)",
+			item.Name, block.Hash(), blockHeight)
+
+		isMainChain, isOrphan, err := chain.ProcessBlock(block,
+			blockchain.BFNone)
+		if err != nil {
+			t.Fatalf("block %q (hash %s, height %d) should "+
+				"have been accepted: %v", item.Name,
+				block.Hash(), blockHeight, err)
+		}
+
+		// Ensure the main chain and orphan flags match the values
+		// specified in the test.
+		if isMainChain != item.IsMainChain {
+			t.Fatalf("block %q (hash %s, height %d) unexpected main "+
+				"chain flag -- got %v, want %v", item.Name,
+				block.Hash(), blockHeight, isMainChain,
+				item.IsMainChain)
+		}
+		if isOrphan != item.IsOrphan {
+			t.Fatalf("block %q (hash %s, height %d) unexpected "+
+				"orphan flag -- got %v, want %v", item.Name,
+				block.Hash(), blockHeight, isOrphan,
+				item.IsOrphan)
+		}
+	}
+
+	for testNum, test := range tests {
+		for itemNum, item := range test {
+			switch item := item.(type) {
+			case fullblocktests.AcceptedBlock:
+				testAcceptedBlock(item)
+			default:
+				t.Fatalf("test #%d, item #%d is not one of "+
+					"the supported test instance types -- "+
+					"got type: %T", testNum, itemNum, item)
+			}
+		}
+	}
+}

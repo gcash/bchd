@@ -806,12 +806,12 @@ func testSignAndVerifyECDSA(t *testing.T, c *KoblitzCurve, tag string) {
 			return
 		}
 
-		if !sig.VerifyECDSA(hashed[:], pub) {
+		if !sig.Verify(hashed[:], pub) {
 			t.Errorf("%s: Verify failed", tag)
 		}
 
 		hashed[0] ^= 0xff
-		if sig.VerifyECDSA(hashed[:], pub) {
+		if sig.Verify(hashed[:], pub) {
 			t.Errorf("%s: Verify always works!", tag)
 		}
 	}
@@ -830,12 +830,12 @@ func testSignAndVerifySchnorr(t *testing.T, c *KoblitzCurve, tag string) {
 			return
 		}
 
-		if !sig.VerifySchnorr(hashed[:], pub) {
+		if !sig.Verify(hashed[:], pub) {
 			t.Errorf("%s: Verify failed", tag)
 		}
 
 		hashed[0] ^= 0xff
-		if sig.VerifySchnorr(hashed[:], pub) {
+		if sig.Verify(hashed[:], pub) {
 			t.Errorf("%s: Verify always works!", tag)
 		}
 	}

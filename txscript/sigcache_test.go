@@ -49,7 +49,7 @@ func TestSigCacheAddExists(t *testing.T) {
 	sigCache.Add(*msg1, sig1, key1)
 
 	// The previously added triplet should now be found within the sigcache.
-	sig1Copy, _ := bchec.ParseSignature(sig1.Serialize(), bchec.S256())
+	sig1Copy, _ := bchec.ParseBERSignature(sig1.Serialize(), bchec.S256())
 	key1Copy, _ := bchec.ParsePubKey(key1.SerializeCompressed(), bchec.S256())
 	if !sigCache.Exists(*msg1, sig1Copy, key1Copy) {
 		t.Errorf("previously added item not found in signature cache")
@@ -73,7 +73,7 @@ func TestSigCacheAddEvictEntry(t *testing.T) {
 
 		sigCache.Add(*msg, sig, key)
 
-		sigCopy, _ := bchec.ParseSignature(sig.Serialize(), bchec.S256())
+		sigCopy, _ := bchec.ParseBERSignature(sig.Serialize(), bchec.S256())
 		keyCopy, _ := bchec.ParsePubKey(key.SerializeCompressed(), bchec.S256())
 		if !sigCache.Exists(*msg, sigCopy, keyCopy) {
 			t.Errorf("previously added item not found in signature" +
@@ -102,7 +102,7 @@ func TestSigCacheAddEvictEntry(t *testing.T) {
 	}
 
 	// The entry added above should be found within the sigcache.
-	sigNewCopy, _ := bchec.ParseSignature(sigNew.Serialize(), bchec.S256())
+	sigNewCopy, _ := bchec.ParseBERSignature(sigNew.Serialize(), bchec.S256())
 	keyNewCopy, _ := bchec.ParsePubKey(keyNew.SerializeCompressed(), bchec.S256())
 	if !sigCache.Exists(*msgNew, sigNewCopy, keyNewCopy) {
 		t.Fatalf("previously added item not found in signature cache")
@@ -125,7 +125,7 @@ func TestSigCacheAddMaxEntriesZeroOrNegative(t *testing.T) {
 	sigCache.Add(*msg1, sig1, key1)
 
 	// The generated triplet should not be found.
-	sig1Copy, _ := bchec.ParseSignature(sig1.Serialize(), bchec.S256())
+	sig1Copy, _ := bchec.ParseBERSignature(sig1.Serialize(), bchec.S256())
 	key1Copy, _ := bchec.ParsePubKey(key1.SerializeCompressed(), bchec.S256())
 	if sigCache.Exists(*msg1, sig1Copy, key1Copy) {
 		t.Errorf("previously added signature found in sigcache, but" +

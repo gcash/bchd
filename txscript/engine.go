@@ -84,6 +84,17 @@ const (
 	// OP_CHECKDATASIGVERIFY opcodes. Without this flag the opcodes will
 	// behave as if they are disabled.
 	ScriptVerifyCheckDataSig
+
+	// ScriptVerifySchnorr enables verification of schnorr signatures,
+	// in addition to ECDSA signatures, in OP_CHECKSIG, OP_CHECKSIGVEERIFY,
+	// OP_CHECKDATASIG, and OP_CHECKDATASIGVERIFY.
+	ScriptVerifySchnorr
+
+	// ScriptVerifyAllowSegwitRecovery enables an exemption to
+	// ScriptVerifyCleanStack which allows certain outputs to be exempted
+	// from the rule in order to allow users who accidentally sent funds to
+	// segwit addresses to recover them.
+	ScriptVerifyAllowSegwitRecovery
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -266,7 +277,7 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 	}
 
 	if finalScript && vm.hasFlag(ScriptVerifyCleanStack) &&
-		vm.dstack.Depth() != 1 {
+		vm.dstack.Depth() != 1 && !vm.isCleanStackExempt() {
 
 		str := fmt.Sprintf("stack contains %d unexpected items",
 			vm.dstack.Depth()-1)
@@ -466,6 +477,10 @@ func (vm *Engine) checkSignatureEncoding(sig []byte) error {
 		!vm.hasFlag(ScriptVerifyLowS) &&
 		!vm.hasFlag(ScriptVerifyStrictEncoding) {
 
+		return nil
+	}
+
+	if vm.hasFlag(ScriptVerifySchnorr) && len(sig) == 64 {
 		return nil
 	}
 
@@ -678,6 +693,44 @@ func setStack(stack *stack, data [][]byte) {
 	}
 }
 
+// isSegwitScript is used to identify segwit input scripts to determine
+// if they are eligible for cleanstack exemption under ScriptVerifyAllowSegwitRecovery.
+func isSegwitScript(scriptSig []parsedOpcode) bool {
+	// A segwit script sig contains a single data push of a redeem script
+	if len(scriptSig) != 1 {
+		return false
+	}
+
+	// The first (and only) opcode must be a data push and since the redeem script must
+	// be no less than 4 bytes, the opcode must be greater or equal to OP_DATA_4. It also
+	// cannot be greater than OP_PUSHDATA4 since there are no more pushes above that range.
+	if scriptSig[0].opcode.value < OP_DATA_4 || scriptSig[0].opcode.value > OP_PUSHDATA4 {
+		return false
+	}
+
+	redeemScript := scriptSig[0].data
+
+	// The redeem script must be between 4 and 42 bytes.
+	if len(redeemScript) < 4 || len(redeemScript) > 42 {
+		return false
+	}
+
+	// The first byte of the redeem script must be either OP_0 or in the range OP_1 - OP_16
+	if redeemScript[0] != OP_0 && (redeemScript[0] < OP_1 || redeemScript[0] > OP_16) {
+		return false
+	}
+
+	// The second byte of the redeem script must equal the length of the redeem script minus 2.
+	return redeemScript[1] == uint8(len(redeemScript)-2)
+}
+
+// isCleanStackExempt returns true if ScriptVerifyAllowSegwitRecover
+// is set and this is a bip16 (P2SH) input and the script passes the
+// isSegwitScript checks.
+func (vm *Engine) isCleanStackExempt() bool {
+	return vm.hasFlag(ScriptVerifyAllowSegwitRecovery) && vm.bip16 && isSegwitScript(vm.scripts[0])
+}
+
 // GetStack returns the contents of the primary stack as an array. where the
 // last item in the array is the top of the stack.
 func (vm *Engine) GetStack() [][]byte {
@@ -726,8 +779,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	}
 
 	// The clean stack flag (ScriptVerifyCleanStack) is not allowed without
-	// either the pay-to-script-hash (P2SH) evaluation (ScriptBip16)
-	// flag or the Segregated Witness (ScriptVerifyWitness) flag.
+	// the pay-to-script-hash (P2SH) evaluation (ScriptBip16) flag.
 	//
 	// Recall that evaluating a P2SH script without the flag set results in
 	// non-P2SH evaluation which leaves the P2SH inputs on the stack.

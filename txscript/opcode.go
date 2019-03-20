@@ -2297,12 +2297,14 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	}
 
 	var signature *bchec.Signature
-	if vm.hasFlag(ScriptVerifyStrictEncoding) ||
+	if vm.hasFlag(ScriptVerifySchnorr) && len(sigBytes) == 64 {
+		signature, err = bchec.ParseSchnorrSignature(sigBytes)
+	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
 		vm.hasFlag(ScriptVerifyDERSignatures) {
 
 		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
 	} else {
-		signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
+		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
 	}
 	if err != nil {
 		vm.dstack.PushBool(false)
@@ -2315,12 +2317,12 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		copy(sigHash[:], hash)
 
 		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.VerifyECDSA(hash, pubKey) {
+		if !valid && signature.Verify(hash, pubKey) {
 			vm.sigCache.Add(sigHash, signature, pubKey)
 			valid = true
 		}
 	} else {
-		valid = signature.VerifyECDSA(hash, pubKey)
+		valid = signature.Verify(hash, pubKey)
 	}
 
 	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {
@@ -2512,7 +2514,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				parsedSig, err = bchec.ParseDERSignature(signature,
 					bchec.S256())
 			} else {
-				parsedSig, err = bchec.ParseSignature(signature,
+				parsedSig, err = bchec.ParseBERSignature(signature,
 					bchec.S256())
 			}
 			sigInfo.parsed = true
@@ -2554,12 +2556,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			copy(sigHash[:], signatureHash)
 
 			valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
-			if !valid && parsedSig.VerifyECDSA(signatureHash, parsedPubKey) {
+			if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
 				vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
 				valid = true
 			}
 		} else {
-			valid = parsedSig.VerifyECDSA(signatureHash, parsedPubKey)
+			valid = parsedSig.Verify(signatureHash, parsedPubKey)
 		}
 
 		if valid {
@@ -2641,12 +2643,14 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 	}
 
 	var signature *bchec.Signature
-	if vm.hasFlag(ScriptVerifyStrictEncoding) ||
+	if vm.hasFlag(ScriptVerifySchnorr) && len(sigBytes) == 64 {
+		signature, err = bchec.ParseSchnorrSignature(sigBytes)
+	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
 		vm.hasFlag(ScriptVerifyDERSignatures) {
 
 		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
 	} else {
-		signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
+		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
 	}
 	if err != nil {
 		vm.dstack.PushBool(false)
@@ -2659,12 +2663,12 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 		copy(sigHash[:], messageHash[:])
 
 		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.VerifyECDSA(messageHash[:], pubKey) {
+		if !valid && signature.Verify(messageHash[:], pubKey) {
 			vm.sigCache.Add(sigHash, signature, pubKey)
 			valid = true
 		}
 	} else {
-		valid = signature.VerifyECDSA(messageHash[:], pubKey)
+		valid = signature.Verify(messageHash[:], pubKey)
 	}
 
 	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {

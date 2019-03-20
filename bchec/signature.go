@@ -22,10 +22,22 @@ var (
 	errExcessivelyPaddedValue = errors.New("value is excessively padded")
 )
 
-// Signature is a type representing an ecdsa signature.
+// SignatureType enumerates the type of signature. Either ECDSA or Schnorr
+type SignatureType uint8
+
+const (
+	// SignatureTypeECDSA defines an ecdsa signature
+	SignatureTypeECDSA SignatureType = iota
+
+	// SignatureTypeSchnorr defines a schnorr signature
+	SignatureTypeSchnorr
+)
+
+// Signature is a type representing either an ecdsa or schnorr signature.
 type Signature struct {
-	R *big.Int
-	S *big.Int
+	R       *big.Int
+	S       *big.Int
+	sigType SignatureType
 }
 
 var (
@@ -37,14 +49,20 @@ var (
 	oneInitializer = []byte{0x01}
 )
 
-// Serialize returns the ECDSA signature in the more strict DER format.  Note
-// that the serialized bytes returned do not include the appended hash type
+// Serialize returns the a serialized signature depending on the SignatureType.
+// Note that the serialized bytes returned do not include the appended hash type
 // used in Bitcoin signature scripts.
+//
+// ECDSA signature in the more strict DER format.
 //
 // encoding/asn1 is broken so we hand roll this output:
 //
 // 0x30 <length> 0x02 <length r> r 0x02 <length s> s
 func (sig *Signature) Serialize() []byte {
+	// Schnorr signatures are easy to serialize
+	if sig.sigType == SignatureTypeSchnorr {
+		return append(padIntBytes(sig.R), padIntBytes(sig.S)...)
+	}
 	// low 'S' malleability breaker
 	sigS := sig.S
 	if sigS.Cmp(S256().halfOrder) == 1 {
@@ -71,16 +89,22 @@ func (sig *Signature) Serialize() []byte {
 	return b
 }
 
-// VerifyECDSA calls ecdsa.Verify to verify the signature of hash using the public
-// key.  It returns true if the signature is valid, false otherwise.
-func (sig *Signature) VerifyECDSA(hash []byte, pubKey *PublicKey) bool {
-	return ecdsa.Verify(pubKey.ToECDSA(), hash, sig.R, sig.S)
+// Verify verifies either an ECDSA or Schnorr signature depending
+// on the SignatureType of the signature. It returns true if the
+// signature is valid, false otherwise.
+func (sig *Signature) Verify(hash []byte, pubKey *PublicKey) bool {
+	if sig.sigType == SignatureTypeECDSA {
+		return ecdsa.Verify(pubKey.ToECDSA(), hash, sig.R, sig.S)
+	} else if sig.sigType == SignatureTypeSchnorr {
+		return verifySchnorr(pubKey, hash, sig.R, sig.S)
+	}
+	// unknown signature type
+	return false
 }
 
-// VerifySchnorr verifies the schnorr signature of the hash using the pubkey key.
+// verifySchnorr verifies the schnorr signature of the hash using the pubkey key.
 // It returns true if the signature is valid, false otherwise.
-func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
-
+func verifySchnorr(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool {
 	// This schnorr specification is specific to the secp256k1 curve so if the
 	// provided curve is not a KoblitizCurve then we'll just return false.
 	curve, ok := pubKey.Curve.(*KoblitzCurve)
@@ -89,12 +113,12 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	}
 
 	// Signature is invalid if s >= order or r >= p.
-	if sig.S.Cmp(curve.Params().N) >= 0 || sig.R.Cmp(curve.Params().P) >= 0 {
+	if s.Cmp(curve.Params().N) >= 0 || r.Cmp(curve.Params().P) >= 0 {
 		return false
 	}
 
 	// Compute scalar e = Hash(r || compressed(P) || m) mod N
-	eBytes := sha256.Sum256(append(append(padIntBytes(sig.R), pubKey.SerializeCompressed()...), hash...))
+	eBytes := sha256.Sum256(append(append(padIntBytes(r), pubKey.SerializeCompressed()...), hash...))
 	e := new(big.Int).SetBytes(eBytes[:])
 	e.Mod(e, curve.Params().N)
 
@@ -102,7 +126,7 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 	e.Neg(e).Mod(e, curve.Params().N)
 
 	// Compute point R = s * G - e * P.
-	sgx, sgy, sgz := curve.scalarBaseMultJacobian(sig.S.Bytes())
+	sgx, sgy, sgz := curve.scalarBaseMultJacobian(s.Bytes())
 	epx, epy, epz := curve.scalarMultJacobian(pubKey.X, pubKey.Y, e.Bytes())
 	rx, ry, rz := new(fieldVal), new(fieldVal), new(fieldVal)
 	curve.addJacobian(sgx, sgy, sgz, epx, epy, epz, rx, ry, rz)
@@ -121,7 +145,7 @@ func (sig *Signature) VerifySchnorr(hash []byte, pubKey *PublicKey) bool {
 
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
-	fieldR := new(fieldVal).SetByteSlice(sig.R.Bytes())
+	fieldR := new(fieldVal).SetByteSlice(r.Bytes())
 	return rx.Equals(rz.Square().Mul(fieldR))
 }
 
@@ -149,7 +173,7 @@ func parseECDSASig(sigStr []byte, curve elliptic.Curve, der bool) (*Signature, e
 	// 0x30 <length of whole message> <0x02> <length of R> <R> 0x2
 	// <length of S> <S>.
 
-	signature := &Signature{}
+	signature := &Signature{sigType: SignatureTypeECDSA}
 
 	if len(sigStr) < minSigLen {
 		return nil, errors.New("malformed signature: too short")
@@ -260,29 +284,29 @@ func parseSchnorrSig(sigStr []byte) (*Signature, error) {
 	bigR := new(big.Int).SetBytes(sigStr[:32])
 	bigS := new(big.Int).SetBytes(sigStr[32:64])
 	return &Signature{
-		R: bigR,
-		S: bigS,
+		R:       bigR,
+		S:       bigS,
+		sigType: SignatureTypeSchnorr,
 	}, nil
 }
 
-// ParseSignature parses a signature depending in the signature type.
-// If it's an ECDSA signature in BER format for the curve type `curve'
+// ParseBERSignature parses an ECDSA signature in BER format for the curve type `curve'
 // into a Signature type, perfoming some basic sanity checks.  If parsing
 // according to the more strict DER format is needed, use ParseDERSignature.
-// If the signature is 64 bytes in length it is interpreted as a schnorr signature
-// and parsed accordingly.
-func ParseSignature(sigStr []byte, curve elliptic.Curve) (*Signature, error) {
-	if len(sigStr) == 64 {
-		return parseSchnorrSig(sigStr)
-	}
+func ParseBERSignature(sigStr []byte, curve elliptic.Curve) (*Signature, error) {
 	return parseECDSASig(sigStr, curve, false)
 }
 
 // ParseDERSignature parses a signature in DER format for the curve type
 // `curve` into a Signature type.  If parsing according to the less strict
-// BER format is needed, use ParseSignature.
+// BER format is needed, use ParseBERSignature.
 func ParseDERSignature(sigStr []byte, curve elliptic.Curve) (*Signature, error) {
 	return parseECDSASig(sigStr, curve, true)
+}
+
+// ParseSchnorrSignature parses a 64 byte schnorr signature into a Signature type.
+func ParseSchnorrSignature(sigStr []byte) (*Signature, error) {
+	return parseSchnorrSig(sigStr)
 }
 
 // canonicalizeInt returns the bytes for the passed big integer adjusted as
@@ -519,7 +543,7 @@ func signRFC6979(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 	if s.Sign() == 0 {
 		return nil, errors.New("calculated S is zero")
 	}
-	return &Signature{R: r, S: s}, nil
+	return &Signature{R: r, S: s, sigType: SignatureTypeECDSA}, nil
 }
 
 // signSchnorr signs the hash using the schnorr signature algorithm.
@@ -551,8 +575,9 @@ func signSchnorr(privateKey *PrivateKey, hash []byte) (*Signature, error) {
 	s.Add(s, k)
 	s.Mod(s, privateKey.Params().N)
 	return &Signature{
-		R: rx,
-		S: s,
+		R:       rx,
+		S:       s,
+		sigType: SignatureTypeSchnorr,
 	}, nil
 }
 

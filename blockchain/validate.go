@@ -1071,9 +1071,13 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// adjustment algorithm and also enforce Low S and Nullfail.
 	daaActive := node.height > b.chainParams.DaaForkHeight
 
-	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
+	// If MagneticAnomaly hardfork is active we must enforce PushOnly and CleanStack
 	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY and CTOR.
 	magneticAnomalyActive := node.height > b.chainParams.MagneticAnonomalyForkHeight
+
+	// If GreatWall hardfork is active then we must enforce the Schnorr and AllowSegitRecovery
+	// script flags.
+	greatWallActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.GreatWallActivationTime
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
@@ -1145,12 +1149,17 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptVerifyLowS | txscript.ScriptVerifyNullFail
 	}
 
-	// If MagneticAnomaly hardfork is enabled we must enforce PushOnly and CleanStack
-	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY
+	// If MagneticAnomaly hardfork is active we must enforce PushOnly and CleanStack
+	// and enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY.
 	if magneticAnomalyActive {
 		scriptFlags |= txscript.ScriptVerifySigPushOnly |
 			txscript.ScriptVerifyCleanStack |
 			txscript.ScriptVerifyCheckDataSig
+	}
+
+	// If GreatWall is enforce Schnorr and AllowSegwitRecovery script flags.
+	if greatWallActive {
+		scriptFlags |= txscript.ScriptVerifySchnorr | txscript.ScriptVerifyAllowSegwitRecovery
 	}
 
 	// The number of signature operations must be less than the maximum

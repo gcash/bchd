@@ -41,7 +41,7 @@ func TestPrivKeys(t *testing.T) {
 			continue
 		}
 
-		if !sig.VerifyECDSA(hash, pub) {
+		if !sig.Verify(hash, pub) {
 			t.Errorf("%s could not verify: %v", test.name, err)
 			continue
 		}
