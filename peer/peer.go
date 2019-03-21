@@ -127,9 +127,6 @@ type MessageListeners struct {
 	// message.
 	OnCFCheckpt func(p *Peer, msg *wire.MsgCFCheckpt)
 
-	// OnCFMempool is invoked when a peer receives a cfmempool bitcoin message.
-	OnCFMempool func(p *Peer, msg *wire.MsgCFMempool)
-
 	// OnInv is invoked when a peer receives an inv bitcoin message.
 	OnInv func(p *Peer, msg *wire.MsgInv)
 
@@ -1171,6 +1168,10 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time, msgCmd st
 		// Expects an inv message.
 		pendingResponses[wire.CmdInv] = deadline
 
+	case wire.CmdGetCFMempool:
+		// Expects a cfilter message.
+		pendingResponses[wire.CmdCFilter] = deadline
+
 	case wire.CmdGetData:
 		// Expects a block, merkleblock, tx, or notfound message.
 		pendingResponses[wire.CmdBlock] = deadline
@@ -1507,11 +1508,6 @@ out:
 		case *wire.MsgCFHeaders:
 			if p.cfg.Listeners.OnCFHeaders != nil {
 				p.cfg.Listeners.OnCFHeaders(p, msg)
-			}
-
-		case *wire.MsgCFMempool:
-			if p.cfg.Listeners.OnCFMempool != nil {
-				p.cfg.Listeners.OnCFMempool(p, msg)
 			}
 
 		case *wire.MsgFeeFilter:
