@@ -165,7 +165,7 @@ func TestComputePkScript(t *testing.T) {
 				0x1f, 0x1f, 0x7b, 0x73, 0x7d, 0x9a, 0x24, 0x49,
 				0x90,
 			},
-			class:   PubKeyHashTy,
+			class: PubKeyHashTy,
 			pkScript: []byte{
 				// OP_DUP
 				0x76,
@@ -215,7 +215,7 @@ func TestComputePkScript(t *testing.T) {
 				0x3e, 0xfd, 0x9d, 0x41, 0x03, 0xb5, 0x59, 0xeb,
 				0x67, 0xcd, 0x52, 0xae,
 			},
-			class:   ScriptHashTy,
+			class: ScriptHashTy,
 			pkScript: []byte{
 				// OP_HASH160
 				0xA9,
