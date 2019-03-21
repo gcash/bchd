@@ -566,27 +566,27 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	txDescs := txMemPool.TxDescs()
 
 	// To build the filter we'll put all the mempool transactions into a mock block
-	block := wire.NewMsgBlock(&wire.BlockHeader{})
-	var scripts [][]byte
+	var txs []*wire.MsgTx
+	scripts := make([][]byte, 0)
 	for _, txDesc := range txDescs {
-		block.Transactions = append(block.Transactions, txDesc.Tx.MsgTx())
+		txs = append(txs, txDesc.Tx.MsgTx())
 		for _, in := range txDesc.Tx.MsgTx().TxIn {
 			entry, err := sp.server.chain.FetchUtxoEntry(in.PreviousOutPoint)
-			if err != nil {
+			if err != nil || entry == nil {
 				continue
 			}
 			scripts = append(scripts, entry.PkScript())
 		}
 	}
-	filter, err := builder.BuildBasicFilter(block, scripts)
+	filter, err := builder.BuildMempoolFilter(txs, scripts)
 	if err != nil {
 		return
 	}
-	filterBytes, err := filter.Bytes()
+	filterBytes, err := filter.NBytes()
 	if err != nil {
 		return
 	}
-	resp := wire.NewMsgCFMempool(wire.GCSFilterRegular, filterBytes)
+	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, &chainhash.Hash{}, filterBytes)
 	sp.QueueMessage(resp, nil)
 }
 
@@ -2058,6 +2058,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnGetCFilters:  sp.OnGetCFilters,
 			OnGetCFHeaders: sp.OnGetCFHeaders,
 			OnGetCFCheckpt: sp.OnGetCFCheckpt,
+			OnGetCFMempool: sp.OnGetCFMemPool,
 			OnFeeFilter:    sp.OnFeeFilter,
 			OnFilterAdd:    sp.OnFilterAdd,
 			OnFilterClear:  sp.OnFilterClear,
