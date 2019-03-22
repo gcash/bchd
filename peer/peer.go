@@ -197,6 +197,22 @@ type MessageListeners struct {
 	// message.
 	OnSendHeaders func(p *Peer, msg *wire.MsgSendHeaders)
 
+	// OnSendCmpct is invoked when a peer receives a sendcmpct bitcoin
+	// message.
+	OnSendCmpct func(p *Peer, msg *wire.MsgSendCmpct)
+
+	// OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin
+	// message.
+	OnCmpctBlock func(p *Peer, msg *wire.MsgCmpctBlock)
+
+	// OnGetBlockTxns is invoked when a peer receives a getblocktxn bitcoin
+	// message.
+	OnGetBlockTxns func(p *Peer, msg *wire.MsgGetBlockTxns)
+
+	// OnBlockTxns is invoked when a peer receives a blocktxns bitcoin
+	// message.
+	OnBlockTxns func(p *Peer, msg *wire.MsgBlockTxns)
+
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
 	// an error in the read occurred.  Typically, callers will opt to use
@@ -485,6 +501,10 @@ type Peer struct {
 	queueQuit     chan struct{}
 	outQuit       chan struct{}
 	quit          chan struct{}
+
+	// CompactBlocks
+	compactBlocksPreferred   bool
+	acceptsUnvalidatedBlocks bool
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -1172,9 +1192,14 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time, msgCmd st
 		// Expects a cfilter message.
 		pendingResponses[wire.CmdCFilter] = deadline
 
+	case wire.CmdGetBlockTxns:
+		// Expects a blocktxns message.
+		pendingResponses[wire.CmdBlockTxns] = deadline
+
 	case wire.CmdGetData:
-		// Expects a block, merkleblock, tx, or notfound message.
+		// Expects a block, cmpctblock, merkleblock, tx, or notfound message.
 		pendingResponses[wire.CmdBlock] = deadline
+		pendingResponses[wire.CmdCmpctBlock] = deadline
 		pendingResponses[wire.CmdMerkleBlock] = deadline
 		pendingResponses[wire.CmdTx] = deadline
 		pendingResponses[wire.CmdNotFound] = deadline
@@ -1232,12 +1257,15 @@ out:
 				switch msgCmd := msg.message.Command(); msgCmd {
 				case wire.CmdBlock:
 					fallthrough
+				case wire.CmdCmpctBlock:
+					fallthrough
 				case wire.CmdMerkleBlock:
 					fallthrough
 				case wire.CmdTx:
 					fallthrough
 				case wire.CmdNotFound:
 					delete(pendingResponses, wire.CmdBlock)
+					delete(pendingResponses, wire.CmdCmpctBlock)
 					delete(pendingResponses, wire.CmdMerkleBlock)
 					delete(pendingResponses, wire.CmdTx)
 					delete(pendingResponses, wire.CmdNotFound)
@@ -1547,6 +1575,32 @@ out:
 
 			if p.cfg.Listeners.OnSendHeaders != nil {
 				p.cfg.Listeners.OnSendHeaders(p, msg)
+			}
+
+		case *wire.MsgSendCmpct:
+			// We only know of one version so if they want something
+			// else we can't use compact blocks.
+			if msg.Version == wire.CompactBlocksProtocolVersion {
+				p.compactBlocksPreferred = true
+				p.acceptsUnvalidatedBlocks = msg.Announce
+			}
+			if p.cfg.Listeners.OnSendCmpct != nil {
+				p.cfg.Listeners.OnSendCmpct(p, msg)
+			}
+
+		case *wire.MsgCmpctBlock:
+			if p.cfg.Listeners.OnCmpctBlock != nil {
+				p.cfg.Listeners.OnCmpctBlock(p, msg)
+			}
+
+		case *wire.MsgGetBlockTxns:
+			if p.cfg.Listeners.OnGetBlockTxns != nil {
+				p.cfg.Listeners.OnGetBlockTxns(p, msg)
+			}
+
+		case *wire.MsgBlockTxns:
+			if p.cfg.Listeners.OnBlockTxns != nil {
+				p.cfg.Listeners.OnBlockTxns(p, msg)
 			}
 
 		default:
