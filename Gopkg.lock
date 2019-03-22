@@ -85,6 +85,14 @@
   revision = "d8f796af33cc11cb798c1aaeb27a4ebc5099927d"
 
 [[projects]]
+  digest = "1:1e9a0ec4f7e852123fefad9aadd7647eed1e9fd3716118e99a4b3dc463705c82"
+  name = "github.com/dchest/siphash"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "34f201214d993633bb24f418ba11736ab8b55aa7"
+  version = "v1.2.1"
+
+[[projects]]
   branch = "master"
   digest = "1:b1053b781e9090dab5d3e916eb04c8d85b63a7f6911007c2cd1dd82fb22f7f6a"
   name = "github.com/gcash/bchlog"
@@ -166,6 +174,7 @@
     "github.com/btcsuite/winsvc/mgr",
     "github.com/btcsuite/winsvc/svc",
     "github.com/davecgh/go-spew/spew",
+    "github.com/dchest/siphash",
     "github.com/gcash/bchlog",
     "github.com/gcash/bchutil",
     "github.com/gcash/bchutil/bloom",

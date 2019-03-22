@@ -56,6 +56,14 @@ const (
 	// retries when connecting to persistent peers.  It is adjusted by the
 	// number of retries such that there is a retry backoff.
 	connectionRetryInterval = time.Second * 5
+
+	// maxDirectRelayPeers specifies the maximum number of direct relay
+	// peers. As part of the compact block protocol (BIP0152) we can tell
+	// a remote peer to send us a block directly without first sending an
+	// inv message. This is a faster relay but we may use more bandwidth
+	// than necessary. For this reason we cap the number of peers we
+	// allow to send us blocks directly at three.
+	maxDirectRelayPeers = 3
 )
 
 var (
@@ -152,15 +160,24 @@ type updatePeerHeightsMsg struct {
 	originPeer *peer.Peer
 }
 
+// maybeAddDirectRelayPeerMsg holds a response chan which returns whether or
+// not the peer was added to the peerstate directRelayPeers map. This will be
+// true if we have less than maxDirectRelayPeers.
+type maybeAddDirectRelayPeerMsg struct {
+	response chan bool
+	peer     *serverPeer
+}
+
 // peerState maintains state of inbound, persistent, outbound peers as well
 // as banned peers and outbound groups.
 type peerState struct {
-	inboundPeers    map[int32]*serverPeer
-	outboundPeers   map[int32]*serverPeer
-	persistentPeers map[int32]*serverPeer
-	banned          map[string]time.Time
-	outboundGroups  map[string]int
-	connectionCount map[string]int
+	inboundPeers     map[int32]*serverPeer
+	outboundPeers    map[int32]*serverPeer
+	persistentPeers  map[int32]*serverPeer
+	directRelayPeers map[int32]*serverPeer
+	banned           map[string]time.Time
+	outboundGroups   map[string]int
+	connectionCount  map[string]int
 }
 
 // Count returns the count of all known peers.
@@ -213,30 +230,31 @@ type server struct {
 	shutdownSched int32
 	startupTime   int64
 
-	chainParams          *chaincfg.Params
-	addrManager          *addrmgr.AddrManager
-	connManager          *connmgr.ConnManager
-	sigCache             *txscript.SigCache
-	hashCache            *txscript.HashCache
-	rpcServer            *rpcServer
-	syncManager          *netsync.SyncManager
-	chain                *blockchain.BlockChain
-	txMemPool            *mempool.TxPool
-	cpuMiner             *cpuminer.CPUMiner
-	modifyRebroadcastInv chan interface{}
-	newPeers             chan *serverPeer
-	donePeers            chan *serverPeer
-	banPeers             chan *serverPeer
-	query                chan interface{}
-	relayInv             chan relayMsg
-	broadcast            chan broadcastMsg
-	peerHeightsUpdate    chan updatePeerHeightsMsg
-	wg                   sync.WaitGroup
-	quit                 chan struct{}
-	nat                  NAT
-	db                   database.DB
-	timeSource           blockchain.MedianTimeSource
-	services             wire.ServiceFlag
+	chainParams             *chaincfg.Params
+	addrManager             *addrmgr.AddrManager
+	connManager             *connmgr.ConnManager
+	sigCache                *txscript.SigCache
+	hashCache               *txscript.HashCache
+	rpcServer               *rpcServer
+	syncManager             *netsync.SyncManager
+	chain                   *blockchain.BlockChain
+	txMemPool               *mempool.TxPool
+	cpuMiner                *cpuminer.CPUMiner
+	modifyRebroadcastInv    chan interface{}
+	newPeers                chan *serverPeer
+	donePeers               chan *serverPeer
+	banPeers                chan *serverPeer
+	maybeAddDirectRelayPeer chan *maybeAddDirectRelayPeerMsg
+	query                   chan interface{}
+	relayInv                chan relayMsg
+	broadcast               chan broadcastMsg
+	peerHeightsUpdate       chan updatePeerHeightsMsg
+	wg                      sync.WaitGroup
+	quit                    chan struct{}
+	nat                     NAT
+	db                      database.DB
+	timeSource              blockchain.MedianTimeSource
+	services                wire.ServiceFlag
 
 	// The following fields are used for optional indexes.  They will be nil
 	// if the associated index is not enabled.  These fields are set during
@@ -493,6 +511,16 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 
 	// Add valid peer to the server.
 	sp.server.AddPeer(sp)
+
+	// This peer supports the compact blocks version so we should
+	// send them a sendcmpt message.
+	if msg.ProtocolVersion >= int32(wire.BIP0152Version) {
+		resp := make(chan bool)
+		sp.server.maybeAddDirectRelayPeer <- &maybeAddDirectRelayPeerMsg{response: resp, peer: sp}
+		announce := <-resp
+		sendCmpctMessage := wire.NewMsgSendCmpct(announce, wire.CompactBlocksProtocolVersion)
+		sp.Peer.QueueMessage(sendCmpctMessage, nil)
+	}
 	return nil
 }
 
@@ -1771,6 +1799,12 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		s.addrManager.Connected(sp.NA())
 	}
 
+	// If this peer was one of the peers we sent the sendcmpct announce
+	// message to then delete it.
+	if _, ok := state.directRelayPeers[sp.ID()]; ok {
+		delete(state.directRelayPeers, sp.ID())
+	}
+
 	// If we get here it means that either we didn't know about the peer
 	// or we purposefully deleted it.
 }
@@ -2205,6 +2239,14 @@ out:
 
 		case qmsg := <-s.query:
 			s.handleQuery(state, qmsg)
+
+		case amsg := <-s.maybeAddDirectRelayPeer:
+			if len(state.directRelayPeers) < maxDirectRelayPeers {
+				state.directRelayPeers[amsg.peer.ID()] = amsg.peer
+				amsg.response <- true
+			} else {
+				amsg.response <- false
+			}
 
 		case <-s.quit:
 			// Disconnect all peers on server shutdown.
@@ -2655,25 +2697,26 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 
 	s := server{
-		startupTime:          time.Now().Unix(),
-		chainParams:          chainParams,
-		addrManager:          amgr,
-		newPeers:             make(chan *serverPeer, cfg.MaxPeers),
-		donePeers:            make(chan *serverPeer, cfg.MaxPeers),
-		banPeers:             make(chan *serverPeer, cfg.MaxPeers),
-		query:                make(chan interface{}),
-		relayInv:             make(chan relayMsg, cfg.MaxPeers),
-		broadcast:            make(chan broadcastMsg, cfg.MaxPeers),
-		quit:                 make(chan struct{}),
-		modifyRebroadcastInv: make(chan interface{}),
-		peerHeightsUpdate:    make(chan updatePeerHeightsMsg),
-		nat:                  nat,
-		db:                   db,
-		timeSource:           blockchain.NewMedianTime(),
-		services:             services,
-		sigCache:             txscript.NewSigCache(cfg.SigCacheMaxSize),
-		hashCache:            txscript.NewHashCache(cfg.SigCacheMaxSize),
-		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
+		startupTime:           time.Now().Unix(),
+		chainParams:           chainParams,
+		addrManager:           amgr,
+		newPeers:              make(chan *serverPeer, cfg.MaxPeers),
+		donePeers:             make(chan *serverPeer, cfg.MaxPeers),
+		banPeers:              make(chan *serverPeer, cfg.MaxPeers),
+		countDirectRelayPeers: make(chan *countDirectRelayPeersMsg),
+		query:                 make(chan interface{}),
+		relayInv:              make(chan relayMsg, cfg.MaxPeers),
+		broadcast:             make(chan broadcastMsg, cfg.MaxPeers),
+		quit:                  make(chan struct{}),
+		modifyRebroadcastInv:  make(chan interface{}),
+		peerHeightsUpdate:     make(chan updatePeerHeightsMsg),
+		nat:                   nat,
+		db:                    db,
+		timeSource:            blockchain.NewMedianTime(),
+		services:              services,
+		sigCache:              txscript.NewSigCache(cfg.SigCacheMaxSize),
+		hashCache:             txscript.NewHashCache(cfg.SigCacheMaxSize),
+		cfCheckptCaches:       make(map[wire.FilterType][]cfHeaderKV),
 	}
 
 	// Create the transaction and address indexes if needed.
