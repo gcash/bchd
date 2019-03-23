@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"encoding/hex"
+	"github.com/gcash/bchd/mining"
 	"reflect"
 	"runtime"
 	"sync"
@@ -866,5 +867,68 @@ func TestCheckSpend(t *testing.T) {
 	spend = harness.txPool.CheckSpend(op)
 	if spend != nil {
 		t.Fatalf("Unexpeced spend found in pool: %v", spend)
+	}
+}
+
+// TestTxPool_DecodeCompressedBlock tests that a compact block is decoded
+// correctly against the mempool.
+func TestTxPool_DecodeCompressedBlock(t *testing.T) {
+	t.Parallel()
+
+	harness, spendableOutputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	txs, err := harness.CreateTxChain(spendableOutputs[0], 18)
+	if err != nil {
+		t.Fatalf("unable to create test txs: %v", err)
+	}
+	originalBlock := wire.NewMsgBlock(&wire.BlockHeader{})
+	targetHash := originalBlock.BlockHash()
+	knownInventory := make(map[chainhash.Hash]bool)
+	for i, tx := range txs[:15] {
+		originalBlock.Transactions = append(originalBlock.Transactions, tx.MsgTx())
+		txhash := tx.Hash()
+		harness.txPool.pool[*txhash] = &TxDesc{TxDesc: mining.TxDesc{Tx: tx}}
+		if i%2 == 0 {
+			knownInventory[*txhash] = true
+		}
+	}
+	for i, tx := range txs[15:] {
+		originalBlock.Transactions = append(originalBlock.Transactions, tx.MsgTx())
+		txhash := tx.Hash()
+		harness.txPool.orphans[*txhash] = &orphanTx{tx: tx}
+		if i%2 == 0 {
+			knownInventory[*txhash] = true
+		}
+	}
+
+	cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(originalBlock, knownInventory)
+	if err != nil {
+		t.Fatalf("unable to create test cmpctblock: %v", err)
+	}
+
+	if len(cmpctBlock.ShortIDs) != 10 {
+		t.Errorf("cmpctBlock built with incorrect number of shortIDs: expected 10 got %d", len(cmpctBlock.ShortIDs))
+	}
+
+	if len(cmpctBlock.PrefilledTxs) != 8 {
+		t.Errorf("cmpctBlock built with incorrect number of prefilled txs: expected 8 got %d", len(cmpctBlock.PrefilledTxs))
+	}
+
+	decodedBlock, err := harness.txPool.DecodeCompressedBlock(cmpctBlock)
+	if err != nil {
+		t.Fatalf("Error decoding block: %v", err)
+	}
+
+	decodedHash := decodedBlock.BlockHash()
+	if !decodedHash.IsEqual(&targetHash) {
+		t.Errorf("hash of decoded block does not match original. wanted %v got %v", decodedHash, targetHash)
+	}
+
+	for i, tx := range decodedBlock.Transactions {
+		if tx == nil {
+			t.Errorf("decoded tx at index %d is nil when it should not be", i)
+		}
 	}
 }

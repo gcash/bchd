@@ -1237,7 +1237,7 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 	switch block := iBlock.(type) {
 	case *wire.MsgCmpctBlock:
 		msgBlock := wire.NewMsgBlock(&block.Header)
-		msgBlock.Transactions = make([]*wire.MsgTx, 0, block.TotalTransactions())
+		msgBlock.Transactions = make([]*wire.MsgTx, block.TotalTransactions())
 
 		// First add all th prefilled txs
 		for _, ptx := range block.PrefilledTxs {
@@ -1249,7 +1249,7 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 		for i, sid := range block.ShortIDs {
 			shortIDMap[sid] = i
 		}
-		recoveredTxs := make([]*wire.MsgTx, 0, len(block.ShortIDs))
+		recoveredTxs := make([]*wire.MsgTx, len(block.ShortIDs))
 
 		// To calculate the siphash keys we need to append the little endian
 		// nonce to the block header.
