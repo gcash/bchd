@@ -1831,23 +1831,43 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			return
 		}
 
+		// If this is a block loop through and delete all the txs
+		// in the block from the peer's known inventory. We do this
+		// last so that
+		deleteKnownInventory := func(block *wire.MsgBlock) {
+			for _, tx := range block.Transactions[1:] {
+				sp.DeleteKnownInventory(&wire.InvVect{
+					Type: wire.InvTypeTx,
+					Hash: tx.TxHash(),
+				})
+			}
+		}
+
 		// If the inventory is a block and the peer prefers headers,
 		// generate and send a headers message instead of an inventory
-		// message.
-		if msg.invVect.Type == wire.InvTypeBlock && sp.WantsHeaders() {
-			blockHeader, ok := msg.data.(wire.BlockHeader)
+		// message otherwise send the inv message right away rather
+		// than putting it on the queue.
+		if msg.invVect.Type == wire.InvTypeBlock {
+			block, ok := msg.data.(*wire.MsgBlock)
 			if !ok {
-				peerLog.Warnf("Underlying data for headers" +
-					" is not a block header")
+				peerLog.Warnf("Underlying data for block" +
+					" is not a block")
 				return
 			}
-			msgHeaders := wire.NewMsgHeaders()
-			if err := msgHeaders.AddBlockHeader(&blockHeader); err != nil {
-				peerLog.Errorf("Failed to add block"+
-					" header: %v", err)
-				return
+			if sp.WantsHeaders() {
+				msgHeaders := wire.NewMsgHeaders()
+				if err := msgHeaders.AddBlockHeader(&block.Header); err != nil {
+					peerLog.Errorf("Failed to add block"+
+						" header: %v", err)
+					return
+				}
+				sp.QueueMessage(msgHeaders, nil)
+			} else {
+				msgInv := wire.NewMsgInv()
+				msgInv.AddInvVect(msg.invVect)
+				sp.QueueMessage(msgInv, nil)
 			}
-			sp.QueueMessage(msgHeaders, nil)
+			deleteKnownInventory(block)
 			return
 		}
 
@@ -2698,26 +2718,26 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	}
 
 	s := server{
-		startupTime:           time.Now().Unix(),
-		chainParams:           chainParams,
-		addrManager:           amgr,
-		newPeers:              make(chan *serverPeer, cfg.MaxPeers),
-		donePeers:             make(chan *serverPeer, cfg.MaxPeers),
-		banPeers:              make(chan *serverPeer, cfg.MaxPeers),
-		countDirectRelayPeers: make(chan *countDirectRelayPeersMsg),
-		query:                 make(chan interface{}),
-		relayInv:              make(chan relayMsg, cfg.MaxPeers),
-		broadcast:             make(chan broadcastMsg, cfg.MaxPeers),
-		quit:                  make(chan struct{}),
-		modifyRebroadcastInv:  make(chan interface{}),
-		peerHeightsUpdate:     make(chan updatePeerHeightsMsg),
-		nat:                   nat,
-		db:                    db,
-		timeSource:            blockchain.NewMedianTime(),
-		services:              services,
-		sigCache:              txscript.NewSigCache(cfg.SigCacheMaxSize),
-		hashCache:             txscript.NewHashCache(cfg.SigCacheMaxSize),
-		cfCheckptCaches:       make(map[wire.FilterType][]cfHeaderKV),
+		startupTime:             time.Now().Unix(),
+		chainParams:             chainParams,
+		addrManager:             amgr,
+		newPeers:                make(chan *serverPeer, cfg.MaxPeers),
+		donePeers:               make(chan *serverPeer, cfg.MaxPeers),
+		banPeers:                make(chan *serverPeer, cfg.MaxPeers),
+		maybeAddDirectRelayPeer: make(chan *maybeAddDirectRelayPeerMsg),
+		query:                   make(chan interface{}),
+		relayInv:                make(chan relayMsg, cfg.MaxPeers),
+		broadcast:               make(chan broadcastMsg, cfg.MaxPeers),
+		quit:                    make(chan struct{}),
+		modifyRebroadcastInv:    make(chan interface{}),
+		peerHeightsUpdate:       make(chan updatePeerHeightsMsg),
+		nat:                     nat,
+		db:                      db,
+		timeSource:              blockchain.NewMedianTime(),
+		services:                services,
+		sigCache:                txscript.NewSigCache(cfg.SigCacheMaxSize),
+		hashCache:               txscript.NewHashCache(cfg.SigCacheMaxSize),
+		cfCheckptCaches:         make(map[wire.FilterType][]cfHeaderKV),
 	}
 
 	// Create the transaction and address indexes if needed.

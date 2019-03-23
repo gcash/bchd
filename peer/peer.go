@@ -550,6 +550,14 @@ func (p *Peer) AddKnownInventory(invVect *wire.InvVect) {
 	p.knownInventory.Add(invVect)
 }
 
+// DeleteKnownInventory deletes the passed inventory from the cache of known inventory
+// for the peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) DeleteKnownInventory(invVect *wire.InvVect) {
+	p.knownInventory.Delete(invVect)
+}
+
 // StatsSnapshot returns a snapshot of the current peer flags and statistics.
 //
 // This function is safe for concurrent access.
