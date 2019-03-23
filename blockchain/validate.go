@@ -695,6 +695,27 @@ func checkSerializedHeight(coinbaseTx *bchutil.Tx, wantHeight int32) error {
 	return nil
 }
 
+// CheckBlockHeaderContext checks the passed block header against the best chain.
+// In other words it checks if the header would be considered valid if processed
+// along with the next block.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	flags := BFNone
+
+	tip := b.bestChain.Tip()
+
+	err := checkBlockHeaderSanity(header, b.chainParams.PowLimit, b.timeSource, flags)
+	if err != nil {
+		return err
+	}
+
+	return b.checkBlockHeaderContext(header, tip, flags)
+}
+
 // checkBlockHeaderContext performs several validation checks on the block header
 // which depend on its position within the block chain.
 //

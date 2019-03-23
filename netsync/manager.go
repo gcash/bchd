@@ -1298,6 +1298,10 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				sm.limitMap(sm.requestedBlocks, maxRequestedBlocks)
 				state.requestedBlocks[iv.Hash] = struct{}{}
 
+				// Request a compact block if this peer supports it.
+				if imsg.peer.ProtocolVersion() >= wire.BIP0152Version {
+					iv.Type = wire.InvTypeCmpctBlock
+				}
 				gdmsg.AddInvVect(iv)
 				numRequested++
 			}

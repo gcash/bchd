@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-// MsgBlockRxRequest implements the Message interface and represents a Bitcoin getblocktxn
+// MsgGetBlockTxns implements the Message interface and represents a Bitcoin getblocktxn
 // message.  It is used to request missing transactions as part of the compact block
 // protocol.
 type MsgGetBlockTxns struct {

@@ -5,8 +5,13 @@
 package mempool
 
 import (
+	"bytes"
 	"container/list"
+	"crypto/sha256"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"github.com/dchest/siphash"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -1220,6 +1225,91 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 // This function is safe for concurrent access.
 func (mp *TxPool) LastUpdated() time.Time {
 	return time.Unix(atomic.LoadInt64(&mp.lastUpdated), 0)
+}
+
+// DecodeCompressedBlock takes in a block interface and attempts to decode it
+// according to know block compressing algorithms. If successful it returns
+// the complete block.
+func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, error) {
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	switch block := iBlock.(type) {
+	case *wire.MsgCmpctBlock:
+		msgBlock := wire.NewMsgBlock(&block.Header)
+		msgBlock.Transactions = make([]*wire.MsgTx, 0, block.TotalTransactions())
+
+		// First add all th prefilled txs
+		for _, ptx := range block.PrefilledTxs {
+			msgBlock.Transactions[ptx.Index] = ptx.Tx
+		}
+
+		// Next we'll decode the short IDs.
+		shortIDMap := make(map[[wire.ShortIDSize]byte]int)
+		for i, sid := range block.ShortIDs {
+			shortIDMap[sid] = i
+		}
+		recoveredTxs := make([]*wire.MsgTx, 0, len(block.ShortIDs))
+
+		// To calculate the siphash keys we need to append the little endian
+		// nonce to the block header.
+		var buf bytes.Buffer
+		if err := block.Header.Serialize(&buf); err != nil {
+			return nil, err
+		}
+		nonceBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(nonceBytes, block.Nonce)
+		headerWithNonce := append(buf.Bytes(), nonceBytes...)
+
+		// Hash the result once with sha256
+		headerHash := sha256.Sum256(headerWithNonce)
+
+		// The keys are the first two little endian uint64s in the resulting
+		// byte array.
+		key0 := binary.LittleEndian.Uint64(headerHash[0:8])
+		key1 := binary.LittleEndian.Uint64(headerHash[8:16])
+
+		calcShortID := func(txid chainhash.Hash) [wire.ShortIDSize]byte {
+			sum64 := siphash.Hash(key0, key1, txid.CloneBytes())
+			shortIDBytes := make([]byte, 8)
+			binary.LittleEndian.PutUint64(shortIDBytes, sum64)
+			var shortID [wire.ShortIDSize]byte
+			copy(shortID[:], shortIDBytes[:wire.ShortIDSize])
+			return shortID
+		}
+
+		// Iterate over the mempool and see if any txs match
+		for txid, txdesc := range mp.pool {
+			shortID := calcShortID(txid)
+			index, ok := shortIDMap[shortID]
+			if ok {
+				recoveredTxs[index] = txdesc.Tx.MsgTx()
+			}
+		}
+
+		// Iterate over the orphan map and see if any txs match
+		for txid, orphan := range mp.orphans {
+			shortID := calcShortID(txid)
+			index, ok := shortIDMap[shortID]
+			if ok {
+				recoveredTxs[index] = orphan.tx.MsgTx()
+			}
+		}
+
+		var pop *wire.MsgTx
+		for i, tx := range msgBlock.Transactions {
+			// This was a prefilled tx so we can continue
+			if tx != nil {
+				continue
+			}
+			// Pop the first item of the shortID list
+			pop, recoveredTxs = recoveredTxs[len(recoveredTxs)-1], recoveredTxs[:len(recoveredTxs)-1]
+			msgBlock.Transactions[i] = pop
+		}
+		return msgBlock, nil
+	default:
+		return nil, errors.New("unknown block type")
+	}
 }
 
 // New returns a new memory pool for validating and storing standalone
