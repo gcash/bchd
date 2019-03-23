@@ -1302,7 +1302,7 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 			if tx != nil {
 				continue
 			}
-			// Pop the first item of the shortID list
+			// Pop the first item of the recoveredTxs list
 			pop, recoveredTxs = recoveredTxs[len(recoveredTxs)-1], recoveredTxs[:len(recoveredTxs)-1]
 			msgBlock.Transactions[i] = pop
 		}

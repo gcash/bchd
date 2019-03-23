@@ -780,7 +780,8 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 				index := msgGetBlockTxns.Indexes[i]
 				msgBlock.Transactions[index] = tx
 			}
-			if !msgBlock.BlockHash().IsEqual(&targetHash) {
+			newBlockHash := msgBlock.BlockHash()
+			if !newBlockHash.IsEqual(&targetHash) {
 				peerLog.Debugf("decoded cmpctblock hash %v doesn't match original message"+
 					" from peer %v ", msg.Header.BlockHash(), sp)
 				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
