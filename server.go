@@ -750,7 +750,7 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 		select {
 		case <-timeout:
 			sp.unsubscribeRecvMsgs(subscription)
-			quitChan <- struct{}{}
+			close(quitChan)
 			peerLog.Debugf("Peer %v timed out waiting for blocktxns for cmpctblock %v",
 				sp, msg.Header.BlockHash())
 			sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
