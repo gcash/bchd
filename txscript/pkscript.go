@@ -27,17 +27,11 @@ const (
 	// pubKeyHashLen is the length of a P2PKH script.
 	pubKeyHashLen = 25
 
-	// witnessV0PubKeyHashLen is the length of a P2WPKH script.
-	witnessV0PubKeyHashLen = 22
-
 	// scriptHashLen is the length of a P2SH script.
 	scriptHashLen = 23
 
-	// witnessV0ScriptHashLen is the length of a P2WSH script.
-	witnessV0ScriptHashLen = 34
-
 	// maxLen is the maximum script length supported by ParsePkScript.
-	maxLen = witnessV0ScriptHashLen
+	maxLen = pubKeyHashSigScriptLen
 )
 
 var (
