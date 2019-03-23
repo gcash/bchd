@@ -507,8 +507,8 @@ type Peer struct {
 	quit          chan struct{}
 
 	// CompactBlocks
-	compactBlocksPreferred   bool
-	acceptsUnvalidatedBlocks bool
+	compactBlocksPreferred    bool
+	directBlockRelayPreferred bool
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -556,6 +556,30 @@ func (p *Peer) AddKnownInventory(invVect *wire.InvVect) {
 // This function is safe for concurrent access.
 func (p *Peer) DeleteKnownInventory(invVect *wire.InvVect) {
 	p.knownInventory.Delete(invVect)
+}
+
+// HasKnownInventory checks whether the inventory exists in the peer's known
+// inventory map.
+//
+// This function is safe for concurrent access.
+func (p *Peer) HasKnownInventory(invVect *wire.InvVect) bool {
+	return p.knownInventory.Exists(invVect)
+}
+
+// GetKnownTxInventory returns a map of the known transaction inventory for this peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) GetKnownTxInventory() map[chainhash.Hash]bool {
+	p.knownInventory.invMtx.Lock()
+	defer p.knownInventory.invMtx.Unlock()
+
+	ki := make(map[chainhash.Hash]bool)
+	for iv := range p.knownInventory.invMap {
+		if iv.Type == wire.InvTypeTx {
+			ki[iv.Hash] = true
+		}
+	}
+	return ki
 }
 
 // StatsSnapshot returns a snapshot of the current peer flags and statistics.
@@ -854,6 +878,30 @@ func (p *Peer) WantsHeaders() bool {
 	p.flagsMtx.Unlock()
 
 	return sendHeadersPreferred
+}
+
+// WantsCompactBlocks returns if the peer wants header cmpctblocks instead of
+// regular blocks.
+//
+// This function is safe for concurrent access.
+func (p *Peer) WantsCompactBlocks() bool {
+	p.flagsMtx.Lock()
+	compactBlocksPreferred := p.compactBlocksPreferred
+	p.flagsMtx.Unlock()
+
+	return compactBlocksPreferred
+}
+
+// WantsDirectBlockRelay returns if the peer wants us to relay blocks without
+// announcing them in inv messages.
+//
+// This function is safe for concurrent access.
+func (p *Peer) WantsDirectBlockRelay() bool {
+	p.flagsMtx.Lock()
+	directBlockRelayPreferred := p.directBlockRelayPreferred
+	p.flagsMtx.Unlock()
+
+	return directBlockRelayPreferred
 }
 
 // PushAddrMsg sends an addr message to the connected peer using the provided
@@ -1594,7 +1642,7 @@ out:
 			// else we can't use compact blocks.
 			if msg.Version == wire.CompactBlocksProtocolVersion {
 				p.compactBlocksPreferred = true
-				p.acceptsUnvalidatedBlocks = msg.Announce
+				p.directBlockRelayPreferred = msg.Announce
 			}
 			if p.cfg.Listeners.OnSendCmpct != nil {
 				p.cfg.Listeners.OnSendCmpct(p, msg)
@@ -1705,7 +1753,7 @@ out:
 			// If this is a new block, then we'll blast it
 			// out immediately, skipping the inv trickle
 			// queue.
-			if iv.Type == wire.InvTypeBlock {
+			if iv.Type == wire.InvTypeBlock || iv.Type == wire.InvTypeCmpctBlock {
 				invMsg := wire.NewMsgInvSizeHint(1)
 				invMsg.AddInvVect(iv)
 				waiting = queuePacket(outMsg{msg: invMsg},

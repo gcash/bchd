@@ -752,6 +752,8 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 			err = sp.server.pushTxMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		case wire.InvTypeBlock:
 			err = sp.server.pushBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+		case wire.InvTypeCmpctBlock:
+			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		case wire.InvTypeFilteredBlock:
 			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		default:
@@ -1595,6 +1597,61 @@ func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan cha
 	return nil
 }
 
+// pushCmpctBlockMsg sends a cmpctblock message for the provided block hash to the
+// connected peer.  An error is returned if the block hash is not known.
+func (s *server) pushCmpctBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
+	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	// Fetch the raw block bytes from the database.
+	var blockBytes []byte
+	err := sp.server.db.View(func(dbTx database.Tx) error {
+		var err error
+		blockBytes, err = dbTx.FetchBlock(hash)
+		return err
+	})
+	if err != nil {
+		peerLog.Tracef("Unable to fetch requested block hash %v: %v",
+			hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	// Deserialize the block.
+	var msgBlock wire.MsgBlock
+	err = msgBlock.Deserialize(bytes.NewReader(blockBytes))
+	if err != nil {
+		peerLog.Tracef("Unable to deserialize requested block hash "+
+			"%v: %v", hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(&msgBlock, sp.GetKnownTxInventory())
+	if err != nil {
+		peerLog.Tracef("Unable to build requested cmpctblock hash "+
+			"%v: %v", hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	// Once we have fetched data wait for any previous operation to finish.
+	if waitChan != nil {
+		<-waitChan
+	}
+
+	sp.QueueMessageWithEncoding(cmpctBlock, doneChan, encoding)
+	return nil
+}
+
 // pushMerkleBlockMsg sends a merkleblock message for the provided block hash to
 // the connected peer.  Since a merkle block requires the peer to have a filter
 // loaded, this call will simply be ignored if there is no filter loaded.  An
@@ -1831,22 +1888,9 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			return
 		}
 
-		// If this is a block loop through and delete all the txs
-		// in the block from the peer's known inventory. We do this
-		// last so that
-		deleteKnownInventory := func(block *wire.MsgBlock) {
-			for _, tx := range block.Transactions[1:] {
-				sp.DeleteKnownInventory(&wire.InvVect{
-					Type: wire.InvTypeTx,
-					Hash: tx.TxHash(),
-				})
-			}
-		}
-
-		// If the inventory is a block and the peer prefers headers,
-		// generate and send a headers message instead of an inventory
-		// message otherwise send the inv message right away rather
-		// than putting it on the queue.
+		// If the inventory is a block we'll check some flags set on the
+		// remote peer to see if we should do some special relaying or
+		// just drop it into the inv queue with everything else.
 		if msg.invVect.Type == wire.InvTypeBlock {
 			block, ok := msg.data.(*wire.MsgBlock)
 			if !ok {
@@ -1854,6 +1898,42 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 					" is not a block")
 				return
 			}
+
+			// We'll give the peer a minute to request a compact block
+			// then we'll delete the known inventory in this block.
+			// Worst case scenario we will have to send the full txs to
+			// this guy later, but it's easier to do it this way than
+			// to try to delete the txs after he sends us an inv or a
+			// getdata.
+			time.AfterFunc(time.Minute, func() {
+				for _, tx := range block.Transactions[1:] {
+					txHash := tx.TxHash()
+					txiv := wire.NewInvVect(wire.InvTypeBlock, &txHash)
+					sp.DeleteKnownInventory(txiv)
+				}
+			})
+
+			// If the peer wants direct compact block relay we will set it to
+			// him right away rather than sending an inv message.
+			if sp.WantsDirectBlockRelay() {
+				// We need to check if the peer already has this block before
+				// pushing it to them.
+				blockHash := block.BlockHash()
+				blockInv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
+				if !sp.HasKnownInventory(blockInv) {
+					cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(block, sp.GetKnownTxInventory())
+					if err != nil {
+						peerLog.Tracef("Unable to build requested cmpctblock hash "+
+							"%v: %v", block.BlockHash(), err)
+						return
+					}
+					sp.QueueMessage(cmpctBlock, nil)
+					return
+				}
+			}
+
+			// If the peer wants us to send block headers instead of inv messages
+			// then we'll send the header here rather than the inv message.
 			if sp.WantsHeaders() {
 				msgHeaders := wire.NewMsgHeaders()
 				if err := msgHeaders.AddBlockHeader(&block.Header); err != nil {
@@ -1862,13 +1942,8 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 					return
 				}
 				sp.QueueMessage(msgHeaders, nil)
-			} else {
-				msgInv := wire.NewMsgInv()
-				msgInv.AddInvVect(msg.invVect)
-				sp.QueueMessage(msgInv, nil)
+				return
 			}
-			deleteKnownInventory(block)
-			return
 		}
 
 		if msg.invVect.Type == wire.InvTypeTx {
