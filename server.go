@@ -2506,12 +2506,13 @@ func (s *server) peerHandler() {
 	srvrLog.Tracef("Starting peer handler")
 
 	state := &peerState{
-		inboundPeers:    make(map[int32]*serverPeer),
-		persistentPeers: make(map[int32]*serverPeer),
-		outboundPeers:   make(map[int32]*serverPeer),
-		banned:          make(map[string]time.Time),
-		outboundGroups:  make(map[string]int),
-		connectionCount: make(map[string]int),
+		inboundPeers:     make(map[int32]*serverPeer),
+		persistentPeers:  make(map[int32]*serverPeer),
+		outboundPeers:    make(map[int32]*serverPeer),
+		directRelayPeers: make(map[int32]*serverPeer),
+		banned:           make(map[string]time.Time),
+		outboundGroups:   make(map[string]int),
+		connectionCount:  make(map[string]int),
 	}
 
 	if !cfg.DisableDNSSeed {
