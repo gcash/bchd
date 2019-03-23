@@ -709,6 +709,10 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
 // It blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
+	go sp.processComapactBlock(msg)
+}
+
+func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 	targetHash := msg.BlockHash()
 
 	// We check the header here before proceeding. For one we end up wasting
