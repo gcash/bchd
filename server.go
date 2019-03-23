@@ -296,19 +296,20 @@ type serverPeer struct {
 
 	*peer.Peer
 
-	connReq        *connmgr.ConnReq
-	server         *server
-	persistent     bool
-	continueHash   *chainhash.Hash
-	relayMtx       sync.Mutex
-	disableRelayTx bool
-	sentAddrs      bool
-	isWhitelisted  bool
-	filter         *bloom.Filter
-	addrMtx        sync.RWMutex
-	knownAddresses map[string]struct{}
-	banScore       connmgr.DynamicBanScore
-	quit           chan struct{}
+	connReq         *connmgr.ConnReq
+	server          *server
+	persistent      bool
+	continueHash    *chainhash.Hash
+	relayMtx        sync.Mutex
+	processBlockMtx sync.Mutex
+	disableRelayTx  bool
+	sentAddrs       bool
+	isWhitelisted   bool
+	filter          *bloom.Filter
+	addrMtx         sync.RWMutex
+	knownAddresses  map[string]struct{}
+	banScore        connmgr.DynamicBanScore
+	quit            chan struct{}
 	// The following chans are used to sync blockmanager and server.
 	txProcessed    chan struct{}
 	blockProcessed chan struct{}
@@ -799,8 +800,53 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	// reference implementation processes blocks in the same
 	// thread and therefore blocks further messages until
 	// the bitcoin block has been fully processed.
+	//
+	// We also lock here in case there's a race between us
+	// processing the block and any peers we sent the block
+	// to before validation requesting blocktxns. We need to
+	// wait to process the getblocktxns message until processing
+	// finishes.
+	sp.processBlockMtx.Lock()
 	sp.server.syncManager.QueueBlock(block, sp.Peer, sp.blockProcessed)
 	<-sp.blockProcessed
+	sp.processBlockMtx.Unlock()
+}
+
+// OnGetBlockTxns is invoked when a peer receives a getblocktxns bitcoin message.
+// We block need to acquire lock to make sure the block is process first before
+// continuing.
+func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
+	sp.processBlockMtx.Lock()
+	sp.processBlockMtx.Unlock()
+
+	// Fetch the raw block bytes from the database.
+	hash := msg.BlockHash
+	var blockBytes []byte
+	err := sp.server.db.View(func(dbTx database.Tx) error {
+		var err error
+		blockBytes, err = dbTx.FetchBlock(&hash)
+		return err
+	})
+	if err != nil {
+		peerLog.Tracef("Unable to fetch requested block hash %v: %v",
+			hash, err)
+		return
+	}
+
+	// Deserialize the block.
+	var msgBlock wire.MsgBlock
+	err = msgBlock.Deserialize(bytes.NewReader(blockBytes))
+	if err != nil {
+		peerLog.Tracef("Unable to deserialize requested block hash "+
+			"%v: %v", hash, err)
+		return
+	}
+	var requestedTxs []*wire.MsgTx
+	for _, i := range msg.Indexes {
+		requestedTxs = append(requestedTxs, msgBlock.Transactions[i])
+	}
+	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestedTxs)
+	sp.QueueMessage(msgBlockTxns, nil)
 }
 
 // OnInv is invoked when a peer receives an inv bitcoin message and is
