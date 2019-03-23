@@ -38,16 +38,16 @@ const (
 	// connected peer may support.
 	MinAcceptableProtocolVersion = wire.MultipleAddressVersion
 
+	// DefaultMaxKnownInventory is the maximum number of items to keep in the known
+	// inventory cache.
+	DefaultMaxKnownInventory = 2000
+
 	// outputBufferSize is the number of elements the output channels use.
 	outputBufferSize = 50
 
 	// invTrickleSize is the maximum amount of inventory to send in a single
 	// message when trickling inventory to remote peers.
 	maxInvTrickleSize = 5000
-
-	// maxKnownInventory is the maximum number of items to keep in the known
-	// inventory cache.
-	maxKnownInventory = 1000
 
 	// pingInterval is the interval of time to wait in between sending ping
 	// messages.
@@ -296,6 +296,10 @@ type Config struct {
 	// connection detecting and disconnect logic since they intentionally
 	// do so for testing purposes.
 	TstAllowSelfConnection bool
+
+	// MaxKnownInventory is the maximum number of known inventory items we will hold
+	// in memory for this peer.
+	MaxKnownInventory uint
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.
@@ -2259,10 +2263,15 @@ func newPeerBase(origCfg *Config, inbound bool) *Peer {
 		cfg.TrickleInterval = DefaultTrickleInterval
 	}
 
+	// If zero was set then we'll use the default.
+	if cfg.MaxKnownInventory == 0 {
+		cfg.MaxKnownInventory = DefaultMaxKnownInventory
+	}
+
 	p := Peer{
 		inbound:         inbound,
 		wireEncoding:    wire.BaseEncoding,
-		knownInventory:  newMruInventoryMap(maxKnownInventory),
+		knownInventory:  newMruInventoryMap(cfg.MaxKnownInventory),
 		stallControl:    make(chan stallControlMsg, 1), // nonblocking sync
 		outputQueue:     make(chan outMsg, outputBufferSize),
 		sendQueue:       make(chan outMsg, 1),   // nonblocking sync
