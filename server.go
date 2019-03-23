@@ -247,6 +247,7 @@ type server struct {
 	maybeAddDirectRelayPeer chan *maybeAddDirectRelayPeerMsg
 	query                   chan interface{}
 	relayInv                chan relayMsg
+	relayCmpctBlock         chan *wire.MsgCmpctBlock
 	broadcast               chan broadcastMsg
 	peerHeightsUpdate       chan updatePeerHeightsMsg
 	wg                      sync.WaitGroup
@@ -708,9 +709,7 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
 // It blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
-	// TODO: we need to call back to the sync manager on error so that
-	// it knows to remove the block from the requested block list and
-	// maybe try to rerequest it from someone else.
+	targetHash := msg.BlockHash()
 
 	// We check the header here before proceeding. For one we end up wasting
 	// round trips if it turns out to be invalid. And two we might want to
@@ -719,6 +718,7 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	if err := sp.server.chain.CheckBlockHeaderContext(&msg.Header); err != nil {
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- "+
 			"invalid header: %v", msg.Header.BlockHash(), sp, err)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 		return
 	}
 
@@ -726,6 +726,7 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	if err != nil {
 		peerLog.Debugf("Error decoding cmpctblock %v from %v: %v",
 			msg.Header.BlockHash(), sp, err)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 		return
 	}
 	msgGetBlockTxns := wire.NewMsgGetBlockTxns(msgBlock.BlockHash(), []uint32{})
@@ -752,6 +753,7 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 			quitChan <- struct{}{}
 			peerLog.Debugf("Peer %v timed out waiting for blocktxns for cmpctblock %v",
 				sp, msg.Header.BlockHash())
+			sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 			return
 		case resp := <-msgChan:
 			sp.unsubscribeRecvMsgs(subscription)
@@ -759,22 +761,30 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 			if !ok {
 				peerLog.Debugf("Unable to decode blocktxns for cmpctblock %v from peer %v",
 					msg.Header.BlockHash(), sp)
+				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
-			targetHash := msg.BlockHash()
 			if !blockTxns.BlockHash.IsEqual(&targetHash) {
 				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
 					"contained incorrect hash", msg.Header.BlockHash(), sp)
+				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
 			if len(blockTxns.Txs) != len(msgGetBlockTxns.Indexes) {
 				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
-					"contained number of txs", msg.Header.BlockHash(), sp)
+					"contained incorrect number of txs", msg.Header.BlockHash(), sp)
+				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
 			for i, tx := range blockTxns.Txs {
 				index := msgGetBlockTxns.Indexes[i]
 				msgBlock.Transactions[index] = tx
+			}
+			if !msgBlock.BlockHash().IsEqual(&targetHash) {
+				peerLog.Debugf("decoded cmpctblock hash %v doesn't match original message"+
+					" from peer %v ", msg.Header.BlockHash(), sp)
+				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+				return
 			}
 		}
 	}
@@ -787,7 +797,8 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
 	sp.AddKnownInventory(iv)
 
-	// TODO: push block to any peers with WantCompactBlocks() and version >= 70015
+	// Relay the block to peers which want direct relay.
+	sp.server.relayCmpctBlock <- msg
 
 	// Queue the block up to be handled by the block
 	// manager and intentionally block further receives
@@ -2179,6 +2190,21 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 	})
 }
 
+// handleRelayCmpctBlock deals with direct relaying a compact block to
+// peers which both want a compact block and accept direct relay.
+func (s *server) handleRelayCmpctBlock(state *peerState, msg *wire.MsgCmpctBlock) {
+	state.forAllPeers(func(sp *serverPeer) {
+		if sp.WantsCompactBlocks() && sp.WantsDirectBlockRelay() &&
+			sp.ProtocolVersion() >= wire.NoValidationRelayVersion {
+
+			blockHash := msg.BlockHash()
+			iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
+			sp.AddKnownInventory(iv)
+			sp.QueueMessage(msg, nil)
+		}
+	})
+}
+
 // handleBroadcastMsg deals with broadcasting messages to peers.  It is invoked
 // from the peerHandler goroutine.
 func (s *server) handleBroadcastMsg(state *peerState, bmsg *broadcastMsg) {
@@ -2523,6 +2549,11 @@ out:
 		// New inventory to potentially be relayed to other peers.
 		case invMsg := <-s.relayInv:
 			s.handleRelayInvMsg(state, invMsg)
+
+		// A compact block to relay. This should only be sent to peers
+		// which want compact blocks and with version >= 70015
+		case msgCmpctBlock := <-s.relayCmpctBlock:
+			s.handleRelayCmpctBlock(state, msgCmpctBlock)
 
 		// Message to broadcast to all connected peers except those
 		// which are excluded by the message.
@@ -2998,6 +3029,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		maybeAddDirectRelayPeer: make(chan *maybeAddDirectRelayPeerMsg),
 		query:                   make(chan interface{}),
 		relayInv:                make(chan relayMsg, cfg.MaxPeers),
+		relayCmpctBlock:         make(chan *wire.MsgCmpctBlock),
 		broadcast:               make(chan broadcastMsg, cfg.MaxPeers),
 		quit:                    make(chan struct{}),
 		modifyRebroadcastInv:    make(chan interface{}),
