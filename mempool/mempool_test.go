@@ -884,7 +884,6 @@ func TestTxPool_DecodeCompressedBlock(t *testing.T) {
 		t.Fatalf("unable to create test txs: %v", err)
 	}
 	originalBlock := wire.NewMsgBlock(&wire.BlockHeader{})
-	targetHash := originalBlock.BlockHash()
 	knownInventory := make(map[chainhash.Hash]bool)
 	for i, tx := range txs[:15] {
 		originalBlock.Transactions = append(originalBlock.Transactions, tx.MsgTx())
@@ -902,6 +901,8 @@ func TestTxPool_DecodeCompressedBlock(t *testing.T) {
 			knownInventory[*txhash] = true
 		}
 	}
+
+	targetHash := originalBlock.BlockHash()
 
 	cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(originalBlock, knownInventory)
 	if err != nil {
@@ -929,6 +930,11 @@ func TestTxPool_DecodeCompressedBlock(t *testing.T) {
 	for i, tx := range decodedBlock.Transactions {
 		if tx == nil {
 			t.Errorf("decoded tx at index %d is nil when it should not be", i)
+		}
+		txHash := tx.TxHash()
+		target := originalBlock.Transactions[i].TxHash()
+		if !txHash.IsEqual(&target) {
+			t.Errorf("decoded tx at index %d does not match original: wanted %v, got %v", i, txHash, target)
 		}
 	}
 }

@@ -1303,7 +1303,7 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 				continue
 			}
 			// Pop the first item of the recoveredTxs list
-			pop, recoveredTxs = recoveredTxs[len(recoveredTxs)-1], recoveredTxs[:len(recoveredTxs)-1]
+			pop, recoveredTxs = recoveredTxs[0], recoveredTxs[1:]
 			msgBlock.Transactions[i] = pop
 		}
 		return msgBlock, nil
