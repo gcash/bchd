@@ -733,14 +733,7 @@ func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 		return
 	}
-	msgGetBlockTxns := wire.NewMsgGetBlockTxns(msgBlock.BlockHash(), []uint32{})
-	lastIndex := 0
-	for i, tx := range msgBlock.Transactions {
-		if tx == nil {
-			msgGetBlockTxns.Indexes = append(msgGetBlockTxns.Indexes, uint32(i-lastIndex))
-			lastIndex = i + 1
-		}
-	}
+	msgGetBlockTxns := wire.NewMsgGetBlockTxnsFromBlock(msgBlock)
 
 	if len(msgGetBlockTxns.Indexes) > 0 {
 		quitChan := make(chan struct{})
@@ -776,17 +769,21 @@ func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
-			if len(blockTxns.Txs) != len(msgGetBlockTxns.Indexes) {
+			indexMap, err := blockTxns.AbsoluteIndexes(msgGetBlockTxns.Indexes)
+			if err != nil {
 				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
 					"contained incorrect number of txs", msg.Header.BlockHash(), sp)
 				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
-			lastIndex := uint32(0)
-			for i, tx := range blockTxns.Txs {
-				index := msgGetBlockTxns.Indexes[i]
-				msgBlock.Transactions[index+lastIndex] = tx
-				lastIndex += index + 1
+			for i, tx := range indexMap {
+				if i > uint32(len(msgBlock.Transactions)-1) {
+					peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
+						"contained incorrect index", msg.Header.BlockHash(), sp)
+					sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+					return
+				}
+				msgBlock.Transactions[i] = tx
 			}
 			newBlockHash := msgBlock.BlockHash()
 			if !newBlockHash.IsEqual(&targetHash) {
@@ -867,13 +864,12 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 			"%v: %v", hash, err)
 		return
 	}
-	var requestedTxs []*wire.MsgTx
-	lastIndex := uint32(0)
-	for _, i := range msg.Indexes {
-		requestedTxs = append(requestedTxs, msgBlock.Transactions[i+lastIndex])
-		lastIndex = i + 1
+	requestdTxs, err := msg.RequestedTransactions(&msgBlock)
+	if err != nil {
+		peerLog.Tracef("Unable to extract requested transactions: %v", err)
+		return
 	}
-	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestedTxs)
+	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestdTxs)
 	sp.QueueMessage(msgBlockTxns, nil)
 }
 

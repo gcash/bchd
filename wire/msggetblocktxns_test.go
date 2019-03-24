@@ -194,3 +194,108 @@ func TestGetBlockTxnsWire(t *testing.T) {
 		}
 	}
 }
+
+// TestNewMsgGetBlockTxnsFromBlock tests whether the MsgGetBlockTxns is
+// properly contructed by the TestNewMsgGetBlockTxnsFromBlock method.
+func TestNewMsgGetBlockTxnsFromBlock(t *testing.T) {
+	txs := make([]*MsgTx, 5)
+	for i := 0; i < 5; i++ {
+		tx := *multiTx
+		tx.Version = int32(i)
+		txs[i] = &tx
+	}
+
+	block1 := NewMsgBlock(&BlockHeader{})
+	txsCpy := make([]*MsgTx, 5)
+	copy(txsCpy, txs)
+	block1.Transactions = txsCpy
+	block1.Transactions[0] = nil
+	block1.Transactions[2] = nil
+	block1.Transactions[3] = nil
+
+	block2 := NewMsgBlock(&BlockHeader{})
+	txsCpy2 := make([]*MsgTx, 5)
+	copy(txsCpy2, txs)
+	block2.Transactions = txsCpy2
+	block2.Transactions[2] = nil
+	block2.Transactions[4] = nil
+
+	tests := []struct {
+		block           *MsgBlock
+		expectedIndexes []uint32
+	}{
+		// First index zero
+		{
+			block1,
+			[]uint32{0, 1, 0},
+		},
+		// First index non-zero
+		{
+			block2,
+			[]uint32{2, 1},
+		},
+	}
+
+	for _, test := range tests {
+		gbtxns := NewMsgGetBlockTxnsFromBlock(test.block)
+
+		if len(gbtxns.Indexes) != len(test.expectedIndexes) {
+			t.Errorf("Invalid number of indexes. Expected %d got %d", len(test.expectedIndexes), len(gbtxns.Indexes))
+		}
+
+		for i, expected := range test.expectedIndexes {
+			if gbtxns.Indexes[i] != expected {
+				t.Errorf("Invalid index %d. Expected %d got %d", i, expected, gbtxns.Indexes[0])
+			}
+		}
+	}
+}
+
+// TestMsgGetBlockTxns_RequestedTransactions tests whether the transactions returned
+// by the RequestedTransactions method are correct.
+func TestMsgGetBlockTxns_RequestedTransactions(t *testing.T) {
+	tests := []struct {
+		requestedIndexes []uint32
+		expectedTxInexes []uint32
+	}{
+		// First index zero
+		{
+			[]uint32{0, 1, 1},
+			[]uint32{0, 2, 4},
+		},
+		// First index non-zero
+		{
+			[]uint32{2, 0, 0},
+			[]uint32{2, 3, 4},
+		},
+	}
+
+	for _, test := range tests {
+		txs := make([]*MsgTx, 5)
+		for i := 0; i < 5; i++ {
+			tx := *multiTx
+			tx.Version = int32(i)
+			txs[i] = &tx
+		}
+		block := NewMsgBlock(&BlockHeader{})
+		block.Transactions = txs
+
+		gbtxns := NewMsgGetBlockTxns(block.BlockHash(), test.requestedIndexes)
+		rt, err := gbtxns.RequestedTransactions(block)
+		if err != nil {
+			t.Fatalf("Failed to create requested transactions: %s", err)
+		}
+
+		if len(rt) != len(test.expectedTxInexes) {
+			t.Errorf("Invalid number of txs. Expected %d got %d", len(test.expectedTxInexes), len(rt))
+		}
+
+		for i, index := range test.expectedTxInexes {
+			want := block.Transactions[index].TxHash()
+			expected := rt[i].TxHash()
+			if !expected.IsEqual(&want) {
+				t.Errorf("Returned incorrect transaction for index %d. Expected %v got %v", i, expected, want)
+			}
+		}
+	}
+}

@@ -3,6 +3,7 @@ package wire
 import (
 	"fmt"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/go-errors/errors"
 	"io"
 )
 
@@ -79,6 +80,35 @@ func (msg *MsgGetBlockTxns) MaxPayloadLength(pver uint32) uint32 {
 	// In practice this will always be less than the payload but the number
 	// of txs in a block can vary so we really don't know the real max.
 	return maxMessagePayload()
+}
+
+// RequestedTransactions extracts the transactions that were requested by this
+// message from the given block and returns them.
+func (msg *MsgGetBlockTxns) RequestedTransactions(block *MsgBlock) ([]*MsgTx, error) {
+	var requestedTxs []*MsgTx
+	lastIndex := uint32(0)
+	for _, i := range msg.Indexes {
+		if i+lastIndex > uint32(len(block.Transactions)-1) {
+			return nil, errors.New("transaction index out of range")
+		}
+		requestedTxs = append(requestedTxs, block.Transactions[i+lastIndex])
+		lastIndex += i + 1
+	}
+	return requestedTxs, nil
+}
+
+// NewMsgGetBlockTxnsFromBlock parses a block and for each nil transasction
+// ads a index to the getblocktxn message that is returned.
+func NewMsgGetBlockTxnsFromBlock(block *MsgBlock) *MsgGetBlockTxns {
+	msg := &MsgGetBlockTxns{BlockHash: block.BlockHash()}
+	lastIndex := 0
+	for i, tx := range block.Transactions {
+		if tx == nil {
+			msg.Indexes = append(msg.Indexes, uint32(i-lastIndex))
+			lastIndex = i + 1
+		}
+	}
+	return msg
 }
 
 // NewMsgGetBlockTxns returns a new bitcoin getblocktxn message that conforms to the

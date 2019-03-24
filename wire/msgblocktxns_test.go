@@ -218,3 +218,46 @@ func TestBlockTxnsWire(t *testing.T) {
 		}
 	}
 }
+
+// TestMsgBlockTxns_AbsoluteIndexes tests whether map returned by the
+// AbsoluteIndexes method is correct.
+func TestMsgBlockTxns_AbsoluteIndexes(t *testing.T) {
+	txs := make([]*MsgTx, 5)
+	for i := 0; i < 5; i++ {
+		tx := *multiTx
+		tx.Version = int32(i)
+		txs[i] = &tx
+	}
+
+	tests := []struct {
+		txs             []*MsgTx
+		relativeIndexes []uint32
+		expectedIndexs  []uint32
+	}{
+		// First index starting at zero
+		{
+			txs,
+			[]uint32{0, 2, 0, 1, 4},
+			[]uint32{0, 3, 4, 6, 11},
+		},
+		// First index starting at non-zero
+		{
+			txs[:2],
+			[]uint32{3, 2},
+			[]uint32{3, 6},
+		},
+	}
+
+	for _, test := range tests {
+		btxs := NewMsgBlockTxns(chainhash.Hash{}, test.txs)
+		indexMap, err := btxs.AbsoluteIndexes(test.relativeIndexes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, expectedIndex := range test.expectedIndexs {
+			if indexMap[expectedIndex] != test.txs[i] {
+				t.Errorf("Returned incorrect tx. Expected %v, got %v", test.txs[i], indexMap[expectedIndex])
+			}
+		}
+	}
+}

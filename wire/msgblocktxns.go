@@ -3,6 +3,7 @@ package wire
 import (
 	"fmt"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/go-errors/errors"
 	"io"
 )
 
@@ -79,6 +80,22 @@ func (msg *MsgBlockTxns) MaxPayloadLength(pver uint32) uint32 {
 	// In practice this will always be less than the payload but the number
 	// of txs in a block can vary so we really don't know the real max.
 	return maxMessagePayload()
+}
+
+// AbsoluteIndexes takes in the requested differential indexes from a MsgGetBlockTxns
+// message and returns a map of the absolution position of a tx in the block to the tx.
+func (msg *MsgBlockTxns) AbsoluteIndexes(requestedDiffIndexes []uint32) (map[uint32]*MsgTx, error) {
+	if len(requestedDiffIndexes) != len(msg.Txs) {
+		return nil, errors.New("requestedDiffIndexes length does not match length of txs in blocktxn message")
+	}
+	m := make(map[uint32]*MsgTx)
+	lastIndex := uint32(0)
+	for i, tx := range msg.Txs {
+		index := requestedDiffIndexes[i]
+		m[index+lastIndex] = tx
+		lastIndex += index + 1
+	}
+	return m, nil
 }
 
 // NewMsgBlockTxns returns a new bitcoin blocktxn message that conforms to the
