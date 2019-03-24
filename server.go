@@ -734,9 +734,11 @@ func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 		return
 	}
 	msgGetBlockTxns := wire.NewMsgGetBlockTxns(msgBlock.BlockHash(), []uint32{})
+	lastIndex := 0
 	for i, tx := range msgBlock.Transactions {
 		if tx == nil {
-			msgGetBlockTxns.Indexes = append(msgGetBlockTxns.Indexes, uint32(i))
+			msgGetBlockTxns.Indexes = append(msgGetBlockTxns.Indexes, uint32(i-lastIndex))
+			lastIndex = i + 1
 		}
 	}
 
@@ -835,6 +837,12 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 	sp.processBlockMtx.Lock()
 	sp.processBlockMtx.Unlock()
 
+	// A decaying ban score increase is applied to prevent flooding.
+	// The ban score accumulates and passes the ban threshold if a burst of
+	// mempool messages comes from a peer. The score decays each minute to
+	// half of its value.
+	sp.addBanScore(0, 33, "getblocktxns")
+
 	// Fetch the raw block bytes from the database.
 	hash := msg.BlockHash
 	var blockBytes []byte
@@ -858,8 +866,10 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 		return
 	}
 	var requestedTxs []*wire.MsgTx
+	lastIndex := uint32(0)
 	for _, i := range msg.Indexes {
-		requestedTxs = append(requestedTxs, msgBlock.Transactions[i])
+		requestedTxs = append(requestedTxs, msgBlock.Transactions[i+lastIndex])
+		lastIndex = i + 1
 	}
 	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestedTxs)
 	sp.QueueMessage(msgBlockTxns, nil)
@@ -1617,7 +1627,7 @@ func (sp *serverPeer) OnRead(_ *peer.Peer, bytesRead int, msg wire.Message, err 
 	defer sp.mtxSubscribers.RUnlock()
 	for subscription := range sp.recvSubscribers {
 		go func(subscription spMsgSubscription) {
-			if msg.Command() == subscription.command {
+			if err == nil && msg.Command() == subscription.command {
 				select {
 				case <-subscription.quitChan:
 				case subscription.msgChan <- spMsg{
@@ -2406,6 +2416,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnTx:           sp.OnTx,
 			OnBlock:        sp.OnBlock,
 			OnCmpctBlock:   sp.OnCmpctBlock,
+			OnGetBlockTxns: sp.OnGetBlockTxns,
 			OnInv:          sp.OnInv,
 			OnHeaders:      sp.OnHeaders,
 			OnGetData:      sp.OnGetData,

@@ -185,6 +185,7 @@ func NewMsgCmpctBlockFromBlock(block *MsgBlock, knownInventory map[chainhash.Has
 	key0 := binary.LittleEndian.Uint64(headerHash[0:8])
 	key1 := binary.LittleEndian.Uint64(headerHash[8:16])
 
+	lastIndex := 0
 	for i, tx := range block.Transactions {
 		if knownInventory[tx.TxHash()] { // The other peer knows the transaction so we can just send the short IDs.
 			txHash := tx.TxHash()
@@ -196,9 +197,10 @@ func NewMsgCmpctBlockFromBlock(block *MsgBlock, knownInventory map[chainhash.Has
 			msg.ShortIDs = append(msg.ShortIDs, shortID)
 		} else { // The other peer doesn't know the transaction so we just send the full tx.
 			ptx := &PrefilledTx{
-				Index: uint32(i),
+				Index: uint32(i - lastIndex),
 				Tx:    tx,
 			}
+			lastIndex = i + 1
 			msg.PrefilledTxs = append(msg.PrefilledTxs, ptx)
 		}
 	}

@@ -1240,8 +1240,14 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 		msgBlock.Transactions = make([]*wire.MsgTx, block.TotalTransactions())
 
 		// First add all th prefilled txs
-		for _, ptx := range block.PrefilledTxs {
-			msgBlock.Transactions[ptx.Index] = ptx.Tx
+		lastIndex := uint32(0)
+		if len(block.PrefilledTxs) > 0 {
+			lastIndex = block.PrefilledTxs[0].Index
+			msgBlock.Transactions[lastIndex] = block.PrefilledTxs[0].Tx
+		}
+		for _, ptx := range block.PrefilledTxs[1:] {
+			lastIndex += ptx.Index + 1
+			msgBlock.Transactions[lastIndex] = ptx.Tx
 		}
 
 		// Next we'll decode the short IDs.
