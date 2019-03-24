@@ -782,9 +782,11 @@ func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 				return
 			}
+			lastIndex := uint32(0)
 			for i, tx := range blockTxns.Txs {
 				index := msgGetBlockTxns.Indexes[i]
-				msgBlock.Transactions[index] = tx
+				msgBlock.Transactions[index+lastIndex] = tx
+				lastIndex += index + 1
 			}
 			newBlockHash := msgBlock.BlockHash()
 			if !newBlockHash.IsEqual(&targetHash) {
