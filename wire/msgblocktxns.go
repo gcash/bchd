@@ -1,9 +1,9 @@
 package wire
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"github.com/go-errors/errors"
 	"io"
 )
 
