@@ -69,7 +69,7 @@ func (msg *MsgSendCmpct) Command() string {
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgSendCmpct) MaxPayloadLength(pver uint32) uint32 {
 	// One byte bool and eight byte uint64
-	return 1 + 8
+	return 9
 }
 
 // NewMsgSendCmpct returns a new bitcoin sendcmpct message that conforms to the

@@ -707,11 +707,15 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 }
 
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
-// It blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	go sp.processComapactBlock(msg)
 }
 
+// processComapactBlock attempts to reconstruct a full wire.MsgBlock from
+// a wire.MsgCmpctBlock. This may require making another round trip to the
+// peer to retrieve any missing transactions. Thus you can expect this
+// function to possibly block for a long period of time so running it in
+// a separate goroutine is wise.
 func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 	targetHash := msg.BlockHash()
 
@@ -833,6 +837,10 @@ func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
 // We block need to acquire lock to make sure the block is process first before
 // continuing.
 func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
+	// We aren't interested in protecting concurrent access to this function
+	// only making sure we aren't currently processing the block that is
+	// being requested. So we will acquire lock but we can release it right
+	// away.
 	sp.processBlockMtx.Lock()
 	sp.processBlockMtx.Unlock()
 
