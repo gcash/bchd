@@ -28,7 +28,7 @@ import (
 
 const (
 	// MaxProtocolVersion is the max protocol version the peer supports.
-	MaxProtocolVersion = wire.FeeFilterVersion
+	MaxProtocolVersion = wire.NoValidationRelayVersion
 
 	// DefaultTrickleInterval is the min time between attempts to send an
 	// inv message to a peer.
@@ -38,16 +38,16 @@ const (
 	// connected peer may support.
 	MinAcceptableProtocolVersion = wire.MultipleAddressVersion
 
+	// DefaultMaxKnownInventory is the maximum number of items to keep in the known
+	// inventory cache.
+	DefaultMaxKnownInventory = 2000
+
 	// outputBufferSize is the number of elements the output channels use.
 	outputBufferSize = 50
 
 	// invTrickleSize is the maximum amount of inventory to send in a single
 	// message when trickling inventory to remote peers.
 	maxInvTrickleSize = 5000
-
-	// maxKnownInventory is the maximum number of items to keep in the known
-	// inventory cache.
-	maxKnownInventory = 1000
 
 	// pingInterval is the interval of time to wait in between sending ping
 	// messages.
@@ -197,6 +197,22 @@ type MessageListeners struct {
 	// message.
 	OnSendHeaders func(p *Peer, msg *wire.MsgSendHeaders)
 
+	// OnSendCmpct is invoked when a peer receives a sendcmpct bitcoin
+	// message.
+	OnSendCmpct func(p *Peer, msg *wire.MsgSendCmpct)
+
+	// OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin
+	// message.
+	OnCmpctBlock func(p *Peer, msg *wire.MsgCmpctBlock)
+
+	// OnGetBlockTxns is invoked when a peer receives a getblocktxn bitcoin
+	// message.
+	OnGetBlockTxns func(p *Peer, msg *wire.MsgGetBlockTxns)
+
+	// OnBlockTxns is invoked when a peer receives a blocktxns bitcoin
+	// message.
+	OnBlockTxns func(p *Peer, msg *wire.MsgBlockTxns)
+
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
 	// an error in the read occurred.  Typically, callers will opt to use
@@ -280,6 +296,10 @@ type Config struct {
 	// connection detecting and disconnect logic since they intentionally
 	// do so for testing purposes.
 	TstAllowSelfConnection bool
+
+	// MaxKnownInventory is the maximum number of known inventory items we will hold
+	// in memory for this peer.
+	MaxKnownInventory uint
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.
@@ -485,6 +505,10 @@ type Peer struct {
 	queueQuit     chan struct{}
 	outQuit       chan struct{}
 	quit          chan struct{}
+
+	// CompactBlocks
+	compactBlocksPreferred    bool
+	directBlockRelayPreferred bool
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -524,6 +548,38 @@ func (p *Peer) UpdateLastAnnouncedBlock(blkHash *chainhash.Hash) {
 // This function is safe for concurrent access.
 func (p *Peer) AddKnownInventory(invVect *wire.InvVect) {
 	p.knownInventory.Add(invVect)
+}
+
+// DeleteKnownInventory deletes the passed inventory from the cache of known inventory
+// for the peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) DeleteKnownInventory(invVect *wire.InvVect) {
+	p.knownInventory.Delete(invVect)
+}
+
+// HasKnownInventory checks whether the inventory exists in the peer's known
+// inventory map.
+//
+// This function is safe for concurrent access.
+func (p *Peer) HasKnownInventory(invVect *wire.InvVect) bool {
+	return p.knownInventory.Exists(invVect)
+}
+
+// GetKnownTxInventory returns a map of the known transaction inventory for this peer.
+//
+// This function is safe for concurrent access.
+func (p *Peer) GetKnownTxInventory() map[chainhash.Hash]bool {
+	p.knownInventory.invMtx.Lock()
+	defer p.knownInventory.invMtx.Unlock()
+
+	ki := make(map[chainhash.Hash]bool)
+	for iv := range p.knownInventory.invMap {
+		if iv.Type == wire.InvTypeTx {
+			ki[iv.Hash] = true
+		}
+	}
+	return ki
 }
 
 // StatsSnapshot returns a snapshot of the current peer flags and statistics.
@@ -822,6 +878,30 @@ func (p *Peer) WantsHeaders() bool {
 	p.flagsMtx.Unlock()
 
 	return sendHeadersPreferred
+}
+
+// WantsCompactBlocks returns if the peer wants header cmpctblocks instead of
+// regular blocks.
+//
+// This function is safe for concurrent access.
+func (p *Peer) WantsCompactBlocks() bool {
+	p.flagsMtx.Lock()
+	compactBlocksPreferred := p.compactBlocksPreferred
+	p.flagsMtx.Unlock()
+
+	return compactBlocksPreferred
+}
+
+// WantsDirectBlockRelay returns if the peer wants us to relay blocks without
+// announcing them in inv messages.
+//
+// This function is safe for concurrent access.
+func (p *Peer) WantsDirectBlockRelay() bool {
+	p.flagsMtx.Lock()
+	directBlockRelayPreferred := p.directBlockRelayPreferred
+	p.flagsMtx.Unlock()
+
+	return directBlockRelayPreferred
 }
 
 // PushAddrMsg sends an addr message to the connected peer using the provided
@@ -1172,9 +1252,14 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time, msgCmd st
 		// Expects a cfilter message.
 		pendingResponses[wire.CmdCFilter] = deadline
 
+	case wire.CmdGetBlockTxns:
+		// Expects a blocktxns message.
+		pendingResponses[wire.CmdBlockTxns] = deadline
+
 	case wire.CmdGetData:
-		// Expects a block, merkleblock, tx, or notfound message.
+		// Expects a block, cmpctblock, merkleblock, tx, or notfound message.
 		pendingResponses[wire.CmdBlock] = deadline
+		pendingResponses[wire.CmdCmpctBlock] = deadline
 		pendingResponses[wire.CmdMerkleBlock] = deadline
 		pendingResponses[wire.CmdTx] = deadline
 		pendingResponses[wire.CmdNotFound] = deadline
@@ -1232,12 +1317,15 @@ out:
 				switch msgCmd := msg.message.Command(); msgCmd {
 				case wire.CmdBlock:
 					fallthrough
+				case wire.CmdCmpctBlock:
+					fallthrough
 				case wire.CmdMerkleBlock:
 					fallthrough
 				case wire.CmdTx:
 					fallthrough
 				case wire.CmdNotFound:
 					delete(pendingResponses, wire.CmdBlock)
+					delete(pendingResponses, wire.CmdCmpctBlock)
 					delete(pendingResponses, wire.CmdMerkleBlock)
 					delete(pendingResponses, wire.CmdTx)
 					delete(pendingResponses, wire.CmdNotFound)
@@ -1549,6 +1637,32 @@ out:
 				p.cfg.Listeners.OnSendHeaders(p, msg)
 			}
 
+		case *wire.MsgSendCmpct:
+			// We only know of one version so if they want something
+			// else we can't use compact blocks.
+			if msg.Version == wire.CompactBlocksProtocolVersion {
+				p.compactBlocksPreferred = true
+				p.directBlockRelayPreferred = msg.Announce
+			}
+			if p.cfg.Listeners.OnSendCmpct != nil {
+				p.cfg.Listeners.OnSendCmpct(p, msg)
+			}
+
+		case *wire.MsgCmpctBlock:
+			if p.cfg.Listeners.OnCmpctBlock != nil {
+				p.cfg.Listeners.OnCmpctBlock(p, msg)
+			}
+
+		case *wire.MsgGetBlockTxns:
+			if p.cfg.Listeners.OnGetBlockTxns != nil {
+				p.cfg.Listeners.OnGetBlockTxns(p, msg)
+			}
+
+		case *wire.MsgBlockTxns:
+			if p.cfg.Listeners.OnBlockTxns != nil {
+				p.cfg.Listeners.OnBlockTxns(p, msg)
+			}
+
 		default:
 			log.Debugf("Received unhandled message of type %v "+
 				"from %v", rmsg.Command(), p)
@@ -1639,7 +1753,7 @@ out:
 			// If this is a new block, then we'll blast it
 			// out immediately, skipping the inv trickle
 			// queue.
-			if iv.Type == wire.InvTypeBlock {
+			if iv.Type == wire.InvTypeBlock || iv.Type == wire.InvTypeCmpctBlock {
 				invMsg := wire.NewMsgInvSizeHint(1)
 				invMsg.AddInvVect(iv)
 				waiting = queuePacket(outMsg{msg: invMsg},
@@ -2205,10 +2319,15 @@ func newPeerBase(origCfg *Config, inbound bool) *Peer {
 		cfg.TrickleInterval = DefaultTrickleInterval
 	}
 
+	// If zero was set then we'll use the default.
+	if cfg.MaxKnownInventory == 0 {
+		cfg.MaxKnownInventory = DefaultMaxKnownInventory
+	}
+
 	p := Peer{
 		inbound:         inbound,
 		wireEncoding:    wire.BaseEncoding,
-		knownInventory:  newMruInventoryMap(maxKnownInventory),
+		knownInventory:  newMruInventoryMap(cfg.MaxKnownInventory),
 		stallControl:    make(chan stallControlMsg, 1), // nonblocking sync
 		outputQueue:     make(chan outMsg, outputBufferSize),
 		sendQueue:       make(chan outMsg, 1),   // nonblocking sync

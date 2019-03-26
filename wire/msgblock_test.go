@@ -166,7 +166,6 @@ func TestBlockWire(t *testing.T) {
 			MultipleAddressVersion,
 			BaseEncoding,
 		},
-		// TODO(roasbeef): add case for witnessy block
 	}
 
 	t.Logf("Running %d tests", len(tests))

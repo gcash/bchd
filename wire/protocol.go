@@ -13,7 +13,7 @@ import (
 // XXX pedro: we will probably need to bump this.
 const (
 	// ProtocolVersion is the latest protocol version this package supports.
-	ProtocolVersion uint32 = 70013
+	ProtocolVersion uint32 = 70015
 
 	// MultipleAddressVersion is the protocol version which added multiple
 	// addresses per message (pver >= MultipleAddressVersion).
@@ -51,6 +51,16 @@ const (
 	// FeeFilterVersion is the protocol version which added a new
 	// feefilter message.
 	FeeFilterVersion uint32 = 70013
+
+	// BIP0152Version is the protocol version which added the compact
+	// block relaying.
+	BIP0152Version uint32 = 70014
+
+	// NoValidationRelayVersion is the other version number defined
+	// by BIP0152. Nodes using this protocol version or higher also
+	// accept compact block relay but pledge not to ban nodes which
+	// relay blocks without validating them first.
+	NoValidationRelayVersion uint32 = 70015
 )
 
 // ServiceFlag identifies services supported by a bitcoin peer.

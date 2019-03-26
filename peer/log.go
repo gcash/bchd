@@ -93,6 +93,10 @@ func invSummary(invList []*wire.InvVect) string {
 			return fmt.Sprintf("error %s", iv.Hash)
 		case wire.InvTypeBlock:
 			return fmt.Sprintf("block %s", iv.Hash)
+		case wire.InvTypeCmpctBlock:
+			return fmt.Sprintf("cmpctblock %s", iv.Hash)
+		case wire.InvTypeFilteredBlock:
+			return fmt.Sprintf("filteredblock %s", iv.Hash)
 		case wire.InvTypeTx:
 			return fmt.Sprintf("tx %s", iv.Hash)
 		}
@@ -199,6 +203,23 @@ func messageSummary(msg wire.Message) string {
 	case *wire.MsgCFHeaders:
 		return fmt.Sprintf("stop_hash=%v, num_filter_hashes=%d",
 			msg.StopHash, len(msg.FilterHashes))
+
+	case *wire.MsgGetCFMempool:
+		// No summary.
+
+	case *wire.MsgSendCmpct:
+		return fmt.Sprintf("announce=%v", msg.Announce)
+
+	case *wire.MsgCmpctBlock:
+		header := &msg.Header
+		return fmt.Sprintf("hash %s, ver %d, %d shortIDs, %d prefilledTxs, %s", msg.BlockHash(),
+			header.Version, len(msg.ShortIDs), len(msg.PrefilledTxs), header.Timestamp)
+
+	case *wire.MsgGetBlockTxns:
+		return fmt.Sprintf("indexes %d", len(msg.Indexes))
+
+	case *wire.MsgBlockTxns:
+		return fmt.Sprintf("txs %d", len(msg.Txs))
 
 	case *wire.MsgReject:
 		// Ensure the variable length strings don't contain any

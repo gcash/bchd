@@ -71,6 +71,13 @@ type blockMsg struct {
 	reply chan struct{}
 }
 
+// blockErrorMsg packages a peer and a block hash to signal an error processing
+// the block so we can remove it from the queues.
+type blockErrorMsg struct {
+	hash *chainhash.Hash
+	peer *peerpkg.Peer
+}
+
 // invMsg packages a bitcoin inv message and the peer it came from together
 // so the block handler has access to that information.
 type invMsg struct {
@@ -903,6 +910,16 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	}
 }
 
+// handleBlockError removes the request block from the queues so it can be request
+// again if necessary.
+func (sm *SyncManager) handleBlockError(msg *blockErrorMsg) {
+	state, exists := sm.peerStates[msg.peer]
+	if exists {
+		delete(state.requestedBlocks, *msg.hash)
+	}
+	delete(sm.requestedBlocks, *msg.hash)
+}
+
 // fetchHeaderBlocks creates and sends a request to the syncPeer for the next
 // list of blocks to be downloaded based on the current list of headers.
 func (sm *SyncManager) fetchHeaderBlocks() {
@@ -1298,6 +1315,10 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				sm.limitMap(sm.requestedBlocks, maxRequestedBlocks)
 				state.requestedBlocks[iv.Hash] = struct{}{}
 
+				// Request a compact block if this peer supports it.
+				if sm.current() && imsg.peer.ProtocolVersion() >= wire.BIP0152Version {
+					iv.Type = wire.InvTypeCmpctBlock
+				}
 				gdmsg.AddInvVect(iv)
 				numRequested++
 			}
@@ -1377,6 +1398,9 @@ out:
 				if msg.reply != nil {
 					msg.reply <- struct{}{}
 				}
+
+			case *blockErrorMsg:
+				sm.handleBlockError(msg)
 
 			case *invMsg:
 				sm.handleInvMsg(msg)
@@ -1469,7 +1493,7 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 
 		// Generate the inventory vector and relay it.
 		iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
-		sm.peerNotifier.RelayInventory(iv, block.MsgBlock().Header)
+		sm.peerNotifier.RelayInventory(iv, block.MsgBlock())
 
 	// A block has been connected to the main block chain.
 	case blockchain.NTBlockConnected:
@@ -1571,6 +1595,15 @@ func (sm *SyncManager) QueueBlock(block *bchutil.Block, peer *peerpkg.Peer, done
 	}
 
 	sm.msgChan <- &blockMsg{block: block, peer: peer, reply: done}
+}
+
+// QueueBlockError adds the passed block message and peer to the block handling
+// queue to remove the requested block for our queues.
+func (sm *SyncManager) QueueBlockError(hash *chainhash.Hash, peer *peerpkg.Peer) {
+	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		return
+	}
+	sm.msgChan <- &blockErrorMsg{hash: hash, peer: peer}
 }
 
 // QueueInv adds the passed inv message and peer to the block handling queue.

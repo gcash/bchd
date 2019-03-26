@@ -110,6 +110,21 @@ func TestInvVectWire(t *testing.T) {
 		0x26, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Block 203707 hash
 	}
 
+	// cmpctBlockInvVect is an inventory vector representing a compact block.
+	cmpctBlockInvVect := InvVect{
+		Type: InvTypeCmpctBlock,
+		Hash: *baseHash,
+	}
+
+	// cmpctBlockInvVectEncoded is the wire encoded bytes of cmpctBlockInvVect.
+	cmpctBlockInvVectEncoded := []byte{
+		0x04, 0x00, 0x00, 0x00, // InvTypeBlock
+		0xdc, 0xe9, 0x69, 0x10, 0x94, 0xda, 0x23, 0xc7,
+		0xe7, 0x67, 0x13, 0xd0, 0x75, 0xd4, 0xa1, 0x0b,
+		0x79, 0x40, 0x08, 0xa6, 0x36, 0xac, 0xc2, 0x4b,
+		0x26, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Block 203707 hash
+	}
+
 	tests := []struct {
 		in   InvVect // NetAddress to encode
 		out  InvVect // Expected decoded NetAddress
@@ -140,6 +155,14 @@ func TestInvVectWire(t *testing.T) {
 			ProtocolVersion,
 		},
 
+		// Latest protocol version cmptctblock inventory vector.
+		{
+			cmpctBlockInvVect,
+			cmpctBlockInvVect,
+			cmpctBlockInvVectEncoded,
+			ProtocolVersion,
+		},
+
 		// Protocol version BIP0035Version error inventory vector.
 		{
 			errInvVect,
@@ -161,6 +184,14 @@ func TestInvVectWire(t *testing.T) {
 			blockInvVect,
 			blockInvVect,
 			blockInvVectEncoded,
+			BIP0035Version,
+		},
+
+		// Protocol version BIP0035Version cmpctblock inventory vector.
+		{
+			cmpctBlockInvVect,
+			cmpctBlockInvVect,
+			cmpctBlockInvVectEncoded,
 			BIP0035Version,
 		},
 
@@ -188,6 +219,14 @@ func TestInvVectWire(t *testing.T) {
 			BIP0031Version,
 		},
 
+		// Protocol version BIP0031Version cmpctblock inventory vector.
+		{
+			cmpctBlockInvVect,
+			cmpctBlockInvVect,
+			cmpctBlockInvVectEncoded,
+			BIP0031Version,
+		},
+
 		// Protocol version NetAddressTimeVersion error inventory vector.
 		{
 			errInvVect,
@@ -212,6 +251,14 @@ func TestInvVectWire(t *testing.T) {
 			NetAddressTimeVersion,
 		},
 
+		// Protocol version NetAddressTimeVersion cmpctblock inventory vector.
+		{
+			cmpctBlockInvVect,
+			cmpctBlockInvVect,
+			cmpctBlockInvVectEncoded,
+			NetAddressTimeVersion,
+		},
+
 		// Protocol version MultipleAddressVersion error inventory vector.
 		{
 			errInvVect,
@@ -233,6 +280,14 @@ func TestInvVectWire(t *testing.T) {
 			blockInvVect,
 			blockInvVect,
 			blockInvVectEncoded,
+			MultipleAddressVersion,
+		},
+
+		// Protocol version MultipleAddressVersion cmpctblock inventory vector.
+		{
+			cmpctBlockInvVect,
+			cmpctBlockInvVect,
+			cmpctBlockInvVectEncoded,
 			MultipleAddressVersion,
 		},
 	}
