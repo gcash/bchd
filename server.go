@@ -608,8 +608,8 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 }
 
 // OnGetCFMemPool is invoked when a peer receives a getcfmempool bitcoin message.
-// It creates a Cfilter of node's mempool and sends it to the resting peer in a
-// cfmempool message.
+// It creates a Cfilter of node's mempool and sends it to the requesting peer in a
+// cfilter message.
 func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// Only allow cfmempool requests if the server has nodeCF enabled
 	if sp.server.services&wire.SFNodeCF != wire.SFNodeCF {
@@ -621,18 +621,21 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 
 	// A decaying ban score increase is applied to prevent flooding.
 	// The ban score accumulates and passes the ban threshold if a burst of
-	// mempool messages comes from a peer. The score decays each minute to
+	// getcfmempool messages comes from a peer. The score decays each minute to
 	// half of its value.
-	sp.addBanScore(0, 33, "mempool")
+	sp.addBanScore(0, 33, "getcfmempool")
 
 	txMemPool := sp.server.txMemPool
 	txDescs := txMemPool.TxDescs()
 
-	// To build the filter we'll put all the mempool transactions into a mock block
+	// Build the tx slice
 	var txs []*wire.MsgTx
 	scripts := make([][]byte, 0)
 	for _, txDesc := range txDescs {
 		txs = append(txs, txDesc.Tx.MsgTx())
+		// For each input we also include linked PkScript. Our utxo cache
+		// should already have it in memory since the mempool had to load
+		// it to validate the transaction.
 		for _, in := range txDesc.Tx.MsgTx().TxIn {
 			entry, err := sp.server.chain.FetchUtxoEntry(in.PreviousOutPoint)
 			if err != nil || entry == nil {
@@ -649,7 +652,8 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	if err != nil {
 		return
 	}
-	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, &chainhash.Hash{}, filterBytes)
+	zeroHash := &chainhash.Hash{}
+	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, zeroHash, filterBytes)
 	sp.QueueMessage(resp, nil)
 }
 
