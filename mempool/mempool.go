@@ -216,18 +216,18 @@ type TxPool struct {
 // Ensure the TxPool type implements the mining.TxSource interface.
 var _ mining.TxSource = (*TxPool)(nil)
 
-// StartWorkers starts up a number of workers in separate goroutines
+// Start starts up a number of workers in separate goroutines
 // that will be used for parallel processing.
-func (mp *TxPool) StartWorkers() {
+func (mp *TxPool) Start() {
 	for i := 0; i < numWorkers; i++ {
 		go mp.poolWorker()
 	}
 	go mp.tryLaterHandler()
 }
 
-// StopWorkers gracefully shuts down the mempool by stopping all workers
+// Stop gracefully shuts down the mempool by stopping all workers
 // and waiting for them to finish.
-func (mp *TxPool) StopWorkers() {
+func (mp *TxPool) Stop() {
 	mp.wg.Add(numWorkers + 1)
 	close(mp.quit)
 	mp.wg.Wait()

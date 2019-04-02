@@ -2522,6 +2522,7 @@ func (s *server) peerHandler() {
 	// things, it's easier and slightly faster to simply start and stop them
 	// in this handler.
 	s.addrManager.Start()
+	s.txMemPool.Start()
 	s.syncManager.Start()
 
 	srvrLog.Tracef("Starting peer handler")
@@ -2606,6 +2607,7 @@ out:
 
 	s.connManager.Stop()
 	s.syncManager.Stop()
+	s.txMemPool.Stop()
 	s.addrManager.Stop()
 
 	// Drain channels before exiting so nothing is left waiting around
