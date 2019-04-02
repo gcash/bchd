@@ -606,11 +606,6 @@ func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
 // handleTxMsg handles transaction messages from all peers.
 func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	peer := tmsg.peer
-	state, exists := sm.peerStates[peer]
-	if !exists {
-		log.Warnf("Received tx message from unknown peer %s", peer)
-		return
-	}
 
 	// NOTE:  BitcoinJ, and possibly other wallets, don't follow the spec of
 	// sending an inventory message and allowing the remote peer to decide
@@ -625,25 +620,40 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	// Ignore transactions that we have already rejected.  Do not
 	// send a reject message here because if the transaction was already
 	// rejected, the transaction was unsolicited.
-	if _, exists = sm.rejectedTxns[*txHash]; exists {
+	if _, exists := sm.rejectedTxns[*txHash]; exists {
 		log.Debugf("Ignoring unsolicited previously rejected "+
 			"transaction %v from %s", txHash, peer)
 		return
 	}
 
-	// Process the transaction to include validation, insertion in the
-	// memory pool, orphan handling, etc.
-	acceptedTxs, err := sm.txMemPool.ProcessTransaction(tmsg.tx,
-		true, true, mempool.Tag(peer.ID()))
+	// Put the transaction on the mempool queue to be processed in paralle.
+	sm.txMemPool.QueueTransaction(tmsg.tx, true, true, mempool.Tag(peer.ID()), sm.msgChan)
+}
 
+// handleProcessTxResponse handles an asynchronous response from the mempool
+// with the response to the process request.
+func (sm *SyncManager) handleProcessTxResponse(resp *mempool.ProcessResponse) {
+	txHash := resp.Tx.Hash()
+
+	var peer *peerpkg.Peer
+	for p := range sm.peerStates {
+		if p.ID() == int32(resp.Tag) {
+			peer = p
+			break
+		}
+	}
+
+	state, exists := sm.peerStates[peer]
+	if exists {
+		delete(state.requestedTxns, *txHash)
+	}
 	// Remove transaction from request maps. Either the mempool/chain
 	// already knows about it and as such we shouldn't have any more
 	// instances of trying to fetch it, or we failed to insert and thus
 	// we'll retry next time we get an inv.
-	delete(state.requestedTxns, *txHash)
 	delete(sm.requestedTxns, *txHash)
 
-	if err != nil {
+	if resp.Err != nil {
 		// Do not request this transaction again until a new block
 		// has been processed.
 		sm.rejectedTxns[*txHash] = struct{}{}
@@ -653,23 +663,25 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		// simply rejected as opposed to something actually going wrong,
 		// so log it as such.  Otherwise, something really did go wrong,
 		// so log it as an actual error.
-		if _, ok := err.(mempool.RuleError); ok {
+		if _, ok := resp.Err.(mempool.RuleError); ok {
 			log.Debugf("Rejected transaction %v from %s: %v",
-				txHash, peer, err)
+				txHash, peer, resp.Err)
 		} else {
 			log.Errorf("Failed to process transaction %v: %v",
-				txHash, err)
+				txHash, resp.Err)
 		}
 
 		// Convert the error into an appropriate reject message and
 		// send it.
-		code, reason := mempool.ErrToRejectErr(err)
-		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
+		if peer != nil {
+			code, reason := mempool.ErrToRejectErr(resp.Err)
+			peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
+		}
 		return
 	}
 
-	if len(acceptedTxs) > 0 {
-		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
+	if len(resp.AcceptedTxs) > 0 {
+		sm.peerNotifier.AnnounceNewTransactions(resp.AcceptedTxs)
 	}
 }
 
@@ -1445,6 +1457,9 @@ out:
 					isOrphan: isOrphan,
 					err:      nil,
 				}
+
+			case *mempool.ProcessResponse:
+				sm.handleProcessTxResponse(msg)
 
 			case isCurrentMsg:
 				msg.reply <- sm.current()

@@ -43,6 +43,10 @@ const (
 	// orphanExpireScanInterval is the minimum amount of time in between
 	// scans of the orphan pool to evict expired transactions.
 	orphanExpireScanInterval = time.Minute * 5
+
+	// numWorkers is the number of workers used for processing transactions
+	// in parallel.
+	numWorkers = 8
 )
 
 // Tag represents an identifier to use for tagging orphan transactions.  The
@@ -159,6 +163,26 @@ type orphanTx struct {
 	expiration time.Time
 }
 
+// ProcessResponse is the response to the process
+// request that is used to call back to the goroutine
+// which made the request for parallel processing.
+type ProcessResponse struct {
+	Tx          *bchutil.Tx
+	AcceptedTxs []*TxDesc
+	Tag         Tag
+	Err         error
+}
+
+// processRequest is a request to put on the queue
+// to be parallel processed by the mempool.
+type processRequest struct {
+	tx           *bchutil.Tx
+	allowOrphan  bool
+	rateLimit    bool
+	tag          Tag
+	responseChan chan<- interface{}
+}
+
 // TxPool is used as a source of transactions that need to be mined into blocks
 // and relayed to other peers.  It is safe for concurrent access from multiple
 // peers.
@@ -180,10 +204,70 @@ type TxPool struct {
 	// the scan will only run when an orphan is added to the pool as opposed
 	// to on an unconditional timer.
 	nextExpireScan time.Time
+
+	inFlightMtx sync.RWMutex
+	inflight    map[wire.OutPoint]bool
+	workerQueue chan *processRequest
+	tryLater    chan *processRequest
+	quit        chan struct{}
+	wg          sync.WaitGroup
 }
 
 // Ensure the TxPool type implements the mining.TxSource interface.
 var _ mining.TxSource = (*TxPool)(nil)
+
+// StartWorkers starts up a number of workers in separate goroutines
+// that will be used for parallel processing.
+func (mp *TxPool) StartWorkers() {
+	for i := 0; i < numWorkers; i++ {
+		go mp.poolWorker()
+	}
+	go mp.tryLaterHandler()
+}
+
+// StopWorkers gracefully shuts down the mempool by stopping all workers
+// and waiting for them to finish.
+func (mp *TxPool) StopWorkers() {
+	mp.wg.Add(numWorkers + 1)
+	close(mp.quit)
+	mp.wg.Wait()
+}
+
+// poolWorker starts up a worker. It will attempt to read requests
+// of the queue and process them.
+func (mp *TxPool) poolWorker() {
+	for {
+		select {
+		case req := <-mp.workerQueue:
+			mp.parallelProcessTransaction(req)
+		case <-mp.quit:
+			mp.wg.Done()
+			return
+		}
+	}
+}
+
+// tryLaterHandler holds requests that couldn't be processed because their
+// inputs are already in flight. Every second it passes the transactions
+// back into ProcessInParallel to be tried again.
+func (mp *TxPool) tryLaterHandler() {
+	ticker := time.NewTicker(time.Second)
+	var requests []*processRequest
+	for {
+		select {
+		case req := <-mp.tryLater:
+			requests = append(requests, req)
+		case <-ticker.C:
+			for _, req := range requests {
+				mp.QueueTransaction(req.tx, req.allowOrphan, req.rateLimit, req.tag, req.responseChan)
+			}
+			requests = []*processRequest{}
+		case <-mp.quit:
+			mp.wg.Done()
+			return
+		}
+	}
+}
 
 // removeOrphan is the internal function which implements the public
 // RemoveOrphan.  See the comment for RemoveOrphan for more details.
@@ -636,12 +720,13 @@ func (mp *TxPool) FetchTransaction(txHash *chainhash.Hash) (*bchutil.Tx, error) 
 	return nil, fmt.Errorf("transaction is not in the pool")
 }
 
-// maybeAcceptTransaction is the internal function which implements the public
-// MaybeAcceptTransaction.  See the comment for MaybeAcceptTransaction for
-// more details.
+// canAcceptTransaction processes a transaction to see if it can be added
+// to the mempool. If it passes this check, it can be committed.
 //
-// This function MUST be called with the mempool lock held (for writes).
-func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash, *TxDesc, error) {
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) canAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash,
+	*blockchain.UtxoViewpoint, *bchutil.Tx, int32, int64, error) {
+
 	txHash := tx.Hash()
 
 	// Don't accept the transaction if it already exists in the pool.  This
@@ -652,7 +737,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		mp.isOrphanInPool(txHash)) {
 
 		str := fmt.Sprintf("already have transaction %v", txHash)
-		return nil, nil, txRuleError(wire.RejectDuplicate, str)
+		return nil, nil, nil, 0, 0, txRuleError(wire.RejectDuplicate, str)
 	}
 
 	medianTimePast := mp.cfg.MedianTimePast()
@@ -683,16 +768,16 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	err := blockchain.CheckTransactionSanity(tx, magneticAnomalyActive, scriptFlags)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	// A standalone transaction must not be a coinbase transaction.
 	if blockchain.IsCoinBase(tx) {
 		str := fmt.Sprintf("transaction %v is an individual coinbase",
 			txHash)
-		return nil, nil, txRuleError(wire.RejectInvalid, str)
+		return nil, nil, nil, 0, 0, txRuleError(wire.RejectInvalid, str)
 	}
 
 	// Don't allow non-standard transactions if the network parameters
@@ -711,7 +796,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			}
 			str := fmt.Sprintf("transaction %v is not standard: %v",
 				txHash, err)
-			return nil, nil, txRuleError(rejectCode, str)
+			return nil, nil, nil, 0, 0, txRuleError(rejectCode, str)
 		}
 	}
 
@@ -725,7 +810,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// which examines the actual spend data and prevents double spends.
 	err = mp.checkPoolDoubleSpend(tx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	// Fetch all of the unspent transaction outputs referenced by the inputs
@@ -735,9 +820,9 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	utxoView, err := mp.fetchInputUtxos(tx)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	// Don't allow the transaction if it exists in the main chain and is not
@@ -747,7 +832,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		prevOut.Index = uint32(txOutIdx)
 		entry := utxoView.LookupEntry(prevOut)
 		if entry != nil && !entry.IsSpent() {
-			return nil, nil, txRuleError(wire.RejectDuplicate,
+			return nil, nil, nil, 0, 0, txRuleError(wire.RejectDuplicate,
 				"transaction already exists")
 		}
 		utxoView.RemoveEntry(prevOut)
@@ -769,7 +854,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		}
 	}
 	if len(missingParents) > 0 {
-		return missingParents, nil, nil
+		return missingParents, nil, nil, 0, 0, nil
 	}
 
 	// Don't allow the transaction into the mempool unless its sequence
@@ -778,13 +863,13 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	sequenceLock, err := mp.cfg.CalcSequenceLock(tx, utxoView)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 	if !blockchain.SequenceLockActive(sequenceLock, nextBlockHeight,
 		medianTimePast) {
-		return nil, nil, txRuleError(wire.RejectNonstandard,
+		return nil, nil, nil, 0, 0, txRuleError(wire.RejectNonstandard,
 			"transaction's sequence locks on inputs not met")
 	}
 
@@ -796,9 +881,9 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		utxoView, mp.cfg.ChainParams)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	// Don't allow transactions with non-standard inputs if the network
@@ -815,7 +900,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			}
 			str := fmt.Sprintf("transaction %v has a non-standard "+
 				"input: %v", txHash, err)
-			return nil, nil, txRuleError(rejectCode, str)
+			return nil, nil, nil, 0, 0, txRuleError(rejectCode, str)
 		}
 	}
 
@@ -831,14 +916,14 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	sigOps, err := blockchain.GetSigOps(tx, false, utxoView, scriptFlags)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
-		return nil, nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 	if sigOps > mp.cfg.Policy.MaxSigOpPerTx {
 		str := fmt.Sprintf("transaction %v sigop cost is too high: %d > %d",
 			txHash, sigOps, mp.cfg.Policy.MaxSigOpPerTx)
-		return nil, nil, txRuleError(wire.RejectNonstandard, str)
+		return nil, nil, nil, 0, 0, txRuleError(wire.RejectNonstandard, str)
 	}
 
 	// Don't allow transactions with fees too low to get into a mined block.
@@ -859,7 +944,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		str := fmt.Sprintf("transaction %v has %d fees which is under "+
 			"the required amount of %d", txHash, txFee,
 			minFee)
-		return nil, nil, txRuleError(wire.RejectInsufficientFee, str)
+		return nil, nil, nil, 0, 0, txRuleError(wire.RejectInsufficientFee, str)
 	}
 
 	// Require that free transactions have sufficient priority to be mined
@@ -873,7 +958,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 			str := fmt.Sprintf("transaction %v has insufficient "+
 				"priority (%g <= %g)", txHash,
 				currentPriority, mining.MinHighPriority)
-			return nil, nil, txRuleError(wire.RejectInsufficientFee, str)
+			return nil, nil, nil, 0, 0, txRuleError(wire.RejectInsufficientFee, str)
 		}
 	}
 
@@ -891,7 +976,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		if mp.pennyTotal >= mp.cfg.Policy.FreeTxRelayLimit*10*1000 {
 			str := fmt.Sprintf("transaction %v has been rejected "+
 				"by the rate limiter due to low fees", txHash)
-			return nil, nil, txRuleError(wire.RejectInsufficientFee, str)
+			return nil, nil, nil, 0, 0, txRuleError(wire.RejectInsufficientFee, str)
 		}
 		oldTotal := mp.pennyTotal
 
@@ -908,14 +993,33 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		mp.cfg.HashCache)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
+			return nil, nil, nil, 0, 0, chainRuleError(cerr)
 		}
+		return nil, nil, nil, 0, 0, err
+	}
+
+	return nil, utxoView, tx, bestHeight, txFee, nil
+}
+
+// maybeAcceptTransaction is the internal function which implements the public
+// MaybeAcceptTransaction.  See the comment for MaybeAcceptTransaction for
+// more details.
+//
+// This function MUST be called with the mempool lock held (for writes).
+func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash, *TxDesc, error) {
+	missingParents, utxoView, tx, bestHeight, txFee, err := mp.canAcceptTransaction(tx, isNew, rateLimit, rejectDupOrphans)
+	if err != nil {
 		return nil, nil, err
+	}
+
+	if len(missingParents) > 0 {
+		return missingParents, nil, nil
 	}
 
 	// Add to transaction pool.
 	txD := mp.addTransaction(utxoView, tx, bestHeight, txFee)
 
+	txHash := tx.Hash()
 	log.Debugf("Accepted transaction %v (pool size: %v)", txHash,
 		len(mp.pool))
 
@@ -1105,6 +1209,138 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 	// Potentially add the orphan transaction to the orphan pool.
 	err = mp.maybeAddOrphan(tx, tag)
 	return nil, err
+}
+
+// parallelProcessTransaction processes a processRequest. The validation of
+// the transaction is done with only the mempool's read lock held meaning
+// the validation can be done in parallel with other goroutines. When committing
+// the transaction, however, the write lock is acquired.
+//
+// This function does not require any locks prior to calling.
+func (mp *TxPool) parallelProcessTransaction(req *processRequest) {
+	log.Tracef("Processing transaction %v", req.tx.Hash())
+
+	defer func() {
+		// Delete the in flight outpoints from the map
+		mp.inFlightMtx.Lock()
+		for _, in := range req.tx.MsgTx().TxIn {
+			delete(mp.inflight, in.PreviousOutPoint)
+		}
+		mp.inFlightMtx.Unlock()
+	}()
+
+	callback := func(acceptedTxs []*TxDesc, err error) {
+		if req.responseChan != nil {
+			req.responseChan <- &ProcessResponse{
+				Tx:          req.tx,
+				AcceptedTxs: acceptedTxs,
+				Tag:         req.tag,
+				Err:         err,
+			}
+		}
+	}
+
+	mp.mtx.RLock()
+	missingParents, utxoView, tx, bestHeight, txFee, err := mp.canAcceptTransaction(req.tx, true, req.rateLimit, true)
+	if err != nil {
+		go callback(nil, err)
+		return
+	}
+	mp.mtx.RUnlock()
+
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+
+	// Commit to transaction pool.
+	txD := mp.addTransaction(utxoView, tx, bestHeight, txFee)
+
+	txHash := tx.Hash()
+	log.Debugf("Accepted transaction %v (pool size: %v)", txHash,
+		len(mp.pool))
+
+	if len(missingParents) == 0 {
+		// Accept any orphan transactions that depend on this
+		// transaction (they may no longer be orphans if all inputs
+		// are now available) and repeat for those accepted
+		// transactions until there are no more.
+		//
+		// TODO: processOrphans requires a write lock. Ideally
+		// these orphans could be processed in parallel as well.
+		// Fortunately orphans are rather rare but they will
+		// become more common as the tx volume increases.
+		newTxs := mp.processOrphans(tx)
+		acceptedTxs := make([]*TxDesc, len(newTxs)+1)
+
+		// Add the parent transaction first so remote nodes
+		// do not add orphans.
+		acceptedTxs[0] = txD
+		copy(acceptedTxs[1:], newTxs)
+
+		go callback(acceptedTxs, nil)
+		return
+	}
+
+	// The transaction is an orphan (has inputs missing).  Reject
+	// it if the flag to allow orphans is not set.
+	if !req.allowOrphan {
+		// Only use the first missing parent transaction in
+		// the error message.
+		//
+		// NOTE: RejectDuplicate is really not an accurate
+		// reject code here, but it matches the reference
+		// implementation and there isn't a better choice due
+		// to the limited number of reject codes.  Missing
+		// inputs is assumed to mean they are already spent
+		// which is not really always the case.
+		str := fmt.Sprintf("orphan transaction %v references "+
+			"outputs of unknown or fully-spent "+
+			"transaction %v", tx.Hash(), missingParents[0])
+		go callback(nil, txRuleError(wire.RejectDuplicate, str))
+		return
+	}
+
+	// Potentially add the orphan transaction to the orphan pool.
+	err = mp.maybeAddOrphan(tx, req.tag)
+	go callback(nil, err)
+}
+
+// QueueTransaction behaves like ProcessTransaction except it puts the transaction
+// on a queue to be processed in parallel. If a responseChan is provided it the
+// response will be pushed over the channel in a new goroutine.
+func (mp *TxPool) QueueTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag, responseChan chan<- interface{}) {
+	pr := &processRequest{
+		tx:           tx,
+		allowOrphan:  allowOrphan,
+		rateLimit:    rateLimit,
+		tag:          tag,
+		responseChan: responseChan,
+	}
+	// This could be a double spend so let's first check to see if
+	// any of these inputs are in flight.
+	var isInflight bool
+
+	mp.inFlightMtx.Lock()
+	defer mp.inFlightMtx.Unlock()
+
+	for _, in := range tx.MsgTx().TxIn {
+		if mp.inflight[in.PreviousOutPoint] {
+			isInflight = true
+			break
+		}
+	}
+
+	if isInflight {
+		// If the inputs are in flight then we'll put the request
+		// on a queue to try again later.
+		mp.tryLater <- pr
+	} else {
+		// If the inputs are not in flight we'll put them in our
+		// inFlight map and pass the request off to our workers.
+		for _, in := range tx.MsgTx().TxIn {
+			mp.inflight[in.PreviousOutPoint] = true
+		}
+		mp.workerQueue <- pr
+	}
 }
 
 // Count returns the number of transactions in the main pool.  It does not
@@ -1328,5 +1564,11 @@ func New(cfg *Config) *TxPool {
 		orphansByPrev:  make(map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx),
 		nextExpireScan: time.Now().Add(orphanExpireScanInterval),
 		outpoints:      make(map[wire.OutPoint]*bchutil.Tx),
+		inFlightMtx:    sync.RWMutex{},
+		inflight:       make(map[wire.OutPoint]bool),
+		workerQueue:    make(chan *processRequest),
+		tryLater:       make(chan *processRequest),
+		quit:           make(chan struct{}),
+		wg:             sync.WaitGroup{},
 	}
 }
