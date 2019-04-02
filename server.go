@@ -625,29 +625,16 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// half of its value.
 	sp.addBanScore(0, 33, "getcfmempool")
 
-	txMemPool := sp.server.txMemPool
-	txDescs := txMemPool.TxDescs()
-
-	// Build the tx slice
-	var txs []*wire.MsgTx
-	scripts := make([][]byte, 0)
-	for _, txDesc := range txDescs {
-		txs = append(txs, txDesc.Tx.MsgTx())
-		// For each input we also include linked PkScript. Our utxo cache
-		// should already have it in memory since the mempool had to load
-		// it to validate the transaction.
-		for _, in := range txDesc.Tx.MsgTx().TxIn {
-			entry, err := sp.server.chain.FetchUtxoEntry(in.PreviousOutPoint)
-			if err != nil || entry == nil {
-				continue
-			}
-			scripts = append(scripts, entry.PkScript())
-		}
+	txs, scripts, err := sp.server.txMemPool.TxsAndPrevOutScripts()
+	if err != nil {
+		return
 	}
+
 	filter, err := builder.BuildMempoolFilter(txs, scripts)
 	if err != nil {
 		return
 	}
+
 	filterBytes, err := filter.NBytes()
 	if err != nil {
 		return

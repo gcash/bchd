@@ -1137,18 +1137,27 @@ func (mp *TxPool) TxHashes() []*chainhash.Hash {
 	return hashes
 }
 
-// TxDescs returns a slice of descriptors for all the transactions in the pool.
+// txDescs returns a slice of descriptors for all the transactions in the pool.
 // The descriptors are to be treated as read only.
 //
-// This function is safe for concurrent access.
-func (mp *TxPool) TxDescs() []*TxDesc {
-	mp.mtx.RLock()
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) txDescs() []*TxDesc {
 	descs := make([]*TxDesc, len(mp.pool))
 	i := 0
 	for _, desc := range mp.pool {
 		descs[i] = desc
 		i++
 	}
+	return descs
+}
+
+// TxDescs returns a slice of descriptors for all the transactions in the pool.
+// The descriptors are to be treated as read only.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) TxDescs() []*TxDesc {
+	mp.mtx.RLock()
+	descs := mp.txDescs()
 	mp.mtx.RUnlock()
 
 	return descs
@@ -1170,6 +1179,36 @@ func (mp *TxPool) MiningDescs() []*mining.TxDesc {
 	mp.mtx.RUnlock()
 
 	return descs
+}
+
+// TxsAndPrevOutScripts returns a slice of txs for all the transactions
+// in the pool. It also returns a slice of all the prevout scripts for
+// each txin in the pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) TxsAndPrevOutScripts() ([]*wire.MsgTx, [][]byte, error) {
+	// Protect concurrent access.
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+
+	descs := mp.txDescs()
+
+	scripts := make([][]byte, 0)
+	txs := make([]*wire.MsgTx, 0)
+	for _, desc := range descs {
+		txs = append(txs, desc.Tx.MsgTx())
+		view, err := mp.fetchInputUtxos(desc.Tx)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, entry := range view.Entries() {
+			if entry != nil {
+				scripts = append(scripts, entry.PkScript())
+			}
+		}
+	}
+
+	return txs, scripts, nil
 }
 
 // RawMempoolVerbose returns all of the entries in the mempool as a fully
