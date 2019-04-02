@@ -611,9 +611,9 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 // It creates a Cfilter of node's mempool and sends it to the requesting peer in a
 // cfilter message.
 func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
-	// Only allow cfmempool requests if the server has nodeCF enabled
+	// Only allow getcfmempool requests if the server has nodeCF enabled
 	if sp.server.services&wire.SFNodeCF != wire.SFNodeCF {
-		peerLog.Debugf("peer %v sent cfmempool request with NodeCF "+
+		peerLog.Debugf("peer %v sent getcfmempool request with NodeCF "+
 			"disabled -- disconnecting", sp)
 		sp.Disconnect()
 		return
@@ -624,6 +624,16 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// getcfmempool messages comes from a peer. The score decays each minute to
 	// half of its value.
 	sp.addBanScore(0, 33, "getcfmempool")
+
+	switch msg.FilterType {
+	case wire.GCSFilterRegular:
+		break
+
+	default:
+		peerLog.Debugf("Mempool filter request for unknown filter: %v",
+			msg.FilterType)
+		return
+	}
 
 	txs, scripts, err := sp.server.txMemPool.TxsAndPrevOutScripts()
 	if err != nil {
@@ -1085,7 +1095,7 @@ func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 		break
 
 	default:
-		peerLog.Debug("Filter request for unknown filter: %v",
+		peerLog.Debugf("Filter request for unknown filter: %v",
 			msg.FilterType)
 		return
 	}
@@ -1141,7 +1151,7 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 		break
 
 	default:
-		peerLog.Debug("Filter request for unknown headers for "+
+		peerLog.Debugf("Filter request for unknown headers for "+
 			"filter: %v", msg.FilterType)
 		return
 	}
@@ -1258,7 +1268,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 		break
 
 	default:
-		peerLog.Debug("Filter request for unknown checkpoints for "+
+		peerLog.Debugf("Filter request for unknown checkpoints for "+
 			"filter: %v", msg.FilterType)
 		return
 	}
