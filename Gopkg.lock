@@ -10,14 +10,6 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:1c9dffe45896d21dc8e183fdc3cdb405249e6c7dd3d00792e534af3597d5e4fc"
-  name = "github.com/avast/retry-go"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "08d411bf8302219fe47ca04dbdf9de892010c5e5"
-  version = "v2.2.0"
-
-[[projects]]
   branch = "master"
   digest = "1:1e6b2f7aa98b082c30a1303c29a702c369b2ec6d86b74a599bc8bbe2333db299"
   name = "github.com/btcsuite/go-socks"
@@ -156,11 +148,31 @@
   pruneopts = "UT"
   revision = "ffb98f73852f696ea2bb21a617a5c4b3e067a439"
 
+[[projects]]
+  digest = "1:b154eb17b54cec56332bb76d6b5cf1b23f96beaf19468d0da5e94fc737a9093d"
+  name = "golang.org/x/text"
+  packages = [
+    "feature/plural",
+    "internal",
+    "internal/catmsg",
+    "internal/format",
+    "internal/gen",
+    "internal/number",
+    "internal/stringset",
+    "internal/tag",
+    "language",
+    "message",
+    "message/catalog",
+    "unicode/cldr",
+  ]
+  pruneopts = "UT"
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/avast/retry-go",
     "github.com/btcsuite/go-socks/socks",
     "github.com/btcsuite/goleveldb/leveldb",
     "github.com/btcsuite/goleveldb/leveldb/comparer",
@@ -186,6 +198,7 @@
     "github.com/jrick/logrotate/rotator",
     "github.com/zquestz/grab",
     "golang.org/x/crypto/ripemd160",
+    "golang.org/x/text/message",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
