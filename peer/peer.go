@@ -178,7 +178,7 @@ type MessageListeners struct {
 	// message.
 	OnFilterLoad func(p *Peer, msg *wire.MsgFilterLoad)
 
-	// OnMerkleBlock  is invoked when a peer receives a merkleblock bitcoin
+	// OnMerkleBlock is invoked when a peer receives a merkleblock bitcoin
 	// message.
 	OnMerkleBlock func(p *Peer, msg *wire.MsgMerkleBlock)
 
@@ -186,6 +186,9 @@ type MessageListeners struct {
 	// The caller may return a reject message in which case the message will
 	// be sent to the peer and the peer will be disconnected.
 	OnVersion func(p *Peer, msg *wire.MsgVersion) *wire.MsgReject
+
+	// OnXVersion is invoked when a peer receives an xversion bitcoin message.
+	OnXVersion func(p *Peer, msg *wire.MsgXVersion)
 
 	// OnVerAck is invoked when a peer receives a verack bitcoin message.
 	OnVerAck func(p *Peer, msg *wire.MsgVerAck)
@@ -472,6 +475,7 @@ type Peer struct {
 	protocolVersion      uint32 // negotiated protocol version
 	sendHeadersPreferred bool   // peer sent a sendheaders message
 	verAckReceived       bool
+	xVersionReceived     bool
 	syncPeer             bool
 
 	wireEncoding wire.MessageEncoding
@@ -1484,6 +1488,21 @@ out:
 			p.PushRejectMsg(msg.Command(), wire.RejectDuplicate,
 				"duplicate version message", nil, true)
 			break out
+
+		case *wire.MsgXVersion:
+			if p.xVersionReceived {
+				log.Infof("Already received 'xversion' from peer %v -- "+
+					"disconnecting", p)
+				break out
+			}
+
+			p.flagsMtx.Lock()
+			p.xVersionReceived = true
+			p.flagsMtx.Unlock()
+
+			if p.cfg.Listeners.OnXVersion != nil {
+				p.cfg.Listeners.OnXVersion(p, msg)
+			}
 
 		case *wire.MsgVerAck:
 
