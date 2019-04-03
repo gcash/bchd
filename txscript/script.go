@@ -112,8 +112,10 @@ func ExtractDataElements(script []byte) ([][]byte, error) {
 		return nil, err
 	}
 	for _, pop := range pops {
-		// All opcodes up to OP_16 are data push instructions.
-		if pop.opcode.value <= OP_16 {
+		// The only opcodes which carry data are OP_DATA_1 to OP_PUSHDATA4.
+		// OP_0 and OP_1 - OP_16 are ignored for the purpose of this function
+		// even though they push data to the stack.
+		if pop.opcode.value > OP_0 && pop.opcode.value <= OP_PUSHDATA4 {
 			dataElements = append(dataElements, pop.data)
 		}
 	}
