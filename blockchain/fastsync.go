@@ -15,9 +15,9 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 
-	"github.com/avast/retry-go"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/zquestz/grab"
+	"golang.org/x/text/message"
 )
 
 const numWorkers = 8
@@ -213,38 +213,69 @@ func worker(cache *utxoCache, jobs <-chan []byte, results chan<- *result) {
 // downloadUtxoSet will attempt to connect to make an HTTP GET request to the
 // provided sources one at a time and download the UTXO set to the provided path.
 // If a proxy is provided it will use it for the HTTP connection.
-func downloadUtxoSet(sources []string, proxy *socks.Proxy, pth string) (string, error) {
-	var fileName string
+func downloadUtxoSet(sources []string, proxy *socks.Proxy, destination string) (string, error) {
+	for _, source := range sources {
+		log.Infof("FastSync: Downloading UTXO set from %s to %s ...", source, destination)
+		retries := 3
+		for retries > 0 {
+			retries--
 
-	grab.SetDefaultClientWithProxy(proxy)
+			client := grab.NewClientWithProxy(proxy)
+			request, err := grab.NewRequest(destination, source)
+			if err != nil {
+				log.Errorf("FastSync: Error creating download request: %s", err.Error())
+				return "", err
+			}
 
-	for _, src := range sources {
-		log.Infof("Downloading UTXO set from %s", src)
-		err := retry.Do(
-			func() error {
-				resp, err := grab.Get(pth, src)
-				if err != nil {
-					return err
+			// Begin download
+			response := client.Do(request)
+
+			displayDownloadProgress(response)
+
+			// Error checking
+			if responseError := response.Err(); responseError != nil {
+				log.Errorf("FastSync: Failed downloading UTXO set: %s", responseError.Error())
+				if strings.Contains(responseError.Error(), "connection refused") {
+					break
+				} else {
+					continue
 				}
+			}
 
-				fileName = resp.Filename
+			filename := response.Filename
+			log.Infof("FastSync: Download saved to %v", filename)
 
-				return nil
-			},
-			retry.Attempts(3),
-			retry.RetryIf(func(err error) bool {
-				return !strings.Contains(err.Error(), "connection refused")
-			}),
-		)
-
-		if err != nil {
-			log.Errorf("Failed downloading UTXO set: %s", err.Error())
-			continue
+			log.Info("FastSync: UTXO download complete. Verifying integrity...")
+			return filename, nil
 		}
-
-		log.Info("UTXO download complete. Verifying integrity...")
-		return fileName, nil
 	}
+	return "", AssertError("FastSync: All UTXO sources are unavailable")
+}
 
-	return "", AssertError("all UTXO sources are unavailable")
+// displayDownloadProgress will display progress text while a file is being downloaded
+// The download text is updated every five seconds
+func displayDownloadProgress(resp *grab.Response) {
+
+	printer := message.NewPrinter(message.MatchLanguage("en"))
+	// Begin UI loop
+	timer := time.NewTicker(5 * time.Second)
+	defer timer.Stop()
+	percentageDownloaded := 0
+	for {
+		select {
+		case <-timer.C:
+			currentPercentageDownloaded := int(100 * resp.Progress())
+			if currentPercentageDownloaded > percentageDownloaded {
+				percentageDownloaded = currentPercentageDownloaded
+				log.Info(printer.Sprintf("FastSync: Downloaded %.0fMB of %.0fMB (%d%%)",
+					float64(resp.BytesComplete())*0.000001,
+					float64(resp.Size)*0.000001,
+					percentageDownloaded))
+			}
+
+		case <-resp.Done:
+			// Download is complete
+			return
+		}
+	}
 }
