@@ -12,7 +12,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchutil/gcs/builder"
 	"math"
 	"net"
 	"runtime"
@@ -22,6 +21,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchutil/gcs/builder"
 
 	"github.com/gcash/bchd/addrmgr"
 	"github.com/gcash/bchd/blockchain"
@@ -557,6 +558,11 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		sp.Peer.QueueMessage(sendCmpctMessage, nil)
 	}
 	return nil
+}
+
+// OnXVersion is invoked when a peer receives an xversion message.
+func (sp *serverPeer) OnXVersion(_ *peer.Peer, msg *wire.MsgXVersion) {
+	sp.Peer.QueueMessage(wire.NewMsgXVerAck(), nil)
 }
 
 // OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -2419,6 +2425,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 	return &peer.Config{
 		Listeners: peer.MessageListeners{
 			OnVersion:      sp.OnVersion,
+			OnXVersion:     sp.OnXVersion,
 			OnMemPool:      sp.OnMemPool,
 			OnTx:           sp.OnTx,
 			OnBlock:        sp.OnBlock,

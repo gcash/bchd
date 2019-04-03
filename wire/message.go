@@ -40,7 +40,9 @@ func maxMessagePayload() uint32 {
 // Commands used in bitcoin message headers which describe the type of message.
 const (
 	CmdVersion      = "version"
+	CmdXVersion     = "xversion"
 	CmdVerAck       = "verack"
+	CmdXVerAck      = "xverack"
 	CmdGetAddr      = "getaddr"
 	CmdAddr         = "addr"
 	CmdGetBlocks    = "getblocks"
@@ -106,8 +108,14 @@ func makeEmptyMessage(command string) (Message, error) {
 	case CmdVersion:
 		msg = &MsgVersion{}
 
+	case CmdXVersion:
+		msg = &MsgXVersion{}
+
 	case CmdVerAck:
 		msg = &MsgVerAck{}
+
+	case CmdXVerAck:
+		msg = &MsgXVerAck{}
 
 	case CmdGetAddr:
 		msg = &MsgGetAddr{}
