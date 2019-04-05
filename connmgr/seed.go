@@ -66,7 +66,7 @@ func SeedFromDNS(chainParams *chaincfg.Params, reqServices wire.ServiceFlag,
 					// and 7 days ago.
 					time.Now().Add(-1*time.Second*time.Duration(secondsIn3Days+
 						randSource.Int31n(secondsIn4Days))),
-					0, peer, uint16(intPort))
+					reqServices, peer, uint16(intPort))
 			}
 
 			seedFn(addresses)
