@@ -597,6 +597,15 @@ func (idx *AddrIndex) Init() error {
 	return nil
 }
 
+// Migrate is only provided to satisfy the Indexer interface as there is nothing to
+// migrate this index.
+//
+// This is part of the Indexer interface.
+func (idx *AddrIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
+	// Nothing to do.
+	return nil
+}
+
 // Key returns the database key to use for the index as a byte slice.
 //
 // This is part of the Indexer interface.

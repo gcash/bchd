@@ -270,6 +270,13 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 		}
 	}
 
+	// Migrate each index if necessary.
+	for _, indexer := range m.enabledIndexes {
+		if err := indexer.Migrate(m.db, interrupt); err != nil {
+			return err
+		}
+	}
+
 	// Rollback indexes to the main chain if their tip is an orphaned fork.
 	// This is fairly unlikely, but it can happen if the chain is
 	// reorganized while the index is disabled.  This has to be done in
