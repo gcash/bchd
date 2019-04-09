@@ -39,7 +39,8 @@ const (
 		ScriptVerifyLowS |
 		ScriptStrictMultiSig |
 		ScriptVerifyBip143SigHash |
-		ScriptVerifySigPushOnly
+		ScriptVerifySigPushOnly |
+		ScriptVerifyCheckDataSig
 )
 
 // ScriptClass is an enumeration for the list of standard types of script.
