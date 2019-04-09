@@ -172,6 +172,20 @@ func NewOutPoint(hash *chainhash.Hash, index uint32) *OutPoint {
 	}
 }
 
+// Deserialize will read bytes from a reader and deserialize them
+// into the associated outpoint.
+func (o *OutPoint) Deserialize(r io.Reader) error {
+	return readOutPoint(r, ProtocolVersion, 0, o)
+}
+
+// Serialize writes the outpoint to the write using the same
+// format that the outpoint is transmitted on the wire. That is,
+// 32-byte little endian hash followed by 4-byte little endian
+// index.
+func (o *OutPoint) Serialize(w io.Writer) error {
+	return writeOutPoint(w, ProtocolVersion, 0, o)
+}
+
 // String returns the OutPoint in the human-readable form "hash:index".
 func (o OutPoint) String() string {
 	// Allocate enough for hash string, colon, and 10 digits.  Although
