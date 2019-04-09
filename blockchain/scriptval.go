@@ -191,7 +191,24 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
 	hashCache *txscript.HashCache) error {
 
+	// If the HashCache is present, and it doesn't yet contain the
+	// partial sighashes for this transaction, then we add the
+	// sighashes for the transaction. This allows us to take
+	// advantage of the potential speed savings due to the new
+	// digest algorithm (BIP0143).
+	hash := tx.Hash()
+	if flags.HasFlag(txscript.ScriptVerifyBip143SigHash) && hashCache != nil &&
+		!hashCache.ContainsHashes(hash) {
+
+		hashCache.AddSigHashes(tx.MsgTx())
+	}
+
 	var cachedHashes *txscript.TxSigHashes
+	if hashCache != nil {
+		cachedHashes, _ = hashCache.GetSigHashes(hash)
+	} else {
+		cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
+	}
 
 	// Collect all of the transaction inputs and required information for
 	// validation.
@@ -237,20 +254,19 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 		// sighashes for the transaction. This allows us to take
 		// advantage of the potential speed savings due to the new
 		// digest algorithm (BIP0143).
-		/*
-			hash := tx.Hash()
-			if segwitActive && tx.HasWitness() && hashCache != nil &&
-				!hashCache.ContainsHashes(hash) {
+		hash := tx.Hash()
+		if scriptFlags.HasFlag(txscript.ScriptVerifyBip143SigHash) && hashCache != nil &&
+			!hashCache.ContainsHashes(hash) {
 
-				hashCache.AddSigHashes(tx.MsgTx())
-			}*/
+			hashCache.AddSigHashes(tx.MsgTx())
+		}
 
 		var cachedHashes *txscript.TxSigHashes
-		/*if hashCache != nil {
+		if hashCache != nil {
 			cachedHashes, _ = hashCache.GetSigHashes(hash)
 		} else {
 			cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
-		}*/
+		}
 
 		for txInIdx, txIn := range tx.MsgTx().TxIn {
 			// Skip coinbases.
