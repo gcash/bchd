@@ -2281,7 +2281,12 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	// to sign itself.
 	subScript = removeOpcodeByData(subScript, fullSigBytes)
 
-	sigHashes := NewTxSigHashes(&vm.tx)
+	var sigHashes *TxSigHashes
+	if vm.hashCache != nil {
+		sigHashes = vm.hashCache
+	} else {
+		sigHashes = NewTxSigHashes(&vm.tx)
+	}
 
 	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
@@ -2466,7 +2471,11 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	signatureIdx := 0
 	var sigHashes *TxSigHashes
 	if vm.hasFlag(ScriptVerifyBip143SigHash) {
-		sigHashes = NewTxSigHashes(&vm.tx)
+		if vm.hashCache != nil {
+			sigHashes = vm.hashCache
+		} else {
+			sigHashes = NewTxSigHashes(&vm.tx)
+		}
 	}
 	for numSignatures > 0 {
 		// When there are more signatures than public keys remaining,

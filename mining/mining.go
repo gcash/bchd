@@ -474,18 +474,14 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 		return nil, err
 	}
 
-	// TODO: This set of flags is currently incomplete and
-	// only includes the latest DSV changes.
-	var scriptFlags txscript.ScriptFlags
-
-	if nextBlockHeight > g.chainParams.MagneticAnonomalyForkHeight {
-		scriptFlags |= txscript.ScriptVerifySigPushOnly |
-			txscript.ScriptVerifyCleanStack |
-			txscript.ScriptVerifyCheckDataSig
-	}
-
-	// Enable BIP-16
-	scriptFlags |= txscript.ScriptBip16
+	// TODO: after the fork activates we obviously will need to add the
+	// ScriptVerifySchnorr to the StandardVerifyFlags. We will not be adding
+	// ScriptVerifyAllowSegwitRecovery because StandardVerifyFlags because
+	// it's something only mining pools should be using because it allows
+	// insecure spends. However, we might want to create an option to set
+	// the flag in both the mempool and here for miners so they can accept
+	// segwit recovery txs.
+	scriptFlags := txscript.StandardVerifyFlags
 
 	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, scriptFlags))
 
