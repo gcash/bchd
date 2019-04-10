@@ -1181,36 +1181,6 @@ func (mp *TxPool) MiningDescs() []*mining.TxDesc {
 	return descs
 }
 
-// TxsAndPrevOutScripts returns a slice of txs for all the transactions
-// in the pool. It also returns a slice of all the prevout scripts for
-// each txin in the pool.
-//
-// This function is safe for concurrent access.
-func (mp *TxPool) TxsAndPrevOutScripts() ([]*wire.MsgTx, [][]byte, error) {
-	// Protect concurrent access.
-	mp.mtx.Lock()
-	defer mp.mtx.Unlock()
-
-	descs := mp.txDescs()
-
-	scripts := make([][]byte, 0)
-	txs := make([]*wire.MsgTx, 0)
-	for _, desc := range descs {
-		txs = append(txs, desc.Tx.MsgTx())
-		view, err := mp.fetchInputUtxos(desc.Tx)
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, entry := range view.Entries() {
-			if entry != nil {
-				scripts = append(scripts, entry.PkScript())
-			}
-		}
-	}
-
-	return txs, scripts, nil
-}
-
 // RawMempoolVerbose returns all of the entries in the mempool as a fully
 // populated btcjson result.
 //

@@ -641,12 +641,12 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 		return
 	}
 
-	txs, scripts, err := sp.server.txMemPool.TxsAndPrevOutScripts()
-	if err != nil {
-		return
+	var txs []*wire.MsgTx
+	for _, txDesc := range sp.server.txMemPool.TxDescs() {
+		txs = append(txs, txDesc.Tx.MsgTx())
 	}
 
-	filter, err := builder.BuildMempoolFilter(txs, scripts)
+	filter, err := builder.BuildMempoolFilter(txs)
 	if err != nil {
 		return
 	}
