@@ -879,7 +879,7 @@ var scriptClassTests = []struct {
 	{
 		// Nulldata with max allowed data to be considered standard.
 		name: "nulldata max standard push",
-		script: "RETURN PUSHDATA1 0xDF 0x046708afdb0fe5548271967f1a67" +
+		script: "RETURN PUSHDATA1 0xDC 0x046708afdb0fe5548271967f1a67" +
 			"130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3" +
 			"046708afdb0fe5548271967f1a67130b7105cd6a828e03909a67" +
 			"962e0ea1f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61d" +
@@ -887,8 +887,14 @@ var scriptClassTests = []struct {
 			"cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb64" +
 			"9f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3" +
 			"f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3f61deb649f6b" +
-			"c3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3aabbcc",
+			"c3f4cef3f61deb649f6bc3f4cef3f61deb649f6bc3f4cef3",
 		class: NullDataTy,
+	},
+	{
+		// Nulldata with multiple data pushes
+		name:   "nulldata with multiple data pushes",
+		script: "RETURN PUSHDATA1 0x02 0x0467 0x03 0x010101",
+		class:  NullDataTy,
 	},
 	{
 		// Nulldata with more than max allowed data to be considered
@@ -910,6 +916,12 @@ var scriptClassTests = []struct {
 		// to make it nonstandard.
 		name:   "almost nulldata",
 		script: "RETURN 4 TRUE",
+		class:  NullDataTy,
+	},
+	{
+		// Nulldata with non-data opcode
+		name:   "nulldata with non-data opcode",
+		script: "RETURN PUSHDATA1 0x02 0x0467 0x03 0x010101 ADD",
 		class:  NonStandardTy,
 	},
 
