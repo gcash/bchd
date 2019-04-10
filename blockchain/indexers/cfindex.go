@@ -212,12 +212,7 @@ func storeFilter(dbTx database.Tx, block *bchutil.Block, f *gcs.Filter,
 func (idx *CfIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	stxos []blockchain.SpentTxOut) error {
 
-	prevScripts := make([][]byte, len(stxos))
-	for i, stxo := range stxos {
-		prevScripts[i] = stxo.PkScript
-	}
-
-	f, err := builder.BuildBasicFilter(block.MsgBlock(), prevScripts)
+	f, err := builder.BuildBasicFilter(block.MsgBlock())
 	if err != nil {
 		return err
 	}

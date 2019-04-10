@@ -94,7 +94,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:fc8134986a2c9ec89139aac9a18fde5ba012bba8ff680433094a934a237f15ff"
+  digest = "1:a2f081ebc2b87c6b83d6a1791a077a4204ce98d23053e33cafc70d3f6a372465"
   name = "github.com/gcash/bchutil"
   packages = [
     ".",
@@ -106,7 +106,7 @@
     "merkleblock",
   ]
   pruneopts = "UT"
-  revision = "d3e1fc0aaef7cf3bfbed3caab306a3b8dee71ae6"
+  revision = "f909784c02593590644a5527b3f2237b8406bb7e"
 
 [[projects]]
   branch = "master"
