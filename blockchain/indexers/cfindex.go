@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"encoding/binary"
 	"errors"
 
 	"github.com/gcash/bchd/blockchain"
@@ -50,6 +51,10 @@ var (
 
 	maxFilterType = uint8(len(cfHeaderKeys) - 1)
 
+	// cfIndexMigrationVersionKey is the db key used to store the migration
+	// version this index is migrated to.
+	cfIndexMigrationVersionKey = []byte("cfindexmigrationversion")
+
 	// zeroHash is the chainhash.Hash value of all zero bytes, defined here
 	// for convenience.
 	zeroHash chainhash.Hash
@@ -72,6 +77,25 @@ func dbStoreFilterIdxEntry(dbTx database.Tx, key []byte, h *chainhash.Hash, f []
 func dbDeleteFilterIdxEntry(dbTx database.Tx, key []byte, h *chainhash.Hash) error {
 	idx := dbTx.Metadata().Bucket(cfIndexParentBucketKey).Bucket(key)
 	return idx.Delete(h[:])
+}
+
+// dbFetchMigrationVersion retrieves the migration version from the bucket.
+func dbFetchMigrationVersion(dbTx database.Tx) (uint32, error) {
+	bucket := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	versionBytes := bucket.Get(cfIndexMigrationVersionKey)
+	version := uint32(0)
+	if len(versionBytes) == 4 {
+		version = binary.BigEndian.Uint32(versionBytes)
+	}
+	return version, nil
+}
+
+// dbStoreMigrationVersion stores the migration version in the bucket.
+func dbStoreMigrationVersion(dbTx database.Tx, version uint32) error {
+	bucket := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	versionBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(versionBytes, version)
+	return bucket.Put(cfIndexMigrationVersionKey, versionBytes)
 }
 
 // CfIndex implements a committed filter (cf) by hash index.
@@ -98,6 +122,44 @@ func (idx *CfIndex) NeedsInputs() bool {
 // interface.
 func (idx *CfIndex) Init() error {
 	return nil // Nothing to do.
+}
+
+// Migrate migrates the index up to the current version. For the CfIndex we will
+// just drop the index here and write the new version number. The IndexManager
+// will then rebuild the index from the blockchain, using the new scheme,
+// as it continues its Init function.
+//
+// This is part of the Indexer interface.
+func (idx *CfIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
+	// Load the version number from the metadata bucket.
+	var cfIndexMigrationVersion uint32
+	err := db.View(func(dbTx database.Tx) error {
+		var err error
+		cfIndexMigrationVersion, err = dbFetchMigrationVersion(dbTx)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// If the version is less than 1 then drop the index and write the new version.
+	if cfIndexMigrationVersion < 1 {
+		log.Info("Migrating CfIndex to version 1")
+		if err := dropIndex(db, cfIndexParentBucketKey, cfIndexName, interrupt); err != nil {
+			return err
+		}
+		return db.Update(func(dbTx database.Tx) error {
+			// The tip for the index does not exist, so create it.
+			if err := idx.Create(dbTx); err != nil {
+				return err
+			}
+
+			// Set the tip for the index to values which represent an
+			// uninitialized index.
+			return dbPutIndexerTip(dbTx, cfIndexParentBucketKey, &chainhash.Hash{}, -1)
+		})
+	}
+	return nil
 }
 
 // Key returns the database key to use for the index as a byte slice. This is
@@ -144,7 +206,7 @@ func (idx *CfIndex) Create(dbTx database.Tx) error {
 		}
 	}
 
-	return nil
+	return dbStoreMigrationVersion(dbTx, 1)
 }
 
 // storeFilter stores a given filter, and performs the steps needed to

@@ -45,6 +45,11 @@ type Indexer interface {
 	// to be created for the first time.
 	Create(dbTx database.Tx) error
 
+	// Migrate is invoked after Init and allows each index the opportunity
+	// to perform any migrations as necessary. This should be a noop if
+	// there are no migrations to perform.
+	Migrate(db database.DB, interrupt <-chan struct{}) error
+
 	// Init is invoked when the index manager is first initializing the
 	// index.  This differs from the Create method in that it is called on
 	// every load, including the case the index was just created.
