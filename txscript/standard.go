@@ -138,16 +138,33 @@ func isNullData(pops []parsedOpcode) bool {
 	// A nulldata transaction is either a single OP_RETURN or an
 	// OP_RETURN SMALLDATA (where SMALLDATA is a data push up to
 	// MaxDataCarrierSize bytes).
+	//
+	// Multiple pushes of data are allowed but the total script
+	// may not exceed MaxDataCarrierSize.
 	l := len(pops)
-	if l == 1 && pops[0].opcode.value == OP_RETURN {
-		return true
+	if l < 1 || pops[0].opcode.value != OP_RETURN {
+		return false
 	}
 
-	return l == 2 &&
-		pops[0].opcode.value == OP_RETURN &&
-		(isSmallInt(pops[1].opcode) || pops[1].opcode.value <=
-			OP_PUSHDATA4) &&
-		len(pops[1].data) <= MaxDataCarrierSize
+	scriptLen := 1
+	for _, pop := range pops[1:] {
+		isDataOpcode := false
+		if isSmallInt(pop.opcode) {
+			isDataOpcode = true
+			scriptLen++
+		} else if pop.opcode.value < OP_PUSHDATA1 {
+			isDataOpcode = true
+			scriptLen += pop.opcode.length
+		} else if pop.opcode.value >= OP_PUSHDATA1 && pop.opcode.value <= OP_PUSHDATA4 {
+			isDataOpcode = true
+			scriptLen += len(pop.data)
+			scriptLen += -pop.opcode.length + 1
+		}
+		if !isDataOpcode {
+			return false
+		}
+	}
+	return scriptLen <= MaxDataCarrierSize
 }
 
 // scriptType returns the type of the script being inspected from the known
