@@ -1411,7 +1411,9 @@ func opcodeCat(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
-	c := append(a, b...)
+	c := make([]byte, len(a)+len(b))
+	copy(c[:len(a)], a)
+	copy(c[len(a):], b)
 	if len(c) > MaxScriptElementSize {
 		str := fmt.Sprintf("concatenated size %d exceeds max allowed size %d",
 			len(c), MaxScriptElementSize)
