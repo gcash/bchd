@@ -115,7 +115,7 @@ var _ NeedsInputser = (*CfIndex)(nil)
 //
 // This implements the NeedsInputser interface.
 func (idx *CfIndex) NeedsInputs() bool {
-	return true
+	return false
 }
 
 // Init initializes the hash-based cf index. This is part of the Indexer
