@@ -77,7 +77,7 @@ const (
 	gbtRegenerateSeconds = 60
 
 	// maxProtocolVersion is the max protocol version the server supports.
-	maxProtocolVersion = wire.FeeFilterVersion
+	maxProtocolVersion = wire.NoValidationRelayVersion
 )
 
 var (
