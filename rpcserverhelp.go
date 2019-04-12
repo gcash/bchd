@@ -561,6 +561,10 @@ var helpDescsEnUS = map[string]string{
 	"reconsiderblock--synopsis": "Reconsider a block for validation.",
 	"reconsiderblock-blockhash": "Hash of the block you want to reconsider",
 
+	// InvalidateBlockCmd
+	"invalidateblock--synopsis": "Invalidate a block.",
+	"invalidateblock-blockhash": "Hash of the block you want to invalidate",
+
 	// SetGenerateCmd help.
 	"setgenerate--synopsis":    "Set the server to generate coins (mine) or not.",
 	"setgenerate-generate":     "Use true to enable generation, false to disable it",
@@ -730,6 +734,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"gettxoutproof":         {(*string)(nil)},
 	"node":                  nil,
 	"help":                  {(*string)(nil), (*string)(nil)},
+	"invalidateblock":       nil,
 	"ping":                  nil,
 	"reconsiderblock":       nil,
 	"searchrawtransactions": {(*string)(nil), (*[]btcjson.SearchRawTransactionsResult)(nil)},
