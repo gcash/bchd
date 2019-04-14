@@ -17,8 +17,9 @@ import (
 // the client to set a key value in the context metadata to 'AuthenticationToken: cfg.AuthToken'
 const AuthenticationTokenKey = "AuthenticationToken"
 
-func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig) (*bchrpc.GrpcServer, error) {
+func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	if len(listeners) != 0 {
+		rpcCfg.NetMgr = svr
 		opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
 		if !cfg.DisableTLS {
 			creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)

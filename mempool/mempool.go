@@ -636,6 +636,24 @@ func (mp *TxPool) FetchTransaction(txHash *chainhash.Hash) (*bchutil.Tx, error) 
 	return nil, fmt.Errorf("transaction is not in the pool")
 }
 
+// FetchTxDesc returns the requested transaction description from the
+// transaction pool. This only fetches from the main transaction pool
+// and does not include orphans.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
+	// Protect concurrent access.
+	mp.mtx.RLock()
+	txDesc, exists := mp.pool[*txHash]
+	mp.mtx.RUnlock()
+
+	if exists {
+		return txDesc, nil
+	}
+
+	return nil, fmt.Errorf("transaction is not in the pool")
+}
+
 // maybeAcceptTransaction is the internal function which implements the public
 // MaybeAcceptTransaction.  See the comment for MaybeAcceptTransaction for
 // more details.

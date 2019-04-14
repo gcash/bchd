@@ -52,7 +52,7 @@ service bchrpc {
     // limit, and from block options.
     rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest) returns (GetRawAddressTransactionsResponse) {}
 
-    // **Requires TxIndex and AddressIndex**
+    // **Requires AddressIndex**
     // Returns all the unspent transaction outpoints for the given address.
     // Offers offset, limit, and from block options.
     rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
@@ -67,7 +67,7 @@ service bchrpc {
     // Subscribe to relevant transactions based on the subscription requests.
     // The parameters to filter transactions on can be updated by sending new
     // SubscribeTransactionsRequest objects on the stream.
-    rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+    rpc SubscribeTransactions(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // Subscribe to notifications of new blocks being connected to the blockchain
     // or blocks being disconnected.
@@ -235,10 +235,13 @@ message SubscribeTransactionsRequest {
     TransactionFilter subscribe = 1;
     TransactionFilter unsubscribe = 2;
 
-    // When this is true, also new transactions coming in from the mempool are
-    // included apart from the ones confirmed in a block.  These transactions
-    // will be sent again when they are confirmed.
+    // When this is true, new transactions coming in from the mempool are
+    // included apart from the ones confirmed in a block.
     bool include_mempool = 3;
+
+    // When this is true, transactions are included when they are confirmed.
+    // This notification is sent in addition to any requested mempool notifications.
+    bool include_in_block = 4;
 }
 
 message SubscribeBlocksRequest {}
@@ -265,7 +268,7 @@ message TransactionNotification {
     Type type = 1;
     oneof transaction {
         Transaction confirmed_transaction = 2;
-        MempoolTransaction accepted_transaction = 3;
+        MempoolTransaction unconfirmed_transaction = 3;
     }
 }
 

@@ -1724,6 +1724,11 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	if s.rpcServer != nil {
 		s.rpcServer.NotifyNewTransactions(txns)
 	}
+
+	// Notify the gRPC server of the new transaction.
+	if s.gRpcServer != nil {
+		s.gRpcServer.NotifyNewTransactions(txns)
+	}
 }
 
 // Transaction has one confirmation on the main chain. Now we can mark it as no
@@ -3392,7 +3397,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			TxIndex:     s.txIndex,
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
-		})
+		}, &s)
 		if err != nil {
 			return nil, err
 		}
