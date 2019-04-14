@@ -320,7 +320,7 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	}
 
 	resp := &pb.GetBlockInfoResponse{
-		Info: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height() + 1, s.chainParams),
+		Info: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 	}
 
 	nexBlock, err := s.chain.BlockByHeight(block.Height() + 1)
@@ -979,8 +979,8 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				block := event.(*bchutil.Block)
 
 				toSend := &pb.BlockNotification{
-					Type: pb.BlockNotification_CONNECTED,
-					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height - block.Height() + 1, s.chainParams),
+					Type:  pb.BlockNotification_CONNECTED,
+					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -992,8 +992,8 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				block := event.(*bchutil.Block)
 
 				toSend := &pb.BlockNotification{
-					Type: pb.BlockNotification_DISCONNECTED,
-					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height - block.Height() + 1, s.chainParams),
+					Type:  pb.BlockNotification_DISCONNECTED,
+					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {

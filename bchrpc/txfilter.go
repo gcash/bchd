@@ -21,7 +21,7 @@ type txFilter struct {
 	uncompressedPubKeys map[[65]byte]struct{}
 	fallbacks           map[string]struct{}
 
-	matchAll            bool
+	matchAll bool
 }
 
 // newTxFilter creates a new txFilter.
