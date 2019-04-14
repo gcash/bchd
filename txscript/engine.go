@@ -328,6 +328,13 @@ func (vm *Engine) Step() (done bool, err error) {
 		return true, err
 	}
 
+	/*fmt.Println("executing opcode:", opcode.opcode.name)
+	fmt.Println("stack:")
+	for i:=len(vm.dstack.stk)-1; i>=0; i-- {
+		fmt.Printf("%x\n", vm.dstack.stk[i])
+	}
+	fmt.Println("------------")*/
+
 	// The number of elements in the combination of the data and alt stacks
 	// must not exceed the maximum number of stack elements allowed.
 	combinedStackSize := vm.dstack.Depth() + vm.astack.Depth()

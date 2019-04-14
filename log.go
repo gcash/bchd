@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/gcash/bchd/bchrpc"
 	"os"
 	"path/filepath"
 
@@ -69,6 +70,7 @@ var (
 	srvrLog = backendLog.Logger("SRVR")
 	syncLog = backendLog.Logger("SYNC")
 	txmpLog = backendLog.Logger("TXMP")
+	grpcLog = backendLog.Logger("GRPC")
 )
 
 // Initialize package-global logger variables.
@@ -84,6 +86,7 @@ func init() {
 	txscript.UseLogger(scrpLog)
 	netsync.UseLogger(syncLog)
 	mempool.UseLogger(txmpLog)
+	bchrpc.UseLogger(grpcLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
@@ -103,6 +106,7 @@ var subsystemLoggers = map[string]bchlog.Logger{
 	"SRVR": srvrLog,
 	"SYNC": syncLog,
 	"TXMP": txmpLog,
+	"GRPC": grpcLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and
