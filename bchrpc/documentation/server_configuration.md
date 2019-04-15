@@ -19,14 +19,10 @@ To bind to all interfaces use and allow anyone to connect use:
 bchd --grpclisten=0.0.0.0
 ```
 
-By default TLS is always used. It will use the `rpc.cert` file found in the bchd data directory.
-If you want to disable TLS you may do so but only if the server is running on localhost:
+It should be noted that Go's HTTP/2 implementation does not support cleartext connection. So TLS must always
+be used. By default bchd's self signed cert (found in the data directory) will be used. If you wish to use
+an actual TLS certificate signed by a valid CA then you can use the following options:
 
-```bash
-bchd --grpclisten=127.0.0.1 --notls
-```
-
-To use your own TLS certificate use:
 ```bash
 bchd  --grpclisten=0.0.0.0 --rpccert=/path/to/your/cert --rpckey=/path/to/your/key
 ```

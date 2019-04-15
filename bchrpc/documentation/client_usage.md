@@ -92,7 +92,7 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-var certificateFile = filepath.Join(bchutil.AppDataDir("bchwallet", false), "rpc.cert")
+var certificateFile = filepath.Join(bchutil.AppDataDir("bchd", false), "rpc.cert")
 
 func main() {
 	creds, err := credentials.NewClientTLSFromFile(certificateFile, "localhost")

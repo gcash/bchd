@@ -23,13 +23,11 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	for _, addr := range netAddrs {
 		rpcCfg.NetMgr = svr
 		opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
-		if !cfg.DisableTLS {
-			creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)
-			if err != nil {
-				return nil, err
-			}
-			opts = append(opts, grpc.Creds(creds))
+		creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)
+		if err != nil {
+			return nil, err
 		}
+		opts = append(opts, grpc.Creds(creds))
 		server := grpc.NewServer(opts...)
 
 		allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
@@ -38,7 +36,6 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 		wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
 
 		rpcCfg.Server = server
-		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
 		handler := func(resp http.ResponseWriter, req *http.Request) {
 			if wrappedGrpc.IsGrpcWebRequest(req) {
@@ -48,24 +45,20 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 			}
 		}
 
-		httpServer := http.Server{
+		httpServer := &http.Server{
 			Addr:    addr.String(),
 			Handler: http.HandlerFunc(handler),
 		}
 
-		rpcCfg.HTTPServer = &httpServer
+		rpcCfg.HTTPServer = httpServer
+
+		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
 		grpcLog.Infof("Experimental gRPC server listening on %s", addr)
 
 		go func() {
-			if !cfg.DisableTLS {
-				if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
-					grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
-				}
-			} else {
-				if err := httpServer.ListenAndServe(); err != nil {
-					grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
-				}
+			if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+				grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
 			}
 		}()
 
