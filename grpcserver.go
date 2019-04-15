@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"github.com/gcash/bchd/bchrpc"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"net"
+	"net/http"
 	"strings"
 )
 
@@ -17,8 +19,8 @@ import (
 // the client to set a key value in the context metadata to 'AuthenticationToken: cfg.AuthToken'
 const AuthenticationTokenKey = "AuthenticationToken"
 
-func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
-	if len(listeners) != 0 {
+func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
+	for _, addr := range netAddrs {
 		rpcCfg.NetMgr = svr
 		opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
 		if !cfg.DisableTLS {
@@ -30,20 +32,40 @@ func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig, sv
 		}
 		server := grpc.NewServer(opts...)
 
+		wrappedGrpc := grpcweb.WrapServer(server)
+
 		rpcCfg.Server = server
-		rpcCfg.Listeners = listeners
 		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
-		for _, lis := range listeners {
-			lis := lis
-			go func() {
-				grpcLog.Infof("Experimental gRPC server listening on %s",
-					lis.Addr())
-				err := server.Serve(lis)
-				grpcLog.Tracef("Finished serving expimental gRPC: %v",
-					err)
-			}()
+		handler := func(resp http.ResponseWriter, req *http.Request) {
+			if wrappedGrpc.IsGrpcWebRequest(req) {
+				wrappedGrpc.ServeHTTP(resp, req)
+			} else {
+				server.ServeHTTP(resp, req)
+			}
 		}
+
+		httpServer := http.Server{
+			Addr:    addr.String(),
+			Handler: http.HandlerFunc(handler),
+		}
+
+		rpcCfg.HTTPServer = &httpServer
+
+		grpcLog.Infof("Experimental gRPC server listening on %s", addr)
+
+		go func() {
+			if !cfg.DisableTLS {
+				if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+					grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
+				}
+			} else {
+				if err := httpServer.ListenAndServe(); err != nil {
+					grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
+				}
+			}
+		}()
+
 		return gRPCServer, nil
 
 	}

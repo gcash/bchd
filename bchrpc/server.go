@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 	"io"
 	"math/big"
-	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -67,8 +67,8 @@ type NetManager interface {
 // GrpcServerConfig hols the various objects needed by the GrpcServer to
 // perform its functions.
 type GrpcServerConfig struct {
-	Server    *grpc.Server
-	Listeners []net.Listener
+	Server     *grpc.Server
+	HTTPServer *http.Server
 
 	TimeSource  blockchain.MedianTimeSource
 	Chain       *blockchain.BlockChain
@@ -96,10 +96,10 @@ type GrpcServer struct {
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
 
-	listeners []net.Listener
-	subscribe chan *rpcEventSubscription
-	events    chan interface{}
-	quit      chan struct{}
+	httpServer *http.Server
+	subscribe  chan *rpcEventSubscription
+	events     chan interface{}
+	quit       chan struct{}
 
 	wg       sync.WaitGroup
 	ready    uint32 // atomic
@@ -119,7 +119,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		txIndex:     cfg.TxIndex,
 		addrIndex:   cfg.AddrIndex,
 		cfIndex:     cfg.CfIndex,
-		listeners:   cfg.Listeners,
+		httpServer:  cfg.HTTPServer,
 		subscribe:   make(chan *rpcEventSubscription),
 		events:      make(chan interface{}),
 		quit:        make(chan struct{}),
@@ -275,12 +275,10 @@ func (s *GrpcServer) Stop() error {
 		return nil
 	}
 	log.Warnf("gRPC server shutting down")
-	for _, listener := range s.listeners {
-		err := listener.Close()
-		if err != nil {
-			log.Errorf("Problem shutting down grpc: %v", err)
-			return err
-		}
+	err := s.httpServer.Close()
+	if err != nil {
+		log.Errorf("Problem shutting down grpc: %v", err)
+		return err
 	}
 	close(s.quit)
 	s.wg.Wait()
@@ -903,10 +901,99 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	return resp, nil
 }
 
-// SubscribeTransactions subscribes to relevant transactions based on the subscription
-// requests. The parameters to filter transactions on can be updated by sending new
-// SubscribeTransactionsRequest objects on the stream.
-func (s *GrpcServer) SubscribeTransactions(stream pb.Bchrpc_SubscribeTransactionsServer) error {
+// SubscribeTransactions subscribes to relevant transactions based on the
+// subscription requests. The parameters to filter transactions on can be
+// updated by sending new SubscribeTransactionsRequest objects on the stream.
+//
+// This RPC does not use bi-directional streams and therefore can be used
+// with grpc-web. You will need to close and re-open the stream whenever
+// you want to update the addresses. If you are not using grpc-web
+// then SubscribeTransactionStream is more appropriate.
+func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	filter := newTxFilter()
+	if err := filter.AddRPCFilter(req.GetSubscribe(), s.chainParams); err != nil {
+		return err
+	}
+	includeMempool := req.IncludeMempool
+	includeBlocks := req.IncludeInBlock
+	for {
+		select {
+
+		case event := <-subscription.Events():
+
+			switch event.(type) {
+			case *rpcEventTxAccepted:
+				if !includeMempool {
+					continue
+				}
+
+				txDesc := event.(*rpcEventTxAccepted)
+
+				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
+					continue
+				}
+
+				toSend := &pb.TransactionNotification{
+					Type: pb.TransactionNotification_UNCONFIRMED,
+					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
+						UnconfirmedTransaction: &pb.MempoolTransaction{
+							Transaction:      marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams),
+							AddedTime:        txDesc.Added.Unix(),
+							Fee:              txDesc.Fee,
+							FeePerByte:       txDesc.FeePerKB,
+							AddedHeight:      txDesc.Height,
+							StartingPriority: txDesc.StartingPriority,
+						},
+					},
+				}
+
+				if err := stream.Send(toSend); err != nil {
+					return err
+				}
+
+			case *rpcEventBlockConnected:
+				if !includeBlocks {
+					continue
+				}
+				// Search for all transactions.
+				block := event.(*bchutil.Block)
+
+				for _, tx := range block.Transactions() {
+					if !filter.MatchAndUpdate(tx, s.chainParams) {
+						continue
+					}
+
+					header := block.MsgBlock().Header
+
+					toSend := &pb.TransactionNotification{
+						Type: pb.TransactionNotification_CONFIRMED,
+						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
+							ConfirmedTransaction: marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams),
+						},
+					}
+
+					if err := stream.Send(toSend); err != nil {
+						return err
+					}
+				}
+			}
+
+		case <-stream.Context().Done():
+			return nil // client disconnected
+		}
+	}
+}
+
+// SubscribeTransactionStream subscribes to relevant transactions based on
+// the subscription requests. The parameters to filter transactions on can
+// be updated by sending new SubscribeTransactionsRequest objects on the stream.
+//
+// Because this RPC using bi-directional streaming it cannot be used with
+// grpc-web.
+func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
 	// Put the incoming messages on a channel.
 	requests := make(chan *pb.SubscribeTransactionsRequest)
 	go func() {

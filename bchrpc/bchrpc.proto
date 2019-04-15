@@ -67,7 +67,20 @@ service bchrpc {
     // Subscribe to relevant transactions based on the subscription requests.
     // The parameters to filter transactions on can be updated by sending new
     // SubscribeTransactionsRequest objects on the stream.
-    rpc SubscribeTransactions(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+    //
+    // This RPC does not use bi-directional streams and therefore can be used
+    // with grpc-web. You will need to close and re-open the stream whenever
+    // you want to update the addresses. If you are not using grpc-web
+    // then SubscribeTransactionStream is more appropriate.
+    rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+
+    // Subscribe to relevant transactions based on the subscription requests.
+    // The parameters to filter transactions on can be updated by sending new
+    // SubscribeTransactionsRequest objects on the stream.
+    //
+    // Because this RPC using bi-directional streaming it cannot be used with
+    // grpc-web.
+    rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // Subscribe to notifications of new blocks being connected to the blockchain
     // or blocks being disconnected.

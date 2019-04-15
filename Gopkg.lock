@@ -123,6 +123,22 @@
   version = "v1.3.1"
 
 [[projects]]
+  digest = "1:7b5c6e2eeaa9ae5907c391a91c132abfd5c9e8a784a341b5625e750c67e6825d"
+  name = "github.com/gorilla/websocket"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d"
+  version = "v1.4.0"
+
+[[projects]]
+  digest = "1:09a4cb9cbc08a6bd60772259635aaf62532744d42d89dd6080925d939c9d1af8"
+  name = "github.com/improbable-eng/grpc-web"
+  packages = ["go/grpcweb"]
+  pruneopts = "UT"
+  revision = "f5a2e82437e4b5cb013a3669efb17dc7bf9ea110"
+  version = "v0.9.1"
+
+[[projects]]
   branch = "master"
   digest = "1:459271b8268fe541549b299f65160b1df5abe9ffef0426cc38607f771dbc6bb4"
   name = "github.com/jessevdk/go-flags"
@@ -145,6 +161,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "b3251f7901ec4dd4ec66b3210e8f4bd5c0f1c5a3"
+
+[[projects]]
+  digest = "1:b0c25f00bad20d783d259af2af8666969e2fc343fa0dc9efe52936bbd67fb758"
+  name = "github.com/rs/cors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9a47f48565a795472d43519dd49aac781f3034fb"
+  version = "v1.6.0"
 
 [[projects]]
   branch = "master"
@@ -292,6 +316,7 @@
     "github.com/gcash/bchutil/hdkeychain",
     "github.com/gcash/bchutil/merkleblock",
     "github.com/golang/protobuf/proto",
+    "github.com/improbable-eng/grpc-web/go/grpcweb",
     "github.com/jessevdk/go-flags",
     "github.com/jrick/logrotate/rotator",
     "github.com/zquestz/grab",

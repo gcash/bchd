@@ -2990,7 +2990,7 @@ out:
 // setupRPCListeners returns slices of listeners that are configured for use
 // with the RPC server and gRPC server depending on the configuration settings
 // for listen addresses and TLS.
-func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
+func setupRPCListeners() ([]net.Listener, error) {
 	// Setup TLS if not disabled.
 	listenFunc := net.Listen
 	if !cfg.DisableTLS {
@@ -2999,12 +2999,12 @@ func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
 		if !fileExists(cfg.RPCKey) && !fileExists(cfg.RPCCert) {
 			err := genCertPair(cfg.RPCCert, cfg.RPCKey, cfg.ExternalIPs)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		}
 		keypair, err := tls.LoadX509KeyPair(cfg.RPCCert, cfg.RPCKey)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		tlsConfig := tls.Config{
@@ -3020,12 +3020,7 @@ func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
 
 	rpcNetAddrs, err := parseListeners(cfg.RPCListeners)
 	if err != nil {
-		return nil, nil, err
-	}
-
-	gRRPCNetAddrs, err := parseListeners(cfg.GrpcListeners)
-	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	rpcListeners := make([]net.Listener, 0, len(rpcNetAddrs))
@@ -3038,18 +3033,7 @@ func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
 		rpcListeners = append(rpcListeners, listener)
 	}
 
-	gRRPCListeners := make([]net.Listener, 0, len(rpcNetAddrs))
-	for _, addr := range gRRPCNetAddrs {
-		// We use a regular listener here as gRPC TLS gets added later.
-		listener, err := net.Listen(addr.Network(), addr.String())
-		if err != nil {
-			rpcsLog.Warnf("Can't listen on %s: %v", addr, err)
-			continue
-		}
-		gRRPCListeners = append(gRRPCListeners, listener)
-	}
-
-	return rpcListeners, gRRPCListeners, nil
+	return rpcListeners, nil
 }
 
 // newServer returns a new bchd server configured to listen on addr for the
@@ -3362,7 +3346,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if !cfg.DisableRPC {
 		// Setup listeners for the configured RPC listen addresses and
 		// TLS settings.
-		rpcListeners, gRPCListeners, err := setupRPCListeners()
+		rpcListeners, err := setupRPCListeners()
 		if err != nil {
 			return nil, err
 		}
@@ -3391,7 +3375,12 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			return nil, err
 		}
 
-		s.gRPCServer, err = newGrpcServer(gRPCListeners, &bchrpc.GrpcServerConfig{
+		gRPCNetAddrs, err := parseListeners(cfg.GrpcListeners)
+		if err != nil {
+			return nil, err
+		}
+
+		s.gRPCServer, err = newGrpcServer(gRPCNetAddrs, &bchrpc.GrpcServerConfig{
 			TimeSource:  s.timeSource,
 			Chain:       s.chain,
 			ChainParams: chainParams,
