@@ -59,6 +59,18 @@ if err != nil {
 tlsOption := grpc.WithTransportCredentials(creds)
 ```
 
+## Authentication
+
+The server may require client authentication via an auth token. This token must be provided with each request as part of the context metadata. 
+The key is `AuthenticationToken`. For example in Go:
+```go
+md := metadata.Pairs("AuthenticationToken", "auth_token_here")
+ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+// Make the RPC
+response, err := client.SomeRPC(ctx, someRequest)
+```
+
 ## Go
 
 The native gRPC library (gRPC Core) is not required for Go clients (a
