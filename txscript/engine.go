@@ -276,9 +276,17 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 			"error check when script unfinished")
 	}
 
-	if finalScript && vm.hasFlag(ScriptVerifyCleanStack) &&
-		vm.dstack.Depth() != 1 && !vm.isCleanStackExempt() {
+	// If the script is a segwit exemption we exit before checking the cleanstack
+	// rule and before poping the top stack item off the stack and verifying that
+	// it is non-zero. In other words, if this is a p2sh segwit script and the
+	// redeem script hashed to the correct hash in the PKScript then we consider
+	// the script valid. Even if the stop stack item is zero or there is more
+	// than one item on the stack.
+	if finalScript && vm.isSegwitExemption() {
+		return nil
+	}
 
+	if finalScript && vm.hasFlag(ScriptVerifyCleanStack) && vm.dstack.Depth() != 1 {
 		str := fmt.Sprintf("stack contains %d unexpected items",
 			vm.dstack.Depth()-1)
 		return scriptError(ErrCleanStack, str)
@@ -724,10 +732,10 @@ func isSegwitScript(scriptSig []parsedOpcode) bool {
 	return redeemScript[1] == uint8(len(redeemScript)-2)
 }
 
-// isCleanStackExempt returns true if ScriptVerifyAllowSegwitRecover
+// isSegwitExemption returns true if ScriptVerifyAllowSegwitRecovery
 // is set and this is a bip16 (P2SH) input and the script passes the
 // isSegwitScript checks.
-func (vm *Engine) isCleanStackExempt() bool {
+func (vm *Engine) isSegwitExemption() bool {
 	return vm.hasFlag(ScriptVerifyAllowSegwitRecovery) && vm.bip16 && isSegwitScript(vm.scripts[0])
 }
 
