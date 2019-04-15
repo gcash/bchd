@@ -32,7 +32,10 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 		}
 		server := grpc.NewServer(opts...)
 
-		wrappedGrpc := grpcweb.WrapServer(server)
+		allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
+			return true
+		})
+		wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
 
 		rpcCfg.Server = server
 		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
