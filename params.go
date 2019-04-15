@@ -18,7 +18,7 @@ var activeNetParams = &mainNetParams
 type params struct {
 	*chaincfg.Params
 	rpcPort  string
-	gRpcPort string
+	gRRPPort string
 }
 
 // mainNetParams contains parameters specific to the main network
@@ -30,7 +30,7 @@ type params struct {
 var mainNetParams = params{
 	Params:   &chaincfg.MainNetParams,
 	rpcPort:  "8334",
-	gRpcPort: "8335",
+	gRRPPort: "8335",
 }
 
 // regressionNetParams contains parameters specific to the regression test
@@ -40,7 +40,7 @@ var mainNetParams = params{
 var regressionNetParams = params{
 	Params:   &chaincfg.RegressionNetParams,
 	rpcPort:  "18334",
-	gRpcPort: "18335",
+	gRRPPort: "18335",
 }
 
 // testNet3Params contains parameters specific to the test network (version 3)
@@ -49,7 +49,7 @@ var regressionNetParams = params{
 var testNet3Params = params{
 	Params:   &chaincfg.TestNet3Params,
 	rpcPort:  "18334",
-	gRpcPort: "18335",
+	gRRPPort: "18335",
 }
 
 // simNetParams contains parameters specific to the simulation test network
@@ -57,7 +57,7 @@ var testNet3Params = params{
 var simNetParams = params{
 	Params:   &chaincfg.SimNetParams,
 	rpcPort:  "18556",
-	gRpcPort: "18557",
+	gRRPPort: "18557",
 }
 
 // netName returns the name used when referring to a bitcoin network.  At the

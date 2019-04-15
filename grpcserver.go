@@ -31,7 +31,8 @@ func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig, sv
 		server := grpc.NewServer(opts...)
 
 		rpcCfg.Server = server
-		gRpcServer := bchrpc.NewGrpcServer(rpcCfg)
+		rpcCfg.Listeners = listeners
+		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
 		for _, lis := range listeners {
 			lis := lis
@@ -43,7 +44,7 @@ func newGrpcServer(listeners []net.Listener, rpcCfg *bchrpc.GrpcServerConfig, sv
 					err)
 			}()
 		}
-		return gRpcServer, nil
+		return gRPCServer, nil
 
 	}
 	return nil, nil

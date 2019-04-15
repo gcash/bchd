@@ -954,7 +954,7 @@ func loadConfig() (*config, []string, error) {
 	// Add default port to all gRPC listener addresses if needed and remove
 	// duplicate addresses.
 	cfg.GrpcListeners = normalizeAddresses(cfg.GrpcListeners,
-		activeNetParams.gRpcPort)
+		activeNetParams.gRRPPort)
 
 	// Only allow TLS to be disabled if the RPC or gRPC is bound to localhost
 	// addresses.

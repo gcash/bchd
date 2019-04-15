@@ -45,3 +45,11 @@ ctx := metadata.NewOutgoingContext(context.Background(), md)
 // Make the RPC
 response, err := client.SomeRPC(ctx, someRequest)
 ```
+
+Finally you don't need to use indexes to use the gRPC API but it's recommended so
+you have access to all API calls. This obviously means you should not run in either
+`--prune` mode or `--fastsync` mode. To use the indexes run with:
+
+```bash
+bchd --grpclisten=0.0.0.0 --txindex --addrindex
+```

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 	"io"
 	"math/big"
+	"net"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,9 @@ func ServiceReady(service string) error {
 	return nil
 }
 
+// NetManager is an interface which provides functions for handling new transactions.
+// This is used by the SubmitTransaction RPC to notify the rest of the system a new
+// transaction needs to be handled.
 type NetManager interface {
 	// AddRebroadcastInventory adds 'iv' to the list of inventories to be
 	// rebroadcasted at random intervals until they show up in a block.
@@ -60,8 +64,11 @@ type NetManager interface {
 	AnnounceNewTransactions(txns []*mempool.TxDesc)
 }
 
+// GrpcServerConfig hols the various objects needed by the GrpcServer to
+// perform its functions.
 type GrpcServerConfig struct {
-	Server *grpc.Server
+	Server    *grpc.Server
+	Listeners []net.Listener
 
 	TimeSource  blockchain.MedianTimeSource
 	Chain       *blockchain.BlockChain
@@ -75,6 +82,8 @@ type GrpcServerConfig struct {
 	CfIndex   *indexers.CfIndex
 }
 
+// GrpcServer is the gRPC server implementation. It holds all the objects
+// necessary to serve the RPCs and implements the bchrpc.proto interface.
 type GrpcServer struct {
 	timeSource  blockchain.MedianTimeSource
 	chain       *blockchain.BlockChain
@@ -87,14 +96,18 @@ type GrpcServer struct {
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
 
+	listeners []net.Listener
 	subscribe chan *rpcEventSubscription
 	events    chan interface{}
 	quit      chan struct{}
 
-	wg    sync.WaitGroup
-	ready uint32 // atomic
+	wg       sync.WaitGroup
+	ready    uint32 // atomic
+	shutdown int32  //atomic
 }
 
+// NewGrpcServer returns a new GrpcServer which has not yet
+// be started.
 func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	s := &GrpcServer{
 		timeSource:  cfg.TimeSource,
@@ -106,6 +119,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		txIndex:     cfg.TxIndex,
 		addrIndex:   cfg.AddrIndex,
 		cfIndex:     cfg.CfIndex,
+		listeners:   cfg.Listeners,
 		subscribe:   make(chan *rpcEventSubscription),
 		events:      make(chan interface{}),
 		quit:        make(chan struct{}),
@@ -242,6 +256,8 @@ func (s *GrpcServer) handleBlockchainNotification(notification *blockchain.Notif
 	}
 }
 
+// Start will start the GrpcServer, subscribe to blockchain notifications
+// and start the EventDispatcher in a new goroutine.
 func (s *GrpcServer) Start() {
 	if atomic.SwapUint32(&s.ready, 1) != 0 {
 		panic("service already started")
@@ -252,11 +268,32 @@ func (s *GrpcServer) Start() {
 	go s.runEventDispatcher()
 }
 
+// Stop is used by server.go to stop the gRPC listener.
+func (s *GrpcServer) Stop() error {
+	if atomic.AddInt32(&s.shutdown, 1) != 1 {
+		log.Infof("gRPC server is already in the process of shutting down")
+		return nil
+	}
+	log.Warnf("gRPC server shutting down")
+	for _, listener := range s.listeners {
+		err := listener.Close()
+		if err != nil {
+			log.Errorf("Problem shutting down grpc: %v", err)
+			return err
+		}
+	}
+	close(s.quit)
+	s.wg.Wait()
+	log.Infof("gRPC server shutdown complete")
+	return nil
+}
+
+// checkReady returns if the server is ready to serve data.
 func (s *GrpcServer) checkReady() bool {
 	return atomic.LoadUint32(&s.ready) != 0
 }
 
-// Get info about the mempool.
+// GetMempoolInfo returns info about the mempool.
 func (s *GrpcServer) GetMempoolInfo(ctx context.Context, req *pb.GetMempoolInfoRequest) (*pb.GetMempoolInfoResponse, error) {
 	nBytes := uint32(0)
 	for _, txDesc := range s.txMemPool.TxDescs() {
@@ -269,7 +306,7 @@ func (s *GrpcServer) GetMempoolInfo(ctx context.Context, req *pb.GetMempoolInfoR
 	return resp, nil
 }
 
-// GetBlockchainInfo info about the blockchain including the most recent
+// GetBlockchainInfo returns info about the blockchain including the most recent
 // block hash and height.
 func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchainInfoRequest) (*pb.GetBlockchainInfoResponse, error) {
 	bestSnapShot := s.chain.BestSnapshot()
@@ -300,7 +337,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 	return resp, nil
 }
 
-// Get info about the given block.
+// GetBlockInfo returns info about the given block.
 func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoRequest) (*pb.GetBlockInfoResponse, error) {
 	var (
 		block *bchutil.Block
@@ -331,7 +368,7 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	return resp, nil
 }
 
-// Get a block.
+// GetBlock returns a full block.
 func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb.GetBlockResponse, error) {
 	var (
 		block *bchutil.Block
@@ -392,7 +429,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	return nil, nil
 }
 
-// Get a serialized block.
+// GetRawBlock returns a full serialized block.
 func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest) (*pb.GetRawBlockResponse, error) {
 	var (
 		block *bchutil.Block
@@ -421,8 +458,9 @@ func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest
 	return resp, nil
 }
 
+// GetBlockFilter returns a block filter.
+//
 // **Requires CfIndex**
-// Get a block filter.
 func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterRequest) (*pb.GetBlockFilterResponse, error) {
 	if s.cfIndex == nil {
 		return nil, status.Error(codes.Unavailable, "cfindex required")
@@ -454,7 +492,7 @@ func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterR
 	return resp, nil
 }
 
-// This RPC sends a block locator object to the server and the server responds with
+// GetHeaders sends a block locator object to the server and the server responds with
 // a batch of no more than 2000 headers. Upon parsing the block locator, if the server
 // concludes there has been a fork, it will send headers starting at the fork point,
 // or genesis if no blocks in the locator are in the best chain. If the locator is
@@ -509,8 +547,9 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 	return resp, nil
 }
 
+// GetTransaction returns a transaction given its hash.
+//
 // **Requires TxIndex**
-// Get a transaction given its hash.
 func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionRequest) (*pb.GetTransactionResponse, error) {
 	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "txindex required")
@@ -550,8 +589,9 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	return resp, nil
 }
 
+// GetRawTransaction returns a serialized transaction given its hash.
+//
 // **Requires TxIndex**
-// Get a serialized transaction given its hash.
 func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransactionRequest) (*pb.GetRawTransactionResponse, error) {
 	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "txindex required")
@@ -585,9 +625,10 @@ func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransa
 	return resp, nil
 }
 
-// **Requires AddressIndex**
-// Returns the transactions for the given address. Offers offset,
+// GetAddressTransactions returns the transactions for the given address. Offers offset,
 // limit, and from block options.
+//
+// **Requires AddressIndex**
 func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddressTransactionsRequest) (*pb.GetAddressTransactionsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
@@ -640,9 +681,10 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	return resp, nil
 }
 
-// **Requires AddressIndex**
-// Returns the raw transactions for the given address. Offers offset,
+// GetRawAddressTransactions returns the raw transactions for the given address. Offers offset,
 // limit, and from block options.
+//
+// **Requires AddressIndex**
 func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetRawAddressTransactionsRequest) (*pb.GetRawAddressTransactionsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
@@ -685,9 +727,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	return resp, nil
 }
 
-// **Requires AddressIndex**
-// Returns all the unspent transaction outpoints for the given address.
+// GetAddressUnspentOutputs returns all the unspent transaction outpoints for the given address.
 // Offers offset, limit, and from block options.
+//
+// **Requires AddressIndex**
 func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAddressUnspentOutputsRequest) (*pb.GetAddressUnspentOutputsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
@@ -742,8 +785,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	return resp, nil
 }
 
+// GetMerkleProof returns a merkle (SPV) proof that the given transaction is in the provided block.
+//
 // **Requires TxIndex***
-// Returns a merkle (SPV) proof that the given transaction is in the provided block.
 func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofRequest) (*pb.GetMerkleProofResponse, error) {
 	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "txindex required")
@@ -801,7 +845,7 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	return resp, nil
 }
 
-// Submit a transaction to all connected peers.
+// SubmitTransaction submits a transaction to all connected peers.
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 
 	var msgTx wire.MsgTx
@@ -859,8 +903,8 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	return resp, nil
 }
 
-// Subscribe to relevant transactions based on the subscription requests.
-// The parameters to filter transactions on can be updated by sending new
+// SubscribeTransactions subscribes to relevant transactions based on the subscription
+// requests. The parameters to filter transactions on can be updated by sending new
 // SubscribeTransactionsRequest objects on the stream.
 func (s *GrpcServer) SubscribeTransactions(stream pb.Bchrpc_SubscribeTransactionsServer) error {
 	// Put the incoming messages on a channel.
@@ -960,11 +1004,10 @@ func (s *GrpcServer) SubscribeTransactions(stream pb.Bchrpc_SubscribeTransaction
 			return nil // client disconnected
 		}
 	}
-	return nil
 }
 
-// Subscribe to notifications of new blocks being connected to the blockchain
-// or blocks being disconnected.
+// SubscribeBlocks subscribes to notifications of new blocks being connected to the
+// blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
@@ -1005,7 +1048,6 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 			return nil // client disconnected
 		}
 	}
-	return nil
 }
 
 func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, *bchutil.Block, error) {

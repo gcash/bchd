@@ -238,7 +238,7 @@ type server struct {
 	sigCache                *txscript.SigCache
 	hashCache               *txscript.HashCache
 	rpcServer               *rpcServer
-	gRpcServer              *bchrpc.GrpcServer
+	gRPCServer              *bchrpc.GrpcServer
 	syncManager             *netsync.SyncManager
 	chain                   *blockchain.BlockChain
 	txMemPool               *mempool.TxPool
@@ -1726,8 +1726,8 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	}
 
 	// Notify the gRPC server of the new transaction.
-	if s.gRpcServer != nil {
-		s.gRpcServer.NotifyNewTransactions(txns)
+	if s.gRPCServer != nil {
+		s.gRPCServer.NotifyNewTransactions(txns)
 	}
 }
 
@@ -2798,8 +2798,8 @@ func (s *server) Start() {
 		go s.rebroadcastHandler()
 
 		s.rpcServer.Start()
-		if s.gRpcServer != nil {
-			s.gRpcServer.Start()
+		if s.gRPCServer != nil {
+			s.gRPCServer.Start()
 		}
 	}
 
@@ -2826,6 +2826,9 @@ func (s *server) Stop() error {
 	// Shutdown the RPC server if it's not disabled.
 	if !cfg.DisableRPC {
 		s.rpcServer.Stop()
+		if s.gRPCServer != nil {
+			s.gRPCServer.Stop()
+		}
 	}
 
 	// Save fee estimator state in the database.
@@ -3020,7 +3023,7 @@ func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
 		return nil, nil, err
 	}
 
-	gRpcNetAddrs, err := parseListeners(cfg.GrpcListeners)
+	gRRPCNetAddrs, err := parseListeners(cfg.GrpcListeners)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3035,18 +3038,18 @@ func setupRPCListeners() ([]net.Listener, []net.Listener, error) {
 		rpcListeners = append(rpcListeners, listener)
 	}
 
-	gRpcListeners := make([]net.Listener, 0, len(rpcNetAddrs))
-	for _, addr := range gRpcNetAddrs {
+	gRRPCListeners := make([]net.Listener, 0, len(rpcNetAddrs))
+	for _, addr := range gRRPCNetAddrs {
 		// We use a regular listener here as gRPC TLS gets added later.
 		listener, err := net.Listen(addr.Network(), addr.String())
 		if err != nil {
 			rpcsLog.Warnf("Can't listen on %s: %v", addr, err)
 			continue
 		}
-		gRpcListeners = append(gRpcListeners, listener)
+		gRRPCListeners = append(gRRPCListeners, listener)
 	}
 
-	return rpcListeners, gRpcListeners, nil
+	return rpcListeners, gRRPCListeners, nil
 }
 
 // newServer returns a new bchd server configured to listen on addr for the
@@ -3359,7 +3362,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 	if !cfg.DisableRPC {
 		// Setup listeners for the configured RPC listen addresses and
 		// TLS settings.
-		rpcListeners, gRpcListeners, err := setupRPCListeners()
+		rpcListeners, gRPCListeners, err := setupRPCListeners()
 		if err != nil {
 			return nil, err
 		}
@@ -3388,7 +3391,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			return nil, err
 		}
 
-		s.gRpcServer, err = newGrpcServer(gRpcListeners, &bchrpc.GrpcServerConfig{
+		s.gRPCServer, err = newGrpcServer(gRPCListeners, &bchrpc.GrpcServerConfig{
 			TimeSource:  s.timeSource,
 			Chain:       s.chain,
 			ChainParams: chainParams,
