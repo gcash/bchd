@@ -131,15 +131,21 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 }
 
 // rpcEventTxAccepted indicates a new tx was accepted into the mempool.
-type rpcEventTxAccepted mempool.TxDesc
+type rpcEventTxAccepted struct {
+	*mempool.TxDesc
+}
 
 // rpcEventBlockConnected indicates a new block connected to the current best
 // chain.
-type rpcEventBlockConnected bchutil.Block
+type rpcEventBlockConnected struct {
+	*bchutil.Block
+}
 
 // rpcEventBlockDisconnected indicates a block that was disconnected from the
 // current best chain.
-type rpcEventBlockDisconnected bchutil.Block
+type rpcEventBlockDisconnected struct {
+	*bchutil.Block
+}
 
 // rpcEventSubscription represents a subscription to events from the RPC server.
 type rpcEventSubscription struct {
@@ -229,7 +235,7 @@ func (s *GrpcServer) dispatchEvent(event interface{}) {
 // are accepted in the mempool.
 func (s *GrpcServer) NotifyNewTransactions(txs []*mempool.TxDesc) {
 	for _, txDesc := range txs {
-		s.dispatchEvent((*rpcEventTxAccepted)(txDesc))
+		s.dispatchEvent(&rpcEventTxAccepted{txDesc})
 	}
 }
 
@@ -244,7 +250,7 @@ func (s *GrpcServer) handleBlockchainNotification(notification *blockchain.Notif
 			log.Warnf("Chain connected notification is not a block.")
 			break
 		}
-		s.dispatchEvent((*rpcEventBlockConnected)(block))
+		s.dispatchEvent(&rpcEventBlockConnected{block})
 
 	case blockchain.NTBlockDisconnected:
 		block, ok := notification.Data.(*bchutil.Block)
@@ -252,7 +258,7 @@ func (s *GrpcServer) handleBlockchainNotification(notification *blockchain.Notif
 			log.Warnf("Chain disconnected notification is not a block.")
 			break
 		}
-		s.dispatchEvent((*rpcEventBlockDisconnected)(block))
+		s.dispatchEvent(&rpcEventBlockDisconnected{block})
 	}
 }
 
@@ -960,7 +966,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					continue
 				}
 				// Search for all transactions.
-				block := event.(*bchutil.Block)
+				block := event.(*rpcEventBlockConnected)
 
 				for _, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
@@ -1066,7 +1072,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					continue
 				}
 				// Search for all transactions.
-				block := event.(*bchutil.Block)
+				block := event.(*rpcEventBlockConnected)
 
 				for _, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
@@ -1107,11 +1113,11 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 			switch event.(type) {
 			case *rpcEventBlockConnected:
 				// Search for all transactions.
-				block := event.(*bchutil.Block)
+				block := event.(*rpcEventBlockConnected)
 
 				toSend := &pb.BlockNotification{
 					Type:  pb.BlockNotification_CONNECTED,
-					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					Block: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1120,11 +1126,11 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 
 			case *rpcEventBlockDisconnected:
 				// Search for all transactions.
-				block := event.(*bchutil.Block)
+				block := event.(*rpcEventBlockDisconnected)
 
 				toSend := &pb.BlockNotification{
 					Type:  pb.BlockNotification_DISCONNECTED,
-					Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					Block: marshalBlockInfo(block.Block, 0, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {
