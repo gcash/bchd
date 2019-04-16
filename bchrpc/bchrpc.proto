@@ -384,6 +384,7 @@ message UnspentOutput {
 message TransactionFilter {
     repeated string addresses = 1;
     repeated Transaction.Input.Outpoint outpoints = 2;
+    repeated bytes data_elements = 3;
 
     //TODO: Are these extra filters values relevant?
     // - scriptPubkey
@@ -391,5 +392,5 @@ message TransactionFilter {
 
     // Subscribed/Unsubscribe to everything. Other filters
     // will be ignored.
-    bool all_transactions = 3;
+    bool all_transactions = 4;
 }

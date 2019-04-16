@@ -1,6 +1,7 @@
 package bchrpc
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
@@ -19,6 +20,7 @@ type txFilter struct {
 	scriptHashes        map[[ripemd160.Size]byte]struct{}
 	compressedPubKeys   map[[33]byte]struct{}
 	uncompressedPubKeys map[[65]byte]struct{}
+	dataElements        map[string]struct{}
 	fallbacks           map[string]struct{}
 
 	matchAll bool
@@ -32,6 +34,7 @@ func newTxFilter() *txFilter {
 		scriptHashes:        map[[ripemd160.Size]byte]struct{}{},
 		compressedPubKeys:   map[[33]byte]struct{}{},
 		uncompressedPubKeys: map[[65]byte]struct{}{},
+		dataElements:        map[string]struct{}{},
 		fallbacks:           map[string]struct{}{},
 	}
 }
@@ -44,6 +47,19 @@ func (f *txFilter) AddOutpoint(op wire.OutPoint) {
 // RemoveOutpoint removes an outpoint from the filter.
 func (f *txFilter) RemoveOutpoint(op wire.OutPoint) {
 	delete(f.outpoints, op)
+}
+
+// AddDataElement adds a new data element to the filter.
+func (f *txFilter) AddDataElement(dataElement []byte) {
+	if len(dataElement) > txscript.MaxScriptElementSize {
+		return
+	}
+	f.dataElements[hex.EncodeToString(dataElement)] = struct{}{}
+}
+
+// RemoveDataElement removes a data element from the filter.
+func (f *txFilter) RemoveDataElement(dataElement []byte) {
+	delete(f.dataElements, hex.EncodeToString(dataElement))
 }
 
 // AddAddress adds a new address to the filter.
@@ -136,6 +152,11 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 		f.AddAddress(addr)
 	}
 
+	// Add data elements
+	for _, dataElement := range rpcFilter.GetDataElements() {
+		f.AddDataElement(dataElement)
+	}
+
 	f.matchAll = rpcFilter.AllTransactions
 
 	return nil
@@ -160,9 +181,14 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
-			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
+			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
 		f.RemoveAddress(addr)
+	}
+
+	// Remove data elements
+	for _, dataElement := range rpcFilter.GetDataElements() {
+		f.RemoveDataElement(dataElement)
 	}
 
 	f.matchAll = rpcFilter.AllTransactions
@@ -190,6 +216,7 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 	}
 
 	for txOutIdx, txout := range tx.MsgTx().TxOut {
+		outputMatch := false
 		_, addrs, _, _ := txscript.ExtractPkScriptAddrs(txout.PkScript, params)
 
 		for _, addr := range addrs {
@@ -247,17 +274,31 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 			}
 
 			// Matching address.
+			outputMatch = true
 			break
 		}
 
-		// Matching output should be added to filter.
-		outpoint := wire.OutPoint{
-			Hash:  *tx.Hash(),
-			Index: uint32(txOutIdx),
+		dataElements, err := txscript.ExtractDataElements(txout.PkScript)
+		if err == nil && len(dataElements) > 0 {
+			for _, dataElement := range dataElements {
+				_, ok := f.dataElements[hex.EncodeToString(dataElement)]
+				if ok {
+					outputMatch = true
+					break
+				}
+			}
 		}
-		f.outpoints[outpoint] = struct{}{}
 
-		matched = true
+		// Matching output should be added to filter.
+		if outputMatch {
+			outpoint := wire.OutPoint{
+				Hash:  *tx.Hash(),
+				Index: uint32(txOutIdx),
+			}
+			f.outpoints[outpoint] = struct{}{}
+
+			matched = true
+		}
 	}
 
 	return matched
