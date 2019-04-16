@@ -507,15 +507,16 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 		}
 		locator = append(locator, blockHash)
 	}
-	var stopHash *chainhash.Hash
+	var stopHash chainhash.Hash
 	if len(req.StopHash) > 0 {
-		stopHash, err = chainhash.NewHash(req.StopHash)
+		hash, err := chainhash.NewHash(req.StopHash)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid stop hash")
 		}
+		stopHash = *hash
 	}
 
-	headers := s.chain.LocateHeaders(locator, stopHash)
+	headers := s.chain.LocateHeaders(locator, &stopHash)
 	resp := &pb.GetHeadersResponse{}
 
 	var startHeight int32
@@ -538,7 +539,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 			Nonce:         header.Nonce,
 			Bits:          header.Bits,
 			PreviousBlock: header.PrevBlock.CloneBytes(),
-			Confirmations: s.chain.BestSnapshot().Height - startHeight + int32(i),
+			Confirmations: s.chain.BestSnapshot().Height - (startHeight + int32(i)) + 1,
 		})
 	}
 
@@ -670,7 +671,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			Fee:              txDesc.Fee,
 			AddedTime:        txDesc.Added.Unix(),
 			AddedHeight:      txDesc.Height,
-			FeePerByte:       txDesc.Fee / int64(uTx.MsgTx().SerializeSize()),
+			FeePerKb:         txDesc.Fee / int64(uTx.MsgTx().SerializeSize()),
 			StartingPriority: txDesc.StartingPriority,
 		}
 		resp.UnconfirmedTransactions = append(resp.UnconfirmedTransactions, mempoolTx)
@@ -943,7 +944,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							Transaction:      marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams),
 							AddedTime:        txDesc.Added.Unix(),
 							Fee:              txDesc.Fee,
-							FeePerByte:       txDesc.FeePerKB,
+							FeePerKb:         txDesc.FeePerKB,
 							AddedHeight:      txDesc.Height,
 							StartingPriority: txDesc.StartingPriority,
 						},
@@ -1049,7 +1050,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							Transaction:      marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams),
 							AddedTime:        txDesc.Added.Unix(),
 							Fee:              txDesc.Fee,
-							FeePerByte:       txDesc.FeePerKB,
+							FeePerKb:         txDesc.FeePerKB,
 							AddedHeight:      txDesc.Height,
 							StartingPriority: txDesc.StartingPriority,
 						},

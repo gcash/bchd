@@ -366,8 +366,8 @@ message MempoolTransaction {
     int32 added_height = 3;
     // The total fee in satoshi the transaction pays.
     int64 fee = 4;
-    // The fee in satoshi per byte the transaction pays.
-    int64 fee_per_byte = 5;
+    // The fee in satoshi per kilobyte the transaction pays.
+    int64 fee_per_kb = 5;
     // The priority of the transaction when it was added to the pool.
     double starting_priority = 6;
 }
