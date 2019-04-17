@@ -1736,6 +1736,50 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	return headers
 }
 
+// InvalidateBlock takes a block hash and invalidates it.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) InvalidateBlock(hash *chainhash.Hash) error {
+	return b.invalidateBlock(hash)
+}
+
+// invalidateBlock takes a block hash and invalidates it.
+func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		err := fmt.Errorf("block %s is not known", hash)
+		return err
+	}
+
+	// No need to invalidate if its already invalid.
+	if node.status.KnownInvalid() {
+		err := fmt.Errorf("block %s is already invalid", hash)
+		return err
+	}
+
+	if node.parent == nil {
+		err := fmt.Errorf("block %s has no parent", hash)
+		return err
+	}
+
+	b.index.SetStatusFlags(node, statusValidateFailed)
+
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+	detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
+
+	err := b.reorganizeChain(detachNodes, attachNodes)
+	if err != nil {
+		return err
+	}
+
+	if writeErr := b.index.flushToDB(); writeErr != nil {
+		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+	}
+
+	return nil
+}
+
 // ReconsiderBlock takes a block hash and allows it to be revalidated.
 //
 // This function is safe for concurrent access.
@@ -1753,7 +1797,8 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 
 	// No need to reconsider, it is already valid.
 	if node.status.KnownValid() {
-		return nil
+		err := fmt.Errorf("block %s is already valid", hash)
+		return err
 	}
 
 	// Keep a reference to the first node in the chain of invalid
@@ -1781,7 +1826,15 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	// Process it all again. This will take care of the
 	// orphans as well.
 	_, _, err = b.ProcessBlock(blk, BFNoDupBlockCheck)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if writeErr := b.index.flushToDB(); writeErr != nil {
+		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+	}
+
+	return nil
 }
 
 // Prune deletes the block data and spend journals for all blocks deeper than

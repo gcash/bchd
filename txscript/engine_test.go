@@ -585,53 +585,88 @@ func Test_isSegwitScript(t *testing.T) {
 		Valid  bool
 	}{
 		{
-			"Recovering P2SH-P2WPKH",
-			hexToBytes("160014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"recovering v0 P2SH-P2WPKH",
+			hexToBytes("16001491b24bf9f5288532960ac687abb035127b1d28a5"),
 			true,
 		},
 		{
-			"Recovering P2SH-P2WSH",
-			hexToBytes("220020fc8b08ed636cb23afcb425ff260b3abd03380a2333b54cfa5d51ac52d803baf4"),
+			"recovering v0 P2SH-P2WSH",
+			hexToBytes("2200205a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
 			true,
 		},
 		{
-			"Recovering hypothetical v1 witness program",
-			hexToBytes("165114fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"max allowed version, v16",
+			hexToBytes("2260205a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
 			true,
 		},
 		{
-			"Non-minimal push of redeemscript",
-			hexToBytes("4e160000000014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"max allowed length, 42 bytes",
+			hexToBytes("2a00285a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627"),
 			true,
 		},
 		{
-			"Exempted, though ultimately invalid since a false boolean value is left on stack",
-			hexToBytes("1600140000000000000000000000000000000000000080"),
+			"non-minimal push of redeemscript",
+			hexToBytes("4e16000000001491b24bf9f5288532960ac687abb035127b1d28a5"),
 			true,
 		},
 		{
-			"Four-byte witness program",
-			hexToBytes("0453020101"),
+			"min allowed length, 4 bytes, valid in spite of a false boolean value being left on stack",
+			hexToBytes("0451020000"),
 			true,
 		},
 		{
-			"Pushes two items on stack",
-			hexToBytes("00160014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"min allowed length, 4 bytes, valid in spite of a false boolean value being left on stack",
+			hexToBytes("0451020080"),
+			true,
+		},
+		/*{
+			"if not spending a P2SH coin",
+			hexToBytes("16001491b24bf9f5288532960ac687abb035127b1d28a5"),
 			false,
 		},
 		{
-			"Non-minimal push inside witness program",
-			hexToBytes("17010014fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"if hash does not match P2SH output",
+			hexToBytes("16001491b24bf9f5288532960ac687abb035127b1d28a5"),
+			false,
+		},*/
+		{
+			"scriptSig pushes two items onto the stack",
+			hexToBytes("0016001491b24bf9f5288532960ac687abb035127b1d28a5"),
 			false,
 		},
 		{
-			"Non-minimal push inside witness program",
-			hexToBytes("17004c14fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"invalid witness program, non-minimal push in version field",
+			hexToBytes("1701001491b24bf9f5288532960ac687abb035127b1d28a5"),
 			false,
 		},
 		{
-			"OP_1NEGATE for witness program version byte",
-			hexToBytes("164914fcf9969ce1c98a135ed293719721fb69f0b686cb"),
+			"invalid witness program, non-minimal push in program field",
+			hexToBytes("05004c0245aa"),
+			false,
+		},
+		{
+			"invalid witness program, too short",
+			hexToBytes("0300015a"),
+			false,
+		},
+		{
+			"invalid witness program, too long",
+			hexToBytes("2b00295a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728"),
+			false,
+		},
+		{
+			"invalid witness program, version -1",
+			hexToBytes("224f205a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+			false,
+		},
+		{
+			"invalid witness program, version 17",
+			hexToBytes("230111205a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+			false,
+		},
+		{
+			"invalid witness program, more than 2 stack items",
+			hexToBytes("2300205a0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f51"),
 			false,
 		},
 	}
