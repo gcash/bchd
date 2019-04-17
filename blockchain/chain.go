@@ -1763,6 +1763,7 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	}
 
 	b.index.SetStatusFlags(node, statusValidateFailed)
+	b.index.UnsetStatusFlags(node, statusValid)
 
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
@@ -1771,6 +1772,13 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	err := b.reorganizeChain(detachNodes, attachNodes)
 	if err != nil {
 		return err
+	}
+
+	for i, e := 0, detachNodes.Front(); e != nil; i, e = i+1, e.Next() {
+		n := e.Value.(*blockNode)
+
+		b.index.SetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValid)
 	}
 
 	if writeErr := b.index.flushToDB(); writeErr != nil {
