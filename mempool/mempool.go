@@ -587,6 +587,19 @@ func (mp *TxPool) CheckSpend(op wire.OutPoint) *bchutil.Tx {
 	return txR
 }
 
+// FetchInputUtxos loads utxo details about the input transactions referenced by
+// the passed transaction.  First, it loads the details form the viewpoint of
+// the main chain, then it adjusts them based upon the contents of the
+// transaction pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchInputUtxos(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	return mp.fetchInputUtxos(tx)
+}
+
 // fetchInputUtxos loads utxo details about the input transactions referenced by
 // the passed transaction.  First, it loads the details form the viewpoint of
 // the main chain, then it adjusts them based upon the contents of the

@@ -414,6 +414,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 					stxo := spentTxos[spendIdx]
 					respTx.Inputs[i].Coinbase = stxo.IsCoinBase
 					respTx.Inputs[i].Value = stxo.Amount
+					respTx.Inputs[i].PrevScript = stxo.PkScript
 					spendIdx++
 				}
 			}
@@ -430,7 +431,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 			})
 		}
 	}
-	return nil, nil
+	return resp, nil
 }
 
 // GetRawBlock returns a full serialized block.
@@ -568,6 +569,18 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	if txDesc, err := s.txMemPool.FetchTxDesc(txHash); err == nil {
 		tx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 		tx.Timestamp = txDesc.Added.Unix()
+		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+		if err == nil {
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				stxo := view.LookupEntry(in.PreviousOutPoint)
+				if stxo != nil {
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].Coinbase = stxo.IsCoinBase()
+					tx.Inputs[i].PrevScript = stxo.PkScript()
+				}
+			}
+		}
+
 		resp := &pb.GetTransactionResponse{
 			Transaction: tx,
 		}
@@ -587,8 +600,14 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	}
 
 	header := blk.MsgBlock().Header
+	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blk.Height(), &header, blk.Height(), s.chainParams)
+
+	if err := s.attachSpendInfo(respTx, blk); err != nil {
+		return nil, status.Error(codes.Internal, "Error loading spend journal")
+	}
+
 	resp := &pb.GetTransactionResponse{
-		Transaction: marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blk.Height(), &header, blk.Height(), s.chainParams),
+		Transaction: respTx,
 	}
 
 	return resp, nil
@@ -663,6 +682,13 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	for _, cTx := range confirmedTxs {
 		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), 0, cTx.blockHeader, cTx.blockHeight, s.chainParams)
+		blk, err := s.chain.BlockByHeight(cTx.blockHeight)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "Error loading block")
+		}
+		if err := s.attachSpendInfo(tx, blk); err != nil {
+			return nil, status.Error(codes.Internal, "Error loading spend journal")
+		}
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
 	}
 
@@ -679,6 +705,17 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			AddedHeight:      txDesc.Height,
 			FeePerKb:         txDesc.Fee / int64(uTx.MsgTx().SerializeSize()),
 			StartingPriority: txDesc.StartingPriority,
+		}
+		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+		if err == nil {
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				stxo := view.LookupEntry(in.PreviousOutPoint)
+				if stxo != nil {
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].Coinbase = stxo.IsCoinBase()
+					tx.Inputs[i].PrevScript = stxo.PkScript()
+				}
+			}
 		}
 		resp.UnconfirmedTransactions = append(resp.UnconfirmedTransactions, mempoolTx)
 	}
@@ -942,12 +979,12 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
 					continue
 				}
-
+				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 				toSend := &pb.TransactionNotification{
 					Type: pb.TransactionNotification_UNCONFIRMED,
 					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
-							Transaction:      marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams),
+							Transaction:      respTx,
 							AddedTime:        txDesc.Added.Unix(),
 							Fee:              txDesc.Fee,
 							FeePerKb:         txDesc.FeePerKB,
@@ -955,6 +992,18 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							StartingPriority: txDesc.StartingPriority,
 						},
 					},
+				}
+
+				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+				if err == nil {
+					for i, in := range txDesc.Tx.MsgTx().TxIn {
+						stxo := view.LookupEntry(in.PreviousOutPoint)
+						if stxo != nil {
+							respTx.Inputs[i].Value = stxo.Amount()
+							respTx.Inputs[i].Coinbase = stxo.IsCoinBase()
+							respTx.Inputs[i].PrevScript = stxo.PkScript()
+						}
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -968,18 +1017,40 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
 
-				for _, tx := range block.Transactions() {
+				spentTxos, err := s.chain.FetchSpendJournal(block.Block)
+				if err != nil {
+					return status.Error(codes.Internal, "error loading spend journal")
+				}
+				spendIdx := 0
+
+				for i, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
+						if i > 0 {
+							for range tx.MsgTx().TxIn {
+								spendIdx++
+							}
+						}
 						continue
 					}
 
 					header := block.MsgBlock().Header
 
+					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
 					toSend := &pb.TransactionNotification{
 						Type: pb.TransactionNotification_CONFIRMED,
 						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
-							ConfirmedTransaction: marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams),
+							ConfirmedTransaction: respTx,
 						},
+					}
+
+					for n := range respTx.Inputs {
+						stxo := spentTxos[spendIdx]
+						respTx.Inputs[n].PrevScript = stxo.PkScript
+						respTx.Inputs[n].Value = stxo.Amount
+						respTx.Inputs[n].Coinbase = stxo.IsCoinBase
+						if i > 0 {
+							spendIdx++
+						}
 					}
 
 					if err := stream.Send(toSend); err != nil {
@@ -1049,11 +1120,12 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					continue
 				}
 
+				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 				toSend := &pb.TransactionNotification{
 					Type: pb.TransactionNotification_UNCONFIRMED,
 					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
-							Transaction:      marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams),
+							Transaction:      respTx,
 							AddedTime:        txDesc.Added.Unix(),
 							Fee:              txDesc.Fee,
 							FeePerKb:         txDesc.FeePerKB,
@@ -1061,6 +1133,18 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							StartingPriority: txDesc.StartingPriority,
 						},
 					},
+				}
+
+				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+				if err == nil {
+					for i, in := range txDesc.Tx.MsgTx().TxIn {
+						stxo := view.LookupEntry(in.PreviousOutPoint)
+						if stxo != nil {
+							respTx.Inputs[i].Value = stxo.Amount()
+							respTx.Inputs[i].Coinbase = stxo.IsCoinBase()
+							respTx.Inputs[i].PrevScript = stxo.PkScript()
+						}
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1074,18 +1158,39 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
 
-				for _, tx := range block.Transactions() {
+				spentTxos, err := s.chain.FetchSpendJournal(block.Block)
+				if err != nil {
+					return status.Error(codes.Internal, "error loading spend journal")
+				}
+				spendIdx := 0
+				for i, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
+						if i > 0 {
+							for range tx.MsgTx().TxIn {
+								spendIdx++
+							}
+						}
 						continue
 					}
 
 					header := block.MsgBlock().Header
 
+					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
 					toSend := &pb.TransactionNotification{
 						Type: pb.TransactionNotification_CONFIRMED,
 						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
-							ConfirmedTransaction: marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams),
+							ConfirmedTransaction: respTx,
 						},
+					}
+
+					for n := range respTx.Inputs {
+						stxo := spentTxos[spendIdx]
+						respTx.Inputs[n].PrevScript = stxo.PkScript
+						respTx.Inputs[n].Value = stxo.Amount
+						respTx.Inputs[n].Coinbase = stxo.IsCoinBase
+						if i > 0 {
+							spendIdx++
+						}
 					}
 
 					if err := stream.Send(toSend); err != nil {
@@ -1165,7 +1270,7 @@ func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, 
 		return nil, nil, status.Error(codes.Internal, "failed to load transaction bytes")
 	}
 
-	// Grab the block height.
+	// Grab the block.
 	blk, err := s.chain.BlockByHash(blockRegion.Hash)
 	if err != nil {
 		return nil, nil, status.Error(codes.Internal, "failed to retrieve block")
@@ -1274,6 +1379,30 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	mpTxns := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 
 	return addressTxns, mpTxns, nil
+}
+
+func (s *GrpcServer) attachSpendInfo(pbTx *pb.Transaction, blk *bchutil.Block) error {
+	spentTxos, err := s.chain.FetchSpendJournal(blk)
+	if err != nil {
+		return status.Error(codes.Internal, "error loading spend journal")
+	}
+	spendIdx := 0
+	for _, tx := range blk.Transactions()[1:] {
+		if bytes.Equal(tx.Hash()[:], pbTx.Hash) {
+			for i := range pbTx.Inputs {
+				stxo := spentTxos[spendIdx]
+				pbTx.Inputs[i].PrevScript = stxo.PkScript
+				pbTx.Inputs[i].Coinbase = stxo.IsCoinBase
+				pbTx.Inputs[i].Value = stxo.Amount
+				spendIdx++
+			}
+			break
+		}
+		for range tx.MsgTx().TxIn {
+			spendIdx++
+		}
+	}
+	return nil
 }
 
 // getDifficultyRatio returns the proof-of-work difficulty as a multiple of the

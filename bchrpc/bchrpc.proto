@@ -331,8 +331,9 @@ message Transaction {
         bool coinbase = 2;
         Outpoint outpoint = 3;
         bytes signature_script = 4;
-        uint32 sequence = 5;
-        int64 value = 6;
+        bytes prev_script = 5;
+        uint32 sequence = 6;
+        int64 value = 7;
     }
     message Output {
         uint32 index = 1;
