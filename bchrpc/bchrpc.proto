@@ -328,12 +328,9 @@ message Transaction {
         }
 
         uint32 index = 1;
-        bool coinbase = 2;
-        Outpoint outpoint = 3;
-        bytes signature_script = 4;
-        bytes prev_script = 5;
-        uint32 sequence = 6;
-        int64 value = 7;
+        Outpoint outpoint = 2;
+        bytes signature_script = 3;
+        uint32 sequence = 4;
     }
     message Output {
         uint32 index = 1;
@@ -389,7 +386,6 @@ message TransactionFilter {
 
     //TODO: Are these extra filters values relevant?
     // - scriptPubkey
-    // - script data elements
 
     // Subscribed/Unsubscribe to everything. Other filters
     // will be ignored.
