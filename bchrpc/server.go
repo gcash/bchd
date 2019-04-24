@@ -397,10 +397,34 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 			Info: marshalBlockInfo(block, confirmations, s.chainParams),
 		},
 	}
-	for _, tx := range block.Transactions() {
+
+	var spentTxos []blockchain.SpentTxOut
+	if req.FullTransactions {
+		spentTxos, err = s.chain.FetchSpendJournal(block)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error loading spend journal")
+		}
+	}
+	spendIdx := 0
+	for idx, tx := range block.Transactions() {
 		if req.FullTransactions {
 			header := block.MsgBlock().Header
 			respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+			for i := range tx.MsgTx().TxIn {
+				if idx > 0 {
+					stxo := spentTxos[spendIdx]
+					respTx.Inputs[i].Value = stxo.Amount
+					respTx.Inputs[i].PreviousScript = stxo.PkScript
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+					if err == nil && len(addrs) > 0 {
+						respTx.Inputs[i].Address = addrs[0].String()
+					}
+
+					spendIdx++
+				}
+			}
+
 			resp.Block.TransactionData = append(resp.Block.TransactionData, &pb.Block_TransactionData{
 				TxidsOrTxs: &pb.Block_TransactionData_Transaction{
 					Transaction: respTx,
@@ -553,6 +577,22 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		tx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 		tx.Timestamp = txDesc.Added.Unix()
 
+		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+		if err == nil {
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				stxo := view.LookupEntry(in.PreviousOutPoint)
+				if stxo != nil {
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].PreviousScript = stxo.PkScript()
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+					if err == nil && len(addrs) > 0 {
+						tx.Inputs[i].Address = addrs[0].String()
+					}
+				}
+			}
+		}
+
 		resp := &pb.GetTransactionResponse{
 			Transaction: tx,
 		}
@@ -576,6 +616,11 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		return nil, status.Error(codes.Internal, "failed to load block header")
 	}
 	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight, &header, blockHeight, s.chainParams)
+	if s.txIndex != nil {
+		if err := s.setInputMetadata(respTx); err != nil {
+			return nil, err
+		}
+	}
 
 	resp := &pb.GetTransactionResponse{
 		Transaction: respTx,
@@ -624,6 +669,7 @@ func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransa
 // limit, and from block options.
 //
 // **Requires AddressIndex**
+// **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddressTransactionsRequest) (*pb.GetAddressTransactionsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
@@ -653,6 +699,11 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	for _, cTx := range confirmedTxs {
 		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), 0, cTx.blockHeader, cTx.blockHeight, s.chainParams)
+		if s.txIndex != nil {
+			if err := s.setInputMetadata(tx); err != nil {
+				return nil, err
+			}
+		}
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
 	}
 
@@ -661,6 +712,21 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
 		if err != nil {
 			continue
+		}
+		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+		if err == nil {
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				stxo := view.LookupEntry(in.PreviousOutPoint)
+				if stxo != nil {
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].PreviousScript = stxo.PkScript()
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+					if err == nil && len(addrs) > 0 {
+						tx.Inputs[i].Address = addrs[0].String()
+					}
+				}
+			}
 		}
 		mempoolTx := &pb.MempoolTransaction{
 			Transaction:      tx,
@@ -906,6 +972,8 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 // with grpc-web. You will need to close and re-open the stream whenever
 // you want to update the addresses. If you are not using grpc-web
 // then SubscribeTransactionStream is more appropriate.
+//
+// **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
@@ -933,6 +1001,21 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					continue
 				}
 				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+				if err == nil {
+					for i, in := range txDesc.Tx.MsgTx().TxIn {
+						stxo := view.LookupEntry(in.PreviousOutPoint)
+						if stxo != nil {
+							respTx.Inputs[i].Value = stxo.Amount()
+							respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+							_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+							if err == nil && len(addrs) > 0 {
+								respTx.Inputs[i].Address = addrs[0].String()
+							}
+						}
+					}
+				}
 				toSend := &pb.TransactionNotification{
 					Type: pb.TransactionNotification_UNCONFIRMED,
 					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
@@ -966,6 +1049,11 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					header := block.MsgBlock().Header
 
 					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+					if s.txIndex != nil {
+						if err := s.setInputMetadata(respTx); err != nil {
+							return err
+						}
+					}
 					toSend := &pb.TransactionNotification{
 						Type: pb.TransactionNotification_CONFIRMED,
 						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
@@ -1041,6 +1129,21 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				}
 
 				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+				if err == nil {
+					for i, in := range txDesc.Tx.MsgTx().TxIn {
+						stxo := view.LookupEntry(in.PreviousOutPoint)
+						if stxo != nil {
+							respTx.Inputs[i].Value = stxo.Amount()
+							respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+							_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+							if err == nil && len(addrs) > 0 {
+								respTx.Inputs[i].Address = addrs[0].String()
+							}
+						}
+					}
+				}
 				toSend := &pb.TransactionNotification{
 					Type: pb.TransactionNotification_UNCONFIRMED,
 					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
@@ -1074,6 +1177,11 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					header := block.MsgBlock().Header
 
 					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+					if s.txIndex != nil {
+						if err := s.setInputMetadata(respTx); err != nil {
+							return err
+						}
+					}
 					toSend := &pb.TransactionNotification{
 						Type: pb.TransactionNotification_CONFIRMED,
 						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
@@ -1165,6 +1273,61 @@ func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, 
 	}
 
 	return txBytes, blockHeight, blockRegion.Hash, nil
+}
+
+// setInputMetadata will set the value, previous script, and address for each input in the transaction
+// by loading the previous transaction from the txindex and using its data.
+func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
+	inputTxMap := make(map[chainhash.Hash]*wire.MsgTx)
+	for i, in := range tx.Inputs {
+		ch, err := chainhash.NewHash(in.Outpoint.Hash)
+		if err != nil {
+			return status.Error(codes.Internal, "error marshaling chainhash")
+		}
+		if prevTx, ok := inputTxMap[*ch]; ok {
+			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
+			tx.Inputs[i].PreviousScript = prevTx.TxOut[in.Outpoint.Index].PkScript
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(prevTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
+			if err == nil && len(addrs) > 0 {
+				tx.Inputs[i].Address = addrs[0].String()
+			}
+		} else {
+			blockRegion, err := s.txIndex.TxBlockRegion(ch)
+			if err != nil {
+				return status.Error(codes.InvalidArgument, "failed to retrieve transaction location")
+			}
+			if blockRegion == nil {
+				return status.Error(codes.NotFound, "transaction not found")
+			}
+
+			var txBytes []byte
+			err = s.db.View(func(dbTx database.Tx) error {
+				var err error
+				txBytes, err = dbTx.FetchBlockRegion(blockRegion)
+				return err
+			})
+			if err != nil {
+				return status.Error(codes.Internal, "failed to load transaction bytes")
+			}
+
+			var loadedTx wire.MsgTx
+			if err := loadedTx.BchDecode(bytes.NewReader(txBytes), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+				return status.Error(codes.Internal, "failed to unmarshal transaction")
+			}
+
+			tx.Inputs[i].Value = loadedTx.TxOut[in.Outpoint.Index].Value
+			tx.Inputs[i].PreviousScript = loadedTx.TxOut[in.Outpoint.Index].PkScript
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
+			if err == nil && len(addrs) > 0 {
+				tx.Inputs[i].Address = addrs[0].String()
+			}
+
+			inputTxMap[*ch] = &loadedTx
+		}
+	}
+	return nil
 }
 
 type retrievedTx struct {
