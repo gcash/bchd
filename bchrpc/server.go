@@ -697,8 +697,9 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	resp := &pb.GetAddressTransactionsResponse{}
 
+	tip := s.chain.BestSnapshot().Height
 	for _, cTx := range confirmedTxs {
-		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), 0, cTx.blockHeader, cTx.blockHeight, s.chainParams)
+		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s.chainParams)
 		if s.txIndex != nil {
 			if err := s.setInputMetadata(tx); err != nil {
 				return nil, err
@@ -1501,9 +1502,15 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			PubkeyScript: output.PkScript,
 		}
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
-		if err == nil && len(addrs) > 0 {
-			out.ScriptClass = scriptClass.String()
-			out.Address = addrs[0].String()
+		if err == nil {
+			if scriptClass == txscript.NullDataTy {
+				out.ScriptClass = "datacarrier"
+			} else {
+				out.ScriptClass = scriptClass.String()
+			}
+			if len(addrs) > 0 {
+				out.Address = addrs[0].String()
+			}
 		}
 		disassm, err := txscript.DisasmString(output.PkScript)
 		if err == nil {
