@@ -1377,7 +1377,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 		err := s.db.View(func(dbTx database.Tx) error {
 			regions, dbSkipped, err := s.addrIndex.TxRegionsForAddress(
 				dbTx, addr, uint32(numToSkip)-numSkipped,
-				uint32(numRequested-len(addressTxns)), false)
+				uint32(numRequested-len(addressTxns)), true)
 			if err != nil {
 				return err
 			}
