@@ -364,9 +364,10 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 		Info: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 	}
 
-	nexBlock, err := s.chain.BlockByHeight(block.Height() + 1)
+	nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1)
 	if err == nil {
-		resp.Info.NextBlockHash = nexBlock.Hash().CloneBytes()
+		nextHash := nextHeader.BlockHash()
+		resp.Info.NextBlockHash = nextHash.CloneBytes()
 	}
 
 	return resp, nil
@@ -396,6 +397,12 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 		Block: &pb.Block{
 			Info: marshalBlockInfo(block, confirmations, s.chainParams),
 		},
+	}
+
+	nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1)
+	if err == nil {
+		nextHash := nextHeader.BlockHash()
+		resp.Block.Info.NextBlockHash = nextHash.CloneBytes()
 	}
 
 	var spentTxos []blockchain.SpentTxOut
@@ -868,21 +875,9 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 
 	blkHash := blockRegion.Hash
 
-	// load block and check that all transactions passed in the set exist in
-	// the loaded block
-	var blkBytes []byte
-	err = s.db.View(func(dbTx database.Tx) error {
-		var err error
-		blkBytes, err = dbTx.FetchBlock(blkHash)
-		return err
-	})
+	block, err := s.chain.BlockByHash(blkHash)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "can't read block from disk")
-	}
-
-	block, err := bchutil.NewBlockFromBytes(blkBytes)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to deserialize block")
+		return nil, status.Error(codes.NotFound, "unable to find block for given transaction")
 	}
 
 	// create merkle proof
@@ -902,6 +897,12 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 		Block:  marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 		Flags:  mBlock.Flags,
 		Hashes: hashes,
+	}
+
+	nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1)
+	if err == nil {
+		nextHash := nextHeader.BlockHash()
+		resp.Block.NextBlockHash = nextHash.CloneBytes()
 	}
 
 	return resp, nil
@@ -1465,6 +1466,7 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, params *chaincf
 		Bits:          block.MsgBlock().Header.Bits,
 		PreviousBlock: block.MsgBlock().Header.PrevBlock.CloneBytes(),
 		Confirmations: confirmations,
+		Size:          int32(block.MsgBlock().SerializeSize()),
 	}
 }
 

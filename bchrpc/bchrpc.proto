@@ -309,6 +309,7 @@ message BlockInfo {
     int32 confirmations = 9;
     double difficulty = 10;
     bytes next_block_hash = 11;
+    int32 size = 12;
 }
 
 message Block {

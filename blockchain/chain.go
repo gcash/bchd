@@ -1399,6 +1399,19 @@ func (b *BlockChain) HeaderByHash(hash *chainhash.Hash) (wire.BlockHeader, error
 	return node.Header(), nil
 }
 
+// HeaderByHeight returns the block header identified by the given height or an
+// error if it doesn't exist. Note that this will return headers from the main
+// chain.
+func (b *BlockChain) HeaderByHeight(height int32) (wire.BlockHeader, error) {
+	node := b.bestChain.NodeByHeight(height)
+	if node == nil {
+		err := fmt.Errorf("header at height %d is not known", height)
+		return wire.BlockHeader{}, err
+	}
+
+	return node.Header(), nil
+}
+
 // MainChainHasBlock returns whether or not the block with the given hash is in
 // the main chain.
 //
