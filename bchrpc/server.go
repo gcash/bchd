@@ -889,7 +889,7 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 		return nil, status.Error(codes.Internal, "failed to deserialize merkle block")
 	}
 
-	hashes := make([][]byte, len(mBlock.Hashes))
+	hashes := make([][]byte, 0, len(mBlock.Hashes))
 	for _, h := range mBlock.Hashes {
 		hashes = append(hashes, h.CloneBytes())
 	}
