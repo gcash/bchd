@@ -676,7 +676,6 @@ func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransa
 // limit, and from block options.
 //
 // **Requires AddressIndex**
-// **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddressTransactionsRequest) (*pb.GetAddressTransactionsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
@@ -1081,6 +1080,8 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 //
 // Because this RPC using bi-directional streaming it cannot be used with
 // grpc-web.
+//
+// **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
 	// Put the incoming messages on a channel.
 	requests := make(chan *pb.SubscribeTransactionsRequest)

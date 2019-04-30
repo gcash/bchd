@@ -3180,32 +3180,35 @@ type BchrpcClient interface {
 	// or genesis if no blocks in the locator are in the best chain. If the locator is
 	// already at the tip no headers will be returned.
 	GetHeaders(ctx context.Context, in *GetHeadersRequest, opts ...grpc.CallOption) (*GetHeadersResponse, error)
-	// **Requires TxIndex**
-	// **Requires TxIndex to receive input metadata**
 	// Get a transaction given its hash.
-	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
+	//
 	// **Requires TxIndex**
+	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
 	// Get a serialized transaction given its hash.
+	//
+	// **Requires TxIndex**
 	GetRawTransaction(ctx context.Context, in *GetRawTransactionRequest, opts ...grpc.CallOption) (*GetRawTransactionResponse, error)
-	// **Requires AddressIndex**
-	// **Requires TxIndex to receive input metadata**
 	// Returns the transactions for the given address. Offers offset,
 	// limit, and from block options.
-	GetAddressTransactions(ctx context.Context, in *GetAddressTransactionsRequest, opts ...grpc.CallOption) (*GetAddressTransactionsResponse, error)
+	//
 	// **Requires AddressIndex**
+	GetAddressTransactions(ctx context.Context, in *GetAddressTransactionsRequest, opts ...grpc.CallOption) (*GetAddressTransactionsResponse, error)
 	// Returns the raw transactions for the given address. Offers offset,
 	// limit, and from block options.
-	GetRawAddressTransactions(ctx context.Context, in *GetRawAddressTransactionsRequest, opts ...grpc.CallOption) (*GetRawAddressTransactionsResponse, error)
+	//
 	// **Requires AddressIndex**
+	GetRawAddressTransactions(ctx context.Context, in *GetRawAddressTransactionsRequest, opts ...grpc.CallOption) (*GetRawAddressTransactionsResponse, error)
 	// Returns all the unspent transaction outpoints for the given address.
 	// Offers offset, limit, and from block options.
+	//
+	// **Requires AddressIndex**
 	GetAddressUnspentOutputs(ctx context.Context, in *GetAddressUnspentOutputsRequest, opts ...grpc.CallOption) (*GetAddressUnspentOutputsResponse, error)
-	// **Requires TxIndex***
 	// Returns a merkle (SPV) proof that the given transaction is in the provided block.
+	//
+	// **Requires TxIndex***
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
 	// Submit a transaction to all connected peers.
 	SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error)
-	// **Requires TxIndex to receive input metadata**
 	// Subscribe to relevant transactions based on the subscription requests.
 	// The parameters to filter transactions on can be updated by sending new
 	// SubscribeTransactionsRequest objects on the stream.
@@ -3214,14 +3217,17 @@ type BchrpcClient interface {
 	// with grpc-web. You will need to close and re-open the stream whenever
 	// you want to update the addresses. If you are not using grpc-web
 	// then SubscribeTransactionStream is more appropriate.
-	SubscribeTransactions(ctx context.Context, in *SubscribeTransactionsRequest, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionsClient, error)
+	//
 	// **Requires TxIndex to receive input metadata**
+	SubscribeTransactions(ctx context.Context, in *SubscribeTransactionsRequest, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionsClient, error)
 	// Subscribe to relevant transactions based on the subscription requests.
 	// The parameters to filter transactions on can be updated by sending new
 	// SubscribeTransactionsRequest objects on the stream.
 	//
 	// Because this RPC using bi-directional streaming it cannot be used with
 	// grpc-web.
+	//
+	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactionStream(ctx context.Context, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionStreamClient, error)
 	// Subscribe to notifications of new blocks being connected to the blockchain
 	// or blocks being disconnected.
@@ -3479,32 +3485,35 @@ type BchrpcServer interface {
 	// or genesis if no blocks in the locator are in the best chain. If the locator is
 	// already at the tip no headers will be returned.
 	GetHeaders(context.Context, *GetHeadersRequest) (*GetHeadersResponse, error)
-	// **Requires TxIndex**
-	// **Requires TxIndex to receive input metadata**
 	// Get a transaction given its hash.
-	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
+	//
 	// **Requires TxIndex**
+	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
 	// Get a serialized transaction given its hash.
+	//
+	// **Requires TxIndex**
 	GetRawTransaction(context.Context, *GetRawTransactionRequest) (*GetRawTransactionResponse, error)
-	// **Requires AddressIndex**
-	// **Requires TxIndex to receive input metadata**
 	// Returns the transactions for the given address. Offers offset,
 	// limit, and from block options.
-	GetAddressTransactions(context.Context, *GetAddressTransactionsRequest) (*GetAddressTransactionsResponse, error)
+	//
 	// **Requires AddressIndex**
+	GetAddressTransactions(context.Context, *GetAddressTransactionsRequest) (*GetAddressTransactionsResponse, error)
 	// Returns the raw transactions for the given address. Offers offset,
 	// limit, and from block options.
-	GetRawAddressTransactions(context.Context, *GetRawAddressTransactionsRequest) (*GetRawAddressTransactionsResponse, error)
+	//
 	// **Requires AddressIndex**
+	GetRawAddressTransactions(context.Context, *GetRawAddressTransactionsRequest) (*GetRawAddressTransactionsResponse, error)
 	// Returns all the unspent transaction outpoints for the given address.
 	// Offers offset, limit, and from block options.
+	//
+	// **Requires AddressIndex**
 	GetAddressUnspentOutputs(context.Context, *GetAddressUnspentOutputsRequest) (*GetAddressUnspentOutputsResponse, error)
-	// **Requires TxIndex***
 	// Returns a merkle (SPV) proof that the given transaction is in the provided block.
+	//
+	// **Requires TxIndex***
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
 	// Submit a transaction to all connected peers.
 	SubmitTransaction(context.Context, *SubmitTransactionRequest) (*SubmitTransactionResponse, error)
-	// **Requires TxIndex to receive input metadata**
 	// Subscribe to relevant transactions based on the subscription requests.
 	// The parameters to filter transactions on can be updated by sending new
 	// SubscribeTransactionsRequest objects on the stream.
@@ -3513,14 +3522,17 @@ type BchrpcServer interface {
 	// with grpc-web. You will need to close and re-open the stream whenever
 	// you want to update the addresses. If you are not using grpc-web
 	// then SubscribeTransactionStream is more appropriate.
-	SubscribeTransactions(*SubscribeTransactionsRequest, Bchrpc_SubscribeTransactionsServer) error
+	//
 	// **Requires TxIndex to receive input metadata**
+	SubscribeTransactions(*SubscribeTransactionsRequest, Bchrpc_SubscribeTransactionsServer) error
 	// Subscribe to relevant transactions based on the subscription requests.
 	// The parameters to filter transactions on can be updated by sending new
 	// SubscribeTransactionsRequest objects on the stream.
 	//
 	// Because this RPC using bi-directional streaming it cannot be used with
 	// grpc-web.
+	//
+	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactionStream(Bchrpc_SubscribeTransactionStreamServer) error
 	// Subscribe to notifications of new blocks being connected to the blockchain
 	// or blocks being disconnected.

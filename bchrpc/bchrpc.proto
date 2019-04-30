@@ -34,39 +34,42 @@ service bchrpc {
     // already at the tip no headers will be returned.
     rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
 
-    // **Requires TxIndex**
-    // **Requires TxIndex to receive input metadata**
     // Get a transaction given its hash.
+    //
+    // **Requires TxIndex**
     rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
 
-    // **Requires TxIndex**
     // Get a serialized transaction given its hash.
+    //
+    // **Requires TxIndex**
     rpc GetRawTransaction(GetRawTransactionRequest) returns (GetRawTransactionResponse) {}
 
-    // **Requires AddressIndex**
-    // **Requires TxIndex to receive input metadata**
     // Returns the transactions for the given address. Offers offset,
     // limit, and from block options.
+    //
+    // **Requires AddressIndex**
     rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
 
-    // **Requires AddressIndex**
     // Returns the raw transactions for the given address. Offers offset,
     // limit, and from block options.
+    //
+    // **Requires AddressIndex**
     rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest) returns (GetRawAddressTransactionsResponse) {}
 
-    // **Requires AddressIndex**
     // Returns all the unspent transaction outpoints for the given address.
     // Offers offset, limit, and from block options.
+    //
+    // **Requires AddressIndex**
     rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
 
-    // **Requires TxIndex***
     // Returns a merkle (SPV) proof that the given transaction is in the provided block.
+    //
+    // **Requires TxIndex***
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
     // Submit a transaction to all connected peers.
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
-    // **Requires TxIndex to receive input metadata**
     // Subscribe to relevant transactions based on the subscription requests.
     // The parameters to filter transactions on can be updated by sending new
     // SubscribeTransactionsRequest objects on the stream.
@@ -75,15 +78,18 @@ service bchrpc {
     // with grpc-web. You will need to close and re-open the stream whenever
     // you want to update the addresses. If you are not using grpc-web
     // then SubscribeTransactionStream is more appropriate.
+    //
+    // **Requires TxIndex to receive input metadata**
     rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
-    // **Requires TxIndex to receive input metadata**
     // Subscribe to relevant transactions based on the subscription requests.
     // The parameters to filter transactions on can be updated by sending new
     // SubscribeTransactionsRequest objects on the stream.
     //
     // Because this RPC using bi-directional streaming it cannot be used with
     // grpc-web.
+    //
+    // **Requires TxIndex to receive input metadata**
     rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // Subscribe to notifications of new blocks being connected to the blockchain
