@@ -1,0 +1,407 @@
+syntax = "proto3";
+
+package pb;
+
+// bchrpc contains a set of RPCs that can be exposed publicly via
+// the command line options. This service could be authenticated or
+// unauthenticated.
+service bchrpc {
+
+    // Get info about the mempool.
+    rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
+
+    // GetBlockchainInfo info about the blockchain including the most recent
+    // block hash and height.
+    rpc GetBlockchainInfo(GetBlockchainInfoRequest) returns (GetBlockchainInfoResponse) {}
+
+    // Get info about the given block.
+    rpc GetBlockInfo(GetBlockInfoRequest)returns (GetBlockInfoResponse) {}
+
+    // Get a block.
+    rpc GetBlock(GetBlockRequest) returns (GetBlockResponse) {}
+
+    // Get a serialized block.
+    rpc GetRawBlock(GetRawBlockRequest) returns (GetRawBlockResponse) {}
+
+    // **Requires CfIndex**
+    // Get a block filter.
+    rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
+
+    // This RPC sends a block locator object to the server and the server responds with
+    // a batch of no more than 2000 headers. Upon parsing the block locator, if the server
+    // concludes there has been a fork, it will send headers starting at the fork point,
+    // or genesis if no blocks in the locator are in the best chain. If the locator is
+    // already at the tip no headers will be returned.
+    rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
+
+    // Get a transaction given its hash.
+    //
+    // **Requires TxIndex**
+    rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
+
+    // Get a serialized transaction given its hash.
+    //
+    // **Requires TxIndex**
+    rpc GetRawTransaction(GetRawTransactionRequest) returns (GetRawTransactionResponse) {}
+
+    // Returns the transactions for the given address. Offers offset,
+    // limit, and from block options.
+    //
+    // **Requires AddressIndex**
+    rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
+
+    // Returns the raw transactions for the given address. Offers offset,
+    // limit, and from block options.
+    //
+    // **Requires AddressIndex**
+    rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest) returns (GetRawAddressTransactionsResponse) {}
+
+    // Returns all the unspent transaction outpoints for the given address.
+    // Offers offset, limit, and from block options.
+    //
+    // **Requires AddressIndex**
+    rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
+
+    // Returns a merkle (SPV) proof that the given transaction is in the provided block.
+    //
+    // **Requires TxIndex***
+    rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
+
+    // Submit a transaction to all connected peers.
+    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
+
+    // Subscribe to relevant transactions based on the subscription requests.
+    // The parameters to filter transactions on can be updated by sending new
+    // SubscribeTransactionsRequest objects on the stream.
+    //
+    // This RPC does not use bi-directional streams and therefore can be used
+    // with grpc-web. You will need to close and re-open the stream whenever
+    // you want to update the addresses. If you are not using grpc-web
+    // then SubscribeTransactionStream is more appropriate.
+    //
+    // **Requires TxIndex to receive input metadata**
+    rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+
+    // Subscribe to relevant transactions based on the subscription requests.
+    // The parameters to filter transactions on can be updated by sending new
+    // SubscribeTransactionsRequest objects on the stream.
+    //
+    // Because this RPC using bi-directional streaming it cannot be used with
+    // grpc-web.
+    //
+    // **Requires TxIndex to receive input metadata**
+    rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+
+    // Subscribe to notifications of new blocks being connected to the blockchain
+    // or blocks being disconnected.
+    rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
+
+}
+
+
+// RPC MESSAGES
+
+message GetMempoolInfoRequest {}
+message GetMempoolInfoResponse {
+    uint32 size = 1;
+    uint32 bytes = 2;
+}
+
+message GetBlockchainInfoRequest {}
+message GetBlockchainInfoResponse {
+    enum BitcoinNet {
+        MAINNET  = 0;
+        REGTEST  = 1;
+        TESTNET3 = 2;
+        SIMNET   = 3;
+    }
+
+    BitcoinNet bitcoin_net = 1;
+    int32 best_height = 2;
+    bytes best_block_hash = 3;
+    double difficulty = 4;
+    int64 median_time = 5;
+    bool tx_index = 6;
+    bool addr_index =7;
+}
+
+message GetBlockInfoRequest {
+    oneof hash_or_height {
+        bytes hash = 1;
+        int32 height = 2;
+    }
+}
+message GetBlockInfoResponse {
+    BlockInfo info = 1;
+}
+
+message GetBlockRequest {
+    oneof hash_or_height {
+        bytes hash = 1;
+        int32 height = 2;
+    }
+    // Provide full transaction info instead of only the hashes.
+    bool full_transactions = 3;
+}
+message GetBlockResponse {
+    Block block = 1;
+}
+
+message GetRawBlockRequest {
+    oneof hash_or_height {
+        bytes hash = 1;
+        int32 height = 2;
+    }
+}
+message GetRawBlockResponse {
+    bytes block = 1;
+}
+
+message GetBlockFilterRequest {
+    oneof hash_or_height {
+        bytes hash = 1;
+        int32 height = 2;
+    }
+}
+message GetBlockFilterResponse {
+    bytes filter = 1;
+}
+
+message GetHeadersRequest {
+    repeated bytes block_locator_hashes = 1;
+    bytes stop_hash = 2;
+}
+message GetHeadersResponse {
+    repeated BlockInfo headers = 1;
+}
+
+message GetTransactionRequest {
+    bytes hash = 1;
+}
+message GetTransactionResponse {
+    Transaction transaction = 1;
+}
+
+message GetRawTransactionRequest {
+    bytes hash = 1;
+}
+message GetRawTransactionResponse {
+    bytes transaction = 1;
+}
+
+message GetAddressTransactionsRequest {
+    string address = 1;
+
+    // Control the number of transactions to be fetched from the blockchain.
+    // These controls only apply to the confirmed transactions. All unconfirmed
+    // ones will be returned always.
+    uint32 nb_skip = 2;
+    uint32 nb_fetch = 3;
+
+    // If the start block is provided it will only return transactions after this
+    // block. This should be used if possible to save bandwidth.
+    oneof start_block {
+        bytes hash = 4;
+        int32 height = 5;
+    }
+}
+message GetAddressTransactionsResponse {
+    repeated Transaction confirmed_transactions = 1;
+    repeated MempoolTransaction unconfirmed_transactions = 2;
+}
+
+message GetRawAddressTransactionsRequest {
+    string address = 1;
+
+    // Control the number of transactions to be fetched from the blockchain.
+    // These controls only apply to the confirmed transactions. All unconfirmed
+    // ones will be returned always.
+    uint32 nb_skip = 2;
+    uint32 nb_fetch = 3;
+
+    // If the start block is provided it will only return transactions after this
+    // block. This should be used if possible to save bandwidth.
+    oneof start_block {
+        bytes hash = 4;
+        int32 height = 5;
+    }
+}
+message GetRawAddressTransactionsResponse {
+    repeated bytes confirmed_transactions = 1;
+    repeated bytes unconfirmed_transactions = 2;
+}
+
+message GetAddressUnspentOutputsRequest {
+    string address = 1;
+}
+message GetAddressUnspentOutputsResponse {
+    repeated UnspentOutput outputs = 1;
+}
+
+message GetMerkleProofRequest {
+    bytes transaction_hash = 1;
+}
+message GetMerkleProofResponse {
+    BlockInfo block = 1;
+    repeated bytes hashes = 2;
+    bytes flags = 3;
+}
+
+message SubmitTransactionRequest {
+    bytes transaction = 1;
+}
+message SubmitTransactionResponse {
+    bytes hash = 1;
+}
+
+message SubscribeTransactionsRequest {
+    TransactionFilter subscribe = 1;
+    TransactionFilter unsubscribe = 2;
+
+    // When this is true, new transactions coming in from the mempool are
+    // included apart from the ones confirmed in a block.
+    bool include_mempool = 3;
+
+    // When this is true, transactions are included when they are confirmed.
+    // This notification is sent in addition to any requested mempool notifications.
+    bool include_in_block = 4;
+}
+
+message SubscribeBlocksRequest {}
+
+
+// NOTIFICATIONS
+
+message BlockNotification {
+    enum Type {
+        CONNECTED = 0;
+        DISCONNECTED = 1;
+    }
+
+    Type type = 1;
+    BlockInfo block = 2;
+}
+
+message TransactionNotification {
+    enum Type {
+        UNCONFIRMED = 0;
+        CONFIRMED   = 1;
+    }
+
+    Type type = 1;
+    oneof transaction {
+        Transaction confirmed_transaction = 2;
+        MempoolTransaction unconfirmed_transaction = 3;
+    }
+}
+
+
+// DATA MESSAGES
+
+message BlockInfo {
+    // Identification.
+    bytes hash = 1;
+    int32 height = 2;
+
+    // Block header data.
+    int32 version = 3;
+    bytes previous_block = 4;
+    bytes merkle_root = 5;
+    int64 timestamp = 6;
+    uint32 bits = 7;
+    uint32 nonce = 8;
+
+    // Metadata.
+    int32 confirmations = 9;
+    double difficulty = 10;
+    bytes next_block_hash = 11;
+    int32 size = 12;
+}
+
+message Block {
+    message TransactionData {
+        // Either one of the two following is provided, depending on the request.
+        oneof txids_or_txs {
+            bytes transaction_hash = 1;
+            Transaction transaction = 2;
+        }
+    }
+
+    BlockInfo info = 1;
+    repeated TransactionData transaction_data = 2;
+}
+
+message Transaction {
+    message Input {
+        message Outpoint {
+            bytes hash = 1;
+            uint32 index = 2;
+        }
+
+        uint32 index = 1;
+        Outpoint outpoint = 2;
+        bytes signature_script = 3;
+        uint32 sequence = 4;
+        int64 value = 5;
+        bytes previous_script = 6;
+        string address = 7;
+    }
+    message Output {
+        uint32 index = 1;
+        int64 value = 2;
+        bytes pubkey_script = 3;
+        string address = 4;
+        string script_class = 5;
+        string disassembled_script = 6;
+    }
+
+    bytes hash = 1;
+    int32 version = 2;
+    repeated Input inputs = 3;
+    repeated Output outputs = 4;
+    uint32 lock_time = 5;
+
+    // Metadata
+    int32 size = 8;
+    int64 timestamp = 9;
+    int32 confirmations = 10;
+    int32 block_height = 11;
+    bytes block_hash = 12;
+}
+
+message MempoolTransaction {
+    Transaction transaction = 1;
+
+    // The time when the transaction was added too the pool.
+    int64 added_time = 2;
+    // The block height when the transaction was added to the pool.
+    int32 added_height = 3;
+    // The total fee in satoshi the transaction pays.
+    int64 fee = 4;
+    // The fee in satoshi per kilobyte the transaction pays.
+    int64 fee_per_kb = 5;
+    // The priority of the transaction when it was added to the pool.
+    double starting_priority = 6;
+}
+
+message UnspentOutput {
+    Transaction.Input.Outpoint outpoint = 1;
+    bytes pubkey_script = 2;
+    int64 value = 3;
+
+    bool is_coinbase = 4;
+    int32 block_height = 5;
+}
+
+message TransactionFilter {
+    repeated string addresses = 1;
+    repeated Transaction.Input.Outpoint outpoints = 2;
+    repeated bytes data_elements = 3;
+
+    //TODO: Are these extra filters values relevant?
+    // - scriptPubkey
+
+    // Subscribed/Unsubscribe to everything. Other filters
+    // will be ignored.
+    bool all_transactions = 4;
+}

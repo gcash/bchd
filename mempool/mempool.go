@@ -587,6 +587,19 @@ func (mp *TxPool) CheckSpend(op wire.OutPoint) *bchutil.Tx {
 	return txR
 }
 
+// FetchInputUtxos loads utxo details about the input transactions referenced by
+// the passed transaction.  First, it loads the details form the viewpoint of
+// the main chain, then it adjusts them based upon the contents of the
+// transaction pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchInputUtxos(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	return mp.fetchInputUtxos(tx)
+}
+
 // fetchInputUtxos loads utxo details about the input transactions referenced by
 // the passed transaction.  First, it loads the details form the viewpoint of
 // the main chain, then it adjusts them based upon the contents of the
@@ -631,6 +644,24 @@ func (mp *TxPool) FetchTransaction(txHash *chainhash.Hash) (*bchutil.Tx, error) 
 
 	if exists {
 		return txDesc.Tx, nil
+	}
+
+	return nil, fmt.Errorf("transaction is not in the pool")
+}
+
+// FetchTxDesc returns the requested transaction description from the
+// transaction pool. This only fetches from the main transaction pool
+// and does not include orphans.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
+	// Protect concurrent access.
+	mp.mtx.RLock()
+	txDesc, exists := mp.pool[*txHash]
+	mp.mtx.RUnlock()
+
+	if exists {
+		return txDesc, nil
 	}
 
 	return nil, fmt.Errorf("transaction is not in the pool")

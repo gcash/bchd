@@ -182,6 +182,8 @@ type config struct {
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"number of outbound connections to maintain"`
 	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
 	FastSync                bool          `long:"fastsync" description:"Sync full blocks from the last checkpoint to the tip rather than from genesis."`
+	GrpcListeners           []string      `long:"grpclisten" description:"Add an interface/port to listen for experimental gRPC connections (default port: 8335, testnet: 18335)"`
+	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -949,7 +951,12 @@ func loadConfig() (*config, []string, error) {
 	cfg.RPCListeners = normalizeAddresses(cfg.RPCListeners,
 		activeNetParams.rpcPort)
 
-	// Only allow TLS to be disabled if the RPC is bound to localhost
+	// Add default port to all gRPC listener addresses if needed and remove
+	// duplicate addresses.
+	cfg.GrpcListeners = normalizeAddresses(cfg.GrpcListeners,
+		activeNetParams.gRRPPort)
+
+	// Only allow TLS to be disabled if the RPC or gRPC is bound to localhost
 	// addresses.
 	if !cfg.DisableRPC && cfg.DisableTLS {
 		allowedTLSListeners := map[string]struct{}{
@@ -970,6 +977,26 @@ func loadConfig() (*config, []string, error) {
 			if _, ok := allowedTLSListeners[host]; !ok {
 				str := "%s: the --notls option may not be used " +
 					"when binding RPC to non localhost " +
+					"addresses: %s"
+				err := fmt.Errorf(str, funcName, addr)
+				fmt.Fprintln(os.Stderr, err)
+				fmt.Fprintln(os.Stderr, usageMessage)
+				return nil, nil, err
+			}
+		}
+		for _, addr := range cfg.GrpcListeners {
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				str := "%s: gRPC listen interface '%s' is " +
+					"invalid: %v"
+				err := fmt.Errorf(str, funcName, addr, err)
+				fmt.Fprintln(os.Stderr, err)
+				fmt.Fprintln(os.Stderr, usageMessage)
+				return nil, nil, err
+			}
+			if _, ok := allowedTLSListeners[host]; !ok {
+				str := "%s: the --notls option may not be used " +
+					"when binding gRPC to non localhost " +
 					"addresses: %s"
 				err := fmt.Errorf(str, funcName, addr)
 				fmt.Fprintln(os.Stderr, err)
