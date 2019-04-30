@@ -6,8 +6,6 @@ package txscript
 
 import (
 	"bytes"
-	"encoding/hex"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -1156,12 +1154,4 @@ func TestNullDataScript(t *testing.T) {
 			continue
 		}
 	}
-}
-
-func TestGetScriptClass(t *testing.T) {
-	script, _ := hex.DecodeString("6a045cc3bbc22045a0f800375fcedd3d507c853a70dba03cf861a63c66d9be3697549b387446b9")
-
-	class, _, _, _ := ExtractPkScriptAddrs(script, &chaincfg.MainNetParams)
-
-	fmt.Println(class.String())
 }

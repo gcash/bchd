@@ -51,12 +51,7 @@ tlsOption := grpc.WithTransportCredentials(creds)
 
 If the server is using a certificate signed by a valid certificate authority just use nil for the cert:
 ```go
-creds, err := credentials.NewClientTLSFromFile(nil, "")
-if err != nil {
-    fmt.Println(err)
-    return
-}
-tlsOption := grpc.WithTransportCredentials(creds)
+tlsOption := gprc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, "")
 ```
 
 ## Authentication
