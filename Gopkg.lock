@@ -109,10 +109,11 @@
   revision = "f909784c02593590644a5527b3f2237b8406bb7e"
 
 [[projects]]
-  digest = "1:239c4c7fd2159585454003d9be7207167970194216193a8a210b8d29576f19c9"
+  digest = "1:64c2b533ffd17023738c534548ab2455d7f519bc15ed4225145425ed2222448b"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
+    "protoc-gen-go/descriptor",
     "ptypes",
     "ptypes/any",
     "ptypes/duration",
@@ -250,7 +251,7 @@
   revision = "64821d5d210748c883cd2b809589555ae4654203"
 
 [[projects]]
-  digest = "1:31d87f39886fb38a2b6c097ff3b9f985d6960772170d64a68246f7790e955746"
+  digest = "1:305ae1b02020aa7bd0bf7c51eb20cec7fec7d813c8b37e517ac588963fedd43d"
   name = "google.golang.org/grpc"
   packages = [
     ".",
@@ -279,6 +280,8 @@
     "metadata",
     "naming",
     "peer",
+    "reflection",
+    "reflection/grpc_reflection_v1alpha",
     "resolver",
     "resolver/dns",
     "resolver/passthrough",
@@ -287,8 +290,8 @@
     "tap",
   ]
   pruneopts = "UT"
-  revision = "236199dd5f8031d698fb64091194aecd1c3895b2"
-  version = "v1.20.0"
+  revision = "25c4f928eaa6d96443009bd842389fb4fa48664e"
+  version = "v1.20.1"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -328,6 +331,7 @@
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/metadata",
     "google.golang.org/grpc/peer",
+    "google.golang.org/grpc/reflection",
     "google.golang.org/grpc/status",
   ]
   solver-name = "gps-cdcl"

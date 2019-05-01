@@ -16,6 +16,7 @@ import (
 	"github.com/gcash/bchutil/merkleblock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"io"
 	"math/big"
@@ -126,6 +127,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		wg:          sync.WaitGroup{},
 	}
 	pb.RegisterBchrpcServer(cfg.Server, s)
+	reflection.Register(cfg.Server)
 	serviceMap["pb.bchrpc"] = s
 	return s
 }

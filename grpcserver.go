@@ -44,7 +44,6 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 				server.ServeHTTP(resp, req)
 			}
 		}
-
 		httpServer := &http.Server{
 			Addr:    addr.String(),
 			Handler: http.HandlerFunc(handler),
