@@ -16,6 +16,7 @@ import (
 	"github.com/gcash/bchutil/merkleblock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"io"
 	"math/big"
@@ -27,6 +28,14 @@ import (
 
 var serviceMap = map[string]interface{}{
 	"pb.bchrpc": &GrpcServer{},
+
+	"grpc.reflection.v1alpha.ServerReflection": &reflectionServer{},
+}
+
+type reflectionServer struct{}
+
+func (s *reflectionServer) checkReady() bool {
+	return true
 }
 
 // ServiceReady returns nil when the service is ready and a gRPC error when not.
@@ -125,6 +134,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		quit:        make(chan struct{}),
 		wg:          sync.WaitGroup{},
 	}
+	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
 	serviceMap["pb.bchrpc"] = s
 	return s
