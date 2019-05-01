@@ -28,6 +28,14 @@ import (
 
 var serviceMap = map[string]interface{}{
 	"pb.bchrpc": &GrpcServer{},
+
+	"grpc.reflection.v1alpha.ServerReflection": &reflectionServer{},
+}
+
+type reflectionServer struct{}
+
+func (s *reflectionServer) checkReady() bool {
+	return true
 }
 
 // ServiceReady returns nil when the service is ready and a gRPC error when not.
@@ -126,8 +134,8 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		quit:        make(chan struct{}),
 		wg:          sync.WaitGroup{},
 	}
-	pb.RegisterBchrpcServer(cfg.Server, s)
 	reflection.Register(cfg.Server)
+	pb.RegisterBchrpcServer(cfg.Server, s)
 	serviceMap["pb.bchrpc"] = s
 	return s
 }
