@@ -31,3 +31,12 @@ uninstall:
 
 docker:
 	docker build -t $(APPNAME) .
+
+
+.PHONY: gen-mocks
+gen-mocks:
+	@echo "===================    regenerating     ==================="
+	GO111MODULE=off go get -u github.com/maxbrunsfeld/counterfeiter
+	counterfeiter -o ./mocks/bchrpc.mock.go \
+		./bchrpc/pb BchrpcClient
+	@echo "===================          done           ==================="
