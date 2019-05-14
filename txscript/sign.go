@@ -14,9 +14,9 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// RawTxInSignature returns the serialized ECDSA signature for the input idx of
+// RawTxInECDSASignature returns the serialized ECDSA signature for the input idx of
 // the given transaction, with hashType appended to it.
-func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
+func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
 
 	// If the forkID was not passed in with the hashtype then add it here
@@ -39,9 +39,6 @@ func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 
 // RawTxInSchnorrSignature returns the serialized Schnorr signature for the input idx of
 // the given transaction, with hashType appended to it.
-//
-// TODO: This function is only used in a test. After Great Wall activation we will switch
-// RawTxInSignature to generate schnorr signatures by default.
 func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
 
@@ -55,7 +52,7 @@ func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	if err != nil {
 		return nil, err
 	}
-	signature, err := key.SignECDSA(hash)
+	signature, err := key.SignSchnorr(hash)
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign tx input: %s", err)
 	}
@@ -91,7 +88,7 @@ func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 // used to generate the payment address, or the script validation will fail.
 func SignatureScript(tx *wire.MsgTx, idx int, amt int64, subscript []byte,
 	hashType SigHashType, privKey *bchec.PrivateKey, compress bool) ([]byte, error) {
-	sig, err := RawTxInSignature(tx, idx, subscript, hashType, privKey, amt)
+	sig, err := RawTxInSchnorrSignature(tx, idx, subscript, hashType, privKey, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +126,7 @@ func LegacySignatureScript(tx *wire.MsgTx, idx int, subscript []byte,
 
 func p2pkSignatureScript(tx *wire.MsgTx, idx int, amt int64, subScript []byte,
 	hashType SigHashType, privKey *bchec.PrivateKey) ([]byte, error) {
-	sig, err := RawTxInSignature(tx, idx, subScript, hashType, privKey, amt)
+	sig, err := RawTxInSchnorrSignature(tx, idx, subScript, hashType, privKey, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +151,7 @@ func signMultiSig(tx *wire.MsgTx, idx int, amt int64, subScript []byte, hashType
 		if err != nil {
 			continue
 		}
-		sig, err := RawTxInSignature(tx, idx, subScript, hashType, key, amt)
+		sig, err := RawTxInECDSASignature(tx, idx, subScript, hashType, key, amt)
 		if err != nil {
 			continue
 		}
