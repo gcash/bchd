@@ -165,7 +165,8 @@ func ExampleSignTxOutput() {
 	flags := txscript.ScriptBip16 | txscript.ScriptVerifyDERSignatures |
 		txscript.ScriptStrictMultiSig |
 		txscript.ScriptDiscourageUpgradableNops |
-		txscript.ScriptVerifyBip143SigHash
+		txscript.ScriptVerifyBip143SigHash |
+		txscript.ScriptVerifySchnorr
 	vm, err := txscript.NewEngine(originTx.TxOut[0].PkScript, redeemTx, 0,
 		flags, nil, nil, -1)
 	if err != nil {
