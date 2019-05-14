@@ -819,43 +819,50 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
-	confirmedTxs, _, err := s.fetchTransactionsByAddress(addr, 0, 0, 0)
 
 	var utxos []*pb.UnspentOutput
-	for _, cTx := range confirmedTxs {
-		txHash := cTx.tx.TxHash()
-		utxoView, err := s.chain.FetchUtxoView(bchutil.NewTx(&cTx.tx))
-		if err != nil {
-			return nil, err
+	skip := 0
+	fetch := 1000
+	for {
+		confirmedTxs, _, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
+		if err != nil || len(confirmedTxs) == 0 {
+			break
 		}
-		entries := utxoView.Entries()
-		for i, out := range cTx.tx.TxOut {
-			op := wire.NewOutPoint(&txHash, uint32(i))
-			entry := entries[*op]
-			if entry == nil || entry.IsSpent() {
-				continue
+		for _, cTx := range confirmedTxs {
+			txHash := cTx.tx.TxHash()
+			utxoView, err := s.chain.FetchUtxoView(bchutil.NewTx(&cTx.tx))
+			if err != nil {
+				return nil, err
 			}
-
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
-			if err != nil || len(addrs) == 0 {
-				continue
-			}
-
-			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
-				utxo := &pb.UnspentOutput{
-					Outpoint: &pb.Transaction_Input_Outpoint{
-						Hash:  txHash.CloneBytes(),
-						Index: uint32(i),
-					},
-					Value:        entry.Amount(),
-					PubkeyScript: out.PkScript,
-					IsCoinbase:   entry.IsCoinBase(),
-					BlockHeight:  entry.BlockHeight(),
+			entries := utxoView.Entries()
+			for i, out := range cTx.tx.TxOut {
+				op := wire.NewOutPoint(&txHash, uint32(i))
+				entry := entries[*op]
+				if entry == nil || entry.IsSpent() {
+					continue
 				}
-				utxos = append(utxos, utxo)
-			}
 
+				_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+				if err != nil || len(addrs) == 0 {
+					continue
+				}
+
+				if addrs[0].EncodeAddress() == addr.EncodeAddress() {
+					utxo := &pb.UnspentOutput{
+						Outpoint: &pb.Transaction_Input_Outpoint{
+							Hash:  txHash.CloneBytes(),
+							Index: uint32(i),
+						},
+						Value:        entry.Amount(),
+						PubkeyScript: out.PkScript,
+						IsCoinbase:   entry.IsCoinBase(),
+						BlockHeight:  entry.BlockHeight(),
+					}
+					utxos = append(utxos, utxo)
+				}
+			}
 		}
+		skip += len(confirmedTxs)
 	}
 	resp := &pb.GetAddressUnspentOutputsResponse{
 		Outputs: utxos,
