@@ -3,9 +3,10 @@ package bchec
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"github.com/gcash/bchd/chaincfg/chainhash"
 	"math/big"
 	"sync"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 // Multiset tracks the state of a multiset as used to calculate the ECMH
@@ -31,10 +32,10 @@ func NewMultiset(curve *KoblitzCurve) *Multiset {
 func NewMultisetFromPoint(curve *KoblitzCurve, x, y *big.Int) *Multiset {
 	var copyX, copyY big.Int
 	if x != nil {
-		copyX = *x
+		copyX.Set(x)
 	}
 	if y != nil {
-		copyY = *y
+		copyY.Set(y)
 	}
 	return &Multiset{curve: curve, x: &copyX, y: &copyY, mtx: sync.RWMutex{}}
 }
@@ -98,7 +99,9 @@ func (ms *Multiset) Point() (x *big.Int, y *big.Int) {
 	ms.mtx.RLock()
 	defer ms.mtx.RUnlock()
 
-	copyX, copyY := *ms.x, *ms.y
+	var copyX, copyY big.Int
+	copyX.Set(ms.x)
+	copyY.Set(ms.y)
 	return &copyX, &copyY
 }
 
