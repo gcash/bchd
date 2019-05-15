@@ -143,10 +143,10 @@ type Params struct {
 	UahfForkHeight              int32 // August 1, 2017 hard fork
 	DaaForkHeight               int32 // November 13, 2017 hard fork
 	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
+	GreatWallForkHeight         int32 // May 15, 2019 hard fork
 
 	// Planned hardforks
-	GreatWallActivationTime uint64 // May 15, 2019 hard fork
-	GravitonActivationTime  uint64 // Nov 15, 2019 hard fork
+	GravitonActivationTime uint64 // Nov 15, 2019 hard fork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -256,9 +256,9 @@ var MainNetParams = Params{
 	UahfForkHeight:              478558, // 0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43
 	DaaForkHeight:               504031, // 0000000000000000011ebf65b60d0a3de80b8175be709d653b4c1a1beeb6ab9c
 	MagneticAnonomalyForkHeight: 556766, // 00000000000000000102d94fde9bd0807a2cc7582fe85dd6349b73ce4e8d9322
+	GreatWallForkHeight:         582679, // 0000000000000000018596bdfd350a9fbc7297a62a3f510b74565d992d63d2ef
 
-	GreatWallActivationTime: 1557921600,
-	GravitonActivationTime:  1573819200,
+	GravitonActivationTime: 1573819200,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -447,9 +447,9 @@ var TestNet3Params = Params{
 	UahfForkHeight:              1155875, // 00000000f17c850672894b9a75b63a1e72830bbd5f4c8889b5c1a80e7faef138
 	DaaForkHeight:               1188697, // 0000000000170ed0918077bde7b4d36cc4c91be69fa09211f748240dabe047fb
 	MagneticAnonomalyForkHeight: 1267996, // 00000000000001fae0095cd4bea16f1ce8ab63f3f660a03c6d8171485f484b24
+	GreatWallForkHeight:         1303884, // 00000000000001a749d7aa418c582a0e234ebc15643bf23a4f3107fa55120388
 
-	GreatWallActivationTime: 1557921600,
-	GravitonActivationTime:  1573819200,
+	GravitonActivationTime: 1573819200,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -539,7 +539,7 @@ var SimNetParams = Params{
 	UahfForkHeight:              0, // Always active on simnet
 	DaaForkHeight:               2000,
 	MagneticAnonomalyForkHeight: 3000,
-	GreatWallActivationTime:     0,
+	GreatWallForkHeight:         0,
 	CoinbaseMaturity:            100,
 	SubsidyReductionInterval:    210000,
 	TargetTimespan:              time.Hour * 24 * 14, // 14 days
