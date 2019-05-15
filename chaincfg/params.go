@@ -539,6 +539,7 @@ var SimNetParams = Params{
 	UahfForkHeight:              0, // Always active on simnet
 	DaaForkHeight:               2000,
 	MagneticAnonomalyForkHeight: 3000,
+	GreatWallActivationTime:     0,
 	CoinbaseMaturity:            100,
 	SubsidyReductionInterval:    210000,
 	TargetTimespan:              time.Hour * 24 * 14, // 14 days
