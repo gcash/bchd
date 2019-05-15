@@ -305,6 +305,16 @@ var MainNetParams = Params{
 				"https://ipfs.greyh.at/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
 			},
 		},
+		{
+			Height:      582680,
+			Hash:        newHashFromStr("000000000000000001b4b8e36aec7d4f9671a47872cb9a74dc16ca398c7dcc18"),
+			UtxoSetHash: newHashFromStr("2406189cf8e15140c2004d4e9aa012711f48183689a305223c9bafdd3af8887e"),
+			UtxoSetSize: 3178882199,
+			UtxoSetSources: []string{
+				"http://localhost:8080/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
+				"https://ipfs.greyh.at/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
+			},
+		},
 	},
 
 	// Consensus rule change deployments.
