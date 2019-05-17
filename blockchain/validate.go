@@ -1098,7 +1098,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If GreatWall hardfork is active then we must enforce the Schnorr and AllowSegitRecovery
 	// script flags.
-	greatWallActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.GreatWallActivationTime
+	greatWallActive := node.height > b.chainParams.GreatWallForkHeight
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
