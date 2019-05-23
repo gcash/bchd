@@ -2054,7 +2054,7 @@ func initDB(ldb *leveldb.DB) error {
 
 // openDB opens the database at the provided path.  database.ErrDbDoesNotExist
 // is returned if the database doesn't exist and the create flag is not set.
-func openDB(dbPath string, network wire.BitcoinNet, create bool) (database.DB, error) {
+func openDB(dbPath string, network wire.BitcoinNet, create bool, cacheSize uint64, flushSecs uint32) (database.DB, error) {
 	// Error if the database doesn't exist and the create flag is not set.
 	metadataDbPath := filepath.Join(dbPath, metadataDbName)
 	dbExists := fileExists(metadataDbPath)
@@ -2092,7 +2092,13 @@ func openDB(dbPath string, network wire.BitcoinNet, create bool) (database.DB, e
 	if err != nil {
 		return nil, err
 	}
-	cache := newDbCache(ldb, store, defaultCacheSize, defaultFlushSecs)
+	if cacheSize == 0 {
+		cacheSize = defaultCacheSize
+	}
+	if flushSecs == 0 {
+		flushSecs = defaultFlushSecs
+	}
+	cache := newDbCache(ldb, store, cacheSize, flushSecs)
 	pdb := &db{store: store, cache: cache}
 
 	// Perform any reconciliation needed between the block and metadata as

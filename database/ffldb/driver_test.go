@@ -37,8 +37,8 @@ func TestCreateOpenFail(t *testing.T) {
 	// Ensure that attempting to open a database with the wrong number of
 	// parameters returns the expected error.
 	wantErr := fmt.Errorf("invalid arguments to %s.Open -- expected "+
-		"database path and block network", dbType)
-	_, err = database.Open(dbType, 1, 2, 3)
+		"database path and block network with optional cache size and flush seconds", dbType)
+	_, err = database.Open(dbType, 1, 2, 3, 4, 5)
 	if err.Error() != wantErr.Error() {
 		t.Errorf("Open: did not receive expected error - got %v, "+
 			"want %v", err, wantErr)
@@ -70,8 +70,8 @@ func TestCreateOpenFail(t *testing.T) {
 	// Ensure that attempting to create a database with the wrong number of
 	// parameters returns the expected error.
 	wantErr = fmt.Errorf("invalid arguments to %s.Create -- expected "+
-		"database path and block network", dbType)
-	_, err = database.Create(dbType, 1, 2, 3)
+		"database path and block network with optional cache size and flush seconds", dbType)
+	_, err = database.Create(dbType, 1, 2, 3, 4, 5)
 	if err.Error() != wantErr.Error() {
 		t.Errorf("Create: did not receive expected error - got %v, "+
 			"want %v", err, wantErr)
