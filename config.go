@@ -67,6 +67,8 @@ const (
 	defaultPruneDepth              = 4320
 	defaultTargetOutboundPeers     = uint32(8)
 	minPruneDepth                  = 288
+	defaultDBCacheSize             = 500
+	defaultDBFlushSecs             = 1800
 )
 
 var (
@@ -184,6 +186,8 @@ type config struct {
 	FastSync                bool          `long:"fastsync" description:"Sync full blocks from the last checkpoint to the tip rather than from genesis."`
 	GrpcListeners           []string      `long:"grpclisten" description:"Add an interface/port to listen for experimental gRPC connections (default port: 8335, testnet: 18335)"`
 	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
+	DBCacheSize             uint64        `long:"dbcachesize" description:"The maximum size in MiB of the database cache"`
+	DBFlushInterval         uint32        `long:"dbflushinterval" description:"The number of seconds between database flushes"`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -454,6 +458,8 @@ func loadConfig() (*config, []string, error) {
 		AddrIndex:               defaultAddrIndex,
 		PruneDepth:              defaultPruneDepth,
 		TargetOutboundPeers:     defaultTargetOutboundPeers,
+		DBCacheSize:             defaultDBCacheSize,
+		DBFlushInterval:         defaultDBFlushSecs,
 	}
 
 	// Service options which are only added on Windows.
