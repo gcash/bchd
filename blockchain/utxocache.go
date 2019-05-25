@@ -470,12 +470,14 @@ func (s *utxoCache) Commit(view *UtxoViewpoint) error {
 		// the UTXO set, only to have a future block add it back. In that case it could
 		// be going from being marked spent to needing to be marked unspent so we handle
 		// that case by overriding here.
+		override := false
 		if ourEntry.IsSpent() && !entry.IsSpent() {
-			ourEntry = entry
+			ourEntry = entry.Clone()
+			override = true
 		}
 
 		// Store the entry we don't know.
-		if err := s.addEntry(outpoint, ourEntry, false); err != nil {
+		if err := s.addEntry(outpoint, ourEntry, override); err != nil {
 			return err
 		}
 	}
