@@ -1304,6 +1304,9 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 		if err != nil {
 			return status.Error(codes.Internal, "error marshaling chainhash")
 		}
+		if ch.IsEqual(&chainhash.Hash{}) { // Coinbase txs don't have an input.
+			continue
+		}
 		if prevTx, ok := inputTxMap[*ch]; ok {
 			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
 			tx.Inputs[i].PreviousScript = prevTx.TxOut[in.Outpoint.Index].PkScript
