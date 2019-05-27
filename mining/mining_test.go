@@ -6,6 +6,9 @@ package mining
 
 import (
 	"container/heap"
+	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/txscript"
 	"math/rand"
 	"testing"
 
@@ -106,5 +109,25 @@ func TestTxFeePrioHeap(t *testing.T) {
 				highest.feePerKB, highest.priority)
 		}
 		highest = prioItem
+	}
+}
+
+// Test_createCoinbaseTx tests that the coinbase is padded to be over the minimum transaction size.
+func Test_createCoinbaseTx(t *testing.T) {
+	coinbaseScript, err := standardCoinbaseScript(584412, 123456789)
+	if err != nil {
+		t.Fatal(err)
+	}
+	miningAddr, err := bchutil.DecodeAddress("qr0ayr8hdlg6zl7kcn8mgc8cz04aczyw4567fpu8rl", &chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase, err := createCoinbaseTx(&chaincfg.MainNetParams, coinbaseScript[:len(coinbaseScript)-2], 584412, miningAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = blockchain.CheckTransactionSanity(coinbase, true, txscript.StandardVerifyFlags)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
