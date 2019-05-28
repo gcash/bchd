@@ -54,7 +54,7 @@ const (
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	defaultExcessiveBlockSize      = 32000000
 	defaultBlockMinSize            = 0
-	defaultBlockMaxSize            = 750000
+	defaultBlockMaxSize            = 31999000
 	blockMaxSizeMin                = 1000
 	defaultGenerate                = false
 	defaultMaxOrphanTransactions   = 100
