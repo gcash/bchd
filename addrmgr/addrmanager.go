@@ -45,7 +45,7 @@ type AddrManager struct {
 	nTried         int
 	nNew           int
 	lamtx          sync.Mutex
-	localAddresses map[string]*localAddress
+	localAddresses map[string]*LocalAddress
 	version        int
 }
 
@@ -69,9 +69,10 @@ type serializedAddrManager struct {
 	TriedBuckets [triedBucketCount][]string
 }
 
-type localAddress struct {
-	na    *wire.NetAddress
-	score AddressPriority
+// LocalAddress holds a NetAddress with the addresses's priority.
+type LocalAddress struct {
+	NA    *wire.NetAddress
+	Score AddressPriority
 }
 
 // AddressPriority type is used to describe the hierarchy of local address
@@ -1004,13 +1005,13 @@ func (a *AddrManager) AddLocalAddress(na *wire.NetAddress, priority AddressPrior
 
 	key := NetAddressKey(na)
 	la, ok := a.localAddresses[key]
-	if !ok || la.score < priority {
+	if !ok || la.Score < priority {
 		if ok {
-			la.score = priority + 1
+			la.Score = priority + 1
 		} else {
-			a.localAddresses[key] = &localAddress{
-				na:    na,
-				score: priority,
+			a.localAddresses[key] = &LocalAddress{
+				NA:    na,
+				Score: priority,
 			}
 		}
 	}
@@ -1106,12 +1107,12 @@ func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddress) *wire.Net
 	var bestscore AddressPriority
 	var bestAddress *wire.NetAddress
 	for _, la := range a.localAddresses {
-		reach := getReachabilityFrom(la.na, remoteAddr)
+		reach := getReachabilityFrom(la.NA, remoteAddr)
 		if reach > bestreach ||
-			(reach == bestreach && la.score > bestscore) {
+			(reach == bestreach && la.Score > bestscore) {
 			bestreach = reach
-			bestscore = la.score
-			bestAddress = la.na
+			bestscore = la.Score
+			bestAddress = la.NA
 		}
 	}
 	if bestAddress != nil {
@@ -1135,6 +1136,15 @@ func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddress) *wire.Net
 	return bestAddress
 }
 
+// LocalAddresses returns the list of local addresses for our node.
+func (a *AddrManager) LocalAddresses() []*LocalAddress {
+	var addrs []*LocalAddress
+	for _, addr := range a.localAddresses {
+		addrs = append(addrs, addr)
+	}
+	return addrs
+}
+
 // New returns a new bitcoin address manager.
 // Use Start to begin processing asynchronous address updates.
 func New(dataDir string, lookupFunc func(string) ([]net.IP, error)) *AddrManager {
@@ -1143,7 +1153,7 @@ func New(dataDir string, lookupFunc func(string) ([]net.IP, error)) *AddrManager
 		lookupFunc:     lookupFunc,
 		rand:           rand.New(rand.NewSource(time.Now().UnixNano())),
 		quit:           make(chan struct{}),
-		localAddresses: make(map[string]*localAddress),
+		localAddresses: make(map[string]*LocalAddress),
 		version:        serialisationVersion,
 	}
 	am.reset()

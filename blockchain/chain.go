@@ -282,6 +282,15 @@ func (b *BlockChain) FastSyncDoneChan() <-chan struct{} {
 	return b.fastSyncDone
 }
 
+// GetWarnings returns a bool for whether unknownRules and unknownVersions
+// has been warned.
+func (b *BlockChain) GetWarnings() (bool, bool) {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	return b.unknownRulesWarned, b.unknownVersionsWarned
+}
+
 // AddHeader will add a new header to the tip of the index. This is primarily used
 // when syncing headers in fastsync mode.
 //
