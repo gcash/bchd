@@ -3358,6 +3358,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			Listeners:    rpcListeners,
 			StartupTime:  s.startupTime,
 			ConnMgr:      &rpcConnManager{&s},
+			AddrMgr:      amgr,
 			SyncMgr:      &rpcSyncMgr{&s, s.syncManager},
 			TimeSource:   s.timeSource,
 			Chain:        s.chain,
@@ -3370,6 +3371,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			AddrIndex:    s.addrIndex,
 			CfIndex:      s.cfIndex,
 			FeeEstimator: s.feeEstimator,
+			Services:     s.services,
 		})
 		if err != nil {
 			return nil, err
