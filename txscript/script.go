@@ -122,6 +122,17 @@ func ExtractDataElements(script []byte) ([][]byte, error) {
 	return dataElements, nil
 }
 
+// ExtractRedeemScript attempts to extract the redeem script from a signature
+// script. In practice this amount to just returning the last popped element
+// as we don't know for sure if it's a redeem script.
+func ExtractRedeemScript(script []byte) ([]byte, error) {
+	pops, err := parseScript(script)
+	if err != nil {
+		return nil, err
+	}
+	return pops[len(pops)-1].data, nil
+}
+
 // parseScriptTemplate is the same as parseScript but allows the passing of the
 // template list for testing purposes.  When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.

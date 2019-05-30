@@ -139,11 +139,11 @@ func (vm *Engine) hasFlag(flag ScriptFlags) bool {
 	return vm.flags.HasFlag(flag)
 }
 
-// isBranchExecuting returns whether or not the current conditional branch is
+// IsBranchExecuting returns whether or not the current conditional branch is
 // actively executing. For example, when the data stack has an OP_FALSE on it
 // and an OP_IF is encountered, the branch is inactive until an OP_ELSE or
 // OP_ENDIF is encountered.  It properly handles nested conditionals.
-func (vm *Engine) isBranchExecuting() bool {
+func (vm *Engine) IsBranchExecuting() bool {
 	if len(vm.condStack) == 0 {
 		return true
 	}
@@ -185,13 +185,13 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 
 	// Nothing left to do when this is not a conditional opcode and it is
 	// not in an executing branch.
-	if !vm.isBranchExecuting() && !pop.isConditional() {
+	if !vm.IsBranchExecuting() && !pop.isConditional() {
 		return nil
 	}
 
 	// Ensure all executed data push opcodes use the minimal encoding when
 	// the minimal data verification flag is set.
-	if vm.dstack.verifyMinimalData && vm.isBranchExecuting() &&
+	if vm.dstack.verifyMinimalData && vm.IsBranchExecuting() &&
 		pop.opcode.value >= 0 && pop.opcode.value <= OP_PUSHDATA4 {
 
 		if err := pop.checkMinimalDataPush(); err != nil {
@@ -761,6 +761,57 @@ func (vm *Engine) GetAltStack() [][]byte {
 // provided array where the last item in the array will be the top of the stack.
 func (vm *Engine) SetAltStack(data [][]byte) {
 	setStack(&vm.astack, data)
+}
+
+// Clone deep copies the state of the vm into a new instance
+// and returns it.
+func (vm *Engine) Clone() *Engine {
+	if vm == nil {
+		return nil
+	}
+	newVM := &Engine{
+		txIdx:       vm.txIdx,
+		scriptOff:   vm.scriptOff,
+		scriptIdx:   vm.scriptIdx,
+		numOps:      vm.numOps,
+		lastCodeSep: vm.lastCodeSep,
+		tx:          vm.tx,
+		bip16:       vm.bip16,
+		flags:       vm.flags,
+		inputAmount: vm.inputAmount,
+		sigCache:    vm.sigCache,
+		hashCache:   vm.hashCache,
+	}
+	newVM.savedFirstStack = make([][]byte, len(vm.savedFirstStack))
+	for i, stack := range vm.savedFirstStack {
+		newVM.savedFirstStack[i] = make([]byte, len(stack))
+		copy(newVM.savedFirstStack[i], stack)
+	}
+
+	newVM.condStack = make([]int, len(vm.condStack))
+	copy(newVM.condStack, vm.condStack)
+
+	newVM.scripts = make([][]parsedOpcode, len(vm.scripts))
+	for i, script := range vm.scripts {
+		newVM.scripts[i] = make([]parsedOpcode, len(script))
+		copy(newVM.scripts[i], script)
+	}
+
+	newVM.astack.verifyMinimalData = vm.astack.verifyMinimalData
+	newVM.astack.stk = make([][]byte, len(vm.astack.stk))
+	for i, data := range vm.astack.stk {
+		newVM.astack.stk[i] = make([]byte, len(data))
+		copy(newVM.astack.stk[i], data)
+	}
+
+	newVM.dstack.verifyMinimalData = vm.dstack.verifyMinimalData
+	newVM.dstack.stk = make([][]byte, len(vm.dstack.stk))
+	for i, data := range vm.dstack.stk {
+		newVM.dstack.stk[i] = make([]byte, len(data))
+		copy(newVM.dstack.stk[i], data)
+	}
+
+	return newVM
 }
 
 // NewEngine returns a new script engine for the provided public key script,
