@@ -922,7 +922,7 @@ func popIfBool(vm *Engine) (bool, error) {
 // Conditional stack transformation: [...] -> [... OpCondValue]
 func opcodeIf(op *parsedOpcode, vm *Engine) error {
 	condVal := OpCondFalse
-	if vm.isBranchExecuting() {
+	if vm.IsBranchExecuting() {
 		ok, err := popIfBool(vm)
 		if err != nil {
 			return err
@@ -956,7 +956,7 @@ func opcodeIf(op *parsedOpcode, vm *Engine) error {
 // Conditional stack transformation: [...] -> [... OpCondValue]
 func opcodeNotIf(op *parsedOpcode, vm *Engine) error {
 	condVal := OpCondFalse
-	if vm.isBranchExecuting() {
+	if vm.IsBranchExecuting() {
 		ok, err := popIfBool(vm)
 		if err != nil {
 			return err
