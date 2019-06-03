@@ -38,7 +38,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 		rpcCfg.Server = server
 
 		handler := func(resp http.ResponseWriter, req *http.Request) {
-			if wrappedGrpc.IsGrpcWebRequest(req) {
+			if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
 				wrappedGrpc.ServeHTTP(resp, req)
 			} else {
 				server.ServeHTTP(resp, req)
