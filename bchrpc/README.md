@@ -35,8 +35,8 @@ In short, gRPC moves the interaction between frontend code and the server from t
 $ bchd --grpclisten=<your_interface>
 ```
 
-## Serving bchrpc API through an NGINX reverse proxy
-For various reasons, like load balancing, ssl handling, etc. It might be handy to serve the bchrpc API thourgh a reverse proxy. Here we provide 
+## Serving bchrpc API through an NGINX reverse proxy (optional)
+For various reasons, like load balancing, ssl handling, etc. It might be handy to serve the bchrpc API thourgh a reverse proxy, although not necessary. Here we provide a sample config for NGINX.
 
 ### Upstream
 With load balancing
