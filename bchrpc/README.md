@@ -40,7 +40,8 @@ For various reasons, like load balancing, ssl handling, etc. It might be handy t
 
 ### Upstream
 With load balancing
-```upstream bchrpc {
+```
+upstream bchrpc {
     ip_hash; # Session persistence: make same client always connect to same server
     server bchd01.bitcoin.cash:8335;
     server bchd02.bitcoin.cash:8335;
@@ -48,7 +49,8 @@ With load balancing
 ```
 
 Without load balancing
-```upstream bchrpc {
+```
+upstream bchrpc {
     server bchd01.bitcoin.cash:8335;
 }
 ```
