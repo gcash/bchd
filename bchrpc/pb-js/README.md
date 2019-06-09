@@ -1,5 +1,6 @@
 # JavaScript / TypeScript bchrp libs 
 ## Protoc - [grpc-web](https://github.com/improbable-eng/grpc-web)
+
 ```
 protoc \
   --plugin=protoc-gen-ts=../node_modules/.bin/protoc-gen-ts \
@@ -8,7 +9,8 @@ protoc \
   ./bchrpc.proto
 ```
 
-#Dependencies
+## Dependencies
+
 ```
 > yarn add ts-protoc-gen
 > yarn add @improbable-eng/grpc-web
