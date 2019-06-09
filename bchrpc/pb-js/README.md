@@ -1,6 +1,6 @@
 # JavaScript / TypeScript bchrp libs 
 ## Protoc - [grpc-web](https://github.com/improbable-eng/grpc-web)
-The provide libs are generated with the following `protoc` command:
+The provided libs are generated with the following `protoc` command:
 
 ```
 protoc \
