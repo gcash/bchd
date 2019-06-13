@@ -146,7 +146,7 @@ func verifySchnorr(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool 
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
 	fieldR := new(fieldVal).SetByteSlice(r.Bytes())
-	return rx.Equals(rz.Square().Mul(fieldR))
+	return rx.Normalize().Equals(rz.Square().Mul(fieldR).Normalize())
 }
 
 // IsEqual compares this Signature instance to the one passed, returning true
