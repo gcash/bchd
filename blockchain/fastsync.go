@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,12 +21,12 @@ import (
 	"golang.org/x/text/message"
 )
 
-const numWorkers = 8
-
 // fastSyncUtxoSet will download the UTXO set from the sources provided in the checkpoint. Each
 // UTXO will be saved to the database and the ECMH hash of the UTXO set will be validated against
 // the checkpoint. If a proxyAddr is provided it will use that proxy for the HTTP connection.
 func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr string) error {
+	numWorkers := runtime.NumCPU() * 3
+
 	// If the UTXO set is already caught up with the last checkpoint then
 	// we can just close the done chan and exit.
 	if b.utxoCache.lastFlushHash.IsEqual(checkpoint.Hash) {
