@@ -115,6 +115,7 @@ func main() {
 ```
 
 ## Node.js
+
 ```javascript
 var PROTO_PATH = __dirname + '/bchrpc.proto';
 
@@ -146,5 +147,10 @@ client.GetMempoolInfo(pb.MempoolInfoRequest, function(error, resp) {
     }
 });
 ```
+If connecting to a node using a self signed cert you will need to use:
+```javascript
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
 
 TODO: Add examples in other languages
