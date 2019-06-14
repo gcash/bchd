@@ -71,8 +71,6 @@ service bchrpc {
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
     // Subscribe to relevant transactions based on the subscription requests.
-    // The parameters to filter transactions on can be updated by sending new
-    // SubscribeTransactionsRequest objects on the stream.
     //
     // This RPC does not use bi-directional streams and therefore can be used
     // with grpc-web. You will need to close and re-open the stream whenever
