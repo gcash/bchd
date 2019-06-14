@@ -23,6 +23,7 @@ by implementing a basic client that fetches the balance of the default account
 different languages:
 
 - [Go](#go)
+- [Node.js](#node.js)
 
 Unless otherwise stated under the language example, it is assumed that
 gRPC is already already installed.  The gRPC installation procedure
@@ -111,6 +112,39 @@ func main() {
 
 	fmt.Println("Blockchain Height: ", blockchainInfoResp.BestHeight)
 }
+```
+
+## Node.js
+```javascript
+var PROTO_PATH = __dirname + '/bchrpc.proto';
+
+var grpc = require('@grpc/grpc-js');
+var protoLoader = require('@grpc/proto-loader');
+var packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+    {
+        keepCase: true,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true
+    });
+
+var pb = grpc.loadPackageDefinition(packageDefinition).pb;
+var client = new pb.bchrpc('bchd.greyh.at:8335', grpc.credentials.createSsl());
+
+
+// Get current state of the mempool
+client.GetMempoolInfo(pb.MempoolInfoRequest, function(error, resp) {
+    if (error) {
+        console.log("Error: " + error.code + ": " + error.message)
+        console.log(error)
+    } else {
+    var mempool = resp
+    console.log("\nGetMempoolInfo:")
+    console.log(mempool)
+    }
+});
 ```
 
 TODO: Add examples in other languages
