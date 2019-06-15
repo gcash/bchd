@@ -1,5 +1,8 @@
 // Example use of BCHD's gRPC bchrpc with nodejs. 
 
+// If connecting to a node using a self signed cert you will need to use:
+// export NODE_TLS_REJECT_UNAUTHORIZED=0
+
 var PROTO_PATH = __dirname + '/bchrpc.proto';
 
 var grpc = require('@grpc/grpc-js');

@@ -14,6 +14,12 @@ npm install @grpc/proto-loader
 wget https://raw.githubusercontent.com/gcash/bchd/master/bchrpc/bchrpc.proto
 ```
 
+If connecting to a node using a self signed cert you will need to use:
+
+```
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
 ## Examples
 
 The example code will show you how to:
