@@ -2511,7 +2511,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			}
 
 			if vm.hasFlag(ScriptVerifySchnorr) && len(signature) == 64 {
-				return scriptError(ErrSigInvalidDataLen, "CHECKMULTISIG cannot contain 64 byte signatures")
+				return scriptError(ErrSigInvalidDataLen, "Signature cannot be 65 bytes in CHECKMULTISIG")
 			}
 
 			// Parse the signature.
