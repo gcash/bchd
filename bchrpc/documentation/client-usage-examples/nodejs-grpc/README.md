@@ -18,10 +18,10 @@ wget https://raw.githubusercontent.com/gcash/bchd/master/bchrpc/bchrpc.proto
 
 The example code will show you how to:
 
-* How to get the mempool state with a simple `GetMempoolInfo` request
-* How to convert a tx hash string to bin and change the edianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
-* How to define a `TransactionFilter`
-* How to setup a live transaction stream with `SubscribeTransactions`
+* Get the mempool state with a simple `GetMempoolInfo` request
+* Convert a tx hash string to bin and change the edianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
+* Define a `TransactionFilter`
+* Setup a live transaction stream with `SubscribeTransactions`
 
 ### Example code
 
