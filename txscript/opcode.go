@@ -1459,7 +1459,7 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
-	a, err := vm.dstack.PopInt()
+	a, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
 	}
@@ -1471,7 +1471,7 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 			fmt.Sprintf("n is larger than the max of %d", defaultScriptNumLen))
 	}
 
-	b := a.Bytes()
+	b := minimallyEncode(a)
 	if len(b) > size {
 		return scriptError(ErrNumberTooSmall, "cannot fit it into n sized array")
 	}
