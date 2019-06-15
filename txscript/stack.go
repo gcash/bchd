@@ -93,10 +93,13 @@ func (s *stack) PopInt() (scriptNum, error) {
 // returns it.
 //
 // Stack transformation: [... x1 x2 x3] -> [... x1 x2]
-func (s *stack) PopBool() (bool, error) {
+func (s *stack) PopBool(requireMinimalIf bool) (bool, error) {
 	so, err := s.PopByteArray()
 	if err != nil {
 		return false, err
+	}
+	if requireMinimalIf && (len(so) > 1 || len(so) == 1 && so[0] != 0x01) {
+		return false, scriptError(ErrMinimalIf, "not minimal if encoding")
 	}
 
 	return asBool(so), nil

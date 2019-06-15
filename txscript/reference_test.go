@@ -50,6 +50,18 @@ func scriptTestName(test []interface{}) (string, error) {
 	return name, nil
 }
 
+func scriptTestAmount(test []interface{}) (bchutil.Amount, error) {
+	iAmounts, ok := test[0].([]interface{})
+	if !ok {
+		return bchutil.Amount(0), errors.New("test index 0 is not type []interface")
+	}
+	amount, ok := iAmounts[0].(float64)
+	if !ok {
+		return bchutil.Amount(0), errors.New("test index 0 is not type []float64")
+	}
+	return bchutil.Amount(amount * 100000000), nil
+}
+
 // parse hex string into a []byte.
 func parseHex(tok string) ([]byte, error) {
 	if !strings.HasPrefix(tok, "0x") {
@@ -171,6 +183,16 @@ func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 			flags |= ScriptVerifyStrictEncoding
 		case "CHECKDATASIG":
 			flags |= ScriptVerifyCheckDataSig
+		case "SCHNORR":
+			flags |= ScriptVerifySchnorr
+		case "MINIMALIF":
+			flags |= ScriptVerifyMinimalIf
+		case "SIGHASH_FORKID":
+			flags |= ScriptVerifyBip143SigHash
+		case "ALLOWSEGWITRECOVERY":
+			flags |= ScriptVerifyAllowSegwitRecovery
+		case "COMPRESSED_PUBKEYTYPE":
+			flags |= ScriptVerifyCompressedPubkey
 		default:
 			return flags, fmt.Errorf("invalid flag: %s", flag)
 		}
@@ -185,11 +207,11 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 	switch expected {
 	case "OK":
 		return nil, nil
-	case "UNKNOWN_ERROR":
+	case "UNKNOWN_ERROR", "OPERAND_SIZE":
 		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall, ErrMinimalData, ErrInvalidInputLength}, nil
-	case "PUBKEYTYPE":
+	case "PUBKEYTYPE", "NONCOMPRESSED_PUBKEY":
 		return []ErrorCode{ErrPubKeyType}, nil
-	case "SIG_DER":
+	case "SIG_DER", "SIG_BADLENGTH", "MISSING_FORKID":
 		return []ErrorCode{ErrSigTooShort, ErrSigTooLong,
 			ErrSigInvalidSeqID, ErrSigInvalidDataLen, ErrSigMissingSTypeID,
 			ErrSigMissingSLen, ErrSigInvalidSLen,
@@ -197,8 +219,10 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 			ErrSigTooMuchRPadding, ErrSigInvalidSIntID,
 			ErrSigZeroSLen, ErrSigNegativeS, ErrSigTooMuchSPadding,
 			ErrInvalidSigHashType}, nil
+	case "ILLEGAL_FORKID":
+		return []ErrorCode{ErrInvalidSigHashType}, nil
 	case "EVAL_FALSE":
-		return []ErrorCode{ErrEvalFalse, ErrEmptyStack}, nil
+		return []ErrorCode{ErrEvalFalse, ErrEmptyStack, ErrCleanStack}, nil
 	case "EQUALVERIFY":
 		return []ErrorCode{ErrEqualVerify}, nil
 	case "NULLFAIL":
@@ -223,13 +247,13 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 	case "VERIFY":
 		return []ErrorCode{ErrVerify}, nil
 	case "INVALID_STACK_OPERATION", "INVALID_ALTSTACK_OPERATION":
-		return []ErrorCode{ErrInvalidStackOperation}, nil
+		return []ErrorCode{ErrInvalidStackOperation, ErrDisabledOpcode}, nil
 	case "DISABLED_OPCODE":
 		return []ErrorCode{ErrDisabledOpcode}, nil
 	case "DISCOURAGE_UPGRADABLE_NOPS":
 		return []ErrorCode{ErrDiscourageUpgradableNOPs}, nil
-	case "PUSH_SIZE":
-		return []ErrorCode{ErrElementTooBig}, nil
+	case "PUSH_SIZE", "IMPOSSIBLE_ENCODING", "INVALID_NUMBER_RANGE", "DIV_BY_ZERO", "MOD_BY_ZERO":
+		return []ErrorCode{ErrElementTooBig, ErrNumberTooBig, ErrNumberTooSmall}, nil
 	case "OP_COUNT":
 		return []ErrorCode{ErrTooManyOperations}, nil
 	case "STACK_SIZE":
@@ -242,14 +266,20 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 		return []ErrorCode{ErrInvalidPubKeyCount}, nil
 	case "SIG_COUNT":
 		return []ErrorCode{ErrInvalidSignatureCount}, nil
-	case "MINIMALDATA":
-		return []ErrorCode{ErrMinimalData}, nil
+	case "MINIMALDATA", "MINIMALIF":
+		return []ErrorCode{ErrMinimalData, ErrMinimalIf}, nil
 	case "NEGATIVE_LOCKTIME":
 		return []ErrorCode{ErrNegativeLockTime}, nil
 	case "UNSATISFIED_LOCKTIME":
 		return []ErrorCode{ErrUnsatisfiedLockTime}, nil
 	case "CHECKDATASIGVERIFY":
 		return []ErrorCode{ErrCheckDataSigVerify}, nil
+	case "CHECKSIGVERIFY":
+		return []ErrorCode{ErrCheckSigVerify}, nil
+	case "CHECKMULTISIGVERIFY":
+		return []ErrorCode{ErrCheckMultiSigVerify}, nil
+	case "SPLIT_RANGE":
+		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall}, nil
 	}
 
 	return nil, fmt.Errorf("unrecognized expected result in test data: %v",
@@ -308,6 +338,18 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 			continue
 		}
 
+		var inputAmt bchutil.Amount
+
+		if len(test) == 6 {
+			var err error
+			inputAmt, err = scriptTestAmount(test)
+			if err != nil {
+				t.Errorf("TestScripts: invalid test #%d: %v", i, err)
+				continue
+			}
+			test = test[1:]
+		}
+
 		// Construct a name for the test based on the comment and test
 		// data.
 		name, err := scriptTestName(test)
@@ -315,8 +357,6 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 			t.Errorf("TestScripts: invalid test #%d: %v", i, err)
 			continue
 		}
-
-		var inputAmt bchutil.Amount
 
 		// Extract and parse the signature script from the test fields.
 		scriptSigStr, ok := test[0].(string)

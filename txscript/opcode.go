@@ -902,7 +902,7 @@ func opcodeNop(op *parsedOpcode, vm *Engine) error {
 
 // popIfBool pops the top item off the stack and returns a bool
 func popIfBool(vm *Engine) (bool, error) {
-	return vm.dstack.PopBool()
+	return vm.dstack.PopBool(vm.flags.HasFlag(ScriptVerifyMinimalIf))
 }
 
 // opcodeIf treats the top item on the data stack as a boolean and removes it.
@@ -1020,7 +1020,7 @@ func opcodeEndif(op *parsedOpcode, vm *Engine) error {
 // where the verification fails specifically due to the top item evaluating
 // to false, the returned error will use the passed error code.
 func abstractVerify(op *parsedOpcode, vm *Engine, c ErrorCode) error {
-	verified, err := vm.dstack.PopBool()
+	verified, err := vm.dstack.PopBool(false)
 	if err != nil {
 		return err
 	}
@@ -2508,6 +2508,10 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			}
 			if err := vm.checkSignatureEncoding(signature); err != nil {
 				return err
+			}
+
+			if vm.hasFlag(ScriptVerifySchnorr) && len(signature) == 64 {
+				return scriptError(ErrSigInvalidDataLen, "CHECKMULTISIG cannot contain 64 byte signatures")
 			}
 
 			// Parse the signature.
