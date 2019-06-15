@@ -38,5 +38,10 @@ The example code will show you how to:
 ```
 git clone https://github.com/gcash/bchd.git
 cd bchd/bchrpc/documentation/client-usage-examples/nodejs-grpc/
+wget https://raw.githubusercontent.com/gcash/bchd/master/bchrpc/bchrpc.proto
 node grpc.js
 ```
+
+## Tips
+
+* Use the bchrpc.proto service spec to guide you through the API. It contains all data-type definitions and RPC method descriptors.
