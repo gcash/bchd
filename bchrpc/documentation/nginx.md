@@ -23,6 +23,8 @@ upstream bchrpc {
 ### Location
 ```
 location / {
+        # https://nginx.org/en/docs/http/ngx_http_grpc_module.html
+        
         # Raise default timeout because blocks can take longer than 10 minutes (600 seconds) in between, 
         # this causes a timeout on SubscribeBlocks stream
         grpc_read_timeout       3600;
