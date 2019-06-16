@@ -223,3 +223,56 @@ func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, 
 
 	return scriptNum(result), nil
 }
+
+// minimallyEncode takes in a byte slice and returns a slice that contains a
+// minimally encoded version of the original.
+func minimallyEncode(data []byte) (ret []byte) {
+	if len(data) == 0 {
+		return []byte{}
+	}
+
+	// If the last byte is not 0x00 or 0x80, we are minimally encoded.
+	last := data[len(data)-1]
+	if last&0x7f > 0 {
+		ret = make([]byte, len(data))
+		copy(ret, data)
+		return
+	}
+
+	// If the script is one byte long, then we have a zero, which encodes as an
+	// empty array.
+	if len(data) == 1 {
+		return []byte{}
+	}
+
+	// If the next byte has it sign bit set, then we are minimaly encoded.
+	if data[len(data)-2]&0x80 > 0 {
+		ret = make([]byte, len(data))
+		copy(ret, data)
+		return
+	}
+
+	// We are not minimally encoded, we need to figure out how much to trim.
+	ret = make([]byte, len(data))
+	copy(ret, data)
+	for i := len(ret) - 1; i > 0; i-- {
+		// We found a non zero byte, time to encode.
+		if ret[i-1] != 0 {
+			if ret[i-1]&0x80 > 0 {
+				// We found a byte with it sign bit set so we need one more
+				// byte.
+				i++
+				ret[i] = last
+			} else {
+				// the sign bit is clear, we can use it.
+				ret[i-1] |= last
+			}
+
+			ret = ret[:i]
+			return
+		}
+	}
+
+	// If we the whole thing is zeros, then we have a zero.
+	return []byte{}
+}

@@ -271,3 +271,42 @@ func TestScriptNumInt32(t *testing.T) {
 		}
 	}
 }
+
+func Test_minimallyEncode(t *testing.T) {
+	tests := []struct {
+		data     []byte
+		expected []byte
+	}{
+		{
+			bytes.Repeat([]byte{0x00}, MaxScriptElementSize),
+			[]byte{},
+		},
+		{
+			[]byte{0x80},
+			[]byte{},
+		},
+		{
+			[]byte{0x00, 0x80},
+			[]byte{},
+		},
+		{
+			[]byte{0x01, 0x00},
+			[]byte{0x01},
+		},
+		{
+			[]byte{0x01, 0x80},
+			[]byte{0x81},
+		},
+	}
+
+	for i, test := range tests {
+		result := minimallyEncode(test.data)
+		if !bytes.Equal(result, test.expected) {
+			t.Errorf("Test %d: Expected %v, got %v", i, test.expected, result)
+		}
+
+		if checkMinimalDataEncoding(result) != nil {
+			t.Errorf("Test %d: Result not minimally encoded", i)
+		}
+	}
+}

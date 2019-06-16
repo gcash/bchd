@@ -64,6 +64,10 @@ const (
 	// push operator. This is both rules 3 and 4 of BIP0062.
 	ScriptVerifyMinimalData
 
+	// ScriptVerifyMinimalIf requires the argument of OP_IF/NOTIF to be exactly
+	// 0x01 or empty vector
+	ScriptVerifyMinimalIf
+
 	// ScriptVerifyNullFail defines that signatures must be empty if
 	// a CHECKSIG or CHECKMULTISIG operation fails.
 	ScriptVerifyNullFail
@@ -75,6 +79,10 @@ const (
 	// ScriptVerifyStrictEncoding defines that signature scripts and
 	// public keys must follow the strict encoding requirements.
 	ScriptVerifyStrictEncoding
+
+	// ScriptVerifyCompressedPubkey defines that public keys must be in the
+	// compressed format.
+	ScriptVerifyCompressedPubkey
 
 	// ScriptVerifyBip143SigHash defines that signature hashes should
 	// be calculated using the bip0143 signature hashing algorithm.
@@ -295,7 +303,7 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 			"stack empty at end of script execution")
 	}
 
-	v, err := vm.dstack.PopBool()
+	v, err := vm.dstack.PopBool(false)
 	if err != nil {
 		return err
 	}
@@ -462,20 +470,29 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 // checkPubKeyEncoding returns whether or not the passed public key adheres to
 // the strict encoding requirements if enabled.
 func (vm *Engine) checkPubKeyEncoding(pubKey []byte) error {
-	if !vm.hasFlag(ScriptVerifyStrictEncoding) {
-		return nil
+	if vm.hasFlag(ScriptVerifyStrictEncoding) {
+		if len(pubKey) == 33 && (pubKey[0] == 0x02 || pubKey[0] == 0x03) {
+			// Compressed
+			return nil
+		}
+
+		if vm.hasFlag(ScriptVerifyCompressedPubkey) {
+			return scriptError(ErrPubKeyType, "compressed public keys are required")
+		}
+
+		if len(pubKey) == 65 && pubKey[0] == 0x04 {
+			// Uncompressed
+			return nil
+		}
+
+		return scriptError(ErrPubKeyType, "unsupported public key type")
 	}
 
-	if len(pubKey) == 33 && (pubKey[0] == 0x02 || pubKey[0] == 0x03) {
-		// Compressed
-		return nil
-	}
-	if len(pubKey) == 65 && pubKey[0] == 0x04 {
-		// Uncompressed
-		return nil
+	if vm.hasFlag(ScriptVerifyCompressedPubkey) && (len(pubKey) != 33 || (pubKey[0] != 0x02 && pubKey[0] != 0x03)) {
+		return scriptError(ErrPubKeyType, "compressed public keys are required")
 	}
 
-	return scriptError(ErrPubKeyType, "unsupported public key type")
+	return nil
 }
 
 // checkSignatureEncoding returns whether or not the passed signature adheres to
