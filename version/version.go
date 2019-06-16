@@ -18,11 +18,11 @@ const semanticAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
 const (
 	AppMajor uint = 0
 	AppMinor uint = 14
-	AppPatch uint = 6
+	AppPatch uint = 7
 
 	// AppPreRelease MUST only contain characters from semanticAlphabet
 	// per the semantic versioning spec.
-	AppPreRelease = ""
+	AppPreRelease = "dev"
 )
 
 // appBuild is defined as a variable so it can be overridden during the build
