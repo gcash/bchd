@@ -787,6 +787,13 @@ func scanBlockFiles(dbPath string) (int, uint32, error) {
 			return filepath.SkipDir
 		}
 		if !info.IsDir() {
+			// Block files should always end in .fdb, skip any other
+			// files that may be present in this directory, for instance
+			// those pesky .DS_Store files from OS X!
+			if !strings.HasSuffix(info.Name(), ".fdb") {
+				return nil
+			}
+
 			fileName := strings.TrimSuffix(info.Name(), ".fdb")
 			fileNum, err := strconv.Atoi(fileName)
 			if err != nil {
