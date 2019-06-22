@@ -3,6 +3,13 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"io"
+	"math/big"
+	"net/http"
+	"strconv"
+	"sync"
+	"sync/atomic"
+
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -18,12 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"io"
-	"math/big"
-	"net/http"
-	"strconv"
-	"sync"
-	"sync/atomic"
 )
 
 var serviceMap = map[string]interface{}{
@@ -1265,6 +1266,60 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 	}
 }
 
+// SubscribeRawBlocks subscribes to notifications of new blocks being connected to the
+// blockchain or blocks being disconnected.
+func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, stream pb.Bchrpc_SubscribeRawBlocksServer) error {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	for {
+		select {
+		case event := <-subscription.Events():
+
+			switch event.(type) {
+			case *rpcEventBlockConnected:
+				// Search for all transactions.
+				block := event.(*rpcEventBlockConnected)
+
+				rawBlock, err := serializeBlock(block.Block)
+				if err != nil {
+					return status.Error(codes.Internal, "block serialization error")
+				}
+
+				toSend := &pb.RawBlockNotification{
+					Type:  pb.RawBlockNotification_CONNECTED,
+					Block: rawBlock,
+				}
+
+				if err := stream.Send(toSend); err != nil {
+					return err
+				}
+
+			case *rpcEventBlockDisconnected:
+				// Search for all transactions.
+				block := event.(*rpcEventBlockDisconnected)
+
+				rawBlock, err := serializeBlock(block.Block)
+				if err != nil {
+					return status.Error(codes.Internal, "block serialization error")
+				}
+
+				toSend := &pb.RawBlockNotification{
+					Type:  pb.RawBlockNotification_DISCONNECTED,
+					Block: rawBlock,
+				}
+
+				if err := stream.Send(toSend); err != nil {
+					return err
+				}
+			}
+
+		case <-stream.Context().Done():
+			return nil // client disconnected
+		}
+	}
+}
+
 func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, int32, *chainhash.Hash, error) {
 	// Look up the location of the transaction.
 	blockRegion, err := s.txIndex.TxBlockRegion(txHash)
@@ -1473,6 +1528,18 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 		return 0
 	}
 	return diff
+}
+
+func serializeBlock(block *bchutil.Block) (*pb.RawBlock, error) {
+
+	bytes, err := block.Bytes()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "block serialization error")
+	}
+
+	return &pb.RawBlock{
+		Block: bytes,
+	}, nil
 }
 
 func marshalBlockInfo(block *bchutil.Block, confirmations int32, params *chaincfg.Params) *pb.BlockInfo {

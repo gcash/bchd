@@ -94,6 +94,10 @@ service bchrpc {
     // or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
 
+    // Subscribe to raw block notifications of new blocks being connected to the blockchain
+    // or blocks being disconnected.
+    rpc SubscribeRawBlocks(SubscribeRawBlocksRequest) returns (stream RawBlockNotification) {}
+
 }
 
 
@@ -267,6 +271,8 @@ message SubscribeTransactionsRequest {
 
 message SubscribeBlocksRequest {}
 
+message SubscribeRawBlocksRequest {}
+
 
 // NOTIFICATIONS
 
@@ -278,6 +284,16 @@ message BlockNotification {
 
     Type type = 1;
     BlockInfo block = 2;
+}
+
+message RawBlockNotification {
+    enum Type {
+        CONNECTED = 0;
+        DISCONNECTED = 1;
+    }
+
+    Type type = 1;
+    RawBlock block = 2;
 }
 
 message TransactionNotification {
@@ -327,6 +343,10 @@ message Block {
 
     BlockInfo info = 1;
     repeated TransactionData transaction_data = 2;
+}
+
+message RawBlock {
+    bytes block = 1;
 }
 
 message Transaction {
