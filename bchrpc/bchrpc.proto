@@ -293,7 +293,7 @@ message RawBlockNotification {
     }
 
     Type type = 1;
-    RawBlock block = 2;
+    bytes block = 2;
 }
 
 message TransactionNotification {
@@ -343,10 +343,6 @@ message Block {
 
     BlockInfo info = 1;
     repeated TransactionData transaction_data = 2;
-}
-
-message RawBlock {
-    bytes block = 1;
 }
 
 message Transaction {

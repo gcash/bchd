@@ -1281,14 +1281,14 @@ func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, strea
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
 
-				rawBlock, err := serializeBlock(block.Block)
+				bytes, err := block.Block.Bytes()
 				if err != nil {
-					return err
+					return status.Error(codes.Internal, "block serialization error")
 				}
 
 				toSend := &pb.RawBlockNotification{
 					Type:  pb.RawBlockNotification_CONNECTED,
-					Block: rawBlock,
+					Block: bytes,
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1299,14 +1299,14 @@ func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, strea
 				// Search for all transactions.
 				block := event.(*rpcEventBlockDisconnected)
 
-				rawBlock, err := serializeBlock(block.Block)
+				bytes, err := block.Block.Bytes()
 				if err != nil {
-					return err
+					return status.Error(codes.Internal, "block serialization error")
 				}
 
 				toSend := &pb.RawBlockNotification{
 					Type:  pb.RawBlockNotification_DISCONNECTED,
-					Block: rawBlock,
+					Block: bytes,
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1528,17 +1528,6 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 		return 0
 	}
 	return diff
-}
-
-func serializeBlock(block *bchutil.Block) (*pb.RawBlock, error) {
-	bytes, err := block.Bytes()
-	if err != nil {
-		return nil, status.Error(codes.Internal, "block serialization error")
-	}
-
-	return &pb.RawBlock{
-		Block: bytes,
-	}, nil
 }
 
 func marshalBlockInfo(block *bchutil.Block, confirmations int32, params *chaincfg.Params) *pb.BlockInfo {
