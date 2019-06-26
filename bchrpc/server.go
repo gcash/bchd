@@ -1283,7 +1283,7 @@ func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, strea
 
 				rawBlock, err := serializeBlock(block.Block)
 				if err != nil {
-					return status.Error(codes.Internal, "block serialization error")
+					return err
 				}
 
 				toSend := &pb.RawBlockNotification{
@@ -1301,7 +1301,7 @@ func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, strea
 
 				rawBlock, err := serializeBlock(block.Block)
 				if err != nil {
-					return status.Error(codes.Internal, "block serialization error")
+					return err
 				}
 
 				toSend := &pb.RawBlockNotification{
@@ -1531,7 +1531,6 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 }
 
 func serializeBlock(block *bchutil.Block) (*pb.RawBlock, error) {
-
 	bytes, err := block.Bytes()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "block serialization error")
