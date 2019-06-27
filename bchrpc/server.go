@@ -1150,12 +1150,14 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 	defer subscription.Unsubscribe()
 
 	filter := newTxFilter()
-	var includeMempool, includeBlocks bool
+	var includeMempool, includeBlocks, serializeTx bool
 	for {
 		select {
 		case req := <-requests:
 			includeMempool = req.IncludeMempool
 			includeBlocks = req.IncludeInBlock
+			serializeTx = req.SerializeTx
+
 			// Update filter.
 			if err := filter.AddRPCFilter(req.GetSubscribe(), s.chainParams); err != nil {
 				return err
@@ -1178,25 +1180,40 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					continue
 				}
 
-				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
-				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-				if err == nil {
-					for i, in := range txDesc.Tx.MsgTx().TxIn {
-						stxo := view.LookupEntry(in.PreviousOutPoint)
-						if stxo != nil {
-							respTx.Inputs[i].Value = stxo.Amount()
-							respTx.Inputs[i].PreviousScript = stxo.PkScript()
+				toSend := &pb.TransactionNotification{}
 
-							_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
-							if err == nil && len(addrs) > 0 {
-								respTx.Inputs[i].Address = addrs[0].String()
+				// Serialize raw tx using Bitcoin protocol encoding
+				if serializeTx {
+					tx := txDesc.Tx
+					var buf bytes.Buffer
+					if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+						return status.Error(codes.Internal, "error serializing transaction")
+					}
+
+					toSend.Type = pb.TransactionNotification_UNCONFIRMED
+					toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
+						SerializedTransaction: buf.Bytes(),
+					}
+
+				} else {
+					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+					view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+					if err == nil {
+						for i, in := range txDesc.Tx.MsgTx().TxIn {
+							stxo := view.LookupEntry(in.PreviousOutPoint)
+							if stxo != nil {
+								respTx.Inputs[i].Value = stxo.Amount()
+								respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+								_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+								if err == nil && len(addrs) > 0 {
+									respTx.Inputs[i].Address = addrs[0].String()
+								}
 							}
 						}
 					}
-				}
-				toSend := &pb.TransactionNotification{
-					Type: pb.TransactionNotification_UNCONFIRMED,
-					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
+					toSend.Type = pb.TransactionNotification_UNCONFIRMED
+					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
 							AddedTime:        txDesc.Added.Unix(),
@@ -1205,7 +1222,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							AddedHeight:      txDesc.Height,
 							StartingPriority: txDesc.StartingPriority,
 						},
-					},
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1224,19 +1241,31 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 						continue
 					}
 
-					header := block.MsgBlock().Header
+					toSend := &pb.TransactionNotification{}
 
-					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
-					if s.txIndex != nil {
-						if err := s.setInputMetadata(respTx); err != nil {
-							return err
+					if serializeTx {
+						var buf bytes.Buffer
+						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+							return status.Error(codes.Internal, "error serializing transaction")
 						}
-					}
-					toSend := &pb.TransactionNotification{
-						Type: pb.TransactionNotification_CONFIRMED,
-						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
+						toSend.Type = pb.TransactionNotification_CONFIRMED
+						toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
+							SerializedTransaction: buf.Bytes(),
+						}
+
+					} else { //Marshal tx
+						header := block.MsgBlock().Header
+
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+						if s.txIndex != nil {
+							if err := s.setInputMetadata(respTx); err != nil {
+								return err
+							}
+						}
+						toSend.Type = pb.TransactionNotification_CONFIRMED
+						toSend.Transaction = &pb.TransactionNotification_ConfirmedTransaction{
 							ConfirmedTransaction: respTx,
-						},
+						}
 					}
 
 					if err := stream.Send(toSend); err != nil {
