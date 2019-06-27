@@ -94,10 +94,6 @@ service bchrpc {
     // or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
 
-    // Subscribe to raw block notifications of new blocks being connected to the blockchain
-    // or blocks being disconnected.
-    rpc SubscribeRawBlocks(SubscribeRawBlocksRequest) returns (stream RawBlockNotification) {}
-
 }
 
 
@@ -273,9 +269,11 @@ message SubscribeTransactionsRequest {
     bool serialize_tx = 5;
 }
 
-message SubscribeBlocksRequest {}
-
-message SubscribeRawBlocksRequest {}
+message SubscribeBlocksRequest {
+    // When this is true, blocks are serialized using bitcoin protocol encoding. 
+    // Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
+    bool serialize_block = 1;
+}
 
 
 // NOTIFICATIONS
@@ -287,17 +285,11 @@ message BlockNotification {
     }
 
     Type type = 1;
-    BlockInfo block = 2;
-}
-
-message RawBlockNotification {
-    enum Type {
-        CONNECTED = 0;
-        DISCONNECTED = 1;
+    oneof block {
+        BlockInfo marshaled_block = 2;
+        bytes serialized_block = 3;
     }
-
-    Type type = 1;
-    bytes block = 2;
+    
 }
 
 message TransactionNotification {

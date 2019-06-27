@@ -1195,7 +1195,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 						SerializedTransaction: buf.Bytes(),
 					}
 
-				} else {
+				} else { // Marshal tx
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 					view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
 					if err == nil {
@@ -1243,6 +1243,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 
 					toSend := &pb.TransactionNotification{}
 
+					// Serialize raw tx using Bitcoin protocol encoding
 					if serializeTx {
 						var buf bytes.Buffer
 						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
@@ -1286,6 +1287,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
+	serializeBlock := req.SerializeBlock
 	for {
 		select {
 		case event := <-subscription.Events():
@@ -1294,10 +1296,25 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 			case *rpcEventBlockConnected:
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
+				toSend := &pb.BlockNotification{}
 
-				toSend := &pb.BlockNotification{
-					Type:  pb.BlockNotification_CONNECTED,
-					Block: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+				// Serialize raw block using Bitcoin protocol encoding
+				if serializeBlock {
+					bytes, err := block.Block.Bytes()
+					if err != nil {
+						return status.Error(codes.Internal, "block serialization error")
+					}
+
+					toSend.Type = pb.BlockNotification_CONNECTED
+					toSend.Block = &pb.BlockNotification_SerializedBlock{
+						SerializedBlock: bytes,
+					}
+
+				} else { // Marshal block
+					toSend.Type = pb.BlockNotification_CONNECTED
+					toSend.Block = &pb.BlockNotification_MarshaledBlock{
+						MarshaledBlock: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1307,64 +1324,25 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 			case *rpcEventBlockDisconnected:
 				// Search for all transactions.
 				block := event.(*rpcEventBlockDisconnected)
+				toSend := &pb.BlockNotification{}
 
-				toSend := &pb.BlockNotification{
-					Type:  pb.BlockNotification_DISCONNECTED,
-					Block: marshalBlockInfo(block.Block, 0, s.chainParams),
-				}
+				// Serialize raw block using Bitcoin protocol encoding
+				if serializeBlock {
+					bytes, err := block.Block.Bytes()
+					if err != nil {
+						return status.Error(codes.Internal, "block serialization error")
+					}
 
-				if err := stream.Send(toSend); err != nil {
-					return err
-				}
-			}
+					toSend.Type = pb.BlockNotification_CONNECTED
+					toSend.Block = &pb.BlockNotification_SerializedBlock{
+						SerializedBlock: bytes,
+					}
 
-		case <-stream.Context().Done():
-			return nil // client disconnected
-		}
-	}
-}
-
-// SubscribeRawBlocks subscribes to notifications of new blocks being connected to the
-// blockchain or blocks being disconnected.
-func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, stream pb.Bchrpc_SubscribeRawBlocksServer) error {
-	subscription := s.subscribeEvents()
-	defer subscription.Unsubscribe()
-
-	for {
-		select {
-		case event := <-subscription.Events():
-
-			switch event.(type) {
-			case *rpcEventBlockConnected:
-				// Search for all transactions.
-				block := event.(*rpcEventBlockConnected)
-
-				bytes, err := block.Block.Bytes()
-				if err != nil {
-					return status.Error(codes.Internal, "block serialization error")
-				}
-
-				toSend := &pb.RawBlockNotification{
-					Type:  pb.RawBlockNotification_CONNECTED,
-					Block: bytes,
-				}
-
-				if err := stream.Send(toSend); err != nil {
-					return err
-				}
-
-			case *rpcEventBlockDisconnected:
-				// Search for all transactions.
-				block := event.(*rpcEventBlockDisconnected)
-
-				bytes, err := block.Block.Bytes()
-				if err != nil {
-					return status.Error(codes.Internal, "block serialization error")
-				}
-
-				toSend := &pb.RawBlockNotification{
-					Type:  pb.RawBlockNotification_DISCONNECTED,
-					Block: bytes,
+				} else { // Marshal block
+					toSend.Type = pb.BlockNotification_CONNECTED
+					toSend.Block = &pb.BlockNotification_MarshaledBlock{
+						MarshaledBlock: marshalBlockInfo(block.Block, 0, s.chainParams),
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
