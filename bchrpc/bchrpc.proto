@@ -268,7 +268,8 @@ message SubscribeTransactionsRequest {
     // This notification is sent in addition to any requested mempool notifications.
     bool include_in_block = 4;
 
-    // When this is true, transactions are serialized using bitcoin protocol encoding when sent over the wire.
+    // When this is true, transactions are serialized using bitcoin protocol encoding. 
+    // Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
     bool serialize_tx = 5;
 }
 
