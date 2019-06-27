@@ -3,6 +3,13 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"io"
+	"math/big"
+	"net/http"
+	"strconv"
+	"sync"
+	"sync/atomic"
+
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -18,12 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"io"
-	"math/big"
-	"net/http"
-	"strconv"
-	"sync"
-	"sync/atomic"
 )
 
 var serviceMap = map[string]interface{}{
@@ -1002,6 +1003,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 	}
 	includeMempool := req.IncludeMempool
 	includeBlocks := req.IncludeInBlock
+	serializeTx := req.SerializeTx
 	for {
 		select {
 
@@ -1018,25 +1020,41 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
 					continue
 				}
-				respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
-				view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-				if err == nil {
-					for i, in := range txDesc.Tx.MsgTx().TxIn {
-						stxo := view.LookupEntry(in.PreviousOutPoint)
-						if stxo != nil {
-							respTx.Inputs[i].Value = stxo.Amount()
-							respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-							_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
-							if err == nil && len(addrs) > 0 {
-								respTx.Inputs[i].Address = addrs[0].String()
+				toSend := &pb.TransactionNotification{}
+
+				// Serialize raw tx using Bitcoin protocol encoding
+				if serializeTx {
+					tx := txDesc.Tx
+					var buf bytes.Buffer
+					if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+						return status.Error(codes.Internal, "error serializing transaction")
+					}
+
+					toSend.Type = pb.TransactionNotification_UNCONFIRMED
+					toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
+						SerializedTransaction: buf.Bytes(),
+					}
+
+				} else { // Marshal tx
+					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+					view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+					if err == nil {
+						for i, in := range txDesc.Tx.MsgTx().TxIn {
+							stxo := view.LookupEntry(in.PreviousOutPoint)
+							if stxo != nil {
+								respTx.Inputs[i].Value = stxo.Amount()
+								respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+								_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+								if err == nil && len(addrs) > 0 {
+									respTx.Inputs[i].Address = addrs[0].String()
+								}
 							}
 						}
 					}
-				}
-				toSend := &pb.TransactionNotification{
-					Type: pb.TransactionNotification_UNCONFIRMED,
-					Transaction: &pb.TransactionNotification_UnconfirmedTransaction{
+					toSend.Type = pb.TransactionNotification_UNCONFIRMED
+					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
 							AddedTime:        txDesc.Added.Unix(),
@@ -1045,7 +1063,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							AddedHeight:      txDesc.Height,
 							StartingPriority: txDesc.StartingPriority,
 						},
-					},
+					}
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1064,19 +1082,31 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 						continue
 					}
 
-					header := block.MsgBlock().Header
+					toSend := &pb.TransactionNotification{}
 
-					respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
-					if s.txIndex != nil {
-						if err := s.setInputMetadata(respTx); err != nil {
-							return err
+					if serializeTx {
+						var buf bytes.Buffer
+						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+							return status.Error(codes.Internal, "error serializing transaction")
 						}
-					}
-					toSend := &pb.TransactionNotification{
-						Type: pb.TransactionNotification_CONFIRMED,
-						Transaction: &pb.TransactionNotification_ConfirmedTransaction{
+						toSend.Type = pb.TransactionNotification_CONFIRMED
+						toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
+							SerializedTransaction: buf.Bytes(),
+						}
+
+					} else { //Marshal tx
+						header := block.MsgBlock().Header
+
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+						if s.txIndex != nil {
+							if err := s.setInputMetadata(respTx); err != nil {
+								return err
+							}
+						}
+						toSend.Type = pb.TransactionNotification_CONFIRMED
+						toSend.Transaction = &pb.TransactionNotification_ConfirmedTransaction{
 							ConfirmedTransaction: respTx,
-						},
+						}
 					}
 
 					if err := stream.Send(toSend); err != nil {
@@ -1252,6 +1282,60 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				toSend := &pb.BlockNotification{
 					Type:  pb.BlockNotification_DISCONNECTED,
 					Block: marshalBlockInfo(block.Block, 0, s.chainParams),
+				}
+
+				if err := stream.Send(toSend); err != nil {
+					return err
+				}
+			}
+
+		case <-stream.Context().Done():
+			return nil // client disconnected
+		}
+	}
+}
+
+// SubscribeRawBlocks subscribes to notifications of new blocks being connected to the
+// blockchain or blocks being disconnected.
+func (s *GrpcServer) SubscribeRawBlocks(req *pb.SubscribeRawBlocksRequest, stream pb.Bchrpc_SubscribeRawBlocksServer) error {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	for {
+		select {
+		case event := <-subscription.Events():
+
+			switch event.(type) {
+			case *rpcEventBlockConnected:
+				// Search for all transactions.
+				block := event.(*rpcEventBlockConnected)
+
+				bytes, err := block.Block.Bytes()
+				if err != nil {
+					return status.Error(codes.Internal, "block serialization error")
+				}
+
+				toSend := &pb.RawBlockNotification{
+					Type:  pb.RawBlockNotification_CONNECTED,
+					Block: bytes,
+				}
+
+				if err := stream.Send(toSend); err != nil {
+					return err
+				}
+
+			case *rpcEventBlockDisconnected:
+				// Search for all transactions.
+				block := event.(*rpcEventBlockDisconnected)
+
+				bytes, err := block.Block.Bytes()
+				if err != nil {
+					return status.Error(codes.Internal, "block serialization error")
+				}
+
+				toSend := &pb.RawBlockNotification{
+					Type:  pb.RawBlockNotification_DISCONNECTED,
+					Block: bytes,
 				}
 
 				if err := stream.Send(toSend); err != nil {
