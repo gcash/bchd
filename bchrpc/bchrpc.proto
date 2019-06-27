@@ -94,6 +94,10 @@ service bchrpc {
     // or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
 
+    // Subscribe to raw block notifications of new blocks being connected to the blockchain
+    // or blocks being disconnected.
+    rpc SubscribeRawBlocks(SubscribeRawBlocksRequest) returns (stream RawBlockNotification) {}
+
 }
 
 
@@ -263,9 +267,14 @@ message SubscribeTransactionsRequest {
     // When this is true, transactions are included when they are confirmed.
     // This notification is sent in addition to any requested mempool notifications.
     bool include_in_block = 4;
+
+    // When this is true, transactions are serialized using bitcoin protocol encoding when sent over the wire.
+    bool serialize_tx = 5;
 }
 
 message SubscribeBlocksRequest {}
+
+message SubscribeRawBlocksRequest {}
 
 
 // NOTIFICATIONS
@@ -280,6 +289,16 @@ message BlockNotification {
     BlockInfo block = 2;
 }
 
+message RawBlockNotification {
+    enum Type {
+        CONNECTED = 0;
+        DISCONNECTED = 1;
+    }
+
+    Type type = 1;
+    bytes block = 2;
+}
+
 message TransactionNotification {
     enum Type {
         UNCONFIRMED = 0;
@@ -290,6 +309,7 @@ message TransactionNotification {
     oneof transaction {
         Transaction confirmed_transaction = 2;
         MempoolTransaction unconfirmed_transaction = 3;
+        bytes serialized_transaction = 4;
     }
 }
 
