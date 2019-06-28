@@ -983,6 +983,10 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	return resp, nil
 }
 
+func serializeTx(tx *rpcEventTxAccepted) *pb.TransactionNotification {
+
+}
+
 // SubscribeTransactions subscribes to relevant transactions based on the
 // subscription requests. The parameters to filter transactions on can be
 // updated by sending new SubscribeTransactionsRequest objects on the stream.
@@ -1022,6 +1026,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				}
 
 				toSend := &pb.TransactionNotification{}
+				toSend.Type = pb.TransactionNotification_UNCONFIRMED
 
 				// Serialize raw tx using Bitcoin protocol encoding
 				if serializeTx {
@@ -1031,7 +1036,6 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 						return status.Error(codes.Internal, "error serializing transaction")
 					}
 
-					toSend.Type = pb.TransactionNotification_UNCONFIRMED
 					toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
 						SerializedTransaction: buf.Bytes(),
 					}
@@ -1053,7 +1057,6 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							}
 						}
 					}
-					toSend.Type = pb.TransactionNotification_UNCONFIRMED
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
@@ -1083,13 +1086,13 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					}
 
 					toSend := &pb.TransactionNotification{}
+					toSend.Type = pb.TransactionNotification_CONFIRMED
 
 					if serializeTx {
 						var buf bytes.Buffer
 						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 							return status.Error(codes.Internal, "error serializing transaction")
 						}
-						toSend.Type = pb.TransactionNotification_CONFIRMED
 						toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
 							SerializedTransaction: buf.Bytes(),
 						}
@@ -1103,7 +1106,6 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 								return err
 							}
 						}
-						toSend.Type = pb.TransactionNotification_CONFIRMED
 						toSend.Transaction = &pb.TransactionNotification_ConfirmedTransaction{
 							ConfirmedTransaction: respTx,
 						}
@@ -1181,6 +1183,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				}
 
 				toSend := &pb.TransactionNotification{}
+				toSend.Type = pb.TransactionNotification_UNCONFIRMED
 
 				// Serialize raw tx using Bitcoin protocol encoding
 				if serializeTx {
@@ -1190,7 +1193,6 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 						return status.Error(codes.Internal, "error serializing transaction")
 					}
 
-					toSend.Type = pb.TransactionNotification_UNCONFIRMED
 					toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
 						SerializedTransaction: buf.Bytes(),
 					}
@@ -1212,7 +1214,6 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							}
 						}
 					}
-					toSend.Type = pb.TransactionNotification_UNCONFIRMED
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
@@ -1242,6 +1243,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					}
 
 					toSend := &pb.TransactionNotification{}
+					toSend.Type = pb.TransactionNotification_CONFIRMED
 
 					// Serialize raw tx using Bitcoin protocol encoding
 					if serializeTx {
@@ -1249,7 +1251,6 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 							return status.Error(codes.Internal, "error serializing transaction")
 						}
-						toSend.Type = pb.TransactionNotification_CONFIRMED
 						toSend.Transaction = &pb.TransactionNotification_SerializedTransaction{
 							SerializedTransaction: buf.Bytes(),
 						}
@@ -1263,7 +1264,6 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 								return err
 							}
 						}
-						toSend.Type = pb.TransactionNotification_CONFIRMED
 						toSend.Transaction = &pb.TransactionNotification_ConfirmedTransaction{
 							ConfirmedTransaction: respTx,
 						}
@@ -1297,6 +1297,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
 				toSend := &pb.BlockNotification{}
+				toSend.Type = pb.BlockNotification_CONNECTED
 
 				// Serialize raw block using Bitcoin protocol encoding
 				if serializeBlock {
@@ -1305,13 +1306,11 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 						return status.Error(codes.Internal, "block serialization error")
 					}
 
-					toSend.Type = pb.BlockNotification_CONNECTED
 					toSend.Block = &pb.BlockNotification_SerializedBlock{
 						SerializedBlock: bytes,
 					}
 
-				} else { // Marshal block
-					toSend.Type = pb.BlockNotification_CONNECTED
+				} else {
 					toSend.Block = &pb.BlockNotification_MarshaledBlock{
 						MarshaledBlock: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 					}
@@ -1325,6 +1324,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				// Search for all transactions.
 				block := event.(*rpcEventBlockDisconnected)
 				toSend := &pb.BlockNotification{}
+				toSend.Type = pb.BlockNotification_DISCONNECTED
 
 				// Serialize raw block using Bitcoin protocol encoding
 				if serializeBlock {
@@ -1333,13 +1333,11 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 						return status.Error(codes.Internal, "block serialization error")
 					}
 
-					toSend.Type = pb.BlockNotification_CONNECTED
 					toSend.Block = &pb.BlockNotification_SerializedBlock{
 						SerializedBlock: bytes,
 					}
 
-				} else { // Marshal block
-					toSend.Type = pb.BlockNotification_CONNECTED
+				} else {
 					toSend.Block = &pb.BlockNotification_MarshaledBlock{
 						MarshaledBlock: marshalBlockInfo(block.Block, 0, s.chainParams),
 					}
