@@ -983,10 +983,6 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	return resp, nil
 }
 
-func serializeTx(tx *rpcEventTxAccepted) *pb.TransactionNotification {
-
-}
-
 // SubscribeTransactions subscribes to relevant transactions based on the
 // subscription requests. The parameters to filter transactions on can be
 // updated by sending new SubscribeTransactionsRequest objects on the stream.
@@ -1040,23 +1036,20 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 						SerializedTransaction: buf.Bytes(),
 					}
 
-				} else { // Marshal tx
+				} else {
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
-					view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-					if err == nil {
-						for i, in := range txDesc.Tx.MsgTx().TxIn {
-							stxo := view.LookupEntry(in.PreviousOutPoint)
-							if stxo != nil {
-								respTx.Inputs[i].Value = stxo.Amount()
-								respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-								_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
-								if err == nil && len(addrs) > 0 {
-									respTx.Inputs[i].Address = addrs[0].String()
-								}
-							}
+					if s.txIndex != nil {
+						if err := s.setInputMetadata(respTx); err != nil {
+							return err
 						}
 					}
+
+					// view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+					// if err == nil {
+					// 	applyInputs(respTx, txDesc, view, s.chainParams)
+					// }
+
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
@@ -1097,7 +1090,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							SerializedTransaction: buf.Bytes(),
 						}
 
-					} else { //Marshal tx
+					} else {
 						header := block.MsgBlock().Header
 
 						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
@@ -1119,6 +1112,22 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 
 		case <-stream.Context().Done():
 			return nil // client disconnected
+		}
+	}
+}
+
+// applyInputs adds the inputs to a marshaled transaction.
+func applyInputs(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
+	for i, in := range txDesc.Tx.MsgTx().TxIn {
+		stxo := view.LookupEntry(in.PreviousOutPoint)
+		if stxo != nil {
+			respTx.Inputs[i].Value = stxo.Amount()
+			respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), chainParams)
+			if err == nil && len(addrs) > 0 {
+				respTx.Inputs[i].Address = addrs[0].String()
+			}
 		}
 	}
 }

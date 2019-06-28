@@ -1595,13 +1595,13 @@ func (m *SubmitTransactionResponse) GetHash() []byte {
 type SubscribeTransactionsRequest struct {
 	Subscribe   *TransactionFilter `protobuf:"bytes,1,opt,name=subscribe,proto3" json:"subscribe,omitempty"`
 	Unsubscribe *TransactionFilter `protobuf:"bytes,2,opt,name=unsubscribe,proto3" json:"unsubscribe,omitempty"`
-	// When this is true, new transactions coming in from the mempool are
+	// When include_mempool is true, new transactions coming in from the mempool are
 	// included apart from the ones confirmed in a block.
 	IncludeMempool bool `protobuf:"varint,3,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
-	// When this is true, transactions are included when they are confirmed.
+	// When include_in_block is true, transactions are included when they are confirmed.
 	// This notification is sent in addition to any requested mempool notifications.
 	IncludeInBlock bool `protobuf:"varint,4,opt,name=include_in_block,json=includeInBlock,proto3" json:"include_in_block,omitempty"`
-	// When this is true, transactions are serialized using bitcoin protocol encoding.
+	// When serialize_tx is true, transactions are serialized using bitcoin protocol encoding.
 	// Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
 	SerializeTx          bool     `protobuf:"varint,5,opt,name=serialize_tx,json=serializeTx,proto3" json:"serialize_tx,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -1670,7 +1670,7 @@ func (m *SubscribeTransactionsRequest) GetSerializeTx() bool {
 }
 
 type SubscribeBlocksRequest struct {
-	// When this is true, blocks are serialized using bitcoin protocol encoding.
+	// When serialize_block is true, blocks are serialized using bitcoin protocol encoding.
 	// Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
 	SerializeBlock       bool     `protobuf:"varint,1,opt,name=serialize_block,json=serializeBlock,proto3" json:"serialize_block,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
