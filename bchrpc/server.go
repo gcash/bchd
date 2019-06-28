@@ -1006,7 +1006,6 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 	serializeTx := req.SerializeTx
 	for {
 		select {
-
 		case event := <-subscription.Events():
 
 			switch event.(type) {
@@ -1024,11 +1023,9 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				toSend := &pb.TransactionNotification{}
 				toSend.Type = pb.TransactionNotification_UNCONFIRMED
 
-				// Serialize raw tx using Bitcoin protocol encoding
 				if serializeTx {
-					tx := txDesc.Tx
 					var buf bytes.Buffer
-					if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+					if err := txDesc.Tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 						return status.Error(codes.Internal, "error serializing transaction")
 					}
 
@@ -1039,16 +1036,9 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				} else {
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 
-					if s.txIndex != nil {
-						if err := s.setInputMetadata(respTx); err != nil {
-							return err
-						}
+					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
+						setInputMetadata(respTx, txDesc, view, s.chainParams)
 					}
-
-					// view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-					// if err == nil {
-					// 	applyInputs(respTx, txDesc, view, s.chainParams)
-					// }
 
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
@@ -1116,22 +1106,6 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 	}
 }
 
-// applyInputs adds the inputs to a marshaled transaction.
-func applyInputs(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
-	for i, in := range txDesc.Tx.MsgTx().TxIn {
-		stxo := view.LookupEntry(in.PreviousOutPoint)
-		if stxo != nil {
-			respTx.Inputs[i].Value = stxo.Amount()
-			respTx.Inputs[i].PreviousScript = stxo.PkScript()
-
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), chainParams)
-			if err == nil && len(addrs) > 0 {
-				respTx.Inputs[i].Address = addrs[0].String()
-			}
-		}
-	}
-}
-
 // SubscribeTransactionStream subscribes to relevant transactions based on
 // the subscription requests. The parameters to filter transactions on can
 // be updated by sending new SubscribeTransactionsRequest objects on the stream.
@@ -1194,11 +1168,9 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				toSend := &pb.TransactionNotification{}
 				toSend.Type = pb.TransactionNotification_UNCONFIRMED
 
-				// Serialize raw tx using Bitcoin protocol encoding
 				if serializeTx {
-					tx := txDesc.Tx
 					var buf bytes.Buffer
-					if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+					if err := txDesc.Tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 						return status.Error(codes.Internal, "error serializing transaction")
 					}
 
@@ -1206,23 +1178,13 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 						SerializedTransaction: buf.Bytes(),
 					}
 
-				} else { // Marshal tx
+				} else {
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
-					view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-					if err == nil {
-						for i, in := range txDesc.Tx.MsgTx().TxIn {
-							stxo := view.LookupEntry(in.PreviousOutPoint)
-							if stxo != nil {
-								respTx.Inputs[i].Value = stxo.Amount()
-								respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-								_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
-								if err == nil && len(addrs) > 0 {
-									respTx.Inputs[i].Address = addrs[0].String()
-								}
-							}
-						}
+					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
+						setInputMetadata(respTx, txDesc, view, s.chainParams)
 					}
+
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
 						UnconfirmedTransaction: &pb.MempoolTransaction{
 							Transaction:      respTx,
@@ -1308,7 +1270,6 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_CONNECTED
 
-				// Serialize raw block using Bitcoin protocol encoding
 				if serializeBlock {
 					bytes, err := block.Block.Bytes()
 					if err != nil {
@@ -1335,7 +1296,6 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_DISCONNECTED
 
-				// Serialize raw block using Bitcoin protocol encoding
 				if serializeBlock {
 					bytes, err := block.Block.Bytes()
 					if err != nil {
@@ -1640,6 +1600,24 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		respTx.Outputs = append(respTx.Outputs, out)
 	}
 	return respTx
+}
+
+// setInputMetadata will set the value, previous script, and address for each input in the mempool transaction
+// from blockchain data adjusted upon the contents of the transaction pool.
+// Used when no s.txIndex is available
+func setInputMetadata(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
+	for i, in := range txDesc.Tx.MsgTx().TxIn {
+		stxo := view.LookupEntry(in.PreviousOutPoint)
+		if stxo != nil {
+			respTx.Inputs[i].Value = stxo.Amount()
+			respTx.Inputs[i].PreviousScript = stxo.PkScript()
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), chainParams)
+			if err == nil && len(addrs) > 0 {
+				respTx.Inputs[i].Address = addrs[0].String()
+			}
+		}
+	}
 }
 
 // queueHandler manages a queue of empty interfaces, reading from in and
