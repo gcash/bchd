@@ -1216,7 +1216,6 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					toSend := &pb.TransactionNotification{}
 					toSend.Type = pb.TransactionNotification_CONFIRMED
 
-					// Serialize raw tx using Bitcoin protocol encoding
 					if serializeTx {
 						var buf bytes.Buffer
 						if err := tx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
@@ -1226,7 +1225,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							SerializedTransaction: buf.Bytes(),
 						}
 
-					} else { //Marshal tx
+					} else {
 						header := block.MsgBlock().Header
 
 						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
