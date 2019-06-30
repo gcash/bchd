@@ -1257,7 +1257,6 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
-	serializeBlock := req.SerializeBlock
 	for {
 		select {
 		case event := <-subscription.Events():
@@ -1265,23 +1264,78 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 			switch event.(type) {
 			case *rpcEventBlockConnected:
 				// Search for all transactions.
-				block := event.(*rpcEventBlockConnected)
+				block := event.(*rpcEventBlockConnected).Block
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_CONNECTED
 
-				if serializeBlock {
-					bytes, err := block.Block.Bytes()
+				if req.FullBlock && !req.SerializeBlock {
+					confirmations := s.chain.BestSnapshot().Height - block.Height() + 1
+					respBlock := &pb.BlockNotification_MarshaledBlock{
+						MarshaledBlock: &pb.Block{
+							Info: marshalBlockInfo(block, confirmations, s.chainParams),
+						},
+					}
+
+					var spentTxos []blockchain.SpentTxOut
+					var err error
+					if req.FullTransactions {
+						spentTxos, err = s.chain.FetchSpendJournal(block)
+						if err != nil {
+							return status.Error(codes.Internal, "error loading spend journal")
+						}
+					}
+
+					spendIdx := 0
+					for idx, tx := range block.Transactions() {
+						if req.FullTransactions {
+							header := block.MsgBlock().Header
+							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+
+							for i := range tx.MsgTx().TxIn {
+								if idx > 0 {
+									stxo := spentTxos[spendIdx]
+									respTx.Inputs[i].Value = stxo.Amount
+									respTx.Inputs[i].PreviousScript = stxo.PkScript
+
+									_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+									if err == nil && len(addrs) > 0 {
+										respTx.Inputs[i].Address = addrs[0].String()
+									}
+									spendIdx++
+								}
+							}
+
+							respBlock.MarshaledBlock.TransactionData = append(respBlock.MarshaledBlock.TransactionData, &pb.Block_TransactionData{
+								TxidsOrTxs: &pb.Block_TransactionData_Transaction{
+									Transaction: respTx,
+								},
+							})
+
+						} else {
+							respBlock.MarshaledBlock.TransactionData = append(respBlock.MarshaledBlock.TransactionData, &pb.Block_TransactionData{
+								TxidsOrTxs: &pb.Block_TransactionData_TransactionHash{
+									TransactionHash: tx.Hash().CloneBytes(),
+								},
+							})
+						}
+					}
+
+					toSend.Block = respBlock
+
+				} else {
+					toSend.Block = &pb.BlockNotification_BlockInfo{
+						BlockInfo: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					}
+				}
+
+				if req.SerializeBlock {
+					bytes, err := block.Bytes()
 					if err != nil {
 						return status.Error(codes.Internal, "block serialization error")
 					}
 
 					toSend.Block = &pb.BlockNotification_SerializedBlock{
 						SerializedBlock: bytes,
-					}
-
-				} else {
-					toSend.Block = &pb.BlockNotification_MarshaledBlock{
-						MarshaledBlock: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
 					}
 				}
 
@@ -1291,12 +1345,70 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 
 			case *rpcEventBlockDisconnected:
 				// Search for all transactions.
-				block := event.(*rpcEventBlockDisconnected)
+				block := event.(*rpcEventBlockDisconnected).Block
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_DISCONNECTED
 
-				if serializeBlock {
-					bytes, err := block.Block.Bytes()
+				if req.FullBlock && !req.SerializeBlock {
+					confirmations := s.chain.BestSnapshot().Height - block.Height() + 1
+					respBlock := &pb.BlockNotification_MarshaledBlock{
+						MarshaledBlock: &pb.Block{
+							Info: marshalBlockInfo(block, confirmations, s.chainParams),
+						},
+					}
+
+					var spentTxos []blockchain.SpentTxOut
+					var err error
+					if req.FullTransactions {
+						spentTxos, err = s.chain.FetchSpendJournal(block)
+						if err != nil {
+							return status.Error(codes.Internal, "error loading spend journal")
+						}
+					}
+
+					spendIdx := 0
+					for idx, tx := range block.Transactions() {
+						if req.FullTransactions {
+							header := block.MsgBlock().Header
+							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+							for i := range tx.MsgTx().TxIn {
+								if idx > 0 {
+									stxo := spentTxos[spendIdx]
+									respTx.Inputs[i].Value = stxo.Amount
+									respTx.Inputs[i].PreviousScript = stxo.PkScript
+
+									_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+									if err == nil && len(addrs) > 0 {
+										respTx.Inputs[i].Address = addrs[0].String()
+									}
+									spendIdx++
+								}
+							}
+
+							respBlock.MarshaledBlock.TransactionData = append(respBlock.MarshaledBlock.TransactionData, &pb.Block_TransactionData{
+								TxidsOrTxs: &pb.Block_TransactionData_Transaction{
+									Transaction: respTx,
+								},
+							})
+						} else {
+							respBlock.MarshaledBlock.TransactionData = append(respBlock.MarshaledBlock.TransactionData, &pb.Block_TransactionData{
+								TxidsOrTxs: &pb.Block_TransactionData_TransactionHash{
+									TransactionHash: tx.Hash().CloneBytes(),
+								},
+							})
+						}
+					}
+
+					toSend.Block = respBlock
+
+				} else {
+					toSend.Block = &pb.BlockNotification_BlockInfo{
+						BlockInfo: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					}
+				}
+
+				if req.SerializeBlock {
+					bytes, err := block.Bytes()
 					if err != nil {
 						return status.Error(codes.Internal, "block serialization error")
 					}
@@ -1305,10 +1417,6 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 						SerializedBlock: bytes,
 					}
 
-				} else {
-					toSend.Block = &pb.BlockNotification_MarshaledBlock{
-						MarshaledBlock: marshalBlockInfo(block.Block, 0, s.chainParams),
-					}
 				}
 
 				if err := stream.Send(toSend); err != nil {

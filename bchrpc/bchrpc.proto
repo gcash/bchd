@@ -269,10 +269,38 @@ message SubscribeTransactionsRequest {
     bool serialize_tx = 5;
 }
 
+
+// Options to define data structure to be sent by SubscribeBlock stream:
+//
+//  - BlockInfo (block metadata): `BlockInfo`
+//      - SubscribeBlocksRequest {}
+//
+//  - Marshaled Block (with transaction hashes): `Block`
+//      - SubscribeBlocksRequest {
+//            full_block = true
+//        }
+//  - Marshaled Block (with full transaction data): `Block`
+//      - SubscribeBlocksRequest {
+//            full_block = true
+//            full_transactions = true
+//        }
+//  - Serialized Block acccording to bitcoin protocol encoding: `bytes`
+//      - SubscribeBlocksRequest {
+//            serialize_block = true
+//        }
 message SubscribeBlocksRequest {
+
+    // When full_block is true, a complete marshaled block is sent. See `Block`.
+    // Default is false, block metadata is sent. See `BlockInfo`.
+    bool full_block = 1;
+
+    // When full_transactions is true, provide full transaction info for a marshaled block.
+    // Default is false, only the transaction hashes are included for a marshaled block. See `TransactionData`.
+    bool full_transactions = 2;
+
     // When serialize_block is true, blocks are serialized using bitcoin protocol encoding. 
     // Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
-    bool serialize_block = 1;
+    bool serialize_block = 3;
 }
 
 
@@ -286,10 +314,10 @@ message BlockNotification {
 
     Type type = 1;
     oneof block {
-        BlockInfo marshaled_block = 2;
+        BlockInfo block_info = 2;
         bytes serialized_block = 3;
+        Block marshaled_block = 4;
     }
-    
 }
 
 message TransactionNotification {
