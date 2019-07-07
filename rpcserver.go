@@ -1077,9 +1077,9 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		}
 	}
 
-	// When the verbosity value set to 0, simply return the serialized block
-	// as a hex-encoded string.
-	if *c.Verbosity == 0 {
+	// When the verbose flag isn't set, simply return the
+	// network-serialized block as a hex-encoded string.
+	if c.Verbose != nil && !*c.Verbose {
 		return hex.EncodeToString(blkBytes), nil
 	}
 
@@ -1133,9 +1133,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		NextHash:      nextHashString,
 	}
 
-	// If verbose level does not match 0 or 1
-	// we can consider it 2 (current bitcoin core behavior)
-	if *c.Verbosity == 1 {
+	if c.VerboseTx == nil || !*c.VerboseTx {
 		transactions := blk.Transactions()
 		txNames := make([]string, len(transactions))
 		for i, tx := range transactions {
