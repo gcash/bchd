@@ -1183,6 +1183,13 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		if err != nil {
 			return err
 		}
+
+		// Notify other peers that this block was accepted. Since it was
+		// originally seen as an orphan the accept message was never sent
+		// to downstream peers.
+		b.chainLock.Unlock()
+		b.sendNotification(NTBlockAccepted, block)
+		b.chainLock.Lock()
 	}
 
 	// Log the point where the chain forked and old and new best chain
