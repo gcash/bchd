@@ -142,15 +142,16 @@ func TestChainSvrCmds(t *testing.T) {
 		{
 			name: "getblock",
 			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("getblock", "123", 0)
+				return btcjson.NewCmd("getblock", "123")
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Uint32(0))
+				return btcjson.NewGetBlockCmd("123", nil, nil)
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",0],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123"],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Uint32(0),
+				Verbose:   btcjson.Bool(true),
+				VerboseTx: btcjson.Bool(false),
 			},
 		},
 		{
@@ -159,44 +160,32 @@ func TestChainSvrCmds(t *testing.T) {
 				// Intentionally use a source param that is
 				// more pointers than the destination to
 				// exercise that path.
-				verbosityPtr := btcjson.Uint32(1)
-				return btcjson.NewCmd("getblock", "123", &verbosityPtr)
+				verbosePtr := btcjson.Bool(true)
+				return btcjson.NewCmd("getblock", "123", &verbosePtr)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Uint32(1))
+				return btcjson.NewGetBlockCmd("123", btcjson.Bool(true), nil)
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",1],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",true],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Uint32(1),
+				Verbose:   btcjson.Bool(true),
+				VerboseTx: btcjson.Bool(false),
 			},
 		},
 		{
 			name: "getblock required optional2",
 			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("getblock", "123", 2)
+				return btcjson.NewCmd("getblock", "123", true, true)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Uint32(2))
+				return btcjson.NewGetBlockCmd("123", btcjson.Bool(true), btcjson.Bool(true))
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",2],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",true,true],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Uint32(2),
-			},
-		},
-		{
-			name: "getblock; default verbose level must be 1",
-			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("getblock", "123")
-			},
-			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", nil)
-			},
-			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123"],"id":1}`,
-			unmarshalled: &btcjson.GetBlockCmd{
-				Hash:      "123",
-				Verbosity: btcjson.Uint32(1),
+				Verbose:   btcjson.Bool(true),
+				VerboseTx: btcjson.Bool(true),
 			},
 		},
 		{
@@ -1103,7 +1092,7 @@ func TestChainSvrCmds(t *testing.T) {
 	for i, test := range tests {
 		// Marshal the command as created by the new static command
 		// creation function.
-		marshalled, err := btcjson.MarshalCmd(testID, test.staticCmd())
+		marshalled, err := btcjson.MarshalCmd("1.0", testID, test.staticCmd())
 		if err != nil {
 			t.Errorf("MarshalCmd #%d (%s) unexpected error: %v", i,
 				test.name, err)
@@ -1128,7 +1117,7 @@ func TestChainSvrCmds(t *testing.T) {
 
 		// Marshal the command as created by the generic new command
 		// creation function.
-		marshalled, err = btcjson.MarshalCmd(testID, cmd)
+		marshalled, err = btcjson.MarshalCmd("1.0", testID, cmd)
 		if err != nil {
 			t.Errorf("MarshalCmd #%d (%s) unexpected error: %v", i,
 				test.name, err)
