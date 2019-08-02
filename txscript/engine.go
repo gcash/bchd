@@ -356,7 +356,7 @@ func (vm *Engine) Step() (done bool, err error) {
 	// Prepare for next instruction.
 	if vm.scriptOff >= len(vm.scripts[vm.scriptIdx]) {
 		// Illegal to have an `if' that straddles two scripts.
-		if err == nil && len(vm.condStack) != 0 {
+		if len(vm.condStack) != 0 {
 			return false, scriptError(ErrUnbalancedConditional,
 				"end of script reached in conditional execution")
 		}

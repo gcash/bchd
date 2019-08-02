@@ -17,12 +17,14 @@ if [ ! -x "$(type -p golangci-lint)" ]; then
 fi
 
 # Automatic checks
-test -z "$(golangci-lint run --disable-all \
+test -z "$(env GO111MODULE=on golangci-lint run --disable-all \
 --enable=gofmt \
 --enable=golint \
 --enable=vet \
 --enable=gosimple \
 --enable=unconvert \
 --deadline=10m \
-| grep -v 'ALL_CAPS\|OP_' 2>&1 | tee /dev/stderr)"
-go test -tags rpctest ./...
+--exclude="OP_" \
+--exclude="ALL_CAPS" \
+2>&1 | tee /dev/stderr)"
+env GO111MODULE=on go test -tags rpctest ./...

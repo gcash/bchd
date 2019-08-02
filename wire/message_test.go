@@ -203,7 +203,7 @@ func TestReadMessageWireErrors(t *testing.T) {
 
 	// Wire encoded bytes for a message that exceeds max overall message
 	// length.
-	mpl := uint32(maxMessagePayload())
+	mpl := maxMessagePayload()
 	exceedMaxPayloadBytes := makeHeader(bchnet, "getaddr", mpl+1, 0)
 
 	// Wire encoded bytes for a command which is invalid utf-8.
