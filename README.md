@@ -51,7 +51,7 @@ go get github.com/gcash/bchd
 
 This will download the source code into your GOPATH and compile `bchd` and install it in your path.
 
-For developers if you wish to place the working directory outside your GOPATH you can do so with Go >1.12.7 as follows:
+For developers if you wish to place the working directory outside your GOPATH you can do so with Go >=1.12.x as follows:
 ```bash
 mkdir workspace
 cd workspace
