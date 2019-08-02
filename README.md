@@ -43,13 +43,23 @@ If you prefer to install from source do the following:
 - Install Go according to the installation instructions here:
   http://golang.org/doc/install
 
-- Run the following commands to obtain btcd, all dependencies, and install it:
+- Run the following commands to obtain bchd, all dependencies, and install it:
 
 ```bash
 go get github.com/gcash/bchd
 ```
 
-This will download and compile `bchd` and put it in your path.
+This will download the source code into your GOPATH and compile `bchd` and install it in your path.
+
+For developers if you wish to place the working directory outside your GOPATH you can do so with Go >1.12.7 as follows:
+```bash
+mkdir workspace
+cd workspace
+git clone https://github.com/gcash/bchd.git
+cd bchd
+go install (or build or run, etc)
+```
+Dependencies will be automatically installed to `$GOPATH/pkg/mod`.
 
 If you are a bchd contributor and would like to change the default config file (`bchd.conf`), make any changes to `sample-bchd.conf` and then run the following commands:
 
