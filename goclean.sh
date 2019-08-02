@@ -12,17 +12,17 @@
 set -ex
 
 # Make sure gometalinter is installed and $GOPATH/bin is in your path.
-if [ ! -x "$(type -p gometalinter.v2)" ]; then
+if [ ! -x "$(type -p golangci-lint)" ]; then
   exit 1
 fi
 
 # Automatic checks
-test -z "$(gometalinter.v2 --disable-all \
+test -z "$(golangci-lint run --disable-all \
 --enable=gofmt \
 --enable=golint \
 --enable=vet \
 --enable=gosimple \
 --enable=unconvert \
 --deadline=10m \
---vendor ./... | grep -v 'ALL_CAPS\|OP_' 2>&1 | tee /dev/stderr)"
+| grep -v 'ALL_CAPS\|OP_' 2>&1 | tee /dev/stderr)"
 go test -tags rpctest ./...
