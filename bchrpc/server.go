@@ -10,6 +10,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -824,8 +825,8 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	var (
 		utxos []*pb.UnspentOutput
-		txs []*wire.MsgTx
-		skip = 0
+		txs   []*wire.MsgTx
+		skip  = 0
 		fetch = 1000
 	)
 	for {
@@ -891,6 +892,63 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		Outputs: utxos,
 	}
 	return resp, nil
+}
+
+// Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOutputRequest) (*pb.GetUnspentOutputResponse, error) {
+	txnHash, err := chainhash.NewHash(req.Hash)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+	}
+	op := wire.NewOutPoint(txnHash, req.Index)
+	entry, err := s.chain.FetchUtxoEntry(*op)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		value        int64
+		blockHeight  int32
+		scriptPubkey []byte
+		coinbase     bool
+	)
+	if entry == nil && req.IncludeMempool { // Nil means not found in utxo set. Check mempool.
+		desc, err := s.txMemPool.FetchTxDesc(txnHash)
+		if err != nil {
+			return nil, status.Error(codes.NotFound, "utxo not found")
+		}
+		if req.Index > uint32(len(desc.Tx.MsgTx().TxOut)) {
+			return nil, status.Error(codes.InvalidArgument, "prev index greater than len outputs")
+		}
+		value = desc.Tx.MsgTx().TxOut[req.Index].Value
+		blockHeight = mining.UnminedHeight
+		scriptPubkey = desc.Tx.MsgTx().TxOut[req.Index].PkScript
+		coinbase = false
+	} else if entry == nil && !req.IncludeMempool {
+		return nil, status.Error(codes.NotFound, "utxo not found")
+	} else {
+		value = entry.Amount()
+		blockHeight = entry.BlockHeight()
+		scriptPubkey = entry.PkScript()
+		coinbase = entry.IsCoinBase()
+	}
+	if req.IncludeMempool {
+		spendingTx := s.txMemPool.CheckSpend(*op)
+		if spendingTx != nil {
+			return nil, status.Error(codes.NotFound, "utxo spent in mempool")
+		}
+	}
+
+	ret := &pb.GetUnspentOutputResponse{
+		Outpoint: &pb.Transaction_Input_Outpoint{
+			Hash:  txnHash[:],
+			Index: req.Index,
+		},
+		Value:        value,
+		PubkeyScript: scriptPubkey,
+		BlockHeight:  blockHeight,
+		IsCoinbase:   coinbase,
+	}
+	return ret, nil
 }
 
 // GetMerkleProof returns a merkle (SPV) proof that the given transaction is in the provided block.
