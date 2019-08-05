@@ -231,6 +231,7 @@ message GetRawAddressTransactionsResponse {
 
 message GetAddressUnspentOutputsRequest {
     string address = 1;
+    bool include_mempool = 2;
 }
 message GetAddressUnspentOutputsResponse {
     repeated UnspentOutput outputs = 1;

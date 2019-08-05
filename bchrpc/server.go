@@ -709,7 +709,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 
 	resp := &pb.GetAddressTransactionsResponse{}
 
@@ -724,6 +724,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
 	}
 
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		tx := marshalTransaction(uTx, 0, nil, 0, s.chainParams)
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
@@ -786,7 +787,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 
 	resp := &pb.GetRawAddressTransactionsResponse{}
 
@@ -794,6 +795,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, cTx.txBytes)
 	}
 
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		var buf bytes.Buffer
 		if err := uTx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
@@ -820,50 +822,71 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
-	var utxos []*pb.UnspentOutput
-	skip := 0
-	fetch := 1000
+	var (
+		utxos []*pb.UnspentOutput
+		txs []*wire.MsgTx
+		skip = 0
+		fetch = 1000
+	)
 	for {
-		confirmedTxs, _, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
+		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
 		if err != nil || len(confirmedTxs) == 0 {
 			break
 		}
 		for _, cTx := range confirmedTxs {
-			txHash := cTx.tx.TxHash()
-			utxoView, err := s.chain.FetchUtxoView(bchutil.NewTx(&cTx.tx))
-			if err != nil {
-				return nil, err
-			}
-			entries := utxoView.Entries()
-			for i, out := range cTx.tx.TxOut {
-				op := wire.NewOutPoint(&txHash, uint32(i))
-				entry := entries[*op]
-				if entry == nil || entry.IsSpent() {
-					continue
-				}
-
-				_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
-				if err != nil || len(addrs) == 0 {
-					continue
-				}
-
-				if addrs[0].EncodeAddress() == addr.EncodeAddress() {
-					utxo := &pb.UnspentOutput{
-						Outpoint: &pb.Transaction_Input_Outpoint{
-							Hash:  txHash.CloneBytes(),
-							Index: uint32(i),
-						},
-						Value:        entry.Amount(),
-						PubkeyScript: out.PkScript,
-						IsCoinbase:   entry.IsCoinBase(),
-						BlockHeight:  entry.BlockHeight(),
-					}
-					utxos = append(utxos, utxo)
-				}
-			}
+			txs = append(txs, &cTx.tx)
 		}
 		skip += len(confirmedTxs)
 	}
+	if req.IncludeMempool {
+		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+		for _, tx := range unconfirmedTxs {
+			txs = append(txs, tx.MsgTx())
+		}
+	}
+	for _, tx := range txs {
+		txHash := tx.TxHash()
+		var utxoView *blockchain.UtxoViewpoint
+		if req.IncludeMempool {
+			utxoView, err = s.txMemPool.FetchUtxoView(bchutil.NewTx(tx))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			utxoView, err = s.chain.FetchUtxoView(bchutil.NewTx(tx))
+			if err != nil {
+				return nil, err
+			}
+		}
+		entries := utxoView.Entries()
+		for i, out := range tx.TxOut {
+			op := wire.NewOutPoint(&txHash, uint32(i))
+			entry := entries[*op]
+			if entry == nil || entry.IsSpent() {
+				continue
+			}
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+			if err != nil || len(addrs) == 0 {
+				continue
+			}
+
+			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
+				utxo := &pb.UnspentOutput{
+					Outpoint: &pb.Transaction_Input_Outpoint{
+						Hash:  txHash.CloneBytes(),
+						Index: uint32(i),
+					},
+					Value:        entry.Amount(),
+					PubkeyScript: out.PkScript,
+					IsCoinbase:   entry.IsCoinBase(),
+					BlockHeight:  entry.BlockHeight(),
+				}
+				utxos = append(utxos, utxo)
+			}
+		}
+	}
+
 	resp := &pb.GetAddressUnspentOutputsResponse{
 		Outputs: utxos,
 	}
@@ -1360,7 +1383,7 @@ type retrievedTx struct {
 	blockHeight int32
 }
 
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, []*bchutil.Tx, error) {
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
@@ -1372,7 +1395,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 		}
 	}
 	if numRequested == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// Override the default number of entries to skip if needed.
@@ -1444,15 +1467,12 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			return nil
 		})
 		if err != nil {
-			return nil, nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
+			return nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
 		}
 
 	}
 
-	// Get mempool transactions
-	mpTxns := s.addrIndex.UnconfirmedTxnsForAddress(addr)
-
-	return addressTxns, mpTxns, nil
+	return addressTxns, nil
 }
 
 // getDifficultyRatio returns the proof-of-work difficulty as a multiple of the
