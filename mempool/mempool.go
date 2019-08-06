@@ -631,6 +631,48 @@ func (mp *TxPool) fetchInputUtxos(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, er
 	return utxoView, nil
 }
 
+// FetchUtxoView loads utxo details about the transactions inputs and outputs.
+// First, it loads the details form the viewpoint of the main chain, then it
+// adjusts them based upon the contents of the transaction pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	return mp.fetchUtxoView(tx)
+}
+
+// fetchUtxoView loads utxo details about the transactions inputs and outputs.
+// First, it loads the details form the viewpoint of the main chain, then it
+// adjusts them based upon the contents of the transaction pool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) fetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+	utxoView, err := mp.fetchInputUtxos(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	_, existsInPool := mp.pool[tx.MsgTx().TxHash()]
+
+	// Check to see if any of the outputs are spent in the pool.
+	for i := range tx.MsgTx().TxOut {
+		if existsInPool {
+			utxoView.AddTxOut(tx, uint32(i), mining.UnminedHeight)
+		}
+		prevOut := wire.OutPoint{Hash: tx.MsgTx().TxHash(), Index: uint32(i)}
+		if _, outpointExists := mp.outpoints[prevOut]; outpointExists {
+			entry := utxoView.LookupEntry(prevOut)
+			if entry != nil {
+				entry.Spend()
+			}
+		}
+	}
+
+	return utxoView, nil
+}
+
 // FetchTransaction returns the requested transaction from the transaction pool.
 // This only fetches from the main transaction pool and does not include
 // orphans.

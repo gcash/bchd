@@ -10,6 +10,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -709,7 +710,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 
 	resp := &pb.GetAddressTransactionsResponse{}
 
@@ -724,6 +725,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
 	}
 
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		tx := marshalTransaction(uTx, 0, nil, 0, s.chainParams)
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
@@ -786,7 +788,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 
 	resp := &pb.GetRawAddressTransactionsResponse{}
 
@@ -794,6 +796,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, cTx.txBytes)
 	}
 
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		var buf bytes.Buffer
 		if err := uTx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
@@ -820,52 +823,171 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
-	var utxos []*pb.UnspentOutput
-	skip := 0
-	fetch := 1000
+	var (
+		utxos []*pb.UnspentOutput
+		txs   []*wire.MsgTx
+		skip  = 0
+		fetch = 1000
+	)
 	for {
-		confirmedTxs, _, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
+		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
 		if err != nil || len(confirmedTxs) == 0 {
 			break
 		}
 		for _, cTx := range confirmedTxs {
-			txHash := cTx.tx.TxHash()
-			utxoView, err := s.chain.FetchUtxoView(bchutil.NewTx(&cTx.tx))
-			if err != nil {
-				return nil, err
-			}
-			entries := utxoView.Entries()
-			for i, out := range cTx.tx.TxOut {
-				op := wire.NewOutPoint(&txHash, uint32(i))
-				entry := entries[*op]
-				if entry == nil || entry.IsSpent() {
-					continue
-				}
-
-				_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
-				if err != nil || len(addrs) == 0 {
-					continue
-				}
-
-				if addrs[0].EncodeAddress() == addr.EncodeAddress() {
-					utxo := &pb.UnspentOutput{
-						Outpoint: &pb.Transaction_Input_Outpoint{
-							Hash:  txHash.CloneBytes(),
-							Index: uint32(i),
-						},
-						Value:        entry.Amount(),
-						PubkeyScript: out.PkScript,
-						IsCoinbase:   entry.IsCoinBase(),
-						BlockHeight:  entry.BlockHeight(),
-					}
-					utxos = append(utxos, utxo)
-				}
-			}
+			txs = append(txs, &cTx.tx)
 		}
 		skip += len(confirmedTxs)
 	}
+	if req.IncludeMempool {
+		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+		for _, tx := range unconfirmedTxs {
+			txs = append(txs, tx.MsgTx())
+		}
+	}
+	for _, tx := range txs {
+		txHash := tx.TxHash()
+		var utxoView *blockchain.UtxoViewpoint
+		if req.IncludeMempool {
+			utxoView, err = s.txMemPool.FetchUtxoView(bchutil.NewTx(tx))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			utxoView, err = s.chain.FetchUtxoView(bchutil.NewTx(tx))
+			if err != nil {
+				return nil, err
+			}
+		}
+		entries := utxoView.Entries()
+		for i, out := range tx.TxOut {
+			op := wire.NewOutPoint(&txHash, uint32(i))
+			entry := entries[*op]
+			if entry == nil || entry.IsSpent() {
+				continue
+			}
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+			if err != nil || len(addrs) == 0 {
+				continue
+			}
+
+			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
+				utxo := &pb.UnspentOutput{
+					Outpoint: &pb.Transaction_Input_Outpoint{
+						Hash:  txHash.CloneBytes(),
+						Index: uint32(i),
+					},
+					Value:        entry.Amount(),
+					PubkeyScript: out.PkScript,
+					IsCoinbase:   entry.IsCoinBase(),
+					BlockHeight:  entry.BlockHeight(),
+				}
+				utxos = append(utxos, utxo)
+			}
+		}
+	}
+
 	resp := &pb.GetAddressUnspentOutputsResponse{
 		Outputs: utxos,
+	}
+	return resp, nil
+}
+
+// Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOutputRequest) (*pb.GetUnspentOutputResponse, error) {
+	txnHash, err := chainhash.NewHash(req.Hash)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+	}
+	op := wire.NewOutPoint(txnHash, req.Index)
+	entry, err := s.chain.FetchUtxoEntry(*op)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		value        int64
+		blockHeight  int32
+		scriptPubkey []byte
+		coinbase     bool
+	)
+	if entry == nil && req.IncludeMempool { // Nil means not found in utxo set. Check mempool.
+		desc, err := s.txMemPool.FetchTxDesc(txnHash)
+		if err != nil {
+			return nil, status.Error(codes.NotFound, "utxo not found")
+		}
+		if req.Index > uint32(len(desc.Tx.MsgTx().TxOut)) {
+			return nil, status.Error(codes.InvalidArgument, "prev index greater than len outputs")
+		}
+		value = desc.Tx.MsgTx().TxOut[req.Index].Value
+		blockHeight = mining.UnminedHeight
+		scriptPubkey = desc.Tx.MsgTx().TxOut[req.Index].PkScript
+		coinbase = false
+	} else if entry == nil && !req.IncludeMempool {
+		return nil, status.Error(codes.NotFound, "utxo not found")
+	} else {
+		value = entry.Amount()
+		blockHeight = entry.BlockHeight()
+		scriptPubkey = entry.PkScript()
+		coinbase = entry.IsCoinBase()
+	}
+	if req.IncludeMempool {
+		spendingTx := s.txMemPool.CheckSpend(*op)
+		if spendingTx != nil {
+			return nil, status.Error(codes.NotFound, "utxo spent in mempool")
+		}
+	}
+
+	ret := &pb.GetUnspentOutputResponse{
+		Outpoint: &pb.Transaction_Input_Outpoint{
+			Hash:  txnHash[:],
+			Index: req.Index,
+		},
+		Value:        value,
+		PubkeyScript: scriptPubkey,
+		BlockHeight:  blockHeight,
+		IsCoinbase:   coinbase,
+	}
+	return ret, nil
+}
+
+// Returns information about all of the transactions currently in the memory pool.
+// Offers an option to return full transactions or just transactions hashes.
+func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) (*pb.GetMempoolResponse, error) {
+	rawMempool := s.txMemPool.MiningDescs()
+	resp := &pb.GetMempoolResponse{}
+	for _, txDesc := range rawMempool {
+		if req.FullTransactions {
+			respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+			stxos, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+			if err != nil {
+				continue
+			}
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				entry := stxos.LookupEntry(in.PreviousOutPoint)
+				if entry != nil {
+					respTx.Inputs[i].Value = entry.Amount()
+					respTx.Inputs[i].PreviousScript = entry.PkScript()
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(entry.PkScript(), s.chainParams)
+					if err == nil && len(addrs) > 0 {
+						respTx.Inputs[i].Address = addrs[0].String()
+					}
+				}
+			}
+
+			resp.TransactionData = append(resp.TransactionData, &pb.GetMempoolResponse_TransactionData{
+				TxidsOrTxs: &pb.GetMempoolResponse_TransactionData_Transaction{
+					Transaction: respTx,
+				},
+			})
+		} else {
+			resp.TransactionData = append(resp.TransactionData, &pb.GetMempoolResponse_TransactionData{
+				TxidsOrTxs: &pb.GetMempoolResponse_TransactionData_TransactionHash{
+					TransactionHash: txDesc.Tx.Hash().CloneBytes(),
+				},
+			})
+		}
 	}
 	return resp, nil
 }
@@ -1360,7 +1482,7 @@ type retrievedTx struct {
 	blockHeight int32
 }
 
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, []*bchutil.Tx, error) {
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
@@ -1372,7 +1494,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 		}
 	}
 	if numRequested == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// Override the default number of entries to skip if needed.
@@ -1444,15 +1566,12 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			return nil
 		})
 		if err != nil {
-			return nil, nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
+			return nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
 		}
 
 	}
 
-	// Get mempool transactions
-	mpTxns := s.addrIndex.UnconfirmedTxnsForAddress(addr)
-
-	return addressTxns, mpTxns, nil
+	return addressTxns, nil
 }
 
 // getDifficultyRatio returns the proof-of-work difficulty as a multiple of the

@@ -56,11 +56,17 @@ service bchrpc {
     // **Requires AddressIndex**
     rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest) returns (GetRawAddressTransactionsResponse) {}
 
-    // Returns all the unspent transaction outpoints for the given address.
-    // Offers offset, limit, and from block options.
+    // Returns all the unspent transaction outputs for the given address.
     //
     // **Requires AddressIndex**
     rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
+
+    // Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+    rpc GetUnspentOutput(GetUnspentOutputRequest) returns (GetUnspentOutputResponse) {}
+
+    // Returns information about all of the transactions currently in the memory pool.
+    // Offers an option to return full transactions or just transactions hashes.
+    rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
 
     // Returns a merkle (SPV) proof that the given transaction is in the provided block.
     //
@@ -231,9 +237,40 @@ message GetRawAddressTransactionsResponse {
 
 message GetAddressUnspentOutputsRequest {
     string address = 1;
+    bool include_mempool = 2;
 }
 message GetAddressUnspentOutputsResponse {
     repeated UnspentOutput outputs = 1;
+}
+
+message GetUnspentOutputRequest {
+    bytes hash = 1;
+    uint32 index = 2;
+    bool include_mempool = 3;
+}
+message GetUnspentOutputResponse {
+    Transaction.Input.Outpoint outpoint = 1;
+    bytes pubkey_script = 2;
+    int64 value = 3;
+
+    bool is_coinbase = 4;
+    int32 block_height = 5;
+}
+
+message GetMempoolRequest {
+    // Provide full transaction info instead of only the hashes.
+    bool full_transactions = 1;
+}
+message GetMempoolResponse {
+    message TransactionData {
+        // Either one of the two following is provided, depending on the request.
+        oneof txids_or_txs {
+            bytes transaction_hash = 1;
+            Transaction transaction = 2;
+        }
+    }
+
+    repeated TransactionData transaction_data = 1;
 }
 
 message GetMerkleProofRequest {
