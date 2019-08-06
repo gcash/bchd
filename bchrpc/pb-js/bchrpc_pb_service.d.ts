@@ -112,6 +112,24 @@ type bchrpcGetAddressUnspentOutputs = {
   readonly responseType: typeof bchrpc_pb.GetAddressUnspentOutputsResponse;
 };
 
+type bchrpcGetUnspentOutput = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetUnspentOutputRequest;
+  readonly responseType: typeof bchrpc_pb.GetUnspentOutputResponse;
+};
+
+type bchrpcGetMempool = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetMempoolRequest;
+  readonly responseType: typeof bchrpc_pb.GetMempoolResponse;
+};
+
 type bchrpcGetMerkleProof = {
   readonly methodName: string;
   readonly service: typeof bchrpc;
@@ -171,6 +189,8 @@ export class bchrpc {
   static readonly GetAddressTransactions: bchrpcGetAddressTransactions;
   static readonly GetRawAddressTransactions: bchrpcGetRawAddressTransactions;
   static readonly GetAddressUnspentOutputs: bchrpcGetAddressUnspentOutputs;
+  static readonly GetUnspentOutput: bchrpcGetUnspentOutput;
+  static readonly GetMempool: bchrpcGetMempool;
   static readonly GetMerkleProof: bchrpcGetMerkleProof;
   static readonly SubmitTransaction: bchrpcSubmitTransaction;
   static readonly SubscribeTransactions: bchrpcSubscribeTransactions;
@@ -317,6 +337,24 @@ export class bchrpcClient {
   getAddressUnspentOutputs(
     requestMessage: bchrpc_pb.GetAddressUnspentOutputsRequest,
     callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetAddressUnspentOutputsResponse|null) => void
+  ): UnaryResponse;
+  getUnspentOutput(
+    requestMessage: bchrpc_pb.GetUnspentOutputRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetUnspentOutputResponse|null) => void
+  ): UnaryResponse;
+  getUnspentOutput(
+    requestMessage: bchrpc_pb.GetUnspentOutputRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetUnspentOutputResponse|null) => void
+  ): UnaryResponse;
+  getMempool(
+    requestMessage: bchrpc_pb.GetMempoolRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetMempoolResponse|null) => void
+  ): UnaryResponse;
+  getMempool(
+    requestMessage: bchrpc_pb.GetMempoolRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetMempoolResponse|null) => void
   ): UnaryResponse;
   getMerkleProof(
     requestMessage: bchrpc_pb.GetMerkleProofRequest,
