@@ -951,6 +951,45 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	return ret, nil
 }
 
+func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) (*pb.GetMempoolResponse, error) {
+	rawMempool := s.txMemPool.MiningDescs()
+	resp := &pb.GetMempoolResponse{}
+	for _, txDesc := range rawMempool {
+		if req.FullTransactions {
+			respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+			stxos, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
+			if err != nil {
+				continue
+			}
+			for i, in := range txDesc.Tx.MsgTx().TxIn {
+				entry := stxos.LookupEntry(in.PreviousOutPoint)
+				if entry != nil {
+					respTx.Inputs[i].Value = entry.Amount()
+					respTx.Inputs[i].PreviousScript = entry.PkScript()
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(entry.PkScript(), s.chainParams)
+					if err == nil && len(addrs) > 0 {
+						respTx.Inputs[i].Address = addrs[0].String()
+					}
+				}
+			}
+
+			resp.TransactionData = append(resp.TransactionData, &pb.GetMempoolResponse_TransactionData{
+				TxidsOrTxs: &pb.GetMempoolResponse_TransactionData_Transaction{
+					Transaction: respTx,
+				},
+			})
+		} else {
+			resp.TransactionData = append(resp.TransactionData, &pb.GetMempoolResponse_TransactionData{
+				TxidsOrTxs: &pb.GetMempoolResponse_TransactionData_TransactionHash{
+					TransactionHash: txDesc.Tx.Hash().CloneBytes(),
+				},
+			})
+		}
+	}
+	return resp, nil
+}
+
 // GetMerkleProof returns a merkle (SPV) proof that the given transaction is in the provided block.
 //
 // **Requires TxIndex***
