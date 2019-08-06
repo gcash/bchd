@@ -10,6 +10,10 @@ service bchrpc {
     // Get info about the mempool.
     rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
 
+    // Returns information about all of the transactions currently in the memory pool.
+    // Offers an option to return full transactions or just transactions hashes.
+    rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
+
     // GetBlockchainInfo info about the blockchain including the most recent
     // block hash and height.
     rpc GetBlockchainInfo(GetBlockchainInfoRequest) returns (GetBlockchainInfoResponse) {}
@@ -23,8 +27,9 @@ service bchrpc {
     // Get a serialized block.
     rpc GetRawBlock(GetRawBlockRequest) returns (GetRawBlockResponse) {}
 
-    // **Requires CfIndex**
     // Get a block filter.
+    //
+    // **Requires CfIndex**
     rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
 
     // This RPC sends a block locator object to the server and the server responds with
@@ -64,10 +69,6 @@ service bchrpc {
     // Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
     rpc GetUnspentOutput(GetUnspentOutputRequest) returns (GetUnspentOutputResponse) {}
 
-    // Returns information about all of the transactions currently in the memory pool.
-    // Offers an option to return full transactions or just transactions hashes.
-    rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
-
     // Returns a merkle (SPV) proof that the given transaction is in the provided block.
     //
     // **Requires TxIndex***
@@ -99,7 +100,6 @@ service bchrpc {
     // Subscribe to notifications of new blocks being connected to the blockchain
     // or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
-
 }
 
 
@@ -109,6 +109,22 @@ message GetMempoolInfoRequest {}
 message GetMempoolInfoResponse {
     uint32 size = 1;
     uint32 bytes = 2;
+}
+
+message GetMempoolRequest {
+    // Provide full transaction info instead of only the hashes.
+    bool full_transactions = 1;
+}
+message GetMempoolResponse {
+    message TransactionData {
+        // Either one of the two following is provided, depending on the request.
+        oneof txids_or_txs {
+            bytes transaction_hash = 1;
+            Transaction transaction = 2;
+        }
+    }
+
+    repeated TransactionData transaction_data = 1;
 }
 
 message GetBlockchainInfoRequest {}
@@ -255,22 +271,6 @@ message GetUnspentOutputResponse {
 
     bool is_coinbase = 4;
     int32 block_height = 5;
-}
-
-message GetMempoolRequest {
-    // Provide full transaction info instead of only the hashes.
-    bool full_transactions = 1;
-}
-message GetMempoolResponse {
-    message TransactionData {
-        // Either one of the two following is provided, depending on the request.
-        oneof txids_or_txs {
-            bytes transaction_hash = 1;
-            Transaction transaction = 2;
-        }
-    }
-
-    repeated TransactionData transaction_data = 1;
 }
 
 message GetMerkleProofRequest {
