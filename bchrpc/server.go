@@ -951,6 +951,8 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	return ret, nil
 }
 
+// Returns information about all of the transactions currently in the memory pool.
+// Offers an option to return full transactions or just transactions hashes.
 func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) (*pb.GetMempoolResponse, error) {
 	rawMempool := s.txMemPool.MiningDescs()
 	resp := &pb.GetMempoolResponse{}

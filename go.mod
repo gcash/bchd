@@ -3,6 +3,7 @@ module github.com/gcash/bchd
 go 1.12
 
 require (
+	github.com/OpenBazaar/jsonpb v0.0.0-20171123000858-37d32ddf4eef // indirect
 	github.com/aead/siphash v1.0.1 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
 	github.com/btcsuite/goleveldb v1.0.0
