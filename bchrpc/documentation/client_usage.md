@@ -152,5 +152,59 @@ If connecting to a node using a self signed cert you will need to use:
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 ```
 
+## Python
+
+### Protoc
+
+Install dependencies
+```
+python -m pip install grpcio
+python -m pip install grpcio-tools
+```
+
+Generate libs
+```
+python -m grpc_tools.protoc -I=./ --python_out=./pb-py --grpc_python_out=./pb-py ./bchrpc.proto
+```
+
+### Example
+```
+#!/usr/bin/env python3
+
+import grpc
+import bchrpc_pb2 as pb
+import bchrpc_pb2_grpc as bchrpc
+
+def run():
+    with grpc.secure_channel('bchd.greyh.at:8335', grpc.ssl_channel_credentials()) as channel:
+        
+        # Get MempoolInfo
+        stub = bchrpc.bchrpcStub(channel)
+        req = pb.GetMempoolInfoRequest()
+
+        resp = stub.GetMempoolInfo(req)
+
+        print("mempool")
+        print(resp)
+
+        # Get block and parse tx hashes contained in block
+        req = pb.GetBlockRequest()
+        req.height = 555555
+        # req.full_transactions = True
+
+        resp = stub.GetBlock(req)
+
+        hash = resp.block.info.hash
+        hash = bytearray(hash[::-1])
+        print("blockhash: " + hash.hex())
+
+        for tx in resp.block.transaction_data:
+            txhash = bytearray(tx.transaction_hash[::-1])
+            print(txhash.hex())
+
+
+if __name__ == '__main__':
+    run()
+```
 
 TODO: Add examples in other languages
