@@ -168,7 +168,7 @@ python -m grpc_tools.protoc -I=./ --python_out=./pb-py --grpc_python_out=./pb-py
 ```
 
 ### Example
-```
+```python
 #!/usr/bin/env python3
 
 import grpc
