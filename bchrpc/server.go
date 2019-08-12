@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var serviceMap = map[string]interface{}{
@@ -412,8 +413,13 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 		return nil, status.Error(codes.NotFound, "block not found")
 	}
 
+	medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error calculating median time for block")
+	}
+
 	resp := &pb.GetBlockInfoResponse{
-		Info: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+		Info: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, medianTime, s.chainParams),
 	}
 
 	nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1)
@@ -445,9 +451,13 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	}
 
 	confirmations := s.chain.BestSnapshot().Height - block.Height() + 1
+	medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error calculating median time for block")
+	}
 	resp := &pb.GetBlockResponse{
 		Block: &pb.Block{
-			Info: marshalBlockInfo(block, confirmations, s.chainParams),
+			Info: marshalBlockInfo(block, confirmations, medianTime, s.chainParams),
 		},
 	}
 
@@ -1031,8 +1041,12 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	for _, h := range mBlock.Hashes {
 		hashes = append(hashes, h.CloneBytes())
 	}
+	medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error calculating median time for block")
+	}
 	resp := &pb.GetMerkleProofResponse{
-		Block:  marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+		Block:  marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1, medianTime, s.chainParams),
 		Flags:  mBlock.Flags,
 		Hashes: hashes,
 	}
@@ -1358,9 +1372,14 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				// Search for all transactions.
 				block := event.(*rpcEventBlockConnected)
 
+				medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+				if err != nil {
+					return err
+				}
+
 				toSend := &pb.BlockNotification{
 					Type:  pb.BlockNotification_CONNECTED,
-					Block: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, s.chainParams),
+					Block: marshalBlockInfo(block.Block, s.chain.BestSnapshot().Height-block.Height()+1, medianTime, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1371,9 +1390,14 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				// Search for all transactions.
 				block := event.(*rpcEventBlockDisconnected)
 
+				medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+				if err != nil {
+					return err
+				}
+
 				toSend := &pb.BlockNotification{
 					Type:  pb.BlockNotification_DISCONNECTED,
-					Block: marshalBlockInfo(block.Block, 0, s.chainParams),
+					Block: marshalBlockInfo(block.Block, 0, medianTime, s.chainParams),
 				}
 
 				if err := stream.Send(toSend); err != nil {
@@ -1594,7 +1618,7 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 	return diff
 }
 
-func marshalBlockInfo(block *bchutil.Block, confirmations int32, params *chaincfg.Params) *pb.BlockInfo {
+func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time.Time, params *chaincfg.Params) *pb.BlockInfo {
 	return &pb.BlockInfo{
 		Difficulty:    getDifficultyRatio(block.MsgBlock().Header.Bits, params),
 		Hash:          block.Hash().CloneBytes(),
@@ -1607,6 +1631,7 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, params *chaincf
 		PreviousBlock: block.MsgBlock().Header.PrevBlock.CloneBytes(),
 		Confirmations: confirmations,
 		Size:          int32(block.MsgBlock().SerializeSize()),
+		MedianTime:    medianTime.Unix(),
 	}
 }
 

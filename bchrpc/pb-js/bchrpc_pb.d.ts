@@ -43,6 +43,85 @@ export namespace GetMempoolInfoResponse {
   }
 }
 
+export class GetMempoolRequest extends jspb.Message {
+  getFullTransactions(): boolean;
+  setFullTransactions(value: boolean): void;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): GetMempoolRequest.AsObject;
+  static toObject(includeInstance: boolean, msg: GetMempoolRequest): GetMempoolRequest.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: GetMempoolRequest, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): GetMempoolRequest;
+  static deserializeBinaryFromReader(message: GetMempoolRequest, reader: jspb.BinaryReader): GetMempoolRequest;
+}
+
+export namespace GetMempoolRequest {
+  export type AsObject = {
+    fullTransactions: boolean,
+  }
+}
+
+export class GetMempoolResponse extends jspb.Message {
+  clearTransactionDataList(): void;
+  getTransactionDataList(): Array<GetMempoolResponse.TransactionData>;
+  setTransactionDataList(value: Array<GetMempoolResponse.TransactionData>): void;
+  addTransactionData(value?: GetMempoolResponse.TransactionData, index?: number): GetMempoolResponse.TransactionData;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): GetMempoolResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: GetMempoolResponse): GetMempoolResponse.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: GetMempoolResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): GetMempoolResponse;
+  static deserializeBinaryFromReader(message: GetMempoolResponse, reader: jspb.BinaryReader): GetMempoolResponse;
+}
+
+export namespace GetMempoolResponse {
+  export type AsObject = {
+    transactionDataList: Array<GetMempoolResponse.TransactionData.AsObject>,
+  }
+
+  export class TransactionData extends jspb.Message {
+    hasTransactionHash(): boolean;
+    clearTransactionHash(): void;
+    getTransactionHash(): Uint8Array | string;
+    getTransactionHash_asU8(): Uint8Array;
+    getTransactionHash_asB64(): string;
+    setTransactionHash(value: Uint8Array | string): void;
+
+    hasTransaction(): boolean;
+    clearTransaction(): void;
+    getTransaction(): Transaction | undefined;
+    setTransaction(value?: Transaction): void;
+
+    getTxidsOrTxsCase(): TransactionData.TxidsOrTxsCase;
+    serializeBinary(): Uint8Array;
+    toObject(includeInstance?: boolean): TransactionData.AsObject;
+    static toObject(includeInstance: boolean, msg: TransactionData): TransactionData.AsObject;
+    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+    static serializeBinaryToWriter(message: TransactionData, writer: jspb.BinaryWriter): void;
+    static deserializeBinary(bytes: Uint8Array): TransactionData;
+    static deserializeBinaryFromReader(message: TransactionData, reader: jspb.BinaryReader): TransactionData;
+  }
+
+  export namespace TransactionData {
+    export type AsObject = {
+      transactionHash: Uint8Array | string,
+      transaction?: Transaction.AsObject,
+    }
+
+    export enum TxidsOrTxsCase {
+      TXIDS_OR_TXS_NOT_SET = 0,
+      TRANSACTION_HASH = 1,
+      TRANSACTION = 2,
+    }
+  }
+}
+
 export class GetBlockchainInfoRequest extends jspb.Message {
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetBlockchainInfoRequest.AsObject;
@@ -768,85 +847,6 @@ export namespace GetUnspentOutputResponse {
   }
 }
 
-export class GetMempoolRequest extends jspb.Message {
-  getFullTransactions(): boolean;
-  setFullTransactions(value: boolean): void;
-
-  serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): GetMempoolRequest.AsObject;
-  static toObject(includeInstance: boolean, msg: GetMempoolRequest): GetMempoolRequest.AsObject;
-  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-  static serializeBinaryToWriter(message: GetMempoolRequest, writer: jspb.BinaryWriter): void;
-  static deserializeBinary(bytes: Uint8Array): GetMempoolRequest;
-  static deserializeBinaryFromReader(message: GetMempoolRequest, reader: jspb.BinaryReader): GetMempoolRequest;
-}
-
-export namespace GetMempoolRequest {
-  export type AsObject = {
-    fullTransactions: boolean,
-  }
-}
-
-export class GetMempoolResponse extends jspb.Message {
-  clearTransactionDataList(): void;
-  getTransactionDataList(): Array<GetMempoolResponse.TransactionData>;
-  setTransactionDataList(value: Array<GetMempoolResponse.TransactionData>): void;
-  addTransactionData(value?: GetMempoolResponse.TransactionData, index?: number): GetMempoolResponse.TransactionData;
-
-  serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): GetMempoolResponse.AsObject;
-  static toObject(includeInstance: boolean, msg: GetMempoolResponse): GetMempoolResponse.AsObject;
-  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-  static serializeBinaryToWriter(message: GetMempoolResponse, writer: jspb.BinaryWriter): void;
-  static deserializeBinary(bytes: Uint8Array): GetMempoolResponse;
-  static deserializeBinaryFromReader(message: GetMempoolResponse, reader: jspb.BinaryReader): GetMempoolResponse;
-}
-
-export namespace GetMempoolResponse {
-  export type AsObject = {
-    transactionDataList: Array<GetMempoolResponse.TransactionData.AsObject>,
-  }
-
-  export class TransactionData extends jspb.Message {
-    hasTransactionHash(): boolean;
-    clearTransactionHash(): void;
-    getTransactionHash(): Uint8Array | string;
-    getTransactionHash_asU8(): Uint8Array;
-    getTransactionHash_asB64(): string;
-    setTransactionHash(value: Uint8Array | string): void;
-
-    hasTransaction(): boolean;
-    clearTransaction(): void;
-    getTransaction(): Transaction | undefined;
-    setTransaction(value?: Transaction): void;
-
-    getTxidsOrTxsCase(): TransactionData.TxidsOrTxsCase;
-    serializeBinary(): Uint8Array;
-    toObject(includeInstance?: boolean): TransactionData.AsObject;
-    static toObject(includeInstance: boolean, msg: TransactionData): TransactionData.AsObject;
-    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-    static serializeBinaryToWriter(message: TransactionData, writer: jspb.BinaryWriter): void;
-    static deserializeBinary(bytes: Uint8Array): TransactionData;
-    static deserializeBinaryFromReader(message: TransactionData, reader: jspb.BinaryReader): TransactionData;
-  }
-
-  export namespace TransactionData {
-    export type AsObject = {
-      transactionHash: Uint8Array | string,
-      transaction?: Transaction.AsObject,
-    }
-
-    export enum TxidsOrTxsCase {
-      TXIDS_OR_TXS_NOT_SET = 0,
-      TRANSACTION_HASH = 1,
-      TRANSACTION = 2,
-    }
-  }
-}
-
 export class GetMerkleProofRequest extends jspb.Message {
   getTransactionHash(): Uint8Array | string;
   getTransactionHash_asU8(): Uint8Array;
@@ -1125,6 +1125,9 @@ export class BlockInfo extends jspb.Message {
   getSize(): number;
   setSize(value: number): void;
 
+  getMedianTime(): number;
+  setMedianTime(value: number): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): BlockInfo.AsObject;
   static toObject(includeInstance: boolean, msg: BlockInfo): BlockInfo.AsObject;
@@ -1149,6 +1152,7 @@ export namespace BlockInfo {
     difficulty: number,
     nextBlockHash: Uint8Array | string,
     size: number,
+    medianTime: number,
   }
 }
 

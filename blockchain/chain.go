@@ -1487,10 +1487,21 @@ func (b *BlockChain) BlockHashByHeight(blockHeight int32) (*chainhash.Hash, erro
 	if node == nil {
 		str := fmt.Sprintf("no block at height %d exists", blockHeight)
 		return nil, errNotInMainChain(str)
-
 	}
 
 	return &node.hash, nil
+}
+
+// MedianTimeByHash returns the median time of the block with the provided hash
+// if it is in the block index.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) MedianTimeByHash(hash *chainhash.Hash) (time.Time, error) {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return time.Time{}, fmt.Errorf("no block with hash %s exists", hash)
+	}
+	return node.CalcPastMedianTime(), nil
 }
 
 // HeightRange returns a range of block hashes for the given start and end
