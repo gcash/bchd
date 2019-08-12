@@ -389,7 +389,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		BestBlockHash: bestSnapShot.Hash[:],
 		BitcoinNet:    net,
 		Difficulty:    getDifficultyRatio(bestSnapShot.Bits, s.chainParams),
-		MedianTime:    s.timeSource.AdjustedTime().Unix(),
+		MedianTime:    bestSnapShot.MedianTime.Unix(),
 	}
 	return resp, nil
 }
