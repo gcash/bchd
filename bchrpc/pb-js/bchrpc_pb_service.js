@@ -19,6 +19,15 @@ bchrpc.GetMempoolInfo = {
   responseType: bchrpc_pb.GetMempoolInfoResponse
 };
 
+bchrpc.GetMempool = {
+  methodName: "GetMempool",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetMempoolRequest,
+  responseType: bchrpc_pb.GetMempoolResponse
+};
+
 bchrpc.GetBlockchainInfo = {
   methodName: "GetBlockchainInfo",
   service: bchrpc,
@@ -127,15 +136,6 @@ bchrpc.GetUnspentOutput = {
   responseType: bchrpc_pb.GetUnspentOutputResponse
 };
 
-bchrpc.GetMempool = {
-  methodName: "GetMempool",
-  service: bchrpc,
-  requestStream: false,
-  responseStream: false,
-  requestType: bchrpc_pb.GetMempoolRequest,
-  responseType: bchrpc_pb.GetMempoolResponse
-};
-
 bchrpc.GetMerkleProof = {
   methodName: "GetMerkleProof",
   service: bchrpc,
@@ -193,6 +193,37 @@ bchrpcClient.prototype.getMempoolInfo = function getMempoolInfo(requestMessage, 
     callback = arguments[1];
   }
   var client = grpc.unary(bchrpc.GetMempoolInfo, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getMempool = function getMempool(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetMempool, {
     request: requestMessage,
     host: this.serviceHost,
     metadata: metadata,
@@ -565,37 +596,6 @@ bchrpcClient.prototype.getUnspentOutput = function getUnspentOutput(requestMessa
     callback = arguments[1];
   }
   var client = grpc.unary(bchrpc.GetUnspentOutput, {
-    request: requestMessage,
-    host: this.serviceHost,
-    metadata: metadata,
-    transport: this.options.transport,
-    debug: this.options.debug,
-    onEnd: function (response) {
-      if (callback) {
-        if (response.status !== grpc.Code.OK) {
-          var err = new Error(response.statusMessage);
-          err.code = response.status;
-          err.metadata = response.trailers;
-          callback(err, null);
-        } else {
-          callback(null, response.message);
-        }
-      }
-    }
-  });
-  return {
-    cancel: function () {
-      callback = null;
-      client.close();
-    }
-  };
-};
-
-bchrpcClient.prototype.getMempool = function getMempool(requestMessage, metadata, callback) {
-  if (arguments.length === 2) {
-    callback = arguments[1];
-  }
-  var client = grpc.unary(bchrpc.GetMempool, {
     request: requestMessage,
     host: this.serviceHost,
     metadata: metadata,

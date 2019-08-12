@@ -351,6 +351,7 @@ message BlockInfo {
     double difficulty = 10;
     bytes next_block_hash = 11;
     int32 size = 12;
+    int64 median_time = 13;
 }
 
 message Block {
