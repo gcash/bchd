@@ -10,10 +10,6 @@ ADD . /go/src/github.com/gcash/bchd
 # Switch to the correct working directory.
 WORKDIR /go/src/github.com/gcash/bchd
 
-# Restore vendored packages.
-RUN go get -u github.com/golang/dep/cmd/dep
-RUN dep ensure
-
 # Build the code and the cli client.
 RUN go install .
 RUN go install ./cmd/bchctl
