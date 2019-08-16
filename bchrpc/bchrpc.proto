@@ -293,13 +293,17 @@ message SubscribeTransactionsRequest {
     TransactionFilter subscribe = 1;
     TransactionFilter unsubscribe = 2;
 
-    // When this is true, new transactions coming in from the mempool are
+    // When include_mempool is true, new transactions coming in from the mempool are
     // included apart from the ones confirmed in a block.
     bool include_mempool = 3;
 
-    // When this is true, transactions are included when they are confirmed.
+    // When include_in_block is true, transactions are included when they are confirmed.
     // This notification is sent in addition to any requested mempool notifications.
     bool include_in_block = 4;
+
+    // When serialize_tx is true, transactions are serialized using bitcoin protocol encoding. 
+    // Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
+    bool serialize_tx = 5;
 }
 
 message SubscribeBlocksRequest {}
@@ -327,6 +331,7 @@ message TransactionNotification {
     oneof transaction {
         Transaction confirmed_transaction = 2;
         MempoolTransaction unconfirmed_transaction = 3;
+        bytes serialized_transaction = 4;
     }
 }
 
