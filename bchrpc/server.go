@@ -1173,7 +1173,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
-						setInputMetadata(respTx, txDesc, view, s.chainParams)
+						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
 					}
 
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
@@ -1318,7 +1318,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
-						setInputMetadata(respTx, txDesc, view, s.chainParams)
+						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
 					}
 
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
@@ -1721,7 +1721,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 // setInputMetadata will set the value, previous script, and address for each input in the mempool transaction
 // from blockchain data adjusted upon the contents of the transaction pool.
 // Used when no s.txIndex is available
-func setInputMetadata(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
+func setInputMetadataFromView(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
 	for i, in := range txDesc.Tx.MsgTx().TxIn {
 		stxo := view.LookupEntry(in.PreviousOutPoint)
 		if stxo != nil {
