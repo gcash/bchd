@@ -14,12 +14,12 @@ to change the port you can do so:
 bchd --grpclisten=127.0.0.1:443
 ```
 
-To bind to all interfaces use and allow anyone to connect use:
+To bind to all interfaces and allow anyone to connect use:
 ```bash
 bchd --grpclisten=0.0.0.0
 ```
 
-It should be noted that Go's HTTP/2 implementation does not support cleartext connection. So TLS must always
+It should be noted that Go's HTTP/2 implementation does not support cleartext connections. So TLS must always
 be used. By default bchd's self signed cert (found in the data directory) will be used. If you wish to use
 an actual TLS certificate signed by a valid CA then you can use the following options:
 
