@@ -31,3 +31,27 @@ uninstall:
 
 docker:
 	docker build -t $(APPNAME) .
+
+
+protoc-go:
+	protoc -I=bchrpc/ bchrpc/bchrpc.proto --go_out=plugins=grpc:bchrpc/pb
+
+protoc-py:
+	# python -m pip install grpcio-tools
+	python -m grpc_tools.protoc -I=bchrpc/ --python_out=bchrpc/pb-py --grpc_python_out=bchrpc/pb-py bchrpc/bchrpc.proto
+
+protoc-js:
+	protoc -I=bchrpc/ \
+		--plugin=protoc-gen-ts=$(HOME)/node_modules/.bin/protoc-gen-ts \
+		--js_out=import_style=commonjs,binary:bchrpc/pb-js \
+		--ts_out=service=true:bchrpc/pb-js \
+		bchrpc/bchrpc.proto
+
+protoc-all:
+	protoc -I=bchrpc/ bchrpc/bchrpc.proto --go_out=plugins=grpc:bchrpc/pb
+	python -m grpc_tools.protoc -I=bchrpc/ --python_out=bchrpc/pb-py --grpc_python_out=bchrpc/pb-py bchrpc/bchrpc.proto
+	protoc -I=bchrpc/\
+		--plugin=protoc-gen-ts=$(HOME)/node_modules/.bin/protoc-gen-ts \
+		--js_out=import_style=commonjs,binary:bchrpc/pb-js \
+		--ts_out=service=true:bchrpc/pb-js \
+		bchrpc/bchrpc.proto
