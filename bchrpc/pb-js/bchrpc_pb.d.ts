@@ -966,6 +966,9 @@ export class SubscribeTransactionsRequest extends jspb.Message {
   getIncludeInBlock(): boolean;
   setIncludeInBlock(value: boolean): void;
 
+  getSerializeTx(): boolean;
+  setSerializeTx(value: boolean): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): SubscribeTransactionsRequest.AsObject;
   static toObject(includeInstance: boolean, msg: SubscribeTransactionsRequest): SubscribeTransactionsRequest.AsObject;
@@ -982,6 +985,7 @@ export namespace SubscribeTransactionsRequest {
     unsubscribe?: TransactionFilter.AsObject,
     includeMempool: boolean,
     includeInBlock: boolean,
+    serializeTx: boolean,
   }
 }
 
@@ -1048,6 +1052,13 @@ export class TransactionNotification extends jspb.Message {
   getUnconfirmedTransaction(): MempoolTransaction | undefined;
   setUnconfirmedTransaction(value?: MempoolTransaction): void;
 
+  hasSerializedTransaction(): boolean;
+  clearSerializedTransaction(): void;
+  getSerializedTransaction(): Uint8Array | string;
+  getSerializedTransaction_asU8(): Uint8Array;
+  getSerializedTransaction_asB64(): string;
+  setSerializedTransaction(value: Uint8Array | string): void;
+
   getTransactionCase(): TransactionNotification.TransactionCase;
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): TransactionNotification.AsObject;
@@ -1064,6 +1075,7 @@ export namespace TransactionNotification {
     type: TransactionNotification.TypeMap[keyof TransactionNotification.TypeMap],
     confirmedTransaction?: Transaction.AsObject,
     unconfirmedTransaction?: MempoolTransaction.AsObject,
+    serializedTransaction: Uint8Array | string,
   }
 
   export interface TypeMap {
@@ -1077,6 +1089,7 @@ export namespace TransactionNotification {
     TRANSACTION_NOT_SET = 0,
     CONFIRMED_TRANSACTION = 2,
     UNCONFIRMED_TRANSACTION = 3,
+    SERIALIZED_TRANSACTION = 4,
   }
 }
 
