@@ -24,6 +24,7 @@ different languages:
 
 - [Go](#go)
 - [Node.js](#node.js)
+- [Python](#python)
 
 Unless otherwise stated under the language example, it is assumed that
 gRPC is already already installed.  The gRPC installation procedure
@@ -151,6 +152,7 @@ If connecting to a node using a self signed cert you will need to use:
 ```javascript
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 ```
+**More Examples**: [here](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client-usage-examples/nodejs-grpc)
 
 ## Python
 
