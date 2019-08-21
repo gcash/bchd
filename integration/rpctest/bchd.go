@@ -6,7 +6,6 @@ package rpctest
 
 import (
 	"fmt"
-	"go/build"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,29 +44,16 @@ func bchdExecutablePath() (string, error) {
 		return "", err
 	}
 
-	// Determine import path of this package. Not necessarily gcash/bchd if
-	// this is a forked repo.
-	_, rpctestDir, _, ok := runtime.Caller(1)
-	if !ok {
-		return "", fmt.Errorf("Cannot get path to bchd source code")
-	}
-	bchdPkgPath := filepath.Join(rpctestDir, "..", "..", "..")
-	bchdPkg, err := build.ImportDir(bchdPkgPath, build.FindOnly)
-	if err != nil {
-		return "", fmt.Errorf("Failed to build bchd: %v", err)
-	}
-
 	// Build bchd and output an executable in a static temp path.
 	outputPath := filepath.Join(testDir, "bchd")
 	if runtime.GOOS == "windows" {
 		outputPath += ".exe"
 	}
-
-	cmd := exec.Command("go", "build", "-o", outputPath, bchdPkg.ImportPath)
+	cmd := exec.Command("go", "build", "-o", outputPath, "github.com/gcash/bchd")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	err = cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("Failed to build bchd: %v", err)
+		return "", fmt.Errorf("failed to build bchd: %v", err)
 	}
 
 	// Save executable path so future calls do not recompile.
