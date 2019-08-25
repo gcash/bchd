@@ -37,7 +37,7 @@ support for the proto3 language version), which contains the protoc
 tool and language plugins used to compile this project's `.proto`
 files to language-specific bindings.
 
-##TLS
+## TLS
 By default bchd uses a self signed certificate to encrypt and authenticate the
 connection. To authenticate against the server the client will need access to the
 certificate. For example, in Go:
