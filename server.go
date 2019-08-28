@@ -1282,7 +1282,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 	}
 
 	// Now that we know the client is fetching a filter that we know of,
-	// we'll fetch the block hashes et each check point interval so we can
+	// we'll fetch the block hashes at each check point interval so we can
 	// compare against our cache, and create new check points if necessary.
 	blockHashes, err := sp.server.chain.IntervalBlockHashes(
 		&msg.StopHash, wire.CFCheckptInterval,
