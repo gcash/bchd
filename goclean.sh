@@ -11,7 +11,7 @@
 
 set -ex
 
-# Make sure gometalinter is installed and $GOPATH/bin is in your path.
+# Make sure golangci-lint is installed and $GOPATH/bin is in your path.
 if [ ! -x "$(type -p golangci-lint)" ]; then
   exit 1
 fi

@@ -886,8 +886,8 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		if err != nil || len(confirmedTxs) == 0 {
 			break
 		}
-		for _, cTx := range confirmedTxs {
-			txs = append(txs, &cTx.tx)
+		for i := range confirmedTxs {
+			txs = append(txs, &confirmedTxs[i].tx)
 		}
 		skip += len(confirmedTxs)
 	}
