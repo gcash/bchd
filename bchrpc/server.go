@@ -975,7 +975,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		blockHeight = mining.UnminedHeight
 		scriptPubkey = desc.Tx.MsgTx().TxOut[req.Index].PkScript
 		coinbase = false
-	} else if entry == nil && !req.IncludeMempool {
+	} else if (entry == nil || entry.IsSpent()) && !req.IncludeMempool {
 		return nil, status.Error(codes.NotFound, "utxo not found")
 	} else {
 		value = entry.Amount()
