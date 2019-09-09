@@ -952,42 +952,43 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
 	}
-	op := wire.NewOutPoint(txnHash, req.Index)
-	entry, err := s.chain.FetchUtxoEntry(*op)
-	if err != nil {
-		return nil, err
-	}
+
 	var (
+		op           = wire.NewOutPoint(txnHash, req.Index)
 		value        int64
 		blockHeight  int32
 		scriptPubkey []byte
 		coinbase     bool
 	)
-	if entry == nil && req.IncludeMempool { // Nil means not found in utxo set. Check mempool.
-		desc, err := s.txMemPool.FetchTxDesc(txnHash)
+	if req.IncludeMempool && s.txMemPool.HaveTransaction(txnHash) {
+		tx, err := s.txMemPool.FetchTransaction(txnHash)
 		if err != nil {
 			return nil, status.Error(codes.NotFound, "utxo not found")
 		}
-		if req.Index > uint32(len(desc.Tx.MsgTx().TxOut)) {
+		if req.Index > uint32(len(tx.MsgTx().TxOut)) {
 			return nil, status.Error(codes.InvalidArgument, "prev index greater than len outputs")
 		}
-		value = desc.Tx.MsgTx().TxOut[req.Index].Value
-		blockHeight = mining.UnminedHeight
-		scriptPubkey = desc.Tx.MsgTx().TxOut[req.Index].PkScript
-		coinbase = false
-	} else if (entry == nil || entry.IsSpent()) && !req.IncludeMempool {
-		return nil, status.Error(codes.NotFound, "utxo not found")
-	} else {
-		value = entry.Amount()
-		blockHeight = entry.BlockHeight()
-		scriptPubkey = entry.PkScript()
-		coinbase = entry.IsCoinBase()
-	}
-	if req.IncludeMempool {
 		spendingTx := s.txMemPool.CheckSpend(*op)
 		if spendingTx != nil {
 			return nil, status.Error(codes.NotFound, "utxo spent in mempool")
 		}
+		value = tx.MsgTx().TxOut[req.Index].Value
+		blockHeight = mining.UnminedHeight
+		scriptPubkey = tx.MsgTx().TxOut[req.Index].PkScript
+		coinbase = blockchain.IsCoinBase(tx)
+	} else {
+		entry, err := s.chain.FetchUtxoEntry(*op)
+		if err != nil {
+			return nil, err
+		}
+		if entry == nil || entry.IsSpent() {
+			return nil, status.Error(codes.NotFound, "utxo not found")
+		}
+
+		value = entry.Amount()
+		blockHeight = entry.BlockHeight()
+		scriptPubkey = entry.PkScript()
+		coinbase = entry.IsCoinBase()
 	}
 
 	ret := &pb.GetUnspentOutputResponse{
