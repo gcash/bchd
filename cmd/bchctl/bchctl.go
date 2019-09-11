@@ -107,7 +107,7 @@ func main() {
 	cmd, err := btcjson.NewCmd(method, params...)
 	if err != nil {
 		// Show the error along with its error code when it's a
-		// btcjson.Error as it reallistcally will always be since the
+		// btcjson.Error as it realistically will always be since the
 		// NewCmd function is only supposed to return errors of that
 		// type.
 		if jerr, ok := err.(btcjson.Error); ok {
