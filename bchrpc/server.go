@@ -323,7 +323,7 @@ func (s *GrpcServer) GetMempoolInfo(ctx context.Context, req *pb.GetMempoolInfoR
 	return resp, nil
 }
 
-// Returns information about all of the transactions currently in the memory pool.
+// GetMempool returns information about all of the transactions currently in the memory pool.
 // Offers an option to return full transactions or just transactions hashes.
 func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) (*pb.GetMempoolResponse, error) {
 	rawMempool := s.txMemPool.MiningDescs()
@@ -946,7 +946,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	return resp, nil
 }
 
-// Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+// GetUnspentOutput looks up the unspent output in the utxo set and returns the utxo metadata or not found.
 func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOutputRequest) (*pb.GetUnspentOutputResponse, error) {
 	txnHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
