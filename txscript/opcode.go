@@ -10,8 +10,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-
 	"golang.org/x/crypto/ripemd160"
+	"math/bits"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -2435,10 +2435,11 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		signatures = append(signatures, sigInfo)
 	}
 
-	// A bug in the original Satoshi client implementation means one more
-	// stack value than should be used must be popped.  Unfortunately, this
-	// buggy behavior is now part of the consensus and a hard fork would be
-	// required to fix it.
+	// This dummy element was originally a bug in the original Satoshi
+	// codebase which required clients to add an extra element to the
+	// script. However when ScriptVerifySchnorrMultisig is active the
+	// dummy element is re-purposed to serve to flag the use of schnorr
+	// or ECDSA in this opcode.
 	dummy, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
@@ -2447,7 +2448,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	// Since the dummy argument is otherwise not checked, it could be any
 	// value which unfortunately provides a source of malleability.  Thus,
 	// there is a script flag to force an error when the value is NOT 0.
-	if vm.hasFlag(ScriptStrictMultiSig) && len(dummy) != 0 {
+	if !vm.hasFlag(ScriptVerifySchnorrMultisig) && vm.hasFlag(ScriptStrictMultiSig) && len(dummy) != 0 {
 		str := fmt.Sprintf("multisig dummy argument has length %d "+
 			"instead of 0", len(dummy))
 		return scriptError(ErrSigNullDummy, str)
@@ -2460,10 +2461,6 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		script = removeOpcodeByData(script, sigInfo.signature)
 	}
 
-	success := true
-	numPubKeys++
-	pubKeyIdx := -1
-	signatureIdx := 0
 	var sigHashes *TxSigHashes
 	if vm.hasFlag(ScriptVerifyBip143SigHash) {
 		if vm.hashCache != nil {
@@ -2472,110 +2469,243 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			sigHashes = NewTxSigHashes(&vm.tx)
 		}
 	}
-	for numSignatures > 0 {
-		// When there are more signatures than public keys remaining,
-		// there is no way to succeed since too many signatures are
-		// invalid, so exit early.
-		pubKeyIdx++
-		numPubKeys--
-		if numSignatures > numPubKeys {
-			success = false
-			break
+
+	success := true
+
+	if vm.hasFlag(ScriptVerifySchnorrMultisig) && len(dummy) > 0 { // Schnorr multisig
+		pubKeyIdx := len(pubKeys) - 1
+		signatureIdx := len(signatures) - 1
+
+		// Fail if the dummy element does not have length in bytes = floor((N+7)/8)
+		expectedDummyLen := (numPubKeys + 7) / 8
+		if len(dummy) != expectedDummyLen {
+			str := fmt.Sprintf("multisig dummy argument has length %d "+
+				"instead of %d", len(dummy), expectedDummyLen)
+			return scriptError(ErrInvalidDummy, str)
 		}
 
-		sigInfo := signatures[signatureIdx]
-		pubKey := pubKeys[pubKeyIdx]
+		// Pad dummy and convert to uint32
+		dummy = append(dummy, make([]byte, 4-len(dummy))...)
+		checkBits := binary.LittleEndian.Uint32(dummy)
 
-		// The order of the signature and public key evaluation is
-		// important here since it can be distinguished by an
-		// OP_CHECKMULTISIG NOT when the strict encoding flag is set.
-
-		rawSig := sigInfo.signature
-		if len(rawSig) == 0 {
-			// Skip to the next pubkey if signature is empty.
-			continue
+		// The bitfield doesn't set the right number of signatures.
+		numBits := bits.OnesCount32(checkBits)
+		if numBits != numSignatures {
+			str := fmt.Sprintf("Number of set bits in schnorr multisig (%d) "+
+				"is greater than number of signatures (%d)", numBits, numSignatures)
+			return scriptError(ErrInvalidBitCount, str)
 		}
 
-		// Split the signature into hash type and signature components.
-		hashType := SigHashType(rawSig[len(rawSig)-1])
-		signature := rawSig[:len(rawSig)-1]
+		// Check the range of the bits does not exceed the number of pubkeys.
+		mask := uint32(1<<uint64(numPubKeys)) - 1
+		if checkBits&mask != checkBits {
+			str := fmt.Sprintf("Invalid bit range")
+			return scriptError(ErrInvalidBitCount, str)
+		}
 
-		// Only parse and check the signature encoding once.
-		var parsedSig *bchec.Signature
-		if !sigInfo.parsed {
+		iKey := uint(0)
+		for iSig := uint(0); iSig < uint(numSignatures); iKey, iSig = iKey+1, iSig+1 {
+
+			if checkBits>>iKey == 0 {
+				// This is a sanity check and should be
+				// unreachable.
+				str := fmt.Sprintf("Checkbits pubkey index invalid")
+				return scriptError(ErrInvalidBitCount, str)
+			}
+
+			// Find the next suitable key.
+			for (checkBits>>iKey)&0x01 == 0 {
+				iKey++
+			}
+
+			if iKey >= uint(numPubKeys) {
+				// This is a sanity check and should be
+				// unrecheable.
+				str := fmt.Sprintf("Pubkey index too large: %d > %d",
+					iKey, numPubKeys)
+				return scriptError(ErrInvalidPubKeyCount, str)
+			}
+
+			sigInfo := signatures[signatureIdx-int(iSig)]
+			pubKey := pubKeys[pubKeyIdx-int(iKey)]
+
+			rawSig := sigInfo.signature
+			if len(rawSig) == 0 {
+				return scriptError(ErrSigInvalidDataLen, "Schnorr signatures must be 64 bytes in CHECKMULTISIG")
+			}
+
+			// Split the signature into hash type and signature components.
+			hashType := SigHashType(rawSig[len(rawSig)-1])
+			signature := rawSig[:len(rawSig)-1]
+
+			// Only parse and check the signature encoding once.
 			if err := vm.checkHashTypeEncoding(hashType); err != nil {
 				return err
 			}
-			if err := vm.checkSignatureEncoding(signature); err != nil {
-				return err
-			}
 
-			if vm.hasFlag(ScriptVerifySchnorr) && len(signature) == 64 {
-				return scriptError(ErrSigInvalidDataLen, "Signature cannot be 65 bytes in CHECKMULTISIG")
+			if len(signature) != 64 {
+				return scriptError(ErrSigInvalidDataLen, "Schnorr signatures must be 64 bytes in CHECKMULTISIG")
 			}
 
 			// Parse the signature.
-			var err error
-			if vm.hasFlag(ScriptVerifyStrictEncoding) ||
-				vm.hasFlag(ScriptVerifyDERSignatures) {
-
-				parsedSig, err = bchec.ParseDERSignature(signature,
-					bchec.S256())
-			} else {
-				parsedSig, err = bchec.ParseBERSignature(signature,
-					bchec.S256())
+			parsedSig, err := bchec.ParseSchnorrSignature(signature)
+			if err != nil {
+				return err
 			}
-			sigInfo.parsed = true
+
+			if err := vm.checkPubKeyEncoding(pubKey); err != nil {
+				return err
+			}
+
+			// Parse the pubkey.
+			parsedPubKey, err := bchec.ParsePubKey(pubKey, bchec.S256())
+			if err != nil {
+				return err
+			}
+
+			// Generate the signature hash based on the signature hash type.
+			signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+				vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+			if err != nil {
+				vm.dstack.PushBool(false)
+				return nil
+			}
+
+			var valid bool
+			if vm.sigCache != nil {
+				var sigHash chainhash.Hash
+				copy(sigHash[:], signatureHash)
+
+				valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
+				if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
+					vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
+					valid = true
+				}
+			} else {
+				valid = parsedSig.Verify(signatureHash, parsedPubKey)
+			}
+
+			if !valid {
+				str := "not all signatures empty on failed checkmultisig"
+				return scriptError(ErrNullFail, str)
+			}
+		}
+
+		if checkBits>>iKey != 0 {
+			// This is a sanity check and should be
+			// unreachable.
+			str := fmt.Sprintf("dummy key index %d greater than num pubkeys", iKey)
+			return scriptError(ErrInvalidBitCount, str)
+		}
+	} else { // ECDSA multisig
+		numPubKeys++
+		pubKeyIdx := -1
+		signatureIdx := 0
+		for numSignatures > 0 {
+			// When there are more signatures than public keys remaining,
+			// there is no way to succeed since too many signatures are
+			// invalid, so exit early.
+			pubKeyIdx++
+			numPubKeys--
+			if numSignatures > numPubKeys {
+				success = false
+				break
+			}
+
+			sigInfo := signatures[signatureIdx]
+			pubKey := pubKeys[pubKeyIdx]
+
+			// The order of the signature and public key evaluation is
+			// important here since it can be distinguished by an
+			// OP_CHECKMULTISIG NOT when the strict encoding flag is set.
+
+			rawSig := sigInfo.signature
+			if len(rawSig) == 0 {
+				// Skip to the next pubkey if signature is empty.
+				continue
+			}
+
+			// Split the signature into hash type and signature components.
+			hashType := SigHashType(rawSig[len(rawSig)-1])
+			signature := rawSig[:len(rawSig)-1]
+
+			// Only parse and check the signature encoding once.
+			var parsedSig *bchec.Signature
+			if !sigInfo.parsed {
+				if err := vm.checkHashTypeEncoding(hashType); err != nil {
+					return err
+				}
+				if err := vm.checkSignatureEncoding(signature); err != nil {
+					return err
+				}
+
+				if vm.hasFlag(ScriptVerifySchnorr) && len(signature) == 64 {
+					return scriptError(ErrSigInvalidDataLen, "Signature cannot be 65 bytes in CHECKMULTISIG")
+				}
+
+				// Parse the signature.
+				var err error
+				if vm.hasFlag(ScriptVerifyStrictEncoding) ||
+					vm.hasFlag(ScriptVerifyDERSignatures) {
+
+					parsedSig, err = bchec.ParseDERSignature(signature,
+						bchec.S256())
+				} else {
+					parsedSig, err = bchec.ParseBERSignature(signature,
+						bchec.S256())
+				}
+				sigInfo.parsed = true
+				if err != nil {
+					continue
+				}
+				sigInfo.parsedSignature = parsedSig
+			} else {
+				// Skip to the next pubkey if the signature is invalid.
+				if sigInfo.parsedSignature == nil {
+					continue
+				}
+
+				// Use the already parsed signature.
+				parsedSig = sigInfo.parsedSignature
+			}
+
+			if err := vm.checkPubKeyEncoding(pubKey); err != nil {
+				return err
+			}
+
+			// Parse the pubkey.
+			parsedPubKey, err := bchec.ParsePubKey(pubKey, bchec.S256())
 			if err != nil {
 				continue
 			}
-			sigInfo.parsedSignature = parsedSig
-		} else {
-			// Skip to the next pubkey if the signature is invalid.
-			if sigInfo.parsedSignature == nil {
-				continue
+
+			// Generate the signature hash based on the signature hash type.
+			signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+				vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+			if err != nil {
+				vm.dstack.PushBool(false)
+				return nil
 			}
 
-			// Use the already parsed signature.
-			parsedSig = sigInfo.parsedSignature
-		}
+			var valid bool
+			if vm.sigCache != nil {
+				var sigHash chainhash.Hash
+				copy(sigHash[:], signatureHash)
 
-		if err := vm.checkPubKeyEncoding(pubKey); err != nil {
-			return err
-		}
-
-		// Parse the pubkey.
-		parsedPubKey, err := bchec.ParsePubKey(pubKey, bchec.S256())
-		if err != nil {
-			continue
-		}
-
-		// Generate the signature hash based on the signature hash type.
-		signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
-			vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
-		if err != nil {
-			vm.dstack.PushBool(false)
-			return nil
-		}
-
-		var valid bool
-		if vm.sigCache != nil {
-			var sigHash chainhash.Hash
-			copy(sigHash[:], signatureHash)
-
-			valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
-			if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
-				vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
-				valid = true
+				valid = vm.sigCache.Exists(sigHash, parsedSig, parsedPubKey)
+				if !valid && parsedSig.Verify(signatureHash, parsedPubKey) {
+					vm.sigCache.Add(sigHash, parsedSig, parsedPubKey)
+					valid = true
+				}
+			} else {
+				valid = parsedSig.Verify(signatureHash, parsedPubKey)
 			}
-		} else {
-			valid = parsedSig.Verify(signatureHash, parsedPubKey)
-		}
 
-		if valid {
-			// PubKey verified, move on to the next signature.
-			signatureIdx++
-			numSignatures--
+			if valid {
+				// PubKey verified, move on to the next signature.
+				signatureIdx++
+				numSignatures--
+			}
 		}
 	}
 

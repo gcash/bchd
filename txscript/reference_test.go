@@ -193,6 +193,8 @@ func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 			flags |= ScriptVerifyAllowSegwitRecovery
 		case "COMPRESSED_PUBKEYTYPE":
 			flags |= ScriptVerifyCompressedPubkey
+		case "SCHNORR_MULTISIG":
+			flags |= ScriptVerifySchnorrMultisig
 		default:
 			return flags, fmt.Errorf("invalid flag: %s", flag)
 		}
@@ -280,6 +282,12 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 		return []ErrorCode{ErrCheckMultiSigVerify}, nil
 	case "SPLIT_RANGE":
 		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall}, nil
+	case "BITFIELD_SIZE":
+		return []ErrorCode{ErrInvalidDummy}, nil
+	case "BIT_RANGE", "INVALID_BIT_COUNT":
+		return []ErrorCode{ErrInvalidBitCount}, nil
+	case "SIG_NONSCHNORR":
+		return []ErrorCode{ErrSigInvalidDataLen}, nil
 	}
 
 	return nil, fmt.Errorf("unrecognized expected result in test data: %v",

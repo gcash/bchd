@@ -103,6 +103,11 @@ const (
 	// from the rule in order to allow users who accidentally sent funds to
 	// segwit addresses to recover them.
 	ScriptVerifyAllowSegwitRecovery
+
+	// ScriptVerifySchnorrMultisig enables the use of schnorr signatures
+	// with OP_CHECKMULTISIG. When active the dummy element signals the
+	// use of schnorr or ECDSA.
+	ScriptVerifySchnorrMultisig
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
