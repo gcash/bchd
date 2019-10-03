@@ -1100,6 +1100,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// script flags.
 	greatWallActive := node.height > b.chainParams.GreatWallForkHeight
 
+	// If Graviton hardfork is active we must enforce MinimalData
+	gravitonActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.GravitonActivationTime
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1178,9 +1181,14 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			txscript.ScriptVerifyCheckDataSig
 	}
 
-	// If GreatWall is enforce Schnorr and AllowSegwitRecovery script flags.
+	// If GreatWall hardfork is active enforce Schnorr and AllowSegwitRecovery script flags.
 	if greatWallActive {
 		scriptFlags |= txscript.ScriptVerifySchnorr | txscript.ScriptVerifyAllowSegwitRecovery
+	}
+
+	// If Graviton hardfork is active enforce MinimalData and SchnorrMultisig script flag.
+	if gravitonActive {
+		scriptFlags |= txscript.ScriptVerifyMinimalData | txscript.ScriptVerifySchnorrMultisig
 	}
 
 	// The number of signature operations must be less than the maximum

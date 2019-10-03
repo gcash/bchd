@@ -311,6 +311,15 @@ const (
 	// reached.
 	ErrUnsatisfiedLockTime
 
+	// ErrInvalidDummy is returned when the schnorr dummy element is not
+	// encoded correctly. For example, if it has more bytes than necessary
+	// to encode the selected pubkeys.
+	ErrInvalidDummy
+
+	// ErrInvalidBitCount is returned when the schnorr dummy element does
+	// not contain the correct number of bits.
+	ErrInvalidBitCount
+
 	// numErrorCodes is the maximum error code number used in tests.  This
 	// entry MUST be the last entry in the enum.
 	numErrorCodes
@@ -377,6 +386,8 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrDiscourageUpgradableNOPs: "ErrDiscourageUpgradableNOPs",
 	ErrNegativeLockTime:         "ErrNegativeLockTime",
 	ErrUnsatisfiedLockTime:      "ErrUnsatisfiedLockTime",
+	ErrInvalidDummy:             "ErrInvalidDummy",
+	ErrInvalidBitCount:          "ErrInvalidBitCount",
 }
 
 // String returns the ErrorCode as a human-readable name.

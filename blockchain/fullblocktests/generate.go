@@ -2321,9 +2321,9 @@ func GenerateWithTxs(chainLength int, txsPerBlock int) (tests [][]TestInstance, 
 	return tests, nil
 }
 
-// GenerateBlocksWithSchnorrSigs generates a test chain containing several
+// GenerateGreatWallTestBlocks generates a test chain containing several
 // schnorr transactions per block.
-func GenerateBlocksWithSchnorrSigs() (tests [][]TestInstance, err error) {
+func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 	// In order to simplify the generation code which really should never
 	// fail unless the test code itself is broken, panics are used
 	// internally.  This deferred func ensures any panics don't escape the
@@ -2465,6 +2465,206 @@ func GenerateBlocksWithSchnorrSigs() (tests [][]TestInstance, err error) {
 	g.nextBlock("b0", nil, addAdditionalTxs)
 	tests = append(tests, []TestInstance{
 		acceptBlock(g.tipName, g.tip, true, false),
+	})
+
+	return tests, nil
+}
+
+// GenerateGravitonTestBlocks generates a test chain containing several
+// schnorr multisig transactions per block.
+func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
+	// In order to simplify the generation code which really should never
+	// fail unless the test code itself is broken, panics are used
+	// internally.  This deferred func ensures any panics don't escape the
+	// generator by replacing the named error return with the underlying
+	// panic error.
+	defer func() {
+		if r := recover(); r != nil {
+			tests = nil
+
+			switch rt := r.(type) {
+			case string:
+				err = errors.New(rt)
+			case error:
+				err = rt
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+
+	// Create a test generator instance initialized with the genesis block
+	// as the tip.
+	g, err := makeTestGenerator(regressionNetParams)
+	if err != nil {
+		return nil, err
+	}
+
+	acceptBlock := func(blockName string, block *wire.MsgBlock, isMainChain, isOrphan bool) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return AcceptedBlock{blockName, block, blockHeight, isMainChain,
+			isOrphan}
+	}
+	rejectBlock := func(blockName string, block *wire.MsgBlock, code blockchain.ErrorCode) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return RejectedBlock{blockName, block, blockHeight, code}
+	}
+
+	coinbaseMaturity := g.params.CoinbaseMaturity
+	var testInstances []TestInstance
+	for i := uint16(0); i < coinbaseMaturity+1; i++ {
+		blockName := fmt.Sprintf("bm%d", i)
+		g.nextBlock(blockName, nil)
+		g.saveTipCoinbaseOut()
+		testInstances = append(testInstances, acceptBlock(g.tipName,
+			g.tip, true, false))
+	}
+	tests = append(tests, testInstances)
+
+	// Collect spendable outputs.  This simplifies the code below.
+	var outs []*spendableOut
+	for i := uint16(0); i < coinbaseMaturity; i++ {
+		op := g.oldestCoinbaseOut()
+		outs = append(outs, &op)
+	}
+
+	addNonMinimalData := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		// Create one tx paying a p2sh output
+		tx1 := createSpendTx(outs[1], 0)
+		builder := txscript.NewScriptBuilder().
+			AddInt64(1).
+			AddData(g.privKey.PubKey().SerializeCompressed()).
+			AddInt64(1).
+			AddOp(txscript.OP_CHECKMULTISIG)
+		redeemScript, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.RegressionNetParams)
+		if err != nil {
+			panic(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			panic(err)
+		}
+		tx1.TxOut[0].PkScript = script
+
+		block.AddTransaction(tx1)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+		// Spend from tx1 using a Schnorr multi-signature
+		so1 := &spendableOut{
+			amount: bchutil.Amount(tx1.TxOut[0].Value),
+			prevOut: wire.OutPoint{
+				Hash:  tx1.TxHash(),
+				Index: 0,
+			},
+		}
+
+		tx2 := createSpendTx(so1, 0)
+		sig, err := txscript.RawTxInSchnorrSignature(tx2, 0,
+			redeemScript, txscript.SigHashAll, g.privKey, tx1.TxOut[0].Value)
+		if err != nil {
+			panic(err)
+		}
+		tx2.TxIn[0].SignatureScript = append([]byte{0x51, 0x4c, 0x41}, sig...) // OP_1, OP_PUSHDATA1 not minimally encoded.
+		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, txscript.OP_DATA_37)
+		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, redeemScript...)
+		block.AddTransaction(tx2)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	addSchnorrMultisig := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		// Create one tx paying a p2sh output
+		tx1 := createSpendTx(outs[0], 0)
+		builder := txscript.NewScriptBuilder().
+			AddInt64(1).
+			AddData(g.privKey.PubKey().SerializeCompressed()).
+			AddInt64(1).
+			AddOp(txscript.OP_CHECKMULTISIG)
+		redeemScript, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.RegressionNetParams)
+		if err != nil {
+			panic(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			panic(err)
+		}
+		tx1.TxOut[0].PkScript = script
+
+		block.AddTransaction(tx1)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+		// Spend from tx1 using a Schnorr multi-signature
+		so1 := &spendableOut{
+			amount: bchutil.Amount(tx1.TxOut[0].Value),
+			prevOut: wire.OutPoint{
+				Hash:  tx1.TxHash(),
+				Index: 0,
+			},
+		}
+
+		tx2 := createSpendTx(so1, 0)
+		sig, err := txscript.RawTxInSchnorrSignature(tx2, 0,
+			redeemScript, txscript.SigHashAll, g.privKey, tx1.TxOut[0].Value)
+		if err != nil {
+			panic(err)
+		}
+		tx2.TxIn[0].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
+		block.AddTransaction(tx2)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	g.nextBlock("b0", nil, addSchnorrMultisig)
+	tests = append(tests, []TestInstance{
+		acceptBlock(g.tipName, g.tip, true, false),
+	})
+	g.nextBlock("b1", nil, addNonMinimalData)
+	tests = append(tests, []TestInstance{
+		rejectBlock(g.tipName, g.tip, blockchain.ErrScriptValidation),
 	})
 
 	return tests, nil
