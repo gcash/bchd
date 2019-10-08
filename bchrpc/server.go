@@ -977,6 +977,12 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		scriptPubkey = tx.MsgTx().TxOut[req.Index].PkScript
 		coinbase = blockchain.IsCoinBase(tx)
 	} else {
+		if req.IncludeMempool {
+			spendingTx := s.txMemPool.CheckSpend(*op)
+			if spendingTx != nil {
+				return nil, status.Error(codes.NotFound, "utxo spent in mempool")
+			}
+		}
 		entry, err := s.chain.FetchUtxoEntry(*op)
 		if err != nil {
 			return nil, err
