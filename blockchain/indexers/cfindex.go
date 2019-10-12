@@ -21,6 +21,9 @@ import (
 const (
 	// cfIndexName is the human-readable name for the index.
 	cfIndexName = "committed filter index"
+
+	// cfIndexVersion is the current version of the index.
+	cfIndexVersion = 2
 )
 
 // Committed filters come in one flavor currently: basic. They are generated
@@ -143,8 +146,8 @@ func (idx *CfIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
 	}
 
 	// If the version is less than 1 then drop the index and write the new version.
-	if cfIndexMigrationVersion < 1 {
-		log.Info("Migrating CfIndex to version 1")
+	if cfIndexMigrationVersion < cfIndexVersion {
+		log.Infof("Migrating CfIndex to version %d", cfIndexVersion)
 		if err := dropIndex(db, cfIndexParentBucketKey, cfIndexName, interrupt); err != nil {
 			return err
 		}
@@ -206,7 +209,7 @@ func (idx *CfIndex) Create(dbTx database.Tx) error {
 		}
 	}
 
-	return dbStoreMigrationVersion(dbTx, 1)
+	return dbStoreMigrationVersion(dbTx, cfIndexVersion)
 }
 
 // storeFilter stores a given filter, and performs the steps needed to
