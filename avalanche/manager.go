@@ -2,17 +2,18 @@ package avalanche
 
 import (
 	"fmt"
+	"math/rand"
+	"net"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"math/rand"
-	"net"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (
@@ -234,7 +235,7 @@ func (am *AvalancheManager) handleQuery(req *wire.MsgAvaRequest, respChan chan *
 		}
 	}
 	resp := wire.NewMsgAvaResponse(req.RequestID, votes, nil)
-	sig, err := am.privKey.Sign(resp.SerializeForSignature())
+	sig, err := am.privKey.SignSchnorr(resp.SerializeForSignature())
 	if err != nil {
 		log.Error("Error signing response: %s", err.Error())
 	}

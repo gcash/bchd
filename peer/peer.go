@@ -2280,7 +2280,7 @@ func (p *Peer) writeLocalVersionMsg() error {
 func (p *Peer) writeLocalAvaPubkeyMsg() error {
 	nonceBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(nonceBytes, p.remoteVersionNonce)
-	sig, err := p.cfg.AvalanchePrivateKey.Sign(nonceBytes)
+	sig, err := p.cfg.AvalanchePrivateKey.SignSchnorr(nonceBytes)
 	if err != nil {
 		return err
 	}

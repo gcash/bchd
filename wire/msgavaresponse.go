@@ -7,15 +7,16 @@ package wire
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/gcash/bchd/bchec"
 	"io"
+
+	"github.com/gcash/bchd/bchec"
 )
 
 // MsgAvaResponse implements the Message interface and represents a bitcoin avaresponse message.
 // It is the signed response to the avarequest message.
 type MsgAvaResponse struct {
 	RequestID uint64
-	Votes  []byte
+	Votes     []byte
 	Signature *bchec.Signature
 }
 
@@ -59,7 +60,7 @@ func (msg *MsgAvaResponse) BchDecode(r io.Reader, pver uint32, enc MessageEncodi
 	if err != nil {
 		return err
 	}
-	msg.Signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
+	msg.Signature, err = bchec.ParseSchnorrSignature(sigBytes)
 	if err != nil {
 		return err
 	}
@@ -109,7 +110,7 @@ func (msg *MsgAvaResponse) MaxPayloadLength(pver uint32) uint32 {
 func NewMsgAvaResponse(requestID uint64, votes []byte, signature *bchec.Signature) *MsgAvaResponse {
 	return &MsgAvaResponse{
 		RequestID: requestID,
-		Votes: votes,
+		Votes:     votes,
 		Signature: signature,
 	}
 }

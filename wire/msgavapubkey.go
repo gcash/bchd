@@ -5,8 +5,9 @@
 package wire
 
 import (
-	"github.com/gcash/bchd/bchec"
 	"io"
+
+	"github.com/gcash/bchd/bchec"
 )
 
 // MsgAvalanchePubkey implements the Message interface and represents a bitcoin
@@ -35,7 +36,7 @@ func (msg *MsgAvaPubkey) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 	if err != nil {
 		return err
 	}
-	msg.Signature, err = bchec.ParseSignature(sigBytes, bchec.S256())
+	msg.Signature, err = bchec.ParseSchnorrSignature(sigBytes)
 	return err
 }
 
