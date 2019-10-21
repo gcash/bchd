@@ -271,9 +271,11 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 	}
 
 	// Migrate each index if necessary.
-	for _, indexer := range m.enabledIndexes {
-		if err := indexer.Migrate(m.db, interrupt); err != nil {
-			return err
+	if !chain.IsPruned() {
+		for _, indexer := range m.enabledIndexes {
+			if err := indexer.Migrate(m.db, interrupt); err != nil {
+				return err
+			}
 		}
 	}
 
