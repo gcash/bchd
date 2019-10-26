@@ -180,9 +180,11 @@ func addTxOuts(view utxoView, tx *bchutil.Tx, blockHeight int32, overwrite bool)
 		}
 
 		// Create a new entry from the output.
+		pkScript := make([]byte, len(txOut.PkScript))
+		copy(pkScript, txOut.PkScript)
 		entry := &UtxoEntry{
 			amount:      txOut.Value,
-			pkScript:    txOut.PkScript,
+			pkScript:    pkScript,
 			blockHeight: blockHeight,
 			packedFlags: tfModified,
 		}
@@ -326,9 +328,12 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			stxo := &stxos[stxoIdx]
 			stxoIdx--
 
+			pkScript := make([]byte, len(stxo.PkScript))
+			copy(pkScript, stxo.PkScript)
+
 			entry := &UtxoEntry{
 				amount:      stxo.Amount,
-				pkScript:    stxo.PkScript,
+				pkScript:    pkScript,
 				blockHeight: stxo.Height,
 				packedFlags: tfModified,
 			}
