@@ -79,8 +79,11 @@ func (view *UtxoViewpoint) addTxOut(outpoint wire.OutPoint, txOut *wire.TxOut, i
 		view.entries[outpoint] = entry
 	}
 
+	pkScript := make([]byte, len(txOut.PkScript))
+	copy(pkScript, txOut.PkScript)
+
 	entry.amount = txOut.Value
-	entry.pkScript = txOut.PkScript
+	entry.pkScript = pkScript
 	entry.blockHeight = blockHeight
 	entry.packedFlags = tfModified
 	if isCoinBase {
@@ -182,6 +185,7 @@ func addTxOuts(view utxoView, tx *bchutil.Tx, blockHeight int32, overwrite bool)
 		// Create a new entry from the output.
 		pkScript := make([]byte, len(txOut.PkScript))
 		copy(pkScript, txOut.PkScript)
+
 		entry := &UtxoEntry{
 			amount:      txOut.Value,
 			pkScript:    pkScript,
@@ -226,10 +230,13 @@ func spendTransactionInputs(view utxoView, tx *bchutil.Tx, stxos *[]SpentTxOut) 
 
 		// Only create the stxo details if requested.
 		if stxos != nil {
+			pkScript := make([]byte, len(entry.PkScript()))
+			copy(pkScript, entry.PkScript())
+
 			// Populate the stxo details using the utxo entry.
 			var stxo = SpentTxOut{
 				Amount:     entry.Amount(),
-				PkScript:   entry.PkScript(),
+				PkScript:   pkScript,
 				Height:     entry.BlockHeight(),
 				IsCoinBase: entry.IsCoinBase(),
 			}
@@ -375,11 +382,15 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			}
 
 			prevOut.Index = uint32(txOutIdx)
+
+			pkScript := make([]byte, len(txOut.PkScript))
+			copy(pkScript, txOut.PkScript)
+
 			// Mark the entry as spent.  To make sure the view has the entry,
 			// create one to pass along.
 			entry := &UtxoEntry{
 				amount:      txOut.Value,
-				pkScript:    txOut.PkScript,
+				pkScript:    pkScript,
 				blockHeight: block.Height(),
 				packedFlags: packedFlags,
 			}
