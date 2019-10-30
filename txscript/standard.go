@@ -56,6 +56,9 @@ const (
 	ScriptHashTy                     // Pay to script hash.
 	MultiSigTy                       // Multi signature.
 	NullDataTy                       // Empty data-only (provably prunable).
+	SLPGenesisTy                     // Genesis transaction.
+	SLPMintTy                        // Mint transaction.
+	SLPSpendTy                       // Spend transaction.
 )
 
 // scriptClassToName houses the human-readable strings which describe each
@@ -67,6 +70,9 @@ var scriptClassToName = []string{
 	ScriptHashTy:  "scripthash",
 	MultiSigTy:    "multisig",
 	NullDataTy:    "nulldata",
+	SLPGenesisTy:  "genesis",
+	SLPMintTy:     "mint",
+	SLPSpendTy:    "spend",
 }
 
 // String implements the Stringer interface by returning the name of

@@ -1038,6 +1038,21 @@ func TestStringifyClass(t *testing.T) {
 			stringed: "nulldata",
 		},
 		{
+			name:     "genesis",
+			class:    SLPGenesisTy,
+			stringed: "genesis",
+		},
+		{
+			name:     "mint",
+			class:    SLPMintTy,
+			stringed: "mint",
+		},
+		{
+			name:     "spend",
+			class:    SLPSpendTy,
+			stringed: "spend",
+		},
+		{
 			name:     "broken",
 			class:    ScriptClass(255),
 			stringed: "Invalid",
