@@ -2296,20 +2296,6 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, err
 	}
 
-	// Initialize and catch up all of the currently active optional indexes
-	// as needed.
-	if config.IndexManager != nil {
-		err := config.IndexManager.Init(&b, config.Interrupt)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Initialize rule change threshold state caches.
-	if err := b.initThresholdCaches(); err != nil {
-		return nil, err
-	}
-
 	// If we're running in pruned mode or fast sync mode then set the chain type in the
 	// database. If not load the chain type from the database.
 	if config.Prune || config.FastSync {
@@ -2328,6 +2314,26 @@ func New(config *Config) (*BlockChain, error) {
 			}
 			return nil
 		})
+	}
+
+	// If we are pruned then done set any indexes as the manager cannot
+	// currently handle a pruned chain.
+	if b.isPruned {
+		b.indexManager = nil
+	}
+
+	// Initialize and catch up all of the currently active optional indexes
+	// as needed.
+	if b.indexManager != nil {
+		err := b.indexManager.Init(&b, config.Interrupt)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Initialize rule change threshold state caches.
+	if err := b.initThresholdCaches(); err != nil {
+		return nil, err
 	}
 
 	// Run an initial prune if prune mode is set
