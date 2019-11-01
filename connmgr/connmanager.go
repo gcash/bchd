@@ -35,7 +35,38 @@ var (
 	// defaultTargetOutbound is the default number of outbound connections to
 	// maintain.
 	defaultTargetOutbound = uint32(8)
+
+	// This is a map of all ip:port strings for all peers currently connected to our node.
+	peerMap = concurrentConnectionMap{connections: make(map[string]bool)}
 )
+
+// concurrentConnectionMap is safe to use concurrently.
+type concurrentConnectionMap struct {
+	connections map[string]bool
+	mux         sync.Mutex
+}
+
+// addToConnectionMap adds a network address to the map.
+func (c *concurrentConnectionMap) addToConnectionMap(key string) {
+	c.mux.Lock()
+	c.connections[key] = true
+	c.mux.Unlock()
+}
+
+// RemoveFromConnectionMap deletes a network address from the map.
+func (c *concurrentConnectionMap) removeFromConnectionMap(key string) {
+	c.mux.Lock()
+	delete(c.connections, key)
+	c.mux.Unlock()
+}
+
+//findKeyInConnectionMap returns a boolean of whether a network address is in the map.
+func (c *concurrentConnectionMap) findKeyInConnectionMap(key string) bool {
+	c.mux.Lock()
+	_, found := c.connections[key]
+	defer c.mux.Unlock()
+	return found
+}
 
 // ConnState represents the state of the requested connection.
 type ConnState uint8
@@ -263,6 +294,9 @@ out:
 				connReq.updateState(ConnEstablished)
 				connReq.conn = msg.conn
 				conns[connReq.id] = connReq
+				// Add the address to the peerMap
+				peerNetworkAddressString := connReq.Addr.String()
+				peerMap.addToConnectionMap(peerNetworkAddressString)
 				log.Debugf("Connected to %v", connReq)
 				connReq.retryCount = 0
 				cm.failedAttempts = 0
@@ -282,6 +316,10 @@ out:
 							msg.id)
 						continue
 					}
+
+					// remove the network address from the peerMap
+					peerNetworkAddressString := connReq.Addr.String()
+					peerMap.removeFromConnectionMap(peerNetworkAddressString)
 
 					// Pending connection was found, remove
 					// it from pending map if we should
@@ -420,6 +458,13 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 	// this connection was already cancelled
 	if c.State() == ConnCanceled {
 		log.Debugf("Ignoring connect for canceled connreq=%v", c)
+		return
+	}
+
+	// Don't try to connect if we are already connected to this peer.
+	peerNetworkAddressString := c.Addr.String()
+	found := peerMap.findKeyInConnectionMap(peerNetworkAddressString)
+	if found == true {
 		return
 	}
 
