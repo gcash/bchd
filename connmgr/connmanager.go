@@ -49,22 +49,22 @@ type concurrentConnectionMap struct {
 // addToConnectionMap adds a network address to the map.
 func (c *concurrentConnectionMap) addToConnectionMap(key string) {
 	c.mux.Lock()
+	defer c.mux.Unlock()
 	c.connections[key] = true
-	c.mux.Unlock()
 }
 
 // RemoveFromConnectionMap deletes a network address from the map.
 func (c *concurrentConnectionMap) removeFromConnectionMap(key string) {
 	c.mux.Lock()
+	defer c.mux.Unlock()
 	delete(c.connections, key)
-	c.mux.Unlock()
 }
 
 //findKeyInConnectionMap returns a boolean of whether a network address is in the map.
 func (c *concurrentConnectionMap) findKeyInConnectionMap(key string) bool {
 	c.mux.Lock()
-	_, found := c.connections[key]
 	defer c.mux.Unlock()
+	_, found := c.connections[key]
 	return found
 }
 
@@ -295,8 +295,8 @@ out:
 				connReq.conn = msg.conn
 				conns[connReq.id] = connReq
 				// Add the address to the peerMap
-				peerNetworkAddressString := connReq.Addr.String()
-				peerMap.addToConnectionMap(peerNetworkAddressString)
+				peerNetworkAddress := connReq.Addr.String()
+				peerMap.addToConnectionMap(peerNetworkAddress)
 				log.Debugf("Connected to %v", connReq)
 				connReq.retryCount = 0
 				cm.failedAttempts = 0
@@ -318,8 +318,8 @@ out:
 					}
 
 					// remove the network address from the peerMap
-					peerNetworkAddressString := connReq.Addr.String()
-					peerMap.removeFromConnectionMap(peerNetworkAddressString)
+					peerNetworkAddress := connReq.Addr.String()
+					peerMap.removeFromConnectionMap(peerNetworkAddress)
 
 					// Pending connection was found, remove
 					// it from pending map if we should
@@ -462,8 +462,8 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 	}
 
 	// Don't try to connect if we are already connected to this peer.
-	peerNetworkAddressString := c.Addr.String()
-	found := peerMap.findKeyInConnectionMap(peerNetworkAddressString)
+	peerNetworkAddress := c.Addr.String()
+	found := peerMap.findKeyInConnectionMap(peerNetworkAddress)
 	if found {
 		return
 	}
