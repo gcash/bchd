@@ -464,7 +464,7 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 	// Don't try to connect if we are already connected to this peer.
 	peerNetworkAddressString := c.Addr.String()
 	found := peerMap.findKeyInConnectionMap(peerNetworkAddressString)
-	if found == true {
+	if found {
 		return
 	}
 
