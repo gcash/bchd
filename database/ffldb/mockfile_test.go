@@ -10,7 +10,8 @@ package ffldb
 import (
 	"errors"
 	"io"
-	"sync"
+
+	"github.com/gcash/bchutil"
 )
 
 // Errors used for the mock file.
@@ -30,7 +31,7 @@ var (
 // the database code related to reading and writing from the flat block files.
 // A maxSize of -1 is unlimited.
 type mockFile struct {
-	sync.RWMutex
+	bchutil.RWMutex
 	maxSize      int64
 	data         []byte
 	forceSyncErr bool

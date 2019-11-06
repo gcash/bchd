@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"sync"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
@@ -99,13 +98,13 @@ type memWallet struct {
 
 	chainUpdates      []*chainUpdate
 	chainUpdateSignal chan struct{}
-	chainMtx          sync.Mutex
+	chainMtx          bchutil.Mutex
 
 	net *chaincfg.Params
 
 	rpc *rpcclient.Client
 
-	sync.RWMutex
+	bchutil.RWMutex
 }
 
 // newMemWallet creates and returns a fully initialized instance of the
@@ -153,6 +152,9 @@ func newMemWallet(net *chaincfg.Params, harnessID uint32) (*memWallet, error) {
 		utxos:             make(map[wire.OutPoint]*utxo),
 		chainUpdateSignal: make(chan struct{}),
 		reorgJournal:      make(map[int32]*undoEntry),
+
+		RWMutex:  bchutil.NewRWMutex("integration/rpctest.memWallet"),
+		chainMtx: bchutil.NewMutex("integration/rpctest.memWallet.chainMtx"),
 	}, nil
 }
 

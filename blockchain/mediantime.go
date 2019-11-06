@@ -7,8 +7,9 @@ package blockchain
 import (
 	"math"
 	"sort"
-	"sync"
 	"time"
+
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -75,7 +76,7 @@ func (s int64Sorter) Less(i, j int) bool {
 // the time offset mechanism in Bitcoin Core.  This is necessary because it is
 // used in the consensus code.
 type medianTime struct {
-	mtx                sync.Mutex
+	mtx                bchutil.Mutex
 	knownIDs           map[string]struct{}
 	offsets            []int64
 	offsetSecs         int64
@@ -212,6 +213,7 @@ func (m *medianTime) Offset() time.Duration {
 // message received from remote peers that successfully connect and negotiate.
 func NewMedianTime() MedianTimeSource {
 	return &medianTime{
+		mtx:      bchutil.NewMutex("blockchain.mediaTime.mtx"),
 		knownIDs: make(map[string]struct{}),
 		offsets:  make([]int64, 0, maxMedianTimeEntries),
 	}

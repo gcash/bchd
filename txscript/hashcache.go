@@ -5,10 +5,9 @@
 package txscript
 
 import (
-	"sync"
-
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // TxSigHashes houses the partial set of sighashes introduced within BIP0143.
@@ -39,13 +38,14 @@ func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
 type HashCache struct {
 	sigHashes map[chainhash.Hash]*TxSigHashes
 
-	sync.RWMutex
+	bchutil.RWMutex
 }
 
 // NewHashCache returns a new instance of the HashCache given a maximum number
 // of entries which may exist within it at anytime.
 func NewHashCache(maxSize uint) *HashCache {
 	return &HashCache{
+		RWMutex:   bchutil.NewRWMutex("txscript.HashCache"),
 		sigHashes: make(map[chainhash.Hash]*TxSigHashes, maxSize),
 	}
 }

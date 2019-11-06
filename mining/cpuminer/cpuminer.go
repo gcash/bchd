@@ -90,13 +90,13 @@ type Config struct {
 // function, but the default is based on the number of processor cores in the
 // system which is typically sufficient.
 type CPUMiner struct {
-	sync.Mutex
+	bchutil.Mutex
 	g                 *mining.BlkTmplGenerator
 	cfg               Config
 	numWorkers        uint32
 	started           bool
 	discreteMining    bool
-	submitBlockLock   sync.Mutex
+	submitBlockLock   bchutil.Mutex
 	wg                sync.WaitGroup
 	workerWg          sync.WaitGroup
 	updateNumWorkers  chan struct{}
@@ -638,5 +638,8 @@ func New(cfg *Config) *CPUMiner {
 		updateNumWorkers:  make(chan struct{}),
 		queryHashesPerSec: make(chan float64),
 		updateHashes:      make(chan uint64),
+
+		Mutex:           bchutil.NewMutex("mining/cpuminer.CPUMiner"),
+		submitBlockLock: bchutil.NewMutex("mining/cpuminer.CPUMiner.submitBlockLock"),
 	}
 }

@@ -10,13 +10,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sync"
+
+	"github.com/gcash/bchutil"
 )
 
 var (
 	// compileMtx guards access to the executable path so that the project is
 	// only compiled once.
-	compileMtx sync.Mutex
+	compileMtx = bchutil.NewMutex("integration/rpcclient.compileMtx")
 
 	// executablePath is the path to the compiled executable. This is the empty
 	// string until bchd is compiled. This should not be accessed directly;

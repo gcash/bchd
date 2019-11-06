@@ -7,7 +7,6 @@ package netsync
 import (
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
@@ -25,7 +24,7 @@ type blockProgressLogger struct {
 
 	subsystemLogger bchlog.Logger
 	progressAction  string
-	sync.Mutex
+	bchutil.Mutex
 }
 
 // newBlockProgressLogger returns a new block progress logger.
@@ -34,6 +33,7 @@ type blockProgressLogger struct {
 //  ({numTxs}, height {lastBlockHeight}, {lastBlockTimeStamp})
 func newBlockProgressLogger(progressMessage string, logger bchlog.Logger) *blockProgressLogger {
 	return &blockProgressLogger{
+		Mutex:            bchutil.NewMutex("netsync.blockProgressLogger"),
 		lastBlockLogTime: time.Now(),
 		progressAction:   progressMessage,
 		subsystemLogger:  logger,

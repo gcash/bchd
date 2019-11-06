@@ -11,7 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
+
+	"github.com/gcash/bchutil"
 )
 
 // UsageFlag define flags that specify additional properties about the
@@ -84,7 +85,7 @@ type methodInfo struct {
 
 var (
 	// These fields are used to map the registered types to method names.
-	registerLock         sync.RWMutex
+	registerLock         = bchutil.NewRWMutex("btcjson.registerLock")
 	methodToConcreteType = make(map[string]reflect.Type)
 	methodToInfo         = make(map[string]methodInfo)
 	concreteTypeToMethod = make(map[reflect.Type]string)

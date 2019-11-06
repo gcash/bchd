@@ -7,8 +7,8 @@ package blockchain
 import (
 	"container/list"
 	"fmt"
+
 	"github.com/gcash/bchd/txscript"
-	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
@@ -186,7 +186,7 @@ type utxoCache struct {
 	// This mutex protects the internal state.
 	// A simple mutex instead of a read-write mutex is chosen because the main
 	// read method also possibly does a write on a cache miss.
-	mtx sync.Mutex
+	mtx bchutil.Mutex
 
 	// cachedEntries keeps the internal cache of the utxo state.  The tfModified
 	// flag indicates that the state of the entry (potentially) deviates from the
@@ -206,6 +206,7 @@ func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 	return &utxoCache{
 		db:                  db,
 		maxTotalMemoryUsage: maxTotalMemoryUsage,
+		mtx:                 bchutil.NewMutex("blockchain.utxoCache.mtx"),
 
 		cachedEntries: make(map[wire.OutPoint]*UtxoEntry),
 	}

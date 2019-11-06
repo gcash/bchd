@@ -345,7 +345,7 @@ func rpcNoTxInfoError(txHash *chainhash.Hash) *btcjson.RPCError {
 // gbtWorkState houses state that is used in between multiple RPC invocations to
 // getblocktemplate.
 type gbtWorkState struct {
-	sync.Mutex
+	bchutil.Mutex
 	lastTxUpdate  time.Time
 	lastGenerated time.Time
 	prevHash      *chainhash.Hash
@@ -361,6 +361,7 @@ type gbtWorkState struct {
 // fields initialized and ready to use.
 func newGbtWorkState(timeSource blockchain.MedianTimeSource) *gbtWorkState {
 	return &gbtWorkState{
+		Mutex:      bchutil.NewMutex("gbtWorkState"),
 		notifyMap:  make(map[chainhash.Hash]map[int64]chan struct{}),
 		timeSource: timeSource,
 	}
@@ -3983,7 +3984,7 @@ type rpcServer struct {
 	ntfnMgr                *wsNotificationManager
 	numClients             int32
 	statusLines            map[int]string
-	statusLock             sync.RWMutex
+	statusLock             bchutil.RWMutex
 	wg                     sync.WaitGroup
 	gbtWorkState           *gbtWorkState
 	helpCacher             *helpCacher
@@ -4803,6 +4804,7 @@ func newRPCServer(config *rpcserverConfig) (*rpcServer, error) {
 		helpCacher:             newHelpCacher(),
 		requestProcessShutdown: make(chan struct{}),
 		quit:                   make(chan int),
+		statusLock:             bchutil.NewRWMutex("rpcServer.statusLock"),
 	}
 	if cfg.RPCUser != "" && cfg.RPCPass != "" {
 		login := cfg.RPCUser + ":" + cfg.RPCPass

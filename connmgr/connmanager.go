@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchutil"
 )
 
 // maxFailedAttempts is the maximum number of successive failed connection
@@ -63,7 +65,7 @@ type ConnReq struct {
 
 	conn       net.Conn
 	state      ConnState
-	stateMtx   sync.RWMutex
+	stateMtx   bchutil.RWMutex
 	retryCount uint32
 }
 
@@ -366,7 +368,7 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	c := &ConnReq{}
+	c := &ConnReq{stateMtx: bchutil.NewRWMutex("connmgr.ConnReq.stateMtx")}
 	atomic.StoreUint64(&c.id, atomic.AddUint64(&cm.connReqCount, 1))
 
 	// Submit a request of a pending connection attempt to the connection

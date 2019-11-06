@@ -6,12 +6,12 @@ package mempool
 
 import (
 	"encoding/hex"
-	"github.com/gcash/bchd/mining"
 	"reflect"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/gcash/bchd/mining"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
@@ -28,7 +28,7 @@ const MockMaxUtxosPerBlock = 32000000 / wire.MinTxOutPayload
 // a current faked chain height to the pool callbacks.  This, in turn, allows
 // transactions to appear as though they are spending completely valid utxos.
 type fakeChain struct {
-	sync.RWMutex
+	bchutil.RWMutex
 	utxos          *blockchain.UtxoViewpoint
 	currentHeight  int32
 	medianTimePast time.Time

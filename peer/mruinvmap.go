@@ -8,16 +8,16 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
-	"sync"
 
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // mruInventoryMap provides a concurrency safe map that is limited to a maximum
 // number of items with eviction for the oldest entry when the limit is
 // exceeded.
 type mruInventoryMap struct {
-	invMtx  sync.Mutex
+	invMtx  bchutil.Mutex
 	invMap  map[wire.InvVect]*list.Element // nearly O(1) lookups
 	invList *list.List                     // O(1) insert, update, delete
 	limit   uint
@@ -124,6 +124,7 @@ func (m *mruInventoryMap) Delete(iv *wire.InvVect) {
 // new entry.
 func newMruInventoryMap(limit uint) *mruInventoryMap {
 	m := mruInventoryMap{
+		invMtx:  bchutil.NewMutex("peer.mruInventoryMap.invMtx"),
 		invMap:  make(map[wire.InvVect]*list.Element),
 		invList: list.New(),
 		limit:   limit,

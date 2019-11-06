@@ -5,10 +5,9 @@
 package txscript
 
 import (
-	"sync"
-
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchutil"
 )
 
 // sigCacheEntry represents an entry in the SigCache. Entries within the
@@ -33,7 +32,7 @@ type sigCacheEntry struct {
 // optimization which speeds up the validation of transactions within a block,
 // if they've already been seen and verified within the mempool.
 type SigCache struct {
-	sync.RWMutex
+	bchutil.RWMutex
 	validSigs  map[chainhash.Hash]sigCacheEntry
 	maxEntries uint
 }
@@ -45,6 +44,7 @@ type SigCache struct {
 // cache to exceed the max.
 func NewSigCache(maxEntries uint) *SigCache {
 	return &SigCache{
+		RWMutex:    bchutil.NewRWMutex("txscript.SigCache"),
 		validSigs:  make(map[chainhash.Hash]sigCacheEntry, maxEntries),
 		maxEntries: maxEntries,
 	}

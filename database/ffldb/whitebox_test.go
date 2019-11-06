@@ -326,7 +326,7 @@ func testWriteFailures(tc *testContext) bool {
 	store.writeCursor.Lock()
 	oldFile := store.writeCursor.curFile
 	store.writeCursor.curFile = &lockableFile{
-		file: &mockFile{forceSyncErr: true, maxSize: -1},
+		file: &mockFile{forceSyncErr: true, maxSize: -1, RWMutex: bchutil.NewRWMutex("database/ffldb.mockFile")},
 	}
 	store.writeCursor.Unlock()
 	err := tc.db.(*db).cache.flush()
@@ -655,7 +655,7 @@ func TestFailureScenarios(t *testing.T) {
 		if maxFileSize, ok := tc.maxFileSizes[fileNum]; ok {
 			maxSize = maxFileSize
 		}
-		file := &mockFile{maxSize: maxSize}
+		file := &mockFile{maxSize: maxSize, RWMutex: bchutil.NewRWMutex("database/ffldb.mockFile")}
 		tc.files[fileNum] = &lockableFile{file: file}
 		return file, nil
 	}
@@ -675,7 +675,7 @@ func TestFailureScenarios(t *testing.T) {
 			file.Unlock()
 			return file, nil
 		}
-		file := &lockableFile{file: &mockFile{}}
+		file := &lockableFile{file: &mockFile{RWMutex: bchutil.NewRWMutex("database/ffldb.mockFile")}}
 		tc.files[fileNum] = file
 		return file, nil
 	}

@@ -17,11 +17,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -80,15 +80,22 @@ type filer interface {
 // read or read/write access.  It also contains a read-write mutex to support
 // multiple concurrent readers.
 type lockableFile struct {
-	sync.RWMutex
+	bchutil.RWMutex
 	file filer
+}
+
+func newLockableFile(f filer) *lockableFile {
+	return &lockableFile{
+		file:    f,
+		RWMutex: bchutil.NewRWMutex("database/ffldb.lockableFile"),
+	}
 }
 
 // writeCursor represents the current file and offset of the block file on disk
 // for performing all writes. It also contains a read-write mutex to support
 // multiple concurrent readers which can reuse the file handle.
 type writeCursor struct {
-	sync.RWMutex
+	bchutil.RWMutex
 
 	// curFile is the current block file that will be appended to when
 	// writing new blocks.
@@ -162,9 +169,9 @@ type blockStore struct {
 	//
 	// Due to the high performance and multi-read concurrency requirements,
 	// write locks should only be held for the minimum time necessary.
-	obfMutex         sync.RWMutex
-	lruMutex         sync.Mutex
-	fbhMutex         sync.RWMutex
+	obfMutex         bchutil.RWMutex
+	lruMutex         bchutil.Mutex
+	fbhMutex         bchutil.RWMutex
 	openBlocksLRU    *list.List // Contains uint32 block file numbers.
 	fileNumToLRUElem map[uint32]*list.Element
 	openBlockFiles   map[uint32]*lockableFile
@@ -264,7 +271,7 @@ func (s *blockStore) openFile(fileNum uint32) (*lockableFile, error) {
 		return nil, makeDbErr(database.ErrDriverSpecific, err.Error(),
 			err)
 	}
-	blockFile := &lockableFile{file: file}
+	blockFile := newLockableFile(file)
 
 	// Close the least recently used file if the file exceeds the max
 	// allowed open files.  This is not done until after the file open in
@@ -879,11 +886,16 @@ func newBlockStore(basePath string, network wire.BitcoinNet) (*blockStore, error
 		fileNumToLRUElem: make(map[uint32]*list.Element),
 
 		writeCursor: &writeCursor{
-			curFile:    &lockableFile{},
+			RWMutex:    bchutil.NewRWMutex("database/ffldb.blockStore.writeCursor"),
+			curFile:    newLockableFile(nil),
 			curFileNum: uint32(fileNum),
 			curOffset:  fileOff,
 		},
 		fileBlockHeights: make(map[uint32]uint32),
+
+		obfMutex: bchutil.NewRWMutex("database/ffldb.blockStore.obfMutex"),
+		lruMutex: bchutil.NewMutex("database/ffldb.blockStore.lruMutex"),
+		fbhMutex: bchutil.NewRWMutex("database/ffldb.blockStore.fbhMutex"),
 	}
 	store.openFileFunc = store.openFile
 	store.openWriteFileFunc = store.openWriteFile

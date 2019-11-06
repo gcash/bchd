@@ -7,8 +7,9 @@ package connmgr
 import (
 	"fmt"
 	"math"
-	"sync"
 	"time"
+
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -64,7 +65,11 @@ type DynamicBanScore struct {
 	lastUnix   int64
 	transient  float64
 	persistent uint32
-	mtx        sync.Mutex
+	mtx        bchutil.Mutex
+}
+
+func NewDynamicBanScore() DynamicBanScore {
+	return DynamicBanScore{mtx: bchutil.NewMutex("connmgr.DynamicBanScore.tx")}
 }
 
 // String returns the ban score as a human-readable string.

@@ -252,7 +252,7 @@ func (m *wsNotificationManager) NotifyMempoolTx(tx *bchutil.Tx, isNew bool) {
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
 type wsClientFilter struct {
-	mu sync.Mutex
+	mu bchutil.Mutex
 
 	// Implemented fast paths for address lookup.
 	pubKeyHashes        map[[ripemd160.Size]byte]struct{}
@@ -275,6 +275,7 @@ type wsClientFilter struct {
 // NOTE: This extension was ported from github.com/decred/dcrd
 func newWSClientFilter(addresses []string, unspentOutPoints []wire.OutPoint, params *chaincfg.Params) *wsClientFilter {
 	filter := &wsClientFilter{
+		mu:                  bchutil.NewMutex("wsClientFilter.mu"),
 		pubKeyHashes:        map[[ripemd160.Size]byte]struct{}{},
 		scriptHashes:        map[[ripemd160.Size]byte]struct{}{},
 		compressedPubKeys:   map[[33]byte]struct{}{},
@@ -1246,7 +1247,7 @@ type wsResponse struct {
 // subsystems can't block.  Ultimately, all messages are sent via the
 // outHandler.
 type wsClient struct {
-	sync.Mutex
+	bchutil.Mutex
 
 	// server is the RPC server that is servicing the client.
 	server *rpcServer
@@ -2002,6 +2003,8 @@ func newWebsocketClient(server *rpcServer, conn *websocket.Conn,
 	}
 
 	client := &wsClient{
+		Mutex: bchutil.NewMutex("wsClient"),
+
 		conn:              conn,
 		addr:              remoteAddr,
 		authenticated:     authenticated,

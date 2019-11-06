@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"sync"
 
 	"github.com/btcsuite/goleveldb/leveldb"
 	"github.com/btcsuite/goleveldb/leveldb/comparer"
@@ -984,7 +983,7 @@ type transaction struct {
 	// Active iterators that need to be notified when the pending keys have
 	// been updated so the cursors can properly handle updates to the
 	// transaction state.
-	activeIterLock sync.RWMutex
+	activeIterLock bchutil.RWMutex
 	activeIters    []*treap.Iterator
 }
 
@@ -1782,11 +1781,11 @@ func (tx *transaction) Rollback() error {
 // the database.DB interface.  All database access is performed through
 // transactions which are obtained through the specific Namespace.
 type db struct {
-	writeLock sync.Mutex   // Limit to one write transaction at a time.
-	closeLock sync.RWMutex // Make database close block while txns active.
-	closed    bool         // Is the database closed?
-	store     *blockStore  // Handles read/writing blocks to flat files.
-	cache     *dbCache     // Cache layer which wraps underlying leveldb DB.
+	writeLock bchutil.Mutex   // Limit to one write transaction at a time.
+	closeLock bchutil.RWMutex // Make database close block while txns active.
+	closed    bool            // Is the database closed?
+	store     *blockStore     // Handles read/writing blocks to flat files.
+	cache     *dbCache        // Cache layer which wraps underlying leveldb DB.
 }
 
 // Enforce db implements the database.DB interface.
@@ -1866,6 +1865,8 @@ func (db *db) begin(writable bool) (*transaction, error) {
 		snapshot:      snapshot,
 		pendingKeys:   treap.NewMutable(),
 		pendingRemove: treap.NewMutable(),
+
+		activeIterLock: bchutil.NewRWMutex("database/ffldb.transaction.activeIterLock"),
 	}
 	tx.metaBucket = &bucket{tx: tx, id: metadataBucketID}
 	tx.blockIdxBucket = &bucket{tx: tx, id: blockIdxBucketID}
@@ -2099,7 +2100,13 @@ func openDB(dbPath string, network wire.BitcoinNet, create bool, cacheSize uint6
 		flushSecs = defaultFlushSecs
 	}
 	cache := newDbCache(ldb, store, cacheSize, flushSecs)
-	pdb := &db{store: store, cache: cache}
+	pdb := &db{
+		store: store,
+		cache: cache,
+
+		writeLock: bchutil.NewMutex("database/fldb/db.writeLock"),
+		closeLock: bchutil.NewRWMutex("database/fldb/db.closeLock"),
+	}
 
 	// Perform any reconciliation needed between the block and metadata as
 	// well as database initialization, if needed.

@@ -12,7 +12,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/bchrpc"
 	"math"
 	"net"
 	"runtime"
@@ -22,6 +21,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchd/bchrpc"
 
 	"github.com/gcash/bchutil/gcs/builder"
 
@@ -275,7 +276,7 @@ type server struct {
 	// cfCheckptCaches stores a cached slice of filter headers for cfcheckpt
 	// messages for each filter type.
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
-	cfCheckptCachesMtx sync.RWMutex
+	cfCheckptCachesMtx bchutil.RWMutex
 }
 
 // spMsg represents a message over the wire from a specific peer.
@@ -304,13 +305,13 @@ type serverPeer struct {
 	server          *server
 	persistent      bool
 	continueHash    *chainhash.Hash
-	relayMtx        sync.Mutex
-	processBlockMtx sync.Mutex
+	relayMtx        bchutil.Mutex
+	processBlockMtx bchutil.Mutex
 	disableRelayTx  bool
 	sentAddrs       bool
 	isWhitelisted   bool
 	filter          *bloom.Filter
-	addrMtx         sync.RWMutex
+	addrMtx         bchutil.RWMutex
 	knownAddresses  map[string]struct{}
 	banScore        connmgr.DynamicBanScore
 	quit            chan struct{}
@@ -319,7 +320,7 @@ type serverPeer struct {
 	blockProcessed chan struct{}
 
 	recvSubscribers map[spMsgSubscription]struct{}
-	mtxSubscribers  sync.RWMutex
+	mtxSubscribers  bchutil.RWMutex
 }
 
 // newServerPeer returns a new serverPeer instance. The peer needs to be set by
@@ -334,6 +335,13 @@ func newServerPeer(s *server, isPersistent bool) *serverPeer {
 		txProcessed:     make(chan struct{}, 1),
 		blockProcessed:  make(chan struct{}, 1),
 		recvSubscribers: make(map[spMsgSubscription]struct{}),
+
+		banScore: connmgr.NewDynamicBanScore(),
+
+		relayMtx:        bchutil.NewMutex("serverPeer.relayMtx"),
+		addrMtx:         bchutil.NewRWMutex("serverPeer.addrMtx"),
+		processBlockMtx: bchutil.NewMutex("serverPeer.processBlockMtx"),
+		mtxSubscribers:  bchutil.NewRWMutex("serverPeer.mtxSubscribers"),
 	}
 }
 
@@ -3086,6 +3094,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		sigCache:             txscript.NewSigCache(cfg.SigCacheMaxSize),
 		hashCache:            txscript.NewHashCache(cfg.SigCacheMaxSize),
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
+		cfCheckptCachesMtx:   bchutil.NewRWMutex("server.cfCheckptCachesMtx"),
 	}
 
 	// Create the transaction and address indexes if needed.

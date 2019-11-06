@@ -26,6 +26,7 @@ import (
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchutil"
 )
 
 var (
@@ -130,7 +131,7 @@ type Client struct {
 	httpClient *http.Client
 
 	// mtx is a mutex to protect access to connection related fields.
-	mtx sync.Mutex
+	mtx bchutil.Mutex
 
 	// disconnected indicated whether or not the server is disconnected.
 	disconnected bool
@@ -140,13 +141,13 @@ type Client struct {
 	retryCount int64
 
 	// Track command and their response channels by ID.
-	requestLock sync.Mutex
+	requestLock bchutil.Mutex
 	requestMap  map[uint64]*list.Element
 	requestList *list.List
 
 	// Notifications.
 	ntfnHandlers  *NotificationHandlers
-	ntfnStateLock sync.Mutex
+	ntfnStateLock bchutil.Mutex
 	ntfnState     *notificationState
 
 	// Networking infrastructure.
@@ -1260,6 +1261,10 @@ func New(config *ConnConfig, ntfnHandlers *NotificationHandlers) (*Client, error
 		connEstablished: connEstablished,
 		disconnect:      make(chan struct{}),
 		shutdown:        make(chan struct{}),
+
+		mtx:           bchutil.NewMutex("rpcclient.Client.mtx"),
+		requestLock:   bchutil.NewMutex("rpcclient.Client.requestLock"),
+		ntfnStateLock: bchutil.NewMutex("rpcclient.Client.ntfnStateLock"),
 	}
 
 	if start {

@@ -25,12 +25,13 @@ import (
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // AddrManager provides a concurrency safe address manager for caching potential
 // peers on the bitcoin network.
 type AddrManager struct {
-	mtx            sync.Mutex
+	mtx            bchutil.Mutex
 	peersFile      string
 	lookupFunc     func(string) ([]net.IP, error)
 	rand           *rand.Rand
@@ -44,7 +45,7 @@ type AddrManager struct {
 	quit           chan struct{}
 	nTried         int
 	nNew           int
-	lamtx          sync.Mutex
+	lamtx          bchutil.Mutex
 	localAddresses map[string]*LocalAddress
 	version        int
 }
@@ -1149,6 +1150,9 @@ func (a *AddrManager) LocalAddresses() []*LocalAddress {
 // Use Start to begin processing asynchronous address updates.
 func New(dataDir string, lookupFunc func(string) ([]net.IP, error)) *AddrManager {
 	am := AddrManager{
+		mtx:   bchutil.NewMutex("addrmgr.AddrManager.mtx"),
+		lamtx: bchutil.NewMutex("addrmgr.AddrManager.lamtx"),
+
 		peersFile:      filepath.Join(dataDir, "peers.json"),
 		lookupFunc:     lookupFunc,
 		rand:           rand.New(rand.NewSource(time.Now().UnixNano())),

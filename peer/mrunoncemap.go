@@ -8,14 +8,15 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
-	"sync"
+
+	"github.com/gcash/bchutil"
 )
 
 // mruNonceMap provides a concurrency safe map that is limited to a maximum
 // number of items with eviction for the oldest entry when the limit is
 // exceeded.
 type mruNonceMap struct {
-	mtx       sync.Mutex
+	mtx       bchutil.Mutex
 	nonceMap  map[uint64]*list.Element // nearly O(1) lookups
 	nonceList *list.List               // O(1) insert, update, delete
 	limit     uint
@@ -117,6 +118,7 @@ func (m *mruNonceMap) Delete(nonce uint64) {
 // new entry.
 func newMruNonceMap(limit uint) *mruNonceMap {
 	m := mruNonceMap{
+		mtx:       bchutil.NewMutex("peer.mruNonceMap.mtx"),
 		nonceMap:  make(map[uint64]*list.Element),
 		nonceList: list.New(),
 		limit:     limit,
