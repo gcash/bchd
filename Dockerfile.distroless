@@ -1,6 +1,7 @@
+# Building stage
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM golang
+FROM golang as builder
 
 LABEL maintainer="Josh Ellithorpe <quest@mac.com>"
 
@@ -18,6 +19,16 @@ RUN go install ./cmd/bchctl
 # so bchctl requires fewer flags.
 RUN mkdir -p /root/.bchd
 RUN ln -s /data/bchd.conf /root/.bchd/bchd.conf
+
+# Final stage
+FROM gcr.io/distroless/base
+
+LABEL maintainer="Josh Ellithorpe <quest@mac.com>"
+
+# Copy necessary files
+COPY --from=builder /go/bin/bchd /usr/local/bin/bchd
+COPY --from=builder /go/bin/bchctl /usr/local/bin/bchctl
+COPY --from=builder /root /root
 
 # Create the data volume.
 VOLUME ["/data"]
