@@ -542,18 +542,11 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	state, exists := sm.peerStates[sm.syncPeer]
-	if !exists {
-		return
-	}
-
-	sm.clearRequestedState(state)
 	sm.updateSyncPeer()
 }
 
 // topBlock returns the best chains top block height
 func (sm *SyncManager) topBlock() int32 {
-
 	if sm.syncPeer.LastBlock() > sm.syncPeer.StartingHeight() {
 		return sm.syncPeer.LastBlock()
 	}
@@ -605,6 +598,11 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 // updateSyncPeer picks a new peer to sync from.
 func (sm *SyncManager) updateSyncPeer() {
 	if sm.syncPeer != nil {
+		state, exists := sm.peerStates[sm.syncPeer]
+		if exists {
+			sm.clearRequestedState(state)
+		}
+
 		log.Infof("Updating sync peer, last block: %v, violations: %v", sm.syncPeerState.lastBlockTime, sm.syncPeerState.violations)
 
 		// Disconnect from the misbehaving peer.
