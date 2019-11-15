@@ -408,7 +408,7 @@ func (sm *SyncManager) startSync() {
 				sm.fastSyncMode = false
 				sm.startSync()
 			}()
-		} else if !sm.fastSyncMode && !sm.current() {
+		} else if !sm.fastSyncMode {
 			// We will only send the getBlocks message if we are not
 			// in fast sync mode. If we are in fast sync mode we will
 			// set this bool to false once the UTXO download/verification
