@@ -515,7 +515,7 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	}
 
 	// If we don't have a sync peer, then go get one. We probably stalled.
-	if sm.syncPeer == nil && len(sm.peerStates) > 0 {
+	if sm.syncPeer == nil {
 		sm.selectNewSyncPeer()
 		return
 	}
