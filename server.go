@@ -2099,9 +2099,7 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 
 	// If this peer was one of the peers we sent the sendcmpct announce
 	// message to then delete it.
-	if _, ok := state.directRelayPeers[sp.ID()]; ok {
-		delete(state.directRelayPeers, sp.ID())
-	}
+	delete(state.directRelayPeers, sp.ID())
 
 	// If we get here it means that either we didn't know about the peer
 	// or we purposefully deleted it.
@@ -2733,9 +2731,7 @@ out:
 			// When an InvVect has been added to a block, we can
 			// now remove it, if it was present.
 			case broadcastInventoryDel:
-				if _, ok := pendingInvs[*msg]; ok {
-					delete(pendingInvs, *msg)
-				}
+				delete(pendingInvs, *msg)
 			}
 
 		case <-timer.C:
