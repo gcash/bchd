@@ -1151,13 +1151,13 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 		select {
 		case event := <-subscription.Events():
 
-			switch event.(type) {
+			switch event := event.(type) {
 			case *rpcEventTxAccepted:
 				if !includeMempool {
 					continue
 				}
 
-				txDesc := event.(*rpcEventTxAccepted)
+				txDesc := event
 
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
 					continue
@@ -1204,7 +1204,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					continue
 				}
 				// Search for all transactions.
-				block := event.(*rpcEventBlockConnected)
+				block := event
 
 				for _, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
@@ -1296,13 +1296,13 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 
 		case event := <-subscription.Events():
 
-			switch event.(type) {
+			switch event := event.(type) {
 			case *rpcEventTxAccepted:
 				if !includeMempool {
 					continue
 				}
 
-				txDesc := event.(*rpcEventTxAccepted)
+				txDesc := event
 
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
 					continue
@@ -1349,7 +1349,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					continue
 				}
 				// Search for all transactions.
-				block := event.(*rpcEventBlockConnected)
+				block := event
 
 				for _, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams) {
@@ -1404,10 +1404,10 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 		select {
 		case event := <-subscription.Events():
 
-			switch event.(type) {
+			switch event := event.(type) {
 			case *rpcEventBlockConnected:
 				// Search for all transactions.
-				block := event.(*rpcEventBlockConnected).Block
+				block := event.Block
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_CONNECTED
 
@@ -1493,7 +1493,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 
 			case *rpcEventBlockDisconnected:
 				// Search for all transactions.
-				block := event.(*rpcEventBlockDisconnected).Block
+				block := event.Block
 				toSend := &pb.BlockNotification{}
 				toSend.Type = pb.BlockNotification_DISCONNECTED
 
