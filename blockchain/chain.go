@@ -177,6 +177,10 @@ type BlockChain struct {
 	stateLock     sync.RWMutex
 	stateSnapshot *BestState
 
+	// notificationLock is used to make sure notifications are sent
+	// serially and protect against double mutex unlock panics during reorg.
+	notificationLock sync.Mutex
+
 	// The following caches are used to efficiently keep track of the
 	// current deployment threshold state of each rule change deployment.
 	//
@@ -782,9 +786,11 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Notify the caller that the block was connected to the main chain.
 	// The caller would typically want to react with actions such as
 	// updating wallets.
+	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockConnected, block)
 	b.chainLock.Lock()
+	b.notificationLock.Unlock()
 
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
@@ -917,9 +923,11 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Notify the caller that the block was disconnected from the main
 	// chain.  The caller would typically want to react with actions such as
 	// updating wallets.
+	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockDisconnected, block)
 	b.chainLock.Lock()
+	b.notificationLock.Unlock()
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size.
@@ -1187,9 +1195,11 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// Notify other peers that this block was accepted. Since it was
 		// originally seen as an orphan the accept message was never sent
 		// to downstream peers.
+		b.notificationLock.Lock()
 		b.chainLock.Unlock()
 		b.sendNotification(NTBlockAccepted, block)
 		b.chainLock.Lock()
+		b.notificationLock.Unlock()
 	}
 
 	// Log the point where the chain forked and old and new best chain
