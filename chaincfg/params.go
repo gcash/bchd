@@ -438,6 +438,7 @@ var TestNet3Params = Params{
 	Net:         wire.TestNet3,
 	DefaultPort: "18333",
 	DNSSeeds: []DNSSeed{
+		{"testnet-seed.bchd.cash", true},
 		{"testnet-seed.bitcoinabc.org", true},
 		{"testnet-seed-abc.bitcoinforks.org", true},
 		{"testnet-seed.bitprim.org", true},
