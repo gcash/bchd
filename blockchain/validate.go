@@ -1101,7 +1101,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	greatWallActive := node.height > b.chainParams.GreatWallForkHeight
 
 	// If Graviton hardfork is active we must enforce MinimalData
-	gravitonActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.GravitonActivationTime
+	gravitonActive := node.height > b.chainParams.GravitonForkHeight
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
