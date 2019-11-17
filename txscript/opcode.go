@@ -2440,10 +2440,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	// script. However when ScriptVerifySchnorrMultisig is active the
 	// dummy element is re-purposed to serve to flag the use of schnorr
 	// or ECDSA in this opcode.
-	dummy, err := vm.dstack.PopByteArray()
+	b, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
 	}
+	dummy := make([]byte, len(b))
+	copy(dummy, b)
 
 	// Since the dummy argument is otherwise not checked, it could be any
 	// value which unfortunately provides a source of malleability.  Thus,
