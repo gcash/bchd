@@ -515,7 +515,7 @@ func TestGravitonActivation(t *testing.T) {
 
 	// Create a new database and chain instance to run tests against.
 	params := &chaincfg.RegressionNetParams
-	params.GravitonActivationTime = 0
+	params.GravitonForkHeight = 0
 	params.MagneticAnonomalyForkHeight = 0
 	chain, teardownFunc, err := chainSetup("fullblocktest",
 		params)
