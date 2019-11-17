@@ -322,6 +322,11 @@ func (sm *SyncManager) startSync() {
 			continue
 		}
 
+		// Peer isn't connected, skip.
+		if !peer.Connected() {
+			continue
+		}
+
 		// Add any peers on the same block to okPeers. These should
 		// only be used as a last resort.
 		if peer.LastBlock() == best.Height {
@@ -467,6 +472,11 @@ func (sm *SyncManager) isSyncCandidate(peer *peerpkg.Peer) bool {
 // be considered as a sync peer (they have already successfully negotiated).  It
 // also starts syncing if needed.  It is invoked from the syncHandler goroutine.
 func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
+	// Ignore if peer is disconnected
+	if !peer.Connected() {
+		return
+	}
+
 	// Ignore if in the process of shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
 		return
@@ -484,8 +494,17 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 	}
 
 	// Start syncing by choosing the best candidate if needed.
-	if isSyncCandidate && sm.syncPeer == nil {
-		sm.startSync()
+	if isSyncCandidate {
+		if sm.syncPeer == nil {
+			sm.startSync()
+			return
+		}
+
+		// If for some reason we are not connected to
+		// a sync peer, go ahead and find another.
+		if !sm.syncPeer.Connected() {
+			sm.updateSyncPeer()
+		}
 	}
 }
 
@@ -495,8 +514,14 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	// If we don't have a sync peer, then there is nothing to do.
+	// If we don't have a sync peer, then go get one. We probably stalled.
 	if sm.syncPeer == nil {
+		sm.selectNewSyncPeer()
+		return
+	}
+
+	if !sm.syncPeer.Connected() {
+		sm.updateSyncPeer()
 		return
 	}
 
@@ -522,18 +547,11 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	state, exists := sm.peerStates[sm.syncPeer]
-	if !exists {
-		return
-	}
-
-	sm.clearRequestedState(state)
-	sm.updateSyncPeer(state)
+	sm.updateSyncPeer()
 }
 
 // topBlock returns the best chains top block height
 func (sm *SyncManager) topBlock() int32 {
-
 	if sm.syncPeer.LastBlock() > sm.syncPeer.StartingHeight() {
 		return sm.syncPeer.LastBlock()
 	}
@@ -562,7 +580,7 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 
 	// Fetch a new sync peer if this is the sync peer.
 	if peer == sm.syncPeer {
-		sm.updateSyncPeer(state)
+		sm.updateSyncPeer()
 	}
 }
 
@@ -583,15 +601,30 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 }
 
 // updateSyncPeer picks a new peer to sync from.
-func (sm *SyncManager) updateSyncPeer(state *peerSyncState) {
-	log.Infof("Updating sync peer, last block: %v, violations: %v", sm.syncPeerState.lastBlockTime, sm.syncPeerState.violations)
+func (sm *SyncManager) updateSyncPeer() {
+	if sm.syncPeer != nil {
+		state, exists := sm.peerStates[sm.syncPeer]
+		if exists {
+			sm.clearRequestedState(state)
+		}
 
-	// Disconnect from the misbehaving peer.
-	sm.syncPeer.Disconnect()
+		log.Infof("Updating sync peer, last block: %v, violations: %v", sm.syncPeerState.lastBlockTime, sm.syncPeerState.violations)
 
-	// Attempt to find a new peer to sync from
-	// Also, reset the headers-first state.
-	sm.syncPeer.SetSyncPeer(false)
+		// Disconnect from the misbehaving peer.
+		sm.syncPeer.Disconnect()
+
+		// Attempt to find a new peer to sync from
+		// Also, reset the headers-first state.
+		sm.syncPeer.SetSyncPeer(false)
+	} else {
+		log.Infof("Updating sync peer, retrying.")
+	}
+
+	sm.selectNewSyncPeer()
+}
+
+// selectNewSyncPeer selects a new syncPeer
+func (sm *SyncManager) selectNewSyncPeer() {
 	sm.syncPeer = nil
 	sm.syncPeerState = nil
 
@@ -995,6 +1028,12 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 
 	// Nothing to do for an empty headers message.
 	if numHeaders == 0 {
+		// If we are syncing and requesting headers, they
+		// should never be empty.
+		if peer == sm.syncPeer {
+			sm.updateSyncPeer()
+		}
+
 		return
 	}
 
@@ -1563,6 +1602,11 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 
 // NewPeer informs the sync manager of a newly active peer.
 func (sm *SyncManager) NewPeer(peer *peerpkg.Peer, done chan struct{}) {
+	// Ignore peer if not connected.
+	if !peer.Connected() {
+		return
+	}
+
 	// Ignore if we are shutting down.
 	if atomic.LoadInt32(&sm.shutdown) != 0 {
 		done <- struct{}{}
