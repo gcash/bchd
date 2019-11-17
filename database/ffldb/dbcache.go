@@ -7,13 +7,13 @@ package ffldb
 import (
 	"bytes"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/btcsuite/goleveldb/leveldb"
 	"github.com/btcsuite/goleveldb/leveldb/iterator"
 	"github.com/btcsuite/goleveldb/leveldb/util"
 	"github.com/gcash/bchd/database/internal/treap"
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -386,7 +386,7 @@ type dbCache struct {
 	// stored using immutable treaps to support O(1) MVCC snapshots against
 	// the cached data.  The cacheLock is used to protect concurrent access
 	// for cache updates and snapshots.
-	cacheLock    sync.RWMutex
+	cacheLock    bchutil.RWMutex
 	cachedKeys   *treap.Immutable
 	cachedRemove *treap.Immutable
 }
@@ -654,7 +654,9 @@ func newDbCache(ldb *leveldb.DB, store *blockStore, maxSize uint64, flushInterva
 		maxSize:       maxSize,
 		flushInterval: time.Second * time.Duration(flushIntervalSecs),
 		lastFlush:     time.Now(),
-		cachedKeys:    treap.NewImmutable(),
-		cachedRemove:  treap.NewImmutable(),
+
+		cacheLock:    bchutil.NewRWMutex("database/ffldb.dbCache.cacheLock"),
+		cachedKeys:   treap.NewImmutable(),
+		cachedRemove: treap.NewImmutable(),
 	}
 }

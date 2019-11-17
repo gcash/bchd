@@ -4,9 +4,7 @@
 
 package blockchain
 
-import (
-	"sync"
-)
+import "github.com/gcash/bchutil"
 
 // approxNodesPerWeek is an approximation of the number of new blocks there are
 // in a week on average.
@@ -42,7 +40,7 @@ func fastLog2Floor(n uint32) uint8 {
 // The chain view for the branch ending in 6a consists of:
 //   genesis -> 1 -> 2 -> 3 -> 4a -> 5a -> 6a
 type chainView struct {
-	mtx   sync.Mutex
+	mtx   bchutil.Mutex
 	nodes []*blockNode
 }
 
@@ -51,7 +49,10 @@ type chainView struct {
 // can be updated at any time via the setTip function.
 func newChainView(tip *blockNode) *chainView {
 	// The mutex is intentionally not held since this is a constructor.
-	var c chainView
+	c := chainView{
+		mtx:   bchutil.NewMutex("blockchain.chainView.mtx"),
+		nodes: nil,
+	}
 	c.setTip(tip)
 	return &c
 }

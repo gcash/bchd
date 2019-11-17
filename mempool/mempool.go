@@ -11,11 +11,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/dchest/siphash"
 	"math"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dchest/siphash"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -166,7 +166,7 @@ type TxPool struct {
 	// The following variables must only be used atomically.
 	lastUpdated int64 // last time pool was updated
 
-	mtx           sync.RWMutex
+	mtx           bchutil.RWMutex
 	cfg           Config
 	pool          map[chainhash.Hash]*TxDesc
 	orphans       map[chainhash.Hash]*orphanTx
@@ -1405,6 +1405,7 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 func New(cfg *Config) *TxPool {
 	return &TxPool{
 		cfg:            *cfg,
+		mtx:            bchutil.NewRWMutex("mempool.TxPool.mtx"),
 		pool:           make(map[chainhash.Hash]*TxDesc),
 		orphans:        make(map[chainhash.Hash]*orphanTx),
 		orphansByPrev:  make(map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx),

@@ -7,13 +7,13 @@ package blockchain
 import (
 	"math/big"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // blockStatus is a bit field representing the validation state of the block.
@@ -229,7 +229,7 @@ type blockIndex struct {
 	db          database.DB
 	chainParams *chaincfg.Params
 
-	sync.RWMutex
+	bchutil.RWMutex
 	index map[chainhash.Hash]*blockNode
 	dirty map[*blockNode]struct{}
 }
@@ -241,8 +241,10 @@ func newBlockIndex(db database.DB, chainParams *chaincfg.Params) *blockIndex {
 	return &blockIndex{
 		db:          db,
 		chainParams: chainParams,
-		index:       make(map[chainhash.Hash]*blockNode),
-		dirty:       make(map[*blockNode]struct{}),
+
+		RWMutex: bchutil.NewRWMutex("blockchain.blockIndex"),
+		index:   make(map[chainhash.Hash]*blockNode),
+		dirty:   make(map[*blockNode]struct{}),
 	}
 }
 

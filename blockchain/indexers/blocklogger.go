@@ -7,7 +7,6 @@ package indexers
 import (
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/gcash/bchlog"
@@ -24,7 +23,7 @@ type blockProgressLogger struct {
 
 	subsystemLogger bchlog.Logger
 	progressAction  string
-	sync.Mutex
+	bchutil.Mutex
 }
 
 // newBlockProgressLogger returns a new block progress logger.
@@ -36,6 +35,7 @@ func newBlockProgressLogger(progressMessage string, logger bchlog.Logger) *block
 		lastBlockLogTime: time.Now(),
 		progressAction:   progressMessage,
 		subsystemLogger:  logger,
+		Mutex:            bchutil.NewMutex("blockchain/indexers.blockProgressLogger"),
 	}
 }
 

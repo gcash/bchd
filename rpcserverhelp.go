@@ -9,9 +9,9 @@ import (
 	"errors"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchutil"
 )
 
 // helpDescsEnUS defines the English descriptions used for the help strings.
@@ -790,7 +790,7 @@ var rpcResultTypes = map[string][]interface{}{
 // helpCacher provides a concurrent safe type that provides help and usage for
 // the RPC server commands and caches the results for future calls.
 type helpCacher struct {
-	sync.Mutex
+	bchutil.Mutex
 	usage      string
 	methodHelp map[string]string
 }
@@ -865,6 +865,7 @@ func (c *helpCacher) rpcUsage(includeWebsockets bool) (string, error) {
 // usage for the RPC server commands and caches the results for future calls.
 func newHelpCacher() *helpCacher {
 	return &helpCacher{
+		Mutex:      bchutil.NewMutex("helpCacher"),
 		methodHelp: make(map[string]string),
 	}
 }

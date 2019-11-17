@@ -18,7 +18,9 @@ type Multiset struct {
 	curve *KoblitzCurve
 	x     *big.Int
 	y     *big.Int
-	mtx   sync.RWMutex
+
+	// This does not use the logging mutex to avoid cyclic dependencies
+	mtx sync.RWMutex
 }
 
 // NewMultiset returns an empty multiset. The hash of an empty set

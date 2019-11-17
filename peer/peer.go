@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -465,7 +465,7 @@ type Peer struct {
 	cfg     Config
 	inbound bool
 
-	flagsMtx             sync.Mutex // protects the peer flags below
+	flagsMtx             bchutil.Mutex // protects the peer flags below
 	na                   *wire.NetAddress
 	id                   int32
 	userAgent            string
@@ -481,16 +481,16 @@ type Peer struct {
 	wireEncoding wire.MessageEncoding
 
 	knownInventory     *mruInventoryMap
-	prevGetBlocksMtx   sync.Mutex
+	prevGetBlocksMtx   bchutil.Mutex
 	prevGetBlocksBegin *chainhash.Hash
 	prevGetBlocksStop  *chainhash.Hash
-	prevGetHdrsMtx     sync.Mutex
+	prevGetHdrsMtx     bchutil.Mutex
 	prevGetHdrsBegin   *chainhash.Hash
 	prevGetHdrsStop    *chainhash.Hash
 
 	// These fields keep track of statistics for the peer and are protected
 	// by the statsMtx mutex.
-	statsMtx           sync.RWMutex
+	statsMtx           bchutil.RWMutex
 	timeOffset         int64
 	timeConnected      time.Time
 	startingHeight     int32
@@ -2360,6 +2360,11 @@ func newPeerBase(origCfg *Config, inbound bool) *Peer {
 		services:        cfg.Services,
 		protocolVersion: cfg.ProtocolVersion,
 		syncPeer:        false,
+
+		flagsMtx:         bchutil.NewMutex("peer.Peer.flagsMtx"),
+		statsMtx:         bchutil.NewRWMutex("peer.Peer.statsMtx"),
+		prevGetHdrsMtx:   bchutil.NewMutex("peer.Peer.prevGetHdrsMtx"),
+		prevGetBlocksMtx: bchutil.NewMutex("peer.Peer.prevGetBlocksMtx"),
 	}
 	return &p
 }

@@ -10,7 +10,6 @@ import (
 	"container/list"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
@@ -131,7 +130,7 @@ type BlockChain struct {
 
 	// chainLock protects concurrent access to the vast majority of the
 	// fields in this struct below this point.
-	chainLock sync.RWMutex
+	chainLock bchutil.RWMutex
 
 	// These fields are related to the memory block index.  They both have
 	// their own locks, however they are often also protected by the chain
@@ -153,7 +152,7 @@ type BlockChain struct {
 
 	// orphanLock protects the fields related to handling of orphan blocks.
 	// They are protected by a combination of the chain lock and the orphan lock.
-	orphanLock   sync.RWMutex
+	orphanLock   bchutil.RWMutex
 	orphans      map[chainhash.Hash]*orphanBlock
 	prevOrphans  map[chainhash.Hash][]*orphanBlock
 	oldestOrphan *orphanBlock
@@ -174,7 +173,7 @@ type BlockChain struct {
 	//
 	// In addition, some of the fields are stored in the database so the
 	// chain state can be quickly reconstructed on load.
-	stateLock     sync.RWMutex
+	stateLock     bchutil.RWMutex
 	stateSnapshot *BestState
 
 	// notificationLock is used to make sure notifications are sent
@@ -211,7 +210,7 @@ type BlockChain struct {
 
 	// The notifications field stores a slice of callbacks to be executed on
 	// certain blockchain events.
-	notificationsLock sync.RWMutex
+	notificationsLock bchutil.RWMutex
 	notifications     []NotificationCallback
 
 	// The following fields are set if the blockchain is configured to prune
@@ -2282,6 +2281,11 @@ func New(config *Config) (*BlockChain, error) {
 		pruneDepth:          config.PruneDepth,
 		fastSyncDataDir:     config.FastSyncDataDir,
 		fastSyncDone:        make(chan struct{}),
+
+		chainLock:         bchutil.NewRWMutex("blockchain.BlockChain.chainLock"),
+		stateLock:         bchutil.NewRWMutex("blockchain.BlockChain.stateLock"),
+		orphanLock:        bchutil.NewRWMutex("blockchain.BlockChain.orphanLock"),
+		notificationsLock: bchutil.NewRWMutex("blockchain.BlockChain.notificationsLock"),
 	}
 
 	// Initialize the chain state from the passed database.  When the db

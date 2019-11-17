@@ -7,7 +7,6 @@ package indexers
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -569,7 +568,7 @@ type AddrIndex struct {
 	// keep an index of all addresses which a given transaction involves.
 	// This allows fairly efficient updates when transactions are removed
 	// once they are included into a block.
-	unconfirmedLock sync.RWMutex
+	unconfirmedLock bchutil.RWMutex
 	txnsByAddr      map[[addrKeySize]byte]map[chainhash.Hash]*bchutil.Tx
 	addrsByTx       map[chainhash.Hash]map[[addrKeySize]byte]struct{}
 }
@@ -937,6 +936,8 @@ func NewAddrIndex(db database.DB, chainParams *chaincfg.Params) *AddrIndex {
 		chainParams: chainParams,
 		txnsByAddr:  make(map[[addrKeySize]byte]map[chainhash.Hash]*bchutil.Tx),
 		addrsByTx:   make(map[chainhash.Hash]map[[addrKeySize]byte]struct{}),
+
+		unconfirmedLock: bchutil.NewRWMutex("blockchain/indexers.AddrIndex.unconfirmedLock"),
 	}
 }
 

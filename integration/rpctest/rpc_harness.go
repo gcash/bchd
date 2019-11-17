@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -57,7 +56,7 @@ var (
 	testInstances = make(map[string]*Harness)
 
 	// Used to protest concurrent access to above declared variables.
-	harnessStateMtx sync.RWMutex
+	harnessStateMtx = bchutil.NewRWMutex("integration/rpctest.harnessStateMtx")
 )
 
 // HarnessTestCase represents a test-case which utilizes an instance of the
@@ -88,7 +87,7 @@ type Harness struct {
 	maxConnRetries int
 	nodeNum        int
 
-	sync.Mutex
+	bchutil.Mutex
 }
 
 // New creates and initializes new instance of the rpc test harness.
@@ -197,6 +196,7 @@ func New(activeNet *chaincfg.Params, handlers *rpcclient.NotificationHandlers,
 		ActiveNet:      activeNet,
 		nodeNum:        nodeNum,
 		wallet:         wallet,
+		Mutex:          bchutil.NewMutex("integration/rpctest.Harness"),
 	}
 
 	// Track this newly created test instance within the package level

@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/mining"
@@ -47,7 +46,7 @@ const (
 
 	bytePerKb = 1000
 
-	bchPerSatoshi = 1E-8
+	bchPerSatoshi = 1e-8
 )
 
 var (
@@ -168,7 +167,7 @@ type FeeEstimator struct {
 	// The number of blocks that have been registered.
 	numBlocksRegistered uint32
 
-	mtx      sync.RWMutex
+	mtx      bchutil.RWMutex
 	observed map[chainhash.Hash]*observedTransaction
 	bin      [estimateFeeDepth][]*observedTransaction
 
@@ -192,6 +191,7 @@ func NewFeeEstimator(maxRollback, minRegisteredBlocks uint32) *FeeEstimator {
 		maxReplacements:     estimateFeeMaxReplacements,
 		observed:            make(map[chainhash.Hash]*observedTransaction),
 		dropped:             make([]*registeredBlock, 0, maxRollback),
+		mtx:                 bchutil.NewRWMutex("mempool.FeeEstimator.mtx"),
 	}
 }
 
