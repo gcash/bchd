@@ -408,7 +408,6 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	//addr, err := cm.cfg.GetNewAddress()
 	if duplicated || err != nil {
 		select {
 		case cm.requests <- handleFailed{c, err}:
