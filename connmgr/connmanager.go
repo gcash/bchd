@@ -249,14 +249,14 @@ out:
 				connReq.updateState(ConnPending)
 				pending[msg.c.id] = connReq
 				// check duplicates
-				var duplicatesFound bool = false
+				var duplicatesFound = false
 
 				for _, v := range conns {
 					if v.Addr.String() == msg.networkAddress {
 						duplicatesFound = true
 					}
 				}
-				if duplicatesFound == true {
+				if duplicatesFound {
 					msg.duplicateAddress <- true
 				}
 
@@ -397,7 +397,7 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	var duplicated bool = false
+	var duplicated = false
 	// Wait for the registration to successfully add the pending conn req to
 	// the conn manager's internal state.
 	select {
