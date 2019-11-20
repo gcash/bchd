@@ -35,38 +35,7 @@ var (
 	// defaultTargetOutbound is the default number of outbound connections to
 	// maintain.
 	defaultTargetOutbound = uint32(8)
-
-	// This is a map of all ip:port strings for all peers currently connected to our node.
-	peerMap = concurrentConnectionMap{connections: make(map[string]bool)}
 )
-
-// concurrentConnectionMap is safe to use concurrently.
-type concurrentConnectionMap struct {
-	connections map[string]bool
-	mux         sync.Mutex
-}
-
-// addToConnectionMap adds a network address to the map.
-func (c *concurrentConnectionMap) addToConnectionMap(key string) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	c.connections[key] = true
-}
-
-// RemoveFromConnectionMap deletes a network address from the map.
-func (c *concurrentConnectionMap) removeFromConnectionMap(key string) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	delete(c.connections, key)
-}
-
-//findKeyInConnectionMap returns a boolean of whether a network address is in the map.
-func (c *concurrentConnectionMap) findKeyInConnectionMap(key string) bool {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	_, found := c.connections[key]
-	return found
-}
 
 // ConnState represents the state of the requested connection.
 type ConnState uint8
@@ -180,8 +149,10 @@ type Config struct {
 // connection attempts before their successful or in the case they're not
 // longer wanted.
 type registerPending struct {
-	c    *ConnReq
-	done chan struct{}
+	c                *ConnReq
+	done             chan struct{}
+	networkAddress   string
+	duplicateAddress chan bool
 }
 
 // handleConnected is used to queue a successful connection.
@@ -277,6 +248,18 @@ out:
 				connReq := msg.c
 				connReq.updateState(ConnPending)
 				pending[msg.c.id] = connReq
+				// check duplicates
+				var duplicatesFound bool = false
+
+				for _, v := range conns {
+					if v.Addr.String() == msg.networkAddress {
+						duplicatesFound = true
+					}
+				}
+				if duplicatesFound == true {
+					msg.duplicateAddress <- true
+				}
+
 				close(msg.done)
 
 			case handleConnected:
@@ -294,9 +277,6 @@ out:
 				connReq.updateState(ConnEstablished)
 				connReq.conn = msg.conn
 				conns[connReq.id] = connReq
-				// Add the address to the peerMap
-				peerNetworkAddress := connReq.Addr.String()
-				peerMap.addToConnectionMap(peerNetworkAddress)
 				log.Debugf("Connected to %v", connReq)
 				connReq.retryCount = 0
 				cm.failedAttempts = 0
@@ -316,10 +296,6 @@ out:
 							msg.id)
 						continue
 					}
-
-					// remove the network address from the peerMap
-					peerNetworkAddress := connReq.Addr.String()
-					peerMap.removeFromConnectionMap(peerNetworkAddress)
 
 					// Pending connection was found, remove
 					// it from pending map if we should
@@ -407,27 +383,33 @@ func (cm *ConnManager) NewConnReq() {
 	c := &ConnReq{}
 	atomic.StoreUint64(&c.id, atomic.AddUint64(&cm.connReqCount, 1))
 
+	addr, err := cm.cfg.GetNewAddress()
+
 	// Submit a request of a pending connection attempt to the connection
 	// manager. By registering the id before the connection is even
 	// established, we'll be able to later cancel the connection via the
 	// Remove method.
 	done := make(chan struct{})
+	duplicateAddress := make(chan bool)
 	select {
-	case cm.requests <- registerPending{c, done}:
+	case cm.requests <- registerPending{c, done, addr.String(), duplicateAddress}:
 	case <-cm.quit:
 		return
 	}
 
+	var duplicated bool = false
 	// Wait for the registration to successfully add the pending conn req to
 	// the conn manager's internal state.
 	select {
+	case <-duplicateAddress:
+		duplicated = true
 	case <-done:
 	case <-cm.quit:
 		return
 	}
 
-	addr, err := cm.cfg.GetNewAddress()
-	if err != nil {
+	//addr, err := cm.cfg.GetNewAddress()
+	if duplicated || err != nil {
 		select {
 		case cm.requests <- handleFailed{c, err}:
 		case <-cm.quit:
@@ -461,13 +443,6 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 		return
 	}
 
-	// Don't try to connect if we are already connected to this peer.
-	peerNetworkAddress := c.Addr.String()
-	found := peerMap.findKeyInConnectionMap(peerNetworkAddress)
-	if found {
-		return
-	}
-
 	if atomic.LoadUint64(&c.id) == 0 {
 		atomic.StoreUint64(&c.id, atomic.AddUint64(&cm.connReqCount, 1))
 
@@ -476,8 +451,10 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 		// connection is even established, we'll be able to later
 		// cancel the connection via the Remove method.
 		done := make(chan struct{})
+		duplicateAddress := make(chan bool)
+
 		select {
-		case cm.requests <- registerPending{c, done}:
+		case cm.requests <- registerPending{c, done, "", duplicateAddress}:
 		case <-cm.quit:
 			return
 		}
