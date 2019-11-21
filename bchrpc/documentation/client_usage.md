@@ -67,6 +67,20 @@ ctx := metadata.NewOutgoingContext(context.Background(), md)
 response, err := client.SomeRPC(ctx, someRequest)
 ```
 
+## Why Are Transaction IDs Backwards?
+Bitcoin was originally coded by Satoshi in a somewhat quirky way. When a transaction ID is in byte format in memory it is
+stored in little endian format (the bytes are in reverse order). When the ID is converted into a hex string the ID is reversed into
+big endian format (the format you're used to seeing on block explorers). The bchd codebase continues this behavior. Byte arrays = little 
+endian, hex strings = big endian. Because we send transaction IDs as byte arrays in gRPC, they are in little endian format. To get to
+the familiar format you're used to simply reverse them.
+
+The bchd library offers a `chainhash` function which can do this for you if you're using Go:
+```go
+hash, _ := chainhash.NewHash(txBytes) // Expects the bytes to be in little endian format.
+
+fmt.Println(hash.String()) // Prints a hex string in big endian format.
+```
+
 ## Go
 
 The native gRPC library (gRPC Core) is not required for Go clients (a
