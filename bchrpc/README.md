@@ -9,7 +9,7 @@ Package bchrpc implements a gRPC server.
 
 ## Overview
 
-This package provides a gRPC which when combined with the `addrindex` and `txindex` provides
+This package provides a gRPC API which when combined with the `addrindex` and `txindex` provides
 a powerful API for supporting Bitcoin Cash applications. At present the API only exposes public
 methods for interacting with transactions and blocks. It does not expose any methods which can 
 control the node so it is safe to expose the API publicly. To control the node continue using
@@ -23,7 +23,7 @@ With gRPC it is extremely easy to build well-defined, easy to reason about APIs.
  * no more hand-crafted JSON call objects - all requests and responses are strongly typed and code-generated, with hints available in the IDE.
  * no more dealing with methods, headers, body and low level networking - everything is handled by gRPC.
  * no more second-guessing the meaning of error codes - [gRPC status codes](https://godoc.org/google.golang.org/grpc/codes) are a canonical way of representing issues in APIs.
- * no more one-off server-side request handlers to avoid concurrent connections - gRPC is based on HTTP2, with multiplexes multiple streams over the [same connection](https://hpbn.co/http2/#streams-messages-and-frames).
+ * no more one-off server-side request handlers to avoid concurrent connections - gRPC is based on HTTP2, which multiplexes multiple streams over the [same connection](https://hpbn.co/http2/#streams-messages-and-frames).
  * no more problems streaming data from a server -  gRPC-Web supports both *1:1* RPCs and *1:many* streaming requests.
  * no more data parse errors when rolling out new binaries - [backwards and forwards-compatibility](https://developers.google.com/protocol-buffers/docs/gotutorial#extending-a-protocol-buffer) of requests and responses.
 
