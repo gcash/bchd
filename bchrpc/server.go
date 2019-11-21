@@ -1253,7 +1253,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 // the subscription requests. The parameters to filter transactions on can
 // be updated by sending new SubscribeTransactionsRequest objects on the stream.
 //
-// Because this RPC using bi-directional streaming it cannot be used with
+// Because this RPC is using bi-directional streaming it cannot be used with
 // grpc-web.
 //
 // **Requires TxIndex to receive input metadata**
