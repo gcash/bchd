@@ -10,7 +10,7 @@ service bchrpc {
     // Get info about the mempool.
     rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
 
-    // Returns information about all of the transactions currently in the memory pool.
+    // Returns info about all of the transactions currently in the memory pool.
     // Offers an option to return full transactions or just transactions hashes.
     rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
 
