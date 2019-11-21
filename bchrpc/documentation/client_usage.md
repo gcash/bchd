@@ -18,8 +18,7 @@ that case, the first step may be omitted by importing the bindings from
 bchd itself.
 
 The rest of this document provides short examples of how to quickly get started
-by implementing a basic client that fetches the balance of the default account
-(account 0) from a testnet3 server listening on `localhost:18335` in several
+by implementing a basic client from a testnet3 server listening on `localhost:18335` in several
 different languages:
 
 - [Go](#go)
