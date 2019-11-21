@@ -1,3 +1,392 @@
+message Basic {
+  required double num = 1;
+  required bytes payload = 2;
+}
+
+message Map {
+  map<string, string> foo = 1;
+}
+
+message UTF8 {
+  required string foo = 1;
+  required uint32 bar = 2;
+}
+
+message Nested {
+  required double num = 1;
+  required bytes payload = 2;
+  required Basic meh = 3;
+}
+
+message Repeated {
+  repeated Basic list = 1;
+}
+
+message Integers {
+  optional sint32 sint32 = 1;
+  optional sint64 sint64 = 2;
+  optional int32 int32 = 3;
+  optional uint32 uint32 = 4;
+  optional int64 int64 = 5;
+}
+
+message Float {
+  optional float float1 = 1;
+  optional float float2 = 2;
+  optional float float3 = 3;
+}
+
+message Packed {
+  repeated Basic list = 1;
+  repeated int32 packed = 2 [packed = true];
+}
+
+message NotPacked {
+  repeated int64 id = 2;
+  optional int64 value = 5;
+}
+message FalsePacked {
+  repeated int64 id = 2 [packed = false];
+  optional int64 value = 5;
+}
+
+enum FOO {
+  A = 1;
+  B = 2;
+}
+
+message Defaults {
+  optional int32 num = 1 [default = 42];
+  optional FOO foo1 = 2 [default = B];
+  optional FOO foo2 = 3;
+  repeated FOO foos = 4;
+}
+
+enum FOO_HEX {
+  A = 0x01;
+  B = 0x02;
+}
+
+message Property {
+  required string name = 1;
+  optional string desc = 2;
+
+  oneof value {
+    bool bool_value = 3;
+    float float_value = 4;
+    int32 int_value = 5;
+    string string_value = 6;
+  }
+}
+
+message PropertyNoOneof {
+  required string name = 1;
+  optional string desc = 2;
+
+  optional bool bool_value = 3;
+  optional float float_value = 4;
+  optional int32 int_value = 5;
+  optional string string_value = 6;
+}
+
+message ComplexProperty {
+  required string name = 1;
+
+  oneof value {
+    bool bool_value = 3;
+    float float_value = 4;
+    int32 int_value = 5;
+    string string_value = 6;
+  }
+
+  oneof another_value {
+    bool bool_value = 7;
+    float float_value = 8;
+    int32 int_value = 9;
+    string string_value = 10;
+  }
+}
+message Test {
+  optional string foo = 1;
+  required int32 num = 2;
+}
+package tutorial;
+
+option java_package = "com.mafintosh.generated";
+option java_outer_classname = "Example";
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+message Person {
+  enum PhoneType {
+    option allow_alias = true;
+    option custom_option = true;
+    MOBILE = 0 [some_enum_option = true];
+    HOME = 1;
+    WORK = 2;
+  }
+
+  message PhoneNumber {
+    required string number = 1;
+    optional PhoneType type = 2 [default = HOME];
+  }
+
+  required string name = 1;
+  required int32 id = 2;
+  optional string email = 3;
+  repeated PhoneNumber phone = 4;
+}
+
+message AddressBook {
+  repeated Person person = 1;
+}
+syntax = "proto3";
+
+message Reserved {
+  string x = 1;
+  reserved 2, 3;
+  reserved 5 to 9;
+  reserved "foo", "bar";
+  string y = 10;
+}
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+message Line {
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+// Single-line comment
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+/*Multi-line comment*/
+message Line { /*
+                */
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+
+/**
+ * Doxygen-style comment
+ **/
+message A {}  // Comment after closing brace of last message
+message Data {
+  map<string, bytes> data = 1;
+}
+import "./result.proto";
+
+message SearchResponse {
+  repeated Result result = 1;
+}
+message Person {
+  enum PhoneType {
+    option allow_alias = true;
+    MOBILE = 0 [
+      (enum_value_is_deprecated) = true,
+      (some_second_option) = "value1, value2, value3",
+      (some_third_option) = '[value1, value2, value3]'
+    ];
+    HOME = 1 [(enum_value_is_deprecated) = true];
+    WORK = 2;
+  }
+}
+message SampleMessage {
+  oneof test_oneof {
+    string name = 4;
+    SubMessage sub_message = 9;
+  }
+}
+message wallet {
+  optional int32 dollars;
+  optional int32 pesos;
+}
+
+message traveller {
+  required wallet wallet;
+}
+message MsgNormal {
+  required int32 field1 = 1;
+  optional string field2 = 2;
+  required int32 field3 = 3;
+  optional int32 exField1 = 101;
+  optional string exField2 = 102;
+}
+
+message MsgExtend {
+  required int32 field1 = 1;
+  optional string field2 = 2;
+  required int32 field3 = 3;
+  extensions 100 to 200;
+}
+
+extend MsgExtend {
+  optional int32 exField1 = 101;
+  optional string exField2 = 102;
+}
+message OptionFields {
+  optional string type = 2 [mylist = "some,values,[here]"];
+}
+
+message MoreOptionFields {
+  optional string values = 3 [mylist2 = '[more, values], [here]'];
+}
+message HelloRequest {
+  optional string greeting = 1;
+}
+
+message HelloResponse {
+  required string reply = 1;
+}
+
+service HelloService {
+  rpc SayHello(HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = {
+      get: "/v1/say-hello/echo/{greeting}"
+      additional_bindings { post: "/v2/say-hello" body: "greeting" }
+      additional_bindings { get: "/v2/say-hello" }
+    };
+  }
+  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);
+  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = {
+      post: "/v1/lots-of-greetings"
+      body: "*"
+    };
+  }
+  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);
+}
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+  optional string my_file_option = 50000;
+}
+extend google.protobuf.MessageOptions {
+  optional int32 my_message_option = 50001;
+}
+extend google.protobuf.FieldOptions {
+  optional float my_field_option = 50002;
+}
+extend google.protobuf.EnumOptions {
+  optional bool my_enum_option = 50003;
+}
+extend google.protobuf.EnumValueOptions {
+  optional uint32 my_enum_value_option = 50004;
+}
+extend google.protobuf.ServiceOptions {
+  optional MyEnum my_service_option = 50005;
+}
+extend google.protobuf.MethodOptions {
+  optional MyMessage my_method_option = 50006;
+}
+
+option (my_file_option) = "Hello world!";
+
+message MyMessage {
+  option (my_message_option) = 1234;
+
+  optional int32 foo = 1 [(my_field_option) = 4.5];
+  optional string bar = 2;
+}
+
+enum MyEnum {
+  option (my_enum_option) = true;
+
+  FOO = 1 [(my_enum_value_option) = 321];
+  BAR = 2;
+}
+
+message RequestType {}
+message ResponseType {}
+
+service MyService {
+  option (my_service_option) = FOO;
+  option (my_service_option_map) = {
+    foo: "bar";
+};
+
+rpc MyMethod(RequestType) returns (ResponseType) {
+  // Note:  my_method_option has type MyMessage.  We can set each field
+  //   within it using a separate "option" line.
+  option (my_method_option).foo = 567;
+  option (my_method_option).bar = "Some string";
+}
+}
+message deviceTrajectory {
+  required bytes dates = 1 [packed = true];
+  required bytes signal_strengths = 2 [packed = true];
+}
+
+message trajectories {
+  repeated deviceTrajectory trajectories = 1 [packed = true];
+}
+syntax = "proto2";
+
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+message Line {
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+message EnumCarrying {
+  enum E {
+    A = 0;
+    B = 1;
+  }
+}
+
+message ValidPacked {
+  // varint wire types
+  repeated int32 f1 = 1 [packed = true];
+  repeated int64 f2 = 2 [packed = true];
+  repeated uint32 f3 = 3 [packed = true];
+  repeated uint64 f4 = 4 [packed = true];
+  repeated sint32 f5 = 5 [packed = true];
+  repeated sint64 f6 = 6 [packed = true];
+  repeated bool f7 = 7 [packed = true];
+  enum Corpus {
+    UNIVERSAL = 0;
+    WEB = 1;
+  }
+  repeated Corpus f8 = 8 [packed = true];
+  repeated EnumCarrying.E f9 = 9 [packed = true];
+
+  // 64-bit wire types
+  repeated fixed64 f10 = 10 [packed = true];
+  repeated sfixed64 f11 = 11 [packed = true];
+  repeated double f12 = 12 [packed = true];
+
+  // 32-bit wire types
+  repeated fixed32 f13 = 13 [packed = true];
+  repeated sfixed32 f14 = 14 [packed = true];
+  repeated float f15 = 15 [packed = true];
+}
+// example file
+
+message Test {
+  map<string, string> data = 1;
+  required string hello = 2;
+  oneof test {
+    uint32 age = 3;
+    uint32 year = 4;
+  }
+  message Nested {
+    optional bytes thing = 1;
+  }
+}
 syntax = "proto3";
 
 package pb;
@@ -6,304 +395,318 @@ package pb;
 // the command line options. This service could be authenticated or
 // unauthenticated.
 service bchrpc {
+  // Get info about the mempool.
+  rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
 
-    // Get info about the mempool.
-    rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
+  // Returns information about all of the transactions currently in the memory
+  // pool. Offers an option to return full transactions or just transactions
+  // hashes.
+  rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
 
-    // Returns information about all of the transactions currently in the memory pool.
-    // Offers an option to return full transactions or just transactions hashes.
-    rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
+  // GetBlockchainInfo info about the blockchain including the most recent
+  // block hash and height.
+  rpc GetBlockchainInfo(GetBlockchainInfoRequest)
+      returns (GetBlockchainInfoResponse) {}
 
-    // GetBlockchainInfo info about the blockchain including the most recent
-    // block hash and height.
-    rpc GetBlockchainInfo(GetBlockchainInfoRequest) returns (GetBlockchainInfoResponse) {}
+  // Get info about the given block.
+  rpc GetBlockInfo(GetBlockInfoRequest) returns (GetBlockInfoResponse) {}
 
-    // Get info about the given block.
-    rpc GetBlockInfo(GetBlockInfoRequest)returns (GetBlockInfoResponse) {}
+  // Get a block.
+  rpc GetBlock(GetBlockRequest) returns (GetBlockResponse) {}
 
-    // Get a block.
-    rpc GetBlock(GetBlockRequest) returns (GetBlockResponse) {}
+  // Get a serialized block.
+  rpc GetRawBlock(GetRawBlockRequest) returns (GetRawBlockResponse) {}
 
-    // Get a serialized block.
-    rpc GetRawBlock(GetRawBlockRequest) returns (GetRawBlockResponse) {}
+  // Get a block filter.
+  //
+  // **Requires CfIndex**
+  rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
 
-    // Get a block filter.
-    //
-    // **Requires CfIndex**
-    rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
+  // This RPC sends a block locator object to the server and the server responds
+  // with a batch of no more than 2000 headers. Upon parsing the block locator,
+  // if the server concludes there has been a fork, it will send headers
+  // starting at the fork point, or genesis if no blocks in the locator are in
+  // the best chain. If the locator is already at the tip no headers will be
+  // returned.
+  rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
 
-    // This RPC sends a block locator object to the server and the server responds with
-    // a batch of no more than 2000 headers. Upon parsing the block locator, if the server
-    // concludes there has been a fork, it will send headers starting at the fork point,
-    // or genesis if no blocks in the locator are in the best chain. If the locator is
-    // already at the tip no headers will be returned.
-    rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
+  // Get a transaction given its hash.
+  //
+  // **Requires TxIndex**
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
 
-    // Get a transaction given its hash.
-    //
-    // **Requires TxIndex**
-    rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
+  // Get a serialized transaction given its hash.
+  //
+  // **Requires TxIndex**
+  rpc GetRawTransaction(GetRawTransactionRequest)
+      returns (GetRawTransactionResponse) {}
 
-    // Get a serialized transaction given its hash.
-    //
-    // **Requires TxIndex**
-    rpc GetRawTransaction(GetRawTransactionRequest) returns (GetRawTransactionResponse) {}
+  // Returns the transactions for the given address. Offers offset,
+  // limit, and from block options.
+  //
+  // **Requires AddressIndex**
+  rpc GetAddressTransactions(GetAddressTransactionsRequest)
+      returns (GetAddressTransactionsResponse) {}
 
-    // Returns the transactions for the given address. Offers offset,
-    // limit, and from block options.
-    //
-    // **Requires AddressIndex**
-    rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
+  // Returns the raw transactions for the given address. Offers offset,
+  // limit, and from block options.
+  //
+  // **Requires AddressIndex**
+  rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest)
+      returns (GetRawAddressTransactionsResponse) {}
 
-    // Returns the raw transactions for the given address. Offers offset,
-    // limit, and from block options.
-    //
-    // **Requires AddressIndex**
-    rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest) returns (GetRawAddressTransactionsResponse) {}
+  // Returns all the unspent transaction outputs for the given address.
+  //
+  // **Requires AddressIndex**
+  rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest)
+      returns (GetAddressUnspentOutputsResponse) {}
 
-    // Returns all the unspent transaction outputs for the given address.
-    //
-    // **Requires AddressIndex**
-    rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
+  // Looks up the unspent output in the utxo set and returns the utxo metadata
+  // or not found.
+  rpc GetUnspentOutput(GetUnspentOutputRequest)
+      returns (GetUnspentOutputResponse) {}
 
-    // Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
-    rpc GetUnspentOutput(GetUnspentOutputRequest) returns (GetUnspentOutputResponse) {}
+  // Returns a merkle (SPV) proof that the given transaction is in the provided
+  // block.
+  //
+  // **Requires TxIndex***
+  rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // Returns a merkle (SPV) proof that the given transaction is in the provided block.
-    //
-    // **Requires TxIndex***
-    rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
+  // Submit a transaction to all connected peers.
+  rpc SubmitTransaction(SubmitTransactionRequest)
+      returns (SubmitTransactionResponse) {}
 
-    // Submit a transaction to all connected peers.
-    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
+  // Subscribe to relevant transactions based on the subscription requests.
+  //
+  // This RPC does not use bi-directional streams and therefore can be used
+  // with grpc-web. You will need to close and re-open the stream whenever
+  // you want to update the addresses. If you are not using grpc-web
+  // then SubscribeTransactionStream is more appropriate.
+  //
+  // **Requires TxIndex to receive input metadata**
+  rpc SubscribeTransactions(SubscribeTransactionsRequest)
+      returns (stream TransactionNotification) {}
 
-    // Subscribe to relevant transactions based on the subscription requests.
-    //
-    // This RPC does not use bi-directional streams and therefore can be used
-    // with grpc-web. You will need to close and re-open the stream whenever
-    // you want to update the addresses. If you are not using grpc-web
-    // then SubscribeTransactionStream is more appropriate.
-    //
-    // **Requires TxIndex to receive input metadata**
-    rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
+  // Subscribe to relevant transactions based on the subscription requests.
+  // The parameters to filter transactions on can be updated by sending new
+  // SubscribeTransactionsRequest objects on the stream.
+  //
+  // Because this RPC is using bi-directional streaming it cannot be used with
+  // grpc-web.
+  //
+  // **Requires TxIndex to receive input metadata**
+  rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest)
+      returns (stream TransactionNotification) {}
 
-    // Subscribe to relevant transactions based on the subscription requests.
-    // The parameters to filter transactions on can be updated by sending new
-    // SubscribeTransactionsRequest objects on the stream.
-    //
-    // Because this RPC is using bi-directional streaming it cannot be used with
-    // grpc-web.
-    //
-    // **Requires TxIndex to receive input metadata**
-    rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
-
-    // Subscribe to notifications of new blocks being connected to the blockchain
-    // or blocks being disconnected.
-    rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
+  // Subscribe to notifications of new blocks being connected to the blockchain
+  // or blocks being disconnected.
+  rpc SubscribeBlocks(SubscribeBlocksRequest)
+      returns (stream BlockNotification) {}
 }
-
 
 // RPC MESSAGES
 
 message GetMempoolInfoRequest {}
 message GetMempoolInfoResponse {
-    uint32 size = 1;
-    uint32 bytes = 2;
+  uint32 size = 1;
+  uint32 bytes = 2;
 }
 
 message GetMempoolRequest {
-    // Provide full transaction info instead of only the hashes.
-    bool full_transactions = 1;
+  // Provide full transaction info instead of only the hashes.
+  bool full_transactions = 1;
 }
 message GetMempoolResponse {
-    message TransactionData {
-        // Either one of the two following is provided, depending on the request.
-        oneof txids_or_txs {
-            bytes transaction_hash = 1;
-            Transaction transaction = 2;
-        }
+  message TransactionData {
+    // Either one of the two following is provided, depending on the request.
+    oneof txids_or_txs {
+      bytes transaction_hash = 1;
+      Transaction transaction = 2;
     }
+  }
 
-    repeated TransactionData transaction_data = 1;
+  repeated TransactionData transaction_data = 1;
 }
 
 message GetBlockchainInfoRequest {}
 message GetBlockchainInfoResponse {
-    enum BitcoinNet {
-        MAINNET  = 0;
-        REGTEST  = 1;
-        TESTNET3 = 2;
-        SIMNET   = 3;
-    }
+  enum BitcoinNet {
+    MAINNET = 0;
+    REGTEST = 1;
+    TESTNET3 = 2;
+    SIMNET = 3;
+  }
 
-    BitcoinNet bitcoin_net = 1;
-    int32 best_height = 2;
-    bytes best_block_hash = 3;
-    double difficulty = 4;
-    int64 median_time = 5;
-    bool tx_index = 6;
-    bool addr_index =7;
+  BitcoinNet bitcoin_net = 1;
+  int32 best_height = 2;
+  bytes best_block_hash = 3;
+  double difficulty = 4;
+  int64 median_time = 5;
+  bool tx_index = 6;
+  bool addr_index = 7;
 }
 
 message GetBlockInfoRequest {
-    oneof hash_or_height {
-        bytes hash = 1;
-        int32 height = 2;
-    }
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
 }
 message GetBlockInfoResponse {
-    BlockInfo info = 1;
+  BlockInfo info = 1;
 }
 
 message GetBlockRequest {
-    oneof hash_or_height {
-        bytes hash = 1;
-        int32 height = 2;
-    }
-    // Provide full transaction info instead of only the hashes.
-    bool full_transactions = 3;
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
+  // Provide full transaction info instead of only the hashes.
+  bool full_transactions = 3;
 }
 message GetBlockResponse {
-    Block block = 1;
+  Block block = 1;
 }
 
 message GetRawBlockRequest {
-    oneof hash_or_height {
-        bytes hash = 1;
-        int32 height = 2;
-    }
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
 }
 message GetRawBlockResponse {
-    bytes block = 1;
+  bytes block = 1;
 }
 
 message GetBlockFilterRequest {
-    oneof hash_or_height {
-        bytes hash = 1;
-        int32 height = 2;
-    }
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
 }
 message GetBlockFilterResponse {
-    bytes filter = 1;
+  bytes filter = 1;
 }
 
 message GetHeadersRequest {
-    repeated bytes block_locator_hashes = 1;
-    bytes stop_hash = 2;
+  repeated bytes block_locator_hashes = 1;
+  bytes stop_hash = 2;
 }
 message GetHeadersResponse {
-    repeated BlockInfo headers = 1;
+  repeated BlockInfo headers = 1;
 }
 
 message GetTransactionRequest {
-    bytes hash = 1;
+  bytes hash = 1;
 }
 message GetTransactionResponse {
-    Transaction transaction = 1;
+  Transaction transaction = 1;
 }
 
 message GetRawTransactionRequest {
-    bytes hash = 1;
+  bytes hash = 1;
 }
 message GetRawTransactionResponse {
-    bytes transaction = 1;
+  bytes transaction = 1;
 }
 
 message GetAddressTransactionsRequest {
-    string address = 1;
+  string address = 1;
 
-    // Control the number of transactions to be fetched from the blockchain.
-    // These controls only apply to the confirmed transactions. All unconfirmed
-    // ones will be returned always.
-    uint32 nb_skip = 2;
-    uint32 nb_fetch = 3;
+  // Control the number of transactions to be fetched from the blockchain.
+  // These controls only apply to the confirmed transactions. All unconfirmed
+  // ones will be returned always.
+  uint32 nb_skip = 2;
+  uint32 nb_fetch = 3;
 
-    // If the start block is provided it will only return transactions after this
-    // block. This should be used if possible to save bandwidth.
-    oneof start_block {
-        bytes hash = 4;
-        int32 height = 5;
-    }
+  // If the start block is provided it will only return transactions after this
+  // block. This should be used if possible to save bandwidth.
+  oneof start_block {
+    bytes hash = 4;
+    int32 height = 5;
+  }
 }
 message GetAddressTransactionsResponse {
-    repeated Transaction confirmed_transactions = 1;
-    repeated MempoolTransaction unconfirmed_transactions = 2;
+  repeated Transaction confirmed_transactions = 1;
+  repeated MempoolTransaction unconfirmed_transactions = 2;
 }
 
 message GetRawAddressTransactionsRequest {
-    string address = 1;
+  string address = 1;
 
-    // Control the number of transactions to be fetched from the blockchain.
-    // These controls only apply to the confirmed transactions. All unconfirmed
-    // ones will be returned always.
-    uint32 nb_skip = 2;
-    uint32 nb_fetch = 3;
+  // Control the number of transactions to be fetched from the blockchain.
+  // These controls only apply to the confirmed transactions. All unconfirmed
+  // ones will be returned always.
+  uint32 nb_skip = 2;
+  uint32 nb_fetch = 3;
 
-    // If the start block is provided it will only return transactions after this
-    // block. This should be used if possible to save bandwidth.
-    oneof start_block {
-        bytes hash = 4;
-        int32 height = 5;
-    }
+  // If the start block is provided it will only return transactions after this
+  // block. This should be used if possible to save bandwidth.
+  oneof start_block {
+    bytes hash = 4;
+    int32 height = 5;
+  }
 }
 message GetRawAddressTransactionsResponse {
-    repeated bytes confirmed_transactions = 1;
-    repeated bytes unconfirmed_transactions = 2;
+  repeated bytes confirmed_transactions = 1;
+  repeated bytes unconfirmed_transactions = 2;
 }
 
 message GetAddressUnspentOutputsRequest {
-    string address = 1;
-    bool include_mempool = 2;
+  string address = 1;
+  bool include_mempool = 2;
 }
 message GetAddressUnspentOutputsResponse {
-    repeated UnspentOutput outputs = 1;
+  repeated UnspentOutput outputs = 1;
 }
 
 message GetUnspentOutputRequest {
-    bytes hash = 1;
-    uint32 index = 2;
-    bool include_mempool = 3;
+  bytes hash = 1;
+  uint32 index = 2;
+  bool include_mempool = 3;
 }
 message GetUnspentOutputResponse {
-    Transaction.Input.Outpoint outpoint = 1;
-    bytes pubkey_script = 2;
-    int64 value = 3;
+  Transaction.Input.Outpoint outpoint = 1;
+  bytes pubkey_script = 2;
+  int64 value = 3;
 
-    bool is_coinbase = 4;
-    int32 block_height = 5;
+  bool is_coinbase = 4;
+  int32 block_height = 5;
 }
 
 message GetMerkleProofRequest {
-    bytes transaction_hash = 1;
+  bytes transaction_hash = 1;
 }
 message GetMerkleProofResponse {
-    BlockInfo block = 1;
-    repeated bytes hashes = 2;
-    bytes flags = 3;
+  BlockInfo block = 1;
+  repeated bytes hashes = 2;
+  bytes flags = 3;
 }
 
 message SubmitTransactionRequest {
-    bytes transaction = 1;
+  bytes transaction = 1;
 }
 message SubmitTransactionResponse {
-    bytes hash = 1;
+  bytes hash = 1;
 }
 
 message SubscribeTransactionsRequest {
-    TransactionFilter subscribe = 1;
-    TransactionFilter unsubscribe = 2;
+  TransactionFilter subscribe = 1;
+  TransactionFilter unsubscribe = 2;
 
-    // When include_mempool is true, new transactions coming in from the mempool are
-    // included apart from the ones confirmed in a block.
-    bool include_mempool = 3;
+  // When include_mempool is true, new transactions coming in from the mempool
+  // are included apart from the ones confirmed in a block.
+  bool include_mempool = 3;
 
-    // When include_in_block is true, transactions are included when they are confirmed.
-    // This notification is sent in addition to any requested mempool notifications.
-    bool include_in_block = 4;
+  // When include_in_block is true, transactions are included when they are
+  // confirmed. This notification is sent in addition to any requested mempool
+  // notifications.
+  bool include_in_block = 4;
 
-    // When serialize_tx is true, transactions are serialized using bitcoin protocol encoding. 
-    // Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
-    bool serialize_tx = 5;
+  // When serialize_tx is true, transactions are serialized using bitcoin
+  // protocol encoding. Default is false, transaction will be Marshaled (see
+  // `Transaction`, `MempoolTransaction` and `TransactionNotification`)
+  bool serialize_tx = 5;
 }
 
 // Options to define data structure to be sent by SubscribeBlock stream:
@@ -325,159 +728,2430 @@ message SubscribeTransactionsRequest {
 //            serialize_block = true
 //        }
 message SubscribeBlocksRequest {
+  // When full_block is true, a complete marshaled block is sent. See `Block`.
+  // Default is false, block metadata is sent. See `BlockInfo`.
+  bool full_block = 1;
 
-    // When full_block is true, a complete marshaled block is sent. See `Block`.
-    // Default is false, block metadata is sent. See `BlockInfo`.
-    bool full_block = 1;
+  // When full_transactions is true, provide full transaction info for a
+  // marshaled block. Default is false, only the transaction hashes are included
+  // for a marshaled block. See `TransactionData`.
+  bool full_transactions = 2;
 
-    // When full_transactions is true, provide full transaction info for a marshaled block.
-    // Default is false, only the transaction hashes are included for a marshaled block. See `TransactionData`.
-    bool full_transactions = 2;
-
-    // When serialize_block is true, blocks are serialized using bitcoin protocol encoding. 
-    // Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
-    bool serialize_block = 3;
+  // When serialize_block is true, blocks are serialized using bitcoin protocol
+  // encoding. Default is false, block will be Marshaled (see `BlockInfo` and
+  // `BlockNotification`)
+  bool serialize_block = 3;
 }
-
 
 // NOTIFICATIONS
 
 message BlockNotification {
-    enum Type {
-        CONNECTED = 0;
-        DISCONNECTED = 1;
-    }
+  enum Type {
+    CONNECTED = 0;
+    DISCONNECTED = 1;
+  }
 
-    Type type = 1;
-    oneof block {
-        BlockInfo block_info = 2;
-        Block marshaled_block = 3;
-        bytes serialized_block = 4;
-    }
+  Type type = 1;
+  oneof block {
+    BlockInfo block_info = 2;
+    Block marshaled_block = 3;
+    bytes serialized_block = 4;
+  }
 }
 
 message TransactionNotification {
-    enum Type {
-        UNCONFIRMED = 0;
-        CONFIRMED   = 1;
-    }
+  enum Type {
+    UNCONFIRMED = 0;
+    CONFIRMED = 1;
+  }
 
-    Type type = 1;
-    oneof transaction {
-        Transaction confirmed_transaction = 2;
-        MempoolTransaction unconfirmed_transaction = 3;
-        bytes serialized_transaction = 4;
-    }
+  Type type = 1;
+  oneof transaction {
+    Transaction confirmed_transaction = 2;
+    MempoolTransaction unconfirmed_transaction = 3;
+    bytes serialized_transaction = 4;
+  }
 }
-
 
 // DATA MESSAGES
 
 message BlockInfo {
-    // Identification.
-    bytes hash = 1;
-    int32 height = 2;
+  // Identification.
+  bytes hash = 1;
+  int32 height = 2;
 
-    // Block header data.
-    int32 version = 3;
-    bytes previous_block = 4;
-    bytes merkle_root = 5;
-    int64 timestamp = 6;
-    uint32 bits = 7;
-    uint32 nonce = 8;
+  // Block header data.
+  int32 version = 3;
+  bytes previous_block = 4;
+  bytes merkle_root = 5;
+  int64 timestamp = 6;
+  uint32 bits = 7;
+  uint32 nonce = 8;
 
-    // Metadata.
-    int32 confirmations = 9;
-    double difficulty = 10;
-    bytes next_block_hash = 11;
-    int32 size = 12;
-    int64 median_time = 13;
+  // Metadata.
+  int32 confirmations = 9;
+  double difficulty = 10;
+  bytes next_block_hash = 11;
+  int32 size = 12;
+  int64 median_time = 13;
 }
 
 message Block {
-    message TransactionData {
-        // Either one of the two following is provided, depending on the request.
-        oneof txids_or_txs {
-            bytes transaction_hash = 1;
-            Transaction transaction = 2;
-        }
+  message TransactionData {
+    // Either one of the two following is provided, depending on the request.
+    oneof txids_or_txs {
+      bytes transaction_hash = 1;
+      Transaction transaction = 2;
     }
+  }
 
-    BlockInfo info = 1;
-    repeated TransactionData transaction_data = 2;
+  BlockInfo info = 1;
+  repeated TransactionData transaction_data = 2;
 }
 
 message Transaction {
-    message Input {
-        message Outpoint {
-            bytes hash = 1;
-            uint32 index = 2;
-        }
-
-        uint32 index = 1;
-        Outpoint outpoint = 2;
-        bytes signature_script = 3;
-        uint32 sequence = 4;
-        int64 value = 5;
-        bytes previous_script = 6;
-        string address = 7;
-    }
-    message Output {
-        uint32 index = 1;
-        int64 value = 2;
-        bytes pubkey_script = 3;
-        string address = 4;
-        string script_class = 5;
-        string disassembled_script = 6;
+  message Input {
+    message Outpoint {
+      bytes hash = 1;
+      uint32 index = 2;
     }
 
-    bytes hash = 1;
-    int32 version = 2;
-    repeated Input inputs = 3;
-    repeated Output outputs = 4;
-    uint32 lock_time = 5;
+    uint32 index = 1;
+    Outpoint outpoint = 2;
+    bytes signature_script = 3;
+    uint32 sequence = 4;
+    int64 value = 5;
+    bytes previous_script = 6;
+    string address = 7;
+  }
+  message Output {
+    uint32 index = 1;
+    int64 value = 2;
+    bytes pubkey_script = 3;
+    string address = 4;
+    string script_class = 5;
+    string disassembled_script = 6;
+  }
 
-    // Metadata
-    int32 size = 8;
-    int64 timestamp = 9;
-    int32 confirmations = 10;
-    int32 block_height = 11;
-    bytes block_hash = 12;
+  bytes hash = 1;
+  int32 version = 2;
+  repeated Input inputs = 3;
+  repeated Output outputs = 4;
+  uint32 lock_time = 5;
+
+  // Metadata
+  int32 size = 8;
+  int64 timestamp = 9;
+  int32 confirmations = 10;
+  int32 block_height = 11;
+  bytes block_hash = 12;
 }
 
 message MempoolTransaction {
-    Transaction transaction = 1;
+  Transaction transaction = 1;
 
-    // The time when the transaction was added too the pool.
-    int64 added_time = 2;
-    // The block height when the transaction was added to the pool.
-    int32 added_height = 3;
-    // The total fee in satoshi the transaction pays.
-    int64 fee = 4;
-    // The fee in satoshi per kilobyte the transaction pays.
-    int64 fee_per_kb = 5;
-    // The priority of the transaction when it was added to the pool.
-    double starting_priority = 6;
+  // The time when the transaction was added too the pool.
+  int64 added_time = 2;
+  // The block height when the transaction was added to the pool.
+  int32 added_height = 3;
+  // The total fee in satoshi the transaction pays.
+  int64 fee = 4;
+  // The fee in satoshi per kilobyte the transaction pays.
+  int64 fee_per_kb = 5;
+  // The priority of the transaction when it was added to the pool.
+  double starting_priority = 6;
 }
 
 message UnspentOutput {
-    Transaction.Input.Outpoint outpoint = 1;
-    bytes pubkey_script = 2;
-    int64 value = 3;
+  Transaction.Input.Outpoint outpoint = 1;
+  bytes pubkey_script = 2;
+  int64 value = 3;
 
-    bool is_coinbase = 4;
-    int32 block_height = 5;
+  bool is_coinbase = 4;
+  int32 block_height = 5;
 }
 
 message TransactionFilter {
-    repeated string addresses = 1;
-    repeated Transaction.Input.Outpoint outpoints = 2;
-    repeated bytes data_elements = 3;
+  repeated string addresses = 1;
+  repeated Transaction.Input.Outpoint outpoints = 2;
+  repeated bytes data_elements = 3;
 
-    //TODO: Are these extra filters values relevant?
-    // - scriptPubkey
+  // TODO: Are these extra filters values relevant?
+  // - scriptPubkey
 
-    // Subscribed/Unsubscribe to everything. Other filters
-    // will be ignored.
-    bool all_transactions = 4;
+  // Subscribed/Unsubscribe to everything. Other filters
+  // will be ignored.
+  bool all_transactions = 4;
 }
+message Basic {
+  required double num = 1;
+  required bytes payload = 2;
+}
+
+message Map {
+  map<string, string> foo = 1;
+}
+
+message UTF8 {
+  required string foo = 1;
+  required uint32 bar = 2;
+}
+
+message Nested {
+  required double num = 1;
+  required bytes payload = 2;
+  required Basic meh = 3;
+}
+
+message Repeated {
+  repeated Basic list = 1;
+}
+
+message Integers {
+  optional sint32 sint32 = 1;
+  optional sint64 sint64 = 2;
+  optional int32 int32 = 3;
+  optional uint32 uint32 = 4;
+  optional int64 int64 = 5;
+}
+
+message Float {
+  optional float float1 = 1;
+  optional float float2 = 2;
+  optional float float3 = 3;
+}
+
+message Packed {
+  repeated Basic list = 1;
+  repeated int32 packed = 2 [packed = true];
+}
+
+message NotPacked {
+  repeated int64 id = 2;
+  optional int64 value = 5;
+}
+message FalsePacked {
+  repeated int64 id = 2 [packed = false];
+  optional int64 value = 5;
+}
+
+enum FOO {
+  A = 1;
+  B = 2;
+}
+
+message Defaults {
+  optional int32 num = 1 [default = 42];
+  optional FOO foo1 = 2 [default = B];
+  optional FOO foo2 = 3;
+  repeated FOO foos = 4;
+}
+
+enum FOO_HEX {
+  A = 0x01;
+  B = 0x02;
+}
+
+message Property {
+  required string name = 1;
+  optional string desc = 2;
+
+  oneof value {
+    bool bool_value = 3;
+    float float_value = 4;
+    int32 int_value = 5;
+    string string_value = 6;
+  }
+}
+
+message PropertyNoOneof {
+  required string name = 1;
+  optional string desc = 2;
+
+  optional bool bool_value = 3;
+  optional float float_value = 4;
+  optional int32 int_value = 5;
+  optional string string_value = 6;
+}
+
+message ComplexProperty {
+  required string name = 1;
+
+  oneof value {
+    bool bool_value = 3;
+    float float_value = 4;
+    int32 int_value = 5;
+    string string_value = 6;
+  }
+
+  oneof another_value {
+    bool bool_value = 7;
+    float float_value = 8;
+    int32 int_value = 9;
+    string string_value = 10;
+  }
+}
+message Test {
+  optional string foo = 1;
+  required int32 num = 2;
+}
+package tutorial;
+
+option java_package = "com.mafintosh.generated";
+option java_outer_classname = "Example";
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+message Person {
+  enum PhoneType {
+    option allow_alias = true;
+    option custom_option = true;
+    MOBILE = 0 [some_enum_option = true];
+    HOME = 1;
+    WORK = 2;
+  }
+
+  message PhoneNumber {
+    required string number = 1;
+    optional PhoneType type = 2 [default = HOME];
+  }
+
+  required string name = 1;
+  required int32 id = 2;
+  optional string email = 3;
+  repeated PhoneNumber phone = 4;
+}
+
+message AddressBook {
+  repeated Person person = 1;
+}
+syntax = "proto3";
+
+message Reserved {
+  string x = 1;
+  reserved 2, 3;
+  reserved 5 to 9;
+  reserved "foo", "bar";
+  string y = 10;
+}
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+message Line {
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+// Single-line comment
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+/*Multi-line comment*/
+message Line { /*
+                */
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+
+/**
+ * Doxygen-style comment
+ **/
+message A {}  // Comment after closing brace of last message
+message Data {
+  map<string, bytes> data = 1;
+}
+import "./result.proto";
+
+message SearchResponse {
+  repeated Result result = 1;
+}
+message Person {
+  enum PhoneType {
+    option allow_alias = true;
+    MOBILE = 0 [
+      (enum_value_is_deprecated) = true,
+      (some_second_option) = "value1, value2, value3",
+      (some_third_option) = '[value1, value2, value3]'
+    ];
+    HOME = 1 [(enum_value_is_deprecated) = true];
+    WORK = 2;
+  }
+}
+message SampleMessage {
+  oneof test_oneof {
+    string name = 4;
+    SubMessage sub_message = 9;
+  }
+}
+message wallet {
+  optional int32 dollars;
+  optional int32 pesos;
+}
+
+message traveller {
+  required wallet wallet;
+}
+message MsgNormal {
+  required int32 field1 = 1;
+  optional string field2 = 2;
+  required int32 field3 = 3;
+  optional int32 exField1 = 101;
+  optional string exField2 = 102;
+}
+
+message MsgExtend {
+  required int32 field1 = 1;
+  optional string field2 = 2;
+  required int32 field3 = 3;
+  extensions 100 to 200;
+}
+
+extend MsgExtend {
+  optional int32 exField1 = 101;
+  optional string exField2 = 102;
+}
+message OptionFields {
+  optional string type = 2 [mylist = "some,values,[here]"];
+}
+
+message MoreOptionFields {
+  optional string values = 3 [mylist2 = '[more, values], [here]'];
+}
+message HelloRequest {
+  optional string greeting = 1;
+}
+
+message HelloResponse {
+  required string reply = 1;
+}
+
+service HelloService {
+  rpc SayHello(HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = {
+      get: "/v1/say-hello/echo/{greeting}"
+      additional_bindings { post: "/v2/say-hello" body: "greeting" }
+      additional_bindings { get: "/v2/say-hello" }
+    };
+  }
+  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);
+  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = {
+      post: "/v1/lots-of-greetings"
+      body: "*"
+    };
+  }
+  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);
+}
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+  optional string my_file_option = 50000;
+}
+extend google.protobuf.MessageOptions {
+  optional int32 my_message_option = 50001;
+}
+extend google.protobuf.FieldOptions {
+  optional float my_field_option = 50002;
+}
+extend google.protobuf.EnumOptions {
+  optional bool my_enum_option = 50003;
+}
+extend google.protobuf.EnumValueOptions {
+  optional uint32 my_enum_value_option = 50004;
+}
+extend google.protobuf.ServiceOptions {
+  optional MyEnum my_service_option = 50005;
+}
+extend google.protobuf.MethodOptions {
+  optional MyMessage my_method_option = 50006;
+}
+
+option (my_file_option) = "Hello world!";
+
+message MyMessage {
+  option (my_message_option) = 1234;
+
+  optional int32 foo = 1 [(my_field_option) = 4.5];
+  optional string bar = 2;
+}
+
+enum MyEnum {
+  option (my_enum_option) = true;
+
+  FOO = 1 [(my_enum_value_option) = 321];
+  BAR = 2;
+}
+
+message RequestType {}
+message ResponseType {}
+
+service MyService {
+  option (my_service_option) = FOO;
+  option (my_service_option_map) = {
+    foo: "bar";
+};
+
+rpc MyMethod(RequestType) returns (ResponseType) {
+  // Note:  my_method_option has type MyMessage.  We can set each field
+  //   within it using a separate "option" line.
+  option (my_method_option).foo = 567;
+  option (my_method_option).bar = "Some string";
+}
+}
+message deviceTrajectory {
+  required bytes dates = 1 [packed = true];
+  required bytes signal_strengths = 2 [packed = true];
+}
+
+message trajectories {
+  repeated deviceTrajectory trajectories = 1 [packed = true];
+}
+syntax = "proto2";
+
+message Point {
+  required int32 x = 1;
+  required int32 y = 2;
+  optional string label = 3;
+}
+
+message Line {
+  required Point start = 1;
+  required Point end = 2;
+  optional string label = 3;
+}
+message EnumCarrying {
+  enum E {
+    A = 0;
+    B = 1;
+  }
+}
+
+message ValidPacked {
+  // varint wire types
+  repeated int32 f1 = 1 [packed = true];
+  repeated int64 f2 = 2 [packed = true];
+  repeated uint32 f3 = 3 [packed = true];
+  repeated uint64 f4 = 4 [packed = true];
+  repeated sint32 f5 = 5 [packed = true];
+  repeated sint64 f6 = 6 [packed = true];
+  repeated bool f7 = 7 [packed = true];
+  enum Corpus {
+    UNIVERSAL = 0;
+    WEB = 1;
+  }
+  repeated Corpus f8 = 8 [packed = true];
+  repeated EnumCarrying.E f9 = 9 [packed = true];
+
+  // 64-bit wire types
+  repeated fixed64 f10 = 10 [packed = true];
+  repeated sfixed64 f11 = 11 [packed = true];
+  repeated double f12 = 12 [packed = true];
+
+  // 32-bit wire types
+  repeated fixed32 f13 = 13 [packed = true];
+  repeated sfixed32 f14 = 14 [packed = true];
+  repeated float f15 = 15 [packed = true];
+}
+// example file
+
+message Test {
+  map<string, string> data = 1;
+  required string hello = 2;
+  oneof test {
+    uint32 age = 3;
+    uint32 year = 4;
+  }
+  message Nested {
+    optional bytes thing = 1;
+  }
+}
+syntax = "proto3";
+
+package pb;
+
+// bchrpc contains a set of RPCs that can be exposed publicly via
+// the command line options. This service could be authenticated or
+// unauthenticated.
+service bchrpc {
+  // Get info about the mempool.
+  rpc GetMempoolInfo(GetMempoolInfoRequest) returns (GetMempoolInfoResponse) {}
+
+  // Returns information about all of the transactions currently in the memory
+  // pool. Offers an option to return full transactions or just transactions
+  // hashes.
+  rpc GetMempool(GetMempoolRequest) returns (GetMempoolResponse) {}
+
+  // GetBlockchainInfo info about the blockchain including the most recent
+  // block hash and height.
+  rpc GetBlockchainInfo(GetBlockchainInfoRequest)
+      returns (GetBlockchainInfoResponse) {}
+
+  // Get info about the given block.
+  rpc GetBlockInfo(GetBlockInfoRequest) returns (GetBlockInfoResponse) {}
+
+  // Get a block.
+  rpc GetBlock(GetBlockRequest) returns (GetBlockResponse) {}
+
+  // Get a serialized block.
+  rpc GetRawBlock(GetRawBlockRequest) returns (GetRawBlockResponse) {}
+
+  // Get a block filter.
+  //
+  // **Requires CfIndex**
+  rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
+
+  // This RPC sends a block locator object to the server and the server responds
+  // with a batch of no more than 2000 headers. Upon parsing the block locator,
+  // if the server concludes there has been a fork, it will send headers
+  // starting at the fork point, or genesis if no blocks in the locator are in
+  // the best chain. If the locator is already at the tip no headers will be
+  // returned.
+  rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
+
+  // Get a transaction given its hash.
+  //
+  // **Requires TxIndex**
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
+
+  // Get a serialized transaction given its hash.
+  //
+  // **Requires TxIndex**
+  rpc GetRawTransaction(GetRawTransactionRequest)
+      returns (GetRawTransactionResponse) {}
+
+  // Returns the transactions for the given address. Offers offset,
+  // limit, and from block options.
+  //
+  // **Requires AddressIndex**
+  rpc GetAddressTransactions(GetAddressTransactionsRequest)
+      returns (GetAddressTransactionsResponse) {}
+
+  // Returns the raw transactions for the given address. Offers offset,
+  // limit, and from block options.
+  //
+  // **Requires AddressIndex**
+  rpc GetRawAddressTransactions(GetRawAddressTransactionsRequest)
+      returns (GetRawAddressTransactionsResponse) {}
+
+  // Returns all the unspent transaction outputs for the given address.
+  //
+  // **Requires AddressIndex**
+  rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest)
+      returns (GetAddressUnspentOutputsResponse) {}
+
+  // Looks up the unspent output in the utxo set and returns the utxo metadata
+  // or not found.
+  rpc GetUnspentOutput(GetUnspentOutputRequest)
+      returns (GetUnspentOutputResponse) {}
+
+  // Returns a merkle (SPV) proof that the given transaction is in the provided
+  // block.
+  //
+  // **Requires TxIndex***
+  rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
+
+  // Submit a transaction to all connected peers.
+  rpc SubmitTransaction(SubmitTransactionRequest)
+      returns (SubmitTransactionResponse) {}
+
+  // Subscribe to relevant transactions based on the subscription requests.
+  //
+  // This RPC does not use bi-directional streams and therefore can be used
+  // with grpc-web. You will need to close and re-open the stream whenever
+  // you want to update the addresses. If you are not using grpc-web
+  // then SubscribeTransactionStream is more appropriate.
+  //
+  // **Requires TxIndex to receive input metadata**
+  rpc SubscribeTransactions(SubscribeTransactionsRequest)
+      returns (stream TransactionNotification) {}
+
+  // Subscribe to relevant transactions based on the subscription requests.
+  // The parameters to filter transactions on can be updated by sending new
+  // SubscribeTransactionsRequest objects on the stream.
+  //
+  // Because this RPC is using bi-directional streaming it cannot be used with
+  // grpc-web.
+  //
+  // **Requires TxIndex to receive input metadata**
+  rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest)
+      returns (stream TransactionNotification) {}
+
+  // Subscribe to notifications of new blocks being connected to the blockchain
+  // or blocks being disconnected.
+  rpc SubscribeBlocks(SubscribeBlocksRequest)
+      returns (stream BlockNotification) {}
+}
+
+// RPC MESSAGES
+
+message GetMempoolInfoRequest {}
+message GetMempoolInfoResponse {
+  uint32 size = 1;
+  uint32 bytes = 2;
+}
+
+message GetMempoolRequest {
+  // Provide full transaction info instead of only the hashes.
+  bool full_transactions = 1;
+}
+message GetMempoolResponse {
+  message TransactionData {
+    // Either one of the two following is provided, depending on the request.
+    oneof txids_or_txs {
+      bytes transaction_hash = 1;
+      Transaction transaction = 2;
+    }
+  }
+
+  repeated TransactionData transaction_data = 1;
+}
+
+message GetBlockchainInfoRequest {}
+message GetBlockchainInfoResponse {
+  enum BitcoinNet {
+    MAINNET = 0;
+    REGTEST = 1;
+    TESTNET3 = 2;
+    SIMNET = 3;
+  }
+
+  BitcoinNet bitcoin_net = 1;
+  int32 best_height = 2;
+  bytes best_block_hash = 3;
+  double difficulty = 4;
+  int64 median_time = 5;
+  bool tx_index = 6;
+  bool addr_index = 7;
+}
+
+message GetBlockInfoRequest {
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
+}
+message GetBlockInfoResponse {
+  BlockInfo info = 1;
+}
+
+message GetBlockRequest {
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
+  // Provide full transaction info instead of only the hashes.
+  bool full_transactions = 3;
+}
+message GetBlockResponse {
+  Block block = 1;
+}
+
+message GetRawBlockRequest {
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
+}
+message GetRawBlockResponse {
+  bytes block = 1;
+}
+
+message GetBlockFilterRequest {
+  oneof hash_or_height {
+    bytes hash = 1;
+    int32 height = 2;
+  }
+}
+message GetBlockFilterResponse {
+  bytes filter = 1;
+}
+
+message GetHeadersRequest {
+  repeated bytes block_locator_hashes = 1;
+  bytes stop_hash = 2;
+}
+message GetHeadersResponse {
+  repeated BlockInfo headers = 1;
+}
+
+message GetTransactionRequest {
+  bytes hash = 1;
+}
+message GetTransactionResponse {
+  Transaction transaction = 1;
+}
+
+message GetRawTransactionRequest {
+  bytes hash = 1;
+}
+message GetRawTransactionResponse {
+  bytes transaction = 1;
+}
+
+message GetAddressTransactionsRequest {
+  string address = 1;
+
+  // Control the number of transactions to be fetched from the blockchain.
+  // These controls only apply to the confirmed transactions. All unconfirmed
+  // ones will be returned always.
+  uint32 nb_skip = 2;
+  uint32 nb_fetch = 3;
+
+  // If the start block is provided it will only return transactions after this
+  // block. This should be used if possible to save bandwidth.
+  oneof start_block {
+    bytes hash = 4;
+    int32 height = 5;
+  }
+}
+message GetAddressTransactionsResponse {
+  repeated Transaction confirmed_transactions = 1;
+  repeated MempoolTransaction unconfirmed_transactions = 2;
+}
+
+message GetRawAddressTransactionsRequest {
+  string address = 1;
+
+  // Control the number of transactions to be fetched from the blockchain.
+  // These controls only apply to the confirmed transactions. All unconfirmed
+  // ones will be returned always.
+  uint32 nb_skip = 2;
+  uint32 nb_fetch = 3;
+
+  // If the start block is provided it will only return transactions after this
+  // block. This should be used if possible to save bandwidth.
+  oneof start_block {
+    bytes hash = 4;
+    int32 height = 5;
+  }
+}
+message GetRawAddressTransactionsResponse {
+  repeated bytes confirmed_transactions = 1;
+  repeated bytes unconfirmed_transactions = 2;
+}
+
+message GetAddressUnspentOutputsRequest {
+  string address = 1;
+  bool include_mempool = 2;
+}
+message GetAddressUnspentOutputsResponse {
+  repeated UnspentOutput outputs = 1;
+}
+
+message GetUnspentOutputRequest {
+  bytes hash = 1;
+  uint32 index = 2;
+  bool include_mempool = 3;
+}
+message GetUnspentOutputResponse {
+  Transaction.Input.Outpoint outpoint = 1;
+  bytes pubkey_script = 2;
+  int64 value = 3;
+
+  bool is_coinbase = 4;
+  int32 block_height = 5;
+}
+
+message GetMerkleProofRequest {
+  bytes transaction_hash = 1;
+}
+message GetMerkleProofResponse {
+  BlockInfo block = 1;
+  repeated bytes hashes = 2;
+  bytes flags = 3;
+}
+
+message SubmitTransactionRequest {
+  bytes transaction = 1;
+}
+message SubmitTransactionResponse {
+  bytes hash = 1;
+}
+
+message SubscribeTransactionsRequest {
+  TransactionFilter subscribe = 1;
+  TransactionFilter unsubscribe = 2;
+
+  // When include_mempool is true, new transactions coming in from the mempool
+  // are included apart from the ones confirmed in a block.
+  bool include_mempool = 3;
+
+  // When include_in_block is true, transactions are included when they are
+  // confirmed. This notification is sent in addition to any requested mempool
+  // notifications.
+  bool include_in_block = 4;
+
+  // When serialize_tx is true, transactions are serialized using bitcoin
+  // protocol encoding. Default is false, transaction will be Marshaled (see
+  // `Transaction`, `MempoolTransaction` and `TransactionNotification`)
+  bool serialize_tx = 5;
+}
+
+// Options to define data structure to be sent by SubscribeBlock stream:
+//
+//  - BlockInfo (block metadata): `BlockInfo`
+//      - SubscribeBlocksRequest {}
+//
+//  - Marshaled Block (with transaction hashes): `Block`
+//      - SubscribeBlocksRequest {
+//            full_block = true
+//        }
+//  - Marshaled Block (with full transaction data): `Block`
+//      - SubscribeBlocksRequest {
+//            full_block = true
+//            full_transactions = true
+//        }
+//  - Serialized Block acccording to bitcoin protocol encoding: `bytes`
+//      - SubscribeBlocksRequest {
+//            serialize_block = true
+//        }
+message SubscribeBlocksRequest {
+  // When full_block is true, a complete marshaled block is sent. See `Block`.
+  // Default is false, block metadata is sent. See `BlockInfo`.
+  bool full_block = 1;
+
+  // When full_transactions is true, provide full transaction info for a
+  // marshaled block. Default is false, only the transaction hashes are included
+  // for a marshaled block. See `TransactionData`.
+  bool full_transactions = 2;
+
+  // When serialize_block is true, blocks are serialized using bitcoin protocol
+  // encoding. Default is false, block will be Marshaled (see `BlockInfo` and
+  // `BlockNotification`)
+  bool serialize_block = 3;
+}
+
+// NOTIFICATIONS
+
+message BlockNotification {
+  enum Type {
+    CONNECTED = 0;
+    DISCONNECTED = 1;
+  }
+
+  Type type = 1;
+  oneof block {
+    BlockInfo block_info = 2;
+    Block marshaled_block = 3;
+    bytes serialized_block = 4;
+  }
+}
+
+message TransactionNotification {
+  enum Type {
+    UNCONFIRMED = 0;
+    CONFIRMED = 1;
+  }
+
+  Type type = 1;
+  oneof transaction {
+    Transaction confirmed_transaction = 2;
+    MempoolTransaction unconfirmed_transaction = 3;
+    bytes serialized_transaction = 4;
+  }
+}
+
+// DATA MESSAGES
+
+message BlockInfo {
+  // Identification.
+  bytes hash = 1;
+  int32 height = 2;
+
+  // Block header data.
+  int32 version = 3;
+  bytes previous_block = 4;
+  bytes merkle_root = 5;
+  int64 timestamp = 6;
+  uint32 bits = 7;
+  uint32 nonce = 8;
+
+  // Metadata.
+  int32 confirmations = 9;
+  double difficulty = 10;
+  bytes next_block_hash = 11;
+  int32 size = 12;
+  int64 median_time = 13;
+}
+
+message Block {
+  message TransactionData {
+    // Either one of the two following is provided, depending on the request.
+    oneof txids_or_txs {
+      bytes transaction_hash = 1;
+      Transaction transaction = 2;
+    }
+  }
+
+  BlockInfo info = 1;
+  repeated TransactionData transaction_data = 2;
+}
+
+message Transaction {
+  message Input {
+    message Outpoint {
+      bytes hash = 1;
+      uint32 index = 2;
+    }
+
+    uint32 index = 1;
+    Outpoint outpoint = 2;
+    bytes signature_script = 3;
+    uint32 sequence = 4;
+    int64 value = 5;
+    bytes previous_script = 6;
+    string address = 7;
+  }
+  message Output {
+    uint32 index = 1;
+    int64 value = 2;
+    bytes pubkey_script = 3;
+    string address = 4;
+    string script_class = 5;
+    string disassembled_script = 6;
+  }
+
+  bytes hash = 1;
+  int32 version = 2;
+  repeated Input inputs = 3;
+  repeated Output outputs = 4;
+  uint32 lock_time = 5;
+
+  // Metadata
+  int3  // Copyright 2016 gRPC authors.
+        //
+        // Licensed under the Apache License, Version 2.0 (the "License");
+        // you may not use this file except in compliance with the License.
+        // You may obtain a copy of the License at
+        //
+        //     http://www.apache.org/licenses/LICENSE-2.0
+        //
+        // Unless required by applicable law or agreed to in writing, software
+        // distributed under the License is distributed on an "AS IS" BASIS,
+        // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+        // implied. See the License for the specific language governing
+        // permissions and limitations under the License.
+
+      // Service exported by server reflection
+
+      syntax = "proto3";
+
+  package grpc.reflection.v1alpha;
+
+  service ServerReflection {
+    // The reflection service is structured as a bidirectional stream, ensuring
+    // all related requests go to a single server.
+    rpc ServerReflectionInfo(stream ServerReflectionRequest)
+        returns (stream ServerReflectionResponse);
+  }
+
+  // The message sent by the client when calling ServerReflectionInfo method.
+  message ServerReflectionRequest {
+    string host = 1;
+    // To use reflection service, the client should set one of the following
+    // fields in message_request. The server distinguishes requests by their
+    // defined field and then handles them using corresponding methods.
+    oneof message_request {
+      // Find a proto file by the file name.
+      string file_by_filename = 3;
+
+      // Find the proto file that declares the given fully-qualified symbol
+      // name. This field should be a fully-qualified symbol name (e.g.
+      // <package>.<service>[.<method>] or <package>.<type>).
+      string file_containing_symbol = 4;
+
+      // Find the proto file which defines an extension extending the given
+      // message type with the given field number.
+      ExtensionRequest file_containing_extension = 5;
+
+      // Finds the tag numbers used by all known extensions of extendee_type,
+      // and appends them to ExtensionNumberResponse in an undefined order. Its
+      // corresponding method is best-effort: it's not guaranteed that the
+      // reflection service will implement this method, and it's not guaranteed
+      // that this method will provide all extensions. Returns
+      // StatusCode::UNIMPLEMENTED if it's not implemented.
+      // This field should be a fully-qualified type name. The format is
+      // <package>.<type>
+      string all_extension_numbers_of_type = 6;
+
+      // List the full names of registered services. The content will not be
+      // checked.
+      string list_services = 7;
+    }
+  }
+
+  // The type name and extension number sent by the client when requesting
+  // file_containing_extension.
+  message ExtensionRequest {
+    // Fully-qualified type name. The format should be <package>.<type>
+    string containing_type = 1;
+    int32 extension_number = 2;
+  }
+
+  // The message sent by the server to answer ServerReflectionInfo method.
+  message ServerReflectionResponse {
+    string valid_host = 1;
+    ServerReflectionRequest original_request = 2;
+    // The server sets one of the following fields according to the
+    // message_request in the request.
+    oneof message_response {
+      // This message is used to answer file_by_filename,
+      // file_containing_symbol, file_containing_extension requests with
+      // transitive dependencies. As the repeated label is not allowed in oneof
+      // fields, we use a FileDescriptorResponse message to encapsulate the
+      // repeated fields. The reflection service is allowed to avoid sending
+      // FileDescriptorProtos that were previously sent in response to earlier
+      // requests in the stream.
+      FileDescriptorResponse file_descriptor_response = 4;
+
+      // This message is used to answer all_extension_numbers_of_type requests.
+      ExtensionNumberResponse all_extension_numbers_response = 5;
+
+      // This message is used to answer list_services requests.
+      ListServiceResponse list_services_response = 6;
+
+      // This message is used when an error occurs.
+      ErrorResponse error_response = 7;
+    }
+  }
+
+  // Serialized FileDescriptorProto messages sent by the server answering
+  // a file_by_filename, file_containing_symbol, or file_containing_extension
+  // request.
+  message FileDescriptorResponse {
+    // Serialized FileDescriptorProto messages. We avoid taking a dependency on
+    // descriptor.proto, which uses proto2 only features, by making them opaque
+    // bytes instead.
+    repeated bytes file_descriptor_proto = 1;
+  }
+
+  // A list of extension numbers sent by the server answering
+  // all_extension_numbers_of_type request.
+  message ExtensionNumberResponse {
+    // Full name of the base type, including the package name. The format
+    // is <package>.<type>
+    string base_type_name = 1;
+    repeated int32 extension_number = 2;
+  }
+
+  // A list of ServiceResponse sent by the server answering list_services
+  // request.
+  message ListServiceResponse {
+    // The information of each service may be expanded in the future, so we use
+    // ServiceResponse message to encapsulate it.
+    repeated ServiceResponse service = 1;
+  }
+
+  // The information of a single service used by ListServiceResponse to answer
+  // list_services request.
+  message ServiceResponse {
+    // Full name of a registered service, including its package name. The format
+    // is <package>.<service>
+    string name = 1;
+  }
+
+  // The error code and error message sent by the server when an error occurs.
+  message ErrorResponse {
+    // This field uses the error codes defined in grpc::StatusCode.
+    int32 error_code = 1;
+    string error_message = 2;
+  }
+  // Protocol Buffers - Google's data interchange format
+  // Copyright 2008 Google Inc.  All rights reserved.
+  // https://developers.google.com/protocol-buffers/
+  //
+  // Redistribution and use in source and binary forms, with or without
+  // modification, are permitted provided that the following conditions are
+  // met:
+  //
+  //     * Redistributions of source code must retain the above copyright
+  // notice, this list of conditions and the following disclaimer.
+  //     * Redistributions in binary form must reproduce the above
+  // copyright notice, this list of conditions and the following disclaimer
+  // in the documentation and/or other materials provided with the
+  // distribution.
+  //     * Neither the name of Google Inc. nor the names of its
+  // contributors may be used to endorse or promote products derived from
+  // this software without specific prior written permission.
+  //
+  // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  // LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  // A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  // OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  // SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  // LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  // DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  syntax = "proto3";
+
+  package google.protobuf;
+
+  option csharp_namespace = "Google.Protobuf.WellKnownTypes";
+  option go_package = "github.com/golang/protobuf/ptypes/any";
+  option java_package = "com.google.protobuf";
+  option java_outer_classname = "AnyProto";
+  option java_multiple_files = true;
+  option objc_class_prefix = "GPB";
+
+  // `Any` contains an arbitrary serialized protocol buffer message along with a
+  // URL that describes the type of the serialized message.
+  //
+  // Protobuf library provides support to pack/unpack Any values in the form
+  // of utility functions or additional generated methods of the Any type.
+  //
+  // Example 1: Pack and unpack a message in C++.
+  //
+  //     Foo foo = ...;
+  //     Any any;
+  //     any.PackFrom(foo);
+  //     ...
+  //     if (any.UnpackTo(&foo)) {
+  //       ...
+  //     }
+  //
+  // Example 2: Pack and unpack a message in Java.
+  //
+  //     Foo foo = ...;
+  //     Any any = Any.pack(foo);
+  //     ...
+  //     if (any.is(Foo.class)) {
+  //       foo = any.unpack(Foo.class);
+  //     }
+  //
+  //  Example 3: Pack and unpack a message in Python.
+  //
+  //     foo = Foo(...)
+  //     any = Any()
+  //     any.Pack(foo)
+  //     ...
+  //     if any.Is(Foo.DESCRIPTOR):
+  //       any.Unpack(foo)
+  //       ...
+  //
+  //  Example 4: Pack and unpack a message in Go
+  //
+  //      foo := &pb.Foo{...}
+  //      any, err := ptypes.MarshalAny(foo)
+  //      ...
+  //      foo := &pb.Foo{}
+  //      if err := ptypes.UnmarshalAny(any, foo); err != nil {
+  //        ...
+  //      }
+  //
+  // The pack methods provided by protobuf library will by default use
+  // 'type.googleapis.com/full.type.name' as the type URL and the unpack
+  // methods only use the fully qualified type name after the last '/'
+  // in the type URL, for example "foo.bar.com/x/y.z" will yield type
+  // name "y.z".
+  //
+  //
+  // JSON
+  // ====
+  // The JSON representation of an `Any` value uses the regular
+  // representation of the deserialized, embedded message, with an
+  // additional field `@type` which contains the type URL. Example:
+  //
+  //     package google.profile;
+  //     message Person {
+  //       string first_name = 1;
+  //       string last_name = 2;
+  //     }
+  //
+  //     {
+  //       "@type": "type.googleapis.com/google.profile.Person",
+  //       "firstName": <string>,
+  //       "lastName": <string>
+  //     }
+  //
+  // If the embedded message type is well-known and has a custom JSON
+  // representation, that representation will be embedded adding a field
+  // `value` which holds the custom JSON in addition to the `@type`
+  // field. Example (for message [google.protobuf.Duration][]):
+  //
+  //     {
+  //       "@type": "type.googleapis.com/google.protobuf.Duration",
+  //       "value": "1.212s"
+  //     }
+  //
+  message Any {
+    // A URL/resource name that uniquely identifies the type of the serialized
+    // protocol buffer message. The last segment of the URL's path must
+    // represent the fully qualified name of the type (as in
+    // `path/google.protobuf.Duration`). The name should be in a canonical form
+    // (e.g., leading "." is not accepted).
+    //
+    // In practice, teams usually precompile into the binary all types that they
+    // expect it to use in the context of Any. However, for URLs which use the
+    // scheme `http`, `https`, or no scheme, one can optionally set up a type
+    // server that maps type URLs to message definitions as follows:
+    //
+    // * If no scheme is provided, `https` is assumed.
+    // * An HTTP GET on the URL must yield a [google.protobuf.Type][]
+    //   value in binary format, or produce an error.
+    // * Applications are allowed to cache lookup results based on the
+    //   URL, or have them precompiled into a binary to avoid any
+    //   lookup. Therefore, binary compatibility needs to be preserved
+    //   on changes to types. (Use versioned type names to manage
+    //   breaking changes.)
+    //
+    // Note: this functionality is not currently available in the official
+    // protobuf release, and it is not used for type URLs beginning with
+    // type.googleapis.com.
+    //
+    // Schemes other than `http`, `https` (or the empty scheme) might be
+    // used with implementation specific semantics.
+    //
+    string type_url = 1;
+
+    // Must be a valid serialized protocol buffer of the above specified type.
+    bytes value = 2;
+  }
+  // Protocol Buffers - Google's data interchange format
+  // Copyright 2008 Google Inc.  All rights reserved.
+  // https://developers.google.com/protocol-buffers/
+  //
+  // Redistribution and use in source and binary forms, with or without
+  // modification, are permitted provided that the following conditions are
+  // met:
+  //
+  //     * Redistributions of source code must retain the above copyright
+  // notice, this list of conditions and the following disclaimer.
+  //     * Redistributions in binary form must reproduce the above
+  // copyright notice, this list of conditions and the following disclaimer
+  // in the documentation and/or other materials provided with the
+  // distribution.
+  //     * Neither the name of Google Inc. nor the names of its
+  // contributors may be used to endorse or promote products derived from
+  // this software without specific prior written permission.
+  //
+  // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  // LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  // A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  // OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  // SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  // LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  // DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  syntax = "proto3";
+
+  package google.protobuf;
+
+  option csharp_namespace = "Google.Protobuf.WellKnownTypes";
+  option cc_enable_arenas = true;
+  option go_package = "github.com/golang/protobuf/ptypes/timestamp";
+  option java_package = "com.google.protobuf";
+  option java_outer_classname = "TimestampProto";
+  option java_multiple_files = true;
+  option objc_class_prefix = "GPB";
+
+  // A Timestamp represents a point in time independent of any time zone
+  // or calendar, represented as seconds and fractions of seconds at
+  // nanosecond resolution in UTC Epoch time. It is encoded using the
+  // Proleptic Gregorian Calendar which extends the Gregorian calendar
+  // backwards to year one. It is encoded assuming all minutes are 60
+  // seconds long, i.e. leap seconds are "smeared" so that no leap second
+  // table is needed for interpretation. Range is from
+  // 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z.
+  // By restricting to that range, we ensure that we can convert to
+  // and from  RFC 3339 date strings.
+  // See
+  // [https://www.ietf.org/rfc/rfc3339.txt](https://www.ietf.org/rfc/rfc3339.txt).
+  //
+  // # Examples
+  //
+  // Example 1: Compute Timestamp from POSIX `time()`.
+  //
+  //     Timestamp timestamp;
+  //     timestamp.set_seconds(time(NULL));
+  //     timestamp.set_nanos(0);
+  //
+  // Example 2: Compute Timestamp from POSIX `gettimeofday()`.
+  //
+  //     struct timeval tv;
+  //     gettimeofday(&tv, NULL);
+  //
+  //     Timestamp timestamp;
+  //     timestamp.set_seconds(tv.tv_sec);
+  //     timestamp.set_nanos(tv.tv_usec * 1000);
+  //
+  // Example 3: Compute Timestamp from Win32 `GetSystemTimeAsFileTime()`.
+  //
+  //     FILETIME ft;
+  //     GetSystemTimeAsFileTime(&ft);
+  //     UINT64 ticks = (((UINT64)ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+  //
+  //     // A Windows tick is 100 nanoseconds. Windows epoch
+  //     1601-01-01T00:00:00Z
+  //     // is 11644473600 seconds before Unix epoch 1970-01-01T00:00:00Z.
+  //     Timestamp timestamp;
+  //     timestamp.set_seconds((INT64) ((ticks / 10000000) - 11644473600LL));
+  //     timestamp.set_nanos((INT32) ((ticks % 10000000) * 100));
+  //
+  // Example 4: Compute Timestamp from Java `System.currentTimeMillis()`.
+  //
+  //     long millis = System.currentTimeMillis();
+  //
+  //     Timestamp timestamp = Timestamp.newBuilder().setSeconds(millis / 1000)
+  //         .setNanos((int) ((millis % 1000) * 1000000)).build();
+  //
+  //
+  // Example 5: Compute Timestamp from current time in Python.
+  //
+  //     timestamp = Timestamp()
+  //     timestamp.GetCurrentTime()
+  //
+  // # JSON Mapping
+  //
+  // In JSON format, the Timestamp type is encoded as a string in the
+  // [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) format. That is, the
+  // format is "{year}-{month}-{day}T{hour}:{min}:{sec}[.{frac_sec}]Z"
+  // where {year} is always expressed using four digits while {month}, {day},
+  // {hour}, {min}, and {sec} are zero-padded to two digits each. The fractional
+  // seconds, which can go up to 9 digits (i.e. up to 1 nanosecond resolution),
+  // are optional. The "Z" suffix indicates the timezone ("UTC"); the timezone
+  // is required. A proto3 JSON serializer should always use UTC (as indicated
+  // by "Z") when printing the Timestamp type and a proto3 JSON parser should be
+  // able to accept both UTC and other timezones (as indicated by an offset).
+  //
+  // For example, "2017-01-15T01:30:15.01Z" encodes 15.01 seconds past
+  // 01:30 UTC on January 15, 2017.
+  //
+  // In JavaScript, one can convert a Date object to this format using the
+  // standard
+  // [toISOString()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString]
+  // method. In Python, a standard `datetime.datetime` object can be converted
+  // to this format using
+  // [`strftime`](https://docs.python.org/2/library/time.html#time.strftime)
+  // with the time format spec '%Y-%m-%dT%H:%M:%S.%fZ'. Likewise, in Java, one
+  // can use the Joda Time's [`ISODateTimeFormat.dateTime()`](
+  // http://www.joda.org/joda-time/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime--
+  // ) to obtain a formatter capable of generating timestamps in this format.
+  //
+  //
+  message Timestamp {
+    // Represents seconds of UTC time since Unix epoch
+    // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+    // 9999-12-31T23:59:59Z inclusive.
+    int64 seconds = 1;
+
+    // Non-negative fractions of a second at nanosecond resolution. Negative
+    // second values with fractions must still have non-negative nanos values
+    // that count forward in time. Must be from 0 to 999,999,999
+    // inclusive.
+    int32 nanos = 2;
+  }
+  // Protocol Buffers - Google's data interchange format
+  // Copyright 2008 Google Inc.  All rights reserved.
+  // https://developers.google.com/protocol-buffers/
+  //
+  // Redistribution and use in source and binary forms, with or without
+  // modification, are permitted provided that the following conditions are
+  // met:
+  //
+  //     * Redistributions of source code must retain the above copyright
+  // notice, this list of conditions and the following disclaimer.
+  //     * Redistributions in binary form must reproduce the above
+  // copyright notice, this list of conditions and the following disclaimer
+  // in the documentation and/or other materials provided with the
+  // distribution.
+  //     * Neither the name of Google Inc. nor the names of its
+  // contributors may be used to endorse or promote products derived from
+  // this software without specific prior written permission.
+  //
+  // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  // LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  // A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  // OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  // SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  // LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  // DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  syntax = "proto3";
+
+  package google.protobuf;
+
+  option csharp_namespace = "Google.Protobuf.WellKnownTypes";
+  option cc_enable_arenas = true;
+  option go_package = "github.com/golang/protobuf/ptypes/duration";
+  option java_package = "com.google.protobuf";
+  option java_outer_classname = "DurationProto";
+  option java_multiple_files = true;
+  option objc_class_prefix = "GPB";
+
+  // A Duration represents a signed, fixed-length span of time represented
+  // as a count of seconds and fractions of seconds at nanosecond
+  // resolution. It is independent of any calendar and concepts like "day"
+  // or "month". It is related to Timestamp in that the difference between
+  // two Timestamp values is a Duration and it can be added or subtracted
+  // from a Timestamp. Range is approximately +-10,000 years.
+  //
+  // # Examples
+  //
+  // Example 1: Compute Duration from two Timestamps in pseudo code.
+  //
+  //     Timestamp start = ...;
+  //     Timestamp end = ...;
+  //     Duration duration = ...;
+  //
+  //     duration.seconds = end.seconds - start.seconds;
+  //     duration.nanos = end.nanos - start.nanos;
+  //
+  //     if (duration.seconds < 0 && duration.nanos > 0) {
+  //       duration.seconds += 1;
+  //       duration.nanos -= 1000000000;
+  //     } else if (durations.seconds > 0 && duration.nanos < 0) {
+  //       duration.seconds -= 1;
+  //       duration.nanos += 1000000000;
+  //     }
+  //
+  // Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
+  //
+  //     Timestamp start = ...;
+  //     Duration duration = ...;
+  //     Timestamp end = ...;
+  //
+  //     end.seconds = start.seconds + duration.seconds;
+  //     end.nanos = start.nanos + duration.nanos;
+  //
+  //     if (end.nanos < 0) {
+  //       end.seconds -= 1;
+  //       end.nanos += 1000000000;
+  //     } else if (end.nanos >= 1000000000) {
+  //       end.seconds += 1;
+  //       end.nanos -= 1000000000;
+  //     }
+  //
+  // Example 3: Compute Duration from datetime.timedelta in Python.
+  //
+  //     td = datetime.timedelta(days=3, minutes=10)
+  //     duration = Duration()
+  //     duration.FromTimedelta(td)
+  //
+  // # JSON Mapping
+  //
+  // In JSON format, the Duration type is encoded as a string rather than an
+  // object, where the string ends in the suffix "s" (indicating seconds) and
+  // is preceded by the number of seconds, with nanoseconds expressed as
+  // fractional seconds. For example, 3 seconds with 0 nanoseconds should be
+  // encoded in JSON format as "3s", while 3 seconds and 1 nanosecond should
+  // be expressed in JSON format as "3.000000001s", and 3 seconds and 1
+  // microsecond should be expressed in JSON format as "3.000001s".
+  //
+  //
+  message Duration {
+    // Signed seconds of the span of time. Must be from -315,576,000,000
+    // to +315,576,000,000 inclusive. Note: these bounds are computed from:
+    // 60 sec/min * 60 min/hr * 24 hr/day * 365.25 days/year * 10000 years
+    int64 seconds = 1;
+
+    // Signed fractions of a second at nanosecond resolution of the span
+    // of time. Durations less than one second are represented with a 0
+    // `seconds` field and a positive or negative `nanos` field. For durations
+    // of one second or more, a non-zero value for the `nanos` field must be
+    // of the same sign as the `seconds` field. Must be from -999,999,999
+    // to +999,999,999 inclusive.
+    int32 nanos = 2;
+  }
+  // Protocol Buffers - Google's data interchange format
+  // Copyright 2008 Google Inc.  All rights reserved.
+  // https://developers.google.com/protocol-buffers/
+  //
+  // Redistribution and use in source and binary forms, with or without
+  // modification, are permitted provided that the following conditions are
+  // met:
+  //
+  //     * Redistributions of source code must retain the above copyright
+  // notice, this list of conditions and the following disclaimer.
+  //     * Redistributions in binary form must reproduce the above
+  // copyright notice, this list of conditions and the following disclaimer
+  // in the documentation and/or other materials provided with the
+  // distribution.
+  //     * Neither the name of Google Inc. nor the names of its
+  // contributors may be used to endorse or promote products derived from
+  // this software without specific prior written permission.
+  //
+  // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  // LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  // A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  // OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  // SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  // LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  // DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  // Author: kenton@google.com (Kenton Varda)
+  //  Based on original Protocol Buffers design by
+  //  Sanjay Ghemawat, Jeff Dean, and others.
+  //
+  // The messages in this file describe the definitions found in .proto files.
+  // A valid .proto file can be translated directly to a FileDescriptorProto
+  // without any other information (e.g. without reading its imports).
+
+  syntax = "proto2";
+
+  package google.protobuf;
+  option go_package =
+      "github.com/golang/protobuf/protoc-gen-go/descriptor;descriptor";
+  option java_package = "com.google.protobuf";
+  option java_outer_classname = "DescriptorProtos";
+  option csharp_namespace = "Google.Protobuf.Reflection";
+  option objc_class_prefix = "GPB";
+  option cc_enable_arenas = true;
+
+  // descriptor.proto must be optimized for speed because reflection-based
+  // algorithms don't work during bootstrapping.
+  option optimize_for = SPEED;
+
+  // The protocol compiler can output a FileDescriptorSet containing the .proto
+  // files it parses.
+  message FileDescriptorSet {
+    repeated FileDescriptorProto file = 1;
+  }
+
+  // Describes a complete .proto file.
+  message FileDescriptorProto {
+    optional string name = 1;     // file name, relative to root of source tree
+    optional string package = 2;  // e.g. "foo", "foo.bar", etc.
+
+    // Names of files imported by this file.
+    repeated string dependency = 3;
+    // Indexes of the public imported files in the dependency list above.
+    repeated int32 public_dependency = 10;
+    // Indexes of the weak imported files in the dependency list.
+    // For Google-internal migration only. Do not use.
+    repeated int32 weak_dependency = 11;
+
+    // All top-level definitions in this file.
+    repeated DescriptorProto message_type = 4;
+    repeated EnumDescriptorProto enum_type = 5;
+    repeated ServiceDescriptorProto service = 6;
+    repeated FieldDescriptorProto extension = 7;
+
+    optional FileOptions options = 8;
+
+    // This field contains optional information about the original source code.
+    // You may safely remove this entire field without harming runtime
+    // functionality of the descriptors -- the information is needed only by
+    // development tools.
+    optional SourceCodeInfo source_code_info = 9;
+
+    // The syntax of the proto file.
+    // The supported values are "proto2" and "proto3".
+    optional string syntax = 12;
+  }
+
+  // Describes a message type.
+  message DescriptorProto {
+    optional string name = 1;
+
+    repeated FieldDescriptorProto field = 2;
+    repeated FieldDescriptorProto extension = 6;
+
+    repeated DescriptorProto nested_type = 3;
+    repeated EnumDescriptorProto enum_type = 4;
+
+    message ExtensionRange {
+      optional int32 start = 1;
+      optional int32 end = 2;
+
+      optional ExtensionRangeOptions options = 3;
+    }
+    repeated ExtensionRange extension_range = 5;
+
+    repeated OneofDescriptorProto oneof_decl = 8;
+
+    optional MessageOptions options = 7;
+
+    // Range of reserved tag numbers. Reserved tag numbers may not be used by
+    // fields or extension ranges in the same message. Reserved ranges may
+    // not overlap.
+    message ReservedRange {
+      optional int32 start = 1;  // Inclusive.
+      optional int32 end = 2;    // Exclusive.
+    }
+    repeated ReservedRange reserved_range = 9;
+    // Reserved field names, which may not be used by fields in the same
+    // message. A given name may only be reserved once.
+    repeated string reserved_name = 10;
+  }
+
+  message ExtensionRangeOptions {
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  // Describes a field within a message.
+  message FieldDescriptorProto {
+    enum Type {
+      // 0 is reserved for errors.
+      // Order is weird for historical reasons.
+      TYPE_DOUBLE = 1;
+      TYPE_FLOAT = 2;
+      // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT64
+      // if negative values are likely.
+      TYPE_INT64 = 3;
+      TYPE_UINT64 = 4;
+      // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT32
+      // if negative values are likely.
+      TYPE_INT32 = 5;
+      TYPE_FIXED64 = 6;
+      TYPE_FIXED32 = 7;
+      TYPE_BOOL = 8;
+      TYPE_STRING = 9;
+      // Tag-delimited aggregate.
+      // Group type is deprecated and not supported in proto3. However, Proto3
+      // implementations should still be able to parse the group wire format and
+      // treat group fields as unknown fields.
+      TYPE_GROUP = 10;
+      TYPE_MESSAGE = 11;  // Length-delimited aggregate.
+
+      // New in version 2.
+      TYPE_BYTES = 12;
+      TYPE_UINT32 = 13;
+      TYPE_ENUM = 14;
+      TYPE_SFIXED32 = 15;
+      TYPE_SFIXED64 = 16;
+      TYPE_SINT32 = 17;  // Uses ZigZag encoding.
+      TYPE_SINT64 = 18;  // Uses ZigZag encoding.
+    };
+
+    enum Label {
+      // 0 is reserved for errors
+      LABEL_OPTIONAL = 1;
+      LABEL_REQUIRED = 2;
+      LABEL_REPEATED = 3;
+    };
+
+    optional string name = 1;
+    optional int32 number = 3;
+    optional Label label = 4;
+
+    // If type_name is set, this need not be set.  If both this and type_name
+    // are set, this must be one of TYPE_ENUM, TYPE_MESSAGE or TYPE_GROUP.
+    optional Type type = 5;
+
+    // For message and enum types, this is the name of the type.  If the name
+    // starts with a '.', it is fully-qualified.  Otherwise, C++-like scoping
+    // rules are used to find the type (i.e. first the nested types within this
+    // message are searched, then within the parent, on up to the root
+    // namespace).
+    optional string type_name = 6;
+
+    // For extensions, this is the name of the type being extended.  It is
+    // resolved in the same manner as type_name.
+    optional string extendee = 2;
+
+    // For numeric types, contains the original text representation of the
+    // value. For booleans, "true" or "false". For strings, contains the default
+    // text contents (not escaped in any way). For bytes, contains the C escaped
+    // value.  All bytes >= 128 are escaped.
+    // TODO(kenton):  Base-64 encode?
+    optional string default_value = 7;
+
+    // If set, gives the index of a oneof in the containing type's oneof_decl
+    // list.  This field is a member of that oneof.
+    optional int32 oneof_index = 9;
+
+    // JSON name of this field. The value is set by protocol compiler. If the
+    // user has set a "json_name" option on this field, that option's value
+    // will be used. Otherwise, it's deduced from the field's name by converting
+    // it to camelCase.
+    optional string json_name = 10;
+
+    optional FieldOptions options = 8;
+  }
+
+  // Describes a oneof.
+  message OneofDescriptorProto {
+    optional string name = 1;
+    optional OneofOptions options = 2;
+  }
+
+  // Describes an enum type.
+  message EnumDescriptorProto {
+    optional string name = 1;
+
+    repeated EnumValueDescriptorProto value = 2;
+
+    optional EnumOptions options = 3;
+
+    // Range of reserved numeric values. Reserved values may not be used by
+    // entries in the same enum. Reserved ranges may not overlap.
+    //
+    // Note that this is distinct from DescriptorProto.ReservedRange in that it
+    // is inclusive such that it can appropriately represent the entire int32
+    // domain.
+    message EnumReservedRange {
+      optional int32 start = 1;  // Inclusive.
+      optional int32 end = 2;    // Inclusive.
+    }
+
+    // Range of reserved numeric values. Reserved numeric values may not be used
+    // by enum values in the same enum declaration. Reserved ranges may not
+    // overlap.
+    repeated EnumReservedRange reserved_range = 4;
+
+    // Reserved enum value names, which may not be reused. A given name may only
+    // be reserved once.
+    repeated string reserved_name = 5;
+  }
+
+  // Describes a value within an enum.
+  message EnumValueDescriptorProto {
+    optional string name = 1;
+    optional int32 number = 2;
+
+    optional EnumValueOptions options = 3;
+  }
+
+  // Describes a service.
+  message ServiceDescriptorProto {
+    optional string name = 1;
+    repeated MethodDescriptorProto method = 2;
+
+    optional ServiceOptions options = 3;
+  }
+
+  // Describes a method of a service.
+  message MethodDescriptorProto {
+    optional string name = 1;
+
+    // Input and output type names.  These are resolved in the same way as
+    // FieldDescriptorProto.type_name, but must refer to a message type.
+    optional string input_type = 2;
+    optional string output_type = 3;
+
+    optional MethodOptions options = 4;
+
+    // Identifies if client streams multiple client messages
+    optional bool client_streaming = 5 [default = false];
+    // Identifies if server streams multiple server messages
+    optional bool server_streaming = 6 [default = false];
+  }
+
+  // ===================================================================
+  // Options
+
+  // Each of the definitions above may have "options" attached.  These are
+  // just annotations which may cause code to be generated slightly differently
+  // or may contain hints for code that manipulates protocol messages.
+  //
+  // Clients may define custom options as extensions of the *Options messages.
+  // These extensions may not yet be known at parsing time, so the parser cannot
+  // store the values in them.  Instead it stores them in a field in the
+  // *Options message called uninterpreted_option. This field must have the same
+  // name across all *Options messages. We then use this field to populate the
+  // extensions when we build a descriptor, at which point all protos have been
+  // parsed and so all extensions are known.
+  //
+  // Extension numbers for custom options may be chosen as follows:
+  // * For options which will only be used within a single application or
+  //   organization, or for experimental options, use field numbers 50000
+  //   through 99999.  It is up to you to ensure that you do not use the
+  //   same number for multiple options.
+  // * For options which will be published and used publicly by multiple
+  //   independent entities, e-mail
+  //   protobuf-global-extension-registry@google.com to reserve extension
+  //   numbers. Simply provide your project name (e.g. Objective-C plugin) and
+  //   your project website (if available) -- there's no need to explain how you
+  //   intend to use them. Usually you only need one extension number. You can
+  //   declare multiple options with only one extension number by putting them
+  //   in a sub-message. See the Custom Options section of the docs for
+  //   examples:
+  //   https://developers.google.com/protocol-buffers/docs/proto#options
+  //   If this turns out to be popular, a web service will be set up
+  //   to automatically assign option numbers.
+
+  message FileOptions {
+    // Sets the Java package where classes generated from this .proto will be
+    // placed.  By default, the proto package is used, but this is often
+    // inappropriate because proto packages do not normally start with backwards
+    // domain names.
+    optional string java_package = 1;
+
+    // If set, all the classes from the .proto file are wrapped in a single
+    // outer class with the given name.  This applies to both Proto1
+    // (equivalent to the old "--one_java_file" option) and Proto2 (where
+    // a .proto always translates to a single class, but you may want to
+    // explicitly choose the class name).
+    optional string java_outer_classname = 8;
+
+    // If set true, then the Java code generator will generate a separate .java
+    // file for each top-level message, enum, and service defined in the .proto
+    // file.  Thus, these types will *not* be nested inside the outer class
+    // named by java_outer_classname.  However, the outer class will still be
+    // generated to contain the file's getDescriptor() method as well as any
+    // top-level extensions defined in the file.
+    optional bool java_multiple_files = 10 [default = false];
+
+    // This option does nothing.
+    optional bool java_generate_equals_and_hash = 20 [deprecated = true];
+
+    // If set true, then the Java2 code generator will generate code that
+    // throws an exception whenever an attempt is made to assign a non-UTF-8
+    // byte sequence to a string field.
+    // Message reflection will do the same.
+    // However, an extension field still accepts non-UTF-8 byte sequences.
+    // This option has no effect on when used with the lite runtime.
+    optional bool java_string_check_utf8 = 27 [default = false];
+
+    // Generated classes can be optimized for speed or code size.
+    enum OptimizeMode {
+      SPEED = 1;      // Generate complete code for parsing, serialization,
+                      // etc.
+      CODE_SIZE = 2;  // Use ReflectionOps to implement these methods.
+      LITE_RUNTIME =
+          3;  // Generate code using MessageLite and the lite runtime.
+    }
+    optional OptimizeMode optimize_for = 9 [default = SPEED];
+
+    // Sets the Go package where structs generated from this .proto will be
+    // placed. If omitted, the Go package will be derived from the following:
+    //   - The basename of the package import path, if provided.
+    //   - Otherwise, the package statement in the .proto file, if present.
+    //   - Otherwise, the basename of the .proto file, without extension.
+    optional string go_package = 11;
+
+    // Should generic services be generated in each language?  "Generic"
+    // services are not specific to any particular RPC system.  They are
+    // generated by the main code generators in each language (without
+    // additional plugins). Generic services were the only kind of service
+    // generation supported by early versions of google.protobuf.
+    //
+    // Generic services are now considered deprecated in favor of using plugins
+    // that generate code specific to your particular RPC system.  Therefore,
+    // these default to false.  Old code which depends on generic services
+    // should explicitly set them to true.
+    optional bool cc_generic_services = 16 [default = false];
+    optional bool java_generic_services = 17 [default = false];
+    optional bool py_generic_services = 18 [default = false];
+    optional bool php_generic_services = 42 [default = false];
+
+    // Is this file deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for everything in the file, or it will be completely ignored; in the very
+    // least, this is a formalization for deprecating files.
+    optional bool deprecated = 23 [default = false];
+
+    // Enables the use of arenas for the proto messages in this file. This
+    // applies only to generated classes for C++.
+    optional bool cc_enable_arenas = 31 [default = false];
+
+    // Sets the objective c class prefix which is prepended to all objective c
+    // generated classes from this .proto. There is no default.
+    optional string objc_class_prefix = 36;
+
+    // Namespace for generated classes; defaults to the package.
+    optional string csharp_namespace = 37;
+
+    // By default Swift generators will take the proto package and CamelCase it
+    // replacing '.' with underscore and use that to prefix the types/symbols
+    // defined. When this options is provided, they will use this value instead
+    // to prefix the types/symbols defined.
+    optional string swift_prefix = 39;
+
+    // Sets the php class prefix which is prepended to all php generated classes
+    // from this .proto. Default is empty.
+    optional string php_class_prefix = 40;
+
+    // Use this option to change the namespace of php generated classes. Default
+    // is empty. When this option is empty, the package name will be used for
+    // determining the namespace.
+    optional string php_namespace = 41;
+
+    // Use this option to change the namespace of php generated metadata
+    // classes. Default is empty. When this option is empty, the proto file name
+    // will be used for determining the namespace.
+    optional string php_metadata_namespace = 44;
+
+    // Use this option to change the package of ruby generated classes. Default
+    // is empty. When this option is not set, the package name will be used for
+    // determining the ruby package.
+    optional string ruby_package = 45;
+
+    // The parser stores options it doesn't recognize here.
+    // See the documentation for the "Options" section above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message.
+    // See the documentation for the "Options" section above.
+    extensions 1000 to max;
+
+    reserved 38;
+  }
+
+  message MessageOptions {
+    // Set true to use the old proto1 MessageSet wire format for extensions.
+    // This is provided for backwards-compatibility with the MessageSet wire
+    // format.  You should not use this for any other reason:  It's less
+    // efficient, has fewer features, and is more complicated.
+    //
+    // The message must be defined exactly as follows:
+    //   message Foo {
+    //     option message_set_wire_format = true;
+    //     extensions 4 to max;
+    //   }
+    // Note that the message cannot have any defined fields; MessageSets only
+    // have extensions.
+    //
+    // All extensions of your type must be singular messages; e.g. they cannot
+    // be int32s, enums, or repeated messages.
+    //
+    // Because this is an option, the above two restrictions are not enforced by
+    // the protocol compiler.
+    optional bool message_set_wire_format = 1 [default = false];
+
+    // Disables the generation of the standard "descriptor()" accessor, which
+    // can conflict with a field of the same name.  This is meant to make
+    // migration from proto1 easier; new code should avoid fields named
+    // "descriptor".
+    optional bool no_standard_descriptor_accessor = 2 [default = false];
+
+    // Is this message deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for the message, or it will be completely ignored; in the very least,
+    // this is a formalization for deprecating messages.
+    optional bool deprecated = 3 [default = false];
+
+    // Whether the message is an automatically generated map entry type for the
+    // maps field.
+    //
+    // For maps fields:
+    //     map<KeyType, ValueType> map_field = 1;
+    // The parsed descriptor looks like:
+    //     message MapFieldEntry {
+    //         option map_entry = true;
+    //         optional KeyType key = 1;
+    //         optional ValueType value = 2;
+    //     }
+    //     repeated MapFieldEntry map_field = 1;
+    //
+    // Implementations may choose not to generate the map_entry=true message,
+    // but use a native map in the target language to hold the keys and values.
+    // The reflection APIs in such implementions still need to work as
+    // if the field is a repeated message field.
+    //
+    // NOTE: Do not set the option in .proto files. Always use the maps syntax
+    // instead. The option should only be implicitly set by the proto compiler
+    // parser.
+    optional bool map_entry = 7;
+
+    reserved 8;  // javalite_serializable
+    reserved 9;  // javanano_as_lite
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  message FieldOptions {
+    // The ctype option instructs the C++ code generator to use a different
+    // representation of the field than it normally would.  See the specific
+    // options below.  This option is not yet implemented in the open source
+    // release -- sorry, we'll try to include it in a future version!
+    optional CType ctype = 1 [default = STRING];
+    enum CType {
+      // Default mode.
+      STRING = 0;
+
+      CORD = 1;
+
+      STRING_PIECE = 2;
+    }
+    // The packed option can be enabled for repeated primitive fields to enable
+    // a more efficient representation on the wire. Rather than repeatedly
+    // writing the tag and type for each element, the entire array is encoded as
+    // a single length-delimited blob. In proto3, only explicit setting it to
+    // false will avoid using packed encoding.
+    optional bool packed = 2;
+
+    // The jstype option determines the JavaScript type used for values of the
+    // field.  The option is permitted only for 64 bit integral and fixed types
+    // (int64, uint64, sint64, fixed64, sfixed64).  A field with jstype
+    // JS_STRING is represented as JavaScript string, which avoids loss of
+    // precision that can happen when a large value is converted to a floating
+    // point JavaScript. Specifying JS_NUMBER for the jstype causes the
+    // generated JavaScript code to use the JavaScript "number" type.  The
+    // behavior of the default option JS_NORMAL is implementation dependent.
+    //
+    // This option is an enum to permit additional types to be added, e.g.
+    // goog.math.Integer.
+    optional JSType jstype = 6 [default = JS_NORMAL];
+    enum JSType {
+      // Use the default type.
+      JS_NORMAL = 0;
+
+      // Use JavaScript strings.
+      JS_STRING = 1;
+
+      // Use JavaScript numbers.
+      JS_NUMBER = 2;
+    }
+
+    // Should this field be parsed lazily?  Lazy applies only to message-type
+    // fields.  It means that when the outer message is initially parsed, the
+    // inner message's contents will not be parsed but instead stored in encoded
+    // form.  The inner message will actually be parsed when it is first
+    // accessed.
+    //
+    // This is only a hint.  Implementations are free to choose whether to use
+    // eager or lazy parsing regardless of the value of this option.  However,
+    // setting this option true suggests that the protocol author believes that
+    // using lazy parsing on this field is worth the additional bookkeeping
+    // overhead typically needed to implement it.
+    //
+    // This option does not affect the public interface of any generated code;
+    // all method signatures remain the same.  Furthermore, thread-safety of the
+    // interface is not affected by this option; const methods remain safe to
+    // call from multiple threads concurrently, while non-const methods continue
+    // to require exclusive access.
+    //
+    //
+    // Note that implementations may choose not to check required fields within
+    // a lazy sub-message.  That is, calling IsInitialized() on the outer
+    // message may return true even if the inner message has missing required
+    // fields. This is necessary because otherwise the inner message would have
+    // to be parsed in order to perform the check, defeating the purpose of lazy
+    // parsing.  An implementation which chooses not to check required fields
+    // must be consistent about it.  That is, for any particular sub-message,
+    // the implementation must either *always* check its required fields, or
+    // *never* check its required fields, regardless of whether or not the
+    // message has been parsed.
+    optional bool lazy = 5 [default = false];
+
+    // Is this field deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for accessors, or it will be completely ignored; in the very least, this
+    // is a formalization for deprecating fields.
+    optional bool deprecated = 3 [default = false];
+
+    // For Google-internal migration only. Do not use.
+    optional bool weak = 10 [default = false];
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+
+    reserved 4;  // removed jtype
+  }
+
+  message OneofOptions {
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  message EnumOptions {
+    // Set this option to true to allow mapping different tag names to the same
+    // value.
+    optional bool allow_alias = 2;
+
+    // Is this enum deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for the enum, or it will be completely ignored; in the very least, this
+    // is a formalization for deprecating enums.
+    optional bool deprecated = 3 [default = false];
+
+    reserved 5;  // javanano_as_lite
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  message EnumValueOptions {
+    // Is this enum value deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for the enum value, or it will be completely ignored; in the very least,
+    // this is a formalization for deprecating enum values.
+    optional bool deprecated = 1 [default = false];
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  message ServiceOptions {
+    // Note:  Field numbers 1 through 32 are reserved for Google's internal RPC
+    //   framework.  We apologize for hoarding these numbers to ourselves, but
+    //   we were already using them long before we decided to release Protocol
+    //   Buffers.
+
+    // Is this service deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for the service, or it will be completely ignored; in the very least,
+    // this is a formalization for deprecating services.
+    optional bool deprecated = 33 [default = false];
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  message MethodOptions {
+    // Note:  Field numbers 1 through 32 are reserved for Google's internal RPC
+    //   framework.  We apologize for hoarding these numbers to ourselves, but
+    //   we were already using them long before we decided to release Protocol
+    //   Buffers.
+
+    // Is this method deprecated?
+    // Depending on the target platform, this can emit Deprecated annotations
+    // for the method, or it will be completely ignored; in the very least,
+    // this is a formalization for deprecating methods.
+    optional bool deprecated = 33 [default = false];
+
+    // Is this method side-effect-free (or safe in HTTP parlance), or
+    // idempotent, or neither? HTTP based RPC implementation may choose GET verb
+    // for safe methods, and PUT verb for idempotent methods instead of the
+    // default POST.
+    enum IdempotencyLevel {
+      IDEMPOTENCY_UNKNOWN = 0;
+      NO_SIDE_EFFECTS = 1;  // implies idempotent
+      IDEMPOTENT = 2;       // idempotent, but may have side effects
+    }
+    optional IdempotencyLevel idempotency_level = 34
+        [default = IDEMPOTENCY_UNKNOWN];
+
+    // The parser stores options it doesn't recognize here. See above.
+    repeated UninterpretedOption uninterpreted_option = 999;
+
+    // Clients can define custom options in extensions of this message. See
+    // above.
+    extensions 1000 to max;
+  }
+
+  // A message representing a option the parser does not recognize. This only
+  // appears in options protos created by the compiler::Parser class.
+  // DescriptorPool resolves these when building Descriptor objects. Therefore,
+  // options protos in descriptor objects (e.g. returned by
+  // Descriptor::options(), or produced by Descriptor::CopyTo()) will never have
+  // UninterpretedOptions in them.
+  message UninterpretedOption {
+    // The name of the uninterpreted option.  Each string represents a segment
+    // in a dot-separated name.  is_extension is true iff a segment represents
+    // an extension (denoted with parentheses in options specs in .proto files).
+    // E.g.,{ ["foo", false], ["bar.baz", true], ["qux", false] } represents
+    // "foo.(bar.baz).qux".
+    message NamePart {
+      required string name_part = 1;
+      required bool is_extension = 2;
+    }
+    repeated NamePart name = 2;
+
+    // The value of the uninterpreted option, in whatever type the tokenizer
+    // identified it as during parsing. Exactly one of these should be set.
+    optional string identifier_value = 3;
+    optional uint64 positive_int_value = 4;
+    optional int64 negative_int_value = 5;
+    optional double double_value = 6;
+    optional bytes string_value = 7;
+    optional string aggregate_value = 8;
+  }
+
+  // ===================================================================
+  // Optional source code info
+
+  // Encapsulates information about the original source file from which a
+  // FileDescriptorProto was generated.
+  message SourceCodeInfo {
+    // A Location identifies a piece of source code in a .proto file which
+    // corresponds to a particular definition.  This information is intended
+    // to be useful to IDEs, code indexers, documentation generators, and
+    // similar tools.
+    //
+    // For example, say we have a file like:
+    //   message Foo {
+    //     optional string foo = 1;
+    //   }
+    // Let's look at just the field definition:
+    //   optional string foo = 1;
+    //   ^       ^^     ^^  ^  ^^^
+    //   a       bc     de  f  ghi
+    // We have the following locations:
+    //   span   path               represents
+    //   [a,i)  [ 4, 0, 2, 0 ]     The whole field definition.
+    //   [a,b)  [ 4, 0, 2, 0, 4 ]  The label (optional).
+    //   [c,d)  [ 4, 0, 2, 0, 5 ]  The type (string).
+    //   [e,f)  [ 4, 0, 2, 0, 1 ]  The name (foo).
+    //   [g,h)  [ 4, 0, 2, 0, 3 ]  The number (1).
+    //
+    // Notes:
+    // - A location may refer to a repeated field itself (i.e. not to any
+    //   particular index within it).  This is used whenever a set of elements
+    //   are logically enclosed in a single code segment.  For example, an
+    //   entire extend block (possibly containing multiple extension
+    //   definitions) will have an outer location whose path refers to the
+    //   "extensions" repeated field without an index.
+    // - Multiple locations may have the same path.  This happens when a single
+    //   logical declaration is spread out across multiple places.  The most
+    //   obvious example is the "extend" block again -- there may be multiple
+    //   extend blocks in the same scope, each of which will have the same path.
+    // - A location's span is not always a subset of its parent's span.  For
+    //   example, the "extendee" of an extension declaration appears at the
+    //   beginning of the "extend" block and is shared by all extensions within
+    //   the block.
+    // - Just because a location's span is a subset of some other location's
+    // span
+    //   does not mean that it is a descendent.  For example, a "group" defines
+    //   both a type and a field in a single declaration.  Thus, the locations
+    //   corresponding to the type and field and their components will overlap.
+    // - Code which tries to interpret locations should probably be designed to
+    //   ignore those that it doesn't understand, as more types of locations
+    //   could be recorded in the future.
+    repeated Location location = 1;
+    message Location {
+      // Identifies which part of the FileDescriptorProto was defined at this
+      // location.
+      //
+      // Each element is a field number or an index.  They form a path from
+      // the root FileDescriptorProto to the place where the definition.  For
+      // example, this path:
+      //   [ 4, 3, 2, 7, 1 ]
+      // refers to:
+      //   file.message_type(3)  // 4, 3
+      //       .field(7)         // 2, 7
+      //       .name()           // 1
+      // This is because FileDescriptorProto.message_type has field number 4:
+      //   repeated DescriptorProto message_type = 4;
+      // and DescriptorProto.field has field number 2:
+      //   repeated FieldDescriptorProto field = 2;
+      // and FieldDescriptorProto.name has field number 1:
+      //   optional string name = 1;
+      //
+      // Thus, the above path gives the location of a field name.  If we removed
+      // the last element:
+      //   [ 4, 3, 2, 7 ]
+      // this path refers to the whole field declaration (from the beginning
+      // of the label to the terminating semicolon).
+      repeated int32 path = 1 [packed = true];
+
+      // Always has exactly three or four elements: start line, start column,
+      // end line (optional, otherwise assumed same as start line), end column.
+      // These are packed into a single field for efficiency.  Note that line
+      // and column numbers are zero-based -- typically you will want to add
+      // 1 to each before displaying to a user.
+      repeated int32 span = 2 [packed = true];
+
+      // If this SourceCodeInfo represents a complete declaration, these are any
+      // comments appearing before and after the declaration which appear to be
+      // attached to the declaration.
+      //
+      // A series of line comments appearing on consecutive lines, with no other
+      // tokens appearing on those lines, will be treated as a single comment.
+      //
+      // leading_detached_comments will keep paragraphs of comments that appear
+      // before (but not connected to) the current element. Each paragraph,
+      // separated by empty lines, will be one comment element in the repeated
+      // field.
+      //
+      // Only the comment content is provided; comment markers (e.g. //) are
+      // stripped out.  For block comments, leading whitespace and an asterisk
+      // will be stripped from the beginning of each line other than the first.
+      // Newlines are included in the output.
+      //
+      // Examples:
+      //
+      //   optional int32 foo = 1;  // Comment attached to foo.
+      //   // Comment attached to bar.
+      //   optional int32 bar = 2;
+      //
+      //   optional string baz = 3;
+      //   // Comment attached to baz.
+      //   // Another line attached to baz.
+      //
+      //   // Comment attached to qux.
+      //   //
+      //   // Another line attached to qux.
+      //   optional double qux = 4;
+      //
+      //   // Detached comment for corge. This is not leading or trailing
+      //   comments
+      //   // to qux or corge because there are blank lines separating it from
+      //   // both.
+      //
+      //   // Detached comment for corge paragraph 2.
+      //
+      //   optional string corge = 5;
+      //   /* Block comment attached
+      //    * to corge.  Leading asterisks
+      //    * will be removed. */
+      //   /* Block comment attached to
+      //    * grault. */
+      //   optional int32 grault = 6;
+      //
+      //   // ignored detached comments.
+      optional string leading_comments = 3;
+      optional string trailing_comments = 4;
+      repeated string leading_detached_comments = 6;
+    }
+  }
+
+  // Describes the relationship between generated code and its original source
+  // file. A GeneratedCodeInfo message is associated with only one generated
+  // source file, but may contain references to different source .proto files.
+  message GeneratedCodeInfo {
+    // An Annotation connects some span of text in generated code to an element
+    // of its generating .proto file.
+    repeated Annotation annotation = 1;
+    message Annotation {
+      // Identifies the element in the original source .proto file. This field
+      // is formatted the same as SourceCodeInfo.Location.path.
+      repeated int32 path = 1 [packed = true];
+
+      // Identifies the filesystem path to the original source .proto.
+      optional string source_file = 2;
+
+      // Identifies the starting offset in bytes in the generated code
+      // that relates to the identified object.
+      optional int32 begin = 3;
+
+      // Identifies the ending offset in bytes in the generated code that
+      // relates to the identified offset. The end offset should be one past
+      // the last relevant byte (so the length of the text = end - begin).
+      optional int32 end = 4;
+    }
+  }
