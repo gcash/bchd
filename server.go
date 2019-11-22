@@ -2511,7 +2511,7 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 	s.donePeers <- sp
 
 	// Only tell sync manager we are gone if we ever told it we existed.
-	if sp.VerAckReceived() {
+	if sp.VersionKnown() {
 		s.syncManager.DonePeer(sp.Peer, nil)
 
 		// Evict any remaining orphans that were sent by the peer.
