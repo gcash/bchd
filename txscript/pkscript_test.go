@@ -100,7 +100,7 @@ func TestParsePkScript(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pkScript, err := ParsePkScript(test.pkScript)
+			pkScript, err := ParsePkScript(test.pkScript, nil)
 			switch {
 			case err != nil && test.valid:
 				t.Fatalf("unable to parse valid pkScript=%x: %v",
