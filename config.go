@@ -981,13 +981,10 @@ func loadConfig() (*config, []string, error) {
 				return nil, nil, err
 			}
 			if _, ok := allowedTLSListeners[host]; !ok {
-				str := "%s: the --notls option may not be used " +
+				str := "%s: the --notls option is not recommended " +
 					"when binding RPC to non localhost " +
 					"addresses: %s"
-				err := fmt.Errorf(str, funcName, addr)
-				fmt.Fprintln(os.Stderr, err)
-				fmt.Fprintln(os.Stderr, usageMessage)
-				return nil, nil, err
+				bchdLog.Warnf(str, funcName, addr)
 			}
 		}
 		for _, addr := range cfg.GrpcListeners {
@@ -1001,13 +998,10 @@ func loadConfig() (*config, []string, error) {
 				return nil, nil, err
 			}
 			if _, ok := allowedTLSListeners[host]; !ok {
-				str := "%s: the --notls option may not be used " +
+				str := "%s: the --notls option is not recommended " +
 					"when binding gRPC to non localhost " +
 					"addresses: %s"
-				err := fmt.Errorf(str, funcName, addr)
-				fmt.Fprintln(os.Stderr, err)
-				fmt.Fprintln(os.Stderr, usageMessage)
-				return nil, nil, err
+				bchdLog.Warnf(str, funcName, addr)
 			}
 		}
 	}
