@@ -26,6 +26,7 @@ import (
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/chaincfg"
 )
 
 var (
@@ -124,6 +125,10 @@ type Client struct {
 	// wsConn is the underlying websocket connection when not in HTTP POST
 	// mode.
 	wsConn *websocket.Conn
+
+	// chainParams holds the params for the chain that this client is using,
+	// and is used for many wallet methods.
+	chainParams *chaincfg.Params
 
 	// httpClient is the underlying HTTP client to use when running in HTTP
 	// POST mode.
@@ -1065,6 +1070,9 @@ type ConnConfig struct {
 	// Pass is the passphrase to use to authenticate to the RPC server.
 	Pass string
 
+	// Params is the string representing the network that the server is running.
+	Params string
+
 	// DisableTLS specifies whether transport layer security should be
 	// disabled.  It is recommended to always use TLS if the RPC server
 	// supports it as otherwise your username and password is sent across
@@ -1260,6 +1268,23 @@ func New(config *ConnConfig, ntfnHandlers *NotificationHandlers) (*Client, error
 		connEstablished: connEstablished,
 		disconnect:      make(chan struct{}),
 		shutdown:        make(chan struct{}),
+	}
+
+	// Default network is mainnet, no parameters are necessary but if mainnet
+	// is specified it will be the param
+	switch config.Params {
+	case "":
+		fallthrough
+	case chaincfg.MainNetParams.Name:
+		client.chainParams = &chaincfg.MainNetParams
+	case chaincfg.TestNet3Params.Name:
+		client.chainParams = &chaincfg.TestNet3Params
+	case chaincfg.RegressionNetParams.Name:
+		client.chainParams = &chaincfg.RegressionNetParams
+	case chaincfg.SimNetParams.Name:
+		client.chainParams = &chaincfg.SimNetParams
+	default:
+		return nil, fmt.Errorf("rpcclient.New: Unknown chain %s", config.Params)
 	}
 
 	if start {
