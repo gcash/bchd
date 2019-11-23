@@ -2240,6 +2240,11 @@ func (p *Peer) writeLocalVersionMsg() error {
 	return p.writeMessage(localVerMsg, wire.LatestEncoding)
 }
 
+// writeLocalVerAckMsg writes our version ack message to the remote peer.
+func (p *Peer) writeLocalVerAckMsg() error {
+	return p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
+}
+
 // negotiateInboundProtocol performs the negotiation protocol for an inbound
 // peer. The events should occur in the following order, otherwise an error is
 // returned:
@@ -2257,12 +2262,15 @@ func (p *Peer) negotiateInboundProtocol() error {
 		return err
 	}
 
-	err := p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
-	if err != nil {
+	if err := p.writeLocalVerAckMsg(); err != nil {
 		return err
 	}
 
-	return p.readRemoteVerAckMsg()
+	if err := p.readRemoteVerAckMsg(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // negotiateOutoundProtocol performs the negotiation protocol for an outbound
@@ -2286,7 +2294,11 @@ func (p *Peer) negotiateOutboundProtocol() error {
 		return err
 	}
 
-	return p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
+	if err := p.writeLocalVerAckMsg(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // start begins processing input and output messages.
