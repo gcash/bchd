@@ -221,5 +221,7 @@ def run():
 if __name__ == '__main__':
     run()
 ```
+With Python is may be difficult to setup gRPC with self-signed certs.
+We highly recommend getting a certificate from Let's Encrypt.
 
 TODO: Add examples in other languages
