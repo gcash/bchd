@@ -150,7 +150,7 @@ func bchdMain(serverChan chan<- *server) error {
 	}
 
 	// Create server and start it.
-	server, err := newServer(cfg.Listeners, db, activeNetParams.Params,
+	server, err := newServer(cfg.Listeners, cfg.AgentBlacklist, cfg.AgentWhitelist, db, activeNetParams.Params,
 		interrupt)
 	if err != nil {
 		// TODO: this logging could do with some beautifying.
