@@ -57,10 +57,16 @@ type PkScript struct {
 // ParsePkScript parses an output script into the PkScript struct.
 // ErrUnsupportedScriptType is returned when attempting to parse an unsupported
 // script type.
-func ParsePkScript(pkScript []byte) (PkScript, error) {
+func ParsePkScript(pkScript []byte, chainParams *chaincfg.Params) (PkScript, error) {
 	var outputScript PkScript
+
+	// Default to mainnet if no chainParams are provided.
+	if chainParams == nil {
+		chainParams = &chaincfg.MainNetParams
+	}
+
 	scriptClass, _, _, err := ExtractPkScriptAddrs(
-		pkScript, &chaincfg.MainNetParams,
+		pkScript, chainParams,
 	)
 	if err != nil {
 		return outputScript, fmt.Errorf("unable to parse script type: "+
@@ -131,13 +137,13 @@ func (s PkScript) String() string {
 }
 
 // ComputePkScript computes the pkScript of an transaction output by looking at
-// the transaction input's signature script or witness.
+// the transaction input's signature script.
 //
 // NOTE: Only P2PKH, and P2SH redeem scripts are supported.
 func ComputePkScript(sigScript []byte) (PkScript, error) {
 	var pkScript PkScript
 
-	// Ensure that either an input's signature script or a witness was
+	// Ensure that either an input's signature script was
 	// provided.
 	if len(sigScript) == 0 {
 		return pkScript, ErrUnsupportedScriptType
