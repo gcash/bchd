@@ -2676,15 +2676,6 @@ fetchRange:
 				n.RegisterTxOutAddressRequests(wsc, cmd.Addresses)
 			}
 			close(pauseGuard)
-			if err != nil {
-				rpcsLog.Errorf("Error fetching best block "+
-					"hash: %v", err)
-				return nil, nil, &btcjson.RPCError{
-					Code: btcjson.ErrRPCDatabase,
-					Message: "Database error: " +
-						err.Error(),
-				}
-			}
 			if again {
 				continue
 			}
