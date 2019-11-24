@@ -990,6 +990,15 @@ export namespace SubscribeTransactionsRequest {
 }
 
 export class SubscribeBlocksRequest extends jspb.Message {
+  getFullBlock(): boolean;
+  setFullBlock(value: boolean): void;
+
+  getFullTransactions(): boolean;
+  setFullTransactions(value: boolean): void;
+
+  getSerializeBlock(): boolean;
+  setSerializeBlock(value: boolean): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): SubscribeBlocksRequest.AsObject;
   static toObject(includeInstance: boolean, msg: SubscribeBlocksRequest): SubscribeBlocksRequest.AsObject;
@@ -1002,6 +1011,9 @@ export class SubscribeBlocksRequest extends jspb.Message {
 
 export namespace SubscribeBlocksRequest {
   export type AsObject = {
+    fullBlock: boolean,
+    fullTransactions: boolean,
+    serializeBlock: boolean,
   }
 }
 
@@ -1009,11 +1021,24 @@ export class BlockNotification extends jspb.Message {
   getType(): BlockNotification.TypeMap[keyof BlockNotification.TypeMap];
   setType(value: BlockNotification.TypeMap[keyof BlockNotification.TypeMap]): void;
 
-  hasBlock(): boolean;
-  clearBlock(): void;
-  getBlock(): BlockInfo | undefined;
-  setBlock(value?: BlockInfo): void;
+  hasBlockInfo(): boolean;
+  clearBlockInfo(): void;
+  getBlockInfo(): BlockInfo | undefined;
+  setBlockInfo(value?: BlockInfo): void;
 
+  hasMarshaledBlock(): boolean;
+  clearMarshaledBlock(): void;
+  getMarshaledBlock(): Block | undefined;
+  setMarshaledBlock(value?: Block): void;
+
+  hasSerializedBlock(): boolean;
+  clearSerializedBlock(): void;
+  getSerializedBlock(): Uint8Array | string;
+  getSerializedBlock_asU8(): Uint8Array;
+  getSerializedBlock_asB64(): string;
+  setSerializedBlock(value: Uint8Array | string): void;
+
+  getBlockCase(): BlockNotification.BlockCase;
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): BlockNotification.AsObject;
   static toObject(includeInstance: boolean, msg: BlockNotification): BlockNotification.AsObject;
@@ -1027,7 +1052,9 @@ export class BlockNotification extends jspb.Message {
 export namespace BlockNotification {
   export type AsObject = {
     type: BlockNotification.TypeMap[keyof BlockNotification.TypeMap],
-    block?: BlockInfo.AsObject,
+    blockInfo?: BlockInfo.AsObject,
+    marshaledBlock?: Block.AsObject,
+    serializedBlock: Uint8Array | string,
   }
 
   export interface TypeMap {
@@ -1036,6 +1063,13 @@ export namespace BlockNotification {
   }
 
   export const Type: TypeMap;
+
+  export enum BlockCase {
+    BLOCK_NOT_SET = 0,
+    BLOCK_INFO = 2,
+    MARSHALED_BLOCK = 3,
+    SERIALIZED_BLOCK = 4,
+  }
 }
 
 export class TransactionNotification extends jspb.Message {
