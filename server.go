@@ -308,20 +308,22 @@ type serverPeer struct {
 
 	*peer.Peer
 
-	connReq         *connmgr.ConnReq
-	server          *server
-	persistent      bool
-	continueHash    *chainhash.Hash
-	relayMtx        sync.Mutex
-	processBlockMtx sync.Mutex
-	disableRelayTx  bool
-	sentAddrs       bool
-	isWhitelisted   bool
-	filter          *bloom.Filter
-	addrMtx         sync.RWMutex
-	knownAddresses  map[string]struct{}
-	banScore        connmgr.DynamicBanScore
-	quit            chan struct{}
+	connReq               *connmgr.ConnReq
+	server                *server
+	persistent            bool
+	continueHash          *chainhash.Hash
+	relayMtx              sync.Mutex
+	processBlockMtx       sync.Mutex
+	disableRelayTx        bool
+	supportsCompactBlocks bool
+	cbMtx                 sync.RWMutex
+	sentAddrs             bool
+	isWhitelisted         bool
+	filter                *bloom.Filter
+	addrMtx               sync.RWMutex
+	knownAddresses        map[string]struct{}
+	banScore              connmgr.DynamicBanScore
+	quit                  chan struct{}
 	// The following chans are used to sync blockmanager and server.
 	txProcessed    chan struct{}
 	blockProcessed chan struct{}
@@ -363,6 +365,7 @@ func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddress) {
 }
 
 // addressKnown true if the given address is already known to the peer.
+// It is safe for concurrent access.
 func (sp *serverPeer) addressKnown(na *wire.NetAddress) bool {
 	sp.addrMtx.RLock()
 	defer sp.addrMtx.RUnlock()
@@ -376,6 +379,24 @@ func (sp *serverPeer) setDisableRelayTx(disable bool) {
 	sp.relayMtx.Lock()
 	sp.disableRelayTx = disable
 	sp.relayMtx.Unlock()
+}
+
+// setSupportsCompactBlocks marks the peer as compact blocks compatible.
+// It is safe for concurrent access.
+func (sp *serverPeer) setSupportsCompactBlocks(supports bool) {
+	sp.cbMtx.Lock()
+	sp.supportsCompactBlocks = supports
+	sp.cbMtx.Unlock()
+}
+
+// compactBlocksEnabled returns if compact block is enabled for this peer.
+// It is safe for concurrent access.
+func (sp *serverPeer) compactBlocksSupported() bool {
+	sp.cbMtx.Lock()
+	isSupported := sp.supportsCompactBlocks
+	sp.cbMtx.Unlock()
+
+	return isSupported
 }
 
 // relayTxDisabled returns whether or not relaying of transactions for the given
@@ -514,60 +535,36 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
 	}
 
-	// Update the address manager and request known addresses from the
-	// remote peer for outbound connections.  This is skipped when running
-	// on the simulation test network since it is only intended to connect
-	// to specified peers and actively avoids advertising and connecting to
-	// discovered peers.
-	if !cfg.SimNet && !isInbound {
-		// Advertise the local address when the server accepts incoming
-		// connections and it believes itself to be close to the best known tip.
-		if !cfg.DisableListen && sp.server.syncManager.IsCurrent() {
-			// Get address that best matches.
-			lna := addrManager.GetBestLocalAddress(remoteAddr)
-			if addrmgr.IsRoutable(lna) {
-				// Filter addresses the peer already knows about.
-				addresses := []*wire.NetAddress{lna}
-				sp.pushAddrMsg(addresses)
-			}
-		}
-
-		// Request known addresses if the server address manager needs
-		// more and the peer has a protocol version new enough to
-		// include a timestamp with addresses.
-		hasTimestamp := sp.ProtocolVersion() >= wire.NetAddressTimeVersion
-		if addrManager.NeedMoreAddresses() && hasTimestamp {
-			sp.QueueMessage(wire.NewMsgGetAddr(), nil)
-		}
-
-		// Mark the address as a known good address.
-		addrManager.Good(remoteAddr)
-	}
-
 	// Add the remote peer time as a sample for creating an offset against
 	// the local clock to keep the network time in sync.
 	sp.server.timeSource.AddTimeSample(sp.Addr(), msg.Timestamp)
-
-	// Signal the sync manager this peer is a new sync candidate.
-	sp.server.syncManager.NewPeer(sp.Peer, nil)
 
 	// Choose whether or not to relay transactions before a filter command
 	// is received.
 	sp.setDisableRelayTx(msg.DisableRelayTx)
 
-	// Add valid peer to the server.
+	// Mark the sp as compatible with compact blocks.
+	if msg.ProtocolVersion >= int32(wire.BIP0152Version) {
+		sp.setSupportsCompactBlocks(true)
+	}
+
+	return nil
+}
+
+// OnVerAck is invoked when a peer receives a verack bitcoin message and is used
+// to kick start communication with them.
+func (sp *serverPeer) OnVerAck(_ *peer.Peer, msg *wire.MsgVerAck) {
 	sp.server.AddPeer(sp)
 
 	// This peer supports the compact blocks version so we should
 	// send them a sendcmpt message.
-	if msg.ProtocolVersion >= int32(wire.BIP0152Version) {
+	if sp.compactBlocksSupported() {
 		resp := make(chan bool)
 		sp.server.maybeAddDirectRelayPeer <- &maybeAddDirectRelayPeerMsg{response: resp, peer: sp}
 		announce := <-resp
 		sendCmpctMessage := wire.NewMsgSendCmpct(announce, wire.CompactBlocksProtocolVersion)
 		sp.Peer.QueueMessage(sendCmpctMessage, nil)
 	}
-	return nil
 }
 
 // OnXVersion is invoked when a peer receives an xversion message.
@@ -1993,7 +1990,7 @@ func (s *server) handleUpdatePeerHeights(state *peerState, umsg updatePeerHeight
 // handleAddPeerMsg deals with adding new peers.  It is invoked from the
 // peerHandler goroutine.
 func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
-	if sp == nil {
+	if sp == nil || !sp.Connected() {
 		return false
 	}
 
@@ -2065,6 +2062,46 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		}
 	}
 
+	// Update the address' last seen time if the peer has acknowledged
+	// our version and has sent us its version as well.
+	if sp.VerAckReceived() && sp.VersionKnown() && sp.NA() != nil {
+		s.addrManager.Connected(sp.NA())
+	}
+
+	// Signal the sync manager this peer is a new sync candidate.
+	s.syncManager.NewPeer(sp.Peer, nil)
+
+	// Update the address manager and request known addresses from the
+	// remote peer for outbound connections. This is skipped when running on
+	// the simulation test network since it is only intended to connect to
+	// specified peers and actively avoids advertising and connecting to
+	// discovered peers.
+	if !cfg.SimNet && !sp.Inbound() {
+		// Advertise the local address when the server accepts incoming
+		// connections and it believes itself to be close to the best
+		// known tip.
+		if !cfg.DisableListen && s.syncManager.IsCurrent() {
+			// Get address that best matches.
+			lna := s.addrManager.GetBestLocalAddress(sp.NA())
+			if addrmgr.IsRoutable(lna) {
+				// Filter addresses the peer already knows about.
+				addresses := []*wire.NetAddress{lna}
+				sp.pushAddrMsg(addresses)
+			}
+		}
+
+		// Request known addresses if the server address manager needs
+		// more and the peer has a protocol version new enough to
+		// include a timestamp with addresses.
+		hasTimestamp := sp.ProtocolVersion() >= wire.NetAddressTimeVersion
+		if s.addrManager.NeedMoreAddresses() && hasTimestamp {
+			sp.QueueMessage(wire.NewMsgGetAddr(), nil)
+		}
+
+		// Mark the address as a known good address.
+		s.addrManager.Good(sp.NA())
+	}
+
 	return true
 }
 
@@ -2081,13 +2118,21 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		list = state.outboundPeers
 	}
 
+	// Regardless of whether the peer was found in our list, we'll inform
+	// our connection manager about the disconnection. This can happen if we
+	// process a peer's `done` message before its `add`.
+	if !sp.Inbound() {
+		if sp.persistent {
+			s.connManager.Disconnect(sp.connReq.ID())
+		} else {
+			s.connManager.Remove(sp.connReq.ID())
+			go s.connManager.NewConnReq()
+		}
+	}
+
 	if _, ok := list[sp.ID()]; ok {
 		if !sp.Inbound() && sp.VersionKnown() {
 			state.outboundGroups[addrmgr.GroupKey(sp.NA())]--
-		}
-
-		if !sp.Inbound() && sp.connReq != nil {
-			s.connManager.Disconnect(sp.connReq.ID())
 		}
 
 		delete(list, sp.ID())
@@ -2101,22 +2146,9 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		return
 	}
 
-	if sp.connReq != nil {
-		s.connManager.Disconnect(sp.connReq.ID())
-	}
-
-	// Update the address' last seen time if the peer has acknowledged
-	// our version and has sent us its version as well.
-	if sp.VerAckReceived() && sp.VersionKnown() && sp.NA() != nil {
-		s.addrManager.Connected(sp.NA())
-	}
-
 	// If this peer was one of the peers we sent the sendcmpct announce
 	// message to then delete it.
 	delete(state.directRelayPeers, sp.ID())
-
-	// If we get here it means that either we didn't know about the peer
-	// or we purposefully deleted it.
 }
 
 // handleBanPeerMsg deals with banning peers.  It is invoked from the
@@ -2444,6 +2476,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 	return &peer.Config{
 		Listeners: peer.MessageListeners{
 			OnVersion:      sp.OnVersion,
+			OnVerAck:       sp.OnVerAck,
 			OnXVersion:     sp.OnXVersion,
 			OnMemPool:      sp.OnMemPool,
 			OnTx:           sp.OnTx,
@@ -2508,14 +2541,19 @@ func (s *server) outboundPeerConnected(c *connmgr.ConnReq, conn net.Conn) {
 	p, err := peer.NewOutboundPeer(newPeerConfig(sp), c.Addr.String())
 	if err != nil {
 		srvrLog.Debugf("Cannot create outbound peer %s: %v", c.Addr, err)
-		s.connManager.Disconnect(c.ID())
+		if c.Permanent {
+			s.connManager.Disconnect(c.ID())
+		} else {
+			s.connManager.Remove(c.ID())
+			go s.connManager.NewConnReq()
+		}
+		return
 	}
 	sp.Peer = p
 	sp.connReq = c
 	sp.isWhitelisted = isWhitelisted(conn.RemoteAddr())
 	sp.AssociateConnection(conn)
 	go s.peerDoneHandler(sp)
-	s.addrManager.Attempt(sp.NA())
 }
 
 // peerDoneHandler handles peer disconnects by notifiying the server that it's
@@ -2525,7 +2563,7 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 	s.donePeers <- sp
 
 	// Only tell sync manager we are gone if we ever told it we existed.
-	if sp.VersionKnown() {
+	if sp.VerAckReceived() {
 		s.syncManager.DonePeer(sp.Peer, nil)
 
 		// Evict any remaining orphans that were sent by the peer.
@@ -3317,6 +3355,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 					activeNetParams.DefaultPort {
 					continue
 				}
+
+				// Mark an attempt for the valid address.
+				s.addrManager.Attempt(addr.NetAddress())
 
 				addrString := addrmgr.NetAddressKey(addr.NetAddress())
 				return addrStringToNetAddr(addrString)
