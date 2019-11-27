@@ -1,0 +1,10 @@
+[Unit]
+Description=BCHD
+
+[Service]
+Type=simple
+ExecStart=/path/to/bchd --txindex --addrindex
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
