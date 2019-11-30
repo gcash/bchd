@@ -290,7 +290,7 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 	}
 
 	// If the script is a segwit exemption we exit before checking the cleanstack
-	// rule and before poping the top stack item off the stack and verifying that
+	// rule and before popping the top stack item off the stack and verifying that
 	// it is non-zero. In other words, if this is a p2sh segwit script and the
 	// redeem script hashed to the correct hash in the PKScript then we consider
 	// the script valid. Even if the stop stack item is zero or there is more
