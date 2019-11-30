@@ -1282,6 +1282,9 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 	for {
 		select {
 		case req := <-requests:
+			if req == nil {
+				return nil
+			}
 			includeMempool = req.IncludeMempool
 			includeBlocks = req.IncludeInBlock
 			serializeTx = req.SerializeTx
