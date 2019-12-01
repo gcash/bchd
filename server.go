@@ -553,7 +553,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 
 // OnVerAck is invoked when a peer receives a verack bitcoin message and is used
 // to kick start communication with them.
-func (sp *serverPeer) OnVerAck(_ *peer.Peer, msg *wire.MsgVerAck) {
+func (sp *serverPeer) OnVerAck(peer *peer.Peer, msg *wire.MsgVerAck) {
 	sp.server.AddPeer(sp)
 
 	// This peer supports the compact blocks version so we should
@@ -562,6 +562,7 @@ func (sp *serverPeer) OnVerAck(_ *peer.Peer, msg *wire.MsgVerAck) {
 		resp := make(chan bool)
 		sp.server.maybeAddDirectRelayPeer <- &maybeAddDirectRelayPeerMsg{response: resp, peer: sp}
 		announce := <-resp
+		peer.SetAllowDirectBlockRelay(announce)
 		sendCmpctMessage := wire.NewMsgSendCmpct(announce, wire.CompactBlocksProtocolVersion)
 		sp.Peer.QueueMessage(sendCmpctMessage, nil)
 	}
