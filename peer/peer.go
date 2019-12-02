@@ -513,6 +513,7 @@ type Peer struct {
 	// CompactBlocks
 	compactBlocksPreferred    bool
 	directBlockRelayPreferred bool
+	allowDirectBlockRelay     bool
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -906,6 +907,28 @@ func (p *Peer) WantsDirectBlockRelay() bool {
 	p.flagsMtx.Unlock()
 
 	return directBlockRelayPreferred
+}
+
+// SetAllowDirectBlockRelay sets if we want to permit this peer to relay
+// blocks directly to us without getting banned.
+//
+// This function is safe for concurrent access.
+func (p *Peer) SetAllowDirectBlockRelay(allow bool) {
+	p.flagsMtx.Lock()
+	p.allowDirectBlockRelay = allow
+	p.flagsMtx.Unlock()
+}
+
+// AllowDirectBlockRelay returns if we allow this peer to relay blocks without
+// announcing them in inv messages.
+//
+// This function is safe for concurrent access.
+func (p *Peer) AllowDirectBlockRelay() bool {
+	p.flagsMtx.Lock()
+	allowDirectBlockRelay := p.allowDirectBlockRelay
+	p.flagsMtx.Unlock()
+
+	return allowDirectBlockRelay
 }
 
 // PushAddrMsg sends an addr message to the connected peer using the provided
