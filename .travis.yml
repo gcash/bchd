@@ -1,31 +1,31 @@
 language: go
-go_import_path: github.com/gcash/bchd
-go:
-  - "1.12.7"
-
 sudo: false
-
+go: 1.13.3
+go_import_path: github.com/gcash/bchd
+services:
+- docker
 cache:
   directories:
-    - $GOPATH/pkg/mod
-    - /home/travis/.cache/go-build
+    - "$GOPATH/pkg/mod"
+    - "/home/travis/.cache/go-build"
 
-env:
-  - GO111MODULE=on
-
-before_install:
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.17.1
-
-install:
-  - env GO111MODULE=on go build
-  - env GO111MODULE=on go install . ./cmd/...
+before_script:
+  - openssl aes-256-cbc -K $encrypted_336fb08e5863_key -iv $encrypted_336fb08e5863_iv -in secrets.tar.enc -out secrets.tar -d
+  - tar xvf secrets.tar
+  - eval "$(ssh-agent -s)"
+  - chmod 600 id_snowglobe_deploy
+  - ssh-add id_snowglobe_deploy
 
 script:
-  - export PATH=$PATH:$HOME/gopath/bin
-  - ./goclean.sh
+# Disable for now
+#  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
+#    | sh -s -- -b $(go env GOPATH)/bin v1.21.0
+#  - "(cd ./avalanche && $(go env GOPATH)/bin/golangci-lint run)"
+#  - make avalanche_tests
 
-after_script:
-  - if [ "$TRAVIS_GO_VERSION" = "1.12.7" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/inconshreveable/mousetrap; fi
-  - if [ "$TRAVIS_GO_VERSION" = "1.12.7" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/mitchellh/gox; fi
-  - if [ "$TRAVIS_GO_VERSION" = "1.12.7" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/tcnksm/ghr; fi
-  - if [ "$TRAVIS_GO_VERSION" = "1.12.7" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then make compile; ghr --username gcash --token $GITHUB_TOKEN --replace $TRAVIS_TAG pkg/; fi
+  - export TAG="$TRAVIS_TAG"
+  - export BRANCH="$TRAVIS_BRANCH"
+  - if [ "$TAG" != "" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then echo "test"; fi
+  - if [ "$TAG" != "" ] || [ "$BRANCH" = "snowglobe" ]; then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi
+  - if [ "$TAG" != "" ] || [ "$BRANCH" = "snowglobe" ]; then make snowglobed && make push_snowglobed; fi
+  - if [ "$TAG" != "" ] || [ "$BRANCH" = "snowglobe" ]; then ssh -i id_snowglobe_deploy -F deploy_ssh_config snowglobe -C "docker pull sherpacash/snowglobed:snowglobe; cd /opt/snowglobe && docker-compose up -d"; fi

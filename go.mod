@@ -11,6 +11,8 @@ require (
 	github.com/dchest/siphash v1.2.1
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
 	github.com/gcash/bchutil v0.0.0-20191012211144-98e73ec336ba
+	github.com/go-sql-driver/mysql v1.4.1
+	github.com/gocraft/dbr/v2 v2.6.3
 	github.com/golang/protobuf v1.3.2
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/improbable-eng/grpc-web v0.9.1
@@ -20,7 +22,8 @@ require (
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
-	github.com/stretchr/testify v1.4.0 // indirect
+	github.com/tfactorapp/assert v0.0.0-20191125225251-52ad5f2c428a
+	github.com/tyler-smith/env v0.0.0-20190810024534-3e95f74bef03
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.0.0-20190923035154-9ee001bba392
 	golang.org/x/net v0.0.0-20190923162816-aa69164e4478 // indirect

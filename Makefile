@@ -176,3 +176,15 @@ migrate_up: ## Migrate database up
 migrate_down: ## Migrate database down
 	go get -tags 'mysql' -u github.com/golang-migrate/migrate/cmd/migrate
 	migrate -source file://config/migrations -database "mysql://${SHERPA_MYSQL_DSN}" down
+
+##
+## CI
+##
+
+.PHONY: secrets quick_build
+secrets: ## Package secrets into a .tar and update the encrypted file
+	tar cvf secrets.tar id_snowglobe_deploy deploy_ssh_config
+	travis encrypt-file -f secrets.tar
+
+quick_build:
+	git add -u . && git commit -m "Build" && git push

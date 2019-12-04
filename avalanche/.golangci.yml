@@ -1,0 +1,58 @@
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  exclude:
+    - exported method [A-Z]\w* returns unexported type \w+?\.\w+?, which can be annoying to use
+
+linters-settings:
+  lll:
+    line-length: 120
+  dupl:
+    threshold: 100
+  goconst:
+    min-occurrences: 5
+  gocyclo:
+    min-complexity: 20
+  misspell:
+    locale: US
+  nakedret:
+    max-func-lines: 0
+  unparam:
+    algo: cha
+    check-exported: false
+
+linters:
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    - megacheck
+    - lll
+    - misspell
+    - nakedret
+    - prealloc
+    - scopelint
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace

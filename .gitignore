@@ -1,3 +1,8 @@
+secrets.tar
+deploy_ssh_config
+id_snowglobe_deploy
+id_snowglobe_deploy.pub
+
 # Temp files
 *~
 
