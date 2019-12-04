@@ -1,0 +1,36 @@
+version: "3"
+services:
+  snowglobe1: &snowglobe
+    image: sherpacash/snowglobed:snowglobe
+    entrypoint:
+      [
+        "bchd",
+        "-b",
+        "/var/lib/snowglobe",
+        "-C",
+        "/var/lib/snowglobe/bchd.conf",
+        "--nocfilters",
+        "--fastsync",
+        "--prune",
+        "--prunedepth=288",
+        "--rpccert",
+        "/var/lib/snowglobe/rpc.cert",
+        "--rpckey",
+        "/var/lib/snowglobe/rpc.key",
+        "--rpcuser",
+        "a",
+        "--rpcpass",
+        "b",
+      ]
+    environment:
+      SNOWGLOBE_ENABLE_DURABLE_AUDIT: "false"
+    ports:
+      - 8333:8333
+      - 8334:8334
+    volumes:
+      - /Users/tyler/dev/snowglobe_data:/var/lib/snowglobe
+    restart: on-failure
+    logging:
+      options:
+        max-size: "1M"
+        max-file: "10"
