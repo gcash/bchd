@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/addrmgr"
 	"io"
 	"io/ioutil"
 	"math"
@@ -28,6 +27,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchd/addrmgr"
+	"github.com/gcash/bchd/avalanche"
 
 	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/bchec"
@@ -250,6 +252,7 @@ var rpcLimited = map[string]struct{}{
 	"loadtxfilter":          {},
 	"notifyblocks":          {},
 	"notifynewtransactions": {},
+	"notifyavalanche":       {},
 	"notifyreceived":        {},
 	"notifyspent":           {},
 	"rescan":                {},
@@ -3717,6 +3720,11 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeChan <-chan st
 		return nil, internalRPCError(errStr, "")
 	}
 
+	// Pass the transactions to the avalanche manager
+	for _, accepted := range acceptedTxs {
+		go s.cfg.AvaMgr.NewTransaction(*accepted.Tx, 0)
+	}
+
 	// Generate and relay inventory vectors for all newly accepted
 	// transactions into the memory pool due to the original being
 	// accepted.
@@ -3810,6 +3818,10 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 	}
 
 	rpcsLog.Infof("Accepted block %s via submitblock", block.Hash())
+
+	// Pass the block to the avalanche manager
+	go s.cfg.AvaMgr.NewBlock(*block, 0)
+
 	return nil, nil
 }
 
@@ -4087,6 +4099,24 @@ func (s *rpcServer) NotifyNewTransactions(txns []*mempool.TxDesc) {
 		// about stale block templates due to the new transaction.
 		s.gbtWorkState.NotifyMempoolTx(s.cfg.TxMemPool.LastUpdated())
 	}
+}
+
+// NotifyAvalanchePeerConnect notifies the websocket of Ava peer
+// connections.
+func (s *rpcServer) NotifyAvalanchePeerConnect(ssi avalanche.SignedIdentity) {
+	s.ntfnMgr.NotifyAvalanchePeerConnect(ssi)
+}
+
+// NotifyAvalanchePeerDisconnect notifies the websocket of Ava peer
+// disconnections.
+func (s *rpcServer) NotifyAvalanchePeerDisconnect(ssi avalanche.SignedIdentity) {
+	s.ntfnMgr.NotifyAvalanchePeerDisconnect(ssi)
+}
+
+// NotifyAvalancheFinalization notifies the websocket of new Ava
+// finalizations.
+func (s *rpcServer) NotifyAvalancheFinalization(h chainhash.Hash, vr avalanche.VoteRecord) {
+	s.ntfnMgr.NotifyAvalancheFinalization(h, vr)
 }
 
 // limitConnections responds with a 503 service unavailable and returns true if
@@ -4738,6 +4768,12 @@ type rpcserverSyncManager interface {
 	LocateHeaders(locators []*chainhash.Hash, hashStop *chainhash.Hash) []wire.BlockHeader
 }
 
+// rpcserverAvalancheManager represents a avalanche manager for use with the RPC server.
+type rpcserverAvalancheManager interface {
+	NewBlock(bchutil.Block, wire.RejectCode)
+	NewTransaction(bchutil.Tx, wire.RejectCode)
+}
+
 // rpcserverConfig is a descriptor containing the RPC server configuration.
 type rpcserverConfig struct {
 	// Listeners defines a slice of listeners for which the RPC server will
@@ -4761,6 +4797,9 @@ type rpcserverConfig struct {
 
 	// SyncMgr defines the sync manager for the RPC server to use.
 	SyncMgr rpcserverSyncManager
+
+	// AvaMgr defines the avalanche manager for the RPC server to use.
+	AvaMgr rpcserverAvalancheManager
 
 	// These fields allow the RPC server to interface with the local block
 	// chain data and state.

@@ -166,7 +166,7 @@ type Response struct {
 	ID      *interface{}    `json:"id"`
 }
 
-// NewResponse returns a new JSON-RPC response object given the provided rpc
+// NewQueryResponse returns a new JSON-RPC response object given the provided rpc
 // version, id, marshalled result, and RPC error.  This function is only
 // provided in case the caller wants to construct raw responses for some reason.
 // Typically callers will instead want to create the fully marshalled JSON-RPC

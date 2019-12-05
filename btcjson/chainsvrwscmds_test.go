@@ -101,6 +101,51 @@ func TestChainSvrWsCmds(t *testing.T) {
 			unmarshalled: &btcjson.StopNotifyNewTransactionsCmd{},
 		},
 		{
+			name: "notifyavalanchepeers",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("notifyavalanchepeers")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewNotifyAvaPeersCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"notifyavalanchepeers","params":[],"id":1}`,
+			unmarshalled: &btcjson.NotifyAvaPeersCmd{},
+		},
+		{
+			name: "stopnotifyavalanchepeers",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("stopnotifyavalanchepeers")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewStopNotifyAvaPeersCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"stopnotifyavalanchepeers","params":[],"id":1}`,
+			unmarshalled: &btcjson.StopNotifyAvaPeersCmd{},
+		},
+
+		{
+			name: "notifyavalanchefinalizations",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("notifyavalanchefinalizations")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewNotifyAvaFinalizationsCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"notifyavalanchefinalizations","params":[],"id":1}`,
+			unmarshalled: &btcjson.NotifyAvaFinalizationsCmd{},
+		},
+		{
+			name: "stopnotifyavalanchefinalizations",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("stopnotifyavalanchefinalizations")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewStopNotifyAvaFinalizationsCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"stopnotifyavalanchefinalizations","params":[],"id":1}`,
+			unmarshalled: &btcjson.StopNotifyAvaFinalizationsCmd{},
+		},
+		{
 			name: "notifyreceived",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("notifyreceived", []string{"1Address"})

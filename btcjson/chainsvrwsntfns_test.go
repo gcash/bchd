@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/btcjson"
 )
 
@@ -224,6 +225,22 @@ func TestChainSvrWsNtfns(t *testing.T) {
 			unmarshalled: &btcjson.RelevantTxAcceptedNtfn{
 				Transaction: "001122",
 			},
+		},
+		{
+			name: "avalanchefinalized",
+			newNtfn: func() (interface{}, error) {
+				return btcjson.NewCmd("avalanchefinalized", "123", "2s")
+			},
+			staticNtfn: func() interface{} {
+				return btcjson.NewAvaFinalizedNtfn(avalanche.VoteRecord{})
+				// return btcjson.NewAvaFinalizationNtfn("123", time.Second*2)
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"avalanchefinalized","params":["123","2s"],"id":null}`,
+			unmarshalled: &btcjson.AvaFinalizedNtfn{avalanche.VoteRecord{}},
+			// unmarshalled: &btcjson.NewAvaFinalizationNtfn({
+			// 	 TxID:             "123",
+			// 	 FinalizationTime: "2s",
+			// },
 		},
 	}
 

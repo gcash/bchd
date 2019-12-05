@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -39,6 +40,10 @@ type reflectionServer struct{}
 
 func (s *reflectionServer) checkReady() bool {
 	return true
+}
+
+type avaProtoPresenter interface {
+	GetInfoPB() pb.GetAvalancheInfoResponse
 }
 
 // ServiceReady returns nil when the service is ready and a gRPC error when not.
@@ -88,6 +93,7 @@ type GrpcServerConfig struct {
 	DB          database.DB
 	TxMemPool   *mempool.TxPool
 	NetMgr      NetManager
+	Ava         avaProtoPresenter
 
 	TxIndex   *indexers.TxIndex
 	AddrIndex *indexers.AddrIndex
@@ -103,6 +109,7 @@ type GrpcServer struct {
 	db          database.DB
 	txMemPool   *mempool.TxPool
 	netMgr      NetManager
+	ava         avaProtoPresenter
 
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
@@ -128,6 +135,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		db:          cfg.DB,
 		txMemPool:   cfg.TxMemPool,
 		netMgr:      cfg.NetMgr,
+		ava:         cfg.Ava,
 		txIndex:     cfg.TxIndex,
 		addrIndex:   cfg.AddrIndex,
 		cfIndex:     cfg.CfIndex,
@@ -158,6 +166,19 @@ type rpcEventBlockConnected struct {
 // current best chain.
 type rpcEventBlockDisconnected struct {
 	*bchutil.Block
+}
+
+type rpcEventAvalanchePeerConnected struct {
+	avalanche.SignedIdentity
+}
+
+type rpcEventAvalanchePeerDisconnected struct {
+	avalanche.SignedIdentity
+}
+
+type rpcEventAvalancheFinalized struct {
+	chainhash.Hash
+	avalanche.VoteRecord
 }
 
 // rpcEventSubscription represents a subscription to events from the RPC server.
@@ -250,6 +271,24 @@ func (s *GrpcServer) NotifyNewTransactions(txs []*mempool.TxDesc) {
 	for _, txDesc := range txs {
 		s.dispatchEvent(&rpcEventTxAccepted{txDesc})
 	}
+}
+
+// NotifyAvalanchePeerConnect is called by the server when a peer is added to
+// the avalanche participant pool.
+func (s *GrpcServer) NotifyAvalanchePeerConnect(ssi avalanche.SignedIdentity) {
+	s.dispatchEvent(&rpcEventAvalanchePeerConnected{ssi})
+}
+
+// NotifyAvalanchePeerDisconnect is called by the server when a peer is
+// removed from the avalanche participant pool.
+func (s *GrpcServer) NotifyAvalanchePeerDisconnect(ssi avalanche.SignedIdentity) {
+	s.dispatchEvent(&rpcEventAvalanchePeerDisconnected{ssi})
+}
+
+// NotifyAvalanche is called by the server when vertices are finalized by
+// avalanche
+func (s *GrpcServer) NotifyAvalancheFinalization(h chainhash.Hash, vr avalanche.VoteRecord) {
+	s.dispatchEvent(&rpcEventAvalancheFinalized{h, vr})
 }
 
 // handleBlockchainNotification handles the callback from the blockchain package
@@ -393,6 +432,12 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		MedianTime:    bestSnapShot.MedianTime.Unix(),
 	}
 	return resp, nil
+}
+
+// GetAvalancheInfo returns info about the avalanche processor.
+func (s *GrpcServer) GetAvalancheInfo(ctx context.Context, req *pb.GetAvalancheInfoRequest) (*pb.GetAvalancheInfoResponse, error) {
+	info := s.ava.GetInfoPB()
+	return &info, nil
 }
 
 // GetBlockInfo returns info about the given block.
@@ -1579,6 +1624,56 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 				}
 			}
 
+		case <-stream.Context().Done():
+			return nil // client disconnected
+		}
+	}
+}
+
+func (s *GrpcServer) SubscribeAvalanchePeers(req *pb.SubscribeAvalanchePeersRequest, stream pb.Bchrpc_SubscribeAvalanchePeersServer) error {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	for {
+		select {
+		case event := <-subscription.Events():
+			switch evt := event.(type) {
+			case *rpcEventAvalanchePeerConnected:
+				toSend := avalanche.GetPeerNotificationPB(evt.SignedIdentity, true)
+				if err := stream.Send(&toSend); err != nil {
+					return err
+				}
+
+			case *rpcEventAvalanchePeerDisconnected:
+				toSend := avalanche.GetPeerNotificationPB(evt.SignedIdentity, false)
+				if err := stream.Send(&toSend); err != nil {
+					return err
+				}
+			}
+
+		case <-stream.Context().Done():
+			return nil // client disconnected
+		}
+	}
+	return nil
+}
+
+// SubscribeAvalancheFinalizations subscribes to notifications of new
+// finalizations from avalanche
+func (s *GrpcServer) SubscribeAvalancheFinalizations(req *pb.SubscribeAvalancheFinalizationsRequest, stream pb.Bchrpc_SubscribeAvalancheFinalizationsServer) error {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	for {
+		select {
+		case event := <-subscription.Events():
+			switch evt := event.(type) {
+			case *rpcEventAvalancheFinalized:
+				toSend := avalanche.GetFinalizationNotificationPB(evt.Hash, evt.VoteRecord)
+				if err := stream.Send(&toSend); err != nil {
+					return err
+				}
+			}
 		case <-stream.Context().Done():
 			return nil // client disconnected
 		}

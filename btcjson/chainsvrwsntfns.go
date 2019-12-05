@@ -8,6 +8,8 @@
 
 package btcjson
 
+import "github.com/gcash/bchd/avalanche"
+
 const (
 	// BlockConnectedNtfnMethod is the legacy, deprecated method used for
 	// notifications from the chain server that a block has been connected.
@@ -75,6 +77,14 @@ const (
 	// from the chain server that inform a client that a transaction that
 	// matches the loaded filter was accepted by the mempool.
 	RelevantTxAcceptedNtfnMethod = "relevanttxaccepted"
+
+	// AvaPeernNtfnMethod is the method used for notifications from
+	// the avalanche manager that a peer has joined or left.
+	AvaPeerNtfnMethod = "avalanchepeer"
+
+	// AvaFinalizedNtfnMethod is the method used for notifications from
+	// the avalanche manager that a vertex has been finalized.
+	AvaFinalizedNtfnMethod = "avalanchefinalized"
 )
 
 // BlockConnectedNtfn defines the blockconnected JSON-RPC notification.
@@ -285,6 +295,31 @@ func NewRelevantTxAcceptedNtfn(txHex string) *RelevantTxAcceptedNtfn {
 	return &RelevantTxAcceptedNtfn{Transaction: txHex}
 }
 
+// AvaPeerNtfn defines the parameters to the avalanchepeer
+// JSON-RPC notification.
+type AvaPeerNtfn struct {
+	Peer      avalanche.SignedIdentity
+	Connected bool `json:"connected"`
+}
+
+// NewAvaPeerNtfn returns a new instance which can be used to issue an
+// avalanche finalization JSON-RPC notification.
+func NewAvaPeerNtfn(ssi avalanche.SignedIdentity, isConnected bool) *AvaPeerNtfn {
+	return &AvaPeerNtfn{ssi, isConnected}
+}
+
+// AvaFinalizedNtfn defines the parameters to the avalanchefinalization
+// JSON-RPC notification.
+type AvaFinalizedNtfn struct {
+	VoteRecord avalanche.VoteRecord
+}
+
+// NewAvaFinalizedNtfn returns a new instance which can be used to
+// issue an avalanche finalization JSON-RPC notification.
+func NewAvaFinalizedNtfn(vr avalanche.VoteRecord) *AvaFinalizedNtfn {
+	return &AvaFinalizedNtfn{vr}
+}
+
 func init() {
 	// The commands in this file are only usable by websockets and are
 	// notifications.
@@ -301,4 +336,6 @@ func init() {
 	MustRegisterCmd(TxAcceptedNtfnMethod, (*TxAcceptedNtfn)(nil), flags)
 	MustRegisterCmd(TxAcceptedVerboseNtfnMethod, (*TxAcceptedVerboseNtfn)(nil), flags)
 	MustRegisterCmd(RelevantTxAcceptedNtfnMethod, (*RelevantTxAcceptedNtfn)(nil), flags)
+	MustRegisterCmd(AvaPeerNtfnMethod, (*AvaPeerNtfn)(nil), flags)
+	MustRegisterCmd(AvaFinalizedNtfnMethod, (*AvaFinalizedNtfn)(nil), flags)
 }

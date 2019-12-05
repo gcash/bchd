@@ -18,6 +18,9 @@ service bchrpc {
     // block hash and height.
     rpc GetBlockchainInfo(GetBlockchainInfoRequest) returns (GetBlockchainInfoResponse) {}
 
+    // Get info about the Avalanche processor state.
+    rpc GetAvalancheInfo(GetAvalancheInfoRequest) returns (GetAvalancheInfoResponse) {}
+
     // Get info about the given block.
     rpc GetBlockInfo(GetBlockInfoRequest)returns (GetBlockInfoResponse) {}
 
@@ -100,6 +103,12 @@ service bchrpc {
     // Subscribe to notifications of new blocks being connected to the blockchain
     // or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
+
+    // Subscribe to notifications of Avalanche peer connections/disconnections.
+    rpc SubscribeAvalanchePeers(SubscribeAvalanchePeersRequest) returns (stream AvalanchePeerNotification) {}
+
+    // Subscribe to notifications of new Avalanche finalizations.
+    rpc SubscribeAvalancheFinalizations(SubscribeAvalancheFinalizationsRequest) returns (stream AvalancheFinalizationNotification) {}
 }
 
 
@@ -143,6 +152,32 @@ message GetBlockchainInfoResponse {
     int64 median_time = 5;
     bool tx_index = 6;
     bool addr_index =7;
+}
+
+
+message GetAvalancheInfoRequest {}
+message GetAvalancheInfoResponse {
+    bytes accepted_tip_hash = 1;
+    int32 current_peer_count = 2;
+    int64 seen_peer_count = 3;
+
+    int32 pending_block_count = 4;
+    int32 finalized_accepted_block_count = 5;
+    int32 finalized_rejected_block_count = 6;
+    int64 total_finalized_accepted_block_latency = 7;
+    int64 total_finalized_rejected_block_latency = 8;
+
+    int64 pending_transaction_count = 9;
+    int64 finalized_accepted_transaction_count = 10;
+    int64 finalized_rejected_transaction_count = 11;
+    int64 total_finalized_accepted_transaction_latency = 12;
+    int64 total_finalized_rejected_transaction_latency = 13;
+
+    int64 total_queries_requested = 14;
+    int64 total_queries_responded = 15;
+    int32 inflight_queries_requested = 16;
+
+    repeated AvalancheFinalizationNotification recent_finalizations = 17;
 }
 
 message GetBlockInfoRequest {
@@ -301,7 +336,7 @@ message SubscribeTransactionsRequest {
     // This notification is sent in addition to any requested mempool notifications.
     bool include_in_block = 4;
 
-    // When serialize_tx is true, transactions are serialized using bitcoin protocol encoding. 
+    // When serialize_tx is true, transactions are serialized using bitcoin protocol encoding.
     // Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
     bool serialize_tx = 5;
 }
@@ -334,9 +369,15 @@ message SubscribeBlocksRequest {
     // Default is false, only the transaction hashes are included for a marshaled block. See `TransactionData`.
     bool full_transactions = 2;
 
-    // When serialize_block is true, blocks are serialized using bitcoin protocol encoding. 
+    // When serialize_block is true, blocks are serialized using bitcoin protocol encoding.
     // Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
     bool serialize_block = 3;
+}
+
+
+message SubscribeAvalanchePeersRequest {
+}
+message SubscribeAvalancheFinalizationsRequest {
 }
 
 
@@ -368,6 +409,44 @@ message TransactionNotification {
         MempoolTransaction unconfirmed_transaction = 3;
         bytes serialized_transaction = 4;
     }
+}
+
+
+message AvalanchePeerNotification {
+    bytes public_key = 1;
+    int32 version = 2;
+    int64 sequence = 3;
+    repeated Transaction.Input.Outpoint out_points = 4;
+
+    bytes identity_signature = 5;
+    repeated bytes out_point_signatures = 6;
+
+    bool is_connected = 7;
+}
+
+enum AvalancheState {
+    REJECTED = 0;
+    ACCEPTED = 1;
+}
+
+enum AvalancheType {
+    TRANSACTION = 0;
+    BLOCK       = 1;
+}
+
+message AvalancheVertex {
+    AvalancheType type = 1;
+    bytes hash = 2;
+}
+
+message AvalancheFinalizationNotification {
+    AvalancheVertex vertex = 1;
+
+    AvalancheState start_state            = 2;
+    AvalancheState final_state            = 3;
+
+    int64 started_at   = 4;
+    int64 finalization_latency = 5;
 }
 
 
@@ -481,3 +560,4 @@ message TransactionFilter {
     // will be ignored.
     bool all_transactions = 4;
 }
+

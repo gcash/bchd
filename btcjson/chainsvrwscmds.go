@@ -57,6 +57,25 @@ func NewNotifyNewTransactionsCmd(verbose *bool) *NotifyNewTransactionsCmd {
 	}
 }
 
+// NotifyAvaPeersCmd defines the notifyavalanchepeers JSON-RPC command.
+type NotifyAvaPeersCmd struct{}
+
+// NewNotifyAvaPeersCmd returns a new instance which can be used to issue
+// a notifyavalanchepeers JSON-RPC command.
+func NewNotifyAvaPeersCmd() *NotifyAvaPeersCmd {
+	return &NotifyAvaPeersCmd{}
+}
+
+// NotifyAvaFinalizationsCmd defines the notifyavalanchefinalizations
+// JSON-RPC command.
+type NotifyAvaFinalizationsCmd struct{}
+
+// NewNotifyAvaFinalizationsCmd returns a new instance which can be used to issue
+// a notifyavalanchefinalizations JSON-RPC command.
+func NewNotifyAvaFinalizationsCmd() *NotifyAvaFinalizationsCmd {
+	return &NotifyAvaFinalizationsCmd{}
+}
+
 // SessionCmd defines the session JSON-RPC command.
 type SessionCmd struct{}
 
@@ -66,7 +85,8 @@ func NewSessionCmd() *SessionCmd {
 	return &SessionCmd{}
 }
 
-// StopNotifyNewTransactionsCmd defines the stopnotifynewtransactions JSON-RPC command.
+// StopNotifyNewTransactionsCmd defines the stopnotifynewtransactions
+// JSON-RPC command.
 type StopNotifyNewTransactionsCmd struct{}
 
 // NewStopNotifyNewTransactionsCmd returns a new instance which can be used to issue
@@ -76,6 +96,26 @@ type StopNotifyNewTransactionsCmd struct{}
 // for optional parameters will use the default value.
 func NewStopNotifyNewTransactionsCmd() *StopNotifyNewTransactionsCmd {
 	return &StopNotifyNewTransactionsCmd{}
+}
+
+// StopNotifyAvaPeersCmd defines the
+// stopnotifyavalanchepeers JSON-RPC command.
+type StopNotifyAvaPeersCmd struct{}
+
+// NewStopNotifyAvaPeersCmd returns a new instance which can be used to
+// issue a stopnotifyavalanchepeers JSON-RPC command.
+func NewStopNotifyAvaPeersCmd() *StopNotifyAvaPeersCmd {
+	return &StopNotifyAvaPeersCmd{}
+}
+
+// StopNotifyAvaFinalizationCmd defines the
+// stopnotifyavalanchefinalizations JSON-RPC command.
+type StopNotifyAvaFinalizationsCmd struct{}
+
+// NewStopNotifyAvaFinalizationsCmd returns a new instance which can be
+// used to issue a stopnotifyavalanchefinalizations JSON-RPC command.
+func NewStopNotifyAvaFinalizationsCmd() *StopNotifyAvaFinalizationsCmd {
+	return &StopNotifyAvaFinalizationsCmd{}
 }
 
 // NotifyReceivedCmd defines the notifyreceived JSON-RPC command.
@@ -229,11 +269,15 @@ func init() {
 	MustRegisterCmd("loadtxfilter", (*LoadTxFilterCmd)(nil), flags)
 	MustRegisterCmd("notifyblocks", (*NotifyBlocksCmd)(nil), flags)
 	MustRegisterCmd("notifynewtransactions", (*NotifyNewTransactionsCmd)(nil), flags)
+	MustRegisterCmd("notifyavalanchepeers", (*NotifyAvaPeersCmd)(nil), flags)
+	MustRegisterCmd("notifyavalanchefinalizations", (*NotifyAvaFinalizationsCmd)(nil), flags)
 	MustRegisterCmd("notifyreceived", (*NotifyReceivedCmd)(nil), flags)
 	MustRegisterCmd("notifyspent", (*NotifySpentCmd)(nil), flags)
 	MustRegisterCmd("session", (*SessionCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyblocks", (*StopNotifyBlocksCmd)(nil), flags)
 	MustRegisterCmd("stopnotifynewtransactions", (*StopNotifyNewTransactionsCmd)(nil), flags)
+	MustRegisterCmd("stopnotifyavalanchepeers", (*StopNotifyAvaPeersCmd)(nil), flags)
+	MustRegisterCmd("stopnotifyavalanchefinalizations", (*StopNotifyAvaFinalizationsCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyspent", (*StopNotifySpentCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyreceived", (*StopNotifyReceivedCmd)(nil), flags)
 	MustRegisterCmd("rescan", (*RescanCmd)(nil), flags)

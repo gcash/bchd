@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/ripemd160"
 
 	"github.com/btcsuite/websocket"
+	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
@@ -64,19 +65,23 @@ type wsCommandHandler func(*wsClient, interface{}) (interface{}, error)
 // causes a dependency loop.
 var wsHandlers map[string]wsCommandHandler
 var wsHandlersBeforeInit = map[string]wsCommandHandler{
-	"loadtxfilter":              handleLoadTxFilter,
-	"help":                      handleWebsocketHelp,
-	"notifyblocks":              handleNotifyBlocks,
-	"notifynewtransactions":     handleNotifyNewTransactions,
-	"notifyreceived":            handleNotifyReceived,
-	"notifyspent":               handleNotifySpent,
-	"session":                   handleSession,
-	"stopnotifyblocks":          handleStopNotifyBlocks,
-	"stopnotifynewtransactions": handleStopNotifyNewTransactions,
-	"stopnotifyspent":           handleStopNotifySpent,
-	"stopnotifyreceived":        handleStopNotifyReceived,
-	"rescan":                    handleRescan,
-	"rescanblocks":              handleRescanBlocks,
+	"loadtxfilter":                    handleLoadTxFilter,
+	"help":                            handleWebsocketHelp,
+	"notifyblocks":                    handleNotifyBlocks,
+	"notifynewtransactions":           handleNotifyNewTransactions,
+	"notifyavalancheconnections":      handleNotifyAvalancheConnections,
+	"notifyavalanchefinalizations":    handleNotifyAvalancheFinalizations,
+	"notifyreceived":                  handleNotifyReceived,
+	"notifyspent":                     handleNotifySpent,
+	"session":                         handleSession,
+	"stopnotifyblocks":                handleStopNotifyBlocks,
+	"stopnotifynewtransactions":       handleStopNotifyNewTransactions,
+	"stopnotifyavalancheconnections":  handleStopNotifyAvalancheConnections,
+	"stopnotifyavalancheinalizations": handleStopNotifyAvalancheFinalizations,
+	"stopnotifyspent":                 handleStopNotifySpent,
+	"stopnotifyreceived":              handleStopNotifyReceived,
+	"rescan":                          handleRescan,
+	"rescanblocks":                    handleRescanBlocks,
 }
 
 // WebsocketHandler handles a new websocket client by creating a new wsClient,
@@ -243,6 +248,33 @@ func (m *wsNotificationManager) NotifyMempoolTx(tx *bchutil.Tx, isNew bool) {
 	// shutting down.
 	select {
 	case m.queueNotification <- n:
+	case <-m.quit:
+	}
+}
+
+// NotifyAvalanchePeerConnect passes an avalanche peer to the notification
+// manager for processing.
+func (m *wsNotificationManager) NotifyAvalanchePeerConnect(ssi avalanche.SignedIdentity) {
+	select {
+	case m.queueNotification <- notificationAvaPeer{ssi, true}:
+	case <-m.quit:
+	}
+}
+
+// NotifyAvalanchePeerDisconnect passes an avalanche peer to the notification
+// manager for processing.
+func (m *wsNotificationManager) NotifyAvalanchePeerDisconnect(ssi avalanche.SignedIdentity) {
+	select {
+	case m.queueNotification <- notificationAvaPeer{ssi, false}:
+	case <-m.quit:
+	}
+}
+
+// NotifyAvalancheFinalization passes an avalanche finalization object to the
+// notification manager for processing.
+func (m *wsNotificationManager) NotifyAvalancheFinalization(h chainhash.Hash, vr avalanche.VoteRecord) {
+	select {
+	case m.queueNotification <- notificationAvaFinalization{Hash: h, VoteRecord: vr}:
 	case <-m.quit:
 	}
 }
@@ -453,6 +485,16 @@ type notificationTxAcceptedByMempool struct {
 	tx    *bchutil.Tx
 }
 
+type notificationAvaPeer struct {
+	avalanche.SignedIdentity
+	isConnected bool
+}
+
+type notificationAvaFinalization struct {
+	chainhash.Hash
+	avalanche.VoteRecord
+}
+
 // Notification control requests
 type notificationRegisterClient wsClient
 type notificationUnregisterClient wsClient
@@ -460,6 +502,10 @@ type notificationRegisterBlocks wsClient
 type notificationUnregisterBlocks wsClient
 type notificationRegisterNewMempoolTxs wsClient
 type notificationUnregisterNewMempoolTxs wsClient
+type notificationRegisterAvalancheConnections wsClient
+type notificationUnregisterAvalancheConnections wsClient
+type notificationRegisterAvalancheFinalizations wsClient
+type notificationUnregisterAvalancheFinalizations wsClient
 type notificationRegisterSpent struct {
 	wsc *wsClient
 	ops []*wire.OutPoint
@@ -492,6 +538,8 @@ func (m *wsNotificationManager) notificationHandler() {
 	// since it is quite a bit more efficient than using the entire struct.
 	blockNotifications := make(map[chan struct{}]*wsClient)
 	txNotifications := make(map[chan struct{}]*wsClient)
+	avaConnectionNotifications := make(map[chan struct{}]*wsClient)
+	avaFinalizationNotifications := make(map[chan struct{}]*wsClient)
 	watchedOutPoints := make(map[wire.OutPoint]map[chan struct{}]*wsClient)
 	watchedAddrs := make(map[string]map[chan struct{}]*wsClient)
 
@@ -540,6 +588,20 @@ out:
 				m.notifyForTx(watchedOutPoints, watchedAddrs, n.tx, nil)
 				m.notifyRelevantTxAccepted(n.tx, clients)
 
+			case *notificationAvaPeer:
+				if len(avaConnectionNotifications) != 0 {
+					if n.isConnected {
+						m.notifyAvalanchePeerConnected(avaConnectionNotifications, n.SignedIdentity)
+					} else {
+						m.notifyAvalanchePeerDisconnected(avaConnectionNotifications, n.SignedIdentity)
+					}
+				}
+
+			case *notificationAvaFinalization:
+				if len(avaFinalizationNotifications) != 0 {
+					m.notifyAvalancheFinalized(avaFinalizationNotifications, n.Hash, n.VoteRecord)
+				}
+
 			case *notificationRegisterBlocks:
 				wsc := (*wsClient)(n)
 				blockNotifications[wsc.quit] = wsc
@@ -586,6 +648,22 @@ out:
 			case *notificationUnregisterNewMempoolTxs:
 				wsc := (*wsClient)(n)
 				delete(txNotifications, wsc.quit)
+
+			case *notificationRegisterAvalancheConnections:
+				wsc := (*wsClient)(n)
+				avaConnectionNotifications[wsc.quit] = wsc
+
+			case *notificationUnregisterAvalancheConnections:
+				wsc := (*wsClient)(n)
+				delete(avaConnectionNotifications, wsc.quit)
+
+			case *notificationRegisterAvalancheFinalizations:
+				wsc := (*wsClient)(n)
+				avaFinalizationNotifications[wsc.quit] = wsc
+
+			case *notificationUnregisterAvalancheFinalizations:
+				wsc := (*wsClient)(n)
+				delete(avaFinalizationNotifications, wsc.quit)
 
 			default:
 				rpcsLog.Warn("Unhandled notification type")
@@ -822,6 +900,30 @@ func (m *wsNotificationManager) UnregisterNewMempoolTxsUpdates(wsc *wsClient) {
 	m.queueNotification <- (*notificationUnregisterNewMempoolTxs)(wsc)
 }
 
+// RegisterAvalancheConnectionUpdates requests notifications to the passed
+// websocket client when new transactions are added to the memory pool.
+func (m *wsNotificationManager) RegisterAvalancheConnectionUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationRegisterAvalancheConnections)(wsc)
+}
+
+// UnregisterAvalancheConnectionUpdates removes notifications to the passed
+// websocket client when new transaction are added to the memory pool.
+func (m *wsNotificationManager) UnregisterAvalancheConnectionUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationUnregisterAvalancheConnections)(wsc)
+}
+
+// RegisterAvalancheFinalizationUpdates requests notifications to the passed
+// websocket client when new transactions are added to the memory pool.
+func (m *wsNotificationManager) RegisterAvalancheFinalizationUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationRegisterAvalancheFinalizations)(wsc)
+}
+
+// UnregisterAvalancheFinalizationUpdates removes notifications to the passed
+// websocket client when new transaction are added to the memory pool.
+func (m *wsNotificationManager) UnregisterAvalancheFinalizationUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationUnregisterAvalancheFinalizations)(wsc)
+}
+
 // notifyForNewTx notifies websocket clients that have registered for updates
 // when a new transaction is added to the memory pool.
 func (m *wsNotificationManager) notifyForNewTx(clients map[chan struct{}]*wsClient, tx *bchutil.Tx) {
@@ -868,6 +970,54 @@ func (m *wsNotificationManager) notifyForNewTx(clients map[chan struct{}]*wsClie
 		} else {
 			wsc.QueueNotification(marshalledJSON)
 		}
+	}
+}
+
+// notifyAvalanchePeerConnected notifies websocket clients that have registered
+// for updates when a peer joins the avalanche pool.
+func (m *wsNotificationManager) notifyAvalanchePeerConnected(clients map[chan struct{}]*wsClient, ssi avalanche.SignedIdentity) {
+	ntfn := btcjson.NewAvaPeerNtfn(ssi, true)
+
+	marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
+	if err != nil {
+		rpcsLog.Errorf("Failed to marshal ava peer connection notification: %v", err)
+		return
+	}
+
+	for _, client := range clients {
+		client.QueueNotification(marshalledJSON)
+	}
+}
+
+// notifyAvalanchePeerDisconnected notifies websocket clients that have registered
+// for updates when a peer joins the avalanche pool.
+func (m *wsNotificationManager) notifyAvalanchePeerDisconnected(clients map[chan struct{}]*wsClient, ssi avalanche.SignedIdentity) {
+	ntfn := btcjson.NewAvaPeerNtfn(ssi, false)
+
+	marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
+	if err != nil {
+		rpcsLog.Errorf("Failed to marshal ava peer disconnection notification: %v", err)
+		return
+	}
+
+	for _, client := range clients {
+		client.QueueNotification(marshalledJSON)
+	}
+}
+
+// notifyAvalancheFinalized notifies websocket clients that have registered for
+// updates when a vertex has been finalized by avalanche.
+func (m *wsNotificationManager) notifyAvalancheFinalized(clients map[chan struct{}]*wsClient, h chainhash.Hash, vr avalanche.VoteRecord) {
+	ntfn := btcjson.NewAvaFinalizedNtfn(vr)
+
+	marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
+	if err != nil {
+		rpcsLog.Errorf("Failed to marshal ava finalization notification: %v", err)
+		return
+	}
+
+	for _, client := range clients {
+		client.QueueNotification(marshalledJSON)
 	}
 }
 
@@ -2164,6 +2314,34 @@ func handleNotifyNewTransactions(wsc *wsClient, icmd interface{}) (interface{}, 
 // command extension for websocket connections.
 func handleStopNotifyNewTransactions(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	wsc.server.ntfnMgr.UnregisterNewMempoolTxsUpdates(wsc)
+	return nil, nil
+}
+
+// RegisterAvalancheConnectionUpdates implements the
+// notifyavalancheConnections command extension for websocket connections.
+func handleNotifyAvalancheConnections(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.server.ntfnMgr.RegisterAvalancheConnectionUpdates(wsc)
+	return nil, nil
+}
+
+// UnregisterAvalancheConnectionUpdates implements the
+// stopnotifyavalancheConnections command extension for websocket connections.
+func handleStopNotifyAvalancheConnections(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.server.ntfnMgr.UnregisterAvalancheConnectionUpdates(wsc)
+	return nil, nil
+}
+
+// RegisterAvalancheFinalizationUpdates implements the
+// notifyavalanchefinalizations command extension for websocket connections.
+func handleNotifyAvalancheFinalizations(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.server.ntfnMgr.RegisterAvalancheFinalizationUpdates(wsc)
+	return nil, nil
+}
+
+// UnregisterAvalancheFinalizationUpdates implements the
+// stopnotifyavalanchefinalizations command extension for websocket connections.
+func handleStopNotifyAvalancheFinalizations(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.server.ntfnMgr.UnregisterAvalancheFinalizationUpdates(wsc)
 	return nil, nil
 }
 

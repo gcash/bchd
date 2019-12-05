@@ -13,10 +13,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gcash/bchutil"
+
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/snowglobe"
 	"github.com/gcash/bchd/wire"
-	"github.com/gcash/bchutil"
 )
 
 var (
@@ -143,6 +145,9 @@ type NotificationHandlers struct {
 	//
 	// Deprecated: Use OnRelevantTxAccepted instead.
 	OnRedeemingTx func(transaction *bchutil.Tx, details *btcjson.BlockDetails)
+
+	// OnAvaFinalization is invoked when the avalanche manager finalizes a vertex.
+	OnAvaFinalization func(vr *snowglobe.VoteRecord)
 
 	// OnRelevantTxAccepted is invoked when an unmined transaction passes
 	// the client's transaction filter.
@@ -462,6 +467,23 @@ func (c *Client) handleNotification(ntfn *rawNotification) {
 
 		c.ntfnHandlers.OnWalletLockState(locked)
 
+	// OnAvaFinalization
+	case btcjson.AvaFinalizedNtfnMethod:
+		// Ignore the notification if the client is not interested in
+		// it.
+		if c.ntfnHandlers.OnAvaFinalization == nil {
+			return
+		}
+
+		vr, err := parseAvaFinalizationNtfnParams(ntfn.Params)
+		if err != nil {
+			log.Warnf("Received invalid txfinalized notification: %v",
+				err)
+			return
+		}
+
+		c.ntfnHandlers.OnAvaFinalization(vr)
+
 	// OnUnknownNotification
 	default:
 		if c.ntfnHandlers.OnUnknownNotification == nil {
@@ -676,6 +698,23 @@ func parseChainTxNtfnParams(params []json.RawMessage) (*bchutil.Tx,
 	// nicer types for details about the block (block hash as a
 	// chainhash.Hash, block time as a time.Time, etc.).
 	return bchutil.NewTx(&msgTx), block, nil
+}
+
+// parseAvaFinalizationNtfnParams parses out the vote record from the raw
+// message
+func parseAvaFinalizationNtfnParams(params []json.RawMessage) (*snowglobe.VoteRecord, error) {
+	if len(params) == 0 || len(params) > 1 {
+		return nil, wrongNumParams(len(params))
+	}
+
+	// n := &AvaFinalizationNtfn{}
+	var vr *snowglobe.VoteRecord
+	err := json.Unmarshal(params[0], &vr)
+	if err != nil {
+		return nil, err
+	}
+
+	return vr, nil
 }
 
 // parseRescanProgressParams parses out the height of the last rescanned block
@@ -900,6 +939,56 @@ func (c *Client) NotifyBlocksAsync() FutureNotifyBlocksResult {
 // NOTE: This is a bchd extension and requires a websocket connection.
 func (c *Client) NotifyBlocks() error {
 	return c.NotifyBlocksAsync().Receive()
+}
+
+// FutureNotifyAvalancheResult is a future promise to deliver the result of a
+// NotifyAvalancheAsync RPC invocation (or an applicable error).
+type FutureNotifyAvalancheResult chan *response
+
+// Receive waits for the response promised by the future and returns an error
+// if the registration was not successful.
+func (r FutureNotifyAvalancheResult) Receive() error {
+	fmt.Println("FutureNotifyAvalancheResult.Receive()")
+	_, err := receiveFuture(r)
+	return err
+}
+
+// NotifyAvalancheAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on
+// the returned instance.
+//
+// See NotifyBlocks for the blocking version and more details.
+//
+// NOTE: This is a bchd extension and requires a websocket connection.
+func (c *Client) NotifyAvalancheAsync() FutureNotifyAvalancheResult {
+	// Not supported in HTTP POST mode.
+	if c.config.HTTPPostMode {
+		return newFutureError(ErrWebsocketsRequired)
+	}
+
+	// Ignore the notification if the client is not interested in
+	// notifications.
+	if c.ntfnHandlers == nil {
+		return newNilFutureResult()
+	}
+
+	cmd := btcjson.NewNotifyAvaFinalizationsCmd()
+	return c.sendCmd(cmd)
+}
+
+// NotifyAvalanche registers the client to receive notifications when transactions
+// are finalized by avalanche. The notifications are delivered to the notification
+// handlers associated with the client.  Calling this function has no effect if
+// there are no notification handlers and will result in an error if the client
+// is configured to run in HTTP POST mode.
+//
+// The notifications delivered as a result of this call will be via one of
+// OnBlockConnected or OnBlockDisconnected.
+//
+// NOTE: This is a bchd extension and requires a websocket connection.
+func (c *Client) NotifyAvalanche() error {
+	fmt.Println("NotifyAvalanche")
+	return c.NotifyAvalancheAsync().Receive()
 }
 
 // FutureNotifySpentResult is a future promise to deliver the result of a
