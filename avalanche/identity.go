@@ -40,7 +40,9 @@ func NewIdentity(privKey bchec.PrivateKey, outPoints []wire.OutPoint) Identity {
 }
 
 // Sign signs the given message with the private Identity key.
-func (si Identity) Sign(d []byte) (*bchec.Signature, error) { return si.privKey.SignECDSA(d) }
+func (si Identity) Sign(d []byte) (*bchec.Signature, error) { return si.privKey.SignSchnorr(d) }
+
+// func (si Identity) Sign(d []byte) (*bchec.Signature, error) { return si.privKey.SignECDSA(d) }
 
 // Serialize returns a byte slice of the a canonically serialized Identity.
 func (si Identity) Serialize() ([]byte, error) { return json.Marshal(si) }

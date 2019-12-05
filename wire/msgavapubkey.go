@@ -71,6 +71,8 @@ func (msg *MsgAvaPubkey) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 		return err
 	}
 
+	return nil
+
 	// Read outpoints
 	outPointCount, err := binarySerializer.Uint8(r)
 	if err != nil {
@@ -129,6 +131,7 @@ func (msg *MsgAvaPubkey) BchEncode(w io.Writer, _ uint32, _ MessageEncoding) err
 	if err := WriteVarBytes(w, ProtocolVersion, msg.pubKey.SerializeCompressed()); err != nil {
 		return err
 	}
+	return nil
 
 	// Write outpoints
 	if err := binarySerializer.PutUint8(w, uint8(len(msg.outPoints))); err != nil {

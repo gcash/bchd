@@ -40,24 +40,36 @@ type compositeReceiver []Receiver
 
 func (cr compositeReceiver) PeerConnect(ssi SignedIdentity) {
 	for _, r := range cr {
+		if r == nil {
+			continue
+		}
 		r.PeerConnect(ssi)
 	}
 }
 
 func (cr compositeReceiver) PeerDisconnect(ssi SignedIdentity) {
 	for _, r := range cr {
+		if r == nil {
+			continue
+		}
 		r.PeerDisconnect(ssi)
 	}
 }
 
 func (cr compositeReceiver) NewVoteRecord(h chainhash.Hash, vr VoteRecord) {
 	for _, r := range cr {
+		if r == nil {
+			continue
+		}
 		r.NewVoteRecord(h, vr)
 	}
 }
 
 func (cr compositeReceiver) FinalizedVoteRecord(h chainhash.Hash, vr VoteRecord) {
 	for _, r := range cr {
+		if r == nil {
+			continue
+		}
 		r.FinalizedVoteRecord(h, vr)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"unicode/utf8"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -307,12 +308,19 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 
 	totalBytes := 0
 
+	if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+		fmt.Println("Writing version message")
+	}
+
 	// Enforce max command size.
 	var command [CommandSize]byte
 	cmd := msg.Command()
 	if len(cmd) > CommandSize {
 		str := fmt.Sprintf("command [%s] is too long [max %v]",
 			cmd, CommandSize)
+		if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+			panic(str)
+		}
 		return totalBytes, messageError("WriteMessage", str)
 	}
 	copy(command[:], []byte(cmd))
@@ -321,6 +329,9 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	var bw bytes.Buffer
 	err := msg.BchEncode(&bw, pver, encoding)
 	if err != nil {
+		if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+			panic(err)
+		}
 		return totalBytes, err
 	}
 	payload := bw.Bytes()
@@ -331,6 +342,9 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload is %d bytes",
 			lenp, maxMessagePayload())
+		if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+			panic(str)
+		}
 		return totalBytes, messageError("WriteMessage", str)
 	}
 
@@ -340,6 +354,9 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload size for "+
 			"messages of type [%s] is %d.", lenp, cmd, mpl)
+		if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+			panic(str)
+		}
 		return totalBytes, messageError("WriteMessage", str)
 	}
 
@@ -360,6 +377,9 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	n, err := w.Write(hw.Bytes())
 	totalBytes += n
 	if err != nil {
+		if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+			panic(err)
+		}
 		return totalBytes, err
 	}
 
@@ -368,6 +388,9 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	if len(payload) > 0 {
 		n, err = w.Write(payload)
 		totalBytes += n
+	}
+	if reflect.TypeOf(&msg).String() == "*wire.MsgVersion" {
+		panic(err)
 	}
 	return totalBytes, err
 }
@@ -399,9 +422,11 @@ func ReadMessageWithEncodingN(r io.Reader, pver uint32, bchnet BitcoinNet,
 
 	// Check for messages from the wrong bitcoin network.
 	if hdr.magic != bchnet {
-		discardInput(r, hdr.length)
-		str := fmt.Sprintf("message from other network [%v]", hdr.magic)
-		return totalBytes, nil, nil, messageError("ReadMessage", str)
+		fmt.Println("given magic:", hdr.magic)
+		fmt.Println("bchnet magic:", bchnet)
+		// discardInput(r, hdr.length)
+		// str := fmt.Sprintf("message from other network [%v] wanted [%v]", hdr.magic, bchnet)
+		// return totalBytes, nil, nil, messageError("ReadMessage", str)
 	}
 
 	// Check for malformed commands.

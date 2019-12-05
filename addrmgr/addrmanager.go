@@ -661,6 +661,21 @@ func (a *AddrManager) NeedMoreAddresses() bool {
 	return a.numAddresses() < needAddressThreshold
 }
 
+func (a *AddrManager) AvalanchePeers() (addrs []*wire.NetAddress) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	for _, v := range a.addrIndex {
+		if v.na.Services.HasService(wire.SFNodeAvalanche) {
+			addrs = append(addrs, v.na)
+		}
+		if len(addrs) >= getAddrMax {
+			break
+		}
+	}
+	return addrs
+}
+
 // AddressCache returns the current address cache.  It must be treated as
 // read-only (but since it is a copy now, this is not as dangerous).
 func (a *AddrManager) AddressCache() []*wire.NetAddress {

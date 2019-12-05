@@ -31,21 +31,35 @@ const (
 )
 
 var (
-	randomGen                = rand.New(rand.NewSource(time.Now().UnixNano()))
-	clock            clocker = realClock{}
-	globalTimeOffset         = clock.now().Unix()
-	log                      = bchlog.Disabled
+	// log is used to output diagnostic information about the performance of the
+	// Avalanche process.
+	log = bchlog.Disabled
+
+	// globalTimeOffset is used to enable us to store full unix timestamps with
+	// fewer than 64 bits.
+	globalTimeOffset = clock.now().Unix()
+
+	// clock is used to get the current time and can be set to a fixed clock for
+	// deterministic tests.
+	clock clocker = realClock{}
+
+	// clock is used to get random numbers and can be set to a fixed seed for
+	// deterministic tests.
+	randomGen = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type (
+	// query represents a sample request sent to another peer.
+	// A slice is 12 bytes so we use a 4 byte timestamp for alignment.
 	query struct {
-		timestamp int64
+		timestamp uint32
 		invs      []*wire.InvVect
 	}
 
 	peerer interface {
 		ID() int32
 		NA() *wire.NetAddress
+		Connected() bool
 		AvalanchePubkey() *bchec.PublicKey
 		QueueMessage(wire.Message, chan<- struct{})
 	}
@@ -54,7 +68,7 @@ type (
 	voteRecordMap map[chainhash.Hash]*VoteRecord
 	peerMap       map[peerer]*SignedIdentity
 
-	// Create a clock abstraction to allow us to inject fixed times for testing
+	// Create a clock abstraction to allow us to inject fixed times for testing.
 	clocker    interface{ now() time.Time }
 	realClock  struct{}
 	fixedClock time.Time
@@ -63,4 +77,5 @@ type (
 func (realClock) now() time.Time    { return time.Now() }
 func (c fixedClock) now() time.Time { return time.Time(c) }
 
+// UseLogger let's the bchd server tell us which logger to use.
 func UseLogger(logger bchlog.Logger) { log = logger }

@@ -7,9 +7,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/gcash/bchd/bchrpc"
 	"os"
 	"path/filepath"
+
+	"github.com/gcash/bchd/bchrpc"
 
 	"github.com/gcash/bchd/addrmgr"
 	"github.com/gcash/bchd/blockchain"
@@ -71,6 +72,7 @@ var (
 	syncLog = backendLog.Logger("SYNC")
 	txmpLog = backendLog.Logger("TXMP")
 	grpcLog = backendLog.Logger("GRPC")
+	avalLog = backendLog.Logger("AVAL")
 )
 
 // Initialize package-global logger variables.
@@ -87,6 +89,7 @@ func init() {
 	netsync.UseLogger(syncLog)
 	mempool.UseLogger(txmpLog)
 	bchrpc.UseLogger(grpcLog)
+	// avalanche.UseLogger(avalLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
@@ -107,6 +110,7 @@ var subsystemLoggers = map[string]bchlog.Logger{
 	"SYNC": syncLog,
 	"TXMP": txmpLog,
 	"GRPC": grpcLog,
+	"AVAL": avalLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and

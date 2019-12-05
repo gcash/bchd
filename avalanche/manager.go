@@ -22,19 +22,19 @@ type Manager struct {
 	identity *SignedIdentity
 
 	// map of peers and a mutex for writing to it
-	peerWriteMu *sync.Mutex
-	peers       peerMap
+	peerMu *sync.RWMutex
+	peers  peerMap
 
 	// map of queries and a mutex for it
-	queriesMu *sync.Mutex
+	queriesMu *sync.RWMutex
 	queries   queryMap
 
 	// map of rejected vertex hashes and a mutex for it
-	rejectedMu *sync.Mutex
+	rejectedMu *sync.RWMutex
 	rejected   map[chainhash.Hash]struct{}
 
 	// maps of vote records, blocks, and txs, and a mutex for them
-	mapWriteMu     *sync.Mutex
+	vertexMapMu    *sync.RWMutex
 	voteRecords    voteRecordMap
 	conflictBlocks map[int32][]bchutil.Block // TODO: This should use cumulative work for collision points, not height.
 	blocks         map[chainhash.Hash]bchutil.Block
@@ -71,16 +71,16 @@ func New(idKey bchec.PrivateKey, receivers ...Receiver) (*Manager, error) {
 		receiver: compositeReceiver(receivers),
 		rpcInfo:  &pb.GetAvalancheInfoResponse{},
 
-		peerWriteMu: &sync.Mutex{},
-		peers:       make(peerMap, 16),
+		peerMu: &sync.RWMutex{},
+		peers:  make(peerMap, 16),
 
-		queriesMu: &sync.Mutex{},
+		queriesMu: &sync.RWMutex{},
 		queries:   make(queryMap, 4096),
 
-		rejectedMu: &sync.Mutex{},
+		rejectedMu: &sync.RWMutex{},
 		rejected:   make(map[chainhash.Hash]struct{}),
 
-		mapWriteMu:     &sync.Mutex{},
+		vertexMapMu:    &sync.RWMutex{},
 		voteRecords:    make(voteRecordMap, 1024),
 		conflictBlocks: make(map[int32][]bchutil.Block, 4),
 		blocks:         make(map[chainhash.Hash]bchutil.Block, 16),
@@ -123,6 +123,9 @@ func (m Manager) Identity() *SignedIdentity { return m.identity }
 
 // IsAddrConnected returns whether this peer is in the pool or not.
 func (m Manager) IsAddrConnected(addr *wire.NetAddress) bool {
+	m.peerMu.RLock()
+	defer m.peerMu.RUnlock()
+
 	for otherPeer := range m.peers {
 		if addr.IP.Equal(otherPeer.NA().IP) && addr.Port == otherPeer.NA().Port {
 			return true
@@ -138,19 +141,39 @@ func (m Manager) IsAddrConnected(addr *wire.NetAddress) bool {
 // NewPeer notifies the manager of a new peer to add to the pool.
 func (m *Manager) NewPeer(p peerer, ssi *SignedIdentity) {
 	log.Debugf("Adding new avalanche peer %s", p)
-	// TODO: ssi.Validate()
-	// for otherPeer := range m.peers {
-	// 	if otherPeer.AvalanchePubkey().IsEqual(p.AvalanchePubkey()) {
-	// 		log.Debugf("Avalanche peer already known %s", hex.EncodeToString(p.AvalanchePubkey().SerializeCompressed()))
-	// 		return
-	// 	}
-	// }
 
-	m.peerWriteMu.Lock()
+	// Only accept connected peers
+	if !p.Connected() {
+		return
+	}
+
+	m.peerMu.Lock()
+	defer m.peerMu.Unlock()
+
+	// Check if we already have a peer for this identity
+	// TODO: Map peers by key so this is an O(1) check
+	for otherPeer := range m.peers {
+		if otherPeer.AvalanchePubkey().IsEqual(p.AvalanchePubkey()) {
+			log.Debugf("Avalanche peer already known %s", hex.EncodeToString(p.AvalanchePubkey().SerializeCompressed()))
+
+			// If the currently known peer is disconnected we'll evict it and continue
+			// adding this new peer.
+			if !otherPeer.Connected() {
+				log.Debugf("Evicting disconnected peer %s", p)
+				m.DonePeer(p)
+				break
+			}
+
+			// If we already have a peer for this identity and it's still connected
+			// then we'll just stop here.
+			return
+		}
+	}
+
+	// Add the peer to our map
 	m.peers[p] = ssi
-	m.peerWriteMu.Unlock()
-
 	atomic.AddInt64(&m.rpcInfo.SeenPeerCount, 1)
+	m.rpcInfo.Peers = append(m.rpcInfo.Peers, GetPeerNotificationPB(*ssi, true).Peer)
 
 	// Send connection event
 	// m.receiver.PeerConnect(*ssi)
@@ -158,6 +181,9 @@ func (m *Manager) NewPeer(p peerer, ssi *SignedIdentity) {
 
 // DonePeer notifies the manager of a peer to remove from the pool.
 func (m *Manager) DonePeer(p peerer) {
+	m.peerMu.Lock()
+	defer m.peerMu.Unlock()
+
 	_, exists := m.peers[p]
 	if !exists {
 		log.Debugf("Received done avalanche peer message for unknown peer %s", p)
@@ -165,11 +191,16 @@ func (m *Manager) DonePeer(p peerer) {
 	}
 
 	// Remove the peer from the list of peers.
-	m.peerWriteMu.Lock()
 	delete(m.peers, p)
-	m.peerWriteMu.Unlock()
-
 	log.Debugf("Lost avalanche peer %s", p)
+
+	for i, peer := range m.rpcInfo.Peers {
+		if string(peer.PublicKey) == string(p.AvalanchePubkey().SerializeCompressed()) {
+			m.rpcInfo.Peers[i] = m.rpcInfo.Peers[len(m.rpcInfo.Peers)-1]
+			m.rpcInfo.Peers = m.rpcInfo.Peers[:len(m.rpcInfo.Peers)-1]
+			break
+		}
+	}
 
 	// Send disconnection event
 	// m.receiver.PeerDisconnect(*ssi)
@@ -179,14 +210,14 @@ func (m *Manager) DonePeer(p peerer) {
 func (m *Manager) NewBlock(block bchutil.Block, code wire.RejectCode) {
 	// If we already have a VoteRecord for this block then we're done
 	if _, ok := m.voteRecords[*block.Hash()]; ok {
-		log.Debugf("Not starting avalanche for block %s", block.Hash().String())
+		log.Infof("Not starting avalanche for block %s", block.Hash().String())
 		return
 	}
 
 	// Invalid blocks are blocks which violate the consensus rules and must be
 	// permanently considered invalid.
 	if code == wire.RejectInvalid {
-		log.Debugf("avalanche rejecting block %s", block.Hash().String())
+		log.Infof("avalanche rejecting block %s", block.Hash().String())
 		m.rejectedMu.Lock()
 		m.rejected[*block.Hash()] = struct{}{}
 		m.rejectedMu.Unlock()
@@ -202,6 +233,7 @@ func (m *Manager) NewBlock(block bchutil.Block, code wire.RejectCode) {
 	// check for any accepted conflicts.
 	contains := false
 	accepted := code == 0
+	m.vertexMapMu.RLock()
 	for _, conflictingBlk := range m.conflictBlocks[block.Height()] {
 		vr := m.voteRecords[*block.Hash()]
 		contains = contains || block.Hash().IsEqual(conflictingBlk.Hash())
@@ -210,27 +242,30 @@ func (m *Manager) NewBlock(block bchutil.Block, code wire.RejectCode) {
 		// If there's a known accepted, finalized, conflicting block then this one
 		// must be hard rejected
 		if vr.isFinalized() && vr.isAccepted() {
+			m.vertexMapMu.RUnlock()
+
 			m.rejectedMu.Lock()
 			m.rejected[*block.Hash()] = struct{}{}
 			m.rejectedMu.Unlock()
 			return
 		}
 	}
+	m.vertexMapMu.RUnlock()
 
 	vr := newVoteRecord(typeBlock, accepted)
 
-	// Get lock and then start writes to maps
-	m.mapWriteMu.Lock()
+	// Get write lock and then start writes to maps
+	m.vertexMapMu.Lock()
 	m.voteRecords[*block.Hash()] = vr
 	m.blocks[*block.Hash()] = block
 	if !contains {
 		m.conflictBlocks[block.Height()] = append(m.conflictBlocks[block.Height()], block)
 	}
-	m.mapWriteMu.Unlock()
+	m.vertexMapMu.Unlock()
 
 	m.receiver.NewVoteRecord(*block.Hash(), *vr)
 	atomic.AddInt32(&m.rpcInfo.PendingBlockCount, 1)
-	log.Debugf("Starting avalanche for block %s", block.Hash().String())
+	log.Infof("Starting avalanche for block %s", block.Hash().String())
 }
 
 // NewTransactions adds new blocks to the processor.
@@ -240,14 +275,14 @@ func (m *Manager) NewTransaction(tx bchutil.Tx, code wire.RejectCode) {
 	// If we already have a record for this item just skip
 	// We can ignore duplicates as we should have already processed it.
 	if _, ok := m.voteRecords[*tx.Hash()]; ok {
-		log.Debugf("Not starting avalanche for duplicate tx %s", tx.Hash().String())
+		log.Infof("Not starting avalanche for duplicate tx %s", tx.Hash().String())
 		return
 	}
 
 	// Invalid transactions are transactions which violate the consensus  rules
 	// and must be permanently considered invalid.
 	if code == wire.RejectInvalid {
-		log.Debugf("avalanche rejecting tx %s", tx.Hash().String())
+		log.Infof("avalanche rejecting tx %s", tx.Hash().String())
 		m.rejectedMu.Lock()
 		m.rejected[*tx.Hash()] = struct{}{}
 		m.rejectedMu.Unlock()
@@ -263,6 +298,7 @@ func (m *Manager) NewTransaction(tx bchutil.Tx, code wire.RejectCode) {
 	// Iterate over the inputs, add each outpoint to conflict map, and see if any
 	// accepted conflicts exist.
 	outpointsToAddTo := make([]wire.OutPoint, 0, len(tx.MsgTx().TxIn))
+	m.vertexMapMu.RLock()
 	for _, in := range tx.MsgTx().TxIn {
 		contains := false
 		for _, ds := range m.conflictTxs[in.PreviousOutPoint] {
@@ -273,6 +309,8 @@ func (m *Manager) NewTransaction(tx bchutil.Tx, code wire.RejectCode) {
 			// If there's a known accepted, finalized, conflicting tx then this one
 			// must be hard rejected
 			if vr.isFinalized() && vr.isAccepted() {
+				m.vertexMapMu.RUnlock()
+
 				m.rejectedMu.Lock()
 				m.rejected[*tx.Hash()] = struct{}{}
 				m.rejectedMu.Unlock()
@@ -285,23 +323,24 @@ func (m *Manager) NewTransaction(tx bchutil.Tx, code wire.RejectCode) {
 			outpointsToAddTo = append(outpointsToAddTo, in.PreviousOutPoint)
 		}
 	}
+	m.vertexMapMu.RUnlock()
 
 	// We don't have a VoteRecord for this vertex so we'll create one
 	vr := newVoteRecord(typeTx, accepted)
 
 	// Get lock and then start writes to maps
-	m.mapWriteMu.Lock()
+	m.vertexMapMu.Lock()
 	m.voteRecords[txID] = vr
 	m.txs[txID] = *tx.MsgTx()
 	for _, op := range outpointsToAddTo {
 		m.conflictTxs[op] = append(m.conflictTxs[op], tx)
 	}
-	m.mapWriteMu.Unlock()
+	m.vertexMapMu.Unlock()
 
 	// Send new voterecord event
 	m.receiver.NewVoteRecord(txID, *vr)
 	atomic.AddInt64(&m.rpcInfo.PendingTransactionCount, 1)
-	log.Debugf("Starting avalanche for tx %s (%d peers)", tx.Hash().String(), len(m.peers))
+	log.Infof("Starting avalanche for tx %s (%d peers)", tx.Hash().String(), len(m.peers))
 }
 
 //
@@ -310,12 +349,15 @@ func (m *Manager) NewTransaction(tx bchutil.Tx, code wire.RejectCode) {
 
 // ProcessQuery processes a query and sends a response back for valid queries.
 func (m *Manager) ProcessQuery(p peerer, req *wire.MsgAvaQuery) error {
-	log.Debug("ProcessQuery for %d invs (id %d)", len(req.InvList), req.QueryID)
+	log.Infof("ProcessQuery for %d invs (id %d)", len(req.InvList), req.QueryID)
 
 	// Process each queried inv and set a vote for it. Also collect a list of
 	// requested items we don't have so we can ask for them.
 	missingItemsInvMsg := wire.NewMsgInv()
 	votes := make([]byte, len(req.InvList))
+
+	m.rejectedMu.RLock()
+	m.vertexMapMu.RLock()
 	for i, inv := range req.InvList {
 		// If we have a record for this item return our current vote
 		if vr := m.voteRecords[inv.Hash]; vr != nil {
@@ -345,6 +387,8 @@ func (m *Manager) ProcessQuery(p peerer, req *wire.MsgAvaQuery) error {
 		votes[i] = voteAbstain
 		missingItemsInvMsg.AddInvVect(inv)
 	}
+	m.vertexMapMu.RUnlock()
+	m.rejectedMu.RUnlock()
 
 	// Send the inv msg for the missing items
 	p.QueueMessage(missingItemsInvMsg, nil)
@@ -353,13 +397,13 @@ func (m *Manager) ProcessQuery(p peerer, req *wire.MsgAvaQuery) error {
 	resp := wire.NewMsgAvaResponse(req.QueryID, votes, nil)
 	sig, err := m.identity.Sign(resp.SerializeForSignature())
 	if err != nil {
-		log.Debug("Failed to process AvaQuery. Signature failed.")
+		log.Info("Failed to process AvaQuery. Signature failed.")
 		return err
 	}
 	resp.Signature = sig
 
 	// Now send it to the peer
-	log.Debug("ProcessQuery: Sending response")
+	log.Info("ProcessQuery: Sending response")
 	p.QueueMessage(resp, nil)
 
 	return nil
@@ -367,7 +411,7 @@ func (m *Manager) ProcessQuery(p peerer, req *wire.MsgAvaQuery) error {
 
 // ProcessQueryResponse processes the response to a query we made.
 func (m *Manager) ProcessQueryResponse(p peerer, resp *wire.MsgAvaResponse) {
-	log.Debug("ProcessQueryResponse from", p.NA().IP.String(), hex.EncodeToString(p.AvalanchePubkey().SerializeCompressed()))
+	log.Info("ProcessQueryResponse from", p.NA().IP.String(), hex.EncodeToString(p.AvalanchePubkey().SerializeCompressed()))
 	if !resp.Signature.Verify(resp.SerializeForSignature(), p.AvalanchePubkey()) {
 		return
 	}
@@ -384,7 +428,7 @@ func (m *Manager) ProcessQueryResponse(p peerer, resp *wire.MsgAvaResponse) {
 
 	// Ignore responses to expired queries or that don't have the correct number of votes
 	if len(resp.Votes) != len(r.invs) ||
-		time.Unix(r.timestamp+globalTimeOffset, 0).Add(maxQueryAge).Before(clock.now()) {
+		time.Unix(int64(r.timestamp)+globalTimeOffset, 0).Add(maxQueryAge).Before(clock.now()) {
 		return
 	}
 
@@ -392,21 +436,19 @@ func (m *Manager) ProcessQueryResponse(p peerer, resp *wire.MsgAvaResponse) {
 	i := -1
 	for _, inv := range r.invs {
 		i++
+		m.vertexMapMu.RLock()
 		vr, ok := m.voteRecords[inv.Hash]
+		m.vertexMapMu.RUnlock()
 
-		// Ignore votes for records we're not voting on anymore, either because
-		// they expired or were finalized
-		if !ok {
-			continue
-		}
-		if vr.isFinalized() {
+		// Ignore votes for records we don't know about
+		if !ok || vr.isFinalized() {
 			continue
 		}
 
 		// Register the vote
 		vr.decInflight()
 		stateChanged := vr.registerVote(resp.Votes[i])
-		log.Debug("Registered avalanche vote", resp.Votes[i], vr.getConfidence())
+		log.Info("Registered avalanche vote", resp.Votes[i], vr.getConfidence())
 		// This vote did not cause a state change so we can just continue to the
 		// next vote
 		if !stateChanged {
@@ -426,27 +468,22 @@ func (m *Manager) ProcessQueryResponse(p peerer, resp *wire.MsgAvaResponse) {
 		}
 
 		// We either finalized or moved to accepted from a previously rejected
-		// state. Let's look up all its conflicts and set their confidence to 0.
-		for _, hash := range m.incomingEdgeHashes(vr.getType(), inv.Hash) {
-			m.voteRecords[hash].resetConfidence()
-		}
+		// state.
+		// TODO: Handle this correctly
+		// for _, hash := range m.incomingEdgeHashes(vr.getType(), inv.Hash) {
+		// 	m.voteRecords[hash].resetConfidence()
+		// }
 	}
 }
 
 // tick does the all the work for one cycle of the query engine.
 func (m *Manager) tick() {
-	invs := m.getInvsForTick()
-	if len(invs) == 0 {
-		return
-	}
-
-	log.Debugf("tick: have %d invs", len(invs))
-	p := getRandomPeer(m.peers)
+	p := m.getRandomPeer()
 	if p == nil {
 		return
 	}
 
-	log.Debug("sending to peer", p.NA().IP.String())
+	log.Debug("found queryable peer ", p.NA().IP.String())
 
 	queryID, err := wire.RandomUint64()
 	if err != nil {
@@ -454,16 +491,23 @@ func (m *Manager) tick() {
 		return
 	}
 
+	invs := m.getInvsForTick()
+	if len(invs) == 0 {
+		return
+	}
+
+	log.Debugf("tick: have %d invs", len(invs))
+
 	log.Debug("Sending avalanche query")
 
 	// We have everything we need to create an Ava query.
 	key := queryKey(p.ID(), queryID)
 	m.queriesMu.Lock()
-	m.queries[key] = query{clock.now().Unix() - globalTimeOffset, invs}
+	m.queries[key] = query{uint32(clock.now().Unix() - globalTimeOffset), invs}
 	m.queriesMu.Unlock()
 
 	// Setup a timeout to remove the query after the expiration time.
-	time.AfterFunc(maxQueryAge, func() { purgeQuery(m.queries, m.voteRecords, key) })
+	time.AfterFunc(maxQueryAge, func() { m.purgeQuery(m.queries, m.voteRecords, key) })
 
 	// Create an AvaQuery
 	// TODO: Don't preemptively send these in the future; only send when queried
@@ -500,7 +544,8 @@ func (m *Manager) getInvsForTick() []*wire.InvVect {
 	}
 
 	invs := make([]*wire.InvVect, 0, maxSize)
-	i := 0
+	m.vertexMapMu.RLock()
+	defer m.vertexMapMu.RUnlock()
 	for hash, vr := range m.voteRecords {
 		// Delete expired or finalized vertices and skip to next iteration
 		// if vr.getAge() > maxVoteRecordAge {
@@ -510,7 +555,7 @@ func (m *Manager) getInvsForTick() []*wire.InvVect {
 
 		// Add this voterecord to the inv list unless we're at our inflight limit.
 		if !vr.incInflight() {
-			// log.Debug("incinflight returned false")
+			log.Debug("incinflight returned false")
 			continue
 		}
 
@@ -518,12 +563,12 @@ func (m *Manager) getInvsForTick() []*wire.InvVect {
 		invs = append(invs, wire.NewInvVect(wire.InvType(vr.getType()+1), &h))
 
 		// Stop if we're at our request limit
-		i++
-		if i >= maxSize {
+		if len(invs) >= maxSize {
 			break
 		}
 	}
 
+	// log.Debugf("query inv count count: %d", len(invs))
 	return invs
 }
 
@@ -532,8 +577,7 @@ func (m *Manager) getInvsForTick() []*wire.InvVect {
 //
 
 func (m *Manager) finalizeVoteRecord(hash chainhash.Hash, vr VoteRecord) {
-	log.Debug("Finalizing avalanche vertex", hash.String())
-	defer delete(m.voteRecords, hash)
+	log.Infof("Finalizing avalanche vertex %s", hash.String())
 
 	if vr.isAccepted() {
 		// TODO: the finalized transaction should be added to the mempool if it isn't already in there
@@ -557,6 +601,14 @@ func (m *Manager) finalizeVoteRecord(hash chainhash.Hash, vr VoteRecord) {
 		m.rejectedMu.Unlock()
 	}
 
+	// Lock the vertex maps for writing, call the finalization routines, and then
+	// cleanup by deleting the voterecord itself and unlocking the maps
+	m.vertexMapMu.Lock()
+	defer func() {
+		delete(m.voteRecords, hash)
+		m.vertexMapMu.Unlock()
+	}()
+
 	if vr.getType() == typeTx {
 		m.finalizeTx(hash, vr)
 	} else {
@@ -564,6 +616,8 @@ func (m *Manager) finalizeVoteRecord(hash chainhash.Hash, vr VoteRecord) {
 	}
 }
 
+// This method is NOT SAFE for concurrent access. Must be called with
+// vertexMapMu locked for WRITING.
 func (m *Manager) finalizeTx(hash chainhash.Hash, vr VoteRecord) {
 	// Delete this transaction when we're done.
 	defer delete(m.txs, hash)
@@ -584,6 +638,8 @@ func (m *Manager) finalizeTx(hash chainhash.Hash, vr VoteRecord) {
 	}
 }
 
+// This method is NOT SAFE for concurrent access. Must be called with
+// vertexMapMu locked for WRITING.
 func (m *Manager) finalizeBlock(hash chainhash.Hash, vr VoteRecord) {
 	// Delete this block when we're done.
 	defer delete(m.blocks, hash)
@@ -616,9 +672,14 @@ func (m *Manager) finalizeBlock(hash chainhash.Hash, vr VoteRecord) {
 	delete(m.conflictBlocks, block.Height())
 }
 
+// This method is NOT SAFE for concurrent access. Must be called with
+// vertexMapMu locked for READING.
 func (m *Manager) incomingEdgeHashes(t vertexType, hash chainhash.Hash) []chainhash.Hash {
 	if t == typeBlock {
-		block := m.blocks[hash]
+		block, ok := m.blocks[hash]
+		if !ok {
+			return nil
+		}
 		hashes := make([]chainhash.Hash, 1+len(block.Transactions()))
 		hashes[0] = block.MsgBlock().Header.PrevBlock
 
@@ -650,21 +711,23 @@ func (m Manager) GetInfoPB() pb.GetAvalancheInfoResponse {
 
 func GetPeerNotificationPB(ssi SignedIdentity, isConnected bool) pb.AvalanchePeerNotification {
 	ntfn := pb.AvalanchePeerNotification{
-		IsConnected:        isConnected,
-		PublicKey:          ssi.PubKey.SerializeCompressed(),
-		Version:            int32(ssi.Version),
-		Sequence:           ssi.Sequence,
-		OutPoints:          make([]*pb.Transaction_Input_Outpoint, len(ssi.OutPoints)),
-		IdentitySignature:  ssi.IdentitySignature.Serialize(),
-		OutPointSignatures: make([][]byte, len(ssi.OutPointSignatures)),
+		IsConnected: isConnected,
+		Peer: &pb.AvalanchePeer{
+			PublicKey:          ssi.PubKey.SerializeCompressed(),
+			Version:            int32(ssi.Version),
+			Sequence:           ssi.Sequence,
+			OutPoints:          make([]*pb.Transaction_Input_Outpoint, len(ssi.OutPoints)),
+			IdentitySignature:  ssi.IdentitySignature.Serialize(),
+			OutPointSignatures: make([][]byte, len(ssi.OutPointSignatures)),
+		},
 	}
 
 	for i, outPoint := range ssi.OutPoints {
-		ntfn.OutPoints[i] = &pb.Transaction_Input_Outpoint{
+		ntfn.Peer.OutPoints[i] = &pb.Transaction_Input_Outpoint{
 			Index: outPoint.Index,
 			Hash:  outPoint.Hash.CloneBytes(),
 		}
-		ntfn.OutPointSignatures[i] = ssi.OutPointSignatures[i].Serialize()
+		ntfn.Peer.OutPointSignatures[i] = ssi.OutPointSignatures[i].Serialize()
 	}
 
 	return ntfn
@@ -690,15 +753,19 @@ func queryKey(peerID int32, queryID uint64) string {
 	return fmt.Sprintf("%d|%d", peerID, queryID)
 }
 
-func getRandomPeer(peers peerMap) (p peerer) {
-	i := len(peers)
+func (m *Manager) getRandomPeer() (p peerer) {
+	m.peerMu.RLock()
+	m.peerMu.RUnlock()
+
+	i := len(m.peers)
 	if i == 0 {
+		log.Debug("No peers found to query")
 		return nil
 	}
 
 	j := 0
 	t := randomGen.Intn(i)
-	for p = range peers {
+	for p = range m.peers {
 		if j >= t {
 			break
 		}
@@ -707,9 +774,15 @@ func getRandomPeer(peers peerMap) (p peerer) {
 	return p
 }
 
-func purgeQuery(queries queryMap, vrs voteRecordMap, key string) {
-	for _, inv := range queries[key].invs {
-		vrs[inv.Hash].decInflight()
+func (m *Manager) purgeQuery(queries queryMap, vrs voteRecordMap, key string) {
+	m.queriesMu.Lock()
+	m.vertexMapMu.RLock()
+
+	for _, inv := range m.queries[key].invs {
+		m.voteRecords[inv.Hash].decInflight()
 	}
-	delete(queries, key)
+	delete(m.queries, key)
+
+	m.queriesMu.Unlock()
+	m.vertexMapMu.RUnlock()
 }

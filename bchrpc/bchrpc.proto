@@ -177,7 +177,8 @@ message GetAvalancheInfoResponse {
     int64 total_queries_responded = 15;
     int32 inflight_queries_requested = 16;
 
-    repeated AvalancheFinalizationNotification recent_finalizations = 17;
+    repeated AvalanchePeer peers = 17;
+    repeated AvalancheFinalizationNotification recent_finalizations = 18;
 }
 
 message GetBlockInfoRequest {
@@ -412,7 +413,7 @@ message TransactionNotification {
 }
 
 
-message AvalanchePeerNotification {
+message AvalanchePeer {
     bytes public_key = 1;
     int32 version = 2;
     int64 sequence = 3;
@@ -420,8 +421,11 @@ message AvalanchePeerNotification {
 
     bytes identity_signature = 5;
     repeated bytes out_point_signatures = 6;
+}
 
-    bool is_connected = 7;
+message AvalanchePeerNotification {
+    AvalanchePeer peer = 1;
+    bool is_connected = 2;
 }
 
 enum AvalancheState {

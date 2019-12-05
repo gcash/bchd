@@ -27,12 +27,22 @@ type PeerNotifier interface {
 	TransactionConfirmed(tx *bchutil.Tx)
 }
 
+// AvaNotifier exposes a method to notify the avalanche manager of a new transaction.
+type AvalancheNotifier interface {
+	// NewBlock submits the given block to the avalanche manager.
+	NewBlock(bchutil.Block, wire.RejectCode)
+
+	// NewTransaction submits the given transaction to the avalanche manager.
+	NewTransaction(bchutil.Tx, wire.RejectCode)
+}
+
 // Config is a configuration struct used to initialize a new SyncManager.
 type Config struct {
 	PeerNotifier PeerNotifier
 	Chain        *blockchain.BlockChain
 	TxMemPool    *mempool.TxPool
 	ChainParams  *chaincfg.Params
+	AvaNotifier  AvalancheNotifier
 
 	DisableCheckpoints bool
 	MaxPeers           int

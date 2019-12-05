@@ -173,6 +173,12 @@ func (f ServiceFlag) String() string {
 	return s
 }
 
+// HasService returns whether or not the service flag has the bit set for the
+// given service flag.
+func (f ServiceFlag) HasService(sf ServiceFlag) bool {
+	return f&sf == sf
+}
+
 // BitcoinNet represents which bitcoin network a message belongs to.
 type BitcoinNet uint32
 

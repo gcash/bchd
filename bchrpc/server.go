@@ -11,6 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gcash/bchutil"
+	"github.com/gcash/bchutil/merkleblock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
+
 	"github.com/gcash/bchd/avalanche"
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
@@ -22,12 +29,6 @@ import (
 	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
-	"github.com/gcash/bchutil"
-	"github.com/gcash/bchutil/merkleblock"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/status"
 )
 
 var serviceMap = map[string]interface{}{
@@ -268,6 +269,7 @@ func (s *GrpcServer) dispatchEvent(event interface{}) {
 // NotifyNewTransactions is called by the server when new transactions
 // are accepted in the mempool.
 func (s *GrpcServer) NotifyNewTransactions(txs []*mempool.TxDesc) {
+	// log.Info("NotifyNewTransactions !!!!!!", len(txs))
 	for _, txDesc := range txs {
 		s.dispatchEvent(&rpcEventTxAccepted{txDesc})
 	}
@@ -1132,7 +1134,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 		// error is returned to the client with the deserialization
 		// error code (to match bitcoind behavior).
 		if _, ok := err.(mempool.RuleError); ok {
-			log.Debugf("Rejected transaction %v: %v", tx.Hash(),
+			log.Infof("Rejected transaction %v: %v", tx.Hash(),
 				err)
 		} else {
 			log.Errorf("Failed to process transaction %v: %v",
@@ -1182,6 +1184,8 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
+	// log.Info("SubscribeTransactions !!!")
+
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
@@ -1195,6 +1199,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 	for {
 		select {
 		case event := <-subscription.Events():
+			// log.Info("SubscribeTransactions got event", reflect.TypeOf(event).Kind().String())
 
 			switch event := event.(type) {
 			case *rpcEventTxAccepted:
@@ -1310,7 +1315,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 			req, err := stream.Recv()
 			if err != nil {
 				if err != io.EOF {
-					log.Debugf("Error reading from client stream: %v", err)
+					log.Infof("Error reading from client stream: %v", err)
 				}
 				close(requests)
 				return
@@ -1445,13 +1450,14 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 // SubscribeBlocks subscribes to notifications of new blocks being connected to the
 // blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
+	// log.Info("SubscribeBlocks...")
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
 	for {
 		select {
 		case event := <-subscription.Events():
-
+			// log.Info("SubscribeBlocks event")
 			switch event := event.(type) {
 			case *rpcEventBlockConnected:
 				// Search for all transactions.

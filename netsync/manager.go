@@ -210,6 +210,7 @@ func (sps *syncPeerState) updateNetwork(syncPeer *peerpkg.Peer) {
 // notifications and relays announcements of new blocks to peers.
 type SyncManager struct {
 	peerNotifier   PeerNotifier
+	avaNotifier    AvalancheNotifier
 	started        int32
 	shutdown       int32
 	chain          *blockchain.BlockChain
@@ -638,6 +639,7 @@ func (sm *SyncManager) selectNewSyncPeer() {
 
 // handleTxMsg handles transaction messages from all peers.
 func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
+	log.Info("New Transaction handleTxMsg", tmsg.tx.Hash().String())
 	peer := tmsg.peer
 	state, exists := sm.peerStates[peer]
 	if !exists {
@@ -698,11 +700,16 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		// send it.
 		code, reason := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
+
+		go sm.avaNotifier.NewTransaction(*tmsg.tx, code)
 		return
 	}
 
 	if len(acceptedTxs) > 0 {
 		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
+	}
+	for _, accepted := range acceptedTxs {
+		go sm.avaNotifier.NewTransaction(*accepted.Tx, 0)
 	}
 }
 
@@ -729,6 +736,7 @@ func (sm *SyncManager) current() bool {
 
 // handleBlockMsg handles block messages from all peers.
 func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
+	// log.Info("New Block handleBlockMsg", bmsg.block.Hash().String())
 	peer := bmsg.peer
 	state, exists := sm.peerStates[peer]
 	if !exists {
@@ -806,6 +814,8 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		// send it.
 		code, reason := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdBlock, code, reason, blockHash, false)
+
+		go sm.avaNotifier.NewBlock(*bmsg.block, code)
 		return
 	}
 
@@ -871,15 +881,20 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		sm.rejectedTxns = make(map[chainhash.Hash]struct{})
 	}
 
-	// Update the block height for this peer. But only send a message to
-	// the server for updating peer heights if this is an orphan or our
-	// chain is "current". This avoids sending a spammy amount of messages
-	// if we're syncing the chain from scratch.
+	// Update the block height for this peer. But only send a message to  the
+	// server and Ava processor if this is an orphan or our chain is
+	// "current". This avoids sending a spammy amount of messages if we're syncing
+	// the chain from scratch.
 	if blkHashUpdate != nil && heightUpdate != 0 {
 		peer.UpdateLastBlockHeight(heightUpdate)
-		if isOrphan || sm.current() {
-			go sm.peerNotifier.UpdatePeerHeights(blkHashUpdate, heightUpdate,
-				peer)
+
+		if sm.current() {
+			// Add to Ava
+			go sm.avaNotifier.NewBlock(*bmsg.block, 0)
+
+			if isOrphan {
+				go sm.peerNotifier.UpdatePeerHeights(blkHashUpdate, heightUpdate, peer)
+			}
 		}
 	}
 
@@ -1750,6 +1765,7 @@ func (sm *SyncManager) Pause() chan<- struct{} {
 func New(config *Config) (*SyncManager, error) {
 	sm := SyncManager{
 		peerNotifier:            config.PeerNotifier,
+		avaNotifier:             config.AvaNotifier,
 		chain:                   config.Chain,
 		txMemPool:               config.TxMemPool,
 		chainParams:             config.ChainParams,
