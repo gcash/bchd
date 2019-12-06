@@ -5,6 +5,8 @@ Description=BCHD
 Type=simple
 ExecStart=/path/to/bchd --txindex --addrindex
 Restart=on-failure
+KillMode=process
+TimeoutSec=1200
 
 [Install]
 WantedBy=default.target
