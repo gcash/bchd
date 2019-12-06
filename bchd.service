@@ -6,7 +6,7 @@ Type=simple
 ExecStart=/path/to/bchd --txindex --addrindex
 Restart=on-failure
 KillMode=process
-TimeoutSec=1200
+TimeoutSec=1200s
 
 [Install]
 WantedBy=default.target
