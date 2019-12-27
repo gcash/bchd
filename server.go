@@ -723,15 +723,15 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
-	go sp.processComapactBlock(msg)
+	go sp.processCompactBlock(msg)
 }
 
-// processComapactBlock attempts to reconstruct a full wire.MsgBlock from
+// processCompactBlock attempts to reconstruct a full wire.MsgBlock from
 // a wire.MsgCmpctBlock. This may require making another round trip to the
 // peer to retrieve any missing transactions. Thus you can expect this
 // function to possibly block for a long period of time so running it in
 // a separate goroutine is wise.
-func (sp *serverPeer) processComapactBlock(msg *wire.MsgCmpctBlock) {
+func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	targetHash := msg.BlockHash()
 
 	// We check the header here before proceeding. For one we end up wasting
