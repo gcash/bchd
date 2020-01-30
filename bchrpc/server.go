@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -28,6 +29,10 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
+
+// maxAddressQuerySize is the max number of addresses
+// to return per query.
+const maxAddressQuerySize = 10000
 
 var serviceMap = map[string]interface{}{
 	"pb.bchrpc": &GrpcServer{},
@@ -744,6 +749,10 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		return nil, status.Error(codes.Unavailable, "addrindex required")
 	}
 
+	if req.NbFetch > maxAddressQuerySize {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("nbfetch exceeds max of %d", maxAddressQuerySize))
+	}
+
 	// Attempt to decode the supplied address.
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
@@ -763,6 +772,9 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	if err != nil {
+		return nil, err
+	}
 
 	resp := &pb.GetAddressTransactionsResponse{}
 
@@ -822,6 +834,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		return nil, status.Error(codes.Unavailable, "addrindex required")
 	}
 
+	if req.NbFetch > maxAddressQuerySize {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("nbfetch exceeds max of %d", maxAddressQuerySize))
+	}
+
 	// Attempt to decode the supplied address.
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
@@ -841,6 +857,9 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	}
 
 	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	if err != nil {
+		return nil, err
+	}
 
 	resp := &pb.GetRawAddressTransactionsResponse{}
 
@@ -875,31 +894,12 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
-	var (
-		utxos []*pb.UnspentOutput
-		txs   []*wire.MsgTx
-		skip  = 0
-		fetch = 1000
-	)
-	for {
-		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
-		if err != nil || len(confirmedTxs) == 0 {
-			break
-		}
-		for i := range confirmedTxs {
-			txs = append(txs, &confirmedTxs[i].tx)
-		}
-		skip += len(confirmedTxs)
-	}
-	if req.IncludeMempool {
-		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
-		for _, tx := range unconfirmedTxs {
-			txs = append(txs, tx.MsgTx())
-		}
-	}
-	for _, tx := range txs {
+	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
 		txHash := tx.TxHash()
-		var utxoView *blockchain.UtxoViewpoint
+		var (
+			utxoView *blockchain.UtxoViewpoint
+			utxos    []*pb.UnspentOutput
+		)
 		if req.IncludeMempool {
 			utxoView, err = s.txMemPool.FetchUtxoView(bchutil.NewTx(tx))
 			if err != nil {
@@ -936,6 +936,44 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 					BlockHeight:  entry.BlockHeight(),
 				}
 				utxos = append(utxos, utxo)
+			}
+		}
+		return utxos, nil
+	}
+
+	var (
+		utxos []*pb.UnspentOutput
+		skip  = 0
+		fetch = 10000
+	)
+	for {
+		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
+		if err != nil {
+			return nil, err
+		}
+		if len(confirmedTxs) == 0 {
+			break
+		}
+		for _, ret := range confirmedTxs {
+			u, err := checkTxOutputs(&ret.tx)
+			if err != nil {
+				return nil, err
+			}
+			if len(u) > 0 {
+				utxos = append(utxos, u...)
+			}
+		}
+		skip += len(confirmedTxs)
+	}
+	if req.IncludeMempool {
+		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+		for _, tx := range unconfirmedTxs {
+			u, err := checkTxOutputs(tx.MsgTx())
+			if err != nil {
+				return nil, err
+			}
+			if len(u) > 0 {
+				utxos = append(utxos, u...)
 			}
 		}
 	}
