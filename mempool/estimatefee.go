@@ -47,7 +47,7 @@ const (
 
 	bytePerKb = 1000
 
-	bchPerSatoshi = 1E-8
+	bchPerSatoshi = 1e-8
 )
 
 var (
