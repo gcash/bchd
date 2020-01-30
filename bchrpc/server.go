@@ -918,8 +918,10 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if entry == nil || entry.IsSpent() {
 				continue
 			}
+			pkScript := make([]byte, len(out.PkScript))
+			copy(pkScript, out.PkScript)
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, s.chainParams)
 			if err != nil || len(addrs) == 0 {
 				continue
 			}
@@ -931,7 +933,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 						Index: uint32(i),
 					},
 					Value:        entry.Amount(),
-					PubkeyScript: out.PkScript,
+					PubkeyScript: pkScript,
 					IsCoinbase:   entry.IsCoinBase(),
 					BlockHeight:  entry.BlockHeight(),
 				}
