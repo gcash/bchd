@@ -19,20 +19,21 @@ func aggregatePubkeys(tweak []byte, keys ...*PublicKey) *PublicKey {
 
 	tweak0 := sha256.Sum256(append(tweak, k.SerializeCompressed()...))
 
-	x0, y0 := k.Curve.ScalarMult(k.X, k.Y, tweak0[:])
-	agg := &PublicKey{
-		X:     x0,
-		Y:     y0,
-		Curve: S256(),
-	}
+	x0, y0, z0 := S256().scalarMultJacobian(k.X, k.Y, tweak0[:])
 
 	for _, key := range keys[1:] {
 		tweaki := sha256.Sum256(append(tweak, key.SerializeCompressed()...))
-		x, y := key.Curve.ScalarMult(key.X, key.Y, tweaki[:])
-		agg.X, agg.Y = agg.Curve.Add(agg.X, agg.Y, x, y)
+		x, y, z := S256().scalarMultJacobian(key.X, key.Y, tweaki[:])
+		S256().addJacobian(x, y, z, x0, y0, z0, x0, y0, z0)
 	}
 
-	return agg
+	x, y := S256().fieldJacobianToBigAffine(x0, y0, z0)
+
+	return &PublicKey{
+		X:     x,
+		Y:     y,
+		Curve: S256(),
+	}
 }
 
 func computeTweak(keys ...*PublicKey) []byte {

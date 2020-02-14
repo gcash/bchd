@@ -52,3 +52,22 @@ func TestMuSession(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkAggregatePublicKeys(b *testing.B) {
+	priv1, err := NewPrivateKey(S256())
+	if err != nil {
+		b.Fatal(err)
+	}
+	priv2, err := NewPrivateKey(S256())
+	if err != nil {
+		b.Fatal(err)
+	}
+	priv3, err := NewPrivateKey(S256())
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		AggregatePublicKeys(priv1.PubKey(), priv2.PubKey(), priv3.PubKey())
+	}
+}
