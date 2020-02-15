@@ -2,19 +2,23 @@ package bchec
 
 import (
 	"crypto/sha256"
+	"errors"
 	"math/big"
 	"sort"
 )
 
 // AggregatePublicKeys aggregates the given public keys using
 // the MuSig aggregating protocol.
-func AggregatePublicKeys(keys ...*PublicKey) *PublicKey {
+func AggregatePublicKeys(keys ...*PublicKey) (*PublicKey, error) {
 	lexagraphicalSortPubkeys(keys)
 	tweak := computeTweak(keys...)
 	return aggregatePubkeys(tweak, keys...)
 }
 
-func aggregatePubkeys(tweak []byte, keys ...*PublicKey) *PublicKey {
+func aggregatePubkeys(tweak []byte, keys ...*PublicKey) (*PublicKey, error) {
+	if len(keys) == 0 {
+		return nil, errors.New("pubkeys is nil")
+	}
 	k := *keys[0]
 
 	tweak0 := sha256.Sum256(append(tweak, k.SerializeCompressed()...))
@@ -33,7 +37,7 @@ func aggregatePubkeys(tweak []byte, keys ...*PublicKey) *PublicKey {
 		X:     x,
 		Y:     y,
 		Curve: S256(),
-	}
+	}, nil
 }
 
 func computeTweak(keys ...*PublicKey) []byte {
@@ -62,7 +66,10 @@ type Session struct {
 func NewMuSession(pubKeys []*PublicKey, privKey *PrivateKey) (*Session, error) {
 	lexagraphicalSortPubkeys(pubKeys)
 	tweak := computeTweak(pubKeys...)
-	agg := aggregatePubkeys(tweak, pubKeys...)
+	agg, err := aggregatePubkeys(tweak, pubKeys...)
+	if err != nil {
+		return nil, err
+	}
 
 	priv, err := NewPrivateKey(S256())
 	if err != nil {
@@ -100,17 +107,28 @@ func (sess *Session) NewNonce() (*PublicKey, error) {
 
 // SetNonces saves the nonces for each peer. This should be called by each
 // participant after the nonces have been shared.
-func (sess *Session) SetNonces(noncePubkeys ...*PublicKey) {
+func (sess *Session) SetNonces(noncePubkeys ...*PublicKey) error {
+	if len(noncePubkeys) == 0 || noncePubkeys[0] == nil {
+		return errors.New("noncePubkey is nil")
+	}
 	aggregateNoncePubkey := *noncePubkeys[0]
 	for _, pubkey := range noncePubkeys[1:] {
+		if pubkey == nil {
+			return errors.New("noncePubkey is nil")
+		}
 		aggregateNoncePubkey.X, aggregateNoncePubkey.Y = aggregateNoncePubkey.Curve.Add(aggregateNoncePubkey.X, aggregateNoncePubkey.Y, pubkey.X, pubkey.Y)
 	}
 	sess.aggregateNonce = &aggregateNoncePubkey
+	return nil
 }
 
 // Sign returns the S value for this node. Technically we don't need to return the
 // R value as it's calculated by each node using the nonce public keys.
-func (sess *Session) Sign(hash []byte) *big.Int {
+func (sess *Session) Sign(hash []byte) (*big.Int, error) {
+	if sess.aggregatePubkey == nil || sess.aggregateNonce == nil || sess.privKey == nil || sess.noncePriv == nil {
+		return nil, errors.New("state not fully set")
+	}
+
 	// If R's y coordinate has jacobi symbol -1, then all parties negate k and R_i
 	r := new(big.Int).SetBytes(sess.noncePriv.Serialize())
 	if big.Jacobi(sess.aggregateNonce.Y, S256().P) == -1 {
@@ -134,7 +152,7 @@ func (sess *Session) Sign(hash []byte) *big.Int {
 	s.Add(s, r)
 	s.Mod(s, S256().N)
 
-	return s
+	return s, nil
 }
 
 // AggregateSignature aggregates the S and R values and returns a signature
@@ -156,18 +174,6 @@ func (sess *Session) AggregateSignature(svals ...*big.Int) *Signature {
 
 func lexagraphicalSortPubkeys(keys []*PublicKey) {
 	sort.Slice(keys, func(i, j int) bool {
-		h := keys[i].SerializeCompressed()
-		t := keys[j].SerializeCompressed()
-		for i := 0; i < len(h); i++ {
-			a := h[i]
-			b := t[i]
-			if a < b {
-				return true
-			}
-			if a > b {
-				return false
-			}
-		}
-		return false
+		return keys[i].X.Cmp(keys[j].X) < 0
 	})
 }

@@ -27,7 +27,10 @@ func TestMuSession(t *testing.T) {
 			pubkeys[x] = priv.PubKey()
 		}
 
-		aggPubkey := AggregatePublicKeys(pubkeys...)
+		aggPubkey, err := AggregatePublicKeys(pubkeys...)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for x := 0; x < r; x++ {
 			sess, err := NewMuSession(pubkeys, privkeys[x])
@@ -40,7 +43,10 @@ func TestMuSession(t *testing.T) {
 
 		for x := 0; x < r; x++ {
 			sessions[x].SetNonces(nonces...)
-			svals[x] = sessions[x].Sign(m[:])
+			svals[x], err = sessions[x].Sign(m[:])
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		for x := 0; x < r; x++ {
