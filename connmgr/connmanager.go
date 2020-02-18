@@ -405,13 +405,6 @@ func (cm *ConnManager) NewConnReq() {
 // Connect assigns an id and dials a connection to the address of the
 // connection request.
 func (cm *ConnManager) Connect(c *ConnReq) {
-	// During the time we wait for retry there is a chance that
-	// this connection was already cancelled.
-	if c.State() == ConnCanceled {
-		log.Debugf("Ignoring connect for canceled connreq=%v", c)
-		return
-	}
-
 	if atomic.LoadInt32(&cm.stop) != 0 {
 		return
 	}
