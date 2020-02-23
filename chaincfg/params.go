@@ -446,8 +446,6 @@ var TestNet3Params = Params{
 		{"testnet-seed.bchd.cash", true},
 		{"testnet-seed.bitcoinabc.org", true},
 		{"testnet-seed-abc.bitcoinforks.org", true},
-		{"testnet-seed.bitprim.org", true},
-		{"testnet-seed.deadalnix.me", true},
 		{"testnet-seeder.criptolayer.net", true},
 	},
 
