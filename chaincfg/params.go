@@ -238,8 +238,6 @@ var MainNetParams = Params{
 		{"seed.bitcoinabc.org", true},
 		{"seed-abc.bitcoinforks.org", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
-		{"seed.bitprim.org", true},
-		{"seed.deadalnix.me", true},
 	},
 
 	// Chain parameters
@@ -448,8 +446,6 @@ var TestNet3Params = Params{
 		{"testnet-seed.bchd.cash", true},
 		{"testnet-seed.bitcoinabc.org", true},
 		{"testnet-seed-abc.bitcoinforks.org", true},
-		{"testnet-seed.bitprim.org", true},
-		{"testnet-seed.deadalnix.me", true},
 		{"testnet-seeder.criptolayer.net", true},
 	},
 
