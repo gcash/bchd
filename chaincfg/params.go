@@ -238,8 +238,6 @@ var MainNetParams = Params{
 		{"seed.bitcoinabc.org", true},
 		{"seed-abc.bitcoinforks.org", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
-		{"seed.bitprim.org", true},
-		{"seed.deadalnix.me", true},
 	},
 
 	// Chain parameters
