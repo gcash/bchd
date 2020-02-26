@@ -3318,6 +3318,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		ConnectedCount:         s.ConnectedCount,
 		IsCurrent:              s.syncManager.IsCurrent,
 	})
+	mining.CoinbaseFlags = cfg.CoinbaseFlags
 
 	// Only setup a function to return new addresses to connect to when
 	// not running in connect-only mode.  The simulation network is always
