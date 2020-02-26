@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/gcash/bchd/mining"
 	"io"
 	"net"
 	"os"
@@ -168,6 +169,7 @@ type config struct {
 	BlockMinSize            uint32        `long:"blockminsize" description:"Mininum block size in bytes to be used when creating a block"`
 	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block"`
 	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Size in bytes for high-priority/low-fee transactions when creating a block"`
+	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
 	NoPeerBloomFilters      bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	NoCFilters              bool          `long:"nocfilters" description:"Disable committed filtering (CF) support"`
@@ -451,6 +453,7 @@ func loadConfig() (*config, []string, error) {
 		TrickleInterval:         defaultTrickleInterval,
 		BlockMinSize:            defaultBlockMinSize,
 		BlockMaxSize:            defaultBlockMaxSize,
+		CoinbaseFlags:           mining.CoinbaseFlags,
 		BlockPrioritySize:       mempool.DefaultBlockPrioritySize,
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
 		SigCacheMaxSize:         defaultSigCacheMaxSize,
