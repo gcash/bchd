@@ -289,7 +289,7 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 	// Make sure the coinbase is above the minimum size threshold.
 	if tx.SerializeSize() < blockchain.MinTransactionSize {
 		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
-			make([]byte, blockchain.MinTransactionSize-(tx.SerializeSize()-1))...)
+			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
 	}
 	return bchutil.NewTx(tx), nil
 }
