@@ -298,6 +298,7 @@ var MainNetParams = Params{
 			UtxoSetSources: []string{
 				"http://localhost:8080/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
 				"https://ipfs.greyh.at/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
+				"https://ipfs.io/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
 			},
 		},
 		{
@@ -308,6 +309,7 @@ var MainNetParams = Params{
 			UtxoSetSources: []string{
 				"http://localhost:8080/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
 				"https://ipfs.greyh.at/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
+				"https://ipfs.io/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
 			},
 		},
 		{
@@ -318,6 +320,7 @@ var MainNetParams = Params{
 			UtxoSetSources: []string{
 				"http://localhost:8080/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
 				"https://ipfs.greyh.at/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
+				"https://ipfs.io/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
 			},
 		},
 	},
