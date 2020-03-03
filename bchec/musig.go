@@ -1,8 +1,10 @@
 package bchec
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"math/big"
 	"sort"
 )
@@ -54,16 +56,21 @@ func computeTweak(keys ...*PublicKey) []byte {
 // Session represents a MuSig signing session. Each party to the singing
 // needs one of these objects.
 type Session struct {
-	aggregatePubkey *PublicKey
-	privKey         *PrivateKey
-	noncePriv       *PrivateKey
-	aggregateNonce  *PublicKey
-	tweak           []byte
+	aggregatePubkey  *PublicKey
+	pubkeys          []*PublicKey
+	privKey          *PrivateKey
+	noncePriv        *PrivateKey
+	aggregateNonce   *PublicKey
+	sessionID        [32]byte
+	nonceCommitments [][]byte
+	tweak            []byte
 }
 
 // NewMuSession gets instantiated with the public keys of each participant and
-// the private key of this specific user.
-func NewMuSession(pubKeys []*PublicKey, privKey *PrivateKey) (*Session, error) {
+// the private key of this specific user. The session ID must either be purely
+// random or a counter that is incremented for every session using the same
+// private key. The choice is left up to the user.
+func NewMuSession(pubKeys []*PublicKey, privKey *PrivateKey, sessionID [32]byte) (*Session, error) {
 	lexagraphicalSortPubkeys(pubKeys)
 	tweak := computeTweak(pubKeys...)
 	agg, err := aggregatePubkeys(tweak, pubKeys...)
@@ -71,15 +78,11 @@ func NewMuSession(pubKeys []*PublicKey, privKey *PrivateKey) (*Session, error) {
 		return nil, err
 	}
 
-	priv, err := NewPrivateKey(S256())
-	if err != nil {
-		return nil, err
-	}
-
 	return &Session{
 		aggregatePubkey: agg,
+		pubkeys:         pubKeys,
 		privKey:         privKey,
-		noncePriv:       priv,
+		sessionID:       sessionID,
 		tweak:           tweak,
 	}, nil
 }
@@ -89,28 +92,55 @@ func (sess *Session) AggregatePublicKey() *PublicKey {
 	return sess.aggregatePubkey
 }
 
-// Nonce returns the nonce public key for this session.
-func (sess *Session) Nonce() *PublicKey {
-	return sess.noncePriv.PubKey()
+// NonceCommitment deterministically generates the nonce and returns
+// the hash. The nonce private key is derived from the private key,
+// each public key in the session, the message, and the session ID.
+func (sess *Session) NonceCommitment(message []byte) []byte {
+	preimage := sess.privKey.Serialize()
+	for _, pubkey := range sess.pubkeys {
+		preimage = append(preimage, pubkey.SerializeCompressed()...)
+	}
+	preimage = append(preimage, message...)
+	preimage = append(preimage, sess.sessionID[:]...)
+	r := sha256.Sum256(preimage)
+
+	sess.noncePriv, _ = PrivKeyFromBytes(S256(), r[:])
+
+	h := sha256.Sum256(sess.noncePriv.PubKey().SerializeCompressed())
+	return h[:]
 }
 
-// NewNonce generates and saves a new nonce in case you need
-// to regenerate it.
-func (sess *Session) NewNonce() (*PublicKey, error) {
-	priv, err := NewPrivateKey(S256())
-	if err != nil {
-		return nil, err
+// Nonce returns the nonce public key for this session.
+func (sess *Session) Nonce() (*PublicKey, error) {
+	if sess.nonceCommitments == nil {
+		return nil, errors.New("nonce commitments must be set before revealing the nonce")
 	}
-	sess.noncePriv = priv
-	return priv.PubKey(), nil
+	return sess.noncePriv.PubKey(), nil
+}
+
+// SetNonceCommitments saves the nonce commitments in the session. We
+// use them to check the hash of the nonce against the these commitments
+// when SetNonces is called.
+func (sess *Session) SetNonceCommitments(nonceCommitments ...[]byte) {
+	sess.nonceCommitments = nonceCommitments
 }
 
 // SetNonces saves the nonces for each peer. This should be called by each
 // participant after the nonces have been shared.
 func (sess *Session) SetNonces(noncePubkeys ...*PublicKey) error {
-	if len(noncePubkeys) == 0 || noncePubkeys[0] == nil {
+	if len(noncePubkeys) != len(sess.nonceCommitments) {
+		return errors.New("nonce public keys must be the same length of nonce commitments")
+	}
+	if noncePubkeys[0] == nil {
 		return errors.New("noncePubkey is nil")
 	}
+	for i, pubkey := range noncePubkeys {
+		h := sha256.Sum256(pubkey.SerializeCompressed())
+		if !bytes.Equal(sess.nonceCommitments[i], h[:]) {
+			return fmt.Errorf("key %d does not match the commitment", i)
+		}
+	}
+
 	aggregateNoncePubkey := *noncePubkeys[0]
 	for _, pubkey := range noncePubkeys[1:] {
 		if pubkey == nil {

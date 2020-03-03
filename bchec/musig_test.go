@@ -15,6 +15,7 @@ func TestMuSession(t *testing.T) {
 		sessions := make([]*Session, r)
 		privkeys := make([]*PrivateKey, r)
 		pubkeys := make([]*PublicKey, r)
+		commitments := make([][]byte, r)
 		nonces := make([]*PublicKey, r)
 		svals := make([]*big.Int, r)
 
@@ -33,12 +34,23 @@ func TestMuSession(t *testing.T) {
 		}
 
 		for x := 0; x < r; x++ {
-			sess, err := NewMuSession(pubkeys, privkeys[x])
+			var b [32]byte
+			rand.Read(b[:])
+
+			sess, err := NewMuSession(pubkeys, privkeys[x], b)
 			if err != nil {
 				t.Fatal(err)
 			}
 			sessions[x] = sess
-			nonces[x] = sess.Nonce()
+			commitments[x] = sess.NonceCommitment(m[:])
+		}
+
+		for x := 0; x < r; x++ {
+			sessions[x].SetNonceCommitments(commitments...)
+			nonces[x], err = sessions[x].Nonce()
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		for x := 0; x < r; x++ {
