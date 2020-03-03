@@ -105,6 +105,16 @@ func (sess *Session) NewNonce() (*PublicKey, error) {
 	return priv.PubKey(), nil
 }
 
+// SetNonce allows the user to generate a nonce public key outside
+// of this class and import it.
+//
+// IMPORTANT: The key must be random and NOT derived using RFC6979
+// or any other deterministic algorithm. This is to prevent a
+// potential attack.
+func (sess *Session) SetNonce(priv *PrivateKey) {
+	sess.noncePriv = priv
+}
+
 // SetNonces saves the nonces for each peer. This should be called by each
 // participant after the nonces have been shared.
 func (sess *Session) SetNonces(noncePubkeys ...*PublicKey) error {
