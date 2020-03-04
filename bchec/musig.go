@@ -12,7 +12,7 @@ import (
 // AggregatePublicKeys aggregates the given public keys using
 // the MuSig aggregating protocol.
 func AggregatePublicKeys(keys ...*PublicKey) (*PublicKey, error) {
-	lexagraphicalSortPubkeys(keys)
+	sortPubkeys(keys)
 	tweak := computeTweak(keys...)
 	return aggregatePubkeys(tweak, keys...)
 }
@@ -43,8 +43,6 @@ func aggregatePubkeys(tweak []byte, keys ...*PublicKey) (*PublicKey, error) {
 }
 
 func computeTweak(keys ...*PublicKey) []byte {
-	lexagraphicalSortPubkeys(keys)
-
 	preimage := make([]byte, 0, 33*len(keys))
 	for _, key := range keys {
 		preimage = append(preimage, key.SerializeCompressed()...)
@@ -71,7 +69,7 @@ type Session struct {
 // random or a counter that is incremented for every session using the same
 // private key. The choice is left up to the user.
 func NewMuSession(pubKeys []*PublicKey, privKey *PrivateKey, sessionID [32]byte) (*Session, error) {
-	lexagraphicalSortPubkeys(pubKeys)
+	sortPubkeys(pubKeys)
 	tweak := computeTweak(pubKeys...)
 	agg, err := aggregatePubkeys(tweak, pubKeys...)
 	if err != nil {
@@ -202,7 +200,7 @@ func (sess *Session) AggregateSignature(svals ...*big.Int) *Signature {
 	}
 }
 
-func lexagraphicalSortPubkeys(keys []*PublicKey) {
+func sortPubkeys(keys []*PublicKey) {
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].X.Cmp(keys[j].X) < 0
 	})
