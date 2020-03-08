@@ -2324,10 +2324,13 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	} else {
 		valid = signature.Verify(hash, pubKey)
 	}
+	if len(sigBytes) > 0 {
+		vm.sigChecks++
 
-	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {
-		str := "signature not empty on failed checksig"
-		return scriptError(ErrNullFail, str)
+		if !valid && vm.hasFlag(ScriptVerifyNullFail) {
+			str := "signature not empty on failed checksig"
+			return scriptError(ErrNullFail, str)
+		}
 	}
 
 	vm.dstack.PushBool(valid)
@@ -2591,6 +2594,9 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				str := "not all signatures empty on failed checkmultisig"
 				return scriptError(ErrNullFail, str)
 			}
+
+			// This is guaranteed to execute exactly numSignatures times (if not script error)
+			vm.sigChecks++
 		}
 
 		if checkBits>>iKey != 0 {
@@ -2603,6 +2609,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		numPubKeys++
 		pubKeyIdx := -1
 		signatureIdx := 0
+		allSignaturesAreNil := true
 		for numSignatures > 0 {
 			// When there are more signatures than public keys remaining,
 			// there is no way to succeed since too many signatures are
@@ -2626,6 +2633,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				// Skip to the next pubkey if signature is empty.
 				continue
 			}
+			allSignaturesAreNil = false
 
 			// Split the signature into hash type and signature components.
 			hashType := SigHashType(rawSig[len(rawSig)-1])
@@ -2708,6 +2716,9 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				signatureIdx++
 				numSignatures--
 			}
+		}
+		if !allSignaturesAreNil {
+			vm.sigChecks += numPubKeys
 		}
 	}
 
@@ -2810,10 +2821,13 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 	} else {
 		valid = signature.Verify(messageHash[:], pubKey)
 	}
+	if len(sigBytes) > 0 {
+		vm.sigChecks++
 
-	if !valid && vm.hasFlag(ScriptVerifyNullFail) && len(sigBytes) > 0 {
-		str := "signature not empty on failed checksig"
-		return scriptError(ErrNullFail, str)
+		if !valid && vm.hasFlag(ScriptVerifyNullFail) {
+			str := "signature not empty on failed checksig"
+			return scriptError(ErrNullFail, str)
+		}
 	}
 
 	vm.dstack.PushBool(valid)

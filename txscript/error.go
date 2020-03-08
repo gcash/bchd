@@ -320,6 +320,10 @@ const (
 	// not contain the correct number of bits.
 	ErrInvalidBitCount
 
+	// ErrInputSigChecks is returned when the script exceeds the maximum
+	// allowed signature density.
+	ErrInputSigChecks
+
 	// numErrorCodes is the maximum error code number used in tests.  This
 	// entry MUST be the last entry in the enum.
 	numErrorCodes
@@ -388,6 +392,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrUnsatisfiedLockTime:      "ErrUnsatisfiedLockTime",
 	ErrInvalidDummy:             "ErrInvalidDummy",
 	ErrInvalidBitCount:          "ErrInvalidBitCount",
+	ErrInputSigChecks:           "ErrInputSigChecks",
 }
 
 // String returns the ErrorCode as a human-readable name.

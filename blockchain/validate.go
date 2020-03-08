@@ -64,6 +64,14 @@ const (
 	// MaxTransactionSigOps is the maximum allowable number of sigops per
 	// transaction after the UAHF hard fork
 	MaxTransactionSigOps = 20000
+
+	// BlockMaxBytesMaxSigChecksRatio is the ratio between the maximum allowable
+	// block size and the maximum allowable * SigChecks (executed signature check
+	// operations) in the block. (network rule).
+	BlockMaxBytesMaxSigChecksRatio = 141
+
+	// MaxTransactionSigChecks is the maximum number of sig checks per transaction.
+	MaxTransactionSigChecks = 3000
 )
 
 var (
@@ -269,6 +277,7 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFl
 		return ruleError(ErrTxTooSmall, str)
 	}
 
+	// FIXME: Only count if phonon is not active
 	sigOps := CountSigOps(tx, scriptFlags)
 	if sigOps > MaxTransactionSigOps {
 		str := fmt.Sprintf("transaction has too many sigops - got "+
@@ -1103,6 +1112,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If Graviton hardfork is active we must enforce MinimalData
 	gravitonActive := node.height > b.chainParams.GravitonForkHeight
 
+	// If Phonon hardfork is active we must enforce the new sig check rules and
+	// OP_REVERSEBYTES.
+	phononActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.PhononActivationTime
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1191,37 +1204,48 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptVerifyMinimalData | txscript.ScriptVerifySchnorrMultisig
 	}
 
+	// If Phonon hardfork is active we need to check the sig checks for both blocks and
+	// transactions as well as activate OP_REVERSEBYTES.
+	if phononActive {
+		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyReverseBytes
+	}
+
 	// The number of signature operations must be less than the maximum
 	// allowed per block.  Note that the preliminary sanity checks on a
 	// block also include a check similar to this one, but this check
 	// expands the count to include a precise count of pay-to-script-hash
 	// signature operations in each of the input transaction public key
 	// scripts.
+	//
+	// Also note that as of the phonon hardfork this check is replaced
+	// with the more accurate SigCheck code.
 	transactions := block.Transactions()
-	totalSigOpCost := 0
-	nBlockBytes := block.MsgBlock().SerializeSize()
-	maxSigOps := MaxBlockSigOps(uint32(nBlockBytes))
-	for i, tx := range transactions {
-		// Since the first (and only the first) transaction has
-		// already been verified to be a coinbase transaction,
-		// use i == 0 as an optimization for the flag to
-		// countP2SHSigOps for whether or not the transaction is
-		// a coinbase transaction rather than having to do a
-		// full coinbase check again.
-		sigOpCost, err := GetSigOps(tx, i == 0, view, scriptFlags)
-		if err != nil {
-			return err
-		}
+	if !phononActive {
+		totalSigOpCost := 0
+		nBlockBytes := block.MsgBlock().SerializeSize()
+		maxSigOps := MaxBlockSigOps(uint32(nBlockBytes))
+		for i, tx := range transactions {
+			// Since the first (and only the first) transaction has
+			// already been verified to be a coinbase transaction,
+			// use i == 0 as an optimization for the flag to
+			// countP2SHSigOps for whether or not the transaction is
+			// a coinbase transaction rather than having to do a
+			// full coinbase check again.
+			sigOpCost, err := GetSigOps(tx, i == 0, view, scriptFlags)
+			if err != nil {
+				return err
+			}
 
-		// Check for overflow or going over the limits.  We have to do
-		// this on every loop iteration to avoid overflow.
-		lastSigOpCost := totalSigOpCost
-		totalSigOpCost += sigOpCost
-		if totalSigOpCost < lastSigOpCost || totalSigOpCost > maxSigOps {
-			str := fmt.Sprintf("block contains too many "+
-				"signature operations - got %v, max %v",
-				totalSigOpCost, maxSigOps)
-			return ruleError(ErrTooManySigOps, str)
+			// Check for overflow or going over the limits.  We have to do
+			// this on every loop iteration to avoid overflow.
+			lastSigOpCost := totalSigOpCost
+			totalSigOpCost += sigOpCost
+			if totalSigOpCost < lastSigOpCost || totalSigOpCost > maxSigOps {
+				str := fmt.Sprintf("block contains too many "+
+					"signature operations - got %v, max %v",
+					totalSigOpCost, maxSigOps)
+				return ruleError(ErrTooManySigOps, str)
+			}
 		}
 	}
 
@@ -1347,8 +1371,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// expensive ECDSA signature check scripts.  Doing this last helps
 	// prevent CPU exhaustion attacks.
 	if runScripts {
+		maxSigChecks := b.excessiveBlockSize / BlockMaxBytesMaxSigChecksRatio
 		err := checkBlockScripts(block, view, scriptFlags, b.sigCache,
-			b.hashCache)
+			b.hashCache, maxSigChecks)
 		if err != nil {
 			return err
 		}

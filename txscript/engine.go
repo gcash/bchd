@@ -108,6 +108,18 @@ const (
 	// with OP_CHECKMULTISIG. When active the dummy element signals the
 	// use of schnorr or ECDSA.
 	ScriptVerifySchnorrMultisig
+
+	// ScriptReportSigChecks is used to signal that the sig checks reported
+	// by the vm need to be checked again the consensus rules.
+	ScriptReportSigChecks
+
+	// ScriptVerifyInputSigChecks verifies that the sig check density in
+	// the input script is less than the max.
+	ScriptVerifyInputSigChecks
+
+	// ScriptVerifyReverseBytes enables the use of OP_REVERSEBYTES in the
+	// script.
+	ScriptVerifyReverseBytes
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -145,6 +157,7 @@ type Engine struct {
 	bip16           bool     // treat execution as pay-to-script-hash
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
+	sigChecks       int
 }
 
 // hasFlag returns whether the script engine instance has the passed flag set.
@@ -278,6 +291,15 @@ func (vm *Engine) DisasmScript(idx int) (string, error) {
 	return disstr, nil
 }
 
+// SigChecks returns the number of SigChecks accumulated during
+// execution. Note this will return the number at the specific
+// step the engine is currently on. If you want the total number
+// of SigChecks this must be called after script execution has
+// finished.
+func (vm *Engine) SigChecks() int {
+	return vm.sigChecks
+}
+
 // CheckErrorCondition returns nil if the running script has ended and was
 // successful, leaving a a true boolean on the stack.  An error otherwise,
 // including if the script has not finished.
@@ -306,6 +328,13 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 	} else if vm.dstack.Depth() < 1 {
 		return scriptError(ErrEmptyStack,
 			"stack empty at end of script execution")
+	}
+
+	if vm.hasFlag(ScriptVerifyInputSigChecks) {
+		if len(vm.scripts[0]) < vm.sigChecks*43-60 {
+			return scriptError(ErrInputSigChecks,
+				"script exceeds maximum signature density")
+		}
 	}
 
 	v, err := vm.dstack.PopBool(false)
