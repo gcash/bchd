@@ -277,14 +277,6 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFl
 		return ruleError(ErrTxTooSmall, str)
 	}
 
-	// FIXME: Only count if phonon is not active
-	sigOps := CountSigOps(tx, scriptFlags)
-	if sigOps > MaxTransactionSigOps {
-		str := fmt.Sprintf("transaction has too many sigops - got "+
-			"%d, max %d", sigOps, MaxTransactionSigOps)
-		return ruleError(ErrTxTooManySigOps, str)
-	}
-
 	// Ensure the transaction amounts are in range.  Each transaction
 	// output must not be negative or more than the max allowed per
 	// transaction.  Also, the total of all outputs must abide by the same
