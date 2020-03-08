@@ -392,6 +392,8 @@ var RegressionNetParams = Params{
 	DaaForkHeight:               0, // Always active on regtest
 	MagneticAnonomalyForkHeight: 1000,
 
+	PhononActivationTime: 1589544000,
+
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes

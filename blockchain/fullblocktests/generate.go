@@ -1086,7 +1086,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b16", outs[6], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// ---------------------------------------------------------------------
 	// Cross-fork spend tests.
@@ -1240,7 +1240,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = append(tooManySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b32", outs[9], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKMULTISIGVERIFY.
 	//
@@ -1261,7 +1261,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = append(manySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b34", outs[10], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKSIGVERIFY.
 	//
@@ -1282,7 +1282,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b36", outs[11], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// ---------------------------------------------------------------------
 	// Spending of tx outputs in block that failed to connect tests.
@@ -1915,7 +1915,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		maxScriptElementSize+1)
 	g.nextBlock("b70", outs[21], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with more than max allowed signature operations such
 	// that the signature operation that pushes it over the limit is before
@@ -1931,7 +1931,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOpsPerMB+2:], 0xffffffff)
 	g.nextBlock("b71", outs[21], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with the max allowed signature operations such that all
 	// counted signature operations are before an invalid push data that

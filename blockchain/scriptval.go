@@ -237,6 +237,7 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 
 	// Collect all of the transaction inputs and required information for
 	// validation.
+	sigChecks := uint32(0)
 	txIns := tx.MsgTx().TxIn
 	txValItems := make([]*txValidateItem, 0, len(txIns))
 	for txInIdx, txIn := range txIns {
@@ -246,10 +247,11 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 		}
 
 		txVI := &txValidateItem{
-			txInIndex: txInIdx,
-			txIn:      txIn,
-			tx:        tx,
-			sigHashes: cachedHashes,
+			txInIndex:   txInIdx,
+			txIn:        txIn,
+			tx:          tx,
+			txSigChecks: &sigChecks,
+			sigHashes:   cachedHashes,
 		}
 		txValItems = append(txValItems, txVI)
 	}
