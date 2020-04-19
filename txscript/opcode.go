@@ -1543,6 +1543,11 @@ func opcodeSize(op *parsedOpcode, vm *Engine) error {
 // {0x01} OP_REVERSEBYTES -> {0x01}
 // {0x01, 0x02, 0x03, 0x04} OP_REVERSEBYTES -> {0x04, 0x03, 0x02, 0x01}
 func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyReverseBytes) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	a, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err

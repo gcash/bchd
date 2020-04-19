@@ -195,6 +195,8 @@ func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 			flags |= ScriptVerifyCompressedPubkey
 		case "SCHNORR_MULTISIG":
 			flags |= ScriptVerifySchnorrMultisig
+		case "REVERSEBYTES":
+			flags |= ScriptVerifyReverseBytes
 		default:
 			return flags, fmt.Errorf("invalid flag: %s", flag)
 		}
