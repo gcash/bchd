@@ -226,7 +226,7 @@ const (
 	OP_NOP10               = 0xb9 // 185
 	OP_CHECKDATASIG        = 0xba // 186
 	OP_CHECKDATASIGVERIFY  = 0xbb // 187
-	OP_UNKNOWN188          = 0xbc // 188
+	OP_REVERSEBYTES        = 0xbc // 188
 	OP_UNKNOWN189          = 0xbd // 189
 	OP_UNKNOWN190          = 0xbe // 190
 	OP_UNKNOWN191          = 0xbf // 191
@@ -442,11 +442,12 @@ var opcodeArray = [256]opcode{
 	OP_TUCK:         {OP_TUCK, "OP_TUCK", 1, opcodeTuck},
 
 	// Splice opcodes.
-	OP_CAT:     {OP_CAT, "OP_CAT", 1, opcodeCat},
-	OP_SPLIT:   {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
-	OP_NUM2BIN: {OP_NUM2BIN, "OP_NUM2BIN", 1, opcodeNum2bin},
-	OP_BIN2NUM: {OP_BIN2NUM, "OP_BIN2NUM", 1, opcodeBin2num},
-	OP_SIZE:    {OP_SIZE, "OP_SIZE", 1, opcodeSize},
+	OP_CAT:          {OP_CAT, "OP_CAT", 1, opcodeCat},
+	OP_SPLIT:        {OP_SPLIT, "OP_SPLIT", 1, opcodeSplit},
+	OP_NUM2BIN:      {OP_NUM2BIN, "OP_NUM2BIN", 1, opcodeNum2bin},
+	OP_BIN2NUM:      {OP_BIN2NUM, "OP_BIN2NUM", 1, opcodeBin2num},
+	OP_SIZE:         {OP_SIZE, "OP_SIZE", 1, opcodeSize},
+	OP_REVERSEBYTES: {OP_REVERSEBYTES, "OP_REVERSEBYTES", 1, opcodeReverseBytes},
 
 	// Bitwise logic opcodes.
 	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
@@ -512,7 +513,6 @@ var opcodeArray = [256]opcode{
 	OP_NOP10: {OP_NOP10, "OP_NOP10", 1, opcodeNop},
 
 	// Undefined opcodes.
-	OP_UNKNOWN188: {OP_UNKNOWN188, "OP_UNKNOWN188", 1, opcodeInvalid},
 	OP_UNKNOWN189: {OP_UNKNOWN189, "OP_UNKNOWN189", 1, opcodeInvalid},
 	OP_UNKNOWN190: {OP_UNKNOWN190, "OP_UNKNOWN190", 1, opcodeInvalid},
 	OP_UNKNOWN191: {OP_UNKNOWN191, "OP_UNKNOWN191", 1, opcodeInvalid},
@@ -1531,6 +1531,27 @@ func opcodeSize(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(scriptNum(len(so)))
+	return nil
+}
+
+// opcodeReverseBytes fails immediately if the stack is empty.
+// Otherwise, the top stack item is removed from the stack, and
+// a byte-reversed version is pushed onto the stack.
+//
+// Stack transformation:
+// {} OP_REVERSEBYTES -> {}
+// {0x01} OP_REVERSEBYTES -> {0x01}
+// {0x01, 0x02, 0x03, 0x04} OP_REVERSEBYTES -> {0x04, 0x03, 0x02, 0x01}
+func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		x := len(a) - 1 - i
+		a[i], a[x] = a[x], a[i]
+	}
+	vm.dstack.PushByteArray(a)
 	return nil
 }
 
