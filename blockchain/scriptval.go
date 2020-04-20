@@ -211,10 +211,10 @@ func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
 }
 
 // ValidateTransactionScripts validates the scripts for the passed transaction
-// using multiple goroutines.
+// using multiple goroutines. It returns the number of sigchecks in the transaction.
 func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
-	hashCache *txscript.HashCache) error {
+	hashCache *txscript.HashCache) (uint32, error) {
 
 	// If the HashCache is present, and it doesn't yet contain the
 	// partial sighashes for this transaction, then we add the
@@ -258,7 +258,10 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 
 	// Validate all of the inputs.
 	validator := newTxValidator(utxoView, flags, sigCache, hashCache, 0)
-	return validator.Validate(txValItems)
+	if err := validator.Validate(txValItems); err != nil {
+		return 0, err
+	}
+	return validator.sigChecks, nil
 }
 
 // checkBlockScripts executes and validates the scripts for all transactions in

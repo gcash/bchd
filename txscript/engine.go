@@ -110,7 +110,7 @@ const (
 	ScriptVerifySchnorrMultisig
 
 	// ScriptReportSigChecks is used to signal that the sig checks reported
-	// by the vm need to be checked again the consensus rules.
+	// by the vm need to be checked against the consensus rules.
 	ScriptReportSigChecks
 
 	// ScriptVerifyInputSigChecks verifies that the sig check density in

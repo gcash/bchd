@@ -974,7 +974,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 
 	// Verify crypto signatures for each input and reject the transaction if
 	// any don't verify.
-	err = blockchain.ValidateTransactionScripts(tx, utxoView, scriptFlags,
+	_, err = blockchain.ValidateTransactionScripts(tx, utxoView, scriptFlags,
 		mp.cfg.SigCache, mp.cfg.HashCache)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {

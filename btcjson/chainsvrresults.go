@@ -135,12 +135,13 @@ type GetBlockChainInfoResult struct {
 // GetBlockTemplateResultTx models the transactions field of the
 // getblocktemplate command.
 type GetBlockTemplateResultTx struct {
-	Data    string  `json:"data"`
-	Hash    string  `json:"hash"`
-	Depends []int64 `json:"depends"`
-	Fee     int64   `json:"fee"`
-	SigOps  int64   `json:"sigops"`
-	Size    int64   `json:"size"`
+	Data      string  `json:"data"`
+	Hash      string  `json:"hash"`
+	Depends   []int64 `json:"depends"`
+	Fee       int64   `json:"fee"`
+	SigOps    int64   `json:"sigops"`
+	SigChecks int64   `json:"sigchecks"`
+	Size      int64   `json:"size"`
 }
 
 // GetBlockTemplateResultAux models the coinbaseaux field of the
@@ -160,6 +161,8 @@ type GetBlockTemplateResult struct {
 	PreviousHash  string                     `json:"previousblockhash"`
 	SigOpLimit    int64                      `json:"sigoplimit,omitempty"`
 	SizeLimit     int64                      `json:"sizelimit,omitempty"`
+	SigCheckLimit int64                      `json:"sigchecklimit,omitempty"`
+	SigCheckTotal int64                      `json:"sigchecktotal,omitempty"`
 	Transactions  []GetBlockTemplateResultTx `json:"transactions"`
 	Version       int32                      `json:"version"`
 	CoinbaseAux   *GetBlockTemplateResultAux `json:"coinbaseaux,omitempty"`

@@ -1697,9 +1697,11 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 	numTx := len(msgBlock.Transactions)
 	transactions := make([]btcjson.GetBlockTemplateResultTx, 0, numTx-1)
 	txIndex := make(map[chainhash.Hash]int64, numTx)
+	sigChecks := int64(0)
 	for i, tx := range msgBlock.Transactions {
 		txHash := tx.TxHash()
 		txIndex[txHash] = int64(i)
+		sigChecks += template.SigChecks[i]
 
 		// Skip the coinbase transaction.
 		if i == 0 {
@@ -1732,12 +1734,13 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 
 		bTx := bchutil.NewTx(tx)
 		resultTx := btcjson.GetBlockTemplateResultTx{
-			Data:    hex.EncodeToString(txBuf.Bytes()),
-			Hash:    txHash.String(),
-			Depends: depends,
-			Fee:     template.Fees[i],
-			SigOps:  template.SigOpCosts[i],
-			Size:    int64(bTx.MsgTx().SerializeSize()),
+			Data:      hex.EncodeToString(txBuf.Bytes()),
+			Hash:      txHash.String(),
+			Depends:   depends,
+			Fee:       template.Fees[i],
+			SigOps:    template.SigOpCosts[i],
+			SigChecks: template.SigChecks[i],
+			Size:      int64(bTx.MsgTx().SerializeSize()),
 		}
 		transactions = append(transactions, resultTx)
 	}
@@ -1749,22 +1752,24 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 	targetDifficulty := fmt.Sprintf("%064x", blockchain.CompactToBig(header.Bits))
 	templateID := encodeTemplateID(state.prevHash, state.lastGenerated)
 	reply := btcjson.GetBlockTemplateResult{
-		Bits:         strconv.FormatInt(int64(header.Bits), 16),
-		CurTime:      header.Timestamp.Unix(),
-		Height:       int64(template.Height),
-		PreviousHash: header.PrevBlock.String(),
-		SigOpLimit:   int64(template.MaxSigOps),
-		SizeLimit:    int64(template.MaxBlockSize),
-		Transactions: transactions,
-		Version:      header.Version,
-		LongPollID:   templateID,
-		SubmitOld:    submitOld,
-		Target:       targetDifficulty,
-		MinTime:      state.minTimestamp.Unix(),
-		MaxTime:      maxTime.Unix(),
-		Mutable:      gbtMutableFields,
-		NonceRange:   gbtNonceRange,
-		Capabilities: gbtCapabilities,
+		Bits:          strconv.FormatInt(int64(header.Bits), 16),
+		CurTime:       header.Timestamp.Unix(),
+		Height:        int64(template.Height),
+		PreviousHash:  header.PrevBlock.String(),
+		SigOpLimit:    int64(template.MaxSigOps),
+		SigCheckLimit: int64(template.MaxSigChecks),
+		SigCheckTotal: sigChecks,
+		SizeLimit:     int64(template.MaxBlockSize),
+		Transactions:  transactions,
+		Version:       header.Version,
+		LongPollID:    templateID,
+		SubmitOld:     submitOld,
+		Target:        targetDifficulty,
+		MinTime:       state.minTimestamp.Unix(),
+		MaxTime:       maxTime.Unix(),
+		Mutable:       gbtMutableFields,
+		NonceRange:    gbtNonceRange,
+		Capabilities:  gbtCapabilities,
 	}
 
 	if useCoinbaseValue {
