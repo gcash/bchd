@@ -77,6 +77,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrUnsatisfiedLockTime, "ErrUnsatisfiedLockTime"},
 		{ErrInvalidDummy, "ErrInvalidDummy"},
 		{ErrInvalidBitCount, "ErrInvalidBitCount"},
+		{ErrInputSigChecks, "ErrInputSigChecks"},
 		{0xffff, "Unknown ErrorCode (65535)"},
 	}
 

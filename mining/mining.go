@@ -205,6 +205,10 @@ type BlockTemplate struct {
 	// transaction in the generated template performs.
 	SigOpCosts []int64
 
+	// SigChecks is the total number of sigchecks for each transaction in
+	// the generated template.
+	SigChecks []int64
+
 	// Height is the height at which the block template connects to the main
 	// chain.
 	Height int32
@@ -217,6 +221,10 @@ type BlockTemplate struct {
 
 	// MaxBlockSize is the block size consensus rule used when creating the block
 	MaxBlockSize uint32
+
+	// MaxSigChecks is the total sigchecks allowed in the block given the
+	// consensus rules.
+	MaxSigChecks uint32
 
 	// MaxSigOps is the block size consensus rule used when creating the block
 	MaxSigOps uint32
@@ -453,9 +461,15 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	best := g.chain.BestSnapshot()
 	nextBlockHeight := best.Height + 1
 
+	ts := medianAdjustedTime(best, g.timeSource)
+
 	uahfActive := nextBlockHeight >= g.chainParams.UahfForkHeight
 
+	phononActive := uint64(ts.Unix()) >= g.chainParams.PhononActivationTime
+
 	maxBlockSize := g.chain.MaxBlockSize(uahfActive)
+
+	maxSigChecks := maxBlockSize / blockchain.BlockMaxBytesMaxSigChecksRatio
 
 	// Create a standard coinbase transaction paying to the provided
 	// address.  NOTE: The coinbase value will be updated to include the
@@ -484,6 +498,10 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// the flag in both the mempool and here for miners so they can accept
 	// segwit recovery txs.
 	scriptFlags := txscript.StandardVerifyFlags
+
+	if phononActive {
+		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyReverseBytes
+	}
 
 	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, scriptFlags))
 
@@ -519,8 +537,10 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// the coinbase fee which will be updated later.
 	txFees := make([]int64, 0, len(sourceTxns))
 	txSigOps := make([]int64, 0, len(sourceTxns))
+	txSigChecks := make([]int64, 0, len(sourceTxns))
 	txFees = append(txFees, -1) // Updated once known
 	txSigOps = append(txSigOps, coinbaseSigOps)
+	txSigChecks = append(txSigChecks, 0) // Coinbase has zero sigchecks
 
 	log.Debugf("Considering %d transactions for inclusion to new block",
 		len(sourceTxns))
@@ -620,6 +640,7 @@ mempoolLoop:
 	// transaction.
 	blockSize := uint32(blockHeaderOverhead * coinbaseTx.MsgTx().SerializeSize())
 	blockSigOps := coinbaseSigOps
+	blockSigChecks := int64(0)
 	totalFees := int64(0)
 	maxSigOps := blockchain.MaxBlockSigOps(blockSize)
 
@@ -656,12 +677,14 @@ mempoolLoop:
 			logSkippedDeps(tx, deps)
 			continue
 		}
-		if blockSigOps+int64(sigOps) < blockSigOps ||
-			blockSigOps+int64(sigOps) > int64(maxSigOps) {
-			log.Tracef("Skipping tx %s because it would "+
-				"exceed the maximum sigops per block", tx.Hash())
-			logSkippedDeps(tx, deps)
-			continue
+		if !phononActive {
+			if blockSigOps+int64(sigOps) < blockSigOps ||
+				blockSigOps+int64(sigOps) > int64(maxSigOps) {
+				log.Tracef("Skipping tx %s because it would "+
+					"exceed the maximum sigops per block", tx.Hash())
+				logSkippedDeps(tx, deps)
+				continue
+			}
 		}
 
 		// Skip free transactions once the block is larger than the
@@ -718,7 +741,7 @@ mempoolLoop:
 			logSkippedDeps(tx, deps)
 			continue
 		}
-		err = blockchain.ValidateTransactionScripts(tx, blockUtxos,
+		sigchecks, err := blockchain.ValidateTransactionScripts(tx, blockUtxos,
 			txscript.StandardVerifyFlags, g.sigCache,
 			g.hashCache)
 		if err != nil {
@@ -726,6 +749,16 @@ mempoolLoop:
 				"ValidateTransactionScripts: %v", tx.Hash(), err)
 			logSkippedDeps(tx, deps)
 			continue
+		}
+
+		if phononActive {
+			if blockSigChecks+int64(sigchecks) < blockSigChecks ||
+				blockSigChecks+int64(sigchecks) > int64(maxSigChecks) {
+				log.Tracef("Skipping tx %s because it would "+
+					"exceed the maximum sigchecks per block", tx.Hash())
+				logSkippedDeps(tx, deps)
+				continue
+			}
 		}
 
 		// Spend the transaction inputs in the block utxo view and add
@@ -740,9 +773,11 @@ mempoolLoop:
 		blockTxns = append(blockTxns, tx)
 		blockSize = blockPlusTxSize
 		blockSigOps += int64(sigOps)
+		blockSigChecks += int64(sigchecks)
 		totalFees += prioItem.fee
 		txFees = append(txFees, prioItem.fee)
 		txSigOps = append(txSigOps, int64(sigOps))
+		txSigChecks = append(txSigChecks, int64(sigchecks))
 
 		log.Tracef("Adding tx %s (priority %.2f, feePerKB %.2f)",
 			prioItem.tx.Hash(), prioItem.priority, prioItem.feePerKB)
@@ -770,7 +805,6 @@ mempoolLoop:
 	// Calculate the required difficulty for the block.  The timestamp
 	// is potentially adjusted to ensure it comes after the median time of
 	// the last several blocks per the chain consensus rules.
-	ts := medianAdjustedTime(best, g.timeSource)
 	reqDifficulty, err := g.chain.CalcNextRequiredDifficulty(ts)
 	if err != nil {
 		return nil, err
@@ -824,6 +858,8 @@ mempoolLoop:
 		Block:           &msgBlock,
 		Fees:            txFees,
 		SigOpCosts:      txSigOps,
+		SigChecks:       txSigChecks,
+		MaxSigChecks:    uint32(maxSigChecks),
 		Height:          nextBlockHeight,
 		ValidPayAddress: payToAddress != nil,
 		MaxBlockSize:    uint32(maxBlockSize),

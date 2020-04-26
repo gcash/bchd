@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/gcash/bchd/txscript"
@@ -17,10 +18,11 @@ import (
 
 // txValidateItem holds a transaction along with which input to validate.
 type txValidateItem struct {
-	txInIndex int
-	txIn      *wire.TxIn
-	tx        *bchutil.Tx
-	sigHashes *txscript.TxSigHashes
+	txInIndex   int
+	txIn        *wire.TxIn
+	tx          *bchutil.Tx
+	sigHashes   *txscript.TxSigHashes
+	txSigChecks *uint32
 }
 
 // txValidator provides a type which asynchronously validates transaction
@@ -34,6 +36,8 @@ type txValidator struct {
 	flags        txscript.ScriptFlags
 	sigCache     *txscript.SigCache
 	hashCache    *txscript.HashCache
+	sigChecks    uint32
+	maxSigChecks uint32
 }
 
 // sendResult sends the result of a script pair validation on the internal
@@ -101,6 +105,26 @@ out:
 				err := ruleError(ErrScriptValidation, str)
 				v.sendResult(err)
 				break out
+			}
+
+			atomic.AddUint32(txVI.txSigChecks, uint32(vm.SigChecks()))
+
+			if v.flags.HasFlag(txscript.ScriptReportSigChecks) && atomic.LoadUint32(txVI.txSigChecks) > MaxTransactionSigChecks {
+				str := fmt.Sprintf("transaction %s too many sig checks",
+					txVI.tx.Hash().String())
+				err := ruleError(ErrTxTooManySigChecks, str)
+				v.sendResult(err)
+				break out
+			}
+
+			if v.maxSigChecks > 0 && v.flags.HasFlag(txscript.ScriptReportSigChecks) {
+				atomic.AddUint32(&v.sigChecks, uint32(vm.SigChecks()))
+				if atomic.LoadUint32(&v.sigChecks) > v.maxSigChecks {
+					str := fmt.Sprintf("block too many sig checks")
+					err := ruleError(ErrTooManySigChecks, str)
+					v.sendResult(err)
+					break out
+				}
 			}
 
 			// Validation succeeded.
@@ -173,7 +197,7 @@ func (v *txValidator) Validate(items []*txValidateItem) error {
 // newTxValidator returns a new instance of txValidator to be used for
 // validating transaction scripts asynchronously.
 func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
-	sigCache *txscript.SigCache, hashCache *txscript.HashCache) *txValidator {
+	sigCache *txscript.SigCache, hashCache *txscript.HashCache, maxSigChecks uint32) *txValidator {
 	return &txValidator{
 		validateChan: make(chan *txValidateItem),
 		quitChan:     make(chan struct{}),
@@ -182,14 +206,15 @@ func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
 		sigCache:     sigCache,
 		hashCache:    hashCache,
 		flags:        flags,
+		maxSigChecks: maxSigChecks,
 	}
 }
 
 // ValidateTransactionScripts validates the scripts for the passed transaction
-// using multiple goroutines.
+// using multiple goroutines. It returns the number of sigchecks in the transaction.
 func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
-	hashCache *txscript.HashCache) error {
+	hashCache *txscript.HashCache) (uint32, error) {
 
 	// If the HashCache is present, and it doesn't yet contain the
 	// partial sighashes for this transaction, then we add the
@@ -212,6 +237,7 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 
 	// Collect all of the transaction inputs and required information for
 	// validation.
+	sigChecks := uint32(0)
 	txIns := tx.MsgTx().TxIn
 	txValItems := make([]*txValidateItem, 0, len(txIns))
 	for txInIdx, txIn := range txIns {
@@ -221,24 +247,28 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 		}
 
 		txVI := &txValidateItem{
-			txInIndex: txInIdx,
-			txIn:      txIn,
-			tx:        tx,
-			sigHashes: cachedHashes,
+			txInIndex:   txInIdx,
+			txIn:        txIn,
+			tx:          tx,
+			txSigChecks: &sigChecks,
+			sigHashes:   cachedHashes,
 		}
 		txValItems = append(txValItems, txVI)
 	}
 
 	// Validate all of the inputs.
-	validator := newTxValidator(utxoView, flags, sigCache, hashCache)
-	return validator.Validate(txValItems)
+	validator := newTxValidator(utxoView, flags, sigCache, hashCache, 0)
+	if err := validator.Validate(txValItems); err != nil {
+		return 0, err
+	}
+	return validator.sigChecks, nil
 }
 
 // checkBlockScripts executes and validates the scripts for all transactions in
 // the passed block using multiple goroutines.
 func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	scriptFlags txscript.ScriptFlags, sigCache *txscript.SigCache,
-	hashCache *txscript.HashCache) error {
+	hashCache *txscript.HashCache, maxSigChecks uint32) error {
 
 	// Collect all of the transaction inputs and required information for
 	// validation for all transactions in the block into a single slice.
@@ -248,6 +278,7 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	}
 	txValItems := make([]*txValidateItem, 0, numInputs)
 	for _, tx := range block.Transactions() {
+		sigChecks := uint32(0)
 
 		// If the HashCache is present, and it doesn't yet contain the
 		// partial sighashes for this transaction, then we add the
@@ -275,21 +306,23 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 			}
 
 			txVI := &txValidateItem{
-				txInIndex: txInIdx,
-				txIn:      txIn,
-				tx:        tx,
-				sigHashes: cachedHashes,
+				txInIndex:   txInIdx,
+				txIn:        txIn,
+				tx:          tx,
+				sigHashes:   cachedHashes,
+				txSigChecks: &sigChecks,
 			}
 			txValItems = append(txValItems, txVI)
 		}
 	}
 
 	// Validate all of the inputs.
-	validator := newTxValidator(utxoView, scriptFlags, sigCache, hashCache)
+	validator := newTxValidator(utxoView, scriptFlags, sigCache, hashCache, maxSigChecks)
 	start := time.Now()
 	if err := validator.Validate(txValItems); err != nil {
 		return err
 	}
+
 	elapsed := time.Since(start)
 
 	log.Tracef("block %v took %v to verify", block.Hash(), elapsed)

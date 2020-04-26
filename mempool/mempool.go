@@ -741,13 +741,11 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		magneticAnomalyActive = true
 	}
 
-	// Check if MagneticAnomaly is enabled. If so let's admit CheckDataSig transactions
-	// into the mempool.
 	scriptFlags := txscript.StandardVerifyFlags
-	if magneticAnomalyActive {
-		scriptFlags |= txscript.ScriptVerifySigPushOnly |
-			txscript.ScriptVerifyCleanStack |
-			txscript.ScriptVerifyCheckDataSig
+
+	// Check if phonon is enabled. If so we add new script flags
+	if uint64(mp.cfg.MedianTimePast().Unix()) >= mp.cfg.ChainParams.PhononActivationTime {
+		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyInputSigChecks | txscript.ScriptVerifyReverseBytes
 	}
 
 	// Perform preliminary sanity checks on the transaction.  This makes
@@ -976,9 +974,8 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 
 	// Verify crypto signatures for each input and reject the transaction if
 	// any don't verify.
-	err = blockchain.ValidateTransactionScripts(tx, utxoView, scriptFlags,
-		mp.cfg.SigCache,
-		mp.cfg.HashCache)
+	_, err = blockchain.ValidateTransactionScripts(tx, utxoView, scriptFlags,
+		mp.cfg.SigCache, mp.cfg.HashCache)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)

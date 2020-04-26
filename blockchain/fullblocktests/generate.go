@@ -1086,7 +1086,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps := repeatOpcode(txscript.OP_CHECKSIG, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b16", outs[6], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// ---------------------------------------------------------------------
 	// Cross-fork spend tests.
@@ -1240,7 +1240,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = append(tooManySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b32", outs[9], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKMULTISIGVERIFY.
 	//
@@ -1261,7 +1261,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = append(manySigOps, txscript.OP_CHECKSIG)
 	g.nextBlock("b34", outs[10], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with max signature operations as OP_CHECKSIGVERIFY.
 	//
@@ -1282,7 +1282,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tooManySigOps = repeatOpcode(txscript.OP_CHECKSIGVERIFY, maxBlockSigOpsPerMB+1)
 	g.nextBlock("b36", outs[11], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// ---------------------------------------------------------------------
 	// Spending of tx outputs in block that failed to connect tests.
@@ -1915,7 +1915,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		maxScriptElementSize+1)
 	g.nextBlock("b70", outs[21], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with more than max allowed signature operations such
 	// that the signature operation that pushes it over the limit is before
@@ -1931,7 +1931,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	binary.LittleEndian.PutUint32(tooManySigOps[maxBlockSigOpsPerMB+2:], 0xffffffff)
 	g.nextBlock("b71", outs[21], replaceSpendScript(tooManySigOps))
 	g.assertTipBlockSigOpsCount(maxBlockSigOpsPerMB + 1)
-	rejected(blockchain.ErrTxTooManySigOps)
+	rejected(blockchain.ErrTooManySigOps)
 
 	// Create block with the max allowed signature operations such that all
 	// counted signature operations are before an invalid push data that
@@ -2667,5 +2667,372 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 		rejectBlock(g.tipName, g.tip, blockchain.ErrScriptValidation),
 	})
 
+	return tests, nil
+}
+
+// GeneratePhononBlocks generates a test chain containing several
+// OP_REVERSEBYTES transactions per block and blocks with too many sigchecks.
+func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
+	// In order to simplify the generation code which really should never
+	// fail unless the test code itself is broken, panics are used
+	// internally.  This deferred func ensures any panics don't escape the
+	// generator by replacing the named error return with the underlying
+	// panic error.
+	defer func() {
+		if r := recover(); r != nil {
+			tests = nil
+
+			switch rt := r.(type) {
+			case string:
+				err = errors.New(rt)
+			case error:
+				err = rt
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+
+	// Create a test generator instance initialized with the genesis block
+	// as the tip.
+	g, err := makeTestGenerator(regressionNetParams)
+	if err != nil {
+		return nil, err
+	}
+
+	acceptBlock := func(blockName string, block *wire.MsgBlock, isMainChain, isOrphan bool) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return AcceptedBlock{blockName, block, blockHeight, isMainChain,
+			isOrphan}
+	}
+	rejectBlock := func(blockName string, block *wire.MsgBlock, code blockchain.ErrorCode) TestInstance {
+		blockHeight := g.blockHeights[blockName]
+		return RejectedBlock{blockName, block, blockHeight, code}
+	}
+
+	coinbaseMaturity := g.params.CoinbaseMaturity
+	var testInstances []TestInstance
+	for i := uint16(0); i < coinbaseMaturity; i++ {
+		blockName := fmt.Sprintf("bm%d", i)
+		g.nextBlock(blockName, nil)
+		g.saveTipCoinbaseOut()
+		testInstances = append(testInstances, acceptBlock(g.tipName,
+			g.tip, true, false))
+	}
+	tests = append(tests, testInstances)
+
+	// Collect spendable outputs.  This simplifies the code below.
+	var outs []*spendableOut
+	for i := uint16(0); i < coinbaseMaturity; i++ {
+		op := g.oldestCoinbaseOut()
+		outs = append(outs, &op)
+	}
+
+	addReverseBytes := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		// Create one tx paying a p2sh output
+		tx1 := createSpendTx(outs[0], 0)
+		builder := txscript.NewScriptBuilder().
+			AddOp(txscript.OP_REVERSEBYTES).
+			AddData([]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11}).
+			AddOp(txscript.OP_EQUAL)
+		redeemScript, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.RegressionNetParams)
+		if err != nil {
+			panic(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			panic(err)
+		}
+		tx1.TxOut[0].PkScript = script
+
+		block.AddTransaction(tx1)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+		// Spend from tx1
+		so1 := &spendableOut{
+			amount: bchutil.Amount(tx1.TxOut[0].Value),
+			prevOut: wire.OutPoint{
+				Hash:  tx1.TxHash(),
+				Index: 0,
+			},
+		}
+
+		tx2 := createSpendTx(so1, 0)
+		tx2.TxIn[0].SignatureScript = []byte{txscript.OP_DATA_11, 0x11, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01}
+		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, txscript.OP_DATA_14)
+		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, redeemScript...)
+		block.AddTransaction(tx2)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	addJustEnoughTxSigChecks := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		builder := txscript.NewScriptBuilder().
+			AddInt64(1).
+			AddData(g.privKey.PubKey().SerializeCompressed()).
+			AddInt64(1).
+			AddOp(txscript.OP_CHECKMULTISIG)
+		redeemScript, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.RegressionNetParams)
+		if err != nil {
+			panic(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			panic(err)
+		}
+
+		outAmount := outs[1].amount / blockchain.MaxTransactionSigChecks
+
+		tx0 := createSpendTx(outs[1], 0)
+		tx0.TxOut = []*wire.TxOut{}
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
+			tx0.AddTxOut(&wire.TxOut{
+				PkScript: script,
+				Value:    int64(outAmount),
+			})
+		}
+		block.AddTransaction(tx0)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
+
+		tx1 := wire.NewMsgTx(1)
+		tx1.AddTxOut(wire.NewTxOut(1000, script))
+
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
+			tx1.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: wire.OutPoint{
+					Hash:  tx0.TxHash(),
+					Index: uint32(i),
+				},
+			})
+		}
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
+			sig, err := txscript.RawTxInSchnorrSignature(tx1, i,
+				redeemScript, txscript.SigHashAll, g.privKey, int64(outAmount))
+			if err != nil {
+				panic(err)
+			}
+			tx1.TxIn[i].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
+		}
+
+		block.AddTransaction(tx1)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	addTooManyTxSigChecks := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		builder := txscript.NewScriptBuilder().
+			AddInt64(1).
+			AddData(g.privKey.PubKey().SerializeCompressed()).
+			AddInt64(1).
+			AddOp(txscript.OP_CHECKMULTISIG)
+		redeemScript, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.RegressionNetParams)
+		if err != nil {
+			panic(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			panic(err)
+		}
+
+		outAmount := outs[2].amount / (blockchain.MaxTransactionSigChecks + 1)
+
+		tx0 := createSpendTx(outs[2], 0)
+		tx0.TxOut = []*wire.TxOut{}
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
+			tx0.AddTxOut(&wire.TxOut{
+				PkScript: script,
+				Value:    int64(outAmount),
+			})
+		}
+		block.AddTransaction(tx0)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
+
+		tx1 := wire.NewMsgTx(1)
+		tx1.AddTxOut(wire.NewTxOut(1000, script))
+
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
+			tx1.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: wire.OutPoint{
+					Hash:  tx0.TxHash(),
+					Index: uint32(i),
+				},
+			})
+		}
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
+			sig, err := txscript.RawTxInSchnorrSignature(tx1, i,
+				redeemScript, txscript.SigHashAll, g.privKey, int64(outAmount))
+			if err != nil {
+				panic(err)
+			}
+			tx1.TxIn[i].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
+		}
+
+		block.AddTransaction(tx1)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	addTooManyBlockSigChecks := func(block *wire.MsgBlock) {
+		// unsortedTxs is a slice of bchutil.Tx's that we will sort later using CTOR.
+		var unsortedTxs []*bchutil.Tx
+
+		// Let's first add any txs (excluding the coinbase) into unsortedTxs
+		for _, tx := range block.Transactions[1:] {
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx))
+		}
+
+		builder := txscript.NewScriptBuilder().
+			AddOp(txscript.OP_DUP).
+			AddData(g.privKey.PubKey().SerializeCompressed()).
+			AddOp(txscript.OP_TUCK).
+			AddOp(txscript.OP_CHECKSIGVERIFY).
+			AddOp(txscript.OP_CHECKSIG)
+		script, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+
+		so := outs[2]
+		tx0 := createSpendTx(so, 0)
+		tx0.TxOut = []*wire.TxOut{
+			{
+				PkScript: script,
+				Value:    int64(1000),
+			},
+			{
+				PkScript: append([]byte{txscript.OP_RETURN}, bytes.Repeat([]byte{0x00}, 20)...),
+			},
+		}
+		block.AddTransaction(tx0)
+		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
+
+		so = &spendableOut{
+			amount: 1000,
+			prevOut: wire.OutPoint{
+				Index: 0,
+				Hash:  tx0.TxHash(),
+			},
+		}
+
+		for i := 0; i < ((32000000/blockchain.BlockMaxBytesMaxSigChecksRatio)/2)+1; i++ {
+			tx1 := wire.NewMsgTx(1)
+			tx1.AddTxOut(wire.NewTxOut(1000, script))
+
+			tx1.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: so.prevOut,
+			})
+			sig, err := txscript.RawTxInSchnorrSignature(tx1, 0,
+				script, txscript.SigHashAll, g.privKey, int64(1000))
+			if err != nil {
+				panic(err)
+			}
+			tx1.TxIn[0].SignatureScript = pushDataScript(sig)
+
+			block.AddTransaction(tx1)
+			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
+
+			so = &spendableOut{
+				amount: 1000,
+				prevOut: wire.OutPoint{
+					Index: 0,
+					Hash:  tx1.TxHash(),
+				},
+			}
+		}
+
+		// Sort the unsortedTxs slice
+		sort.Sort(mining.TxSorter(unsortedTxs))
+		// Set block.Transactions to only the coinbase
+		block.Transactions = block.Transactions[:1]
+
+		// Add each tx from our (now sorted) slice
+		for _, tx := range unsortedTxs {
+			block.Transactions = append(block.Transactions, tx.MsgTx())
+		}
+	}
+
+	g.nextBlock("b0", nil, addReverseBytes)
+	tests = append(tests, []TestInstance{
+		acceptBlock(g.tipName, g.tip, true, false),
+	})
+	g.nextBlock("b1", nil, addJustEnoughTxSigChecks)
+	tests = append(tests, []TestInstance{
+		acceptBlock(g.tipName, g.tip, true, false),
+	})
+	g.nextBlock("b2", nil, addTooManyTxSigChecks)
+	tests = append(tests, []TestInstance{
+		rejectBlock(g.tipName, g.tip, blockchain.ErrTxTooManySigChecks),
+	})
+	g.setTip("b1")
+	g.nextBlock("b3", nil, addTooManyBlockSigChecks)
+	tests = append(tests, []TestInstance{
+		rejectBlock(g.tipName, g.tip, blockchain.ErrTooManySigChecks),
+	})
 	return tests, nil
 }

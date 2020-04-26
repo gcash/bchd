@@ -115,6 +115,10 @@ const (
 	// number of signature operations.
 	ErrTxTooManySigOps
 
+	// ErrTxTooManySigChecks indicates a transaction exceeds the maximum allowable
+	// number of signature checks.
+	ErrTxTooManySigChecks
+
 	// ErrBadTxOutValue indicates an output value for a transaction is
 	// invalid in some way such as being out of range.
 	ErrBadTxOutValue
@@ -165,6 +169,10 @@ const (
 	// ErrTooManySigOps indicates the total number of signature operations
 	// for a transaction or block exceed the maximum allowed limits.
 	ErrTooManySigOps
+
+	// ErrTooManySigChecks indicates that the block's signature checks exceeds
+	// the limit.
+	ErrTooManySigChecks
 
 	// ErrFirstTxNotCoinbase indicates the first transaction in a block
 	// is not a coinbase transaction.
@@ -270,6 +278,8 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidAncestorBlock:  "ErrInvalidAncestorBlock",
 	ErrPrevBlockNotBest:      "ErrPrevBlockNotBest",
 	ErrInvalidTxOrder:        "ErrInvalidTxOrder",
+	ErrTooManySigChecks:      "ErrTooManySigChecks",
+	ErrTxTooManySigChecks:    "ErrTxTooManySigChecks",
 }
 
 // String returns the ErrorCode as a human-readable name.
