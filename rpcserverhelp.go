@@ -292,12 +292,13 @@ var helpDescsEnUS = map[string]string{
 	"templaterequest-workid":       "The server provided workid if provided in block template (not applicable)",
 
 	// GetBlockTemplateResultTx help.
-	"getblocktemplateresulttx-data":    "Hex-encoded transaction data (byte-for-byte)",
-	"getblocktemplateresulttx-hash":    "Hex-encoded transaction hash (little endian if treated as a 256-bit number)",
-	"getblocktemplateresulttx-depends": "Other transactions before this one (by 1-based index in the 'transactions'  list) that must be present in the final block if this one is",
-	"getblocktemplateresulttx-fee":     "Difference in value between transaction inputs and outputs (in Satoshi)",
-	"getblocktemplateresulttx-sigops":  "Total number of signature operations as counted for purposes of block limits",
-	"getblocktemplateresulttx-size":    "The size of the transaction",
+	"getblocktemplateresulttx-data":      "Hex-encoded transaction data (byte-for-byte)",
+	"getblocktemplateresulttx-hash":      "Hex-encoded transaction hash (little endian if treated as a 256-bit number)",
+	"getblocktemplateresulttx-depends":   "Other transactions before this one (by 1-based index in the 'transactions'  list) that must be present in the final block if this one is",
+	"getblocktemplateresulttx-fee":       "Difference in value between transaction inputs and outputs (in Satoshi)",
+	"getblocktemplateresulttx-sigops":    "Total number of signature operations as counted for purposes of block limits",
+	"getblocktemplateresulttx-sigchecks": "Total number of signature checks as counted for purposes of block limits",
+	"getblocktemplateresulttx-size":      "The size of the transaction",
 
 	// GetBlockTemplateResultAux help.
 	"getblocktemplateresultaux-flags": "Hex-encoded byte-for-byte data to include in the coinbase signature script",
@@ -326,6 +327,8 @@ var helpDescsEnUS = map[string]string{
 	"getblocktemplateresult-noncerange":                 "Two concatenated hex-encoded big-endian 32-bit integers which represent the valid ranges of nonces the miner may scan",
 	"getblocktemplateresult-capabilities":               "List of server capabilities including 'proposal' to indicate support for block proposals",
 	"getblocktemplateresult-reject-reason":              "Reason the proposal was invalid as-is (only applies to proposal responses)",
+	"getblocktemplateresult-sigchecktotal":              "The total number of signature checks in the block template",
+	"getblocktemplateresult-sigchecklimit":              "The maximum number of signature checks allowed by the consensus rules",
 	"getblocktemplateresult-default_witness_commitment": "The witness commitment itself. Will be populated if the block has witness data",
 
 	// GetBlockTemplateCmd help.
