@@ -743,7 +743,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 
 	scriptFlags := txscript.StandardVerifyFlags
 
-	// Check if phonon is enabled. If so we add
+	// Check if phonon is enabled. If so we add new script flags
 	if uint64(mp.cfg.MedianTimePast().Unix()) >= mp.cfg.ChainParams.PhononActivationTime {
 		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyInputSigChecks | txscript.ScriptVerifyReverseBytes
 	}

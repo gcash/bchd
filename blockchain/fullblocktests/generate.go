@@ -2816,11 +2816,11 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 
-		outAmount := outs[1].amount / 3000
+		outAmount := outs[1].amount / blockchain.MaxTransactionSigChecks
 
 		tx0 := createSpendTx(outs[1], 0)
 		tx0.TxOut = []*wire.TxOut{}
-		for i := 0; i < 3000; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
 			tx0.AddTxOut(&wire.TxOut{
 				PkScript: script,
 				Value:    int64(outAmount),
@@ -2832,7 +2832,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		tx1 := wire.NewMsgTx(1)
 		tx1.AddTxOut(wire.NewTxOut(1000, script))
 
-		for i := 0; i < 3000; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
 			tx1.AddTxIn(&wire.TxIn{
 				PreviousOutPoint: wire.OutPoint{
 					Hash:  tx0.TxHash(),
@@ -2840,7 +2840,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 				},
 			})
 		}
-		for i := 0; i < 3000; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
 			sig, err := txscript.RawTxInSchnorrSignature(tx1, i,
 				redeemScript, txscript.SigHashAll, g.privKey, int64(outAmount))
 			if err != nil {
@@ -2891,11 +2891,11 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 
-		outAmount := outs[2].amount / 3001
+		outAmount := outs[2].amount / (blockchain.MaxTransactionSigChecks + 1)
 
 		tx0 := createSpendTx(outs[2], 0)
 		tx0.TxOut = []*wire.TxOut{}
-		for i := 0; i < 3001; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
 			tx0.AddTxOut(&wire.TxOut{
 				PkScript: script,
 				Value:    int64(outAmount),
@@ -2907,7 +2907,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		tx1 := wire.NewMsgTx(1)
 		tx1.AddTxOut(wire.NewTxOut(1000, script))
 
-		for i := 0; i < 3001; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
 			tx1.AddTxIn(&wire.TxIn{
 				PreviousOutPoint: wire.OutPoint{
 					Hash:  tx0.TxHash(),
@@ -2915,7 +2915,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 				},
 			})
 		}
-		for i := 0; i < 3001; i++ {
+		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
 			sig, err := txscript.RawTxInSchnorrSignature(tx1, i,
 				redeemScript, txscript.SigHashAll, g.privKey, int64(outAmount))
 			if err != nil {
