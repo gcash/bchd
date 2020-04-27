@@ -34,12 +34,11 @@ func TestMustRegisterPanic(t *testing.T) {
 	mustRegister(&MainNetParams)
 }
 
-// TestSeeds ensures the right seeds are defined.
-func TestSeeds(t *testing.T) {
+// TestMainNetSeeds ensures the right seeds are defined.
+func TestMainNetSeeds(t *testing.T) {
 	expectedSeeds := []DNSSeed{
 		{"seed.bchd.cash", true},
 		{"seed.bitcoinabc.org", true},
-		{"seed-abc.bitcoinforks.org", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
 	}
 
@@ -55,6 +54,31 @@ func TestSeeds(t *testing.T) {
 
 	for i := range MainNetParams.DNSSeeds {
 		if MainNetParams.DNSSeeds[i] != expectedSeeds[i] {
+			t.Error("Seed values are incorrect")
+			return
+		}
+	}
+}
+
+// TestTestNet3Seeds ensures the right seeds are defined.
+func TestTestNet3Seeds(t *testing.T) {
+	expectedSeeds := []DNSSeed{
+		{"testnet-seed.bchd.cash", true},
+		{"testnet-seed.bitcoinabc.org", true},
+	}
+
+	if TestNet3Params.DNSSeeds == nil {
+		t.Error("Seed values are not set")
+		return
+	}
+
+	if len(TestNet3Params.DNSSeeds) != len(expectedSeeds) {
+		t.Error("Incorrect number of seed values")
+		return
+	}
+
+	for i := range TestNet3Params.DNSSeeds {
+		if TestNet3Params.DNSSeeds[i] != expectedSeeds[i] {
 			t.Error("Seed values are incorrect")
 			return
 		}
