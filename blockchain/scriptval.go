@@ -261,7 +261,7 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	if err := validator.Validate(txValItems); err != nil {
 		return 0, err
 	}
-	return validator.sigChecks, nil
+	return sigChecks, nil
 }
 
 // checkBlockScripts executes and validates the scripts for all transactions in
