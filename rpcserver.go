@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/addrmgr"
 	"io"
 	"io/ioutil"
 	"math"
@@ -28,6 +27,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchd/addrmgr"
 
 	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/bchec"
