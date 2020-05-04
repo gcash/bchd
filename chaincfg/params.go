@@ -240,6 +240,7 @@ var MainNetParams = Params{
 		{"seed.bchd.cash", true},
 		{"seed.bitcoinabc.org", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
+		{"seed-bch.bitcoinforks.org", true},
 	},
 
 	// Chain parameters
@@ -454,6 +455,7 @@ var TestNet3Params = Params{
 	DNSSeeds: []DNSSeed{
 		{"testnet-seed.bchd.cash", true},
 		{"testnet-seed.bitcoinabc.org", true},
+		{"testnet-seed-bch.bitcoinforks.org", true},
 	},
 
 	// Chain parameters
