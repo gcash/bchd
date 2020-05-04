@@ -299,13 +299,12 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		Value:    blockchain.CalcBlockSubsidy(blockHeight, g.params),
 		PkScript: opTrueScript,
 	})
+
 	if tx.SerializeSize() < blockchain.MinTransactionSize {
-		padLen := blockchain.MinTransactionSize - tx.SerializeSize()
-		tx.AddTxOut(&wire.TxOut{
-			Value:    0,
-			PkScript: opReturnScript(make([]byte, padLen)),
-		})
+		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
+			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
 	}
+
 	return tx
 }
 

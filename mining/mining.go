@@ -294,12 +294,18 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
 		PkScript: pkScript,
 	})
-	// Make sure the coinbase is above the minimum size threshold.
+	padCoinbaseScript(tx)
+
+	return bchutil.NewTx(tx), nil
+}
+
+// padCoinbase makes sure the coinbase script is above the minimum tx size
+// threshold.
+func padCoinbaseScript(tx *wire.MsgTx) {
 	if tx.SerializeSize() < blockchain.MinTransactionSize {
 		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
 			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
 	}
-	return bchutil.NewTx(tx), nil
 }
 
 // spendTransaction updates the passed view by marking the inputs to the passed
@@ -908,6 +914,9 @@ func (g *BlkTmplGenerator) UpdateExtraNonce(msgBlock *wire.MsgBlock, blockHeight
 			blockchain.MaxCoinbaseScriptLen)
 	}
 	msgBlock.Transactions[0].TxIn[0].SignatureScript = coinbaseScript
+
+	// Make sure the coinbase is above the minimum size threshold.
+	padCoinbaseScript((msgBlock.Transactions[0]))
 
 	// TODO(davec): A bchutil.Block should use saved in the state to avoid
 	// recalculating all of the other transaction hashes.

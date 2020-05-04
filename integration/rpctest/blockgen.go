@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"time"
 
+	"sort"
+
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -18,7 +20,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"sort"
 )
 
 // solveBlock attempts to find a nonce which makes the passed block header hash
@@ -126,6 +127,12 @@ func createCoinbaseTx(coinbaseScript []byte, nextBlockHeight int32,
 			tx.AddTxOut(&mineTo[i])
 		}
 	}
+
+	if tx.SerializeSize() < blockchain.MinTransactionSize {
+		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
+			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
+	}
+
 	return bchutil.NewTx(tx), nil
 }
 

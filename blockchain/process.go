@@ -128,7 +128,14 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 			i--
 
 			// Potentially accept the block into the block chain.
-			_, err := b.maybeAcceptBlock(orphan.block, flags)
+			prevHash := &orphan.block.MsgBlock().Header.PrevBlock
+			prevNode := b.index.LookupNode(prevHash)
+
+			if prevNode != nil {
+				orphan.block.SetHeight(prevNode.height + 1)
+			}
+
+			_, err := b.maybeAcceptBlock(orphan.block, prevHash, prevNode, flags)
 			if err != nil {
 				return err
 			}
@@ -177,6 +184,13 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 		}
 	}
 
+	prevHash := &block.MsgBlock().Header.PrevBlock
+	prevNode := b.index.LookupNode(prevHash)
+
+	if prevNode != nil {
+		block.SetHeight(prevNode.height + 1)
+	}
+
 	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
 		flags |= BFMagneticAnomaly
 	}
@@ -188,8 +202,6 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 	}
 
 	// Handle orphan blocks.
-	blockHeader := &block.MsgBlock().Header
-	prevHash := &blockHeader.PrevBlock
 	prevHashExists, err := b.blockExists(prevHash)
 	if err != nil {
 		return false, false, err
@@ -203,7 +215,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 
 	// The block has passed all context independent checks and appears sane
 	// enough to potentially accept it into the block chain.
-	isMainChain, err := b.maybeAcceptBlock(block, flags)
+	isMainChain, err := b.maybeAcceptBlock(block, prevHash, prevNode, flags)
 	if err != nil {
 		return false, false, err
 	}
