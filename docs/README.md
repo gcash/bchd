@@ -2,9 +2,7 @@
 1. [About](#About)
 2. [Getting Started](#GettingStarted)
     1. [Installation](#Installation)
-        1. [Windows](#WindowsInstallation)
-        2. [Linux/BSD/MacOSX/POSIX](#PosixInstallation)
-          1. [Gentoo Linux](#GentooInstallation)
+        1. [Building From Source](#BuildingFromSource)
     2. [Configuration](#Configuration)
     3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
     4. [Mining](#Mining)
@@ -13,10 +11,7 @@
         1. [Using bootstrap.dat](#BootstrapDat)
     2. [Network Configuration](#NetworkConfig)
     3. [Wallet](#Wallet)
-4. [Contact](#Contact)
-    1. [IRC](#ContactIRC)
-    2. [Mailing Lists](#MailingLists)
-5. [Developer Resources](#DeveloperResources)
+4. [Developer Resources](#DeveloperResources)
     1. [Code Contribution Guidelines](#ContributionGuidelines)
     2. [JSON-RPC Reference](#JSONRPCReference)
     3. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
@@ -27,7 +22,7 @@
 
 bchd is an alternative full node bitcoin cash implementation written in Go (golang).
 
-This project is a port of the [bchd](https://github.com/gcash/bchd) codebase to Bitcoin Cash. It provides a high powered
+This project is a port of the [btcd](https://github.com/btcsuite/btcd) codebase to Bitcoin Cash. It provides a high powered
 and reliable blockchain server which makes it a suitable backend to serve blockchain data to lite clients and block explorers
 or to power your local wallet.
 
@@ -45,9 +40,9 @@ that communicates with your running bchd instance via the API.
 
 The easiest way to run the server is to download a pre-built binary. You can find binaries of our latest release for each operating system at the [releases page](https://github.com/gcash/bchd/releases).
 
-<a name="WindowsInstallation" />
+<a name="BuildingFromSource" />
 
-**2.1.1 Building From Source**<br />
+**2.1.1 Building From Source**
 
 If you prefer to install from source do the following:
 
@@ -61,6 +56,8 @@ $ go get github.com/gcash/bchd
 ```
 
 This will download and compile `bchd` and put it in your path.
+
+<a name="Configuration" />
 
 **2.2 Configuration**
 
