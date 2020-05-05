@@ -107,9 +107,9 @@ out:
 				break out
 			}
 
-			atomic.AddUint32(txVI.txSigChecks, uint32(vm.SigChecks()))
+			txSigChecks := atomic.AddUint32(txVI.txSigChecks, uint32(vm.SigChecks()))
 
-			if v.flags.HasFlag(txscript.ScriptReportSigChecks) && atomic.LoadUint32(txVI.txSigChecks) > MaxTransactionSigChecks {
+			if v.flags.HasFlag(txscript.ScriptReportSigChecks) && txSigChecks > MaxTransactionSigChecks {
 				str := fmt.Sprintf("transaction %s too many sig checks",
 					txVI.tx.Hash().String())
 				err := ruleError(ErrTxTooManySigChecks, str)
@@ -118,8 +118,7 @@ out:
 			}
 
 			if v.maxSigChecks > 0 && v.flags.HasFlag(txscript.ScriptReportSigChecks) {
-				atomic.AddUint32(&v.sigChecks, uint32(vm.SigChecks()))
-				if atomic.LoadUint32(&v.sigChecks) > v.maxSigChecks {
+				if atomic.AddUint32(&v.sigChecks, uint32(vm.SigChecks())) > v.maxSigChecks {
 					str := fmt.Sprintf("block too many sig checks")
 					err := ruleError(ErrTooManySigChecks, str)
 					v.sendResult(err)
