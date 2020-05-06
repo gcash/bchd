@@ -1489,15 +1489,13 @@ out:
 				if err != io.ErrUnexpectedEOF {
 					if unhandledCommand {
 						log.Warnf(errMsg)
+
+						// Don't disconnect peers for sending an unknown message.
+						// This is the behavior of the Satoshi client!
+						continue
 					} else {
 						log.Errorf(errMsg)
 					}
-				}
-
-				// Don't disconnect peers for sending an unknown message.
-				// This is the behavior of the Satoshi client!
-				if unhandledCommand {
-					continue
 				}
 
 				// Push a reject message for the malformed message and disconnect
