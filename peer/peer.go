@@ -1484,7 +1484,7 @@ out:
 			if p.shouldHandleReadError(err) {
 				unhandledCommand := strings.Contains(err.Error(), "unhandled command [")
 
-				// Make sure all unreadable messages are logged as errors.
+				// Make sure all unreadable messages are logged.
 				errMsg := fmt.Sprintf("Can't read message from %s: %v", p, err)
 				if err != io.ErrUnexpectedEOF {
 					if unhandledCommand {
