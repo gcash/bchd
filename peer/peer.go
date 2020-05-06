@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1481,9 +1482,20 @@ out:
 			// local peer is not forcibly disconnecting and the
 			// remote peer has not disconnected.
 			if p.shouldHandleReadError(err) {
+				unhandledCommand := strings.Contains(err.Error(), "unhandled command [")
+
+				// Make sure all unreadable messages are logged.
 				errMsg := fmt.Sprintf("Can't read message from %s: %v", p, err)
 				if err != io.ErrUnexpectedEOF {
-					log.Errorf(errMsg)
+					if unhandledCommand {
+						log.Warnf(errMsg)
+
+						// Don't disconnect peers for sending an unknown message.
+						// This is the behavior of the Satoshi client!
+						continue
+					} else {
+						log.Errorf(errMsg)
+					}
 				}
 
 				// Push a reject message for the malformed message and disconnect
