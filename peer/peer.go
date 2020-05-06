@@ -1496,19 +1496,21 @@ out:
 
 				// Don't disconnect peers for sending an unknown message.
 				// This is the behavior of the Satoshi client!
-				if !unhandledCommand {
-					// Push a reject message for the malformed message and disconnect
-					// from the peer immediately to prevent sync issues.
-					//
-					// Ideally this would include the command in the header if
-					// at least that much of the message was valid, but that is not
-					// currently exposed by wire, so just used malformed for the
-					// command.
-					p.PushRejectMsg("malformed", wire.RejectMalformed, errMsg, nil,
-						true)
-
-					p.Disconnect()
+				if unhandledCommand {
+					continue
 				}
+
+				// Push a reject message for the malformed message and disconnect
+				// from the peer immediately to prevent sync issues.
+				//
+				// Ideally this would include the command in the header if
+				// at least that much of the message was valid, but that is not
+				// currently exposed by wire, so just used malformed for the
+				// command.
+				p.PushRejectMsg("malformed", wire.RejectMalformed, errMsg, nil,
+					true)
+
+				p.Disconnect()
 			}
 			break out
 		}
