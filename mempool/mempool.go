@@ -130,10 +130,9 @@ type Policy struct {
 	// of big orphans.
 	MaxOrphanTxSize int
 
-	// MaxSigOpCostPerTx is the cumulative maximum number of all the signature
-	// operations in a single transaction we will relay or mine.  It is a
-	// a consensus rule.
-	MaxSigOpPerTx int
+	// LimitSigChecks applies an additional standardness limit to the number
+	// of signature checks in each transaction.
+	LimitSigChecks bool
 
 	// MinRelayTxFee defines the minimum transaction fee in BCH/kB to be
 	// considered a non-zero fee.
@@ -742,6 +741,9 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	}
 
 	scriptFlags := txscript.StandardVerifyFlags
+	if !mp.cfg.Policy.LimitSigChecks {
+		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
+	}
 
 	// Perform preliminary sanity checks on the transaction.  This makes
 	// use of blockchain which contains the invariant rules for what
