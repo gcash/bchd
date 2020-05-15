@@ -1552,11 +1552,12 @@ func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
-	for i := len(a)/2 - 1; i >= 0; i-- {
-		x := len(a) - 1 - i
-		a[i], a[x] = a[x], a[i]
+	b := make([]byte, len(a))
+
+	for i := 0; i < len(a); i++ {
+		b[i] = a[len(a)-i-1]
 	}
-	vm.dstack.PushByteArray(a)
+	vm.dstack.PushByteArray(b)
 	return nil
 }
 
@@ -2327,7 +2328,6 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		signature, err = bchec.ParseSchnorrSignature(sigBytes)
 	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
 		vm.hasFlag(ScriptVerifyDERSignatures) {
-
 		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
 	} else {
 		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
@@ -2352,7 +2352,6 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	}
 	if len(sigBytes) > 0 {
 		vm.sigChecks++
-
 		if !valid && vm.hasFlag(ScriptVerifyNullFail) {
 			str := "signature not empty on failed checksig"
 			return scriptError(ErrNullFail, str)
