@@ -43,7 +43,6 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrImmatureSpend, "ErrImmatureSpend"},
 		{ErrSpendTooHigh, "ErrSpendTooHigh"},
 		{ErrBadFees, "ErrBadFees"},
-		{ErrTooManySigOps, "ErrTooManySigOps"},
 		{ErrFirstTxNotCoinbase, "ErrFirstTxNotCoinbase"},
 		{ErrMultipleCoinbases, "ErrMultipleCoinbases"},
 		{ErrBadCoinbaseScriptLen, "ErrBadCoinbaseScriptLen"},

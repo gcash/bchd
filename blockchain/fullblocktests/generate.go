@@ -669,57 +669,6 @@ func repeatOpcode(opcode uint8, numRepeats int) []byte {
 	return bytes.Repeat([]byte{opcode}, numRepeats)
 }
 
-// assertScriptSigOpsCount panics if the provided script does not have the
-// specified number of signature operations.
-func assertScriptSigOpsCount(script []byte, expected int) {
-	var scriptFlags txscript.ScriptFlags
-	scriptFlags |= txscript.ScriptVerifySigPushOnly |
-		txscript.ScriptVerifyCleanStack |
-		txscript.ScriptVerifyCheckDataSig
-
-	numSigOps := txscript.GetSigOpCount(script, scriptFlags)
-	if numSigOps != expected {
-		_, file, line, _ := runtime.Caller(1)
-		panic(fmt.Sprintf("assertion failed at %s:%d: generated number "+
-			"of sigops for script is %d instead of expected %d",
-			file, line, numSigOps, expected))
-	}
-}
-
-// countBlockSigOps returns the number of legacy signature operations in the
-// scripts in the passed block.
-func countBlockSigOps(block *wire.MsgBlock) int {
-	totalSigOps := 0
-	var scriptFlags txscript.ScriptFlags
-	scriptFlags |= txscript.ScriptVerifySigPushOnly |
-		txscript.ScriptVerifyCleanStack |
-		txscript.ScriptVerifyCheckDataSig
-
-	for _, tx := range block.Transactions {
-		for _, txIn := range tx.TxIn {
-			numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, scriptFlags)
-			totalSigOps += numSigOps
-		}
-		for _, txOut := range tx.TxOut {
-			numSigOps := txscript.GetSigOpCount(txOut.PkScript, scriptFlags)
-			totalSigOps += numSigOps
-		}
-	}
-
-	return totalSigOps
-}
-
-// assertTipBlockSigOpsCount panics if the current tip block associated with the
-// generator does not have the specified number of signature operations.
-func (g *testGenerator) assertTipBlockSigOpsCount(expected int) {
-	numSigOps := countBlockSigOps(g.tip)
-	if numSigOps != expected {
-		panic(fmt.Sprintf("generated number of sigops for block %q "+
-			"(height %d) is %d instead of expected %d", g.tipName,
-			g.tipHeight, numSigOps, expected))
-	}
-}
-
 // assertTipBlockSize panics if the if the current tip block associated with the
 // generator does not have the specified size when serialized.
 func (g *testGenerator) assertTipBlockSize(expected int) {

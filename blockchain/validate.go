@@ -49,10 +49,6 @@ const (
 	// prior to the August 1st, 2018 UAHF hardfork
 	LegacyMaxBlockSize = 1000000
 
-	// MaxBlockSigOpsPerMB is the maximum number of allowed sigops allowed
-	// per one (or partial) megabyte of block size after the UAHF hard fork
-	MaxBlockSigOpsPerMB = 20000
-
 	// MaxTransactionSize is the maximum allowable size of a transaction
 	// after the UAHF hard fork
 	MaxTransactionSize = oneMegabyte
@@ -60,10 +56,6 @@ const (
 	// MinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
 	MinTransactionSize = 100
-
-	// MaxTransactionSigOps is the maximum allowable number of sigops per
-	// transaction after the UAHF hard fork
-	MaxTransactionSigOps = 20000
 
 	// BlockMaxBytesMaxSigChecksRatio is the ratio between the maximum allowable
 	// block size and the maximum allowable * SigChecks (executed signature check
@@ -99,14 +91,6 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
 		return int(b.excessiveBlockSize)
 	}
 	return LegacyMaxBlockSize
-}
-
-// MaxBlockSigOps returns the maximum allowable number of signature
-// operations in a block. The value is a function of the serialized
-// block size in bytes.
-func MaxBlockSigOps(nBlockBytes uint32) int {
-	nBlockMBytesRoundedUp := 1 + ((int(nBlockBytes) - 1) / oneMegabyte)
-	return nBlockMBytesRoundedUp * MaxBlockSigOpsPerMB
 }
 
 // isNullOutpoint determines whether or not a previous transaction output point
@@ -395,102 +379,6 @@ func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags Behavio
 // target difficulty as claimed.
 func CheckProofOfWork(block *bchutil.Block, powLimit *big.Int) error {
 	return checkProofOfWork(&block.MsgBlock().Header, powLimit, BFNone)
-}
-
-// CountSigOps returns the number of signature operations for all transaction
-// input and output scripts in the provided transaction.  This uses the
-// quicker, but imprecise, signature operation counting mechanism from
-// txscript.
-func CountSigOps(tx *bchutil.Tx, scriptFlags txscript.ScriptFlags) int {
-	msgTx := tx.MsgTx()
-
-	// Accumulate the number of signature operations in all transaction
-	// inputs.
-	totalSigOps := 0
-	for _, txIn := range msgTx.TxIn {
-		numSigOps := txscript.GetSigOpCount(txIn.SignatureScript, scriptFlags)
-		totalSigOps += numSigOps
-	}
-
-	// Accumulate the number of signature operations in all transaction
-	// outputs.
-	for _, txOut := range msgTx.TxOut {
-		numSigOps := txscript.GetSigOpCount(txOut.PkScript, scriptFlags)
-		totalSigOps += numSigOps
-	}
-
-	return totalSigOps
-}
-
-// GetSigOps returns the unified sig op count for the passed transaction
-// respecting current active soft-forks which modified sig op cost counting.
-func GetSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, scriptFlags txscript.ScriptFlags) (int, error) {
-	numSigOps := CountSigOps(tx, scriptFlags)
-	if scriptFlags.HasFlag(txscript.ScriptBip16) {
-		numP2SHSigOps, err := CountP2SHSigOps(tx, isCoinBaseTx, utxoView, scriptFlags)
-		if err != nil {
-			return 0, nil
-		}
-		numSigOps += numP2SHSigOps
-	}
-	return numSigOps, nil
-}
-
-// CountP2SHSigOps returns the number of signature operations for all input
-// transactions which are of the pay-to-script-hash type.  This uses the
-// precise, signature operation counting mechanism from the script engine which
-// requires access to the input transaction scripts.
-func CountP2SHSigOps(tx *bchutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint, scriptFlags txscript.ScriptFlags) (int, error) {
-	// Coinbase transactions have no interesting inputs.
-	if isCoinBaseTx {
-		return 0, nil
-	}
-
-	// Accumulate the number of signature operations in all transaction
-	// inputs.
-	msgTx := tx.MsgTx()
-	totalSigOps := 0
-	for txInIndex, txIn := range msgTx.TxIn {
-		// Ensure the referenced input transaction is available.
-		utxo := utxoView.LookupEntry(txIn.PreviousOutPoint)
-		if utxo == nil {
-			str := fmt.Sprintf("output %v referenced from "+
-				"transaction %s:%d does not exist", txIn.PreviousOutPoint,
-				tx.Hash(), txInIndex)
-			return 0, ruleError(ErrMissingTxOut, str)
-		} else if utxo.IsSpent() {
-			str := fmt.Sprintf("output %v referenced from "+
-				"transaction %s:%d has already been spent", txIn.PreviousOutPoint,
-				tx.Hash(), txInIndex)
-			return 0, ruleError(ErrSpentTxOut, str)
-		}
-
-		// We're only interested in pay-to-script-hash types, so skip
-		// this input if it's not one.
-		pkScript := utxo.PkScript()
-		if !txscript.IsPayToScriptHash(pkScript) {
-			continue
-		}
-
-		// Count the precise number of signature operations in the
-		// referenced public key script.
-		sigScript := txIn.SignatureScript
-		numSigOps := txscript.GetPreciseSigOpCount(sigScript, pkScript,
-			scriptFlags)
-
-		// We could potentially overflow the accumulator so check for
-		// overflow.
-		lastSigOps := totalSigOps
-		totalSigOps += numSigOps
-		if totalSigOps < lastSigOps {
-			str := fmt.Sprintf("the public key script from output "+
-				"%v contains too many signature operations - "+
-				"overflow", txIn.PreviousOutPoint)
-			return 0, ruleError(ErrTooManySigOps, str)
-		}
-	}
-
-	return totalSigOps, nil
 }
 
 // checkBlockHeaderSanity performs some preliminary checks on a block header to
@@ -1106,7 +994,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	// If Phonon hardfork is active we must enforce the new sig check rules and
 	// OP_REVERSEBYTES.
-	phononActive := uint64(node.parent.CalcPastMedianTime().Unix()) >= b.chainParams.PhononActivationTime
+	phononActive := node.height > b.chainParams.PhononForkHeight
 
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
@@ -1202,45 +1090,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyReverseBytes
 	}
 
-	// The number of signature operations must be less than the maximum
-	// allowed per block.  Note that the preliminary sanity checks on a
-	// block also include a check similar to this one, but this check
-	// expands the count to include a precise count of pay-to-script-hash
-	// signature operations in each of the input transaction public key
-	// scripts.
-	//
-	// Also note that as of the phonon hardfork this check is replaced
-	// with the more accurate SigCheck code.
-	transactions := block.Transactions()
-	if !phononActive {
-		totalSigOpCost := 0
-		nBlockBytes := block.MsgBlock().SerializeSize()
-		maxSigOps := MaxBlockSigOps(uint32(nBlockBytes))
-		for i, tx := range transactions {
-			// Since the first (and only the first) transaction has
-			// already been verified to be a coinbase transaction,
-			// use i == 0 as an optimization for the flag to
-			// countP2SHSigOps for whether or not the transaction is
-			// a coinbase transaction rather than having to do a
-			// full coinbase check again.
-			sigOpCost, err := GetSigOps(tx, i == 0, view, scriptFlags)
-			if err != nil {
-				return err
-			}
-
-			// Check for overflow or going over the limits.  We have to do
-			// this on every loop iteration to avoid overflow.
-			lastSigOpCost := totalSigOpCost
-			totalSigOpCost += sigOpCost
-			if totalSigOpCost < lastSigOpCost || totalSigOpCost > maxSigOps {
-				str := fmt.Sprintf("block contains too many "+
-					"signature operations - got %v, max %v",
-					totalSigOpCost, maxSigOps)
-				return ruleError(ErrTooManySigOps, str)
-			}
-		}
-	}
-
 	// Perform several checks on the inputs for each transaction.  Also
 	// accumulate the total fees.  This could technically be combined with
 	// the loop above instead of running another loop over the transactions,
@@ -1248,6 +1097,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// still relatively cheap as compared to running the scripts) checks
 	// against all the inputs when the signature operations are out of
 	// bounds.
+	transactions := block.Transactions()
+
 	var totalFees int64
 	for _, tx := range transactions {
 		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)

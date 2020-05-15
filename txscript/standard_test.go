@@ -419,7 +419,6 @@ func TestCalcScriptInfo(t *testing.T) {
 				PkScriptClass:  ScriptHashTy,
 				NumInputs:      3,
 				ExpectedInputs: 3, // nonstandard p2sh.
-				SigOps:         1,
 			},
 		},
 		{
@@ -435,7 +434,6 @@ func TestCalcScriptInfo(t *testing.T) {
 				PkScriptClass:  ScriptHashTy,
 				NumInputs:      3,
 				ExpectedInputs: -1, // nonstandard p2sh.
-				SigOps:         0,
 			},
 		},
 		{
@@ -455,7 +453,6 @@ func TestCalcScriptInfo(t *testing.T) {
 				PkScriptClass:  MultiSigTy,
 				NumInputs:      4,
 				ExpectedInputs: 4,
-				SigOps:         3,
 			},
 		},
 	}

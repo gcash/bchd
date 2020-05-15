@@ -201,10 +201,6 @@ type BlockTemplate struct {
 	// sum of the fees of all other transactions.
 	Fees []int64
 
-	// SigOpCosts contains the number of signature operations each
-	// transaction in the generated template performs.
-	SigOpCosts []int64
-
 	// SigChecks is the total number of sigchecks for each transaction in
 	// the generated template.
 	SigChecks []int64
@@ -225,9 +221,6 @@ type BlockTemplate struct {
 	// MaxSigChecks is the total sigchecks allowed in the block given the
 	// consensus rules.
 	MaxSigChecks uint32
-
-	// MaxSigOps is the block size consensus rule used when creating the block
-	MaxSigOps uint32
 }
 
 // mergeUtxoView adds all of the entries in viewB to viewA.  The result is that
@@ -469,11 +462,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 
 	ts := medianAdjustedTime(best, g.timeSource)
 
-	uahfActive := nextBlockHeight >= g.chainParams.UahfForkHeight
-
-	phononActive := uint64(ts.Unix()) >= g.chainParams.PhononActivationTime
-
-	maxBlockSize := g.chain.MaxBlockSize(uahfActive)
+	maxBlockSize := g.chain.MaxBlockSize(true)
 
 	maxSigChecks := maxBlockSize / blockchain.BlockMaxBytesMaxSigChecksRatio
 
@@ -495,21 +484,6 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: after the fork activates we obviously will need to add the
-	// ScriptVerifySchnorr to the StandardVerifyFlags. We will not be adding
-	// ScriptVerifyAllowSegwitRecovery because StandardVerifyFlags because
-	// it's something only mining pools should be using because it allows
-	// insecure spends. However, we might want to create an option to set
-	// the flag in both the mempool and here for miners so they can accept
-	// segwit recovery txs.
-	scriptFlags := txscript.StandardVerifyFlags
-
-	if phononActive {
-		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyReverseBytes
-	}
-
-	coinbaseSigOps := int64(blockchain.CountSigOps(coinbaseTx, scriptFlags))
 
 	// Get the current source transactions and create a priority queue to
 	// hold the transactions which are ready for inclusion into a block
@@ -542,10 +516,8 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// However, since the total fees aren't known yet, use a dummy value for
 	// the coinbase fee which will be updated later.
 	txFees := make([]int64, 0, len(sourceTxns))
-	txSigOps := make([]int64, 0, len(sourceTxns))
 	txSigChecks := make([]int64, 0, len(sourceTxns))
 	txFees = append(txFees, -1) // Updated once known
-	txSigOps = append(txSigOps, coinbaseSigOps)
 	txSigChecks = append(txSigChecks, 0) // Coinbase has zero sigchecks
 
 	log.Debugf("Considering %d transactions for inclusion to new block",
@@ -645,10 +617,8 @@ mempoolLoop:
 	// possible transaction count size, plus the size of the coinbase
 	// transaction.
 	blockSize := uint32(blockHeaderOverhead * coinbaseTx.MsgTx().SerializeSize())
-	blockSigOps := coinbaseSigOps
 	blockSigChecks := int64(0)
 	totalFees := int64(0)
-	maxSigOps := blockchain.MaxBlockSigOps(blockSize)
 
 	// Choose which transactions make it into the block.
 	for priorityQueue.Len() > 0 {
@@ -670,27 +640,6 @@ mempoolLoop:
 				"the max block size", tx.Hash())
 			logSkippedDeps(tx, deps)
 			continue
-		}
-
-		// Enforce maximum signature operation cost per block.  Also
-		// check for overflow.
-		sigOps, err := blockchain.GetSigOps(tx, false,
-			blockUtxos, scriptFlags)
-		maxSigOps = blockchain.MaxBlockSigOps(blockPlusTxSize)
-		if err != nil {
-			log.Tracef("Skipping tx %s due to error in "+
-				"GetSigOpCost: %v", tx.Hash(), err)
-			logSkippedDeps(tx, deps)
-			continue
-		}
-		if !phononActive {
-			if blockSigOps+int64(sigOps) < blockSigOps ||
-				blockSigOps+int64(sigOps) > int64(maxSigOps) {
-				log.Tracef("Skipping tx %s because it would "+
-					"exceed the maximum sigops per block", tx.Hash())
-				logSkippedDeps(tx, deps)
-				continue
-			}
 		}
 
 		// Skip free transactions once the block is larger than the
@@ -757,14 +706,12 @@ mempoolLoop:
 			continue
 		}
 
-		if phononActive {
-			if blockSigChecks+int64(sigchecks) < blockSigChecks ||
-				blockSigChecks+int64(sigchecks) > int64(maxSigChecks) {
-				log.Tracef("Skipping tx %s because it would "+
-					"exceed the maximum sigchecks per block", tx.Hash())
-				logSkippedDeps(tx, deps)
-				continue
-			}
+		if blockSigChecks+int64(sigchecks) < blockSigChecks ||
+		    blockSigChecks+int64(sigchecks) > int64(maxSigChecks) {
+			log.Tracef("Skipping tx %s because it would "+
+			    "exceed the maximum sigchecks per block", tx.Hash())
+			logSkippedDeps(tx, deps)
+			continue
 		}
 
 		// Spend the transaction inputs in the block utxo view and add
@@ -778,11 +725,9 @@ mempoolLoop:
 		// template.
 		blockTxns = append(blockTxns, tx)
 		blockSize = blockPlusTxSize
-		blockSigOps += int64(sigOps)
 		blockSigChecks += int64(sigchecks)
 		totalFees += prioItem.fee
 		txFees = append(txFees, prioItem.fee)
-		txSigOps = append(txSigOps, int64(sigOps))
 		txSigChecks = append(txSigChecks, int64(sigchecks))
 
 		log.Tracef("Adding tx %s (priority %.2f, feePerKB %.2f)",
@@ -856,20 +801,18 @@ mempoolLoop:
 	}
 
 	log.Debugf("Created new block template (%d transactions, %d in "+
-		"fees, %d signature operations, %d size, target difficulty "+
-		"%064x)", len(msgBlock.Transactions), totalFees, blockSigOps,
+		"fees, %d signature checks, %d size, target difficulty "+
+		"%064x)", len(msgBlock.Transactions), totalFees, blockSigChecks,
 		blockSize, blockchain.CompactToBig(msgBlock.Header.Bits))
 
 	return &BlockTemplate{
 		Block:           &msgBlock,
 		Fees:            txFees,
-		SigOpCosts:      txSigOps,
 		SigChecks:       txSigChecks,
 		MaxSigChecks:    uint32(maxSigChecks),
 		Height:          nextBlockHeight,
 		ValidPayAddress: payToAddress != nil,
 		MaxBlockSize:    uint32(maxBlockSize),
-		MaxSigOps:       uint32(maxSigOps),
 	}, nil
 }
 
