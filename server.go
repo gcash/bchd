@@ -12,7 +12,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/bchrpc"
 	"math"
 	"net"
 	"runtime"
@@ -22,6 +21,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gcash/bchd/bchrpc"
 
 	"github.com/gcash/bchutil/gcs/builder"
 
@@ -519,7 +520,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Do not allow connections to Bitcoin SV peers
 	if strings.Contains(msg.UserAgent, "Bitcoin SV") {
 		srvrLog.Debugf("Rejecting peer %s for running Bitcoin SV", sp.Peer)
-		reason := fmt.Sprint("Not Bitcoin Cash node")
+		reason := "Not Bitcoin Cash node"
 		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
 	}
 

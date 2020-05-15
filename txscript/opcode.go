@@ -10,13 +10,15 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"golang.org/x/crypto/ripemd160"
 	"math/bits"
+
+	"golang.org/x/crypto/ripemd160"
+
+	"hash"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"hash"
 )
 
 // An opcode defines the information related to a txscript opcode.  opfunc, if
@@ -2529,7 +2531,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		// Check the range of the bits does not exceed the number of pubkeys.
 		mask := uint32(1<<uint64(numPubKeys)) - 1
 		if checkBits&mask != checkBits {
-			str := fmt.Sprintf("Invalid bit range")
+			str := "Invalid bit range"
 			return scriptError(ErrInvalidBitCount, str)
 		}
 
@@ -2539,7 +2541,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			if checkBits>>iKey == 0 {
 				// This is a sanity check and should be
 				// unreachable.
-				str := fmt.Sprintf("Checkbits pubkey index invalid")
+				str := "Checkbits pubkey index invalid"
 				return scriptError(ErrInvalidBitCount, str)
 			}
 

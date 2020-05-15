@@ -836,7 +836,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	if (b.chainParams == &chaincfg.MainNetParams || b.chainParams == &chaincfg.TestNet3Params) &&
 		block.Height() == b.chainParams.UahfForkHeight+1 {
 		if block.MsgBlock().SerializeSize() <= LegacyMaxBlockSize {
-			str := fmt.Sprintf("the first block after uahf fork block is not greater than 1MB")
+			str := "the first block after uahf fork block is not greater than 1MB"
 			return ruleError(ErrBlockTooSmall, str)
 		}
 	}
