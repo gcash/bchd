@@ -119,7 +119,7 @@ out:
 
 			if v.maxSigChecks > 0 && v.flags.HasFlag(txscript.ScriptReportSigChecks) {
 				if atomic.AddUint32(&v.sigChecks, uint32(vm.SigChecks())) > v.maxSigChecks {
-					str := fmt.Sprintf("block too many sig checks")
+					str := "block too many sig checks"
 					err := ruleError(ErrTooManySigChecks, str)
 					v.sendResult(err)
 					break out

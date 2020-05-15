@@ -4271,7 +4271,7 @@ func (s *rpcServer) processRequest(request *btcjson.Request, isAdmin bool, close
 		if request.Method == "" || request.Params == nil {
 			jsonErr = &btcjson.RPCError{
 				Code:    btcjson.ErrRPCInvalidRequest.Code,
-				Message: fmt.Sprintf("Invalid request: malformed"),
+				Message: "Invalid request: malformed",
 			}
 			msg, err := createMarshalledReply(request.Jsonrpc, request.ID, result, jsonErr)
 			if err != nil {
@@ -4420,7 +4420,7 @@ func (s *rpcServer) jsonRPCRead(w http.ResponseWriter, r *http.Request, isAdmin 
 			if len(batchedRequests) == 0 {
 				jsonErr := &btcjson.RPCError{
 					Code:    btcjson.ErrRPCInvalidRequest.Code,
-					Message: fmt.Sprint("Invalid request: empty batch"),
+					Message: "Invalid request: empty batch",
 				}
 				resp, err = btcjson.MarshalResponse("2.0", nil, nil, jsonErr)
 				if err != nil {
