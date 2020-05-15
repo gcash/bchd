@@ -429,6 +429,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		// used, then create a new engine to execute the scripts.
 		tx := createSpendingTx(scriptSig, scriptPubKey,
 			int64(inputAmt))
+
 		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, nil,
 			int64(inputAmt))
 		if err == nil {

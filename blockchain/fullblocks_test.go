@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/fullblocktests"
@@ -140,6 +141,8 @@ func TestFullBlocks(t *testing.T) {
 	}
 
 	// Create a new database and chain instance to run tests against.
+	params := &chaincfg.RegressionNetParams
+	params.PhononActivationTime = uint64(time.Now().Add(time.Hour).Unix())
 	chain, teardownFunc, err := chainSetup("fullblocktest",
 		&chaincfg.RegressionNetParams, 1000000)
 	if err != nil {
