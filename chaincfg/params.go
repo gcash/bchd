@@ -498,7 +498,7 @@ var TestNet3Params = Params{
 		{Height: 900000, Hash: newHashFromStr("0000000000356f8d8924556e765b7a94aaebc6b5c8685dcfa2b1ee8b41acd89b")},
 		{Height: 1000007, Hash: newHashFromStr("00000000001ccb893d8a1f25b70ad173ce955e5f50124261bbbc50379a612ddf")},
 		{Height: 1341712, Hash: newHashFromStr("00000000fffc44ea2e202bd905a9fbbb9491ef9e9d5a9eed4039079229afa35b")},
-		{Height: 1378461, Hash: newHashFromStr("00")}, // TODO
+		{Height: 1378461, Hash: newHashFromStr("0000000099f5509b5f36b1926bcf82b21d936ebeadee811030dfbbb7fae915d7")},
 	},
 
 	// Consensus rule change deployments.
