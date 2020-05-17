@@ -1606,6 +1606,8 @@ func (state *gbtWorkState) updateBlockTemplate(s *rpcServer, useCoinbaseValue bo
 		state.lastTxUpdate = lastTxUpdate
 		state.prevHash = latestHash
 		state.minTimestamp = minTimestamp
+		state.maxSigChecks = template.MaxSigChecks
+		state.maxBlockSize = template.MaxBlockSize
 
 		rpcsLog.Debugf("Generated block template (timestamp %v, "+
 			"target %s, merkle root %s)",
@@ -1796,10 +1798,10 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		}
 
 		resultTx := btcjson.GetBlockTemplateResultTx{
-			Data:    hex.EncodeToString(txBuf.Bytes()),
-			Hash:    tx.TxHash().String(),
-			Depends: []int64{},
-			Fee:     template.Fees[0],
+			Data:      hex.EncodeToString(txBuf.Bytes()),
+			Hash:      tx.TxHash().String(),
+			Depends:   []int64{},
+			Fee:       template.Fees[0],
 			SigChecks: template.SigChecks[0],
 		}
 

@@ -328,6 +328,13 @@ var MainNetParams = Params{
 		{
 			Height:      635259,
 			Hash:        newHashFromStr("00000000000000000033dfef1fc2d6a5d5520b078c55193a9bf498c5b27530f7"),
+			UtxoSetHash: newHashFromStr("45dc882e48bf4b6d894db29512f35296ffda5ea32c2b82920aa5ae1ba056689a"),
+			UtxoSetSize: 3282796875,
+			UtxoSetSources: []string{
+				"http://localhost:8080/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+				"https://ipfs.greyh.at/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+				"https://ipfs.io/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+			},
 		},
 	},
 

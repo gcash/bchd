@@ -517,7 +517,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// the coinbase fee which will be updated later.
 	txFees := make([]int64, 0, len(sourceTxns))
 	txSigChecks := make([]int64, 0, len(sourceTxns))
-	txFees = append(txFees, -1) // Updated once known
+	txFees = append(txFees, -1)          // Updated once known
 	txSigChecks = append(txSigChecks, 0) // Coinbase has zero sigchecks
 
 	log.Debugf("Considering %d transactions for inclusion to new block",
@@ -707,9 +707,9 @@ mempoolLoop:
 		}
 
 		if blockSigChecks+int64(sigchecks) < blockSigChecks ||
-		    blockSigChecks+int64(sigchecks) > int64(maxSigChecks) {
+			blockSigChecks+int64(sigchecks) > int64(maxSigChecks) {
 			log.Tracef("Skipping tx %s because it would "+
-			    "exceed the maximum sigchecks per block", tx.Hash())
+				"exceed the maximum sigchecks per block", tx.Hash())
 			logSkippedDeps(tx, deps)
 			continue
 		}
