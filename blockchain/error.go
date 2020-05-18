@@ -111,10 +111,6 @@ const (
 	// allowed size when serialized.
 	ErrTxTooSmall
 
-	// ErrTxTooManySigOps indicates a transaction exceeds the maximum allowable
-	// number of signature operations.
-	ErrTxTooManySigOps
-
 	// ErrTxTooManySigChecks indicates a transaction exceeds the maximum allowable
 	// number of signature checks.
 	ErrTxTooManySigChecks
@@ -165,10 +161,6 @@ const (
 	// ErrBadFees indicates the total fees for a block are invalid due to
 	// exceeding the maximum possible value.
 	ErrBadFees
-
-	// ErrTooManySigOps indicates the total number of signature operations
-	// for a transaction or block exceed the maximum allowed limits.
-	ErrTooManySigOps
 
 	// ErrTooManySigChecks indicates that the block's signature checks exceeds
 	// the limit.
@@ -253,7 +245,6 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrNoTxOutputs:           "ErrNoTxOutputs",
 	ErrTxTooBig:              "ErrTxTooBig",
 	ErrTxTooSmall:            "ErrTxTooSmall",
-	ErrTxTooManySigOps:       "ErrTxTooManySigOps",
 	ErrBadTxOutValue:         "ErrBadTxOutValue",
 	ErrDuplicateTxInputs:     "ErrDuplicateTxInputs",
 	ErrBadTxInput:            "ErrBadTxInput",
@@ -265,7 +256,6 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrImmatureSpend:         "ErrImmatureSpend",
 	ErrSpendTooHigh:          "ErrSpendTooHigh",
 	ErrBadFees:               "ErrBadFees",
-	ErrTooManySigOps:         "ErrTooManySigOps",
 	ErrFirstTxNotCoinbase:    "ErrFirstTxNotCoinbase",
 	ErrMultipleCoinbases:     "ErrMultipleCoinbases",
 	ErrBadCoinbaseScriptLen:  "ErrBadCoinbaseScriptLen",

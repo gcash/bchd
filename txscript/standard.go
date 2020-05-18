@@ -43,7 +43,10 @@ const (
 		ScriptVerifySigPushOnly |
 		ScriptVerifyCheckDataSig |
 		ScriptVerifySchnorr |
-		ScriptVerifySchnorrMultisig
+		ScriptVerifySchnorrMultisig |
+		ScriptVerifyReverseBytes |
+		ScriptReportSigChecks |
+		ScriptVerifyInputSigChecks
 )
 
 // ScriptClass is an enumeration for the list of standard types of script.
@@ -246,9 +249,6 @@ type ScriptInfo struct {
 	// script and any pay-to-script-hash scripts. The number will be -1 if
 	// unknown.
 	ExpectedInputs int
-
-	// SigOps is the number of signature operations in the script pair.
-	SigOps int
 }
 
 // CalcScriptInfo returns a structure providing data about the provided script
@@ -280,7 +280,6 @@ func CalcScriptInfo(sigScript, pkScript []byte, scriptFlags ScriptFlags) (*Scrip
 	si.ExpectedInputs = expectedInputs(pkPops, si.PkScriptClass)
 
 	switch {
-	// Count sigops taking into account pay-to-script-hash.
 	case si.PkScriptClass == ScriptHashTy && scriptFlags.HasFlag(ScriptBip16):
 		// The pay-to-hash-script is the final data push of the
 		// signature script.
@@ -296,15 +295,12 @@ func CalcScriptInfo(sigScript, pkScript []byte, scriptFlags ScriptFlags) (*Scrip
 		} else {
 			si.ExpectedInputs += shInputs
 		}
-		si.SigOps = getSigOpCount(shPops, true, scriptFlags)
 
 		// All entries pushed to stack (or are OP_RESERVED and exec
 		// will fail).
 		si.NumInputs = len(sigPops)
 
 	default:
-		si.SigOps = getSigOpCount(pkPops, true, scriptFlags)
-
 		// All entries pushed to stack (or are OP_RESERVED and exec
 		// will fail).
 		si.NumInputs = len(sigPops)

@@ -145,9 +145,7 @@ type Params struct {
 	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
 	GreatWallForkHeight         int32 // May 15, 2019 hard fork
 	GravitonForkHeight          int32 // Nov 15, 2019 hard fork
-
-	// Planned hardforks
-	PhononActivationTime uint64
+	PhononForkHeight            int32 // May 15, 2020 hard fork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -257,8 +255,7 @@ var MainNetParams = Params{
 	MagneticAnonomalyForkHeight: 556766, // 00000000000000000102d94fde9bd0807a2cc7582fe85dd6349b73ce4e8d9322
 	GreatWallForkHeight:         582679, // 0000000000000000018596bdfd350a9fbc7297a62a3f510b74565d992d63d2ef
 	GravitonForkHeight:          609135, // 0000000000000000026f7ec9e79be2f5bb839f29ebcf734066d4bb9a13f6ea83
-
-	PhononActivationTime: 1589544000,
+	PhononForkHeight:            635258, // 000000000000000003302c47d01e78f1c86aa3b0e96b066761a5059bc8f5781a
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -328,6 +325,17 @@ var MainNetParams = Params{
 				"https://ipfs.io/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
 			},
 		},
+		{
+			Height:      635259,
+			Hash:        newHashFromStr("00000000000000000033dfef1fc2d6a5d5520b078c55193a9bf498c5b27530f7"),
+			UtxoSetHash: newHashFromStr("45dc882e48bf4b6d894db29512f35296ffda5ea32c2b82920aa5ae1ba056689a"),
+			UtxoSetSize: 3282796875,
+			UtxoSetSources: []string{
+				"http://localhost:8080/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+				"https://ipfs.greyh.at/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+				"https://ipfs.io/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
+			},
+		},
 	},
 
 	// Consensus rule change deployments.
@@ -391,8 +399,7 @@ var RegressionNetParams = Params{
 	UahfForkHeight:              0, // Always active on regtest
 	DaaForkHeight:               0, // Always active on regtest
 	MagneticAnonomalyForkHeight: 1000,
-
-	PhononActivationTime: 1589544000,
+	PhononForkHeight:            1000,
 
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -472,8 +479,7 @@ var TestNet3Params = Params{
 	MagneticAnonomalyForkHeight: 1267996, // 00000000000001fae0095cd4bea16f1ce8ab63f3f660a03c6d8171485f484b24
 	GreatWallForkHeight:         1303884, // 00000000000001a749d7aa418c582a0e234ebc15643bf23a4f3107fa55120388
 	GravitonForkHeight:          1341711, // 00000000c678f67ea16d5bf803f68ce42991839d13849f77332d6f586f62d421
-
-	PhononActivationTime: 1589544000,
+	PhononForkHeight:            1378460, // 0000000070f33c64cb94629680fbc57d17bea354a73e693affcb366d023db324
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
@@ -499,6 +505,7 @@ var TestNet3Params = Params{
 		{Height: 900000, Hash: newHashFromStr("0000000000356f8d8924556e765b7a94aaebc6b5c8685dcfa2b1ee8b41acd89b")},
 		{Height: 1000007, Hash: newHashFromStr("00000000001ccb893d8a1f25b70ad173ce955e5f50124261bbbc50379a612ddf")},
 		{Height: 1341712, Hash: newHashFromStr("00000000fffc44ea2e202bd905a9fbbb9491ef9e9d5a9eed4039079229afa35b")},
+		{Height: 1378461, Hash: newHashFromStr("0000000099f5509b5f36b1926bcf82b21d936ebeadee811030dfbbb7fae915d7")},
 	},
 
 	// Consensus rule change deployments.

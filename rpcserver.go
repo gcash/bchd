@@ -354,7 +354,7 @@ type gbtWorkState struct {
 	template      *mining.BlockTemplate
 	notifyMap     map[chainhash.Hash]map[int64]chan struct{}
 	timeSource    blockchain.MedianTimeSource
-	maxSigOps     uint32
+	maxSigChecks  uint32
 	maxBlockSize  uint32
 }
 
@@ -1606,6 +1606,8 @@ func (state *gbtWorkState) updateBlockTemplate(s *rpcServer, useCoinbaseValue bo
 		state.lastTxUpdate = lastTxUpdate
 		state.prevHash = latestHash
 		state.minTimestamp = minTimestamp
+		state.maxSigChecks = template.MaxSigChecks
+		state.maxBlockSize = template.MaxBlockSize
 
 		rpcsLog.Debugf("Generated block template (timestamp %v, "+
 			"target %s, merkle root %s)",
@@ -1739,7 +1741,6 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 			Hash:      txHash.String(),
 			Depends:   depends,
 			Fee:       template.Fees[i],
-			SigOps:    template.SigOpCosts[i],
 			SigChecks: template.SigChecks[i],
 			Size:      int64(bTx.MsgTx().SerializeSize()),
 		}
@@ -1757,7 +1758,6 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		CurTime:       header.Timestamp.Unix(),
 		Height:        int64(template.Height),
 		PreviousHash:  header.PrevBlock.String(),
-		SigOpLimit:    int64(template.MaxSigOps),
 		SigCheckLimit: int64(template.MaxSigChecks),
 		SigCheckTotal: sigChecks,
 		SizeLimit:     int64(template.MaxBlockSize),
@@ -1798,11 +1798,11 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		}
 
 		resultTx := btcjson.GetBlockTemplateResultTx{
-			Data:    hex.EncodeToString(txBuf.Bytes()),
-			Hash:    tx.TxHash().String(),
-			Depends: []int64{},
-			Fee:     template.Fees[0],
-			SigOps:  template.SigOpCosts[0],
+			Data:      hex.EncodeToString(txBuf.Bytes()),
+			Hash:      tx.TxHash().String(),
+			Depends:   []int64{},
+			Fee:       template.Fees[0],
+			SigChecks: template.SigChecks[0],
 		}
 
 		reply.CoinbaseTxn = &resultTx
@@ -2041,8 +2041,8 @@ func chainErrToGBTErrString(err error) string {
 		return "bad-txns-size-too-large"
 	case blockchain.ErrTxTooSmall:
 		return "bad-txns-size-too-small"
-	case blockchain.ErrTxTooManySigOps:
-		return "bad-txns-too-many-sigops"
+	case blockchain.ErrTxTooManySigChecks:
+		return "bad-txns-too-many-sigchecks"
 	case blockchain.ErrBadTxOutValue:
 		return "bad-txns-outputvalue"
 	case blockchain.ErrDuplicateTxInputs:
@@ -2065,8 +2065,8 @@ func chainErrToGBTErrString(err error) string {
 		return "bad-txns-highspend"
 	case blockchain.ErrBadFees:
 		return "bad-txns-fees"
-	case blockchain.ErrTooManySigOps:
-		return "high-sigops"
+	case blockchain.ErrTooManySigChecks:
+		return "high-sigchecks"
 	case blockchain.ErrFirstTxNotCoinbase:
 		return "bad-txns-nocoinbase"
 	case blockchain.ErrMultipleCoinbases:

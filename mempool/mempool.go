@@ -130,10 +130,9 @@ type Policy struct {
 	// of big orphans.
 	MaxOrphanTxSize int
 
-	// MaxSigOpCostPerTx is the cumulative maximum number of all the signature
-	// operations in a single transaction we will relay or mine.  It is a
-	// a consensus rule.
-	MaxSigOpPerTx int
+	// LimitSigChecks applies an additional standardness limit to the number
+	// of signature checks in each transaction.
+	LimitSigChecks bool
 
 	// MinRelayTxFee defines the minimum transaction fee in BCH/kB to be
 	// considered a non-zero fee.
@@ -742,10 +741,8 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	}
 
 	scriptFlags := txscript.StandardVerifyFlags
-
-	// Check if phonon is enabled. If so we add new script flags
-	if uint64(mp.cfg.MedianTimePast().Unix()) >= mp.cfg.ChainParams.PhononActivationTime {
-		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyInputSigChecks | txscript.ScriptVerifyReverseBytes
+	if !mp.cfg.Policy.LimitSigChecks {
+		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
 	}
 
 	// Perform preliminary sanity checks on the transaction.  This makes
@@ -888,28 +885,6 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 				"input: %v", txHash, err)
 			return nil, nil, txRuleError(rejectCode, str)
 		}
-	}
-
-	// NOTE: if you modify this code to accept non-standard transactions,
-	// you should add code here to check that the transaction does a
-	// reasonable number of ECDSA signature verifications.
-
-	// Don't allow transactions with an excessive number of signature
-	// operations which would result in making it impossible to mine.  Since
-	// the coinbase address itself can contain signature operations, the
-	// maximum allowed signature operations per transaction is less than
-	// the maximum allowed signature operations per block.
-	sigOps, err := blockchain.GetSigOps(tx, false, utxoView, scriptFlags)
-	if err != nil {
-		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, nil, chainRuleError(cerr)
-		}
-		return nil, nil, err
-	}
-	if sigOps > mp.cfg.Policy.MaxSigOpPerTx {
-		str := fmt.Sprintf("transaction %v sigop cost is too high: %d > %d",
-			txHash, sigOps, mp.cfg.Policy.MaxSigOpPerTx)
-		return nil, nil, txRuleError(wire.RejectNonstandard, str)
 	}
 
 	// Don't allow transactions with fees too low to get into a mined block.

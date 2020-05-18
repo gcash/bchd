@@ -3257,7 +3257,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			FreeTxRelayLimit:     cfg.FreeTxRelayLimit,
 			MaxOrphanTxs:         cfg.MaxOrphanTxs,
 			MaxOrphanTxSize:      defaultMaxOrphanTxSize,
-			MaxSigOpPerTx:        blockchain.MaxTransactionSigOps,
+			LimitSigChecks:       true,
 			MinRelayTxFee:        cfg.minRelayTxFee,
 			MaxTxVersion:         2,
 		},

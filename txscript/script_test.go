@@ -3849,63 +3849,6 @@ func TestExtractDataElements(t *testing.T) {
 	}
 }
 
-// TestGetPreciseSigOps ensures the more precise signature operation counting
-// mechanism which includes signatures in P2SH scripts works as expected.
-func TestGetPreciseSigOps(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		scriptSig []byte
-		nSigOps   int
-	}{
-		{
-			name:      "scriptSig doesn't parse",
-			scriptSig: mustParseShortForm("PUSHDATA1 0x02"),
-		},
-		{
-			name:      "scriptSig isn't push only",
-			scriptSig: mustParseShortForm("1 DUP"),
-			nSigOps:   0,
-		},
-		{
-			name:      "scriptSig length 0",
-			scriptSig: nil,
-			nSigOps:   0,
-		},
-		{
-			name: "No script at the end",
-			// No script at end but still push only.
-			scriptSig: mustParseShortForm("1 1"),
-			nSigOps:   0,
-		},
-		{
-			name:      "pushed script doesn't parse",
-			scriptSig: mustParseShortForm("DATA_2 PUSHDATA1 0x02"),
-		},
-	}
-
-	// The signature in the p2sh script is nonsensical for the tests since
-	// this script will never be executed.  What matters is that it matches
-	// the right pattern.
-	pkScript := mustParseShortForm("HASH160 DATA_20 0x433ec2ac1ffa1b7b7d0" +
-		"27f564529c57197f9ae88 EQUAL")
-
-	var scriptFlags ScriptFlags
-	scriptFlags |= ScriptVerifySigPushOnly |
-		ScriptVerifyCleanStack |
-		ScriptVerifyCheckDataSig | ScriptBip16
-
-	for _, test := range tests {
-		count := GetPreciseSigOpCount(test.scriptSig, pkScript, scriptFlags)
-		if count != test.nSigOps {
-			t.Errorf("%s: expected count of %d, got %d", test.name,
-				test.nSigOps, count)
-
-		}
-	}
-}
-
 // TestRemoveOpcodes ensures that removing opcodes from scripts behaves as
 // expected.
 func TestRemoveOpcodes(t *testing.T) {
