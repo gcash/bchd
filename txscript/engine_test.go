@@ -5,6 +5,7 @@
 package txscript
 
 import (
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchutil"
 	"testing"
@@ -744,5 +745,121 @@ func TestSegwitExemption(t *testing.T) {
 	}
 	if err := vm.Execute(); err != nil {
 		t.Errorf("TestSegwitExemption expected segwit exemption to pass")
+	}
+}
+
+func TestScriptVerifyInputSigChecks(t *testing.T) {
+	priv, err := bchec.NewPrivateKey(bchec.S256())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := priv.PubKey()
+
+	tests := []struct {
+		buildRedeemScript func() ([]byte, error)
+		tooManySigChecks  bool
+	}{
+		{
+			buildRedeemScript: func() ([]byte, error) {
+				builder := NewScriptBuilder().
+					AddData(pub.SerializeCompressed()).
+					AddOp(OP_2DUP).
+					AddOp(OP_2DUP).
+					AddOp(OP_2DUP).
+					AddOp(OP_CHECKSIGVERIFY).
+					AddOp(OP_CHECKSIGVERIFY).
+					AddOp(OP_CHECKSIGVERIFY).
+					AddOp(OP_CHECKSIG)
+
+				return builder.Script()
+			},
+			tooManySigChecks: true,
+		},
+		{
+			buildRedeemScript: func() ([]byte, error) {
+				builder := NewScriptBuilder().
+					AddData(pub.SerializeCompressed()).
+					AddOp(OP_2DUP).
+					AddOp(OP_2DUP).
+					AddOp(OP_CHECKSIGVERIFY).
+					AddOp(OP_CHECKSIGVERIFY).
+					AddOp(OP_CHECKSIG)
+
+				return builder.Script()
+			},
+			tooManySigChecks: false,
+		},
+	}
+
+	for _, test := range tests {
+		redeemScript, err := test.buildRedeemScript()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(redeemScript, &chaincfg.TestNet3Params)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pkScript, err := PayToAddrScript(addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tx := &wire.MsgTx{
+			Version: 1,
+			TxIn: []*wire.TxIn{
+				{
+					PreviousOutPoint: wire.OutPoint{
+						Hash: chainhash.Hash([32]byte{
+							0xc9, 0x97, 0xa5, 0xe5,
+							0x6e, 0x10, 0x41, 0x02,
+							0xfa, 0x20, 0x9c, 0x6a,
+							0x85, 0x2d, 0xd9, 0x06,
+							0x60, 0xa2, 0x0b, 0x2d,
+							0x9c, 0x35, 0x24, 0x23,
+							0xed, 0xce, 0x25, 0x85,
+							0x7f, 0xcd, 0x37, 0x04,
+						}),
+						Index: 0,
+					},
+					Sequence: 4294967295,
+				},
+			},
+			TxOut: []*wire.TxOut{
+				{
+					Value:    1000000000,
+					PkScript: nil,
+				},
+			},
+			LockTime: 0,
+		}
+
+		sig, err := RawTxInSchnorrSignature(tx, 0, redeemScript, SigHashAll, priv, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sigBuilder := NewScriptBuilder().addData(sig).addData(redeemScript)
+		sigBytes, err := sigBuilder.Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tx.TxIn[0].SignatureScript = sigBytes
+
+		vm, err := NewEngine(pkScript, tx, 0, StandardVerifyFlags, nil, nil, 0)
+		if err != nil {
+			t.Errorf("failed to create script: %v", err)
+		}
+		err = vm.Execute()
+		if test.tooManySigChecks && !IsErrorCode(err, ErrInputSigChecks) {
+			t.Errorf("TestScriptVerifyInputSigChecks expected ErrInputSigChecks got "+
+				"error: %v", err)
+		} else if !test.tooManySigChecks && err != nil {
+			t.Errorf("TestScriptVerifyInputSigChecks expected successful execution got "+
+				"error: %v", err)
+		}
 	}
 }

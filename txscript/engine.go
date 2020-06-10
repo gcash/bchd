@@ -331,7 +331,7 @@ func (vm *Engine) CheckErrorCondition(finalScript bool) error {
 	}
 
 	if vm.hasFlag(ScriptVerifyInputSigChecks) {
-		if len(vm.scripts[0]) < vm.sigChecks*43-60 {
+		if len(vm.tx.TxIn[vm.txIdx].SignatureScript) < vm.sigChecks*43-60 {
 			return scriptError(ErrInputSigChecks,
 				"script exceeds maximum signature density")
 		}
