@@ -690,7 +690,8 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to load block header")
 	}
-	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight, &header, blockHeight, s.chainParams)
+
+	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s.chainParams)
 	if s.txIndex != nil {
 		if err := s.setInputMetadata(respTx); err != nil {
 			return nil, err
@@ -1266,7 +1267,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					} else {
 						header := block.MsgBlock().Header
 
-						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s.chainParams)
 						if s.txIndex != nil {
 							if err := s.setInputMetadata(respTx); err != nil {
 								return err
@@ -1414,7 +1415,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					} else {
 						header := block.MsgBlock().Header
 
-						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height(), &header, block.Height(), s.chainParams)
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s.chainParams)
 						if s.txIndex != nil {
 							if err := s.setInputMetadata(respTx); err != nil {
 								return err
