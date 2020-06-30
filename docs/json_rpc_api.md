@@ -1353,11 +1353,19 @@ var password = "yourpassword";
 // for the certificate to properly validate.
 var ws = new WebSocket('wss://127.0.0.1:8334/ws', {
   headers: {
-    'Authorization': 'Basic '+new Buffer(user+':'+password).toString('base64')
+    'Authorization': 'Basic '+new Buffer.from(user+':'+password).toString('base64')
   },
   cert: cert,
   ca: [cert]
 });
+
+// if no tls
+//var ws = new WebSocket('ws://127.0.0.1:8334/ws', {
+//  headers: {
+//    'Authorization': 'Basic '+new Buffer.from(user+':'+password).toString('base64')
+//  }
+//});
+
 ws.on('open', function() {
     console.log('CONNECTED');
     // Send a JSON-RPC command to be notified when blocks are connected and
