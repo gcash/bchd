@@ -719,10 +719,12 @@ message TransactionFilter {
 
     // Subscribed/Unsubscribe to everything. Other filters
     // will be ignored.    
-    oneof all_txn_override {
-        bool all_transactions = 4;
-        bool all_slp_transactions = 5;
-    }
+    bool all_transactions = 4;
+
+    // Subscribed/Unsubscribe to everything SLP. Other filters
+    // will be ignored, except this filter will be overriden by all_transactions=true
+    bool all_slp_transactions = 5;
+
     // only transactions associated with the included tokenIds
     repeated string slp_token_ids = 6;
 }
