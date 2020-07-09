@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+
+	"github.com/simpleledgerinc/GoSlp/parser"
 )
 
 // maxAddressQuerySize is the max number of addresses
@@ -1112,6 +1114,10 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	return resp, nil
 }
 
+func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetadataRequest) (*pb.GetTokenMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method not yet implemented")
+}
+
 // SubmitTransaction submits a transaction to all connected peers.
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 
@@ -1854,12 +1860,66 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 }
 
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, params *chaincfg.Params) *pb.Transaction {
+
+	slpInfo := &pb.SlpTransactionInfo{}
+	slpMsg, slpParseErr := parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	if slpParseErr == nil {
+		if slpMsg.TransactionType == "SEND" {
+			slpInfo.TokenId = slpMsg.Data.(parser.SlpSend).TokenID
+			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
+			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1SendMessage{
+				V1SendMessage: &pb.SlpV1SendMetadata{
+					Amounts: slpMsg.Data.(parser.SlpSend).Amounts,
+				},
+			}
+
+		} else if slpMsg.TransactionType == "MINT" {
+			slpInfo.TokenId = slpMsg.Data.(parser.SlpMint).TokenID
+			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
+			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1MintMessage{
+				V1MintMessage: &pb.SlpV1MintMetadata{
+					MintAmount:    slpMsg.Data.(parser.SlpMint).Qty,
+					MintBatonVout: uint32(slpMsg.Data.(parser.SlpMint).MintBatonVout),
+				},
+			}
+		} else if slpMsg.TransactionType == "GENESIS" {
+			slpInfo.TokenId = tx.Hash().CloneBytes()
+			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
+			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1GenesisMessage{
+				V1GenesisMessage: &pb.SlpV1GenesisMetadata{
+					Name:          string(slpMsg.Data.(parser.SlpGenesis).Name),
+					Ticker:        string(slpMsg.Data.(parser.SlpGenesis).Ticker),
+					Decimals:      uint32(slpMsg.Data.(parser.SlpGenesis).Decimals),
+					DocumentUrl:   string(slpMsg.Data.(parser.SlpGenesis).DocumentURI),
+					DocumentHash:  slpMsg.Data.(parser.SlpGenesis).DocumentHash,
+					MintAmount:    slpMsg.Data.(parser.SlpGenesis).Qty,
+					MintBatonVout: uint32(slpMsg.Data.(parser.SlpGenesis).MintBatonVout),
+				},
+			}
+		}
+	} else {
+		slpInfo.ParseError = slpParseErr.Error()
+		if slpParseErr.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
+			slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+		} else if slpParseErr.Error() != "scriptpubkey cannot be empty" &&
+			slpParseErr.Error() != "scriptpubkey not op_return" &&
+			slpParseErr.Error() != "scriptpubkey too small" &&
+			slpParseErr.Error() != "SLP not in first chunk" &&
+			slpParseErr.Error() != "lokad id wrong size" &&
+			slpParseErr.Error() != "pushdata data extraction failed" {
+			slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
+		} else {
+			slpInfo.VersionType = pb.SlpVersionType_NON_SLP
+		}
+	}
+
 	respTx := &pb.Transaction{
-		Hash:          tx.Hash().CloneBytes(),
-		Confirmations: confirmations,
-		Version:       tx.MsgTx().Version,
-		Size:          int32(tx.MsgTx().SerializeSize()),
-		LockTime:      tx.MsgTx().LockTime,
+		Hash:               tx.Hash().CloneBytes(),
+		Confirmations:      confirmations,
+		Version:            tx.MsgTx().Version,
+		Size:               int32(tx.MsgTx().SerializeSize()),
+		LockTime:           tx.MsgTx().LockTime,
+		SlpTransactionInfo: slpInfo,
 	}
 	if blockHeader != nil {
 		blockHash := blockHeader.BlockHash()
@@ -1877,6 +1937,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				Index: input.PreviousOutPoint.Index,
 				Hash:  input.PreviousOutPoint.Hash.CloneBytes(),
 			},
+			SlpToken: &pb.SlpToken{
+				// TODO: fill-in SLP input amounts and token ids
+			},
 		}
 		respTx.Inputs = append(respTx.Inputs, in)
 	}
@@ -1885,6 +1948,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			Value:        output.Value,
 			Index:        uint32(i),
 			PubkeyScript: output.PkScript,
+			SlpToken:     &pb.SlpToken{
+				// TODO: fill-in SLP output amounts and token ids
+			},
 		}
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
 		if err == nil {
