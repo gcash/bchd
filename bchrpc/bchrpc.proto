@@ -80,11 +80,11 @@ service bchrpc {
     // **Requires TxIndex***
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // SubmitTransaction broadcasts a transaction to all connected peers.
-    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
-
     // Return SLP token metadata
     rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
+
+    // Submit a transaction to all connected peers.
+    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
     // SubscribeTransactions creates subscription to all relevant transactions based on
     // the subscription filter.
@@ -613,6 +613,7 @@ message Transaction {
         bytes previous_script = 6;
         // The bitcoin addresses associated with this input.
         string address = 7;
+        SlpToken slp_token = 8;
     }
 
     message Output {
@@ -628,17 +629,7 @@ message Transaction {
         string script_class = 5;
         // The script expressed in Bitcoin Cash Script.
         string disassembled_script = 6;
-
-        // slp information about the output
-        enum SlpOutputType {
-            NON_SLP = 0;
-            V1_GENESIS = 1;
-            V1_MINT = 2;
-            V1_SEND = 3;
-        }
-        SlpOutputType slp_type = 7;
-        bool slp_amount = 8;
-        bytes slp_token_id = 9;
+        SlpToken slp_token = 7;
     }
 
     // The double sha256 hash of the encoded transaction, little-endian.
@@ -669,14 +660,7 @@ message Transaction {
     // Hash of the block the transaction was recorded in, little-endian.
     bytes block_hash = 12;
 
-    // slp type of involvement for this transaction
-    enum SlpInvolvement {
-        NON_SLP = 0;
-        SLP_OUTPUTS = 1;
-        SLP_BURNED_INPUTS_FROM_INVALID_MESSAGE = 2;
-        SLP_BURNED_INPUTS_FROM_OUTPUTS_TOO_HIGH = 3;
-    }
-    repeated SlpInvolvement slp_involvement = 13;
+    SlpTransactionInfo slp_transaction_info = 13;
 }
 
 message MempoolTransaction {
@@ -729,6 +713,55 @@ message TransactionFilter {
     repeated string slp_token_ids = 6;
 }
 
+// slp
+message SlpToken {
+    bytes token_id = 1;
+    uint64 amount = 2;
+}
+
+message SlpTransactionInfo {
+    SlpVersionType version_type = 1;
+    string parse_error = 2;
+    bytes token_id = 3;
+    enum BurnFlags {
+        BURNED_INPUTS_FROM_OUTPUTS_TOO_HIGH = 0;
+    }
+    repeated BurnFlags burn_flags = 4;
+    oneof slp_opreturn_metadata {
+        SlpV1GenesisMetadata v1_genesis_message = 5;
+        SlpV1MintMetadata v1_mint_message = 6;
+        SlpV1SendMetadata v1_send_message = 7;
+    }
+}
+
+message SlpV1GenesisMetadata {
+    string name = 1;
+    string ticker = 2;
+    string document_url = 3;
+    bytes document_hash = 4;
+    uint32 decimals = 5;
+    uint32 mint_baton_vout = 6;
+    uint64 mint_amount = 7;
+}
+
+message SlpV1MintMetadata {
+    uint32 mint_baton_vout = 1;
+    uint64 mint_amount = 2;
+}
+
+message SlpV1SendMetadata {
+    repeated uint64 amounts = 1;
+}
+
+enum SlpVersionType {
+    NON_SLP = 0;
+    SLP_UNSUPPORTED_VERSION = 1;
+    SLP_PARSE_ERROR = 2;
+    SLP_V1_GENESIS = 3;
+    SLP_V1_MINT = 4;
+    SLP_V1_SEND = 5;
+}
+
 message TokenMetadataTokenType1 {
 	// nothing special here
 }
@@ -750,11 +783,12 @@ message TokenMetadata {
 	string token_document_hash = 6;
 	uint32 decimals = 7;
 	uint64 initial_token_mint_quantity = 8;
-	bytes mint_baton_txid = 9;
-	uint32 height_created = 10;
+    bytes mint_baton_txid = 9;
+    uint32 mint_baton_vout = 10;
+	uint32 height_created = 11;
 	oneof type_metadata {
-        TokenMetadataTokenType1 metadata_type1 = 11;
-        TokenMetadataNFT1Group metadata_nft1_group = 12;
-        TokenMetadataNFT1Child metadata_nft1_child = 13;
+        TokenMetadataTokenType1 metadata_type1 = 12;
+        TokenMetadataNFT1Group metadata_nft1_group = 13;
+        TokenMetadataNFT1Child metadata_nft1_child = 14;
     }
 }

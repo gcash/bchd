@@ -2429,7 +2429,7 @@ func (m *BlockNotification) GetBlock() isBlockNotification_Block {
 	if m != nil {
 		return m.Block
 	}
-	return nil
+	return mi.MessageOf(x)
 }
 
 func (x *BlockNotification) GetBlockInfo() *BlockInfo {
@@ -3087,7 +3087,7 @@ func (x *UnspentOutput) GetPubkeyScript() []byte {
 	if x != nil {
 		return x.PubkeyScript
 	}
-	return nil
+	return 0
 }
 
 func (x *UnspentOutput) GetValue() int64 {
@@ -3108,7 +3108,7 @@ func (x *UnspentOutput) GetBlockHeight() int32 {
 	if x != nil {
 		return x.BlockHeight
 	}
-	return 0
+	return nil
 }
 
 type TransactionFilter struct {
@@ -5128,6 +5128,15 @@ func (c *bchrpcClient) GetMerkleProof(ctx context.Context, in *GetMerkleProofReq
 	return out, nil
 }
 
+func (c *bchrpcClient) GetTokenMetadata(ctx context.Context, in *GetTokenMetadataRequest, opts ...grpc.CallOption) (*GetTokenMetadataResponse, error) {
+	out := new(GetTokenMetadataResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetTokenMetadata", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bchrpcClient) SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error) {
 	out := new(SubmitTransactionResponse)
 	err := c.cc.Invoke(ctx, "/pb.bchrpc/SubmitTransaction", in, out, opts...)
@@ -5652,6 +5661,24 @@ func _Bchrpc_GetMerkleProof_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_GetTokenMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTokenMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).GetTokenMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.bchrpc/GetTokenMetadata",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).GetTokenMetadata(ctx, req.(*GetTokenMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_SubmitTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SubmitTransactionRequest)
 	if err := dec(in); err != nil {
@@ -5801,6 +5828,10 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMerkleProof",
 			Handler:    _Bchrpc_GetMerkleProof_Handler,
+		},
+		{
+			MethodName: "GetTokenMetadata",
+			Handler:    _Bchrpc_GetTokenMetadata_Handler,
 		},
 		{
 			MethodName: "SubmitTransaction",
