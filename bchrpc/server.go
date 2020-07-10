@@ -24,12 +24,11 @@ import (
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/merkleblock"
+	"github.com/simpleledgerinc/GoSlp/v1parser"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-
-	"github.com/simpleledgerinc/GoSlp/parser"
 )
 
 // maxAddressQuerySize is the max number of addresses
@@ -1862,24 +1861,24 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, params *chaincfg.Params) *pb.Transaction {
 
 	slpInfo := &pb.SlpTransactionInfo{}
-	slpMsg, slpParseErr := parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	slpMsg, slpParseErr := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 	if slpParseErr == nil {
 		if slpMsg.TransactionType == "SEND" {
-			slpInfo.TokenId = slpMsg.Data.(parser.SlpSend).TokenID
+			slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
 			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
 			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1SendMessage{
 				V1SendMessage: &pb.SlpV1SendMetadata{
-					Amounts: slpMsg.Data.(parser.SlpSend).Amounts,
+					Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
 				},
 			}
 
 		} else if slpMsg.TransactionType == "MINT" {
-			slpInfo.TokenId = slpMsg.Data.(parser.SlpMint).TokenID
+			slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
 			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
 			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1MintMessage{
 				V1MintMessage: &pb.SlpV1MintMetadata{
-					MintAmount:    slpMsg.Data.(parser.SlpMint).Qty,
-					MintBatonVout: uint32(slpMsg.Data.(parser.SlpMint).MintBatonVout),
+					MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+					MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
 				},
 			}
 		} else if slpMsg.TransactionType == "GENESIS" {
@@ -1887,13 +1886,13 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
 			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1GenesisMessage{
 				V1GenesisMessage: &pb.SlpV1GenesisMetadata{
-					Name:          string(slpMsg.Data.(parser.SlpGenesis).Name),
-					Ticker:        string(slpMsg.Data.(parser.SlpGenesis).Ticker),
-					Decimals:      uint32(slpMsg.Data.(parser.SlpGenesis).Decimals),
-					DocumentUrl:   string(slpMsg.Data.(parser.SlpGenesis).DocumentURI),
-					DocumentHash:  slpMsg.Data.(parser.SlpGenesis).DocumentHash,
-					MintAmount:    slpMsg.Data.(parser.SlpGenesis).Qty,
-					MintBatonVout: uint32(slpMsg.Data.(parser.SlpGenesis).MintBatonVout),
+					Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+					Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+					Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+					DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+					DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+					MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+					MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
 				},
 			}
 		}
