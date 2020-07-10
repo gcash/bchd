@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/mining"
 	"io"
 	"net"
 	"os"
@@ -21,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gcash/bchd/mining"
 
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/chaincfg"
@@ -51,7 +52,7 @@ const (
 	defaultMaxRPCWebsockets        = 25
 	defaultMaxRPCConcurrentReqs    = 20
 	defaultDbType                  = "ffldb"
-	defaultFreeTxRelayLimit        = 15.0
+	defaultFreeTxRelayLimit        = 0
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	defaultExcessiveBlockSize      = 32000000
 	defaultBlockMinSize            = 0
