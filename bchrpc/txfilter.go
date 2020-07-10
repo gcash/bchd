@@ -3,12 +3,14 @@ package bchrpc
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/simpleledgerinc/GoSlp/parser"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -24,6 +26,9 @@ type txFilter struct {
 	fallbacks           map[string]struct{}
 
 	matchAll bool
+
+	matchAllSlp bool
+	slpTokenIds map[[32]byte]struct{}
 }
 
 // newTxFilter creates a new txFilter.
@@ -36,6 +41,7 @@ func newTxFilter() *txFilter {
 		uncompressedPubKeys: map[[65]byte]struct{}{},
 		dataElements:        map[string]struct{}{},
 		fallbacks:           map[string]struct{}{},
+		slpTokenIds:         map[[32]byte]struct{}{},
 	}
 }
 
@@ -60,6 +66,18 @@ func (f *txFilter) AddDataElement(dataElement []byte) {
 // RemoveDataElement removes a data element from the filter.
 func (f *txFilter) RemoveDataElement(dataElement []byte) {
 	delete(f.dataElements, hex.EncodeToString(dataElement))
+}
+
+func (f *txFilter) AddSlpTokenID(tokenID []byte) {
+	var id [32]byte
+	copy(id[:], tokenID)
+	f.slpTokenIds[id] = struct{}{}
+}
+
+func (f *txFilter) RemoveSlpTokenID(tokenID []byte) {
+	var id [32]byte
+	copy(id[:], tokenID)
+	delete(f.slpTokenIds, id)
 }
 
 // AddAddress adds a new address to the filter.
@@ -147,6 +165,7 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
+			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
 		}
 		f.AddAddress(addr)
@@ -158,6 +177,16 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 	}
 
 	f.matchAll = rpcFilter.AllTransactions
+
+	// handle SLP
+	if !f.matchAll {
+		f.matchAllSlp = rpcFilter.AllSlpTransactions
+		if !f.matchAllSlp {
+			for _, tokenID := range rpcFilter.GetSlpTokenIds() {
+				f.AddSlpTokenID(tokenID)
+			}
+		}
+	}
 
 	return nil
 }
@@ -181,6 +210,7 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
+			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
 		f.RemoveAddress(addr)
@@ -192,6 +222,11 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	}
 
 	f.matchAll = rpcFilter.AllTransactions
+
+	// handle SLP
+	for _, tokenId := range rpcFilter.GetSlpTokenIds() {
+		f.RemoveSlpTokenID(tokenId)
+	}
 
 	return nil
 }
@@ -206,6 +241,31 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 	// - all matching inputs can be removed from the filter for later efficiency
 
 	matched := f.matchAll
+
+	slpMsg, err := parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	if err == nil {
+		if f.matchAllSlp {
+			matched = true
+		} else {
+			var tokenID [32]byte
+			if slpMsg.TransactionType == "SEND" {
+				copy(tokenID[:], slpMsg.Data.(parser.SlpSend).TokenID)
+			} else if slpMsg.TransactionType == "MINT" {
+				copy(tokenID[:], slpMsg.Data.(parser.SlpMint).TokenID)
+			} else if slpMsg.TransactionType == "GENESIS" {
+				txnHash := tx.Hash().CloneBytes()
+				var txid []byte
+				for i := len(txnHash) - 1; i >= 0; i-- {
+					txid = append(txid, txnHash[i])
+				}
+				copy(tokenID[:], txid)
+			}
+			_, ok := f.slpTokenIds[tokenID]
+			if ok {
+				matched = true
+			}
+		}
+	}
 
 	for _, txin := range tx.MsgTx().TxIn {
 		if _, ok := f.outpoints[txin.PreviousOutPoint]; ok {
