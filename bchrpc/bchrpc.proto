@@ -82,7 +82,8 @@ service bchrpc {
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
     // SubscribeTransactions creates subscription to all relevant transactions based on 
-    // the subscription filter.
+    // the subscription filter.  The parameters to filter transactions on can be
+    // updated by sending new SubscribeTransactionsRequest objects on the stream.
     //
     // This RPC does not use bidirectional streams and therefore can be used
     // with grpc-web. You will need to close and reopen the stream whenever
@@ -92,11 +93,11 @@ service bchrpc {
     // **Requires TxIndex to receive input metadata**
     rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
-    // Subscribe to relevant transactions based on the subscription requests.
-    // The parameters to filter transactions on can be updated by sending new
-    // SubscribeTransactionsRequest objects on the stream.
+    // SubscribeTransactionStream subscribes to relevant transactions based on
+    // the subscription requests. The parameters to filter transactions on can
+    // be updated by sending new SubscribeTransactionsRequest objects on the stream.
     //
-    // Because this RPC is using bi-directional streaming it cannot be used with
+    // NOTE: Because this RPC is using bi-directional streaming it cannot be used with
     // grpc-web.
     //
     // **Requires TxIndex to receive input metadata**
