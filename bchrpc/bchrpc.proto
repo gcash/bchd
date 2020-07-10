@@ -710,13 +710,14 @@ message TransactionFilter {
     bool all_slp_transactions = 5;
 
     // only transactions associated with the included tokenIds
-    repeated string slp_token_ids = 6;
+    repeated bytes slp_token_ids = 6;
 }
 
 // slp
 message SlpToken {
     bytes token_id = 1;
     uint64 amount = 2;
+    string address = 3;
 }
 
 message SlpTransactionInfo {
