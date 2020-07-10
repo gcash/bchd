@@ -10,7 +10,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/simpleledgerinc/GoSlp/parser"
+	"github.com/simpleledgerinc/GoSlp/v1parser"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -242,16 +242,16 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 
 	matched := f.matchAll
 
-	slpMsg, err := parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 	if err == nil {
 		if f.matchAllSlp {
 			matched = true
 		} else {
 			var tokenID [32]byte
 			if slpMsg.TransactionType == "SEND" {
-				copy(tokenID[:], slpMsg.Data.(parser.SlpSend).TokenID)
+				copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
 			} else if slpMsg.TransactionType == "MINT" {
-				copy(tokenID[:], slpMsg.Data.(parser.SlpMint).TokenID)
+				copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
 			} else if slpMsg.TransactionType == "GENESIS" {
 				txnHash := tx.Hash().CloneBytes()
 				var txid []byte
