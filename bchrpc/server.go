@@ -881,7 +881,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	return resp, nil
 }
 
-// GetAddressUnspentOutputs returns all the unspent transaction outputs 
+// GetAddressUnspentOutputs returns all the unspent transaction outputs
 // for the given address.
 //
 // **Requires AddressIndex**
@@ -988,7 +988,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	return resp, nil
 }
 
-// GetUnspentOutput takes an unspent output in the utxo set and returns 
+// GetUnspentOutput takes an unspent output in the utxo set and returns
 // the utxo metadata or not found.
 func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOutputRequest) (*pb.GetUnspentOutputResponse, error) {
 	txnHash, err := chainhash.NewHash(req.Hash)
@@ -1053,7 +1053,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	return ret, nil
 }
 
-// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction 
+// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
 // in the provided block.
 //
 // **Requires TxIndex***
