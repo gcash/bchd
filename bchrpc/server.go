@@ -1861,40 +1861,109 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, params *chaincfg.Params) *pb.Transaction {
 
 	slpInfo := &pb.SlpTransactionInfo{}
+
+	// TODO: once validation indexer is completed we can try to change this to VALID!
+	slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
+
 	slpMsg, slpParseErr := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 	if slpParseErr == nil {
-		if slpMsg.TransactionType == "SEND" {
-			slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
-			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1SendMessage{
-				V1SendMessage: &pb.SlpV1SendMetadata{
-					Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
-				},
-			}
 
-		} else if slpMsg.TransactionType == "MINT" {
-			slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
-			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
-			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1MintMessage{
-				V1MintMessage: &pb.SlpV1MintMetadata{
-					MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
-					MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
-				},
+		if slpMsg.TransactionType == "GENESIS" {
+			hash := tx.Hash().CloneBytes()
+			for i := len(hash) - 1; i >= 0; i-- {
+				slpInfo.TokenId = append(slpInfo.TokenId, hash[i])
 			}
-		} else if slpMsg.TransactionType == "GENESIS" {
-			slpInfo.TokenId = tx.Hash().CloneBytes()
-			slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
-			slpInfo.SlpOpreturnMetadata = &pb.SlpTransactionInfo_V1GenesisMessage{
-				V1GenesisMessage: &pb.SlpV1GenesisMetadata{
-					Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-					Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
-					Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-					DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
-					DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-					MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
-					MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
-				},
+		}
+
+		if slpMsg.TokenType == 0x01 {
+			if slpMsg.TransactionType == "GENESIS" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
+					V1Genesis: &pb.SlpV1GenesisMetadata{
+						Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+						Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+						Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+						DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+						DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+						MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+					},
+				}
+			} else if slpMsg.TransactionType == "MINT" {
+				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
+				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
+					V1Mint: &pb.SlpV1MintMetadata{
+						MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
+					},
+				}
+			} else if slpMsg.TransactionType == "SEND" {
+				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
+					V1Send: &pb.SlpV1SendMetadata{
+						Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
+					},
+				}
 			}
+		} else if slpMsg.TokenType == 0x41 {
+			if slpMsg.TransactionType == "GENESIS" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildGenesis{
+					Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
+						Name:         string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+						Ticker:       string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+						Decimals:     uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+						DocumentUrl:  string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+						DocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+						GroupTokenId: nil,
+					},
+				}
+			} else if slpMsg.TransactionType == "SEND" {
+				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+
+				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
+					Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
+						GroupTokenId: nil,
+					},
+				}
+			}
+		} else if slpMsg.TokenType == 0x81 {
+			if slpMsg.TransactionType == "GENESIS" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
+					V1Genesis: &pb.SlpV1GenesisMetadata{
+						Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+						Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+						Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+						DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+						DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+						MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+					},
+				}
+			} else if slpMsg.TransactionType == "MINT" {
+				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
+				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
+					V1Mint: &pb.SlpV1MintMetadata{
+						MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
+					},
+				}
+			} else if slpMsg.TransactionType == "SEND" {
+				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
+					V1Send: &pb.SlpV1SendMetadata{
+						Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
+					},
+				}
+			}
+		} else {
+			slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
 		}
 	} else {
 		slpInfo.ParseError = slpParseErr.Error()
@@ -1911,6 +1980,8 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			slpInfo.VersionType = pb.SlpVersionType_NON_SLP
 		}
 	}
+
+	// TODO: loop through inputs to set SLP txn info BURN_FLAGS
 
 	respTx := &pb.Transaction{
 		Hash:               tx.Hash().CloneBytes(),

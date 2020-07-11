@@ -722,16 +722,26 @@ message SlpToken {
 
 message SlpTransactionInfo {
     SlpVersionType version_type = 1;
-    string parse_error = 2;
-    bytes token_id = 3;
-    enum BurnFlags {
-        BURNED_INPUTS_FROM_OUTPUTS_TOO_HIGH = 0;
+    enum ValidityJudgement {
+        UNKNOWN_OR_INVALID = 0;
+        VALID = 1;
     }
-    repeated BurnFlags burn_flags = 4;
-    oneof slp_opreturn_metadata {
-        SlpV1GenesisMetadata v1_genesis_message = 5;
-        SlpV1MintMetadata v1_mint_message = 6;
-        SlpV1SendMetadata v1_send_message = 7;
+    ValidityJudgement validity_judgement = 2;
+    string parse_error = 3;
+    bytes token_id = 4;
+    enum BurnFlags {
+        BURNED_INPUTS_OUTPUTS_TOO_HIGH = 0;
+        BURNED_INPUTS_BAD_OPRETURN = 1;
+        BURNED_INPUTS_OTHER_TOKEN = 2;
+        BURNED_OUTPUTS_MISSING_BCH_VOUT = 3;
+    }
+    repeated BurnFlags burn_flags = 5;
+    oneof tx_metadata {
+        SlpV1GenesisMetadata v1_genesis = 6;    // NFT1 Group also uses this
+        SlpV1MintMetadata v1_mint = 7;          // NFT1 Group also uses this
+        SlpV1SendMetadata v1_send = 8;          // NFT1 Group also uses this
+        SlpNft1ChildGenesisMetadata nft1_child_genesis = 9;
+        SlpNft1ChildSendMetadata nft1_child_send = 10;
     }
 }
 
@@ -754,25 +764,49 @@ message SlpV1SendMetadata {
     repeated uint64 amounts = 1;
 }
 
-enum SlpVersionType {
-    NON_SLP = 0;
-    SLP_UNSUPPORTED_VERSION = 1;
+message SlpNft1ChildGenesisMetadata {
+    string name = 1;
+    string ticker = 2;
+    string document_url = 3;
+    bytes document_hash = 4;
+    uint32 decimals = 5;
+    bytes group_token_id = 6;
+}
+
+message SlpNft1ChildSendMetadata {
+    bytes group_token_id = 1;
+}
+
+enum SlpVersionType {       // everything except "NON_SLP" could be annotated with burn_flags  
+    NON_SLP = 0;            // "NON_SLP" would not be persisted by "--slpindex" option (but would with "--txindex")
+    NON_SLP_BURN = 1;       // same as NON_SLP, except the transaction includes burned SLP inputs                       
     SLP_PARSE_ERROR = 2;
-    SLP_V1_GENESIS = 3;
-    SLP_V1_MINT = 4;
-    SLP_V1_SEND = 5;
+    SLP_UNSUPPORTED_VERSION = 3;
+    SLP_V1_GENESIS = 4;
+    SLP_V1_MINT = 5;
+    SLP_V1_SEND = 6;
+    SLP_NFT1_GROUP_GENESIS = 7;
+    SLP_NFT1_GROUP_MINT = 8;
+    SLP_NFT1_GROUP_SEND = 9;
+    SLP_NFT1_UNIQUE_CHILD_GENESIS = 10;
+    SLP_NFT1_UNIQUE_CHILD_SEND = 11;
 }
 
 message TokenMetadataTokenType1 {
-	// nothing special here
+    uint64 token_mint_quantity = 1;
+    bytes mint_baton_txid = 2;
+    uint32 mint_baton_vout = 3;
 }
 
 message TokenMetadataNFT1Group {
-    //repeated bytes nftChildIDs = 1; // DO WE WANT THIS?
+    uint64 token_mint_quantity = 1;
+    bytes mint_baton_txid = 2;
+    uint32 mint_baton_vout = 3;
+    //repeated bytes nftChildIDs = 4; // DO WE WANT THIS?
 }
 
 message TokenMetadataNFT1Child {
-    bytes nft1_group_id = 1;
+    bytes group_id = 1;
 }
 
 message TokenMetadata {
@@ -783,13 +817,10 @@ message TokenMetadata {
 	string token_document_url = 5;
 	string token_document_hash = 6;
 	uint32 decimals = 7;
-	uint64 initial_token_mint_quantity = 8;
-    bytes mint_baton_txid = 9;
-    uint32 mint_baton_vout = 10;
-	uint32 height_created = 11;
+	uint32 height_created = 8;
 	oneof type_metadata {
-        TokenMetadataTokenType1 metadata_type1 = 12;
-        TokenMetadataNFT1Group metadata_nft1_group = 13;
-        TokenMetadataNFT1Child metadata_nft1_child = 14;
+        TokenMetadataTokenType1 type1 = 9;
+        TokenMetadataNFT1Group nft1_group = 10;
+        TokenMetadataNFT1Child nft1_child = 11;
     }
 }
