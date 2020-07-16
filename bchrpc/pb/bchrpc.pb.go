@@ -1781,6 +1781,13 @@ func (x *GetAddressUnspentOutputsRequest) GetIncludeMempool() bool {
 	return false
 }
 
+func (x *GetAddressUnspentOutputsRequest) GetIncludeTokenMetadata() bool {
+	if x != nil {
+		return x.IncludeTokenMetadata
+	}
+	return false
+}
+
 type GetAddressUnspentOutputsResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1825,6 +1832,13 @@ func (*GetAddressUnspentOutputsResponse) Descriptor() ([]byte, []int) {
 func (x *GetAddressUnspentOutputsResponse) GetOutputs() []*UnspentOutput {
 	if x != nil {
 		return x.Outputs
+	}
+	return nil
+}
+
+func (x *GetAddressUnspentOutputsResponse) GetTokenMetadata() []*TokenMetadata {
+	if x != nil {
+		return x.TokenMetadata
 	}
 	return nil
 }
@@ -1892,6 +1906,13 @@ func (x *GetUnspentOutputRequest) GetIndex() uint32 {
 func (x *GetUnspentOutputRequest) GetIncludeMempool() bool {
 	if x != nil {
 		return x.IncludeMempool
+	}
+	return false
+}
+
+func (x *GetUnspentOutputRequest) GetIncludeTokenMetadata() bool {
+	if x != nil {
+		return x.IncludeTokenMetadata
 	}
 	return false
 }
@@ -1979,6 +2000,20 @@ func (x *GetUnspentOutputResponse) GetBlockHeight() int32 {
 		return x.BlockHeight
 	}
 	return 0
+}
+
+func (x *GetUnspentOutputResponse) GetSlpToken() *SlpToken {
+	if x != nil {
+		return x.SlpToken
+	}
+	return nil
+}
+
+func (x *GetUnspentOutputResponse) GetTokenMetadata() *TokenMetadata {
+	if x != nil {
+		return x.TokenMetadata
+	}
+	return nil
 }
 
 type GetMerkleProofRequest struct {
@@ -2143,6 +2178,13 @@ func (*SubmitTransactionRequest) Descriptor() ([]byte, []int) {
 func (x *SubmitTransactionRequest) GetTransaction() []byte {
 	if x != nil {
 		return x.Transaction
+	}
+	return nil
+}
+
+func (x *SubmitTransactionRequest) GetAllowedSlpBurns() []*Transaction_Input_Outpoint {
+	if x != nil {
+		return x.AllowedSlpBurns
 	}
 	return nil
 }
@@ -3107,6 +3149,13 @@ func (x *UnspentOutput) GetIsCoinbase() bool {
 func (x *UnspentOutput) GetBlockHeight() int32 {
 	if x != nil {
 		return x.BlockHeight
+	}
+	return nil
+}
+
+func (x *UnspentOutput) GetSlpToken() *SlpToken {
+	if x != nil {
+		return x.SlpToken
 	}
 	return nil
 }
