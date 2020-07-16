@@ -371,10 +371,12 @@ message GetAddressUnspentOutputsRequest {
     // When `include_mempool` is true, unconfirmed transactions from mempool
     // are returned. Default is false.
     bool include_mempool = 2;
+    bool include_token_metadata = 3;
 }
 message GetAddressUnspentOutputsResponse {
     // List of unspent outputs.
     repeated UnspentOutput outputs = 1;
+    repeated TokenMetadata token_metadata = 2;
 }
 
 message GetUnspentOutputRequest {
@@ -385,6 +387,7 @@ message GetUnspentOutputRequest {
     // When include_mempool is true, unconfirmed transactions from mempool
     // are returned. Default is false.
     bool include_mempool = 3;
+    bool include_token_metadata = 4;
 }
 message GetUnspentOutputResponse {
 
@@ -399,6 +402,9 @@ message GetUnspentOutputResponse {
     bool is_coinbase = 4;
     // The index number of the block containing the transaction creating the output.
     int32 block_height = 5;
+
+    SlpToken slp_token = 6;
+    TokenMetadata token_metadata = 7;
 }
 
 message GetMerkleProofRequest {
@@ -421,6 +427,7 @@ message GetMerkleProofResponse {
 message SubmitTransactionRequest {
     // The encoded transaction.
     bytes transaction = 1;
+    repeated Transaction.Input.Outpoint allowed_slp_burns = 2;
 }
 message SubmitTransactionResponse {
     bytes hash = 1;
@@ -700,6 +707,8 @@ message UnspentOutput {
     bool is_coinbase = 4;
     // The block number containing the UXTO.
     int32 block_height = 5;
+
+    SlpToken slp_token = 6;
 }
 
 message TransactionFilter {
@@ -733,7 +742,8 @@ message TransactionFilter {
 message SlpToken {
     bytes token_id = 1;
     uint64 amount = 2;
-    string address = 3;
+    bool is_mint_baton = 3;
+    string address = 4;
 }
 
 message SlpTransactionInfo {
