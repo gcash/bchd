@@ -268,6 +268,7 @@ type server struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+	slpIndex  *indexers.SlpIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
@@ -3172,6 +3173,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indxLog.Info("Address index is enabled")
 		s.addrIndex = indexers.NewAddrIndex(db, chainParams)
 		indexes = append(indexes, s.addrIndex)
+	}
+	if cfg.SlpIndex {
+		indxLog.Info("SLP index is enabled")
+		s.slpIndex = indexers.NewSlpIndex(db)
+		indexes = append(indexes, s.slpIndex)
 	}
 	if !cfg.FastSync && !cfg.NoCFilters {
 		indxLog.Info("Committed filter index is enabled")
