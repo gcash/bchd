@@ -178,6 +178,7 @@ message GetBlockchainInfoResponse {
     // When `addr_index` is true, the node has address index enabled and may
     // be used with call related by address.
     bool addr_index =7;
+    bool slp_index = 8;
 }
 
 message GetBlockInfoRequest {
@@ -258,7 +259,7 @@ message GetTransactionRequest {
     // A transaction hash, little-endian.
     bytes hash = 1;
 
-    bool include_slp_metadata = 2; // this is token metadata.  txn level SLP data will be returned regardless of this value
+    bool include_token_metadata = 2;
 }
 message GetTransactionResponse {
     // A marshaled transaction.
@@ -424,7 +425,8 @@ message GetMerkleProofResponse {
 message SubmitTransactionRequest {
     // The encoded transaction.
     bytes transaction = 1;
-    repeated Transaction.Input.Outpoint allowed_slp_burns = 2;
+    bool check_slp_validity = 2;
+    repeated Transaction.Input.Outpoint allowed_slp_burns = 3;
 }
 message SubmitTransactionResponse {
     // Transaction hash, little-endian.
