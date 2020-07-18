@@ -24,7 +24,8 @@ import (
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/merkleblock"
-	"github.com/simpleledgerinc/GoSlp/v1parser"
+	"github.com/simpleledgerinc/goslp"
+	"github.com/simpleledgerinc/goslp/v1parser"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -98,6 +99,7 @@ type GrpcServerConfig struct {
 	TxIndex   *indexers.TxIndex
 	AddrIndex *indexers.AddrIndex
 	CfIndex   *indexers.CfIndex
+	SlpIndex  *indexers.SlpIndex
 }
 
 // GrpcServer is the gRPC server implementation. It holds all the objects
@@ -113,6 +115,7 @@ type GrpcServer struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+	slpIndex  *indexers.SlpIndex
 
 	httpServer *http.Server
 	subscribe  chan *rpcEventSubscription
@@ -137,6 +140,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		txIndex:     cfg.TxIndex,
 		addrIndex:   cfg.AddrIndex,
 		cfIndex:     cfg.CfIndex,
+		slpIndex:    cfg.SlpIndex,
 		httpServer:  cfg.HTTPServer,
 		subscribe:   make(chan *rpcEventSubscription),
 		events:      make(chan interface{}),
@@ -336,7 +340,7 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 	resp := &pb.GetMempoolResponse{}
 	for _, txDesc := range rawMempool {
 		if req.FullTransactions {
-			respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+			respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 			stxos, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
 			if err != nil {
 				continue
@@ -392,6 +396,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 	resp := &pb.GetBlockchainInfoResponse{
 		AddrIndex:     s.addrIndex != nil,
 		TxIndex:       s.txIndex != nil,
+		SlpIndex:      s.slpIndex != nil,
 		BestHeight:    bestSnapShot.Height,
 		BestBlockHash: bestSnapShot.Hash[:],
 		BitcoinNet:    net,
@@ -485,7 +490,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	for idx, tx := range block.Transactions() {
 		if req.FullTransactions {
 			header := block.MsgBlock().Header
-			respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+			respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s)
 			for i := range tx.MsgTx().TxIn {
 				if idx > 0 {
 					stxo := spentTxos[spendIdx]
@@ -646,13 +651,17 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		return nil, status.Error(codes.Unavailable, "txindex required")
 	}
 
+	if req.IncludeTokenMetadata && s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
+	}
+
 	txHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
 	}
 
 	if txDesc, err := s.txMemPool.FetchTxDesc(txHash); err == nil {
-		tx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+		tx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 		tx.Timestamp = txDesc.Added.Unix()
 
 		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
@@ -694,7 +703,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		return nil, status.Error(codes.Internal, "failed to load block header")
 	}
 
-	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s.chainParams)
+	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
 	if s.txIndex != nil {
 		if err := s.setInputMetadata(respTx); err != nil {
 			return nil, err
@@ -784,7 +793,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	tip := s.chain.BestSnapshot().Height
 	for _, cTx := range confirmedTxs {
-		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s.chainParams)
+		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s)
 		if s.txIndex != nil {
 			if err := s.setInputMetadata(tx); err != nil {
 				return nil, err
@@ -795,7 +804,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
-		tx := marshalTransaction(uTx, 0, nil, 0, s.chainParams)
+		tx := marshalTransaction(uTx, 0, nil, 0, s)
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
 		if err != nil {
 			continue
@@ -890,6 +899,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAddressUnspentOutputsRequest) (*pb.GetAddressUnspentOutputsResponse, error) {
 	if s.addrIndex == nil {
 		return nil, status.Error(codes.Unavailable, "addrindex required")
+	}
+
+	if req.IncludeTokenMetadata && s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
 
 	// Attempt to decode the supplied address.
@@ -993,6 +1006,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 // GetUnspentOutput takes an unspent output in the utxo set and returns
 // the utxo metadata or not found.
 func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOutputRequest) (*pb.GetUnspentOutputResponse, error) {
+
+	if req.IncludeTokenMetadata && s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
+	}
+
 	txnHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
@@ -1115,6 +1133,9 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 }
 
 func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetadataRequest) (*pb.GetTokenMetadataResponse, error) {
+	if s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
+	}
 	return nil, status.Error(codes.Unimplemented, "method not yet implemented")
 }
 
@@ -1124,6 +1145,14 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	var msgTx wire.MsgTx
 	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
+	}
+
+	if req.CheckSlpValidity {
+		if s.slpIndex == nil {
+			return nil, status.Error(codes.Unavailable, "slpindex required")
+		}
+
+		// TODO... check slp txn validity
 	}
 
 	// Use 0 for the tag to represent local node.
@@ -1226,7 +1255,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					}
 
 				} else {
-					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
 						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
@@ -1275,7 +1304,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					} else {
 						header := block.MsgBlock().Header
 
-						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s.chainParams)
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s)
 						if s.txIndex != nil {
 							if err := s.setInputMetadata(respTx); err != nil {
 								return err
@@ -1374,7 +1403,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					}
 
 				} else {
-					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s.chainParams)
+					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
 						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
@@ -1423,7 +1452,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					} else {
 						header := block.MsgBlock().Header
 
-						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s.chainParams)
+						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s)
 						if s.txIndex != nil {
 							if err := s.setInputMetadata(respTx); err != nil {
 								return err
@@ -1489,7 +1518,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 					for idx, tx := range block.Transactions() {
 						if req.FullTransactions {
 							header := block.MsgBlock().Header
-							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s)
 
 							for i := range tx.MsgTx().TxIn {
 								if idx > 0 {
@@ -1575,7 +1604,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 					for idx, tx := range block.Transactions() {
 						if req.FullTransactions {
 							header := block.MsgBlock().Header
-							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s.chainParams)
+							respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s)
 							for i := range tx.MsgTx().TxIn {
 								if idx > 0 {
 									stxo := spentTxos[spendIdx]
@@ -1858,130 +1887,130 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 	}
 }
 
-func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, params *chaincfg.Params) *pb.Transaction {
+func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, s *GrpcServer) *pb.Transaction {
+	params := s.chainParams
 
-	slpInfo := &pb.SlpTransactionInfo{}
+	var slpInfo *pb.SlpTransactionInfo
+	if s.slpIndex != nil {
+		slpInfo = &pb.SlpTransactionInfo{}
 
-	// TODO: once validation indexer is completed we can try to change this to VALID!
-	slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
-
-	slpMsg, slpParseErr := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
-	if slpParseErr == nil {
-
-		if slpMsg.TransactionType == "GENESIS" {
-			hash := tx.Hash().CloneBytes()
-			for i := len(hash) - 1; i >= 0; i-- {
-				slpInfo.TokenId = append(slpInfo.TokenId, hash[i])
-			}
+		// handle SLP validity judgement using the SLP indexer
+		slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
+		_, err := s.slpIndex.GetSlpIndexEntry(tx.Hash())
+		if err != nil {
+			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 		}
 
-		if slpMsg.TokenType == 0x01 {
-			if slpMsg.TransactionType == "GENESIS" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
-					V1Genesis: &pb.SlpV1GenesisMetadata{
-						Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-						Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
-						Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-						DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
-						DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-						MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
-						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
-					},
+		// parse the transaction for SLP attributes
+		slpPkScript := tx.MsgTx().TxOut[0].PkScript
+		slpMsg, err := v1parser.ParseSLP(slpPkScript)
+		if err == nil {
+			_tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
+			slpInfo.TokenId = _tokenID
+			if slpMsg.TokenType == 0x01 {
+				if slpMsg.TransactionType == "GENESIS" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
+						V1Genesis: &pb.SlpV1GenesisMetadata{
+							Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+							Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+							DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+							MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+						},
+					}
+				} else if slpMsg.TransactionType == "MINT" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
+						V1Mint: &pb.SlpV1MintMetadata{
+							MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
+						},
+					}
+				} else if slpMsg.TransactionType == "SEND" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
+						V1Send: &pb.SlpV1SendMetadata{
+							Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
+						},
+					}
 				}
-			} else if slpMsg.TransactionType == "MINT" {
-				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
-				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
-					V1Mint: &pb.SlpV1MintMetadata{
-						MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
-						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
-					},
+			} else if slpMsg.TokenType == 0x41 {
+				if slpMsg.TransactionType == "GENESIS" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildGenesis{
+						Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
+							Name:         string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+							Ticker:       string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Decimals:     uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+							DocumentUrl:  string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+							GroupTokenId: nil,
+						},
+					}
+				} else if slpMsg.TransactionType == "SEND" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
+						Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
+							GroupTokenId: nil,
+						},
+					}
 				}
-			} else if slpMsg.TransactionType == "SEND" {
-				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-				slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
-					V1Send: &pb.SlpV1SendMetadata{
-						Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
-					},
+			} else if slpMsg.TokenType == 0x81 {
+				if slpMsg.TransactionType == "GENESIS" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
+						V1Genesis: &pb.SlpV1GenesisMetadata{
+							Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
+							Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+							DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+							MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+						},
+					}
+				} else if slpMsg.TransactionType == "MINT" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
+						V1Mint: &pb.SlpV1MintMetadata{
+							MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
+						},
+					}
+				} else if slpMsg.TransactionType == "SEND" {
+					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
+						V1Send: &pb.SlpV1SendMetadata{
+							Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
+						},
+					}
 				}
-			}
-		} else if slpMsg.TokenType == 0x41 {
-			if slpMsg.TransactionType == "GENESIS" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildGenesis{
-					Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
-						Name:         string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-						Ticker:       string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
-						Decimals:     uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-						DocumentUrl:  string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
-						DocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-						GroupTokenId: nil,
-					},
-				}
-			} else if slpMsg.TransactionType == "SEND" {
-				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-
-				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
-					Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
-						GroupTokenId: nil,
-					},
-				}
-			}
-		} else if slpMsg.TokenType == 0x81 {
-			if slpMsg.TransactionType == "GENESIS" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
-					V1Genesis: &pb.SlpV1GenesisMetadata{
-						Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-						Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
-						Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-						DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
-						DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-						MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
-						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
-					},
-				}
-			} else if slpMsg.TransactionType == "MINT" {
-				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
-				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
-					V1Mint: &pb.SlpV1MintMetadata{
-						MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
-						MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
-					},
-				}
-			} else if slpMsg.TransactionType == "SEND" {
-				slpInfo.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-				slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
-				slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
-					V1Send: &pb.SlpV1SendMetadata{
-						Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
-					},
-				}
+			} else {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
 			}
 		} else {
-			slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+			slpInfo.ParseError = err.Error()
+			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+			} else if err.Error() != "scriptpubkey cannot be empty" &&
+				err.Error() != "scriptpubkey not op_return" &&
+				err.Error() != "scriptpubkey too small" &&
+				err.Error() != "SLP not in first chunk" &&
+				err.Error() != "lokad id wrong size" &&
+				err.Error() != "pushdata data extraction failed" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
+			} else {
+				slpInfo.VersionType = pb.SlpVersionType_NON_SLP
+			}
 		}
-	} else {
-		slpInfo.ParseError = slpParseErr.Error()
-		if slpParseErr.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
-			slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
-		} else if slpParseErr.Error() != "scriptpubkey cannot be empty" &&
-			slpParseErr.Error() != "scriptpubkey not op_return" &&
-			slpParseErr.Error() != "scriptpubkey too small" &&
-			slpParseErr.Error() != "SLP not in first chunk" &&
-			slpParseErr.Error() != "lokad id wrong size" &&
-			slpParseErr.Error() != "pushdata data extraction failed" {
-			slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
-		} else {
-			slpInfo.VersionType = pb.SlpVersionType_NON_SLP
-		}
+
+		// TODO: loop through SLP inputs to set SLP txn info BURN_FLAGS
+		// ... We can see if any of the inputs were burned and return this info to the user
+
 	}
-
-	// TODO: loop through inputs to set SLP txn info BURN_FLAGS
 
 	respTx := &pb.Transaction{
 		Hash:               tx.Hash().CloneBytes(),
