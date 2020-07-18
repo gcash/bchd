@@ -10,7 +10,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/simpleledgerinc/GoSlp/v1parser"
+	"github.com/simpleledgerinc/goslp/v1parser"
 	"golang.org/x/crypto/ripemd160"
 )
 
