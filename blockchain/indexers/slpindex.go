@@ -596,7 +596,7 @@ func dropTokenIDIndex(db database.DB) error {
 // exists.  Since the address index relies on it, the address index will also be
 // dropped when it exists.
 func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
-	err := dropIndex(db, addrIndexKey, addrIndexName, interrupt)
+	err := dropIndex(db, slpIndexKey, slpIndexName, interrupt)
 	if err != nil {
 		return err
 	}

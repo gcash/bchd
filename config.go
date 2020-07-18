@@ -64,6 +64,7 @@ const (
 	defaultSigCacheMaxSize         = 100000
 	defaultTxIndex                 = false
 	defaultAddrIndex               = false
+	defaultSlpIndex                = false
 	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
@@ -182,6 +183,8 @@ type config struct {
 	DropTxIndex             bool          `long:"droptxindex" description:"Deletes the hash-based transaction index from the database on start up and then exits."`
 	AddrIndex               bool          `long:"addrindex" description:"Maintain a full address-based transaction index which makes the searchrawtransactions RPC available"`
 	DropAddrIndex           bool          `long:"dropaddrindex" description:"Deletes the address-based transaction index from the database on start up and then exits."`
+	SlpIndex                bool          `long:"slpindex" description:"Maintain an index which makes slp transaction validity and token metadata available via various gRPC methods"`
+	DropSlpIndex            bool          `long:"dropslpindex" description:"Deletes the slp index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
@@ -462,6 +465,7 @@ func loadConfig() (*config, []string, error) {
 		Generate:                defaultGenerate,
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,
+		SlpIndex:                defaultSlpIndex,
 		PruneDepth:              defaultPruneDepth,
 		TargetOutboundPeers:     defaultTargetOutboundPeers,
 		DBCacheSize:             defaultDBCacheSize,
@@ -915,6 +919,16 @@ func loadConfig() (*config, []string, error) {
 			"options may not be activated at the same time "+
 			"because the address index relies on the transaction "+
 			"index",
+			funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// --slpindex and --dropslpindex do not mix.
+	if cfg.SlpIndex && cfg.DropSlpIndex {
+		err := fmt.Errorf("%s: the --slpindex and --dropslpindex "+
+			"options may not be activated at the same time",
 			funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
