@@ -6,6 +6,7 @@ package indexers
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/gcash/bchd/blockchain"
@@ -50,7 +51,16 @@ func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, heig
 func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32, error) {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
 	serialized := indexesBucket.Get(idxKey)
+
+	// TODO: move this to a config?
+	slpStartHeight := int32(543375)
+	slpStartBlockHash, _ := hex.DecodeString("a462e172119242d76d946b847a152b5552014cf2b09fb8010000000000000000")
+
 	if len(serialized) < chainhash.HashSize+4 {
+		if string(idxKey) == string(slpIndexKey) {
+			_hash, _ := chainhash.NewHash(slpStartBlockHash)
+			return _hash, slpStartHeight, nil
+		}
 		return nil, 0, database.Error{
 			ErrorCode: database.ErrCorruption,
 			Description: fmt.Sprintf("unexpected end of data for "+
@@ -61,6 +71,13 @@ func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32,
 	var hash chainhash.Hash
 	copy(hash[:], serialized[:chainhash.HashSize])
 	height := int32(byteOrder.Uint32(serialized[chainhash.HashSize:]))
+
+	if string(idxKey) == string(slpIndexKey) && height < slpStartHeight {
+		height = slpStartHeight
+		_slpHash, _ := chainhash.NewHash(slpStartBlockHash)
+		hash = *_slpHash
+	}
+
 	return &hash, height, nil
 }
 
