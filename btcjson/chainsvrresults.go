@@ -24,37 +24,25 @@ type GetBlockHeaderVerboseResult struct {
 	NextHash      string  `json:"nextblockhash,omitempty"`
 }
 
-// GetBlockBaseVerboseResult models the common data from the getblock command when
-// verbose flag set to 1 or 2. When the verbose flag is not set, getblock
-// returns a hex-encoded string.
-type GetBlockBaseVerboseResult struct {
-	Hash          string  `json:"hash"`
-	Confirmations int64   `json:"confirmations"`
-	Size          int32   `json:"size"`
-	Height        int64   `json:"height"`
-	Version       int32   `json:"version"`
-	VersionHex    string  `json:"versionHex"`
-	MerkleRoot    string  `json:"merkleroot"`
-	Time          int64   `json:"time"`
-	Nonce         uint32  `json:"nonce"`
-	Bits          string  `json:"bits"`
-	Difficulty    float64 `json:"difficulty"`
-	PreviousHash  string  `json:"previousblockhash"`
-	NextHash      string  `json:"nextblockhash,omitempty"`
-}
-
 // GetBlockVerboseResult models the data from the getblock command when the
-// verbose flag is set to 1 (default).
+// verbose flag is set.  When the verbose flag is not set, getblock returns a
+// hex-encoded string.
 type GetBlockVerboseResult struct {
-	*GetBlockBaseVerboseResult
-	Tx []string `json:"tx,omitempty"`
-}
-
-// GetBlockVerboseTxResult models the data from the getblock command when the
-// verbose flag is set to 2.
-type GetBlockVerboseTxResult struct {
-	*GetBlockBaseVerboseResult
-	Tx []TxRawResult `json:"tx,omitempty"`
+	Hash          string        `json:"hash"`
+	Confirmations int64         `json:"confirmations"`
+	Size          int32         `json:"size"`
+	Height        int64         `json:"height"`
+	Version       int32         `json:"version"`
+	VersionHex    string        `json:"versionHex"`
+	MerkleRoot    string        `json:"merkleroot"`
+	Tx            []string      `json:"tx,omitempty"`
+	RawTx         []TxRawResult `json:"rawtx,omitempty"`
+	Time          int64         `json:"time"`
+	Nonce         uint32        `json:"nonce"`
+	Bits          string        `json:"bits"`
+	Difficulty    float64       `json:"difficulty"`
+	PreviousHash  string        `json:"previousblockhash"`
+	NextHash      string        `json:"nextblockhash,omitempty"`
 }
 
 // AddMultisigAddressResult models the data returned from the addmultisigaddress

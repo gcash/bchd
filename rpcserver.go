@@ -1078,13 +1078,13 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		}
 	}
 
-	// When the verbose flag isn't set, simply return the
-	// network-serialized block as a hex-encoded string.
+	// When the verbose flag isn't set, simply return the serialized block
+	// as a hex-encoded string.
 	if c.Verbose != nil && !*c.Verbose {
 		return hex.EncodeToString(blkBytes), nil
 	}
 
-	// Generate the JSON object and return it.
+	// The verbose flag is set, so generate the JSON object and return it.
 
 	// Deserialize the block.
 	blk, err := bchutil.NewBlockFromBytes(blkBytes)
@@ -1113,12 +1113,9 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		nextHashString = nextHash.String()
 	}
 
-	var (
-		blockReply  interface{}
-		params      = s.cfg.ChainParams
-		blockHeader = &blk.MsgBlock().Header
-	)
-	baseBlockReply := &btcjson.GetBlockBaseVerboseResult{
+	params := s.cfg.ChainParams
+	blockHeader := &blk.MsgBlock().Header
+	blockReply := btcjson.GetBlockVerboseResult{
 		Hash:          c.Hash,
 		Version:       blockHeader.Version,
 		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
@@ -1141,10 +1138,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 			txNames[i] = tx.Hash().String()
 		}
 
-		blockReply = btcjson.GetBlockVerboseResult{
-			GetBlockBaseVerboseResult: baseBlockReply,
-			Tx:                        txNames,
-		}
+		blockReply.Tx = txNames
 	} else {
 		txns := blk.Transactions()
 		rawTxns := make([]btcjson.TxRawResult, len(txns))
@@ -1157,11 +1151,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 			}
 			rawTxns[i] = *rawTxn
 		}
-
-		blockReply = btcjson.GetBlockVerboseTxResult{
-			GetBlockBaseVerboseResult: baseBlockReply,
-			Tx:                        rawTxns,
-		}
+		blockReply.RawTx = rawTxns
 	}
 
 	return blockReply, nil

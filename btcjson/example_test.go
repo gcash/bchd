@@ -11,14 +11,15 @@ import (
 	"github.com/gcash/bchd/btcjson"
 )
 
-// Create a new getblock command. Notice the call to btcjson.Uint32 which is a
-// convenience function for creating a pointer out of a primitive for
-// optional parameters. Notice the nil parameter indicates
-// to use the default parameter for that fields.  This is a common
-// pattern used in all of the New<Foo>Cmdr functions in this package for
-// optional fields.
+// This example demonstrates how to create and marshal a command into a JSON-RPC
+// request.
 func ExampleMarshalCmd() {
-	// Create a new getblock command.
+	// Create a new getblock command.  Notice the nil parameter indicates
+	// to use the default parameter for that fields.  This is a common
+	// pattern used in all of the New<Foo>Cmd functions in this package for
+	// optional fields.  Also, notice the call to btcjson.Bool which is a
+	// convenience function for creating a pointer out of a primitive for
+	// optional parameters.
 	blockHash := "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
 	gbCmd := btcjson.NewGetBlockCmd(blockHash, btcjson.Bool(false), nil)
 

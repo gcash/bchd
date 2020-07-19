@@ -110,8 +110,8 @@ func resultStructHelp(xT descLookupFunc, rt reflect.Type, indentLevel int) []str
 		fieldType := reflectTypeToJSONType(xT, rtfType)
 		fieldDescKey := typeName + "-" + fieldName
 		fieldExamples, isComplex := reflectTypeToJSONExample(xT,
-			rtfType, indentLevel, fieldDescKey, rtf.Anonymous)
-		if isComplex && !rtf.Anonymous {
+			rtfType, indentLevel, fieldDescKey)
+		if isComplex {
 			var brace string
 			kind := rtfType.Kind()
 			if kind == reflect.Array || kind == reflect.Slice {
@@ -122,8 +122,6 @@ func resultStructHelp(xT descLookupFunc, rt reflect.Type, indentLevel int) []str
 			result := fmt.Sprintf("%s\"%s\": %s\t(%s)\t%s", indent,
 				fieldName, brace, fieldType, xT(fieldDescKey))
 			results = append(results, result)
-			results = append(results, fieldExamples...)
-		} else if isComplex && rtf.Anonymous {
 			results = append(results, fieldExamples...)
 		} else {
 			result := fmt.Sprintf("%s\"%s\": %s,\t(%s)\t%s", indent,
@@ -142,7 +140,7 @@ func resultStructHelp(xT descLookupFunc, rt reflect.Type, indentLevel int) []str
 // a tab writer.  A bool is also returned which specifies whether or not the
 // type results in a complex JSON object since they need to be handled
 // differently.
-func reflectTypeToJSONExample(xT descLookupFunc, rt reflect.Type, indentLevel int, fieldDescKey string, embeddedStruct bool) ([]string, bool) {
+func reflectTypeToJSONExample(xT descLookupFunc, rt reflect.Type, indentLevel int, fieldDescKey string) ([]string, bool) {
 	// Indirect pointer if needed.
 	if rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
@@ -165,12 +163,7 @@ func reflectTypeToJSONExample(xT descLookupFunc, rt reflect.Type, indentLevel in
 
 	case reflect.Struct:
 		indent := strings.Repeat(" ", indentLevel)
-		nextIndentLevel := indentLevel
-
-		if !embeddedStruct {
-			nextIndentLevel++
-		}
-		results := resultStructHelp(xT, rt, nextIndentLevel)
+		results := resultStructHelp(xT, rt, indentLevel+1)
 
 		// An opening brace is needed for the first indent level.  For
 		// all others, it will be included as a part of the previous
@@ -181,22 +174,20 @@ func reflectTypeToJSONExample(xT descLookupFunc, rt reflect.Type, indentLevel in
 			copy(newResults[1:], results)
 			results = newResults
 		}
-		if !embeddedStruct {
-			// The closing brace has a comma after it except for the first
-			// indent level.  The final tabs are necessary so the tab writer
-			// lines things up properly.
-			closingBrace := indent + "}"
-			if indentLevel > 0 {
-				closingBrace += ","
-			}
-			results = append(results, closingBrace+"\t\t")
-		}
 
+		// The closing brace has a comma after it except for the first
+		// indent level.  The final tabs are necessary so the tab writer
+		// lines things up properly.
+		closingBrace := indent + "}"
+		if indentLevel > 0 {
+			closingBrace += ","
+		}
+		results = append(results, closingBrace+"\t\t")
 		return results, true
 
 	case reflect.Array, reflect.Slice:
 		results, isComplex := reflectTypeToJSONExample(xT, rt.Elem(),
-			indentLevel, fieldDescKey, false)
+			indentLevel, fieldDescKey)
 
 		// When the result is complex, it is because this is an array of
 		// objects.
@@ -260,7 +251,7 @@ func reflectTypeToJSONExample(xT descLookupFunc, rt reflect.Type, indentLevel in
 // type.
 func resultTypeHelp(xT descLookupFunc, rt reflect.Type, fieldDescKey string) string {
 	// Generate the JSON example for the result type.
-	results, isComplex := reflectTypeToJSONExample(xT, rt, 0, fieldDescKey, false)
+	results, isComplex := reflectTypeToJSONExample(xT, rt, 0, fieldDescKey)
 
 	// When this is a primitive type, add the associated JSON type and
 	// result description into the final string, format it accordingly,
