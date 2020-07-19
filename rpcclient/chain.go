@@ -166,10 +166,6 @@ func (c *Client) GetBlockVerboseTxAsync(blockHash *chainhash.Hash) FutureGetBloc
 	}
 
 	cmd := btcjson.NewGetBlockCmd(hash, btcjson.Bool(true), btcjson.Bool(true))
-<<<<<<< HEAD
-
-=======
->>>>>>> parent of 16110805... Update getblock command to 0.15.0+ syntax
 	return c.sendCmd(cmd)
 }
 
