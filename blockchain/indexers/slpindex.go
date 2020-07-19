@@ -184,7 +184,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, txHash *chainhash.Hash,
 		dbPutTokenIDIndexEntry(dbTx, tokenIDHash, tokenID)
 	}
 
-	var target []byte
+	target := make([]byte, 4+1+len(slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
 	target[5] = slpVersion
 	copy(target[6:], slpMsgPkScript)
@@ -220,71 +220,15 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash, entry *SlpIn
 	}
 
 	_tokenID, _ := dbFetchTokenHashByID(dbTx, binary.BigEndian.Uint32(serializedData[0:4]))
+	if _tokenID == nil {
+		return nil
+	}
 	entry.tokenID = *_tokenID
 	entry.slpVersionType = uint8(serializedData[5])
 	entry.slpOpReturn = serializedData[6:]
 
 	return nil
 }
-
-// dbAddSlpIndexEntries uses an existing database transaction to add a
-// transaction index entry for every transaction in the passed block.
-//
-// TODO: need to make sure to validate SLP tokens
-//
-// func dbAddSlpIndexEntries(idx *SlpIndex, dbTx database.Tx, block *bchutil.Block) error {
-// 	// The offset and length of the transactions within the serialized
-// 	// block.
-// 	_, err := block.TxLoc()
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// As an optimization, allocate a single slice big enough to hold all
-// 	// of the serialized transaction index entries for the block and
-// 	// serialize them directly into the slice.  Then, pass the appropriate
-// 	// subslice to the database to be written.  This approach significantly
-// 	// cuts down on the number of required allocations.
-// 	offset := 0
-// 	maxSlpTxEntrySize := 4 + 1 + 220
-// 	serializedValues := make([]byte, len(block.Transactions())*maxSlpTxEntrySize)
-// 	var slpTxns map[chainhash.Hash]*wire.MsgTx
-
-// 	// first loop through transactions to get potential valid SLP transactions
-// 	for _, tx := range block.Transactions() {
-// 		m := tx.MsgTx()
-// 		slpMsgSize := len(m.TxOut[0].PkScript)
-// 		slpTxEntrySize := 4 + 1 + slpMsgSize
-// 		slpMsg, _ := v1parser.ParseSLP(m.TxOut[0].PkScript)
-// 		if slpMsg != nil {
-// 			slpVersion := uint8(0) // 0 indicates an unknown SLP type
-// 			slpMsgPkScript := m.TxOut[0].PkScript
-
-// 			// get current tokenID for the slp tokenID hash
-// 			tokenIDHash := chainhash.Hash{}
-// 			_tokenIDHash, err := goslp.GetSlpTokenID(m)
-// 			if err != nil {
-// 				continue
-// 			}
-// 			tokenIDHash.SetBytes(_tokenIDHash)
-// 			tokenID, err := dbFetchTokenIDByHash(dbTx, &tokenIDHash)
-// 			if err != nil {
-// 				idx.curTokenID++
-// 				tokenID = idx.curTokenID
-// 			}
-// 			putSlpIndexEntry(serializedValues[offset:], tokenID, slpVersion, slpMsgPkScript)
-// 			endOffset := offset + slpTxEntrySize
-// 			err = dbPutSlpIndexEntry(dbTx, tx.Hash(),
-// 				serializedValues[offset:endOffset:endOffset])
-// 			if err != nil {
-// 				return err
-// 			}
-// 			offset += slpTxEntrySize
-// 		}
-// 	}
-
-// 	return nil
-// }
 
 // dbRemoveSlpIndexEntry uses an existing database transaction to remove the most
 // recent transaction index entry for the given hash.
@@ -467,8 +411,8 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 		for i, txi := range tx.TxIn {
 			prevIdx := int(txi.PreviousOutPoint.Index)
-			slpEntry, err := idx.GetSlpIndexEntry(&txi.PreviousOutPoint.Hash)
-			if err != nil {
+			slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
+			if err != nil || slpEntry == nil {
 				continue
 			}
 
@@ -558,13 +502,9 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 // will be returned for the both the entry and the error, which would mean the transaction is invalid
 //
 // This function is safe for concurrent access.
-func (idx *SlpIndex) GetSlpIndexEntry(hash *chainhash.Hash) (*SlpIndexEntry, error) {
+func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
 	var slpEntry *SlpIndexEntry
-	err := idx.db.View(func(dbTx database.Tx) error {
-		var err error
-		err = dbFetchSlpIndexEntry(dbTx, hash, slpEntry)
-		return err
-	})
+	err := dbFetchSlpIndexEntry(dbTx, hash, slpEntry)
 	return slpEntry, err
 }
 

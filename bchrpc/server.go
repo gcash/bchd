@@ -1896,7 +1896,12 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 		// handle SLP validity judgement using the SLP indexer
 		slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
-		_, err := s.slpIndex.GetSlpIndexEntry(tx.Hash())
+
+		err := s.db.View(func(dbTx database.Tx) error {
+			_, err := s.slpIndex.GetSlpIndexEntry(dbTx, tx.Hash())
+			return err
+		})
+
 		if err != nil {
 			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 		}
