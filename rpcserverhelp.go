@@ -162,10 +162,9 @@ var helpDescsEnUS = map[string]string{
 	// GetBlockCmd help.
 	"getblock--synopsis":   "Returns information about a block given its hash.",
 	"getblock-hash":        "The hash of the block",
-	"getblock-verbose":     "Specifies the block is returned as a JSON object instead of hex-encoded string",
-	"getblock-verbosetx":   "Specifies that each transaction is returned as a JSON object and only applies if the verbose flag is true (bchd extension)",
-	"getblock--condition0": "verbose=false",
-	"getblock--condition1": "verbose=true",
+	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), or as parsed data with parsed transaction data (2) ",
+	"getblock--condition0": "verbosity=0",
+	"getblock--condition1": "verbosity=1",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
 
 	// GetBlockChainInfoCmd help.
@@ -233,8 +232,8 @@ var helpDescsEnUS = map[string]string{
 	"getblockverboseresult-version":           "The block version",
 	"getblockverboseresult-versionHex":        "The block version in hexadecimal",
 	"getblockverboseresult-merkleroot":        "Root hash of the merkle tree",
-	"getblockverboseresult-tx":                "The transaction hashes (only when verbosetx=false)",
-	"getblockverboseresult-rawtx":             "The transactions as JSON objects (only when verbosetx=true)",
+	"getblockverboseresult-tx":                "The transaction hashes (only when verbosity=1)",
+	"getblockverboseresult-rawtx":             "The transactions as JSON objects (only when verbosity=2)",
 	"getblockverboseresult-time":              "The block time in seconds since 1 Jan 1970 GMT",
 	"getblockverboseresult-nonce":             "The block nonce",
 	"getblockverboseresult-bits":              "The bits which represent the block difficulty",
