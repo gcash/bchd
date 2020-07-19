@@ -7,8 +7,9 @@ package blockchain
 import (
 	"container/list"
 	"fmt"
-	"github.com/gcash/bchd/txscript"
 	"sync"
+
+	"github.com/gcash/bchd/txscript"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
@@ -77,6 +78,21 @@ type UtxoEntry struct {
 	// since it was loaded.  This approach is used in order to reduce memory
 	// usage since there will be a lot of these in memory.
 	packedFlags txoFlags
+}
+
+// NewUtxoEntry returns a new UtxoEntry built from the arguments.
+func NewUtxoEntry(txOut *wire.TxOut, blockHeight int32, isCoinbase bool) *UtxoEntry {
+	var cbFlag txoFlags
+	if isCoinbase {
+		cbFlag |= tfCoinBase
+	}
+
+	return &UtxoEntry{
+		amount:      txOut.Value,
+		pkScript:    txOut.PkScript,
+		blockHeight: blockHeight,
+		packedFlags: cbFlag,
+	}
 }
 
 // IsCoinBase returns whether or not the output was contained in a coinbase
