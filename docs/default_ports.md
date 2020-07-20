@@ -13,3 +13,4 @@ configurations.
 |----|----|
 |Default Bitcoin peer-to-peer port|TCP 8333|
 |Default RPC port|TCP 8334|
+|Default gRPC port|TCP 8335|
