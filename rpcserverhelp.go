@@ -167,8 +167,8 @@ var helpDescsEnUS = map[string]string{
 	"getblock--condition1": "verbosity=1",
 	"getblock--condition2": "verbosity=2",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
-	"getblock--result1":    "JSON object with information about block",
-	"getblock--result2":    "JSON object with information about block and each transaction",
+	"getblock--result1":    "JSON object with information about the block",
+	"getblock--result2":    "JSON object with information about the block and each transaction",
 
 	// GetBlockChainInfoCmd help.
 	"getblockchaininfo--synopsis": "Returns information about the current blockchain state and the status of any active soft-fork deployments.",
