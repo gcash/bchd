@@ -165,7 +165,10 @@ var helpDescsEnUS = map[string]string{
 	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), or as parsed data with parsed transaction data (2) ",
 	"getblock--condition0": "verbosity=0",
 	"getblock--condition1": "verbosity=1",
+	"getblock--condition2": "verbosity=2",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
+	"getblock--result1":    "JSON object with information about block",
+	"getblock--result2":    "JSON object with information about block and each transaction",
 
 	// GetBlockChainInfoCmd help.
 	"getblockchaininfo--synopsis": "Returns information about the current blockchain state and the status of any active soft-fork deployments.",
