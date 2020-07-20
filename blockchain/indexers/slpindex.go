@@ -519,7 +519,7 @@ func NewSlpIndex(db database.DB) *SlpIndex {
 	return &SlpIndex{db: db}
 }
 
-// dropBlockIDIndex drops the internal block id index.
+// dropTokenIDIndex drops the internal token id index.
 func dropTokenIDIndex(db database.DB) error {
 	return db.Update(func(dbTx database.Tx) error {
 		meta := dbTx.Metadata()

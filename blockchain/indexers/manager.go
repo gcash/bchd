@@ -704,6 +704,13 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		}
 	}
 
+	// Call extra index specific deinitialization for the SLP index.
+	if idxName == slpIndexName {
+		if err := dropTokenIDIndex(db); err != nil {
+			return err
+		}
+	}
+
 	// Remove the index tip, index bucket, and in-progress drop flag now
 	// that all index entries have been removed.
 	err = db.Update(func(dbTx database.Tx) error {
