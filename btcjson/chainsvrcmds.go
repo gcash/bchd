@@ -134,14 +134,14 @@ func NewGetBestBlockHashCmd() *GetBestBlockHashCmd {
 type VerbosityLevel int
 
 // UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
-func (b *VerbosityLevel) UnmarshalJSON(dat []byte) error {
+func (v *VerbosityLevel) UnmarshalJSON(dat []byte) error {
 	switch string(dat) {
 	case "0", "false":
-		*b = 0
+		*v = 0
 	case "1", "true":
-		*b = 1
+		*v = 1
 	case "2":
-		*b = 2
+		*v = 2
 	default:
 		return errors.New("invalid VerbosityLevel value")
 	}
