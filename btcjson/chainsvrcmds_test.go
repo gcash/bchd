@@ -196,6 +196,62 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "getblock required optional string true",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblock", "123", btcjson.String("true"))
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(1))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",1],"id":1}`,
+			unmarshalled: &btcjson.GetBlockCmd{
+				Hash:      "123",
+				Verbosity: btcjson.Vlevel(1),
+			},
+		},
+		{
+			name: "getblock required optional string false",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblock", "123", btcjson.String("false"))
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(0))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",0],"id":1}`,
+			unmarshalled: &btcjson.GetBlockCmd{
+				Hash:      "123",
+				Verbosity: btcjson.Vlevel(0),
+			},
+		},
+		{
+			name: "getblock required optional true",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblock", "123", btcjson.Bool(true))
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(1))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",1],"id":1}`,
+			unmarshalled: &btcjson.GetBlockCmd{
+				Hash:      "123",
+				Verbosity: btcjson.Vlevel(1),
+			},
+		},
+		{
+			name: "getblock required optional false",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblock", "123", btcjson.Bool(false))
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(0))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",0],"id":1}`,
+			unmarshalled: &btcjson.GetBlockCmd{
+				Hash:      "123",
+				Verbosity: btcjson.Vlevel(0),
+			},
+		},
+		{
 			name: "getblockchaininfo",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getblockchaininfo")
