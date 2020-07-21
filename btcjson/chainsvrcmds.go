@@ -9,6 +9,7 @@ package btcjson
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/gcash/bchd/wire"
@@ -127,10 +128,30 @@ func NewGetBestBlockHashCmd() *GetBestBlockHashCmd {
 	return &GetBestBlockHashCmd{}
 }
 
+// VerbosityLevel is a type that can unmarshal a bool or an int into an int field!
+// This allows the raw API to receive either an int or a bool, however from bchctl
+// you must pass an int!
+type VerbosityLevel int
+
+// UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
+func (b *VerbosityLevel) UnmarshalJSON(dat []byte) error {
+	switch string(dat) {
+	case "0", "false":
+		*b = 0
+	case "1", "true":
+		*b = 1
+	case "2":
+		*b = 2
+	default:
+		return errors.New("invalid VerbosityLevel value")
+	}
+	return nil
+}
+
 // GetBlockCmd defines the getblock JSON-RPC command.
 type GetBlockCmd struct {
 	Hash      string
-	Verbosity *int `jsonrpcdefault:"1"`
+	Verbosity *VerbosityLevel `jsonrpcdefault:"1"`
 }
 
 // NewGetBlockCmd returns a new instance which can be used to issue a getblock
@@ -138,7 +159,7 @@ type GetBlockCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewGetBlockCmd(hash string, verbosity *int) *GetBlockCmd {
+func NewGetBlockCmd(hash string, verbosity *VerbosityLevel) *GetBlockCmd {
 	return &GetBlockCmd{
 		Hash:      hash,
 		Verbosity: verbosity,

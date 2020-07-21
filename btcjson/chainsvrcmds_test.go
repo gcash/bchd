@@ -145,12 +145,12 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getblock", "123", btcjson.Int(0))
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Int(0))
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(0))
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",0],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Int(0),
+				Verbosity: btcjson.Vlevel(0),
 			},
 		},
 		{
@@ -164,7 +164,7 @@ func TestChainSvrCmds(t *testing.T) {
 			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123"],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Int(1),
+				Verbosity: btcjson.Vlevel(1),
 			},
 		},
 		{
@@ -173,12 +173,12 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getblock", "123", btcjson.Int(1))
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Int(1))
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(1))
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",1],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Int(1),
+				Verbosity: btcjson.Vlevel(1),
 			},
 		},
 		{
@@ -187,12 +187,12 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getblock", "123", btcjson.Int(2))
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetBlockCmd("123", btcjson.Int(2))
+				return btcjson.NewGetBlockCmd("123", btcjson.Vlevel(2))
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getblock","params":["123",2],"id":1}`,
 			unmarshalled: &btcjson.GetBlockCmd{
 				Hash:      "123",
-				Verbosity: btcjson.Int(2),
+				Verbosity: btcjson.Vlevel(2),
 			},
 		},
 		{
