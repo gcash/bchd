@@ -3439,6 +3439,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:      s.txIndex,
 			AddrIndex:    s.addrIndex,
 			CfIndex:      s.cfIndex,
+			SlpIndex:     s.slpIndex,
 			FeeEstimator: s.feeEstimator,
 			Services:     s.services,
 		})
@@ -3460,6 +3461,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:     s.txIndex,
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
+			SlpIndex:    s.slpIndex,
 		}, &s)
 		if err != nil {
 			return nil, err
