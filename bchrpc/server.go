@@ -1902,7 +1902,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			return err
 		})
 
-		if err != nil {
+		if err == nil {
 			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 		}
 
