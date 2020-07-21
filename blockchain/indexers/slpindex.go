@@ -451,7 +451,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		isValid := false
 		outputAmt, _ := slpMsg.TotalSlpMsgOutputValue()
 		if slpMsg.TransactionType == "GENESIS" {
-			if slpMsg.TokenType == 0x04 &&
+			if slpMsg.TokenType == 0x41 &&
 				big.NewInt(1).Cmp(&v1InputAmtSpent) < 1 {
 				isValid = true
 			} else {
