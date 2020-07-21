@@ -129,8 +129,7 @@ func NewGetBestBlockHashCmd() *GetBestBlockHashCmd {
 }
 
 // VerbosityLevel is a type that can unmarshal a bool or an int into an int field!
-// This allows the raw API to receive either an int or a bool, however from bchctl
-// you must pass an int!
+// This allows the raw API to receive either an int or a bool.
 type VerbosityLevel int
 
 // UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
