@@ -389,10 +389,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 	sortedTxns := topoSortTxs(block)
 
-	txidSet := make(map[chainhash.Hash]struct{})
-
 	for _, tx := range sortedTxns {
-		txidSet[tx.TxHash()] = struct{}{}
 		_hash, _ := goslp.GetSlpTokenID(tx)
 		tokenIDHash, _ := chainhash.NewHash(_hash)
 		slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
