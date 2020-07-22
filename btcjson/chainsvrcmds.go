@@ -9,6 +9,7 @@ package btcjson
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/gcash/bchd/wire"
@@ -66,6 +67,12 @@ type CreateRawTransactionCmd struct {
 // Amounts are in BTC.
 func NewCreateRawTransactionCmd(inputs []TransactionInput, amounts map[string]float64,
 	lockTime *int64) *CreateRawTransactionCmd {
+
+	// To make sure we're serializing this to the empty list and not null, we
+	// explicitly initialize the list
+	if inputs == nil {
+		inputs = []TransactionInput{}
+	}
 
 	return &CreateRawTransactionCmd{
 		Inputs:   inputs,
@@ -127,11 +134,29 @@ func NewGetBestBlockHashCmd() *GetBestBlockHashCmd {
 	return &GetBestBlockHashCmd{}
 }
 
+// VerbosityLevel is a type that can unmarshal a bool or an int into an int field!
+// This allows the raw API to receive either an int or a bool.
+type VerbosityLevel int
+
+// UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
+func (v *VerbosityLevel) UnmarshalJSON(dat []byte) error {
+	switch string(dat) {
+	case "0", "false":
+		*v = 0
+	case "1", "true":
+		*v = 1
+	case "2":
+		*v = 2
+	default:
+		return errors.New("invalid VerbosityLevel value")
+	}
+	return nil
+}
+
 // GetBlockCmd defines the getblock JSON-RPC command.
 type GetBlockCmd struct {
 	Hash      string
-	Verbose   *bool `jsonrpcdefault:"true"`
-	VerboseTx *bool `jsonrpcdefault:"false"`
+	Verbosity *VerbosityLevel `jsonrpcdefault:"1"`
 }
 
 // NewGetBlockCmd returns a new instance which can be used to issue a getblock
@@ -139,11 +164,10 @@ type GetBlockCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewGetBlockCmd(hash string, verbose, verboseTx *bool) *GetBlockCmd {
+func NewGetBlockCmd(hash string, verbosity *VerbosityLevel) *GetBlockCmd {
 	return &GetBlockCmd{
 		Hash:      hash,
-		Verbose:   verbose,
-		VerboseTx: verboseTx,
+		Verbosity: verbosity,
 	}
 }
 

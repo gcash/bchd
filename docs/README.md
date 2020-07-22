@@ -156,6 +156,7 @@ configuration necessary, however, there is an optional method to use a
 * [How To Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_peer_server_listen_interfaces.md)
 * [How To Configure RPC Server to Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_rpc_server_listen_interfaces.md)
 * [Configuring bchd with Tor](https://github.com/gcash/bchd/tree/master/docs/configuring_tor.md)
+* [Configuring bchd with CIFS](https://github.com/gcash/bchd/tree/master/docs/cifs.md)
 
 <a name="Wallet" />
 
