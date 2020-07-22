@@ -1077,13 +1077,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan bool) (i
 		}
 	}
 
-	// When the verbose flag isn't set, simply return the
-	// network-serialized block as a hex-encoded string.
-	if c.Verbose != nil && !*c.Verbose {
+	// When the verbose flag isn't set, return the serialized block as a hex-encoded string.
+	if c.Verbosity != nil && *c.Verbosity == 0 {
 		return hex.EncodeToString(blkBytes), nil
 	}
 
-	// Generate the JSON object and return it.
+	// Otherwise, generate the JSON object and return it.
 
 	// Deserialize the block.
 	blk, err := bchutil.NewBlockFromBytes(blkBytes)
@@ -1112,12 +1111,9 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan bool) (i
 		nextHashString = nextHash.String()
 	}
 
-	var (
-		blockReply  interface{}
-		params      = s.cfg.ChainParams
-		blockHeader = &blk.MsgBlock().Header
-	)
-	baseBlockReply := &btcjson.GetBlockBaseVerboseResult{
+	params := s.cfg.ChainParams
+	blockHeader := &blk.MsgBlock().Header
+	blockReply := btcjson.GetBlockVerboseResult{
 		Hash:          c.Hash,
 		Version:       blockHeader.Version,
 		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
@@ -1133,18 +1129,14 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan bool) (i
 		NextHash:      nextHashString,
 	}
 
-	if c.VerboseTx == nil || !*c.VerboseTx {
+	if *c.Verbosity == 1 {
 		transactions := blk.Transactions()
 		txNames := make([]string, len(transactions))
 		for i, tx := range transactions {
 			txNames[i] = tx.Hash().String()
 		}
 
-		blockReply = btcjson.GetBlockVerboseResult{
-			GetBlockBaseVerboseResult: baseBlockReply,
-
-			Tx: txNames,
-		}
+		blockReply.Tx = txNames
 	} else {
 		txns := blk.Transactions()
 		rawTxns := make([]btcjson.TxRawResult, len(txns))
@@ -1157,12 +1149,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan bool) (i
 			}
 			rawTxns[i] = *rawTxn
 		}
-
-		blockReply = btcjson.GetBlockVerboseTxResult{
-			GetBlockBaseVerboseResult: baseBlockReply,
-
-			Tx: rawTxns,
-		}
+		blockReply.RawTx = rawTxns
 	}
 
 	return blockReply, nil

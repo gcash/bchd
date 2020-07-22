@@ -190,6 +190,12 @@ func typesMaybeCompatible(dest reflect.Type, src reflect.Type) bool {
 		return true
 	}
 
+	if srcKind == reflect.Bool {
+		if isNumeric(destKind) {
+			return true
+		}
+	}
+
 	if srcKind == reflect.String {
 		// Strings can potentially be converted to numeric types.
 		if isNumeric(destKind) {
@@ -289,6 +295,39 @@ func assignField(paramNum int, fieldName string, dest reflect.Value, src reflect
 
 	// Perform supported type conversions.
 	switch src.Kind() {
+	case reflect.Bool:
+		switch dest.Kind() {
+		// Destination is a signed integer of various magnitude.
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
+			reflect.Int64:
+
+			srcBool := src.Bool()
+
+			switch srcBool {
+			case true:
+				dest.SetInt(1)
+			case false:
+				dest.SetInt(0)
+			}
+
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32,
+			reflect.Uint64:
+
+			srcBool := src.Bool()
+
+			switch srcBool {
+			case true:
+				dest.SetUint(1)
+			case false:
+				dest.SetUint(0)
+			}
+
+		default:
+			str := fmt.Sprintf("parameter #%d '%s' must be type "+
+				"%v (got %v)", paramNum, fieldName, destBaseType,
+				srcBaseType)
+			return makeError(ErrInvalidType, str)
+		}
 	// Source value is a signed integer of various magnitude.
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
 		reflect.Int64:
@@ -409,7 +448,17 @@ func assignField(paramNum int, fieldName string, dest reflect.Value, src reflect
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
 			reflect.Int64:
 
-			srcInt, err := strconv.ParseInt(src.String(), 0, 0)
+			// Support coercing booleans into integers.
+			strVal := src.String()
+
+			switch strVal {
+			case "false":
+				strVal = "0"
+			case "true":
+				strVal = "1"
+			}
+
+			srcInt, err := strconv.ParseInt(strVal, 0, 0)
 			if err != nil {
 				str := fmt.Sprintf("parameter #%d '%s' must "+
 					"parse to a %v", paramNum, fieldName,
@@ -471,7 +520,7 @@ func assignField(paramNum int, fieldName string, dest reflect.Value, src reflect
 			err := json.Unmarshal([]byte(src.String()), &concreteVal)
 			if err != nil {
 				str := fmt.Sprintf("parameter #%d '%s' must "+
-					"be valid JSON which unsmarshals to a %v",
+					"be valid JSON which unmarshals to a %v",
 					paramNum, fieldName, destBaseType)
 				return makeError(ErrInvalidType, str)
 			}
