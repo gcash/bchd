@@ -641,7 +641,7 @@ func TestChainSvrCmds(t *testing.T) {
 			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123"],"id":1}`,
 			unmarshalled: &btcjson.GetRawTransactionCmd{
 				Txid:    "123",
-				Verbose: btcjson.Int(0),
+				Verbose: btcjson.Vlevel(0),
 			},
 		},
 		{
@@ -650,12 +650,26 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getrawtransaction", "123", 1)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetRawTransactionCmd("123", btcjson.Int(1))
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Vlevel(1))
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",1],"id":1}`,
 			unmarshalled: &btcjson.GetRawTransactionCmd{
 				Txid:    "123",
-				Verbose: btcjson.Int(1),
+				Verbose: btcjson.Vlevel(1),
+			},
+		},
+		{
+			name: "getrawtransaction optional bool",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getrawtransaction", "123", true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Vlevel(1))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",1],"id":1}`,
+			unmarshalled: &btcjson.GetRawTransactionCmd{
+				Txid:    "123",
+				Verbose: btcjson.Vlevel(1),
 			},
 		},
 		{
@@ -842,7 +856,26 @@ func TestChainSvrCmds(t *testing.T) {
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address"],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(1),
+				Verbose:     btcjson.Vlevel(1),
+				Skip:        btcjson.Int(0),
+				Count:       btcjson.Int(100),
+				VinExtra:    btcjson.Int(0),
+				Reverse:     btcjson.Bool(false),
+				FilterAddrs: nil,
+			},
+		},
+		{
+			name: "searchrawtransactions",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("searchrawtransactions", "1Address", true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewSearchRawTransactionsCmd("1Address", btcjson.Vlevel(1), nil, nil, nil, nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",1],"id":1}`,
+			unmarshalled: &btcjson.SearchRawTransactionsCmd{
+				Address:     "1Address",
+				Verbose:     btcjson.Vlevel(1),
 				Skip:        btcjson.Int(0),
 				Count:       btcjson.Int(100),
 				VinExtra:    btcjson.Int(0),
@@ -857,12 +890,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), nil, nil, nil, nil, nil)
+					btcjson.Vlevel(0), nil, nil, nil, nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(0),
 				Count:       btcjson.Int(100),
 				VinExtra:    btcjson.Int(0),
@@ -877,12 +910,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), btcjson.Int(5), nil, nil, nil, nil)
+					btcjson.Vlevel(0), btcjson.Int(5), nil, nil, nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0,5],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(5),
 				Count:       btcjson.Int(100),
 				VinExtra:    btcjson.Int(0),
@@ -897,12 +930,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), btcjson.Int(5), btcjson.Int(10), nil, nil, nil)
+					btcjson.Vlevel(0), btcjson.Int(5), btcjson.Int(10), nil, nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0,5,10],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(5),
 				Count:       btcjson.Int(10),
 				VinExtra:    btcjson.Int(0),
@@ -917,12 +950,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), nil, nil)
+					btcjson.Vlevel(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0,5,10,1],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(5),
 				Count:       btcjson.Int(10),
 				VinExtra:    btcjson.Int(1),
@@ -937,12 +970,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), btcjson.Bool(true), nil)
+					btcjson.Vlevel(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), btcjson.Bool(true), nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0,5,10,1,true],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(5),
 				Count:       btcjson.Int(10),
 				VinExtra:    btcjson.Int(1),
@@ -957,12 +990,12 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 			staticCmd: func() interface{} {
 				return btcjson.NewSearchRawTransactionsCmd("1Address",
-					btcjson.Int(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), btcjson.Bool(true), &[]string{"1Address"})
+					btcjson.Vlevel(0), btcjson.Int(5), btcjson.Int(10), btcjson.Int(1), btcjson.Bool(true), &[]string{"1Address"})
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"searchrawtransactions","params":["1Address",0,5,10,1,true,["1Address"]],"id":1}`,
 			unmarshalled: &btcjson.SearchRawTransactionsCmd{
 				Address:     "1Address",
-				Verbose:     btcjson.Int(0),
+				Verbose:     btcjson.Vlevel(0),
 				Skip:        btcjson.Int(5),
 				Count:       btcjson.Int(10),
 				VinExtra:    btcjson.Int(1),

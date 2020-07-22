@@ -488,7 +488,7 @@ func NewGetRawMempoolCmd(verbose *bool) *GetRawMempoolCmd {
 // Core even though it really should be a bool.
 type GetRawTransactionCmd struct {
 	Txid    string
-	Verbose *int `jsonrpcdefault:"0"`
+	Verbose *VerbosityLevel `jsonrpcdefault:"0"`
 }
 
 // NewGetRawTransactionCmd returns a new instance which can be used to issue a
@@ -496,7 +496,7 @@ type GetRawTransactionCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewGetRawTransactionCmd(txHash string, verbose *int) *GetRawTransactionCmd {
+func NewGetRawTransactionCmd(txHash string, verbose *VerbosityLevel) *GetRawTransactionCmd {
 	return &GetRawTransactionCmd{
 		Txid:    txHash,
 		Verbose: verbose,
@@ -633,11 +633,11 @@ func NewReconsiderBlockCmd(blockHash string) *ReconsiderBlockCmd {
 // SearchRawTransactionsCmd defines the searchrawtransactions JSON-RPC command.
 type SearchRawTransactionsCmd struct {
 	Address     string
-	Verbose     *int  `jsonrpcdefault:"1"`
-	Skip        *int  `jsonrpcdefault:"0"`
-	Count       *int  `jsonrpcdefault:"100"`
-	VinExtra    *int  `jsonrpcdefault:"0"`
-	Reverse     *bool `jsonrpcdefault:"false"`
+	Verbose     *VerbosityLevel `jsonrpcdefault:"1"`
+	Skip        *int            `jsonrpcdefault:"0"`
+	Count       *int            `jsonrpcdefault:"100"`
+	VinExtra    *int            `jsonrpcdefault:"0"`
+	Reverse     *bool           `jsonrpcdefault:"false"`
 	FilterAddrs *[]string
 }
 
@@ -646,7 +646,7 @@ type SearchRawTransactionsCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewSearchRawTransactionsCmd(address string, verbose, skip, count *int, vinExtra *int, reverse *bool, filterAddrs *[]string) *SearchRawTransactionsCmd {
+func NewSearchRawTransactionsCmd(address string, verbose *VerbosityLevel, skip, count *int, vinExtra *int, reverse *bool, filterAddrs *[]string) *SearchRawTransactionsCmd {
 	return &SearchRawTransactionsCmd{
 		Address:     address,
 		Verbose:     verbose,

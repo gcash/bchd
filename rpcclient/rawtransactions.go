@@ -103,7 +103,7 @@ func (c *Client) GetRawTransactionAsync(txHash *chainhash.Hash) FutureGetRawTran
 		hash = txHash.String()
 	}
 
-	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Int(0))
+	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Vlevel(0))
 	return c.sendCmd(cmd)
 }
 
@@ -149,7 +149,7 @@ func (c *Client) GetRawTransactionVerboseAsync(txHash *chainhash.Hash) FutureGet
 		hash = txHash.String()
 	}
 
-	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Int(1))
+	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Vlevel(1))
 	return c.sendCmd(cmd)
 }
 
@@ -561,7 +561,7 @@ func (r FutureSearchRawTransactionsResult) Receive() ([]*wire.MsgTx, error) {
 // See SearchRawTransactions for the blocking version and more details.
 func (c *Client) SearchRawTransactionsAsync(address bchutil.Address, skip, count int, reverse bool, filterAddrs []string) FutureSearchRawTransactionsResult {
 	addr := address.EncodeAddress()
-	verbose := btcjson.Int(0)
+	verbose := btcjson.Vlevel(0)
 	cmd := btcjson.NewSearchRawTransactionsCmd(addr, verbose, &skip, &count,
 		nil, &reverse, &filterAddrs)
 	return c.sendCmd(cmd)
@@ -610,7 +610,7 @@ func (c *Client) SearchRawTransactionsVerboseAsync(address bchutil.Address, skip
 	count int, includePrevOut, reverse bool, filterAddrs *[]string) FutureSearchRawTransactionsVerboseResult {
 
 	addr := address.EncodeAddress()
-	verbose := btcjson.Int(1)
+	verbose := btcjson.Vlevel(1)
 	var prevOut *int
 	if includePrevOut {
 		prevOut = btcjson.Int(1)
