@@ -236,8 +236,7 @@ func dbRemoveSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) error {
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := slpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return fmt.Errorf("can't remove non-existent transaction %s "+
-			"from the slp index", txHash)
+		return nil
 	}
 
 	return slpIndex.Delete(txHash[:])
