@@ -83,6 +83,9 @@ service bchrpc {
     // Return SLP token metadata
     rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
 
+    // Returns marshalled object from parsing an SLP pubKeyScript 
+    rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
+
     // Submit a transaction to all connected peers.
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
@@ -496,6 +499,23 @@ message GetTokenMetadataResponse {
     repeated TokenMetadata slp_metadata = 1;
 }
 
+message GetParsedSlpScriptRequest {
+    bytes slp_opreturn_script = 1;
+}
+
+message GetParsedSlpScriptResponse {
+    string parsing_error = 1;
+    bytes token_id = 2;
+    SlpVersionType type = 3;
+    oneof slp_metadata {
+        SlpV1GenesisMetadata v1_genesis = 4;    // NFT1 Group also uses this
+        SlpV1MintMetadata v1_mint = 5;          // NFT1 Group also uses this
+        SlpV1SendMetadata v1_send = 6;          // NFT1 Group also uses this
+        SlpNft1ChildGenesisMetadata nft1_child_genesis = 7;
+        SlpNft1ChildSendMetadata nft1_child_send = 8;
+    }
+}
+
 // NOTIFICATIONS
 
 
@@ -758,9 +778,9 @@ message SlpTransactionInfo {
 }
 
 message SlpV1GenesisMetadata {
-    string name = 1;
-    string ticker = 2;
-    string document_url = 3;
+    bytes name = 1;
+    bytes ticker = 2;
+    bytes document_url = 3;
     bytes document_hash = 4;
     uint32 decimals = 5;
     uint32 mint_baton_vout = 6;
@@ -777,9 +797,9 @@ message SlpV1SendMetadata {
 }
 
 message SlpNft1ChildGenesisMetadata {
-    string name = 1;
-    string ticker = 2;
-    string document_url = 3;
+    bytes name = 1;
+    bytes ticker = 2;
+    bytes document_url = 3;
     bytes document_hash = 4;
     uint32 decimals = 5;
     bytes group_token_id = 6;
@@ -824,10 +844,10 @@ message TokenMetadataNFT1Child {
 message TokenMetadata {
 	bytes token_id = 1;
  	uint32 token_type = 2;
-	string token_ticker = 3;
-	string token_name = 4;
-	string token_document_url = 5;
-	string token_document_hash = 6;
+    bytes token_ticker = 3;
+	bytes token_name = 4;
+	bytes token_document_url = 5;
+	bytes token_document_hash = 6;
 	uint32 decimals = 7;
 	uint32 height_created = 8;
 	oneof type_metadata {

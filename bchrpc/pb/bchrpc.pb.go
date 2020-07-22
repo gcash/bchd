@@ -5231,6 +5231,15 @@ func (c *bchrpcClient) GetTokenMetadata(ctx context.Context, in *GetTokenMetadat
 	return out, nil
 }
 
+func (c *bchrpcClient) GetParsedSlpScript(ctx context.Context, in *GetParsedSlpScriptRequest, opts ...grpc.CallOption) (*GetParsedSlpScriptResponse, error) {
+	out := new(GetParsedSlpScriptResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetParsedSlpScript", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bchrpcClient) SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error) {
 	out := new(SubmitTransactionResponse)
 	err := c.cc.Invoke(ctx, "/pb.bchrpc/SubmitTransaction", in, out, opts...)
@@ -5773,6 +5782,24 @@ func _Bchrpc_GetTokenMetadata_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_GetParsedSlpScript_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetParsedSlpScriptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).GetParsedSlpScript(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.bchrpc/GetParsedSlpScript",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).GetParsedSlpScript(ctx, req.(*GetParsedSlpScriptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_SubmitTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SubmitTransactionRequest)
 	if err := dec(in); err != nil {
@@ -5926,6 +5953,10 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTokenMetadata",
 			Handler:    _Bchrpc_GetTokenMetadata_Handler,
+		},
+		{
+			MethodName: "GetParsedSlpScript",
+			Handler:    _Bchrpc_GetParsedSlpScript_Handler,
 		},
 		{
 			MethodName: "SubmitTransaction",
