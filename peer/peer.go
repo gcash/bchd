@@ -530,10 +530,15 @@ func (p *Peer) String() string {
 // This function is safe for concurrent access.
 func (p *Peer) UpdateLastBlockHeight(newHeight int32) {
 	p.statsMtx.Lock()
+	defer p.statsMtx.Unlock()
+
+	if newHeight <= p.lastBlock {
+		return
+	}
+
 	log.Tracef("Updating last block height of peer %v from %v to %v",
 		p.addr, p.lastBlock, newHeight)
 	p.lastBlock = newHeight
-	p.statsMtx.Unlock()
 }
 
 // UpdateLastAnnouncedBlock updates meta-data about the last block hash this
