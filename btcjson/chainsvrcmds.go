@@ -67,6 +67,12 @@ type CreateRawTransactionCmd struct {
 func NewCreateRawTransactionCmd(inputs []TransactionInput, amounts map[string]float64,
 	lockTime *int64) *CreateRawTransactionCmd {
 
+	// To make sure we're serializing this to the empty list and not null, we
+	// explicitly initialize the list
+	if inputs == nil {
+		inputs = []TransactionInput{}
+	}
+
 	return &CreateRawTransactionCmd{
 		Inputs:   inputs,
 		Amounts:  amounts,
