@@ -1131,11 +1131,77 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	return resp, nil
 }
 
+// GetTokenMetadata returns metadata associated with a Token ID
 func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetadataRequest) (*pb.GetTokenMetadataResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
 	return nil, status.Error(codes.Unimplemented, "method not yet implemented")
+}
+
+// GetParsedSlpScript returns a parsed object from a provided serialized slp OP_RETURN message
+func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSlpScriptRequest) (*pb.GetParsedSlpScriptResponse, error) {
+	resp := &pb.GetParsedSlpScriptResponse{}
+	slpMsg, er := v1parser.ParseSLP(req.GetSlpOpreturnScript())
+	if er != nil {
+		resp.ParsingError = er.Error()
+		return resp, nil
+	}
+	if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" {
+		meta := &pb.GetParsedSlpScriptResponse_Nft1ChildGenesis{
+			Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
+				Name:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+				Ticker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+				DocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+				DocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+				Decimals:     uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+			},
+		}
+		resp.SlpMetadata = meta
+		resp.Type = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+	} else if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "SEND" {
+		meta := &pb.GetParsedSlpScriptResponse_Nft1ChildSend{
+			Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{},
+		}
+		resp.SlpMetadata = meta
+		resp.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+		resp.Type = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+	} else if slpMsg.TransactionType == "GENESIS" {
+		meta := &pb.GetParsedSlpScriptResponse_V1Genesis{
+			V1Genesis: &pb.SlpV1GenesisMetadata{
+				Name:          slpMsg.Data.(v1parser.SlpGenesis).Name,
+				Ticker:        slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+				DocumentUrl:   slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+				DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+				MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
+				MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+				Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
+			},
+		}
+		resp.SlpMetadata = meta
+		resp.Type = pb.SlpVersionType_SLP_V1_GENESIS
+	} else if slpMsg.TransactionType == "MINT" {
+		meta := &pb.GetParsedSlpScriptResponse_V1Mint{
+			V1Mint: &pb.SlpV1MintMetadata{
+				MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
+				MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpMint).MintBatonVout),
+			},
+		}
+		resp.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
+		resp.SlpMetadata = meta
+		resp.Type = pb.SlpVersionType_SLP_V1_MINT
+	} else if slpMsg.TransactionType == "SEND" {
+		meta := &pb.GetParsedSlpScriptResponse_V1Send{
+			V1Send: &pb.SlpV1SendMetadata{
+				Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
+			},
+		}
+		resp.SlpMetadata = meta
+		resp.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+		resp.Type = pb.SlpVersionType_SLP_V1_SEND
+	}
+
+	return resp, nil
 }
 
 // SubmitTransaction submits a transaction to all connected peers.
@@ -1917,10 +1983,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
 						V1Genesis: &pb.SlpV1GenesisMetadata{
-							Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-							Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Name:          slpMsg.Data.(v1parser.SlpGenesis).Name,
+							Ticker:        slpMsg.Data.(v1parser.SlpGenesis).Ticker,
 							Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-							DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentUrl:   slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 							DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 							MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
 							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
@@ -1947,10 +2013,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildGenesis{
 						Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
-							Name:         string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-							Ticker:       string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Name:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+							Ticker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
 							Decimals:     uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-							DocumentUrl:  string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 							DocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 							GroupTokenId: nil,
 						},
@@ -1968,10 +2034,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
 						V1Genesis: &pb.SlpV1GenesisMetadata{
-							Name:          string(slpMsg.Data.(v1parser.SlpGenesis).Name),
-							Ticker:        string(slpMsg.Data.(v1parser.SlpGenesis).Ticker),
+							Name:          slpMsg.Data.(v1parser.SlpGenesis).Name,
+							Ticker:        slpMsg.Data.(v1parser.SlpGenesis).Ticker,
 							Decimals:      uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-							DocumentUrl:   string(slpMsg.Data.(v1parser.SlpGenesis).DocumentURI),
+							DocumentUrl:   slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 							DocumentHash:  slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 							MintAmount:    slpMsg.Data.(v1parser.SlpGenesis).Qty,
 							MintBatonVout: uint32(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
