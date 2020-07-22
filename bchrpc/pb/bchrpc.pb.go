@@ -2189,9 +2189,9 @@ func (x *SubmitTransactionRequest) GetTransaction() []byte {
 	return nil
 }
 
-func (x *SubmitTransactionRequest) GetCheckSlpValidity() bool {
+func (x *SubmitTransactionRequest) GetSkipSlpValidityCheck() bool {
 	if x != nil {
-		return x.CheckSlpValidity
+		return x.SkipSlpValidityCheck
 	}
 	return false
 }
