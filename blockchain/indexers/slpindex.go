@@ -5,7 +5,6 @@
 package indexers
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -82,10 +81,10 @@ var (
 //   Field           	Type              Size
 //   txhash          	chainhash.Hash    32 bytes
 //   token ID        	uint32            4 bytes
-//   slp version	    uint8             1 byte
+//   slp version	    uint16            2 bytes
 //	 op return			[]bytes			  typically <220 bytes
 //   -----
-//   Max: 257 bytes
+//   Max: 258 bytes
 // -----------------------------------------------------------------------------
 
 // dbPutTokenIDIndexEntry uses an existing database transaction to update or add
@@ -135,7 +134,7 @@ func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error
 	if serializedID == nil {
 		return 0, errNoBlockIDEntry
 	}
-
+	//fmt.Printf("\nfetched %s as %s\n", hex.EncodeToString(hash[:]), string(byteOrder.Uint32(serializedID[:])))
 	return byteOrder.Uint32(serializedID), nil
 }
 
@@ -147,10 +146,8 @@ func dbFetchTokenHashBySerializedID(dbTx database.Tx, serializedID []byte) (*cha
 	if hashBytes == nil {
 		return nil, errNoBlockIDEntry
 	}
-
-	var hash chainhash.Hash
-	copy(hash[:], hashBytes)
-	return &hash, nil
+	hash, _ := chainhash.NewHash(hashBytes)
+	return hash, nil
 }
 
 // dbFetchBlockHashByID uses an existing database transaction to retrieve the
@@ -174,44 +171,48 @@ func dbFetchTokenHashByID(dbTx database.Tx, id uint32) (*chainhash.Hash, error) 
 // dbPutSlpIndexEntry uses an existing database transaction to update the
 // transaction index given the provided serialized data that is expected to have
 // been serialized putSlpIndexEntry.
-func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, txHash *chainhash.Hash, tokenIDHash *chainhash.Hash, slpVersion uint8, slpMsgPkScript []byte) error {
+func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, txHash *chainhash.Hash, tokenIDHash *chainhash.Hash, slpVersion uint16, slpMsgPkScript []byte) error {
 
 	// get current tokenID uint32 for the tokenID hash, add new if needed
 	tokenID, err := dbFetchTokenIDByHash(dbTx, tokenIDHash)
+	//fmt.Printf("\nfetching token ID: %s\n", hex.EncodeToString(tokenIDHash[:]))
 	if err != nil {
 		idx.curTokenID++
 		tokenID = idx.curTokenID
+		//fmt.Printf("putting new token ID as %s\n", string(tokenID))
 		dbPutTokenIDIndexEntry(dbTx, tokenIDHash, tokenID)
 	}
 
-	target := make([]byte, 4+1+len(slpMsgPkScript))
+	target := make([]byte, 4+2+len(slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
-	target[5] = slpVersion
+	byteOrder.PutUint16(target[4:], slpVersion)
 	copy(target[6:], slpMsgPkScript)
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+	//fmt.Printf("adding new entry %s\n", hex.EncodeToString(txHash[:]))
 	return slpIndex.Put(txHash[:], target)
 }
 
 // SlpIndexEntry is a valid SLP token stored in the SLP index
 type SlpIndexEntry struct {
-	tokenID        chainhash.Hash
-	slpVersionType uint8
-	slpOpReturn    []byte
+	TokenID        uint32
+	TokenIDHash    chainhash.Hash
+	SlpVersionType uint16
+	SlpOpReturn    []byte
 }
 
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // nil will be returned for the both the entry and the error.
-func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash, entry *SlpIndexEntry) error {
+func dbFetchSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, txHash *chainhash.Hash) error {
 	// Load the record from the database and return now if it doesn't exist.
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return nil
+		return errors.New("entry does not exist")
 	}
 
 	// Ensure the serialized data has enough bytes to properly deserialize.
-	if len(serializedData) < 12 { // TODO: get more accurate number for this (i.e., 4 + 1 + min SLP length)
+	if len(serializedData) < 12 { // TODO: get more accurate number for this (i.e., 4 + 2 + min SLP length)
 		return database.Error{
 			ErrorCode: database.ErrCorruption,
 			Description: fmt.Sprintf("corrupt slp index "+
@@ -219,14 +220,14 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash, entry *SlpIn
 		}
 	}
 
-	_tokenID, _ := dbFetchTokenHashByID(dbTx, binary.BigEndian.Uint32(serializedData[0:4]))
-	if _tokenID == nil {
-		return nil
+	entry.TokenID = byteOrder.Uint32(serializedData[0:4])
+	_tokenIDHash, _ := dbFetchTokenHashByID(dbTx, entry.TokenID)
+	if _tokenIDHash == nil {
+		return errors.New("could not map tokenID uint32 to hash")
 	}
-	entry.tokenID = *_tokenID
-	entry.slpVersionType = uint8(serializedData[5])
-	entry.slpOpReturn = serializedData[6:]
-
+	entry.TokenIDHash = *_tokenIDHash
+	entry.SlpVersionType = byteOrder.Uint16(serializedData[4:6])
+	entry.SlpOpReturn = serializedData[6:]
 	return nil
 }
 
@@ -389,56 +390,56 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	sortedTxns := topoSortTxs(block)
 
 	for _, tx := range sortedTxns {
-		_hash, _ := goslp.GetSlpTokenID(tx)
-		tokenIDHash, _ := chainhash.NewHash(_hash)
+		txnHash := tx.TxHash()
+		_IDhash, _ := goslp.GetSlpTokenID(tx)
+		tokenIDHash, _ := chainhash.NewHash(_IDhash)
 		slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 
 		if slpMsg == nil {
+			// TODO: in the future may want to look for burned inputs on non-SLP txns
 			continue
 		}
 
-		var (
-			v1InputAmtSpent big.Int
-			v1MintBatonVout int
-		)
+		v1InputAmtSpent := big.NewInt(0)
+		v1MintBatonVout := 0
+		slpEntry := &SlpIndexEntry{}
 
-		v1InputAmtSpent.SetUint64(0)
-		v1MintBatonVout = 0
+		// fmt.Println("Examining")
+		// fmt.Println(slpMsg.TransactionType)
+		// fmt.Println(hex.EncodeToString(txnHash[:]))
 
 		for i, txi := range tx.TxIn {
 			prevIdx := int(txi.PreviousOutPoint.Index)
-			slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
-			if err != nil || slpEntry == nil {
+			err := idx.GetSlpIndexEntry(dbTx, slpEntry, &txi.PreviousOutPoint.Hash)
+			if err != nil {
 				continue
 			}
 
-			_slpMsg, _ := v1parser.ParseSLP(slpEntry.slpOpReturn)
+			_slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 			if _slpMsg != nil {
 				amt, _ := _slpMsg.GetVoutAmount(prevIdx)
-				if tokenIDHash != nil {
-					if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
-						if _slpMsg.TokenType == 0x81 && i == 0 {
-							v1InputAmtSpent.Add(&v1InputAmtSpent, amt)
+				if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
+					if _slpMsg.TokenType == 0x81 && i == 0 {
+						v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+					}
+				} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
+					v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+					if _slpMsg.TransactionType == "GENESIS" { // check
+						if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
+							v1MintBatonVout = prevIdx
 						}
-					} else if slpEntry.tokenID.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
-						v1InputAmtSpent.Add(&v1InputAmtSpent, amt)
-						if _slpMsg.TransactionType == "GENESIS" { // check
-							if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
-								v1MintBatonVout = prevIdx
-							}
-						} else if _slpMsg.TransactionType == "MINT" {
-							if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
-								v1MintBatonVout = prevIdx
-							}
+					} else if _slpMsg.TransactionType == "MINT" {
+						if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
+							v1MintBatonVout = prevIdx
 						}
-					} else {
-						// TODO: check for burns and mark them somewhere...
 					}
 				} else {
+					// fmt.Println("mismatch tokenid")
+					// fmt.Println(hex.EncodeToString(tokenIDHash[:]))
+					// fmt.Println(hex.EncodeToString(slpEntry.TokenIDHash[:]))
 					// TODO: check for burns and mark them somewhere...
 				}
 			}
-
 		}
 
 		// Check if tx is a valid SLP.  This requires only two things, first
@@ -448,22 +449,29 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		outputAmt, _ := slpMsg.TotalSlpMsgOutputValue()
 		if slpMsg.TransactionType == "GENESIS" {
 			if slpMsg.TokenType == 0x41 &&
-				big.NewInt(1).Cmp(&v1InputAmtSpent) < 1 {
+				big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
 				isValid = true
-			} else {
+			} else if slpMsg.TokenType == 0x01 || slpMsg.TokenType == 0x81 {
 				isValid = true
 			}
 		} else if slpMsg.TransactionType == "SEND" &&
-			outputAmt.Cmp(&v1InputAmtSpent) < 1 {
+			outputAmt.Cmp(v1InputAmtSpent) < 1 {
 			isValid = true
 		} else if slpMsg.TransactionType == "MINT" &&
-			v1MintBatonVout > 0 {
+			v1MintBatonVout > 1 {
 			isValid = true
 		}
 
 		if isValid {
-			hash := tx.TxHash()
-			dbPutSlpIndexEntry(idx, dbTx, &hash, tokenIDHash, uint8(slpMsg.TokenType), tx.TxOut[0].PkScript)
+			//fmt.Printf("valid tx with tokenID %s", hex.EncodeToString(tokenIDHash[:]))
+			err := dbPutSlpIndexEntry(idx, dbTx, &txnHash, tokenIDHash, uint16(slpMsg.TokenType), tx.TxOut[0].PkScript)
+			if err != nil {
+				fmt.Println("failed to put slp entry")
+				panic(err.Error())
+				//fmt.Println(err.Error())
+			}
+		} else {
+			//fmt.Printf("invalid tx %s\n", txnHash)
 		}
 	}
 
@@ -498,10 +506,29 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 // will be returned for the both the entry and the error, which would mean the transaction is invalid
 //
 // This function is safe for concurrent access.
-func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	var slpEntry *SlpIndexEntry
-	err := dbFetchSlpIndexEntry(dbTx, hash, slpEntry)
-	return slpEntry, err
+func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, hash *chainhash.Hash) error {
+	err := dbFetchSlpIndexEntry(dbTx, entry, hash)
+	return err
+}
+
+// SlpIndexEntryExists returns true if the slp entry exists
+func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Hash) bool {
+	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+	serializedData := slpIndex.Get(txHash[:])
+	if len(serializedData) == 0 {
+		return false
+	}
+	return true
+}
+
+// GetSlpTokenIDFromHash returns the value given the token ID hash
+func (idx *SlpIndex) GetSlpTokenIDFromHash(dbTx database.Tx, hash *chainhash.Hash) (*uint32, error) {
+	serializedID, err := dbFetchTokenIDByHash(dbTx, hash)
+	if err != nil {
+		return nil, errors.New("token ID hash does not exist in slp index")
+	}
+
+	return &serializedID, nil
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a
