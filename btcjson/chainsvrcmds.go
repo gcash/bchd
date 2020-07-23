@@ -153,6 +153,23 @@ func (v *VerbosityLevel) UnmarshalJSON(dat []byte) error {
 	return nil
 }
 
+// VerboseLevel is a type that can unmarshal a bool or an int into an int field!
+// This allows the raw API to receive either an int or a bool.
+type VerboseLevel int
+
+// UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
+func (v *VerboseLevel) UnmarshalJSON(dat []byte) error {
+	switch string(dat) {
+	case "0", "false":
+		*v = 0
+	case "1", "true":
+		*v = 1
+	default:
+		return errors.New("invalid VerboseLevel value")
+	}
+	return nil
+}
+
 // GetBlockCmd defines the getblock JSON-RPC command.
 type GetBlockCmd struct {
 	Hash      string
@@ -488,7 +505,7 @@ func NewGetRawMempoolCmd(verbose *bool) *GetRawMempoolCmd {
 // Core even though it really should be a bool.
 type GetRawTransactionCmd struct {
 	Txid    string
-	Verbose *int `jsonrpcdefault:"0"`
+	Verbose *VerboseLevel `jsonrpcdefault:"0"`
 }
 
 // NewGetRawTransactionCmd returns a new instance which can be used to issue a
@@ -496,7 +513,7 @@ type GetRawTransactionCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewGetRawTransactionCmd(txHash string, verbose *int) *GetRawTransactionCmd {
+func NewGetRawTransactionCmd(txHash string, verbose *VerboseLevel) *GetRawTransactionCmd {
 	return &GetRawTransactionCmd{
 		Txid:    txHash,
 		Verbose: verbose,
@@ -633,11 +650,11 @@ func NewReconsiderBlockCmd(blockHash string) *ReconsiderBlockCmd {
 // SearchRawTransactionsCmd defines the searchrawtransactions JSON-RPC command.
 type SearchRawTransactionsCmd struct {
 	Address     string
-	Verbose     *int  `jsonrpcdefault:"1"`
-	Skip        *int  `jsonrpcdefault:"0"`
-	Count       *int  `jsonrpcdefault:"100"`
-	VinExtra    *int  `jsonrpcdefault:"0"`
-	Reverse     *bool `jsonrpcdefault:"false"`
+	Verbose     *VerboseLevel `jsonrpcdefault:"1"`
+	Skip        *int          `jsonrpcdefault:"0"`
+	Count       *int          `jsonrpcdefault:"100"`
+	VinExtra    *int          `jsonrpcdefault:"0"`
+	Reverse     *bool         `jsonrpcdefault:"false"`
 	FilterAddrs *[]string
 }
 
@@ -646,7 +663,7 @@ type SearchRawTransactionsCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewSearchRawTransactionsCmd(address string, verbose, skip, count *int, vinExtra *int, reverse *bool, filterAddrs *[]string) *SearchRawTransactionsCmd {
+func NewSearchRawTransactionsCmd(address string, verbose *VerboseLevel, skip, count *int, vinExtra *int, reverse *bool, filterAddrs *[]string) *SearchRawTransactionsCmd {
 	return &SearchRawTransactionsCmd{
 		Address:     address,
 		Verbose:     verbose,
