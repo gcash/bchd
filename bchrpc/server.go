@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -1212,12 +1213,96 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
-	if req.CheckSlpValidity {
+	if !req.GetSkipSlpValidityCheck() {
 		if s.slpIndex == nil {
 			return nil, status.Error(codes.Unavailable, "slpindex required")
 		}
 
-		// TODO... check slp txn validity
+		slpMsg, err := v1parser.ParseSLP(msgTx.TxOut[0].PkScript)
+
+		if err != nil {
+			return nil, status.Error(codes.Aborted, err.Error())
+		}
+
+		if slpMsg.TransactionType == "SEND" {
+			// get token ID from slpindex
+			tokenIDHash := slpMsg.Data.(v1parser.SlpSend).TokenID
+
+			// loop through **ALL** inputs, accumulate input amount for tokenID, abort on SLP input with wrong ID
+			inputVal := big.NewInt(0)
+			for _, txIn := range msgTx.TxIn {
+				entry := &indexers.SlpIndexEntry{}
+
+				err = s.db.View(func(dbTx database.Tx) error {
+					var err error
+					err = s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					return err
+				})
+				if err != nil {
+					continue
+				}
+				if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
+					// TODO: check for a list of client supplied allowed burns
+					return nil, status.Error(codes.Aborted, "transaction has input from wrong token")
+				}
+				_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+				idx := txIn.PreviousOutPoint.Index
+				amt, _ := _slpMsg.GetVoutAmount(int(idx))
+				inputVal.Add(inputVal, amt)
+			}
+
+			// check inputs >= outputs
+			outputVal, _ := slpMsg.TotalSlpMsgOutputValue()
+			if inputVal.Cmp(outputVal) < 0 {
+				return nil, status.Error(codes.Aborted, "slp send transaction has outputs less than inputs")
+			}
+
+		} else if slpMsg.TransactionType == "MINT" {
+			// get token ID
+			tokenIDHash := slpMsg.Data.(v1parser.SlpMint).TokenID
+
+			// loop through **ALL** inputs, look for mint baton is included, abort on any other SLP inputs
+			hasBaton := false
+			for _, txIn := range msgTx.TxIn {
+				entry := &indexers.SlpIndexEntry{}
+				err = s.db.View(func(dbTx database.Tx) error {
+					var err error
+					err = s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					return err
+				})
+				if err != nil {
+					continue
+				}
+				if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
+					// TODO: check for a list of client supplied allowed burns
+					return nil, status.Error(codes.Aborted, "transaction has input from wrong token")
+				}
+				_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+				if _slpMsg.TransactionType == "GENESIS" {
+					if _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
+						hasBaton = true
+					}
+				} else {
+					if _slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
+						hasBaton = true
+					}
+				}
+			}
+			if !hasBaton {
+				return nil, status.Error(codes.Aborted, "Minting transaction does not have a valid input baton")
+			}
+		} else if slpMsg.TransactionType == "GENESIS" && slpMsg.TokenType == 0x41 {
+			return nil, status.Error(codes.Unimplemented, "Child NFT1 genesis not implemented")
+
+			// TODO ...
+
+			// check that first input is a valid 0x81 token with quantity > 0
+
+			// loop through **ALL** inputs, abort on any other SLP inputs
+
+		} else if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
+			return nil, status.Error(codes.Aborted, "unknown slp token type")
+		}
 	}
 
 	// Use 0 for the tag to represent local node.
@@ -1964,8 +2049,11 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
 
 		err := s.db.View(func(dbTx database.Tx) error {
-			_, err := s.slpIndex.GetSlpIndexEntry(dbTx, tx.Hash())
-			return err
+			exists := s.slpIndex.SlpIndexEntryExists(dbTx, tx.Hash())
+			if !exists {
+				return errors.New("slp tx does not exist")
+			}
+			return nil
 		})
 
 		if err == nil {
