@@ -1350,8 +1350,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 				entry := &indexers.SlpIndexEntry{}
 
 				err = s.db.View(func(dbTx database.Tx) error {
-					var err error
-					err = s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
 					return err
 				})
 				if err != nil {
@@ -1382,8 +1381,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 			for _, txIn := range msgTx.TxIn {
 				entry := &indexers.SlpIndexEntry{}
 				err = s.db.View(func(dbTx database.Tx) error {
-					var err error
-					err = s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
 					return err
 				})
 				if err != nil {

@@ -515,10 +515,7 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, ha
 func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Hash) bool {
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := slpIndex.Get(txHash[:])
-	if len(serializedData) == 0 {
-		return false
-	}
-	return true
+	return len(serializedData) != 0
 }
 
 // GetSlpTokenIDFromHash returns the value given the token ID hash
