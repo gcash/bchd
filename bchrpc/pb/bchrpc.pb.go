@@ -105,13 +105,20 @@ func (SlpVersionType) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{0}
 }
 
+// Bitcoin network types
 type GetBlockchainInfoResponse_BitcoinNet int32
 
 const (
-	GetBlockchainInfoResponse_MAINNET  GetBlockchainInfoResponse_BitcoinNet = 0
-	GetBlockchainInfoResponse_REGTEST  GetBlockchainInfoResponse_BitcoinNet = 1
+	// Live public network with monetary value.
+	GetBlockchainInfoResponse_MAINNET GetBlockchainInfoResponse_BitcoinNet = 0
+	// An isolated environment for automated testing.
+	GetBlockchainInfoResponse_REGTEST GetBlockchainInfoResponse_BitcoinNet = 1
+	// A public environment where monetary value is agreed to be zero,
+	// and some checks for transaction conformity are disabled.
 	GetBlockchainInfoResponse_TESTNET3 GetBlockchainInfoResponse_BitcoinNet = 2
-	GetBlockchainInfoResponse_SIMNET   GetBlockchainInfoResponse_BitcoinNet = 3
+	// Private testnets for large scale simulations (or stress testing),
+	// where a specified list of nodes is used, rather than node discovery.
+	GetBlockchainInfoResponse_SIMNET GetBlockchainInfoResponse_BitcoinNet = 3
 )
 
 // Enum value maps for GetBlockchainInfoResponse_BitcoinNet.
@@ -157,6 +164,7 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{5, 0}
 }
 
+// State of the block in relation to the chain.
 type BlockNotification_Type int32
 
 const (
@@ -203,11 +211,14 @@ func (BlockNotification_Type) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{38, 0}
 }
 
+// State of the transaction acceptance.
 type TransactionNotification_Type int32
 
 const (
+	// A transaction in mempool.
 	TransactionNotification_UNCONFIRMED TransactionNotification_Type = 0
-	TransactionNotification_CONFIRMED   TransactionNotification_Type = 1
+	// A transaction in a block.
+	TransactionNotification_CONFIRMED TransactionNotification_Type = 1
 )
 
 // Enum value maps for TransactionNotification_Type.
@@ -390,7 +401,9 @@ type GetMempoolInfoResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Size  uint32 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	// The count of transactions in the mempool
+	Size uint32 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	// The size in bytes of all transactions in the mempool
 	Bytes uint32 `protobuf:"varint,2,opt,name=bytes,proto3" json:"bytes,omitempty"`
 }
 
@@ -445,7 +458,8 @@ type GetMempoolRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Provide full transaction info instead of only the hashes.
+	// When `full_transactions` is true, full transaction data is provided
+	// instead of just transaction hashes. Default is false.
 	FullTransactions bool `protobuf:"varint,1,opt,name=full_transactions,json=fullTransactions,proto3" json:"full_transactions,omitempty"`
 }
 
@@ -493,6 +507,7 @@ type GetMempoolResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// List of unconfirmed transactions.
 	TransactionData []*GetMempoolResponse_TransactionData `protobuf:"bytes,1,rep,name=transaction_data,json=transactionData,proto3" json:"transaction_data,omitempty"`
 }
 
@@ -578,14 +593,22 @@ type GetBlockchainInfoResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	BitcoinNet    GetBlockchainInfoResponse_BitcoinNet `protobuf:"varint,1,opt,name=bitcoin_net,json=bitcoinNet,proto3,enum=pb.GetBlockchainInfoResponse_BitcoinNet" json:"bitcoin_net,omitempty"`
-	BestHeight    int32                                `protobuf:"varint,2,opt,name=best_height,json=bestHeight,proto3" json:"best_height,omitempty"`
-	BestBlockHash []byte                               `protobuf:"bytes,3,opt,name=best_block_hash,json=bestBlockHash,proto3" json:"best_block_hash,omitempty"`
-	Difficulty    float64                              `protobuf:"fixed64,4,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
-	MedianTime    int64                                `protobuf:"varint,5,opt,name=median_time,json=medianTime,proto3" json:"median_time,omitempty"`
-	TxIndex       bool                                 `protobuf:"varint,6,opt,name=tx_index,json=txIndex,proto3" json:"tx_index,omitempty"`
-	AddrIndex     bool                                 `protobuf:"varint,7,opt,name=addr_index,json=addrIndex,proto3" json:"addr_index,omitempty"`
-	SlpIndex      bool                                 `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
+	// Which network the node is operating on.
+	BitcoinNet GetBlockchainInfoResponse_BitcoinNet `protobuf:"varint,1,opt,name=bitcoin_net,json=bitcoinNet,proto3,enum=pb.GetBlockchainInfoResponse_BitcoinNet" json:"bitcoin_net,omitempty"`
+	// The current number of blocks on the longest chain.
+	BestHeight int32 `protobuf:"varint,2,opt,name=best_height,json=bestHeight,proto3" json:"best_height,omitempty"`
+	// The hash of the best (tip) block in the most-work fully-validated chain.
+	BestBlockHash []byte `protobuf:"bytes,3,opt,name=best_block_hash,json=bestBlockHash,proto3" json:"best_block_hash,omitempty"`
+	// Threshold for adding new blocks.
+	Difficulty float64 `protobuf:"fixed64,4,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	// Median time of the last 11 blocks.
+	MedianTime int64 `protobuf:"varint,5,opt,name=median_time,json=medianTime,proto3" json:"median_time,omitempty"`
+	// When `tx_index` is true, the node has full transaction index enabled.
+	TxIndex bool `protobuf:"varint,6,opt,name=tx_index,json=txIndex,proto3" json:"tx_index,omitempty"`
+	// When `addr_index` is true, the node has address index enabled and may
+	// be used with call related by address.
+	AddrIndex bool `protobuf:"varint,7,opt,name=addr_index,json=addrIndex,proto3" json:"addr_index,omitempty"`
+	SlpIndex  bool `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
 }
 
 func (x *GetBlockchainInfoResponse) Reset() {
@@ -745,10 +768,12 @@ type isGetBlockInfoRequest_HashOrHeight interface {
 }
 
 type GetBlockInfoRequest_Hash struct {
+	// The block hash as a byte array or base64 encoded string, little-endian.
 	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3,oneof"`
 }
 
 type GetBlockInfoRequest_Height struct {
+	// The block number.
 	Height int32 `protobuf:"varint,2,opt,name=height,proto3,oneof"`
 }
 
@@ -761,6 +786,7 @@ type GetBlockInfoResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Marshaled block header data, as well as metadata.
 	Info *BlockInfo `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
 }
 
@@ -812,7 +838,8 @@ type GetBlockRequest struct {
 	//	*GetBlockRequest_Hash
 	//	*GetBlockRequest_Height
 	HashOrHeight isGetBlockRequest_HashOrHeight `protobuf_oneof:"hash_or_height"`
-	// Provide full transaction info instead of only the hashes.
+	// When `full_transactions` is true, full transactions are returned
+	// instead of just hashes. Default is false.
 	FullTransactions bool `protobuf:"varint,3,opt,name=full_transactions,json=fullTransactions,proto3" json:"full_transactions,omitempty"`
 }
 
@@ -881,10 +908,12 @@ type isGetBlockRequest_HashOrHeight interface {
 }
 
 type GetBlockRequest_Hash struct {
+	// The block hash as a byte array or base64 encoded string, little-endian.
 	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3,oneof"`
 }
 
 type GetBlockRequest_Height struct {
+	// The block number.
 	Height int32 `protobuf:"varint,2,opt,name=height,proto3,oneof"`
 }
 
@@ -897,6 +926,7 @@ type GetBlockResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A marshaled block.
 	Block *Block `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
 }
 
@@ -1008,10 +1038,12 @@ type isGetRawBlockRequest_HashOrHeight interface {
 }
 
 type GetRawBlockRequest_Hash struct {
+	// The block hash as a byte array or base64 encoded string, little-endian.
 	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3,oneof"`
 }
 
 type GetRawBlockRequest_Height struct {
+	// The block number.
 	Height int32 `protobuf:"varint,2,opt,name=height,proto3,oneof"`
 }
 
@@ -1024,6 +1056,7 @@ type GetRawBlockResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Raw block data (with header) serialized according the the bitcoin block protocol.
 	Block []byte `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
 }
 
@@ -1135,10 +1168,12 @@ type isGetBlockFilterRequest_HashOrHeight interface {
 }
 
 type GetBlockFilterRequest_Hash struct {
+	// The block hash as a byte array or base64 encoded string, little-endian.
 	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3,oneof"`
 }
 
 type GetBlockFilterRequest_Height struct {
+	// The block number.
 	Height int32 `protobuf:"varint,2,opt,name=height,proto3,oneof"`
 }
 
@@ -1151,6 +1186,8 @@ type GetBlockFilterResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A compact filter matching input outpoints and public key scripts contained
+	// in a block (encoded according to BIP158).
 	Filter []byte `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 }
 
@@ -1193,13 +1230,20 @@ func (x *GetBlockFilterResponse) GetFilter() []byte {
 	return nil
 }
 
+// Request headers using a list of known block hashes.
 type GetHeadersRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A list of block hashes known to the client (most recent first) which
+	// is exponentially  sparser toward the genesis block (0).
+	// Common practice is to include all of the last 10 blocks, and then
+	// 9 blocks for each order of ten thereafter.
 	BlockLocatorHashes [][]byte `protobuf:"bytes,1,rep,name=block_locator_hashes,json=blockLocatorHashes,proto3" json:"block_locator_hashes,omitempty"`
-	StopHash           []byte   `protobuf:"bytes,2,opt,name=stop_hash,json=stopHash,proto3" json:"stop_hash,omitempty"`
+	// hash of the latest desired block header; only blocks occurring before
+	// the stop will be returned.
+	StopHash []byte `protobuf:"bytes,2,opt,name=stop_hash,json=stopHash,proto3" json:"stop_hash,omitempty"`
 }
 
 func (x *GetHeadersRequest) Reset() {
@@ -1253,6 +1297,7 @@ type GetHeadersResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// List of block headers.
 	Headers []*BlockInfo `protobuf:"bytes,1,rep,name=headers,proto3" json:"headers,omitempty"`
 }
 
@@ -1295,11 +1340,13 @@ func (x *GetHeadersResponse) GetHeaders() []*BlockInfo {
 	return nil
 }
 
+// Get a transaction from a transaction hash.
 type GetTransactionRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A transaction hash.
 	Hash                 []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
 	IncludeTokenMetadata bool   `protobuf:"varint,2,opt,name=include_token_metadata,json=includeTokenMetadata,proto3" json:"include_token_metadata,omitempty"`
 }
@@ -1355,6 +1402,7 @@ type GetTransactionResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A marshaled transaction.
 	Transaction *Transaction   `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
 	SlpMetadata *TokenMetadata `protobuf:"bytes,2,opt,name=slp_metadata,json=slpMetadata,proto3" json:"slp_metadata,omitempty"`
 }
@@ -1405,11 +1453,13 @@ func (x *GetTransactionResponse) GetSlpMetadata() *TokenMetadata {
 	return nil
 }
 
+// Get an encoded transaction from a transaction hash.
 type GetRawTransactionRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A transaction hash.
 	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
 }
 
@@ -1457,6 +1507,7 @@ type GetRawTransactionResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Raw transaction in bytes.
 	Transaction []byte `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
 }
 
@@ -1499,20 +1550,34 @@ func (x *GetRawTransactionResponse) GetTransaction() []byte {
 	return nil
 }
 
+// Get marshaled transactions related to a specific address.
+//
+// RECOMMENDED:
+// Parameters have been provided to query without creating
+//   performance issues on the node or client.
+//
+// - The number of transactions to skip and fetch allow for iterating
+//       over a large set of transactions, if necessary.
+//
+// - A starting block parameter (either `hash` or `height`)
+//       may then be used to filter results to those occurring
+//       after a certain time.
+//
+// This approach will reduce network traffic and response processing
+//   for the client, as well as reduce workload on the node.
 type GetAddressTransactionsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// The address to query transactions, in lowercase cashaddr format.
+	// The network prefix is optional (i.e. "cashaddress:").
 	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// Control the number of transactions to be fetched from the blockchain.
-	// These controls only apply to the confirmed transactions. All unconfirmed
-	// ones will be returned always.
-	NbSkip  uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
+	// The number of confirmed transactions to skip, starting with the oldest first.
+	// Does not affect results of unconfirmed transactions.
+	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
+	// Specify the number of transactions to fetch.
 	NbFetch uint32 `protobuf:"varint,3,opt,name=nb_fetch,json=nbFetch,proto3" json:"nb_fetch,omitempty"`
-	// If the start block is provided it will only return transactions after this
-	// block. This should be used if possible to save bandwidth.
-	//
 	// Types that are assignable to StartBlock:
 	//	*GetAddressTransactionsRequest_Hash
 	//	*GetAddressTransactionsRequest_Height
@@ -1598,10 +1663,14 @@ type isGetAddressTransactionsRequest_StartBlock interface {
 }
 
 type GetAddressTransactionsRequest_Hash struct {
+	// Recommended. Only get transactions after (or within) a
+	// starting block identified by hash.
 	Hash []byte `protobuf:"bytes,4,opt,name=hash,proto3,oneof"`
 }
 
 type GetAddressTransactionsRequest_Height struct {
+	// Recommended. Only get transactions after (or within) a
+	// starting block identified by block number.
 	Height int32 `protobuf:"varint,5,opt,name=height,proto3,oneof"`
 }
 
@@ -1614,7 +1683,9 @@ type GetAddressTransactionsResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ConfirmedTransactions   []*Transaction        `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
+	// Transactions that have been included in a block.
+	ConfirmedTransactions []*Transaction `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
+	// Transactions in mempool which have not been included in a block.
 	UnconfirmedTransactions []*MempoolTransaction `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
 }
 
@@ -1664,20 +1735,34 @@ func (x *GetAddressTransactionsResponse) GetUnconfirmedTransactions() []*Mempool
 	return nil
 }
 
+// Get encoded transactions related to a specific address.
+//
+// RECOMMENDED:
+// Parameters have been provided to query without creating
+//   performance issues on the node or client.
+//
+// - The number of transactions to skip and fetch allow for iterating
+//       over a large set of transactions, if necessary.
+//
+// - A starting block parameter (either `hash` or `height`)
+//       may then be used to filter results to those occurring
+//       after a certain time.
+//
+// This approach will reduce network traffic and response processing
+//   for the client, as well as reduce workload on the node.
 type GetRawAddressTransactionsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// The address to query transactions, in lowercase cashaddr format.
+	// The network prefix is optional (i.e. "cashaddress:").
 	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// Control the number of transactions to be fetched from the blockchain.
-	// These controls only apply to the confirmed transactions. All unconfirmed
-	// ones will be returned always.
-	NbSkip  uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
+	// The number of confirmed transactions to skip, starting with the oldest first.
+	// Does not affect results of unconfirmed transactions.
+	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
+	// Specify the number of transactions to fetch.
 	NbFetch uint32 `protobuf:"varint,3,opt,name=nb_fetch,json=nbFetch,proto3" json:"nb_fetch,omitempty"`
-	// If the start block is provided it will only return transactions after this
-	// block. This should be used if possible to save bandwidth.
-	//
 	// Types that are assignable to StartBlock:
 	//	*GetRawAddressTransactionsRequest_Hash
 	//	*GetRawAddressTransactionsRequest_Height
@@ -1763,10 +1848,14 @@ type isGetRawAddressTransactionsRequest_StartBlock interface {
 }
 
 type GetRawAddressTransactionsRequest_Hash struct {
+	// Recommended. Only return transactions after some starting block
+	// identified by hash.
 	Hash []byte `protobuf:"bytes,4,opt,name=hash,proto3,oneof"`
 }
 
 type GetRawAddressTransactionsRequest_Height struct {
+	// Recommended. Only return transactions after some starting block
+	// identified by block number.
 	Height int32 `protobuf:"varint,5,opt,name=height,proto3,oneof"`
 }
 
@@ -1779,7 +1868,9 @@ type GetRawAddressTransactionsResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ConfirmedTransactions   [][]byte `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
+	// Transactions that have been included in a block.
+	ConfirmedTransactions [][]byte `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
+	// Transactions in mempool which have not been included in a block.
 	UnconfirmedTransactions [][]byte `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
 }
 
@@ -1834,9 +1925,13 @@ type GetAddressUnspentOutputsRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Address              string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	IncludeMempool       bool   `protobuf:"varint,2,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
-	IncludeTokenMetadata bool   `protobuf:"varint,3,opt,name=include_token_metadata,json=includeTokenMetadata,proto3" json:"include_token_metadata,omitempty"`
+	// The address to query transactions, in lowercase cashaddr format.
+	// The network identifier is optional (i.e. "cashaddress:").
+	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	// When `include_mempool` is true, unconfirmed transactions from mempool
+	// are returned. Default is false.
+	IncludeMempool       bool `protobuf:"varint,2,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
+	IncludeTokenMetadata bool `protobuf:"varint,3,opt,name=include_token_metadata,json=includeTokenMetadata,proto3" json:"include_token_metadata,omitempty"`
 }
 
 func (x *GetAddressUnspentOutputsRequest) Reset() {
@@ -1897,6 +1992,7 @@ type GetAddressUnspentOutputsResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// List of unspent outputs.
 	Outputs       []*UnspentOutput `protobuf:"bytes,1,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	TokenMetadata []*TokenMetadata `protobuf:"bytes,2,rep,name=token_metadata,json=tokenMetadata,proto3" json:"token_metadata,omitempty"`
 }
@@ -1952,10 +2048,14 @@ type GetUnspentOutputRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Hash                 []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
-	Index                uint32 `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
-	IncludeMempool       bool   `protobuf:"varint,3,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
-	IncludeTokenMetadata bool   `protobuf:"varint,4,opt,name=include_token_metadata,json=includeTokenMetadata,proto3" json:"include_token_metadata,omitempty"`
+	// The hash of the transaction.
+	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The number of the output, starting from zero.
+	Index uint32 `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	// When include_mempool is true, unconfirmed transactions from mempool
+	// are returned. Default is false.
+	IncludeMempool       bool `protobuf:"varint,3,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
+	IncludeTokenMetadata bool `protobuf:"varint,4,opt,name=include_token_metadata,json=includeTokenMetadata,proto3" json:"include_token_metadata,omitempty"`
 }
 
 func (x *GetUnspentOutputRequest) Reset() {
@@ -2023,13 +2123,19 @@ type GetUnspentOutputResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Outpoint      *Transaction_Input_Outpoint `protobuf:"bytes,1,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
-	PubkeyScript  []byte                      `protobuf:"bytes,2,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
-	Value         int64                       `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
-	IsCoinbase    bool                        `protobuf:"varint,4,opt,name=is_coinbase,json=isCoinbase,proto3" json:"is_coinbase,omitempty"`
-	BlockHeight   int32                       `protobuf:"varint,5,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
-	SlpToken      *SlpToken                   `protobuf:"bytes,6,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
-	TokenMetadata *TokenMetadata              `protobuf:"bytes,7,opt,name=token_metadata,json=tokenMetadata,proto3" json:"token_metadata,omitempty"`
+	// A reference to the related input.
+	Outpoint *Transaction_Input_Outpoint `protobuf:"bytes,1,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
+	// Locking script dictating how funds can be spent in the future
+	PubkeyScript []byte `protobuf:"bytes,2,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
+	// Amount in satoshi.
+	Value int64 `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
+	// When is_coinbase is true, the transaction was the first in a block,
+	// created by a miner, and used to pay the block reward
+	IsCoinbase bool `protobuf:"varint,4,opt,name=is_coinbase,json=isCoinbase,proto3" json:"is_coinbase,omitempty"`
+	// The index number of the block containing the transaction creating the output.
+	BlockHeight   int32          `protobuf:"varint,5,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
+	SlpToken      *SlpToken      `protobuf:"bytes,6,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
+	TokenMetadata *TokenMetadata `protobuf:"bytes,7,opt,name=token_metadata,json=tokenMetadata,proto3" json:"token_metadata,omitempty"`
 }
 
 func (x *GetUnspentOutputResponse) Reset() {
@@ -2118,6 +2224,7 @@ type GetMerkleProofRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// A transaction hash.
 	TransactionHash []byte `protobuf:"bytes,1,opt,name=transaction_hash,json=transactionHash,proto3" json:"transaction_hash,omitempty"`
 }
 
@@ -2165,9 +2272,16 @@ type GetMerkleProofResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Block  *BlockInfo `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
-	Hashes [][]byte   `protobuf:"bytes,2,rep,name=hashes,proto3" json:"hashes,omitempty"`
-	Flags  []byte     `protobuf:"bytes,3,opt,name=flags,proto3" json:"flags,omitempty"`
+	// Block header information for the corresponding transaction
+	Block *BlockInfo `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
+	// A list containing the transaction hash, the adjacent leaf transaction hash
+	// and the hashes of the highest nodes in the merkle tree not built with the transaction.
+	// Proof hashes are ordered following transaction order, or left to right on the merkle tree
+	Hashes [][]byte `protobuf:"bytes,2,rep,name=hashes,proto3" json:"hashes,omitempty"`
+	// Binary representing the location of the matching transaction in the full merkle tree,
+	// starting with the root (`1`) at position/level 0, where `1` corresponds
+	// to a left branch and `01` is a right branch.
+	Flags []byte `protobuf:"bytes,3,opt,name=flags,proto3" json:"flags,omitempty"`
 }
 
 func (x *GetMerkleProofResponse) Reset() {
@@ -2228,6 +2342,7 @@ type SubmitTransactionRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// The encoded transaction.
 	Transaction          []byte                        `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
 	SkipSlpValidityCheck bool                          `protobuf:"varint,2,opt,name=skip_slp_validity_check,json=skipSlpValidityCheck,proto3" json:"skip_slp_validity_check,omitempty"`
 	AllowedSlpBurns      []*Transaction_Input_Outpoint `protobuf:"bytes,3,rep,name=allowed_slp_burns,json=allowedSlpBurns,proto3" json:"allowed_slp_burns,omitempty"`
@@ -2333,21 +2448,25 @@ func (x *SubmitTransactionResponse) GetHash() []byte {
 	return nil
 }
 
+// Request to subscribe or unsubscribe from a stream of transactions.
 type SubscribeTransactionsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Subscribe   *TransactionFilter `protobuf:"bytes,1,opt,name=subscribe,proto3" json:"subscribe,omitempty"`
+	// Subscribe to a filter. add items to a filter
+	Subscribe *TransactionFilter `protobuf:"bytes,1,opt,name=subscribe,proto3" json:"subscribe,omitempty"`
+	// Unsubscribe to a filter, remove items from a filter
 	Unsubscribe *TransactionFilter `protobuf:"bytes,2,opt,name=unsubscribe,proto3" json:"unsubscribe,omitempty"`
-	// When include_mempool is true, new transactions coming in from the mempool are
+	// When include_mempool is true, new unconfirmed transactions from mempool are
 	// included apart from the ones confirmed in a block.
 	IncludeMempool bool `protobuf:"varint,3,opt,name=include_mempool,json=includeMempool,proto3" json:"include_mempool,omitempty"`
 	// When include_in_block is true, transactions are included when they are confirmed.
 	// This notification is sent in addition to any requested mempool notifications.
 	IncludeInBlock bool `protobuf:"varint,4,opt,name=include_in_block,json=includeInBlock,proto3" json:"include_in_block,omitempty"`
-	// When serialize_tx is true, transactions are serialized using bitcoin protocol encoding.
-	// Default is false, transaction will be Marshaled (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
+	// When serialize_tx is true, transactions are serialized using
+	// bitcoin protocol encoding. Default is false, transaction will be Marshaled
+	// (see `Transaction`, `MempoolTransaction` and `TransactionNotification`)
 	SerializeTx bool `protobuf:"varint,5,opt,name=serialize_tx,json=serializeTx,proto3" json:"serialize_tx,omitempty"`
 }
 
@@ -2444,8 +2563,10 @@ type SubscribeBlocksRequest struct {
 	// When full_block is true, a complete marshaled block is sent. See `Block`.
 	// Default is false, block metadata is sent. See `BlockInfo`.
 	FullBlock bool `protobuf:"varint,1,opt,name=full_block,json=fullBlock,proto3" json:"full_block,omitempty"`
-	// When full_transactions is true, provide full transaction info for a marshaled block.
-	// Default is false, only the transaction hashes are included for a marshaled block. See `TransactionData`.
+	// When full_transactions is true, provide full transaction info
+	// for a marshaled block.
+	// Default is false, only the transaction hashes are included for
+	// a marshaled block. See `TransactionData`.
 	FullTransactions bool `protobuf:"varint,2,opt,name=full_transactions,json=fullTransactions,proto3" json:"full_transactions,omitempty"`
 	// When serialize_block is true, blocks are serialized using bitcoin protocol encoding.
 	// Default is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)
@@ -2797,6 +2918,7 @@ type BlockNotification struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Whether the block is connected to the chain.
 	Type BlockNotification_Type `protobuf:"varint,1,opt,name=type,proto3,enum=pb.BlockNotification_Type" json:"type,omitempty"`
 	// Types that are assignable to Block:
 	//	*BlockNotification_BlockInfo
@@ -2877,14 +2999,17 @@ type isBlockNotification_Block interface {
 }
 
 type BlockNotification_BlockInfo struct {
+	// Marshaled block header data, as well as metadata stored by the node.
 	BlockInfo *BlockInfo `protobuf:"bytes,2,opt,name=block_info,json=blockInfo,proto3,oneof"`
 }
 
 type BlockNotification_MarshaledBlock struct {
+	// A Block.
 	MarshaledBlock *Block `protobuf:"bytes,3,opt,name=marshaled_block,json=marshaledBlock,proto3,oneof"`
 }
 
 type BlockNotification_SerializedBlock struct {
+	// Binary block, serialized using bitcoin protocol encoding.
 	SerializedBlock []byte `protobuf:"bytes,4,opt,name=serialized_block,json=serializedBlock,proto3,oneof"`
 }
 
@@ -2899,6 +3024,7 @@ type TransactionNotification struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Whether or not the transaction has been included in a block.
 	Type TransactionNotification_Type `protobuf:"varint,1,opt,name=type,proto3,enum=pb.TransactionNotification_Type" json:"type,omitempty"`
 	// Types that are assignable to Transaction:
 	//	*TransactionNotification_ConfirmedTransaction
@@ -2979,14 +3105,17 @@ type isTransactionNotification_Transaction interface {
 }
 
 type TransactionNotification_ConfirmedTransaction struct {
+	// A transaction included in a block.
 	ConfirmedTransaction *Transaction `protobuf:"bytes,2,opt,name=confirmed_transaction,json=confirmedTransaction,proto3,oneof"`
 }
 
 type TransactionNotification_UnconfirmedTransaction struct {
+	// A transaction in mempool.
 	UnconfirmedTransaction *MempoolTransaction `protobuf:"bytes,3,opt,name=unconfirmed_transaction,json=unconfirmedTransaction,proto3,oneof"`
 }
 
 type TransactionNotification_SerializedTransaction struct {
+	// Binary transaction, serialized using bitcoin protocol encoding.
 	SerializedTransaction []byte `protobuf:"bytes,4,opt,name=serialized_transaction,json=serializedTransaction,proto3,oneof"`
 }
 
@@ -2996,27 +3125,41 @@ func (*TransactionNotification_UnconfirmedTransaction) isTransactionNotification
 
 func (*TransactionNotification_SerializedTransaction) isTransactionNotification_Transaction() {}
 
+// Metadata for identifying and validating a block
 type BlockInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Identification.
-	Hash   []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
-	Height int32  `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
-	// Block header data.
-	Version       int32  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// The double sha256 hash of the six header fields in the first 80 bytes
+	// of the block, when encoded according the bitcoin protocol.
+	// sha256(sha256(encoded_header))
+	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The block number, an incremental index for each block mined.
+	Height int32 `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+	// A version number to track software/protocol upgrades.
+	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// Hash of the previous block
 	PreviousBlock []byte `protobuf:"bytes,4,opt,name=previous_block,json=previousBlock,proto3" json:"previous_block,omitempty"`
-	MerkleRoot    []byte `protobuf:"bytes,5,opt,name=merkle_root,json=merkleRoot,proto3" json:"merkle_root,omitempty"`
-	Timestamp     int64  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Bits          uint32 `protobuf:"varint,7,opt,name=bits,proto3" json:"bits,omitempty"`
-	Nonce         uint32 `protobuf:"varint,8,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	// Metadata.
-	Confirmations int32   `protobuf:"varint,9,opt,name=confirmations,proto3" json:"confirmations,omitempty"`
-	Difficulty    float64 `protobuf:"fixed64,10,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
-	NextBlockHash []byte  `protobuf:"bytes,11,opt,name=next_block_hash,json=nextBlockHash,proto3" json:"next_block_hash,omitempty"`
-	Size          int32   `protobuf:"varint,12,opt,name=size,proto3" json:"size,omitempty"`
-	MedianTime    int64   `protobuf:"varint,13,opt,name=median_time,json=medianTime,proto3" json:"median_time,omitempty"`
+	// The root of the Merkle Tree built from all transactions in the block.
+	MerkleRoot []byte `protobuf:"bytes,5,opt,name=merkle_root,json=merkleRoot,proto3" json:"merkle_root,omitempty"`
+	// When mining of the block started, expressed in seconds since 1970-01-01.
+	Timestamp int64 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// Difficulty in Compressed Target Format.
+	Bits uint32 `protobuf:"varint,7,opt,name=bits,proto3" json:"bits,omitempty"`
+	// A random value that was generated during block mining which happened to
+	// result in a computed block hash below the difficulty target at the time.
+	Nonce uint32 `protobuf:"varint,8,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// Number of blocks in a chain, including the block itself upon creation.
+	Confirmations int32 `protobuf:"varint,9,opt,name=confirmations,proto3" json:"confirmations,omitempty"`
+	// Difficulty target at time of creation.
+	Difficulty float64 `protobuf:"fixed64,10,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	// Hash of the next block in this chain.
+	NextBlockHash []byte `protobuf:"bytes,11,opt,name=next_block_hash,json=nextBlockHash,proto3" json:"next_block_hash,omitempty"`
+	// Size of the block in bytes.
+	Size int32 `protobuf:"varint,12,opt,name=size,proto3" json:"size,omitempty"`
+	// The median block time of the latest 11 block timestamps.
+	MedianTime int64 `protobuf:"varint,13,opt,name=median_time,json=medianTime,proto3" json:"median_time,omitempty"`
 }
 
 func (x *BlockInfo) Reset() {
@@ -3147,7 +3290,9 @@ type Block struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Info            *BlockInfo               `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	// Block header data, as well as metadata stored by the node.
+	Info *BlockInfo `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	// List of transactions or transaction hashes.
 	TransactionData []*Block_TransactionData `protobuf:"bytes,2,rep,name=transaction_data,json=transactionData,proto3" json:"transaction_data,omitempty"`
 }
 
@@ -3202,16 +3347,29 @@ type Transaction struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Hash     []byte                `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
-	Version  int32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Inputs   []*Transaction_Input  `protobuf:"bytes,3,rep,name=inputs,proto3" json:"inputs,omitempty"`
-	Outputs  []*Transaction_Output `protobuf:"bytes,4,rep,name=outputs,proto3" json:"outputs,omitempty"`
-	LockTime uint32                `protobuf:"varint,5,opt,name=lock_time,json=lockTime,proto3" json:"lock_time,omitempty"`
-	// Metadata
-	Size               int32               `protobuf:"varint,8,opt,name=size,proto3" json:"size,omitempty"`
-	Timestamp          int64               `protobuf:"varint,9,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Confirmations      int32               `protobuf:"varint,10,opt,name=confirmations,proto3" json:"confirmations,omitempty"`
-	BlockHeight        int32               `protobuf:"varint,11,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
+	// The double sha256 hash of the encoded transaction.
+	// sha256(sha256(encoded_transaction))
+	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The version of the transaction format.
+	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// List of inputs.
+	Inputs []*Transaction_Input `protobuf:"bytes,3,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	// List of outputs.
+	Outputs []*Transaction_Output `protobuf:"bytes,4,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	// The block height or timestamp after which this transaction is allowed.
+	// If value is greater than 500 million, it is assumed to be an epoch timestamp,
+	// otherwise it is treated as a block-height. Default is zero, or lock.
+	LockTime uint32 `protobuf:"varint,5,opt,name=lock_time,json=lockTime,proto3" json:"lock_time,omitempty"`
+	// The size of the transaction in bytes.
+	Size int32 `protobuf:"varint,8,opt,name=size,proto3" json:"size,omitempty"`
+	// When the transaction was included in a block, in epoch time.
+	Timestamp int64 `protobuf:"varint,9,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// Number of blocks including proof of the transaction, including
+	// the block it appeared.
+	Confirmations int32 `protobuf:"varint,10,opt,name=confirmations,proto3" json:"confirmations,omitempty"`
+	// Number of the block containing the transaction.
+	BlockHeight int32 `protobuf:"varint,11,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
+	// Hash of the block the transaction was recorded in.
 	BlockHash          []byte              `protobuf:"bytes,12,opt,name=block_hash,json=blockHash,proto3" json:"block_hash,omitempty"`
 	SlpTransactionInfo *SlpTransactionInfo `protobuf:"bytes,13,opt,name=slp_transaction_info,json=slpTransactionInfo,proto3" json:"slp_transaction_info,omitempty"`
 }
@@ -3422,12 +3580,18 @@ type UnspentOutput struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Outpoint     *Transaction_Input_Outpoint `protobuf:"bytes,1,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
-	PubkeyScript []byte                      `protobuf:"bytes,2,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
-	Value        int64                       `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
-	IsCoinbase   bool                        `protobuf:"varint,4,opt,name=is_coinbase,json=isCoinbase,proto3" json:"is_coinbase,omitempty"`
-	BlockHeight  int32                       `protobuf:"varint,5,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
-	SlpToken     *SlpToken                   `protobuf:"bytes,6,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
+	// A reference to the output given by transaction hash and index.
+	Outpoint *Transaction_Input_Outpoint `protobuf:"bytes,1,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
+	// The public key script used to pay coins.
+	PubkeyScript []byte `protobuf:"bytes,2,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
+	// The amount in satoshis
+	Value int64 `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
+	// When is_coinbase is true, the output is the first in the block,
+	// a generation transaction, the result of mining.
+	IsCoinbase bool `protobuf:"varint,4,opt,name=is_coinbase,json=isCoinbase,proto3" json:"is_coinbase,omitempty"`
+	// The block number containing the UXTO.
+	BlockHeight int32     `protobuf:"varint,5,opt,name=block_height,json=blockHeight,proto3" json:"block_height,omitempty"`
+	SlpToken    *SlpToken `protobuf:"bytes,6,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
 }
 
 func (x *UnspentOutput) Reset() {
@@ -3509,7 +3673,9 @@ type TransactionFilter struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Addresses    []string                      `protobuf:"bytes,1,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	// Filter by address(es)
+	Addresses []string `protobuf:"bytes,1,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	// Filter by output hash and index.
 	Outpoints    []*Transaction_Input_Outpoint `protobuf:"bytes,2,rep,name=outpoints,proto3" json:"outpoints,omitempty"`
 	DataElements [][]byte                      `protobuf:"bytes,3,rep,name=data_elements,json=dataElements,proto3" json:"data_elements,omitempty"`
 	// Subscribed/Unsubscribe to everything. Other filters
@@ -4563,10 +4729,12 @@ type isGetMempoolResponse_TransactionData_TxidsOrTxs interface {
 }
 
 type GetMempoolResponse_TransactionData_TransactionHash struct {
+	// The transaction hash
 	TransactionHash []byte `protobuf:"bytes,1,opt,name=transaction_hash,json=transactionHash,proto3,oneof"`
 }
 
 type GetMempoolResponse_TransactionData_Transaction struct {
+	// The transaction data
 	Transaction *Transaction `protobuf:"bytes,2,opt,name=transaction,proto3,oneof"`
 }
 
@@ -4581,8 +4749,6 @@ type Block_TransactionData struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Either one of the two following is provided, depending on the request.
-	//
 	// Types that are assignable to TxidsOrTxs:
 	//	*Block_TransactionData_TransactionHash
 	//	*Block_TransactionData_Transaction
@@ -4647,10 +4813,12 @@ type isBlock_TransactionData_TxidsOrTxs interface {
 }
 
 type Block_TransactionData_TransactionHash struct {
+	// Just the transaction hash.
 	TransactionHash []byte `protobuf:"bytes,1,opt,name=transaction_hash,json=transactionHash,proto3,oneof"`
 }
 
 type Block_TransactionData_Transaction struct {
+	// A marshaled transaction.
 	Transaction *Transaction `protobuf:"bytes,2,opt,name=transaction,proto3,oneof"`
 }
 
@@ -4663,14 +4831,23 @@ type Transaction_Input struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Index           uint32                      `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
-	Outpoint        *Transaction_Input_Outpoint `protobuf:"bytes,2,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
-	SignatureScript []byte                      `protobuf:"bytes,3,opt,name=signature_script,json=signatureScript,proto3" json:"signature_script,omitempty"`
-	Sequence        uint32                      `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	Value           int64                       `protobuf:"varint,5,opt,name=value,proto3" json:"value,omitempty"`
-	PreviousScript  []byte                      `protobuf:"bytes,6,opt,name=previous_script,json=previousScript,proto3" json:"previous_script,omitempty"`
-	Address         string                      `protobuf:"bytes,7,opt,name=address,proto3" json:"address,omitempty"`
-	SlpToken        *SlpToken                   `protobuf:"bytes,8,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
+	// The number of the input, starting from zero.
+	Index uint32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	// The related outpoint.
+	Outpoint *Transaction_Input_Outpoint `protobuf:"bytes,2,opt,name=outpoint,proto3" json:"outpoint,omitempty"`
+	// An unlocking script asserting a transaction is permitted to spend
+	// the Outpoint (UTXO)
+	SignatureScript []byte `protobuf:"bytes,3,opt,name=signature_script,json=signatureScript,proto3" json:"signature_script,omitempty"`
+	// As of BIP-68, the sequence number is interpreted as a relative
+	// lock-time for the input.
+	Sequence uint32 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// Amount in satoshi.
+	Value int64 `protobuf:"varint,5,opt,name=value,proto3" json:"value,omitempty"`
+	// The hash of the transaction containing the output to be spent.
+	PreviousScript []byte `protobuf:"bytes,6,opt,name=previous_script,json=previousScript,proto3" json:"previous_script,omitempty"`
+	// The bitcoin addresses associated with this input.
+	Address  string    `protobuf:"bytes,7,opt,name=address,proto3" json:"address,omitempty"`
+	SlpToken *SlpToken `protobuf:"bytes,8,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
 }
 
 func (x *Transaction_Input) Reset() {
@@ -4766,11 +4943,17 @@ type Transaction_Output struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Index              uint32    `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
-	Value              int64     `protobuf:"varint,2,opt,name=value,proto3" json:"value,omitempty"`
-	PubkeyScript       []byte    `protobuf:"bytes,3,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
-	Address            string    `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
-	ScriptClass        string    `protobuf:"bytes,5,opt,name=script_class,json=scriptClass,proto3" json:"script_class,omitempty"`
+	// The number of the output, starting from zero.
+	Index uint32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	// The number of satoshis to be transferred.
+	Value int64 `protobuf:"varint,2,opt,name=value,proto3" json:"value,omitempty"`
+	// The public key script used to pay coins.
+	PubkeyScript []byte `protobuf:"bytes,3,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
+	// The bitcoin addresses associated with this output.
+	Address string `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
+	// The type of script.
+	ScriptClass string `protobuf:"bytes,5,opt,name=script_class,json=scriptClass,proto3" json:"script_class,omitempty"`
+	// The script expressed in Bitcoin Cash Script.
 	DisassembledScript string    `protobuf:"bytes,6,opt,name=disassembled_script,json=disassembledScript,proto3" json:"disassembled_script,omitempty"`
 	SlpToken           *SlpToken `protobuf:"bytes,7,opt,name=slp_token,json=slpToken,proto3" json:"slp_token,omitempty"`
 }
@@ -4861,7 +5044,9 @@ type Transaction_Input_Outpoint struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Hash  []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The hash of the transaction containing the output to be spent.
+	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The index of specific output on the transaction.
 	Index uint32 `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
 }
 
@@ -6729,55 +6914,59 @@ const _ = grpc.SupportPackageIsVersion6
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type BchrpcClient interface {
-	// Get info about the mempool.
+	// GetMempoolInfo returns the state of the current mempool.
 	GetMempoolInfo(ctx context.Context, in *GetMempoolInfoRequest, opts ...grpc.CallOption) (*GetMempoolInfoResponse, error)
-	// Returns information about all of the transactions currently in the memory pool.
+	// GetMempool returns information about all transactions currently in the memory pool.
 	// Offers an option to return full transactions or just transactions hashes.
 	GetMempool(ctx context.Context, in *GetMempoolRequest, opts ...grpc.CallOption) (*GetMempoolResponse, error)
-	// GetBlockchainInfo info about the blockchain including the most recent
+	// GetBlockchainInfo returns data about the blockchain including the most recent
 	// block hash and height.
 	GetBlockchainInfo(ctx context.Context, in *GetBlockchainInfoRequest, opts ...grpc.CallOption) (*GetBlockchainInfoResponse, error)
-	// Get info about the given block.
+	// GetBlockInfo returns metadata and info for a specified block.
 	GetBlockInfo(ctx context.Context, in *GetBlockInfoRequest, opts ...grpc.CallOption) (*GetBlockInfoResponse, error)
-	// Get a block.
+	// GetBlock returns detailed data for a block.
 	GetBlock(ctx context.Context, in *GetBlockRequest, opts ...grpc.CallOption) (*GetBlockResponse, error)
-	// Get a serialized block.
+	// GetRawBlock returns a block in a serialized format.
 	GetRawBlock(ctx context.Context, in *GetRawBlockRequest, opts ...grpc.CallOption) (*GetRawBlockResponse, error)
-	// Get a block filter.
+	// GetBlockFilter returns the compact filter (cf) of a block as a Golomb-Rice encoded set.
 	//
 	// **Requires CfIndex**
 	GetBlockFilter(ctx context.Context, in *GetBlockFilterRequest, opts ...grpc.CallOption) (*GetBlockFilterResponse, error)
-	// This RPC sends a block locator object to the server and the server responds with
+	// GetHeaders takes a block locator object and returns
 	// a batch of no more than 2000 headers. Upon parsing the block locator, if the server
 	// concludes there has been a fork, it will send headers starting at the fork point,
 	// or genesis if no blocks in the locator are in the best chain. If the locator is
 	// already at the tip no headers will be returned.
+	// see: bchd/bchrpc/documentation/wallet_operation.md
 	GetHeaders(ctx context.Context, in *GetHeadersRequest, opts ...grpc.CallOption) (*GetHeadersResponse, error)
-	// Get a transaction given its hash.
+	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
 	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
-	// Get a serialized transaction given its hash.
+	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
 	GetRawTransaction(ctx context.Context, in *GetRawTransactionRequest, opts ...grpc.CallOption) (*GetRawTransactionResponse, error)
-	// Returns the transactions for the given address. Offers offset,
+	// GetAddressTransactions returns the transactions for the given address. Offers offset,
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
 	GetAddressTransactions(ctx context.Context, in *GetAddressTransactionsRequest, opts ...grpc.CallOption) (*GetAddressTransactionsResponse, error)
-	// Returns the raw transactions for the given address. Offers offset,
-	// limit, and from block options.
+	// GetRawAddressTransactions the serialized raw transactions for
+	// the given address. Offers offset, limit, and from block options.
 	//
 	// **Requires AddressIndex**
 	GetRawAddressTransactions(ctx context.Context, in *GetRawAddressTransactionsRequest, opts ...grpc.CallOption) (*GetRawAddressTransactionsResponse, error)
-	// Returns all the unspent transaction outputs for the given address.
+	// GetAddressUnspentOutputs returns all the unspent transaction outputs
+	// for the given address.
 	//
 	// **Requires AddressIndex**
 	GetAddressUnspentOutputs(ctx context.Context, in *GetAddressUnspentOutputsRequest, opts ...grpc.CallOption) (*GetAddressUnspentOutputsResponse, error)
-	// Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+	// GetUnspentOutput takes an unspent output in the utxo set and returns
+	// the utxo metadata or not found.
 	GetUnspentOutput(ctx context.Context, in *GetUnspentOutputRequest, opts ...grpc.CallOption) (*GetUnspentOutputResponse, error)
-	// Returns a merkle (SPV) proof that the given transaction is in the provided block.
+	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
+	// in the provided block.
 	//
 	// **Requires TxIndex***
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
@@ -6787,26 +6976,28 @@ type BchrpcClient interface {
 	GetParsedSlpScript(ctx context.Context, in *GetParsedSlpScriptRequest, opts ...grpc.CallOption) (*GetParsedSlpScriptResponse, error)
 	// Submit a transaction to all connected peers.
 	SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error)
-	// Subscribe to relevant transactions based on the subscription requests.
+	// SubscribeTransactions creates subscription to all relevant transactions based on
+	// the subscription filter.  The parameters to filter transactions on can be
+	// updated by sending new SubscribeTransactionsRequest objects on the stream.
 	//
-	// This RPC does not use bi-directional streams and therefore can be used
-	// with grpc-web. You will need to close and re-open the stream whenever
+	// This RPC does not use bidirectional streams and therefore can be used
+	// with grpc-web. You will need to close and reopen the stream whenever
 	// you want to update the addresses. If you are not using grpc-web
 	// then SubscribeTransactionStream is more appropriate.
 	//
 	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactions(ctx context.Context, in *SubscribeTransactionsRequest, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionsClient, error)
-	// Subscribe to relevant transactions based on the subscription requests.
-	// The parameters to filter transactions on can be updated by sending new
-	// SubscribeTransactionsRequest objects on the stream.
+	// SubscribeTransactionStream subscribes to relevant transactions based on
+	// the subscription requests. The parameters to filter transactions on can
+	// be updated by sending new SubscribeTransactionsRequest objects on the stream.
 	//
-	// Because this RPC is using bi-directional streaming it cannot be used with
+	// NOTE: Because this RPC is using bi-directional streaming it cannot be used with
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactionStream(ctx context.Context, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionStreamClient, error)
-	// Subscribe to notifications of new blocks being connected to the blockchain
-	// or blocks being disconnected.
+	// SubscribeBlocks creates a subscription for notifications of new blocks being
+	// connected to the blockchain or blocks being disconnected.
 	SubscribeBlocks(ctx context.Context, in *SubscribeBlocksRequest, opts ...grpc.CallOption) (Bchrpc_SubscribeBlocksClient, error)
 }
 
@@ -7077,55 +7268,59 @@ func (x *bchrpcSubscribeBlocksClient) Recv() (*BlockNotification, error) {
 
 // BchrpcServer is the server API for Bchrpc service.
 type BchrpcServer interface {
-	// Get info about the mempool.
+	// GetMempoolInfo returns the state of the current mempool.
 	GetMempoolInfo(context.Context, *GetMempoolInfoRequest) (*GetMempoolInfoResponse, error)
-	// Returns information about all of the transactions currently in the memory pool.
+	// GetMempool returns information about all transactions currently in the memory pool.
 	// Offers an option to return full transactions or just transactions hashes.
 	GetMempool(context.Context, *GetMempoolRequest) (*GetMempoolResponse, error)
-	// GetBlockchainInfo info about the blockchain including the most recent
+	// GetBlockchainInfo returns data about the blockchain including the most recent
 	// block hash and height.
 	GetBlockchainInfo(context.Context, *GetBlockchainInfoRequest) (*GetBlockchainInfoResponse, error)
-	// Get info about the given block.
+	// GetBlockInfo returns metadata and info for a specified block.
 	GetBlockInfo(context.Context, *GetBlockInfoRequest) (*GetBlockInfoResponse, error)
-	// Get a block.
+	// GetBlock returns detailed data for a block.
 	GetBlock(context.Context, *GetBlockRequest) (*GetBlockResponse, error)
-	// Get a serialized block.
+	// GetRawBlock returns a block in a serialized format.
 	GetRawBlock(context.Context, *GetRawBlockRequest) (*GetRawBlockResponse, error)
-	// Get a block filter.
+	// GetBlockFilter returns the compact filter (cf) of a block as a Golomb-Rice encoded set.
 	//
 	// **Requires CfIndex**
 	GetBlockFilter(context.Context, *GetBlockFilterRequest) (*GetBlockFilterResponse, error)
-	// This RPC sends a block locator object to the server and the server responds with
+	// GetHeaders takes a block locator object and returns
 	// a batch of no more than 2000 headers. Upon parsing the block locator, if the server
 	// concludes there has been a fork, it will send headers starting at the fork point,
 	// or genesis if no blocks in the locator are in the best chain. If the locator is
 	// already at the tip no headers will be returned.
+	// see: bchd/bchrpc/documentation/wallet_operation.md
 	GetHeaders(context.Context, *GetHeadersRequest) (*GetHeadersResponse, error)
-	// Get a transaction given its hash.
+	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
 	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
-	// Get a serialized transaction given its hash.
+	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
 	GetRawTransaction(context.Context, *GetRawTransactionRequest) (*GetRawTransactionResponse, error)
-	// Returns the transactions for the given address. Offers offset,
+	// GetAddressTransactions returns the transactions for the given address. Offers offset,
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
 	GetAddressTransactions(context.Context, *GetAddressTransactionsRequest) (*GetAddressTransactionsResponse, error)
-	// Returns the raw transactions for the given address. Offers offset,
-	// limit, and from block options.
+	// GetRawAddressTransactions the serialized raw transactions for
+	// the given address. Offers offset, limit, and from block options.
 	//
 	// **Requires AddressIndex**
 	GetRawAddressTransactions(context.Context, *GetRawAddressTransactionsRequest) (*GetRawAddressTransactionsResponse, error)
-	// Returns all the unspent transaction outputs for the given address.
+	// GetAddressUnspentOutputs returns all the unspent transaction outputs
+	// for the given address.
 	//
 	// **Requires AddressIndex**
 	GetAddressUnspentOutputs(context.Context, *GetAddressUnspentOutputsRequest) (*GetAddressUnspentOutputsResponse, error)
-	// Looks up the unspent output in the utxo set and returns the utxo metadata or not found.
+	// GetUnspentOutput takes an unspent output in the utxo set and returns
+	// the utxo metadata or not found.
 	GetUnspentOutput(context.Context, *GetUnspentOutputRequest) (*GetUnspentOutputResponse, error)
-	// Returns a merkle (SPV) proof that the given transaction is in the provided block.
+	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
+	// in the provided block.
 	//
 	// **Requires TxIndex***
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
@@ -7135,26 +7330,28 @@ type BchrpcServer interface {
 	GetParsedSlpScript(context.Context, *GetParsedSlpScriptRequest) (*GetParsedSlpScriptResponse, error)
 	// Submit a transaction to all connected peers.
 	SubmitTransaction(context.Context, *SubmitTransactionRequest) (*SubmitTransactionResponse, error)
-	// Subscribe to relevant transactions based on the subscription requests.
+	// SubscribeTransactions creates subscription to all relevant transactions based on
+	// the subscription filter.  The parameters to filter transactions on can be
+	// updated by sending new SubscribeTransactionsRequest objects on the stream.
 	//
-	// This RPC does not use bi-directional streams and therefore can be used
-	// with grpc-web. You will need to close and re-open the stream whenever
+	// This RPC does not use bidirectional streams and therefore can be used
+	// with grpc-web. You will need to close and reopen the stream whenever
 	// you want to update the addresses. If you are not using grpc-web
 	// then SubscribeTransactionStream is more appropriate.
 	//
 	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactions(*SubscribeTransactionsRequest, Bchrpc_SubscribeTransactionsServer) error
-	// Subscribe to relevant transactions based on the subscription requests.
-	// The parameters to filter transactions on can be updated by sending new
-	// SubscribeTransactionsRequest objects on the stream.
+	// SubscribeTransactionStream subscribes to relevant transactions based on
+	// the subscription requests. The parameters to filter transactions on can
+	// be updated by sending new SubscribeTransactionsRequest objects on the stream.
 	//
-	// Because this RPC is using bi-directional streaming it cannot be used with
+	// NOTE: Because this RPC is using bi-directional streaming it cannot be used with
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
 	SubscribeTransactionStream(Bchrpc_SubscribeTransactionStreamServer) error
-	// Subscribe to notifications of new blocks being connected to the blockchain
-	// or blocks being disconnected.
+	// SubscribeBlocks creates a subscription for notifications of new blocks being
+	// connected to the blockchain or blocks being disconnected.
 	SubscribeBlocks(*SubscribeBlocksRequest, Bchrpc_SubscribeBlocksServer) error
 }
 
