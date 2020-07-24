@@ -539,14 +539,12 @@ message GetParsedSlpScriptResponse {
 
 message GetTrustedValidationRequest {
     message Query {
-        bytes prev_out_txid = 1;
+        bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
     }
     message Functionary {
         enum MessageType {
-            NONE = 0;
-            TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE = 1;
-            SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE = 2;
+            STANDARD = 0;
         }
         enum SignatureType {
             SECP256K1_ECDSA = 0;
@@ -563,23 +561,21 @@ message GetTrustedValidationRequest {
 
 message GetTrustedValidationResponse {
     message ValidityResult {
-        enum SlpVersionType {
-            TYPE_1 = 0;
-            NFT1_GROUP = 1;
-            NFT1_CHILD = 2;
-        }
-        bytes prev_out_txid = 1;
+        bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
         bytes token_id = 3;
         SlpVersionType slp_version = 4;
-        uint64 valid_amount = 5;
-        bytes slp_txn_opreturn = 6;
+        oneof validity_result_type {
+            uint64 v1_token_amount = 5;
+            bool v1_mint_baton = 6;
+        }
+        bytes slp_txn_opreturn = 7;
 
         message FunctionarySignature {
             bytes signature = 1;
             bytes message = 2;
         }
-        FunctionarySignature functionary_sig = 7;
+        FunctionarySignature functionary_sig = 8;
     }
 
     // allows server to respond to a request with multiple

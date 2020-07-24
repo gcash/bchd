@@ -167,22 +167,16 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 type GetTrustedValidationRequest_Functionary_MessageType int32
 
 const (
-	GetTrustedValidationRequest_Functionary_NONE                                          GetTrustedValidationRequest_Functionary_MessageType = 0
-	GetTrustedValidationRequest_Functionary_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE        GetTrustedValidationRequest_Functionary_MessageType = 1
-	GetTrustedValidationRequest_Functionary_SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE GetTrustedValidationRequest_Functionary_MessageType = 2
+	GetTrustedValidationRequest_Functionary_STANDARD GetTrustedValidationRequest_Functionary_MessageType = 0
 )
 
 // Enum value maps for GetTrustedValidationRequest_Functionary_MessageType.
 var (
 	GetTrustedValidationRequest_Functionary_MessageType_name = map[int32]string{
-		0: "NONE",
-		1: "TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
-		2: "SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
+		0: "STANDARD",
 	}
 	GetTrustedValidationRequest_Functionary_MessageType_value = map[string]int32{
-		"NONE":                                   0,
-		"TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 1,
-		"SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 2,
+		"STANDARD": 0,
 	}
 )
 
@@ -259,55 +253,6 @@ func (GetTrustedValidationRequest_Functionary_SignatureType) EnumDescriptor() ([
 	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 1}
 }
 
-type GetTrustedValidationResponse_ValidityResult_SlpVersionType int32
-
-const (
-	GetTrustedValidationResponse_ValidityResult_TYPE_1     GetTrustedValidationResponse_ValidityResult_SlpVersionType = 0
-	GetTrustedValidationResponse_ValidityResult_NFT1_GROUP GetTrustedValidationResponse_ValidityResult_SlpVersionType = 1
-	GetTrustedValidationResponse_ValidityResult_NFT1_CHILD GetTrustedValidationResponse_ValidityResult_SlpVersionType = 2
-)
-
-// Enum value maps for GetTrustedValidationResponse_ValidityResult_SlpVersionType.
-var (
-	GetTrustedValidationResponse_ValidityResult_SlpVersionType_name = map[int32]string{
-		0: "TYPE_1",
-		1: "NFT1_GROUP",
-		2: "NFT1_CHILD",
-	}
-	GetTrustedValidationResponse_ValidityResult_SlpVersionType_value = map[string]int32{
-		"TYPE_1":     0,
-		"NFT1_GROUP": 1,
-		"NFT1_CHILD": 2,
-	}
-)
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Enum() *GetTrustedValidationResponse_ValidityResult_SlpVersionType {
-	p := new(GetTrustedValidationResponse_ValidityResult_SlpVersionType)
-	*p = x
-	return p
-}
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[4].Descriptor()
-}
-
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[4]
-}
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use GetTrustedValidationResponse_ValidityResult_SlpVersionType.Descriptor instead.
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) EnumDescriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0, 0}
-}
-
 // State of the block in relation to the chain.
 type BlockNotification_Type int32
 
@@ -339,11 +284,11 @@ func (x BlockNotification_Type) String() string {
 }
 
 func (BlockNotification_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[5].Descriptor()
+	return file_bchrpc_proto_enumTypes[4].Descriptor()
 }
 
 func (BlockNotification_Type) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[5]
+	return &file_bchrpc_proto_enumTypes[4]
 }
 
 func (x BlockNotification_Type) Number() protoreflect.EnumNumber {
@@ -388,11 +333,11 @@ func (x TransactionNotification_Type) String() string {
 }
 
 func (TransactionNotification_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[6].Descriptor()
+	return file_bchrpc_proto_enumTypes[5].Descriptor()
 }
 
 func (TransactionNotification_Type) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[6]
+	return &file_bchrpc_proto_enumTypes[5]
 }
 
 func (x TransactionNotification_Type) Number() protoreflect.EnumNumber {
@@ -434,11 +379,11 @@ func (x SlpTransactionInfo_ValidityJudgement) String() string {
 }
 
 func (SlpTransactionInfo_ValidityJudgement) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[7].Descriptor()
+	return file_bchrpc_proto_enumTypes[6].Descriptor()
 }
 
 func (SlpTransactionInfo_ValidityJudgement) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[7]
+	return &file_bchrpc_proto_enumTypes[6]
 }
 
 func (x SlpTransactionInfo_ValidityJudgement) Number() protoreflect.EnumNumber {
@@ -486,11 +431,11 @@ func (x SlpTransactionInfo_BurnFlags) String() string {
 }
 
 func (SlpTransactionInfo_BurnFlags) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[8].Descriptor()
+	return file_bchrpc_proto_enumTypes[7].Descriptor()
 }
 
 func (SlpTransactionInfo_BurnFlags) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[8]
+	return &file_bchrpc_proto_enumTypes[7]
 }
 
 func (x SlpTransactionInfo_BurnFlags) Number() protoreflect.EnumNumber {
@@ -4996,7 +4941,7 @@ type GetTrustedValidationRequest_Query struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	PrevOutTxid []byte `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
+	PrevOutHash []byte `protobuf:"bytes,1,opt,name=prev_out_hash,json=prevOutHash,proto3" json:"prev_out_hash,omitempty"`
 	PrevOutVout uint32 `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
 }
 
@@ -5032,9 +4977,9 @@ func (*GetTrustedValidationRequest_Query) Descriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{38, 0}
 }
 
-func (x *GetTrustedValidationRequest_Query) GetPrevOutTxid() []byte {
+func (x *GetTrustedValidationRequest_Query) GetPrevOutHash() []byte {
 	if x != nil {
-		return x.PrevOutTxid
+		return x.PrevOutHash
 	}
 	return nil
 }
@@ -5099,7 +5044,7 @@ func (x *GetTrustedValidationRequest_Functionary) GetType() GetTrustedValidation
 	if x != nil {
 		return x.Type
 	}
-	return GetTrustedValidationRequest_Functionary_NONE
+	return GetTrustedValidationRequest_Functionary_STANDARD
 }
 
 func (x *GetTrustedValidationRequest_Functionary) GetSigType() GetTrustedValidationRequest_Functionary_SignatureType {
@@ -5114,13 +5059,16 @@ type GetTrustedValidationResponse_ValidityResult struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	PrevOutTxid    []byte                                                            `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
-	PrevOutVout    uint32                                                            `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
-	TokenId        []byte                                                            `protobuf:"bytes,3,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
-	SlpVersion     GetTrustedValidationResponse_ValidityResult_SlpVersionType        `protobuf:"varint,4,opt,name=slp_version,json=slpVersion,proto3,enum=pb.GetTrustedValidationResponse_ValidityResult_SlpVersionType" json:"slp_version,omitempty"`
-	ValidAmount    uint64                                                            `protobuf:"varint,5,opt,name=valid_amount,json=validAmount,proto3" json:"valid_amount,omitempty"`
-	SlpTxnOpreturn []byte                                                            `protobuf:"bytes,6,opt,name=slp_txn_opreturn,json=slpTxnOpreturn,proto3" json:"slp_txn_opreturn,omitempty"`
-	FunctionarySig *GetTrustedValidationResponse_ValidityResult_FunctionarySignature `protobuf:"bytes,7,opt,name=functionary_sig,json=functionarySig,proto3" json:"functionary_sig,omitempty"`
+	PrevOutHash []byte         `protobuf:"bytes,1,opt,name=prev_out_hash,json=prevOutHash,proto3" json:"prev_out_hash,omitempty"`
+	PrevOutVout uint32         `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
+	TokenId     []byte         `protobuf:"bytes,3,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	SlpVersion  SlpVersionType `protobuf:"varint,4,opt,name=slp_version,json=slpVersion,proto3,enum=pb.SlpVersionType" json:"slp_version,omitempty"`
+	// Types that are assignable to ValidityResultType:
+	//	*GetTrustedValidationResponse_ValidityResult_V1TokenAmount
+	//	*GetTrustedValidationResponse_ValidityResult_V1MintBaton
+	ValidityResultType isGetTrustedValidationResponse_ValidityResult_ValidityResultType  `protobuf_oneof:"validity_result_type"`
+	SlpTxnOpreturn     []byte                                                            `protobuf:"bytes,7,opt,name=slp_txn_opreturn,json=slpTxnOpreturn,proto3" json:"slp_txn_opreturn,omitempty"`
+	FunctionarySig     *GetTrustedValidationResponse_ValidityResult_FunctionarySignature `protobuf:"bytes,8,opt,name=functionary_sig,json=functionarySig,proto3" json:"functionary_sig,omitempty"`
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult) Reset() {
@@ -5155,9 +5103,9 @@ func (*GetTrustedValidationResponse_ValidityResult) Descriptor() ([]byte, []int)
 	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0}
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutTxid() []byte {
+func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutHash() []byte {
 	if x != nil {
-		return x.PrevOutTxid
+		return x.PrevOutHash
 	}
 	return nil
 }
@@ -5176,18 +5124,32 @@ func (x *GetTrustedValidationResponse_ValidityResult) GetTokenId() []byte {
 	return nil
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetSlpVersion() GetTrustedValidationResponse_ValidityResult_SlpVersionType {
+func (x *GetTrustedValidationResponse_ValidityResult) GetSlpVersion() SlpVersionType {
 	if x != nil {
 		return x.SlpVersion
 	}
-	return GetTrustedValidationResponse_ValidityResult_TYPE_1
+	return SlpVersionType_NON_SLP
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetValidAmount() uint64 {
-	if x != nil {
-		return x.ValidAmount
+func (m *GetTrustedValidationResponse_ValidityResult) GetValidityResultType() isGetTrustedValidationResponse_ValidityResult_ValidityResultType {
+	if m != nil {
+		return m.ValidityResultType
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetV1TokenAmount() uint64 {
+	if x, ok := x.GetValidityResultType().(*GetTrustedValidationResponse_ValidityResult_V1TokenAmount); ok {
+		return x.V1TokenAmount
 	}
 	return 0
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetV1MintBaton() bool {
+	if x, ok := x.GetValidityResultType().(*GetTrustedValidationResponse_ValidityResult_V1MintBaton); ok {
+		return x.V1MintBaton
+	}
+	return false
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult) GetSlpTxnOpreturn() []byte {
@@ -5202,6 +5164,24 @@ func (x *GetTrustedValidationResponse_ValidityResult) GetFunctionarySig() *GetTr
 		return x.FunctionarySig
 	}
 	return nil
+}
+
+type isGetTrustedValidationResponse_ValidityResult_ValidityResultType interface {
+	isGetTrustedValidationResponse_ValidityResult_ValidityResultType()
+}
+
+type GetTrustedValidationResponse_ValidityResult_V1TokenAmount struct {
+	V1TokenAmount uint64 `protobuf:"varint,5,opt,name=v1_token_amount,json=v1TokenAmount,proto3,oneof"`
+}
+
+type GetTrustedValidationResponse_ValidityResult_V1MintBaton struct {
+	V1MintBaton bool `protobuf:"varint,6,opt,name=v1_mint_baton,json=v1MintBaton,proto3,oneof"`
+}
+
+func (*GetTrustedValidationResponse_ValidityResult_V1TokenAmount) isGetTrustedValidationResponse_ValidityResult_ValidityResultType() {
+}
+
+func (*GetTrustedValidationResponse_ValidityResult_V1MintBaton) isGetTrustedValidationResponse_ValidityResult_ValidityResultType() {
 }
 
 type GetTrustedValidationResponse_ValidityResult_FunctionarySignature struct {
@@ -5922,7 +5902,7 @@ var file_bchrpc_proto_rawDesc = []byte{
 	0x68, 0x69, 0x6c, 0x64, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
 	0x48, 0x00, 0x52, 0x0d, 0x6e, 0x66, 0x74, 0x31, 0x43, 0x68, 0x69, 0x6c, 0x64, 0x53, 0x65, 0x6e,
 	0x64, 0x42, 0x0e, 0x0a, 0x0c, 0x73, 0x6c, 0x70, 0x5f, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x22, 0x8e, 0x05, 0x0a, 0x1b, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65, 0x64,
+	0x61, 0x22, 0xb3, 0x04, 0x0a, 0x1b, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65, 0x64,
 	0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x12, 0x3f, 0x0a, 0x07, 0x71, 0x75, 0x65, 0x72, 0x69, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03,
 	0x28, 0x0b, 0x32, 0x25, 0x2e, 0x70, 0x62, 0x2e, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74,
@@ -5935,10 +5915,10 @@ var file_bchrpc_proto_rawDesc = []byte{
 	0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x52, 0x0f, 0x66, 0x75, 0x6e, 0x63, 0x74,
 	0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x49, 0x6e, 0x66, 0x6f, 0x1a, 0x4f, 0x0a, 0x05, 0x51, 0x75,
 	0x65, 0x72, 0x79, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x6f, 0x75, 0x74, 0x5f,
-	0x74, 0x78, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x70, 0x72, 0x65, 0x76,
-	0x4f, 0x75, 0x74, 0x54, 0x78, 0x69, 0x64, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f,
+	0x68, 0x61, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x70, 0x72, 0x65, 0x76,
+	0x4f, 0x75, 0x74, 0x48, 0x61, 0x73, 0x68, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f,
 	0x6f, 0x75, 0x74, 0x5f, 0x76, 0x6f, 0x75, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b,
-	0x70, 0x72, 0x65, 0x76, 0x4f, 0x75, 0x74, 0x56, 0x6f, 0x75, 0x74, 0x1a, 0x84, 0x03, 0x0a, 0x0b,
+	0x70, 0x72, 0x65, 0x76, 0x4f, 0x75, 0x74, 0x56, 0x6f, 0x75, 0x74, 0x1a, 0xa9, 0x02, 0x0a, 0x0b,
 	0x46, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x12, 0x1d, 0x0a, 0x0a, 0x70,
 	0x75, 0x62, 0x6c, 0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52,
 	0x09, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x4b, 0x0a, 0x04, 0x74, 0x79,
@@ -5951,59 +5931,51 @@ var file_bchrpc_proto_rawDesc = []byte{
 	0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74,
 	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x46, 0x75, 0x6e, 0x63, 0x74,
 	0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x2e, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65,
-	0x54, 0x79, 0x70, 0x65, 0x52, 0x07, 0x73, 0x69, 0x67, 0x54, 0x79, 0x70, 0x65, 0x22, 0x76, 0x0a,
-	0x0b, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x08, 0x0a, 0x04,
-	0x4e, 0x4f, 0x4e, 0x45, 0x10, 0x00, 0x12, 0x2a, 0x0a, 0x26, 0x54, 0x58, 0x49, 0x44, 0x5f, 0x56,
-	0x4f, 0x55, 0x54, 0x5f, 0x54, 0x4f, 0x4b, 0x45, 0x4e, 0x49, 0x44, 0x5f, 0x54, 0x4f, 0x4b, 0x45,
-	0x4e, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x54, 0x4f, 0x4b, 0x45, 0x4e, 0x56, 0x41, 0x4c, 0x55, 0x45,
-	0x10, 0x01, 0x12, 0x31, 0x0a, 0x2d, 0x53, 0x48, 0x41, 0x32, 0x35, 0x36, 0x5f, 0x54, 0x58, 0x49,
-	0x44, 0x5f, 0x56, 0x4f, 0x55, 0x54, 0x5f, 0x54, 0x4f, 0x4b, 0x45, 0x4e, 0x49, 0x44, 0x5f, 0x54,
-	0x4f, 0x4b, 0x45, 0x4e, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x54, 0x4f, 0x4b, 0x45, 0x4e, 0x56, 0x41,
-	0x4c, 0x55, 0x45, 0x10, 0x02, 0x22, 0x3b, 0x0a, 0x0d, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75,
-	0x72, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x13, 0x0a, 0x0f, 0x53, 0x45, 0x43, 0x50, 0x32, 0x35,
-	0x36, 0x4b, 0x31, 0x5f, 0x45, 0x43, 0x44, 0x53, 0x41, 0x10, 0x00, 0x12, 0x15, 0x0a, 0x11, 0x53,
-	0x45, 0x43, 0x50, 0x32, 0x35, 0x36, 0x4b, 0x31, 0x5f, 0x53, 0x43, 0x48, 0x4e, 0x4f, 0x52, 0x52,
-	0x10, 0x01, 0x22, 0x8a, 0x05, 0x0a, 0x1c, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65,
-	0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x49, 0x0a, 0x07, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x73, 0x18, 0x01,
-	0x20, 0x03, 0x28, 0x0b, 0x32, 0x2f, 0x2e, 0x70, 0x62, 0x2e, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75,
-	0x73, 0x74, 0x65, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x69, 0x74, 0x79, 0x52,
-	0x65, 0x73, 0x75, 0x6c, 0x74, 0x52, 0x07, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x73, 0x1a, 0x9e,
-	0x04, 0x0a, 0x0e, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75, 0x6c,
-	0x74, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x6f, 0x75, 0x74, 0x5f, 0x74, 0x78,
-	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x70, 0x72, 0x65, 0x76, 0x4f, 0x75,
-	0x74, 0x54, 0x78, 0x69, 0x64, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x6f, 0x75,
-	0x74, 0x5f, 0x76, 0x6f, 0x75, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b, 0x70, 0x72,
-	0x65, 0x76, 0x4f, 0x75, 0x74, 0x56, 0x6f, 0x75, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x74, 0x6f, 0x6b,
-	0x65, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x74, 0x6f, 0x6b,
-	0x65, 0x6e, 0x49, 0x64, 0x12, 0x5f, 0x0a, 0x0b, 0x73, 0x6c, 0x70, 0x5f, 0x76, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x3e, 0x2e, 0x70, 0x62, 0x2e, 0x47,
+	0x54, 0x79, 0x70, 0x65, 0x52, 0x07, 0x73, 0x69, 0x67, 0x54, 0x79, 0x70, 0x65, 0x22, 0x1b, 0x0a,
+	0x0b, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x0c, 0x0a, 0x08,
+	0x53, 0x54, 0x41, 0x4e, 0x44, 0x41, 0x52, 0x44, 0x10, 0x00, 0x22, 0x3b, 0x0a, 0x0d, 0x53, 0x69,
+	0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x13, 0x0a, 0x0f, 0x53,
+	0x45, 0x43, 0x50, 0x32, 0x35, 0x36, 0x4b, 0x31, 0x5f, 0x45, 0x43, 0x44, 0x53, 0x41, 0x10, 0x00,
+	0x12, 0x15, 0x0a, 0x11, 0x53, 0x45, 0x43, 0x50, 0x32, 0x35, 0x36, 0x4b, 0x31, 0x5f, 0x53, 0x43,
+	0x48, 0x4e, 0x4f, 0x52, 0x52, 0x10, 0x01, 0x22, 0xe5, 0x04, 0x0a, 0x1c, 0x47, 0x65, 0x74, 0x54,
+	0x72, 0x75, 0x73, 0x74, 0x65, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x49, 0x0a, 0x07, 0x72, 0x65, 0x73, 0x75,
+	0x6c, 0x74, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x2f, 0x2e, 0x70, 0x62, 0x2e, 0x47,
 	0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74,
 	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x56, 0x61, 0x6c, 0x69,
-	0x64, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x2e, 0x53, 0x6c, 0x70, 0x56, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0a, 0x73, 0x6c, 0x70, 0x56, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x21, 0x0a, 0x0c, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x5f, 0x61,
-	0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0b, 0x76, 0x61, 0x6c,
-	0x69, 0x64, 0x41, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x28, 0x0a, 0x10, 0x73, 0x6c, 0x70, 0x5f,
-	0x74, 0x78, 0x6e, 0x5f, 0x6f, 0x70, 0x72, 0x65, 0x74, 0x75, 0x72, 0x6e, 0x18, 0x06, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x0e, 0x73, 0x6c, 0x70, 0x54, 0x78, 0x6e, 0x4f, 0x70, 0x72, 0x65, 0x74, 0x75,
-	0x72, 0x6e, 0x12, 0x6d, 0x0a, 0x0f, 0x66, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72,
-	0x79, 0x5f, 0x73, 0x69, 0x67, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x44, 0x2e, 0x70, 0x62,
-	0x2e, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x56, 0x61,
-	0x6c, 0x69, 0x64, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x2e, 0x46, 0x75, 0x6e,
-	0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72,
-	0x65, 0x52, 0x0e, 0x66, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x53, 0x69,
-	0x67, 0x1a, 0x4e, 0x0a, 0x14, 0x46, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79,
-	0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67,
-	0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69,
-	0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61,
-	0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x22, 0x3c, 0x0a, 0x0e, 0x53, 0x6c, 0x70, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x54,
-	0x79, 0x70, 0x65, 0x12, 0x0a, 0x0a, 0x06, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x31, 0x10, 0x00, 0x12,
-	0x0e, 0x0a, 0x0a, 0x4e, 0x46, 0x54, 0x31, 0x5f, 0x47, 0x52, 0x4f, 0x55, 0x50, 0x10, 0x01, 0x12,
-	0x0e, 0x0a, 0x0a, 0x4e, 0x46, 0x54, 0x31, 0x5f, 0x43, 0x48, 0x49, 0x4c, 0x44, 0x10, 0x02, 0x22,
+	0x64, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x52, 0x07, 0x72, 0x65, 0x73, 0x75,
+	0x6c, 0x74, 0x73, 0x1a, 0xf9, 0x03, 0x0a, 0x0e, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x69, 0x74, 0x79,
+	0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x6f,
+	0x75, 0x74, 0x5f, 0x68, 0x61, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x70,
+	0x72, 0x65, 0x76, 0x4f, 0x75, 0x74, 0x48, 0x61, 0x73, 0x68, 0x12, 0x22, 0x0a, 0x0d, 0x70, 0x72,
+	0x65, 0x76, 0x5f, 0x6f, 0x75, 0x74, 0x5f, 0x76, 0x6f, 0x75, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0b, 0x70, 0x72, 0x65, 0x76, 0x4f, 0x75, 0x74, 0x56, 0x6f, 0x75, 0x74, 0x12, 0x19,
+	0x0a, 0x08, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x07, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x49, 0x64, 0x12, 0x33, 0x0a, 0x0b, 0x73, 0x6c, 0x70,
+	0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x12,
+	0x2e, 0x70, 0x62, 0x2e, 0x53, 0x6c, 0x70, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x54, 0x79,
+	0x70, 0x65, 0x52, 0x0a, 0x73, 0x6c, 0x70, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x28,
+	0x0a, 0x0f, 0x76, 0x31, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x5f, 0x61, 0x6d, 0x6f, 0x75, 0x6e,
+	0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x04, 0x48, 0x00, 0x52, 0x0d, 0x76, 0x31, 0x54, 0x6f, 0x6b,
+	0x65, 0x6e, 0x41, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x24, 0x0a, 0x0d, 0x76, 0x31, 0x5f, 0x6d,
+	0x69, 0x6e, 0x74, 0x5f, 0x62, 0x61, 0x74, 0x6f, 0x6e, 0x18, 0x06, 0x20, 0x01, 0x28, 0x08, 0x48,
+	0x00, 0x52, 0x0b, 0x76, 0x31, 0x4d, 0x69, 0x6e, 0x74, 0x42, 0x61, 0x74, 0x6f, 0x6e, 0x12, 0x28,
+	0x0a, 0x10, 0x73, 0x6c, 0x70, 0x5f, 0x74, 0x78, 0x6e, 0x5f, 0x6f, 0x70, 0x72, 0x65, 0x74, 0x75,
+	0x72, 0x6e, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x73, 0x6c, 0x70, 0x54, 0x78, 0x6e,
+	0x4f, 0x70, 0x72, 0x65, 0x74, 0x75, 0x72, 0x6e, 0x12, 0x6d, 0x0a, 0x0f, 0x66, 0x75, 0x6e, 0x63,
+	0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x5f, 0x73, 0x69, 0x67, 0x18, 0x08, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x44, 0x2e, 0x70, 0x62, 0x2e, 0x47, 0x65, 0x74, 0x54, 0x72, 0x75, 0x73, 0x74, 0x65,
+	0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x2e, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75,
+	0x6c, 0x74, 0x2e, 0x46, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x53, 0x69,
+	0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x52, 0x0e, 0x66, 0x75, 0x6e, 0x63, 0x74, 0x69, 0x6f,
+	0x6e, 0x61, 0x72, 0x79, 0x53, 0x69, 0x67, 0x1a, 0x4e, 0x0a, 0x14, 0x46, 0x75, 0x6e, 0x63, 0x74,
+	0x69, 0x6f, 0x6e, 0x61, 0x72, 0x79, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x12,
+	0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x12, 0x18, 0x0a,
+	0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07,
+	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x42, 0x16, 0x0a, 0x14, 0x76, 0x61, 0x6c, 0x69, 0x64,
+	0x69, 0x74, 0x79, 0x5f, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x22,
 	0x88, 0x02, 0x0a, 0x11, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63,
 	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x2e, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20,
 	0x01, 0x28, 0x0e, 0x32, 0x1a, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x4e, 0x6f,
@@ -6494,195 +6466,194 @@ func file_bchrpc_proto_rawDescGZIP() []byte {
 	return file_bchrpc_proto_rawDescData
 }
 
-var file_bchrpc_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_bchrpc_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_bchrpc_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_bchrpc_proto_goTypes = []interface{}{
 	(SlpVersionType)(0),                                                      // 0: pb.SlpVersionType
 	(GetBlockchainInfoResponse_BitcoinNet)(0),                                // 1: pb.GetBlockchainInfoResponse.BitcoinNet
 	(GetTrustedValidationRequest_Functionary_MessageType)(0),                 // 2: pb.GetTrustedValidationRequest.Functionary.MessageType
 	(GetTrustedValidationRequest_Functionary_SignatureType)(0),               // 3: pb.GetTrustedValidationRequest.Functionary.SignatureType
-	(GetTrustedValidationResponse_ValidityResult_SlpVersionType)(0),          // 4: pb.GetTrustedValidationResponse.ValidityResult.SlpVersionType
-	(BlockNotification_Type)(0),                                              // 5: pb.BlockNotification.Type
-	(TransactionNotification_Type)(0),                                        // 6: pb.TransactionNotification.Type
-	(SlpTransactionInfo_ValidityJudgement)(0),                                // 7: pb.SlpTransactionInfo.ValidityJudgement
-	(SlpTransactionInfo_BurnFlags)(0),                                        // 8: pb.SlpTransactionInfo.BurnFlags
-	(*GetMempoolInfoRequest)(nil),                                            // 9: pb.GetMempoolInfoRequest
-	(*GetMempoolInfoResponse)(nil),                                           // 10: pb.GetMempoolInfoResponse
-	(*GetMempoolRequest)(nil),                                                // 11: pb.GetMempoolRequest
-	(*GetMempoolResponse)(nil),                                               // 12: pb.GetMempoolResponse
-	(*GetBlockchainInfoRequest)(nil),                                         // 13: pb.GetBlockchainInfoRequest
-	(*GetBlockchainInfoResponse)(nil),                                        // 14: pb.GetBlockchainInfoResponse
-	(*GetBlockInfoRequest)(nil),                                              // 15: pb.GetBlockInfoRequest
-	(*GetBlockInfoResponse)(nil),                                             // 16: pb.GetBlockInfoResponse
-	(*GetBlockRequest)(nil),                                                  // 17: pb.GetBlockRequest
-	(*GetBlockResponse)(nil),                                                 // 18: pb.GetBlockResponse
-	(*GetRawBlockRequest)(nil),                                               // 19: pb.GetRawBlockRequest
-	(*GetRawBlockResponse)(nil),                                              // 20: pb.GetRawBlockResponse
-	(*GetBlockFilterRequest)(nil),                                            // 21: pb.GetBlockFilterRequest
-	(*GetBlockFilterResponse)(nil),                                           // 22: pb.GetBlockFilterResponse
-	(*GetHeadersRequest)(nil),                                                // 23: pb.GetHeadersRequest
-	(*GetHeadersResponse)(nil),                                               // 24: pb.GetHeadersResponse
-	(*GetTransactionRequest)(nil),                                            // 25: pb.GetTransactionRequest
-	(*GetTransactionResponse)(nil),                                           // 26: pb.GetTransactionResponse
-	(*GetRawTransactionRequest)(nil),                                         // 27: pb.GetRawTransactionRequest
-	(*GetRawTransactionResponse)(nil),                                        // 28: pb.GetRawTransactionResponse
-	(*GetAddressTransactionsRequest)(nil),                                    // 29: pb.GetAddressTransactionsRequest
-	(*GetAddressTransactionsResponse)(nil),                                   // 30: pb.GetAddressTransactionsResponse
-	(*GetRawAddressTransactionsRequest)(nil),                                 // 31: pb.GetRawAddressTransactionsRequest
-	(*GetRawAddressTransactionsResponse)(nil),                                // 32: pb.GetRawAddressTransactionsResponse
-	(*GetAddressUnspentOutputsRequest)(nil),                                  // 33: pb.GetAddressUnspentOutputsRequest
-	(*GetAddressUnspentOutputsResponse)(nil),                                 // 34: pb.GetAddressUnspentOutputsResponse
-	(*GetUnspentOutputRequest)(nil),                                          // 35: pb.GetUnspentOutputRequest
-	(*GetUnspentOutputResponse)(nil),                                         // 36: pb.GetUnspentOutputResponse
-	(*GetMerkleProofRequest)(nil),                                            // 37: pb.GetMerkleProofRequest
-	(*GetMerkleProofResponse)(nil),                                           // 38: pb.GetMerkleProofResponse
-	(*SubmitTransactionRequest)(nil),                                         // 39: pb.SubmitTransactionRequest
-	(*SubmitTransactionResponse)(nil),                                        // 40: pb.SubmitTransactionResponse
-	(*SubscribeTransactionsRequest)(nil),                                     // 41: pb.SubscribeTransactionsRequest
-	(*SubscribeBlocksRequest)(nil),                                           // 42: pb.SubscribeBlocksRequest
-	(*GetTokenMetadataRequest)(nil),                                          // 43: pb.GetTokenMetadataRequest
-	(*GetTokenMetadataResponse)(nil),                                         // 44: pb.GetTokenMetadataResponse
-	(*GetParsedSlpScriptRequest)(nil),                                        // 45: pb.GetParsedSlpScriptRequest
-	(*GetParsedSlpScriptResponse)(nil),                                       // 46: pb.GetParsedSlpScriptResponse
-	(*GetTrustedValidationRequest)(nil),                                      // 47: pb.GetTrustedValidationRequest
-	(*GetTrustedValidationResponse)(nil),                                     // 48: pb.GetTrustedValidationResponse
-	(*BlockNotification)(nil),                                                // 49: pb.BlockNotification
-	(*TransactionNotification)(nil),                                          // 50: pb.TransactionNotification
-	(*BlockInfo)(nil),                                                        // 51: pb.BlockInfo
-	(*Block)(nil),                                                            // 52: pb.Block
-	(*Transaction)(nil),                                                      // 53: pb.Transaction
-	(*MempoolTransaction)(nil),                                               // 54: pb.MempoolTransaction
-	(*UnspentOutput)(nil),                                                    // 55: pb.UnspentOutput
-	(*TransactionFilter)(nil),                                                // 56: pb.TransactionFilter
-	(*SlpToken)(nil),                                                         // 57: pb.SlpToken
-	(*SlpTransactionInfo)(nil),                                               // 58: pb.SlpTransactionInfo
-	(*SlpV1GenesisMetadata)(nil),                                             // 59: pb.SlpV1GenesisMetadata
-	(*SlpV1MintMetadata)(nil),                                                // 60: pb.SlpV1MintMetadata
-	(*SlpV1SendMetadata)(nil),                                                // 61: pb.SlpV1SendMetadata
-	(*SlpNft1ChildGenesisMetadata)(nil),                                      // 62: pb.SlpNft1ChildGenesisMetadata
-	(*SlpNft1ChildSendMetadata)(nil),                                         // 63: pb.SlpNft1ChildSendMetadata
-	(*TokenMetadataTokenType1)(nil),                                          // 64: pb.TokenMetadataTokenType1
-	(*TokenMetadataNFT1Group)(nil),                                           // 65: pb.TokenMetadataNFT1Group
-	(*TokenMetadataNFT1Child)(nil),                                           // 66: pb.TokenMetadataNFT1Child
-	(*TokenMetadata)(nil),                                                    // 67: pb.TokenMetadata
-	(*GetMempoolResponse_TransactionData)(nil),                               // 68: pb.GetMempoolResponse.TransactionData
-	(*GetTrustedValidationRequest_Query)(nil),                                // 69: pb.GetTrustedValidationRequest.Query
-	(*GetTrustedValidationRequest_Functionary)(nil),                          // 70: pb.GetTrustedValidationRequest.Functionary
-	(*GetTrustedValidationResponse_ValidityResult)(nil),                      // 71: pb.GetTrustedValidationResponse.ValidityResult
-	(*GetTrustedValidationResponse_ValidityResult_FunctionarySignature)(nil), // 72: pb.GetTrustedValidationResponse.ValidityResult.FunctionarySignature
-	(*Block_TransactionData)(nil),                                            // 73: pb.Block.TransactionData
-	(*Transaction_Input)(nil),                                                // 74: pb.Transaction.Input
-	(*Transaction_Output)(nil),                                               // 75: pb.Transaction.Output
-	(*Transaction_Input_Outpoint)(nil),                                       // 76: pb.Transaction.Input.Outpoint
+	(BlockNotification_Type)(0),                                              // 4: pb.BlockNotification.Type
+	(TransactionNotification_Type)(0),                                        // 5: pb.TransactionNotification.Type
+	(SlpTransactionInfo_ValidityJudgement)(0),                                // 6: pb.SlpTransactionInfo.ValidityJudgement
+	(SlpTransactionInfo_BurnFlags)(0),                                        // 7: pb.SlpTransactionInfo.BurnFlags
+	(*GetMempoolInfoRequest)(nil),                                            // 8: pb.GetMempoolInfoRequest
+	(*GetMempoolInfoResponse)(nil),                                           // 9: pb.GetMempoolInfoResponse
+	(*GetMempoolRequest)(nil),                                                // 10: pb.GetMempoolRequest
+	(*GetMempoolResponse)(nil),                                               // 11: pb.GetMempoolResponse
+	(*GetBlockchainInfoRequest)(nil),                                         // 12: pb.GetBlockchainInfoRequest
+	(*GetBlockchainInfoResponse)(nil),                                        // 13: pb.GetBlockchainInfoResponse
+	(*GetBlockInfoRequest)(nil),                                              // 14: pb.GetBlockInfoRequest
+	(*GetBlockInfoResponse)(nil),                                             // 15: pb.GetBlockInfoResponse
+	(*GetBlockRequest)(nil),                                                  // 16: pb.GetBlockRequest
+	(*GetBlockResponse)(nil),                                                 // 17: pb.GetBlockResponse
+	(*GetRawBlockRequest)(nil),                                               // 18: pb.GetRawBlockRequest
+	(*GetRawBlockResponse)(nil),                                              // 19: pb.GetRawBlockResponse
+	(*GetBlockFilterRequest)(nil),                                            // 20: pb.GetBlockFilterRequest
+	(*GetBlockFilterResponse)(nil),                                           // 21: pb.GetBlockFilterResponse
+	(*GetHeadersRequest)(nil),                                                // 22: pb.GetHeadersRequest
+	(*GetHeadersResponse)(nil),                                               // 23: pb.GetHeadersResponse
+	(*GetTransactionRequest)(nil),                                            // 24: pb.GetTransactionRequest
+	(*GetTransactionResponse)(nil),                                           // 25: pb.GetTransactionResponse
+	(*GetRawTransactionRequest)(nil),                                         // 26: pb.GetRawTransactionRequest
+	(*GetRawTransactionResponse)(nil),                                        // 27: pb.GetRawTransactionResponse
+	(*GetAddressTransactionsRequest)(nil),                                    // 28: pb.GetAddressTransactionsRequest
+	(*GetAddressTransactionsResponse)(nil),                                   // 29: pb.GetAddressTransactionsResponse
+	(*GetRawAddressTransactionsRequest)(nil),                                 // 30: pb.GetRawAddressTransactionsRequest
+	(*GetRawAddressTransactionsResponse)(nil),                                // 31: pb.GetRawAddressTransactionsResponse
+	(*GetAddressUnspentOutputsRequest)(nil),                                  // 32: pb.GetAddressUnspentOutputsRequest
+	(*GetAddressUnspentOutputsResponse)(nil),                                 // 33: pb.GetAddressUnspentOutputsResponse
+	(*GetUnspentOutputRequest)(nil),                                          // 34: pb.GetUnspentOutputRequest
+	(*GetUnspentOutputResponse)(nil),                                         // 35: pb.GetUnspentOutputResponse
+	(*GetMerkleProofRequest)(nil),                                            // 36: pb.GetMerkleProofRequest
+	(*GetMerkleProofResponse)(nil),                                           // 37: pb.GetMerkleProofResponse
+	(*SubmitTransactionRequest)(nil),                                         // 38: pb.SubmitTransactionRequest
+	(*SubmitTransactionResponse)(nil),                                        // 39: pb.SubmitTransactionResponse
+	(*SubscribeTransactionsRequest)(nil),                                     // 40: pb.SubscribeTransactionsRequest
+	(*SubscribeBlocksRequest)(nil),                                           // 41: pb.SubscribeBlocksRequest
+	(*GetTokenMetadataRequest)(nil),                                          // 42: pb.GetTokenMetadataRequest
+	(*GetTokenMetadataResponse)(nil),                                         // 43: pb.GetTokenMetadataResponse
+	(*GetParsedSlpScriptRequest)(nil),                                        // 44: pb.GetParsedSlpScriptRequest
+	(*GetParsedSlpScriptResponse)(nil),                                       // 45: pb.GetParsedSlpScriptResponse
+	(*GetTrustedValidationRequest)(nil),                                      // 46: pb.GetTrustedValidationRequest
+	(*GetTrustedValidationResponse)(nil),                                     // 47: pb.GetTrustedValidationResponse
+	(*BlockNotification)(nil),                                                // 48: pb.BlockNotification
+	(*TransactionNotification)(nil),                                          // 49: pb.TransactionNotification
+	(*BlockInfo)(nil),                                                        // 50: pb.BlockInfo
+	(*Block)(nil),                                                            // 51: pb.Block
+	(*Transaction)(nil),                                                      // 52: pb.Transaction
+	(*MempoolTransaction)(nil),                                               // 53: pb.MempoolTransaction
+	(*UnspentOutput)(nil),                                                    // 54: pb.UnspentOutput
+	(*TransactionFilter)(nil),                                                // 55: pb.TransactionFilter
+	(*SlpToken)(nil),                                                         // 56: pb.SlpToken
+	(*SlpTransactionInfo)(nil),                                               // 57: pb.SlpTransactionInfo
+	(*SlpV1GenesisMetadata)(nil),                                             // 58: pb.SlpV1GenesisMetadata
+	(*SlpV1MintMetadata)(nil),                                                // 59: pb.SlpV1MintMetadata
+	(*SlpV1SendMetadata)(nil),                                                // 60: pb.SlpV1SendMetadata
+	(*SlpNft1ChildGenesisMetadata)(nil),                                      // 61: pb.SlpNft1ChildGenesisMetadata
+	(*SlpNft1ChildSendMetadata)(nil),                                         // 62: pb.SlpNft1ChildSendMetadata
+	(*TokenMetadataTokenType1)(nil),                                          // 63: pb.TokenMetadataTokenType1
+	(*TokenMetadataNFT1Group)(nil),                                           // 64: pb.TokenMetadataNFT1Group
+	(*TokenMetadataNFT1Child)(nil),                                           // 65: pb.TokenMetadataNFT1Child
+	(*TokenMetadata)(nil),                                                    // 66: pb.TokenMetadata
+	(*GetMempoolResponse_TransactionData)(nil),                               // 67: pb.GetMempoolResponse.TransactionData
+	(*GetTrustedValidationRequest_Query)(nil),                                // 68: pb.GetTrustedValidationRequest.Query
+	(*GetTrustedValidationRequest_Functionary)(nil),                          // 69: pb.GetTrustedValidationRequest.Functionary
+	(*GetTrustedValidationResponse_ValidityResult)(nil),                      // 70: pb.GetTrustedValidationResponse.ValidityResult
+	(*GetTrustedValidationResponse_ValidityResult_FunctionarySignature)(nil), // 71: pb.GetTrustedValidationResponse.ValidityResult.FunctionarySignature
+	(*Block_TransactionData)(nil),                                            // 72: pb.Block.TransactionData
+	(*Transaction_Input)(nil),                                                // 73: pb.Transaction.Input
+	(*Transaction_Output)(nil),                                               // 74: pb.Transaction.Output
+	(*Transaction_Input_Outpoint)(nil),                                       // 75: pb.Transaction.Input.Outpoint
 }
 var file_bchrpc_proto_depIdxs = []int32{
-	68, // 0: pb.GetMempoolResponse.transaction_data:type_name -> pb.GetMempoolResponse.TransactionData
+	67, // 0: pb.GetMempoolResponse.transaction_data:type_name -> pb.GetMempoolResponse.TransactionData
 	1,  // 1: pb.GetBlockchainInfoResponse.bitcoin_net:type_name -> pb.GetBlockchainInfoResponse.BitcoinNet
-	51, // 2: pb.GetBlockInfoResponse.info:type_name -> pb.BlockInfo
-	52, // 3: pb.GetBlockResponse.block:type_name -> pb.Block
-	51, // 4: pb.GetHeadersResponse.headers:type_name -> pb.BlockInfo
-	53, // 5: pb.GetTransactionResponse.transaction:type_name -> pb.Transaction
-	67, // 6: pb.GetTransactionResponse.slp_metadata:type_name -> pb.TokenMetadata
-	53, // 7: pb.GetAddressTransactionsResponse.confirmed_transactions:type_name -> pb.Transaction
-	54, // 8: pb.GetAddressTransactionsResponse.unconfirmed_transactions:type_name -> pb.MempoolTransaction
-	55, // 9: pb.GetAddressUnspentOutputsResponse.outputs:type_name -> pb.UnspentOutput
-	67, // 10: pb.GetAddressUnspentOutputsResponse.token_metadata:type_name -> pb.TokenMetadata
-	76, // 11: pb.GetUnspentOutputResponse.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	57, // 12: pb.GetUnspentOutputResponse.slp_token:type_name -> pb.SlpToken
-	67, // 13: pb.GetUnspentOutputResponse.token_metadata:type_name -> pb.TokenMetadata
-	51, // 14: pb.GetMerkleProofResponse.block:type_name -> pb.BlockInfo
-	76, // 15: pb.SubmitTransactionRequest.allowed_slp_burns:type_name -> pb.Transaction.Input.Outpoint
-	56, // 16: pb.SubscribeTransactionsRequest.subscribe:type_name -> pb.TransactionFilter
-	56, // 17: pb.SubscribeTransactionsRequest.unsubscribe:type_name -> pb.TransactionFilter
-	67, // 18: pb.GetTokenMetadataResponse.slp_metadata:type_name -> pb.TokenMetadata
+	50, // 2: pb.GetBlockInfoResponse.info:type_name -> pb.BlockInfo
+	51, // 3: pb.GetBlockResponse.block:type_name -> pb.Block
+	50, // 4: pb.GetHeadersResponse.headers:type_name -> pb.BlockInfo
+	52, // 5: pb.GetTransactionResponse.transaction:type_name -> pb.Transaction
+	66, // 6: pb.GetTransactionResponse.slp_metadata:type_name -> pb.TokenMetadata
+	52, // 7: pb.GetAddressTransactionsResponse.confirmed_transactions:type_name -> pb.Transaction
+	53, // 8: pb.GetAddressTransactionsResponse.unconfirmed_transactions:type_name -> pb.MempoolTransaction
+	54, // 9: pb.GetAddressUnspentOutputsResponse.outputs:type_name -> pb.UnspentOutput
+	66, // 10: pb.GetAddressUnspentOutputsResponse.token_metadata:type_name -> pb.TokenMetadata
+	75, // 11: pb.GetUnspentOutputResponse.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	56, // 12: pb.GetUnspentOutputResponse.slp_token:type_name -> pb.SlpToken
+	66, // 13: pb.GetUnspentOutputResponse.token_metadata:type_name -> pb.TokenMetadata
+	50, // 14: pb.GetMerkleProofResponse.block:type_name -> pb.BlockInfo
+	75, // 15: pb.SubmitTransactionRequest.allowed_slp_burns:type_name -> pb.Transaction.Input.Outpoint
+	55, // 16: pb.SubscribeTransactionsRequest.subscribe:type_name -> pb.TransactionFilter
+	55, // 17: pb.SubscribeTransactionsRequest.unsubscribe:type_name -> pb.TransactionFilter
+	66, // 18: pb.GetTokenMetadataResponse.slp_metadata:type_name -> pb.TokenMetadata
 	0,  // 19: pb.GetParsedSlpScriptResponse.type:type_name -> pb.SlpVersionType
-	59, // 20: pb.GetParsedSlpScriptResponse.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
-	60, // 21: pb.GetParsedSlpScriptResponse.v1_mint:type_name -> pb.SlpV1MintMetadata
-	61, // 22: pb.GetParsedSlpScriptResponse.v1_send:type_name -> pb.SlpV1SendMetadata
-	62, // 23: pb.GetParsedSlpScriptResponse.nft1_child_genesis:type_name -> pb.SlpNft1ChildGenesisMetadata
-	63, // 24: pb.GetParsedSlpScriptResponse.nft1_child_send:type_name -> pb.SlpNft1ChildSendMetadata
-	69, // 25: pb.GetTrustedValidationRequest.queries:type_name -> pb.GetTrustedValidationRequest.Query
-	70, // 26: pb.GetTrustedValidationRequest.functionary_info:type_name -> pb.GetTrustedValidationRequest.Functionary
-	71, // 27: pb.GetTrustedValidationResponse.results:type_name -> pb.GetTrustedValidationResponse.ValidityResult
-	5,  // 28: pb.BlockNotification.type:type_name -> pb.BlockNotification.Type
-	51, // 29: pb.BlockNotification.block_info:type_name -> pb.BlockInfo
-	52, // 30: pb.BlockNotification.marshaled_block:type_name -> pb.Block
-	6,  // 31: pb.TransactionNotification.type:type_name -> pb.TransactionNotification.Type
-	53, // 32: pb.TransactionNotification.confirmed_transaction:type_name -> pb.Transaction
-	54, // 33: pb.TransactionNotification.unconfirmed_transaction:type_name -> pb.MempoolTransaction
-	51, // 34: pb.Block.info:type_name -> pb.BlockInfo
-	73, // 35: pb.Block.transaction_data:type_name -> pb.Block.TransactionData
-	74, // 36: pb.Transaction.inputs:type_name -> pb.Transaction.Input
-	75, // 37: pb.Transaction.outputs:type_name -> pb.Transaction.Output
-	58, // 38: pb.Transaction.slp_transaction_info:type_name -> pb.SlpTransactionInfo
-	53, // 39: pb.MempoolTransaction.transaction:type_name -> pb.Transaction
-	76, // 40: pb.UnspentOutput.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	57, // 41: pb.UnspentOutput.slp_token:type_name -> pb.SlpToken
-	76, // 42: pb.TransactionFilter.outpoints:type_name -> pb.Transaction.Input.Outpoint
+	58, // 20: pb.GetParsedSlpScriptResponse.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
+	59, // 21: pb.GetParsedSlpScriptResponse.v1_mint:type_name -> pb.SlpV1MintMetadata
+	60, // 22: pb.GetParsedSlpScriptResponse.v1_send:type_name -> pb.SlpV1SendMetadata
+	61, // 23: pb.GetParsedSlpScriptResponse.nft1_child_genesis:type_name -> pb.SlpNft1ChildGenesisMetadata
+	62, // 24: pb.GetParsedSlpScriptResponse.nft1_child_send:type_name -> pb.SlpNft1ChildSendMetadata
+	68, // 25: pb.GetTrustedValidationRequest.queries:type_name -> pb.GetTrustedValidationRequest.Query
+	69, // 26: pb.GetTrustedValidationRequest.functionary_info:type_name -> pb.GetTrustedValidationRequest.Functionary
+	70, // 27: pb.GetTrustedValidationResponse.results:type_name -> pb.GetTrustedValidationResponse.ValidityResult
+	4,  // 28: pb.BlockNotification.type:type_name -> pb.BlockNotification.Type
+	50, // 29: pb.BlockNotification.block_info:type_name -> pb.BlockInfo
+	51, // 30: pb.BlockNotification.marshaled_block:type_name -> pb.Block
+	5,  // 31: pb.TransactionNotification.type:type_name -> pb.TransactionNotification.Type
+	52, // 32: pb.TransactionNotification.confirmed_transaction:type_name -> pb.Transaction
+	53, // 33: pb.TransactionNotification.unconfirmed_transaction:type_name -> pb.MempoolTransaction
+	50, // 34: pb.Block.info:type_name -> pb.BlockInfo
+	72, // 35: pb.Block.transaction_data:type_name -> pb.Block.TransactionData
+	73, // 36: pb.Transaction.inputs:type_name -> pb.Transaction.Input
+	74, // 37: pb.Transaction.outputs:type_name -> pb.Transaction.Output
+	57, // 38: pb.Transaction.slp_transaction_info:type_name -> pb.SlpTransactionInfo
+	52, // 39: pb.MempoolTransaction.transaction:type_name -> pb.Transaction
+	75, // 40: pb.UnspentOutput.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	56, // 41: pb.UnspentOutput.slp_token:type_name -> pb.SlpToken
+	75, // 42: pb.TransactionFilter.outpoints:type_name -> pb.Transaction.Input.Outpoint
 	0,  // 43: pb.SlpTransactionInfo.version_type:type_name -> pb.SlpVersionType
-	7,  // 44: pb.SlpTransactionInfo.validity_judgement:type_name -> pb.SlpTransactionInfo.ValidityJudgement
-	8,  // 45: pb.SlpTransactionInfo.burn_flags:type_name -> pb.SlpTransactionInfo.BurnFlags
-	59, // 46: pb.SlpTransactionInfo.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
-	60, // 47: pb.SlpTransactionInfo.v1_mint:type_name -> pb.SlpV1MintMetadata
-	61, // 48: pb.SlpTransactionInfo.v1_send:type_name -> pb.SlpV1SendMetadata
-	62, // 49: pb.SlpTransactionInfo.nft1_child_genesis:type_name -> pb.SlpNft1ChildGenesisMetadata
-	63, // 50: pb.SlpTransactionInfo.nft1_child_send:type_name -> pb.SlpNft1ChildSendMetadata
-	64, // 51: pb.TokenMetadata.type1:type_name -> pb.TokenMetadataTokenType1
-	65, // 52: pb.TokenMetadata.nft1_group:type_name -> pb.TokenMetadataNFT1Group
-	66, // 53: pb.TokenMetadata.nft1_child:type_name -> pb.TokenMetadataNFT1Child
-	53, // 54: pb.GetMempoolResponse.TransactionData.transaction:type_name -> pb.Transaction
+	6,  // 44: pb.SlpTransactionInfo.validity_judgement:type_name -> pb.SlpTransactionInfo.ValidityJudgement
+	7,  // 45: pb.SlpTransactionInfo.burn_flags:type_name -> pb.SlpTransactionInfo.BurnFlags
+	58, // 46: pb.SlpTransactionInfo.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
+	59, // 47: pb.SlpTransactionInfo.v1_mint:type_name -> pb.SlpV1MintMetadata
+	60, // 48: pb.SlpTransactionInfo.v1_send:type_name -> pb.SlpV1SendMetadata
+	61, // 49: pb.SlpTransactionInfo.nft1_child_genesis:type_name -> pb.SlpNft1ChildGenesisMetadata
+	62, // 50: pb.SlpTransactionInfo.nft1_child_send:type_name -> pb.SlpNft1ChildSendMetadata
+	63, // 51: pb.TokenMetadata.type1:type_name -> pb.TokenMetadataTokenType1
+	64, // 52: pb.TokenMetadata.nft1_group:type_name -> pb.TokenMetadataNFT1Group
+	65, // 53: pb.TokenMetadata.nft1_child:type_name -> pb.TokenMetadataNFT1Child
+	52, // 54: pb.GetMempoolResponse.TransactionData.transaction:type_name -> pb.Transaction
 	2,  // 55: pb.GetTrustedValidationRequest.Functionary.type:type_name -> pb.GetTrustedValidationRequest.Functionary.MessageType
 	3,  // 56: pb.GetTrustedValidationRequest.Functionary.sig_type:type_name -> pb.GetTrustedValidationRequest.Functionary.SignatureType
-	4,  // 57: pb.GetTrustedValidationResponse.ValidityResult.slp_version:type_name -> pb.GetTrustedValidationResponse.ValidityResult.SlpVersionType
-	72, // 58: pb.GetTrustedValidationResponse.ValidityResult.functionary_sig:type_name -> pb.GetTrustedValidationResponse.ValidityResult.FunctionarySignature
-	53, // 59: pb.Block.TransactionData.transaction:type_name -> pb.Transaction
-	76, // 60: pb.Transaction.Input.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	57, // 61: pb.Transaction.Input.slp_token:type_name -> pb.SlpToken
-	57, // 62: pb.Transaction.Output.slp_token:type_name -> pb.SlpToken
-	9,  // 63: pb.bchrpc.GetMempoolInfo:input_type -> pb.GetMempoolInfoRequest
-	11, // 64: pb.bchrpc.GetMempool:input_type -> pb.GetMempoolRequest
-	13, // 65: pb.bchrpc.GetBlockchainInfo:input_type -> pb.GetBlockchainInfoRequest
-	15, // 66: pb.bchrpc.GetBlockInfo:input_type -> pb.GetBlockInfoRequest
-	17, // 67: pb.bchrpc.GetBlock:input_type -> pb.GetBlockRequest
-	19, // 68: pb.bchrpc.GetRawBlock:input_type -> pb.GetRawBlockRequest
-	21, // 69: pb.bchrpc.GetBlockFilter:input_type -> pb.GetBlockFilterRequest
-	23, // 70: pb.bchrpc.GetHeaders:input_type -> pb.GetHeadersRequest
-	25, // 71: pb.bchrpc.GetTransaction:input_type -> pb.GetTransactionRequest
-	27, // 72: pb.bchrpc.GetRawTransaction:input_type -> pb.GetRawTransactionRequest
-	29, // 73: pb.bchrpc.GetAddressTransactions:input_type -> pb.GetAddressTransactionsRequest
-	31, // 74: pb.bchrpc.GetRawAddressTransactions:input_type -> pb.GetRawAddressTransactionsRequest
-	33, // 75: pb.bchrpc.GetAddressUnspentOutputs:input_type -> pb.GetAddressUnspentOutputsRequest
-	35, // 76: pb.bchrpc.GetUnspentOutput:input_type -> pb.GetUnspentOutputRequest
-	37, // 77: pb.bchrpc.GetMerkleProof:input_type -> pb.GetMerkleProofRequest
-	43, // 78: pb.bchrpc.GetTokenMetadata:input_type -> pb.GetTokenMetadataRequest
-	45, // 79: pb.bchrpc.GetParsedSlpScript:input_type -> pb.GetParsedSlpScriptRequest
-	47, // 80: pb.bchrpc.GetTrustedValidation:input_type -> pb.GetTrustedValidationRequest
-	39, // 81: pb.bchrpc.SubmitTransaction:input_type -> pb.SubmitTransactionRequest
-	41, // 82: pb.bchrpc.SubscribeTransactions:input_type -> pb.SubscribeTransactionsRequest
-	41, // 83: pb.bchrpc.SubscribeTransactionStream:input_type -> pb.SubscribeTransactionsRequest
-	42, // 84: pb.bchrpc.SubscribeBlocks:input_type -> pb.SubscribeBlocksRequest
-	10, // 85: pb.bchrpc.GetMempoolInfo:output_type -> pb.GetMempoolInfoResponse
-	12, // 86: pb.bchrpc.GetMempool:output_type -> pb.GetMempoolResponse
-	14, // 87: pb.bchrpc.GetBlockchainInfo:output_type -> pb.GetBlockchainInfoResponse
-	16, // 88: pb.bchrpc.GetBlockInfo:output_type -> pb.GetBlockInfoResponse
-	18, // 89: pb.bchrpc.GetBlock:output_type -> pb.GetBlockResponse
-	20, // 90: pb.bchrpc.GetRawBlock:output_type -> pb.GetRawBlockResponse
-	22, // 91: pb.bchrpc.GetBlockFilter:output_type -> pb.GetBlockFilterResponse
-	24, // 92: pb.bchrpc.GetHeaders:output_type -> pb.GetHeadersResponse
-	26, // 93: pb.bchrpc.GetTransaction:output_type -> pb.GetTransactionResponse
-	28, // 94: pb.bchrpc.GetRawTransaction:output_type -> pb.GetRawTransactionResponse
-	30, // 95: pb.bchrpc.GetAddressTransactions:output_type -> pb.GetAddressTransactionsResponse
-	32, // 96: pb.bchrpc.GetRawAddressTransactions:output_type -> pb.GetRawAddressTransactionsResponse
-	34, // 97: pb.bchrpc.GetAddressUnspentOutputs:output_type -> pb.GetAddressUnspentOutputsResponse
-	36, // 98: pb.bchrpc.GetUnspentOutput:output_type -> pb.GetUnspentOutputResponse
-	38, // 99: pb.bchrpc.GetMerkleProof:output_type -> pb.GetMerkleProofResponse
-	44, // 100: pb.bchrpc.GetTokenMetadata:output_type -> pb.GetTokenMetadataResponse
-	46, // 101: pb.bchrpc.GetParsedSlpScript:output_type -> pb.GetParsedSlpScriptResponse
-	48, // 102: pb.bchrpc.GetTrustedValidation:output_type -> pb.GetTrustedValidationResponse
-	40, // 103: pb.bchrpc.SubmitTransaction:output_type -> pb.SubmitTransactionResponse
-	50, // 104: pb.bchrpc.SubscribeTransactions:output_type -> pb.TransactionNotification
-	50, // 105: pb.bchrpc.SubscribeTransactionStream:output_type -> pb.TransactionNotification
-	49, // 106: pb.bchrpc.SubscribeBlocks:output_type -> pb.BlockNotification
+	0,  // 57: pb.GetTrustedValidationResponse.ValidityResult.slp_version:type_name -> pb.SlpVersionType
+	71, // 58: pb.GetTrustedValidationResponse.ValidityResult.functionary_sig:type_name -> pb.GetTrustedValidationResponse.ValidityResult.FunctionarySignature
+	52, // 59: pb.Block.TransactionData.transaction:type_name -> pb.Transaction
+	75, // 60: pb.Transaction.Input.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	56, // 61: pb.Transaction.Input.slp_token:type_name -> pb.SlpToken
+	56, // 62: pb.Transaction.Output.slp_token:type_name -> pb.SlpToken
+	8,  // 63: pb.bchrpc.GetMempoolInfo:input_type -> pb.GetMempoolInfoRequest
+	10, // 64: pb.bchrpc.GetMempool:input_type -> pb.GetMempoolRequest
+	12, // 65: pb.bchrpc.GetBlockchainInfo:input_type -> pb.GetBlockchainInfoRequest
+	14, // 66: pb.bchrpc.GetBlockInfo:input_type -> pb.GetBlockInfoRequest
+	16, // 67: pb.bchrpc.GetBlock:input_type -> pb.GetBlockRequest
+	18, // 68: pb.bchrpc.GetRawBlock:input_type -> pb.GetRawBlockRequest
+	20, // 69: pb.bchrpc.GetBlockFilter:input_type -> pb.GetBlockFilterRequest
+	22, // 70: pb.bchrpc.GetHeaders:input_type -> pb.GetHeadersRequest
+	24, // 71: pb.bchrpc.GetTransaction:input_type -> pb.GetTransactionRequest
+	26, // 72: pb.bchrpc.GetRawTransaction:input_type -> pb.GetRawTransactionRequest
+	28, // 73: pb.bchrpc.GetAddressTransactions:input_type -> pb.GetAddressTransactionsRequest
+	30, // 74: pb.bchrpc.GetRawAddressTransactions:input_type -> pb.GetRawAddressTransactionsRequest
+	32, // 75: pb.bchrpc.GetAddressUnspentOutputs:input_type -> pb.GetAddressUnspentOutputsRequest
+	34, // 76: pb.bchrpc.GetUnspentOutput:input_type -> pb.GetUnspentOutputRequest
+	36, // 77: pb.bchrpc.GetMerkleProof:input_type -> pb.GetMerkleProofRequest
+	42, // 78: pb.bchrpc.GetTokenMetadata:input_type -> pb.GetTokenMetadataRequest
+	44, // 79: pb.bchrpc.GetParsedSlpScript:input_type -> pb.GetParsedSlpScriptRequest
+	46, // 80: pb.bchrpc.GetTrustedValidation:input_type -> pb.GetTrustedValidationRequest
+	38, // 81: pb.bchrpc.SubmitTransaction:input_type -> pb.SubmitTransactionRequest
+	40, // 82: pb.bchrpc.SubscribeTransactions:input_type -> pb.SubscribeTransactionsRequest
+	40, // 83: pb.bchrpc.SubscribeTransactionStream:input_type -> pb.SubscribeTransactionsRequest
+	41, // 84: pb.bchrpc.SubscribeBlocks:input_type -> pb.SubscribeBlocksRequest
+	9,  // 85: pb.bchrpc.GetMempoolInfo:output_type -> pb.GetMempoolInfoResponse
+	11, // 86: pb.bchrpc.GetMempool:output_type -> pb.GetMempoolResponse
+	13, // 87: pb.bchrpc.GetBlockchainInfo:output_type -> pb.GetBlockchainInfoResponse
+	15, // 88: pb.bchrpc.GetBlockInfo:output_type -> pb.GetBlockInfoResponse
+	17, // 89: pb.bchrpc.GetBlock:output_type -> pb.GetBlockResponse
+	19, // 90: pb.bchrpc.GetRawBlock:output_type -> pb.GetRawBlockResponse
+	21, // 91: pb.bchrpc.GetBlockFilter:output_type -> pb.GetBlockFilterResponse
+	23, // 92: pb.bchrpc.GetHeaders:output_type -> pb.GetHeadersResponse
+	25, // 93: pb.bchrpc.GetTransaction:output_type -> pb.GetTransactionResponse
+	27, // 94: pb.bchrpc.GetRawTransaction:output_type -> pb.GetRawTransactionResponse
+	29, // 95: pb.bchrpc.GetAddressTransactions:output_type -> pb.GetAddressTransactionsResponse
+	31, // 96: pb.bchrpc.GetRawAddressTransactions:output_type -> pb.GetRawAddressTransactionsResponse
+	33, // 97: pb.bchrpc.GetAddressUnspentOutputs:output_type -> pb.GetAddressUnspentOutputsResponse
+	35, // 98: pb.bchrpc.GetUnspentOutput:output_type -> pb.GetUnspentOutputResponse
+	37, // 99: pb.bchrpc.GetMerkleProof:output_type -> pb.GetMerkleProofResponse
+	43, // 100: pb.bchrpc.GetTokenMetadata:output_type -> pb.GetTokenMetadataResponse
+	45, // 101: pb.bchrpc.GetParsedSlpScript:output_type -> pb.GetParsedSlpScriptResponse
+	47, // 102: pb.bchrpc.GetTrustedValidation:output_type -> pb.GetTrustedValidationResponse
+	39, // 103: pb.bchrpc.SubmitTransaction:output_type -> pb.SubmitTransactionResponse
+	49, // 104: pb.bchrpc.SubscribeTransactions:output_type -> pb.TransactionNotification
+	49, // 105: pb.bchrpc.SubscribeTransactionStream:output_type -> pb.TransactionNotification
+	48, // 106: pb.bchrpc.SubscribeBlocks:output_type -> pb.BlockNotification
 	85, // [85:107] is the sub-list for method output_type
 	63, // [63:85] is the sub-list for method input_type
 	63, // [63:63] is the sub-list for extension type_name
@@ -7570,6 +7541,10 @@ func file_bchrpc_proto_init() {
 		(*GetMempoolResponse_TransactionData_TransactionHash)(nil),
 		(*GetMempoolResponse_TransactionData_Transaction)(nil),
 	}
+	file_bchrpc_proto_msgTypes[62].OneofWrappers = []interface{}{
+		(*GetTrustedValidationResponse_ValidityResult_V1TokenAmount)(nil),
+		(*GetTrustedValidationResponse_ValidityResult_V1MintBaton)(nil),
+	}
 	file_bchrpc_proto_msgTypes[64].OneofWrappers = []interface{}{
 		(*Block_TransactionData_TransactionHash)(nil),
 		(*Block_TransactionData_Transaction)(nil),
@@ -7579,7 +7554,7 @@ func file_bchrpc_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_bchrpc_proto_rawDesc,
-			NumEnums:      9,
+			NumEnums:      8,
 			NumMessages:   68,
 			NumExtensions: 0,
 			NumServices:   1,
