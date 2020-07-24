@@ -1206,6 +1206,10 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	return resp, nil
 }
 
+func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTrustedValidationRequest) (*pb.GetTrustedValidationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "trusted validation is not yet implemented")
+}
+
 // SubmitTransaction submits a transaction to all connected peers.
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 

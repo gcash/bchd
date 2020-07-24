@@ -88,6 +88,150 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{5, 0}
 }
 
+type GetTrustedValidationRequest_Functionary_MessageType int32
+
+const (
+	GetTrustedValidationRequest_Functionary_NONE                                          GetTrustedValidationRequest_Functionary_MessageType = 0
+	GetTrustedValidationRequest_Functionary_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE        GetTrustedValidationRequest_Functionary_MessageType = 1
+	GetTrustedValidationRequest_Functionary_SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE GetTrustedValidationRequest_Functionary_MessageType = 2
+)
+
+// Enum value maps for GetTrustedValidationRequest_Functionary_MessageType.
+var (
+	GetTrustedValidationRequest_Functionary_MessageType_name = map[int32]string{
+		0: "NONE",
+		1: "TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
+		2: "SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
+	}
+	GetTrustedValidationRequest_Functionary_MessageType_value = map[string]int32{
+		"NONE":                                   0,
+		"TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 1,
+		"SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 2,
+	}
+)
+
+func (x GetTrustedValidationRequest_Functionary_MessageType) Enum() *GetTrustedValidationRequest_Functionary_MessageType {
+	p := new(GetTrustedValidationRequest_Functionary_MessageType)
+	*p = x
+	return p
+}
+
+func (x GetTrustedValidationRequest_Functionary_MessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetTrustedValidationRequest_Functionary_MessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_bchrpc_proto_enumTypes[2].Descriptor()
+}
+
+func (GetTrustedValidationRequest_Functionary_MessageType) Type() protoreflect.EnumType {
+	return &file_bchrpc_proto_enumTypes[2]
+}
+
+func (x GetTrustedValidationRequest_Functionary_MessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetTrustedValidationRequest_Functionary_MessageType.Descriptor instead.
+func (GetTrustedValidationRequest_Functionary_MessageType) EnumDescriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 0}
+}
+
+type GetTrustedValidationRequest_Functionary_SignatureType int32
+
+const (
+	GetTrustedValidationRequest_Functionary_SECP256K1_ECDSA   GetTrustedValidationRequest_Functionary_SignatureType = 0
+	GetTrustedValidationRequest_Functionary_SECP256K1_SCHNORR GetTrustedValidationRequest_Functionary_SignatureType = 1
+)
+
+// Enum value maps for GetTrustedValidationRequest_Functionary_SignatureType.
+var (
+	GetTrustedValidationRequest_Functionary_SignatureType_name = map[int32]string{
+		0: "SECP256K1_ECDSA",
+		1: "SECP256K1_SCHNORR",
+	}
+	GetTrustedValidationRequest_Functionary_SignatureType_value = map[string]int32{
+		"SECP256K1_ECDSA":   0,
+		"SECP256K1_SCHNORR": 1,
+	}
+)
+
+func (x GetTrustedValidationRequest_Functionary_SignatureType) Enum() *GetTrustedValidationRequest_Functionary_SignatureType {
+	p := new(GetTrustedValidationRequest_Functionary_SignatureType)
+	*p = x
+	return p
+}
+
+func (x GetTrustedValidationRequest_Functionary_SignatureType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetTrustedValidationRequest_Functionary_SignatureType) Descriptor() protoreflect.EnumDescriptor {
+	return file_bchrpc_proto_enumTypes[3].Descriptor()
+}
+
+func (GetTrustedValidationRequest_Functionary_SignatureType) Type() protoreflect.EnumType {
+	return &file_bchrpc_proto_enumTypes[3]
+}
+
+func (x GetTrustedValidationRequest_Functionary_SignatureType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetTrustedValidationRequest_Functionary_SignatureType.Descriptor instead.
+func (GetTrustedValidationRequest_Functionary_SignatureType) EnumDescriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 1}
+}
+
+type GetTrustedValidationResponse_ValidityResult_SlpVersionType int32
+
+const (
+	GetTrustedValidationResponse_ValidityResult_TYPE_1     GetTrustedValidationResponse_ValidityResult_SlpVersionType = 0
+	GetTrustedValidationResponse_ValidityResult_NFT1_GROUP GetTrustedValidationResponse_ValidityResult_SlpVersionType = 1
+	GetTrustedValidationResponse_ValidityResult_NFT1_CHILD GetTrustedValidationResponse_ValidityResult_SlpVersionType = 2
+)
+
+// Enum value maps for GetTrustedValidationResponse_ValidityResult_SlpVersionType.
+var (
+	GetTrustedValidationResponse_ValidityResult_SlpVersionType_name = map[int32]string{
+		0: "TYPE_1",
+		1: "NFT1_GROUP",
+		2: "NFT1_CHILD",
+	}
+	GetTrustedValidationResponse_ValidityResult_SlpVersionType_value = map[string]int32{
+		"TYPE_1":     0,
+		"NFT1_GROUP": 1,
+		"NFT1_CHILD": 2,
+	}
+)
+
+func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Enum() *GetTrustedValidationResponse_ValidityResult_SlpVersionType {
+	p := new(GetTrustedValidationResponse_ValidityResult_SlpVersionType)
+	*p = x
+	return p
+}
+
+func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Descriptor() protoreflect.EnumDescriptor {
+	return file_bchrpc_proto_enumTypes[4].Descriptor()
+}
+
+func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Type() protoreflect.EnumType {
+	return &file_bchrpc_proto_enumTypes[4]
+}
+
+func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetTrustedValidationResponse_ValidityResult_SlpVersionType.Descriptor instead.
+func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) EnumDescriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0, 0}
+}
+
 // State of the block in relation to the chain.
 type BlockNotification_Type int32
 
@@ -3336,6 +3480,274 @@ func (*GetMempoolResponse_TransactionData_TransactionHash) isGetMempoolResponse_
 func (*GetMempoolResponse_TransactionData_Transaction) isGetMempoolResponse_TransactionData_TxidsOrTxs() {
 }
 
+type GetTrustedValidationRequest_Query struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PrevOutTxid []byte `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
+	PrevOutVout uint32 `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
+}
+
+func (x *GetTrustedValidationRequest_Query) Reset() {
+	*x = GetTrustedValidationRequest_Query{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[60]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetTrustedValidationRequest_Query) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrustedValidationRequest_Query) ProtoMessage() {}
+
+func (x *GetTrustedValidationRequest_Query) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[60]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrustedValidationRequest_Query.ProtoReflect.Descriptor instead.
+func (*GetTrustedValidationRequest_Query) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{38, 0}
+}
+
+func (x *GetTrustedValidationRequest_Query) GetPrevOutTxid() []byte {
+	if x != nil {
+		return x.PrevOutTxid
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationRequest_Query) GetPrevOutVout() uint32 {
+	if x != nil {
+		return x.PrevOutVout
+	}
+	return 0
+}
+
+type GetTrustedValidationRequest_Functionary struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PublicKey []byte                                                `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Type      GetTrustedValidationRequest_Functionary_MessageType   `protobuf:"varint,2,opt,name=type,proto3,enum=pb.GetTrustedValidationRequest_Functionary_MessageType" json:"type,omitempty"`
+	SigType   GetTrustedValidationRequest_Functionary_SignatureType `protobuf:"varint,3,opt,name=sig_type,json=sigType,proto3,enum=pb.GetTrustedValidationRequest_Functionary_SignatureType" json:"sig_type,omitempty"`
+}
+
+func (x *GetTrustedValidationRequest_Functionary) Reset() {
+	*x = GetTrustedValidationRequest_Functionary{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[61]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetTrustedValidationRequest_Functionary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrustedValidationRequest_Functionary) ProtoMessage() {}
+
+func (x *GetTrustedValidationRequest_Functionary) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[61]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrustedValidationRequest_Functionary.ProtoReflect.Descriptor instead.
+func (*GetTrustedValidationRequest_Functionary) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1}
+}
+
+func (x *GetTrustedValidationRequest_Functionary) GetPublicKey() []byte {
+	if x != nil {
+		return x.PublicKey
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationRequest_Functionary) GetType() GetTrustedValidationRequest_Functionary_MessageType {
+	if x != nil {
+		return x.Type
+	}
+	return GetTrustedValidationRequest_Functionary_NONE
+}
+
+func (x *GetTrustedValidationRequest_Functionary) GetSigType() GetTrustedValidationRequest_Functionary_SignatureType {
+	if x != nil {
+		return x.SigType
+	}
+	return GetTrustedValidationRequest_Functionary_SECP256K1_ECDSA
+}
+
+type GetTrustedValidationResponse_ValidityResult struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PrevOutTxid    []byte                                                            `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
+	PrevOutVout    uint32                                                            `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
+	TokenId        []byte                                                            `protobuf:"bytes,3,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	SlpVersion     GetTrustedValidationResponse_ValidityResult_SlpVersionType        `protobuf:"varint,4,opt,name=slp_version,json=slpVersion,proto3,enum=pb.GetTrustedValidationResponse_ValidityResult_SlpVersionType" json:"slp_version,omitempty"`
+	ValidAmount    uint64                                                            `protobuf:"varint,5,opt,name=valid_amount,json=validAmount,proto3" json:"valid_amount,omitempty"`
+	SlpTxnOpreturn []byte                                                            `protobuf:"bytes,6,opt,name=slp_txn_opreturn,json=slpTxnOpreturn,proto3" json:"slp_txn_opreturn,omitempty"`
+	FunctionarySig *GetTrustedValidationResponse_ValidityResult_FunctionarySignature `protobuf:"bytes,7,opt,name=functionary_sig,json=functionarySig,proto3" json:"functionary_sig,omitempty"`
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) Reset() {
+	*x = GetTrustedValidationResponse_ValidityResult{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[62]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrustedValidationResponse_ValidityResult) ProtoMessage() {}
+
+func (x *GetTrustedValidationResponse_ValidityResult) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[62]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrustedValidationResponse_ValidityResult.ProtoReflect.Descriptor instead.
+func (*GetTrustedValidationResponse_ValidityResult) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0}
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutTxid() []byte {
+	if x != nil {
+		return x.PrevOutTxid
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutVout() uint32 {
+	if x != nil {
+		return x.PrevOutVout
+	}
+	return 0
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetTokenId() []byte {
+	if x != nil {
+		return x.TokenId
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetSlpVersion() GetTrustedValidationResponse_ValidityResult_SlpVersionType {
+	if x != nil {
+		return x.SlpVersion
+	}
+	return GetTrustedValidationResponse_ValidityResult_TYPE_1
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetValidAmount() uint64 {
+	if x != nil {
+		return x.ValidAmount
+	}
+	return 0
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetSlpTxnOpreturn() []byte {
+	if x != nil {
+		return x.SlpTxnOpreturn
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetFunctionarySig() *GetTrustedValidationResponse_ValidityResult_FunctionarySignature {
+	if x != nil {
+		return x.FunctionarySig
+	}
+	return nil
+}
+
+type GetTrustedValidationResponse_ValidityResult_FunctionarySignature struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Signature []byte `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
+	Message   []byte `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Reset() {
+	*x = GetTrustedValidationResponse_ValidityResult_FunctionarySignature{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[63]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrustedValidationResponse_ValidityResult_FunctionarySignature) ProtoMessage() {}
+
+func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[63]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrustedValidationResponse_ValidityResult_FunctionarySignature.ProtoReflect.Descriptor instead.
+func (*GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0, 0}
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) GetMessage() []byte {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
 type Block_TransactionData struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -5025,6 +5437,7 @@ type BchrpcClient interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
@@ -5034,6 +5447,7 @@ type BchrpcClient interface {
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetAddressTransactions(ctx context.Context, in *GetAddressTransactionsRequest, opts ...grpc.CallOption) (*GetAddressTransactionsResponse, error)
 	// GetRawAddressTransactions the serialized raw transactions for
 	// the given address. Offers offset, limit, and from block options.
@@ -5044,14 +5458,17 @@ type BchrpcClient interface {
 	// for the given address.
 	//
 	// **Requires AddressIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetAddressUnspentOutputs(ctx context.Context, in *GetAddressUnspentOutputsRequest, opts ...grpc.CallOption) (*GetAddressUnspentOutputsResponse, error)
 	// GetUnspentOutput takes an unspent output in the utxo set and returns
 	// the utxo metadata or not found.
+	//
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetUnspentOutput(ctx context.Context, in *GetUnspentOutputRequest, opts ...grpc.CallOption) (*GetUnspentOutputResponse, error)
 	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
 	// in the provided block.
 	//
-	// **Requires TxIndex***
+	// **Requires TxIndex**
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
 	// SubmitTransaction broadcasts a transaction to all connected peers.
 	SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error)
@@ -5064,6 +5481,7 @@ type BchrpcClient interface {
 	// then SubscribeTransactionStream is more appropriate.
 	//
 	// **Requires TxIndex to receive input metadata**
+	// **Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**
 	SubscribeTransactions(ctx context.Context, in *SubscribeTransactionsRequest, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionsClient, error)
 	// SubscribeTransactionStream subscribes to relevant transactions based on
 	// the subscription requests. The parameters to filter transactions on can
@@ -5073,6 +5491,7 @@ type BchrpcClient interface {
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
+	// TODO: Add slp metadata similar to "SubscribeTransactions"
 	SubscribeTransactionStream(ctx context.Context, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionStreamClient, error)
 	// SubscribeBlocks creates a subscription for notifications of new blocks being
 	// connected to the blockchain or blocks being disconnected.
@@ -5240,6 +5659,15 @@ func (c *bchrpcClient) GetParsedSlpScript(ctx context.Context, in *GetParsedSlpS
 	return out, nil
 }
 
+func (c *bchrpcClient) GetTrustedValidation(ctx context.Context, in *GetTrustedValidationRequest, opts ...grpc.CallOption) (*GetTrustedValidationResponse, error) {
+	out := new(GetTrustedValidationResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetTrustedValidation", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bchrpcClient) SubmitTransaction(ctx context.Context, in *SubmitTransactionRequest, opts ...grpc.CallOption) (*SubmitTransactionResponse, error) {
 	out := new(SubmitTransactionResponse)
 	err := c.cc.Invoke(ctx, "/pb.bchrpc/SubmitTransaction", in, out, opts...)
@@ -5374,6 +5802,7 @@ type BchrpcServer interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
@@ -5383,6 +5812,7 @@ type BchrpcServer interface {
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetAddressTransactions(context.Context, *GetAddressTransactionsRequest) (*GetAddressTransactionsResponse, error)
 	// GetRawAddressTransactions the serialized raw transactions for
 	// the given address. Offers offset, limit, and from block options.
@@ -5393,14 +5823,17 @@ type BchrpcServer interface {
 	// for the given address.
 	//
 	// **Requires AddressIndex**
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetAddressUnspentOutputs(context.Context, *GetAddressUnspentOutputsRequest) (*GetAddressUnspentOutputsResponse, error)
 	// GetUnspentOutput takes an unspent output in the utxo set and returns
 	// the utxo metadata or not found.
+	//
+	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
 	GetUnspentOutput(context.Context, *GetUnspentOutputRequest) (*GetUnspentOutputResponse, error)
 	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
 	// in the provided block.
 	//
-	// **Requires TxIndex***
+	// **Requires TxIndex**
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
 	// SubmitTransaction broadcasts a transaction to all connected peers.
 	SubmitTransaction(context.Context, *SubmitTransactionRequest) (*SubmitTransactionResponse, error)
@@ -5413,6 +5846,7 @@ type BchrpcServer interface {
 	// then SubscribeTransactionStream is more appropriate.
 	//
 	// **Requires TxIndex to receive input metadata**
+	// **Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**
 	SubscribeTransactions(*SubscribeTransactionsRequest, Bchrpc_SubscribeTransactionsServer) error
 	// SubscribeTransactionStream subscribes to relevant transactions based on
 	// the subscription requests. The parameters to filter transactions on can
@@ -5422,6 +5856,7 @@ type BchrpcServer interface {
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
+	// TODO: Add slp metadata similar to "SubscribeTransactions"
 	SubscribeTransactionStream(Bchrpc_SubscribeTransactionStreamServer) error
 	// SubscribeBlocks creates a subscription for notifications of new blocks being
 	// connected to the blockchain or blocks being disconnected.
@@ -5800,6 +6235,24 @@ func _Bchrpc_GetParsedSlpScript_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_GetTrustedValidation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTrustedValidationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).GetTrustedValidation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.bchrpc/GetTrustedValidation",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).GetTrustedValidation(ctx, req.(*GetTrustedValidationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_SubmitTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SubmitTransactionRequest)
 	if err := dec(in); err != nil {
@@ -5957,6 +6410,10 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetParsedSlpScript",
 			Handler:    _Bchrpc_GetParsedSlpScript_Handler,
+		},
+		{
+			MethodName: "GetTrustedValidation",
+			Handler:    _Bchrpc_GetTrustedValidation_Handler,
 		},
 		{
 			MethodName: "SubmitTransaction",
