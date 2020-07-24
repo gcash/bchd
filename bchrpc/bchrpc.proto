@@ -43,6 +43,7 @@ service bchrpc {
     // GetTransaction returns a transaction given a transaction hash.
     //
     // **Requires TxIndex**
+    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
     rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
 
     // GetRawTransaction returns a serialized transaction given a transaction hash.
@@ -54,6 +55,7 @@ service bchrpc {
     // limit, and from block options.
     //
     // **Requires AddressIndex**
+    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
     rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
 
     // GetRawAddressTransactions the serialized raw transactions for
@@ -66,23 +68,36 @@ service bchrpc {
     // for the given address.
     //
     // **Requires AddressIndex**
+    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
     rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
 
     // GetUnspentOutput takes an unspent output in the utxo set and returns
     // the utxo metadata or not found.
+    //
+    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
     rpc GetUnspentOutput(GetUnspentOutputRequest) returns (GetUnspentOutputResponse) {}
 
     // GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
     // in the provided block.
     //
-    // **Requires TxIndex***
+    // **Requires TxIndex**
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // Return SLP token metadata
+    // GetTokenMetadata return SLP token metadata
+    //
+    // **Requires SlpIndex**
     rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
 
-    // Returns marshalled object from parsing an SLP pubKeyScript 
+    // GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript 
+    // using goslp package.  This endpoint does not require SlpIndex.
     rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
+
+    // GetTrustedValidation returns SLP validity related information for one or more transactions
+    // the client may requests a signed message following a specified message format
+    // which may be used in oracle based applications
+    //
+    // **Requires SlpIndex with additional functionary key setup**
+    rpc GetTrustedValidation(GetTrustedValidationRequest) returns (GetTrustedValidationResponse) {}
 
     // Submit a transaction to all connected peers.
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
@@ -97,6 +112,7 @@ service bchrpc {
     // then SubscribeTransactionStream is more appropriate.
     //
     // **Requires TxIndex to receive input metadata**
+    // **Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**
     rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // SubscribeTransactionStream subscribes to relevant transactions based on
@@ -107,6 +123,7 @@ service bchrpc {
     // grpc-web.
     //
     // **Requires TxIndex to receive input metadata**
+    // TODO: Add slp metadata similar to "SubscribeTransactions"
     rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // SubscribeBlocks creates a subscription for notifications of new blocks being
@@ -518,6 +535,55 @@ message GetParsedSlpScriptResponse {
         SlpNft1ChildGenesisMetadata nft1_child_genesis = 7;
         SlpNft1ChildSendMetadata nft1_child_send = 8;
     }
+}
+
+message GetTrustedValidationRequest {
+    message Query {
+        bytes prev_out_txid = 1;
+        uint32 prev_out_vout = 2;
+    }
+    message Functionary {
+        enum MessageType {
+            NONE = 0;
+            TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE = 1;
+            SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE = 2;
+        }
+        enum SignatureType {
+            SECP256K1_ECDSA = 0;
+            SECP256K1_SCHNORR = 1;
+        }
+        bytes public_key = 1;
+        MessageType type = 2;
+        SignatureType sig_type = 3;
+    }
+
+    repeated Query queries = 1;
+    Functionary functionary_info = 2;
+}
+
+message GetTrustedValidationResponse {
+    message ValidityResult {
+        enum SlpVersionType {
+            TYPE_1 = 0;
+            NFT1_GROUP = 1;
+            NFT1_CHILD = 2;
+        }
+        bytes prev_out_txid = 1;
+        uint32 prev_out_vout = 2;
+        bytes token_id = 3;
+        SlpVersionType slp_version = 4;
+        uint64 valid_amount = 5;
+        bytes slp_txn_opreturn = 6;
+
+        message FunctionarySignature {
+            bytes signature = 1;
+            bytes message = 2;
+        }
+        FunctionarySignature functionary_sig = 7;
+    }
+
+    // allows server to respond to a request with multiple
+    repeated ValidityResult results = 1;
 }
 
 // NOTIFICATIONS
