@@ -224,8 +224,8 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	f.matchAll = rpcFilter.AllTransactions
 
 	// handle SLP
-	for _, tokenId := range rpcFilter.GetSlpTokenIds() {
-		f.RemoveSlpTokenID(tokenId)
+	for _, tokenID := range rpcFilter.GetSlpTokenIds() {
+		f.RemoveSlpTokenID(tokenID)
 	}
 
 	return nil
