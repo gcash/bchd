@@ -1,0 +1,2295 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "bchrpc.proto",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/CheckSlpTransaction": {
+      "post": {
+        "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction",
+        "operationId": "CheckSlpTransaction",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbCheckSlpTransactionResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbCheckSlpTransactionRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetAddressTransactions": {
+      "post": {
+        "summary": "GetAddressTransactions returns the transactions for the given address. Offers offset,\nlimit, and from block options.",
+        "description": "**Requires AddressIndex**\n**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "operationId": "GetAddressTransactions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetAddressTransactionsResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetAddressTransactionsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetAddressUnspentOutputs": {
+      "post": {
+        "summary": "GetAddressUnspentOutputs returns all the unspent transaction outputs\nfor the given address.",
+        "description": "**Requires AddressIndex**\n**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "operationId": "GetAddressUnspentOutputs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetAddressUnspentOutputsResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetAddressUnspentOutputsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBip44HdAddress": {
+      "post": {
+        "summary": "GetBip44HdAddress returns an address associated with a provided xpub, address index, and\nselecting either internal or external by setting the change boolean.  If SlpIndex is disabled\nthe slpAddress string will be an empty string.",
+        "operationId": "GetBip44HdAddress",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBip44HdAddressResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBip44HdAddressRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBlock": {
+      "post": {
+        "summary": "GetBlock returns detailed data for a block.",
+        "operationId": "GetBlock",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBlockFilter": {
+      "post": {
+        "summary": "GetBlockFilter returns the compact filter (cf) of a block as a Golomb-Rice encoded set.",
+        "description": "**Requires CfIndex**",
+        "operationId": "GetBlockFilter",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockFilterResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockFilterRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBlockHeaders": {
+      "post": {
+        "summary": "GetHeaders takes a block locator object and returns\na batch of no more than 2000 headers. Upon parsing the block locator, if the server\nconcludes there has been a fork, it will send headers starting at the fork point,\nor genesis if no blocks in the locator are in the best chain. If the locator is\nalready at the tip no headers will be returned.\nsee: bchd/bchrpc/documentation/wallet_operation.md",
+        "operationId": "GetHeaders",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetHeadersResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetHeadersRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBlockInfo": {
+      "post": {
+        "summary": "GetBlockInfo returns metadata and info for a specified block.",
+        "operationId": "GetBlockInfo",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockInfoResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockInfoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBlockchainInfo": {
+      "post": {
+        "summary": "GetBlockchainInfo returns data about the blockchain including the most recent\nblock hash and height.",
+        "operationId": "GetBlockchainInfo",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockchainInfoResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBlockchainInfoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetMempool": {
+      "post": {
+        "summary": "GetMempool returns information about all transactions currently in the memory pool.\nOffers an option to return full transactions or just transactions hashes.",
+        "operationId": "GetMempool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetMempoolResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetMempoolRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetMempoolInfo": {
+      "post": {
+        "summary": "GetMempoolInfo returns the state of the current mempool.",
+        "operationId": "GetMempoolInfo",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetMempoolInfoResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetMempoolInfoRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetMerkleProof": {
+      "post": {
+        "summary": "GetMerkleProof returns a Merkle (SPV) proof for a specific transaction\nin the provided block.",
+        "description": "**Requires TxIndex**",
+        "operationId": "GetMerkleProof",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetMerkleProofResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetMerkleProofRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetParsedSlpScript": {
+      "post": {
+        "summary": "GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
+        "operationId": "GetParsedSlpScript",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetParsedSlpScriptResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetParsedSlpScriptRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetRawAddressTransactions": {
+      "post": {
+        "summary": "GetRawAddressTransactions the serialized raw transactions for\nthe given address. Offers offset, limit, and from block options.",
+        "description": "**Requires AddressIndex**",
+        "operationId": "GetRawAddressTransactions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetRawAddressTransactionsResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetRawAddressTransactionsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetRawBlock": {
+      "post": {
+        "summary": "GetRawBlock returns a block in a serialized format.",
+        "operationId": "GetRawBlock",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetRawBlockResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetRawBlockRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetRawTransaction": {
+      "post": {
+        "summary": "GetRawTransaction returns a serialized transaction given a transaction hash.",
+        "description": "**Requires TxIndex**",
+        "operationId": "GetRawTransaction",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetRawTransactionResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetRawTransactionRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetTransaction": {
+      "post": {
+        "summary": "GetTransaction returns a transaction given a transaction hash.",
+        "description": "**Requires TxIndex**\n**Requires SlpIndex to receive slp input/output metadata,\n  and TokenMetadata (if include_token_metadata=true in request) **",
+        "operationId": "GetTransaction",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetTransactionResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetTransactionRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetTrustedSlpValidation": {
+      "post": {
+        "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions\nthe client may requests a signed message following a specified message format\nwhich may be used in oracle based applications",
+        "description": "**Requires SlpIndex with additional functionary key setup**",
+        "operationId": "GetTrustedSlpValidation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetTrustedSlpValidationResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetTrustedSlpValidationRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetUnspentOutput": {
+      "post": {
+        "summary": "GetUnspentOutput takes an unspent output in the utxo set and returns\nthe utxo metadata or not found.",
+        "description": "**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "operationId": "GetUnspentOutput",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetUnspentOutputResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetUnspentOutputRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/SubmitTransaction": {
+      "post": {
+        "summary": "Submit a transaction to all connected peers.",
+        "operationId": "SubmitTransaction",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbSubmitTransactionResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbSubmitTransactionRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/SubscribeBlocks": {
+      "post": {
+        "summary": "SubscribeBlocks creates a subscription for notifications of new blocks being\nconnected to the blockchain or blocks being disconnected.",
+        "operationId": "SubscribeBlocks",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "$ref": "#/x-stream-definitions/pbBlockNotification"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbSubscribeBlocksRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/SubscribeTransactionStream": {
+      "post": {
+        "summary": "SubscribeTransactionStream subscribes to relevant transactions based on\nthe subscription requests. The parameters to filter transactions on can\nbe updated by sending new SubscribeTransactionsRequest objects on the stream.",
+        "description": "NOTE: Because this RPC is using bi-directional streaming it cannot be used with\ngrpc-web.\n\n**Requires TxIndex to receive input metadata**\nTODO: Add slp metadata similar to \"SubscribeTransactions\"",
+        "operationId": "SubscribeTransactionStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "$ref": "#/x-stream-definitions/pbTransactionNotification"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": " (streaming inputs)",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbSubscribeTransactionsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/SubscribeTransactions": {
+      "post": {
+        "summary": "SubscribeTransactions creates subscription to all relevant transactions based on\nthe subscription filter.  The parameters to filter transactions on can be\nupdated by sending new SubscribeTransactionsRequest objects on the stream.",
+        "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the addresses. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**",
+        "operationId": "SubscribeTransactions",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "$ref": "#/x-stream-definitions/pbTransactionNotification"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbSubscribeTransactionsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "FunctionaryMessageType": {
+      "type": "string",
+      "enum": [
+        "STANDARD"
+      ],
+      "default": "STANDARD"
+    },
+    "FunctionarySignatureType": {
+      "type": "string",
+      "enum": [
+        "SECP256K1_ECDSA",
+        "SECP256K1_SCHNORR"
+      ],
+      "default": "SECP256K1_ECDSA"
+    },
+    "GetBlockchainInfoResponseBitcoinNet": {
+      "type": "string",
+      "enum": [
+        "MAINNET",
+        "REGTEST",
+        "TESTNET3",
+        "SIMNET"
+      ],
+      "default": "MAINNET",
+      "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.",
+      "title": "Bitcoin network types"
+    },
+    "GetTrustedSlpValidationRequestFunctionary": {
+      "type": "object",
+      "properties": {
+        "public_key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "type": {
+          "$ref": "#/definitions/FunctionaryMessageType"
+        },
+        "sig_type": {
+          "$ref": "#/definitions/FunctionarySignatureType"
+        }
+      }
+    },
+    "GetTrustedSlpValidationRequestQuery": {
+      "type": "object",
+      "properties": {
+        "prev_out_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "prev_out_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "GetTrustedSlpValidationResponseValidityResult": {
+      "type": "object",
+      "properties": {
+        "prev_out_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "prev_out_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "slp_version": {
+          "$ref": "#/definitions/pbSlpVersionType"
+        },
+        "v1_token_amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "v1_mint_baton": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "slp_txn_opreturn": {
+          "type": "string",
+          "format": "byte"
+        },
+        "functionary_sig": {
+          "$ref": "#/definitions/ValidityResultFunctionarySignature"
+        }
+      }
+    },
+    "InputOutpoint": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the transaction containing the output to be spent."
+        },
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The index of specific output on the transaction."
+        }
+      }
+    },
+    "SlpTransactionInfoBurnFlags": {
+      "type": "string",
+      "enum": [
+        "BURNED_INPUTS_OUTPUTS_TOO_HIGH",
+        "BURNED_INPUTS_BAD_OPRETURN",
+        "BURNED_INPUTS_OTHER_TOKEN",
+        "BURNED_OUTPUTS_MISSING_BCH_VOUT"
+      ],
+      "default": "BURNED_INPUTS_OUTPUTS_TOO_HIGH"
+    },
+    "SlpTransactionInfoValidityJudgement": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN_OR_INVALID",
+        "VALID"
+      ],
+      "default": "UNKNOWN_OR_INVALID"
+    },
+    "TransactionInput": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of the input, starting from zero."
+        },
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "The related outpoint."
+        },
+        "signature_script": {
+          "type": "string",
+          "format": "byte",
+          "title": "An unlocking script asserting a transaction is permitted to spend\nthe Outpoint (UTXO)"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "int64",
+          "description": "As of BIP-68, the sequence number is interpreted as a relative\nlock-time for the input."
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "Amount in satoshi."
+        },
+        "previous_script": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the transaction containing the output to be spent."
+        },
+        "address": {
+          "type": "string",
+          "description": "The bitcoin addresses associated with this input."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        }
+      }
+    },
+    "TransactionOutput": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of the output, starting from zero."
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "The number of satoshis to be transferred."
+        },
+        "pubkey_script": {
+          "type": "string",
+          "format": "byte",
+          "description": "The public key script used to pay coins."
+        },
+        "address": {
+          "type": "string",
+          "description": "The bitcoin addresses associated with this output."
+        },
+        "script_class": {
+          "type": "string",
+          "description": "The type of script."
+        },
+        "disassembled_script": {
+          "type": "string",
+          "description": "The script expressed in Bitcoin Cash Script."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        }
+      }
+    },
+    "ValidityResultFunctionarySignature": {
+      "type": "object",
+      "properties": {
+        "signature": {
+          "type": "string",
+          "format": "byte"
+        },
+        "message": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbBlock": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "$ref": "#/definitions/pbBlockInfo",
+          "description": "Block header data, as well as metadata stored by the node."
+        },
+        "transaction_data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbBlockTransactionData"
+          },
+          "description": "List of transactions or transaction hashes."
+        }
+      }
+    },
+    "pbBlockInfo": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The double sha256 hash of the six header fields in the first 80 bytes\nof the block, when encoded according the bitcoin protocol.\nsha256(sha256(encoded_header))"
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number, an incremental index for each block mined."
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "description": "A version number to track software/protocol upgrades."
+        },
+        "previous_block": {
+          "type": "string",
+          "format": "byte",
+          "title": "Hash of the previous block"
+        },
+        "merkle_root": {
+          "type": "string",
+          "format": "byte",
+          "description": "The root of the Merkle Tree built from all transactions in the block."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "int64",
+          "description": "When mining of the block started, expressed in seconds since 1970-01-01."
+        },
+        "bits": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Difficulty in Compressed Target Format."
+        },
+        "nonce": {
+          "type": "integer",
+          "format": "int64",
+          "description": "A random value that was generated during block mining which happened to\nresult in a computed block hash below the difficulty target at the time."
+        },
+        "confirmations": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of blocks in a chain, including the block itself upon creation."
+        },
+        "difficulty": {
+          "type": "number",
+          "format": "double",
+          "description": "Difficulty target at time of creation."
+        },
+        "next_block_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Hash of the next block in this chain."
+        },
+        "size": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Size of the block in bytes."
+        },
+        "median_time": {
+          "type": "string",
+          "format": "int64",
+          "description": "The median block time of the latest 11 block timestamps."
+        }
+      },
+      "title": "Metadata for identifying and validating a block"
+    },
+    "pbBlockNotification": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/pbBlockNotificationType",
+          "description": "Whether the block is connected to the chain."
+        },
+        "block_info": {
+          "$ref": "#/definitions/pbBlockInfo",
+          "description": "Marshaled block header data, as well as metadata stored by the node."
+        },
+        "marshaled_block": {
+          "$ref": "#/definitions/pbBlock",
+          "description": "A Block."
+        },
+        "serialized_block": {
+          "type": "string",
+          "format": "byte",
+          "description": "Binary block, serialized using bitcoin protocol encoding."
+        }
+      }
+    },
+    "pbBlockNotificationType": {
+      "type": "string",
+      "enum": [
+        "CONNECTED",
+        "DISCONNECTED"
+      ],
+      "default": "CONNECTED",
+      "description": "State of the block in relation to the chain."
+    },
+    "pbBlockTransactionData": {
+      "type": "object",
+      "properties": {
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Just the transaction hash."
+        },
+        "transaction": {
+          "$ref": "#/definitions/pbTransaction",
+          "description": "A marshaled transaction."
+        }
+      }
+    },
+    "pbCheckSlpTransactionRequest": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "type": "string",
+          "format": "byte"
+        },
+        "required_slp_burns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbSlpRequiredBurn"
+          }
+        }
+      }
+    },
+    "pbCheckSlpTransactionResponse": {
+      "type": "object",
+      "properties": {
+        "is_valid": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "pbGetAddressTransactionsRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "The address to query transactions, in lowercase cashaddr format.\nThe network prefix is optional (i.e. \"cashaddress:\")."
+        },
+        "nb_skip": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of confirmed transactions to skip, starting with the oldest first.\nDoes not affect results of unconfirmed transactions."
+        },
+        "nb_fetch": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Specify the number of transactions to fetch."
+        },
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by hash."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by block number."
+        }
+      },
+      "description": "Get marshaled transactions related to a specific address.\n\nRECOMMENDED:\nParameters have been provided to query without creating\n  performance issues on the node or client.\n\n- The number of transactions to skip and fetch allow for iterating\n      over a large set of transactions, if necessary.\n\n- A starting block parameter (either `hash` or `height`)\n      may then be used to filter results to those occurring\n      after a certain time.\n\nThis approach will reduce network traffic and response processing\n  for the client, as well as reduce workload on the node."
+    },
+    "pbGetAddressTransactionsResponse": {
+      "type": "object",
+      "properties": {
+        "confirmed_transactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbTransaction"
+          },
+          "description": "Transactions that have been included in a block."
+        },
+        "unconfirmed_transactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbMempoolTransaction"
+          },
+          "description": "Transactions in mempool which have not been included in a block."
+        }
+      }
+    },
+    "pbGetAddressUnspentOutputsRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "The address to query transactions, in lowercase cashaddr format.\nThe network identifier is optional (i.e. \"cashaddress:\")."
+        },
+        "include_mempool": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When `include_mempool` is true, unconfirmed transactions from mempool\nare returned. Default is false."
+        },
+        "include_token_metadata": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "pbGetAddressUnspentOutputsResponse": {
+      "type": "object",
+      "properties": {
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbUnspentOutput"
+          },
+          "description": "List of unspent outputs."
+        },
+        "token_metadata": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbTokenMetadata"
+          }
+        }
+      }
+    },
+    "pbGetBip44HdAddressRequest": {
+      "type": "object",
+      "properties": {
+        "xpub": {
+          "type": "string"
+        },
+        "change": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "address_index": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "pbGetBip44HdAddressResponse": {
+      "type": "object",
+      "properties": {
+        "pub_key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "cash_addr": {
+          "type": "string"
+        },
+        "slp_addr": {
+          "type": "string"
+        }
+      }
+    },
+    "pbGetBlockFilterRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The block hash as a byte array or base64 encoded string, little-endian."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number."
+        }
+      }
+    },
+    "pbGetBlockFilterResponse": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "type": "string",
+          "format": "byte",
+          "description": "A compact filter matching input outpoints and public key scripts contained\nin a block (encoded according to BIP158)."
+        }
+      }
+    },
+    "pbGetBlockInfoRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The block hash as a byte array or base64 encoded string, little-endian."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number."
+        }
+      }
+    },
+    "pbGetBlockInfoResponse": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "$ref": "#/definitions/pbBlockInfo",
+          "description": "Marshaled block header data, as well as metadata."
+        }
+      }
+    },
+    "pbGetBlockRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The block hash as a byte array or base64 encoded string, little-endian."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number."
+        },
+        "full_transactions": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When `full_transactions` is true, full transactions are returned\ninstead of just hashes. Default is false."
+        }
+      }
+    },
+    "pbGetBlockResponse": {
+      "type": "object",
+      "properties": {
+        "block": {
+          "$ref": "#/definitions/pbBlock",
+          "description": "A marshaled block."
+        }
+      }
+    },
+    "pbGetBlockchainInfoRequest": {
+      "type": "object"
+    },
+    "pbGetBlockchainInfoResponse": {
+      "type": "object",
+      "properties": {
+        "bitcoin_net": {
+          "$ref": "#/definitions/GetBlockchainInfoResponseBitcoinNet",
+          "description": "Which network the node is operating on."
+        },
+        "best_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The current number of blocks on the longest chain."
+        },
+        "best_block_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the best (tip) block in the most-work fully-validated chain."
+        },
+        "difficulty": {
+          "type": "number",
+          "format": "double",
+          "description": "Threshold for adding new blocks."
+        },
+        "median_time": {
+          "type": "string",
+          "format": "int64",
+          "description": "Median time of the last 11 blocks."
+        },
+        "tx_index": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When `tx_index` is true, the node has full transaction index enabled."
+        },
+        "addr_index": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When `addr_index` is true, the node has address index enabled and may\nbe used with call related by address."
+        },
+        "slp_index": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "pbGetHeadersRequest": {
+      "type": "object",
+      "properties": {
+        "block_locator_hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "A list of block hashes known to the client (most recent first) which\nis exponentially  sparser toward the genesis block (0).\nCommon practice is to include all of the last 10 blocks, and then\n9 blocks for each order of ten thereafter."
+        },
+        "stop_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "hash of the latest desired block header; only blocks occurring before\nthe stop will be returned."
+        }
+      },
+      "description": "Request headers using a list of known block hashes."
+    },
+    "pbGetHeadersResponse": {
+      "type": "object",
+      "properties": {
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbBlockInfo"
+          },
+          "description": "List of block headers."
+        }
+      }
+    },
+    "pbGetMempoolInfoRequest": {
+      "type": "object"
+    },
+    "pbGetMempoolInfoResponse": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "format": "int64",
+          "title": "The count of transactions in the mempool"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "int64",
+          "title": "The size in bytes of all transactions in the mempool"
+        }
+      }
+    },
+    "pbGetMempoolRequest": {
+      "type": "object",
+      "properties": {
+        "full_transactions": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When `full_transactions` is true, full transaction data is provided\ninstead of just transaction hashes. Default is false."
+        }
+      }
+    },
+    "pbGetMempoolResponse": {
+      "type": "object",
+      "properties": {
+        "transaction_data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbGetMempoolResponseTransactionData"
+          },
+          "description": "List of unconfirmed transactions."
+        }
+      }
+    },
+    "pbGetMempoolResponseTransactionData": {
+      "type": "object",
+      "properties": {
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The transaction hash"
+        },
+        "transaction": {
+          "$ref": "#/definitions/pbTransaction",
+          "title": "The transaction data"
+        }
+      }
+    },
+    "pbGetMerkleProofRequest": {
+      "type": "object",
+      "properties": {
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "A transaction hash."
+        }
+      }
+    },
+    "pbGetMerkleProofResponse": {
+      "type": "object",
+      "properties": {
+        "block": {
+          "$ref": "#/definitions/pbBlockInfo",
+          "title": "Block header information for the corresponding transaction"
+        },
+        "hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "title": "A list containing the transaction hash, the adjacent leaf transaction hash\nand the hashes of the highest nodes in the merkle tree not built with the transaction.\nProof hashes are ordered following transaction order, or left to right on the merkle tree"
+        },
+        "flags": {
+          "type": "string",
+          "format": "byte",
+          "description": "Binary representing the location of the matching transaction in the full merkle tree,\nstarting with the root (`1`) at position/level 0, where `1` corresponds\nto a left branch and `01` is a right branch."
+        }
+      }
+    },
+    "pbGetParsedSlpScriptRequest": {
+      "type": "object",
+      "properties": {
+        "slp_opreturn_script": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbGetParsedSlpScriptResponse": {
+      "type": "object",
+      "properties": {
+        "parsing_error": {
+          "type": "string"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "type": {
+          "$ref": "#/definitions/pbSlpVersionType"
+        },
+        "v1_genesis": {
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+        },
+        "v1_mint": {
+          "$ref": "#/definitions/pbSlpV1MintMetadata"
+        },
+        "v1_send": {
+          "$ref": "#/definitions/pbSlpV1SendMetadata"
+        },
+        "nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        },
+        "nft1_child_send": {
+          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        }
+      }
+    },
+    "pbGetRawAddressTransactionsRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "The address to query transactions, in lowercase cashaddr format.\nThe network prefix is optional (i.e. \"cashaddress:\")."
+        },
+        "nb_skip": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of confirmed transactions to skip, starting with the oldest first.\nDoes not affect results of unconfirmed transactions."
+        },
+        "nb_fetch": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Specify the number of transactions to fetch."
+        },
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Recommended. Only return transactions after some starting block\nidentified by hash."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Recommended. Only return transactions after some starting block\nidentified by block number."
+        }
+      },
+      "description": "Get encoded transactions related to a specific address.\n\nRECOMMENDED:\nParameters have been provided to query without creating\n  performance issues on the node or client.\n\n- The number of transactions to skip and fetch allow for iterating\n      over a large set of transactions, if necessary.\n\n- A starting block parameter (either `hash` or `height`)\n      may then be used to filter results to those occurring\n      after a certain time.\n\nThis approach will reduce network traffic and response processing\n  for the client, as well as reduce workload on the node."
+    },
+    "pbGetRawAddressTransactionsResponse": {
+      "type": "object",
+      "properties": {
+        "confirmed_transactions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "Transactions that have been included in a block."
+        },
+        "unconfirmed_transactions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "Transactions in mempool which have not been included in a block."
+        }
+      }
+    },
+    "pbGetRawBlockRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The block hash as a byte array or base64 encoded string, little-endian."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number."
+        }
+      }
+    },
+    "pbGetRawBlockResponse": {
+      "type": "object",
+      "properties": {
+        "block": {
+          "type": "string",
+          "format": "byte",
+          "description": "Raw block data (with header) serialized according the the bitcoin block protocol."
+        }
+      }
+    },
+    "pbGetRawTransactionRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "A transaction hash."
+        }
+      },
+      "description": "Get an encoded transaction from a transaction hash."
+    },
+    "pbGetRawTransactionResponse": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "type": "string",
+          "format": "byte",
+          "description": "Raw transaction in bytes."
+        }
+      }
+    },
+    "pbGetTokenMetadataResponse": {
+      "type": "object",
+      "properties": {
+        "token_metadata": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbTokenMetadata"
+          }
+        }
+      }
+    },
+    "pbGetTransactionRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "A transaction hash."
+        },
+        "include_token_metadata": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      },
+      "description": "Get a transaction from a transaction hash."
+    },
+    "pbGetTransactionResponse": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "$ref": "#/definitions/pbTransaction",
+          "description": "A marshaled transaction."
+        },
+        "token_metadata": {
+          "$ref": "#/definitions/pbTokenMetadata"
+        }
+      }
+    },
+    "pbGetTrustedSlpValidationRequest": {
+      "type": "object",
+      "properties": {
+        "queries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GetTrustedSlpValidationRequestQuery"
+          }
+        },
+        "functionary_info": {
+          "$ref": "#/definitions/GetTrustedSlpValidationRequestFunctionary"
+        }
+      }
+    },
+    "pbGetTrustedSlpValidationResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
+          },
+          "title": "allows server to respond to a request with multiple"
+        }
+      }
+    },
+    "pbGetUnspentOutputRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the transaction."
+        },
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of the output, starting from zero."
+        },
+        "include_mempool": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When include_mempool is true, unconfirmed transactions from mempool\nare returned. Default is false."
+        },
+        "include_token_metadata": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "pbGetUnspentOutputResponse": {
+      "type": "object",
+      "properties": {
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "A reference to the related input."
+        },
+        "pubkey_script": {
+          "type": "string",
+          "format": "byte",
+          "title": "Locking script dictating how funds can be spent in the future"
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "Amount in satoshi."
+        },
+        "is_coinbase": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "When is_coinbase is true, the transaction was the first in a block,\ncreated by a miner, and used to pay the block reward"
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The index number of the block containing the transaction creating the output."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        },
+        "token_metadata": {
+          "$ref": "#/definitions/pbTokenMetadata"
+        }
+      }
+    },
+    "pbMempoolTransaction": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "$ref": "#/definitions/pbTransaction"
+        },
+        "added_time": {
+          "type": "string",
+          "format": "int64",
+          "description": "The time when the transaction was added too the pool."
+        },
+        "added_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block height when the transaction was added to the pool."
+        },
+        "fee": {
+          "type": "string",
+          "format": "int64",
+          "description": "The total fee in satoshi the transaction pays."
+        },
+        "fee_per_kb": {
+          "type": "string",
+          "format": "int64",
+          "description": "The fee in satoshi per kilobyte the transaction pays."
+        },
+        "starting_priority": {
+          "type": "number",
+          "format": "double",
+          "description": "The priority of the transaction when it was added to the pool."
+        }
+      }
+    },
+    "pbSlpNft1ChildGenesisMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbSlpNft1ChildSendMetadata": {
+      "type": "object",
+      "properties": {
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbSlpRequiredBurn": {
+      "type": "object",
+      "properties": {
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "mint_baton": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "pbSlpToken": {
+      "type": "object",
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "is_mint_baton": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "address": {
+          "type": "string"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
+      "title": "SLP token info used in transaction inputs / outputs"
+    },
+    "pbSlpTransactionInfo": {
+      "type": "object",
+      "properties": {
+        "version_type": {
+          "$ref": "#/definitions/pbSlpVersionType"
+        },
+        "validity_judgement": {
+          "$ref": "#/definitions/SlpTransactionInfoValidityJudgement"
+        },
+        "parse_error": {
+          "type": "string"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "burn_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SlpTransactionInfoBurnFlags"
+          }
+        },
+        "v1_genesis": {
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+        },
+        "v1_mint": {
+          "$ref": "#/definitions/pbSlpV1MintMetadata"
+        },
+        "v1_send": {
+          "$ref": "#/definitions/pbSlpV1SendMetadata"
+        },
+        "nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        },
+        "nft1_child_send": {
+          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        }
+      }
+    },
+    "pbSlpV1GenesisMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "pbSlpV1MintMetadata": {
+      "type": "object",
+      "properties": {
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "pbSlpV1SendMetadata": {
+      "type": "object",
+      "properties": {
+        "amounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uint64"
+          }
+        }
+      }
+    },
+    "pbSlpVersionType": {
+      "type": "string",
+      "enum": [
+        "NON_SLP",
+        "NON_SLP_BURN",
+        "SLP_PARSE_ERROR",
+        "SLP_UNSUPPORTED_VERSION",
+        "SLP_V1_GENESIS",
+        "SLP_V1_MINT",
+        "SLP_V1_SEND",
+        "SLP_NFT1_GROUP_GENESIS",
+        "SLP_NFT1_GROUP_MINT",
+        "SLP_NFT1_GROUP_SEND",
+        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
+        "SLP_NFT1_UNIQUE_CHILD_SEND"
+      ],
+      "default": "NON_SLP"
+    },
+    "pbSubmitTransactionRequest": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "type": "string",
+          "format": "byte",
+          "description": "The encoded transaction."
+        },
+        "skip_slp_validity_check": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "required_slp_burns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbSlpRequiredBurn"
+          }
+        }
+      }
+    },
+    "pbSubmitTransactionResponse": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbSubscribeBlocksRequest": {
+      "type": "object",
+      "properties": {
+        "full_block": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When full_block is true, a complete marshaled block is sent. See `Block`.\nDefault is false, block metadata is sent. See `BlockInfo`."
+        },
+        "full_transactions": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When full_transactions is true, provide full transaction info\nfor a marshaled block.\nDefault is false, only the transaction hashes are included for\na marshaled block. See `TransactionData`."
+        },
+        "serialize_block": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "When serialize_block is true, blocks are serialized using bitcoin protocol encoding.\nDefault is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)"
+        }
+      },
+      "description": "- BlockInfo (block metadata): `BlockInfo`\n     - SubscribeBlocksRequest {}\n\n - Marshaled Block (with transaction hashes): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n       }\n - Marshaled Block (with full transaction data): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n           full_transactions = true\n       }\n - Serialized Block acccording to bitcoin protocol encoding: `bytes`\n     - SubscribeBlocksRequest {\n           serialize_block = true\n       }",
+      "title": "Options to define data structure to be sent by SubscribeBlock stream:"
+    },
+    "pbSubscribeTransactionsRequest": {
+      "type": "object",
+      "properties": {
+        "subscribe": {
+          "$ref": "#/definitions/pbTransactionFilter",
+          "title": "Subscribe to a filter. add items to a filter"
+        },
+        "unsubscribe": {
+          "$ref": "#/definitions/pbTransactionFilter",
+          "title": "Unsubscribe to a filter, remove items from a filter"
+        },
+        "include_mempool": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When include_mempool is true, new unconfirmed transactions from mempool are\nincluded apart from the ones confirmed in a block."
+        },
+        "include_in_block": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When include_in_block is true, transactions are included when they are confirmed.\nThis notification is sent in addition to any requested mempool notifications."
+        },
+        "serialize_tx": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "When serialize_tx is true, transactions are serialized using\nbitcoin protocol encoding. Default is false, transaction will be Marshaled\n(see `Transaction`, `MempoolTransaction` and `TransactionNotification`)"
+        }
+      },
+      "description": "Request to subscribe or unsubscribe from a stream of transactions."
+    },
+    "pbTokenMetadata": {
+      "type": "object",
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "type1": {
+          "$ref": "#/definitions/pbTokenMetadataTokenType1"
+        },
+        "nft1_group": {
+          "$ref": "#/definitions/pbTokenMetadataNFT1Group"
+        },
+        "nft1_child": {
+          "$ref": "#/definitions/pbTokenMetadataNFT1Child"
+        }
+      }
+    },
+    "pbTokenMetadataNFT1Child": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "group_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbTokenMetadataNFT1Group": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_txid": {
+          "type": "string",
+          "format": "byte"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "pbTokenMetadataTokenType1": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_txid": {
+          "type": "string",
+          "format": "byte"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "pbTransaction": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The double sha256 hash of the encoded transaction.\nsha256(sha256(encoded_transaction))"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The version of the transaction format."
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransactionInput"
+          },
+          "description": "List of inputs."
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransactionOutput"
+          },
+          "description": "List of outputs."
+        },
+        "lock_time": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The block height or timestamp after which this transaction is allowed.\nIf value is greater than 500 million, it is assumed to be an epoch timestamp,\notherwise it is treated as a block-height. Default is zero, or lock."
+        },
+        "size": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The size of the transaction in bytes."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "int64",
+          "description": "When the transaction was included in a block, in epoch time."
+        },
+        "confirmations": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of blocks including proof of the transaction, including\nthe block it appeared."
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of the block containing the transaction."
+        },
+        "block_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Hash of the block the transaction was recorded in."
+        },
+        "slp_transaction_info": {
+          "$ref": "#/definitions/pbSlpTransactionInfo"
+        }
+      }
+    },
+    "pbTransactionFilter": {
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Filter by address(es)"
+        },
+        "outpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InputOutpoint"
+          },
+          "description": "Filter by output hash and index."
+        },
+        "data_elements": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        },
+        "all_transactions": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "Subscribed/Unsubscribe to everything. Other filters\nwill be ignored."
+        },
+        "all_slp_transactions": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "Subscribed/Unsubscribe to everything SLP. Other filters\nwill be ignored, except this filter will be overriden by all_transactions=true"
+        },
+        "slp_token_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "title": "only transactions associated with the included tokenIds"
+        }
+      }
+    },
+    "pbTransactionNotification": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/pbTransactionNotificationType",
+          "description": "Whether or not the transaction has been included in a block."
+        },
+        "confirmed_transaction": {
+          "$ref": "#/definitions/pbTransaction",
+          "description": "A transaction included in a block."
+        },
+        "unconfirmed_transaction": {
+          "$ref": "#/definitions/pbMempoolTransaction",
+          "description": "A transaction in mempool."
+        },
+        "serialized_transaction": {
+          "type": "string",
+          "format": "byte",
+          "description": "Binary transaction, serialized using bitcoin protocol encoding."
+        }
+      }
+    },
+    "pbTransactionNotificationType": {
+      "type": "string",
+      "enum": [
+        "UNCONFIRMED",
+        "CONFIRMED"
+      ],
+      "default": "UNCONFIRMED",
+      "description": "State of the transaction acceptance.\n\n - UNCONFIRMED: A transaction in mempool.\n - CONFIRMED: A transaction in a block."
+    },
+    "pbUnspentOutput": {
+      "type": "object",
+      "properties": {
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "A reference to the output given by transaction hash and index."
+        },
+        "pubkey_script": {
+          "type": "string",
+          "format": "byte",
+          "description": "The public key script used to pay coins."
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "title": "The amount in satoshis"
+        },
+        "is_coinbase": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "When is_coinbase is true, the output is the first in the block,\na generation transaction, the result of mining."
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block number containing the UXTO."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "type_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "runtimeStreamError": {
+      "type": "object",
+      "properties": {
+        "grpc_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "http_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "http_status": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  },
+  "x-stream-definitions": {
+    "pbBlockNotification": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/definitions/pbBlockNotification"
+        },
+        "error": {
+          "$ref": "#/definitions/runtimeStreamError"
+        }
+      },
+      "title": "Stream result of pbBlockNotification"
+    },
+    "pbTransactionNotification": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/definitions/pbTransactionNotification"
+        },
+        "error": {
+          "$ref": "#/definitions/runtimeStreamError"
+        }
+      },
+      "title": "Stream result of pbTransactionNotification"
+    }
+  }
+}
