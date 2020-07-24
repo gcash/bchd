@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -1206,8 +1207,119 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	return resp, nil
 }
 
+// GetTrustedValidation returns SLP validity information about a specific token output
 func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTrustedValidationRequest) (*pb.GetTrustedValidationResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "trusted validation is not yet implemented")
+	if s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
+	}
+
+	resp := &pb.GetTrustedValidationResponse{}
+	results := make([]*pb.GetTrustedValidationResponse_ValidityResult, len(req.Queries))
+	for i, query := range req.Queries {
+		result := &pb.GetTrustedValidationResponse_ValidityResult{}
+		result.PrevOutHash = query.PrevOutHash
+		result.PrevOutVout = query.PrevOutVout
+
+		entry := &indexers.SlpIndexEntry{}
+
+		txid, err := chainhash.NewHash(query.PrevOutHash)
+		if err != nil {
+			return nil, status.Error(codes.Aborted, "invalid txn hash (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+		}
+
+		err = s.db.View(func(dbTx database.Tx) error {
+			err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, txid)
+			return err
+		})
+
+		if err != nil {
+			fmt.Println(err.Error())
+			return nil, status.Error(codes.Aborted, "txid is missing from slp validity set (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+		}
+
+		if query.PrevOutVout == 0 || query.PrevOutVout > 19 {
+			return nil, status.Error(codes.Aborted, "slp output index cannot be 0 or > 19 (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+		}
+
+		slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
+
+		// set the proper slp version type
+		if slpMsg.TokenType == 0x01 {
+			if slpMsg.TransactionType == "SEND" {
+				result.SlpVersion = pb.SlpVersionType_SLP_V1_SEND
+			} else if slpMsg.TransactionType == "MINT" {
+				result.SlpVersion = pb.SlpVersionType_SLP_V1_MINT
+			} else if slpMsg.TransactionType == "GENESIS" {
+				result.SlpVersion = pb.SlpVersionType_SLP_V1_GENESIS
+			}
+		} else if slpMsg.TokenType == 0x41 {
+			if slpMsg.TransactionType == "SEND" {
+				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+			} else if slpMsg.TransactionType == "GENESIS" {
+				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+			}
+		} else if slpMsg.TokenType == 0x81 {
+			if slpMsg.TransactionType == "SEND" {
+				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+			} else if slpMsg.TransactionType == "MINT" {
+				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+			} else if slpMsg.TransactionType == "GENESIS" {
+				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+			}
+		} else {
+			panic("trusted validation cannot return result for unknown slp version type")
+		}
+
+		if slpMsg.TransactionType == "SEND" {
+			if len(slpMsg.Data.(v1parser.SlpSend).Amounts) < int(query.PrevOutVout) {
+				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+			}
+			result.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
+			result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+				V1TokenAmount: slpMsg.Data.(v1parser.SlpSend).Amounts[query.PrevOutVout-1],
+			}
+		} else if slpMsg.TransactionType == "MINT" {
+			result.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
+			if query.PrevOutVout == 1 {
+				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+					V1TokenAmount: slpMsg.Data.(v1parser.SlpMint).Qty,
+				}
+			} else if int(query.PrevOutVout) == slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
+				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1MintBaton{
+					V1MintBaton: true,
+				}
+			} else {
+				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+			}
+		} else if slpMsg.TransactionType == "GENESIS" {
+			hash := query.PrevOutHash
+			for i := len(hash) - 1; len(result.TokenId) < len(hash); i-- {
+				result.TokenId = append(result.TokenId, hash[i])
+			}
+			if query.PrevOutVout == 1 {
+				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+					V1TokenAmount: slpMsg.Data.(v1parser.SlpGenesis).Qty,
+				}
+			} else if int(query.PrevOutVout) == slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
+				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1MintBaton{
+					V1MintBaton: true,
+				}
+			} else {
+				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+			}
+		}
+
+		result.SlpTxnOpreturn = entry.SlpOpReturn
+
+		if req.FunctionaryInfo != nil {
+			return nil, status.Error(codes.Aborted, "slp validation functionary has not been configured")
+		}
+
+		results[i] = result
+	}
+
+	resp.Results = results
+	return resp, nil
 }
 
 // SubmitTransaction submits a transaction to all connected peers.

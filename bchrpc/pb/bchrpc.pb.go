@@ -91,22 +91,16 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 type GetTrustedValidationRequest_Functionary_MessageType int32
 
 const (
-	GetTrustedValidationRequest_Functionary_NONE                                          GetTrustedValidationRequest_Functionary_MessageType = 0
-	GetTrustedValidationRequest_Functionary_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE        GetTrustedValidationRequest_Functionary_MessageType = 1
-	GetTrustedValidationRequest_Functionary_SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE GetTrustedValidationRequest_Functionary_MessageType = 2
+	GetTrustedValidationRequest_Functionary_STANDARD GetTrustedValidationRequest_Functionary_MessageType = 0
 )
 
 // Enum value maps for GetTrustedValidationRequest_Functionary_MessageType.
 var (
 	GetTrustedValidationRequest_Functionary_MessageType_name = map[int32]string{
-		0: "NONE",
-		1: "TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
-		2: "SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE",
+		0: "STANDARD",
 	}
 	GetTrustedValidationRequest_Functionary_MessageType_value = map[string]int32{
-		"NONE":                                   0,
-		"TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 1,
-		"SHA256_TXID_VOUT_TOKENID_TOKENTYPE_TOKENVALUE": 2,
+		"STANDARD": 0,
 	}
 )
 
@@ -181,55 +175,6 @@ func (x GetTrustedValidationRequest_Functionary_SignatureType) Number() protoref
 // Deprecated: Use GetTrustedValidationRequest_Functionary_SignatureType.Descriptor instead.
 func (GetTrustedValidationRequest_Functionary_SignatureType) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 1}
-}
-
-type GetTrustedValidationResponse_ValidityResult_SlpVersionType int32
-
-const (
-	GetTrustedValidationResponse_ValidityResult_TYPE_1     GetTrustedValidationResponse_ValidityResult_SlpVersionType = 0
-	GetTrustedValidationResponse_ValidityResult_NFT1_GROUP GetTrustedValidationResponse_ValidityResult_SlpVersionType = 1
-	GetTrustedValidationResponse_ValidityResult_NFT1_CHILD GetTrustedValidationResponse_ValidityResult_SlpVersionType = 2
-)
-
-// Enum value maps for GetTrustedValidationResponse_ValidityResult_SlpVersionType.
-var (
-	GetTrustedValidationResponse_ValidityResult_SlpVersionType_name = map[int32]string{
-		0: "TYPE_1",
-		1: "NFT1_GROUP",
-		2: "NFT1_CHILD",
-	}
-	GetTrustedValidationResponse_ValidityResult_SlpVersionType_value = map[string]int32{
-		"TYPE_1":     0,
-		"NFT1_GROUP": 1,
-		"NFT1_CHILD": 2,
-	}
-)
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Enum() *GetTrustedValidationResponse_ValidityResult_SlpVersionType {
-	p := new(GetTrustedValidationResponse_ValidityResult_SlpVersionType)
-	*p = x
-	return p
-}
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Descriptor() protoreflect.EnumDescriptor {
-	return file_bchrpc_proto_enumTypes[4].Descriptor()
-}
-
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) Type() protoreflect.EnumType {
-	return &file_bchrpc_proto_enumTypes[4]
-}
-
-func (x GetTrustedValidationResponse_ValidityResult_SlpVersionType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use GetTrustedValidationResponse_ValidityResult_SlpVersionType.Descriptor instead.
-func (GetTrustedValidationResponse_ValidityResult_SlpVersionType) EnumDescriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0, 0}
 }
 
 // State of the block in relation to the chain.
@@ -3485,7 +3430,7 @@ type GetTrustedValidationRequest_Query struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	PrevOutTxid []byte `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
+	PrevOutHash []byte `protobuf:"bytes,1,opt,name=prev_out_hash,json=prevOutHash,proto3" json:"prev_out_hash,omitempty"`
 	PrevOutVout uint32 `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
 }
 
@@ -3521,9 +3466,9 @@ func (*GetTrustedValidationRequest_Query) Descriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{38, 0}
 }
 
-func (x *GetTrustedValidationRequest_Query) GetPrevOutTxid() []byte {
+func (x *GetTrustedValidationRequest_Query) GetPrevOutHash() []byte {
 	if x != nil {
-		return x.PrevOutTxid
+		return x.PrevOutHash
 	}
 	return nil
 }
@@ -3588,7 +3533,7 @@ func (x *GetTrustedValidationRequest_Functionary) GetType() GetTrustedValidation
 	if x != nil {
 		return x.Type
 	}
-	return GetTrustedValidationRequest_Functionary_NONE
+	return GetTrustedValidationRequest_Functionary_STANDARD
 }
 
 func (x *GetTrustedValidationRequest_Functionary) GetSigType() GetTrustedValidationRequest_Functionary_SignatureType {
@@ -3603,13 +3548,16 @@ type GetTrustedValidationResponse_ValidityResult struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	PrevOutTxid    []byte                                                            `protobuf:"bytes,1,opt,name=prev_out_txid,json=prevOutTxid,proto3" json:"prev_out_txid,omitempty"`
-	PrevOutVout    uint32                                                            `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
-	TokenId        []byte                                                            `protobuf:"bytes,3,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
-	SlpVersion     GetTrustedValidationResponse_ValidityResult_SlpVersionType        `protobuf:"varint,4,opt,name=slp_version,json=slpVersion,proto3,enum=pb.GetTrustedValidationResponse_ValidityResult_SlpVersionType" json:"slp_version,omitempty"`
-	ValidAmount    uint64                                                            `protobuf:"varint,5,opt,name=valid_amount,json=validAmount,proto3" json:"valid_amount,omitempty"`
-	SlpTxnOpreturn []byte                                                            `protobuf:"bytes,6,opt,name=slp_txn_opreturn,json=slpTxnOpreturn,proto3" json:"slp_txn_opreturn,omitempty"`
-	FunctionarySig *GetTrustedValidationResponse_ValidityResult_FunctionarySignature `protobuf:"bytes,7,opt,name=functionary_sig,json=functionarySig,proto3" json:"functionary_sig,omitempty"`
+	PrevOutHash []byte         `protobuf:"bytes,1,opt,name=prev_out_hash,json=prevOutHash,proto3" json:"prev_out_hash,omitempty"`
+	PrevOutVout uint32         `protobuf:"varint,2,opt,name=prev_out_vout,json=prevOutVout,proto3" json:"prev_out_vout,omitempty"`
+	TokenId     []byte         `protobuf:"bytes,3,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	SlpVersion  SlpVersionType `protobuf:"varint,4,opt,name=slp_version,json=slpVersion,proto3,enum=pb.SlpVersionType" json:"slp_version,omitempty"`
+	// Types that are assignable to ValidityResultType:
+	//	*GetTrustedValidationResponse_ValidityResult_V1TokenAmount
+	//	*GetTrustedValidationResponse_ValidityResult_V1MintBaton
+	ValidityResultType isGetTrustedValidationResponse_ValidityResult_ValidityResultType  `protobuf_oneof:"validity_result_type"`
+	SlpTxnOpreturn     []byte                                                            `protobuf:"bytes,7,opt,name=slp_txn_opreturn,json=slpTxnOpreturn,proto3" json:"slp_txn_opreturn,omitempty"`
+	FunctionarySig     *GetTrustedValidationResponse_ValidityResult_FunctionarySignature `protobuf:"bytes,8,opt,name=functionary_sig,json=functionarySig,proto3" json:"functionary_sig,omitempty"`
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult) Reset() {
@@ -3644,9 +3592,9 @@ func (*GetTrustedValidationResponse_ValidityResult) Descriptor() ([]byte, []int)
 	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0}
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutTxid() []byte {
+func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutHash() []byte {
 	if x != nil {
-		return x.PrevOutTxid
+		return x.PrevOutHash
 	}
 	return nil
 }
@@ -3665,18 +3613,32 @@ func (x *GetTrustedValidationResponse_ValidityResult) GetTokenId() []byte {
 	return nil
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetSlpVersion() GetTrustedValidationResponse_ValidityResult_SlpVersionType {
+func (x *GetTrustedValidationResponse_ValidityResult) GetSlpVersion() SlpVersionType {
 	if x != nil {
 		return x.SlpVersion
 	}
-	return GetTrustedValidationResponse_ValidityResult_TYPE_1
+	return SlpVersionType_NON_SLP
 }
 
-func (x *GetTrustedValidationResponse_ValidityResult) GetValidAmount() uint64 {
-	if x != nil {
-		return x.ValidAmount
+func (m *GetTrustedValidationResponse_ValidityResult) GetValidityResultType() isGetTrustedValidationResponse_ValidityResult_ValidityResultType {
+	if m != nil {
+		return m.ValidityResultType
+	}
+	return nil
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetV1TokenAmount() uint64 {
+	if x, ok := x.GetValidityResultType().(*GetTrustedValidationResponse_ValidityResult_V1TokenAmount); ok {
+		return x.V1TokenAmount
 	}
 	return 0
+}
+
+func (x *GetTrustedValidationResponse_ValidityResult) GetV1MintBaton() bool {
+	if x, ok := x.GetValidityResultType().(*GetTrustedValidationResponse_ValidityResult_V1MintBaton); ok {
+		return x.V1MintBaton
+	}
+	return false
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult) GetSlpTxnOpreturn() []byte {
@@ -3691,6 +3653,24 @@ func (x *GetTrustedValidationResponse_ValidityResult) GetFunctionarySig() *GetTr
 		return x.FunctionarySig
 	}
 	return nil
+}
+
+type isGetTrustedValidationResponse_ValidityResult_ValidityResultType interface {
+	isGetTrustedValidationResponse_ValidityResult_ValidityResultType()
+}
+
+type GetTrustedValidationResponse_ValidityResult_V1TokenAmount struct {
+	V1TokenAmount uint64 `protobuf:"varint,5,opt,name=v1_token_amount,json=v1TokenAmount,proto3,oneof"`
+}
+
+type GetTrustedValidationResponse_ValidityResult_V1MintBaton struct {
+	V1MintBaton bool `protobuf:"varint,6,opt,name=v1_mint_baton,json=v1MintBaton,proto3,oneof"`
+}
+
+func (*GetTrustedValidationResponse_ValidityResult_V1TokenAmount) isGetTrustedValidationResponse_ValidityResult_ValidityResultType() {
+}
+
+func (*GetTrustedValidationResponse_ValidityResult_V1MintBaton) isGetTrustedValidationResponse_ValidityResult_ValidityResultType() {
 }
 
 type GetTrustedValidationResponse_ValidityResult_FunctionarySignature struct {
