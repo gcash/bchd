@@ -11,11 +11,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/dchest/siphash"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dchest/siphash"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
