@@ -579,11 +579,11 @@ func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterR
 	return resp, nil
 }
 
-// GetHeaders takes a block locator object and returns
-// a batch of no more than 2000 headers. Upon parsing the block locator, if the server
-// concludes there has been a fork, it will send headers starting at the fork point,
-// or genesis if no blocks in the locator are in the best chain. If the locator is
-// already at the tip no headers will be returned.
+// GetHeaders takes a block locator object and returns a batch of no more than 2000
+// headers. Upon parsing the block locator, if the server concludes there has been a
+// fork, it will send headers starting at the fork point, or genesis if no blocks in
+// the locator are in the best chain. If the locator is already at the tip no headers
+// will be returned.
 // see: bchd/bchrpc/documentation/wallet_operation.md
 func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) (*pb.GetHeadersResponse, error) {
 	var (
@@ -1170,13 +1170,12 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	return resp, nil
 }
 
-// SubscribeTransactions subscribes to relevant transactions based on the
-// subscription requests. The parameters to filter transactions on can be
-// updated by sending new SubscribeTransactionsRequest objects on the stream.
+// SubscribeTransactions creates subscription to all relevant transactions based on
+// the subscription filter.
 //
-// This RPC does not use bi-directional streams and therefore can be used
-// with grpc-web. You will need to close and re-open the stream whenever
-// you want to update the addresses. If you are not using grpc-web
+// This RPC does not use bidirectional streams and therefore can be used
+// with grpc-web. You will need to close and reopen the stream whenever
+// you want to update the subscription filter. If you are not using grpc-web
 // then SubscribeTransactionStream is more appropriate.
 //
 // **Requires TxIndex to receive input metadata**

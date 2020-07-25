@@ -32,11 +32,11 @@ service bchrpc {
     // **Requires CfIndex**
     rpc GetBlockFilter(GetBlockFilterRequest) returns (GetBlockFilterResponse) {}
 
-    // GetHeaders takes a block locator object and returns
-    // a batch of no more than 2000 headers. Upon parsing the block locator, if the server
-    // concludes there has been a fork, it will send headers starting at the fork point,
-    // or genesis if no blocks in the locator are in the best chain. If the locator is
-    // already at the tip no headers will be returned.
+    // GetHeaders takes a block locator object and returns a batch of no more than 2000
+    // headers. Upon parsing the block locator, if the server concludes there has been a
+    // fork, it will send headers starting at the fork point, or genesis if no blocks in
+    // the locator are in the best chain. If the locator is already at the tip no headers
+    // will be returned.
     // see: bchd/bchrpc/documentation/wallet_operation.md
     rpc GetHeaders(GetHeadersRequest) returns (GetHeadersResponse) {}
 
@@ -82,12 +82,11 @@ service bchrpc {
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
     // SubscribeTransactions creates subscription to all relevant transactions based on
-    // the subscription filter.  The parameters to filter transactions on can be
-    // updated by sending new SubscribeTransactionsRequest objects on the stream.
+    // the subscription filter.
     //
     // This RPC does not use bidirectional streams and therefore can be used
     // with grpc-web. You will need to close and reopen the stream whenever
-    // you want to update the addresses. If you are not using grpc-web
+    // you want to update the subscription filter. If you are not using grpc-web
     // then SubscribeTransactionStream is more appropriate.
     //
     // **Requires TxIndex to receive input metadata**
@@ -285,7 +284,6 @@ message GetRawTransactionResponse {
 // This approach will reduce network traffic and response processing
 //   for the client, as well as reduce workload on the node.
 message GetAddressTransactionsRequest {
-
     // The address to query transactions, in lowercase cashaddr format.
     // The network prefix is optional (i.e. "cashaddress:").
     string address = 1;
@@ -307,7 +305,6 @@ message GetAddressTransactionsRequest {
     }
 }
 message GetAddressTransactionsResponse {
-
     // Transactions that have been included in a block.
     repeated Transaction confirmed_transactions = 1;
     // Transactions in mempool which have not been included in a block.
@@ -330,7 +327,6 @@ message GetAddressTransactionsResponse {
 // This approach will reduce network traffic and response processing
 //   for the client, as well as reduce workload on the node.
 message GetRawAddressTransactionsRequest {
-
     // The address to query transactions, in lowercase cashaddr format.
     // The network prefix is optional (i.e. "cashaddress:").
     string address = 1;
@@ -380,7 +376,6 @@ message GetUnspentOutputRequest {
     bool include_mempool = 3;
 }
 message GetUnspentOutputResponse {
-
     // A reference to the related input.
     Transaction.Input.Outpoint outpoint = 1;
     // Locking script dictating how funds can be spent in the future
@@ -421,7 +416,6 @@ message SubmitTransactionResponse {
 
 // Request to subscribe or unsubscribe from a stream of transactions.
 message SubscribeTransactionsRequest {
-
     // Subscribe to a filter. add items to a filter
     TransactionFilter subscribe = 1;
     // Unsubscribe to a filter, remove items from a filter
@@ -460,7 +454,6 @@ message SubscribeTransactionsRequest {
 //            serialize_block = true
 //        }
 message SubscribeBlocksRequest {
-
     // When full_block is true, a complete marshaled block is sent. See `Block`.
     // Default is false, block metadata is sent. See `BlockInfo`.
     bool full_block = 1;
@@ -481,7 +474,6 @@ message SubscribeBlocksRequest {
 
 
 message BlockNotification {
-
     // State of the block in relation to the chain.
     enum Type {
         CONNECTED = 0;
@@ -501,7 +493,6 @@ message BlockNotification {
 }
 
 message TransactionNotification {
-
     // State of the transaction acceptance.
     enum Type {
         // A transaction in mempool.
@@ -527,7 +518,6 @@ message TransactionNotification {
 
 // Metadata for identifying and validating a block
 message BlockInfo {
-
     // Identification.
 
     // The double sha256 hash of the six header fields in the first 80 bytes
@@ -583,7 +573,6 @@ message Block {
 }
 
 message Transaction {
-
     message Input {
         message Outpoint {
             // The hash of the transaction containing the output to be spent.
@@ -593,7 +582,6 @@ message Transaction {
         }
         // The number of the input, starting from zero.
         uint32 index = 1;
-
         // The related outpoint.
         Outpoint outpoint = 2;
         // An unlocking script asserting a transaction is permitted to spend
@@ -604,7 +592,7 @@ message Transaction {
         uint32 sequence = 4;
         // Amount in satoshi.
         int64 value = 5;
-        // The hash of the transaction containing the output to be spent.
+        // The pubkey_script of the previous output that is being spent.
         bytes previous_script = 6;
         // The bitcoin addresses associated with this input.
         string address = 7;
@@ -656,7 +644,6 @@ message Transaction {
 
 message MempoolTransaction {
     Transaction transaction = 1;
-
     // The time when the transaction was added too the pool.
     int64 added_time = 2;
     // The block height when the transaction was added to the pool.
@@ -670,7 +657,6 @@ message MempoolTransaction {
 }
 
 message UnspentOutput {
-
     // A reference to the output given by transaction hash and index.
     Transaction.Input.Outpoint outpoint = 1;
     // The public key script used to pay coins.
@@ -685,19 +671,14 @@ message UnspentOutput {
 }
 
 message TransactionFilter {
-
     // Filter by address(es)
     repeated string addresses = 1;
 
     // Filter by output hash and index.
     repeated Transaction.Input.Outpoint outpoints = 2;
-    repeated bytes data_elements = 3;
 
-    //TODO: Are these extra filters for data elements relevant?
-    // - scriptPubkey
-    // if so...
-    // Filter by data contained in OP_DATA_1 to OP_PUSHDATA4 in
-    // the public key output script
+    // Filter by data elements contained in pubkey scripts.
+    repeated bytes data_elements = 3;
 
     // Subscribe/Unsubscribe to everything. Other filters
     // will be ignored.

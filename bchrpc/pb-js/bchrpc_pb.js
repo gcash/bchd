@@ -1293,12 +1293,9 @@ proto.pb.GetMempoolInfoResponse.prototype.getSize = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetMempoolInfoResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetMempoolInfoResponse.prototype.setSize = function(value) {
-  return jspb.Message.setProto3IntField(this, 1, value);
+  jspb.Message.setProto3IntField(this, 1, value);
 };
 
 
@@ -1311,12 +1308,9 @@ proto.pb.GetMempoolInfoResponse.prototype.getBytes = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetMempoolInfoResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetMempoolInfoResponse.prototype.setBytes = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -1441,12 +1435,9 @@ proto.pb.GetMempoolRequest.prototype.getFullTransactions = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetMempoolRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetMempoolRequest.prototype.setFullTransactions = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 1, value);
+  jspb.Message.setProto3BooleanField(this, 1, value);
 };
 
 
@@ -1757,21 +1748,17 @@ proto.pb.GetMempoolResponse.TransactionData.prototype.getTransactionHash_asU8 = 
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetMempoolResponse.TransactionData} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetMempoolResponse.TransactionData.prototype.setTransactionHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetMempoolResponse.TransactionData} returns this
  */
 proto.pb.GetMempoolResponse.TransactionData.prototype.clearTransactionHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], undefined);
 };
 
 
@@ -1794,21 +1781,17 @@ proto.pb.GetMempoolResponse.TransactionData.prototype.getTransaction = function(
 };
 
 
-/**
- * @param {?proto.pb.Transaction|undefined} value
- * @return {!proto.pb.GetMempoolResponse.TransactionData} returns this
-*/
+/** @param {?proto.pb.Transaction|undefined} value */
 proto.pb.GetMempoolResponse.TransactionData.prototype.setTransaction = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 2, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 2, proto.pb.GetMempoolResponse.TransactionData.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetMempoolResponse.TransactionData} returns this
  */
 proto.pb.GetMempoolResponse.TransactionData.prototype.clearTransaction = function() {
-  return this.setTransaction(undefined);
+  this.setTransaction(undefined);
 };
 
 
@@ -1831,12 +1814,9 @@ proto.pb.GetMempoolResponse.prototype.getTransactionDataList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.GetMempoolResponse.TransactionData>} value
- * @return {!proto.pb.GetMempoolResponse} returns this
-*/
+/** @param {!Array<!proto.pb.GetMempoolResponse.TransactionData>} value */
 proto.pb.GetMempoolResponse.prototype.setTransactionDataList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 1, value);
+  jspb.Message.setRepeatedWrapperField(this, 1, value);
 };
 
 
@@ -1852,10 +1832,9 @@ proto.pb.GetMempoolResponse.prototype.addTransactionData = function(opt_value, o
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetMempoolResponse} returns this
  */
 proto.pb.GetMempoolResponse.prototype.clearTransactionDataList = function() {
-  return this.setTransactionDataList([]);
+  this.setTransactionDataList([]);
 };
 
 
@@ -2163,12 +2142,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getBitcoinNet = function() {
 };
 
 
-/**
- * @param {!proto.pb.GetBlockchainInfoResponse.BitcoinNet} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {!proto.pb.GetBlockchainInfoResponse.BitcoinNet} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setBitcoinNet = function(value) {
-  return jspb.Message.setProto3EnumField(this, 1, value);
+  jspb.Message.setProto3EnumField(this, 1, value);
 };
 
 
@@ -2181,12 +2157,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getBestHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setBestHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -2223,12 +2196,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getBestBlockHash_asU8 = function() 
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setBestBlockHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 3, value);
+  jspb.Message.setProto3BytesField(this, 3, value);
 };
 
 
@@ -2241,12 +2211,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getDifficulty = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setDifficulty = function(value) {
-  return jspb.Message.setProto3FloatField(this, 4, value);
+  jspb.Message.setProto3FloatField(this, 4, value);
 };
 
 
@@ -2259,12 +2226,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getMedianTime = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setMedianTime = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -2277,12 +2241,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getTxIndex = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setTxIndex = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 6, value);
+  jspb.Message.setProto3BooleanField(this, 6, value);
 };
 
 
@@ -2295,12 +2256,9 @@ proto.pb.GetBlockchainInfoResponse.prototype.getAddrIndex = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetBlockchainInfoResponse} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetBlockchainInfoResponse.prototype.setAddrIndex = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 7, value);
+  jspb.Message.setProto3BooleanField(this, 7, value);
 };
 
 
@@ -2487,21 +2445,17 @@ proto.pb.GetBlockInfoRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetBlockInfoRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetBlockInfoRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockInfoRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockInfoRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockInfoRequest} returns this
  */
 proto.pb.GetBlockInfoRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockInfoRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockInfoRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -2523,21 +2477,17 @@ proto.pb.GetBlockInfoRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockInfoRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockInfoRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockInfoRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockInfoRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockInfoRequest} returns this
  */
 proto.pb.GetBlockInfoRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockInfoRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockInfoRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -2674,21 +2624,17 @@ proto.pb.GetBlockInfoResponse.prototype.getInfo = function() {
 };
 
 
-/**
- * @param {?proto.pb.BlockInfo|undefined} value
- * @return {!proto.pb.GetBlockInfoResponse} returns this
-*/
+/** @param {?proto.pb.BlockInfo|undefined} value */
 proto.pb.GetBlockInfoResponse.prototype.setInfo = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetBlockInfoResponse} returns this
  */
 proto.pb.GetBlockInfoResponse.prototype.clearInfo = function() {
-  return this.setInfo(undefined);
+  this.setInfo(undefined);
 };
 
 
@@ -2896,21 +2842,17 @@ proto.pb.GetBlockRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetBlockRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetBlockRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockRequest} returns this
  */
 proto.pb.GetBlockRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -2932,21 +2874,17 @@ proto.pb.GetBlockRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockRequest} returns this
  */
 proto.pb.GetBlockRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -2968,12 +2906,9 @@ proto.pb.GetBlockRequest.prototype.getFullTransactions = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetBlockRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetBlockRequest.prototype.setFullTransactions = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 3, value);
+  jspb.Message.setProto3BooleanField(this, 3, value);
 };
 
 
@@ -3101,21 +3036,17 @@ proto.pb.GetBlockResponse.prototype.getBlock = function() {
 };
 
 
-/**
- * @param {?proto.pb.Block|undefined} value
- * @return {!proto.pb.GetBlockResponse} returns this
-*/
+/** @param {?proto.pb.Block|undefined} value */
 proto.pb.GetBlockResponse.prototype.setBlock = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetBlockResponse} returns this
  */
 proto.pb.GetBlockResponse.prototype.clearBlock = function() {
-  return this.setBlock(undefined);
+  this.setBlock(undefined);
 };
 
 
@@ -3311,21 +3242,17 @@ proto.pb.GetRawBlockRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetRawBlockRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetRawBlockRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetRawBlockRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetRawBlockRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetRawBlockRequest} returns this
  */
 proto.pb.GetRawBlockRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetRawBlockRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetRawBlockRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -3347,21 +3274,17 @@ proto.pb.GetRawBlockRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetRawBlockRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetRawBlockRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetRawBlockRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetRawBlockRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetRawBlockRequest} returns this
  */
 proto.pb.GetRawBlockRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetRawBlockRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetRawBlockRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -3519,12 +3442,9 @@ proto.pb.GetRawBlockResponse.prototype.getBlock_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetRawBlockResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetRawBlockResponse.prototype.setBlock = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -3711,21 +3631,17 @@ proto.pb.GetBlockFilterRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetBlockFilterRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetBlockFilterRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockFilterRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockFilterRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockFilterRequest} returns this
  */
 proto.pb.GetBlockFilterRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.GetBlockFilterRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.GetBlockFilterRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -3747,21 +3663,17 @@ proto.pb.GetBlockFilterRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetBlockFilterRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetBlockFilterRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockFilterRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockFilterRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetBlockFilterRequest} returns this
  */
 proto.pb.GetBlockFilterRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 2, proto.pb.GetBlockFilterRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 2, proto.pb.GetBlockFilterRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -3919,12 +3831,9 @@ proto.pb.GetBlockFilterResponse.prototype.getFilter_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetBlockFilterResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetBlockFilterResponse.prototype.setFilter = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -4092,31 +4001,26 @@ proto.pb.GetHeadersRequest.prototype.getBlockLocatorHashesList_asU8 = function()
 };
 
 
-/**
- * @param {!(Array<!Uint8Array>|Array<string>)} value
- * @return {!proto.pb.GetHeadersRequest} returns this
- */
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
 proto.pb.GetHeadersRequest.prototype.setBlockLocatorHashesList = function(value) {
-  return jspb.Message.setField(this, 1, value || []);
+  jspb.Message.setField(this, 1, value || []);
 };
 
 
 /**
  * @param {!(string|Uint8Array)} value
  * @param {number=} opt_index
- * @return {!proto.pb.GetHeadersRequest} returns this
  */
 proto.pb.GetHeadersRequest.prototype.addBlockLocatorHashes = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 1, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetHeadersRequest} returns this
  */
 proto.pb.GetHeadersRequest.prototype.clearBlockLocatorHashesList = function() {
-  return this.setBlockLocatorHashesList([]);
+  this.setBlockLocatorHashesList([]);
 };
 
 
@@ -4153,12 +4057,9 @@ proto.pb.GetHeadersRequest.prototype.getStopHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetHeadersRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetHeadersRequest.prototype.setStopHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 2, value);
+  jspb.Message.setProto3BytesField(this, 2, value);
 };
 
 
@@ -4294,12 +4195,9 @@ proto.pb.GetHeadersResponse.prototype.getHeadersList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.BlockInfo>} value
- * @return {!proto.pb.GetHeadersResponse} returns this
-*/
+/** @param {!Array<!proto.pb.BlockInfo>} value */
 proto.pb.GetHeadersResponse.prototype.setHeadersList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 1, value);
+  jspb.Message.setRepeatedWrapperField(this, 1, value);
 };
 
 
@@ -4315,10 +4213,9 @@ proto.pb.GetHeadersResponse.prototype.addHeaders = function(opt_value, opt_index
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetHeadersResponse} returns this
  */
 proto.pb.GetHeadersResponse.prototype.clearHeadersList = function() {
-  return this.setHeadersList([]);
+  this.setHeadersList([]);
 };
 
 
@@ -4467,12 +4364,9 @@ proto.pb.GetTransactionRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetTransactionRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetTransactionRequest.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -4600,21 +4494,17 @@ proto.pb.GetTransactionResponse.prototype.getTransaction = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction|undefined} value
- * @return {!proto.pb.GetTransactionResponse} returns this
-*/
+/** @param {?proto.pb.Transaction|undefined} value */
 proto.pb.GetTransactionResponse.prototype.setTransaction = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetTransactionResponse} returns this
  */
 proto.pb.GetTransactionResponse.prototype.clearTransaction = function() {
-  return this.setTransaction(undefined);
+  this.setTransaction(undefined);
 };
 
 
@@ -4772,12 +4662,9 @@ proto.pb.GetRawTransactionRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetRawTransactionRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetRawTransactionRequest.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -4926,12 +4813,9 @@ proto.pb.GetRawTransactionResponse.prototype.getTransaction_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetRawTransactionResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetRawTransactionResponse.prototype.setTransaction = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -5130,12 +5014,9 @@ proto.pb.GetAddressTransactionsRequest.prototype.getAddress = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
- */
+/** @param {string} value */
 proto.pb.GetAddressTransactionsRequest.prototype.setAddress = function(value) {
-  return jspb.Message.setProto3StringField(this, 1, value);
+  jspb.Message.setProto3StringField(this, 1, value);
 };
 
 
@@ -5148,12 +5029,9 @@ proto.pb.GetAddressTransactionsRequest.prototype.getNbSkip = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetAddressTransactionsRequest.prototype.setNbSkip = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -5166,12 +5044,9 @@ proto.pb.GetAddressTransactionsRequest.prototype.getNbFetch = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetAddressTransactionsRequest.prototype.setNbFetch = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -5208,21 +5083,17 @@ proto.pb.GetAddressTransactionsRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetAddressTransactionsRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 4, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 4, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
  */
 proto.pb.GetAddressTransactionsRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 4, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 4, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -5244,21 +5115,17 @@ proto.pb.GetAddressTransactionsRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetAddressTransactionsRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 5, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 5, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetAddressTransactionsRequest} returns this
  */
 proto.pb.GetAddressTransactionsRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 5, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 5, proto.pb.GetAddressTransactionsRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -5418,12 +5285,9 @@ proto.pb.GetAddressTransactionsResponse.prototype.getConfirmedTransactionsList =
 };
 
 
-/**
- * @param {!Array<!proto.pb.Transaction>} value
- * @return {!proto.pb.GetAddressTransactionsResponse} returns this
-*/
+/** @param {!Array<!proto.pb.Transaction>} value */
 proto.pb.GetAddressTransactionsResponse.prototype.setConfirmedTransactionsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 1, value);
+  jspb.Message.setRepeatedWrapperField(this, 1, value);
 };
 
 
@@ -5439,10 +5303,9 @@ proto.pb.GetAddressTransactionsResponse.prototype.addConfirmedTransactions = fun
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetAddressTransactionsResponse} returns this
  */
 proto.pb.GetAddressTransactionsResponse.prototype.clearConfirmedTransactionsList = function() {
-  return this.setConfirmedTransactionsList([]);
+  this.setConfirmedTransactionsList([]);
 };
 
 
@@ -5456,12 +5319,9 @@ proto.pb.GetAddressTransactionsResponse.prototype.getUnconfirmedTransactionsList
 };
 
 
-/**
- * @param {!Array<!proto.pb.MempoolTransaction>} value
- * @return {!proto.pb.GetAddressTransactionsResponse} returns this
-*/
+/** @param {!Array<!proto.pb.MempoolTransaction>} value */
 proto.pb.GetAddressTransactionsResponse.prototype.setUnconfirmedTransactionsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 2, value);
+  jspb.Message.setRepeatedWrapperField(this, 2, value);
 };
 
 
@@ -5477,10 +5337,9 @@ proto.pb.GetAddressTransactionsResponse.prototype.addUnconfirmedTransactions = f
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetAddressTransactionsResponse} returns this
  */
 proto.pb.GetAddressTransactionsResponse.prototype.clearUnconfirmedTransactionsList = function() {
-  return this.setUnconfirmedTransactionsList([]);
+  this.setUnconfirmedTransactionsList([]);
 };
 
 
@@ -5679,12 +5538,9 @@ proto.pb.GetRawAddressTransactionsRequest.prototype.getAddress = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
- */
+/** @param {string} value */
 proto.pb.GetRawAddressTransactionsRequest.prototype.setAddress = function(value) {
-  return jspb.Message.setProto3StringField(this, 1, value);
+  jspb.Message.setProto3StringField(this, 1, value);
 };
 
 
@@ -5697,12 +5553,9 @@ proto.pb.GetRawAddressTransactionsRequest.prototype.getNbSkip = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetRawAddressTransactionsRequest.prototype.setNbSkip = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -5715,12 +5568,9 @@ proto.pb.GetRawAddressTransactionsRequest.prototype.getNbFetch = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetRawAddressTransactionsRequest.prototype.setNbFetch = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -5757,21 +5607,17 @@ proto.pb.GetRawAddressTransactionsRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetRawAddressTransactionsRequest.prototype.setHash = function(value) {
-  return jspb.Message.setOneofField(this, 4, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 4, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
  */
 proto.pb.GetRawAddressTransactionsRequest.prototype.clearHash = function() {
-  return jspb.Message.setOneofField(this, 4, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 4, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -5793,21 +5639,17 @@ proto.pb.GetRawAddressTransactionsRequest.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetRawAddressTransactionsRequest.prototype.setHeight = function(value) {
-  return jspb.Message.setOneofField(this, 5, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 5, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.GetRawAddressTransactionsRequest} returns this
  */
 proto.pb.GetRawAddressTransactionsRequest.prototype.clearHeight = function() {
-  return jspb.Message.setOneofField(this, 5, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 5, proto.pb.GetRawAddressTransactionsRequest.oneofGroups_[0], undefined);
 };
 
 
@@ -5984,31 +5826,26 @@ proto.pb.GetRawAddressTransactionsResponse.prototype.getConfirmedTransactionsLis
 };
 
 
-/**
- * @param {!(Array<!Uint8Array>|Array<string>)} value
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
- */
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
 proto.pb.GetRawAddressTransactionsResponse.prototype.setConfirmedTransactionsList = function(value) {
-  return jspb.Message.setField(this, 1, value || []);
+  jspb.Message.setField(this, 1, value || []);
 };
 
 
 /**
  * @param {!(string|Uint8Array)} value
  * @param {number=} opt_index
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
  */
 proto.pb.GetRawAddressTransactionsResponse.prototype.addConfirmedTransactions = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 1, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
  */
 proto.pb.GetRawAddressTransactionsResponse.prototype.clearConfirmedTransactionsList = function() {
-  return this.setConfirmedTransactionsList([]);
+  this.setConfirmedTransactionsList([]);
 };
 
 
@@ -6045,31 +5882,26 @@ proto.pb.GetRawAddressTransactionsResponse.prototype.getUnconfirmedTransactionsL
 };
 
 
-/**
- * @param {!(Array<!Uint8Array>|Array<string>)} value
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
- */
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
 proto.pb.GetRawAddressTransactionsResponse.prototype.setUnconfirmedTransactionsList = function(value) {
-  return jspb.Message.setField(this, 2, value || []);
+  jspb.Message.setField(this, 2, value || []);
 };
 
 
 /**
  * @param {!(string|Uint8Array)} value
  * @param {number=} opt_index
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
  */
 proto.pb.GetRawAddressTransactionsResponse.prototype.addUnconfirmedTransactions = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 2, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 2, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetRawAddressTransactionsResponse} returns this
  */
 proto.pb.GetRawAddressTransactionsResponse.prototype.clearUnconfirmedTransactionsList = function() {
-  return this.setUnconfirmedTransactionsList([]);
+  this.setUnconfirmedTransactionsList([]);
 };
 
 
@@ -6206,12 +6038,9 @@ proto.pb.GetAddressUnspentOutputsRequest.prototype.getAddress = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.GetAddressUnspentOutputsRequest} returns this
- */
+/** @param {string} value */
 proto.pb.GetAddressUnspentOutputsRequest.prototype.setAddress = function(value) {
-  return jspb.Message.setProto3StringField(this, 1, value);
+  jspb.Message.setProto3StringField(this, 1, value);
 };
 
 
@@ -6224,12 +6053,9 @@ proto.pb.GetAddressUnspentOutputsRequest.prototype.getIncludeMempool = function(
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetAddressUnspentOutputsRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetAddressUnspentOutputsRequest.prototype.setIncludeMempool = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 2, value);
+  jspb.Message.setProto3BooleanField(this, 2, value);
 };
 
 
@@ -6365,12 +6191,9 @@ proto.pb.GetAddressUnspentOutputsResponse.prototype.getOutputsList = function() 
 };
 
 
-/**
- * @param {!Array<!proto.pb.UnspentOutput>} value
- * @return {!proto.pb.GetAddressUnspentOutputsResponse} returns this
-*/
+/** @param {!Array<!proto.pb.UnspentOutput>} value */
 proto.pb.GetAddressUnspentOutputsResponse.prototype.setOutputsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 1, value);
+  jspb.Message.setRepeatedWrapperField(this, 1, value);
 };
 
 
@@ -6386,10 +6209,9 @@ proto.pb.GetAddressUnspentOutputsResponse.prototype.addOutputs = function(opt_va
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetAddressUnspentOutputsResponse} returns this
  */
 proto.pb.GetAddressUnspentOutputsResponse.prototype.clearOutputsList = function() {
-  return this.setOutputsList([]);
+  this.setOutputsList([]);
 };
 
 
@@ -6562,12 +6384,9 @@ proto.pb.GetUnspentOutputRequest.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetUnspentOutputRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetUnspentOutputRequest.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -6580,12 +6399,9 @@ proto.pb.GetUnspentOutputRequest.prototype.getIndex = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetUnspentOutputRequest} returns this
- */
+/** @param {number} value */
 proto.pb.GetUnspentOutputRequest.prototype.setIndex = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -6598,12 +6414,9 @@ proto.pb.GetUnspentOutputRequest.prototype.getIncludeMempool = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetUnspentOutputRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetUnspentOutputRequest.prototype.setIncludeMempool = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 3, value);
+  jspb.Message.setProto3BooleanField(this, 3, value);
 };
 
 
@@ -6779,21 +6592,17 @@ proto.pb.GetUnspentOutputResponse.prototype.getOutpoint = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction.Input.Outpoint|undefined} value
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
-*/
+/** @param {?proto.pb.Transaction.Input.Outpoint|undefined} value */
 proto.pb.GetUnspentOutputResponse.prototype.setOutpoint = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
  */
 proto.pb.GetUnspentOutputResponse.prototype.clearOutpoint = function() {
-  return this.setOutpoint(undefined);
+  this.setOutpoint(undefined);
 };
 
 
@@ -6839,12 +6648,9 @@ proto.pb.GetUnspentOutputResponse.prototype.getPubkeyScript_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetUnspentOutputResponse.prototype.setPubkeyScript = function(value) {
-  return jspb.Message.setProto3BytesField(this, 2, value);
+  jspb.Message.setProto3BytesField(this, 2, value);
 };
 
 
@@ -6857,12 +6663,9 @@ proto.pb.GetUnspentOutputResponse.prototype.getValue = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetUnspentOutputResponse.prototype.setValue = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -6875,12 +6678,9 @@ proto.pb.GetUnspentOutputResponse.prototype.getIsCoinbase = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
- */
+/** @param {boolean} value */
 proto.pb.GetUnspentOutputResponse.prototype.setIsCoinbase = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 4, value);
+  jspb.Message.setProto3BooleanField(this, 4, value);
 };
 
 
@@ -6893,12 +6693,9 @@ proto.pb.GetUnspentOutputResponse.prototype.getBlockHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.GetUnspentOutputResponse} returns this
- */
+/** @param {number} value */
 proto.pb.GetUnspentOutputResponse.prototype.setBlockHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -7047,12 +6844,9 @@ proto.pb.GetMerkleProofRequest.prototype.getTransactionHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetMerkleProofRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetMerkleProofRequest.prototype.setTransactionHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -7211,21 +7005,17 @@ proto.pb.GetMerkleProofResponse.prototype.getBlock = function() {
 };
 
 
-/**
- * @param {?proto.pb.BlockInfo|undefined} value
- * @return {!proto.pb.GetMerkleProofResponse} returns this
-*/
+/** @param {?proto.pb.BlockInfo|undefined} value */
 proto.pb.GetMerkleProofResponse.prototype.setBlock = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.GetMerkleProofResponse} returns this
  */
 proto.pb.GetMerkleProofResponse.prototype.clearBlock = function() {
-  return this.setBlock(undefined);
+  this.setBlock(undefined);
 };
 
 
@@ -7271,31 +7061,26 @@ proto.pb.GetMerkleProofResponse.prototype.getHashesList_asU8 = function() {
 };
 
 
-/**
- * @param {!(Array<!Uint8Array>|Array<string>)} value
- * @return {!proto.pb.GetMerkleProofResponse} returns this
- */
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
 proto.pb.GetMerkleProofResponse.prototype.setHashesList = function(value) {
-  return jspb.Message.setField(this, 2, value || []);
+  jspb.Message.setField(this, 2, value || []);
 };
 
 
 /**
  * @param {!(string|Uint8Array)} value
  * @param {number=} opt_index
- * @return {!proto.pb.GetMerkleProofResponse} returns this
  */
 proto.pb.GetMerkleProofResponse.prototype.addHashes = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 2, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 2, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.GetMerkleProofResponse} returns this
  */
 proto.pb.GetMerkleProofResponse.prototype.clearHashesList = function() {
-  return this.setHashesList([]);
+  this.setHashesList([]);
 };
 
 
@@ -7332,12 +7117,9 @@ proto.pb.GetMerkleProofResponse.prototype.getFlags_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.GetMerkleProofResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.GetMerkleProofResponse.prototype.setFlags = function(value) {
-  return jspb.Message.setProto3BytesField(this, 3, value);
+  jspb.Message.setProto3BytesField(this, 3, value);
 };
 
 
@@ -7486,12 +7268,9 @@ proto.pb.SubmitTransactionRequest.prototype.getTransaction_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.SubmitTransactionRequest} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.SubmitTransactionRequest.prototype.setTransaction = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -7640,12 +7419,9 @@ proto.pb.SubmitTransactionResponse.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.SubmitTransactionResponse} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.SubmitTransactionResponse.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -7823,21 +7599,17 @@ proto.pb.SubscribeTransactionsRequest.prototype.getSubscribe = function() {
 };
 
 
-/**
- * @param {?proto.pb.TransactionFilter|undefined} value
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
-*/
+/** @param {?proto.pb.TransactionFilter|undefined} value */
 proto.pb.SubscribeTransactionsRequest.prototype.setSubscribe = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
  */
 proto.pb.SubscribeTransactionsRequest.prototype.clearSubscribe = function() {
-  return this.setSubscribe(undefined);
+  this.setSubscribe(undefined);
 };
 
 
@@ -7860,21 +7632,17 @@ proto.pb.SubscribeTransactionsRequest.prototype.getUnsubscribe = function() {
 };
 
 
-/**
- * @param {?proto.pb.TransactionFilter|undefined} value
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
-*/
+/** @param {?proto.pb.TransactionFilter|undefined} value */
 proto.pb.SubscribeTransactionsRequest.prototype.setUnsubscribe = function(value) {
-  return jspb.Message.setWrapperField(this, 2, value);
+  jspb.Message.setWrapperField(this, 2, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
  */
 proto.pb.SubscribeTransactionsRequest.prototype.clearUnsubscribe = function() {
-  return this.setUnsubscribe(undefined);
+  this.setUnsubscribe(undefined);
 };
 
 
@@ -7896,12 +7664,9 @@ proto.pb.SubscribeTransactionsRequest.prototype.getIncludeMempool = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeTransactionsRequest.prototype.setIncludeMempool = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 3, value);
+  jspb.Message.setProto3BooleanField(this, 3, value);
 };
 
 
@@ -7914,12 +7679,9 @@ proto.pb.SubscribeTransactionsRequest.prototype.getIncludeInBlock = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeTransactionsRequest.prototype.setIncludeInBlock = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 4, value);
+  jspb.Message.setProto3BooleanField(this, 4, value);
 };
 
 
@@ -7932,12 +7694,9 @@ proto.pb.SubscribeTransactionsRequest.prototype.getSerializeTx = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeTransactionsRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeTransactionsRequest.prototype.setSerializeTx = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 5, value);
+  jspb.Message.setProto3BooleanField(this, 5, value);
 };
 
 
@@ -8086,12 +7845,9 @@ proto.pb.SubscribeBlocksRequest.prototype.getFullBlock = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeBlocksRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeBlocksRequest.prototype.setFullBlock = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 1, value);
+  jspb.Message.setProto3BooleanField(this, 1, value);
 };
 
 
@@ -8104,12 +7860,9 @@ proto.pb.SubscribeBlocksRequest.prototype.getFullTransactions = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeBlocksRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeBlocksRequest.prototype.setFullTransactions = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 2, value);
+  jspb.Message.setProto3BooleanField(this, 2, value);
 };
 
 
@@ -8122,12 +7875,9 @@ proto.pb.SubscribeBlocksRequest.prototype.getSerializeBlock = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.SubscribeBlocksRequest} returns this
- */
+/** @param {boolean} value */
 proto.pb.SubscribeBlocksRequest.prototype.setSerializeBlock = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 3, value);
+  jspb.Message.setProto3BooleanField(this, 3, value);
 };
 
 
@@ -8327,12 +8077,9 @@ proto.pb.BlockNotification.prototype.getType = function() {
 };
 
 
-/**
- * @param {!proto.pb.BlockNotification.Type} value
- * @return {!proto.pb.BlockNotification} returns this
- */
+/** @param {!proto.pb.BlockNotification.Type} value */
 proto.pb.BlockNotification.prototype.setType = function(value) {
-  return jspb.Message.setProto3EnumField(this, 1, value);
+  jspb.Message.setProto3EnumField(this, 1, value);
 };
 
 
@@ -8346,21 +8093,17 @@ proto.pb.BlockNotification.prototype.getBlockInfo = function() {
 };
 
 
-/**
- * @param {?proto.pb.BlockInfo|undefined} value
- * @return {!proto.pb.BlockNotification} returns this
-*/
+/** @param {?proto.pb.BlockInfo|undefined} value */
 proto.pb.BlockNotification.prototype.setBlockInfo = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 2, proto.pb.BlockNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 2, proto.pb.BlockNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.BlockNotification} returns this
  */
 proto.pb.BlockNotification.prototype.clearBlockInfo = function() {
-  return this.setBlockInfo(undefined);
+  this.setBlockInfo(undefined);
 };
 
 
@@ -8383,21 +8126,17 @@ proto.pb.BlockNotification.prototype.getMarshaledBlock = function() {
 };
 
 
-/**
- * @param {?proto.pb.Block|undefined} value
- * @return {!proto.pb.BlockNotification} returns this
-*/
+/** @param {?proto.pb.Block|undefined} value */
 proto.pb.BlockNotification.prototype.setMarshaledBlock = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 3, proto.pb.BlockNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 3, proto.pb.BlockNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.BlockNotification} returns this
  */
 proto.pb.BlockNotification.prototype.clearMarshaledBlock = function() {
-  return this.setMarshaledBlock(undefined);
+  this.setMarshaledBlock(undefined);
 };
 
 
@@ -8443,21 +8182,17 @@ proto.pb.BlockNotification.prototype.getSerializedBlock_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.BlockNotification} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.BlockNotification.prototype.setSerializedBlock = function(value) {
-  return jspb.Message.setOneofField(this, 4, proto.pb.BlockNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 4, proto.pb.BlockNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.BlockNotification} returns this
  */
 proto.pb.BlockNotification.prototype.clearSerializedBlock = function() {
-  return jspb.Message.setOneofField(this, 4, proto.pb.BlockNotification.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 4, proto.pb.BlockNotification.oneofGroups_[0], undefined);
 };
 
 
@@ -8666,12 +8401,9 @@ proto.pb.TransactionNotification.prototype.getType = function() {
 };
 
 
-/**
- * @param {!proto.pb.TransactionNotification.Type} value
- * @return {!proto.pb.TransactionNotification} returns this
- */
+/** @param {!proto.pb.TransactionNotification.Type} value */
 proto.pb.TransactionNotification.prototype.setType = function(value) {
-  return jspb.Message.setProto3EnumField(this, 1, value);
+  jspb.Message.setProto3EnumField(this, 1, value);
 };
 
 
@@ -8685,21 +8417,17 @@ proto.pb.TransactionNotification.prototype.getConfirmedTransaction = function() 
 };
 
 
-/**
- * @param {?proto.pb.Transaction|undefined} value
- * @return {!proto.pb.TransactionNotification} returns this
-*/
+/** @param {?proto.pb.Transaction|undefined} value */
 proto.pb.TransactionNotification.prototype.setConfirmedTransaction = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 2, proto.pb.TransactionNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 2, proto.pb.TransactionNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.TransactionNotification} returns this
  */
 proto.pb.TransactionNotification.prototype.clearConfirmedTransaction = function() {
-  return this.setConfirmedTransaction(undefined);
+  this.setConfirmedTransaction(undefined);
 };
 
 
@@ -8722,21 +8450,17 @@ proto.pb.TransactionNotification.prototype.getUnconfirmedTransaction = function(
 };
 
 
-/**
- * @param {?proto.pb.MempoolTransaction|undefined} value
- * @return {!proto.pb.TransactionNotification} returns this
-*/
+/** @param {?proto.pb.MempoolTransaction|undefined} value */
 proto.pb.TransactionNotification.prototype.setUnconfirmedTransaction = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 3, proto.pb.TransactionNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 3, proto.pb.TransactionNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.TransactionNotification} returns this
  */
 proto.pb.TransactionNotification.prototype.clearUnconfirmedTransaction = function() {
-  return this.setUnconfirmedTransaction(undefined);
+  this.setUnconfirmedTransaction(undefined);
 };
 
 
@@ -8782,21 +8506,17 @@ proto.pb.TransactionNotification.prototype.getSerializedTransaction_asU8 = funct
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.TransactionNotification} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.TransactionNotification.prototype.setSerializedTransaction = function(value) {
-  return jspb.Message.setOneofField(this, 4, proto.pb.TransactionNotification.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 4, proto.pb.TransactionNotification.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.TransactionNotification} returns this
  */
 proto.pb.TransactionNotification.prototype.clearSerializedTransaction = function() {
-  return jspb.Message.setOneofField(this, 4, proto.pb.TransactionNotification.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 4, proto.pb.TransactionNotification.oneofGroups_[0], undefined);
 };
 
 
@@ -9098,12 +8818,9 @@ proto.pb.BlockInfo.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.BlockInfo.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -9116,12 +8833,9 @@ proto.pb.BlockInfo.prototype.getHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -9134,12 +8848,9 @@ proto.pb.BlockInfo.prototype.getVersion = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setVersion = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -9176,12 +8887,9 @@ proto.pb.BlockInfo.prototype.getPreviousBlock_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.BlockInfo.prototype.setPreviousBlock = function(value) {
-  return jspb.Message.setProto3BytesField(this, 4, value);
+  jspb.Message.setProto3BytesField(this, 4, value);
 };
 
 
@@ -9218,12 +8926,9 @@ proto.pb.BlockInfo.prototype.getMerkleRoot_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.BlockInfo.prototype.setMerkleRoot = function(value) {
-  return jspb.Message.setProto3BytesField(this, 5, value);
+  jspb.Message.setProto3BytesField(this, 5, value);
 };
 
 
@@ -9236,12 +8941,9 @@ proto.pb.BlockInfo.prototype.getTimestamp = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setTimestamp = function(value) {
-  return jspb.Message.setProto3IntField(this, 6, value);
+  jspb.Message.setProto3IntField(this, 6, value);
 };
 
 
@@ -9254,12 +8956,9 @@ proto.pb.BlockInfo.prototype.getBits = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setBits = function(value) {
-  return jspb.Message.setProto3IntField(this, 7, value);
+  jspb.Message.setProto3IntField(this, 7, value);
 };
 
 
@@ -9272,12 +8971,9 @@ proto.pb.BlockInfo.prototype.getNonce = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setNonce = function(value) {
-  return jspb.Message.setProto3IntField(this, 8, value);
+  jspb.Message.setProto3IntField(this, 8, value);
 };
 
 
@@ -9290,12 +8986,9 @@ proto.pb.BlockInfo.prototype.getConfirmations = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setConfirmations = function(value) {
-  return jspb.Message.setProto3IntField(this, 9, value);
+  jspb.Message.setProto3IntField(this, 9, value);
 };
 
 
@@ -9308,12 +9001,9 @@ proto.pb.BlockInfo.prototype.getDifficulty = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setDifficulty = function(value) {
-  return jspb.Message.setProto3FloatField(this, 10, value);
+  jspb.Message.setProto3FloatField(this, 10, value);
 };
 
 
@@ -9350,12 +9040,9 @@ proto.pb.BlockInfo.prototype.getNextBlockHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.BlockInfo.prototype.setNextBlockHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 11, value);
+  jspb.Message.setProto3BytesField(this, 11, value);
 };
 
 
@@ -9368,12 +9055,9 @@ proto.pb.BlockInfo.prototype.getSize = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setSize = function(value) {
-  return jspb.Message.setProto3IntField(this, 12, value);
+  jspb.Message.setProto3IntField(this, 12, value);
 };
 
 
@@ -9386,12 +9070,9 @@ proto.pb.BlockInfo.prototype.getMedianTime = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.BlockInfo} returns this
- */
+/** @param {number} value */
 proto.pb.BlockInfo.prototype.setMedianTime = function(value) {
-  return jspb.Message.setProto3IntField(this, 13, value);
+  jspb.Message.setProto3IntField(this, 13, value);
 };
 
 
@@ -9716,21 +9397,17 @@ proto.pb.Block.TransactionData.prototype.getTransactionHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Block.TransactionData} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Block.TransactionData.prototype.setTransactionHash = function(value) {
-  return jspb.Message.setOneofField(this, 1, proto.pb.Block.TransactionData.oneofGroups_[0], value);
+  jspb.Message.setOneofField(this, 1, proto.pb.Block.TransactionData.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the field making it undefined.
- * @return {!proto.pb.Block.TransactionData} returns this
  */
 proto.pb.Block.TransactionData.prototype.clearTransactionHash = function() {
-  return jspb.Message.setOneofField(this, 1, proto.pb.Block.TransactionData.oneofGroups_[0], undefined);
+  jspb.Message.setOneofField(this, 1, proto.pb.Block.TransactionData.oneofGroups_[0], undefined);
 };
 
 
@@ -9753,21 +9430,17 @@ proto.pb.Block.TransactionData.prototype.getTransaction = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction|undefined} value
- * @return {!proto.pb.Block.TransactionData} returns this
-*/
+/** @param {?proto.pb.Transaction|undefined} value */
 proto.pb.Block.TransactionData.prototype.setTransaction = function(value) {
-  return jspb.Message.setOneofWrapperField(this, 2, proto.pb.Block.TransactionData.oneofGroups_[0], value);
+  jspb.Message.setOneofWrapperField(this, 2, proto.pb.Block.TransactionData.oneofGroups_[0], value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.Block.TransactionData} returns this
  */
 proto.pb.Block.TransactionData.prototype.clearTransaction = function() {
-  return this.setTransaction(undefined);
+  this.setTransaction(undefined);
 };
 
 
@@ -9790,21 +9463,17 @@ proto.pb.Block.prototype.getInfo = function() {
 };
 
 
-/**
- * @param {?proto.pb.BlockInfo|undefined} value
- * @return {!proto.pb.Block} returns this
-*/
+/** @param {?proto.pb.BlockInfo|undefined} value */
 proto.pb.Block.prototype.setInfo = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.Block} returns this
  */
 proto.pb.Block.prototype.clearInfo = function() {
-  return this.setInfo(undefined);
+  this.setInfo(undefined);
 };
 
 
@@ -9827,12 +9496,9 @@ proto.pb.Block.prototype.getTransactionDataList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.Block.TransactionData>} value
- * @return {!proto.pb.Block} returns this
-*/
+/** @param {!Array<!proto.pb.Block.TransactionData>} value */
 proto.pb.Block.prototype.setTransactionDataList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 2, value);
+  jspb.Message.setRepeatedWrapperField(this, 2, value);
 };
 
 
@@ -9848,10 +9514,9 @@ proto.pb.Block.prototype.addTransactionData = function(opt_value, opt_index) {
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.Block} returns this
  */
 proto.pb.Block.prototype.clearTransactionDataList = function() {
-  return this.setTransactionDataList([]);
+  this.setTransactionDataList([]);
 };
 
 
@@ -10431,12 +10096,9 @@ proto.pb.Transaction.Input.Outpoint.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction.Input.Outpoint} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.Input.Outpoint.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -10449,12 +10111,9 @@ proto.pb.Transaction.Input.Outpoint.prototype.getIndex = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Input.Outpoint} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Input.Outpoint.prototype.setIndex = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -10467,12 +10126,9 @@ proto.pb.Transaction.Input.prototype.getIndex = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Input.prototype.setIndex = function(value) {
-  return jspb.Message.setProto3IntField(this, 1, value);
+  jspb.Message.setProto3IntField(this, 1, value);
 };
 
 
@@ -10486,21 +10142,17 @@ proto.pb.Transaction.Input.prototype.getOutpoint = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction.Input.Outpoint|undefined} value
- * @return {!proto.pb.Transaction.Input} returns this
-*/
+/** @param {?proto.pb.Transaction.Input.Outpoint|undefined} value */
 proto.pb.Transaction.Input.prototype.setOutpoint = function(value) {
-  return jspb.Message.setWrapperField(this, 2, value);
+  jspb.Message.setWrapperField(this, 2, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.Transaction.Input} returns this
  */
 proto.pb.Transaction.Input.prototype.clearOutpoint = function() {
-  return this.setOutpoint(undefined);
+  this.setOutpoint(undefined);
 };
 
 
@@ -10546,12 +10198,9 @@ proto.pb.Transaction.Input.prototype.getSignatureScript_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.Input.prototype.setSignatureScript = function(value) {
-  return jspb.Message.setProto3BytesField(this, 3, value);
+  jspb.Message.setProto3BytesField(this, 3, value);
 };
 
 
@@ -10564,12 +10213,9 @@ proto.pb.Transaction.Input.prototype.getSequence = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Input.prototype.setSequence = function(value) {
-  return jspb.Message.setProto3IntField(this, 4, value);
+  jspb.Message.setProto3IntField(this, 4, value);
 };
 
 
@@ -10582,12 +10228,9 @@ proto.pb.Transaction.Input.prototype.getValue = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Input.prototype.setValue = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -10624,12 +10267,9 @@ proto.pb.Transaction.Input.prototype.getPreviousScript_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.Input.prototype.setPreviousScript = function(value) {
-  return jspb.Message.setProto3BytesField(this, 6, value);
+  jspb.Message.setProto3BytesField(this, 6, value);
 };
 
 
@@ -10642,12 +10282,9 @@ proto.pb.Transaction.Input.prototype.getAddress = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.Transaction.Input} returns this
- */
+/** @param {string} value */
 proto.pb.Transaction.Input.prototype.setAddress = function(value) {
-  return jspb.Message.setProto3StringField(this, 7, value);
+  jspb.Message.setProto3StringField(this, 7, value);
 };
 
 
@@ -10832,12 +10469,9 @@ proto.pb.Transaction.Output.prototype.getIndex = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Output.prototype.setIndex = function(value) {
-  return jspb.Message.setProto3IntField(this, 1, value);
+  jspb.Message.setProto3IntField(this, 1, value);
 };
 
 
@@ -10850,12 +10484,9 @@ proto.pb.Transaction.Output.prototype.getValue = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.Output.prototype.setValue = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -10892,12 +10523,9 @@ proto.pb.Transaction.Output.prototype.getPubkeyScript_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.Output.prototype.setPubkeyScript = function(value) {
-  return jspb.Message.setProto3BytesField(this, 3, value);
+  jspb.Message.setProto3BytesField(this, 3, value);
 };
 
 
@@ -10910,12 +10538,9 @@ proto.pb.Transaction.Output.prototype.getAddress = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {string} value */
 proto.pb.Transaction.Output.prototype.setAddress = function(value) {
-  return jspb.Message.setProto3StringField(this, 4, value);
+  jspb.Message.setProto3StringField(this, 4, value);
 };
 
 
@@ -10928,12 +10553,9 @@ proto.pb.Transaction.Output.prototype.getScriptClass = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {string} value */
 proto.pb.Transaction.Output.prototype.setScriptClass = function(value) {
-  return jspb.Message.setProto3StringField(this, 5, value);
+  jspb.Message.setProto3StringField(this, 5, value);
 };
 
 
@@ -10946,12 +10568,9 @@ proto.pb.Transaction.Output.prototype.getDisassembledScript = function() {
 };
 
 
-/**
- * @param {string} value
- * @return {!proto.pb.Transaction.Output} returns this
- */
+/** @param {string} value */
 proto.pb.Transaction.Output.prototype.setDisassembledScript = function(value) {
-  return jspb.Message.setProto3StringField(this, 6, value);
+  jspb.Message.setProto3StringField(this, 6, value);
 };
 
 
@@ -10988,12 +10607,9 @@ proto.pb.Transaction.prototype.getHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.prototype.setHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 1, value);
+  jspb.Message.setProto3BytesField(this, 1, value);
 };
 
 
@@ -11006,12 +10622,9 @@ proto.pb.Transaction.prototype.getVersion = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setVersion = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -11025,12 +10638,9 @@ proto.pb.Transaction.prototype.getInputsList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.Transaction.Input>} value
- * @return {!proto.pb.Transaction} returns this
-*/
+/** @param {!Array<!proto.pb.Transaction.Input>} value */
 proto.pb.Transaction.prototype.setInputsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 3, value);
+  jspb.Message.setRepeatedWrapperField(this, 3, value);
 };
 
 
@@ -11046,10 +10656,9 @@ proto.pb.Transaction.prototype.addInputs = function(opt_value, opt_index) {
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.Transaction} returns this
  */
 proto.pb.Transaction.prototype.clearInputsList = function() {
-  return this.setInputsList([]);
+  this.setInputsList([]);
 };
 
 
@@ -11063,12 +10672,9 @@ proto.pb.Transaction.prototype.getOutputsList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.Transaction.Output>} value
- * @return {!proto.pb.Transaction} returns this
-*/
+/** @param {!Array<!proto.pb.Transaction.Output>} value */
 proto.pb.Transaction.prototype.setOutputsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 4, value);
+  jspb.Message.setRepeatedWrapperField(this, 4, value);
 };
 
 
@@ -11084,10 +10690,9 @@ proto.pb.Transaction.prototype.addOutputs = function(opt_value, opt_index) {
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.Transaction} returns this
  */
 proto.pb.Transaction.prototype.clearOutputsList = function() {
-  return this.setOutputsList([]);
+  this.setOutputsList([]);
 };
 
 
@@ -11100,12 +10705,9 @@ proto.pb.Transaction.prototype.getLockTime = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setLockTime = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -11118,12 +10720,9 @@ proto.pb.Transaction.prototype.getSize = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setSize = function(value) {
-  return jspb.Message.setProto3IntField(this, 8, value);
+  jspb.Message.setProto3IntField(this, 8, value);
 };
 
 
@@ -11136,12 +10735,9 @@ proto.pb.Transaction.prototype.getTimestamp = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setTimestamp = function(value) {
-  return jspb.Message.setProto3IntField(this, 9, value);
+  jspb.Message.setProto3IntField(this, 9, value);
 };
 
 
@@ -11154,12 +10750,9 @@ proto.pb.Transaction.prototype.getConfirmations = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setConfirmations = function(value) {
-  return jspb.Message.setProto3IntField(this, 10, value);
+  jspb.Message.setProto3IntField(this, 10, value);
 };
 
 
@@ -11172,12 +10765,9 @@ proto.pb.Transaction.prototype.getBlockHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {number} value */
 proto.pb.Transaction.prototype.setBlockHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 11, value);
+  jspb.Message.setProto3IntField(this, 11, value);
 };
 
 
@@ -11214,12 +10804,9 @@ proto.pb.Transaction.prototype.getBlockHash_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.Transaction} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.Transaction.prototype.setBlockHash = function(value) {
-  return jspb.Message.setProto3BytesField(this, 12, value);
+  jspb.Message.setProto3BytesField(this, 12, value);
 };
 
 
@@ -11407,21 +10994,17 @@ proto.pb.MempoolTransaction.prototype.getTransaction = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction|undefined} value
- * @return {!proto.pb.MempoolTransaction} returns this
-*/
+/** @param {?proto.pb.Transaction|undefined} value */
 proto.pb.MempoolTransaction.prototype.setTransaction = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.MempoolTransaction} returns this
  */
 proto.pb.MempoolTransaction.prototype.clearTransaction = function() {
-  return this.setTransaction(undefined);
+  this.setTransaction(undefined);
 };
 
 
@@ -11443,12 +11026,9 @@ proto.pb.MempoolTransaction.prototype.getAddedTime = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.MempoolTransaction} returns this
- */
+/** @param {number} value */
 proto.pb.MempoolTransaction.prototype.setAddedTime = function(value) {
-  return jspb.Message.setProto3IntField(this, 2, value);
+  jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -11461,12 +11041,9 @@ proto.pb.MempoolTransaction.prototype.getAddedHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.MempoolTransaction} returns this
- */
+/** @param {number} value */
 proto.pb.MempoolTransaction.prototype.setAddedHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -11479,12 +11056,9 @@ proto.pb.MempoolTransaction.prototype.getFee = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.MempoolTransaction} returns this
- */
+/** @param {number} value */
 proto.pb.MempoolTransaction.prototype.setFee = function(value) {
-  return jspb.Message.setProto3IntField(this, 4, value);
+  jspb.Message.setProto3IntField(this, 4, value);
 };
 
 
@@ -11497,12 +11071,9 @@ proto.pb.MempoolTransaction.prototype.getFeePerKb = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.MempoolTransaction} returns this
- */
+/** @param {number} value */
 proto.pb.MempoolTransaction.prototype.setFeePerKb = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -11515,12 +11086,9 @@ proto.pb.MempoolTransaction.prototype.getStartingPriority = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.MempoolTransaction} returns this
- */
+/** @param {number} value */
 proto.pb.MempoolTransaction.prototype.setStartingPriority = function(value) {
-  return jspb.Message.setProto3FloatField(this, 6, value);
+  jspb.Message.setProto3FloatField(this, 6, value);
 };
 
 
@@ -11696,21 +11264,17 @@ proto.pb.UnspentOutput.prototype.getOutpoint = function() {
 };
 
 
-/**
- * @param {?proto.pb.Transaction.Input.Outpoint|undefined} value
- * @return {!proto.pb.UnspentOutput} returns this
-*/
+/** @param {?proto.pb.Transaction.Input.Outpoint|undefined} value */
 proto.pb.UnspentOutput.prototype.setOutpoint = function(value) {
-  return jspb.Message.setWrapperField(this, 1, value);
+  jspb.Message.setWrapperField(this, 1, value);
 };
 
 
 /**
  * Clears the message field making it undefined.
- * @return {!proto.pb.UnspentOutput} returns this
  */
 proto.pb.UnspentOutput.prototype.clearOutpoint = function() {
-  return this.setOutpoint(undefined);
+  this.setOutpoint(undefined);
 };
 
 
@@ -11756,12 +11320,9 @@ proto.pb.UnspentOutput.prototype.getPubkeyScript_asU8 = function() {
 };
 
 
-/**
- * @param {!(string|Uint8Array)} value
- * @return {!proto.pb.UnspentOutput} returns this
- */
+/** @param {!(string|Uint8Array)} value */
 proto.pb.UnspentOutput.prototype.setPubkeyScript = function(value) {
-  return jspb.Message.setProto3BytesField(this, 2, value);
+  jspb.Message.setProto3BytesField(this, 2, value);
 };
 
 
@@ -11774,12 +11335,9 @@ proto.pb.UnspentOutput.prototype.getValue = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.UnspentOutput} returns this
- */
+/** @param {number} value */
 proto.pb.UnspentOutput.prototype.setValue = function(value) {
-  return jspb.Message.setProto3IntField(this, 3, value);
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -11792,12 +11350,9 @@ proto.pb.UnspentOutput.prototype.getIsCoinbase = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.UnspentOutput} returns this
- */
+/** @param {boolean} value */
 proto.pb.UnspentOutput.prototype.setIsCoinbase = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 4, value);
+  jspb.Message.setProto3BooleanField(this, 4, value);
 };
 
 
@@ -11810,12 +11365,9 @@ proto.pb.UnspentOutput.prototype.getBlockHeight = function() {
 };
 
 
-/**
- * @param {number} value
- * @return {!proto.pb.UnspentOutput} returns this
- */
+/** @param {number} value */
 proto.pb.UnspentOutput.prototype.setBlockHeight = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
+  jspb.Message.setProto3IntField(this, 5, value);
 };
 
 
@@ -11986,31 +11538,26 @@ proto.pb.TransactionFilter.prototype.getAddressesList = function() {
 };
 
 
-/**
- * @param {!Array<string>} value
- * @return {!proto.pb.TransactionFilter} returns this
- */
+/** @param {!Array<string>} value */
 proto.pb.TransactionFilter.prototype.setAddressesList = function(value) {
-  return jspb.Message.setField(this, 1, value || []);
+  jspb.Message.setField(this, 1, value || []);
 };
 
 
 /**
  * @param {string} value
  * @param {number=} opt_index
- * @return {!proto.pb.TransactionFilter} returns this
  */
 proto.pb.TransactionFilter.prototype.addAddresses = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 1, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.TransactionFilter} returns this
  */
 proto.pb.TransactionFilter.prototype.clearAddressesList = function() {
-  return this.setAddressesList([]);
+  this.setAddressesList([]);
 };
 
 
@@ -12024,12 +11571,9 @@ proto.pb.TransactionFilter.prototype.getOutpointsList = function() {
 };
 
 
-/**
- * @param {!Array<!proto.pb.Transaction.Input.Outpoint>} value
- * @return {!proto.pb.TransactionFilter} returns this
-*/
+/** @param {!Array<!proto.pb.Transaction.Input.Outpoint>} value */
 proto.pb.TransactionFilter.prototype.setOutpointsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 2, value);
+  jspb.Message.setRepeatedWrapperField(this, 2, value);
 };
 
 
@@ -12045,10 +11589,9 @@ proto.pb.TransactionFilter.prototype.addOutpoints = function(opt_value, opt_inde
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.TransactionFilter} returns this
  */
 proto.pb.TransactionFilter.prototype.clearOutpointsList = function() {
-  return this.setOutpointsList([]);
+  this.setOutpointsList([]);
 };
 
 
@@ -12085,31 +11628,26 @@ proto.pb.TransactionFilter.prototype.getDataElementsList_asU8 = function() {
 };
 
 
-/**
- * @param {!(Array<!Uint8Array>|Array<string>)} value
- * @return {!proto.pb.TransactionFilter} returns this
- */
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
 proto.pb.TransactionFilter.prototype.setDataElementsList = function(value) {
-  return jspb.Message.setField(this, 3, value || []);
+  jspb.Message.setField(this, 3, value || []);
 };
 
 
 /**
  * @param {!(string|Uint8Array)} value
  * @param {number=} opt_index
- * @return {!proto.pb.TransactionFilter} returns this
  */
 proto.pb.TransactionFilter.prototype.addDataElements = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 3, value, opt_index);
+  jspb.Message.addToRepeatedField(this, 3, value, opt_index);
 };
 
 
 /**
  * Clears the list making it empty but non-null.
- * @return {!proto.pb.TransactionFilter} returns this
  */
 proto.pb.TransactionFilter.prototype.clearDataElementsList = function() {
-  return this.setDataElementsList([]);
+  this.setDataElementsList([]);
 };
 
 
@@ -12122,12 +11660,9 @@ proto.pb.TransactionFilter.prototype.getAllTransactions = function() {
 };
 
 
-/**
- * @param {boolean} value
- * @return {!proto.pb.TransactionFilter} returns this
- */
+/** @param {boolean} value */
 proto.pb.TransactionFilter.prototype.setAllTransactions = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 4, value);
+  jspb.Message.setProto3BooleanField(this, 4, value);
 };
 
 
