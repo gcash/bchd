@@ -41,3 +41,4 @@ _testmain.go
 *.iml
 
 node_modules/
+bchrpc/pb-js/yarn.lock
