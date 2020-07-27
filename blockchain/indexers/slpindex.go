@@ -283,7 +283,7 @@ func (idx *SlpIndex) Init() error {
 		// below.
 		var highestKnown, nextUnknown uint32
 		testTokenID := uint32(1)
-		increment := uint32(100000)
+		increment := uint32(1)
 		for {
 			_, err := dbFetchTokenHashByID(dbTx, testTokenID)
 			if err != nil {
@@ -326,7 +326,7 @@ func (idx *SlpIndex) Init() error {
 		return err
 	}
 
-	log.Debugf("Current number of SLP tokens in index: %d", idx.curTokenID)
+	log.Info("Current number of SLP tokens in index: " + fmt.Sprint(idx.curTokenID))
 	return nil
 }
 
@@ -424,7 +424,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 					}
 				} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
 					v1InputAmtSpent.Add(v1InputAmtSpent, amt)
-					if _slpMsg.TransactionType == "GENESIS" { // check
+					if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
 						if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
 							v1MintBatonVout = prevIdx
 						}
