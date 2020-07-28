@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -179,7 +180,6 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, txHash *chainhash.Hash,
 	if err != nil {
 		idx.curTokenID++
 		tokenID = idx.curTokenID
-		//fmt.Printf("putting new token ID as %s\n", string(tokenID))
 		dbPutTokenIDIndexEntry(dbTx, tokenIDHash, tokenID)
 	}
 
@@ -208,7 +208,7 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, txHash *chainh
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return errors.New("entry does not exist")
+		return errors.New("slp entry does not exist " + hex.EncodeToString(txHash[:]))
 	}
 
 	// Ensure the serialized data has enough bytes to properly deserialize.
@@ -259,17 +259,16 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 // SlpIndex implements a transaction by hash index.  That is to say, it supports
 // querying all transactions by their hash.
 type SlpIndex struct {
-	db database.DB
-	//curBlockID uint32
+	db         database.DB
 	curTokenID uint32
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
 var _ Indexer = (*SlpIndex)(nil)
 
-// Init initializes the hash-based transaction index.  In particular, it finds
-// the highest used block ID and stores it for later use when connecting or
-// disconnecting blocks.
+// Init initializes the hash-based slp transaction index.  In particular, it finds
+// the highest used Token ID and stores it for later use when a new token has been
+// created.
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Init() error {
@@ -390,23 +389,21 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	sortedTxns := topoSortTxs(block)
 
 	for _, tx := range sortedTxns {
-		txnHash := tx.TxHash()
-		_IDhash, _ := goslp.GetSlpTokenID(tx)
-		tokenIDHash, _ := chainhash.NewHash(_IDhash)
 		slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
-
 		if slpMsg == nil {
 			// TODO: in the future may want to look for burned inputs on non-SLP txns
 			continue
 		}
 
+		_tokenid, err := goslp.GetSlpTokenID(tx)
+		if err != nil {
+			panic(err.Error())
+		}
+		tokenIDHash, _ := chainhash.NewHash(_tokenid[:])
+
 		v1InputAmtSpent := big.NewInt(0)
 		v1MintBatonVout := 0
 		slpEntry := &SlpIndexEntry{}
-
-		// fmt.Println("Examining")
-		// fmt.Println(slpMsg.TransactionType)
-		// fmt.Println(hex.EncodeToString(txnHash[:]))
 
 		for i, txi := range tx.TxIn {
 			prevIdx := int(txi.PreviousOutPoint.Index)
@@ -415,7 +412,10 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 				continue
 			}
 
-			_slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+			_slpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+			if err != nil {
+				panic("previously saved slp scriptPubKey cannot be parsed.")
+			}
 			if _slpMsg != nil {
 				amt, _ := _slpMsg.GetVoutAmount(prevIdx)
 				if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
@@ -434,9 +434,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 						}
 					}
 				} else {
-					// fmt.Println("mismatch tokenid")
-					// fmt.Println(hex.EncodeToString(tokenIDHash[:]))
-					// fmt.Println(hex.EncodeToString(slpEntry.TokenIDHash[:]))
+					// fmt.Println("mismatch tokenid " + hex.EncodeToString(slpEntry.TokenIDHash[:]))
 					// TODO: check for burns and mark them somewhere...
 				}
 			}
@@ -462,16 +460,14 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 			isValid = true
 		}
 
+		txnHash := tx.TxHash()
 		if isValid {
-			//fmt.Printf("valid tx with tokenID %s", hex.EncodeToString(tokenIDHash[:]))
 			err := dbPutSlpIndexEntry(idx, dbTx, &txnHash, tokenIDHash, uint16(slpMsg.TokenType), tx.TxOut[0].PkScript)
 			if err != nil {
 				fmt.Println("failed to put slp entry")
 				panic(err.Error())
 				//fmt.Println(err.Error())
 			}
-		} else {
-			//fmt.Printf("invalid tx %s\n", txnHash)
 		}
 	}
 
