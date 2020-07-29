@@ -405,6 +405,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		v1MintBatonVout := 0
 		slpEntry := &SlpIndexEntry{}
 
+		// loop through inputs to look for valid slp contributions
 		for i, txi := range tx.TxIn {
 			prevIdx := int(txi.PreviousOutPoint.Index)
 			err := idx.GetSlpIndexEntry(dbTx, slpEntry, &txi.PreviousOutPoint.Hash)
@@ -416,29 +417,33 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 			if err != nil {
 				panic("previously saved slp scriptPubKey cannot be parsed.")
 			}
-			if _slpMsg != nil {
-				amt, _ := _slpMsg.GetVoutAmount(prevIdx)
-				if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
-					if _slpMsg.TokenType == 0x81 && i == 0 {
-						v1InputAmtSpent.Add(v1InputAmtSpent, amt)
-					}
-				} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
+
+			amt, _ := _slpMsg.GetVoutAmount(prevIdx)
+			if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
+				if _slpMsg.TokenType == 0x81 && i == 0 {
 					v1InputAmtSpent.Add(v1InputAmtSpent, amt)
-					if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
-						if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
-							v1MintBatonVout = prevIdx
-						}
-					} else if _slpMsg.TransactionType == "MINT" {
-						if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
-							v1MintBatonVout = prevIdx
-						}
-					}
-				} else {
-					// fmt.Println("mismatch tokenid " + hex.EncodeToString(slpEntry.TokenIDHash[:]))
-					// TODO: check for burns and mark them somewhere...
 				}
+			} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
+				if _slpMsg.TokenType != slpMsg.TokenType {
+					continue
+				}
+				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+				if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
+					if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
+						v1MintBatonVout = prevIdx
+					}
+				} else if _slpMsg.TransactionType == "MINT" {
+					if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
+						v1MintBatonVout = prevIdx
+					}
+				}
+			} else {
+				// TODO: check for burns and mark them somewhere...
 			}
 		}
+
+		// do not use slpEntry past this point
+		slpEntry = nil
 
 		// Check if tx is a valid SLP.  This requires only two things, first
 		// the slpMsg must be valid, and second the input requirements for the
@@ -466,7 +471,6 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 			if err != nil {
 				fmt.Println("failed to put slp entry")
 				panic(err.Error())
-				//fmt.Println(err.Error())
 			}
 		}
 	}
