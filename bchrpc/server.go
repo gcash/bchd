@@ -1219,7 +1219,7 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 		result.PrevOutHash = query.PrevOutHash
 		result.PrevOutVout = query.PrevOutVout
 
-		entry := &indexers.SlpIndexEntry{}
+		var entry *indexers.SlpIndexEntry
 
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
@@ -1227,7 +1227,7 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 		}
 
 		err = s.db.View(func(dbTx database.Tx) error {
-			err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, txid)
+			entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, txid)
 			return err
 		})
 
@@ -1347,10 +1347,10 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 			// loop through **ALL** inputs, accumulate input amount for tokenID, abort on SLP input with wrong ID
 			inputVal := big.NewInt(0)
 			for _, txIn := range msgTx.TxIn {
-				entry := &indexers.SlpIndexEntry{}
+				var entry *indexers.SlpIndexEntry
 
 				err = s.db.View(func(dbTx database.Tx) error {
-					err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, &txIn.PreviousOutPoint.Hash)
 					return err
 				})
 				if err != nil {
@@ -1379,9 +1379,9 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 			// loop through **ALL** inputs, look for mint baton is included, abort on any other SLP inputs
 			hasBaton := false
 			for _, txIn := range msgTx.TxIn {
-				entry := &indexers.SlpIndexEntry{}
+				var entry *indexers.SlpIndexEntry
 				err = s.db.View(func(dbTx database.Tx) error {
-					err := s.slpIndex.GetSlpIndexEntry(dbTx, entry, &txIn.PreviousOutPoint.Hash)
+					entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, &txIn.PreviousOutPoint.Hash)
 					return err
 				})
 				if err != nil {
