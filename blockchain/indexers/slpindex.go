@@ -203,32 +203,33 @@ type SlpIndexEntry struct {
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // nil will be returned for the both the entry and the error.
-func dbFetchSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, txHash *chainhash.Hash) error {
+func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEntry, error) {
 	// Load the record from the database and return now if it doesn't exist.
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return errors.New("slp entry does not exist " + hex.EncodeToString(txHash[:]))
+		return nil, errors.New("slp entry does not exist " + hex.EncodeToString(txHash[:]))
 	}
 
 	// Ensure the serialized data has enough bytes to properly deserialize.
 	if len(serializedData) < 12 { // TODO: get more accurate number for this (i.e., 4 + 2 + min SLP length)
-		return database.Error{
+		return nil, database.Error{
 			ErrorCode: database.ErrCorruption,
 			Description: fmt.Sprintf("corrupt slp index "+
 				"entry for %s", txHash),
 		}
 	}
-
-	entry.TokenID = byteOrder.Uint32(serializedData[0:4])
+	entry := &SlpIndexEntry{
+		TokenID: byteOrder.Uint32(serializedData[0:4]),
+	}
 	_tokenIDHash, _ := dbFetchTokenHashByID(dbTx, entry.TokenID)
 	if _tokenIDHash == nil {
-		return errors.New("could not map tokenID uint32 to hash")
+		return nil, errors.New("could not map tokenID uint32 to hash")
 	}
 	entry.TokenIDHash = *_tokenIDHash
 	entry.SlpVersionType = byteOrder.Uint16(serializedData[4:6])
 	entry.SlpOpReturn = serializedData[6:]
-	return nil
+	return entry, nil
 }
 
 // dbRemoveSlpIndexEntry uses an existing database transaction to remove the most
@@ -383,99 +384,122 @@ type SlpTxOut struct {
 // for every transaction in the passed block.
 //
 // This is part of the Indexer interface.
-func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
-	stxos []blockchain.SpentTxOut) error {
+func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 
 	sortedTxns := topoSortTxs(block)
 
-	for _, tx := range sortedTxns {
-		slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
-		if slpMsg == nil {
-			// TODO: in the future may want to look for burned inputs on non-SLP txns
-			continue
-		}
+	_getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+		return idx.GetSlpIndexEntry(dbTx, txiHash)
+	}
 
-		_tokenid, err := goslp.GetSlpTokenID(tx)
-		if err != nil {
-			panic(err.Error())
-		}
-		tokenIDHash, _ := chainhash.NewHash(_tokenid[:])
-
-		v1InputAmtSpent := big.NewInt(0)
-		v1MintBatonVout := 0
-		slpEntry := &SlpIndexEntry{}
-
-		// loop through inputs to look for valid slp contributions
-		for i, txi := range tx.TxIn {
-			prevIdx := int(txi.PreviousOutPoint.Index)
-			err := idx.GetSlpIndexEntry(dbTx, slpEntry, &txi.PreviousOutPoint.Hash)
-			if err != nil {
-				continue
-			}
-
-			_slpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
-			if err != nil {
-				panic("previously saved slp scriptPubKey cannot be parsed.")
-			}
-
-			amt, _ := _slpMsg.GetVoutAmount(prevIdx)
-			if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
-				if _slpMsg.TokenType == 0x81 && i == 0 {
-					v1InputAmtSpent.Add(v1InputAmtSpent, amt)
-				}
-			} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
-				if _slpMsg.TokenType != slpMsg.TokenType {
-					continue
-				}
-				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
-				if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
-					if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
-						v1MintBatonVout = prevIdx
-					}
-				} else if _slpMsg.TransactionType == "MINT" {
-					if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
-						v1MintBatonVout = prevIdx
-					}
-				}
-			} else {
-				// TODO: check for burns and mark them somewhere...
-			}
-		}
-
-		// do not use slpEntry past this point
-		slpEntry = nil
-
-		// Check if tx is a valid SLP.  This requires only two things, first
-		// the slpMsg must be valid, and second the input requirements for the
-		// type of transaction must be satisfied.
-		isValid := false
-		outputAmt, _ := slpMsg.TotalSlpMsgOutputValue()
-		if slpMsg.TransactionType == "GENESIS" {
-			if slpMsg.TokenType == 0x41 &&
-				big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
-				isValid = true
-			} else if slpMsg.TokenType == 0x01 || slpMsg.TokenType == 0x81 {
-				isValid = true
-			}
-		} else if slpMsg.TransactionType == "SEND" &&
-			outputAmt.Cmp(v1InputAmtSpent) < 1 {
-			isValid = true
-		} else if slpMsg.TransactionType == "MINT" &&
-			v1MintBatonVout > 1 {
-			isValid = true
-		}
-
+	_putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 		txnHash := tx.TxHash()
-		if isValid {
-			err := dbPutSlpIndexEntry(idx, dbTx, &txnHash, tokenIDHash, uint16(slpMsg.TokenType), tx.TxOut[0].PkScript)
-			if err != nil {
-				fmt.Println("failed to put slp entry")
-				panic(err.Error())
-			}
+		return dbPutSlpIndexEntry(idx, dbTx, &txnHash, tokenIDHash, uint16(slpMsg.TokenType), tx.TxOut[0].PkScript)
+	}
+
+	for _, tx := range sortedTxns {
+		isValid := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
+		if !isValid {
+			continue
 		}
 	}
 
 	return nil
+}
+
+// GetSlpIndexEntryHandler ...
+type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
+
+// AddTxIndexEntryHandler ...
+type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
+
+// CheckSlpTx checks a transaction for validity and adds
+func CheckSlpTx(tx *wire.MsgTx, _getSlpIndexEntry GetSlpIndexEntryHandler, _putTxIndexEntry AddTxIndexEntryHandler) bool {
+
+	slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
+	if slpMsg == nil {
+		// TODO: in the future may want to look for burned inputs on non-SLP txns
+		return false
+	}
+
+	_tokenid, err := goslp.GetSlpTokenID(tx)
+	if err != nil {
+		panic(err.Error())
+	}
+	tokenIDHash, _ := chainhash.NewHash(_tokenid[:])
+
+	v1InputAmtSpent := big.NewInt(0)
+	v1MintBatonVout := 0
+	//slpEntry := &SlpIndexEntry{}
+
+	// loop through inputs to look for valid slp contributions
+	for i, txi := range tx.TxIn {
+		prevIdx := int(txi.PreviousOutPoint.Index)
+
+		slpEntry, err := _getSlpIndexEntry(&txi.PreviousOutPoint.Hash)
+		if err != nil {
+			continue
+		}
+
+		_slpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+		if err != nil {
+			panic("previously saved slp scriptPubKey cannot be parsed.")
+		}
+
+		amt, _ := _slpMsg.GetVoutAmount(prevIdx)
+		if slpMsg.TokenType == 0x41 && slpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
+			if _slpMsg.TokenType == 0x81 && i == 0 {
+				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+			}
+		} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
+			if _slpMsg.TokenType != slpMsg.TokenType {
+				continue
+			}
+			v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+			if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
+				if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
+					v1MintBatonVout = prevIdx
+				}
+			} else if _slpMsg.TransactionType == "MINT" {
+				if prevIdx == _slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
+					v1MintBatonVout = prevIdx
+				}
+			}
+		} else {
+			// TODO: check for burns and mark them somewhere...
+		}
+	}
+
+	// do not use slpEntry past this point
+	//slpEntry = nil
+
+	// Check if tx is a valid SLP.  This requires only two things, first
+	// the slpMsg must be valid, and second the input requirements for the
+	// type of transaction must be satisfied.
+	isValid := false
+	outputAmt, _ := slpMsg.TotalSlpMsgOutputValue()
+	if slpMsg.TransactionType == "GENESIS" {
+		if slpMsg.TokenType == 0x41 &&
+			big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
+			isValid = true
+		} else if slpMsg.TokenType == 0x01 || slpMsg.TokenType == 0x81 {
+			isValid = true
+		}
+	} else if slpMsg.TransactionType == "SEND" &&
+		outputAmt.Cmp(v1InputAmtSpent) < 1 {
+		isValid = true
+	} else if slpMsg.TransactionType == "MINT" &&
+		v1MintBatonVout > 1 {
+		isValid = true
+	}
+
+	if isValid {
+		err := _putTxIndexEntry(tx, slpMsg, tokenIDHash)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return isValid
 }
 
 // DisconnectBlock is invoked by the index manager when a block has been
@@ -506,9 +530,8 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 // will be returned for the both the entry and the error, which would mean the transaction is invalid
 //
 // This function is safe for concurrent access.
-func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, entry *SlpIndexEntry, hash *chainhash.Hash) error {
-	err := dbFetchSlpIndexEntry(dbTx, entry, hash)
-	return err
+func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
+	return dbFetchSlpIndexEntry(dbTx, hash)
 }
 
 // SlpIndexEntryExists returns true if the slp entry exists
