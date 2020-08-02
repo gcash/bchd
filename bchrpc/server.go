@@ -1075,7 +1075,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		tokenMetadata *pb.TokenMetadata
 	)
 
-	if req.Index > 0 {
+	if s.slpIndex != nil && req.Index > 0 {
 		mempoolEntries := make(map[chainhash.Hash]*indexers.SlpIndexEntry, 0) // TODO cache this map somewhere
 
 		if isSlpInMempool && req.IncludeMempool {
