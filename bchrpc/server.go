@@ -1018,11 +1018,12 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	}
 
 	var (
-		op           = wire.NewOutPoint(txnHash, req.Index)
-		value        int64
-		blockHeight  int32
-		scriptPubkey []byte
-		coinbase     bool
+		op             = wire.NewOutPoint(txnHash, req.Index)
+		value          int64
+		blockHeight    int32
+		scriptPubkey   []byte
+		coinbase       bool
+		isSlpInMempool = false
 	)
 	if req.IncludeMempool && s.txMemPool.HaveTransaction(txnHash) {
 		tx, err := s.txMemPool.FetchTransaction(txnHash)
@@ -1040,6 +1041,12 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		blockHeight = mining.UnminedHeight
 		scriptPubkey = tx.MsgTx().TxOut[req.Index].PkScript
 		coinbase = blockchain.IsCoinBase(tx)
+
+		// check if this txn is possibly an SLP transaction
+		_, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+		if err == nil {
+			isSlpInMempool = true
+		}
 	} else {
 		if req.IncludeMempool {
 			spendingTx := s.txMemPool.CheckSpend(*op)
@@ -1061,15 +1068,143 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		coinbase = entry.IsCoinBase()
 	}
 
+	// start of slp handling
+	var (
+		slpEntry      *indexers.SlpIndexEntry
+		slpToken      *pb.SlpToken
+		tokenMetadata *pb.TokenMetadata
+	)
+
+	if req.Index > 0 {
+		mempoolEntries := make(map[chainhash.Hash]*indexers.SlpIndexEntry, 0) // TODO cache this map somewhere
+
+		if isSlpInMempool && req.IncludeMempool {
+
+			// get all mempool txns
+			rawMempool := s.txMemPool.MiningDescs()
+
+			// sort txns by topological order, parents first
+			transactions := make([]*bchutil.Tx, len(rawMempool))
+			for i, tx := range rawMempool {
+				transactions[i] = tx.Tx
+			}
+			sortedTxns := indexers.TopoSortTxs(transactions)
+
+			// loop through entire mempool to create db of valid slp items in mempool
+			getEntry := func(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
+				var _entry *indexers.SlpIndexEntry
+
+				// first look for inputs in the slp index
+				s.db.View(func(dbTx database.Tx) error {
+					_entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, hash)
+					return err
+				})
+				if _entry != nil {
+					return _entry, nil
+				}
+
+				// otherwise we'll check to see if its in our mempool
+				_entry = mempoolEntries[*hash]
+				if _entry != nil {
+					return _entry, nil
+				}
+				return nil, errors.New("item not in mempool")
+			}
+			addEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+				entry := mempoolEntries[tx.TxHash()]
+				if entry == nil {
+					mempoolEntries[tx.TxHash()] = &indexers.SlpIndexEntry{
+						TokenID:        0,
+						TokenIDHash:    *tokenIDHash,
+						SlpVersionType: uint16(slpMsg.TokenType),
+						SlpOpReturn:    tx.TxOut[0].PkScript,
+					}
+				}
+				return nil
+			}
+			for _, tx := range sortedTxns {
+				indexers.CheckSlpTx(tx, getEntry, addEntry)
+			}
+
+			// finally, try to pull our slpEntry
+			slpEntry = mempoolEntries[*txnHash]
+		} else {
+			s.db.View(func(dbTx database.Tx) error {
+				slpEntry, err = s.slpIndex.GetSlpIndexEntry(dbTx, txnHash)
+				return err
+			})
+		}
+
+		if slpEntry != nil {
+			slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+			amount, _ := slpMsg.GetVoutAmount(int(req.Index))
+			isMintBaton := false
+			var tokenID []byte
+			if slpMsg.TransactionType == "MINT" {
+				if slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(req.Index) {
+					isMintBaton = true
+				}
+				tokenID = slpMsg.Data.(v1parser.SlpMint).TokenID
+			} else if slpMsg.TransactionType == "SEND" {
+				tokenID = slpMsg.Data.(v1parser.SlpSend).TokenID
+			} else if slpMsg.TransactionType == "GENESIS" {
+				tokenID = req.Hash
+			}
+
+			slpToken = &pb.SlpToken{
+				Amount:      amount.Uint64(),
+				Address:     "",
+				TokenId:     tokenID,
+				IsMintBaton: isMintBaton,
+			}
+
+			if req.IncludeTokenMetadata {
+				var _hash []byte
+				for i := len(tokenID) - 1; i >= 0; i-- {
+					_hash = append(_hash, tokenID[i])
+				}
+				_tokenIDRev, _ := chainhash.NewHash(_hash)
+
+				var _genesisEntry *indexers.SlpIndexEntry
+				_genesisEntry = mempoolEntries[*_tokenIDRev]
+				if _genesisEntry == nil {
+					s.db.View(func(dbTx database.Tx) error {
+						_genesisEntry, err = s.slpIndex.GetSlpIndexEntry(dbTx, _tokenIDRev)
+						return err
+					})
+				}
+
+				if _genesisEntry == nil {
+					panic("genesis is missing " + hex.EncodeToString(_tokenIDRev[:]))
+				}
+
+				_genesisSlpMsg, _ := v1parser.ParseSLP(_genesisEntry.SlpOpReturn)
+				tokenMetadata = &pb.TokenMetadata{
+					TokenName:         _genesisSlpMsg.Data.(v1parser.SlpGenesis).Name,
+					TokenDocumentHash: _genesisSlpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+					TokenDocumentUrl:  _genesisSlpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+					TokenId:           tokenID,
+					TokenTicker:       _genesisSlpMsg.Data.(v1parser.SlpGenesis).Ticker,
+					TokenType:         uint32(_genesisSlpMsg.TokenType),
+				}
+			}
+		}
+	}
+	// end of slp handling
+
+	//slpToken, TokenMetadata, err :=
+
 	ret := &pb.GetUnspentOutputResponse{
 		Outpoint: &pb.Transaction_Input_Outpoint{
 			Hash:  txnHash[:],
 			Index: req.Index,
 		},
-		Value:        value,
-		PubkeyScript: scriptPubkey,
-		BlockHeight:  blockHeight,
-		IsCoinbase:   coinbase,
+		Value:         value,
+		PubkeyScript:  scriptPubkey,
+		BlockHeight:   blockHeight,
+		IsCoinbase:    coinbase,
+		SlpToken:      slpToken,
+		TokenMetadata: tokenMetadata,
 	}
 	return ret, nil
 }

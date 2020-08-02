@@ -386,7 +386,7 @@ type SlpTxOut struct {
 // This is part of the Indexer interface.
 func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 
-	sortedTxns := topoSortTxs(block)
+	sortedTxns := TopoSortTxs(block.Transactions())
 
 	_getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
 		return idx.GetSlpIndexEntry(dbTx, txiHash)
@@ -414,7 +414,7 @@ type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
 type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
 
 // CheckSlpTx checks a transaction for validity and adds
-func CheckSlpTx(tx *wire.MsgTx, _getSlpIndexEntry GetSlpIndexEntryHandler, _putTxIndexEntry AddTxIndexEntryHandler) bool {
+func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) bool {
 
 	slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 	if slpMsg == nil {
@@ -430,14 +430,13 @@ func CheckSlpTx(tx *wire.MsgTx, _getSlpIndexEntry GetSlpIndexEntryHandler, _putT
 
 	v1InputAmtSpent := big.NewInt(0)
 	v1MintBatonVout := 0
-	//slpEntry := &SlpIndexEntry{}
 
 	// loop through inputs to look for valid slp contributions
 	for i, txi := range tx.TxIn {
 		prevIdx := int(txi.PreviousOutPoint.Index)
 
-		slpEntry, err := _getSlpIndexEntry(&txi.PreviousOutPoint.Hash)
-		if err != nil {
+		slpEntry, err := getSlpIndexEntry(&txi.PreviousOutPoint.Hash)
+		if slpEntry == nil {
 			continue
 		}
 
@@ -494,7 +493,7 @@ func CheckSlpTx(tx *wire.MsgTx, _getSlpIndexEntry GetSlpIndexEntryHandler, _putT
 	}
 
 	if isValid {
-		err := _putTxIndexEntry(tx, slpMsg, tokenIDHash)
+		err := putTxIndexEntry(tx, slpMsg, tokenIDHash)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -587,15 +586,15 @@ func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
 	return dropIndex(db, slpIndexKey, slpIndexName, interrupt)
 }
 
-// topoSortTxs sorts a block into topological order.
+// TopoSortTxs sorts a list of transactions into topological order.
 // That is, the child transactions come after parents.
-func topoSortTxs(block *bchutil.Block) []*wire.MsgTx {
+func TopoSortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
 
-	sorted := make([]*wire.MsgTx, 0, len(block.Transactions()))
+	sorted := make([]*wire.MsgTx, 0, len(transactions))
 	txids := make(map[chainhash.Hash]struct{})
 	outpoints := make(map[wire.OutPoint]struct{})
 
-	for _, tx := range block.Transactions() {
+	for _, tx := range transactions {
 		for i := range tx.MsgTx().TxOut {
 			op := wire.OutPoint{
 				Hash:  *tx.Hash(),
@@ -605,8 +604,8 @@ func topoSortTxs(block *bchutil.Block) []*wire.MsgTx {
 		}
 	}
 
-	for len(sorted) < len(block.Transactions()) {
-		for _, tx := range block.Transactions() {
+	for len(sorted) < len(transactions) {
+		for _, tx := range transactions {
 			if _, ok := txids[*tx.Hash()]; ok {
 				continue
 			}
