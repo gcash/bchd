@@ -617,6 +617,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 			return nil, status.Error(codes.Internal, "error loading start header height")
 		}
 	}
+	bestHeight := s.chain.BestSnapshot().Height
 	for i, header := range headers {
 		hash := header.BlockHash()
 		resp.Headers = append(resp.Headers, &pb.BlockInfo{
@@ -629,7 +630,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 			Nonce:         header.Nonce,
 			Bits:          header.Bits,
 			PreviousBlock: header.PrevBlock.CloneBytes(),
-			Confirmations: s.chain.BestSnapshot().Height - (startHeight + int32(i)) + 1,
+			Confirmations: bestHeight - (startHeight + int32(i)) + 1,
 		})
 	}
 
