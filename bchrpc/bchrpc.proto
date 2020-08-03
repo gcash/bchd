@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package pb;
-option java_package = "com.bchd.rpc";
+option java_package = "cash.bchd.rpc";
 
 // bchrpc contains a set of RPCs that can be exposed publicly via
 // the command line options. This service could be authenticated or
