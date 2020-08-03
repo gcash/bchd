@@ -128,9 +128,9 @@ message GetMempoolResponse {
     message TransactionData {
         // Either one of the two following is provided, depending on the request.
         oneof txids_or_txs {
-            // The transaction hash
+            // The transaction hash, little-endian.
             bytes transaction_hash = 1;
-            // The transaction data
+            // The transaction data.
             Transaction transaction = 2;
         }
     }
@@ -162,7 +162,7 @@ message GetBlockchainInfoResponse {
 
     // The current number of blocks on the longest chain.
     int32 best_height = 2;
-    // The hash of the best (tip) block in the most-work fully-validated chain.
+    // The hash of the best (tip) block in the most-work fully-validated chain, little-endian.
     bytes best_block_hash = 3;
     // Threshold for adding new blocks.
     double difficulty = 4;
@@ -235,12 +235,12 @@ message GetBlockFilterResponse {
 // Request headers using a list of known block hashes.
 message GetHeadersRequest {
     // A list of block hashes known to the client (most recent first) which
-    // is exponentially  sparser toward the genesis block (0).
+    // is exponentially sparser toward the genesis block (0), little-endian.
     // Common practice is to include all of the last 10 blocks, and then
     // 9 blocks for each order of ten thereafter.
     repeated bytes block_locator_hashes = 1;
-    // hash of the latest desired block header; only blocks occurring before
-    // the stop will be returned.
+    // hash of the latest desired block header, little-endian; only blocks
+    // occurring before the stop will be returned.
     bytes stop_hash = 2;
 }
 message GetHeadersResponse {
@@ -250,7 +250,7 @@ message GetHeadersResponse {
 
 // Get a transaction from a transaction hash.
 message GetTransactionRequest {
-    // A transaction hash.
+    // A transaction hash, little-endian.
     bytes hash = 1;
 }
 message GetTransactionResponse {
@@ -260,7 +260,7 @@ message GetTransactionResponse {
 
 // Get an encoded transaction from a transaction hash.
 message GetRawTransactionRequest {
-    // A transaction hash.
+    // A transaction hash, little-endian.
     bytes hash = 1;
 }
 message GetRawTransactionResponse {
@@ -297,7 +297,7 @@ message GetAddressTransactionsRequest {
 
     oneof start_block {
         // Recommended. Only get transactions after (or within) a
-        // starting block identified by hash.
+        // starting block identified by hash, little-endian.
         bytes hash = 4;
         // Recommended. Only get transactions after (or within) a
         // starting block identified by block number.
@@ -339,7 +339,7 @@ message GetRawAddressTransactionsRequest {
 
     oneof start_block {
         // Recommended. Only return transactions after some starting block
-        // identified by hash.
+        // identified by hash, little-endian.
         bytes hash = 4;
         // Recommended. Only return transactions after some starting block
         // identified by block number.
@@ -367,7 +367,7 @@ message GetAddressUnspentOutputsResponse {
 }
 
 message GetUnspentOutputRequest {
-    // The hash of the transaction.
+    // The hash of the transaction, little-endian.
     bytes hash = 1;
     // The number of the output, starting from zero.
     uint32 index = 2;
@@ -390,7 +390,7 @@ message GetUnspentOutputResponse {
 }
 
 message GetMerkleProofRequest {
-    // A transaction hash.
+    // A transaction hash, little-endian.
     bytes transaction_hash = 1;
 }
 message GetMerkleProofResponse {
@@ -411,6 +411,7 @@ message SubmitTransactionRequest {
     bytes transaction = 1;
 }
 message SubmitTransactionResponse {
+    // Transaction hash, little-endian.
     bytes hash = 1;
 }
 
@@ -521,7 +522,7 @@ message BlockInfo {
     // Identification.
 
     // The double sha256 hash of the six header fields in the first 80 bytes
-    // of the block, when encoded according the bitcoin protocol.
+    // of the block, when encoded according the bitcoin protocol, little-endian.
     // sha256(sha256(encoded_header))
     bytes hash = 1;
     // The block number, an incremental index for each block mined.
@@ -531,9 +532,9 @@ message BlockInfo {
 
     // A version number to track software/protocol upgrades.
     int32 version = 3;
-    // Hash of the previous block
+    // Hash of the previous block, little-endian.
     bytes previous_block = 4;
-    // The root of the Merkle Tree built from all transactions in the block.
+    // The root of the Merkle Tree built from all transactions in the block, little-endian.
     bytes merkle_root = 5;
     // When mining of the block started, expressed in seconds since 1970-01-01.
     int64 timestamp = 6;
@@ -549,7 +550,7 @@ message BlockInfo {
     int32 confirmations = 9;
     // Difficulty target at time of creation.
     double difficulty = 10;
-    // Hash of the next block in this chain.
+    // Hash of the next block in this chain, little-endian.
     bytes next_block_hash = 11;
     // Size of the block in bytes.
     int32 size = 12;
@@ -560,7 +561,7 @@ message BlockInfo {
 message Block {
     message TransactionData {
         oneof txids_or_txs {
-            // Just the transaction hash.
+            // Just the transaction hash, little-endian.
             bytes transaction_hash = 1;
             // A marshaled transaction.
             Transaction transaction = 2;
@@ -575,7 +576,7 @@ message Block {
 message Transaction {
     message Input {
         message Outpoint {
-            // The hash of the transaction containing the output to be spent.
+            // The hash of the transaction containing the output to be spent, little-endian
             bytes hash = 1;
             // The index of specific output on the transaction.
             uint32 index = 2;
@@ -613,7 +614,7 @@ message Transaction {
         string disassembled_script = 6;
     }
 
-    // The double sha256 hash of the encoded transaction.
+    // The double sha256 hash of the encoded transaction, little-endian.
     // sha256(sha256(encoded_transaction))
     bytes hash = 1;
     // The version of the transaction format.
@@ -638,7 +639,7 @@ message Transaction {
     int32 confirmations = 10;
     // Number of the block containing the transaction.
     int32 block_height = 11;
-    // Hash of the block the transaction was recorded in.
+    // Hash of the block the transaction was recorded in, little-endian.
     bytes block_hash = 12;
 }
 
