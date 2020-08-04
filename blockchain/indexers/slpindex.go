@@ -469,9 +469,6 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		}
 	}
 
-	// do not use slpEntry past this point
-	//slpEntry = nil
-
 	// Check if tx is a valid SLP.  This requires only two things, first
 	// the slpMsg must be valid, and second the input requirements for the
 	// type of transaction must be satisfied.
