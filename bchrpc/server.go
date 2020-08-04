@@ -953,11 +953,15 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				continue
 			}
 
-			slpToken, _ := s.getSlpToken(&txHash, uint32(i))
-			if req.IncludeTokenMetadata && s.slpIndex != nil {
-				_hash, _ := chainhash.NewHash(slpToken.TokenId)
-				tokenMetadataSet[*_hash] = struct{}{}
+			var slpToken *pb.SlpToken
+			if s.slpIndex != nil {
+				slpToken, _ = s.getSlpToken(&txHash, uint32(i))
+				if req.IncludeTokenMetadata && slpToken != nil {
+					_hash, _ := chainhash.NewHash(slpToken.TokenId)
+					tokenMetadataSet[*_hash] = struct{}{}
+				}
 			}
+
 			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
 				utxo := &pb.UnspentOutput{
 					Outpoint: &pb.Transaction_Input_Outpoint{
@@ -2359,33 +2363,49 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 	}
 
 	tm := &pb.TokenMetadata{
-		TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
-		TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
-		TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-		TokenTicker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
-		TokenType:         uint32(slpMsg.TokenType),
+		TokenId:   tokenID[:],
+		TokenType: uint32(slpMsg.TokenType),
 	}
 
 	switch slpMsg.TokenType {
 	case 0x01:
 		tm.TypeMetadata = &pb.TokenMetadata_Type1{
 			Type1: &pb.TokenMetadataTokenType1{
-				TokenMintQuantity: uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+				TokenTicker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+				TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+				Decimals:          uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
 				// TODO ... complete token metadata
-				MintBatonTxid: nil,
-				MintBatonVout: 0,
+				//TokenMintQuantity: 0, //uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+				//MintBatonTxid: nil,
+				//MintBatonVout: 0,
 			},
 		}
 	case 0x41:
 		tm.TypeMetadata = &pb.TokenMetadata_Nft1Child{
 			Nft1Child: &pb.TokenMetadataNFT1Child{
+				TokenTicker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+				TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 				// TODO ... complete token metadata
+				//GroupId:           nil,
 			},
 		}
 	case 0x81:
 		tm.TypeMetadata = &pb.TokenMetadata_Nft1Group{
 			Nft1Group: &pb.TokenMetadataNFT1Group{
+				TokenTicker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+				TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+				Decimals:          uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
 				// TODO ... complete token metadata
+				//TokenMintQuantity: 0, //uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+				//MintBatonTxid: nil,
+				//MintBatonVout: nil,
+				//
 			},
 		}
 	}
