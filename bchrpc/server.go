@@ -127,31 +127,38 @@ type GrpcServer struct {
 	wg       sync.WaitGroup
 	ready    uint32 // atomic
 	shutdown int32  //atomic
+
+	slpEntryCache map[chainhash.Hash]*indexers.SlpIndexEntry
 }
 
 // NewGrpcServer returns a new GrpcServer which has not yet
 // be started.
 func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	s := &GrpcServer{
-		timeSource:  cfg.TimeSource,
-		chain:       cfg.Chain,
-		chainParams: cfg.ChainParams,
-		db:          cfg.DB,
-		txMemPool:   cfg.TxMemPool,
-		netMgr:      cfg.NetMgr,
-		txIndex:     cfg.TxIndex,
-		addrIndex:   cfg.AddrIndex,
-		cfIndex:     cfg.CfIndex,
-		slpIndex:    cfg.SlpIndex,
-		httpServer:  cfg.HTTPServer,
-		subscribe:   make(chan *rpcEventSubscription),
-		events:      make(chan interface{}),
-		quit:        make(chan struct{}),
-		wg:          sync.WaitGroup{},
+		timeSource:    cfg.TimeSource,
+		chain:         cfg.Chain,
+		chainParams:   cfg.ChainParams,
+		db:            cfg.DB,
+		txMemPool:     cfg.TxMemPool,
+		netMgr:        cfg.NetMgr,
+		txIndex:       cfg.TxIndex,
+		addrIndex:     cfg.AddrIndex,
+		cfIndex:       cfg.CfIndex,
+		slpIndex:      cfg.SlpIndex,
+		httpServer:    cfg.HTTPServer,
+		subscribe:     make(chan *rpcEventSubscription),
+		events:        make(chan interface{}),
+		quit:          make(chan struct{}),
+		wg:            sync.WaitGroup{},
+		slpEntryCache: make(map[chainhash.Hash]*indexers.SlpIndexEntry),
 	}
 	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
 	serviceMap["pb.bchrpc"] = s
+
+	// listen to changes in the mempool for adding/removing from slp entry cache
+	go s.manageSlpEntryCache()
+
 	return s
 }
 
@@ -769,6 +776,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	// Attempt to decode the supplied address.
+	// TODO: Handle SLP formatted address
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
@@ -912,7 +920,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
-
+	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
 		txHash := tx.TxHash()
 		var (
@@ -945,6 +953,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				continue
 			}
 
+			slpToken, _ := s.getSlpToken(&txHash, uint32(i))
+			if req.IncludeTokenMetadata && s.slpIndex != nil {
+				_hash, _ := chainhash.NewHash(slpToken.TokenId)
+				tokenMetadataSet[*_hash] = struct{}{}
+			}
 			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
 				utxo := &pb.UnspentOutput{
 					Outpoint: &pb.Transaction_Input_Outpoint{
@@ -955,6 +968,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 					PubkeyScript: pkScript,
 					IsCoinbase:   entry.IsCoinBase(),
 					BlockHeight:  entry.BlockHeight(),
+					SlpToken:     slpToken,
 				}
 				utxos = append(utxos, utxo)
 			}
@@ -999,8 +1013,20 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		}
 	}
 
+	var tokenMetadata []*pb.TokenMetadata
+	if req.IncludeTokenMetadata && s.slpIndex != nil {
+		tokenMetadata = make([]*pb.TokenMetadata, 0)
+		for _hash := range tokenMetadataSet {
+			tm, _ := s.buildTokenMetadata(&_hash)
+			if tm != nil {
+				tokenMetadata = append(tokenMetadata, tm)
+			}
+		}
+	}
+
 	resp := &pb.GetAddressUnspentOutputsResponse{
-		Outputs: utxos,
+		Outputs:       utxos,
+		TokenMetadata: tokenMetadata,
 	}
 	return resp, nil
 }
@@ -1069,131 +1095,18 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		coinbase = entry.IsCoinBase()
 	}
 
-	// start of slp handling
 	var (
-		slpEntry      *indexers.SlpIndexEntry
 		slpToken      *pb.SlpToken
 		tokenMetadata *pb.TokenMetadata
 	)
-
-	if s.slpIndex != nil && req.Index > 0 {
-		mempoolEntries := make(map[chainhash.Hash]*indexers.SlpIndexEntry, 0) // TODO cache this map somewhere
-
-		if isSlpInMempool && req.IncludeMempool {
-
-			// get all mempool txns
-			rawMempool := s.txMemPool.MiningDescs()
-
-			// sort txns by topological order, parents first
-			transactions := make([]*bchutil.Tx, len(rawMempool))
-			for i, tx := range rawMempool {
-				transactions[i] = tx.Tx
-			}
-			sortedTxns := indexers.TopoSortTxs(transactions)
-
-			// loop through entire mempool to create db of valid slp items in mempool
-			getEntry := func(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
-				var _entry *indexers.SlpIndexEntry
-
-				// first look for inputs in the slp index
-				s.db.View(func(dbTx database.Tx) error {
-					_entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, hash)
-					return err
-				})
-				if _entry != nil {
-					return _entry, nil
-				}
-
-				// otherwise we'll check to see if its in our mempool
-				_entry = mempoolEntries[*hash]
-				if _entry != nil {
-					return _entry, nil
-				}
-				return nil, errors.New("item not in mempool")
-			}
-			addEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
-				entry := mempoolEntries[tx.TxHash()]
-				if entry == nil {
-					mempoolEntries[tx.TxHash()] = &indexers.SlpIndexEntry{
-						TokenID:        0,
-						TokenIDHash:    *tokenIDHash,
-						SlpVersionType: uint16(slpMsg.TokenType),
-						SlpOpReturn:    tx.TxOut[0].PkScript,
-					}
-				}
-				return nil
-			}
-			for _, tx := range sortedTxns {
-				indexers.CheckSlpTx(tx, getEntry, addEntry)
-			}
-
-			// finally, try to pull our slpEntry
-			slpEntry = mempoolEntries[*txnHash]
-		} else {
-			s.db.View(func(dbTx database.Tx) error {
-				slpEntry, err = s.slpIndex.GetSlpIndexEntry(dbTx, txnHash)
-				return err
-			})
-		}
-
-		if slpEntry != nil {
-			slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
-			amount, _ := slpMsg.GetVoutAmount(int(req.Index))
-			isMintBaton := false
-			var tokenID []byte
-			if slpMsg.TransactionType == "MINT" {
-				if slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(req.Index) {
-					isMintBaton = true
-				}
-				tokenID = slpMsg.Data.(v1parser.SlpMint).TokenID
-			} else if slpMsg.TransactionType == "SEND" {
-				tokenID = slpMsg.Data.(v1parser.SlpSend).TokenID
-			} else if slpMsg.TransactionType == "GENESIS" {
-				tokenID = req.Hash
-			}
-
-			slpToken = &pb.SlpToken{
-				Amount:      amount.Uint64(),
-				Address:     "",
-				TokenId:     tokenID,
-				IsMintBaton: isMintBaton,
-			}
-
-			if req.IncludeTokenMetadata {
-				var _hash []byte
-				for i := len(tokenID) - 1; i >= 0; i-- {
-					_hash = append(_hash, tokenID[i])
-				}
-				_tokenIDRev, _ := chainhash.NewHash(_hash)
-
-				var _genesisEntry *indexers.SlpIndexEntry
-				_genesisEntry = mempoolEntries[*_tokenIDRev]
-				if _genesisEntry == nil {
-					s.db.View(func(dbTx database.Tx) error {
-						_genesisEntry, err = s.slpIndex.GetSlpIndexEntry(dbTx, _tokenIDRev)
-						return err
-					})
-				}
-
-				if _genesisEntry == nil {
-					panic("genesis is missing " + hex.EncodeToString(_tokenIDRev[:]))
-				}
-
-				_genesisSlpMsg, _ := v1parser.ParseSLP(_genesisEntry.SlpOpReturn)
-				tokenMetadata = &pb.TokenMetadata{
-					TokenName:         _genesisSlpMsg.Data.(v1parser.SlpGenesis).Name,
-					TokenDocumentHash: _genesisSlpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-					TokenDocumentUrl:  _genesisSlpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
-					TokenId:           tokenID,
-					TokenTicker:       _genesisSlpMsg.Data.(v1parser.SlpGenesis).Ticker,
-					TokenType:         uint32(_genesisSlpMsg.TokenType),
-				}
-			}
-		}
+	if s.slpIndex != nil &&
+		req.Index > 0 &&
+		isSlpInMempool &&
+		req.IncludeMempool {
+		slpToken, err = s.getSlpToken(txnHash, req.Index)
+		tID, _ := chainhash.NewHash(slpToken.TokenId)
+		tokenMetadata, _ = s.buildTokenMetadata(tID)
 	}
-	// end of slp handling
-
-	//slpToken, TokenMetadata, err :=
 
 	ret := &pb.GetUnspentOutputResponse{
 		Outpoint: &pb.Transaction_Input_Outpoint{
@@ -1274,7 +1187,27 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
-	return nil, status.Error(codes.Unimplemented, "method not yet implemented")
+
+	tokenMetadata := make([]*pb.TokenMetadata, 0)
+	for _, hash := range req.GetTokenIds() {
+		tokenID, err := chainhash.NewHash(hash)
+		if err != nil {
+			return nil, status.Error(codes.Aborted, "token ID hash "+hex.EncodeToString(hash)+" is invalid")
+		}
+
+		tm, err := s.buildTokenMetadata(tokenID)
+		if err != nil {
+			return nil, status.Error(codes.Aborted, "token ID "+hex.EncodeToString(hash)+" does not exist")
+		}
+
+		tokenMetadata = append(tokenMetadata, tm)
+	}
+
+	resp := &pb.GetTokenMetadataResponse{
+		SlpMetadata: tokenMetadata,
+	}
+
+	return resp, nil
 }
 
 // GetParsedSlpScript returns a parsed object from a provided serialized slp OP_RETURN message
@@ -1355,18 +1288,12 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 		result.PrevOutHash = query.PrevOutHash
 		result.PrevOutVout = query.PrevOutVout
 
-		var entry *indexers.SlpIndexEntry
-
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
 			return nil, status.Error(codes.Aborted, "invalid txn hash (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
 		}
 
-		err = s.db.View(func(dbTx database.Tx) error {
-			entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, txid)
-			return err
-		})
-
+		entry, err := s.getSlpIndexEntry(txid)
 		if err != nil {
 			fmt.Println(err.Error())
 			return nil, status.Error(codes.Aborted, "txid is missing from slp validity set (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
@@ -1457,101 +1384,162 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 	return resp, nil
 }
 
+func isMaybeSlpTransaction(pkScript []byte) bool {
+	lokadHex, _ := hex.DecodeString("534c5000")
+	return bytes.Contains(pkScript, lokadHex)
+}
+
+func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
+
+	if req.AllowedSlpBurns != nil {
+		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
+	}
+
+	var msgTx wire.MsgTx
+	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
+	}
+	isMaybeSlp := isMaybeSlpTransaction(msgTx.TxOut[0].PkScript)
+	if !isMaybeSlp {
+		return nil, status.Error(codes.Aborted, "invalid slp (lokad id is missing)")
+	}
+
+	err := s.checkSlpTransaction(&msgTx)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &pb.CheckSlpTransactionResponse{
+		IsValid: true,
+	}
+	return res, nil
+}
+
+func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
+	if s.slpIndex == nil {
+		return status.Error(codes.Unavailable, "slpindex required")
+	}
+
+	slpMsg, err := v1parser.ParseSLP(msgTx.TxOut[0].PkScript)
+	if err != nil {
+		return status.Error(codes.Aborted, err.Error())
+	}
+
+	if slpMsg.TransactionType == "SEND" {
+		// get token ID from slpindex
+		tokenIDHash := slpMsg.Data.(v1parser.SlpSend).TokenID
+
+		// loop through **ALL** inputs, accumulate input amount for tokenID, abort on SLP input with wrong ID
+		inputVal := big.NewInt(0)
+		for _, txIn := range msgTx.TxIn {
+			var entry *indexers.SlpIndexEntry
+
+			entry, err = s.getSlpIndexEntry(&txIn.PreviousOutPoint.Hash)
+			if err != nil {
+				continue
+			}
+			if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
+				// TODO: check 'req.AllowedSlpBurns' for allowed burns
+				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (slp input from wrong token)")
+			}
+			_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+			idx := txIn.PreviousOutPoint.Index
+			amt, _ := _slpMsg.GetVoutAmount(int(idx))
+			inputVal.Add(inputVal, amt)
+		}
+
+		// check inputs != outputs (use check for explict burn requests i.e., 'req.AllowedSlpBurns')
+		outputVal, _ := slpMsg.TotalSlpMsgOutputValue()
+		if inputVal.Cmp(outputVal) < 0 {
+			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (outputs less than inputs)")
+		} else if inputVal.Cmp(outputVal) > 0 {
+			// TODO: check 'req.AllowedSlpBurns' for allowed burns
+			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (inputs greater than outputs)")
+		}
+
+	} else if slpMsg.TransactionType == "MINT" {
+		// get token ID
+		tokenIDHash := slpMsg.Data.(v1parser.SlpMint).TokenID
+
+		// loop through **ALL** inputs, look for mint baton is included, abort on any other SLP inputs
+		hasBaton := false
+		for _, txIn := range msgTx.TxIn {
+			var entry *indexers.SlpIndexEntry
+			err = s.db.View(func(dbTx database.Tx) error {
+				entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, &txIn.PreviousOutPoint.Hash)
+				return err
+			})
+			if err != nil {
+				continue
+			}
+			if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
+				// TODO: check 'req.AllowedSlpBurns' for allowed burns
+				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (slp input from wrong token)")
+			}
+			_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+			if _slpMsg.TransactionType == "GENESIS" {
+				if _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
+					hasBaton = true
+				}
+			} else {
+				if _slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
+					hasBaton = true
+				}
+			}
+		}
+		if !hasBaton {
+			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (missing valid baton)")
+		}
+	} else if slpMsg.TransactionType == "GENESIS" && slpMsg.TokenType == 0x41 {
+
+		grpIn := msgTx.TxIn[0].PreviousOutPoint
+		groupInputEntry, err := s.getSlpIndexEntry(&grpIn.Hash)
+		if err != nil {
+			return status.Error(codes.Aborted, "submitted transaction rejected because it is invalid (missing valid NFT1 group input)")
+		}
+
+		grpInSlpMsg, _ := v1parser.ParseSLP(groupInputEntry.SlpOpReturn)
+		amt, _ := grpInSlpMsg.GetVoutAmount(0)
+		if big.NewInt(1).Cmp(amt) > 0 {
+			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (insufficient NFT1 group input)")
+		}
+		if grpInSlpMsg.TokenType != 0x81 {
+			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (wrong token type for NFT1 child genesis)")
+		}
+
+		for i, txIn := range msgTx.TxIn {
+			if i == 0 {
+				continue
+			}
+			// TODO: check 'req.AllowedSlpBurns' for allowed burns
+			_inputEntry, _ := s.getSlpIndexEntry(&txIn.PreviousOutPoint.Hash)
+			if _inputEntry != nil {
+				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (bad input)")
+			}
+		}
+	} else if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
+		return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (unknown slp token type)")
+	}
+	return nil
+}
+
 // SubmitTransaction submits a transaction to all connected peers.
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
+
+	if req.AllowedSlpBurns != nil {
+		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
+	}
 
 	var msgTx wire.MsgTx
 	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
-	if !req.GetSkipSlpValidityCheck() {
-		if s.slpIndex == nil {
-			return nil, status.Error(codes.Unavailable, "slpindex required")
-		}
-
-		slpMsg, err := v1parser.ParseSLP(msgTx.TxOut[0].PkScript)
-
+	isMaybeSlp := isMaybeSlpTransaction(msgTx.TxOut[0].PkScript)
+	if isMaybeSlp && !req.GetSkipSlpValidityCheck() {
+		err := s.checkSlpTransaction(&msgTx)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, err.Error())
-		}
-
-		if slpMsg.TransactionType == "SEND" {
-			// get token ID from slpindex
-			tokenIDHash := slpMsg.Data.(v1parser.SlpSend).TokenID
-
-			// loop through **ALL** inputs, accumulate input amount for tokenID, abort on SLP input with wrong ID
-			inputVal := big.NewInt(0)
-			for _, txIn := range msgTx.TxIn {
-				var entry *indexers.SlpIndexEntry
-
-				err = s.db.View(func(dbTx database.Tx) error {
-					entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, &txIn.PreviousOutPoint.Hash)
-					return err
-				})
-				if err != nil {
-					continue
-				}
-				if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
-					// TODO: check for a list of client supplied allowed burns
-					return nil, status.Error(codes.Aborted, "transaction has input from wrong token")
-				}
-				_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
-				idx := txIn.PreviousOutPoint.Index
-				amt, _ := _slpMsg.GetVoutAmount(int(idx))
-				inputVal.Add(inputVal, amt)
-			}
-
-			// check inputs >= outputs
-			outputVal, _ := slpMsg.TotalSlpMsgOutputValue()
-			if inputVal.Cmp(outputVal) < 0 {
-				return nil, status.Error(codes.Aborted, "slp send transaction has outputs less than inputs")
-			}
-
-		} else if slpMsg.TransactionType == "MINT" {
-			// get token ID
-			tokenIDHash := slpMsg.Data.(v1parser.SlpMint).TokenID
-
-			// loop through **ALL** inputs, look for mint baton is included, abort on any other SLP inputs
-			hasBaton := false
-			for _, txIn := range msgTx.TxIn {
-				var entry *indexers.SlpIndexEntry
-				err = s.db.View(func(dbTx database.Tx) error {
-					entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, &txIn.PreviousOutPoint.Hash)
-					return err
-				})
-				if err != nil {
-					continue
-				}
-				if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
-					// TODO: check for a list of client supplied allowed burns
-					return nil, status.Error(codes.Aborted, "transaction has input from wrong token")
-				}
-				_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
-				if _slpMsg.TransactionType == "GENESIS" {
-					if _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
-						hasBaton = true
-					}
-				} else {
-					if _slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
-						hasBaton = true
-					}
-				}
-			}
-			if !hasBaton {
-				return nil, status.Error(codes.Aborted, "Minting transaction does not have a valid input baton")
-			}
-		} else if slpMsg.TransactionType == "GENESIS" && slpMsg.TokenType == 0x41 {
-			return nil, status.Error(codes.Unimplemented, "Child NFT1 genesis not implemented")
-
-			// TODO ...
-
-			// check that first input is a valid 0x81 token with quantity > 0
-
-			// loop through **ALL** inputs, abort on any other SLP inputs
-
-		} else if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
-			return nil, status.Error(codes.Aborted, "unknown slp token type")
+			return nil, err
 		}
 	}
 
@@ -2250,6 +2238,161 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	return addressTxns, nil
 }
 
+// getSlpIndexEntry fetches an SlpIndexEntry object leveraging a cache of SlpIndexEntry items
+func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
+
+	// Try to fetch the entry from the cache
+	entry := s.slpEntryCache[*hash]
+	if entry != nil {
+		return entry, nil
+	}
+
+	// Otherwise, try to fetch from the db
+	err := s.db.View(func(dbTx database.Tx) error {
+		var err error
+		entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, hash)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.slpEntryCache[*hash] = entry
+	return entry, nil
+}
+
+// getSlpToken fetches an SlpToken object leveraging a cache of SlpIndexEntry items
+func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToken, error) {
+
+	entry, err := s.getSlpIndexEntry(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		isMintBaton bool = false
+		address     string
+	)
+
+	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+
+	// check for isMintBaton
+	if slpMsg.TransactionType == "MINT" {
+		if slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(vout) {
+			isMintBaton = true
+		}
+	}
+
+	// get amount
+	amount, _ := slpMsg.GetVoutAmount(int(vout))
+
+	slpToken := &pb.SlpToken{
+		TokenId:     entry.TokenIDHash[:],
+		Amount:      amount.Uint64(),
+		Address:     address,
+		IsMintBaton: isMintBaton,
+	}
+
+	return slpToken, nil
+}
+
+// manageSlpEntryCache keeps the SlpEntryCache updated on transaction and block events
+func (s *GrpcServer) manageSlpEntryCache() {
+	subscription := s.subscribeEvents()
+	defer subscription.Unsubscribe()
+
+	for {
+		event := <-subscription.Events()
+		switch event := event.(type) {
+		case *rpcEventTxAccepted:
+			txDesc := event
+			slpMsg, err := v1parser.ParseSLP(txDesc.Tx.MsgTx().TxOut[0].PkScript)
+			if err != nil {
+				continue
+			}
+
+			if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
+				continue
+			}
+
+			_tokenIDHash, _ := goslp.GetSlpTokenID(txDesc.Tx.MsgTx())
+			tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
+			s.slpEntryCache[*txDesc.Tx.Hash()] = &indexers.SlpIndexEntry{
+				TokenID:        0,
+				TokenIDHash:    *tokenIDHash,
+				SlpVersionType: uint16(slpMsg.TokenType),
+				SlpOpReturn:    txDesc.Tx.MsgTx().TxOut[0].PkScript,
+			}
+		case *rpcEventBlockConnected:
+			block := event
+			for _, tx := range block.Transactions() {
+				delete(s.slpEntryCache, tx.MsgTx().TxHash())
+			}
+		}
+	}
+}
+
+// buildTokenMetadata returns metadata for the provided tokenID
+//
+// TODO: complete token metadata... Currently any other data, like number of transactions
+//		 for a token etc are not tracked. In the future we'll want to update this to fetch
+//		 additional token properties from the db.
+//
+func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetadata, error) {
+	var _hash []byte
+	for i := len(tokenID) - 1; i >= 0; i-- {
+		_hash = append(_hash, tokenID[i])
+	}
+	_tokenIDRev, _ := chainhash.NewHash(_hash)
+	entry, err := s.getSlpIndexEntry(_tokenIDRev)
+	if err != nil {
+		return nil, err
+	}
+
+	slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
+	if err != nil {
+		return nil, err
+	}
+
+	if slpMsg.TransactionType != "GENESIS" {
+		return nil, errors.New("cannot build token metadata from a non-Genesis entry")
+	}
+
+	tm := &pb.TokenMetadata{
+		TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
+		TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
+		TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
+		TokenTicker:       slpMsg.Data.(v1parser.SlpGenesis).Ticker,
+		TokenType:         uint32(slpMsg.TokenType),
+	}
+
+	switch slpMsg.TokenType {
+	case 0x01:
+		tm.TypeMetadata = &pb.TokenMetadata_Type1{
+			Type1: &pb.TokenMetadataTokenType1{
+				TokenMintQuantity: uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
+				// TODO ... complete token metadata
+				MintBatonTxid: nil,
+				MintBatonVout: 0,
+			},
+		}
+	case 0x41:
+		tm.TypeMetadata = &pb.TokenMetadata_Nft1Child{
+			Nft1Child: &pb.TokenMetadataNFT1Child{
+				// TODO ... complete token metadata
+			},
+		}
+	case 0x81:
+		tm.TypeMetadata = &pb.TokenMetadata_Nft1Group{
+			Nft1Group: &pb.TokenMetadataNFT1Group{
+				// TODO ... complete token metadata
+			},
+		}
+	}
+
+	return tm, nil
+}
+
 // getDifficultyRatio returns the proof-of-work difficulty as a multiple of the
 // minimum difficulty using the passed bits field from the header of a block.
 func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
@@ -2436,6 +2579,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 	}
 	for i, input := range tx.MsgTx().TxIn {
+
+		slpToken, _ := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
+
 		in := &pb.Transaction_Input{
 			Index:           uint32(i),
 			SignatureScript: input.SignatureScript,
@@ -2444,20 +2590,19 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				Index: input.PreviousOutPoint.Index,
 				Hash:  input.PreviousOutPoint.Hash.CloneBytes(),
 			},
-			SlpToken: &pb.SlpToken{
-				// TODO: fill-in SLP input amounts and token ids
-			},
+			SlpToken: slpToken,
 		}
 		respTx.Inputs = append(respTx.Inputs, in)
 	}
 	for i, output := range tx.MsgTx().TxOut {
+
+		slpToken, _ := s.getSlpToken(tx.Hash(), uint32(i))
+
 		out := &pb.Transaction_Output{
 			Value:        output.Value,
 			Index:        uint32(i),
 			PubkeyScript: output.PkScript,
-			SlpToken:     &pb.SlpToken{
-				// TODO: fill-in SLP output amounts and token ids
-			},
+			SlpToken:     slpToken,
 		}
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
 		if err == nil {

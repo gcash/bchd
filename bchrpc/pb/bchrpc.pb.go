@@ -128,7 +128,7 @@ func (x GetTrustedValidationRequest_Functionary_MessageType) Number() protorefle
 
 // Deprecated: Use GetTrustedValidationRequest_Functionary_MessageType.Descriptor instead.
 func (GetTrustedValidationRequest_Functionary_MessageType) EnumDescriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 0}
+	return file_bchrpc_proto_rawDescGZIP(), []int{40, 1, 0}
 }
 
 type GetTrustedValidationRequest_Functionary_SignatureType int32
@@ -174,7 +174,7 @@ func (x GetTrustedValidationRequest_Functionary_SignatureType) Number() protoref
 
 // Deprecated: Use GetTrustedValidationRequest_Functionary_SignatureType.Descriptor instead.
 func (GetTrustedValidationRequest_Functionary_SignatureType) EnumDescriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1, 1}
+	return file_bchrpc_proto_rawDescGZIP(), []int{40, 1, 1}
 }
 
 // State of the block in relation to the chain.
@@ -2339,6 +2339,108 @@ func (x *SubmitTransactionResponse) GetHash() []byte {
 	return nil
 }
 
+type CheckSlpTransactionRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Transaction     []byte                        `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
+	AllowedSlpBurns []*Transaction_Input_Outpoint `protobuf:"bytes,2,rep,name=allowed_slp_burns,json=allowedSlpBurns,proto3" json:"allowed_slp_burns,omitempty"`
+}
+
+func (x *CheckSlpTransactionRequest) Reset() {
+	*x = CheckSlpTransactionRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[32]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CheckSlpTransactionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSlpTransactionRequest) ProtoMessage() {}
+
+func (x *CheckSlpTransactionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[32]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSlpTransactionRequest.ProtoReflect.Descriptor instead.
+func (*CheckSlpTransactionRequest) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CheckSlpTransactionRequest) GetTransaction() []byte {
+	if x != nil {
+		return x.Transaction
+	}
+	return nil
+}
+
+func (x *CheckSlpTransactionRequest) GetAllowedSlpBurns() []*Transaction_Input_Outpoint {
+	if x != nil {
+		return x.AllowedSlpBurns
+	}
+	return nil
+}
+
+type CheckSlpTransactionResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	IsValid bool `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
+}
+
+func (x *CheckSlpTransactionResponse) Reset() {
+	*x = CheckSlpTransactionResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_bchrpc_proto_msgTypes[33]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CheckSlpTransactionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSlpTransactionResponse) ProtoMessage() {}
+
+func (x *CheckSlpTransactionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[33]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSlpTransactionResponse.ProtoReflect.Descriptor instead.
+func (*CheckSlpTransactionResponse) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CheckSlpTransactionResponse) GetIsValid() bool {
+	if x != nil {
+		return x.IsValid
+	}
+	return false
+}
+
 // Request to subscribe or unsubscribe from a stream of transactions.
 type SubscribeTransactionsRequest struct {
 	state         protoimpl.MessageState
@@ -2364,7 +2466,7 @@ type SubscribeTransactionsRequest struct {
 func (x *SubscribeTransactionsRequest) Reset() {
 	*x = SubscribeTransactionsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[32]
+		mi := &file_bchrpc_proto_msgTypes[34]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2377,7 +2479,7 @@ func (x *SubscribeTransactionsRequest) String() string {
 func (*SubscribeTransactionsRequest) ProtoMessage() {}
 
 func (x *SubscribeTransactionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[32]
+	mi := &file_bchrpc_proto_msgTypes[34]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2390,7 +2492,7 @@ func (x *SubscribeTransactionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeTransactionsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeTransactionsRequest) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{32}
+	return file_bchrpc_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SubscribeTransactionsRequest) GetSubscribe() *TransactionFilter {
@@ -2467,7 +2569,7 @@ type SubscribeBlocksRequest struct {
 func (x *SubscribeBlocksRequest) Reset() {
 	*x = SubscribeBlocksRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[33]
+		mi := &file_bchrpc_proto_msgTypes[35]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2480,7 +2582,7 @@ func (x *SubscribeBlocksRequest) String() string {
 func (*SubscribeBlocksRequest) ProtoMessage() {}
 
 func (x *SubscribeBlocksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[33]
+	mi := &file_bchrpc_proto_msgTypes[35]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2493,7 +2595,7 @@ func (x *SubscribeBlocksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeBlocksRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeBlocksRequest) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{33}
+	return file_bchrpc_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SubscribeBlocksRequest) GetFullBlock() bool {
@@ -2534,7 +2636,7 @@ type BlockNotification struct {
 func (x *BlockNotification) Reset() {
 	*x = BlockNotification{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[34]
+		mi := &file_bchrpc_proto_msgTypes[36]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3437,7 +3539,7 @@ type GetTrustedValidationRequest_Query struct {
 func (x *GetTrustedValidationRequest_Query) Reset() {
 	*x = GetTrustedValidationRequest_Query{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[60]
+		mi := &file_bchrpc_proto_msgTypes[62]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3450,7 +3552,7 @@ func (x *GetTrustedValidationRequest_Query) String() string {
 func (*GetTrustedValidationRequest_Query) ProtoMessage() {}
 
 func (x *GetTrustedValidationRequest_Query) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[60]
+	mi := &file_bchrpc_proto_msgTypes[62]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3463,7 +3565,7 @@ func (x *GetTrustedValidationRequest_Query) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetTrustedValidationRequest_Query.ProtoReflect.Descriptor instead.
 func (*GetTrustedValidationRequest_Query) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{38, 0}
+	return file_bchrpc_proto_rawDescGZIP(), []int{40, 0}
 }
 
 func (x *GetTrustedValidationRequest_Query) GetPrevOutHash() []byte {
@@ -3493,7 +3595,7 @@ type GetTrustedValidationRequest_Functionary struct {
 func (x *GetTrustedValidationRequest_Functionary) Reset() {
 	*x = GetTrustedValidationRequest_Functionary{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[61]
+		mi := &file_bchrpc_proto_msgTypes[63]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3506,7 +3608,7 @@ func (x *GetTrustedValidationRequest_Functionary) String() string {
 func (*GetTrustedValidationRequest_Functionary) ProtoMessage() {}
 
 func (x *GetTrustedValidationRequest_Functionary) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[61]
+	mi := &file_bchrpc_proto_msgTypes[63]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3519,7 +3621,7 @@ func (x *GetTrustedValidationRequest_Functionary) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetTrustedValidationRequest_Functionary.ProtoReflect.Descriptor instead.
 func (*GetTrustedValidationRequest_Functionary) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{38, 1}
+	return file_bchrpc_proto_rawDescGZIP(), []int{40, 1}
 }
 
 func (x *GetTrustedValidationRequest_Functionary) GetPublicKey() []byte {
@@ -3563,7 +3665,7 @@ type GetTrustedValidationResponse_ValidityResult struct {
 func (x *GetTrustedValidationResponse_ValidityResult) Reset() {
 	*x = GetTrustedValidationResponse_ValidityResult{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[62]
+		mi := &file_bchrpc_proto_msgTypes[64]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3576,7 +3678,7 @@ func (x *GetTrustedValidationResponse_ValidityResult) String() string {
 func (*GetTrustedValidationResponse_ValidityResult) ProtoMessage() {}
 
 func (x *GetTrustedValidationResponse_ValidityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[62]
+	mi := &file_bchrpc_proto_msgTypes[64]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3589,7 +3691,7 @@ func (x *GetTrustedValidationResponse_ValidityResult) ProtoReflect() protoreflec
 
 // Deprecated: Use GetTrustedValidationResponse_ValidityResult.ProtoReflect.Descriptor instead.
 func (*GetTrustedValidationResponse_ValidityResult) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0}
+	return file_bchrpc_proto_rawDescGZIP(), []int{41, 0}
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult) GetPrevOutHash() []byte {
@@ -3685,7 +3787,7 @@ type GetTrustedValidationResponse_ValidityResult_FunctionarySignature struct {
 func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Reset() {
 	*x = GetTrustedValidationResponse_ValidityResult_FunctionarySignature{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_bchrpc_proto_msgTypes[63]
+		mi := &file_bchrpc_proto_msgTypes[65]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3698,7 +3800,7 @@ func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Strin
 func (*GetTrustedValidationResponse_ValidityResult_FunctionarySignature) ProtoMessage() {}
 
 func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[63]
+	mi := &file_bchrpc_proto_msgTypes[65]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3711,7 +3813,7 @@ func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Proto
 
 // Deprecated: Use GetTrustedValidationResponse_ValidityResult_FunctionarySignature.ProtoReflect.Descriptor instead.
 func (*GetTrustedValidationResponse_ValidityResult_FunctionarySignature) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{39, 0, 0}
+	return file_bchrpc_proto_rawDescGZIP(), []int{41, 0, 0}
 }
 
 func (x *GetTrustedValidationResponse_ValidityResult_FunctionarySignature) GetSignature() []byte {
@@ -5134,7 +5236,7 @@ func file_bchrpc_proto_init() {
 			}
 		}
 		file_bchrpc_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubscribeTransactionsRequest); i {
+			switch v := v.(*CheckSlpTransactionRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5146,7 +5248,7 @@ func file_bchrpc_proto_init() {
 			}
 		}
 		file_bchrpc_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubscribeBlocksRequest); i {
+			switch v := v.(*CheckSlpTransactionResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5642,6 +5744,15 @@ func (c *bchrpcClient) GetParsedSlpScript(ctx context.Context, in *GetParsedSlpS
 func (c *bchrpcClient) GetTrustedValidation(ctx context.Context, in *GetTrustedValidationRequest, opts ...grpc.CallOption) (*GetTrustedValidationResponse, error) {
 	out := new(GetTrustedValidationResponse)
 	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetTrustedValidation", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bchrpcClient) CheckSlpTransaction(ctx context.Context, in *CheckSlpTransactionRequest, opts ...grpc.CallOption) (*CheckSlpTransactionResponse, error) {
+	out := new(CheckSlpTransactionResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/CheckSlpTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -6233,6 +6344,24 @@ func _Bchrpc_GetTrustedValidation_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_CheckSlpTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckSlpTransactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).CheckSlpTransaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.bchrpc/CheckSlpTransaction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).CheckSlpTransaction(ctx, req.(*CheckSlpTransactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_SubmitTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SubmitTransactionRequest)
 	if err := dec(in); err != nil {
@@ -6394,6 +6523,10 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTrustedValidation",
 			Handler:    _Bchrpc_GetTrustedValidation_Handler,
+		},
+		{
+			MethodName: "CheckSlpTransaction",
+			Handler:    _Bchrpc_CheckSlpTransaction_Handler,
 		},
 		{
 			MethodName: "SubmitTransaction",
