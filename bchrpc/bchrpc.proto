@@ -915,34 +915,42 @@ enum SlpVersionType {       // everything except "NON_SLP" could be annotated wi
 }
 
 message TokenMetadataTokenType1 {
-    uint64 token_mint_quantity = 1;
-    bytes mint_baton_txid = 2;
-    uint32 mint_baton_vout = 3;
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+	uint32 decimals = 5;
+    uint64 token_mint_quantity = 6;
+    bytes mint_baton_txid = 7;
+    uint32 mint_baton_vout = 8;
 }
 
 message TokenMetadataNFT1Group {
-    uint64 token_mint_quantity = 1;
-    bytes mint_baton_txid = 2;
-    uint32 mint_baton_vout = 3;
-    //repeated bytes nftChildIDs = 4; // DO WE WANT THIS?
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+	uint32 decimals = 5;
+    uint64 token_mint_quantity = 6;
+    bytes mint_baton_txid = 7;
+    uint32 mint_baton_vout = 8;
+    //repeated bytes nftChildIDs = 9; // DO WE WANT THIS?
 }
 
 message TokenMetadataNFT1Child {
-    bytes group_id = 1;
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+    bytes group_id = 5;
 }
 
 message TokenMetadata {
 	bytes token_id = 1;
  	uint32 token_type = 2;
-    bytes token_ticker = 3;
-	bytes token_name = 4;
-	bytes token_document_url = 5;
-	bytes token_document_hash = 6;
-	uint32 decimals = 7;
-	uint32 height_created = 8;
 	oneof type_metadata {
-        TokenMetadataTokenType1 type1 = 9;
-        TokenMetadataNFT1Group nft1_group = 10;
-        TokenMetadataNFT1Child nft1_child = 11;
+        TokenMetadataTokenType1 type1 = 3;
+        TokenMetadataNFT1Group nft1_group = 4;
+        TokenMetadataNFT1Child nft1_child = 5;
     }
 }
