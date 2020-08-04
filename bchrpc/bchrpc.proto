@@ -99,6 +99,9 @@ service bchrpc {
     // **Requires SlpIndex with additional functionary key setup**
     rpc GetTrustedValidation(GetTrustedValidationRequest) returns (GetTrustedValidationResponse) {}
 
+    // CheckSlpTransaction checks the validity of a 
+    rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
+
     // Submit a transaction to all connected peers.
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
@@ -453,6 +456,15 @@ message SubmitTransactionRequest {
 }
 message SubmitTransactionResponse {
     bytes hash = 1;
+}
+
+message CheckSlpTransactionRequest {
+    bytes transaction = 1;
+    repeated Transaction.Input.Outpoint allowed_slp_burns = 2;
+}
+
+message CheckSlpTransactionResponse {
+    bool is_valid = 1;
 }
 
 // Request to subscribe or unsubscribe from a stream of transactions.
