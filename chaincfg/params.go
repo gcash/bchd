@@ -140,12 +140,15 @@ type Params struct {
 
 	// The following are the heights at which the Bitcoin Cash specific forks
 	// became active.
-	UahfForkHeight              int32 // August 1, 2017 hard fork
-	DaaForkHeight               int32 // November 13, 2017 hard fork
+	UahfForkHeight              int32 // August 1, 2017 hardfork
+	DaaForkHeight               int32 // November 13, 2017 hardfork
 	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
-	GreatWallForkHeight         int32 // May 15, 2019 hard fork
-	GravitonForkHeight          int32 // Nov 15, 2019 hard fork
-	PhononForkHeight            int32 // May 15, 2020 hard fork
+	GreatWallForkHeight         int32 // May 15, 2019 hardfork
+	GravitonForkHeight          int32 // Nov 15, 2019 hardfork
+	PhononForkHeight            int32 // May 15, 2020 hardfork
+	AxionForkHeight             int32 // Nov 15, 2020 hardfork
+
+	AxionActivationTime uint64 // Activation time
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.

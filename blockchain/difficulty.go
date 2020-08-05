@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"errors"
 	"math/big"
 	"time"
 
@@ -21,12 +22,24 @@ var (
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 )
 
-// DifficultyAdjustmentWindow is the size of the window used by the DAA adjustment
-// algorithm when calculating the current difficulty. The algorithm requires fetching
-// a 'suitable' block out of blocks n-144, n-145, and n-146. We set this value equal
-// to n-144 as that is the first of the three candidate blocks and we will use it
-// to fetch the previous two.
-const DifficultyAdjustmentWindow = 144
+const (
+	// difficultyAdjustmentWindow is the size of the window used by the DAA adjustment
+	// algorithm when calculating the current difficulty. The algorithm requires fetching
+	// a 'suitable' block out of blocks n-144, n-145, and n-146. We set this value equal
+	// to n-144 as that is the first of the three candidate blocks and we will use it
+	// to fetch the previous two.
+	difficultyAdjustmentWindow = 144
+
+	// idealBlockTime is used by the Asert difficulty adjustment algorithm. It equals
+	// 10 minutes between blocks.
+	idealBlockTime = 600
+
+	// tau is used by the Asert difficult adjustment algorithm. It is 2 days in seconds.
+	tau = 172800
+
+	// radix is used by the Asert difficulty adjustment algorithm.
+	radix = 65536
+)
 
 // The DifficultyAlgorithm specifies which algorithm to use and is passed into
 // the calcNextRequiredDifficulty function.
@@ -44,9 +57,12 @@ const (
 	// right after the August 1st, 2017 hardfork and lasted until November 15th, 2017.
 	DifficultyEDA DifficultyAlgorithm = 1
 
-	// DifficultyDAA (Difficulty Adjustment Algorithm) is the current Bitcoin Cash
-	// difficulty algorithm in effect since Novemeber 15th, 2017.
+	// DifficultyDAA (Difficulty Adjustment Algorithm) is the Bitcoin Cash difficulty
+	// algorithm in effect between November 15th, 2017 and November 15, 2020.
 	DifficultyDAA DifficultyAlgorithm = 2
+
+	// DifficultyAsert is the aserti3-2d algorithm in effect as of November 15, 2020.
+	DifficultyAsert DifficultyAlgorithm = 3
 )
 
 // SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
@@ -56,6 +72,8 @@ func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(height int32) Difficult
 		return DifficultyEDA
 	} else if height > b.chainParams.DaaForkHeight {
 		return DifficultyDAA
+	} else if height > b.chainParams.AxionForkHeight {
+		return DifficultyAsert
 	}
 	return DifficultyLegacy
 }
@@ -254,11 +272,80 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return lastNode.bits, nil
 	}
 
-	// If we're still using a legacy algorithm
-	if algorithm != DifficultyDAA {
+	switch algorithm {
+	case DifficultyLegacy, DifficultyEDA:
 		return b.calcLegacyRequiredDifficulty(lastNode, newBlockTime, algorithm)
+	case DifficultyDAA:
+		return b.calcDAARequiredDifficulty(lastNode, newBlockTime)
+	case DifficultyAsert:
+		referenceNode := b.bestChain.NodeByHeight(b.chainParams.AxionForkHeight)
+		return b.calcAsertRequiredDifficulty(lastNode, referenceNode.height, referenceNode.timestamp, referenceNode.bits, lastNode.height+1, newBlockTime.Unix())
+	}
+	return 0, errors.New("unknown difficulty algorithm")
+}
+
+func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceBlockHeight int32, referenceBlockTime int64, referenceBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
+	// For networks that support it, allow special reduction of the
+	// required difficulty once too much time has elapsed without
+	// mining a block.
+	if b.chainParams.ReduceMinDifficulty {
+		// Return minimum difficulty when more than the desired
+		// amount of time has elapsed without mining a block.
+		reductionTime := int64(b.chainParams.MinDiffReductionTime /
+			time.Second)
+		allowMinTime := lastNode.timestamp + reductionTime
+		if evalBlockTime > allowMinTime {
+			return b.chainParams.PowLimitBits, nil
+		}
 	}
 
+	target := CompactToBig(referenceBlockBits)
+
+	tDelta := evalBlockTime - referenceBlockTime
+	hDelta := evalBlockHeight - referenceBlockHeight
+
+	exponent := ((tDelta - int64(idealBlockTime)*int64(hDelta)) * radix) / tau
+
+	num_shifts := exponent >> 16
+
+	if num_shifts < 0 {
+		target = target.Rsh(target, uint(-num_shifts))
+	} else {
+		target = target.Lsh(target, uint(num_shifts))
+	}
+
+	exponent = exponent - (num_shifts * radix)
+
+	// If target is zero or greater than the POW limit.
+	if target.Cmp(big.NewInt(0)) == 0 || target.Cmp(b.chainParams.PowLimit) > 0 {
+		if num_shifts < 0 {
+			// Return hardest target
+			return BigToCompact(big.NewInt(1)), nil
+		} else {
+			// Return softest target
+			return b.chainParams.PowLimitBits, nil
+		}
+	}
+
+	// factor = (195766423245049*exponent + 971821376*exponent**2 + 5127*exponent**3 + 2**47)>>48
+	bigExp := big.NewInt(exponent)
+	factor := new(big.Int).Mul(big.NewInt(195766423245049), bigExp)
+	factor.Add(factor, new(big.Int).Mul(big.NewInt(971821376), new(big.Int).Exp(bigExp, big.NewInt(2), nil)))
+	factor.Add(factor, new(big.Int).Mul(big.NewInt(5127), new(big.Int).Exp(bigExp, big.NewInt(3), nil)))
+	factor.Add(factor, new(big.Int).Exp(big.NewInt(2), big.NewInt(47), nil))
+	factor.Rsh(factor, 48)
+
+	// target += (target * factor) >> 16
+	target = target.Add(target, new(big.Int).Rsh(new(big.Int).Mul(target, factor), 16))
+
+	// clip again if above minimum target (too easy)
+	if target.Cmp(b.chainParams.PowLimit) > 0 {
+		target.Set(b.chainParams.PowLimit)
+	}
+	return BigToCompact(target), nil
+}
+
+func (b *BlockChain) calcDAARequiredDifficulty(lastNode *blockNode, newBlockTime time.Time) (uint32, error) {
 	// For networks that support it, allow special reduction of the
 	// required difficulty once too much time has elapsed without
 	// mining a block.
@@ -274,7 +361,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	}
 
 	// Get the block node at the beginning of the window (n-144)
-	firstNode := lastNode.RelativeAncestor(DifficultyAdjustmentWindow)
+	firstNode := lastNode.RelativeAncestor(difficultyAdjustmentWindow)
 	if firstNode == nil {
 		return 0, AssertError("unable to obtain previous retarget block")
 	}
