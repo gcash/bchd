@@ -126,9 +126,10 @@ type GrpcServer struct {
 
 	wg       sync.WaitGroup
 	ready    uint32 // atomic
-	shutdown int32  //atomic
+	shutdown int32  // atomic
 
 	slpEntryCache map[chainhash.Hash]*indexers.SlpIndexEntry
+	mutex         *sync.Mutex
 }
 
 // NewGrpcServer returns a new GrpcServer which has not yet
@@ -151,6 +152,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		quit:          make(chan struct{}),
 		wg:            sync.WaitGroup{},
 		slpEntryCache: make(map[chainhash.Hash]*indexers.SlpIndexEntry),
+		mutex:         &sync.Mutex{},
 	}
 	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
@@ -2246,7 +2248,9 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
 
 	// Try to fetch the entry from the cache
+	s.mutex.Lock()
 	entry := s.slpEntryCache[*hash]
+	s.mutex.Unlock()
 	if entry != nil {
 		return entry, nil
 	}
@@ -2261,7 +2265,10 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexE
 		return nil, err
 	}
 
+	s.mutex.Lock()
 	s.slpEntryCache[*hash] = entry
+	s.mutex.Unlock()
+
 	return entry, nil
 }
 
@@ -2301,6 +2308,9 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 }
 
 // manageSlpEntryCache keeps the SlpEntryCache updated on transaction and block events
+//
+// TODO: need to remove old items from this map with a timer
+//
 func (s *GrpcServer) manageSlpEntryCache() {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
@@ -2321,17 +2331,21 @@ func (s *GrpcServer) manageSlpEntryCache() {
 
 			_tokenIDHash, _ := goslp.GetSlpTokenID(txDesc.Tx.MsgTx())
 			tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
+			s.mutex.Lock()
 			s.slpEntryCache[*txDesc.Tx.Hash()] = &indexers.SlpIndexEntry{
 				TokenID:        0,
 				TokenIDHash:    *tokenIDHash,
 				SlpVersionType: uint16(slpMsg.TokenType),
 				SlpOpReturn:    txDesc.Tx.MsgTx().TxOut[0].PkScript,
 			}
+			s.mutex.Unlock()
 		case *rpcEventBlockConnected:
 			block := event
+			s.mutex.Lock()
 			for _, tx := range block.Transactions() {
 				delete(s.slpEntryCache, tx.MsgTx().TxHash())
 			}
+			s.mutex.Unlock()
 		}
 	}
 }
