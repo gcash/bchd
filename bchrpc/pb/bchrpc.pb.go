@@ -2285,9 +2285,9 @@ func (x *SubmitTransactionRequest) GetSkipSlpValidityCheck() bool {
 	return false
 }
 
-func (x *SubmitTransactionRequest) GetAllowedSlpBurns() []*Transaction_Input_Outpoint {
+func (x *SubmitTransactionRequest) GetRequiredSlpBurns() []*SlpRequiredBurn {
 	if x != nil {
-		return x.AllowedSlpBurns
+		return x.RequiredSlpBurns
 	}
 	return nil
 }
@@ -2344,8 +2344,8 @@ type CheckSlpTransactionRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Transaction     []byte                        `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
-	AllowedSlpBurns []*Transaction_Input_Outpoint `protobuf:"bytes,2,rep,name=allowed_slp_burns,json=allowedSlpBurns,proto3" json:"allowed_slp_burns,omitempty"`
+	Transaction      []byte             `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
+	RequiredSlpBurns []*SlpRequiredBurn `protobuf:"bytes,2,rep,name=required_slp_burns,json=requiredSlpBurns,proto3" json:"required_slp_burns,omitempty"`
 }
 
 func (x *CheckSlpTransactionRequest) Reset() {
@@ -2387,9 +2387,9 @@ func (x *CheckSlpTransactionRequest) GetTransaction() []byte {
 	return nil
 }
 
-func (x *CheckSlpTransactionRequest) GetAllowedSlpBurns() []*Transaction_Input_Outpoint {
+func (x *CheckSlpTransactionRequest) GetRequiredSlpBurns() []*SlpRequiredBurn {
 	if x != nil {
-		return x.AllowedSlpBurns
+		return x.RequiredSlpBurns
 	}
 	return nil
 }
