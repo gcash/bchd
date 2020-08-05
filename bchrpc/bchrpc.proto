@@ -452,7 +452,7 @@ message SubmitTransactionRequest {
     // The encoded transaction.
     bytes transaction = 1;
     bool skip_slp_validity_check = 2;
-    repeated Transaction.Input.Outpoint allowed_slp_burns = 3;
+    repeated SlpRequiredBurn required_slp_burns = 3;
 }
 message SubmitTransactionResponse {
     bytes hash = 1;
@@ -460,7 +460,7 @@ message SubmitTransactionResponse {
 
 message CheckSlpTransactionRequest {
     bytes transaction = 1;
-    repeated Transaction.Input.Outpoint allowed_slp_burns = 2;
+    repeated SlpRequiredBurn required_slp_burns = 2;
 }
 
 message CheckSlpTransactionResponse {
@@ -952,5 +952,15 @@ message TokenMetadata {
         TokenMetadataTokenType1 type1 = 3;
         TokenMetadataNFT1Group nft1_group = 4;
         TokenMetadataNFT1Child nft1_child = 5;
+    }
+}
+
+message SlpRequiredBurn {
+    Transaction.Input.Outpoint outpoint = 1;
+    bytes token_id = 2;
+    uint32 token_type = 3;
+    oneof burn_intention {
+        uint64 amount = 4;
+        bool mint_baton = 5;
     }
 }

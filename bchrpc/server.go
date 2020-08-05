@@ -1396,7 +1396,7 @@ func isMaybeSlpTransaction(pkScript []byte) bool {
 
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
 
-	if req.AllowedSlpBurns != nil {
+	if req.RequiredSlpBurns != nil {
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
@@ -1531,7 +1531,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 // SubmitTransaction submits a transaction to all connected peers.
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 
-	if req.AllowedSlpBurns != nil {
+	if req.RequiredSlpBurns != nil {
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
