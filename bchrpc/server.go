@@ -1395,6 +1395,7 @@ func isMaybeSlpTransaction(pkScript []byte) bool {
 	return bytes.Contains(pkScript, lokadHex)
 }
 
+// CheckSlpTransaction checks validity of a submitted transaction and with return an error if the transaction is invalid
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
 
 	if req.RequiredSlpBurns != nil {
@@ -1445,7 +1446,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 				continue
 			}
 			if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
-				// TODO: check 'req.AllowedSlpBurns' for allowed burns
+				// TODO: (BONUS) check 'req.RequiredSlpBurns' for allowed burns
 				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (slp input from wrong token)")
 			}
 			_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -1459,7 +1460,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 		if inputVal.Cmp(outputVal) < 0 {
 			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (outputs less than inputs)")
 		} else if inputVal.Cmp(outputVal) > 0 {
-			// TODO: check 'req.AllowedSlpBurns' for allowed burns
+			// TODO: (BONUS) check 'req.RequiredSlpBurns' for allowed burns
 			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (inputs greater than outputs)")
 		}
 
@@ -1479,7 +1480,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 				continue
 			}
 			if !bytes.Equal(tokenIDHash, entry.TokenIDHash.CloneBytes()) {
-				// TODO: check 'req.AllowedSlpBurns' for allowed burns
+				// TODO: (BONUS) check 'req.RequiredSlpBurns' for allowed burns
 				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (slp input from wrong token)")
 			}
 			_slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -1517,7 +1518,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 			if i == 0 {
 				continue
 			}
-			// TODO: check 'req.AllowedSlpBurns' for allowed burns
+			// TODO: (BONUS) check 'req.RequiredSlpBurns' for allowed burns
 			_inputEntry, _ := s.getSlpIndexEntry(&txIn.PreviousOutPoint.Hash)
 			if _inputEntry != nil {
 				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (bad input)")
