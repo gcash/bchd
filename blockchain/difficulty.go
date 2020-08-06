@@ -298,12 +298,12 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 				node = node.parent
 			}
 		}
-		return b.calcAsertRequiredDifficulty(lastNode, referenceNode.height, referenceNode.timestamp, referenceNode.bits, lastNode.height+1, newBlockTime.Unix())
+		return b.calcAsertRequiredDifficulty(lastNode, referenceNode.height, referenceNode.parent.timestamp, referenceNode.bits, lastNode.height+1, newBlockTime.Unix())
 	}
 	return 0, errors.New("unknown difficulty algorithm")
 }
 
-func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceBlockHeight int32, referenceBlockTime int64, referenceBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
+func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceBlockHeight int32, anchorBlockTime int64, referenceBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
 	// For networks that support it, allow special reduction of the
 	// required difficulty once too much time has elapsed without
 	// mining a block.
@@ -320,10 +320,10 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 
 	target := CompactToBig(referenceBlockBits)
 
-	tDelta := evalBlockTime - referenceBlockTime
+	tDelta := evalBlockTime - anchorBlockTime
 	hDelta := evalBlockHeight - referenceBlockHeight
 
-	exponent := ((tDelta - int64(idealBlockTime)*int64(hDelta)) * radix) / tau
+	exponent := ((tDelta - int64(idealBlockTime)*int64(hDelta+1)) * radix) / tau
 
 	numShifts := exponent >> 16
 

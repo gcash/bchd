@@ -83,22 +83,22 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 	}
 
 	testVectors := []struct {
-		run             int
-		referenceHeight int64
-		referenceTime   int64
-		referenceBits   uint32
-		startHeight     int64
-		startTime       int64
-		blocks          []block
+		run           int
+		anchorHeight  int64
+		referenceTime int64
+		referenceBits uint32
+		startHeight   int64
+		startTime     int64
+		blocks        []block
 	}{
 		// Steady 600s blocks at POW limit target
 		{
-			run:             1,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1d00ffff,
-			startHeight:     1,
-			startTime:       600,
+			run:           1,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1d00ffff,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x1d00ffff},
 				{2, 1200, 0x1d00ffff},
@@ -114,12 +114,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// Steady 600s blocks at arbitrary non-limit target 0x1a2b3c4d
 		{
-			run:             2,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1a2b3c4d,
-			startHeight:     1,
-			startTime:       600,
+			run:           2,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1a2b3c4d,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x1a2b3c4d},
 				{2, 1200, 0x1a2b3c4d},
@@ -135,12 +135,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// Steady 600s blocks at minimum limit target 0x01010000
 		{
-			run:             3,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x01010000,
-			startHeight:     1,
-			startTime:       600,
+			run:           3,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x01010000,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x01010000},
 				{2, 1200, 0x01010000},
@@ -156,12 +156,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// From minimum target, a series of halflife schedule jumps, doubling target at each block
 		{
-			run:             4,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x01010000,
-			startHeight:     1,
-			startTime:       173400,
+			run:           4,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x01010000,
+			startHeight:   2,
+			startTime:     173400,
 			blocks: []block{
 				{1, 173400, 0x01020000},
 				{2, 346800, 0x01040000},
@@ -392,12 +392,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// From POW limit, a series of halflife block height jumps w/o time increment, halving target at each block
 		{
-			run:             5,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1d00ffff,
-			startHeight:     0,
-			startTime:       0,
+			run:           5,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1d00ffff,
+			startHeight:   2,
+			startTime:     0,
 			blocks: []block{
 				{0, 0, 0x1d00ffff},
 				{288, 0, 0x1c7fff80},
@@ -628,12 +628,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// Deterministically random solvetimes for stable hashrate around a recent real life nBits
 		{
-			run:             6,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1802aee8,
-			startHeight:     1,
-			startTime:       600,
+			run:           6,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1802aee8,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x1802aee8},
 				{2, 710, 0x1802ad91},
@@ -1639,12 +1639,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// Deterministically random solvetimes for up-ramping hashrate around a recent real life nBits
 		{
-			run:             7,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1802aee8,
-			startHeight:     1,
-			startTime:       600,
+			run:           7,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1802aee8,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x1802aee8},
 				{2, 710, 0x1802ad91},
@@ -2650,12 +2650,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// Deterministically random solvetimes for down-ramping hashrate around a recent real life nBits
 		{
-			run:             8,
-			referenceHeight: 0,
-			referenceTime:   0,
-			referenceBits:   0x1802aee8,
-			startHeight:     1,
-			startTime:       600,
+			run:           8,
+			anchorHeight:  1,
+			referenceTime: 0,
+			referenceBits: 0x1802aee8,
+			startHeight:   2,
+			startTime:     1200,
 			blocks: []block{
 				{1, 600, 0x1802aee8},
 				{2, 710, 0x1802ad91},
@@ -3161,12 +3161,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// A sequence of 300s blocks across signed 32-bit max integer height
 		{
-			run:             9,
-			referenceHeight: 2147483642,
-			referenceTime:   1234567890,
-			referenceBits:   0x1802aee8,
-			startHeight:     2147483643,
-			startTime:       1234568190,
+			run:           9,
+			anchorHeight:  2147483642,
+			referenceTime: 1234567290,
+			referenceBits: 0x1802aee8,
+			startHeight:   2147483643,
+			startTime:     1234568190,
 			blocks: []block{
 				{2147483643, 1234568190, 0x1802ae16},
 				{2147483644, 1234568490, 0x1802ad44},
@@ -3182,12 +3182,12 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 		},
 		// A sequence of 900s blocks across signed 64-bit max integer height and signed 32-bit max integer time
 		{
-			run:             10,
-			referenceHeight: 9223372036854775802,
-			referenceTime:   2147483647,
-			referenceBits:   0x1802aee8,
-			startHeight:     9223372036854775803,
-			startTime:       2147484547,
+			run:           10,
+			anchorHeight:  9223372036854775802,
+			referenceTime: 2147483047,
+			referenceBits: 0x1802aee8,
+			startHeight:   9223372036854775803,
+			startTime:     2147484547,
 			blocks: []block{
 				{9223372036854775803, 2147484547, 0x1802afbb},
 				{9223372036854775804, 2147485447, 0x1802b08f},
@@ -3209,7 +3209,7 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 	b.chainParams.ReduceMinDifficulty = false
 	for _, test := range testVectors {
 		for i, block := range test.blocks {
-			target, err := b.calcAsertRequiredDifficulty(nil, int32(test.referenceHeight), test.referenceTime, test.referenceBits, int32(block.height), block.timestamp)
+			target, err := b.calcAsertRequiredDifficulty(nil, int32(test.anchorHeight), test.referenceTime, test.referenceBits, int32(block.height), block.timestamp)
 			if err != nil {
 				t.Errorf("Run %d, block %d: %s", test.run, i, err)
 			}
