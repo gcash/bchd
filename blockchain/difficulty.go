@@ -325,25 +325,24 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 
 	exponent := ((tDelta - int64(idealBlockTime)*int64(hDelta)) * radix) / tau
 
-	num_shifts := exponent >> 16
+	numShifts := exponent >> 16
 
-	if num_shifts < 0 {
-		target = target.Rsh(target, uint(-num_shifts))
+	if numShifts < 0 {
+		target = target.Rsh(target, uint(-numShifts))
 	} else {
-		target = target.Lsh(target, uint(num_shifts))
+		target = target.Lsh(target, uint(numShifts))
 	}
 
-	exponent = exponent - (num_shifts * radix)
+	exponent = exponent - (numShifts * radix)
 
 	// If target is zero or greater than the POW limit.
 	if target.Cmp(big.NewInt(0)) == 0 || target.Cmp(b.chainParams.PowLimit) > 0 {
-		if num_shifts < 0 {
+		if numShifts < 0 {
 			// Return hardest target
 			return BigToCompact(big.NewInt(1)), nil
-		} else {
-			// Return softest target
-			return b.chainParams.PowLimitBits, nil
 		}
+		// Return softest target
+		return b.chainParams.PowLimitBits, nil
 	}
 
 	// factor = (195766423245049*exponent + 971821376*exponent**2 + 5127*exponent**3 + 2**47)>>48
