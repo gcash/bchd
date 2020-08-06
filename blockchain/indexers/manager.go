@@ -6,7 +6,6 @@ package indexers
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/gcash/bchd/blockchain"
@@ -48,18 +47,17 @@ func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, heig
 
 // dbFetchIndexerTip uses an existing database transaction to retrieve the
 // hash and height of the current tip for the provided index.
-func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32, error) {
+func dbFetchIndexerTip(dbTx database.Tx, indexerPtr *Indexer) (*chainhash.Hash, int32, error) {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
+	indexer := *indexerPtr
+	idxKey := indexer.Key()
 	serialized := indexesBucket.Get(idxKey)
 
-	// TODO: move this to a config?
-	slpStartHeight := int32(543375)
-	slpStartBlockHash, _ := hex.DecodeString("a462e172119242d76d946b847a152b5552014cf2b09fb8010000000000000000")
-
 	if len(serialized) < chainhash.HashSize+4 {
-		if string(idxKey) == string(slpIndexKey) {
-			_hash, _ := chainhash.NewHash(slpStartBlockHash)
-			return _hash, slpStartHeight, nil
+		switch v := indexer.(type) {
+		case *SlpIndex:
+			_hash, _ := chainhash.NewHash(v.config.StartHash)
+			return _hash, v.config.StartHeight, nil
 		}
 		return nil, 0, database.Error{
 			ErrorCode: database.ErrCorruption,
@@ -72,10 +70,13 @@ func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32,
 	copy(hash[:], serialized[:chainhash.HashSize])
 	height := int32(byteOrder.Uint32(serialized[chainhash.HashSize:]))
 
-	if string(idxKey) == string(slpIndexKey) && height < slpStartHeight {
-		height = slpStartHeight
-		_slpHash, _ := chainhash.NewHash(slpStartBlockHash)
-		hash = *_slpHash
+	switch v := indexer.(type) {
+	case *SlpIndex:
+		if height < v.config.StartHeight {
+			height = v.config.StartHeight
+			_slpHash, _ := chainhash.NewHash(v.config.StartHash)
+			hash = *_slpHash
+		}
 	}
 
 	return &hash, height, nil
@@ -91,7 +92,7 @@ func dbIndexConnectBlock(dbTx database.Tx, indexer Indexer, block *bchutil.Block
 	// Assert that the block being connected properly connects to the
 	// current tip of the index.
 	idxKey := indexer.Key()
-	curTipHash, _, err := dbFetchIndexerTip(dbTx, idxKey)
+	curTipHash, _, err := dbFetchIndexerTip(dbTx, &indexer)
 	if err != nil {
 		return err
 	}
@@ -121,7 +122,7 @@ func dbIndexDisconnectBlock(dbTx database.Tx, indexer Indexer, block *bchutil.Bl
 	// Assert that the block being disconnected is the current tip of the
 	// index.
 	idxKey := indexer.Key()
-	curTipHash, _, err := dbFetchIndexerTip(dbTx, idxKey)
+	curTipHash, _, err := dbFetchIndexerTip(dbTx, &indexer)
 	if err != nil {
 		return err
 	}
@@ -305,12 +306,18 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 		var height int32
 		var hash *chainhash.Hash
 		err := m.db.View(func(dbTx database.Tx) error {
-			idxKey := indexer.Key()
-			hash, height, err = dbFetchIndexerTip(dbTx, idxKey)
+			hash, height, err = dbFetchIndexerTip(dbTx, &indexer)
 			return err
 		})
 		if err != nil {
 			return err
+		}
+
+		switch v := indexer.(type) {
+		case *SlpIndex:
+			if height == v.config.StartHeight {
+				continue
+			}
 		}
 
 		// Nothing to do if the index does not have any entries yet.
@@ -394,8 +401,7 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 	indexerHeights := make([]int32, len(m.enabledIndexes))
 	err = m.db.View(func(dbTx database.Tx) error {
 		for i, indexer := range m.enabledIndexes {
-			idxKey := indexer.Key()
-			hash, height, err := dbFetchIndexerTip(dbTx, idxKey)
+			hash, height, err := dbFetchIndexerTip(dbTx, &indexer)
 			if err != nil {
 				return err
 			}

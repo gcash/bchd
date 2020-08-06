@@ -227,6 +227,11 @@ type Params struct {
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType uint32
+
+	// SLP indexer parameters
+	SlpIndexStartHeight uint32
+	SlpIndexStartHash   []byte
+	SlpAddressPrefix    string
 }
 
 // MainNetParams defines the network parameters for the main Bitcoin network.
@@ -375,6 +380,15 @@ var MainNetParams = Params{
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType: 145,
+
+	// SLP indexer parameters
+	SlpIndexStartHeight: 543375,
+	SlpIndexStartHash: []byte{
+		164, 98, 225, 114, 17, 146, 66, 215, 109,
+		148, 107, 132, 122, 21, 43, 85, 82, 1,
+		76, 242, 176, 159, 184, 1, 0, 0, 0,
+		0, 0, 0, 0, 0},
+	SlpAddressPrefix: "simpleledger",
 }
 
 // RegressionNetParams defines the network parameters for the regression test
@@ -450,6 +464,15 @@ var RegressionNetParams = Params{
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType: 1, // all coins use 1
+
+	// SLP indexer parameters
+	SlpIndexStartHeight: 0,
+	SlpIndexStartHash: []byte{
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0},
+	SlpAddressPrefix: "slptest",
 }
 
 // TestNet3Params defines the network parameters for the test Bitcoin network
@@ -545,6 +568,15 @@ var TestNet3Params = Params{
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType: 1, // all coins use 1
+
+	// SLP indexer parameters
+	SlpIndexStartHeight: 1253801,
+	SlpIndexStartHash: []byte{
+		96, 64, 68, 134, 230, 199, 191, 141,
+		78, 175, 138, 176, 216, 136, 237, 59,
+		137, 63, 64, 195, 159, 142, 197, 23,
+		251, 2, 0, 0, 0, 0, 0, 0},
+	SlpAddressPrefix: "slptest",
 }
 
 // SimNetParams defines the network parameters for the simulation test Bitcoin

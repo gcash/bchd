@@ -3176,7 +3176,13 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	}
 	if cfg.SlpIndex {
 		indxLog.Info("SLP index is enabled")
-		s.slpIndex = indexers.NewSlpIndex(db)
+
+		slpCfg := &indexers.SlpConfig{
+			AddrPrefix:  chainParams.SlpAddressPrefix,
+			StartHash:   chainParams.SlpIndexStartHash,
+			StartHeight: int32(chainParams.SlpIndexStartHeight),
+		}
+		s.slpIndex = indexers.NewSlpIndex(db, slpCfg)
 		indexes = append(indexes, s.slpIndex)
 	}
 	if !cfg.FastSync && !cfg.NoCFilters {
