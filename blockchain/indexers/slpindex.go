@@ -262,6 +262,7 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 type SlpIndex struct {
 	db         database.DB
 	curTokenID uint32
+	config     *SlpConfig
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -547,6 +548,13 @@ func (idx *SlpIndex) GetSlpTokenIDFromHash(dbTx database.Tx, hash *chainhash.Has
 	return &serializedID, nil
 }
 
+// SlpConfig provides the proper starting height and hash
+type SlpConfig struct {
+	StartHash   []byte
+	StartHeight int32
+	AddrPrefix  string
+}
+
 // NewSlpIndex returns a new instance of an indexer that is used to create a
 // mapping of the hashes of all transactions in the blockchain to the respective
 // block, location within the block, and size of the transaction.
@@ -554,8 +562,11 @@ func (idx *SlpIndex) GetSlpTokenIDFromHash(dbTx database.Tx, hash *chainhash.Has
 // It implements the Indexer interface which plugs into the IndexManager that in
 // turn is used by the blockchain package.  This allows the index to be
 // seamlessly maintained along with the chain.
-func NewSlpIndex(db database.DB) *SlpIndex {
-	return &SlpIndex{db: db}
+func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
+	return &SlpIndex{
+		db:     db,
+		config: cfg,
+	}
 }
 
 // dropTokenIDIndex drops the internal token id index.
