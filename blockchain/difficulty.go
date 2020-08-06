@@ -67,12 +67,13 @@ const (
 
 // SelectDifficultyAdjustmentAlgorithm returns the difficulty adjustment algorithm that
 // should be used when validating a block at the given height.
-func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(height int32) DifficultyAlgorithm {
+func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(prevNode *blockNode) DifficultyAlgorithm {
+	height := prevNode.height + 1
 	if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
 		return DifficultyEDA
 	} else if height > b.chainParams.DaaForkHeight {
 		return DifficultyDAA
-	} else if height > b.chainParams.AxionForkHeight {
+	} else if uint64(prevNode.CalcPastMedianTime().Unix()) >= b.chainParams.AxionActivationTime {
 		return DifficultyAsert
 	}
 	return DifficultyLegacy
@@ -528,7 +529,7 @@ func (b *BlockChain) CalcNextRequiredDifficulty(timestamp time.Time) (uint32, er
 	b.chainLock.Lock()
 	tip := b.bestChain.Tip()
 	difficulty, err := b.calcNextRequiredDifficulty(tip, timestamp,
-		b.SelectDifficultyAdjustmentAlgorithm(tip.height))
+		b.SelectDifficultyAdjustmentAlgorithm(tip))
 	b.chainLock.Unlock()
 	return difficulty, err
 }
