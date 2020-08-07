@@ -97,6 +97,16 @@ func dbIndexConnectBlock(dbTx database.Tx, indexer Indexer, block *bchutil.Block
 		return err
 	}
 	if !curTipHash.IsEqual(&block.MsgBlock().Header.PrevBlock) {
+
+		// Handle slp indexer since it does not start at genesis
+		switch v := indexer.(type) {
+		case *SlpIndex:
+			_hash, _ := chainhash.NewHash(v.config.StartHash)
+			if curTipHash.IsEqual(_hash) {
+				return dbPutIndexerTip(dbTx, idxKey, _hash, v.config.StartHeight)
+			}
+		}
+
 		return AssertError(fmt.Sprintf("dbIndexConnectBlock must be "+
 			"called with a block that extends the current index "+
 			"tip (%s, tip %s, block %s)", indexer.Name(),
