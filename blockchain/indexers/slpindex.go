@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -263,6 +264,9 @@ type SlpIndex struct {
 	db         database.DB
 	curTokenID uint32
 	config     *SlpConfig
+
+	slpEntryCache map[chainhash.Hash]*SlpIndexEntry
+	mutex         *sync.Mutex
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -528,7 +532,62 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 //
 // This function is safe for concurrent access.
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	return dbFetchSlpIndexEntry(dbTx, hash)
+	idx.mutex.Lock()
+	entry := idx.slpEntryCache[*hash]
+	idx.mutex.Unlock()
+	if entry != nil {
+		return entry, nil
+	}
+
+	entry, err := dbFetchSlpIndexEntry(dbTx, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	idx.mutex.Lock()
+	idx.slpEntryCache[*hash] = entry
+	idx.mutex.Unlock()
+	return entry, nil
+}
+
+// AddMempoolTx adds a new SlpIndexEntry item to a temporary cache that holds
+// both mempool and recently queried db entries.
+//
+// TODO: How do we handle fetching of TokenMetadata for Genesis txns in the mempool?
+//
+func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
+
+	slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	if err != nil {
+		return err
+	}
+
+	if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
+		return errors.New("unsupported token type")
+	}
+
+	_tokenIDHash, _ := goslp.GetSlpTokenID(tx.MsgTx())
+	tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
+	idx.mutex.Lock()
+	idx.slpEntryCache[*tx.Hash()] = &SlpIndexEntry{
+		TokenID:        0,
+		TokenIDHash:    *tokenIDHash,
+		SlpVersionType: uint16(slpMsg.TokenType),
+		SlpOpReturn:    tx.MsgTx().TxOut[0].PkScript,
+	}
+	idx.mutex.Unlock()
+
+	return nil
+}
+
+// RemoveMempoolTxs removes a list of transactions from the temporary cache that holds
+// both mempool and recently queried SlpIndexEntries
+func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
+	idx.mutex.Lock()
+	for _, tx := range txs {
+		delete(idx.slpEntryCache, tx.MsgTx().TxHash())
+	}
+	idx.mutex.Unlock()
 }
 
 // SlpIndexEntryExists returns true if the slp entry exists
@@ -564,8 +623,10 @@ type SlpConfig struct {
 // seamlessly maintained along with the chain.
 func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	return &SlpIndex{
-		db:     db,
-		config: cfg,
+		db:            db,
+		config:        cfg,
+		slpEntryCache: make(map[chainhash.Hash]*SlpIndexEntry),
+		mutex:         &sync.Mutex{},
 	}
 }
 
