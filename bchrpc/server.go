@@ -2252,13 +2252,7 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexE
 		return nil, errors.New("slpindex required")
 	}
 
-	// Try to fetch the entry from the cache
-	s.mutex.Lock()
-	entry := s.slpEntryCache[*hash]
-	s.mutex.Unlock()
-	if entry != nil {
-		return entry, nil
-	}
+	var entry *indexers.SlpIndexEntry
 
 	// Otherwise, try to fetch from the db
 	err := s.db.View(func(dbTx database.Tx) error {
@@ -2269,10 +2263,6 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexE
 	if err != nil {
 		return nil, err
 	}
-
-	s.mutex.Lock()
-	s.slpEntryCache[*hash] = entry
-	s.mutex.Unlock()
 
 	return entry, nil
 }
@@ -2334,32 +2324,15 @@ func (s *GrpcServer) manageSlpEntryCache() {
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
 			txDesc := event
-			slpMsg, err := v1parser.ParseSLP(txDesc.Tx.MsgTx().TxOut[0].PkScript)
+
+			err := s.slpIndex.AddMempoolTx(txDesc.Tx)
 			if err != nil {
 				continue
 			}
 
-			if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
-				continue
-			}
-
-			_tokenIDHash, _ := goslp.GetSlpTokenID(txDesc.Tx.MsgTx())
-			tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
-			s.mutex.Lock()
-			s.slpEntryCache[*txDesc.Tx.Hash()] = &indexers.SlpIndexEntry{
-				TokenID:        0,
-				TokenIDHash:    *tokenIDHash,
-				SlpVersionType: uint16(slpMsg.TokenType),
-				SlpOpReturn:    txDesc.Tx.MsgTx().TxOut[0].PkScript,
-			}
-			s.mutex.Unlock()
 		case *rpcEventBlockConnected:
 			block := event
-			s.mutex.Lock()
-			for _, tx := range block.Transactions() {
-				delete(s.slpEntryCache, tx.MsgTx().TxHash())
-			}
-			s.mutex.Unlock()
+			s.slpIndex.RemoveMempoolTxs(block.Transactions())
 		}
 	}
 }
