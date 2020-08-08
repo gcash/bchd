@@ -2248,6 +2248,10 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 // getSlpIndexEntry fetches an SlpIndexEntry object leveraging a cache of SlpIndexEntry items
 func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
 
+	if s.slpIndex == nil {
+		return nil, errors.New("slpindex required")
+	}
+
 	// Try to fetch the entry from the cache
 	s.mutex.Lock()
 	entry := s.slpEntryCache[*hash]
@@ -2275,6 +2279,10 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexE
 
 // getSlpToken fetches an SlpToken object leveraging a cache of SlpIndexEntry items
 func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToken, error) {
+
+	if s.slpIndex == nil {
+		return nil, errors.New("slpindex required")
+	}
 
 	entry, err := s.getSlpIndexEntry(hash)
 	if err != nil {
@@ -2313,6 +2321,11 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 // TODO: need to remove old items from this map with a timer
 //
 func (s *GrpcServer) manageSlpEntryCache() {
+
+	if s.slpIndex == nil {
+		return
+	}
+
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
@@ -2358,6 +2371,11 @@ func (s *GrpcServer) manageSlpEntryCache() {
 //		 additional token properties from the db.
 //
 func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetadata, error) {
+
+	if s.slpIndex == nil {
+		return nil, errors.New("slpindex required")
+	}
+
 	var _hash []byte
 	for i := len(tokenID) - 1; i >= 0; i-- {
 		_hash = append(_hash, tokenID[i])
