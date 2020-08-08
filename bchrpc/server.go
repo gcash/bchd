@@ -128,31 +128,27 @@ type GrpcServer struct {
 	ready    uint32 // atomic
 	shutdown int32  // atomic
 
-	slpEntryCache map[chainhash.Hash]*indexers.SlpIndexEntry
-	mutex         *sync.Mutex
 }
 
 // NewGrpcServer returns a new GrpcServer which has not yet
 // be started.
 func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	s := &GrpcServer{
-		timeSource:    cfg.TimeSource,
-		chain:         cfg.Chain,
-		chainParams:   cfg.ChainParams,
-		db:            cfg.DB,
-		txMemPool:     cfg.TxMemPool,
-		netMgr:        cfg.NetMgr,
-		txIndex:       cfg.TxIndex,
-		addrIndex:     cfg.AddrIndex,
-		cfIndex:       cfg.CfIndex,
-		slpIndex:      cfg.SlpIndex,
-		httpServer:    cfg.HTTPServer,
-		subscribe:     make(chan *rpcEventSubscription),
-		events:        make(chan interface{}),
-		quit:          make(chan struct{}),
-		wg:            sync.WaitGroup{},
-		slpEntryCache: make(map[chainhash.Hash]*indexers.SlpIndexEntry),
-		mutex:         &sync.Mutex{},
+		timeSource:  cfg.TimeSource,
+		chain:       cfg.Chain,
+		chainParams: cfg.ChainParams,
+		db:          cfg.DB,
+		txMemPool:   cfg.TxMemPool,
+		netMgr:      cfg.NetMgr,
+		txIndex:     cfg.TxIndex,
+		addrIndex:   cfg.AddrIndex,
+		cfIndex:     cfg.CfIndex,
+		slpIndex:    cfg.SlpIndex,
+		httpServer:  cfg.HTTPServer,
+		subscribe:   make(chan *rpcEventSubscription),
+		events:      make(chan interface{}),
+		quit:        make(chan struct{}),
+		wg:          sync.WaitGroup{},
 	}
 	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
