@@ -358,7 +358,7 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 	if target.Cmp(b.chainParams.PowLimit) > 0 {
 		target.Set(b.chainParams.PowLimit)
 	}
-	
+
 	return BigToCompact(target), nil
 }
 
