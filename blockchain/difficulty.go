@@ -327,23 +327,7 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 
 	numShifts := exponent >> 16
 
-	if numShifts < 0 {
-		target = target.Rsh(target, uint(-numShifts))
-	} else {
-		target = target.Lsh(target, uint(numShifts))
-	}
-
 	exponent = exponent - (numShifts * radix)
-
-	// If target is zero or greater than the POW limit.
-	if target.Cmp(big.NewInt(0)) == 0 || target.Cmp(b.chainParams.PowLimit) > 0 {
-		if numShifts < 0 {
-			// Return hardest target
-			return BigToCompact(big.NewInt(1)), nil
-		}
-		// Return softest target
-		return b.chainParams.PowLimitBits, nil
-	}
 
 	// factor = (195766423245049*exponent + 971821376*exponent**2 + 5127*exponent**3 + 2**47)>>48
 	bigExp := big.NewInt(exponent)
@@ -353,13 +337,28 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 	factor.Add(factor, new(big.Int).Exp(big.NewInt(2), big.NewInt(47), nil))
 	factor.Rsh(factor, 48)
 
-	// target += (target * factor) >> 16
-	target = target.Add(target, new(big.Int).Rsh(new(big.Int).Mul(target, factor), 16))
+	bigRadix := big.NewInt(radix)
+	bigRadix.Add(bigRadix, factor)
+	target.Mul(target, radixBigInt)
+
+	if numShifts < 0 {
+		target = target.Rsh(target, uint(-numShifts))
+	} else {
+		target = target.Lsh(target, uint(numShifts))
+	}
+
+	target.Rsh(target, 16)
+
+	// If target is zero or greater than the POW limit.
+	if target.Cmp(big.NewInt(0)) == 0 {
+		return BigToCompact(big.NewInt(1)), nil
+	}
 
 	// clip again if above minimum target (too easy)
 	if target.Cmp(b.chainParams.PowLimit) > 0 {
 		target.Set(b.chainParams.PowLimit)
 	}
+	
 	return BigToCompact(target), nil
 }
 
