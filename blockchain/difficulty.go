@@ -338,7 +338,7 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 	factor.Rsh(factor, 48)
 
 	bigRadix := big.NewInt(radix)
-	target = target.Mul(target, new(big.Int).Add(bigRadix, factor))
+	target = new(big.Int).Mul(target, new(big.Int).Add(bigRadix, factor))
 
 	if numShifts < 0 {
 		target = target.Rsh(target, uint(-numShifts))
