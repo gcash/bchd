@@ -338,8 +338,7 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 	factor.Rsh(factor, 48)
 
 	bigRadix := big.NewInt(radix)
-	bigRadix.Add(bigRadix, factor)
-	target.Mul(target, bigRadix)
+	target = target.Mul(target, new(big.Int).Add(bigRadix, factor))
 
 	if numShifts < 0 {
 		target = target.Rsh(target, uint(-numShifts))
@@ -347,14 +346,14 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 		target = target.Lsh(target, uint(numShifts))
 	}
 
-	target.Rsh(target, 16)
+	target = target.Rsh(target, 16)
 
-	// If target is zero or greater than the POW limit.
+	// clip again if above minimum target (too easy)
 	if target.Cmp(big.NewInt(0)) == 0 {
 		return BigToCompact(big.NewInt(1)), nil
 	}
 
-	// clip again if above minimum target (too easy)
+	// If target is greater than the POW limit.
 	if target.Cmp(b.chainParams.PowLimit) > 0 {
 		target.Set(b.chainParams.PowLimit)
 	}
