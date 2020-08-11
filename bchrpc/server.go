@@ -794,8 +794,10 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	// Attempt to decode the supplied address.
-	// TODO: Handle SLP formatted address
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
+	if err != nil {
+		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
+	}
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
@@ -882,6 +884,9 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	// Attempt to decode the supplied address.
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
+		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
+	}
+	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
@@ -935,6 +940,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	// Attempt to decode the supplied address.
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
+	if err != nil {
+		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
+	}
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
@@ -2303,7 +2311,6 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 
 	var (
 		isMintBaton bool = false
-		address     string
 	)
 
 	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -2321,7 +2328,6 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	slpToken := &pb.SlpToken{
 		TokenId:     entry.TokenIDHash[:],
 		Amount:      amount.Uint64(),
-		Address:     address,
 		IsMintBaton: isMintBaton,
 	}
 
@@ -2662,6 +2668,12 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			}
 			if len(addrs) > 0 {
 				out.Address = addrs[0].String()
+				if out.SlpToken != nil {
+					_slpAddr, _ := goslp.DecodeAddress(out.Address, params)
+					if _slpAddr != nil {
+						out.SlpToken.Address = _slpAddr.String()
+					}
+				}
 			}
 		}
 		disassm, err := txscript.DisasmString(output.PkScript)
