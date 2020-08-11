@@ -2304,6 +2304,10 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		return nil, errors.New("slpindex required")
 	}
 
+	if vout == 0 {
+		return nil, errors.New("vout=0 is out of range for getSlpToken")
+	}
+
 	entry, err := s.getSlpIndexEntry(hash)
 	if err != nil {
 		return nil, err
@@ -2315,10 +2319,22 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 
 	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
 
-	// check for isMintBaton
+	// set isMintBaton and also check that vout is within proper range
 	if slpMsg.TransactionType == "MINT" {
 		if slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(vout) {
 			isMintBaton = true
+		} else if vout != 1 {
+			return nil, errors.New("vout is out of range for slp mint")
+		}
+	} else if slpMsg.TransactionType == "GENESIS" {
+		if slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(vout) {
+			isMintBaton = true
+		} else if vout != 1 {
+			return nil, errors.New("vout is out of range for slp genesis")
+		}
+	} else if slpMsg.TransactionType == "SEND" {
+		if int(vout) > len(slpMsg.Data.(v1parser.SlpSend).Amounts) {
+			return nil, errors.New("vout is out of range for slp send transaction")
 		}
 	}
 
