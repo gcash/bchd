@@ -113,6 +113,8 @@ github.com/simpleledgerinc/goslp v0.0.0-20200727182116-b8f93d91875d h1:bBUdkhwgt
 github.com/simpleledgerinc/goslp v0.0.0-20200727182116-b8f93d91875d/go.mod h1:DLIHzj5ymXC6pNJVIZRYqhKbsIst3QrhQ2w+ZGFMa3E=
 github.com/simpleledgerinc/goslp v0.0.0-20200728142104-0235622b5998 h1:rde3K0PE/k6oI6oc4xu9CrCZvjjvmWuLluvc/Af2V14=
 github.com/simpleledgerinc/goslp v0.0.0-20200728142104-0235622b5998/go.mod h1:DLIHzj5ymXC6pNJVIZRYqhKbsIst3QrhQ2w+ZGFMa3E=
+github.com/simpleledgerinc/goslp v0.0.0-20200807200630-6272a32f4428 h1:jSVN0DunIDKOL3NVa8yngaWqp2msZj06epSHlW1uEuQ=
+github.com/simpleledgerinc/goslp v0.0.0-20200807200630-6272a32f4428/go.mod h1:DLIHzj5ymXC6pNJVIZRYqhKbsIst3QrhQ2w+ZGFMa3E=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0Q=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
