@@ -1402,6 +1402,11 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
+
+	if len(msgTx.TxIn) == 0 || len(msgTx.TxOut) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "transaction is missing inputs or outputs")
+	}
+
 	isMaybeSlp := isMaybeSlpTransaction(msgTx.TxOut[0].PkScript)
 	if !isMaybeSlp {
 		return nil, status.Error(codes.Aborted, "invalid slp (lokad id is missing)")
