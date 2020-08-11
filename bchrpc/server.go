@@ -2481,27 +2481,20 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, s *GrpcServer) *pb.Transaction {
 	params := s.chainParams
 
-	var slpInfo *pb.SlpTransactionInfo
-	if s.slpIndex != nil {
-		slpInfo = &pb.SlpTransactionInfo{}
+	slpInfo := &pb.SlpTransactionInfo{
+		ValidityJudgement: pb.SlpTransactionInfo_UNKNOWN_OR_INVALID,
+	}
 
-		// handle SLP validity judgement using the SLP indexer
-		slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
-
-		err := s.db.View(func(dbTx database.Tx) error {
-			exists := s.slpIndex.SlpIndexEntryExists(dbTx, tx.Hash())
-			if !exists {
-				return errors.New("slp tx does not exist")
-			}
-			return nil
-		})
-
-		if err == nil {
-			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
-		}
-
-		// parse the transaction for SLP attributes
-		slpPkScript := tx.MsgTx().TxOut[0].PkScript
+	// always try to parse the transaction for SLP attributes (even when slpindex is not enabled)
+	var (
+		slpPkScript []byte
+		isMaybeSlp  bool = false
+	)
+	if len(tx.MsgTx().TxOut) > 0 {
+		slpPkScript = tx.MsgTx().TxOut[0].PkScript
+		isMaybeSlp = isMaybeSlpTransaction(slpPkScript)
+	}
+	if isMaybeSlp {
 		slpMsg, err := v1parser.ParseSLP(slpPkScript)
 		if err == nil {
 			_tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
@@ -2591,24 +2584,32 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
 			}
 		} else {
-			slpInfo.ParseError = err.Error()
 			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
 				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
-			} else if err.Error() != "scriptpubkey cannot be empty" &&
-				err.Error() != "scriptpubkey not op_return" &&
-				err.Error() != "scriptpubkey too small" &&
-				err.Error() != "SLP not in first chunk" &&
-				err.Error() != "lokad id wrong size" &&
-				err.Error() != "pushdata data extraction failed" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
 			} else {
-				slpInfo.VersionType = pb.SlpVersionType_NON_SLP
+				slpInfo.ParseError = err.Error()
+				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
 			}
+		}
+	} else {
+		slpInfo.VersionType = pb.SlpVersionType_NON_SLP
+	}
+
+	// check slp validity
+	if s.slpIndex != nil {
+		err := s.db.View(func(dbTx database.Tx) error {
+			exists := s.slpIndex.SlpIndexEntryExists(dbTx, tx.Hash())
+			if !exists {
+				return errors.New("slp tx does not exist")
+			}
+			return nil
+		})
+		if err == nil {
+			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 		}
 
 		// TODO: loop through SLP inputs to set SLP txn info BURN_FLAGS
 		// ... We can see if any of the inputs were burned and return this info to the user
-
 	}
 
 	respTx := &pb.Transaction{
