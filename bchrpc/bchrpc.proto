@@ -529,7 +529,7 @@ message GetTokenMetadataRequest {
 }
 
 message GetTokenMetadataResponse {
-    repeated TokenMetadata slp_metadata = 1;
+    repeated TokenMetadata token_metadata = 1;
 }
 
 message GetParsedSlpScriptRequest {
