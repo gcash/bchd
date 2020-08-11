@@ -653,6 +653,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 // GetTransaction returns a transaction given its hash.
 //
 // **Requires TxIndex**
+// **Requires SlpIndex for slp token metadata, and token metadata
 func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionRequest) (*pb.GetTransactionResponse, error) {
 	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "txindex required")
@@ -687,8 +688,18 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			}
 		}
 
+		var tokenMetadata *pb.TokenMetadata
+		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
+			tokenID, _ := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
+			tokenMetadata, err = s.buildTokenMetadata(tokenID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "a unknown problem occured when building token metadata")
+			}
+		}
+
 		resp := &pb.GetTransactionResponse{
-			Transaction: tx,
+			Transaction:   tx,
+			TokenMetadata: tokenMetadata,
 		}
 		return resp, nil
 	}
@@ -717,8 +728,18 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		}
 	}
 
+	var tokenMetadata *pb.TokenMetadata
+	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
+		tokenID, _ := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
+		tokenMetadata, err = s.buildTokenMetadata(tokenID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "a unknown problem occured when building token metadata")
+		}
+	}
+
 	resp := &pb.GetTransactionResponse{
-		Transaction: respTx,
+		Transaction:   respTx,
+		TokenMetadata: tokenMetadata,
 	}
 
 	return resp, nil
@@ -1206,7 +1227,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 	}
 
 	resp := &pb.GetTokenMetadataResponse{
-		SlpMetadata: tokenMetadata,
+		TokenMetadata: tokenMetadata,
 	}
 
 	return resp, nil

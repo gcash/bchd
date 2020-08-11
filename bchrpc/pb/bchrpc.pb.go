@@ -5519,7 +5519,8 @@ type BchrpcClient interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex to receive slp input/output metadata,
+	//   and TokenMetadata (if include_token_metadata=true in request) **
 	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
@@ -5893,7 +5894,8 @@ type BchrpcServer interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex to receive slp input/output metadata,
+	//   and TokenMetadata (if include_token_metadata=true in request) **
 	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//

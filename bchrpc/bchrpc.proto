@@ -45,7 +45,8 @@ service bchrpc {
     // GetTransaction returns a transaction given a transaction hash.
     //
     // **Requires TxIndex**
-    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
+    // **Requires SlpIndex to receive slp input/output metadata,
+    //   and TokenMetadata (if include_token_metadata=true in request) **
     rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
 
     // GetRawTransaction returns a serialized transaction given a transaction hash.
@@ -288,7 +289,7 @@ message GetTransactionResponse {
     // A marshaled transaction.
     Transaction transaction = 1;
 
-    TokenMetadata slp_metadata = 2;
+    TokenMetadata token_metadata = 2;
 }
 
 // Get an encoded transaction from a transaction hash.
