@@ -65,6 +65,7 @@ const (
 	defaultTxIndex                 = false
 	defaultAddrIndex               = false
 	defaultSlpIndex                = false
+	defaultSlpCacheMaxSize         = 100000
 	defaultUtxoCacheMaxSizeMiB     = 450
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
@@ -184,6 +185,7 @@ type config struct {
 	AddrIndex               bool          `long:"addrindex" description:"Maintain a full address-based transaction index which makes the searchrawtransactions RPC available"`
 	DropAddrIndex           bool          `long:"dropaddrindex" description:"Deletes the address-based transaction index from the database on start up and then exits."`
 	SlpIndex                bool          `long:"slpindex" description:"Maintain an index which makes slp transaction validity and token metadata available via various gRPC methods"`
+	SlpCacheMaxSize         uint          `long:"slpcachemaxsize" description:"The maximum number of entries in the slp indexer cache"`
 	DropSlpIndex            bool          `long:"dropslpindex" description:"Deletes the slp index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
@@ -466,6 +468,7 @@ func loadConfig() (*config, []string, error) {
 		TxIndex:                 defaultTxIndex,
 		AddrIndex:               defaultAddrIndex,
 		SlpIndex:                defaultSlpIndex,
+		SlpCacheMaxSize:         defaultSlpCacheMaxSize,
 		PruneDepth:              defaultPruneDepth,
 		TargetOutboundPeers:     defaultTargetOutboundPeers,
 		DBCacheSize:             defaultDBCacheSize,

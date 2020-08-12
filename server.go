@@ -3178,9 +3178,10 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indxLog.Info("SLP index is enabled")
 
 		slpCfg := &indexers.SlpConfig{
-			AddrPrefix:  chainParams.SlpAddressPrefix,
-			StartHash:   chainParams.SlpIndexStartHash,
-			StartHeight: int32(chainParams.SlpIndexStartHeight),
+			AddrPrefix:   chainParams.SlpAddressPrefix,
+			StartHash:    chainParams.SlpIndexStartHash,
+			StartHeight:  int32(chainParams.SlpIndexStartHeight),
+			MaxCacheSize: int(cfg.SlpCacheMaxSize),
 		}
 		s.slpIndex = indexers.NewSlpIndex(db, slpCfg)
 		indexes = append(indexes, s.slpIndex)

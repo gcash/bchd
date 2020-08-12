@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -78,13 +77,13 @@ var (
 //
 // The serialized format for the keys and values in the slp index bucket is:
 //
-//   <txhash> = <token id><slp type flags>
+//   <txhash> = <token ID><slp version><slp op_return>
 //
 //   Field           	Type              Size
 //   txhash          	chainhash.Hash    32 bytes
 //   token ID        	uint32            4 bytes
 //   slp version	    uint16            2 bytes
-//	 op return			[]bytes			  typically <220 bytes
+//	 op_return			[]bytes			  typically <220 bytes
 //   -----
 //   Max: 258 bytes
 // -----------------------------------------------------------------------------
@@ -264,9 +263,7 @@ type SlpIndex struct {
 	db         database.DB
 	curTokenID uint32
 	config     *SlpConfig
-
-	slpEntryCache map[chainhash.Hash]*SlpIndexEntry
-	mutex         *sync.Mutex
+	cache      *SlpCache
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -532,9 +529,7 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 //
 // This function is safe for concurrent access.
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	idx.mutex.Lock()
-	entry := idx.slpEntryCache[*hash]
-	idx.mutex.Unlock()
+	entry := idx.cache.Get(hash)
 	if entry != nil {
 		return entry, nil
 	}
@@ -544,9 +539,7 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 		return nil, err
 	}
 
-	idx.mutex.Lock()
-	idx.slpEntryCache[*hash] = entry
-	idx.mutex.Unlock()
+	idx.cache.AddTemp(hash, entry)
 	return entry, nil
 }
 
@@ -568,26 +561,19 @@ func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 
 	_tokenIDHash, _ := goslp.GetSlpTokenID(tx.MsgTx())
 	tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
-	idx.mutex.Lock()
-	idx.slpEntryCache[*tx.Hash()] = &SlpIndexEntry{
+	idx.cache.AddMempool(tx.Hash(), &SlpIndexEntry{
 		TokenID:        0,
 		TokenIDHash:    *tokenIDHash,
 		SlpVersionType: uint16(slpMsg.TokenType),
 		SlpOpReturn:    tx.MsgTx().TxOut[0].PkScript,
-	}
-	idx.mutex.Unlock()
-
+	})
 	return nil
 }
 
 // RemoveMempoolTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
 func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
-	idx.mutex.Lock()
-	for _, tx := range txs {
-		delete(idx.slpEntryCache, tx.MsgTx().TxHash())
-	}
-	idx.mutex.Unlock()
+	idx.cache.RemoveMempoolItems(txs)
 }
 
 // SlpIndexEntryExists returns true if the slp entry exists
@@ -609,9 +595,10 @@ func (idx *SlpIndex) GetSlpTokenIDFromHash(dbTx database.Tx, hash *chainhash.Has
 
 // SlpConfig provides the proper starting height and hash
 type SlpConfig struct {
-	StartHash   []byte
-	StartHeight int32
-	AddrPrefix  string
+	StartHash    []byte
+	StartHeight  int32
+	AddrPrefix   string
+	MaxCacheSize int
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a
@@ -623,10 +610,9 @@ type SlpConfig struct {
 // seamlessly maintained along with the chain.
 func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	return &SlpIndex{
-		db:            db,
-		config:        cfg,
-		slpEntryCache: make(map[chainhash.Hash]*SlpIndexEntry),
-		mutex:         &sync.Mutex{},
+		db:     db,
+		config: cfg,
+		cache:  NewSlpCache(cfg.MaxCacheSize),
 	}
 }
 
