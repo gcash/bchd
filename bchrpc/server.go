@@ -1459,7 +1459,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx) error {
 
 	slpMsg, err := v1parser.ParseSLP(msgTx.TxOut[0].PkScript)
 	if err != nil {
-		return status.Error(codes.Aborted, err.Error())
+		return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (error parsing slp op_return message: "+err.Error()+")")
 	}
 
 	if slpMsg.TransactionType == "SEND" {
