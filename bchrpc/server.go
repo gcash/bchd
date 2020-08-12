@@ -2338,6 +2338,16 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		}
 	}
 
+	// Get decimal amount from Genesis for convenience
+	var decimals int
+	if slpMsg.TransactionType == "GENESIS" {
+		decimals = slpMsg.Data.(v1parser.SlpGenesis).Decimals
+	} else {
+		genEntry, _ := s.getSlpIndexEntry(&entry.TokenIDHash)
+		genSlpMsg, _ := v1parser.ParseSLP(genEntry.SlpOpReturn)
+		decimals = genSlpMsg.Data.(v1parser.SlpGenesis).Decimals
+	}
+
 	// get amount
 	amount, _ := slpMsg.GetVoutAmount(int(vout))
 
@@ -2345,6 +2355,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		TokenId:     entry.TokenIDHash[:],
 		Amount:      amount.Uint64(),
 		IsMintBaton: isMintBaton,
+		Decimals:    uint32(decimals),
 	}
 
 	return slpToken, nil
