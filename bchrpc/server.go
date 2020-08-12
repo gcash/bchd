@@ -2343,7 +2343,12 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	if slpMsg.TransactionType == "GENESIS" {
 		decimals = slpMsg.Data.(v1parser.SlpGenesis).Decimals
 	} else {
-		genEntry, _ := s.getSlpIndexEntry(&entry.TokenIDHash)
+		var _hash []byte
+		for i := len(entry.TokenIDHash) - 1; i >= 0; i-- {
+			_hash = append(_hash, entry.TokenIDHash[i])
+		}
+		_tokenIDRev, _ := chainhash.NewHash(_hash)
+		genEntry, _ := s.getSlpIndexEntry(_tokenIDRev)
 		genSlpMsg, _ := v1parser.ParseSLP(genEntry.SlpOpReturn)
 		decimals = genSlpMsg.Data.(v1parser.SlpGenesis).Decimals
 	}
