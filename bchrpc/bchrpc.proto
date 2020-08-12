@@ -819,12 +819,19 @@ message TransactionFilter {
     repeated bytes slp_token_ids = 6;
 }
 
-// slp
+// SLP token info used in transaction inputs / outputs
+//
+// WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'
+// for large amounts. For this reason, an annotation has been added for JS to
+// return a string for the amount field instead of casting uint64 to the JS 'number'
+// type. Other languages may require similar treatment.
+//
 message SlpToken {
     bytes token_id = 1;
-    uint64 amount = 2;
+    uint64 amount = 2 [jstype = JS_STRING];
     bool is_mint_baton = 3;
     string address = 4;
+    uint32 decimals = 5;
 }
 
 message SlpTransactionInfo {
