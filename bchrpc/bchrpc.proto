@@ -928,9 +928,8 @@ message TokenMetadataTokenType1 {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    uint64 token_mint_quantity = 6;
-    bytes mint_baton_txid = 7;
-    uint32 mint_baton_vout = 8;
+    bytes mint_baton_txid = 6;
+    uint32 mint_baton_vout = 7;
 }
 
 message TokenMetadataNFT1Group {
@@ -939,9 +938,8 @@ message TokenMetadataNFT1Group {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    uint64 token_mint_quantity = 6;
-    bytes mint_baton_txid = 7;
-    uint32 mint_baton_vout = 8;
+    bytes mint_baton_txid = 6;
+    uint32 mint_baton_vout = 7;
     //repeated bytes nftChildIDs = 9; // DO WE WANT THIS?
 }
 

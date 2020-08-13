@@ -30,15 +30,15 @@ var (
 	slpIndexKey = []byte("slptxbyhashidx")
 
 	// tokenIDByHashIndexBucketName is the name of the db bucket used to house
-	// the block id -> block hash index.
+	// the token id -> token hash index.
 	tokenIDByHashIndexBucketName = []byte("tokenidbyhashidx")
 
-	// tokenHashByIDIndexBucketName is the name of the db bucket used to house
-	// the block hash -> block id index.
-	tokenHashByIDIndexBucketName = []byte("tokenhashbyididx")
+	// tokenMetadataByIDIndexBucketName is the name of the db bucket used to house
+	// the token hash -> token id index and token metadata.
+	tokenMetadataByIDIndexBucketName = []byte("tokenhashbyididx")
 
-	// errNoBlockIDEntry is an error that indicates a requested entry does
-	// not exist in the block ID index.
+	// errNoTokenIDEntry is an error that indicates a requested entry does
+	// not exist in the token ID index.
 	errNoTokenIDEntry = errors.New("no entry in the Token ID index")
 )
 
@@ -67,13 +67,16 @@ var (
 //   Total: 36 bytes
 //
 // The serialized format for keys and values in the ID to TokenID hash bucket is:
-//   <ID> = <hash>
+//   <ID> = <token id txid><mint baton hash><uint32>
 //
-//   Field           Type              Size
-//   ID              uint32            4 bytes
-//   TokenID hash    chainhash.Hash    32 bytes
+//   Field            					Type              Size
+//   ID               					uint32            4 bytes
+//   TokenID hash                   	chainhash.Hash    32 bytes
+//   slp version	    				uint16            2 bytes
+//   Mint baton hash (or nft group id)  chainhash.Hash    32 bytes (optional)
+//   Mint baton vout  					uint32			  4 bytes  (optional)
 //   -----
-//   Total: 36 bytes
+//   Max: 70 bytes max
 //
 // The serialized format for the keys and values in the slp index bucket is:
 //
@@ -88,30 +91,56 @@ var (
 //   Max: 258 bytes
 // -----------------------------------------------------------------------------
 
+// TokenMetadata ...
+type TokenMetadata struct {
+	TokenID       *chainhash.Hash
+	SlpVersion    uint16
+	NftGroupID    *chainhash.Hash
+	MintBatonHash *chainhash.Hash
+	MintBatonVout uint32
+}
+
 // dbPutTokenIDIndexEntry uses an existing database transaction to update or add
 // the index entries for the hash to id and id to hash mappings for the provided
 // values.
-func dbPutTokenIDIndexEntry(dbTx database.Tx, hash *chainhash.Hash, id uint32) error {
+func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata) error {
 	// Serialize the height for use in the index entries.
 	var serializedID [4]byte
 	byteOrder.PutUint32(serializedID[:], id)
 
-	// Add the token hash to token ID mapping to the index.
+	// Add the token ID by token hash mapping to the index.
 	meta := dbTx.Metadata()
 	hashIndex := meta.Bucket(tokenIDByHashIndexBucketName)
-	if err := hashIndex.Put(hash[:], serializedID[:]); err != nil {
+	if err := hashIndex.Put(metadata.TokenID[:], serializedID[:]); err != nil {
 		return err
 	}
 
-	// Add the token ID to token hash mapping to the index.
-	idIndex := meta.Bucket(tokenHashByIDIndexBucketName)
-	return idIndex.Put(serializedID[:], hash[:])
+	// Add token metadata by uint32 tokenID mapping to the index.
+	tmIndex := meta.Bucket(tokenMetadataByIDIndexBucketName)
+	tokenMetadata := make([]byte, 32+2+32+4)
+	copy(tokenMetadata[0:], metadata.TokenID[:])
+	byteOrder.PutUint16(tokenMetadata[32:], metadata.SlpVersion)
+	if metadata.NftGroupID != nil {
+		copy(tokenMetadata[34:], metadata.NftGroupID[:])
+		tokenMetadata = tokenMetadata[:66]
+	} else if metadata.MintBatonHash != nil {
+		copy(tokenMetadata[34:], metadata.MintBatonHash[:])
+		byteOrder.PutUint32(tokenMetadata[66:], metadata.MintBatonVout)
+	} else {
+		tokenMetadata = tokenMetadata[:34]
+	}
+
+	if metadata.NftGroupID == nil && metadata.SlpVersion == 0x41 {
+		panic("missing nft group id for NFT child " + string(id))
+	}
+
+	return tmIndex.Put(serializedID[:], tokenMetadata)
 }
 
 // dbRemoveTokenIDIndexEntry uses an existing database transaction remove index
 // entries from the hash to id and id to hash mappings for the provided hash.
 func dbRemoveTokenIDIndexEntry(dbTx database.Tx, hash *chainhash.Hash) error {
-	// Remove the block hash to ID mapping.
+	// Remove the token hash to ID mapping.
 	meta := dbTx.Metadata()
 	hashIndex := meta.Bucket(tokenIDByHashIndexBucketName)
 	serializedID := hashIndex.Get(hash[:])
@@ -122,73 +151,137 @@ func dbRemoveTokenIDIndexEntry(dbTx database.Tx, hash *chainhash.Hash) error {
 		return err
 	}
 
-	// Remove the block ID to hash mapping.
-	idIndex := meta.Bucket(tokenHashByIDIndexBucketName)
-	return idIndex.Delete(serializedID)
+	// Remove the token ID to hash mapping.
+	tmIndex := meta.Bucket(tokenMetadataByIDIndexBucketName)
+	return tmIndex.Delete(serializedID)
 }
 
 // dbFetchTokenIDByHash uses an existing database transaction to retrieve the
-// block id for the provided hash from the index.
+// token id for the provided hash from the index.
 func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error) {
 	hashIndex := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
 	serializedID := hashIndex.Get(hash[:])
 	if serializedID == nil {
-		return 0, errNoBlockIDEntry
+		return 0, errNoTokenIDEntry
 	}
-	//fmt.Printf("\nfetched %s as %s\n", hex.EncodeToString(hash[:]), string(byteOrder.Uint32(serializedID[:])))
 	return byteOrder.Uint32(serializedID), nil
 }
 
-// dbFetchTokenHashBySerializedID uses an existing database transaction to
-// retrieve the hash for the provided serialized block id from the index.
-func dbFetchTokenHashBySerializedID(dbTx database.Tx, serializedID []byte) (*chainhash.Hash, error) {
-	idIndex := dbTx.Metadata().Bucket(tokenHashByIDIndexBucketName)
-	hashBytes := idIndex.Get(serializedID)
-	if hashBytes == nil {
-		return nil, errNoBlockIDEntry
+// dbFetchTokenMetadataBySerializedID uses an existing database transaction to
+// retrieve the hash for the provided serialized token id from the index.
+func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (*TokenMetadata, error) {
+	idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
+	serializedData := idIndex.Get(serializedID)
+	if serializedData == nil {
+		return nil, errNoTokenIDEntry
 	}
-	hash, _ := chainhash.NewHash(hashBytes)
-	return hash, nil
+
+	tokenIDHash, _ := chainhash.NewHash(serializedData[0:32])
+	slpVersion := byteOrder.Uint16(serializedData[32:34])
+
+	var (
+		mintBatonHash *chainhash.Hash
+		mintBatonVout uint32
+		nft1GroupID   *chainhash.Hash
+	)
+	if len(serializedData) == 70 {
+		if slpVersion == 0x41 {
+			panic("cannon have this length with nft1 child")
+		}
+		mintBatonHash, _ = chainhash.NewHash(serializedData[34:66])
+		mintBatonVout = byteOrder.Uint32(serializedData[66:])
+	} else if len(serializedData) == 66 {
+		if slpVersion != 0x41 {
+			panic("cannot have this length if not nft1 child")
+		}
+		nft1GroupID, _ = chainhash.NewHash(serializedData[34:])
+	}
+
+	tm := &TokenMetadata{
+		TokenID:       tokenIDHash,
+		NftGroupID:    nft1GroupID,
+		MintBatonHash: mintBatonHash,
+		MintBatonVout: mintBatonVout,
+	}
+	return tm, nil
 }
 
-// dbFetchBlockHashByID uses an existing database transaction to retrieve the
-// hash for the provided block id from the index.
-func dbFetchTokenHashByID(dbTx database.Tx, id uint32) (*chainhash.Hash, error) {
+// dbFetchTokenMetadataByID uses an existing database transaction to retrieve the
+// hash for the provided token id from the index.
+func dbFetchTokenMetadataByID(dbTx database.Tx, id uint32) (*TokenMetadata, error) {
 	var serializedID [4]byte
 	byteOrder.PutUint32(serializedID[:], id)
-	return dbFetchTokenHashBySerializedID(dbTx, serializedID[:])
+	return dbFetchTokenMetadataBySerializedID(dbTx, serializedID[:])
 }
 
-// putSlpIndexEntry serializes the provided values according to the format
-// described about for a transaction index entry.  The target byte slice must
-// be at least large enough to handle the number of bytes defined by the
-// slpTxEntrySize constant or it will panic.
-// func putSlpIndexEntry(target []byte, tokenID uint32, slpVersion uint8, slpMsgPkScript []byte) {
-// 	byteOrder.PutUint32(target, tokenID)
-// 	target[5] = slpVersion
-// 	copy(target[6:], slpMsgPkScript)
-// }
+type dbSlpIndexEntry struct {
+	tx             *wire.MsgTx
+	slpMsg         *v1parser.ParseResult
+	tokenIDHash    *chainhash.Hash
+	slpVersion     uint16
+	slpMsgPkScript []byte
+}
 
 // dbPutSlpIndexEntry uses an existing database transaction to update the
 // transaction index given the provided serialized data that is expected to have
 // been serialized putSlpIndexEntry.
-func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, txHash *chainhash.Hash, tokenIDHash *chainhash.Hash, slpVersion uint16, slpMsgPkScript []byte) error {
+func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEntry) error {
+	txHash := entryInfo.tx.TxHash()
 
 	// get current tokenID uint32 for the tokenID hash, add new if needed
-	tokenID, err := dbFetchTokenIDByHash(dbTx, tokenIDHash)
-	//fmt.Printf("\nfetching token ID: %s\n", hex.EncodeToString(tokenIDHash[:]))
+	tokenID, err := dbFetchTokenIDByHash(dbTx, entryInfo.tokenIDHash)
 	if err != nil {
-		idx.curTokenID++
-		tokenID = idx.curTokenID
-		dbPutTokenIDIndexEntry(dbTx, tokenIDHash, tokenID)
+		tokenID = idx.curTokenID + 1
 	}
 
-	target := make([]byte, 4+2+len(slpMsgPkScript))
+	var (
+		tokenMetadataNeedsUpdated bool   = false
+		mintBatonVout             uint32 = 0
+		mintBatonHash             *chainhash.Hash
+		nft1GroupID               *chainhash.Hash
+	)
+
+	if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpGenesis); ok {
+		idx.curTokenID++
+		tokenMetadataNeedsUpdated = true
+		if entry.MintBatonVout > 1 {
+			mintBatonVout = uint32(entry.MintBatonVout)
+			mintBatonHash = &txHash
+		} else if entryInfo.slpMsg.TokenType == 0x41 {
+			var _nft1GroupID []byte
+			for i := len(entryInfo.tx.TxIn[0].PreviousOutPoint.Hash) - 1; i >= 0; i-- {
+				_nft1GroupID = append(_nft1GroupID, entryInfo.tx.TxIn[0].PreviousOutPoint.Hash[i])
+			}
+			nft1GroupID, _ = chainhash.NewHash(_nft1GroupID)
+		}
+	} else if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpMint); ok {
+		tokenMetadataNeedsUpdated = true
+		if entry.MintBatonVout > 1 {
+			mintBatonVout = uint32(entry.MintBatonVout)
+			mintBatonHash = &txHash
+		}
+	}
+
+	// maybe update token metadata
+	if tokenMetadataNeedsUpdated {
+		err = dbPutTokenIDIndexEntry(dbTx, tokenID,
+			&TokenMetadata{
+				TokenID:       entryInfo.tokenIDHash,
+				SlpVersion:    entryInfo.slpVersion,
+				MintBatonHash: mintBatonHash,
+				MintBatonVout: mintBatonVout,
+				NftGroupID:    nft1GroupID,
+			})
+		if err != nil {
+			panic("this should never happen")
+		}
+	}
+
+	target := make([]byte, 4+2+len(entryInfo.slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
-	byteOrder.PutUint16(target[4:], slpVersion)
-	copy(target[6:], slpMsgPkScript)
+	byteOrder.PutUint16(target[4:], entryInfo.slpVersion)
+	copy(target[6:], entryInfo.slpMsgPkScript)
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
-	//fmt.Printf("adding new entry %s\n", hex.EncodeToString(txHash[:]))
 	return slpIndex.Put(txHash[:], target)
 }
 
@@ -222,11 +315,11 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 	entry := &SlpIndexEntry{
 		TokenID: byteOrder.Uint32(serializedData[0:4]),
 	}
-	_tokenIDHash, _ := dbFetchTokenHashByID(dbTx, entry.TokenID)
-	if _tokenIDHash == nil {
-		return nil, errors.New("could not map tokenID uint32 to hash")
+	_tokenMetadata, err := dbFetchTokenMetadataByID(dbTx, entry.TokenID)
+	if err != nil {
+		return nil, err
 	}
-	entry.TokenIDHash = *_tokenIDHash
+	entry.TokenIDHash = *_tokenMetadata.TokenID
 	entry.SlpVersionType = byteOrder.Uint16(serializedData[4:6])
 	entry.SlpOpReturn = serializedData[6:]
 	return entry, nil
@@ -240,6 +333,13 @@ func dbRemoveSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) error {
 	if len(serializedData) == 0 {
 		return nil
 	}
+
+	// TODO
+	// parse "serializedData" and check if this is a genesis or mint transaction,
+	// then update TokenID and TokenMetadata index appropriately.
+	// If Genesis, delete both records.
+	// If Mint, update the status of the minting baton
+	// NOTE: will need to handle idx.curTokenID carefully
 
 	return slpIndex.Delete(txHash[:])
 }
@@ -275,19 +375,16 @@ var _ Indexer = (*SlpIndex)(nil)
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Init() error {
-	// Find the latest known block id field for the internal block id
+	// Find the latest known token id field for the internal token id
 	// index and initialize it.  This is done because it's a lot more
 	// efficient to do a single search at initialize time than it is to
 	// write another value to the database on every update.
 	err := idx.db.View(func(dbTx database.Tx) error {
-		// Scan forward in large gaps to find a block id that doesn't
-		// exist yet to serve as an upper bound for the binary search
-		// below.
 		var highestKnown, nextUnknown uint32
 		testTokenID := uint32(1)
 		increment := uint32(1)
 		for {
-			_, err := dbFetchTokenHashByID(dbTx, testTokenID)
+			_, err := dbFetchTokenMetadataByID(dbTx, testTokenID)
 			if err != nil {
 				nextUnknown = testTokenID
 				break
@@ -299,31 +396,10 @@ func (idx *SlpIndex) Init() error {
 		log.Tracef("Forward scan (highest known %d, next unknown %d)",
 			highestKnown, nextUnknown)
 
-		// No used block IDs due to new database.
-		if nextUnknown == 1 {
-			return nil
-		}
-
-		// Use a binary search to find the final highest used block id.
-		// This will take at most ceil(log_2(increment)) attempts.
-		for {
-			testTokenID = (highestKnown + nextUnknown) / 2
-			_, err := dbFetchBlockHashByID(dbTx, testTokenID)
-			if err != nil {
-				nextUnknown = testTokenID
-			} else {
-				highestKnown = testTokenID
-			}
-			log.Tracef("Binary scan (highest known %d, next "+
-				"unknown %d)", highestKnown, nextUnknown)
-			if highestKnown+1 == nextUnknown {
-				break
-			}
-		}
-
 		idx.curTokenID = highestKnown
 		return nil
 	})
+
 	if err != nil {
 		return err
 	}
@@ -357,7 +433,7 @@ func (idx *SlpIndex) Name() string {
 
 // Create is invoked when the indexer manager determines the index needs
 // to be created for the first time.  It creates the buckets for the hash-based
-// transaction index and the internal block ID indexes.
+// transaction index and the internal token ID and token metadata indexes.
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Create(dbTx database.Tx) error {
@@ -365,7 +441,7 @@ func (idx *SlpIndex) Create(dbTx database.Tx) error {
 	if _, err := meta.CreateBucket(tokenIDByHashIndexBucketName); err != nil {
 		return err
 	}
-	if _, err := meta.CreateBucket(tokenHashByIDIndexBucketName); err != nil {
+	if _, err := meta.CreateBucket(tokenMetadataByIDIndexBucketName); err != nil {
 		return err
 	}
 	_, err := meta.CreateBucket(slpIndexKey)
@@ -386,8 +462,14 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	}
 
 	_putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
-		txnHash := tx.TxHash()
-		return dbPutSlpIndexEntry(idx, dbTx, &txnHash, tokenIDHash, uint16(slpMsg.TokenType), tx.TxOut[0].PkScript)
+		entry := &dbSlpIndexEntry{
+			tx:             tx,
+			slpMsg:         slpMsg,
+			tokenIDHash:    tokenIDHash,
+			slpMsgPkScript: tx.TxOut[0].PkScript,
+			slpVersion:     uint16(slpMsg.TokenType),
+		}
+		return dbPutSlpIndexEntry(idx, dbTx, entry)
 	}
 
 	for _, tx := range sortedTxns {
@@ -496,20 +578,13 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 // hash-to-transaction mapping for every transaction in the block.
 //
 // This is part of the Indexer interface.
-func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
-	stxos []blockchain.SpentTxOut) error {
+func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 
 	// Remove all of the transactions in the block from the index.
 	if err := dbRemoveSlpIndexEntries(dbTx, block); err != nil {
 		return err
 	}
 
-	// Remove the block ID index entry for the block being disconnected and
-	// decrement the current internal block ID to account for it.
-	if err := dbRemoveTokenIDIndexEntry(dbTx, block.Hash()); err != nil {
-		return err
-	}
-	idx.curTokenID--
 	return nil
 }
 
@@ -532,6 +607,13 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 
 	idx.cache.AddTemp(hash, entry)
 	return entry, nil
+}
+
+// GetTokenMetadata ...
+func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenMetadata, error) {
+	serializedID := make([]byte, 4)
+	byteOrder.PutUint32(serializedID, tokenID)
+	return dbFetchTokenMetadataBySerializedID(dbTx, serializedID)
 }
 
 // AddMempoolTx adds a new SlpIndexEntry item to a temporary cache that holds
@@ -583,8 +665,8 @@ type SlpConfig struct {
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a
-// mapping of the hashes of all transactions in the blockchain to the respective
-// block, location within the block, and size of the transaction.
+// mapping of the hashes of all slp transactions in the blockchain to the respective
+// token ID, and token metadata.
 //
 // It implements the Indexer interface which plugs into the IndexManager that in
 // turn is used by the blockchain package.  This allows the index to be
@@ -597,8 +679,8 @@ func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	}
 }
 
-// dropTokenIDIndex drops the internal token id index.
-func dropTokenIDIndex(db database.DB) error {
+// dropTokenIndexes drops the internal token id index.
+func dropTokenIndexes(db database.DB) error {
 	return db.Update(func(dbTx database.Tx) error {
 		meta := dbTx.Metadata()
 		err := meta.DeleteBucket(tokenIDByHashIndexBucketName)
@@ -606,7 +688,7 @@ func dropTokenIDIndex(db database.DB) error {
 			return err
 		}
 
-		return meta.DeleteBucket(tokenHashByIDIndexBucketName)
+		return meta.DeleteBucket(tokenMetadataByIDIndexBucketName)
 	})
 }
 
