@@ -372,15 +372,6 @@ func (idx *SlpIndex) Create(dbTx database.Tx) error {
 	return err
 }
 
-type SlpTxOut struct {
-	previousOutput  wire.OutPoint
-	slpVersionType  uint8
-	v1amount        uint64
-	v1mintBaton     bool
-	spentInBurn     bool
-	invalidOpReturn bool
-}
-
 // ConnectBlock is invoked by the index manager when a new block has been
 // connected to the main chain.  This indexer adds a hash-to-transaction mapping
 // for every transaction in the passed block.
@@ -581,16 +572,6 @@ func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Has
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := slpIndex.Get(txHash[:])
 	return len(serializedData) != 0
-}
-
-// GetSlpTokenIDFromHash returns the value given the token ID hash
-func (idx *SlpIndex) GetSlpTokenIDFromHash(dbTx database.Tx, hash *chainhash.Hash) (*uint32, error) {
-	serializedID, err := dbFetchTokenIDByHash(dbTx, hash)
-	if err != nil {
-		return nil, errors.New("token ID hash does not exist in slp index")
-	}
-
-	return &serializedID, nil
 }
 
 // SlpConfig provides the proper starting height and hash
