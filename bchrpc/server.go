@@ -1326,7 +1326,6 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 
 		entry, err := s.getSlpIndexEntry(txid)
 		if err != nil {
-			fmt.Println(err.Error())
 			return nil, status.Error(codes.Aborted, "txid is missing from slp validity set (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
 		}
 
@@ -2433,6 +2432,17 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 		TokenType: uint32(slpMsg.TokenType),
 	}
 
+	var dbTm *indexers.TokenMetadata
+	err = s.db.View(func(dbTx database.Tx) error {
+		dbTm, err = s.slpIndex.GetTokenMetadata(dbTx, entry.TokenID)
+		return err
+	})
+
+	var mintBatonHash []byte
+	if dbTm.MintBatonHash != nil {
+		mintBatonHash = dbTm.MintBatonHash[:]
+	}
+
 	switch slpMsg.TokenType {
 	case 0x01:
 		tm.TypeMetadata = &pb.TokenMetadata_Type1{
@@ -2442,10 +2452,8 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 				Decimals:          uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-				// TODO ... complete token metadata
-				//TokenMintQuantity: 0, //uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
-				//MintBatonTxid: nil,
-				//MintBatonVout: 0,
+				MintBatonTxid:     mintBatonHash,
+				MintBatonVout:     dbTm.MintBatonVout,
 			},
 		}
 	case 0x41:
@@ -2455,8 +2463,7 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 				TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
 				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-				// TODO ... complete token metadata
-				//GroupId:           nil,
+				GroupId:           dbTm.NftGroupID[:],
 			},
 		}
 	case 0x81:
@@ -2467,11 +2474,8 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
 				Decimals:          uint32(slpMsg.Data.(v1parser.SlpGenesis).Decimals),
-				// TODO ... complete token metadata
-				//TokenMintQuantity: 0, //uint64(slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout),
-				//MintBatonTxid: nil,
-				//MintBatonVout: nil,
-				//
+				MintBatonTxid:     mintBatonHash,
+				MintBatonVout:     dbTm.MintBatonVout,
 			},
 		}
 	}
