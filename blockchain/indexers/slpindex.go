@@ -248,11 +248,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 			mintBatonVout = uint32(entry.MintBatonVout)
 			mintBatonHash = &txHash
 		} else if entryInfo.slpMsg.TokenType == 0x41 {
-			var _nft1GroupID []byte
-			for i := len(entryInfo.tx.TxIn[0].PreviousOutPoint.Hash) - 1; i >= 0; i-- {
-				_nft1GroupID = append(_nft1GroupID, entryInfo.tx.TxIn[0].PreviousOutPoint.Hash[i])
-			}
-			nft1GroupID, _ = chainhash.NewHash(_nft1GroupID)
+			parentTokenEntry, _ := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
+			nft1GroupID = &parentTokenEntry.TokenIDHash
 		}
 	} else if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpMint); ok {
 		tokenMetadataNeedsUpdated = true
