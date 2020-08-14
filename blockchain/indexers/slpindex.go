@@ -137,25 +137,6 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 	return tmIndex.Put(serializedID[:], tokenMetadata)
 }
 
-// dbRemoveTokenIDIndexEntry uses an existing database transaction remove index
-// entries from the hash to id and id to hash mappings for the provided hash.
-func dbRemoveTokenIDIndexEntry(dbTx database.Tx, hash *chainhash.Hash) error {
-	// Remove the token hash to ID mapping.
-	meta := dbTx.Metadata()
-	hashIndex := meta.Bucket(tokenIDByHashIndexBucketName)
-	serializedID := hashIndex.Get(hash[:])
-	if serializedID == nil {
-		return nil
-	}
-	if err := hashIndex.Delete(hash[:]); err != nil {
-		return err
-	}
-
-	// Remove the token ID to hash mapping.
-	tmIndex := meta.Bucket(tokenMetadataByIDIndexBucketName)
-	return tmIndex.Delete(serializedID)
-}
-
 // dbFetchTokenIDByHash uses an existing database transaction to retrieve the
 // token id for the provided hash from the index.
 func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error) {
