@@ -41,8 +41,8 @@ func (s *SlpCache) AddTemp(hash *chainhash.Hash, item *SlpIndexEntry) {
 	}
 }
 
-// AddMempool puts new items in the mempool cache
-func (s *SlpCache) AddMempool(hash *chainhash.Hash, item *SlpIndexEntry) {
+// AddMempoolItem puts new items in the mempool cache
+func (s *SlpCache) AddMempoolItem(hash *chainhash.Hash, item *SlpIndexEntry) {
 	entry := s.Get(hash)
 	if entry != nil {
 		return
