@@ -2398,9 +2398,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 
 // buildTokenMetadata returns metadata for the provided tokenID
 //
-// TODO: complete token metadata... Currently any other data, like number of transactions
-//		 for a token etc are not tracked. In the future we'll want to update this to fetch
-//		 additional token properties from the db.
+// NOTE: Unconfirmed changes to mint baton status will not be reflected the returned TokenMetadata value.
 //
 func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetadata, error) {
 
@@ -2424,7 +2422,7 @@ func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetad
 	}
 
 	if slpMsg.TransactionType != "GENESIS" {
-		return nil, errors.New("cannot build token metadata from a non-Genesis entry")
+		return nil, errors.New("cannot build token metadata from a non-genesis entry")
 	}
 
 	tm := &pb.TokenMetadata{

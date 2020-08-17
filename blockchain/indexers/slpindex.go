@@ -115,7 +115,7 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 		return err
 	}
 
-	// Add token metadata by uint32 tokenID mapping to the index.
+	// Add or update token metadata by uint32 tokenID mapping to the index.
 	tmIndex := meta.Bucket(tokenMetadataByIDIndexBucketName)
 	tokenMetadata := make([]byte, 32+2+32+4)
 	copy(tokenMetadata[0:], metadata.TokenID[:])
@@ -303,30 +303,39 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 	return entry, nil
 }
 
-// dbRemoveSlpIndexEntry uses an existing database transaction to remove the most
-// recent transaction index entry for the given hash.
-func dbRemoveSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) error {
-	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
-	serializedData := slpIndex.Get(txHash[:])
-	if len(serializedData) == 0 {
-		return nil
+// dbRemoveSlpIndexEntries uses an existing database transaction to remove the
+// latest slp transaction entry for every transaction in the passed block.
+//
+// This method should only be called by DisconnectBlock()
+//
+func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
+	// toposort and reverse order so we can unwind slp token metadata state if needed
+	txs := TopoSortTxs(block.Transactions())
+	var txsRev []*wire.MsgTx
+	for i := len(txs) - 1; i >= 0; i-- {
+		txsRev = append(txsRev, txs[i])
 	}
 
-	// TODO
-	// parse "serializedData" and check if this is a genesis or mint transaction,
-	// then update TokenID and TokenMetadata index appropriately.
-	// If Genesis, delete both records.
-	// If Mint, update the status of the minting baton
-	// NOTE: will need to handle idx.curTokenID carefully
+	// this method should only be called after a topo sort
+	dbRemoveSlpIndexEntry := func(dbTx database.Tx, txHash *chainhash.Hash) error {
+		slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+		serializedData := slpIndex.Get(txHash[:])
+		if len(serializedData) == 0 {
+			return nil
+		}
 
-	return slpIndex.Delete(txHash[:])
-}
+		// NOTE: In the future token metadata may contain properties which
+		// need to be updated here.  Currently, token metadata only have mint baton location
+		// and NFT1 group ID.  Neither of these items need special handling
+		// on DisconnectBlock since they are properly updated during
+		// the subsequently called ConnectBlock.
 
-// dbRemoveSlpIndexEntries uses an existing database transaction to remove the
-// latest transaction entry for every transaction in the passed block.
-func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
-	for _, tx := range block.Transactions() {
-		err := dbRemoveSlpIndexEntry(dbTx, tx.Hash())
+		return slpIndex.Delete(txHash[:])
+	}
+
+	for _, tx := range txsRev {
+		hash := tx.TxHash()
+		err := dbRemoveSlpIndexEntry(dbTx, &hash)
 		if err != nil {
 			return err
 		}
@@ -426,6 +435,13 @@ func (idx *SlpIndex) Create(dbTx database.Tx) error {
 	return err
 }
 
+type burnedInput struct {
+	Tx      *wire.MsgTx
+	TxInput *wire.TxIn
+	SlpMsg  *v1parser.ParseResult
+	Entry   *SlpIndexEntry
+}
+
 // ConnectBlock is invoked by the index manager when a new block has been
 // connected to the main chain.  This indexer adds a hash-to-transaction mapping
 // for every transaction in the passed block.
@@ -450,14 +466,85 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		return dbPutSlpIndexEntry(idx, dbTx, entry)
 	}
 
+	burnedInputs := make([]*burnedInput, 0)
 	for _, tx := range sortedTxns {
-		isValid := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
+		isValid, _burnedInputs := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
+
+		// look for burned inputs within non-SLP txns
 		if !isValid {
-			continue
+			for _, txi := range tx.TxIn {
+				slpEntry, _ := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
+				if slpEntry != nil {
+					slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+					burnedInputs = append(burnedInputs, &burnedInput{
+						Tx:      tx,
+						TxInput: txi,
+						SlpMsg:  slpMsg,
+						Entry:   slpEntry,
+					})
+				}
+			}
+		}
+
+		if _burnedInputs != nil {
+			burnedInputs = append(burnedInputs, _burnedInputs...)
 		}
 	}
 
+	// Loop through burned inputs and check for different situations
+	// where token metadata will need to be updated.
+	//
+	// NOTE: items in burnedInputs are not topologically ordered
+	//
+	for _, burn := range burnedInputs {
+		// Currently we only need to check for a burned mint baton
+		isMintBatonBurned := idx.checkBurnedInputForMintBaton(dbTx, burn)
+		if isMintBatonBurned {
+			continue
+		}
+	}
 	return nil
+}
+
+func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *burnedInput) bool {
+
+	// we can skip nft children since they don't have mint batons
+	if burn.SlpMsg.TokenType == 0x41 {
+		return false
+	}
+
+	// check if input is the mint baton from either Genesis or Mint parent data
+	if msg, ok := burn.SlpMsg.Data.(v1parser.SlpGenesis); ok {
+		if msg.MintBatonVout != int(burn.TxInput.PreviousOutPoint.Index) {
+			return false
+		}
+	} else if msg, ok := burn.SlpMsg.Data.(v1parser.SlpMint); ok {
+		if msg.MintBatonVout != int(burn.TxInput.PreviousOutPoint.Index) {
+			return false
+		}
+	} else {
+		return false
+	}
+
+	// double-check this burned mint baton was a valid slp token
+	if burn.Entry == nil {
+		return false
+	}
+
+	err := dbPutTokenIDIndexEntry(dbTx, burn.Entry.TokenID,
+		&TokenMetadata{
+			TokenID:       &burn.Entry.TokenIDHash,
+			SlpVersion:    burn.Entry.SlpVersionType,
+			MintBatonHash: nil,
+			MintBatonVout: 0,
+			NftGroupID:    nil,
+		},
+	)
+	if err != nil {
+		panic("could not update token metadata")
+	}
+
+	return true
 }
 
 // GetSlpIndexEntryHandler ...
@@ -466,14 +553,15 @@ type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
 // AddTxIndexEntryHandler ...
 type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
 
-// CheckSlpTx checks a transaction for validity and adds
-func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) bool {
+// CheckSlpTx checks a transaction for validity and adds valid txns to the db
+func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*burnedInput) {
 
 	slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 	if slpMsg == nil {
-		// TODO: in the future may want to look for burned inputs on non-SLP txns
-		return false
+		return false, nil
 	}
+
+	burnedInputs := make([]*burnedInput, 0)
 
 	_tokenid, err := goslp.GetSlpTokenID(tx)
 	if err != nil {
@@ -484,7 +572,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	v1InputAmtSpent := big.NewInt(0)
 	v1MintBatonVout := 0
 
-	// loop through inputs to look for valid slp contributions
+	// loop through inputs to look for valid slp contributions, and check for burned inputs
 	for i, txi := range tx.TxIn {
 		prevIdx := int(txi.PreviousOutPoint.Index)
 
@@ -507,7 +595,41 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			if _slpMsg.TokenType != slpMsg.TokenType {
 				continue
 			}
-			v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+			if slpMsg.TransactionType == "MINT" {
+				if msg, ok := _slpMsg.Data.(v1parser.SlpGenesis); ok {
+					if prevIdx == msg.MintBatonVout {
+						v1MintBatonVout = prevIdx
+					}
+				} else if msg, ok := _slpMsg.Data.(v1parser.SlpMint); ok {
+					if prevIdx == msg.MintBatonVout {
+						v1MintBatonVout = prevIdx
+					}
+				}
+			} else { // i.e., SEND
+				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
+
+				// catch mint batons burned in a valid SEND transaction
+				if msg, ok := _slpMsg.Data.(v1parser.SlpGenesis); ok {
+					if prevIdx == msg.MintBatonVout {
+						burnedInputs = append(burnedInputs, &burnedInput{
+							Tx:      tx,
+							TxInput: txi,
+							SlpMsg:  _slpMsg,
+							Entry:   slpEntry,
+						})
+					}
+				} else if msg, ok := _slpMsg.Data.(v1parser.SlpMint); ok {
+					if prevIdx == msg.MintBatonVout {
+						burnedInputs = append(burnedInputs, &burnedInput{
+							Tx:      tx,
+							TxInput: txi,
+							SlpMsg:  _slpMsg,
+							Entry:   slpEntry,
+						})
+					}
+				}
+			}
+
 			if _slpMsg.TransactionType == "GENESIS" { // check for minting baton
 				if prevIdx == _slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
 					v1MintBatonVout = prevIdx
@@ -518,13 +640,22 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 				}
 			}
 		} else {
-			// TODO: check for burns and mark them somewhere...
+			burnedInputs = append(burnedInputs, &burnedInput{
+				Tx:      tx,
+				TxInput: txi,
+				SlpMsg:  _slpMsg,
+				Entry:   slpEntry,
+			})
 		}
 	}
 
-	// Check if tx is a valid SLP.  This requires only two things, first
-	// the slpMsg must be valid, and second the input requirements for the
-	// type of transaction must be satisfied.
+	// TODO: check/handle edge case where GENESIS or MINT transaction has new mint baton
+	// at a non-existant output index.  The Token Metadata needs to be update to show the
+	// mint baton as burned.
+
+	// Check if tx is a valid SLP. SLP validity has two requirements:
+	//  (1) the slpMsg must be valid, and
+	//  (2) the input requirements must be satisfied.
 	isValid := false
 	outputAmt, _ := slpMsg.TotalSlpMsgOutputValue()
 	if slpMsg.TransactionType == "GENESIS" {
@@ -548,7 +679,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			panic(err.Error())
 		}
 	}
-	return isValid
+	return isValid, burnedInputs
 }
 
 // DisconnectBlock is invoked by the index manager when a block has been
@@ -612,7 +743,7 @@ func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 
 	_tokenIDHash, _ := goslp.GetSlpTokenID(tx.MsgTx())
 	tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
-	idx.cache.AddMempool(tx.Hash(), &SlpIndexEntry{
+	idx.cache.AddMempoolItem(tx.Hash(), &SlpIndexEntry{
 		TokenID:        0,
 		TokenIDHash:    *tokenIDHash,
 		SlpVersionType: uint16(slpMsg.TokenType),

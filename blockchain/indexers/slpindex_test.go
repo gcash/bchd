@@ -126,7 +126,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 		tx.Deserialize(bytes.NewReader(serializedTx))
 
 		// check the slp txns
-		isValid := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
+		isValid, _ := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
 		if !isValid && !test.Should[0].Valid {
 			continue
 		} else if isValid && test.Should[0].Valid {
