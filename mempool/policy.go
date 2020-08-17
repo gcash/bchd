@@ -47,7 +47,7 @@ const (
 	maxStandardMultiSigKeys = 3
 
 	// maxStandardTxSize is the maximum size of a transaction
-	maxStandardTxSize = 1000000
+	maxStandardTxSize = 100000
 )
 
 // calcMinRequiredTxRelayFee returns the minimum transaction fee required for a
@@ -261,9 +261,9 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	// size of a transaction.  This also helps mitigate CPU exhaustion
 	// attacks.
 	txSize := tx.MsgTx().SerializeSize()
-	if txSize > blockchain.MaxTransactionSize {
+	if txSize > maxStandardTxSize {
 		str := fmt.Sprintf("size of transaction %v is larger than max "+
-			"allowed size of %v", txSize, blockchain.MaxTransactionSize)
+			"allowed size of %v", txSize, maxStandardTxSize)
 		return txRuleError(wire.RejectNonstandard, str)
 	}
 
