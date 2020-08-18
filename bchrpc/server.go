@@ -1305,16 +1305,16 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	return resp, nil
 }
 
-// GetTrustedValidation returns SLP validity information about a specific token output
-func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTrustedValidationRequest) (*pb.GetTrustedValidationResponse, error) {
+// GetTrustedSlpValidation returns SLP validity information about a specific token output
+func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTrustedSlpValidationRequest) (*pb.GetTrustedSlpValidationResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
 
-	resp := &pb.GetTrustedValidationResponse{}
-	results := make([]*pb.GetTrustedValidationResponse_ValidityResult, len(req.Queries))
+	resp := &pb.GetTrustedSlpValidationResponse{}
+	results := make([]*pb.GetTrustedSlpValidationResponse_ValidityResult, len(req.Queries))
 	for i, query := range req.Queries {
-		result := &pb.GetTrustedValidationResponse_ValidityResult{}
+		result := &pb.GetTrustedSlpValidationResponse_ValidityResult{}
 		result.PrevOutHash = query.PrevOutHash
 		result.PrevOutVout = query.PrevOutVout
 
@@ -1366,17 +1366,17 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
 			}
 			result.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-			result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+			result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
 				V1TokenAmount: slpMsg.Data.(v1parser.SlpSend).Amounts[query.PrevOutVout-1],
 			}
 		} else if slpMsg.TransactionType == "MINT" {
 			result.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
 			if query.PrevOutVout == 1 {
-				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
 					V1TokenAmount: slpMsg.Data.(v1parser.SlpMint).Qty,
 				}
 			} else if int(query.PrevOutVout) == slpMsg.Data.(v1parser.SlpMint).MintBatonVout {
-				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1MintBaton{
+				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1MintBaton{
 					V1MintBaton: true,
 				}
 			} else {
@@ -1388,11 +1388,11 @@ func (s *GrpcServer) GetTrustedValidation(ctx context.Context, req *pb.GetTruste
 				result.TokenId = append(result.TokenId, hash[i])
 			}
 			if query.PrevOutVout == 1 {
-				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1TokenAmount{
+				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
 					V1TokenAmount: slpMsg.Data.(v1parser.SlpGenesis).Qty,
 				}
 			} else if int(query.PrevOutVout) == slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
-				result.ValidityResultType = &pb.GetTrustedValidationResponse_ValidityResult_V1MintBaton{
+				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1MintBaton{
 					V1MintBaton: true,
 				}
 			} else {
