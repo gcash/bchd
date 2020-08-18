@@ -100,9 +100,9 @@ service bchrpc {
     // which may be used in oracle based applications
     //
     // **Requires SlpIndex with additional functionary key setup**
-    rpc GetTrustedValidation(GetTrustedValidationRequest) returns (GetTrustedValidationResponse) {}
+    rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
 
-    // CheckSlpTransaction checks the validity of a 
+    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction
     rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
 
     // Submit a transaction to all connected peers.
@@ -546,7 +546,7 @@ message GetParsedSlpScriptResponse {
     }
 }
 
-message GetTrustedValidationRequest {
+message GetTrustedSlpValidationRequest {
     message Query {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
@@ -568,7 +568,7 @@ message GetTrustedValidationRequest {
     Functionary functionary_info = 2;
 }
 
-message GetTrustedValidationResponse {
+message GetTrustedSlpValidationResponse {
     message ValidityResult {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;

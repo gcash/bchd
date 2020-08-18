@@ -88,92 +88,92 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{5, 0}
 }
 
-type GetTrustedValidationRequest_Functionary_MessageType int32
+type GetTrustedSlpValidationRequest_Functionary_MessageType int32
 
 const (
-	GetTrustedValidationRequest_Functionary_STANDARD GetTrustedValidationRequest_Functionary_MessageType = 0
+	GetTrustedSlpValidationRequest_Functionary_STANDARD GetTrustedSlpValidationRequest_Functionary_MessageType = 0
 )
 
-// Enum value maps for GetTrustedValidationRequest_Functionary_MessageType.
+// Enum value maps for GetTrustedSlpValidationRequest_Functionary_MessageType.
 var (
-	GetTrustedValidationRequest_Functionary_MessageType_name = map[int32]string{
+	GetTrustedSlpValidationRequest_Functionary_MessageType_name = map[int32]string{
 		0: "STANDARD",
 	}
-	GetTrustedValidationRequest_Functionary_MessageType_value = map[string]int32{
+	GetTrustedSlpValidationRequest_Functionary_MessageType_value = map[string]int32{
 		"STANDARD": 0,
 	}
 )
 
-func (x GetTrustedValidationRequest_Functionary_MessageType) Enum() *GetTrustedValidationRequest_Functionary_MessageType {
-	p := new(GetTrustedValidationRequest_Functionary_MessageType)
+func (x GetTrustedSlpValidationRequest_Functionary_MessageType) Enum() *GetTrustedSlpValidationRequest_Functionary_MessageType {
+	p := new(GetTrustedSlpValidationRequest_Functionary_MessageType)
 	*p = x
 	return p
 }
 
-func (x GetTrustedValidationRequest_Functionary_MessageType) String() string {
+func (x GetTrustedSlpValidationRequest_Functionary_MessageType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (GetTrustedValidationRequest_Functionary_MessageType) Descriptor() protoreflect.EnumDescriptor {
+func (GetTrustedSlpValidationRequest_Functionary_MessageType) Descriptor() protoreflect.EnumDescriptor {
 	return file_bchrpc_proto_enumTypes[2].Descriptor()
 }
 
-func (GetTrustedValidationRequest_Functionary_MessageType) Type() protoreflect.EnumType {
+func (GetTrustedSlpValidationRequest_Functionary_MessageType) Type() protoreflect.EnumType {
 	return &file_bchrpc_proto_enumTypes[2]
 }
 
-func (x GetTrustedValidationRequest_Functionary_MessageType) Number() protoreflect.EnumNumber {
+func (x GetTrustedSlpValidationRequest_Functionary_MessageType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use GetTrustedValidationRequest_Functionary_MessageType.Descriptor instead.
-func (GetTrustedValidationRequest_Functionary_MessageType) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use GetTrustedSlpValidationRequest_Functionary_MessageType.Descriptor instead.
+func (GetTrustedSlpValidationRequest_Functionary_MessageType) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{40, 1, 0}
 }
 
-type GetTrustedValidationRequest_Functionary_SignatureType int32
+type GetTrustedSlpValidationRequest_Functionary_SignatureType int32
 
 const (
-	GetTrustedValidationRequest_Functionary_SECP256K1_ECDSA   GetTrustedValidationRequest_Functionary_SignatureType = 0
-	GetTrustedValidationRequest_Functionary_SECP256K1_SCHNORR GetTrustedValidationRequest_Functionary_SignatureType = 1
+	GetTrustedSlpValidationRequest_Functionary_SECP256K1_ECDSA   GetTrustedSlpValidationRequest_Functionary_SignatureType = 0
+	GetTrustedSlpValidationRequest_Functionary_SECP256K1_SCHNORR GetTrustedSlpValidationRequest_Functionary_SignatureType = 1
 )
 
-// Enum value maps for GetTrustedValidationRequest_Functionary_SignatureType.
+// Enum value maps for GetTrustedSlpValidationRequest_Functionary_SignatureType.
 var (
-	GetTrustedValidationRequest_Functionary_SignatureType_name = map[int32]string{
+	GetTrustedSlpValidationRequest_Functionary_SignatureType_name = map[int32]string{
 		0: "SECP256K1_ECDSA",
 		1: "SECP256K1_SCHNORR",
 	}
-	GetTrustedValidationRequest_Functionary_SignatureType_value = map[string]int32{
+	GetTrustedSlpValidationRequest_Functionary_SignatureType_value = map[string]int32{
 		"SECP256K1_ECDSA":   0,
 		"SECP256K1_SCHNORR": 1,
 	}
 )
 
-func (x GetTrustedValidationRequest_Functionary_SignatureType) Enum() *GetTrustedValidationRequest_Functionary_SignatureType {
-	p := new(GetTrustedValidationRequest_Functionary_SignatureType)
+func (x GetTrustedSlpValidationRequest_Functionary_SignatureType) Enum() *GetTrustedSlpValidationRequest_Functionary_SignatureType {
+	p := new(GetTrustedSlpValidationRequest_Functionary_SignatureType)
 	*p = x
 	return p
 }
 
-func (x GetTrustedValidationRequest_Functionary_SignatureType) String() string {
+func (x GetTrustedSlpValidationRequest_Functionary_SignatureType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (GetTrustedValidationRequest_Functionary_SignatureType) Descriptor() protoreflect.EnumDescriptor {
+func (GetTrustedSlpValidationRequest_Functionary_SignatureType) Descriptor() protoreflect.EnumDescriptor {
 	return file_bchrpc_proto_enumTypes[3].Descriptor()
 }
 
-func (GetTrustedValidationRequest_Functionary_SignatureType) Type() protoreflect.EnumType {
+func (GetTrustedSlpValidationRequest_Functionary_SignatureType) Type() protoreflect.EnumType {
 	return &file_bchrpc_proto_enumTypes[3]
 }
 
-func (x GetTrustedValidationRequest_Functionary_SignatureType) Number() protoreflect.EnumNumber {
+func (x GetTrustedSlpValidationRequest_Functionary_SignatureType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use GetTrustedValidationRequest_Functionary_SignatureType.Descriptor instead.
-func (GetTrustedValidationRequest_Functionary_SignatureType) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use GetTrustedSlpValidationRequest_Functionary_SignatureType.Descriptor instead.
+func (GetTrustedSlpValidationRequest_Functionary_SignatureType) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{40, 1, 1}
 }
 
@@ -5742,9 +5742,9 @@ func (c *bchrpcClient) GetParsedSlpScript(ctx context.Context, in *GetParsedSlpS
 	return out, nil
 }
 
-func (c *bchrpcClient) GetTrustedValidation(ctx context.Context, in *GetTrustedValidationRequest, opts ...grpc.CallOption) (*GetTrustedValidationResponse, error) {
-	out := new(GetTrustedValidationResponse)
-	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetTrustedValidation", in, out, opts...)
+func (c *bchrpcClient) GetTrustedSlpValidation(ctx context.Context, in *GetTrustedSlpValidationRequest, opts ...grpc.CallOption) (*GetTrustedSlpValidationResponse, error) {
+	out := new(GetTrustedSlpValidationResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetTrustedSlpValidation", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -6328,20 +6328,20 @@ func _Bchrpc_GetParsedSlpScript_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Bchrpc_GetTrustedValidation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTrustedValidationRequest)
+func _Bchrpc_GetTrustedSlpValidation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTrustedSlpValidationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BchrpcServer).GetTrustedValidation(ctx, in)
+		return srv.(BchrpcServer).GetTrustedSlpValidation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.bchrpc/GetTrustedValidation",
+		FullMethod: "/pb.bchrpc/GetTrustedSlpValidation",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BchrpcServer).GetTrustedValidation(ctx, req.(*GetTrustedValidationRequest))
+		return srv.(BchrpcServer).GetTrustedSlpValidation(ctx, req.(*GetTrustedSlpValidationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -6523,8 +6523,8 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Bchrpc_GetParsedSlpScript_Handler,
 		},
 		{
-			MethodName: "GetTrustedValidation",
-			Handler:    _Bchrpc_GetTrustedValidation_Handler,
+			MethodName: "GetTrustedSlpValidation",
+			Handler:    _Bchrpc_GetTrustedSlpValidation_Handler,
 		},
 		{
 			MethodName: "CheckSlpTransaction",
