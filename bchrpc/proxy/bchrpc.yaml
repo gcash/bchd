@@ -1,0 +1,71 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+  - selector: pb.bchrpc.GetBlockchainInfo
+    post: /v1/GetBlockchainInfo
+    body: "*"
+  - selector: pb.bchrpc.CheckSlpTransaction
+    post: /v1/CheckSlpTransaction
+    body: "*"
+  - selector: pb.bchrpc.GetParsedSlpScript
+    post: /v1/GetParsedSlpScript
+    body: "*"
+  - selector: pb.bchrpc.GetTrustedSlpValidation
+    post: /v1/GetTrustedSlpValidation
+    body: "*"
+  - selector: pb.bchrpc.GetMempoolInfo
+    post: /v1/GetMempoolInfo
+    body: "*"
+  - selector: pb.bchrpc.GetMempool
+    post: /v1/GetMempool
+    body: "*"
+  - selector: pb.bchrpc.GetBlockInfo
+    post: /v1/GetBlockInfo
+    body: "*"
+  - selector: pb.bchrpc.GetBlock
+    post: /v1/GetBlock
+    body: "*"
+  - selector: pb.bchrpc.GetRawBlock
+    post: /v1/GetRawBlock
+    body: "*"
+  - selector: pb.bchrpc.GetBlockFilter
+    post: /v1/GetBlockFilter
+    body: "*"
+  - selector: pb.bchrpc.GetHeaders
+    post: /v1/GetBlockHeaders
+    body: "*"
+  - selector: pb.bchrpc.GetTransaction
+    post: /v1/GetTransaction
+    body: "*"
+  - selector: pb.bchrpc.GetRawTransaction
+    post: /v1/GetRawTransaction
+    body: "*"
+  - selector: pb.bchrpc.GetAddressTransactions
+    post: /v1/GetAddressTransactions
+    body: "*"
+  - selector: pb.bchrpc.GetRawAddressTransactions
+    post: /v1/GetRawAddressTransactions
+    body: "*"
+  - selector: pb.bchrpc.GetAddressUnspentOutputs
+    post: /v1/GetAddressUnspentOutputs
+    body: "*"
+  - selector: pb.bchrpc.GetUnspentOutput
+    post: /v1/GetUnspentOutput
+    body: "*"
+  - selector: pb.bchrpc.GetMerkleProof
+    post: /v1/GetMerkleProof
+    body: "*"
+  - selector: pb.bchrpc.SubmitTransaction
+    post: /v1/SubmitTransaction
+    body: "*"
+  - selector: pb.bchrpc.SubscribeTransactions
+    post: /v1/SubscribeTransactions
+    body: "*"
+  - selector: pb.bchrpc.SubscribeTransactionStream
+    post: /v1/SubscribeTransactionStream
+    body: "*"
+  - selector: pb.bchrpc.SubscribeBlocks
+    post: /v1/SubscribeBlocks
+    body: "*"
