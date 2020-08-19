@@ -22,6 +22,7 @@ var (
 )
 
 func run() error {
+	var err error
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -29,8 +30,17 @@ func run() error {
 	// Register gRPC server endpoint
 	// Note: Make sure the gRPC server is running properly and accessible
 	mux := runtime.NewServeMux()
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(credentials.NewTLS(nil)), grpc.WithMaxMsgSize(4294967295)}
-	err := gw.RegisterBchrpcHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
+	var creds credentials.TransportCredentials
+	if *grpcRootCertPath != "" {
+		creds, err = credentials.NewClientTLSFromFile(*grpcRootCertPath, "")
+		if err != nil {
+			glog.Fatal(err)
+		}
+	} else {
+		creds = credentials.NewTLS(nil)
+	}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithMaxMsgSize(4294967295)}
+	err = gw.RegisterBchrpcHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
 	if err != nil {
 		return err
 	}
