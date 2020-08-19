@@ -5751,6 +5751,15 @@ func (c *bchrpcClient) GetTrustedSlpValidation(ctx context.Context, in *GetTrust
 	return out, nil
 }
 
+func (c *bchrpcClient) GetBip44HdAddress(ctx context.Context, in *GetBip44HdAddressRequest, opts ...grpc.CallOption) (*GetBip44HdAddressResponse, error) {
+	out := new(GetBip44HdAddressResponse)
+	err := c.cc.Invoke(ctx, "/pb.bchrpc/GetBip44HdAddress", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bchrpcClient) CheckSlpTransaction(ctx context.Context, in *CheckSlpTransactionRequest, opts ...grpc.CallOption) (*CheckSlpTransactionResponse, error) {
 	out := new(CheckSlpTransactionResponse)
 	err := c.cc.Invoke(ctx, "/pb.bchrpc/CheckSlpTransaction", in, out, opts...)
@@ -6346,6 +6355,24 @@ func _Bchrpc_GetTrustedSlpValidation_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_GetBip44HdAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBip44HdAddressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).GetBip44HdAddress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.bchrpc/GetBip44HdAddress",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).GetBip44HdAddress(ctx, req.(*GetBip44HdAddressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_CheckSlpTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckSlpTransactionRequest)
 	if err := dec(in); err != nil {
@@ -6525,6 +6552,10 @@ var _Bchrpc_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTrustedSlpValidation",
 			Handler:    _Bchrpc_GetTrustedSlpValidation_Handler,
+		},
+		{
+			MethodName: "GetBip44HdAddress",
+			Handler:    _Bchrpc_GetBip44HdAddress_Handler,
 		},
 		{
 			MethodName: "CheckSlpTransaction",

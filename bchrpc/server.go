@@ -25,6 +25,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/bchutil/hdkeychain"
 	"github.com/gcash/bchutil/merkleblock"
 	"github.com/simpleledgerinc/goslp"
 	"github.com/simpleledgerinc/goslp/v1parser"
@@ -1412,6 +1413,57 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 
 	resp.Results = results
 	return resp, nil
+}
+
+// GetBip44HdAddress this method will return an address based on the requested HD path
+func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAddressRequest) (*pb.GetBip44HdAddressResponse, error) {
+	xpub := req.Xpub
+	if len(xpub) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "xpub is missing in request")
+	}
+
+	if xpub[:4] != "xpub" {
+		return nil, status.Error(codes.InvalidArgument, "xpub provided does not start with 'xpub'")
+	}
+
+	masterKey, err := hdkeychain.NewKeyFromString(xpub)
+	if err != nil {
+		fmt.Println(err)
+		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+	}
+
+	var change uint32 = 0
+	if req.Change {
+		change = 1
+	}
+
+	ext, err := masterKey.Child(change)
+	if err != nil {
+		fmt.Println(err)
+		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+	}
+
+	extK, err := ext.Child(req.AddressIndex)
+	if err != nil {
+		fmt.Println(err)
+		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+	}
+
+	pubKey, _ := extK.ECPubKey()
+	addr, _ := extK.Address(s.chainParams)
+	slpAddrStr := ""
+	if s.slpIndex != nil {
+		slpAddr, _ := goslp.NewAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
+		slpAddrStr = s.chainParams.SlpAddressPrefix + ":" + slpAddr.EncodeAddress()
+	}
+
+	res := &pb.GetBip44HdAddressResponse{
+		PubKey:   pubKey.SerializeCompressed(),
+		CashAddr: s.chainParams.CashAddressPrefix + ":" + addr.EncodeAddress(),
+		SlpAddr:  slpAddrStr,
+	}
+
+	return res, nil
 }
 
 func isMaybeSlpTransaction(pkScript []byte) bool {
