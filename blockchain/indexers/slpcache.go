@@ -26,6 +26,9 @@ func NewSlpCache(maxEntries int) *SlpCache {
 
 // AddTemp puts new items in a temporary cache with limited size
 func (s *SlpCache) AddTemp(hash *chainhash.Hash, item *SlpIndexEntry) {
+	s.Lock()
+	defer s.Unlock()
+
 	// Remove a random entry from the map.  For most compilers, Go's
 	// range statement iterates starting at a random item although
 	// that is not 100% guaranteed by the spec.
