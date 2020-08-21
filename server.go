@@ -696,6 +696,29 @@ func (sp *serverPeer) OnTx(_ *peer.Peer, msg *wire.MsgTx) {
 	<-sp.txProcessed
 }
 
+// OnDSProof is invoked when a peer receives a dsproof bitcoin message.  It blocks
+// until the proof has been fully processed.
+func (sp *serverPeer) OnDSProof(_ *peer.Peer, msg *wire.MsgDSProof) {
+	if cfg.BlocksOnly {
+		peerLog.Tracef("Ignoring dsproof %v from %v - blocksonly enabled",
+			msg.ProofHash(), sp)
+		return
+	}
+
+	// Add the proof to the known inventory for the peer.
+	h := msg.ProofHash()
+	iv := wire.NewInvVect(wire.InvTypeTx, &h)
+	sp.AddKnownInventory(iv)
+
+	// Queue the proof up to be handled by the sync manager and
+	// intentionally block further receives until the proof is fully
+	// processed and known good or bad.  This helps prevent a malicious peer
+	// from queuing up a bunch of bad proofs before disconnecting (or
+	// being disconnected) and wasting memory.
+	sp.server.syncManager.QueueDSProof(msg, sp.Peer, sp.txProcessed)
+	<-sp.txProcessed
+}
+
 // OnBlock is invoked when a peer receives a block bitcoin message.  It
 // blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
@@ -1738,6 +1761,31 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	}
 }
 
+// AnnounceNewDSProof generates and relays inventory vectors and notifies
+// both rpc and grpc clients.  This function should be called whenever
+// new double spend proofs are added to the mempool.
+func (s *server) AnnounceNewDSProof(msg *wire.MsgDSProof) {
+	proofHash := msg.ProofHash()
+	// Generate and relay inventory vectors for all newly accepted
+	// double spend proofs.
+	iv := wire.NewInvVect(wire.InvTypeDSProof, &proofHash)
+	s.RelayInventory(iv, msg)
+
+	// TODO: notify RPC server
+	/*
+		if s.rpcServer != nil {
+			s.rpcServer.NotifyNewDSProof(msg)
+		}
+	*/
+
+	// TODO: notify gRPC server
+	/*
+		if s.gRPCServer != nil {
+			s.gRPCServer.NotifyNewDSProof(msg)
+		}
+	*/
+}
+
 // Transaction has one confirmation on the main chain. Now we can mark it as no
 // longer needing rebroadcasting.
 func (s *server) TransactionConfirmed(tx *bchutil.Tx) {
@@ -2264,6 +2312,34 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			}
 		}
 
+		if msg.invVect.Type == wire.InvTypeDSProof {
+			// Don't relay the proof to the peer when it has
+			// transaction relaying disabled.
+			if sp.relayTxDisabled() {
+				return
+			}
+
+			dsproof, ok := msg.data.(*wire.MsgDSProof)
+			if !ok {
+				peerLog.Warnf("Underlying data for dsproof inv "+
+					"relay is not a *wire.MsgDSProof: %T",
+					msg.data)
+				return
+			}
+
+			// Don't relay the transaction if there is a bloom
+			// filter loaded and the transaction doesn't match it.
+			if sp.filter.IsLoaded() {
+				op := wire.OutPoint{
+					Hash:  dsproof.TxInPrevHash,
+					Index: dsproof.TxInPrevIndex,
+				}
+				if !sp.filter.MatchesOutPoint(&op) {
+					return
+				}
+			}
+		}
+
 		// Queue the inventory to be relayed with the next batch.
 		// It will be ignored if the peer is already known to
 		// have the inventory.
@@ -2504,6 +2580,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
+			OnDSProof:      sp.OnDSProof,
 		},
 		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,

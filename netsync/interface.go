@@ -20,6 +20,8 @@ import (
 type PeerNotifier interface {
 	AnnounceNewTransactions(newTxs []*mempool.TxDesc)
 
+	AnnounceNewDSProof(newDSProof *wire.MsgDSProof)
+
 	UpdatePeerHeights(latestBlkHash *chainhash.Hash, latestHeight int32, updateSource *peer.Peer)
 
 	RelayInventory(invVect *wire.InvVect, data interface{})

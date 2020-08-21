@@ -711,6 +711,32 @@ func TestMempoolSync(t *testing.T) {
 	case <-time.After(time.Second):
 	}
 
+	// Attempt to process double spend proof
+	proof := wire.NewMsgDSProof(wire.OutPoint{Index: 1}, wire.Spender{}, wire.Spender{})
+	syncMgr.QueueDSProof(proof, localNode, syncChan)
+	select {
+	case <-syncChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for sync manager to process dsproof")
+	}
+
+	// Assert dsproof was accepted by checking that call was made to notify
+	// peers of the new dsproof.
+	select {
+	case call := <-ctx.peerNotifier.announceNewDSProofChan:
+		proofHash := proof.ProofHash()
+		callHash := call.newDSProof.ProofHash()
+		if call.newDSProof == nil ||
+			!callHash.IsEqual(&proofHash) {
+
+			t.Fatalf("PeerNotifier received unexpected "+
+				"AnnounceNewDSProof call: %v", call.newDSProof)
+		}
+	default:
+		t.Fatal("Expected SyncManager to make AnnounceNewDSProof call " +
+			"to PeerNotifier")
+	}
+
 	err = syncMgr.Stop()
 	if err != nil {
 		t.Fatalf("failed to stop SyncManager: %v", err)

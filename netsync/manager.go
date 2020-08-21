@@ -106,6 +106,14 @@ type txMsg struct {
 	reply chan struct{}
 }
 
+// dsProofMsg packages a bitcoin dsproof message and the peer it came from together
+// so the block handler has access to that information.
+type dsProofMsg struct {
+	msg   *wire.MsgDSProof
+	peer  *peerpkg.Peer
+	reply chan struct{}
+}
+
 // getSyncPeerMsg is a message type to be sent across the message channel for
 // retrieving the current sync peer.
 type getSyncPeerMsg struct {
@@ -156,10 +164,11 @@ type headerNode struct {
 // peerSyncState stores additional information that the SyncManager tracks
 // about a peer.
 type peerSyncState struct {
-	syncCandidate   bool
-	requestQueue    []*wire.InvVect
-	requestedTxns   map[chainhash.Hash]struct{}
-	requestedBlocks map[chainhash.Hash]struct{}
+	syncCandidate     bool
+	requestQueue      []*wire.InvVect
+	requestedTxns     map[chainhash.Hash]struct{}
+	requestedBlocks   map[chainhash.Hash]struct{}
+	requestedDSProofs map[chainhash.Hash]struct{}
 }
 
 // syncPeerState stores additional info about the sync peer.
@@ -221,12 +230,14 @@ type SyncManager struct {
 	quit           chan struct{}
 
 	// These fields should only be accessed from the blockHandler thread.
-	rejectedTxns    map[chainhash.Hash]struct{}
-	requestedTxns   map[chainhash.Hash]struct{}
-	requestedBlocks map[chainhash.Hash]struct{}
-	syncPeer        *peerpkg.Peer
-	syncPeerState   *syncPeerState
-	peerStates      map[*peerpkg.Peer]*peerSyncState
+	rejectedTxns      map[chainhash.Hash]struct{}
+	rejectedDSProofs  map[chainhash.Hash]struct{}
+	requestedTxns     map[chainhash.Hash]struct{}
+	requestedBlocks   map[chainhash.Hash]struct{}
+	requestedDSProofs map[chainhash.Hash]struct{}
+	syncPeer          *peerpkg.Peer
+	syncPeerState     *syncPeerState
+	peerStates        map[*peerpkg.Peer]*peerSyncState
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
@@ -488,9 +499,10 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 	isSyncCandidate := sm.isSyncCandidate(peer)
 
 	sm.peerStates[peer] = &peerSyncState{
-		syncCandidate:   isSyncCandidate,
-		requestedTxns:   make(map[chainhash.Hash]struct{}),
-		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		syncCandidate:     isSyncCandidate,
+		requestedTxns:     make(map[chainhash.Hash]struct{}),
+		requestedBlocks:   make(map[chainhash.Hash]struct{}),
+		requestedDSProofs: make(map[chainhash.Hash]struct{}),
 	}
 
 	// Start syncing by choosing the best candidate if needed.
@@ -598,6 +610,12 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 	for blockHash := range state.requestedBlocks {
 		delete(sm.requestedBlocks, blockHash)
 	}
+
+	// Remove requested dsproofs from the global map so that they will
+	// be fetched from elsewhere next time we get an inv.
+	for proofHash := range state.requestedDSProofs {
+		delete(sm.requestedDSProofs, proofHash)
+	}
 }
 
 // updateSyncPeer picks a new peer to sync from.
@@ -704,6 +722,64 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	if len(acceptedTxs) > 0 {
 		sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
 	}
+}
+
+// handleDSProofMsg handles double spend proof messages from all peers.
+func (sm *SyncManager) handleDSProofMsg(dsmsg *dsProofMsg) {
+	peer := dsmsg.peer
+	state, exists := sm.peerStates[peer]
+	if !exists {
+		log.Warnf("Received dsproof message from unknown peer %s", peer)
+		return
+	}
+
+	proofHash := dsmsg.msg.ProofHash()
+
+	// Ignore proofs that we have already rejected.  Do not send a reject
+	// message here because if the transaction was already rejected, the
+	// transaction was unsolicited.
+	if _, exists = sm.rejectedDSProofs[proofHash]; exists {
+		log.Debugf("Ignoring unsolicited previously rejected "+
+			"dsproof %v from %s", proofHash, peer)
+		return
+	}
+
+	// Process the proof to include validation, insertion in the memory pool.
+	err := sm.txMemPool.ProcessDSProof(dsmsg.msg)
+
+	// Remove proof from request maps. Either the mempool/chain
+	// already knows about it and as such we shouldn't have any more
+	// instances of trying to fetch it, or we failed to insert and thus
+	// we'll retry next time we get an inv.
+	delete(state.requestedDSProofs, proofHash)
+	delete(sm.requestedDSProofs, proofHash)
+
+	if err != nil {
+		// Do not request this proof again until a new block
+		// has been processed.
+		sm.rejectedTxns[proofHash] = struct{}{}
+		sm.limitMap(sm.requestedDSProofs, maxRejectedTxns)
+
+		// When the error is a rule error, it means the proof was
+		// simply rejected as opposed to something actually going wrong,
+		// so log it as such.  Otherwise, something really did go wrong,
+		// so log it as an actual error.
+		if _, ok := err.(mempool.RuleError); ok {
+			log.Debugf("Rejected dsproof %v from %s: %v",
+				proofHash, peer, err)
+		} else {
+			log.Errorf("Failed to process dsproof %v: %v",
+				proofHash, err)
+		}
+
+		// Convert the error into an appropriate reject message and
+		// send it.
+		code, reason := mempool.ErrToRejectErr(err)
+		peer.PushRejectMsg(wire.CmdTx, code, reason, &proofHash, false)
+		return
+	}
+
+	sm.peerNotifier.AnnounceNewDSProof(dsmsg.msg)
 }
 
 // current returns true if we believe we are synced with our peers, false if we
@@ -1198,6 +1274,12 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 		}
 
 		return false, nil
+
+	case wire.InvTypeDSProof:
+		// Ask the transaction memory pool if the double spend proof is known.
+		if sm.txMemPool.HaveDoubleSpendProof(&invVect.Hash) {
+			return true, nil
+		}
 	}
 
 	// The requested inventory is is an unsupported type, so just claim
@@ -1259,6 +1341,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 		switch iv.Type {
 		case wire.InvTypeBlock:
 		case wire.InvTypeTx:
+		case wire.InvTypeDSProof:
 		default:
 			continue
 		}
@@ -1373,6 +1456,18 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				gdmsg.AddInvVect(iv)
 				numRequested++
 			}
+
+		case wire.InvTypeDSProof:
+			// Request the double spend proof if there is not already a
+			// pending request.
+			if _, exists := sm.requestedDSProofs[iv.Hash]; !exists {
+				sm.requestedDSProofs[iv.Hash] = struct{}{}
+				sm.limitMap(sm.requestedDSProofs, maxRequestedTxns)
+				state.requestedDSProofs[iv.Hash] = struct{}{}
+
+				gdmsg.AddInvVect(iv)
+				numRequested++
+			}
 		}
 
 		if numRequested >= wire.MaxInvPerMsg {
@@ -1428,6 +1523,12 @@ out:
 
 			case *txMsg:
 				sm.handleTxMsg(msg)
+				if msg.reply != nil {
+					msg.reply <- struct{}{}
+				}
+
+			case *dsProofMsg:
+				sm.handleDSProofMsg(msg)
 				if msg.reply != nil {
 					msg.reply <- struct{}{}
 				}
@@ -1628,6 +1729,18 @@ func (sm *SyncManager) QueueTx(tx *bchutil.Tx, peer *peerpkg.Peer, done chan str
 	sm.msgChan <- &txMsg{tx: tx, peer: peer, reply: done}
 }
 
+// QueueDSProof adds the passed double spend proof message and peer to the block handling
+// queue. Responds to the done channel argument after the tx message is processed.
+func (sm *SyncManager) QueueDSProof(msg *wire.MsgDSProof, peer *peerpkg.Peer, done chan struct{}) {
+	// Don't accept more transactions if we're shutting down.
+	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		done <- struct{}{}
+		return
+	}
+
+	sm.msgChan <- &dsProofMsg{msg: msg, peer: peer, reply: done}
+}
+
 // QueueBlock adds the passed block message and peer to the block handling
 // queue. Responds to the done channel argument after the block message is
 // processed.
@@ -1754,8 +1867,10 @@ func New(config *Config) (*SyncManager, error) {
 		txMemPool:               config.TxMemPool,
 		chainParams:             config.ChainParams,
 		rejectedTxns:            make(map[chainhash.Hash]struct{}),
+		rejectedDSProofs:        make(map[chainhash.Hash]struct{}),
 		requestedTxns:           make(map[chainhash.Hash]struct{}),
 		requestedBlocks:         make(map[chainhash.Hash]struct{}),
+		requestedDSProofs:       make(map[chainhash.Hash]struct{}),
 		peerStates:              make(map[*peerpkg.Peer]*peerSyncState),
 		progressLogger:          newBlockProgressLogger("Processed", log),
 		msgChan:                 make(chan interface{}, config.MaxPeers*3),

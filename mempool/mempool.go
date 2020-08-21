@@ -172,6 +172,8 @@ type TxPool struct {
 	orphans       map[chainhash.Hash]*orphanTx
 	orphansByPrev map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx
 	outpoints     map[wire.OutPoint]*bchutil.Tx
+	dsProofs      map[chainhash.Hash]bool
+	dsOutpoints   map[wire.OutPoint]bool
 	pennyTotal    float64 // exponentially decaying total for penny spends.
 	lastPennyUnix int64   // unix time of last ``penny spend''
 
@@ -431,14 +433,6 @@ func (mp *TxPool) IsOrphanInPool(hash *chainhash.Hash) bool {
 	return inPool
 }
 
-// haveTransaction returns whether or not the passed transaction already exists
-// in the main pool or in the orphan pool.
-//
-// This function MUST be called with the mempool lock held (for reads).
-func (mp *TxPool) haveTransaction(hash *chainhash.Hash) bool {
-	return mp.isTransactionInPool(hash) || mp.isOrphanInPool(hash)
-}
-
 // HaveTransaction returns whether or not the passed transaction already exists
 // in the main pool or in the orphan pool.
 //
@@ -450,6 +444,35 @@ func (mp *TxPool) HaveTransaction(hash *chainhash.Hash) bool {
 	mp.mtx.RUnlock()
 
 	return haveTx
+}
+
+// haveTransaction returns whether or not the passed transaction already exists
+// in the main pool or in the orphan pool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) haveTransaction(hash *chainhash.Hash) bool {
+	return mp.isTransactionInPool(hash) || mp.isOrphanInPool(hash)
+}
+
+// HaveDoubleSpendProof returns whether or not the passed double spend proof
+// already exists in the main pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) HaveDoubleSpendProof(hash *chainhash.Hash) bool {
+	// Protect concurrent access.
+	mp.mtx.RLock()
+	haveProof := mp.haveDoubleSpendProof(hash)
+	mp.mtx.RUnlock()
+
+	return haveProof
+}
+
+// HaveDoubleSpendProof returns whether or not the passed double spend proof
+// already exists in the main pool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) haveDoubleSpendProof(hash *chainhash.Hash) bool {
+	return mp.dsProofs[*hash]
 }
 
 // removeTransaction is the internal function which implements the public
@@ -1153,6 +1176,35 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 	return nil, err
 }
 
+// ProcessDSProof handles inserting a new double spend proof into the mempool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) ProcessDSProof(msg *wire.MsgDSProof) error {
+	proofHash := msg.ProofHash()
+	log.Tracef("Processing dsproof %v", proofHash)
+
+	// Protect concurrent access.
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+
+	op := wire.OutPoint{
+		Hash:  msg.TxInPrevHash,
+		Index: msg.TxInPrevIndex,
+	}
+
+	if mp.dsProofs[proofHash] || mp.dsOutpoints[op] {
+		str := fmt.Sprintf("duplicate dsproof %v", proofHash)
+		return txRuleError(wire.RejectDuplicate, str)
+	}
+
+	// TODO: Validate proof
+
+	mp.dsProofs[proofHash] = true
+	mp.dsOutpoints[op] = true
+
+	return nil
+}
+
 // Count returns the number of transactions in the main pool.  It does not
 // include the orphan pool.
 //
@@ -1383,5 +1435,7 @@ func New(cfg *Config) *TxPool {
 		orphansByPrev:  make(map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx),
 		nextExpireScan: time.Now().Add(orphanExpireScanInterval),
 		outpoints:      make(map[wire.OutPoint]*bchutil.Tx),
+		dsProofs:       make(map[chainhash.Hash]bool),
+		dsOutpoints:    make(map[wire.OutPoint]bool),
 	}
 }
