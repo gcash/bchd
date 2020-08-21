@@ -224,6 +224,9 @@ func messageSummary(msg wire.Message) string {
 	case *wire.MsgBlockTxns:
 		return fmt.Sprintf("txs %d", len(msg.Txs))
 
+	case *wire.MsgDSProof:
+		return fmt.Sprintf("hash %v, outpoint %v", msg.ProofHash(), msg.PrevOut)
+
 	case *wire.MsgReject:
 		// Ensure the variable length strings don't contain any
 		// characters which are even remotely dangerous such as HTML

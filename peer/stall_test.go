@@ -66,3 +66,20 @@ func TestMaybeAddDeadlineGetBlocksStopHash(t *testing.T) {
 		}
 	}
 }
+
+// TestGetDataAnsweredByDSProof verifies that a dsproof-beta message answers a
+// getdata, so a getdata asking only for proofs does not stall the peer.
+func TestGetDataAnsweredByDSProof(t *testing.T) {
+	t.Parallel()
+
+	p := &Peer{}
+	pending := make(map[string]time.Time)
+	p.maybeAddDeadline(pending, wire.NewMsgGetData())
+	if len(pending) == 0 {
+		t.Fatal("getdata armed no deadline")
+	}
+	removeExpectedResponse(pending, wire.CmdDSProof)
+	if len(pending) != 0 {
+		t.Fatalf("deadlines left after a dsproof-beta answer: %v", pending)
+	}
+}
