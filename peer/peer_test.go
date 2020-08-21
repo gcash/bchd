@@ -446,6 +446,9 @@ func TestPeerListeners(t *testing.T) {
 			OnSendHeaders: func(_ *peer.Peer, msg *wire.MsgSendHeaders) {
 				ok <- msg
 			},
+			OnDSProof: func(_ *peer.Peer, msg *wire.MsgDSProof) {
+				ok <- msg
+			},
 		},
 		UserAgentName:          "peer",
 		UserAgentVersion:       "1.0",
@@ -490,6 +493,11 @@ func TestPeerListeners(t *testing.T) {
 		{
 			"OnGetAddr",
 			wire.NewMsgGetAddr(),
+		},
+		{
+			"OnDSProof",
+			wire.NewMsgDSProof(wire.OutPoint{}, wire.DSProofSpender{},
+				wire.DSProofSpender{}),
 		},
 		{
 			"OnAddr",

@@ -79,6 +79,8 @@ func TestMessage(t *testing.T) {
 	msgCFCheckpt := NewMsgCFCheckpt(GCSFilterRegular, &chainhash.Hash{}, 0)
 	msgSendAddrV2 := NewMsgSendAddrV2()
 	msgAddrV2 := NewMsgAddrV2()
+	msgDSProof := NewMsgDSProof(OutPoint{}, DSProofSpender{PushData: [][]byte{}},
+		DSProofSpender{PushData: [][]byte{}})
 
 	tests := []struct {
 		in     Message    // Value to encode
@@ -115,6 +117,7 @@ func TestMessage(t *testing.T) {
 		{msgCFCheckpt, msgCFCheckpt, pver, MainNet, 58},
 		{msgSendAddrV2, msgSendAddrV2, pver, MainNet, 24},
 		{msgAddrV2, msgAddrV2, pver, MainNet, 25},
+		{msgDSProof, msgDSProof, pver, MainNet, 278},
 	}
 
 	t.Logf("Running %d tests", len(tests))

@@ -222,6 +222,10 @@ type MessageListeners struct {
 	// message.
 	OnBlockTxns func(p *Peer, msg *wire.MsgBlockTxns)
 
+	// OnDSProof is invoked when a peer receives a dsproof-beta bitcoin
+	// message.
+	OnDSProof func(p *Peer, msg *wire.MsgDSProof)
+
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
 	// an error in the read occurred.  Typically, callers will opt to use
@@ -1346,7 +1350,8 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time,
 		pendingResponses[wire.CmdBlockTxns] = deadline
 
 	case wire.CmdGetData:
-		// Expects a block, cmpctblock, merkleblock, tx, or notfound message.
+		// Expects a block, cmpctblock, merkleblock, tx, dsproof-beta or
+		// notfound message.
 		pendingResponses[wire.CmdBlock] = deadline
 		pendingResponses[wire.CmdCmpctBlock] = deadline
 		pendingResponses[wire.CmdMerkleBlock] = deadline
@@ -1359,6 +1364,24 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time,
 		// headers.
 		deadline = time.Now().Add(stallResponseTimeout * 3)
 		pendingResponses[wire.CmdHeaders] = deadline
+	}
+}
+
+// removeExpectedResponse removes the deadlines a received command answers.
+// A getdata expects one of a group of responses, so any of them removes the
+// whole group.
+func removeExpectedResponse(pendingResponses map[string]time.Time, msgCmd string) {
+	switch msgCmd {
+	case wire.CmdBlock, wire.CmdCmpctBlock, wire.CmdMerkleBlock, wire.CmdTx,
+		wire.CmdDSProof, wire.CmdNotFound:
+
+		delete(pendingResponses, wire.CmdBlock)
+		delete(pendingResponses, wire.CmdCmpctBlock)
+		delete(pendingResponses, wire.CmdMerkleBlock)
+		delete(pendingResponses, wire.CmdTx)
+		delete(pendingResponses, wire.CmdNotFound)
+	default:
+		delete(pendingResponses, msgCmd)
 	}
 }
 
@@ -1403,24 +1426,8 @@ out:
 				// response map.  Since certain commands expect
 				// one of a group of responses, remove
 				// everything in the expected group accordingly.
-				switch msgCmd := msg.message.Command(); msgCmd {
-				case wire.CmdBlock:
-					fallthrough
-				case wire.CmdCmpctBlock:
-					fallthrough
-				case wire.CmdMerkleBlock:
-					fallthrough
-				case wire.CmdTx:
-					fallthrough
-				case wire.CmdNotFound:
-					delete(pendingResponses, wire.CmdBlock)
-					delete(pendingResponses, wire.CmdCmpctBlock)
-					delete(pendingResponses, wire.CmdMerkleBlock)
-					delete(pendingResponses, wire.CmdTx)
-					delete(pendingResponses, wire.CmdNotFound)
-				default:
-					delete(pendingResponses, msgCmd)
-				}
+				removeExpectedResponse(pendingResponses,
+					msg.message.Command())
 
 			case sccHandlerStart:
 				// Warn on unbalanced callback signalling.
@@ -1779,6 +1786,11 @@ out:
 		case *wire.MsgBlockTxns:
 			if p.cfg.Listeners.OnBlockTxns != nil {
 				p.cfg.Listeners.OnBlockTxns(p, msg)
+			}
+
+		case *wire.MsgDSProof:
+			if p.cfg.Listeners.OnDSProof != nil {
+				p.cfg.Listeners.OnDSProof(p, msg)
 			}
 
 		default:
