@@ -745,7 +745,7 @@ func (sm *SyncManager) handleDSProofMsg(dsmsg *dsProofMsg) {
 	}
 
 	// Process the proof to include validation, insertion in the memory pool.
-	err := sm.txMemPool.ProcessDSProof(dsmsg.msg)
+	isOrphan, err := sm.txMemPool.ProcessDSProof(dsmsg.msg)
 
 	// Remove proof from request maps. Either the mempool/chain
 	// already knows about it and as such we shouldn't have any more
@@ -779,7 +779,9 @@ func (sm *SyncManager) handleDSProofMsg(dsmsg *dsProofMsg) {
 		return
 	}
 
-	sm.peerNotifier.AnnounceNewDSProof(dsmsg.msg)
+	if !isOrphan {
+		sm.peerNotifier.AnnounceNewDSProof(dsmsg.msg)
+	}
 }
 
 // current returns true if we believe we are synced with our peers, false if we

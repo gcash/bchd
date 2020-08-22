@@ -1005,6 +1005,8 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		case wire.InvTypeFilteredBlock:
 			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+		case wire.InvTypeDSProof:
+			err = sp.server.pushDSProofMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		default:
 			peerLog.Warnf("Unknown type in inventory request %d",
 				iv.Type)
@@ -1691,6 +1693,36 @@ func (sp *serverPeer) OnWrite(_ *peer.Peer, bytesWritten int, msg wire.Message, 
 	sp.server.AddBytesSent(uint64(bytesWritten))
 }
 
+// doubleSpendFilterMatch takes a bloom filter from an SPV peer and an outpoint. It loads
+// the transaction from the mempool spending the outpoint and iterates over the outputs to
+// check to see if any match the filter. If so we return true. We also must recursively
+// check any child transactions for output filter matches as well so as to properly determine
+// if we should relay the double spend notification.
+func (sp *serverPeer) doubleSpendFilterMatch(filter *bloom.Filter, op wire.OutPoint) bool {
+	tx := sp.server.txMemPool.CheckSpend(op)
+	if tx == nil {
+		return false
+	}
+
+	outpoints := make([]wire.OutPoint, len(tx.MsgTx().TxOut))
+	for i, out := range tx.MsgTx().TxOut {
+		if sp.filter.Matches(out.PkScript) {
+			return true
+		}
+		outpoints = append(outpoints, wire.OutPoint{
+			Hash:  tx.MsgTx().TxHash(),
+			Index: uint32(i),
+		})
+	}
+
+	for _, outpoint := range outpoints {
+		if sp.doubleSpendFilterMatch(filter, outpoint) {
+			return true
+		}
+	}
+	return false
+}
+
 // randomUint16Number returns a random uint16 in a specified input range.  Note
 // that the range is in zeroth ordering; if you pass it 1800, you will get
 // values from 0 to 1800.
@@ -1823,6 +1855,35 @@ func (s *server) pushTxMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<-
 	}
 
 	sp.QueueMessageWithEncoding(tx.MsgTx(), doneChan, encoding)
+
+	return nil
+}
+
+// pushDSProofMsg sends a dsproof message for the provided proof hash to the
+// connected peer.  An error is returned if the proof hash is not known.
+func (s *server) pushDSProofMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
+	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	// Attempt to fetch the requested transaction from the pool.  A
+	// call could be made to check for existence first, but simply trying
+	// to fetch a missing transaction results in the same behavior.
+	msg, err := s.txMemPool.FetchDSProof(hash)
+	if err != nil {
+		peerLog.Tracef("Unable to fetch tx %v from transaction "+
+			"pool: %v", hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	// Once we have fetched data wait for any previous operation to finish.
+	if waitChan != nil {
+		<-waitChan
+	}
+
+	sp.QueueMessageWithEncoding(msg, doneChan, encoding)
 
 	return nil
 }
@@ -2334,7 +2395,8 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 					Hash:  dsproof.TxInPrevHash,
 					Index: dsproof.TxInPrevIndex,
 				}
-				if !sp.filter.MatchesOutPoint(&op) {
+
+				if !sp.doubleSpendFilterMatch(sp.filter, op) {
 					return
 				}
 			}

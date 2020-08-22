@@ -125,7 +125,7 @@ func TestInvVectWire(t *testing.T) {
 		0x26, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Block 203707 hash
 	}
 
-	// dsProofInvVect is an inventory vector representing a compact block.
+	// dsProofInvVect is an inventory vector representing a dsproof.
 	dsProofInvVect := InvVect{
 		Type: InvTypeDSProof,
 		Hash: *baseHash,
