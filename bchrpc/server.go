@@ -425,7 +425,7 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -462,7 +462,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -541,7 +541,7 @@ func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -579,7 +579,7 @@ func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterR
 	} else {
 		blockHash, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 	}
 	filter, err := s.cfIndex.FilterByBlockHash(blockHash, wire.GCSFilterRegular)
@@ -615,7 +615,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 	if len(req.StopHash) > 0 {
 		hash, err := chainhash.NewHash(req.StopHash)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid stop hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid stop hash %s", err.Error()))
 		}
 		stopHash = *hash
 	}
@@ -665,7 +665,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 
 	txHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
 	}
 
 	if txDesc, err := s.txMemPool.FetchTxDesc(txHash); err == nil {
@@ -693,7 +693,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			tokenID, _ := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
 			tokenMetadata, err = s.buildTokenMetadata(tokenID)
 			if err != nil {
-				return nil, status.Error(codes.Internal, "a unknown problem occured when building token metadata")
+				return nil, status.Error(codes.Internal, fmt.Sprintf("a unknown problem occured when building token metadata: %s", err.Error()))
 			}
 		}
 
@@ -713,12 +713,12 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	var msgTx wire.MsgTx
 	err = msgTx.Deserialize(bytes.NewReader(txBytes))
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to deserialize transaction")
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to deserialize transaction %s", err.Error()))
 	}
 
 	header, err := s.chain.HeaderByHash(blockHash)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to load block header")
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to load block header %s", err.Error()))
 	}
 
 	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
@@ -733,7 +733,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		tokenID, _ := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
 		tokenMetadata, err = s.buildTokenMetadata(tokenID)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "a unknown problem occured when building token metadata")
+			return nil, status.Error(codes.Internal, "a unknown problem occurred when building token metadata")
 		}
 	}
 
@@ -755,7 +755,7 @@ func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransa
 
 	txHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
 	}
 
 	if tx, err := s.txMemPool.FetchTransaction(txHash); err == nil {
@@ -800,7 +800,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
 	}
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid address")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 	}
 
 	startHeight := int32(0)
@@ -809,7 +809,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 		// If error here we'll just use the genesis
 		startHeight, _ = s.chain.BlockHeightByHash(h)
@@ -888,7 +888,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
 	}
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid address")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 	}
 
 	startHeight := int32(0)
@@ -897,7 +897,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid hash")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
 		}
 		// If error here we'll just use the genesis
 		startHeight, _ = s.chain.BlockHeightByHash(h)
@@ -945,7 +945,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
 	}
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid address")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 	}
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
@@ -1072,7 +1072,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 
 	txnHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
 	}
 
 	var (
@@ -1165,7 +1165,7 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 
 	txnHash, err := chainhash.NewHash(req.TransactionHash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid transaction hash")
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
 	}
 
 	// lookup location of the transaction
@@ -1223,7 +1223,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 	for _, hash := range req.GetTokenIds() {
 		tokenID, err := chainhash.NewHash(hash)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, "token ID hash "+hex.EncodeToString(hash)+" is invalid")
+			return nil, status.Error(codes.Aborted, fmt.Sprintf("token ID hash %s is invalid %s", hex.EncodeToString(hash), err.Error()))
 		}
 
 		tm, err := s.buildTokenMetadata(tokenID)
@@ -1321,7 +1321,7 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, "invalid txn hash (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+			return nil, status.Error(codes.Aborted, fmt.Sprintf("invalid txn hash (txo: %s:%s) - err %s", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err.Error()))
 		}
 
 		entry, err := s.getSlpIndexEntry(txid)
