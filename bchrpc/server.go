@@ -2755,9 +2755,16 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			if len(addrs) > 0 {
 				out.Address = addrs[0].String()
 				if out.SlpToken != nil {
-					_slpAddr, _ := goslp.DecodeAddress(out.Address, params)
-					if _slpAddr != nil {
-						out.SlpToken.Address = _slpAddr.String()
+					addr := addrs[0]
+					switch addr.(type) {
+					case *bchutil.AddressPubKeyHash:
+						hash := addr.(*bchutil.AddressPubKeyHash).Hash160()
+						slpAddr, _ := goslp.NewAddressPubKeyHash(hash[:], params)
+						out.SlpToken.Address = slpAddr.String()
+					case *bchutil.AddressScriptHash:
+						hash := addr.(*bchutil.AddressScriptHash).Hash160()
+						slpAddr, _ := goslp.NewAddressScriptHashFromHash(hash[:], params)
+						out.SlpToken.Address = slpAddr.String()
 					}
 				}
 			}
