@@ -36,6 +36,9 @@ http:
   - selector: pb.bchrpc.GetHeaders
     post: /v1/GetBlockHeaders
     body: "*"
+  - selector: pb.bchrpc.GetTokenMetadata
+    post: /v1/GetTokenMetadata
+    body: "*"
   - selector: pb.bchrpc.GetTransaction
     post: /v1/GetTransaction
     body: "*"
