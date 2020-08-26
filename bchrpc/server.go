@@ -692,7 +692,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		var tokenMetadata *pb.TokenMetadata
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			tokenID, _ := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
-			tokenMetadata, err = s.buildTokenMetadata(tokenID)
+			tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 			if err != nil {
 				return nil, status.Error(codes.Internal, fmt.Sprintf("a unknown problem occured when building token metadata: %s", err.Error()))
 			}
@@ -732,7 +732,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	var tokenMetadata *pb.TokenMetadata
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, _ := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
-		tokenMetadata, err = s.buildTokenMetadata(tokenID)
+		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, "a unknown problem occurred when building token metadata")
 		}
@@ -1049,7 +1049,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
 		tokenMetadata = make([]*pb.TokenMetadata, 0)
 		for _hash := range tokenMetadataSet {
-			tm, _ := s.buildTokenMetadata(&_hash)
+			tm, _ := s.buildTokenMetadata(_hash)
 			if tm != nil {
 				tokenMetadata = append(tokenMetadata, tm)
 			}
@@ -1136,8 +1136,8 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		isSlpInMempool &&
 		req.IncludeMempool {
 		slpToken, err = s.getSlpToken(txnHash, req.Index)
-		tID, _ := chainhash.NewHash(slpToken.TokenId)
-		tokenMetadata, _ = s.buildTokenMetadata(tID)
+		tokenID, _ := chainhash.NewHash(slpToken.TokenId)
+		tokenMetadata, _ = s.buildTokenMetadata(*tokenID)
 	}
 
 	ret := &pb.GetUnspentOutputResponse{
@@ -1227,7 +1227,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 			return nil, status.Error(codes.Aborted, fmt.Sprintf("token ID hash %s is invalid %s", hex.EncodeToString(hash), err.Error()))
 		}
 
-		tm, err := s.buildTokenMetadata(tokenID)
+		tm, err := s.buildTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Error(codes.Aborted, "token ID "+hex.EncodeToString(hash)+" does not exist")
 		}
@@ -2452,7 +2452,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 //
 // NOTE: Unconfirmed changes to mint baton status will not be reflected the returned TokenMetadata value.
 //
-func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetadata, error) {
+func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetadata, error) {
 
 	if s.slpIndex == nil {
 		return nil, errors.New("slpindex required")
