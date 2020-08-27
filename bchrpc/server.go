@@ -802,12 +802,12 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 		}
-		switch addr.(type) {
+		switch _addr := addr.(type) {
 		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
 		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
 		}
 	}
@@ -898,12 +898,12 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 		}
-		switch addr.(type) {
+		switch _addr := addr.(type) {
 		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
 		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
 		}
 	}
@@ -963,12 +963,12 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
 		}
-		switch addr.(type) {
+		switch _addr := addr.(type) {
 		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
 		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			hash := _addr.Hash160()
 			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
 		}
 	}
@@ -2779,14 +2779,13 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			if len(addrs) > 0 {
 				out.Address = addrs[0].String()
 				if out.SlpToken != nil {
-					addr := addrs[0]
-					switch addr.(type) {
+					switch _addr := addrs[0].(type) {
 					case *bchutil.AddressPubKeyHash:
-						hash := addr.(*bchutil.AddressPubKeyHash).Hash160()
+						hash := _addr.Hash160()
 						slpAddr, _ := goslp.NewAddressPubKeyHash(hash[:], params)
 						out.SlpToken.Address = slpAddr.String()
 					case *bchutil.AddressScriptHash:
-						hash := addr.(*bchutil.AddressScriptHash).Hash160()
+						hash := _addr.Hash160()
 						slpAddr, _ := goslp.NewAddressScriptHashFromHash(hash[:], params)
 						out.SlpToken.Address = slpAddr.String()
 					}

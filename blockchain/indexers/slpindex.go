@@ -435,7 +435,8 @@ func (idx *SlpIndex) Create(dbTx database.Tx) error {
 	return err
 }
 
-type burnedInput struct {
+// BurnedInput represents a burned slp txo item
+type BurnedInput struct {
 	Tx      *wire.MsgTx
 	TxInput *wire.TxIn
 	SlpMsg  *v1parser.ParseResult
@@ -466,7 +467,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		return dbPutSlpIndexEntry(idx, dbTx, entry)
 	}
 
-	burnedInputs := make([]*burnedInput, 0)
+	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
 		isValid, _burnedInputs := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
 
@@ -476,7 +477,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 				slpEntry, _ := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
 				if slpEntry != nil {
 					slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
-					burnedInputs = append(burnedInputs, &burnedInput{
+					burnedInputs = append(burnedInputs, &BurnedInput{
 						Tx:      tx,
 						TxInput: txi,
 						SlpMsg:  slpMsg,
@@ -506,7 +507,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	return nil
 }
 
-func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *burnedInput) bool {
+func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) bool {
 
 	// we can skip nft children since they don't have mint batons
 	if burn.SlpMsg.TokenType == 0x41 {
@@ -554,14 +555,14 @@ type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
 type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
 
 // CheckSlpTx checks a transaction for validity and adds valid txns to the db
-func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*burnedInput) {
+func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*BurnedInput) {
 
 	slpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 	if slpMsg == nil {
 		return false, nil
 	}
 
-	burnedInputs := make([]*burnedInput, 0)
+	burnedInputs := make([]*BurnedInput, 0)
 
 	_tokenid, err := goslp.GetSlpTokenID(tx)
 	if err != nil {
@@ -611,7 +612,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 				// catch mint batons burned in a valid SEND transaction
 				if msg, ok := _slpMsg.Data.(v1parser.SlpGenesis); ok {
 					if prevIdx == msg.MintBatonVout {
-						burnedInputs = append(burnedInputs, &burnedInput{
+						burnedInputs = append(burnedInputs, &BurnedInput{
 							Tx:      tx,
 							TxInput: txi,
 							SlpMsg:  _slpMsg,
@@ -620,7 +621,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 					}
 				} else if msg, ok := _slpMsg.Data.(v1parser.SlpMint); ok {
 					if prevIdx == msg.MintBatonVout {
-						burnedInputs = append(burnedInputs, &burnedInput{
+						burnedInputs = append(burnedInputs, &BurnedInput{
 							Tx:      tx,
 							TxInput: txi,
 							SlpMsg:  _slpMsg,
@@ -640,7 +641,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 				}
 			}
 		} else {
-			burnedInputs = append(burnedInputs, &burnedInput{
+			burnedInputs = append(burnedInputs, &BurnedInput{
 				Tx:      tx,
 				TxInput: txi,
 				SlpMsg:  _slpMsg,
