@@ -13,7 +13,7 @@
   "paths": {
     "/v1/CheckSlpTransaction": {
       "post": {
-        "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction",
+        "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.",
         "operationId": "CheckSlpTransaction",
         "responses": {
           "200": {
@@ -41,7 +41,7 @@
     "/v1/GetAddressTransactions": {
       "post": {
         "summary": "GetAddressTransactions returns the transactions for the given address. Offers offset,\nlimit, and from block options.",
-        "description": "**Requires AddressIndex**\n**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "description": "**Requires AddressIndex**\n**Requires SlpIndex for slp related information **",
         "operationId": "GetAddressTransactions",
         "responses": {
           "200": {
@@ -69,7 +69,7 @@
     "/v1/GetAddressUnspentOutputs": {
       "post": {
         "summary": "GetAddressUnspentOutputs returns all the unspent transaction outputs\nfor the given address.",
-        "description": "**Requires AddressIndex**\n**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "description": "**Requires AddressIndex**\n**Requires SlpIndex for slp related information **",
         "operationId": "GetAddressUnspentOutputs",
         "responses": {
           "200": {
@@ -178,7 +178,7 @@
     },
     "/v1/GetBlockHeaders": {
       "post": {
-        "summary": "GetHeaders takes a block locator object and returns\na batch of no more than 2000 headers. Upon parsing the block locator, if the server\nconcludes there has been a fork, it will send headers starting at the fork point,\nor genesis if no blocks in the locator are in the best chain. If the locator is\nalready at the tip no headers will be returned.\nsee: bchd/bchrpc/documentation/wallet_operation.md",
+        "summary": "GetHeaders takes a block locator object and returns a batch of no more than 2000\nheaders. Upon parsing the block locator, if the server concludes there has been a\nfork, it will send headers starting at the fork point, or genesis if no blocks in\nthe locator are in the best chain. If the locator is already at the tip no headers\nwill be returned.\nsee: bchd/bchrpc/documentation/wallet_operation.md",
         "operationId": "GetHeaders",
         "responses": {
           "200": {
@@ -449,10 +449,38 @@
         ]
       }
     },
+    "/v1/GetTokenMetadata": {
+      "post": {
+        "summary": "GetTokenMetadata return SLP token metadata for one or more tokens.",
+        "description": "**Requires SlpIndex**",
+        "operationId": "GetTokenMetadata",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetTokenMetadataResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetTokenMetadataRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetTransaction": {
       "post": {
         "summary": "GetTransaction returns a transaction given a transaction hash.",
-        "description": "**Requires TxIndex**\n**Requires SlpIndex to receive slp input/output metadata,\n  and TokenMetadata (if include_token_metadata=true in request) **",
+        "description": "**Requires TxIndex**\n**Requires SlpIndex for slp related information **",
         "operationId": "GetTransaction",
         "responses": {
           "200": {
@@ -479,7 +507,7 @@
     },
     "/v1/GetTrustedSlpValidation": {
       "post": {
-        "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions\nthe client may requests a signed message following a specified message format\nwhich may be used in oracle based applications",
+        "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions.",
         "description": "**Requires SlpIndex with additional functionary key setup**",
         "operationId": "GetTrustedSlpValidation",
         "responses": {
@@ -508,7 +536,7 @@
     "/v1/GetUnspentOutput": {
       "post": {
         "summary": "GetUnspentOutput takes an unspent output in the utxo set and returns\nthe utxo metadata or not found.",
-        "description": "**Requires SlpIndex to receive slp input/output and TokenMetadata**",
+        "description": "**Requires SlpIndex for slp related information **",
         "operationId": "GetUnspentOutput",
         "responses": {
           "200": {
@@ -618,8 +646,8 @@
     },
     "/v1/SubscribeTransactions": {
       "post": {
-        "summary": "SubscribeTransactions creates subscription to all relevant transactions based on\nthe subscription filter.  The parameters to filter transactions on can be\nupdated by sending new SubscribeTransactionsRequest objects on the stream.",
-        "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the addresses. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**",
+        "summary": "SubscribeTransactions creates subscription to all relevant transactions based on\nthe subscription filter.",
+        "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the subscription filter. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**",
         "operationId": "SubscribeTransactions",
         "responses": {
           "200": {
@@ -742,7 +770,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "The hash of the transaction containing the output to be spent."
+          "title": "The hash of the transaction containing the output to be spent, little-endian"
         },
         "index": {
           "type": "integer",
@@ -799,7 +827,7 @@
         "previous_script": {
           "type": "string",
           "format": "byte",
-          "description": "The hash of the transaction containing the output to be spent."
+          "description": "The pubkey_script of the previous output that is being spent."
         },
         "address": {
           "type": "string",
@@ -880,7 +908,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "title": "The double sha256 hash of the six header fields in the first 80 bytes\nof the block, when encoded according the bitcoin protocol.\nsha256(sha256(encoded_header))"
+          "title": "The double sha256 hash of the six header fields in the first 80 bytes\nof the block, when encoded according the bitcoin protocol, little-endian.\nsha256(sha256(encoded_header))"
         },
         "height": {
           "type": "integer",
@@ -895,12 +923,12 @@
         "previous_block": {
           "type": "string",
           "format": "byte",
-          "title": "Hash of the previous block"
+          "description": "Hash of the previous block, little-endian."
         },
         "merkle_root": {
           "type": "string",
           "format": "byte",
-          "description": "The root of the Merkle Tree built from all transactions in the block."
+          "description": "The root of the Merkle Tree built from all transactions in the block, little-endian."
         },
         "timestamp": {
           "type": "string",
@@ -930,7 +958,7 @@
         "next_block_hash": {
           "type": "string",
           "format": "byte",
-          "description": "Hash of the next block in this chain."
+          "description": "Hash of the next block in this chain, little-endian."
         },
         "size": {
           "type": "integer",
@@ -982,7 +1010,7 @@
         "transaction_hash": {
           "type": "string",
           "format": "byte",
-          "description": "Just the transaction hash."
+          "description": "Just the transaction hash, little-endian."
         },
         "transaction": {
           "$ref": "#/definitions/pbTransaction",
@@ -1034,7 +1062,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by hash."
+          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by hash, little-endian."
         },
         "height": {
           "type": "integer",
@@ -1226,7 +1254,7 @@
         "best_block_hash": {
           "type": "string",
           "format": "byte",
-          "description": "The hash of the best (tip) block in the most-work fully-validated chain."
+          "description": "The hash of the best (tip) block in the most-work fully-validated chain, little-endian."
         },
         "difficulty": {
           "type": "number",
@@ -1263,12 +1291,12 @@
             "type": "string",
             "format": "byte"
           },
-          "description": "A list of block hashes known to the client (most recent first) which\nis exponentially  sparser toward the genesis block (0).\nCommon practice is to include all of the last 10 blocks, and then\n9 blocks for each order of ten thereafter."
+          "description": "A list of block hashes known to the client (most recent first) which\nis exponentially sparser toward the genesis block (0), little-endian.\nCommon practice is to include all of the last 10 blocks, and then\n9 blocks for each order of ten thereafter."
         },
         "stop_hash": {
           "type": "string",
           "format": "byte",
-          "description": "hash of the latest desired block header; only blocks occurring before\nthe stop will be returned."
+          "description": "hash of the latest desired block header, little-endian; only blocks\noccurring before the stop will be returned."
         }
       },
       "description": "Request headers using a list of known block hashes."
@@ -1331,11 +1359,11 @@
         "transaction_hash": {
           "type": "string",
           "format": "byte",
-          "title": "The transaction hash"
+          "description": "The transaction hash, little-endian."
         },
         "transaction": {
           "$ref": "#/definitions/pbTransaction",
-          "title": "The transaction data"
+          "description": "The transaction data."
         }
       }
     },
@@ -1345,7 +1373,7 @@
         "transaction_hash": {
           "type": "string",
           "format": "byte",
-          "description": "A transaction hash."
+          "description": "A transaction hash, little-endian."
         }
       }
     },
@@ -1430,7 +1458,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "Recommended. Only return transactions after some starting block\nidentified by hash."
+          "description": "Recommended. Only return transactions after some starting block\nidentified by hash, little-endian."
         },
         "height": {
           "type": "integer",
@@ -1492,7 +1520,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "A transaction hash."
+          "description": "A transaction hash, little-endian."
         }
       },
       "description": "Get an encoded transaction from a transaction hash."
@@ -1504,6 +1532,18 @@
           "type": "string",
           "format": "byte",
           "description": "Raw transaction in bytes."
+        }
+      }
+    },
+    "pbGetTokenMetadataRequest": {
+      "type": "object",
+      "properties": {
+        "token_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
         }
       }
     },
@@ -1524,7 +1564,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "A transaction hash."
+          "description": "A transaction hash, little-endian."
         },
         "include_token_metadata": {
           "type": "boolean",
@@ -1577,7 +1617,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "The hash of the transaction."
+          "description": "The hash of the transaction, little-endian."
         },
         "index": {
           "type": "integer",
@@ -1891,7 +1931,8 @@
       "properties": {
         "hash": {
           "type": "string",
-          "format": "byte"
+          "format": "byte",
+          "description": "Transaction hash, little-endian."
         }
       }
     },
@@ -2065,7 +2106,7 @@
         "hash": {
           "type": "string",
           "format": "byte",
-          "title": "The double sha256 hash of the encoded transaction.\nsha256(sha256(encoded_transaction))"
+          "title": "The double sha256 hash of the encoded transaction, little-endian.\nsha256(sha256(encoded_transaction))"
         },
         "version": {
           "type": "integer",
@@ -2114,7 +2155,7 @@
         "block_hash": {
           "type": "string",
           "format": "byte",
-          "description": "Hash of the block the transaction was recorded in."
+          "description": "Hash of the block the transaction was recorded in, little-endian."
         },
         "slp_transaction_info": {
           "$ref": "#/definitions/pbSlpTransactionInfo"
@@ -2143,7 +2184,8 @@
           "items": {
             "type": "string",
             "format": "byte"
-          }
+          },
+          "description": "Filter by data elements contained in pubkey scripts."
         },
         "all_transactions": {
           "type": "boolean",
