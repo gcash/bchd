@@ -17,13 +17,13 @@ require (
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/jessevdk/go-flags v0.0.0-20181221193153-c0795c8afcf4
 	github.com/jrick/logrotate v1.0.0
-	github.com/simpleledgerinc/goslp v0.0.0-20200807200630-6272a32f4428
+	github.com/simpleledgerinc/goslp v0.0.0-20200824185505-14cd0de12d5d
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
-	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899
-	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
-	golang.org/x/sys v0.0.0-20200724161237-0e2f3a69832c // indirect
+	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/net v0.0.0-20200822124328-c89045814202 // indirect
+	golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6 // indirect
 	golang.org/x/text v0.3.3
-	google.golang.org/genproto v0.0.0-20200724131911-43cab4749ae7 // indirect
-	google.golang.org/grpc v1.30.0
+	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987 // indirect
+	google.golang.org/grpc v1.31.1
 	google.golang.org/protobuf v1.25.0
 )
