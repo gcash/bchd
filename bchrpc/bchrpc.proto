@@ -45,8 +45,7 @@ service bchrpc {
     // GetTransaction returns a transaction given a transaction hash.
     //
     // **Requires TxIndex**
-    // **Requires SlpIndex to receive slp input/output metadata,
-    //   and TokenMetadata (if include_token_metadata=true in request) **
+    // **Requires SlpIndex for slp related information **
     rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {}
 
     // GetRawTransaction returns a serialized transaction given a transaction hash.
@@ -58,7 +57,7 @@ service bchrpc {
     // limit, and from block options.
     //
     // **Requires AddressIndex**
-    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
+    // **Requires SlpIndex for slp related information **
     rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
 
     // GetRawAddressTransactions the serialized raw transactions for
@@ -71,13 +70,13 @@ service bchrpc {
     // for the given address.
     //
     // **Requires AddressIndex**
-    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
+    // **Requires SlpIndex for slp related information **
     rpc GetAddressUnspentOutputs(GetAddressUnspentOutputsRequest) returns (GetAddressUnspentOutputsResponse) {}
 
     // GetUnspentOutput takes an unspent output in the utxo set and returns
     // the utxo metadata or not found.
     //
-    // **Requires SlpIndex to receive slp input/output and TokenMetadata**
+    // **Requires SlpIndex for slp related information **
     rpc GetUnspentOutput(GetUnspentOutputRequest) returns (GetUnspentOutputResponse) {}
 
     // GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
@@ -86,7 +85,7 @@ service bchrpc {
     // **Requires TxIndex**
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // GetTokenMetadata return SLP token metadata
+    // GetTokenMetadata return SLP token metadata for one or more tokens.
     //
     // **Requires SlpIndex**
     rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
@@ -95,9 +94,7 @@ service bchrpc {
     // using goslp package.  This endpoint does not require SlpIndex.
     rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
 
-    // GetTrustedValidation returns SLP validity related information for one or more transactions
-    // the client may requests a signed message following a specified message format
-    // which may be used in oracle based applications
+    // GetTrustedValidation returns SLP validity related information for one or more transactions.
     //
     // **Requires SlpIndex with additional functionary key setup**
     rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
@@ -107,7 +104,7 @@ service bchrpc {
     // the slpAddress string will be an empty string.
     rpc GetBip44HdAddress(GetBip44HdAddressRequest) returns (GetBip44HdAddressResponse) {}
 
-    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction
+    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.
     rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
 
     // Submit a transaction to all connected peers.

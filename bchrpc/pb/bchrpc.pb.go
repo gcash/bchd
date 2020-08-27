@@ -5519,8 +5519,7 @@ type BchrpcClient interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
-	// **Requires SlpIndex to receive slp input/output metadata,
-	//   and TokenMetadata (if include_token_metadata=true in request) **
+	// **Requires SlpIndex for slp related information **
 	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
@@ -5530,7 +5529,7 @@ type BchrpcClient interface {
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetAddressTransactions(ctx context.Context, in *GetAddressTransactionsRequest, opts ...grpc.CallOption) (*GetAddressTransactionsResponse, error)
 	// GetRawAddressTransactions the serialized raw transactions for
 	// the given address. Offers offset, limit, and from block options.
@@ -5541,12 +5540,12 @@ type BchrpcClient interface {
 	// for the given address.
 	//
 	// **Requires AddressIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetAddressUnspentOutputs(ctx context.Context, in *GetAddressUnspentOutputsRequest, opts ...grpc.CallOption) (*GetAddressUnspentOutputsResponse, error)
 	// GetUnspentOutput takes an unspent output in the utxo set and returns
 	// the utxo metadata or not found.
 	//
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetUnspentOutput(ctx context.Context, in *GetUnspentOutputRequest, opts ...grpc.CallOption) (*GetUnspentOutputResponse, error)
 	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
 	// in the provided block.
@@ -5903,8 +5902,7 @@ type BchrpcServer interface {
 	// GetTransaction returns a transaction given a transaction hash.
 	//
 	// **Requires TxIndex**
-	// **Requires SlpIndex to receive slp input/output metadata,
-	//   and TokenMetadata (if include_token_metadata=true in request) **
+	// **Requires SlpIndex for slp related information **
 	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
 	// GetRawTransaction returns a serialized transaction given a transaction hash.
 	//
@@ -5914,7 +5912,7 @@ type BchrpcServer interface {
 	// limit, and from block options.
 	//
 	// **Requires AddressIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetAddressTransactions(context.Context, *GetAddressTransactionsRequest) (*GetAddressTransactionsResponse, error)
 	// GetRawAddressTransactions the serialized raw transactions for
 	// the given address. Offers offset, limit, and from block options.
@@ -5925,12 +5923,12 @@ type BchrpcServer interface {
 	// for the given address.
 	//
 	// **Requires AddressIndex**
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetAddressUnspentOutputs(context.Context, *GetAddressUnspentOutputsRequest) (*GetAddressUnspentOutputsResponse, error)
 	// GetUnspentOutput takes an unspent output in the utxo set and returns
 	// the utxo metadata or not found.
 	//
-	// **Requires SlpIndex to receive slp input/output and TokenMetadata**
+	// **Requires SlpIndex for slp related information **
 	GetUnspentOutput(context.Context, *GetUnspentOutputRequest) (*GetUnspentOutputResponse, error)
 	// GetMerkleProof returns a Merkle (SPV) proof for a specific transaction
 	// in the provided block.
