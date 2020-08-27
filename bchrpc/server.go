@@ -691,7 +691,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		var tokenMetadata *pb.TokenMetadata
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			tokenID, _ := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
-			tokenMetadata, err = s.buildTokenMetadata(tokenID)
+			tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 			if err != nil {
 				return nil, status.Error(codes.Internal, fmt.Sprintf("a unknown problem occured when building token metadata: %s", err.Error()))
 			}
@@ -731,7 +731,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	var tokenMetadata *pb.TokenMetadata
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, _ := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
-		tokenMetadata, err = s.buildTokenMetadata(tokenID)
+		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, "a unknown problem occurred when building token metadata")
 		}
@@ -798,9 +798,17 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-	}
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		}
+		switch addr.(type) {
+		case *goslp.AddressPubKeyHash:
+			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
+		case *goslp.AddressScriptHash:
+			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
+		}
 	}
 
 	startHeight := int32(0)
@@ -886,9 +894,17 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-	}
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		}
+		switch addr.(type) {
+		case *goslp.AddressPubKeyHash:
+			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
+		case *goslp.AddressScriptHash:
+			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
+		}
 	}
 
 	startHeight := int32(0)
@@ -943,9 +959,17 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-	}
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
+		}
+		switch addr.(type) {
+		case *goslp.AddressPubKeyHash:
+			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
+			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
+		case *goslp.AddressScriptHash:
+			hash := addr.(*goslp.AddressScriptHash).Hash160()
+			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
+		}
 	}
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
@@ -1048,7 +1072,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
 		tokenMetadata = make([]*pb.TokenMetadata, 0)
 		for _hash := range tokenMetadataSet {
-			tm, _ := s.buildTokenMetadata(&_hash)
+			tm, _ := s.buildTokenMetadata(_hash)
 			if tm != nil {
 				tokenMetadata = append(tokenMetadata, tm)
 			}
@@ -1135,8 +1159,8 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		isSlpInMempool &&
 		req.IncludeMempool {
 		slpToken, err = s.getSlpToken(txnHash, req.Index)
-		tID, _ := chainhash.NewHash(slpToken.TokenId)
-		tokenMetadata, _ = s.buildTokenMetadata(tID)
+		tokenID, _ := chainhash.NewHash(slpToken.TokenId)
+		tokenMetadata, _ = s.buildTokenMetadata(*tokenID)
 	}
 
 	ret := &pb.GetUnspentOutputResponse{
@@ -1226,7 +1250,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 			return nil, status.Error(codes.Aborted, fmt.Sprintf("token ID hash %s is invalid %s", hex.EncodeToString(hash), err.Error()))
 		}
 
-		tm, err := s.buildTokenMetadata(tokenID)
+		tm, err := s.buildTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Error(codes.Aborted, "token ID "+hex.EncodeToString(hash)+" does not exist")
 		}
@@ -2452,7 +2476,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 //
 // NOTE: Unconfirmed changes to mint baton status will not be reflected the returned TokenMetadata value.
 //
-func (s *GrpcServer) buildTokenMetadata(tokenID *chainhash.Hash) (*pb.TokenMetadata, error) {
+func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetadata, error) {
 
 	if s.slpIndex == nil {
 		return nil, errors.New("slpindex required")
@@ -2755,9 +2779,16 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			if len(addrs) > 0 {
 				out.Address = addrs[0].String()
 				if out.SlpToken != nil {
-					_slpAddr, _ := goslp.DecodeAddress(out.Address, params)
-					if _slpAddr != nil {
-						out.SlpToken.Address = _slpAddr.String()
+					addr := addrs[0]
+					switch addr.(type) {
+					case *bchutil.AddressPubKeyHash:
+						hash := addr.(*bchutil.AddressPubKeyHash).Hash160()
+						slpAddr, _ := goslp.NewAddressPubKeyHash(hash[:], params)
+						out.SlpToken.Address = slpAddr.String()
+					case *bchutil.AddressScriptHash:
+						hash := addr.(*bchutil.AddressScriptHash).Hash160()
+						slpAddr, _ := goslp.NewAddressScriptHashFromHash(hash[:], params)
+						out.SlpToken.Address = slpAddr.String()
 					}
 				}
 			}
