@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
-	"net/http"
+	"os"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -15,45 +16,14 @@ import (
 	"github.com/simpleledgerinc/goslp/v1parser"
 )
 
-// TestSlpMesesageUnitTests downloads SLP parser unit tests and checks the parser throws for each test where code != nil
-func TestSlpMessageUnitTests(t *testing.T) {
-	resp, err := http.Get("https://raw.githubusercontent.com/simpleledger/slp-unit-test-data/master/script_tests.json")
-	if err != nil {
-		t.Fatal("cannot download unit tests")
-	}
-	data, err := ioutil.ReadAll(resp.Body)
-	defer resp.Body.Close()
-
-	type TestCase struct {
-		Msg    string
-		Script string
-		Code   *float64
-	}
-	var tests []TestCase
-	err = json.Unmarshal(data, &tests)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	for _, test := range tests {
-		slpbuf, _ := hex.DecodeString(test.Script)
-		_, err := v1parser.ParseSLP(slpbuf)
-		if err != nil {
-			if test.Code != nil {
-				continue
-			}
-			t.Fatal("goslp parser did not throw an error")
-		}
-	}
-}
-
 // TestSlpInputUnitTests downloads SLP input unit tests and checks the input conditions for each test are met
 func TestSlpInputUnitTests(t *testing.T) {
-	resp, err := http.Get("https://raw.githubusercontent.com/simpleledger/slp-unit-test-data/master/tx_input_tests.json")
+	inputTestsFile, err := os.Open("slpindex_test_inputs.json")
 	if err != nil {
-		t.Fatal("cannot download unit tests")
+		fmt.Println(err)
 	}
-	data, err := ioutil.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	data, err := ioutil.ReadAll(inputTestsFile)
+	defer inputTestsFile.Close()
 
 	type TxItem struct {
 		Txid  string
@@ -71,10 +41,10 @@ func TestSlpInputUnitTests(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 
 		// create temporary db of input conditions
-		_entryDb := make(map[[32]byte]*SlpIndexEntry)
+		entryDb := make(map[[32]byte]*SlpIndexEntry)
 
 		for _, wen := range test.When {
 			if !wen.Valid {
@@ -83,37 +53,46 @@ func TestSlpInputUnitTests(t *testing.T) {
 			tx := wire.NewMsgTx(1)
 			serializedTx, err := hex.DecodeString(wen.Tx)
 			if err != nil {
-				panic(err.Error())
+				t.Fatal(err.Error())
 			}
-			tx.Deserialize(bytes.NewReader(serializedTx))
+
+			// decode serialized transaction
+			err = tx.BchDecode(bytes.NewReader(serializedTx), wire.ProtocolVersion, wire.LatestEncoding)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+
 			slpMsg, err := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 			if err != nil || slpMsg == nil {
 				continue
 			}
-			_tokenid, err := goslp.GetSlpTokenID(tx)
-			tokenIDHash, _ := chainhash.NewHash(_tokenid[:])
+			tokenID, err := goslp.GetSlpTokenID(tx)
+			tokenIDHash, err := chainhash.NewHash(tokenID[:])
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 			entry := &SlpIndexEntry{
 				TokenIDHash:    *tokenIDHash,
 				TokenID:        0,
 				SlpVersionType: uint16(slpMsg.TokenType),
 				SlpOpReturn:    tx.TxOut[0].PkScript,
 			}
-			_hash := tx.TxHash()
-			_entryDb[_hash] = entry
+			hash := tx.TxHash()
+			entryDb[hash] = entry
 		}
 
 		// add "When" and "Should" variables
-		_getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
 			var _hash [32]byte
 			copy(_hash[:], txiHash[:])
-			slpEntry := _entryDb[_hash]
+			slpEntry := entryDb[_hash]
 			if slpEntry == nil {
 				return nil, errors.New("entry doesn't exist")
 			}
 			return slpEntry, nil
 		}
 
-		_putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 			return nil
 		}
 
@@ -121,18 +100,19 @@ func TestSlpInputUnitTests(t *testing.T) {
 		tx := wire.NewMsgTx(1)
 		serializedTx, err := hex.DecodeString(test.Should[0].Tx)
 		if err != nil {
-			panic(err.Error())
+			t.Fatal(err.Error())
 		}
-		tx.Deserialize(bytes.NewReader(serializedTx))
+
+		// decode serialized transaction
+		err = tx.BchDecode(bytes.NewReader(serializedTx), wire.ProtocolVersion, wire.LatestEncoding)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
 
 		// check the slp txns
-		isValid, _ := CheckSlpTx(tx, _getSlpIndexEntry, _putTxIndexEntry)
-		if !isValid && !test.Should[0].Valid {
-			continue
-		} else if isValid && test.Should[0].Valid {
-			continue
-		} else {
-			t.Fatal("input unit test failed")
+		isValid, _ := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		if isValid != test.Should[0].Valid {
+			t.Errorf("Test %d: Expected valid = %t, got %t", i, test.Should[0].Valid, isValid)
 		}
 	}
 }
