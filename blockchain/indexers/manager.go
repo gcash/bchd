@@ -47,18 +47,10 @@ func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, heig
 
 // dbFetchIndexerTip uses an existing database transaction to retrieve the
 // hash and height of the current tip for the provided index.
-func dbFetchIndexerTip(dbTx database.Tx, indexerPtr *Indexer) (*chainhash.Hash, int32, error) {
+func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32, error) {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
-	indexer := *indexerPtr
-	idxKey := indexer.Key()
 	serialized := indexesBucket.Get(idxKey)
-
 	if len(serialized) < chainhash.HashSize+4 {
-		switch v := indexer.(type) {
-		case *SlpIndex:
-			_hash, _ := chainhash.NewHash(v.config.StartHash)
-			return _hash, v.config.StartHeight, nil
-		}
 		return nil, 0, database.Error{
 			ErrorCode: database.ErrCorruption,
 			Description: fmt.Sprintf("unexpected end of data for "+
@@ -69,16 +61,6 @@ func dbFetchIndexerTip(dbTx database.Tx, indexerPtr *Indexer) (*chainhash.Hash, 
 	var hash chainhash.Hash
 	copy(hash[:], serialized[:chainhash.HashSize])
 	height := int32(byteOrder.Uint32(serialized[chainhash.HashSize:]))
-
-	switch v := indexer.(type) {
-	case *SlpIndex:
-		if height < v.config.StartHeight {
-			height = v.config.StartHeight
-			_slpHash, _ := chainhash.NewHash(v.config.StartHash)
-			hash = *_slpHash
-		}
-	}
-
 	return &hash, height, nil
 }
 
@@ -92,21 +74,11 @@ func dbIndexConnectBlock(dbTx database.Tx, indexer Indexer, block *bchutil.Block
 	// Assert that the block being connected properly connects to the
 	// current tip of the index.
 	idxKey := indexer.Key()
-	curTipHash, _, err := dbFetchIndexerTip(dbTx, &indexer)
+	curTipHash, _, err := dbFetchIndexerTip(dbTx, idxKey)
 	if err != nil {
 		return err
 	}
 	if !curTipHash.IsEqual(&block.MsgBlock().Header.PrevBlock) {
-
-		// Handle slp indexer since it does not start at genesis
-		switch v := indexer.(type) {
-		case *SlpIndex:
-			_hash, _ := chainhash.NewHash(v.config.StartHash)
-			if curTipHash.IsEqual(_hash) {
-				return dbPutIndexerTip(dbTx, idxKey, _hash, v.config.StartHeight)
-			}
-		}
-
 		return AssertError(fmt.Sprintf("dbIndexConnectBlock must be "+
 			"called with a block that extends the current index "+
 			"tip (%s, tip %s, block %s)", indexer.Name(),
@@ -132,7 +104,7 @@ func dbIndexDisconnectBlock(dbTx database.Tx, indexer Indexer, block *bchutil.Bl
 	// Assert that the block being disconnected is the current tip of the
 	// index.
 	idxKey := indexer.Key()
-	curTipHash, _, err := dbFetchIndexerTip(dbTx, &indexer)
+	curTipHash, _, err := dbFetchIndexerTip(dbTx, idxKey)
 	if err != nil {
 		return err
 	}
@@ -244,7 +216,12 @@ func (m *Manager) maybeCreateIndexes(dbTx database.Tx) error {
 
 		// Set the tip for the index to values which represent an
 		// uninitialized index.
-		err := dbPutIndexerTip(dbTx, idxKey, &chainhash.Hash{}, -1)
+		idxStartHash, idxStartHeight := indexer.StartBlock()
+		if idxStartHash == nil {
+			idxStartHash = &chainhash.Hash{}
+			idxStartHeight = -1
+		}
+		err := dbPutIndexerTip(dbTx, idxKey, idxStartHash, idxStartHeight)
 		if err != nil {
 			return err
 		}
@@ -316,7 +293,8 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 		var height int32
 		var hash *chainhash.Hash
 		err := m.db.View(func(dbTx database.Tx) error {
-			hash, height, err = dbFetchIndexerTip(dbTx, &indexer)
+			idxKey := indexer.Key()
+			hash, height, err = dbFetchIndexerTip(dbTx, idxKey)
 			return err
 		})
 		if err != nil {
@@ -411,11 +389,11 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 	indexerHeights := make([]int32, len(m.enabledIndexes))
 	err = m.db.View(func(dbTx database.Tx) error {
 		for i, indexer := range m.enabledIndexes {
-			hash, height, err := dbFetchIndexerTip(dbTx, &indexer)
+			idxKey := indexer.Key()
+			hash, height, err := dbFetchIndexerTip(dbTx, idxKey)
 			if err != nil {
 				return err
 			}
-
 			log.Debugf("Current %s tip (height %d, hash %v)",
 				indexer.Name(), height, hash)
 			indexerHeights[i] = height
@@ -545,6 +523,13 @@ func (m *Manager) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	// Call each of the currently active optional indexes with the block
 	// being connected so they can update accordingly.
 	for _, index := range m.enabledIndexes {
+
+		// Check the specified start block for the indexer
+		_, idxStartHeight := index.StartBlock()
+		if block.Height() <= idxStartHeight {
+			return nil
+		}
+
 		err := dbIndexConnectBlock(dbTx, index, block, stxos)
 		if err != nil {
 			return err

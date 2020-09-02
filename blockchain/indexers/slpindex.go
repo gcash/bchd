@@ -395,6 +395,13 @@ func (idx *SlpIndex) Init() error {
 	return nil
 }
 
+// StartBlock is used to indicate the proper start block for the index manager.
+//
+// This is part of the Indexer interface.
+func (idx *SlpIndex) StartBlock() (*chainhash.Hash, int32) {
+	return idx.config.StartHash, idx.config.StartHeight
+}
+
 // Migrate is only provided to satisfy the Indexer interface as there is nothing to
 // migrate this index.
 //
@@ -768,7 +775,7 @@ func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Has
 
 // SlpConfig provides the proper starting height and hash
 type SlpConfig struct {
-	StartHash    []byte
+	StartHash    *chainhash.Hash
 	StartHeight  int32
 	AddrPrefix   string
 	MaxCacheSize int

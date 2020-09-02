@@ -127,6 +127,13 @@ func (idx *CfIndex) Init() error {
 	return nil // Nothing to do.
 }
 
+// StartBlock is used to indicate the proper start block for the index manager.
+//
+// This is part of the Indexer interface.
+func (idx *CfIndex) StartBlock() (*chainhash.Hash, int32) {
+	return nil, -1
+}
+
 // Migrate migrates the index up to the current version. For the CfIndex we will
 // just drop the index here and write the new version number. The IndexManager
 // will then rebuild the index from the blockchain, using the new scheme,
