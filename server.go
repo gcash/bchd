@@ -3180,7 +3180,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		slpCfg := &indexers.SlpConfig{
 			AddrPrefix:   chainParams.SlpAddressPrefix,
 			StartHash:    chainParams.SlpIndexStartHash,
-			StartHeight:  int32(chainParams.SlpIndexStartHeight),
+			StartHeight:  chainParams.SlpIndexStartHeight,
 			MaxCacheSize: int(cfg.SlpCacheMaxSize),
 		}
 		s.slpIndex = indexers.NewSlpIndex(db, slpCfg)
