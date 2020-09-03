@@ -111,7 +111,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 		// check the slp txns
 		isValid, _ := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
 		if isValid != test.Should[0].Valid {
-			t.Errorf("Test %d: Expected valid = %t, got %t", i, test.Should[0].Valid, isValid)
+			t.Errorf("Test %d: Expected valid = %t, got %t, \n%s", i, test.Should[0].Valid, isValid, test.Description)
 		}
 	}
 }
