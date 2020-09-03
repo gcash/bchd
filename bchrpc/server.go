@@ -799,17 +799,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch _addr := addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		addr, err = goslp.ConvertSlpToCashAddress(addr, s.chainParams)
 	}
 
 	startHeight := int32(0)
@@ -895,17 +885,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch _addr := addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		addr, err = goslp.ConvertSlpToCashAddress(addr, s.chainParams)
 	}
 
 	startHeight := int32(0)
@@ -960,17 +940,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch _addr := addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := _addr.Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		addr, err = goslp.ConvertSlpToCashAddress(addr, s.chainParams)
 	}
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {

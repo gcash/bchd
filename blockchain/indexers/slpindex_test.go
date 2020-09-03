@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -20,7 +19,7 @@ import (
 func TestSlpInputUnitTests(t *testing.T) {
 	inputTestsFile, err := os.Open("slpindex_test_inputs.json")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err.Error())
 	}
 	data, err := ioutil.ReadAll(inputTestsFile)
 	defer inputTestsFile.Close()
