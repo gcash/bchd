@@ -1460,9 +1460,12 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 	return res, nil
 }
 
-func isMaybeSlpTransaction(pkScript []byte) bool {
-	lokadHex, _ := hex.DecodeString("534c5000")
-	return bytes.Contains(pkScript, lokadHex)
+func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
+	if len(txn.TxOut) > 0 {
+		lokadHex, _ := hex.DecodeString("534c5000")
+		return bytes.Contains(txn.TxOut[0].PkScript, lokadHex)
+	}
+	return false
 }
 
 // CheckSlpTransaction checks validity of a submitted transaction and with return an error if the transaction is invalid
@@ -1472,7 +1475,7 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
-	var msgTx wire.MsgTx
+	var msgTx *wire.MsgTx
 	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
@@ -1481,12 +1484,12 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 		return nil, status.Error(codes.InvalidArgument, "transaction is missing inputs or outputs")
 	}
 
-	isMaybeSlp := isMaybeSlpTransaction(msgTx.TxOut[0].PkScript)
+	isMaybeSlp := isMaybeSlpTransaction(msgTx)
 	if !isMaybeSlp {
 		return nil, status.Error(codes.Aborted, "invalid slp (lokad id is missing)")
 	}
 
-	err := s.checkSlpTransaction(&msgTx)
+	err := s.checkSlpTransaction(msgTx)
 	if err != nil {
 		return nil, err
 	}
@@ -1612,21 +1615,21 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
-	var msgTx wire.MsgTx
+	var msgTx *wire.MsgTx
 	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
-	isMaybeSlp := isMaybeSlpTransaction(msgTx.TxOut[0].PkScript)
+	isMaybeSlp := isMaybeSlpTransaction(msgTx)
 	if isMaybeSlp && !req.GetSkipSlpValidityCheck() {
-		err := s.checkSlpTransaction(&msgTx)
+		err := s.checkSlpTransaction(msgTx)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Use 0 for the tag to represent local node.
-	tx := bchutil.NewTx(&msgTx)
+	tx := bchutil.NewTx(msgTx)
 	acceptedTxs, err := s.txMemPool.ProcessTransaction(tx, false, false, 0)
 	if err != nil {
 		// When the error is a rule error, it means the transaction was
@@ -2572,19 +2575,11 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	}
 
 	// always try to parse the transaction for SLP attributes (even when slpindex is not enabled)
-	var (
-		slpPkScript []byte
-		isMaybeSlp  bool = false
-	)
-	if len(tx.MsgTx().TxOut) > 0 {
-		slpPkScript = tx.MsgTx().TxOut[0].PkScript
-		isMaybeSlp = isMaybeSlpTransaction(slpPkScript)
-	}
-	if isMaybeSlp {
-		slpMsg, err := v1parser.ParseSLP(slpPkScript)
+	if isMaybeSlpTransaction(tx.MsgTx()) {
+		slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 		if err == nil {
-			_tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
-			slpInfo.TokenId = _tokenID
+			tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
+			slpInfo.TokenId = tokenID
 			if slpMsg.TokenType == 0x01 {
 				if slpMsg.TransactionType == "GENESIS" {
 					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
