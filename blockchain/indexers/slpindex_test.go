@@ -82,9 +82,9 @@ func TestSlpInputUnitTests(t *testing.T) {
 
 		// add "When" and "Should" variables
 		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
-			var _hash [32]byte
-			copy(_hash[:], txiHash[:])
-			slpEntry := entryDb[_hash]
+			var hash [32]byte
+			copy(hash[:], txiHash[:])
+			slpEntry := entryDb[hash]
 			if slpEntry == nil {
 				return nil, errors.New("entry doesn't exist")
 			}
