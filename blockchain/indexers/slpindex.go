@@ -76,7 +76,7 @@ var (
 //   Mint baton hash (or nft group id)  chainhash.Hash    32 bytes (optional)
 //   Mint baton vout  					uint32			  4 bytes  (optional)
 //   -----
-//   Max: 70 bytes max
+//   Max: 74 bytes max
 //
 // The serialized format for the keys and values in the slp index bucket is:
 //
