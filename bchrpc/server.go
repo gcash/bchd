@@ -1475,8 +1475,8 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
-	var msgTx *wire.MsgTx
-	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
+	msgTx := &wire.MsgTx{}
+	if err := msgTx.BchDecode(bytes.NewReader(req.Transaction), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
@@ -1615,8 +1615,8 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 		return nil, status.Error(codes.Aborted, "intentional burning with 'AllowedSlpBurns' is not yet implemented")
 	}
 
-	var msgTx *wire.MsgTx
-	if err := msgTx.Deserialize(bytes.NewReader(req.Transaction)); err != nil {
+	msgTx := &wire.MsgTx{}
+	if err := msgTx.BchDecode(bytes.NewReader(req.Transaction), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
@@ -2205,7 +2205,7 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 				return status.Error(codes.Internal, "failed to load transaction bytes")
 			}
 
-			var loadedTx wire.MsgTx
+			loadedTx := wire.MsgTx{}
 			if err := loadedTx.BchDecode(bytes.NewReader(txBytes), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 				return status.Error(codes.Internal, "failed to unmarshal transaction")
 			}
