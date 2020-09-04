@@ -19,7 +19,7 @@ require (
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/jessevdk/go-flags v0.0.0-20181221193153-c0795c8afcf4
 	github.com/jrick/logrotate v1.0.0
-	github.com/simpleledgerinc/goslp v0.0.0-20200903131033-5580fed5a98c
+	github.com/simpleledgerinc/goslp v0.0.0-20200904024013-0dc92ffeeeeb
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
