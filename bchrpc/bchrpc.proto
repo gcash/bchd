@@ -862,6 +862,7 @@ message SlpTransactionInfo {
         BURNED_INPUTS_BAD_OPRETURN = 1;
         BURNED_INPUTS_OTHER_TOKEN = 2;
         BURNED_OUTPUTS_MISSING_BCH_VOUT = 3;
+        BURNED_INPUTS_GREATER_THAN_OUTPUTS = 4;
     }
     repeated BurnFlags burn_flags = 5;
     oneof tx_metadata {

@@ -2789,8 +2789,11 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				for _, amt := range t.Amounts {
 					outputAmount.Add(outputAmount, new(big.Int).SetUint64(amt))
 				}
-				if inputAmount.Cmp(outputAmount) > 0 {
+				if inputAmount.Cmp(outputAmount) < 0 {
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OUTPUTS_TOO_HIGH] = struct{}{}
+				}
+				if inputAmount.Cmp(outputAmount) > 0 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_GREATER_THAN_OUTPUTS] = struct{}{}
 				}
 			case v1parser.SlpGenesis:
 			case v1parser.SlpMint:
