@@ -2568,16 +2568,26 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 }
 
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, s *GrpcServer) *pb.Transaction {
-	params := s.chainParams
-
-	slpInfo := &pb.SlpTransactionInfo{
-		ValidityJudgement: pb.SlpTransactionInfo_UNKNOWN_OR_INVALID,
-	}
+	var (
+		params      = s.chainParams
+		slpMsg      *v1parser.ParseResult
+		slpInfo     = &pb.SlpTransactionInfo{ValidityJudgement: pb.SlpTransactionInfo_UNKNOWN_OR_INVALID}
+		inputAmount = big.NewInt(0)
+		burnFlagSet = make(map[pb.SlpTransactionInfo_BurnFlags]struct{})
+	)
 
 	// always try to parse the transaction for SLP attributes (even when slpindex is not enabled)
 	if isMaybeSlpTransaction(tx.MsgTx()) {
-		slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
-		if err == nil {
+		var err error
+		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+		if err != nil {
+			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
+				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+			} else {
+				slpInfo.ParseError = err.Error()
+				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
+			}
+		} else {
 			tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
 			slpInfo.TokenId = tokenID
 			if slpMsg.TokenType == 0x01 {
@@ -2664,13 +2674,6 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			} else {
 				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
 			}
-		} else {
-			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
-			} else {
-				slpInfo.ParseError = err.Error()
-				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
-			}
 		}
 	} else {
 		slpInfo.VersionType = pb.SlpVersionType_NON_SLP
@@ -2688,9 +2691,6 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		if err == nil {
 			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 		}
-
-		// TODO: loop through SLP inputs to set SLP txn info BURN_FLAGS
-		// ... We can see if any of the inputs were burned and return this info to the user
 	}
 
 	respTx := &pb.Transaction{
@@ -2723,6 +2723,20 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			SlpToken: slpToken,
 		}
 		respTx.Inputs = append(respTx.Inputs, in)
+
+		// loop through SLP inputs to set some SLP txn info BURN_FLAGS
+		if slpToken != nil {
+			if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
+				if !bytes.Equal(slpInfo.TokenId, slpToken.TokenId) {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
+				} else {
+					inputAmount.Add(inputAmount, new(big.Int).SetUint64(slpToken.Amount))
+				}
+			} else if slpMsg == nil {
+				burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_BAD_OPRETURN] = struct{}{}
+			}
+		}
+
 	}
 	for i, output := range tx.MsgTx().TxOut {
 
@@ -2763,6 +2777,35 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		}
 		respTx.Outputs = append(respTx.Outputs, out)
 	}
+	// check for slp burns caused by missing vouts or inputs > outputs
+	if s.slpIndex != nil {
+		if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
+			switch t := slpMsg.Data.(type) {
+			case v1parser.SlpSend:
+				if len(t.Amounts) > len(tx.MsgTx().TxOut)-1 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_BAD_OPRETURN] = struct{}{}
+				}
+				outputAmount := big.NewInt(0)
+				for _, amt := range t.Amounts {
+					outputAmount.Add(outputAmount, new(big.Int).SetUint64(amt))
+				}
+				if inputAmount.Cmp(outputAmount) > 0 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OUTPUTS_TOO_HIGH] = struct{}{}
+				}
+			case v1parser.SlpGenesis:
+			case v1parser.SlpMint:
+				if t.MintBatonVout+1 > len(tx.MsgTx().TxOut) {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_OUTPUTS_MISSING_BCH_VOUT] = struct{}{}
+				}
+			}
+		}
+
+		// marshal the burn flags seen in this transaction
+		for flag := range burnFlagSet {
+			slpInfo.BurnFlags = append(slpInfo.BurnFlags, flag)
+		}
+	}
+
 	return respTx
 }
 
