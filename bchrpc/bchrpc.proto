@@ -553,21 +553,7 @@ message GetTrustedSlpValidationRequest {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
     }
-    message Functionary {
-        enum MessageType {
-            STANDARD = 0;
-        }
-        enum SignatureType {
-            SECP256K1_ECDSA = 0;
-            SECP256K1_SCHNORR = 1;
-        }
-        bytes public_key = 1;
-        MessageType type = 2;
-        SignatureType sig_type = 3;
-    }
-
     repeated Query queries = 1;
-    Functionary functionary_info = 2;
 }
 
 message GetTrustedSlpValidationResponse {

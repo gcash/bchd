@@ -1395,16 +1395,9 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
 			}
 		}
-
 		result.SlpTxnOpreturn = entry.SlpOpReturn
-
-		if req.FunctionaryInfo != nil {
-			return nil, status.Error(codes.Unimplemented, "slp validation functionary not implemented")
-		}
-
 		results[i] = result
 	}
-
 	resp.Results = results
 	return resp, nil
 }
