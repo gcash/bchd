@@ -599,10 +599,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			if inputSlpMsg.TokenType == 0x81 && i == 0 {
 				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
 			}
-		} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 { // checks SEND/MINT inputs
-			if inputSlpMsg.TokenType != txSlpMsg.TokenType {
-				continue
-			}
+		} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 && inputSlpMsg.TokenType != txSlpMsg.TokenType { // checks SEND/MINT inputs
 			if txSlpMsg.TransactionType == "MINT" {
 				if msg, ok := inputSlpMsg.Data.(v1parser.SlpGenesis); ok {
 					if prevIdx == msg.MintBatonVout {

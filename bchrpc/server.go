@@ -2720,7 +2720,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		// loop through SLP inputs to set some SLP txn info BURN_FLAGS
 		if slpToken != nil {
 			if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
-				if !bytes.Equal(slpInfo.TokenId, slpToken.TokenId) {
+				if !bytes.Equal(slpInfo.TokenId, slpToken.TokenId) || slpInfo.VersionType != slpToken.VersionType {
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
 				} else {
 					inputAmount.Add(inputAmount, new(big.Int).SetUint64(slpToken.Amount))

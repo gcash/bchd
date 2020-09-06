@@ -832,6 +832,7 @@ message SlpToken {
     bool is_mint_baton = 3;
     string address = 4;
     uint32 decimals = 5;
+    SlpVersionType version_type = 6;
 }
 
 message SlpTransactionInfo {
