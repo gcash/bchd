@@ -2355,7 +2355,8 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	}
 
 	var (
-		isMintBaton bool = false
+		isMintBaton    bool = false
+		slpVersionType pb.SlpVersionType
 	)
 
 	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -2367,15 +2368,34 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		} else if vout != 1 {
 			return nil, errors.New("vout is out of range for slp mint")
 		}
+		if slpMsg.TokenType == 0x01 {
+			slpVersionType = pb.SlpVersionType_SLP_V1_MINT
+		} else if slpMsg.TokenType == 0x81 {
+			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+		}
 	} else if slpMsg.TransactionType == "GENESIS" {
 		if slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(vout) {
 			isMintBaton = true
 		} else if vout != 1 {
 			return nil, errors.New("vout is out of range for slp genesis")
 		}
+		if slpMsg.TokenType == 0x01 {
+			slpVersionType = pb.SlpVersionType_SLP_V1_GENESIS
+		} else if slpMsg.TokenType == 0x41 {
+			slpVersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+		} else if slpMsg.TokenType == 0x81 {
+			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+		}
 	} else if slpMsg.TransactionType == "SEND" {
 		if int(vout) > len(slpMsg.Data.(v1parser.SlpSend).Amounts) {
 			return nil, errors.New("vout is out of range for slp send transaction")
+		}
+		if slpMsg.TokenType == 0x01 {
+			slpVersionType = pb.SlpVersionType_SLP_V1_SEND
+		} else if slpMsg.TokenType == 0x41 {
+			slpVersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+		} else if slpMsg.TokenType == 0x81 {
+			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
 		}
 	}
 
@@ -2402,6 +2422,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		Amount:      amount.Uint64(),
 		IsMintBaton: isMintBaton,
 		Decimals:    uint32(decimals),
+		VersionType: slpVersionType,
 	}
 
 	return slpToken, nil
