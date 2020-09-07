@@ -8,6 +8,7 @@ import (
 	"container/list"
 	"math/rand"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -525,6 +526,13 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
+	// Check if a majority of our sync peer candidates are at a greater height than our current sync peer.
+	// If they are, it is time to select a new peer, as ours is obviously behind.
+	if sm.topBlock() < sm.medianSyncPeerCandidateBlockHeight() {
+		sm.updateSyncPeer()
+		return
+	}
+
 	// Update network stats at the end of this tick.
 	defer sm.syncPeerState.updateNetwork(sm.syncPeer)
 
@@ -537,7 +545,6 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	// Don't update sync peers if you have all the available
 	// blocks.
-
 	best := sm.chain.BestSnapshot()
 
 	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
@@ -548,6 +555,40 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	}
 
 	sm.updateSyncPeer()
+}
+
+// medianSyncPeerCandidateBlockHeight returns the median block height of sync peer candidates.
+func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
+	heights := []int32{}
+
+	for peer, state := range sm.peerStates {
+		if !state.syncCandidate {
+			continue
+		}
+
+		// Peer isn't connected, skip.
+		if !peer.Connected() {
+			continue
+		}
+
+		heights = append(heights, peer.LastBlock())
+	}
+
+	// If we don't have any sync peer candidate heights, return 0.
+	// This is just to protect from a panic below.
+	if len(heights) < 1 {
+		return 0
+	}
+
+	sort.Slice(heights, func(i, j int) bool { return heights[i] < heights[j] })
+
+	mNumber := len(heights) / 2
+
+	if len(heights)%2 != 0 {
+		return heights[mNumber]
+	}
+
+	return (heights[mNumber-1] + heights[mNumber]) / 2
 }
 
 // topBlock returns the best chains top block height
