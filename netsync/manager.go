@@ -29,6 +29,11 @@ const (
 	// more.
 	minInFlightBlocks = 10
 
+	// minSyncPeerMedianHeights is the minimum number of valid sync
+	// peer candidates to trust for updating the sync peer due
+	// to it being behind.
+	minSyncPeerMedianHeights = 5
+
 	// maxNetworkViolations is the max number of network violations a
 	// sync peer can have before a new sync peer is found.
 	maxNetworkViolations = 3
@@ -579,9 +584,9 @@ func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 		heights = append(heights, topBlock)
 	}
 
-	// If we don't have any sync peer candidate heights, return 0.
-	// This is just to protect from a panic below.
-	if len(heights) < 1 {
+	// Make sure we have enough heights to trust the data.
+	// If we only have 1 or 2 that could be gamed easily!
+	if len(heights) < minSyncPeerMedianHeights {
 		return 0
 	}
 
