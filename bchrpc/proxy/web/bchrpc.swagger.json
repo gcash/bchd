@@ -508,7 +508,7 @@
     "/v1/GetTrustedSlpValidation": {
       "post": {
         "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions.",
-        "description": "**Requires SlpIndex with additional functionary key setup**",
+        "description": "**Requires SlpIndex**",
         "operationId": "GetTrustedSlpValidation",
         "responses": {
           "200": {
@@ -674,21 +674,6 @@
     }
   },
   "definitions": {
-    "FunctionaryMessageType": {
-      "type": "string",
-      "enum": [
-        "STANDARD"
-      ],
-      "default": "STANDARD"
-    },
-    "FunctionarySignatureType": {
-      "type": "string",
-      "enum": [
-        "SECP256K1_ECDSA",
-        "SECP256K1_SCHNORR"
-      ],
-      "default": "SECP256K1_ECDSA"
-    },
     "GetBlockchainInfoResponseBitcoinNet": {
       "type": "string",
       "enum": [
@@ -700,21 +685,6 @@
       "default": "MAINNET",
       "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.",
       "title": "Bitcoin network types"
-    },
-    "GetTrustedSlpValidationRequestFunctionary": {
-      "type": "object",
-      "properties": {
-        "public_key": {
-          "type": "string",
-          "format": "byte"
-        },
-        "type": {
-          "$ref": "#/definitions/FunctionaryMessageType"
-        },
-        "sig_type": {
-          "$ref": "#/definitions/FunctionarySignatureType"
-        }
-      }
     },
     "GetTrustedSlpValidationRequestQuery": {
       "type": "object",
@@ -758,9 +728,6 @@
         "slp_txn_opreturn": {
           "type": "string",
           "format": "byte"
-        },
-        "functionary_sig": {
-          "$ref": "#/definitions/ValidityResultFunctionarySignature"
         }
       }
     },
@@ -785,7 +752,8 @@
         "BURNED_INPUTS_OUTPUTS_TOO_HIGH",
         "BURNED_INPUTS_BAD_OPRETURN",
         "BURNED_INPUTS_OTHER_TOKEN",
-        "BURNED_OUTPUTS_MISSING_BCH_VOUT"
+        "BURNED_OUTPUTS_MISSING_BCH_VOUT",
+        "BURNED_INPUTS_GREATER_THAN_OUTPUTS"
       ],
       "default": "BURNED_INPUTS_OUTPUTS_TOO_HIGH"
     },
@@ -870,19 +838,6 @@
         },
         "slp_token": {
           "$ref": "#/definitions/pbSlpToken"
-        }
-      }
-    },
-    "ValidityResultFunctionarySignature": {
-      "type": "object",
-      "properties": {
-        "signature": {
-          "type": "string",
-          "format": "byte"
-        },
-        "message": {
-          "type": "string",
-          "format": "byte"
         }
       }
     },
@@ -1593,9 +1548,6 @@
           "items": {
             "$ref": "#/definitions/GetTrustedSlpValidationRequestQuery"
           }
-        },
-        "functionary_info": {
-          "$ref": "#/definitions/GetTrustedSlpValidationRequestFunctionary"
         }
       }
     },
@@ -1786,6 +1738,9 @@
         "decimals": {
           "type": "integer",
           "format": "int64"
+        },
+        "version_type": {
+          "$ref": "#/definitions/pbSlpVersionType"
         }
       },
       "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",

@@ -96,7 +96,7 @@ service bchrpc {
 
     // GetTrustedValidation returns SLP validity related information for one or more transactions.
     //
-    // **Requires SlpIndex with additional functionary key setup**
+    // **Requires SlpIndex**
     rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
 
     // GetBip44HdAddress returns an address associated with a provided xpub, address index, and
@@ -567,12 +567,6 @@ message GetTrustedSlpValidationResponse {
             bool v1_mint_baton = 6;
         }
         bytes slp_txn_opreturn = 7;
-
-        message FunctionarySignature {
-            bytes signature = 1;
-            bytes message = 2;
-        }
-        FunctionarySignature functionary_sig = 8;
     }
 
     // allows server to respond to a request with multiple
