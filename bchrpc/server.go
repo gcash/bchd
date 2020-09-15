@@ -2797,7 +2797,26 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			switch t := slpMsg.Data.(type) {
 			case v1parser.SlpSend:
 				if len(t.Amounts) > len(tx.MsgTx().TxOut)-1 {
-					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_BAD_OPRETURN] = struct{}{}
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_OUTPUTS_MISSING_BCH_VOUT] = struct{}{}
+				}
+				outputAmount := big.NewInt(0)
+				for _, amt := range t.Amounts {
+					outputAmount.Add(outputAmount, new(big.Int).SetUint64(amt))
+				}
+				if inputAmount.Cmp(outputAmount) > 0 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_GREATER_THAN_OUTPUTS] = struct{}{}
+				}
+			case v1parser.SlpGenesis:
+			case v1parser.SlpMint:
+				if t.MintBatonVout > len(tx.MsgTx().TxOut)-1 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_OUTPUTS_MISSING_BCH_VOUT] = struct{}{}
+				}
+			}
+		} else if slpMsg != nil {
+			switch t := slpMsg.Data.(type) {
+			case v1parser.SlpSend:
+				if len(t.Amounts) > len(tx.MsgTx().TxOut)-1 {
+					burnFlagSet[pb.SlpTransactionInfo_BURNED_OUTPUTS_MISSING_BCH_VOUT] = struct{}{}
 				}
 				outputAmount := big.NewInt(0)
 				for _, amt := range t.Amounts {
@@ -2806,15 +2825,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				if inputAmount.Cmp(outputAmount) < 0 {
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OUTPUTS_TOO_HIGH] = struct{}{}
 				}
-				if inputAmount.Cmp(outputAmount) > 0 {
-					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_GREATER_THAN_OUTPUTS] = struct{}{}
-				}
-			case v1parser.SlpGenesis:
-			case v1parser.SlpMint:
-				if t.MintBatonVout+1 > len(tx.MsgTx().TxOut) {
-					burnFlagSet[pb.SlpTransactionInfo_BURNED_OUTPUTS_MISSING_BCH_VOUT] = struct{}{}
-				}
 			}
+		} else if isMaybeSlpTransaction(tx.MsgTx()) && inputAmount.Cmp(big.NewInt(0)) > 0 {
+			burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_BAD_OPRETURN] = struct{}{}
 		}
 
 		// marshal the burn flags seen in this transaction
