@@ -797,6 +797,9 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
+	}
 
 	startHeight := int32(0)
 	if len(req.GetHash()) == 0 {
@@ -879,6 +882,9 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
+	}
 
 	startHeight := int32(0)
 	if len(req.GetHash()) == 0 {
@@ -930,6 +936,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
+	}
 
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
