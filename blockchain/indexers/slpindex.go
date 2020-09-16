@@ -130,7 +130,7 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 		tokenMetadata = tokenMetadata[:34]
 	}
 
-	if metadata.NftGroupID == nil && metadata.SlpVersion == 0x41 {
+	if metadata.NftGroupID == nil && int(metadata.SlpVersion) == v1parser.TokenTypeNft1Child41 {
 		panic("missing nft group id for NFT child " + string(id))
 	}
 
@@ -166,13 +166,13 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		nft1GroupID   *chainhash.Hash
 	)
 	if len(serializedData) == 70 {
-		if slpVersion == 0x41 {
+		if int(slpVersion) == v1parser.TokenTypeNft1Child41 {
 			panic("cannon have this length with nft1 child")
 		}
 		mintBatonHash, _ = chainhash.NewHash(serializedData[34:66])
 		mintBatonVout = byteOrder.Uint32(serializedData[66:])
 	} else if len(serializedData) == 66 {
-		if slpVersion != 0x41 {
+		if int(slpVersion) != v1parser.TokenTypeNft1Child41 {
 			panic("cannot have this length if not nft1 child")
 		}
 		nft1GroupID, _ = chainhash.NewHash(serializedData[34:])
@@ -228,7 +228,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		if entry.MintBatonVout > 1 {
 			mintBatonVout = uint32(entry.MintBatonVout)
 			mintBatonHash = &txHash
-		} else if entryInfo.slpMsg.TokenType == 0x41 {
+		} else if entryInfo.slpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
 			parentTokenEntry, _ := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
 			nft1GroupID = &parentTokenEntry.TokenIDHash
 		}
@@ -517,7 +517,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) bool {
 
 	// we can skip nft children since they don't have mint batons
-	if burn.SlpMsg.TokenType == 0x41 {
+	if burn.SlpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
 		return false
 	}
 
@@ -595,12 +595,12 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		}
 
 		amt, _ := inputSlpMsg.GetVoutAmount(prevIdx)
-		if txSlpMsg.TokenType == 0x41 && txSlpMsg.TransactionType == "GENESIS" { // checks inputs for NFT1 child GENESIS
-			if inputSlpMsg.TokenType == 0x81 && i == 0 {
+		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 && txSlpMsg.TransactionType == v1parser.TransactionTypeGenesis { // checks inputs for NFT1 child GENESIS
+			if inputSlpMsg.TokenType == v1parser.TokenTypeNft1Group81 && i == 0 {
 				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
 			}
 		} else if slpEntry.TokenIDHash.Compare(tokenIDHash) == 0 && inputSlpMsg.TokenType == txSlpMsg.TokenType { // checks SEND/MINT inputs
-			if txSlpMsg.TransactionType == "MINT" {
+			if txSlpMsg.TransactionType == v1parser.TransactionTypeMint {
 				if msg, ok := inputSlpMsg.Data.(v1parser.SlpGenesis); ok {
 					if prevIdx == msg.MintBatonVout {
 						v1MintBatonVout = prevIdx
@@ -635,11 +635,11 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 				}
 			}
 
-			if inputSlpMsg.TransactionType == "GENESIS" { // check for minting baton
+			if inputSlpMsg.TransactionType == v1parser.TransactionTypeGenesis { // check for minting baton
 				if prevIdx == inputSlpMsg.Data.(v1parser.SlpGenesis).MintBatonVout {
 					v1MintBatonVout = prevIdx
 				}
-			} else if inputSlpMsg.TransactionType == "MINT" {
+			} else if inputSlpMsg.TransactionType == v1parser.TransactionTypeMint {
 				if prevIdx == inputSlpMsg.Data.(v1parser.SlpMint).MintBatonVout {
 					v1MintBatonVout = prevIdx
 				}
@@ -663,17 +663,17 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	//  (2) the input requirements must be satisfied.
 	isValid := false
 	outputAmt, _ := txSlpMsg.TotalSlpMsgOutputValue()
-	if txSlpMsg.TransactionType == "GENESIS" {
-		if txSlpMsg.TokenType == 0x41 &&
+	if txSlpMsg.TransactionType == v1parser.TransactionTypeGenesis {
+		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 &&
 			big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
 			isValid = true
-		} else if txSlpMsg.TokenType == 0x01 || txSlpMsg.TokenType == 0x81 {
+		} else if txSlpMsg.TokenType == v1parser.TokenTypeFungible01 || txSlpMsg.TokenType == v1parser.TokenTypeNft1Group81 {
 			isValid = true
 		}
-	} else if txSlpMsg.TransactionType == "SEND" &&
+	} else if txSlpMsg.TransactionType == v1parser.TransactionTypeSend &&
 		outputAmt.Cmp(v1InputAmtSpent) < 1 {
 		isValid = true
-	} else if txSlpMsg.TransactionType == "MINT" &&
+	} else if txSlpMsg.TransactionType == v1parser.TransactionTypeMint &&
 		v1MintBatonVout > 1 {
 		isValid = true
 	}
@@ -742,7 +742,7 @@ func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 		return err
 	}
 
-	if slpMsg.TokenType != 0x01 && slpMsg.TokenType != 0x41 && slpMsg.TokenType != 0x81 {
+	if slpMsg.TokenType != v1parser.TokenTypeFungible01 && slpMsg.TokenType != v1parser.TokenTypeNft1Child41 && slpMsg.TokenType != v1parser.TokenTypeNft1Group81 {
 		return errors.New("unsupported token type")
 	}
 
