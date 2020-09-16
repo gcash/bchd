@@ -248,11 +248,11 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 			matched = true
 		} else {
 			var tokenID [32]byte
-			if slpMsg.TransactionType == "SEND" {
+			if slpMsg.TransactionType == v1parser.TransactionTypeSend {
 				copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
-			} else if slpMsg.TransactionType == "MINT" {
+			} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
 				copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
-			} else if slpMsg.TransactionType == "GENESIS" {
+			} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
 				txnHash := tx.Hash().CloneBytes()
 				var txid []byte
 				for i := len(txnHash) - 1; i >= 0; i-- {
