@@ -131,7 +131,7 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 	}
 
 	if metadata.NftGroupID == nil && int(metadata.SlpVersion) == v1parser.TokenTypeNft1Child41 {
-		panic("missing nft group id for NFT child " + string(id))
+		return errors.New("missing nft group id for NFT child " + string(id))
 	}
 
 	return tmIndex.Put(serializedID[:], tokenMetadata)
@@ -167,15 +167,23 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 	)
 	if len(serializedData) == 70 {
 		if int(slpVersion) == v1parser.TokenTypeNft1Child41 {
-			panic("cannon have this length with nft1 child")
+			return nil, errors.New("cannot have this stored data length with nft1 child, drop and add slpindex")
 		}
-		mintBatonHash, _ = chainhash.NewHash(serializedData[34:66])
+		var err error
+		mintBatonHash, err = chainhash.NewHash(serializedData[34:66])
+		if err != nil {
+			return nil, errors.New("could not create mint baton hash with data: " + hex.EncodeToString(serializedData[34:66]))
+		}
 		mintBatonVout = byteOrder.Uint32(serializedData[66:])
 	} else if len(serializedData) == 66 {
 		if int(slpVersion) != v1parser.TokenTypeNft1Child41 {
-			panic("cannot have this length if not nft1 child")
+			return nil, errors.New("cannot have this stored data length if not nft1 child, drop and add slpindex")
 		}
-		nft1GroupID, _ = chainhash.NewHash(serializedData[34:])
+		var err error
+		nft1GroupID, err = chainhash.NewHash(serializedData[34:])
+		if err != nil {
+			return nil, errors.New("could not create nft group id hash with data: " + hex.EncodeToString(serializedData[34:]))
+		}
 	}
 
 	tm := &TokenMetadata{
@@ -229,6 +237,9 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 			mintBatonVout = uint32(entry.MintBatonVout)
 			mintBatonHash = &txHash
 		} else if entryInfo.slpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
+			if len(entryInfo.tx.TxIn) < 1 {
+				return errors.New("entryInfo transaction has no inputs")
+			}
 			parentTokenEntry, _ := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
 			nft1GroupID = &parentTokenEntry.TokenIDHash
 		}
@@ -251,7 +262,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 				NftGroupID:    nft1GroupID,
 			})
 		if err != nil {
-			panic("this should never happen")
+			return errors.New("failed not update db for token id: " + hex.EncodeToString(entryInfo.tokenIDHash[:]) + ", this should never happen")
 		}
 	}
 
@@ -310,13 +321,13 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 //
 func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 	// toposort and reverse order so we can unwind slp token metadata state if needed
-	txs := TopoSortTxs(block.Transactions())
+	txs := TopologicallySortTxs(block.Transactions())
 	var txsRev []*wire.MsgTx
 	for i := len(txs) - 1; i >= 0; i-- {
 		txsRev = append(txsRev, txs[i])
 	}
 
-	// this method should only be called after a topo sort
+	// this method should only be called after a topological sort
 	dbRemoveSlpIndexEntry := func(dbTx database.Tx, txHash *chainhash.Hash) error {
 		slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 		serializedData := slpIndex.Get(txHash[:])
@@ -457,13 +468,16 @@ type BurnedInput struct {
 // This is part of the Indexer interface.
 func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 
-	sortedTxns := TopoSortTxs(block.Transactions())
+	sortedTxns := TopologicallySortTxs(block.Transactions())
 
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
 		return idx.GetSlpIndexEntry(dbTx, txiHash)
 	}
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		if len(tx.TxOut) < 1 {
+			return errors.New("transaction has no outputs")
+		}
 		entry := &dbSlpIndexEntry{
 			tx:             tx,
 			slpMsg:         slpMsg,
@@ -476,7 +490,10 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
-		isValid, txnInputsBurned := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		if err != nil {
+			return err
+		}
 
 		// look for burned inputs within non-SLP txns
 		if !isValid {
@@ -506,7 +523,10 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	//
 	for _, burn := range burnedInputs {
 		// Currently we only need to check for a burned mint baton
-		isMintBatonBurned := idx.checkBurnedInputForMintBaton(dbTx, burn)
+		isMintBatonBurned, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
+		if err != nil {
+			return err
+		}
 		if isMintBatonBurned {
 			continue
 		}
@@ -514,29 +534,29 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	return nil
 }
 
-func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) bool {
+func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) (bool, error) {
 
 	// we can skip nft children since they don't have mint batons
 	if burn.SlpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
-		return false
+		return false, nil
 	}
 
 	// check if input is the mint baton from either Genesis or Mint parent data
 	if msg, ok := burn.SlpMsg.Data.(v1parser.SlpGenesis); ok {
 		if msg.MintBatonVout != int(burn.TxInput.PreviousOutPoint.Index) {
-			return false
+			return false, nil
 		}
 	} else if msg, ok := burn.SlpMsg.Data.(v1parser.SlpMint); ok {
 		if msg.MintBatonVout != int(burn.TxInput.PreviousOutPoint.Index) {
-			return false
+			return false, nil
 		}
 	} else {
-		return false
+		return false, nil
 	}
 
 	// double-check this burned mint baton was a valid slp token
 	if burn.Entry == nil {
-		return false
+		return false, nil
 	}
 
 	err := dbPutTokenIDIndexEntry(dbTx, burn.Entry.TokenID,
@@ -549,10 +569,10 @@ func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *Burned
 		},
 	)
 	if err != nil {
-		panic("could not update token metadata")
+		return false, errors.New("could not update token metadata for token id: " + hex.EncodeToString(burn.Entry.TokenIDHash[:]))
 	}
 
-	return true
+	return true, nil
 }
 
 // GetSlpIndexEntryHandler ...
@@ -562,18 +582,21 @@ type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
 type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
 
 // CheckSlpTx checks a transaction for validity and adds valid txns to the db
-func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*BurnedInput) {
+func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*BurnedInput, error) {
 
+	if len(tx.TxOut) < 1 {
+		return false, nil, nil
+	}
 	txSlpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
 	if txSlpMsg == nil {
-		return false, nil
+		return false, nil, nil
 	}
 
 	burnedInputs := make([]*BurnedInput, 0)
 
 	tokenID, err := goslp.GetSlpTokenID(tx)
 	if err != nil {
-		panic(err.Error())
+		return false, nil, err
 	}
 	tokenIDHash, _ := chainhash.NewHash(tokenID[:])
 
@@ -591,7 +614,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 
 		inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 		if err != nil {
-			panic("previously saved slp scriptPubKey cannot be parsed.")
+			return false, nil, errors.New("previously saved slp scriptPubKey cannot be parsed: " + err.Error())
 		}
 
 		amt, _ := inputSlpMsg.GetVoutAmount(prevIdx)
@@ -681,10 +704,10 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	if isValid {
 		err := putTxIndexEntry(tx, txSlpMsg, tokenIDHash)
 		if err != nil {
-			panic(err.Error())
+			return false, nil, err
 		}
 	}
-	return isValid, burnedInputs
+	return isValid, burnedInputs, nil
 }
 
 // DisconnectBlock is invoked by the index manager when a block has been
@@ -737,7 +760,13 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenM
 //
 func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 
-	slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+	if len(tx.MsgTx().TxOut) < 1 {
+		return errors.New("transaction has no outputs")
+	}
+
+	scriptPubKey := tx.MsgTx().TxOut[0].PkScript
+
+	slpMsg, err := v1parser.ParseSLP(scriptPubKey)
 	if err != nil {
 		return err
 	}
@@ -752,7 +781,7 @@ func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 		TokenID:        0,
 		TokenIDHash:    *tokenIDHash,
 		SlpVersionType: uint16(slpMsg.TokenType),
-		SlpOpReturn:    tx.MsgTx().TxOut[0].PkScript,
+		SlpOpReturn:    scriptPubKey,
 	})
 	return nil
 }
@@ -818,9 +847,9 @@ func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
 	return dropIndex(db, slpIndexKey, slpIndexName, interrupt)
 }
 
-// TopoSortTxs sorts a list of transactions into topological order.
+// TopologicallySortTxs sorts a list of transactions into topological order.
 // That is, the child transactions come after parents.
-func TopoSortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
+func TopologicallySortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
 
 	sorted := make([]*wire.MsgTx, 0, len(transactions))
 	txids := make(map[chainhash.Hash]struct{})
