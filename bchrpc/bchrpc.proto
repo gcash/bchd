@@ -946,6 +946,6 @@ message SlpRequiredBurn {
     uint32 token_type = 3;
     oneof burn_intention {
         uint64 amount = 4;
-        bool mint_baton = 5;
+        uint32 mint_baton = 5;
     }
 }
