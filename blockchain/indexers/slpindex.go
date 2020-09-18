@@ -796,7 +796,11 @@ func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
 func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Hash) bool {
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := slpIndex.Get(txHash[:])
-	return len(serializedData) != 0
+	if len(serializedData) != 0 {
+		return true
+	}
+	entry := idx.cache.Get(txHash)
+	return entry != nil
 }
 
 // SlpConfig provides the proper starting height and hash
