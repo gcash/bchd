@@ -241,27 +241,29 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 
 	matched := f.matchAll
 
-	slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
-	if err == nil {
-		if f.matchAllSlp {
-			matched = true
-		} else {
-			var tokenID [32]byte
-			if slpMsg.TransactionType == v1parser.TransactionTypeSend {
-				copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
-			} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
-				copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
-			} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
-				txnHash := tx.Hash().CloneBytes()
-				var txid []byte
-				for i := len(txnHash) - 1; i >= 0; i-- {
-					txid = append(txid, txnHash[i])
-				}
-				copy(tokenID[:], txid)
-			}
-			_, ok := f.slpTokenIds[tokenID]
-			if ok {
+	if len(tx.MsgTx().TxOut) > 0 {
+		slpMsg, _ := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+		if slpMsg != nil {
+			if f.matchAllSlp {
 				matched = true
+			} else {
+				var tokenID [32]byte
+				if slpMsg.TransactionType == v1parser.TransactionTypeSend {
+					copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
+				} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
+					copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
+				} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
+					txnHash := tx.Hash().CloneBytes()
+					var txid []byte
+					for i := len(txnHash) - 1; i >= 0; i-- {
+						txid = append(txid, txnHash[i])
+					}
+					copy(tokenID[:], txid)
+				}
+				_, ok := f.slpTokenIds[tokenID]
+				if ok {
+					matched = true
+				}
 			}
 		}
 	}
