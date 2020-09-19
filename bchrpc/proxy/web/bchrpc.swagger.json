@@ -1712,8 +1712,8 @@
           "format": "uint64"
         },
         "mint_baton": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
