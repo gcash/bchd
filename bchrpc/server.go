@@ -975,7 +975,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 			var slpToken *pb.SlpToken
 			if s.slpIndex != nil {
-				slpToken, _ = s.getSlpToken(&txHash, uint32(i))
+				slpToken, _, _ = s.getSlpToken(&txHash, uint32(i))
 				if req.IncludeTokenMetadata && slpToken != nil {
 					_hash, _ := chainhash.NewHash(slpToken.TokenId)
 					tokenMetadataSet[*_hash] = struct{}{}
@@ -1133,7 +1133,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		req.Index > 0 &&
 		isSlpInMempool &&
 		req.IncludeMempool {
-		slpToken, err = s.getSlpToken(txnHash, req.Index)
+		slpToken, _, err = s.getSlpToken(txnHash, req.Index)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "cannot get slp token for txid: %s", hex.EncodeToString(txnHash[:]))
 		}
@@ -2499,19 +2499,19 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexE
 }
 
 // getSlpToken fetches an SlpToken object leveraging a cache of SlpIndexEntry items
-func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToken, error) {
+func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToken, *v1parser.ParseResult, error) {
 
 	if s.slpIndex == nil {
-		return nil, errors.New("slpindex required")
+		return nil, nil, errors.New("slpindex required")
 	}
 
 	if vout == 0 {
-		return nil, errors.New("vout=0 is out of range for getSlpToken")
+		return nil, nil, errors.New("vout=0 is out of range for getSlpToken")
 	}
 
 	entry, err := s.getSlpIndexEntry(hash)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var (
@@ -2527,7 +2527,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		if slpMsg.Data.(v1parser.SlpMint).MintBatonVout == int(vout) {
 			isMintBaton = true
 		} else if vout != 1 {
-			return nil, errors.New("vout is out of range for slp mint")
+			return nil, slpMsg, errors.New("vout is out of range for slp mint")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
 			slpVersionType = pb.SlpVersionType_SLP_V1_MINT
@@ -2538,7 +2538,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		if slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(vout) {
 			isMintBaton = true
 		} else if vout != 1 {
-			return nil, errors.New("vout is out of range for slp genesis")
+			return nil, slpMsg, errors.New("vout is out of range for slp genesis")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
 			slpVersionType = pb.SlpVersionType_SLP_V1_GENESIS
@@ -2549,7 +2549,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		}
 	case v1parser.TransactionTypeSend:
 		if int(vout) > len(slpMsg.Data.(v1parser.SlpSend).Amounts) {
-			return nil, errors.New("vout is out of range for slp send transaction")
+			return nil, slpMsg, errors.New("vout is out of range for slp send transaction")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
 			slpVersionType = pb.SlpVersionType_SLP_V1_SEND
@@ -2586,7 +2586,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		VersionType: slpVersionType,
 	}
 
-	return slpToken, nil
+	return slpToken, slpMsg, nil
 }
 
 // manageSlpEntryCache keeps the SlpEntryCache updated on transaction and block events
@@ -2893,7 +2893,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	}
 	for i, input := range tx.MsgTx().TxIn {
 
-		slpToken, _ := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
+		inputToken, inputSlpMsg, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
+		if err != nil {
+			log.Debugf("error in getSlpToken for input %s:%s", hex.EncodeToString(input.PreviousOutPoint.Hash[:]), input.PreviousOutPoint.Index)
+		}
 
 		in := &pb.Transaction_Input{
 			Index:           uint32(i),
@@ -2903,17 +2906,21 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				Index: input.PreviousOutPoint.Index,
 				Hash:  input.PreviousOutPoint.Hash.CloneBytes(),
 			},
-			SlpToken: slpToken,
+			SlpToken: inputToken,
 		}
 		respTx.Inputs = append(respTx.Inputs, in)
 
 		// loop through SLP inputs to set some SLP txn info BURN_FLAGS
-		if slpToken != nil {
+		if inputToken != nil {
 			if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
-				if !bytes.Equal(slpInfo.TokenId, slpToken.TokenId) || slpInfo.VersionType != slpToken.VersionType {
+				if !bytes.Equal(slpInfo.TokenId, inputToken.TokenId) || slpMsg.TokenType != inputSlpMsg.TokenType {
+					fmt.Println("txn slp info: " + hex.EncodeToString(slpInfo.TokenId))
+					fmt.Println("input: " + hex.EncodeToString(inputToken.TokenId))
+					fmt.Println(slpInfo.VersionType)
+					fmt.Println(inputToken.VersionType)
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
 				} else {
-					inputAmount.Add(inputAmount, new(big.Int).SetUint64(slpToken.Amount))
+					inputAmount.Add(inputAmount, new(big.Int).SetUint64(inputToken.Amount))
 				}
 			} else if slpMsg == nil {
 				burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_BAD_OPRETURN] = struct{}{}
@@ -2923,13 +2930,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	}
 	for i, output := range tx.MsgTx().TxOut {
 
-		slpToken, _ := s.getSlpToken(tx.Hash(), uint32(i))
+		outputToken, _, err := s.getSlpToken(tx.Hash(), uint32(i))
+
 
 		out := &pb.Transaction_Output{
 			Value:        output.Value,
 			Index:        uint32(i),
 			PubkeyScript: output.PkScript,
-			SlpToken:     slpToken,
+			SlpToken:     outputToken,
 		}
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
 		if err == nil {
