@@ -1585,7 +1585,6 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns. "+err.Error())
 			}
 
-			inputSlpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 			switch inputSlpMsg.TransactionType {
 			case v1parser.TransactionTypeGenesis:
 				if inputSlpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(txIn.PreviousOutPoint.Index) {
