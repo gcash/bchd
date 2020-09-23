@@ -1268,14 +1268,14 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 			},
 		}
 		resp.SlpMetadata = meta
-		resp.Type = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+		resp.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_GENESIS
 	} else if slpMsg.TokenType == v1parser.TokenTypeNft1Child41 && slpMsg.TransactionType == v1parser.TransactionTypeSend {
 		meta := &pb.GetParsedSlpScriptResponse_Nft1ChildSend{
 			Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{},
 		}
 		resp.SlpMetadata = meta
 		resp.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-		resp.Type = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+		resp.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 	} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
 		meta := &pb.GetParsedSlpScriptResponse_V1Genesis{
 			V1Genesis: &pb.SlpV1GenesisMetadata{
@@ -1289,7 +1289,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 			},
 		}
 		resp.SlpMetadata = meta
-		resp.Type = pb.SlpVersionType_SLP_V1_GENESIS
+		resp.SlpAction = pb.SlpAction_SLP_V1_GENESIS
 	} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
 		meta := &pb.GetParsedSlpScriptResponse_V1Mint{
 			V1Mint: &pb.SlpV1MintMetadata{
@@ -1299,7 +1299,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 		}
 		resp.TokenId = slpMsg.Data.(v1parser.SlpMint).TokenID
 		resp.SlpMetadata = meta
-		resp.Type = pb.SlpVersionType_SLP_V1_MINT
+		resp.SlpAction = pb.SlpAction_SLP_V1_MINT
 	} else if slpMsg.TransactionType == v1parser.TransactionTypeSend {
 		meta := &pb.GetParsedSlpScriptResponse_V1Send{
 			V1Send: &pb.SlpV1SendMetadata{
@@ -1308,7 +1308,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 		}
 		resp.SlpMetadata = meta
 		resp.TokenId = slpMsg.Data.(v1parser.SlpSend).TokenID
-		resp.Type = pb.SlpVersionType_SLP_V1_SEND
+		resp.SlpAction = pb.SlpAction_SLP_V1_SEND
 	}
 
 	return resp, nil
@@ -1347,25 +1347,25 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 		switch slpMsg.TokenType {
 		case v1parser.TokenTypeFungible01:
 			if slpMsg.TransactionType == v1parser.TransactionTypeSend {
-				result.SlpVersion = pb.SlpVersionType_SLP_V1_SEND
+				result.SlpAction = pb.SlpAction_SLP_V1_SEND
 			} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
-				result.SlpVersion = pb.SlpVersionType_SLP_V1_MINT
+				result.SlpAction = pb.SlpAction_SLP_V1_MINT
 			} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
-				result.SlpVersion = pb.SlpVersionType_SLP_V1_GENESIS
+				result.SlpAction = pb.SlpAction_SLP_V1_GENESIS
 			}
 		case v1parser.TokenTypeNft1Child41:
 			if slpMsg.TransactionType == v1parser.TransactionTypeSend {
-				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+				result.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 			} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
-				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+				result.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_GENESIS
 			}
 		case v1parser.TokenTypeNft1Group81:
 			if slpMsg.TransactionType == v1parser.TransactionTypeSend {
-				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+				result.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_SEND
 			} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
-				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+				result.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_MINT
 			} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
-				result.SlpVersion = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+				result.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_GENESIS
 			}
 		default:
 			panic("trusted validation cannot return result for unknown slp version type")
@@ -2515,8 +2515,8 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	}
 
 	var (
-		isMintBaton    bool = false
-		slpVersionType pb.SlpVersionType
+		isMintBaton bool = false
+		slpAction   pb.SlpAction
 	)
 
 	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -2530,9 +2530,9 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 			return nil, slpMsg, errors.New("vout is out of range for slp mint")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
-			slpVersionType = pb.SlpVersionType_SLP_V1_MINT
+			slpAction = pb.SlpAction_SLP_V1_MINT
 		} else if slpMsg.TokenType == v1parser.TokenTypeNft1Group81 {
-			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+			slpAction = pb.SlpAction_SLP_NFT1_GROUP_MINT
 		}
 	case v1parser.TransactionTypeGenesis:
 		if slpMsg.Data.(v1parser.SlpGenesis).MintBatonVout == int(vout) {
@@ -2541,22 +2541,22 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 			return nil, slpMsg, errors.New("vout is out of range for slp genesis")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
-			slpVersionType = pb.SlpVersionType_SLP_V1_GENESIS
+			slpAction = pb.SlpAction_SLP_V1_GENESIS
 		} else if slpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
-			slpVersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+			slpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_GENESIS
 		} else if slpMsg.TokenType == v1parser.TokenTypeNft1Group81 {
-			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+			slpAction = pb.SlpAction_SLP_NFT1_GROUP_GENESIS
 		}
 	case v1parser.TransactionTypeSend:
 		if int(vout) > len(slpMsg.Data.(v1parser.SlpSend).Amounts) {
 			return nil, slpMsg, errors.New("vout is out of range for slp send transaction")
 		}
 		if slpMsg.TokenType == v1parser.TokenTypeFungible01 {
-			slpVersionType = pb.SlpVersionType_SLP_V1_SEND
+			slpAction = pb.SlpAction_SLP_V1_SEND
 		} else if slpMsg.TokenType == v1parser.TokenTypeNft1Child41 {
-			slpVersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+			slpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 		} else if slpMsg.TokenType == v1parser.TokenTypeNft1Group81 {
-			slpVersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+			slpAction = pb.SlpAction_SLP_NFT1_GROUP_SEND
 		}
 	}
 
@@ -2583,7 +2583,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		Amount:      amount.Uint64(),
 		IsMintBaton: isMintBaton,
 		Decimals:    uint32(decimals),
-		VersionType: slpVersionType,
+		SlpAction:   slpAction,
 	}
 
 	return slpToken, slpMsg, nil
@@ -2761,10 +2761,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 		if err != nil {
 			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
-				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+				slpInfo.SlpAction = pb.SlpAction_SLP_UNSUPPORTED_VERSION
 			} else {
 				slpInfo.ParseError = err.Error()
-				slpInfo.VersionType = pb.SlpVersionType_SLP_PARSE_ERROR
+				slpInfo.SlpAction = pb.SlpAction_SLP_PARSE_ERROR
 			}
 		} else {
 			tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
@@ -2773,7 +2773,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			case v1parser.TokenTypeFungible01:
 				switch slpMsg.TransactionType {
 				case v1parser.TransactionTypeGenesis:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_GENESIS
+					slpInfo.SlpAction = pb.SlpAction_SLP_V1_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
 						V1Genesis: &pb.SlpV1GenesisMetadata{
 							Name:          slpMsg.Data.(v1parser.SlpGenesis).Name,
@@ -2786,7 +2786,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						},
 					}
 				case v1parser.TransactionTypeMint:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_MINT
+					slpInfo.SlpAction = pb.SlpAction_SLP_V1_MINT
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
 						V1Mint: &pb.SlpV1MintMetadata{
 							MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
@@ -2794,7 +2794,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						},
 					}
 				case v1parser.TransactionTypeSend:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_V1_SEND
+					slpInfo.SlpAction = pb.SlpAction_SLP_V1_SEND
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
 						V1Send: &pb.SlpV1SendMetadata{
 							Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
@@ -2804,7 +2804,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			case v1parser.TokenTypeNft1Child41:
 				switch slpMsg.TransactionType {
 				case v1parser.TransactionTypeGenesis:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_GENESIS
+					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildGenesis{
 						Nft1ChildGenesis: &pb.SlpNft1ChildGenesisMetadata{
 							Name:         slpMsg.Data.(v1parser.SlpGenesis).Name,
@@ -2816,7 +2816,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						},
 					}
 				case v1parser.TransactionTypeSend:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_UNIQUE_CHILD_SEND
+					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
 						Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
 							GroupTokenId: nil,
@@ -2826,7 +2826,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			case v1parser.TokenTypeNft1Group81:
 				switch slpMsg.TransactionType {
 				case v1parser.TransactionTypeGenesis:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_GENESIS
+					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_GENESIS
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Genesis{
 						V1Genesis: &pb.SlpV1GenesisMetadata{
 							Name:          slpMsg.Data.(v1parser.SlpGenesis).Name,
@@ -2839,7 +2839,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						},
 					}
 				case v1parser.TransactionTypeMint:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_MINT
+					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_MINT
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Mint{
 						V1Mint: &pb.SlpV1MintMetadata{
 							MintAmount:    slpMsg.Data.(v1parser.SlpMint).Qty,
@@ -2847,7 +2847,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						},
 					}
 				case v1parser.TransactionTypeSend:
-					slpInfo.VersionType = pb.SlpVersionType_SLP_NFT1_GROUP_SEND
+					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_SEND
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_V1Send{
 						V1Send: &pb.SlpV1SendMetadata{
 							Amounts: slpMsg.Data.(v1parser.SlpSend).Amounts,
@@ -2855,11 +2855,11 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					}
 				}
 			default:
-				slpInfo.VersionType = pb.SlpVersionType_SLP_UNSUPPORTED_VERSION
+				slpInfo.SlpAction = pb.SlpAction_SLP_UNSUPPORTED_VERSION
 			}
 		}
 	} else {
-		slpInfo.VersionType = pb.SlpVersionType_NON_SLP
+		slpInfo.SlpAction = pb.SlpAction_NON_SLP
 	}
 
 	// check slp validity
@@ -2916,8 +2916,8 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				if !bytes.Equal(slpInfo.TokenId, inputToken.TokenId) || slpMsg.TokenType != inputSlpMsg.TokenType {
 					fmt.Println("txn slp info: " + hex.EncodeToString(slpInfo.TokenId))
 					fmt.Println("input: " + hex.EncodeToString(inputToken.TokenId))
-					fmt.Println(slpInfo.VersionType)
-					fmt.Println(inputToken.VersionType)
+					fmt.Println(slpInfo.SlpAction)
+					fmt.Println(inputToken.SlpAction)
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
 				} else {
 					inputAmount.Add(inputAmount, new(big.Int).SetUint64(inputToken.Amount))

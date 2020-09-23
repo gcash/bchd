@@ -538,7 +538,8 @@ message GetParsedSlpScriptRequest {
 message GetParsedSlpScriptResponse {
     string parsing_error = 1;
     bytes token_id = 2;
-    SlpVersionType type = 3;
+    SlpAction slp_action = 3;
+    //uint32 version_type = 4;
     oneof slp_metadata {
         SlpV1GenesisMetadata v1_genesis = 4;    // NFT1 Group also uses this
         SlpV1MintMetadata v1_mint = 5;          // NFT1 Group also uses this
@@ -561,7 +562,8 @@ message GetTrustedSlpValidationResponse {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
         bytes token_id = 3;
-        SlpVersionType slp_version = 4;
+        SlpAction slp_action = 4;
+        //uint32 version_type = 5;
         oneof validity_result_type {
             uint64 v1_token_amount = 5 [jstype = JS_STRING];
             bool v1_mint_baton = 6;
@@ -826,11 +828,12 @@ message SlpToken {
     bool is_mint_baton = 3;
     string address = 4;
     uint32 decimals = 5;
-    SlpVersionType version_type = 6;
+    SlpAction slp_action = 6;
+    //uint32 version_type = 7;
 }
 
 message SlpTransactionInfo {
-    SlpVersionType version_type = 1;
+    SlpAction slp_action = 1;
     enum ValidityJudgement {
         UNKNOWN_OR_INVALID = 0;
         VALID = 1;
@@ -887,7 +890,7 @@ message SlpNft1ChildSendMetadata {
     bytes group_token_id = 1;
 }
 
-enum SlpVersionType {       // everything except "NON_SLP" could be annotated with burn_flags  
+enum SlpAction {       // everything except "NON_SLP" could be annotated with burn_flags  
     NON_SLP = 0;            // "NON_SLP" would not be persisted by "--slpindex" option (but would with "--txindex")
     NON_SLP_BURN = 1;       // same as NON_SLP, except the transaction includes burned SLP inputs                       
     SLP_PARSE_ERROR = 2;
