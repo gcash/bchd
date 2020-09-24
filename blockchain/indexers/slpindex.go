@@ -88,10 +88,14 @@ var (
 //   slp version	    uint16            2 bytes
 //	 op_return			[]bytes			  typically <220 bytes
 //   -----
-//   Max: 258 bytes
+//   Max: 258 bytes (if OP_RETURN is limited to 220 bytes)
+//	 Min: 43 bytes (4 + 2 + 37)
+//
+//   NOTE: The minimum possible SLP OP_RETURN is 37 bytes, this is empty GENESIS
+//
 // -----------------------------------------------------------------------------
 
-// TokenMetadata ...
+// TokenMetadata is used to hold the unmarshalled data parsed from the Token ID index
 type TokenMetadata struct {
 	TokenID       *chainhash.Hash
 	SlpVersion    uint16
@@ -131,7 +135,7 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 	}
 
 	if metadata.NftGroupID == nil && int(metadata.SlpVersion) == v1parser.TokenTypeNft1Child41 {
-		return errors.New("missing nft group id for NFT child " + string(id))
+		return fmt.Errorf("missing nft group id for NFT child %v", id)
 	}
 
 	return tmIndex.Put(serializedID[:], tokenMetadata)
@@ -172,7 +176,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		var err error
 		mintBatonHash, err = chainhash.NewHash(serializedData[34:66])
 		if err != nil {
-			return nil, errors.New("could not create mint baton hash with data: " + hex.EncodeToString(serializedData[34:66]))
+			return nil, fmt.Errorf("could not create mint baton hash with data: %s", hex.EncodeToString(serializedData[34:66]))
 		}
 		mintBatonVout = byteOrder.Uint32(serializedData[66:])
 	} else if len(serializedData) == 66 {
@@ -182,7 +186,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		var err error
 		nft1GroupID, err = chainhash.NewHash(serializedData[34:])
 		if err != nil {
-			return nil, errors.New("could not create nft group id hash with data: " + hex.EncodeToString(serializedData[34:]))
+			return nil, fmt.Errorf("could not create nft group id hash with data: %s", hex.EncodeToString(serializedData[34:]))
 		}
 	}
 
@@ -262,7 +266,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 				NftGroupID:    nft1GroupID,
 			})
 		if err != nil {
-			return errors.New("failed not update db for token id: " + hex.EncodeToString(entryInfo.tokenIDHash[:]) + ", this should never happen")
+			return fmt.Errorf("failed to update db for token id: %v, this should never happen", entryInfo.tokenIDHash)
 		}
 	}
 
@@ -290,11 +294,12 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return nil, errors.New("slp entry does not exist " + hex.EncodeToString(txHash[:]))
+		return nil, fmt.Errorf("slp entry does not exist %v", txHash)
 	}
 
 	// Ensure the serialized data has enough bytes to properly deserialize.
-	if len(serializedData) < 12 { // TODO: get more accurate number for this (i.e., 4 + 2 + min SLP length)
+	// The minimum possible entry size is 4 + 2 + 37 = 43, which is an empty GENESIS slp OP_RETURN.
+	if len(serializedData) < 43 {
 		return nil, database.Error{
 			ErrorCode: database.ErrCorruption,
 			Description: fmt.Sprintf("corrupt slp index "+
@@ -402,7 +407,7 @@ func (idx *SlpIndex) Init() error {
 		return err
 	}
 
-	log.Info("Current number of SLP tokens in index: " + fmt.Sprint(idx.curTokenID))
+	log.Infof("Current number of SLP tokens in index: %v", idx.curTokenID)
 	return nil
 }
 
@@ -569,7 +574,7 @@ func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *Burned
 		},
 	)
 	if err != nil {
-		return false, errors.New("could not update token metadata for token id: " + hex.EncodeToString(burn.Entry.TokenIDHash[:]))
+		return false, fmt.Errorf("could not update token metadata for token id: %v", burn.Entry.TokenIDHash)
 	}
 
 	return true, nil
@@ -614,7 +619,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 
 		inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 		if err != nil {
-			return false, nil, errors.New("previously saved slp scriptPubKey cannot be parsed: " + err.Error())
+			return false, nil, fmt.Errorf("previously saved slp scriptPubKey cannot be parsed: %v", err)
 		}
 
 		amt, _ := inputSlpMsg.GetVoutAmount(prevIdx)
@@ -686,19 +691,21 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	//  (2) the input requirements must be satisfied.
 	isValid := false
 	outputAmt, _ := txSlpMsg.TotalSlpMsgOutputValue()
-	if txSlpMsg.TransactionType == v1parser.TransactionTypeGenesis {
-		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 &&
-			big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
+	switch txSlpMsg.TransactionType {
+	case v1parser.TransactionTypeGenesis:
+		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 && big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
 			isValid = true
 		} else if txSlpMsg.TokenType == v1parser.TokenTypeFungible01 || txSlpMsg.TokenType == v1parser.TokenTypeNft1Group81 {
 			isValid = true
 		}
-	} else if txSlpMsg.TransactionType == v1parser.TransactionTypeSend &&
-		outputAmt.Cmp(v1InputAmtSpent) < 1 {
-		isValid = true
-	} else if txSlpMsg.TransactionType == v1parser.TransactionTypeMint &&
-		v1MintBatonVout > 1 {
-		isValid = true
+	case v1parser.TransactionTypeSend:
+		if outputAmt.Cmp(v1InputAmtSpent) < 1 {
+			isValid = true
+		}
+	case v1parser.TransactionTypeMint:
+		if v1MintBatonVout > 1 {
+			isValid = true
+		}
 	}
 
 	if isValid {
@@ -755,9 +762,6 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenM
 
 // AddMempoolTx adds a new SlpIndexEntry item to a temporary cache that holds
 // both mempool and recently queried db entries.
-//
-// TODO: How do we handle fetching of TokenMetadata for Genesis txns in the mempool?
-//
 func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 
 	if len(tx.MsgTx().TxOut) < 1 {

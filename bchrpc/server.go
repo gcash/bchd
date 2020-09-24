@@ -425,7 +425,7 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -462,7 +462,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -541,7 +541,7 @@ func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -579,7 +579,7 @@ func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterR
 	} else {
 		blockHash, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
 		}
 	}
 	filter, err := s.cfIndex.FilterByBlockHash(blockHash, wire.GCSFilterRegular)
@@ -615,7 +615,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 	if len(req.StopHash) > 0 {
 		hash, err := chainhash.NewHash(req.StopHash)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid stop hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid stop hash %v", err)
 		}
 		stopHash = *hash
 	}
@@ -666,7 +666,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 
 	txHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
+		return nil, status.Errorf(codes.InvalidArgument, "invalid transaction hash %v", err)
 	}
 
 	if txDesc, err := s.txMemPool.FetchTxDesc(txHash); err == nil {
@@ -691,10 +691,13 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 
 		var tokenMetadata *pb.TokenMetadata
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
-			tokenID, _ := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
+			tokenID, err := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "a unknown problem occured when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
+			}
 			tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 			if err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("a unknown problem occured when building token metadata: %s", err.Error()))
+				return nil, status.Errorf(codes.Internal, "a unknown problem occured when building token metadata: %v", err)
 			}
 		}
 
@@ -714,12 +717,12 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	var msgTx wire.MsgTx
 	err = msgTx.Deserialize(bytes.NewReader(txBytes))
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to deserialize transaction %s", err.Error()))
+		return nil, status.Errorf(codes.Internal, "failed to deserialize transaction: %v", err)
 	}
 
 	header, err := s.chain.HeaderByHash(blockHash)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to load block header %s", err.Error()))
+		return nil, status.Errorf(codes.Internal, "failed to load block header: %v", err)
 	}
 
 	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
@@ -731,10 +734,13 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 
 	var tokenMetadata *pb.TokenMetadata
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
-		tokenID, _ := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
+		tokenID, err := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "a unknown problem occured when parsing token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+		}
 		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "a unknown problem occurred when building token metadata")
+			return nil, status.Errorf(codes.Internal, "a unknown problem occurred when building token metadata for token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
 		}
 	}
 
@@ -756,7 +762,7 @@ func (s *GrpcServer) GetRawTransaction(ctx context.Context, req *pb.GetRawTransa
 
 	txHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
+		return nil, status.Errorf(codes.InvalidArgument, "invalid transaction hash: %v", err)
 	}
 
 	if tx, err := s.txMemPool.FetchTransaction(txHash); err == nil {
@@ -792,7 +798,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	if req.NbFetch > maxAddressQuerySize {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("nbfetch exceeds max of %d", maxAddressQuerySize))
+		return nil, status.Errorf(codes.InvalidArgument, "nbfetch exceeds max of %d", maxAddressQuerySize)
 	}
 
 	// Attempt to decode the supplied address.
@@ -807,7 +813,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 		// If error here we'll just use the genesis
 		startHeight, _ = s.chain.BlockHeightByHash(h)
@@ -877,7 +883,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	}
 
 	if req.NbFetch > maxAddressQuerySize {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("nbfetch exceeds max of %d", maxAddressQuerySize))
+		return nil, status.Errorf(codes.InvalidArgument, "nbfetch exceeds max of %d", maxAddressQuerySize)
 	}
 
 	// Attempt to decode the supplied address.
@@ -892,7 +898,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid hash %s", err.Error()))
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
 		}
 		// If error here we'll just use the genesis
 		startHeight, _ = s.chain.BlockHeightByHash(h)
@@ -977,8 +983,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if s.slpIndex != nil {
 				slpToken, _ = s.getSlpToken(&txHash, uint32(i))
 				if req.IncludeTokenMetadata && slpToken != nil {
-					_hash, _ := chainhash.NewHash(slpToken.TokenId)
-					tokenMetadataSet[*_hash] = struct{}{}
+					hash, err := chainhash.NewHash(slpToken.TokenId)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "failed to parse token id: %s: %v", hex.EncodeToString(slpToken.TokenId), err)
+					}
+					tokenMetadataSet[*hash] = struct{}{}
 				}
 			}
 
@@ -1069,7 +1078,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 
 	txnHash, err := chainhash.NewHash(req.Hash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
+		return nil, status.Errorf(codes.InvalidArgument, "invalid transaction hash %v", err)
 	}
 
 	var (
@@ -1173,7 +1182,7 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 
 	txnHash, err := chainhash.NewHash(req.TransactionHash)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid transaction hash %s", err.Error()))
+		return nil, status.Errorf(codes.InvalidArgument, "invalid transaction hash %v", err)
 	}
 
 	// lookup location of the transaction
@@ -1231,12 +1240,12 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 	for _, hash := range req.GetTokenIds() {
 		tokenID, err := chainhash.NewHash(hash)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, fmt.Sprintf("token ID hash %s is invalid %s", hex.EncodeToString(hash), err.Error()))
+			return nil, status.Errorf(codes.Aborted, "token ID hash %s is invalid: %v", hex.EncodeToString(hash), err)
 		}
 
 		tm, err := s.buildTokenMetadata(*tokenID)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, "token ID "+hex.EncodeToString(hash)+" does not exist")
+			return nil, status.Errorf(codes.Aborted, "token ID %v does not exist", tokenID)
 		}
 
 		tokenMetadata = append(tokenMetadata, tm)
@@ -1330,16 +1339,16 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, fmt.Sprintf("invalid txn hash (txo: %s:%s) - err %s", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err.Error()))
+			return nil, status.Errorf(codes.Aborted, "invalid txn hash for txo %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err)
 		}
 
 		entry, err := s.getSlpIndexEntry(txid)
 		if err != nil {
-			return nil, status.Error(codes.Aborted, "txid is missing from slp validity set (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+			return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txo: %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err)
 		}
 
 		if query.PrevOutVout == 0 || query.PrevOutVout > 19 {
-			return nil, status.Error(codes.Aborted, "slp output index cannot be 0 or > 19 (txo: "+hex.EncodeToString(query.GetPrevOutHash())+":"+string(query.GetPrevOutVout())+")")
+			return nil, status.Errorf(codes.Aborted, "slp output index cannot be 0 or > 19 txo: %s:%s", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()))
 		}
 
 		slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -1433,7 +1442,7 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 	masterKey, err := hdkeychain.NewKeyFromString(xpub)
 	if err != nil {
 		fmt.Println(err)
-		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
 	var change uint32 = 0
@@ -1444,32 +1453,35 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 	ext, err := masterKey.Child(change)
 	if err != nil {
 		fmt.Println(err)
-		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
 	extK, err := ext.Child(req.AddressIndex)
 	if err != nil {
 		fmt.Println(err)
-		return nil, status.Error(codes.InvalidArgument, "invalid xpub: "+err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
 	pubKey, err := extK.ECPubKey()
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 	addr, err := extK.Address(s.chainParams)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 	slpAddrStr := ""
 	if s.slpIndex != nil {
-		slpAddr, _ := goslp.NewAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
-		slpAddrStr = s.chainParams.SlpAddressPrefix + ":" + slpAddr.EncodeAddress()
+		slpAddr, err := goslp.NewAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to create slp pubkeyhash address from hash160: %v", err)
+		}
+		slpAddrStr = fmt.Sprintf("%s:%s", s.chainParams.SlpAddressPrefix, slpAddr.EncodeAddress())
 	}
 
 	res := &pb.GetBip44HdAddressResponse{
 		PubKey:   pubKey.SerializeCompressed(),
-		CashAddr: s.chainParams.CashAddressPrefix + ":" + addr.EncodeAddress(),
+		CashAddr: fmt.Sprintf("%s:%s", s.chainParams.CashAddressPrefix, addr.EncodeAddress()),
 		SlpAddr:  slpAddrStr,
 	}
 
@@ -1524,7 +1536,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 
 	slpMsg, err := v1parser.ParseSLP(msgTx.TxOut[0].PkScript)
 	if err != nil {
-		return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn (error parsing slp op_return message: "+err.Error()+")")
+		return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: error parsing slp op_return message: %v", err)
 	}
 
 	switch slpMsg.Data.(type) {
@@ -1538,7 +1550,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				continue
 			}
 			if err != nil {
-				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns. "+err.Error())
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v", err)
 			}
 
 			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1546,12 +1558,18 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				continue
 			}
 			idx := txIn.PreviousOutPoint.Index
-			amt, _ := inputSlpMsg.GetVoutAmount(int(idx))
+			amt, err := inputSlpMsg.GetVoutAmount(int(idx))
+			if err != nil {
+				return status.Errorf(codes.Internal, "an error occured when getting amount for outpoint: %v:%s, with error: %v", txIn.PreviousOutPoint.Hash, idx, err)
+			}
 			inputVal.Add(inputVal, amt)
 		}
 
 		// check inputs != outputs (use check for explict burn requests i.e., 'req.AllowedSlpBurns')
-		outputVal, _ := slpMsg.TotalSlpMsgOutputValue()
+		outputVal, err := slpMsg.TotalSlpMsgOutputValue()
+		if err != nil {
+			return status.Errorf(codes.Aborted, "an error occured when getting total slp amount in txn: %v, with error: %v", msgTx.TxHash(), err)
+		}
 		if inputVal.Cmp(outputVal) < 0 {
 			return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: outputs less than inputs")
 		} else if inputVal.Cmp(outputVal) > 0 {
@@ -1567,9 +1585,9 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 
 			inputAmtUsed := inputVal.Sub(inputVal, burnAmt)
 			if inputAmtUsed.Cmp(outputVal) < 0 {
-				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: specified burn ammount "+burnAmt.String()+" is too high, use SlpRequiredBurn to allow burns")
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: specified burn ammount %s is too high, use SlpRequiredBurn to allow burns", burnAmt.String())
 			} else if inputAmtUsed.Cmp(outputVal) > 0 {
-				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: specified burn ammount "+burnAmt.String()+" is too low, use SlpRequiredBurn to allow burns")
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: specified burn ammount %s is too low, use SlpRequiredBurn to allow burns", burnAmt.String())
 			}
 		}
 
@@ -1587,9 +1605,13 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 			if slpEntry == nil {
 				continue
 			}
-			inputSlpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 			if err != nil {
-				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns. "+err.Error())
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v ", err)
+			}
+
+			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+			if err != nil {
+				return status.Errorf(codes.Internal, "an error occured when parsing slp op_return entry previously stored in the db for txn: %v, with error: %v", msgTx.TxHash(), err)
 			}
 
 			switch inputSlpMsg.TransactionType {
@@ -1625,7 +1647,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				continue
 			}
 			if err != nil {
-				return status.Error(codes.Aborted, "submitted transaction rejected to prevent token burn: use SlpRequiredBurn to allow burns. "+err.Error())
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: use SlpRequiredBurn to allow burns: %v", err)
 			}
 		}
 
@@ -1729,7 +1751,6 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurn(outpoint wire.OutPoint, requir
 		}
 	}
 
-
 	canBurn := false
 	for _, burn := range requiredBurns {
 
@@ -1751,10 +1772,7 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurn(outpoint wire.OutPoint, requir
 			}
 
 			// check burn intent (amount or mint)
-			_, isAmountBurn := burn.BurnIntention.(*pb.SlpRequiredBurn_Amount)
-			_, isMintBurn := burn.BurnIntention.(*pb.SlpRequiredBurn_MintBatonVout)
-
-			if isAmountBurn {
+			if _, isAmountBurn := burn.BurnIntention.(*pb.SlpRequiredBurn_Amount); isAmountBurn {
 				amt, err := inputSlpMsg.GetVoutAmount(int(outpoint.Index))
 				if err != nil {
 					return slpEntry, err
@@ -1765,7 +1783,7 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurn(outpoint wire.OutPoint, requir
 
 				canBurn = true
 				break
-			} else if isMintBurn {
+			} else if _, isMintBurn := burn.BurnIntention.(*pb.SlpRequiredBurn_MintBatonVout); isMintBurn {
 				switch t := inputSlpMsg.Data.(type) {
 				case v1parser.SlpGenesis:
 					if t.MintBatonVout != int(burn.GetMintBatonVout()) {
@@ -1825,7 +1843,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 			log.Errorf("Failed to process transaction %v: %v",
 				tx.Hash(), err)
 		}
-		return nil, status.Errorf(codes.InvalidArgument, "tx rejected: %s", err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, "tx rejected: %v", err)
 	}
 
 	// When the transaction was accepted it should be the first item in the
@@ -2546,7 +2564,11 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 		slpAction   pb.SlpAction
 	)
 
-	slpMsg, _ := v1parser.ParseSLP(entry.SlpOpReturn)
+	slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
+	if err != nil {
+		log.Criticalf("failed to parse an slp entry message stored in the index db for txn: %v, this should never happen.", hash)
+		return nil, err
+	}
 
 	// set isMintBaton and also check that vout is within proper range
 	switch slpMsg.TransactionType {
@@ -2592,18 +2614,34 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
 		decimals = slpMsg.Data.(v1parser.SlpGenesis).Decimals
 	} else {
-		var _hash []byte
+		var tokenIDHash []byte
 		for i := len(entry.TokenIDHash) - 1; i >= 0; i-- {
-			_hash = append(_hash, entry.TokenIDHash[i])
+			tokenIDHash = append(tokenIDHash, entry.TokenIDHash[i])
 		}
-		_tokenIDRev, _ := chainhash.NewHash(_hash)
-		genEntry, _ := s.getSlpIndexEntry(_tokenIDRev)
-		genSlpMsg, _ := v1parser.ParseSLP(genEntry.SlpOpReturn)
+		tokenIDRev, err := chainhash.NewHash(tokenIDHash)
+		if err != nil {
+			log.Criticalf("failed to create chainhash from token ID from %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+			return nil, err
+		}
+		genEntry, err := s.getSlpIndexEntry(tokenIDRev)
+		if err != nil {
+			log.Criticalf("failed to fetch slp entry for %s, with error: %v, with error: %v", tokenIDRev, err)
+			return nil, err
+		}
+		genSlpMsg, err := v1parser.ParseSLP(genEntry.SlpOpReturn)
+		if err != nil {
+			log.Criticalf("failed to parse slp message for %v, with error: %v", tokenIDRev, err)
+			return nil, err
+		}
 		decimals = genSlpMsg.Data.(v1parser.SlpGenesis).Decimals
 	}
 
 	// get amount
-	amount, _ := slpMsg.GetVoutAmount(int(vout))
+	amount, err := slpMsg.GetVoutAmount(int(vout))
+	if err != nil {
+		log.Criticalf("failed to get slp amount for %v, with error: %v", hash, err)
+		return nil, err
+	}
 
 	slpToken := &pb.SlpToken{
 		TokenId:     entry.TokenIDHash[:],
@@ -2641,7 +2679,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 			}
 			err := s.slpIndex.AddMempoolTx(txDesc.Tx)
 			if err != nil {
-				log.Debugf("slp mempool add error: %s", err.Error())
+				log.Debugf("slp mempool add error: %v", err)
 				continue
 			}
 
@@ -2662,13 +2700,18 @@ func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetada
 		return nil, errors.New("slpindex required")
 	}
 
-	var _hash []byte
+	var tokenIDHash []byte
 	for i := len(tokenID) - 1; i >= 0; i-- {
-		_hash = append(_hash, tokenID[i])
+		tokenIDHash = append(tokenIDHash, tokenID[i])
 	}
-	_tokenIDRev, _ := chainhash.NewHash(_hash)
-	entry, err := s.getSlpIndexEntry(_tokenIDRev)
+	tokenIDRev, err := chainhash.NewHash(tokenIDHash)
 	if err != nil {
+		log.Criticalf("failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+		return nil, err
+	}
+	entry, err := s.getSlpIndexEntry(tokenIDRev)
+	if err != nil {
+		log.Criticalf("failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
 		return nil, err
 	}
 
@@ -2795,7 +2838,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				slpInfo.SlpAction = pb.SlpAction_SLP_PARSE_ERROR
 			}
 		} else {
-			tokenID, _ := goslp.GetSlpTokenID(tx.MsgTx())
+			tokenID, err := goslp.GetSlpTokenID(tx.MsgTx())
+			if err != nil {
+				log.Criticalf("failed to parse token ID for transaction %v", tx.Hash())
+			}
 			slpInfo.TokenId = tokenID
 			switch slpMsg.TokenType {
 			case v1parser.TokenTypeFungible01:
@@ -2954,7 +3000,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	}
 	for i, output := range tx.MsgTx().TxOut {
 
-		outputToken, _ := s.getSlpToken(tx.Hash(), uint32(i))
+		outputToken, err := s.getSlpToken(tx.Hash(), uint32(i))
+		if err != nil {
+			log.Debugf("no token stored for %v index: %v", tx.Hash(), uint32(i))
+		}
 
 		out := &pb.Transaction_Output{
 			Value:        output.Value,
@@ -2975,11 +3024,17 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					switch _addr := addrs[0].(type) {
 					case *bchutil.AddressPubKeyHash:
 						hash := _addr.Hash160()
-						slpAddr, _ := goslp.NewAddressPubKeyHash(hash[:], params)
+						slpAddr, err := goslp.NewAddressPubKeyHash(hash[:], params)
+						if err != nil {
+							log.Criticalf("an error occured creating slp address from pubkey hash160: %v", err)
+						}
 						out.SlpToken.Address = slpAddr.String()
 					case *bchutil.AddressScriptHash:
 						hash := _addr.Hash160()
-						slpAddr, _ := goslp.NewAddressScriptHashFromHash(hash[:], params)
+						slpAddr, err := goslp.NewAddressScriptHashFromHash(hash[:], params)
+						if err != nil {
+							log.Criticalf("an error occured creating slp address from script hash160: %v", err)
+						}
 						out.SlpToken.Address = slpAddr.String()
 					}
 				}
