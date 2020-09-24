@@ -161,7 +161,10 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		return nil, errNoTokenIDEntry
 	}
 
-	tokenIDHash, _ := chainhash.NewHash(serializedData[0:32])
+	tokenIDHash, err := chainhash.NewHash(serializedData[0:32])
+	if err != nil {
+		return nil, fmt.Errorf("failed to create hash from %s", hex.EncodeToString(serializedData[0:32]))
+	}
 	slpVersion := byteOrder.Uint16(serializedData[32:34])
 
 	var (
@@ -244,7 +247,10 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 			if len(entryInfo.tx.TxIn) < 1 {
 				return errors.New("entryInfo transaction has no inputs")
 			}
-			parentTokenEntry, _ := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
+			parentTokenEntry, err := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
+			if err != nil {
+				return fmt.Errorf("failed to fetch nft parent token ID %v: %v", entryInfo.tx.TxIn[0].PreviousOutPoint.Hash, err)
+			}
 			nft1GroupID = &parentTokenEntry.TokenIDHash
 		}
 	} else if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpMint); ok {
@@ -503,9 +509,16 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		// look for burned inputs within non-SLP txns
 		if !isValid {
 			for _, txi := range tx.TxIn {
-				slpEntry, _ := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
+				slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
+				if err != nil {
+					log.Debugf("slp entry does not exist for this transaction %v", txi.PreviousOutPoint.Hash)
+				}
 				if slpEntry != nil {
-					slpMsg, _ := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+					slpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
+					if err != nil {
+						log.Criticalf("failed to parse slp message stored in db %v", txi.PreviousOutPoint.Hash)
+						return err
+					}
 					burnedInputs = append(burnedInputs, &BurnedInput{
 						Tx:      tx,
 						TxInput: txi,
@@ -592,7 +605,10 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	if len(tx.TxOut) < 1 {
 		return false, nil, nil
 	}
-	txSlpMsg, _ := v1parser.ParseSLP(tx.TxOut[0].PkScript)
+	txSlpMsg, err := v1parser.ParseSLP(tx.TxOut[0].PkScript)
+	if err != nil {
+		log.Debugf("slp parsing failed for %v: %v", tx.TxHash(), err)
+	}
 	if txSlpMsg == nil {
 		return false, nil, nil
 	}
@@ -603,7 +619,10 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	if err != nil {
 		return false, nil, err
 	}
-	tokenIDHash, _ := chainhash.NewHash(tokenID[:])
+	tokenIDHash, err := chainhash.NewHash(tokenID[:])
+	if err != nil {
+		return false, nil, err
+	}
 
 	v1InputAmtSpent := big.NewInt(0)
 	v1MintBatonVout := 0
@@ -622,7 +641,10 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			return false, nil, fmt.Errorf("previously saved slp scriptPubKey cannot be parsed: %v", err)
 		}
 
-		amt, _ := inputSlpMsg.GetVoutAmount(prevIdx)
+		amt, err := inputSlpMsg.GetVoutAmount(prevIdx)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to get amount for vout %v: %v", prevIdx, err)
+		}
 		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 && txSlpMsg.TransactionType == v1parser.TransactionTypeGenesis { // checks inputs for NFT1 child GENESIS
 			if inputSlpMsg.TokenType == v1parser.TokenTypeNft1Group81 && i == 0 {
 				v1InputAmtSpent.Add(v1InputAmtSpent, amt)
@@ -690,7 +712,10 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 	//  (1) the slpMsg must be valid, and
 	//  (2) the input requirements must be satisfied.
 	isValid := false
-	outputAmt, _ := txSlpMsg.TotalSlpMsgOutputValue()
+	outputAmt, err := txSlpMsg.TotalSlpMsgOutputValue()
+	if err != nil {
+		return false, nil, err
+	}
 	switch txSlpMsg.TransactionType {
 	case v1parser.TransactionTypeGenesis:
 		if txSlpMsg.TokenType == v1parser.TokenTypeNft1Child41 && big.NewInt(1).Cmp(v1InputAmtSpent) < 1 {
@@ -779,8 +804,14 @@ func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
 		return errors.New("unsupported token type")
 	}
 
-	_tokenIDHash, _ := goslp.GetSlpTokenID(tx.MsgTx())
-	tokenIDHash, _ := chainhash.NewHash(_tokenIDHash)
+	hash, err := goslp.GetSlpTokenID(tx.MsgTx())
+	if err != nil {
+		return err
+	}
+	tokenIDHash, err := chainhash.NewHash(hash)
+	if err != nil {
+		return err
+	}
 	idx.cache.AddMempoolItem(tx.Hash(), &SlpIndexEntry{
 		TokenID:        0,
 		TokenIDHash:    *tokenIDHash,
