@@ -714,8 +714,12 @@
           "type": "string",
           "format": "byte"
         },
-        "slp_version": {
-          "$ref": "#/definitions/pbSlpVersionType"
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
         },
         "v1_token_amount": {
           "type": "string",
@@ -1373,8 +1377,12 @@
           "type": "string",
           "format": "byte"
         },
-        "type": {
-          "$ref": "#/definitions/pbSlpVersionType"
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
         },
         "v1_genesis": {
           "$ref": "#/definitions/pbSlpV1GenesisMetadata"
@@ -1655,6 +1663,24 @@
         }
       }
     },
+    "pbSlpAction": {
+      "type": "string",
+      "enum": [
+        "NON_SLP",
+        "NON_SLP_BURN",
+        "SLP_PARSE_ERROR",
+        "SLP_UNSUPPORTED_VERSION",
+        "SLP_V1_GENESIS",
+        "SLP_V1_MINT",
+        "SLP_V1_SEND",
+        "SLP_NFT1_GROUP_GENESIS",
+        "SLP_NFT1_GROUP_MINT",
+        "SLP_NFT1_GROUP_SEND",
+        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
+        "SLP_NFT1_UNIQUE_CHILD_SEND"
+      ],
+      "default": "NON_SLP"
+    },
     "pbSlpNft1ChildGenesisMetadata": {
       "type": "object",
       "properties": {
@@ -1711,7 +1737,7 @@
           "type": "string",
           "format": "uint64"
         },
-        "mint_baton": {
+        "mint_baton_vout": {
           "type": "integer",
           "format": "int64"
         }
@@ -1739,8 +1765,12 @@
           "type": "integer",
           "format": "int64"
         },
-        "version_type": {
-          "$ref": "#/definitions/pbSlpVersionType"
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
         }
       },
       "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
@@ -1749,8 +1779,8 @@
     "pbSlpTransactionInfo": {
       "type": "object",
       "properties": {
-        "version_type": {
-          "$ref": "#/definitions/pbSlpVersionType"
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
         },
         "validity_judgement": {
           "$ref": "#/definitions/SlpTransactionInfoValidityJudgement"
@@ -1842,24 +1872,6 @@
           }
         }
       }
-    },
-    "pbSlpVersionType": {
-      "type": "string",
-      "enum": [
-        "NON_SLP",
-        "NON_SLP_BURN",
-        "SLP_PARSE_ERROR",
-        "SLP_UNSUPPORTED_VERSION",
-        "SLP_V1_GENESIS",
-        "SLP_V1_MINT",
-        "SLP_V1_SEND",
-        "SLP_NFT1_GROUP_GENESIS",
-        "SLP_NFT1_GROUP_MINT",
-        "SLP_NFT1_GROUP_SEND",
-        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
-        "SLP_NFT1_UNIQUE_CHILD_SEND"
-      ],
-      "default": "NON_SLP"
     },
     "pbSubmitTransactionRequest": {
       "type": "object",
