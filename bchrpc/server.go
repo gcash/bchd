@@ -1560,7 +1560,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 			idx := txIn.PreviousOutPoint.Index
 			amt, err := inputSlpMsg.GetVoutAmount(int(idx))
 			if err != nil {
-				return status.Errorf(codes.Internal, "an error occured when getting amount for outpoint: %v:%s, with error: %v", txIn.PreviousOutPoint.Hash, idx, err)
+				return status.Errorf(codes.Internal, "an error occured when getting amount for outpoint: %v:%v, with error: %v", txIn.PreviousOutPoint.Hash, idx, err)
 			}
 			inputVal.Add(inputVal, amt)
 		}
