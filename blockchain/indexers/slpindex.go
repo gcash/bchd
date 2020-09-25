@@ -704,10 +704,6 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		}
 	}
 
-	// TODO: check/handle edge case where GENESIS or MINT transaction has new mint baton
-	// at a non-existant output index.  The Token Metadata needs to be update to show the
-	// mint baton as burned.
-
 	// Check if tx is a valid SLP. SLP validity has two requirements:
 	//  (1) the slpMsg must be valid, and
 	//  (2) the input requirements must be satisfied.
