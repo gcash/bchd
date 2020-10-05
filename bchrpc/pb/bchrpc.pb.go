@@ -29,11 +29,15 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
+// SlpAction is used to allow clients to identify the type of slp transaction from this single field.
+//
+// NOTE: All enum types except for "NON_SLP" may be annotated with one or more BurnFlags.
+//
 type SlpAction int32
 
 const (
-	SlpAction_NON_SLP                       SlpAction = 0 // "NON_SLP" would not be persisted by "--slpindex" option (but would with "--txindex")
-	SlpAction_NON_SLP_BURN                  SlpAction = 1 // same as NON_SLP, except the transaction includes burned SLP inputs
+	SlpAction_NON_SLP                       SlpAction = 0
+	SlpAction_NON_SLP_BURN                  SlpAction = 1
 	SlpAction_SLP_PARSE_ERROR               SlpAction = 2
 	SlpAction_SLP_UNSUPPORTED_VERSION       SlpAction = 3
 	SlpAction_SLP_V1_GENESIS                SlpAction = 4

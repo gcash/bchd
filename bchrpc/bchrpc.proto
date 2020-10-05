@@ -804,7 +804,7 @@ message TransactionFilter {
     repeated bytes data_elements = 3;
 
     // Subscribed/Unsubscribe to everything. Other filters
-    // will be ignored.    
+    // will be ignored.
     bool all_transactions = 4;
 
     // Subscribed/Unsubscribe to everything SLP. Other filters
@@ -890,9 +890,13 @@ message SlpNft1ChildSendMetadata {
     bytes group_token_id = 1;
 }
 
-enum SlpAction {       // everything except "NON_SLP" could be annotated with burn_flags  
-    NON_SLP = 0;            // "NON_SLP" would not be persisted by "--slpindex" option (but would with "--txindex")
-    NON_SLP_BURN = 1;       // same as NON_SLP, except the transaction includes burned SLP inputs                       
+// SlpAction is used to allow clients to identify the type of slp transaction from this single field.
+//
+// NOTE: All enum types except for "NON_SLP" may be annotated with one or more BurnFlags.
+//
+enum SlpAction {
+    NON_SLP = 0;
+    NON_SLP_BURN = 1;
     SLP_PARSE_ERROR = 2;
     SLP_UNSUPPORTED_VERSION = 3;
     SLP_V1_GENESIS = 4;
