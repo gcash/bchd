@@ -14,8 +14,6 @@ import (
 )
 
 var (
-	// command-line options:
-	// gRPC server endpoint
 	grpcServerEndpoint = flag.String("bchd-grpc-url", "localhost:8335", "BCHD gRPC server endpoint")
 	grpcRootCertPath   = flag.String("bchd-grpc-certpath", "", "BCHD gRPC server self-signed root certificate path")
 	proxyPort          = flag.String("port", "8080", "port for the proxy server")

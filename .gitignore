@@ -4,6 +4,7 @@
 # Binaries
 bchd
 bchctl
+gw
 
 # Databases
 btcd.db

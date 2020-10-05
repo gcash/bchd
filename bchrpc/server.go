@@ -128,7 +128,6 @@ type GrpcServer struct {
 	wg       sync.WaitGroup
 	ready    uint32 // atomic
 	shutdown int32  // atomic
-
 }
 
 // NewGrpcServer returns a new GrpcServer which has not yet
@@ -425,7 +424,7 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -462,7 +461,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -541,7 +540,7 @@ func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 		block, err = s.chain.BlockByHash(h)
 	}
@@ -579,7 +578,7 @@ func (s *GrpcServer) GetBlockFilter(ctx context.Context, req *pb.GetBlockFilterR
 	} else {
 		blockHash, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 	}
 	filter, err := s.cfIndex.FilterByBlockHash(blockHash, wire.GCSFilterRegular)
@@ -654,7 +653,7 @@ func (s *GrpcServer) GetHeaders(ctx context.Context, req *pb.GetHeadersRequest) 
 // GetTransaction returns a transaction given its hash.
 //
 // **Requires TxIndex**
-// **Requires SlpIndex for slp token metadata, and token metadata
+// **Requires SlpIndex for all token metadata
 func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionRequest) (*pb.GetTransactionResponse, error) {
 	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "txindex required")
@@ -898,7 +897,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	} else {
 		h, err := chainhash.NewHash(req.GetHash())
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid hash %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
 		// If error here we'll just use the genesis
 		startHeight, _ = s.chain.BlockHeightByHash(h)
