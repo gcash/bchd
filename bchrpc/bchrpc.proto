@@ -130,7 +130,6 @@ service bchrpc {
     // grpc-web.
     //
     // **Requires TxIndex to receive input metadata**
-    // TODO: Add slp metadata similar to "SubscribeTransactions"
     rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // SubscribeBlocks creates a subscription for notifications of new blocks being
@@ -571,7 +570,6 @@ message GetTrustedSlpValidationResponse {
         bytes slp_txn_opreturn = 8;
     }
 
-    // allows server to respond to a request with multiple
     repeated ValidityResult results = 1;
 }
 
@@ -815,7 +813,7 @@ message TransactionFilter {
     repeated bytes slp_token_ids = 6;
 }
 
-// SLP token info used in transaction inputs / outputs
+// SlpToken info used in transaction inputs / outputs
 //
 // WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'
 // for large amounts. For this reason, an annotation has been added for JS to
@@ -832,6 +830,7 @@ message SlpToken {
     uint32 token_type = 7;
 }
 
+// SlpTransactionInfo is used inside the Transaction message type.
 message SlpTransactionInfo {
     SlpAction slp_action = 1;
     enum ValidityJudgement {
@@ -858,6 +857,7 @@ message SlpTransactionInfo {
     }
 }
 
+// SlpV1GenesisMetadata is used to marshal type 1 and NFT1 Group GENESIS OP_RETURN scriptPubKey
 message SlpV1GenesisMetadata {
     bytes name = 1;
     bytes ticker = 2;
@@ -868,15 +868,18 @@ message SlpV1GenesisMetadata {
     uint64 mint_amount = 7 [jstype = JS_STRING];
 }
 
+// SlpV1MintMetadata is used to marshal type 1 MINT OP_RETURN scriptPubKey
 message SlpV1MintMetadata {
     uint32 mint_baton_vout = 1;
     uint64 mint_amount = 2 [jstype = JS_STRING];
 }
 
+// SlpV1SendMetadata is used to marshal type 1 and NFT1 Group SEND OP_RETURN scriptPubKey
 message SlpV1SendMetadata {
     repeated uint64 amounts = 1 [jstype = JS_STRING];
 }
 
+// SlpNft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey
 message SlpNft1ChildGenesisMetadata {
     bytes name = 1;
     bytes ticker = 2;
@@ -886,6 +889,7 @@ message SlpNft1ChildGenesisMetadata {
     bytes group_token_id = 6;
 }
 
+// SlpNft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey
 message SlpNft1ChildSendMetadata {
     bytes group_token_id = 1;
 }
@@ -909,34 +913,7 @@ enum SlpAction {
     SLP_NFT1_UNIQUE_CHILD_SEND = 11;
 }
 
-message TokenMetadataTokenType1 {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;   // txn must be confirmed
-    uint32 mint_baton_vout = 7;
-}
-
-message TokenMetadataNFT1Group {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;   // txn must be confirmed
-    uint32 mint_baton_vout = 7;
-}
-
-message TokenMetadataNFT1Child {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-    bytes group_id = 5;
-}
-
+// TokenMetadata is used to marshal metadata about a specific TokenID
 message TokenMetadata {
 	bytes token_id = 1;
  	uint32 token_type = 2;
@@ -947,6 +924,38 @@ message TokenMetadata {
     }
 }
 
+// TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs
+message TokenMetadataTokenType1 {
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+	uint32 decimals = 5;
+    bytes mint_baton_txid = 6;   // txn must be confirmed?
+    uint32 mint_baton_vout = 7;
+}
+
+// TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs
+message TokenMetadataNFT1Group {
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+	uint32 decimals = 5;
+    bytes mint_baton_txid = 6;   // txn must be confirmed?
+    uint32 mint_baton_vout = 7;
+}
+
+// TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs
+message TokenMetadataNFT1Child {
+    bytes token_ticker = 1;
+	bytes token_name = 2;
+	bytes token_document_url = 3;
+	bytes token_document_hash = 4;
+    bytes group_id = 5;
+}
+
+// SlpRequiredBurn is used by clients to allow token burning
 message SlpRequiredBurn {
     Transaction.Input.Outpoint outpoint = 1;
     bytes token_id = 2;
