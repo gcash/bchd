@@ -2734,9 +2734,17 @@ func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetada
 		return err
 	})
 
-	var mintBatonHash []byte
+	// Mint baton hash and NFT Group ID will be nil until the transaction is confirmed,
+	// so we need to check this condition before taking a slice.
+	var (
+		mintBatonHash []byte
+		nftGroupID    []byte
+	)
 	if dbTm.MintBatonHash != nil {
 		mintBatonHash = dbTm.MintBatonHash[:]
+	}
+	if dbTm.NftGroupID != nil {
+		nftGroupID = dbTm.NftGroupID[:]
 	}
 
 	switch slpMsg.TokenType {
@@ -2759,7 +2767,7 @@ func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetada
 				TokenName:         slpMsg.Data.(v1parser.SlpGenesis).Name,
 				TokenDocumentUrl:  slpMsg.Data.(v1parser.SlpGenesis).DocumentURI,
 				TokenDocumentHash: slpMsg.Data.(v1parser.SlpGenesis).DocumentHash,
-				GroupId:           dbTm.NftGroupID[:],
+				GroupId:           nftGroupID,
 			},
 		}
 	case v1parser.TokenTypeNft1Group81:
