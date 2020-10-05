@@ -692,11 +692,11 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			tokenID, err := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "a unknown problem occured when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
+				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 			}
 			tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "a unknown problem occured when building token metadata: %v", err)
+				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when building token metadata: %v", err)
 			}
 		}
 
@@ -735,7 +735,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, err := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "a unknown problem occured when parsing token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			return nil, status.Errorf(codes.Internal, "a unknown problem occurred when parsing token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
 		}
 		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 		if err != nil {
