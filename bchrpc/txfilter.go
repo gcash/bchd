@@ -166,7 +166,6 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := goslp.DecodeAddress(addrStr, params, true)
 		if err != nil {
-			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
 		}
 		f.AddAddress(addr)
@@ -211,7 +210,6 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := goslp.DecodeAddress(addrStr, params, true)
 		if err != nil {
-			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
 		f.RemoveAddress(addr)

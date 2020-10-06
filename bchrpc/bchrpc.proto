@@ -130,7 +130,6 @@ service bchrpc {
     // grpc-web.
     //
     // **Requires TxIndex to receive input metadata**
-    // TODO: Add slp metadata similar to "SubscribeTransactions"
     rpc SubscribeTransactionStream(stream SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // SubscribeBlocks creates a subscription for notifications of new blocks being

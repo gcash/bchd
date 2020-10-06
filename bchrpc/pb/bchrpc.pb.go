@@ -172,32 +172,8 @@ func (GetBlockchainInfoResponse_BitcoinNet) EnumDescriptor() ([]byte, []int) {
 type BlockNotification_Type int32
 
 const (
-	// Live public network with monetary value.
-	GetBlockchainInfoResponse_MAINNET GetBlockchainInfoResponse_BitcoinNet = 0
-	// An isolated environment for automated testing.
-	GetBlockchainInfoResponse_REGTEST GetBlockchainInfoResponse_BitcoinNet = 1
-	// A public environment where monetary value is agreed to be zero,
-	// and some checks for transaction conformity are disabled.
-	GetBlockchainInfoResponse_TESTNET3 GetBlockchainInfoResponse_BitcoinNet = 2
-	// Private testnets for large scale simulations (or stress testing),
-	// where a specified list of nodes is used, rather than node discovery.
-	GetBlockchainInfoResponse_SIMNET GetBlockchainInfoResponse_BitcoinNet = 3
-)
-
-// Enum value maps for GetBlockchainInfoResponse_BitcoinNet.
-var (
-	GetBlockchainInfoResponse_BitcoinNet_name = map[int32]string{
-		0: "MAINNET",
-		1: "REGTEST",
-		2: "TESTNET3",
-		3: "SIMNET",
-	}
-	GetBlockchainInfoResponse_BitcoinNet_value = map[string]int32{
-		"MAINNET":  0,
-		"REGTEST":  1,
-		"TESTNET3": 2,
-		"SIMNET":   3,
-	}
+	BlockNotification_CONNECTED    BlockNotification_Type = 0
+	BlockNotification_DISCONNECTED BlockNotification_Type = 1
 )
 
 // Enum value maps for BlockNotification_Type.
@@ -784,6 +760,7 @@ func (x *GetBlockInfoRequest) GetHash() []byte {
 	if x, ok := x.GetHashOrHeight().(*GetBlockInfoRequest_Hash); ok {
 		return x.Hash
 	}
+	return nil
 }
 
 func (x *GetBlockInfoRequest) GetHeight() int32 {
@@ -3327,35 +3304,9 @@ func (x *BlockNotification) GetType() BlockNotification_Type {
 	return BlockNotification_CONNECTED
 }
 
-// Deprecated: Use GetParsedSlpScriptResponse.ProtoReflect.Descriptor instead.
-func (*GetParsedSlpScriptResponse) Descriptor() ([]byte, []int) {
-	return file_bchrpc_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *GetParsedSlpScriptResponse) GetParsingError() string {
-	if x != nil {
-		return x.ParsingError
-	}
-	return ""
-}
-
-func (x *GetParsedSlpScriptResponse) GetTokenId() []byte {
-	if x != nil {
-		return x.TokenId
-	}
-	return nil
-}
-
-func (x *GetParsedSlpScriptResponse) GetType() SlpVersionType {
-	if x != nil {
-		return x.Type
-	}
-	return SlpVersionType_NON_SLP
-}
-
-func (m *GetParsedSlpScriptResponse) GetSlpMetadata() isGetParsedSlpScriptResponse_SlpMetadata {
+func (m *BlockNotification) GetBlock() isBlockNotification_Block {
 	if m != nil {
-		return m.SlpMetadata
+		return m.Block
 	}
 	return nil
 }
@@ -5199,7 +5150,7 @@ func (x *SlpRequiredBurn) GetTokenType() uint32 {
 	if x != nil {
 		return x.TokenType
 	}
-	return nil
+	return 0
 }
 
 func (m *SlpRequiredBurn) GetBurnIntention() isSlpRequiredBurn_BurnIntention {
@@ -5213,14 +5164,14 @@ func (x *SlpRequiredBurn) GetAmount() uint64 {
 	if x, ok := x.GetBurnIntention().(*SlpRequiredBurn_Amount); ok {
 		return x.Amount
 	}
-	return nil
+	return 0
 }
 
 func (x *SlpRequiredBurn) GetMintBatonVout() uint32 {
 	if x, ok := x.GetBurnIntention().(*SlpRequiredBurn_MintBatonVout); ok {
 		return x.MintBatonVout
 	}
-	return nil
+	return 0
 }
 
 type isSlpRequiredBurn_BurnIntention interface {
@@ -5461,7 +5412,7 @@ func (x *GetTrustedSlpValidationResponse_ValidityResult) GetTokenType() uint32 {
 	if x != nil {
 		return x.TokenType
 	}
-	return false
+	return 0
 }
 
 func (m *GetTrustedSlpValidationResponse_ValidityResult) GetValidityResultType() isGetTrustedSlpValidationResponse_ValidityResult_ValidityResultType {
@@ -5666,7 +5617,7 @@ func (x *Transaction_Input) GetSignatureScript() []byte {
 	if x != nil {
 		return x.SignatureScript
 	}
-	return mi.MessageOf(x)
+	return nil
 }
 
 func (x *Transaction_Input) GetSequence() uint32 {
@@ -5680,7 +5631,7 @@ func (x *Transaction_Input) GetValue() int64 {
 	if x != nil {
 		return x.Value
 	}
-	return nil
+	return 0
 }
 
 func (x *Transaction_Input) GetPreviousScript() []byte {
@@ -8041,7 +7992,6 @@ type BchrpcClient interface {
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
-	// TODO: Add slp metadata similar to "SubscribeTransactions"
 	SubscribeTransactionStream(ctx context.Context, opts ...grpc.CallOption) (Bchrpc_SubscribeTransactionStreamClient, error)
 	// SubscribeBlocks creates a subscription for notifications of new blocks being
 	// connected to the blockchain or blocks being disconnected.
@@ -8441,7 +8391,6 @@ type BchrpcServer interface {
 	// grpc-web.
 	//
 	// **Requires TxIndex to receive input metadata**
-	// TODO: Add slp metadata similar to "SubscribeTransactions"
 	SubscribeTransactionStream(Bchrpc_SubscribeTransactionStreamServer) error
 	// SubscribeBlocks creates a subscription for notifications of new blocks being
 	// connected to the blockchain or blocks being disconnected.

@@ -803,18 +803,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
 	if err != nil {
-		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
 	startHeight := int32(0)
@@ -899,18 +888,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
 	if err != nil {
-		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
 	startHeight := int32(0)
@@ -964,18 +942,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	// Attempt to decode the supplied address.
 	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
 	if err != nil {
-		addr, err = goslp.DecodeAddress(req.Address, s.chainParams)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid address %s", err.Error()))
-		}
-		switch addr.(type) {
-		case *goslp.AddressPubKeyHash:
-			hash := addr.(*goslp.AddressPubKeyHash).Hash160()
-			addr, _ = bchutil.NewAddressPubKeyHash(hash[:], s.chainParams)
-		case *goslp.AddressScriptHash:
-			hash := addr.(*goslp.AddressScriptHash).Hash160()
-			addr, _ = bchutil.NewAddressScriptHash(hash[:], s.chainParams)
-		}
+		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
