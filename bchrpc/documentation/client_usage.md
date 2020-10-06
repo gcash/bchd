@@ -8,7 +8,7 @@ for the JVM, F# for the CLR, etc.).  Exact instructions differ slightly
 depending on the language being used, but the general process is the same for
 each.  In short summary, to call RPC server methods, a client must:
 
-1. Generate the language-specific client bindings using the `protoc` compiler and [bchrpc.proto](.../bchrpc.proto)
+1. Generate the language-specific client bindings using the `protoc` compiler and [bchrpc.proto](../bchrpc.proto)
 2. Import or include the gRPC dependency
 3. (Optional) Wrap the client bindings with application-specific types
 4. Open a gRPC channel using the server's self-signed TLS certificate or a valid TLS certificate.

@@ -78,9 +78,9 @@ func (s *SlpCache) Get(hash *chainhash.Hash) *SlpIndexEntry {
 	s.RLock()
 	defer s.RUnlock()
 
-	entry, _ := s.mempoolEntries[*hash]
+	entry := s.mempoolEntries[*hash]
 	if entry == nil {
-		entry, _ = s.tempEntries[*hash]
+		entry = s.tempEntries[*hash]
 	}
 
 	return entry

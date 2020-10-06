@@ -244,7 +244,12 @@ func (m *Manager) maybeCreateIndexes(dbTx database.Tx) error {
 
 		// Set the tip for the index to values which represent an
 		// uninitialized index.
-		err := dbPutIndexerTip(dbTx, idxKey, &chainhash.Hash{}, -1)
+		idxStartHash, idxStartHeight := indexer.StartBlock()
+		if idxStartHash == nil {
+			idxStartHash = &chainhash.Hash{}
+			idxStartHeight = -1
+		}
+		err := dbPutIndexerTip(dbTx, idxKey, idxStartHash, idxStartHeight)
 		if err != nil {
 			return err
 		}
@@ -415,7 +420,6 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			if err != nil {
 				return err
 			}
-
 			log.Debugf("Current %s tip (height %d, hash %v)",
 				indexer.Name(), height, hash)
 			indexerHeights[i] = height
@@ -545,6 +549,13 @@ func (m *Manager) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	// Call each of the currently active optional indexes with the block
 	// being connected so they can update accordingly.
 	for _, index := range m.enabledIndexes {
+
+		// Check the specified start block for the indexer
+		_, idxStartHeight := index.StartBlock()
+		if block.Height() <= idxStartHeight {
+			return nil
+		}
+
 		err := dbIndexConnectBlock(dbTx, index, block, stxos)
 		if err != nil {
 			return err

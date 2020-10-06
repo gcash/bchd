@@ -10,6 +10,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/simpleledgerinc/goslp"
 	"github.com/simpleledgerinc/goslp/v1parser"
 	"golang.org/x/crypto/ripemd160"
 )
@@ -163,7 +164,7 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 
 	// Interpret and add addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := bchutil.DecodeAddress(addrStr, params)
+		addr, err := goslp.DecodeAddress(addrStr, params, true)
 		if err != nil {
 			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
@@ -208,7 +209,7 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 
 	// Interpret and remove addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := bchutil.DecodeAddress(addrStr, params)
+		addr, err := goslp.DecodeAddress(addrStr, params, true)
 		if err != nil {
 			// TODO: handle addresses in slpAddr format
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
@@ -242,27 +243,29 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 
 	matched := f.matchAll
 
-	slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
-	if err == nil {
-		if f.matchAllSlp {
-			matched = true
-		} else {
-			var tokenID [32]byte
-			if slpMsg.TransactionType == "SEND" {
-				copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
-			} else if slpMsg.TransactionType == "MINT" {
-				copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
-			} else if slpMsg.TransactionType == "GENESIS" {
-				txnHash := tx.Hash().CloneBytes()
-				var txid []byte
-				for i := len(txnHash) - 1; i >= 0; i-- {
-					txid = append(txid, txnHash[i])
-				}
-				copy(tokenID[:], txid)
-			}
-			_, ok := f.slpTokenIds[tokenID]
-			if ok {
+	if len(tx.MsgTx().TxOut) > 0 {
+		slpMsg, _ := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+		if slpMsg != nil {
+			if f.matchAllSlp {
 				matched = true
+			} else {
+				var tokenID [32]byte
+				if slpMsg.TransactionType == v1parser.TransactionTypeSend {
+					copy(tokenID[:], slpMsg.Data.(v1parser.SlpSend).TokenID)
+				} else if slpMsg.TransactionType == v1parser.TransactionTypeMint {
+					copy(tokenID[:], slpMsg.Data.(v1parser.SlpMint).TokenID)
+				} else if slpMsg.TransactionType == v1parser.TransactionTypeGenesis {
+					txnHash := tx.Hash().CloneBytes()
+					var txid []byte
+					for i := len(txnHash) - 1; i >= 0; i-- {
+						txid = append(txid, txnHash[i])
+					}
+					copy(tokenID[:], txid)
+				}
+				_, ok := f.slpTokenIds[tokenID]
+				if ok {
+					matched = true
+				}
 			}
 		}
 	}

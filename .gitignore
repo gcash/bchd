@@ -4,6 +4,7 @@
 # Binaries
 bchd
 bchctl
+gw
 
 # Databases
 btcd.db
@@ -41,3 +42,4 @@ _testmain.go
 *.iml
 
 node_modules/
+bchrpc/pb-js/yarn.lock
