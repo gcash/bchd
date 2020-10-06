@@ -879,7 +879,7 @@ func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
 		return err
 	}
 
-	return dropIndex(db, slpIndexKey, slpIndexName, interrupt)
+	return nil
 }
 
 // TopologicallySortTxs sorts a list of transactions into topological order.
