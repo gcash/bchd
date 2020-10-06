@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 	"net/http"
 
 	"github.com/golang/glog"
@@ -48,7 +49,10 @@ func run() error {
 	// TODO: consider serving static files for swagger-ui
 
 	// Start HTTP server (and proxy calls to gRPC server endpoint)
-	return http.ListenAndServe(":"+*proxyPort, mux)
+	// Apply middlewares to modify all responses. Our middleware run from inner to outer function
+	// Example: Func2(Func1(mux))
+	// To make a middleware run first, you must inside call next.ServeHTTP() before modifying the response.
+	return http.ListenAndServe(":"+*proxyPort, middlewares.CorsMiddleware(middlewares.NoCacheMiddleware(mux)))
 }
 
 func main() {
