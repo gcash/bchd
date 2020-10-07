@@ -2,10 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -20,15 +23,12 @@ var (
 	proxyPort          = flag.String("port", "8080", "port for the proxy server")
 )
 
-func run() error {
+func serveHttp(ctx context.Context) error {
 	var err error
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	// Register gRPC server endpoint
 	// Note: Make sure the gRPC server is running properly and accessible
-	mux := runtime.NewServeMux()
+	grpcGateway := runtime.NewServeMux()
 	var creds credentials.TransportCredentials
 	if *grpcRootCertPath != "" {
 		creds, err = credentials.NewClientTLSFromFile(*grpcRootCertPath, "")
@@ -39,25 +39,52 @@ func run() error {
 		creds = credentials.NewTLS(nil)
 	}
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithMaxMsgSize(4294967295)}
-	err = gw.RegisterBchrpcHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
+	err = gw.RegisterBchrpcHandlerFromEndpoint(ctx, grpcGateway, *grpcServerEndpoint, opts)
 	if err != nil {
 		return err
 	}
 
-	// TODO: consider serving static files for swagger-ui
+	router := mux.NewRouter()
 
-	// Start HTTP server (and proxy calls to gRPC server endpoint)
-	// Apply middlewares to modify all responses. Our middleware run from inner to outer function
-	// Example: Func2(Func1(mux))
-	// To make a middleware run first, you must inside call next.ServeHTTP() before modifying the response.
-	return http.ListenAndServe(":"+*proxyPort, middlewares.CorsMiddleware(middlewares.NoCacheMiddleware(mux)))
+	// serve static files for swagger-ui
+	fileServer := http.FileServer(http.Dir("./web/"))
+	router.PathPrefix("/").Handler(fileServer).Methods("GET")
+
+	// mount the gRPC router + middlewares on /v1
+	grpcGatewayRouter := router.PathPrefix("/v1").Subrouter()
+	grpcGatewayRouter.Use(middlewares.NoCacheMiddleware)
+	grpcGatewayRouter.Use(middlewares.CorsMiddleware)
+	grpcGatewayRouter.NewRoute().HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// limit reading requests to max 50 MB
+		r.Body = http.MaxBytesReader(w, r.Body, 50*1024*1024)
+		grpcGateway.ServeHTTP(w, r) // this calls the gRPC server endpoint
+	})
+
+	// Start HTTP server
+	server := &http.Server{
+		Addr:         ":" + *proxyPort,
+		Handler:      router,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	fmt.Printf("Serving HTTP at port %s\n", *proxyPort)
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		glog.Errorf("Error serving HTTP %+v", err)
+	}
+
+	return err
 }
 
 func main() {
 	flag.Parse()
 	defer glog.Flush()
 
-	if err := run(); err != nil {
+	// Create the app context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := serveHttp(ctx); err != nil {
 		glog.Fatal(err)
 	}
 }
