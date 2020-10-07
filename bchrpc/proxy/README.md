@@ -7,16 +7,16 @@ A proxy server can be used when a client application is not able to connect to B
 
 `$ make`
 
-This will generate all of the files required for the gateway proxy and also the web files for host swagger API docs.
+This will generate all of the files required for the gateway proxy and also the files for the swagger API docs.
 
 
 ## Run the Proxy
 
-`$ ./gw -port 8080 -bchd-grpc-url <BCHD gRPC server url> -bchd-grpc-certpath <path to self-signed cert>`
+`$ ./gw -port 8080 -bchd-grpc-url <BCHD gRPC server url>:8335 -bchd-grpc-certpath <path to self-signed cert>`
 
 If you are using a certificate signed by a CA then you do not need to specify a value for `-bchd-grpc-certpath`.
 
 
 ## Swagger API Docs
 
-Currently a separate static server (e.g. nginx) needs to be used to host the swagger files located in the `./web` directory.
+The proxy server will also host the static swagger files located in the `./web` directory.

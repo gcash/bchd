@@ -1,0 +1,12 @@
+[Unit]
+Description=BCHD-grpc-gateway
+
+[Service]
+WorkingDirectory=/path/to/bchd/bchrpc/proxy
+ExecStart=/path/to/bchd/bchrpc/proxy/gw -bchd-grpc-url bchd.yourdomain.com:8335
+Type=simple
+Restart=on-failure
+KillMode=process
+
+[Install]
+WantedBy=default.target
