@@ -14,6 +14,7 @@ require (
 	github.com/gcash/bchutil v0.0.0-20200506001747-c2894cd54b33
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.4.2
+	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.14.7
 	github.com/improbable-eng/grpc-web v0.13.0
