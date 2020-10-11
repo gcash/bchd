@@ -593,13 +593,13 @@ func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *Burned
 	return true, nil
 }
 
-// GetSlpIndexEntryHandler ...
+// GetSlpIndexEntryHandler provides a function interface for CheckSlpTx
 type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
 
-// AddTxIndexEntryHandler ...
+// AddTxIndexEntryHandler provides a function interface for CheckSlpTx
 type AddTxIndexEntryHandler func(*wire.MsgTx, *v1parser.ParseResult, *chainhash.Hash) error
 
-// CheckSlpTx checks a transaction for validity and adds valid txns to the db
+// CheckSlpTx checks a transaction for validity and adds valid transactions to the db
 func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxIndexEntry AddTxIndexEntryHandler) (bool, []*BurnedInput, error) {
 
 	if len(tx.TxOut) < 1 {
@@ -774,7 +774,7 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 	return entry, nil
 }
 
-// GetTokenMetadata ...
+// GetTokenMetadata fetches token ID hash and other token metadata properties for the 4 byte tokenID
 func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenMetadata, error) {
 	serializedID := make([]byte, 4)
 	byteOrder.PutUint32(serializedID, tokenID)
