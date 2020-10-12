@@ -122,8 +122,11 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 	// Add or update token metadata by uint32 tokenID mapping to the index.
 	tmIndex := meta.Bucket(tokenMetadataByIDIndexBucketName)
 	tokenMetadata := make([]byte, 32+2+32+4)
+
 	copy(tokenMetadata[0:], metadata.TokenID[:])
+
 	byteOrder.PutUint16(tokenMetadata[32:], metadata.SlpVersion)
+
 	if metadata.NftGroupID != nil {
 		copy(tokenMetadata[34:], metadata.NftGroupID[:])
 		tokenMetadata = tokenMetadata[:66]
@@ -165,6 +168,10 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to create hash from %s", hex.EncodeToString(serializedData[0:32]))
 	}
+	if len(serializedData) < 34 {
+		return &TokenMetadata{TokenID: tokenIDHash}, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
+	}
+
 	slpVersion := byteOrder.Uint16(serializedData[32:34])
 
 	var (
@@ -237,7 +244,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		nft1GroupID               *chainhash.Hash
 	)
 
-	if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpGenesis); ok {
+	switch entry := entryInfo.slpMsg.Data.(type) {
+	case v1parser.SlpGenesis:
 		idx.curTokenID++
 		tokenMetadataNeedsUpdated = true
 		if entry.MintBatonVout > 1 {
@@ -253,7 +261,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 			}
 			nft1GroupID = &parentTokenEntry.TokenIDHash
 		}
-	} else if entry, ok := entryInfo.slpMsg.Data.(v1parser.SlpMint); ok {
+	case v1parser.SlpMint:
 		tokenMetadataNeedsUpdated = true
 		if entry.MintBatonVout > 1 {
 			mintBatonVout = uint32(entry.MintBatonVout)
@@ -393,8 +401,11 @@ func (idx *SlpIndex) Init() error {
 		testTokenID := uint32(1)
 		increment := uint32(1)
 		for {
-			_, err := dbFetchTokenMetadataByID(dbTx, testTokenID)
+			md, err := dbFetchTokenMetadataByID(dbTx, testTokenID)
 			if err != nil {
+				if md != nil {
+					return fmt.Errorf("could not init slp index: %v", err)
+				}
 				nextUnknown = testTokenID
 				break
 			}
