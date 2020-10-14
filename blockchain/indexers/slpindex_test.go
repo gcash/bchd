@@ -73,7 +73,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 			entry := &SlpIndexEntry{
 				TokenIDHash:    *tokenIDHash,
 				TokenID:        0,
-				SlpVersionType: uint16(slpMsg.TokenType),
+				SlpVersionType: slpMsg.TokenType(),
 				SlpOpReturn:    tx.TxOut[0].PkScript,
 			}
 			hash := tx.TxHash()
@@ -91,7 +91,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 			return slpEntry, nil
 		}
 
-		putTxIndexEntry := func(tx *wire.MsgTx, slpMsg *v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 			return nil
 		}
 
