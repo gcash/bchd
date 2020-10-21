@@ -21,10 +21,10 @@ var (
 	// the overhead of creating it multiple times.
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 
-	// referenceNode is the node used for the asert difficult algorithm. This is the
+	// anchorNode is the node used for the asert difficult algorithm. This is the
 	// block just prior to the fork. After the fork this will be hardcoded, but for
 	// now it will be set at runtime.
-	referenceNode *blockNode
+	anchorNode *blockNode
 )
 
 const (
@@ -39,11 +39,14 @@ const (
 	// 10 minutes between blocks.
 	idealBlockTime = 600
 
-	// tau is used by the Asert difficult adjustment algorithm. It is 2 days in seconds.
-	tau = 172800
+	// halflife is used by the Asert difficult adjustment algorithm. It is 2 days in seconds.
+	halflife = 172800
 
 	// radix is used by the Asert difficulty adjustment algorithm.
 	radix = 65536
+
+	// rbits is the number of bits after the radix for fixed-point math
+	rbits = 16
 )
 
 // The DifficultyAlgorithm specifies which algorithm to use and is passed into
@@ -284,7 +287,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	case DifficultyDAA:
 		return b.calcDAARequiredDifficulty(lastNode, newBlockTime)
 	case DifficultyAsert:
-		if referenceNode == nil {
+		if anchorNode == nil {
 			// If block 1 has a median timestamp less than the activation time and..
 			// block 2 has a median timestamp greater than or equal to the activation time,
 			// then block 3 is the first block to contain the new rules and block 2 is the
@@ -292,18 +295,18 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 			node := b.bestChain.Tip()
 			for {
 				if uint64(node.CalcPastMedianTime().Unix()) < b.chainParams.AxionActivationTime {
-					referenceNode = b.bestChain.next(node)
+					anchorNode = b.bestChain.next(node)
 					break
 				}
 				node = node.parent
 			}
 		}
-		return b.calcAsertRequiredDifficulty(lastNode, referenceNode.height, referenceNode.parent.timestamp, referenceNode.bits, lastNode.height+1, newBlockTime.Unix())
+		return b.calcAsertRequiredDifficulty(lastNode, anchorNode.height, anchorNode.parent.timestamp, anchorNode.bits, lastNode.height+1, newBlockTime.Unix())
 	}
 	return 0, errors.New("unknown difficulty algorithm")
 }
 
-func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceBlockHeight int32, anchorBlockTime int64, referenceBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
+func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBlockHeight int32, anchorBlockTime int64, anchorBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
 	// For networks that support it, allow special reduction of the
 	// required difficulty once too much time has elapsed without
 	// mining a block.
@@ -318,48 +321,52 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, referenceB
 		}
 	}
 
-	target := CompactToBig(referenceBlockBits)
+	target := CompactToBig(anchorBlockBits)
 
 	tDelta := evalBlockTime - anchorBlockTime
-	hDelta := evalBlockHeight - referenceBlockHeight
+	hDelta := evalBlockHeight - anchorBlockHeight
+	bigRadix := big.NewInt(radix)
 
-	exponent := ((tDelta - int64(idealBlockTime)*int64(hDelta+1)) * radix) / tau
+	// exponent = int(((time_diff - IDEAL_BLOCK_TIME * (height_diff + 1)) * RADIX) / HALFLIFE)
+	exponent := new(big.Int).Sub(big.NewInt(tDelta), new(big.Int).Mul(big.NewInt(int64(idealBlockTime)), new(big.Int).Add(big.NewInt(int64(hDelta)), big.NewInt(1))))
+	exponent.Mul(exponent, bigRadix)
+	exponent.Quo(exponent, big.NewInt(halflife))
 
-	numShifts := exponent >> 16
+	// shifts = exponent >> RBITS
+	shifts := new(big.Int).Rsh(exponent, rbits)
 
-	if numShifts < 0 {
-		target = target.Rsh(target, uint(-numShifts))
+	// exponent -= shifts * RADIX
+	exponent.Sub(exponent, new(big.Int).Mul(shifts, bigRadix))
+
+	//  target *= RADIX + ((195766423245049 * exponent + 971821376 * exponent**2 + 5127 * exponent**3 + 2**47) >> (RBITS * 3))
+	factor := new(big.Int).Mul(big.NewInt(195766423245049), exponent)
+	factor.Add(factor, new(big.Int).Mul(big.NewInt(971821376), new(big.Int).Exp(exponent, big.NewInt(2), nil)))
+	factor.Add(factor, new(big.Int).Mul(big.NewInt(5127), new(big.Int).Exp(exponent, big.NewInt(3), nil)))
+	factor.Add(factor, new(big.Int).Exp(big.NewInt(2), big.NewInt(47), nil))
+	factor.Rsh(factor, rbits*3)
+
+	target.Mul(target, new(big.Int).Add(bigRadix, factor))
+
+	// if shifts < 0: target >>= -shifts else: target <<= shifts
+	if shifts.Cmp(big.NewInt(0)) < 0 {
+		target = target.Rsh(target, uint(-shifts.Int64()))
 	} else {
-		target = target.Lsh(target, uint(numShifts))
+		target = target.Lsh(target, uint(shifts.Int64()))
 	}
 
-	exponent = exponent - (numShifts * radix)
+	// target >>= RBITS
+	target.Rsh(target, rbits)
 
-	// If target is zero or greater than the POW limit.
-	if target.Cmp(big.NewInt(0)) == 0 || target.Cmp(b.chainParams.PowLimit) > 0 {
-		if numShifts < 0 {
-			// Return hardest target
-			return BigToCompact(big.NewInt(1)), nil
-		}
+	// If target is zero
+	if target.Cmp(big.NewInt(0)) == 0 {
+		return BigToCompact(big.NewInt(1)), nil
+	}
+
+	if target.Cmp(b.chainParams.PowLimit) > 0 {
 		// Return softest target
 		return b.chainParams.PowLimitBits, nil
 	}
 
-	// factor = (195766423245049*exponent + 971821376*exponent**2 + 5127*exponent**3 + 2**47)>>48
-	bigExp := big.NewInt(exponent)
-	factor := new(big.Int).Mul(big.NewInt(195766423245049), bigExp)
-	factor.Add(factor, new(big.Int).Mul(big.NewInt(971821376), new(big.Int).Exp(bigExp, big.NewInt(2), nil)))
-	factor.Add(factor, new(big.Int).Mul(big.NewInt(5127), new(big.Int).Exp(bigExp, big.NewInt(3), nil)))
-	factor.Add(factor, new(big.Int).Exp(big.NewInt(2), big.NewInt(47), nil))
-	factor.Rsh(factor, 48)
-
-	// target += (target * factor) >> 16
-	target = target.Add(target, new(big.Int).Rsh(new(big.Int).Mul(target, factor), 16))
-
-	// clip again if above minimum target (too easy)
-	if target.Cmp(b.chainParams.PowLimit) > 0 {
-		target.Set(b.chainParams.PowLimit)
-	}
 	return BigToCompact(target), nil
 }
 
