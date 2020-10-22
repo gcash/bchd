@@ -189,6 +189,10 @@ type Params struct {
 	// NOTE: This only applies if ReduceMinDifficulty is true.
 	MinDiffReductionTime time.Duration
 
+	// AsertDifficultyHalflife the halflife parameter used by the asert
+	// difficulty adjustment algorithm for the given network.
+	AsertDifficultyHalflife int64
+
 	// GenerateSupported specifies whether or not CPU mining is allowed.
 	GenerateSupported bool
 
@@ -270,6 +274,7 @@ var MainNetParams = Params{
 	ReduceMinDifficulty:      false,
 	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     0,
+	AsertDifficultyHalflife:  2 * 24 * 3600, // 2 days in seconds
 	GenerateSupported:        false,
 
 	// Checkpoints ordered from oldest to newest.
@@ -415,6 +420,7 @@ var RegressionNetParams = Params{
 	ReduceMinDifficulty:      true,
 	NoDifficultyAdjustment:   true,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:  3600,             // 1 hour
 	GenerateSupported:        true,
 
 	// Checkpoints ordered from oldest to newest.
@@ -498,6 +504,7 @@ var TestNet3Params = Params{
 	ReduceMinDifficulty:      true,
 	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:  3600,             // 1 hour
 	GenerateSupported:        false,
 
 	// Checkpoints ordered from oldest to newest.

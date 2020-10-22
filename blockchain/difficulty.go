@@ -39,9 +39,6 @@ const (
 	// 10 minutes between blocks.
 	idealBlockTime = 600
 
-	// halflife is used by the Asert difficult adjustment algorithm. It is 2 days in seconds.
-	halflife = 172800
-
 	// radix is used by the Asert difficulty adjustment algorithm.
 	radix = 65536
 
@@ -77,12 +74,12 @@ const (
 // should be used when validating a block at the given height.
 func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(prevNode *blockNode) DifficultyAlgorithm {
 	height := prevNode.height + 1
-	if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
+	if uint64(prevNode.CalcPastMedianTime().Unix()) >= b.chainParams.AxionActivationTime {
+		return DifficultyAsert
+	} else if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
 		return DifficultyEDA
 	} else if height > b.chainParams.DaaForkHeight {
 		return DifficultyDAA
-	} else if uint64(prevNode.CalcPastMedianTime().Unix()) >= b.chainParams.AxionActivationTime {
-		return DifficultyAsert
 	}
 	return DifficultyLegacy
 }
@@ -301,12 +298,12 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 				node = node.parent
 			}
 		}
-		return b.calcAsertRequiredDifficulty(lastNode, anchorNode.height, anchorNode.parent.timestamp, anchorNode.bits, lastNode.height+1, newBlockTime.Unix())
+		return b.calcAsertRequiredDifficulty(lastNode, anchorNode.height, anchorNode.parent.timestamp, anchorNode.bits, newBlockTime)
 	}
 	return 0, errors.New("unknown difficulty algorithm")
 }
 
-func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBlockHeight int32, anchorBlockTime int64, anchorBlockBits uint32, evalBlockHeight int32, evalBlockTime int64) (uint32, error) {
+func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBlockHeight int32, anchorBlockTime int64, anchorBlockBits uint32, evalTimestamp time.Time) (uint32, error) {
 	// For networks that support it, allow special reduction of the
 	// required difficulty once too much time has elapsed without
 	// mining a block.
@@ -316,21 +313,21 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBloc
 		reductionTime := int64(b.chainParams.MinDiffReductionTime /
 			time.Second)
 		allowMinTime := lastNode.timestamp + reductionTime
-		if evalBlockTime > allowMinTime {
+		if evalTimestamp.Unix() > allowMinTime {
 			return b.chainParams.PowLimitBits, nil
 		}
 	}
 
 	target := CompactToBig(anchorBlockBits)
 
-	tDelta := evalBlockTime - anchorBlockTime
-	hDelta := evalBlockHeight - anchorBlockHeight
+	tDelta := lastNode.timestamp - anchorBlockTime
+	hDelta := lastNode.height - anchorBlockHeight
 	bigRadix := big.NewInt(radix)
 
 	// exponent = int(((time_diff - IDEAL_BLOCK_TIME * (height_diff + 1)) * RADIX) / HALFLIFE)
 	exponent := new(big.Int).Sub(big.NewInt(tDelta), new(big.Int).Mul(big.NewInt(int64(idealBlockTime)), new(big.Int).Add(big.NewInt(int64(hDelta)), big.NewInt(1))))
 	exponent.Mul(exponent, bigRadix)
-	exponent.Quo(exponent, big.NewInt(halflife))
+	exponent.Quo(exponent, big.NewInt(b.chainParams.AsertDifficultyHalflife))
 
 	// shifts = exponent >> RBITS
 	shifts := new(big.Int).Rsh(exponent, rbits)

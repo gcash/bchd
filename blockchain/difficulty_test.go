@@ -8,6 +8,7 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"math/big"
 	"testing"
+	"time"
 )
 
 // TestBigToCompact ensures BigToCompact converts big integers to the expected
@@ -14229,7 +14230,7 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 	b.chainParams.ReduceMinDifficulty = false
 	for _, test := range testVectors {
 		for i, block := range test.blocks {
-			target, err := b.calcAsertRequiredDifficulty(nil, int32(test.anchorHeight), test.anchorTime, test.anchorBits, int32(block.height), block.timestamp)
+			target, err := b.calcAsertRequiredDifficulty(&blockNode{height: int32(block.height), timestamp: block.timestamp}, int32(test.anchorHeight), test.anchorTime, test.anchorBits, time.Unix(block.timestamp, 0))
 			if err != nil {
 				t.Errorf("Run %d, block %d: %s", test.run, i, err)
 			}
