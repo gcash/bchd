@@ -596,6 +596,7 @@ var SimNetParams = Params{
 	ReduceMinDifficulty:         true,
 	NoDifficultyAdjustment:      true,
 	MinDiffReductionTime:        time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:     3600,             // 1 hour
 	GenerateSupported:           true,
 
 	// Checkpoints ordered from oldest to newest.
