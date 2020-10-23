@@ -140,12 +140,15 @@ type Params struct {
 
 	// The following are the heights at which the Bitcoin Cash specific forks
 	// became active.
-	UahfForkHeight              int32 // August 1, 2017 hard fork
-	DaaForkHeight               int32 // November 13, 2017 hard fork
+	UahfForkHeight              int32 // August 1, 2017 hardfork
+	DaaForkHeight               int32 // November 13, 2017 hardfork
 	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
-	GreatWallForkHeight         int32 // May 15, 2019 hard fork
-	GravitonForkHeight          int32 // Nov 15, 2019 hard fork
-	PhononForkHeight            int32 // May 15, 2020 hard fork
+	GreatWallForkHeight         int32 // May 15, 2019 hardfork
+	GravitonForkHeight          int32 // Nov 15, 2019 hardfork
+	PhononForkHeight            int32 // May 15, 2020 hardfork
+
+	// Planned hardforks
+	AxionActivationTime uint64 // Nov 15, 2020 hardfork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -185,6 +188,10 @@ type Params struct {
 	//
 	// NOTE: This only applies if ReduceMinDifficulty is true.
 	MinDiffReductionTime time.Duration
+
+	// AsertDifficultyHalflife the halflife parameter used by the asert
+	// difficulty adjustment algorithm for the given network.
+	AsertDifficultyHalflife int64
 
 	// GenerateSupported specifies whether or not CPU mining is allowed.
 	GenerateSupported bool
@@ -257,6 +264,8 @@ var MainNetParams = Params{
 	GravitonForkHeight:          609135, // 0000000000000000026f7ec9e79be2f5bb839f29ebcf734066d4bb9a13f6ea83
 	PhononForkHeight:            635258, // 000000000000000003302c47d01e78f1c86aa3b0e96b066761a5059bc8f5781a
 
+	AxionActivationTime: 1605441600,
+
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -265,6 +274,7 @@ var MainNetParams = Params{
 	ReduceMinDifficulty:      false,
 	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     0,
+	AsertDifficultyHalflife:  2 * 24 * 3600, // 2 days in seconds
 	GenerateSupported:        false,
 
 	// Checkpoints ordered from oldest to newest.
@@ -401,6 +411,8 @@ var RegressionNetParams = Params{
 	MagneticAnonomalyForkHeight: 1000,
 	PhononForkHeight:            1000,
 
+	AxionActivationTime: 1605441600,
+
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
@@ -408,6 +420,7 @@ var RegressionNetParams = Params{
 	ReduceMinDifficulty:      true,
 	NoDifficultyAdjustment:   true,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:  3600,             // 1 hour
 	GenerateSupported:        true,
 
 	// Checkpoints ordered from oldest to newest.
@@ -481,6 +494,8 @@ var TestNet3Params = Params{
 	GravitonForkHeight:          1341711, // 00000000c678f67ea16d5bf803f68ce42991839d13849f77332d6f586f62d421
 	PhononForkHeight:            1378460, // 0000000070f33c64cb94629680fbc57d17bea354a73e693affcb366d023db324
 
+	AxionActivationTime: 1605441600,
+
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -489,6 +504,7 @@ var TestNet3Params = Params{
 	ReduceMinDifficulty:      true,
 	NoDifficultyAdjustment:   false,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:  3600,             // 1 hour
 	GenerateSupported:        false,
 
 	// Checkpoints ordered from oldest to newest.
@@ -580,6 +596,7 @@ var SimNetParams = Params{
 	ReduceMinDifficulty:         true,
 	NoDifficultyAdjustment:      true,
 	MinDiffReductionTime:        time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:     3600,             // 1 hour
 	GenerateSupported:           true,
 
 	// Checkpoints ordered from oldest to newest.
