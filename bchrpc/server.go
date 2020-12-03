@@ -1386,7 +1386,7 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				result.SlpAction = pb.SlpAction_SLP_NFT1_GROUP_SEND
 			}
 		default:
-			panic("trusted validation cannot return result for unknown slp version type")
+			return nil, status.Error(codes.Aborted, "trusted validation cannot return result for unknown slp version type")
 		}
 
 		switch msg := slpMsg.(type) {
