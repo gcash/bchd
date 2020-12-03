@@ -243,9 +243,10 @@ var MainNetParams = Params{
 	DefaultPort: "8333",
 	DNSSeeds: []DNSSeed{
 		{"seed.bchd.cash", true},
-		{"seed.bitcoinabc.org", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
 		{"seed-bch.bitcoinforks.org", true},
+		{"seed.bch.loping.net", true},
+		{"dnsseed.electroncash.de", true},
 	},
 
 	// Chain parameters
@@ -474,8 +475,8 @@ var TestNet3Params = Params{
 	DefaultPort: "18333",
 	DNSSeeds: []DNSSeed{
 		{"testnet-seed.bchd.cash", true},
-		{"testnet-seed.bitcoinabc.org", true},
 		{"testnet-seed-bch.bitcoinforks.org", true},
+		{"seed.tbch.loping.net", true},
 	},
 
 	// Chain parameters
