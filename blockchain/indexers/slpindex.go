@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -57,39 +58,48 @@ var (
 // unique uint32 ID back to the TokenID hash.
 //
 //
+// DB Bucket Variable: "tokenIDByHashIndexBucketName"
 // The serialized format for keys and values in the TokenID hash to ID bucket is:
 //   <hash> = <ID>
 //
 //   Field           Type              Size
+//   -----           -----             -----
 //   TokenID hash    chainhash.Hash    32 bytes
 //   ID              uint32            4 bytes
-//   -----
-//   Total: 36 bytes
 //
+//   Total Item Size: 36 bytes
+//
+//
+// DB Bucket Variable: "tokenMetadataByIDIndexBucketName"
 // The serialized format for keys and values in the ID to TokenID hash bucket is:
 //   <ID> = <token id txid><mint baton hash><uint32>
 //
+//
 //   Field            					Type              Size
+//   -----                              -----             -----
 //   ID               					uint32            4 bytes
 //   TokenID hash                   	chainhash.Hash    32 bytes
 //   slp version	    				uint16            2 bytes
 //   Mint baton hash (or nft group id)  chainhash.Hash    32 bytes (optional)
 //   Mint baton vout  					uint32			  4 bytes  (optional)
-//   -----
-//   Max: 74 bytes max
 //
+//   Max Item Size: 74 bytes
+//   Min Item Size: 36 bytes
+//
+//
+// DB Bucket Variable: "slpIndexKey"
 // The serialized format for the keys and values in the slp index bucket is:
-//
 //   <txhash> = <token ID><slp version><slp op_return>
 //
 //   Field           	Type              Size
+//   -----				-----			  -----
 //   txhash          	chainhash.Hash    32 bytes
 //   token ID        	uint32            4 bytes
 //   slp version	    uint16            2 bytes
-//	 op_return			[]bytes			  typically <220 bytes
-//   -----
-//   Max: 258 bytes (if OP_RETURN is limited to 220 bytes)
-//	 Min: 43 bytes (4 + 2 + 37)
+//	 op_return			[]bytes			  typically < 220 bytes
+//
+//   Max Item Size: 258 bytes (if OP_RETURN is limited to 220 bytes)
+//	 Min Item Size: 43 bytes (4 + 2 + 37)
 //
 //   NOTE: The minimum possible SLP OP_RETURN is 37 bytes, this is empty GENESIS
 //
@@ -854,6 +864,93 @@ func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Has
 	}
 	entry := idx.cache.Get(txHash)
 	return entry != nil
+}
+
+// LoadGraphSearchDb is used to load transactions and associated tokenID
+func (idx *SlpIndex) LoadGraphSearchDb(db map[chainhash.Hash]*chainhash.Hash) error {
+
+	err := idx.db.View(func(dbTx database.Tx) error {
+		tokenIDBucket := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
+		idxBucket := dbTx.Metadata().Bucket(slpIndexKey)
+		idxBucket.ForEach(func(k []byte, v []byte) error {
+			ch, err := chainhash.NewHash(k)
+			if err != nil {
+				return err
+			}
+			tokenIDHash, err := chainhash.NewHash(tokenIDBucket.Get(v[0:4]))
+			if err != nil {
+				return err
+			}
+			db[*ch] = tokenIDHash
+			return nil
+		})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GraphSearchFor performs a graph search for a given transaction hash
+func GraphSearchFor(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wire.MsgTx, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
+	seen := make(map[chainhash.Hash]struct{})
+	txdata := make([][]byte, len(*tokenGraph))
+	i := 0
+
+	// check client validity cache txns are valid
+	for hash := range *validityCache {
+		if _, ok := (*tokenGraph)[hash]; ok != true {
+			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
+		}
+	}
+
+	// perform the recursive graph search
+	err := graphSearchInternal(hash, tokenGraph, &seen, validityCache, &txdata, &i)
+	if err != nil {
+		return nil, err
+	}
+	return txdata[0:i], nil
+}
+
+func graphSearchInternal(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wire.MsgTx, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+
+	// check if txn is valid slp
+	txMsg, ok := (*tokenGraph)[hash]
+	if !ok {
+		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
+	}
+
+	// check seen list
+	if _, ok := (*seen)[hash]; ok {
+		return fmt.Errorf("txn %v already seen in graph search", hash)
+	}
+	(*seen)[hash] = struct{}{}
+
+	// add txn buffer to results
+	txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
+	if err := txMsg.Serialize(txBuf); err != nil {
+		return err
+	}
+	(*txdata)[*counter] = txBuf.Bytes()
+	(*counter)++
+
+	// check exclude txids here, don't return with error
+	if _, ok := (*validityCache)[hash]; ok {
+		log.Debug("skipping valid slp txn provided by client exclude list")
+		return nil
+	}
+
+	// loop through inputs and recurse
+	for _, txn := range txMsg.TxIn {
+		err := graphSearchInternal(txn.PreviousOutPoint.Hash, tokenGraph, seen, validityCache, txdata, counter)
+		if err != nil {
+			log.Debug(err.Error())
+			continue
+		}
+	}
+	return nil
 }
 
 // SlpConfig provides the proper starting height and hash

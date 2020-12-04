@@ -115,3 +115,105 @@ func TestSlpInputUnitTests(t *testing.T) {
 		}
 	}
 }
+
+func TestSlpGraphSearch(t *testing.T) {
+	inputTestsFile, err := os.Open("slpindex_test_graphsearch.json")
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	data, err := ioutil.ReadAll(inputTestsFile)
+	defer inputTestsFile.Close()
+
+	type TestCase struct {
+		Description         string
+		TokenGraph          []string
+		SearchTxid          string
+		ClientValidityCache []string
+		ExpectedResultTxids []string
+	}
+	var tests []TestCase
+	err = json.Unmarshal(data, &tests)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	// slpindex_test_graphsearch.json contains txids, they need to be reversed for BCHD
+	reverseTxidFromString := func(txidHex string) (*chainhash.Hash, error) {
+		txid, err := chainhash.NewHashFromStr(txidHex)
+		if err != nil {
+			return nil, err
+		}
+		return txid, nil
+	}
+
+	for _, test := range tests {
+		hash, err := reverseTxidFromString(test.SearchTxid)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+
+		// load token graph db (GS expects hashes, not txids)
+		tokenGraph := make(map[chainhash.Hash]*wire.MsgTx)
+		for _, txnHex := range test.TokenGraph {
+			txnBuf, err := hex.DecodeString(txnHex)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			r := bytes.NewReader(txnBuf)
+			msgTx := &wire.MsgTx{}
+			msgTx.Deserialize(r)
+			//msgTx := wire.NewMsgTx(1)
+			//msgTx.BchDecode(r, wire.ProtocolVersion, wire.LatestEncoding)
+			tokenGraph[msgTx.TxHash()] = msgTx
+		}
+		if len(tokenGraph) != len(test.TokenGraph) {
+			t.Fatal("token graph size does not match test inputs")
+		}
+
+		// load client's validity cache set (GS expects hashes, not txids)
+		validityCacheSet := make(map[chainhash.Hash]struct{})
+		for _, exTxid := range test.ClientValidityCache {
+			hash, err := reverseTxidFromString(exTxid)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			validityCacheSet[*hash] = struct{}{}
+		}
+		if len(validityCacheSet) != len(test.ClientValidityCache) {
+			t.Fatal("exclude set size does not match test excludes")
+		}
+
+		// perform the graph search
+		gsRes, err := GraphSearchFor(*hash, &tokenGraph, &validityCacheSet)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+
+		// check the graph search length matches the expected results length
+		if len(test.ExpectedResultTxids) != len(gsRes) {
+			t.Fatal("expected result has different size")
+		}
+
+		// create set of expected results
+		expectedResults := make(map[chainhash.Hash]struct{})
+		for _, resTxid := range test.ExpectedResultTxids {
+			hash, err := reverseTxidFromString(resTxid)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			expectedResults[*hash] = struct{}{}
+		}
+
+		// check each graph search results is part of the expected result
+		for _, txnBuf := range gsRes {
+			r := bytes.NewReader(txnBuf)
+			msgTx := wire.MsgTx{}
+			msgTx.Deserialize(r)
+
+			// check the expected txid is included
+			if _, ok := expectedResults[msgTx.TxHash()]; ok != true {
+				t.Fatalf("missing txid in graph search result: %v", msgTx.TxHash())
+			}
+		}
+	}
+}
