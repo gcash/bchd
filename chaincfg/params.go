@@ -146,9 +146,7 @@ type Params struct {
 	GreatWallForkHeight         int32 // May 15, 2019 hardfork
 	GravitonForkHeight          int32 // Nov 15, 2019 hardfork
 	PhononForkHeight            int32 // May 15, 2020 hardfork
-
-	// Planned hardforks
-	AxionActivationTime uint64 // Nov 15, 2020 hardfork
+	AxionActivationHeight       int32 // Nov 15, 2020 hardfork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -189,9 +187,21 @@ type Params struct {
 	// NOTE: This only applies if ReduceMinDifficulty is true.
 	MinDiffReductionTime time.Duration
 
-	// AsertDifficultyHalflife the halflife parameter used by the asert
+	// AsertDifficultyHalflife is the halflife parameter used by the asert
 	// difficulty adjustment algorithm for the given network.
 	AsertDifficultyHalflife int64
+
+	// AsertDifficultyAnchorHeight is the height of the asert difficulty
+	// anchor block.
+	AsertDifficultyAnchorHeight int32
+
+	// AsertDifficultyAnchorParentTimestamp is the timestamp of the asert difficulty
+	// anchor block's parent.
+	AsertDifficultyAnchorParentTimestamp int64
+
+	// AsertDifficultyAnchorBits is the bits of the asert difficulty
+	// anchor block.
+	AsertDifficultyAnchorBits uint32
 
 	// GenerateSupported specifies whether or not CPU mining is allowed.
 	GenerateSupported bool
@@ -264,19 +274,21 @@ var MainNetParams = Params{
 	GreatWallForkHeight:         582679, // 0000000000000000018596bdfd350a9fbc7297a62a3f510b74565d992d63d2ef
 	GravitonForkHeight:          609135, // 0000000000000000026f7ec9e79be2f5bb839f29ebcf734066d4bb9a13f6ea83
 	PhononForkHeight:            635258, // 000000000000000003302c47d01e78f1c86aa3b0e96b066761a5059bc8f5781a
+	AxionActivationHeight:       661647, // 00000000000000000083ed4b7a780d59e3983513215518ad75654bb02deee62f
 
-	AxionActivationTime: 1605441600,
-
-	CoinbaseMaturity:         100,
-	SubsidyReductionInterval: 210000,
-	TargetTimespan:           time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
-	ReduceMinDifficulty:      false,
-	NoDifficultyAdjustment:   false,
-	MinDiffReductionTime:     0,
-	AsertDifficultyHalflife:  2 * 24 * 3600, // 2 days in seconds
-	GenerateSupported:        false,
+	CoinbaseMaturity:                     100,
+	SubsidyReductionInterval:             210000,
+	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:             4,                   // 25% less, 400% more
+	ReduceMinDifficulty:                  false,
+	NoDifficultyAdjustment:               false,
+	MinDiffReductionTime:                 0,
+	AsertDifficultyHalflife:              2 * 24 * 3600, // 2 days in seconds
+	AsertDifficultyAnchorHeight:          661647,
+	AsertDifficultyAnchorParentTimestamp: 1605447844,
+	AsertDifficultyAnchorBits:            402971390,
+	GenerateSupported:                    false,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: []Checkpoint{
@@ -347,6 +359,10 @@ var MainNetParams = Params{
 				"https://ipfs.io/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
 			},
 		},
+		{
+			Height:      661648,
+			Hash:        newHashFromStr("0000000000000000029e471c41818d24b8b74c911071c4ef0b4a0509f9b5a8ce"),
+		},
 	},
 
 	// Consensus rule change deployments.
@@ -411,8 +427,6 @@ var RegressionNetParams = Params{
 	DaaForkHeight:               0, // Always active on regtest
 	MagneticAnonomalyForkHeight: 1000,
 	PhononForkHeight:            1000,
-
-	AxionActivationTime: 1605441600,
 
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -494,8 +508,6 @@ var TestNet3Params = Params{
 	GreatWallForkHeight:         1303884, // 00000000000001a749d7aa418c582a0e234ebc15643bf23a4f3107fa55120388
 	GravitonForkHeight:          1341711, // 00000000c678f67ea16d5bf803f68ce42991839d13849f77332d6f586f62d421
 	PhononForkHeight:            1378460, // 0000000070f33c64cb94629680fbc57d17bea354a73e693affcb366d023db324
-
-	AxionActivationTime: 1605441600,
 
 	CoinbaseMaturity:         100,
 	SubsidyReductionInterval: 210000,
