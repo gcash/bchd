@@ -427,6 +427,7 @@ var RegressionNetParams = Params{
 	DaaForkHeight:               0, // Always active on regtest
 	MagneticAnonomalyForkHeight: 1000,
 	PhononForkHeight:            1000,
+	AxionActivationHeight:       0, // Always active on regtest
 
 	SubsidyReductionInterval: 150,
 	TargetTimespan:           time.Hour * 24 * 14, // 14 days
@@ -436,6 +437,9 @@ var RegressionNetParams = Params{
 	NoDifficultyAdjustment:   true,
 	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
 	AsertDifficultyHalflife:  3600,             // 1 hour
+	AsertDifficultyAnchorHeight:          0,
+	AsertDifficultyAnchorParentTimestamp: regTestGenesisBlock.Header.Timestamp.Unix(),
+	AsertDifficultyAnchorBits:            regTestGenesisBlock.Header.Bits,
 	GenerateSupported:        true,
 
 	// Checkpoints ordered from oldest to newest.
