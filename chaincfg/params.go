@@ -429,18 +429,18 @@ var RegressionNetParams = Params{
 	PhononForkHeight:            1000,
 	AxionActivationHeight:       0, // Always active on regtest
 
-	SubsidyReductionInterval: 150,
-	TargetTimespan:           time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
-	ReduceMinDifficulty:      true,
-	NoDifficultyAdjustment:   true,
-	MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
-	AsertDifficultyHalflife:  3600,             // 1 hour
+	SubsidyReductionInterval:             150,
+	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:             4,                   // 25% less, 400% more
+	ReduceMinDifficulty:                  true,
+	NoDifficultyAdjustment:               true,
+	MinDiffReductionTime:                 time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:              3600,             // 1 hour
 	AsertDifficultyAnchorHeight:          0,
 	AsertDifficultyAnchorParentTimestamp: regTestGenesisBlock.Header.Timestamp.Unix(),
 	AsertDifficultyAnchorBits:            regTestGenesisBlock.Header.Bits,
-	GenerateSupported:        true,
+	GenerateSupported:                    true,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
@@ -599,27 +599,31 @@ var SimNetParams = Params{
 	DNSSeeds:    []DNSSeed{}, // NOTE: There must NOT be any seeds.
 
 	// Chain parameters
-	GenesisBlock:                &simNetGenesisBlock,
-	GenesisHash:                 &simNetGenesisHash,
-	PowLimit:                    simNetPowLimit,
-	PowLimitBits:                0x207fffff,
-	BIP0034Height:               0, // Always active on simnet
-	BIP0065Height:               0, // Always active on simnet
-	BIP0066Height:               0, // Always active on simnet
-	UahfForkHeight:              0, // Always active on simnet
-	DaaForkHeight:               2000,
-	MagneticAnonomalyForkHeight: 3000,
-	GreatWallForkHeight:         0,
-	CoinbaseMaturity:            100,
-	SubsidyReductionInterval:    210000,
-	TargetTimespan:              time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:          time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor:    4,                   // 25% less, 400% more
-	ReduceMinDifficulty:         true,
-	NoDifficultyAdjustment:      true,
-	MinDiffReductionTime:        time.Minute * 20, // TargetTimePerBlock * 2
-	AsertDifficultyHalflife:     3600,             // 1 hour
-	GenerateSupported:           true,
+	GenesisBlock:                         &simNetGenesisBlock,
+	GenesisHash:                          &simNetGenesisHash,
+	PowLimit:                             simNetPowLimit,
+	PowLimitBits:                         0x207fffff,
+	BIP0034Height:                        0, // Always active on simnet
+	BIP0065Height:                        0, // Always active on simnet
+	BIP0066Height:                        0, // Always active on simnet
+	UahfForkHeight:                       0, // Always active on simnet
+	DaaForkHeight:                        2000,
+	MagneticAnonomalyForkHeight:          3000,
+	GreatWallForkHeight:                  0,
+	AxionActivationHeight:                4000,
+	CoinbaseMaturity:                     100,
+	SubsidyReductionInterval:             210000,
+	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:             4,                   // 25% less, 400% more
+	ReduceMinDifficulty:                  true,
+	NoDifficultyAdjustment:               true,
+	MinDiffReductionTime:                 time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:              3600,             // 1 hour
+	AsertDifficultyAnchorHeight:          0,
+	AsertDifficultyAnchorParentTimestamp: simNetGenesisBlock.Header.Timestamp.Unix(),
+	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
+	GenerateSupported:                    true,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
