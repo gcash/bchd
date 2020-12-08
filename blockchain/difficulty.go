@@ -20,11 +20,6 @@ var (
 	// oneLsh256 is 1 shifted left 256 bits.  It is defined here to avoid
 	// the overhead of creating it multiple times.
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
-
-	// anchorNode is the node used for the asert difficult algorithm. This is the
-	// block just prior to the fork. After the fork this will be hardcoded, but for
-	// now it will be set at runtime.
-	anchorNode *blockNode
 )
 
 const (
@@ -74,12 +69,12 @@ const (
 // should be used when validating a block at the given height.
 func (b *BlockChain) SelectDifficultyAdjustmentAlgorithm(prevNode *blockNode) DifficultyAlgorithm {
 	height := prevNode.height + 1
-	if uint64(prevNode.CalcPastMedianTime().Unix()) >= b.chainParams.AxionActivationTime {
-		return DifficultyAsert
-	} else if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
+	if height > b.chainParams.UahfForkHeight && height <= b.chainParams.DaaForkHeight {
 		return DifficultyEDA
-	} else if height > b.chainParams.DaaForkHeight {
+	} else if height > b.chainParams.DaaForkHeight && height <= b.chainParams.AxionActivationHeight {
 		return DifficultyDAA
+	} else if height > b.chainParams.AxionActivationHeight {
+		return DifficultyAsert
 	}
 	return DifficultyLegacy
 }
@@ -284,21 +279,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	case DifficultyDAA:
 		return b.calcDAARequiredDifficulty(lastNode, newBlockTime)
 	case DifficultyAsert:
-		if anchorNode == nil {
-			// If block 1 has a median timestamp less than the activation time and..
-			// block 2 has a median timestamp greater than or equal to the activation time,
-			// then block 3 is the first block to contain the new rules and block 2 is the
-			// "reference block".
-			node := b.bestChain.Tip()
-			for {
-				if uint64(node.CalcPastMedianTime().Unix()) < b.chainParams.AxionActivationTime {
-					anchorNode = b.bestChain.next(node)
-					break
-				}
-				node = node.parent
-			}
-		}
-		return b.calcAsertRequiredDifficulty(lastNode, anchorNode.height, anchorNode.parent.timestamp, anchorNode.bits, newBlockTime)
+		return b.calcAsertRequiredDifficulty(lastNode, b.chainParams.AsertDifficultyAnchorHeight, b.chainParams.AsertDifficultyAnchorParentTimestamp, b.chainParams.AsertDifficultyAnchorBits, newBlockTime)
 	}
 	return 0, errors.New("unknown difficulty algorithm")
 }

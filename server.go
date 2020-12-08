@@ -2274,12 +2274,12 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 // handleRelayCmpctBlock deals with direct relaying a compact block to
 // peers which both want a compact block and accept direct relay.
 func (s *server) handleRelayCmpctBlock(state *peerState, msg *wire.MsgCmpctBlock) {
+	blockHash := msg.BlockHash()
+	iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 	state.forAllPeers(func(sp *serverPeer) {
 		if sp.WantsCompactBlocks() && sp.WantsDirectBlockRelay() &&
-			sp.ProtocolVersion() >= wire.NoValidationRelayVersion {
+			sp.ProtocolVersion() >= wire.NoValidationRelayVersion && !sp.HasKnownInventory(iv) {
 
-			blockHash := msg.BlockHash()
-			iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 			sp.AddKnownInventory(iv)
 			sp.QueueMessage(msg, nil)
 		}
