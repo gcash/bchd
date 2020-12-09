@@ -273,9 +273,10 @@ func (ef *FeeEstimator) RegisterBlock(block *bchutil.Block) error {
 			return errors.New("Transaction has already been mined")
 		}
 
-		// This shouldn't happen but check just in case to avoid
-		// an out-of-bounds array index later.
-		if blocksToConfirm >= estimateFeeDepth {
+		// This shouldn't happen in normal operation but check just in case
+		// to avoid an out-of-bounds array index later. Make sure to cover
+		// negative indexes in the case of reorgs.
+		if blocksToConfirm >= estimateFeeDepth || blocksToConfirm < 0 {
 			continue
 		}
 
