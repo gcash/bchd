@@ -8,6 +8,7 @@ import (
 	"container/list"
 	"math/rand"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,11 @@ const (
 	// in the request queue for headers-first mode before requesting
 	// more.
 	minInFlightBlocks = 10
+
+	// minSyncPeerMedianHeights is the minimum number of valid sync
+	// peer candidates to trust for updating the sync peer due
+	// to it being behind.
+	minSyncPeerMedianHeights = 5
 
 	// maxNetworkViolations is the max number of network violations a
 	// sync peer can have before a new sync peer is found.
@@ -525,6 +531,13 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
+	// Check if a majority of our sync peer candidates are at a greater height than our current sync peer.
+	// If they are, it is time to select a new peer, as ours is obviously behind.
+	if sm.topBlock() < sm.medianSyncPeerCandidateBlockHeight() {
+		sm.updateSyncPeer()
+		return
+	}
+
 	// Update network stats at the end of this tick.
 	defer sm.syncPeerState.updateNetwork(sm.syncPeer)
 
@@ -537,7 +550,6 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 
 	// Don't update sync peers if you have all the available
 	// blocks.
-
 	best := sm.chain.BestSnapshot()
 
 	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
@@ -548,6 +560,45 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	}
 
 	sm.updateSyncPeer()
+}
+
+// medianSyncPeerCandidateBlockHeight returns the median block height of sync peer candidates.
+func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
+	heights := []int32{}
+
+	for peer, state := range sm.peerStates {
+		if !state.syncCandidate {
+			continue
+		}
+
+		// Peer isn't connected, skip.
+		if !peer.Connected() {
+			continue
+		}
+
+		topBlock := peer.LastBlock()
+		if topBlock < peer.StartingHeight() {
+			topBlock = peer.StartingHeight()
+		}
+
+		heights = append(heights, topBlock)
+	}
+
+	// Make sure we have enough heights to trust the data.
+	// If we only have 1 or 2 that could be gamed easily!
+	if len(heights) < minSyncPeerMedianHeights {
+		return 0
+	}
+
+	sort.Slice(heights, func(i, j int) bool { return heights[i] < heights[j] })
+
+	mNumber := len(heights) / 2
+
+	if len(heights)%2 != 0 {
+		return heights[mNumber]
+	}
+
+	return (heights[mNumber-1] + heights[mNumber]) / 2
 }
 
 // topBlock returns the best chains top block height

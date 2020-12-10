@@ -990,7 +990,17 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				}
 			}
 
-			if addrs[0].EncodeAddress() == addr.EncodeAddress() {
+			matchAddr := ""
+
+			switch typedAddr := addrs[0].(type) {
+			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash:
+				matchAddr = addrs[0].EncodeAddress()
+
+			case *bchutil.AddressPubKey:
+				matchAddr = typedAddr.AddressPubKeyHash().EncodeAddress()
+			}
+
+			if matchAddr == addr.EncodeAddress() {
 				utxo := &pb.UnspentOutput{
 					Outpoint: &pb.Transaction_Input_Outpoint{
 						Hash:  txHash.CloneBytes(),
