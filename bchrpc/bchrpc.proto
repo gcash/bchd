@@ -203,6 +203,9 @@ message GetBlockchainInfoResponse {
     // When `addr_index` is true, the node has address index enabled and may
     // be used with call related by address.
     bool addr_index =7;
+    // When `slp_index` is true, the node has the slp index enabled and may
+    // be used with slp related rpc methods and also causes slp metadata to be added
+    // in some of the existing rpc methods.
     bool slp_index = 8;
 }
 

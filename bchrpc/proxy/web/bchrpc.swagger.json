@@ -1237,7 +1237,8 @@
         },
         "slp_index": {
           "type": "boolean",
-          "format": "boolean"
+          "format": "boolean",
+          "description": "When `slp_index` is true, the node has the slp index enabled and may\nbe used with slp related rpc methods and also causes slp metadata to be added\nin some of the existing rpc methods."
         }
       }
     },

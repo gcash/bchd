@@ -23,7 +23,7 @@ require (
 	github.com/simpleledgerinc/goslp v0.0.0-20201014183713-88ba2ceaf1b1
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
-	golang.org/x/net v0.0.0-20201022231255-08b38378de70 // indirect
+	golang.org/x/net v0.0.0-20201022231255-08b38378de70
 	golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd // indirect
 	golang.org/x/text v0.3.3
 	google.golang.org/genproto v0.0.0-20201022181438-0ff5f38871d5 // indirect

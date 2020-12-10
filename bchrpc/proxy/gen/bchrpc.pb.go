@@ -615,7 +615,10 @@ type GetBlockchainInfoResponse struct {
 	// When `addr_index` is true, the node has address index enabled and may
 	// be used with call related by address.
 	AddrIndex bool `protobuf:"varint,7,opt,name=addr_index,json=addrIndex,proto3" json:"addr_index,omitempty"`
-	SlpIndex  bool `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
+	// When `slp_index` is true, the node has the slp index enabled and may
+	// be used with slp related rpc methods and also causes slp metadata to be added
+	// in some of the existing rpc methods.
+	SlpIndex bool `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
 }
 
 func (x *GetBlockchainInfoResponse) Reset() {
