@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 	"net/http"
 	"time"
+
+	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -23,7 +24,7 @@ var (
 	proxyPort          = flag.String("port", "8080", "port for the proxy server")
 )
 
-func serveHttp(ctx context.Context) error {
+func serveHTTP(ctx context.Context) error {
 	var err error
 
 	// Register gRPC server endpoint
@@ -84,7 +85,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := serveHttp(ctx); err != nil {
+	if err := serveHTTP(ctx); err != nil {
 		glog.Fatal(err)
 	}
 }

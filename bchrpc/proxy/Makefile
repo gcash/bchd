@@ -1,6 +1,6 @@
 all: gw web/bchrpc.swagger.json
 
-gw: gen/bchrpc.pb.go gen/bchrpc.pb.gw.go
+gw: gen/bchrpc.pb.go gen/bchrpc.pb.gw.go gw.go
 	go build -o gw -v
 
 gen/bchrpc.pb.go: ../bchrpc.proto
