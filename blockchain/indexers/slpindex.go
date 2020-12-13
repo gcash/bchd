@@ -386,10 +386,11 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 // SlpIndex implements a transaction by hash index.  That is to say, it supports
 // querying all transactions by their hash.
 type SlpIndex struct {
-	db         database.DB
-	curTokenID uint32
-	config     *SlpConfig
-	cache      *SlpCache
+	db            database.DB
+	curTokenID    uint32
+	Config        *SlpConfig
+	cache         *SlpCache
+	GraphSearchDb *SlpGraphSearchDb
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -441,7 +442,7 @@ func (idx *SlpIndex) Init() error {
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) StartBlock() (*chainhash.Hash, int32) {
-	return idx.config.StartHash, idx.config.StartHeight
+	return idx.Config.StartHash, idx.Config.StartHeight
 }
 
 // Migrate is only provided to satisfy the Indexer interface as there is nothing to
@@ -867,41 +868,47 @@ func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Has
 }
 
 // LoadGraphSearchDb is used to load transactions and associated tokenID
-func (idx *SlpIndex) LoadGraphSearchDb(db map[chainhash.Hash]*chainhash.Hash) error {
+func (idx *SlpIndex) LoadGraphSearchDb(db *map[chainhash.Hash]*chainhash.Hash) error {
 
 	err := idx.db.View(func(dbTx database.Tx) error {
-		tokenIDBucket := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
+
 		idxBucket := dbTx.Metadata().Bucket(slpIndexKey)
-		idxBucket.ForEach(func(k []byte, v []byte) error {
+
+		err := idxBucket.ForEach(func(k []byte, v []byte) error {
 			ch, err := chainhash.NewHash(k)
 			if err != nil {
 				return err
 			}
-			tokenIDHash, err := chainhash.NewHash(tokenIDBucket.Get(v[0:4]))
+			tm, err := dbFetchTokenMetadataBySerializedID(dbTx, v[0:4])
 			if err != nil {
 				return err
 			}
-			db[*ch] = tokenIDHash
+			(*db)[*ch] = tm.TokenID
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
+	log.Infof("slp graph search loaded %s transactions", fmt.Sprint(len(*db)))
 	return nil
 }
 
-// GraphSearchFor performs a graph search for a given transaction hash
-func GraphSearchFor(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wire.MsgTx, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
+// SlpGraphSearchFor performs a graph search for a given transaction hash
+func SlpGraphSearchFor(hash chainhash.Hash, tokenGraph *SlpTokenGraph, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 	seen := make(map[chainhash.Hash]struct{})
-	txdata := make([][]byte, len(*tokenGraph))
+	txdata := make([][]byte, tokenGraph.Size())
 	i := 0
 
 	// check client validity cache txns are valid
 	for hash := range *validityCache {
-		if _, ok := (*tokenGraph)[hash]; ok != true {
+		if txn := (*tokenGraph).GetTxn(&hash); txn == nil {
 			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
 		}
 	}
@@ -914,11 +921,11 @@ func GraphSearchFor(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wire.Ms
 	return txdata[0:i], nil
 }
 
-func graphSearchInternal(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wire.MsgTx, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func graphSearchInternal(hash chainhash.Hash, tokenGraph *SlpTokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
 
 	// check if txn is valid slp
-	txMsg, ok := (*tokenGraph)[hash]
-	if !ok {
+	txMsg := tokenGraph.GetTxn(&hash)
+	if txMsg == nil {
 		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
 	}
 
@@ -938,7 +945,7 @@ func graphSearchInternal(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wi
 
 	// check exclude txids here, don't return with error
 	if _, ok := (*validityCache)[hash]; ok {
-		log.Debug("skipping valid slp txn provided by client exclude list")
+		log.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
 		return nil
 	}
 
@@ -946,7 +953,7 @@ func graphSearchInternal(hash chainhash.Hash, tokenGraph *map[chainhash.Hash]*wi
 	for _, txn := range txMsg.TxIn {
 		err := graphSearchInternal(txn.PreviousOutPoint.Hash, tokenGraph, seen, validityCache, txdata, counter)
 		if err != nil {
-			log.Debug(err.Error())
+			log.Debugf("%v", err)
 			continue
 		}
 	}
@@ -959,6 +966,7 @@ type SlpConfig struct {
 	StartHeight  int32
 	AddrPrefix   string
 	MaxCacheSize int
+	GraphSearch  bool
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a
@@ -969,11 +977,13 @@ type SlpConfig struct {
 // turn is used by the blockchain package.  This allows the index to be
 // seamlessly maintained along with the chain.
 func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
-	return &SlpIndex{
+	idx := &SlpIndex{
 		db:     db,
-		config: cfg,
+		Config: cfg,
 		cache:  NewSlpCache(cfg.MaxCacheSize),
 	}
+
+	return idx
 }
 
 // dropTokenIndexes drops the internal token id index.

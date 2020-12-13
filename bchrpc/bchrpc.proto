@@ -135,6 +135,9 @@ service bchrpc {
     // SubscribeBlocks creates a subscription for notifications of new blocks being
     // connected to the blockchain or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
+
+    // GraphSearch returns all the transactions needed for a client to validate an SLP graph
+    rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
 }
 
 
@@ -207,6 +210,8 @@ message GetBlockchainInfoResponse {
     // be used with slp related rpc methods and also causes slp metadata to be added
     // in some of the existing rpc methods.
     bool slp_index = 8;
+    // When `slp_graphsearch` is true, the node is able to handle calls to slp graph search
+    bool slp_graphsearch = 9;
 }
 
 message GetBlockInfoRequest {
@@ -555,6 +560,7 @@ message GetTrustedSlpValidationRequest {
     message Query {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
+        repeated bytes graphsearch_valid_txids = 3;
     }
     repeated Query queries = 1;
 }
@@ -571,9 +577,19 @@ message GetTrustedSlpValidationResponse {
             bool v1_mint_baton = 7;
         }
         bytes slp_txn_opreturn = 8;
+        uint32 graphsearch_txn_count = 9;
     }
 
     repeated ValidityResult results = 1;
+}
+
+message GetSlpGraphSearchRequest {
+    bytes hash = 1;
+    repeated bytes valid_txids = 2;
+}
+
+message GetSlpGraphSearchResponse {
+    repeated bytes txdata = 1;
 }
 
 message GetBip44HdAddressRequest {

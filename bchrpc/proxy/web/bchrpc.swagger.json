@@ -1239,6 +1239,11 @@
           "type": "boolean",
           "format": "boolean",
           "description": "When `slp_index` is true, the node has the slp index enabled and may\nbe used with slp related rpc methods and also causes slp metadata to be added\nin some of the existing rpc methods."
+        },
+        "slp_graphsearch": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "When `slp_graphsearch` is true, the node is able to handle calls to slp graph search"
         }
       }
     },
@@ -1496,6 +1501,18 @@
           "type": "string",
           "format": "byte",
           "description": "Raw transaction in bytes."
+        }
+      }
+    },
+    "pbGetSlpGraphSearchResponse": {
+      "type": "object",
+      "properties": {
+        "txdata": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
         }
       }
     },

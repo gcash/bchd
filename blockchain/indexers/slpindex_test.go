@@ -153,20 +153,22 @@ func TestSlpGraphSearch(t *testing.T) {
 		}
 
 		// load token graph db (GS expects hashes, not txids)
-		tokenGraph := make(map[chainhash.Hash]*wire.MsgTx)
-		for _, txnHex := range test.TokenGraph {
+		tokenGraph := &SlpTokenGraph{
+			graph: make(map[chainhash.Hash]*wire.MsgTx),
+		}
+		for _, txnHex := range test.TokenGraph { // TODO: rename this to txn DB
 			txnBuf, err := hex.DecodeString(txnHex)
 			if err != nil {
 				t.Fatal(err.Error())
 			}
+
 			r := bytes.NewReader(txnBuf)
 			msgTx := &wire.MsgTx{}
 			msgTx.Deserialize(r)
-			//msgTx := wire.NewMsgTx(1)
-			//msgTx.BchDecode(r, wire.ProtocolVersion, wire.LatestEncoding)
-			tokenGraph[msgTx.TxHash()] = msgTx
+			h := msgTx.TxHash()
+			tokenGraph.AddTxn(&h, msgTx)
 		}
-		if len(tokenGraph) != len(test.TokenGraph) {
+		if tokenGraph.Size() != len(test.TokenGraph) {
 			t.Fatal("token graph size does not match test inputs")
 		}
 
@@ -184,7 +186,7 @@ func TestSlpGraphSearch(t *testing.T) {
 		}
 
 		// perform the graph search
-		gsRes, err := GraphSearchFor(*hash, &tokenGraph, &validityCacheSet)
+		gsRes, err := SlpGraphSearchFor(*hash, tokenGraph, &validityCacheSet)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
