@@ -1360,16 +1360,16 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "invalid txn hash for txo %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err)
+			return nil, status.Errorf(codes.Aborted, "invalid txn hash for txo %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), fmt.Sprint(query.GetPrevOutVout()), err)
 		}
 
 		entry, err := s.getSlpIndexEntry(txid)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txo: %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()), err)
+			return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txo: %s:%s: %v", hex.EncodeToString(query.GetPrevOutHash()), fmt.Sprint(query.GetPrevOutVout()), err)
 		}
 
 		if query.PrevOutVout == 0 || query.PrevOutVout > 19 {
-			return nil, status.Errorf(codes.Aborted, "slp output index cannot be 0 or > 19 txo: %s:%s", hex.EncodeToString(query.GetPrevOutHash()), string(query.GetPrevOutVout()))
+			return nil, status.Errorf(codes.Aborted, "slp output index cannot be 0 or > 19 txo: %s:%s", hex.EncodeToString(query.GetPrevOutHash()), fmt.Sprint(query.GetPrevOutVout()))
 		}
 
 		slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
@@ -2763,16 +2763,24 @@ func (s *GrpcServer) manageSlpEntryCache() {
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
 			txDesc := event
-
+			log.Debugf("new mempool txn %v", txDesc.Tx.Hash())
 			if !isMaybeSlpTransaction(txDesc.Tx.MsgTx()) {
 				continue
 			}
+			log.Debugf("possible slp transaction added in mempool %v", txDesc.Tx.Hash())
+			s.db.View(func(dbTx database.Tx) error {
+				valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, txDesc.Tx.MsgTx())
+				if err != nil {
+					log.Debugf("invalid slp transaction in mempool %v: %v", txDesc.Tx.Hash(), err)
+				} else if valid {
+					log.Debugf("valid slp transaction in mempool %v", txDesc.Tx.Hash())
+				} else {
+					log.Debugf("invalid slp transaction in mempool %v", txDesc.Tx.Hash())
+				}
+				return nil
+			})
 
-			err := s.slpIndex.AddMempoolTx(txDesc.Tx)
-			if err != nil {
-				log.Debugf("slp mempool add error: %v", err)
-				continue
-			}
+			continue
 
 			// TODO: add valid slp mempool txns to gs db
 
