@@ -29,7 +29,11 @@ func serveHTTP(ctx context.Context) error {
 
 	// Register gRPC server endpoint
 	// Note: Make sure the gRPC server is running properly and accessible
-	grpcGateway := runtime.NewServeMux()
+	grpcGateway := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			EmitDefaults: true,
+		}),
+	)
 	var creds credentials.TransportCredentials
 	if *grpcRootCertPath != "" {
 		creds, err = credentials.NewClientTLSFromFile(*grpcRootCertPath, "")
