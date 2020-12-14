@@ -34,6 +34,7 @@ func (s *SlpTokenGraph) Size() int {
 func (s *SlpTokenGraph) AddTxn(hash *chainhash.Hash, item *wire.MsgTx) {
 	s.Lock()
 	defer s.Unlock()
+
 	s.graph[*hash] = item
 }
 
@@ -42,5 +43,6 @@ func (s *SlpTokenGraph) AddTxn(hash *chainhash.Hash, item *wire.MsgTx) {
 func (s *SlpTokenGraph) GetTxn(hash *chainhash.Hash) *wire.MsgTx {
 	s.RLock()
 	defer s.RUnlock()
+
 	return s.graph[*hash]
 }

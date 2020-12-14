@@ -20,7 +20,7 @@ func NewSlpGraphSearchDb() *SlpGraphSearchDb {
 }
 
 // AddTokenGraph puts new items in a temporary cache with limited size
-func (s *SlpGraphSearchDb) AddTokenGraph(tokenID *chainhash.Hash, item *SlpTokenGraph) {
+func (s *SlpGraphSearchDb) addTokenGraph(tokenID *chainhash.Hash, item *SlpTokenGraph) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -28,10 +28,17 @@ func (s *SlpGraphSearchDb) AddTokenGraph(tokenID *chainhash.Hash, item *SlpToken
 }
 
 // GetTokenGraph gets items from the cache allowing concurrent read access without
-// holding a lock on other readers
+// holding a lock on other readers.  If a token graph doesn't exist it creates
+// and returns a new one.
 func (s *SlpGraphSearchDb) GetTokenGraph(tokenID *chainhash.Hash) *SlpTokenGraph {
 	s.RLock()
-	defer s.RUnlock()
+	tg := s.db[*tokenID]
+	s.RUnlock()
+	if tg != nil {
+		return tg
+	}
 
-	return s.db[*tokenID]
+	tg = NewSlpTokenGraph(tokenID)
+	s.addTokenGraph(tokenID, tg)
+	return tg
 }
