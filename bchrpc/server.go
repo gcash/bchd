@@ -2699,15 +2699,24 @@ func (s *GrpcServer) manageSlpEntryCache() {
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
 			txDesc := event
-
+			log.Debugf("new mempool txn %v", txDesc.Tx.Hash())
 			if !isMaybeSlpTransaction(txDesc.Tx.MsgTx()) {
 				continue
 			}
-			err := s.slpIndex.AddMempoolTx(txDesc.Tx)
-			if err != nil {
-				log.Debugf("slp mempool add error: %v", err)
-				continue
-			}
+			log.Debugf("possible slp transaction added in mempool %v", txDesc.Tx.Hash())
+			s.db.View(func(dbTx database.Tx) error {
+				valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, txDesc.Tx.MsgTx())
+				if err != nil {
+					log.Debugf("invalid slp transaction in mempool %v: %v", txDesc.Tx.Hash(), err)
+				} else if valid {
+					log.Debugf("valid slp transaction in mempool %v", txDesc.Tx.Hash())
+				} else {
+					log.Debugf("invalid slp transaction in mempool %v", txDesc.Tx.Hash())
+				}
+				return nil
+			})
+
+			continue
 
 		case *rpcEventBlockConnected:
 			block := event
