@@ -2275,12 +2275,12 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 // handleRelayCmpctBlock deals with direct relaying a compact block to
 // peers which both want a compact block and accept direct relay.
 func (s *server) handleRelayCmpctBlock(state *peerState, msg *wire.MsgCmpctBlock) {
+	blockHash := msg.BlockHash()
+	iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 	state.forAllPeers(func(sp *serverPeer) {
 		if sp.WantsCompactBlocks() && sp.WantsDirectBlockRelay() &&
-			sp.ProtocolVersion() >= wire.NoValidationRelayVersion {
+			sp.ProtocolVersion() >= wire.NoValidationRelayVersion && !sp.HasKnownInventory(iv) {
 
-			blockHash := msg.BlockHash()
-			iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 			sp.AddKnownInventory(iv)
 			sp.QueueMessage(msg, nil)
 		}
@@ -3431,24 +3431,25 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		}
 
 		s.rpcServer, err = newRPCServer(&rpcserverConfig{
-			Listeners:    rpcListeners,
-			StartupTime:  s.startupTime,
-			ConnMgr:      &rpcConnManager{&s},
-			AddrMgr:      amgr,
-			SyncMgr:      &rpcSyncMgr{&s, s.syncManager},
-			TimeSource:   s.timeSource,
-			Chain:        s.chain,
-			ChainParams:  chainParams,
-			DB:           db,
-			TxMemPool:    s.txMemPool,
-			Generator:    blockTemplateGenerator,
-			CPUMiner:     s.cpuMiner,
-			TxIndex:      s.txIndex,
-			AddrIndex:    s.addrIndex,
-			CfIndex:      s.cfIndex,
-			SlpIndex:     s.slpIndex,
-			FeeEstimator: s.feeEstimator,
-			Services:     s.services,
+			Listeners:      rpcListeners,
+			StartupTime:    s.startupTime,
+			ConnMgr:        &rpcConnManager{&s},
+			AddrMgr:        amgr,
+			SyncMgr:        &rpcSyncMgr{&s, s.syncManager},
+			TimeSource:     s.timeSource,
+			Chain:          s.chain,
+			ChainParams:    chainParams,
+			DB:             db,
+			TxMemPool:      s.txMemPool,
+			Generator:      blockTemplateGenerator,
+			CPUMiner:       s.cpuMiner,
+			TxIndex:        s.txIndex,
+			AddrIndex:      s.addrIndex,
+			CfIndex:        s.cfIndex,
+			SlpIndex:       s.slpIndex,
+			FeeEstimator:   s.feeEstimator,
+			Services:       s.services,
+			RPCAuthTimeout: cfg.RPCAuthTimeout,
 		})
 		if err != nil {
 			return nil, err

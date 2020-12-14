@@ -803,40 +803,39 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenM
 	return dbFetchTokenMetadataBySerializedID(dbTx, serializedID)
 }
 
-// AddMempoolTx adds a new SlpIndexEntry item to a temporary cache that holds
-// both mempool and recently queried db entries.
-func (idx *SlpIndex) AddMempoolTx(tx *bchutil.Tx) error {
+// AddPotentialSlpMempoolTransaction checks if a newly received mempool message is a valid SLP transaction
+// if the transactino is valid it will be added to the shared cache of valid slp transactions
+func (idx *SlpIndex) AddPotentialSlpMempoolTransaction(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
 
-	if len(tx.MsgTx().TxOut) < 1 {
-		return errors.New("transaction has no outputs")
+	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
+		if err != nil {
+			entry = idx.cache.Get(txiHash)
+		}
+
+		if entry != nil {
+			return entry, nil
+		}
+
+		return nil, err
 	}
 
-	scriptPubKey := tx.MsgTx().TxOut[0].PkScript
+	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		scriptPubKey := tx.TxOut[0].PkScript
+		hash := tx.TxHash()
+		idx.cache.AddMempoolItem(&hash, &SlpIndexEntry{
+			TokenID:        0,
+			TokenIDHash:    *tokenIDHash,
+			SlpVersionType: slpMsg.TokenType(),
+			SlpOpReturn:    scriptPubKey,
+		})
 
-	slpMsg, err := v1parser.ParseSLP(scriptPubKey)
-	if err != nil {
-		return err
+		return nil
 	}
 
-	if slpMsg.TokenType() != v1parser.TokenTypeFungible01 && slpMsg.TokenType() != v1parser.TokenTypeNft1Child41 && slpMsg.TokenType() != v1parser.TokenTypeNft1Group81 {
-		return errors.New("unsupported token type")
-	}
+	valid, _, err := CheckSlpTx(msgTx, getSlpIndexEntry, putTxIndexEntry)
 
-	hash, err := goslp.GetSlpTokenID(tx.MsgTx())
-	if err != nil {
-		return err
-	}
-	tokenIDHash, err := chainhash.NewHash(hash)
-	if err != nil {
-		return err
-	}
-	idx.cache.AddMempoolItem(tx.Hash(), &SlpIndexEntry{
-		TokenID:        0,
-		TokenIDHash:    *tokenIDHash,
-		SlpVersionType: slpMsg.TokenType(),
-		SlpOpReturn:    scriptPubKey,
-	})
-	return nil
+	return valid, err
 }
 
 // RemoveMempoolTxs removes a list of transactions from the temporary cache that holds

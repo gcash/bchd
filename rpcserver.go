@@ -57,11 +57,6 @@ const (
 )
 
 const (
-	// rpcAuthTimeoutSeconds is the number of seconds a connection to the
-	// RPC server is allowed to stay open without authenticating before it
-	// is closed.
-	rpcAuthTimeoutSeconds = 10
-
 	// uint256Size is the number of bytes needed to represent an unsigned
 	// 256-bit integer.
 	uint256Size = 32
@@ -4438,7 +4433,7 @@ func (s *rpcServer) Start() {
 
 	httpServer := &http.Server{
 		Handler:           rpcServeMux,
-		ReadHeaderTimeout: time.Second * rpcAuthTimeoutSeconds,
+		ReadHeaderTimeout: time.Duration(s.cfg.RPCAuthTimeout) * time.Second,
 	}
 
 	rpcServeMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -4692,6 +4687,12 @@ type rpcserverConfig struct {
 
 	// Services represents the services supported by this node.
 	Services wire.ServiceFlag
+
+	// RPCAuthTimeout is the number of seconds a connection to the
+	// RPC server is allowed to stay open without authenticating before it
+	// is closed. With keep-alives in a protected environment, 0 can be used
+	// for long polling.
+	RPCAuthTimeout uint
 }
 
 // newRPCServer returns a new instance of the rpcServer struct.
