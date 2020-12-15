@@ -3264,7 +3264,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 		inputToken, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
 		if err != nil {
-			log.Debugf("error in getSlpToken for input %v:%s", input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index))
+			log.Debugf("no slp token for input %v:%s, error: %v", input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index), err)
 		}
 
 		in := &pb.Transaction_Input{
