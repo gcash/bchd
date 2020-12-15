@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -2886,18 +2887,21 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 			return nil
 		}
 
-		maxGoroutines := 4
+		// Limit the number of goroutines to do script validation based on the
+		// number of processor cores.  This helps ensure the system stays
+		// reasonably responsive under heavy load.
+		maxGoroutines := runtime.NumCPU() * 3
 		guard := make(chan struct{}, maxGoroutines)
 		var wg sync.WaitGroup
-		txnCount := 0
 
+		txnCount := 0
 		for txnHash, tokenIDHash := range *txnMap {
 			if atomic.LoadInt32(&s.shutdown) == 1 {
 				return errors.New("slp graph search loading interupted, shutdown signal received")
 			}
 
 			if txnCount > 0 && txnCount%10000 == 0 {
-				log.Debugf("slp graph search %s transactions loaded...", fmt.Sprint(txnCount))
+				log.Infof("SLP graph search %s transactions loaded...", fmt.Sprint(txnCount))
 			}
 			txnCount++
 
@@ -2923,7 +2927,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 		}
 
 		wg.Wait()
-		log.Debugf("finished fetching slp graph search transactions (%s)", fmt.Sprint(txnCount))
+		log.Infof("SLP graph search finished fetching %s transactions", fmt.Sprint(txnCount))
 		return nil
 	}
 
