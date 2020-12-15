@@ -14,12 +14,18 @@
     "/v1/CheckSlpTransaction": {
       "post": {
         "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.",
-        "operationId": "CheckSlpTransaction",
+        "operationId": "bchrpc_CheckSlpTransaction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbCheckSlpTransactionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -42,12 +48,18 @@
       "post": {
         "summary": "GetAddressTransactions returns the transactions for the given address. Offers offset,\nlimit, and from block options.",
         "description": "**Requires AddressIndex**\n**Requires SlpIndex for slp related information **",
-        "operationId": "GetAddressTransactions",
+        "operationId": "bchrpc_GetAddressTransactions",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetAddressTransactionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -70,12 +82,18 @@
       "post": {
         "summary": "GetAddressUnspentOutputs returns all the unspent transaction outputs\nfor the given address.",
         "description": "**Requires AddressIndex**\n**Requires SlpIndex for slp related information **",
-        "operationId": "GetAddressUnspentOutputs",
+        "operationId": "bchrpc_GetAddressUnspentOutputs",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetAddressUnspentOutputsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -97,12 +115,18 @@
     "/v1/GetBip44HdAddress": {
       "post": {
         "summary": "GetBip44HdAddress returns an address associated with a provided xpub, address index, and\nselecting either internal or external by setting the change boolean.  If SlpIndex is disabled\nthe slpAddress string will be an empty string.",
-        "operationId": "GetBip44HdAddress",
+        "operationId": "bchrpc_GetBip44HdAddress",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetBip44HdAddressResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -124,12 +148,18 @@
     "/v1/GetBlock": {
       "post": {
         "summary": "GetBlock returns detailed data for a block.",
-        "operationId": "GetBlock",
+        "operationId": "bchrpc_GetBlock",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetBlockResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -152,12 +182,18 @@
       "post": {
         "summary": "GetBlockFilter returns the compact filter (cf) of a block as a Golomb-Rice encoded set.",
         "description": "**Requires CfIndex**",
-        "operationId": "GetBlockFilter",
+        "operationId": "bchrpc_GetBlockFilter",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetBlockFilterResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -179,12 +215,18 @@
     "/v1/GetBlockHeaders": {
       "post": {
         "summary": "GetHeaders takes a block locator object and returns a batch of no more than 2000\nheaders. Upon parsing the block locator, if the server concludes there has been a\nfork, it will send headers starting at the fork point, or genesis if no blocks in\nthe locator are in the best chain. If the locator is already at the tip no headers\nwill be returned.\nsee: bchd/bchrpc/documentation/wallet_operation.md",
-        "operationId": "GetHeaders",
+        "operationId": "bchrpc_GetHeaders",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetHeadersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -206,12 +248,18 @@
     "/v1/GetBlockInfo": {
       "post": {
         "summary": "GetBlockInfo returns metadata and info for a specified block.",
-        "operationId": "GetBlockInfo",
+        "operationId": "bchrpc_GetBlockInfo",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetBlockInfoResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -233,12 +281,18 @@
     "/v1/GetBlockchainInfo": {
       "post": {
         "summary": "GetBlockchainInfo returns data about the blockchain including the most recent\nblock hash and height.",
-        "operationId": "GetBlockchainInfo",
+        "operationId": "bchrpc_GetBlockchainInfo",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetBlockchainInfoResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -260,12 +314,18 @@
     "/v1/GetMempool": {
       "post": {
         "summary": "GetMempool returns information about all transactions currently in the memory pool.\nOffers an option to return full transactions or just transactions hashes.",
-        "operationId": "GetMempool",
+        "operationId": "bchrpc_GetMempool",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetMempoolResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -287,12 +347,18 @@
     "/v1/GetMempoolInfo": {
       "post": {
         "summary": "GetMempoolInfo returns the state of the current mempool.",
-        "operationId": "GetMempoolInfo",
+        "operationId": "bchrpc_GetMempoolInfo",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetMempoolInfoResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -315,12 +381,18 @@
       "post": {
         "summary": "GetMerkleProof returns a Merkle (SPV) proof for a specific transaction\nin the provided block.",
         "description": "**Requires TxIndex**",
-        "operationId": "GetMerkleProof",
+        "operationId": "bchrpc_GetMerkleProof",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetMerkleProofResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -342,12 +414,18 @@
     "/v1/GetParsedSlpScript": {
       "post": {
         "summary": "GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
-        "operationId": "GetParsedSlpScript",
+        "operationId": "bchrpc_GetParsedSlpScript",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetParsedSlpScriptResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -370,12 +448,18 @@
       "post": {
         "summary": "GetRawAddressTransactions the serialized raw transactions for\nthe given address. Offers offset, limit, and from block options.",
         "description": "**Requires AddressIndex**",
-        "operationId": "GetRawAddressTransactions",
+        "operationId": "bchrpc_GetRawAddressTransactions",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetRawAddressTransactionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -397,12 +481,18 @@
     "/v1/GetRawBlock": {
       "post": {
         "summary": "GetRawBlock returns a block in a serialized format.",
-        "operationId": "GetRawBlock",
+        "operationId": "bchrpc_GetRawBlock",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetRawBlockResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -425,12 +515,18 @@
       "post": {
         "summary": "GetRawTransaction returns a serialized transaction given a transaction hash.",
         "description": "**Requires TxIndex**",
-        "operationId": "GetRawTransaction",
+        "operationId": "bchrpc_GetRawTransaction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetRawTransactionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -449,16 +545,56 @@
         ]
       }
     },
+    "/v1/GetSlpGraphSearch": {
+      "post": {
+        "summary": "GraphSearch returns all the transactions needed for a client to validate an SLP graph",
+        "description": "**Requires SlpIndex and  SlpGraphSearch**",
+        "operationId": "bchrpc_GetSlpGraphSearch",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpGraphSearchResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpGraphSearchRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetTokenMetadata": {
       "post": {
         "summary": "GetTokenMetadata return SLP token metadata for one or more tokens.",
         "description": "**Requires SlpIndex**",
-        "operationId": "GetTokenMetadata",
+        "operationId": "bchrpc_GetTokenMetadata",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetTokenMetadataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -481,12 +617,18 @@
       "post": {
         "summary": "GetTransaction returns a transaction given a transaction hash.",
         "description": "**Requires TxIndex**\n**Requires SlpIndex for slp related information **",
-        "operationId": "GetTransaction",
+        "operationId": "bchrpc_GetTransaction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetTransactionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -509,12 +651,18 @@
       "post": {
         "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions.",
         "description": "**Requires SlpIndex**",
-        "operationId": "GetTrustedSlpValidation",
+        "operationId": "bchrpc_GetTrustedSlpValidation",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetTrustedSlpValidationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -537,12 +685,18 @@
       "post": {
         "summary": "GetUnspentOutput takes an unspent output in the utxo set and returns\nthe utxo metadata or not found.",
         "description": "**Requires SlpIndex for slp related information **",
-        "operationId": "GetUnspentOutput",
+        "operationId": "bchrpc_GetUnspentOutput",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbGetUnspentOutputResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -564,12 +718,18 @@
     "/v1/SubmitTransaction": {
       "post": {
         "summary": "Submit a transaction to all connected peers.",
-        "operationId": "SubmitTransaction",
+        "operationId": "bchrpc_SubmitTransaction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/pbSubmitTransactionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -591,12 +751,27 @@
     "/v1/SubscribeBlocks": {
       "post": {
         "summary": "SubscribeBlocks creates a subscription for notifications of new blocks being\nconnected to the blockchain or blocks being disconnected.",
-        "operationId": "SubscribeBlocks",
+        "operationId": "bchrpc_SubscribeBlocks",
         "responses": {
           "200": {
             "description": "A successful response.(streaming responses)",
             "schema": {
-              "$ref": "#/x-stream-definitions/pbBlockNotification"
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/pbBlockNotification"
+                },
+                "error": {
+                  "$ref": "#/definitions/runtimeStreamError"
+                }
+              },
+              "title": "Stream result of pbBlockNotification"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -619,12 +794,27 @@
       "post": {
         "summary": "SubscribeTransactionStream subscribes to relevant transactions based on\nthe subscription requests. The parameters to filter transactions on can\nbe updated by sending new SubscribeTransactionsRequest objects on the stream.",
         "description": "NOTE: Because this RPC is using bi-directional streaming it cannot be used with\ngrpc-web.\n\n**Requires TxIndex to receive input metadata**",
-        "operationId": "SubscribeTransactionStream",
+        "operationId": "bchrpc_SubscribeTransactionStream",
         "responses": {
           "200": {
             "description": "A successful response.(streaming responses)",
             "schema": {
-              "$ref": "#/x-stream-definitions/pbTransactionNotification"
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/pbTransactionNotification"
+                },
+                "error": {
+                  "$ref": "#/definitions/runtimeStreamError"
+                }
+              },
+              "title": "Stream result of pbTransactionNotification"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -648,12 +838,27 @@
       "post": {
         "summary": "SubscribeTransactions creates subscription to all relevant transactions based on\nthe subscription filter.",
         "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the subscription filter. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**",
-        "operationId": "SubscribeTransactions",
+        "operationId": "bchrpc_SubscribeTransactions",
         "responses": {
           "200": {
             "description": "A successful response.(streaming responses)",
             "schema": {
-              "$ref": "#/x-stream-definitions/pbTransactionNotification"
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/pbTransactionNotification"
+                },
+                "error": {
+                  "$ref": "#/definitions/runtimeStreamError"
+                }
+              },
+              "title": "Stream result of pbTransactionNotification"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
             }
           }
         },
@@ -1515,6 +1720,22 @@
         }
       }
     },
+    "pbGetSlpGraphSearchRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "valid_txids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      }
+    },
     "pbGetSlpGraphSearchResponse": {
       "type": "object",
       "properties": {
@@ -2292,6 +2513,27 @@
         }
       }
     },
+    "runtimeError": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
     "runtimeStreamError": {
       "type": "object",
       "properties": {
@@ -2316,32 +2558,6 @@
           }
         }
       }
-    }
-  },
-  "x-stream-definitions": {
-    "pbBlockNotification": {
-      "type": "object",
-      "properties": {
-        "result": {
-          "$ref": "#/definitions/pbBlockNotification"
-        },
-        "error": {
-          "$ref": "#/definitions/runtimeStreamError"
-        }
-      },
-      "title": "Stream result of pbBlockNotification"
-    },
-    "pbTransactionNotification": {
-      "type": "object",
-      "properties": {
-        "result": {
-          "$ref": "#/definitions/pbTransactionNotification"
-        },
-        "error": {
-          "$ref": "#/definitions/runtimeStreamError"
-        }
-      },
-      "title": "Stream result of pbTransactionNotification"
     }
   }
 }

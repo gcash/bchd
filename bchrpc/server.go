@@ -2880,7 +2880,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 	// know all of the mempool items are in the graph search db
 	seen := make(map[chainhash.Hash]struct{})
 	for {
-		log.Debug("slp graph search checking slp mempool against the slp transactions loaded")
+		log.Debug("slp graph search checking mempool against the slp transactions loaded")
 		tm := make(map[chainhash.Hash]*chainhash.Hash)
 		s.slpIndex.Cache.ForEachMempoolItem(func(h *chainhash.Hash, e *indexers.SlpIndexEntry) error {
 			_, isSeen := seen[*h]

@@ -99,6 +99,11 @@ service bchrpc {
     // **Requires SlpIndex**
     rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
 
+    // GraphSearch returns all the transactions needed for a client to validate an SLP graph
+    //
+    // **Requires SlpIndex and  SlpGraphSearch**
+    rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
+
     // GetBip44HdAddress returns an address associated with a provided xpub, address index, and
     // selecting either internal or external by setting the change boolean.  If SlpIndex is disabled
     // the slpAddress string will be an empty string.
@@ -135,9 +140,6 @@ service bchrpc {
     // SubscribeBlocks creates a subscription for notifications of new blocks being
     // connected to the blockchain or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
-
-    // GraphSearch returns all the transactions needed for a client to validate an SLP graph
-    rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
 }
 
 

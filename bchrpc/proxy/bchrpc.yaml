@@ -15,6 +15,12 @@ http:
   - selector: pb.bchrpc.GetTrustedSlpValidation
     post: /v1/GetTrustedSlpValidation
     body: "*"
+  - selector: pb.bchrpc.GetSlpGraphSearch
+    post: /v1/GetSlpGraphSearch
+    body: "*"
+  - selector: pb.bchrpc.GetBip44HdAddress
+    post: /v1/GetBip44HdAddress
+    body: "*"
   - selector: pb.bchrpc.GetMempoolInfo
     post: /v1/GetMempoolInfo
     body: "*"
@@ -71,7 +77,4 @@ http:
     body: "*"
   - selector: pb.bchrpc.SubscribeBlocks
     post: /v1/SubscribeBlocks
-    body: "*"
-  - selector: pb.bchrpc.GetBip44HdAddress
-    post: /v1/GetBip44HdAddress
     body: "*"
