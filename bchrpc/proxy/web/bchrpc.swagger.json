@@ -696,6 +696,13 @@
         "prev_out_vout": {
           "type": "integer",
           "format": "int64"
+        },
+        "graphsearch_valid_txids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
         }
       }
     },
@@ -732,6 +739,10 @@
         "slp_txn_opreturn": {
           "type": "string",
           "format": "byte"
+        },
+        "graphsearch_txn_count": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
