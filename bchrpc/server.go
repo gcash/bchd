@@ -1058,11 +1058,10 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	var tokenMetadata []*pb.TokenMetadata
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
 		tokenMetadata = make([]*pb.TokenMetadata, 0)
-		for _hash := range tokenMetadataSet {
-			tm, err := s.buildTokenMetadata(_hash)
+		for hash := range tokenMetadataSet {
+			tm, err := s.buildTokenMetadata(hash)
 			if err != nil {
-				// don't want to return error, just log for debugging
-				log.Debugf("Could not build token metadata for %s", hex.EncodeToString(_hash[:]))
+				log.Debugf("Could not build slp token metadata for %v", hash)
 			}
 			if tm != nil && err == nil {
 				tokenMetadata = append(tokenMetadata, tm)
@@ -1153,15 +1152,15 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		req.IncludeMempool {
 		slpToken, err = s.getSlpToken(txnHash, req.Index)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot get slp token for txid: %s", hex.EncodeToString(txnHash[:]))
+			return nil, status.Errorf(codes.Internal, "cannot get slp token for txid: %v", txnHash)
 		}
 		tokenID, err := chainhash.NewHash(slpToken.TokenId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot create hash for token Id: %s", slpToken.TokenId)
+			return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
 		}
 		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot build token metadata for token id: %s", slpToken.TokenId)
+			return nil, status.Errorf(codes.Internal, "cannot build token metadata for token id: %s", hex.EncodeToString(slpToken.TokenId))
 		}
 	}
 
@@ -1249,7 +1248,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 	for _, hash := range req.GetTokenIds() {
 		tokenID, err := chainhash.NewHash(hash)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "token ID hash %s is invalid: %v", hex.EncodeToString(hash), err)
+			return nil, status.Errorf(codes.Aborted, "token ID hash %s is invalid: %s", hex.EncodeToString(hash), err)
 		}
 
 		tm, err := s.buildTokenMetadata(*tokenID)
@@ -3013,7 +3012,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 		inputToken, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
 		if err != nil {
-			log.Debugf("error in getSlpToken for input %s:%s", hex.EncodeToString(input.PreviousOutPoint.Hash[:]), input.PreviousOutPoint.Index)
+			log.Debugf("no slp token for input %v:%s, error: %v", input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index), err)
 		}
 
 		in := &pb.Transaction_Input{
