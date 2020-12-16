@@ -927,7 +927,7 @@ func (idx *SlpIndex) LoadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, e
 		return nil, err
 	}
 
-	log.Infof("slp graph search is loading %s transactions", fmt.Sprint(len(db)))
+	log.Infof("SLP graph search is loading %s transactions...", fmt.Sprint(len(db)))
 	return &db, nil
 }
 

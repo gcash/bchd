@@ -1806,6 +1806,10 @@
           "items": {
             "$ref": "#/definitions/GetTrustedSlpValidationRequestQuery"
           }
+        },
+        "include_graphsearch_count": {
+          "type": "boolean",
+          "format": "boolean"
         }
       }
     },

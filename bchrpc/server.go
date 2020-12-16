@@ -160,7 +160,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 
 	// load graph search db
 	if s.slpIndex != nil && s.slpIndex.Config.GraphSearch {
-		log.Info("Loading SLP graph search db into memory")
+		log.Info("Experimental SLP graph search db is loading into memory")
 		go s.loadSlpGraphSearchDb()
 	}
 
@@ -1446,6 +1446,38 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 		}
 
 		result.SlpTxnOpreturn = entry.SlpOpReturn
+
+		// include graph search count if client includes any value for excludes
+		if req.IncludeGraphsearchCount {
+			hash, err := chainhash.NewHash(query.PrevOutHash)
+			if err != nil {
+				return nil, status.Errorf(codes.Aborted, "slp graph search error: %v", err)
+			}
+
+			gsDb := s.slpIndex.Cache.GetGraphSearchDb()
+			tokenGraph := gsDb.GetTokenGraph(&entry.TokenIDHash)
+			if tokenGraph == nil {
+				return nil, status.Errorf(codes.Internal, "graph search graph is missing for token ID %v", entry.TokenIDHash)
+			}
+
+			validityCache := make(map[chainhash.Hash]struct{})
+			if query.GraphsearchValidTxids != nil {
+				for _, validTxid := range query.GraphsearchValidTxids {
+					hash, err := chainhash.NewHash(validTxid)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "graph search validity txid %v, error: %v", hex.EncodeToString(validTxid), err)
+					}
+					validityCache[*hash] = struct{}{}
+				}
+			}
+
+			txData, err := indexers.SlpGraphSearchFor(*hash, tokenGraph, &validityCache)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "%v", err)
+			}
+			result.GraphsearchTxnCount = uint32(len(txData[:]))
+		}
+
 		results[i] = result
 	}
 	resp.Results = results
@@ -1496,10 +1528,6 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		validityCache[*hash] = struct{}{}
 	}
 
-	// TODO: include mempool tokenGraph
-
-	// TODO: in checkSlpTransaction etc include graph search count if client includes any value for excludes
-
 	// perform the graph search
 	txData, err := indexers.SlpGraphSearchFor(*hash, tokenGraph, &validityCache)
 	if err != nil {
@@ -1508,7 +1536,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 
 	res := &pb.GetSlpGraphSearchResponse{}
 	res.Txdata = txData
-	log.Debugf("responded to slp graph search for txid: %v with %s transactions", hash, fmt.Sprint(len(txData)))
+	log.Infof("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData), hash))
 	return res, nil
 }
 
@@ -1731,7 +1759,7 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				continue
 			}
 			if err != nil {
-				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: use SlpRequiredBurn to allow burns: %v", err)
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burns, use SlpRequiredBurn to allow burns: %v", err)
 			}
 		}
 
@@ -2778,7 +2806,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 		})
 
 		if s.slpIndex.Config.GraphSearch && s.slpIndex.Cache.GetGraphSearchDb() == nil {
-			log.Debug("adding mempool txn to temporary cache while graph search is loading")
+			log.Debugf("adding %s txn to temporary cache while graph search is loading", event)
 			s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
 		}
 	}
@@ -2804,11 +2832,6 @@ func (s *GrpcServer) manageSlpEntryCache() {
 				log.Debug("checking block to remove txns from slp mempool")
 				s.slpIndex.RemoveMempoolTxs(block.Transactions())
 
-				// TODO: loop through remaining slp mempool transactions and check if they are still in the bch mempool,
-				//	     as they may have been removed from the mempool for various reasons.
-				// for {
-				//
-				// }
 			}
 		}
 	}
@@ -2848,9 +2871,9 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 
 	// loop through the map and load full transactions into s.slpGraphSearchDb
 	//
-	// TODO: this can be optimized by storing slp txn block region in an index
+	// Future TODO: this can be optimized by storing slp txn block region in an index
 	//
-	// TODO: to reduce memory footprint either lazy loading and/or a whitelist
+	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
 	//	      of token IDs for graph search can be added.
 	loadTxns := func(txnMap *map[chainhash.Hash]*chainhash.Hash) error {
 
@@ -2931,7 +2954,6 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 		return nil
 	}
 
-	// TODO: to speed up the loading process use multiple theads to fetch the transactions
 	err = loadTxns(txnTokenIDMap)
 	if err != nil {
 		log.Warn(err.Error())
@@ -3268,7 +3290,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 		inputToken, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index)
 		if err != nil {
-			log.Debugf("no slp token for input %v:%s, error: %v", input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index), err)
+			log.Debugf("error: %v (input %v:%s)", err, input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index))
 		}
 
 		in := &pb.Transaction_Input{

@@ -565,6 +565,7 @@ message GetTrustedSlpValidationRequest {
         repeated bytes graphsearch_valid_txids = 3;
     }
     repeated Query queries = 1;
+    bool include_graphsearch_count = 2;
 }
 
 message GetTrustedSlpValidationResponse {
