@@ -128,11 +128,13 @@ func (s *SlpCache) SetGraphSearchDb(db *SlpGraphSearchDb) error {
 }
 
 // GetGraphSearchDb retrieves the graph search DB
-func (s *SlpCache) GetGraphSearchDb() *SlpGraphSearchDb {
+func (s *SlpCache) GetGraphSearchDb() (*SlpGraphSearchDb, error) {
 	s.RLock()
 	defer s.RUnlock()
-
-	return s.graphSearchDb
+	if s.graphSearchDb == nil {
+		return nil, errors.New("graph search db is either disabled or is still be loading")
+	}
+	return s.graphSearchDb, nil
 }
 
 // AddCachedTransactionForGs adds MsgTx items during graph search startup phase

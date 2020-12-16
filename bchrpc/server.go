@@ -1455,7 +1455,10 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				return nil, status.Errorf(codes.Aborted, "slp graph search error: %v", err)
 			}
 
-			gsDb := s.slpIndex.Cache.GetGraphSearchDb()
+			gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
 			tokenGraph := gsDb.GetTokenGraph(&entry.TokenIDHash)
 			if tokenGraph == nil {
 				return nil, status.Errorf(codes.Internal, "graph search graph is missing for token ID %v", entry.TokenIDHash)
@@ -1496,7 +1499,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		return nil, status.Error(codes.Unavailable, "slpindex and txindex must be enabled to use slp graph search")
 	}
 
-	if s.slpIndex.Cache.GetGraphSearchDb() == nil {
+	if _, err := s.slpIndex.Cache.GetGraphSearchDb(); err != nil {
 		return nil, status.Error(codes.Unavailable, "graph search isn't loaded yet, try again momentarily")
 	}
 
@@ -1513,7 +1516,10 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	}
 
 	// get map for token and do graph search
-	gsDb := s.slpIndex.Cache.GetGraphSearchDb()
+	gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
+	if err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
 	tokenGraph := gsDb.GetTokenGraph(&entry.TokenIDHash)
 	if tokenGraph == nil {
 		return nil, status.Errorf(codes.Internal, "graph search graph is missing for token ID %v", entry.TokenIDHash)
@@ -2806,7 +2812,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 			return nil
 		})
 
-		if s.slpIndex.Config.GraphSearch && s.slpIndex.Cache.GetGraphSearchDb() == nil {
+		if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
 			log.Debugf("adding %s txn to temporary cache while graph search is loading", event)
 			s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
 		}
@@ -2822,7 +2828,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 			block := event
 			log.Debugf("new block received %v", block.Hash())
 
-			if s.slpIndex.Config.GraphSearch && s.slpIndex.Cache.GetGraphSearchDb() == nil {
+			if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
 				log.Debug("skipping block txns removal from slp mempool while graph search is loading")
 				for _, tx := range block.Transactions() {
 					checkTxForSlpGS(tx.MsgTx(), "block")
