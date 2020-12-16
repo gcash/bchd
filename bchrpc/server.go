@@ -408,14 +408,15 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 	}
 
 	resp := &pb.GetBlockchainInfoResponse{
-		AddrIndex:     s.addrIndex != nil,
-		TxIndex:       s.txIndex != nil,
-		SlpIndex:      s.slpIndex != nil,
-		BestHeight:    bestSnapShot.Height,
-		BestBlockHash: bestSnapShot.Hash[:],
-		BitcoinNet:    net,
-		Difficulty:    getDifficultyRatio(bestSnapShot.Bits, s.chainParams),
-		MedianTime:    bestSnapShot.MedianTime.Unix(),
+		AddrIndex:      s.addrIndex != nil,
+		TxIndex:        s.txIndex != nil,
+		SlpIndex:       s.slpIndex != nil,
+		SlpGraphsearch: s.slpIndex != nil && s.slpIndex.Config.GraphSearch,
+		BestHeight:     bestSnapShot.Height,
+		BestBlockHash:  bestSnapShot.Hash[:],
+		BitcoinNet:     net,
+		Difficulty:     getDifficultyRatio(bestSnapShot.Bits, s.chainParams),
+		MedianTime:     bestSnapShot.MedianTime.Unix(),
 	}
 	return resp, nil
 }
