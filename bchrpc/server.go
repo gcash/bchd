@@ -2825,10 +2825,9 @@ func (s *GrpcServer) manageSlpEntryCache() {
 			if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
 				log.Debug("skipping block txns removal from slp mempool while graph search is loading")
 
-				// TODO: lexagraphically order the transactions
-
-				for _, tx := range block.Transactions() {
-					checkTxForSlpGS(tx.MsgTx(), "block")
+				txns := indexers.TopologicallySortTxs(block.Transactions())
+				for _, tx := range txns {
+					checkTxForSlpGS(tx, "block")
 				}
 				log.Debug("finished looking at block for additional slp graph search items")
 				continue
