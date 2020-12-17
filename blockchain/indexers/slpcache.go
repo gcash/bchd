@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -15,7 +16,7 @@ type SlpCache struct {
 	tempEntries      map[chainhash.Hash]*SlpIndexEntry
 	mempoolEntries   map[chainhash.Hash]*SlpIndexEntry
 	maxTempEntries   int
-	graphSearchDb    *SlpGraphSearchDb
+	graphSearchDb    *slpgraphsearch.Db
 	tmpTxnCacheForGs map[chainhash.Hash]*wire.MsgTx
 }
 
@@ -78,7 +79,6 @@ func (s *SlpCache) remove(hash *chainhash.Hash) {
 }
 
 // Get gets items from the cache allowing concurrent read access without
-// holding a lock on other readers
 func (s *SlpCache) Get(hash *chainhash.Hash) *SlpIndexEntry {
 	s.RLock()
 	defer s.RUnlock()
@@ -115,7 +115,7 @@ func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpI
 }
 
 // SetGraphSearchDb provides a safe way to only have the db set only one time
-func (s *SlpCache) SetGraphSearchDb(db *SlpGraphSearchDb) error {
+func (s *SlpCache) SetGraphSearchDb(db *slpgraphsearch.Db) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -128,23 +128,30 @@ func (s *SlpCache) SetGraphSearchDb(db *SlpGraphSearchDb) error {
 }
 
 // GetGraphSearchDb retrieves the graph search DB
-func (s *SlpCache) GetGraphSearchDb() (*SlpGraphSearchDb, error) {
+func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	s.RLock()
-	defer s.RUnlock()
 	if s.graphSearchDb == nil {
+		s.RUnlock()
 		return nil, errors.New("graph search db is either disabled or is still be loading")
 	}
+	s.RUnlock()
+
+	s.Lock()
+	defer s.Lock()
 	return s.graphSearchDb, nil
 }
 
 // AddCachedTransactionForGs adds MsgTx items during graph search startup phase
 func (s *SlpCache) AddCachedTransactionForGs(tx *wire.MsgTx) error {
-	s.Lock()
-	defer s.Unlock()
-
+	s.RLock()
 	if s.graphSearchDb != nil {
+		s.RUnlock()
 		return errors.New("this cache is not available after slp graph search has been loaded")
 	}
+	s.RUnlock()
+
+	s.Lock()
+	defer s.Unlock()
 	s.tmpTxnCacheForGs[tx.TxHash()] = tx
 	return nil
 }

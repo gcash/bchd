@@ -5,7 +5,6 @@
 package indexers
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -850,19 +849,10 @@ func (idx *SlpIndex) AddPotentialSlpMempoolTransaction(dbTx database.Tx, msgTx *
 
 	// if valid, add new graph search item
 	if gsDb, err := idx.Cache.GetGraphSearchDb(); valid && idx.Config.GraphSearch && gsDb != nil {
-		tokenIDBuf, err := goslp.GetSlpTokenID(msgTx)
+		err := gsDb.AddTxn(msgTx)
 		if err != nil {
 			log.Critical(err.Error())
-			return valid, nil
 		}
-		tokenID, err := chainhash.NewHash(tokenIDBuf)
-		if err != nil {
-			log.Critical(err.Error())
-			return valid, nil
-		}
-		tg := gsDb.GetTokenGraph(tokenID)
-		hash := msgTx.TxHash()
-		tg.AddTxn(&hash, msgTx)
 		log.Debugf("added transaction to graph search db %v", msgTx.TxHash())
 	} else {
 		if err != nil {
@@ -893,7 +883,6 @@ func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Has
 
 // LoadGraphSearchDb is used to load transactions and associated tokenID
 func (idx *SlpIndex) LoadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, error) {
-
 	db := make(map[chainhash.Hash]*chainhash.Hash)
 
 	err := idx.db.View(func(dbTx database.Tx) error {
@@ -932,66 +921,6 @@ func (idx *SlpIndex) LoadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, e
 
 	log.Infof("SLP graph search is loading %s transactions...", fmt.Sprint(len(db)))
 	return &db, nil
-}
-
-// SlpGraphSearchFor performs a graph search for a given transaction hash
-func SlpGraphSearchFor(hash chainhash.Hash, tokenGraph *SlpTokenGraph, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
-	seen := make(map[chainhash.Hash]struct{})
-	txdata := make([][]byte, tokenGraph.Size())
-	i := 0
-
-	// check client validity cache txns are valid
-	for hash := range *validityCache {
-		if txn := (*tokenGraph).GetTxn(&hash); txn == nil {
-			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
-		}
-	}
-
-	// perform the recursive graph search
-	err := graphSearchInternal(hash, tokenGraph, &seen, validityCache, &txdata, &i)
-	if err != nil {
-		return nil, err
-	}
-	return txdata[0:i], nil
-}
-
-func graphSearchInternal(hash chainhash.Hash, tokenGraph *SlpTokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
-
-	// check if txn is valid slp
-	txMsg := tokenGraph.GetTxn(&hash)
-	if txMsg == nil {
-		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
-	}
-
-	// check seen list
-	if _, ok := (*seen)[hash]; ok {
-		return fmt.Errorf("txn %v already seen in graph search", hash)
-	}
-	(*seen)[hash] = struct{}{}
-
-	// add txn buffer to results
-	txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
-	if err := txMsg.Serialize(txBuf); err != nil {
-		return err
-	}
-	(*txdata)[*counter] = txBuf.Bytes()
-	(*counter)++
-
-	// check exclude txids here, don't return with error
-	if _, ok := (*validityCache)[hash]; ok {
-		log.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
-		return nil
-	}
-
-	// loop through inputs and recurse
-	for _, txn := range txMsg.TxIn {
-		err := graphSearchInternal(txn.PreviousOutPoint.Hash, tokenGraph, seen, validityCache, txdata, counter)
-		if err != nil {
-			log.Debugf("%v", err)
-			continue
-		}
-	}
-	return nil
 }
 
 // SlpConfig provides the proper starting height and hash
