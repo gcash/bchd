@@ -133,7 +133,7 @@ func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	defer s.RUnlock()
 
 	if s.graphSearchDb == nil {
-		return nil, errors.New("graph search db is either disabled or is still be loading")
+		return nil, errors.New("graph search db is either disabled or is still loading")
 	}
 
 	return s.graphSearchDb, nil

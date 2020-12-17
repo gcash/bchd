@@ -157,7 +157,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	serviceMap["pb.bchrpc"] = s
 
 	// listen to changes in the mempool for adding/removing from slp entry cache
-	go s.manageSlpEntryCache()
+	go s.slpEventHandler()
 
 	// load graph search db
 	if s.slpIndex != nil && s.slpIndex.Config.GraphSearch {
@@ -2776,11 +2776,16 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	return slpToken, nil
 }
 
-// manageSlpEntryCache keeps the SlpEntryCache updated on transaction and block events
+// slpEventHandler handles mempool and block events
+//
+//  1) Adds to the SlpEntryCache updated on mempool events
+//  2) Removes from the SlpEntryCache on block enents
+//  3) (During GS startup loading) Adds valid slp mempool items to a temporary graph search cache
+//  4) (During GS startup loading) Adds valid slp txn block items to a temporary graph search cache
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
-func (s *GrpcServer) manageSlpEntryCache() {
+func (s *GrpcServer) slpEventHandler() {
 
 	if s.slpIndex == nil {
 		return
@@ -2789,23 +2794,36 @@ func (s *GrpcServer) manageSlpEntryCache() {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
-	checkTxForSlpGS := func(msgTx *wire.MsgTx, event string) {
+	checkEventTxForSlp := func(msgTx *wire.MsgTx, event string) {
 		if !isMaybeSlpTransaction(msgTx) {
 			return
 		}
 
-		s.db.View(func(dbTx database.Tx) error {
-			valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, msgTx)
-			if err != nil {
-				log.Debugf("invalid slp transaction (in %s) %v: %v", event, msgTx.TxHash(), err)
-			} else if valid {
-				log.Debugf("valid slp transaction (in %s) %v", event, msgTx.TxHash())
+		err := s.db.View(func(dbTx database.Tx) error {
+			hash := msgTx.TxHash()
+			if event == "mempool" {
+				valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, msgTx)
+				if err != nil {
+					return fmt.Errorf("invalid slp transaction (in %s) %v: %v", event, hash, err)
+				} else if valid {
+					log.Debugf("valid slp transaction (in %s) %v", event, hash)
+				} else {
+					log.Debugf("invalid slp transaction (in %s) %v", event, hash)
+				}
 			} else {
-				log.Debugf("invalid slp transaction (in %s) %v", event, msgTx.TxHash())
+				if _, err := s.slpIndex.GetSlpIndexEntry(dbTx, &hash); err != nil {
+					return fmt.Errorf("invalid slp transaction (in %s)", event)
+				}
+				log.Debugf("valid slp transaction (in %s)", event)
 			}
 			return nil
 		})
+		if err != nil {
+			log.Debug(err.Error())
+			return
+		}
 
+		// For Graph Search startup loading, cache mempool and block event transactions
 		if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
 			log.Debugf("adding %s txn to temporary cache while graph search is loading", event)
 			s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
@@ -2816,7 +2834,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 		event := <-subscription.Events()
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
-			checkTxForSlpGS(event.Tx.MsgTx(), "mempool")
+			checkEventTxForSlp(event.Tx.MsgTx(), "mempool")
 			continue
 		case *rpcEventBlockConnected:
 			block := event
@@ -2827,7 +2845,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 
 				txns := indexers.TopologicallySortTxs(block.Transactions())
 				for _, tx := range txns {
-					checkTxForSlpGS(tx, "block")
+					checkEventTxForSlp(tx, "block")
 				}
 				log.Debug("finished looking at block for additional slp graph search items")
 				continue
@@ -2923,7 +2941,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 		txnCount := 0
 		for txnHash, tokenIDHash := range *txnMap {
 			if atomic.LoadInt32(&s.shutdown) == 1 {
-				return errors.New("slp graph search loading interupted, shutdown signal received")
+				return errors.New("SLP graph search loading interupted, shutdown signal received")
 			}
 
 			if txnCount > 0 && txnCount%10000 == 0 {
