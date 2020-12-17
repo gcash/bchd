@@ -2926,9 +2926,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 				}
 			}
 
-			gsDb.AddTxn(&msgTx)
-
-			return nil
+			return gsDb.AddTxn(&msgTx)
 		}
 
 		// Limit the number of goroutines to do script validation based on the

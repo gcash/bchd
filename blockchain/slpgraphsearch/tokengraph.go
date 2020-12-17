@@ -1,7 +1,6 @@
 package slpgraphsearch
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -32,10 +31,6 @@ func (g *TokenGraph) size() int {
 func (g *TokenGraph) addTxn(tx *wire.MsgTx) error {
 	g.Lock()
 	defer g.Unlock()
-
-	if g.size() < 1 && tx.TxHash() != *g.TokenID {
-		return errors.New("genesis transaction must be the first item added to a token graph")
-	}
 
 	g.graph[tx.TxHash()] = tx
 	return nil

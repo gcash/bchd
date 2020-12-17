@@ -38,8 +38,8 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 	}
 
 	tg := gs.getTokenGraph(tokenID)
-	tg.addTxn(msgTx)
-	return nil
+
+	return tg.addTxn(msgTx)
 }
 
 // getTokenGraph gets a token graph item from the db

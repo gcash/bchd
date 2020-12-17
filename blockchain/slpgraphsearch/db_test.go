@@ -73,13 +73,19 @@ func TestSlpGraphSearch(t *testing.T) {
 		}
 		tokenGraph := newTokenGraph(tokenID)
 		if tx, ok := txns[*tokenID]; ok {
-			tokenGraph.addTxn(tx)
+			err = tokenGraph.addTxn(tx)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 		} else {
 			t.Fatalf("missing genesis transaction %s", hex.EncodeToString(tokenID[:]))
 		}
 		tokenGraph.addTxn(txns[*tokenID])
 		for _, txn := range txns {
-			tokenGraph.addTxn(txn)
+			err = tokenGraph.addTxn(txn)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 		}
 		if tokenGraph.size() != len(test.TokenGraph) {
 			t.Fatal("token graph size does not match test inputs")
