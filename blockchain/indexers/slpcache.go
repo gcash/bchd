@@ -130,14 +130,12 @@ func (s *SlpCache) SetGraphSearchDb(db *slpgraphsearch.Db) error {
 // GetGraphSearchDb retrieves the graph search DB
 func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	s.RLock()
+	defer s.RUnlock()
+
 	if s.graphSearchDb == nil {
-		s.RUnlock()
 		return nil, errors.New("graph search db is either disabled or is still be loading")
 	}
-	s.RUnlock()
 
-	s.Lock()
-	defer s.Lock()
 	return s.graphSearchDb, nil
 }
 
@@ -149,9 +147,9 @@ func (s *SlpCache) AddCachedTransactionForGs(tx *wire.MsgTx) error {
 		return errors.New("this cache is not available after slp graph search has been loaded")
 	}
 	s.RUnlock()
-
 	s.Lock()
 	defer s.Unlock()
+
 	s.tmpTxnCacheForGs[tx.TxHash()] = tx
 	return nil
 }
