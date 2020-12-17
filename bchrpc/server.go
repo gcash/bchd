@@ -2863,10 +2863,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 	}
 
 	// load initial db containing all slp transactions mapped to token ID hash
-	log.Debug("LOAD GS DB 1")
-
 	txnTokenIDMap, err := s.slpIndex.LoadGraphSearchDb()
-	log.Debug("LOAD GS DB 2")
 
 	if err != nil {
 		log.Criticalf("SLP graph search failed to load with error: %v", err)
@@ -2874,9 +2871,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 		return
 	}
 
-	log.Debug("NEW DB")
 	gsDb := slpgraphsearch.NewDb(&log)
-	log.Debug("NEW DB 2")
 
 	// loop through the map and load full transactions into s.slpGraphSearchDb
 	//
