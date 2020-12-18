@@ -1554,7 +1554,6 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 
 	masterKey, err := hdkeychain.NewKeyFromString(xpub)
 	if err != nil {
-		fmt.Println(err)
 		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
@@ -1565,13 +1564,11 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 
 	ext, err := masterKey.Child(change)
 	if err != nil {
-		fmt.Println(err)
 		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
 	extK, err := ext.Child(req.AddressIndex)
 	if err != nil {
-		fmt.Println(err)
 		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
 	}
 
