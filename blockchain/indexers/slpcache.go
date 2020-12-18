@@ -99,6 +99,14 @@ func (s *SlpCache) GetMempoolItem(hash *chainhash.Hash) *SlpIndexEntry {
 	return s.mempoolEntries[*hash]
 }
 
+// MempoolSize returns the size of the slp mempool cache
+func (s *SlpCache) MempoolSize() int {
+	s.RLock()
+	defer s.RUnlock()
+
+	return len(s.mempoolEntries)
+}
+
 // ForEachMempoolItem provides thread-safe access to all mempool entries
 func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpIndexEntry) error) error {
 	s.RLock()

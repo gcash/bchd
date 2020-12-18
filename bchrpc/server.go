@@ -2825,8 +2825,11 @@ func (s *GrpcServer) slpEventHandler() {
 		if err != nil {
 			// This will occur during graph search startup phase & loading process, we need to temporaily
 			// store mempool and block transactions so they can be added to the gs db at the end of loading
-			log.Debugf("adding %s txn to temporary cache: %v", event, err)
-			s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
+			log.Debugf("adding %s txn to temporary cache, %v", event, err)
+			err := s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
+			if err != nil {
+				log.Criticalf("Could not add %s txn to temporary graph search cache, %v", err)
+			}
 		} else {
 			// This will occur after the gs db is loaded and the startup phase is complete
 			err := gsDb.AddTxn(msgTx)
@@ -2857,6 +2860,7 @@ func (s *GrpcServer) slpEventHandler() {
 			continue
 		case *rpcEventBlockConnected:
 			block := event
+			log.Debugf("slp mempool cache size: %s", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
 			log.Debugf("new block received %v", block.Hash())
 
 			// process block for adding to graph search db
@@ -2881,7 +2885,9 @@ func (s *GrpcServer) slpEventHandler() {
 			} else {
 				log.Debug("checking block to remove txns from slp mempool")
 				s.slpIndex.RemoveMempoolTxs(block.Transactions())
+				log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
 			}
+			continue
 		}
 	}
 }
@@ -2927,7 +2933,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 	//	      of token IDs for graph search can be added.
 	loadTxns := func(txnMap *map[chainhash.Hash]*chainhash.Hash) error {
 
-		log.Debug("starting to slp graph search fetch transactions")
+		log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnMap)))
 
 		fetchTxn := func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) error {
 			if wg != nil {
@@ -3013,7 +3019,7 @@ func (s *GrpcServer) loadSlpGraphSearchDb() {
 	// know all of the mempool items are in the graph search db
 	seen := make(map[chainhash.Hash]struct{})
 	for {
-		log.Debug("slp graph search checking mempool against the slp transactions loaded")
+		log.Debugf("checking slp mempool (%s txns) for graph search db", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
 		tm := make(map[chainhash.Hash]*chainhash.Hash)
 		s.slpIndex.Cache.ForEachMempoolItem(func(h *chainhash.Hash, e *indexers.SlpIndexEntry) error {
 			_, isSeen := seen[*h]
