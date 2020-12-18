@@ -847,20 +847,6 @@ func (idx *SlpIndex) AddPotentialSlpMempoolTransaction(dbTx database.Tx, msgTx *
 		return valid, err
 	}
 
-	// if valid, add new graph search item
-	if gsDb, err := idx.Cache.GetGraphSearchDb(); valid && idx.Config.GraphSearch && gsDb != nil {
-		err := gsDb.AddTxn(msgTx)
-		if err != nil {
-			log.Critical(err.Error())
-		}
-		log.Debugf("added transaction to graph search db %v", msgTx.TxHash())
-	} else {
-		if err != nil {
-			log.Debug(err.Error())
-		}
-		log.Debugf("skipping graph search db update for %v", msgTx.TxHash())
-	}
-
 	return valid, nil
 }
 

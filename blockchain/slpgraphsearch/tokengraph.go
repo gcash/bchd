@@ -1,6 +1,7 @@
 package slpgraphsearch
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -27,12 +28,15 @@ func (g *TokenGraph) size() int {
 	return len(g.graph)
 }
 
-// addTxn puts new graph items in a temporary cache with limited size
+// addTxn puts new graph items in a token graph
 func (g *TokenGraph) addTxn(tx *wire.MsgTx) error {
 	g.Lock()
 	defer g.Unlock()
-
+	size0 := g.size()
 	g.graph[tx.TxHash()] = tx
+	if g.size() < size0 {
+		return errors.New("token graph db should never get smaller")
+	}
 	return nil
 }
 

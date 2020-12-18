@@ -2776,12 +2776,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32) (*pb.SlpToke
 	return slpToken, nil
 }
 
-// slpEventHandler handles mempool and block events
-//
-//  1) Adds to the SlpEntryCache updated on mempool events
-//  2) Removes from the SlpEntryCache on block enents
-//  3) (During GS startup loading) Adds valid slp mempool items to a temporary graph search cache
-//  4) (During GS startup loading) Adds valid slp txn block items to a temporary graph search cache
+// slpEventHandler handles valid slp transactions events from mempool and block
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
@@ -2794,9 +2789,9 @@ func (s *GrpcServer) slpEventHandler() {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
-	checkEventTxForSlp := func(msgTx *wire.MsgTx, event string) {
+	checkForSlpCache := func(msgTx *wire.MsgTx, event string) error {
 		if !isMaybeSlpTransaction(msgTx) {
-			return
+			return errors.New("transaction doesn't contain slp magic")
 		}
 
 		err := s.db.View(func(dbTx database.Tx) error {
@@ -2814,45 +2809,78 @@ func (s *GrpcServer) slpEventHandler() {
 				if _, err := s.slpIndex.GetSlpIndexEntry(dbTx, &hash); err != nil {
 					return fmt.Errorf("invalid slp transaction (in %s)", event)
 				}
-				log.Debugf("valid slp transaction (in %s)", event)
+				log.Debugf("valid slp transaction (in %s) %v", event, hash)
 			}
 			return nil
 		})
 		if err != nil {
-			log.Debug(err.Error())
-			return
+			return err
 		}
 
-		// For Graph Search startup loading, cache mempool and block event transactions
-		if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
-			log.Debugf("adding %s txn to temporary cache while graph search is loading", event)
+		return nil
+	}
+
+	addTxToSlpGraphSearch := func(msgTx *wire.MsgTx, event string) error {
+		gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
+		if err != nil {
+			// This will occur during graph search startup phase & loading process, we need to temporaily
+			// store mempool and block transactions so they can be added to the gs db at the end of loading
+			log.Debugf("adding %s txn to temporary cache: %v", event, err)
 			s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
+		} else {
+			// This will occur after the gs db is loaded and the startup phase is complete
+			err := gsDb.AddTxn(msgTx)
+			if err != nil {
+				return err
+			}
+			log.Debugf("added transaction to graph search db %v", msgTx.TxHash())
 		}
+		return nil
 	}
 
 	for {
 		event := <-subscription.Events()
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
-			checkEventTxForSlp(event.Tx.MsgTx(), "mempool")
+
+			err := checkForSlpCache(event.Tx.MsgTx(), "mempool")
+			if err != nil {
+				continue
+			}
+
+			if s.slpIndex.Config.GraphSearch {
+				err := addTxToSlpGraphSearch(event.Tx.MsgTx(), "mempool")
+				if err != nil {
+					log.Criticalf("could not add mempool transaction %v to graph search db: %v", event.Tx.Hash(), err)
+				}
+			}
 			continue
 		case *rpcEventBlockConnected:
 			block := event
 			log.Debugf("new block received %v", block.Hash())
 
+			// process block for adding to graph search db
+			txns := indexers.TopologicallySortTxs(block.Transactions())
+			for _, tx := range txns {
+				err := checkForSlpCache(tx, "block")
+				if err != nil {
+					continue
+				}
+				if s.slpIndex.Config.GraphSearch {
+					err := addTxToSlpGraphSearch(tx, "block")
+					if err != nil {
+						log.Criticalf("could not add block transcation %v to graph search db: %v", tx.TxHash(), err)
+					}
+				}
+			}
+
+			// remove slp mempool cached transactions
 			if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
 				log.Debug("skipping block txns removal from slp mempool while graph search is loading")
-
-				txns := indexers.TopologicallySortTxs(block.Transactions())
-				for _, tx := range txns {
-					checkEventTxForSlp(tx, "block")
-				}
-				log.Debug("finished looking at block for additional slp graph search items")
 				continue
 			} else {
 				log.Debug("checking block to remove txns from slp mempool")
 				s.slpIndex.RemoveMempoolTxs(block.Transactions())
-
 			}
 		}
 	}
