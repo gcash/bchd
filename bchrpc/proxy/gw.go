@@ -31,6 +31,7 @@ func serveHTTP(ctx context.Context) error {
 	// Note: Make sure the gRPC server is running properly and accessible
 	grpcGateway := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			OrigName:     true,
 			EmitDefaults: true,
 		}),
 	)
