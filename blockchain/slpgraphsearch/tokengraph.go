@@ -28,6 +28,14 @@ func (g *TokenGraph) size() int {
 	return len(g.graph)
 }
 
+// getTxn gets graph items allowing concurrent read access without
+func (g *TokenGraph) getTxn(hash *chainhash.Hash) *wire.MsgTx {
+	g.RLock()
+	defer g.RUnlock()
+
+	return g.graph[*hash]
+}
+
 // addTxn puts new graph items in a token graph
 func (g *TokenGraph) addTxn(tx *wire.MsgTx) error {
 	g.Lock()
@@ -40,10 +48,14 @@ func (g *TokenGraph) addTxn(tx *wire.MsgTx) error {
 	return nil
 }
 
-// getTxn gets graph items allowing concurrent read access without
-func (g *TokenGraph) getTxn(hash *chainhash.Hash) *wire.MsgTx {
-	g.RLock()
-	defer g.RUnlock()
+// removeTxn removes a transaction from the graph
+func (g *TokenGraph) removeTxn(tx *wire.MsgTx) error {
+	g.Lock()
+	defer g.Unlock()
 
-	return g.graph[*hash]
+	if _, ok := g.graph[tx.TxHash()]; !ok {
+		return errors.New("transaction doesn't exist in graph")
+	}
+	delete(g.graph, tx.TxHash())
+	return nil
 }

@@ -2,28 +2,40 @@ package slpgraphsearch
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"github.com/gcash/bchlog"
 	"github.com/simpleledgerinc/goslp"
 )
 
 // Db manages slp token graphs for graph search and TODO: recently queried items
 type Db struct {
 	sync.RWMutex
-	db     map[chainhash.Hash]*TokenGraph
-	logger *bchlog.Logger
+	db    map[chainhash.Hash]*TokenGraph
+	State uint32 // atomic, 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
 }
 
 // NewDb creates a new instance of SlpCache
-func NewDb(logger *bchlog.Logger) *Db {
+func NewDb() *Db {
 	return &Db{
-		db:     make(map[chainhash.Hash]*TokenGraph),
-		logger: logger,
+		db:    make(map[chainhash.Hash]*TokenGraph),
+		State: 0,
 	}
+}
+
+// SetGsState sets the internal graph search state
+func (gs *Db) SetGsState(desiredState uint32) error {
+	state := atomic.LoadUint32(&gs.State)
+	if state == desiredState-1 {
+		atomic.AddUint32(&gs.State, desiredState)
+	} else if state != desiredState {
+		return errors.New("invalid state change")
+	}
+	return nil
 }
 
 // AddTxn adds a transaction to the graph search database
@@ -38,22 +50,13 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 	}
 
 	tg := gs.getTokenGraph(tokenID)
-
-	return tg.addTxn(msgTx)
-}
-
-// getTokenGraph gets a token graph item from the db
-func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *TokenGraph {
-	gs.Lock()
-	defer gs.Unlock()
-
-	if tg, ok := gs.db[*tokenID]; ok {
-		return tg
+	err = tg.addTxn(msgTx)
+	if err != nil {
+		return err
 	}
 
-	item := newTokenGraph(tokenID)
-	gs.db[*tokenID] = item
-	return item
+	return nil
+
 }
 
 // Find performs a graph search for a given transaction hash
@@ -69,7 +72,7 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	txdata := make([][]byte, tokenGraph.size())
 	i := 0
 
-	// check client validity cache txns are valid
+	// check client validity cache transactions are valid
 	for hash := range *validityCache {
 		if txn := (*tokenGraph).getTxn(&hash); txn == nil {
 			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
@@ -81,6 +84,9 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: Do an integrity check before returning results to client!
+
 	return txdata[0:i], nil
 }
 
@@ -121,4 +127,18 @@ func (gs *Db) findInternal(hash *chainhash.Hash, tokenGraph *TokenGraph, seen *m
 		}
 	}
 	return nil
+}
+
+// getTokenGraph gets a token graph item from the db
+func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *TokenGraph {
+	gs.Lock()
+	defer gs.Unlock()
+
+	if tg, ok := gs.db[*tokenID]; ok {
+		return tg
+	}
+
+	item := newTokenGraph(tokenID)
+	gs.db[*tokenID] = item
+	return item
 }

@@ -1,32 +1,30 @@
 package indexers
 
 import (
-	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
 
 // SlpCache to manage slp index mempool items and recently queried items
 type SlpCache struct {
 	sync.RWMutex
-	tempEntries      map[chainhash.Hash]*SlpIndexEntry
-	mempoolEntries   map[chainhash.Hash]*SlpIndexEntry
-	maxTempEntries   int
-	graphSearchDb    *slpgraphsearch.Db
-	tmpTxnCacheForGs map[chainhash.Hash]*wire.MsgTx
+	tempEntries    map[chainhash.Hash]*SlpIndexEntry
+	mempoolEntries map[chainhash.Hash]*SlpIndexEntry
+	maxTempEntries int
+	graphSearchDb  *slpgraphsearch.Db
 }
 
 // NewSlpCache creates a new instance of SlpCache
 func NewSlpCache(maxTempEntries int) *SlpCache {
 	return &SlpCache{
-		mempoolEntries:   make(map[chainhash.Hash]*SlpIndexEntry),
-		tempEntries:      make(map[chainhash.Hash]*SlpIndexEntry, maxTempEntries),
-		maxTempEntries:   maxTempEntries,
-		tmpTxnCacheForGs: make(map[chainhash.Hash]*wire.MsgTx),
+		mempoolEntries: make(map[chainhash.Hash]*SlpIndexEntry),
+		tempEntries:    make(map[chainhash.Hash]*SlpIndexEntry, maxTempEntries),
+		maxTempEntries: maxTempEntries,
 	}
 }
 
@@ -122,53 +120,21 @@ func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpI
 	return nil
 }
 
-// SetGraphSearchDb provides a safe way to only have the db set only one time
-func (s *SlpCache) SetGraphSearchDb(db *slpgraphsearch.Db) error {
+// GetGraphSearchDb retrieves the graph search DB
+func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if s.graphSearchDb != nil {
-		return errors.New("slp graph search db is already set")
-	}
-	s.tmpTxnCacheForGs = nil
-	s.graphSearchDb = db
-	return nil
-}
-
-// GetGraphSearchDb retrieves the graph search DB
-func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
-	s.RLock()
-	defer s.RUnlock()
-
 	if s.graphSearchDb == nil {
-		return nil, errors.New("graph search db is either disabled or is still loading")
+		s.graphSearchDb = slpgraphsearch.NewDb()
+	}
+
+	dbState := atomic.LoadUint32(&s.graphSearchDb.State)
+	if dbState == 1 {
+		return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
+	} else if dbState == 0 {
+		return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
 	}
 
 	return s.graphSearchDb, nil
-}
-
-// AddCachedTransactionForGs adds MsgTx items during graph search startup phase
-func (s *SlpCache) AddCachedTransactionForGs(tx *wire.MsgTx) error {
-	s.RLock()
-	if s.graphSearchDb != nil {
-		s.RUnlock()
-		return errors.New("this cache is not available after slp graph search has been loaded")
-	}
-	s.RUnlock()
-	s.Lock()
-	defer s.Unlock()
-
-	s.tmpTxnCacheForGs[tx.TxHash()] = tx
-	return nil
-}
-
-// GetCachedTransactionForGs from temporary transaction cache during slp graph search
-func (s *SlpCache) GetCachedTransactionForGs(hash *chainhash.Hash) (*wire.MsgTx, error) {
-	s.RLock()
-	defer s.RUnlock()
-
-	if s.graphSearchDb != nil {
-		return nil, errors.New("this cache is not available after slp graph search has been loaded")
-	}
-	return s.tmpTxnCacheForGs[*hash], nil
 }

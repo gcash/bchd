@@ -303,7 +303,7 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 
 		switch v := indexer.(type) {
 		case *SlpIndex:
-			if height == v.Config.StartHeight {
+			if height == v.config.StartHeight {
 				continue
 			}
 		}

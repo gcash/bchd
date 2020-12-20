@@ -9,7 +9,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -18,7 +17,6 @@ import (
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
-	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
@@ -160,9 +158,12 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	go s.slpEventHandler()
 
 	// load graph search db
-	if s.slpIndex != nil && s.slpIndex.Config.GraphSearch {
-		log.Info("Experimental SLP graph search db is loading into memory")
-		go s.loadSlpGraphSearchDb()
+	if s.slpIndex != nil && s.txIndex != nil {
+		fetchTxn := func(txnHash *chainhash.Hash) ([]byte, error) {
+			txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
+			return txn, err
+		}
+		go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &s.shutdown)
 	}
 
 	return s
@@ -408,11 +409,18 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		return nil, status.Error(codes.Internal, "unknown network parameters")
 	}
 
+	gsEnabled := false
+	if s.slpIndex != nil {
+		if gsDb, _ := s.slpIndex.GetGraphSearchDb(); gsDb != nil {
+			gsEnabled = true
+		}
+	}
+
 	resp := &pb.GetBlockchainInfoResponse{
 		AddrIndex:      s.addrIndex != nil,
 		TxIndex:        s.txIndex != nil,
 		SlpIndex:       s.slpIndex != nil,
-		SlpGraphsearch: s.slpIndex != nil && s.slpIndex.Config.GraphSearch,
+		SlpGraphsearch: gsEnabled,
 		BestHeight:     bestSnapShot.Height,
 		BestBlockHash:  bestSnapShot.Hash[:],
 		BitcoinNet:     net,
@@ -1456,11 +1464,6 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				return nil, status.Errorf(codes.Aborted, "slp graph search error: %v", err)
 			}
 
-			gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
-			if err != nil {
-				return nil, status.Error(codes.Unavailable, err.Error())
-			}
-
 			validityCache := make(map[chainhash.Hash]struct{})
 			if query.GraphsearchValidTxids != nil {
 				for _, validTxid := range query.GraphsearchValidTxids {
@@ -1472,6 +1475,10 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				}
 			}
 
+			gsDb, err := s.slpIndex.GetGraphSearchDb()
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
 			txData, err := gsDb.Find(hash, &entry.TokenIDHash, &validityCache)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "%v", err)
@@ -1489,16 +1496,12 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 // GetSlpGraphSearch returns all transactions required for a client to validate locally
 func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphSearchRequest) (*pb.GetSlpGraphSearchResponse, error) {
 
-	if !s.slpIndex.Config.GraphSearch {
-		return nil, status.Error(codes.Unavailable, "slp graph search is not enabled")
+	if _, err := s.slpIndex.GetGraphSearchDb(); err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 
 	if s.slpIndex == nil || s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex and txindex must be enabled to use slp graph search")
-	}
-
-	if _, err := s.slpIndex.Cache.GetGraphSearchDb(); err != nil {
-		return nil, status.Error(codes.Unavailable, "graph search isn't loaded yet, try again momentarily")
 	}
 
 	// check slp validity, get graph tokenId
@@ -1514,7 +1517,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	}
 
 	// get map for token and do graph search
-	gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
+	gsDb, err := s.slpIndex.GetGraphSearchDb()
 	if err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
@@ -2786,271 +2789,53 @@ func (s *GrpcServer) slpEventHandler() {
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
 
-	checkForSlpCache := func(msgTx *wire.MsgTx, event string) error {
-		if !isMaybeSlpTransaction(msgTx) {
-			return errors.New("transaction doesn't contain slp magic")
-		}
-
-		err := s.db.View(func(dbTx database.Tx) error {
-			hash := msgTx.TxHash()
-			if event == "mempool" {
-				valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, msgTx)
-				if err != nil {
-					return fmt.Errorf("invalid slp transaction (in %s) %v: %v", event, hash, err)
-				} else if valid {
-					log.Debugf("valid slp transaction (in %s) %v", event, hash)
-				} else {
-					log.Debugf("invalid slp transaction (in %s) %v", event, hash)
-				}
-			} else {
-				if _, err := s.slpIndex.GetSlpIndexEntry(dbTx, &hash); err != nil {
-					return fmt.Errorf("invalid slp transaction (in %s)", event)
-				}
-				log.Debugf("valid slp transaction (in %s) %v", event, hash)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	addTxToSlpGraphSearch := func(msgTx *wire.MsgTx, event string) error {
-		gsDb, err := s.slpIndex.Cache.GetGraphSearchDb()
-		if err != nil {
-			// This will occur during graph search startup phase & loading process, we need to temporaily
-			// store mempool and block transactions so they can be added to the gs db at the end of loading
-			log.Debugf("adding %s txn to temporary cache, %v", event, err)
-			err := s.slpIndex.Cache.AddCachedTransactionForGs(msgTx)
-			if err != nil {
-				log.Criticalf("Could not add %s txn to temporary graph search cache, %v", err)
-			}
-		} else {
-			// This will occur after the gs db is loaded and the startup phase is complete
-			err := gsDb.AddTxn(msgTx)
-			if err != nil {
-				return err
-			}
-			log.Debugf("added transaction to graph search db %v", msgTx.TxHash())
-		}
-		return nil
-	}
-
 	for {
 		event := <-subscription.Events()
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
 
-			err := checkForSlpCache(event.Tx.MsgTx(), "mempool")
+			if !isMaybeSlpTransaction(event.Tx.MsgTx()) {
+				continue
+			}
+
+			err := s.db.View(func(dbTx database.Tx) error {
+				hash := event.Tx.Hash()
+				valid, err := s.slpIndex.AddPotentialSlpMempoolTransaction(dbTx, event.Tx.MsgTx())
+				if err != nil {
+					return fmt.Errorf("invalid slp transaction (in mempool) %v: %v", hash, err)
+				} else if valid {
+					log.Debugf("valid slp transaction (in mempool) %v", hash)
+				} else {
+					log.Debugf("invalid slp transaction (in mempool) %v", hash)
+				}
+				return nil
+			})
 			if err != nil {
 				continue
 			}
 
-			if s.slpIndex.Config.GraphSearch {
-				err := addTxToSlpGraphSearch(event.Tx.MsgTx(), "mempool")
+			// Add mempool transactions to graph search
+			gsDb, err := s.slpIndex.GetGraphSearchDb()
+			if gsDb != nil {
+				if err != nil {
+					log.Debugf("slp: %v", err)
+				}
+
+				err = gsDb.AddTxn(event.Tx.MsgTx())
 				if err != nil {
 					log.Criticalf("could not add mempool transaction %v to graph search db: %v", event.Tx.Hash(), err)
 				}
+
 			}
+
 			continue
 		case *rpcEventBlockConnected:
-			block := event
-			log.Debugf("slp mempool cache size: %s", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
-			log.Debugf("new block received %v", block.Hash())
-
-			// process block for adding to graph search db
-			txns := indexers.TopologicallySortTxs(block.Transactions())
-			for _, tx := range txns {
-				err := checkForSlpCache(tx, "block")
-				if err != nil {
-					continue
-				}
-				if s.slpIndex.Config.GraphSearch {
-					err := addTxToSlpGraphSearch(tx, "block")
-					if err != nil {
-						log.Criticalf("could not add block transcation %v to graph search db: %v", tx.TxHash(), err)
-					}
-				}
-			}
-
-			// remove slp mempool cached transactions
-			if _, err := s.slpIndex.Cache.GetGraphSearchDb(); s.slpIndex.Config.GraphSearch && err != nil {
-				log.Debug("skipping block txns removal from slp mempool while graph search is loading")
-				continue
-			} else {
-				log.Debug("checking block to remove txns from slp mempool")
-				s.slpIndex.RemoveMempoolTxs(block.Transactions())
-				log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
-			}
-			continue
-		}
-	}
-}
-
-// loadSlpGraphSearchDb is used to load data needed for slp graph search
-//
-// NOTE: this is launched as a goroutine and does not return errors!
-//
-func (s *GrpcServer) loadSlpGraphSearchDb() {
-
-	if !s.slpIndex.Config.GraphSearch {
-		log.Criticalf("SLP graph search is not enabled, use --slpgraphsearch")
-	}
-
-	if s.slpIndex == nil {
-		log.Critical("SLP graph search failed to load, slp index is required")
-		s.slpIndex.Config.GraphSearch = false
-		return
-	}
-
-	if s.txIndex == nil {
-		log.Critical("SLP graph search failed to load, tx index is required")
-		s.slpIndex.Config.GraphSearch = false
-		return
-	}
-
-	// load initial db containing all slp transactions mapped to token ID hash
-	txnTokenIDMap, err := s.slpIndex.LoadGraphSearchDb()
-
-	if err != nil {
-		log.Criticalf("SLP graph search failed to load with error: %v", err)
-		s.slpIndex.Config.GraphSearch = false
-		return
-	}
-
-	gsDb := slpgraphsearch.NewDb(&log)
-
-	// loop through the map and load full transactions into s.slpGraphSearchDb
-	//
-	// Future TODO: this can be optimized by storing slp txn block region in an index
-	//
-	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
-	//	      of token IDs for graph search can be added.
-	loadTxns := func(txnMap *map[chainhash.Hash]*chainhash.Hash) error {
-
-		log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnMap)))
-
-		fetchTxn := func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) error {
-			if wg != nil {
-				defer wg.Done()
-			}
-
-			var msgTx wire.MsgTx
-
-			txBytes, _, _, err := s.fetchTransactionFromBlock(&txnHash)
+			err := s.slpIndex.SetGsReady()
 			if err != nil {
-				// this should occur when slp txn is in mempool
-				msgTxPtr, err := s.slpIndex.Cache.GetCachedTransactionForGs(&txnHash)
-				if err != nil {
-					return fmt.Errorf("loadSlpGraphSearchDb failed to fetch transaction: %v, with error: %v", txnHash, err)
-				}
-				if msgTxPtr == nil {
-					return errors.New("loadSlpGraphSearchDb exited nil pointer (received shutdown signal?)")
-				}
-				msgTx = *msgTxPtr
-			} else {
-				err = msgTx.Deserialize(bytes.NewReader(txBytes))
-				if err != nil {
-					return fmt.Errorf("loadSlpGraphSearchDb failed to deserialize transaction: %v", err)
-				}
+				log.Debug(err.Error())
 			}
-
-			return gsDb.AddTxn(&msgTx)
-		}
-
-		// Limit the number of goroutines to do script validation based on the
-		// number of processor cores.  This helps ensure the system stays
-		// reasonably responsive under heavy load.
-		maxGoroutines := runtime.NumCPU() * 3
-		guard := make(chan struct{}, maxGoroutines)
-		var wg sync.WaitGroup
-
-		txnCount := 0
-		for txnHash, tokenIDHash := range *txnMap {
-			if atomic.LoadInt32(&s.shutdown) == 1 {
-				return errors.New("SLP graph search loading interupted, shutdown signal received")
-			}
-
-			if txnCount > 0 && txnCount%10000 == 0 {
-				log.Infof("SLP graph search %s transactions loaded...", fmt.Sprint(txnCount))
-			}
-			txnCount++
-
-			if len(*txnMap) > maxGoroutines && maxGoroutines > 0 {
-				if txnCount == 1 {
-					log.Debug("loading slp graph search transactions concurrently")
-				}
-				guard <- struct{}{}
-				wg.Add(1)
-				go func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) {
-					err := fetchTxn(txnHash, tokenIDHash, wg)
-					if err != nil {
-						log.Warn(err.Error())
-					}
-					<-guard
-				}(txnHash, tokenIDHash, &wg)
-			} else {
-				err := fetchTxn(txnHash, tokenIDHash, nil)
-				if err != nil {
-					log.Warn(err.Error())
-				}
-			}
-		}
-
-		wg.Wait()
-		log.Infof("SLP graph search finished fetching %s transactions", fmt.Sprint(txnCount))
-		return nil
-	}
-
-	err = loadTxns(txnTokenIDMap)
-	if err != nil {
-		log.Warn(err.Error())
-		s.slpIndex.Config.GraphSearch = false
-		return
-	}
-
-	// since the above txn loading process may take a several seconds the mempool may have received new
-	// slp entry items during this time so we need to loop through the mempool transactions until we
-	// know all of the mempool items are in the graph search db
-	seen := make(map[chainhash.Hash]struct{})
-	for {
-		log.Debugf("checking slp mempool (%s txns) for graph search db", fmt.Sprint(s.slpIndex.Cache.MempoolSize()))
-		tm := make(map[chainhash.Hash]*chainhash.Hash)
-		s.slpIndex.Cache.ForEachMempoolItem(func(h *chainhash.Hash, e *indexers.SlpIndexEntry) error {
-			_, isSeen := seen[*h]
-			if _, ok := (*txnTokenIDMap)[*h]; !ok && !isSeen {
-				seen[*h] = struct{}{}
-				tm[*h] = &e.TokenIDHash
-			}
-			return nil
-		})
-		if err != nil {
-			log.Criticalf("loadSlpGraphSearchDb failed to init graph search db: %v", err)
-			s.slpIndex.Config.GraphSearch = false
-			return
-		}
-		if len(tm) == 0 {
-			break
-		}
-		err = loadTxns(&tm)
-		if err != nil {
-			log.Critical(err.Error())
-			s.slpIndex.Config.GraphSearch = false
-			return
 		}
 	}
-
-	err = s.slpIndex.Cache.SetGraphSearchDb(gsDb)
-
-	if err != nil {
-		log.Criticalf("loadSlpGraphSearchDb failed to init graph search db: %v", err)
-		s.slpIndex.Config.GraphSearch = false
-		return
-	}
-
-	log.Info("SLP graph search loading is complete")
 }
 
 // buildTokenMetadata returns metadata for the provided tokenID
