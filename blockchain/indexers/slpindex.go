@@ -566,6 +566,9 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			if err != nil {
 				log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
 			}
+
+			// try to advance state to ready
+			idx.cache.graphSearchDb.SetGsState(2)
 		}
 
 		idx.RemoveMempoolTxs(block.Transactions())
@@ -673,11 +676,13 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 
 	wg.Wait()
 
-	err = idx.setGsLoaded()
+	// try to set db state to loaded
+	err = idx.cache.graphSearchDb.SetGsState(1)
 	if err != nil {
-		log.Debug(err.Error())
+		log.Debug("couldn't set state to loaded: %v", err)
+	} else {
+		log.Infof("SLP graph search finished fetching %s transactions", fmt.Sprint(txnCount))
 	}
-	log.Infof("SLP graph search finished fetching %s transactions", fmt.Sprint(txnCount))
 }
 
 // GetGraphSearchDb checks if graph search is enabled and returns the db
@@ -687,24 +692,6 @@ func (idx *SlpIndex) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	}
 
 	return idx.cache.GetGraphSearchDb()
-}
-
-// SetGsLoaded sets the internal graph search state to loaded
-func (idx *SlpIndex) setGsLoaded() error {
-	if !idx.config.GraphSearch {
-		return errors.New("graph search is disabled")
-	}
-
-	return idx.cache.graphSearchDb.SetGsState(1)
-}
-
-// SetGsReady sets the internal graph search state to ready
-func (idx *SlpIndex) SetGsReady() error {
-	if !idx.config.GraphSearch {
-		return errors.New("graph search is disabled")
-	}
-
-	return idx.cache.graphSearchDb.SetGsState(2)
 }
 
 func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) (bool, error) {

@@ -2825,14 +2825,6 @@ func (s *GrpcServer) slpEventHandler() {
 				if err != nil {
 					log.Criticalf("could not add mempool transaction %v to graph search db: %v", event.Tx.Hash(), err)
 				}
-
-			}
-
-			continue
-		case *rpcEventBlockConnected:
-			err := s.slpIndex.SetGsReady()
-			if err != nil {
-				log.Debug(err.Error())
 			}
 		}
 	}
