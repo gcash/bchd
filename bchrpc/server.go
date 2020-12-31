@@ -1465,8 +1465,8 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 			}
 
 			validityCache := make(map[chainhash.Hash]struct{})
-			if query.GraphsearchValidTxids != nil {
-				for _, validTxid := range query.GraphsearchValidTxids {
+			if query.GraphsearchValidHashes != nil {
+				for _, validTxid := range query.GraphsearchValidHashes {
 					hash, err := chainhash.NewHash(validTxid)
 					if err != nil {
 						return nil, status.Errorf(codes.Internal, "graph search validity txid %v, error: %v", hex.EncodeToString(validTxid), err)
@@ -1524,7 +1524,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 
 	// setup the validity cache
 	validityCache := make(map[chainhash.Hash]struct{})
-	for _, txHash := range req.GetValidTxids() {
+	for _, txHash := range req.GetValidHashes() {
 		hash, err := chainhash.NewHash(txHash)
 		if err != nil {
 			return nil, status.Errorf(codes.Aborted, "graph search validity cache invalid hash %v", txHash)

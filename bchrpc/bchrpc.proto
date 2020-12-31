@@ -562,7 +562,7 @@ message GetTrustedSlpValidationRequest {
     message Query {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
-        repeated bytes graphsearch_valid_txids = 3;
+        repeated bytes graphsearch_valid_hashes = 3;
     }
     repeated Query queries = 1;
     bool include_graphsearch_count = 2;
@@ -588,7 +588,7 @@ message GetTrustedSlpValidationResponse {
 
 message GetSlpGraphSearchRequest {
     bytes hash = 1;
-    repeated bytes valid_txids = 2;
+    repeated bytes valid_hashes = 2;
 }
 
 message GetSlpGraphSearchResponse {

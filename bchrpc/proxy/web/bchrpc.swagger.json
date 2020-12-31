@@ -902,7 +902,7 @@
           "type": "integer",
           "format": "int64"
         },
-        "graphsearch_valid_txids": {
+        "graphsearch_valid_hashes": {
           "type": "array",
           "items": {
             "type": "string",
@@ -1727,7 +1727,7 @@
           "type": "string",
           "format": "byte"
         },
-        "valid_txids": {
+        "valid_hashes": {
           "type": "array",
           "items": {
             "type": "string",
