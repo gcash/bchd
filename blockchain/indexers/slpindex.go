@@ -936,16 +936,16 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenM
 	return dbFetchTokenMetadataBySerializedID(dbTx, serializedID)
 }
 
-// AddPotentialSlpMempoolTransaction checks if a newly received mempool message is a valid SLP transaction
-// if the transactino is valid it will be added to the shared cache of valid slp transactions
-func (idx *SlpIndex) AddPotentialSlpMempoolTransaction(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
+// AddPotentialSlpEntries checks if a transaction is SLP valid and then will add a
+// new SlpIndexEntry to the shared cache of valid slp transactions.
+//
+// This method should be used to assess SLP validity of newly received mempool items and also in rpc
+// client subscriber methods that return notifications for both mempool and block events to prevent
+// any possibility of a race conditions with manageSlpEntryCache.
+func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
 
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
-		if err != nil {
-			entry = idx.cache.Get(txiHash)
-		}
-
 		if entry != nil {
 			return entry, nil
 		}
