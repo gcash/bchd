@@ -804,15 +804,11 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenM
 }
 
 // AddPotentialSlpMempoolTransaction checks if a newly received mempool message is a valid SLP transaction
-// if the transactino is valid it will be added to the shared cache of valid slp transactions
+// if the transaction is valid it will be added to the shared cache of valid slp transactions
 func (idx *SlpIndex) AddPotentialSlpMempoolTransaction(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
 
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
-		if err != nil {
-			entry = idx.cache.Get(txiHash)
-		}
-
 		if entry != nil {
 			return entry, nil
 		}
