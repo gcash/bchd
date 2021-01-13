@@ -700,6 +700,14 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
+						if s.slpIndex != nil && tx.Inputs[i].SlpToken != nil {
+							slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
+							if err != nil {
+								log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
+							} else {
+								tx.Inputs[i].SlpToken.Address = slpAddr.String()
+							}
+						}
 					}
 				}
 			}
