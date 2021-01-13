@@ -1,4 +1,8 @@
-package indexers
+// Copyright (c) 2020 Simple Ledger, Inc.
+// Use of this source code is governed by an ISC
+// license that can be found in the LICENSE file.
+
+package indexers_test
 
 import (
 	"bytes"
@@ -9,6 +13,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/simpleledgerinc/goslp"
@@ -43,7 +48,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 	for i, test := range tests {
 
 		// create temporary db of input conditions
-		entryDb := make(map[[32]byte]*SlpIndexEntry)
+		entryDb := make(map[[32]byte]*indexers.SlpIndexEntry)
 
 		for _, wen := range test.When {
 			if !wen.Valid {
@@ -70,7 +75,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 			if err != nil {
 				t.Fatal(err.Error())
 			}
-			entry := &SlpIndexEntry{
+			entry := &indexers.SlpIndexEntry{
 				TokenIDHash:    *tokenIDHash,
 				TokenID:        0,
 				SlpVersionType: slpMsg.TokenType(),
@@ -81,7 +86,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 		}
 
 		// add "When" and "Should" variables
-		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
 			var hash [32]byte
 			copy(hash[:], txiHash[:])
 			slpEntry := entryDb[hash]
@@ -109,7 +114,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 		}
 
 		// check the slp txns
-		isValid, _, _ := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		isValid, _, _ := indexers.CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
 		if isValid != test.Should[0].Valid {
 			t.Errorf("Test %d: Expected valid = %t, got %t, \n%s", i, test.Should[0].Valid, isValid, test.Description)
 		}
