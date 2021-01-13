@@ -46,6 +46,8 @@ github.com/gcash/bchutil v0.0.0-20200506001747-c2894cd54b33 h1:HNO6rKAfeYm6hE+0K
 github.com/gcash/bchutil v0.0.0-20200506001747-c2894cd54b33/go.mod h1:wB++2ZcHUvGLN1OgO9swBmJK1vmyshJLW9SNS+apXwc=
 github.com/gcash/bchutil v0.0.0-20210113004300-8c33cf833c51 h1:yQUzjmX83aNKDHeX9jDu0nI3PorUf5+TBhD1507ku8E=
 github.com/gcash/bchutil v0.0.0-20210113004300-8c33cf833c51/go.mod h1:H2USFGwtiu6CNMxiVQPqZkDzsoVSt9BLNqTfBBqGXRo=
+github.com/gcash/bchutil v0.0.0-20210113190856-6ea28dff4000 h1:vVi7Ym3I9T4ZKhQy0/XLKzS3xAqX4K+/cSAmnvMR+HM=
+github.com/gcash/bchutil v0.0.0-20210113190856-6ea28dff4000/go.mod h1:H2USFGwtiu6CNMxiVQPqZkDzsoVSt9BLNqTfBBqGXRo=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b h1:VKtxabqXZkF25pY9ekfRL6a582T4P37/31XEstQ5p58=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
@@ -190,6 +192,7 @@ golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd h1:WgqgiQvkiZWz7XLhphjt2GI2GcGCTIZs9jqXMWmH+oc=
 golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20201024232916-9f70ab9862d5 h1:iCaAy5bMeEvwANu3YnJfWwI0kWAGkEa2RXPdweI/ysk=
 golang.org/x/sys v0.0.0-20201024232916-9f70ab9862d5/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/term v0.0.0-20201117132131-f5c789dd3221/go.mod h1:Nr5EML6q2oocZ2LXRh80K7BxOlk5/8JxuGnuhpl+muw=
 golang.org/x/text v0.3.0 h1:g61tztE5qeGQ89tm6NTjjM9VPIm088od1l6aSorWRWg=
