@@ -10,7 +10,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/simpleledgerinc/goslp"
 	"github.com/simpleledgerinc/goslp/v1parser"
 	"golang.org/x/crypto/ripemd160"
 )
@@ -164,7 +163,7 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 
 	// Interpret and add addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := goslp.DecodeAddress(addrStr, params, true)
+		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
 			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
 		}
@@ -208,7 +207,7 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 
 	// Interpret and remove addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := goslp.DecodeAddress(addrStr, params, true)
+		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
