@@ -801,7 +801,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	// Attempt to decode the supplied address.
-	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
@@ -886,7 +886,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	}
 
 	// Attempt to decode the supplied address.
-	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
@@ -940,7 +940,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 
 	// Attempt to decode the supplied address.
-	addr, err := goslp.DecodeAddress(req.Address, s.chainParams, true)
+	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
@@ -1486,7 +1486,7 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 	}
 	slpAddrStr := ""
 	if s.slpIndex != nil {
-		slpAddr, err := goslp.NewAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
+		slpAddr, err := bchutil.NewSlpAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create slp pubkeyhash address from hash160: %v", err)
 		}
@@ -3087,14 +3087,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 					switch _addr := addrs[0].(type) {
 					case *bchutil.AddressPubKeyHash:
 						hash := _addr.Hash160()
-						slpAddr, err := goslp.NewAddressPubKeyHash(hash[:], params)
+						slpAddr, err := bchutil.NewSlpAddressPubKeyHash(hash[:], params)
 						if err != nil {
 							log.Criticalf("an error occured creating slp address from pubkey hash160: %v", err)
 						}
 						out.SlpToken.Address = slpAddr.String()
 					case *bchutil.AddressScriptHash:
 						hash := _addr.Hash160()
-						slpAddr, err := goslp.NewAddressScriptHashFromHash(hash[:], params)
+						slpAddr, err := bchutil.NewSlpAddressScriptHashFromHash(hash[:], params)
 						if err != nil {
 							log.Criticalf("an error occured creating slp address from script hash160: %v", err)
 						}
