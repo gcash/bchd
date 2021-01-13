@@ -11,7 +11,7 @@ require (
 	github.com/dchest/siphash v1.2.2
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
-	github.com/gcash/bchutil v0.0.0-20210113004300-8c33cf833c51
+	github.com/gcash/bchutil v0.0.0-20210113190856-6ea28dff4000
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.4.3
 	github.com/gorilla/mux v1.8.0
