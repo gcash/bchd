@@ -814,6 +814,12 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
+	// use cash address format
+	addr, err = bchutil.ConvertSlpToCashAddress(addr, s.chainParams)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
+	}
+
 	startHeight := int32(0)
 	if len(req.GetHash()) == 0 {
 		startHeight = req.GetHeight()
@@ -959,6 +965,12 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	addr, err := bchutil.DecodeAddress(req.Address, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
+	}
+
+	// use cash address format
+	addr, err = bchutil.ConvertSlpToCashAddress(addr, s.chainParams)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
 	}
 
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
@@ -1960,7 +1972,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
-						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
+						s.setInputMetadataFromView(respTx, txDesc, view)
 					}
 
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
@@ -2116,7 +2128,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
 
 					if view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx); err == nil {
-						setInputMetadataFromView(respTx, txDesc, view, s.chainParams)
+						s.setInputMetadataFromView(respTx, txDesc, view)
 					}
 
 					toSend.Transaction = &pb.TransactionNotification_UnconfirmedTransaction{
@@ -2457,6 +2469,14 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
+				if s.slpIndex != nil && in.SlpToken != nil {
+					slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
+					if err != nil {
+						log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
+					} else {
+						tx.Inputs[i].SlpToken.Address = slpAddr.String()
+					}
+				}
 			}
 
 			inputTxMap[*ch] = &loadedTx
@@ -3176,16 +3196,24 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 // setInputMetadata will set the value, previous script, and address for each input in the mempool transaction
 // from blockchain data adjusted upon the contents of the transaction pool.
 // Used when no s.txIndex is available
-func setInputMetadataFromView(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint, chainParams *chaincfg.Params) {
+func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint) {
 	for i, in := range txDesc.Tx.MsgTx().TxIn {
 		stxo := view.LookupEntry(in.PreviousOutPoint)
 		if stxo != nil {
 			respTx.Inputs[i].Value = stxo.Amount()
 			respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), chainParams)
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				respTx.Inputs[i].Address = addrs[0].String()
+				if s.slpIndex != nil && respTx.Inputs[i].SlpToken != nil {
+					slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
+					if err != nil {
+						log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
+					} else {
+						respTx.Inputs[i].SlpToken.Address = slpAddr.String()
+					}
+				}
 			}
 		}
 	}
