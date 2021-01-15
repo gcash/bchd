@@ -3,21 +3,28 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/gcash/bchd/bchrpc"
+	"github.com/gorilla/mux"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"net"
-	"net/http"
-	"strings"
 )
 
 // AuthenticationTokenKey is the key used in the context to authenticate clients.
 // If this is set to anything other than "" in the config, then the server expects
 // the client to set a key value in the context metadata to 'AuthenticationToken: cfg.AuthToken'
 const AuthenticationTokenKey = "AuthenticationToken"
+
+var prometheusEnabled = false
 
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	for _, addr := range netAddrs {
@@ -62,6 +69,30 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 			}
 		}()
 
+		if len(cfg.PrometheusListen) != 0 {
+			// init Prometheus metrics
+			grpc_prometheus.EnableHandlingTimeHistogram()
+			grpc_prometheus.Register(server)
+
+			router := mux.NewRouter()
+			router.Handle("/metrics", promhttp.Handler())
+
+			prometheusHTTPServer := &http.Server{
+				Addr:         cfg.PrometheusListen,
+				Handler:      router,
+				ReadTimeout:  10 * time.Second,
+				WriteTimeout: 10 * time.Second,
+			}
+
+			prometheusEnabled = true
+
+			go func() {
+				if err := prometheusHTTPServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+					grpcLog.Tracef("Finished serving Prometheus metrics %v", err)
+				}
+			}()
+		}
+
 		return gRPCServer, nil
 
 	}
@@ -78,6 +109,13 @@ func serviceName(method string) string {
 }
 
 func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	// collect prometheus metrics before auth
+	if prometheusEnabled {
+		if err := grpc_prometheus.StreamServerInterceptor(srv, ss, info, handler); err != nil {
+			return err
+		}
+	}
+
 	p, ok := peer.FromContext(ss.Context())
 	if ok {
 		grpcLog.Infof("Streaming method %s invoked by %s", info.FullMethod,
@@ -102,6 +140,13 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 }
 
 func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	if prometheusEnabled {
+		resp, err = grpc_prometheus.UnaryServerInterceptor(ctx, req, info, handler)
+		if err != nil {
+			return resp, err
+		}
+	}
+
 	p, ok := peer.FromContext(ctx)
 	if ok {
 		grpcLog.Infof("Unary method %s invoked by %s", info.FullMethod,
