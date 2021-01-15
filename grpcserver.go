@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/gcash/bchd/bchrpc"
+	"github.com/gorilla/mux"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -12,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // AuthenticationTokenKey is the key used in the context to authenticate clients.
@@ -62,6 +66,27 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 			}
 		}()
 
+		if len(cfg.PrometheusListen) != 0 {
+			// init Prometheus metrics
+			grpc_prometheus.EnableHandlingTimeHistogram()
+			grpc_prometheus.Register(server)
+
+			router := mux.NewRouter()
+			router.Handle("/metrics", promhttp.Handler())
+
+			prometheusHttpServer := &http.Server{
+				Addr:         cfg.PrometheusListen,
+				Handler:      router,
+				ReadTimeout:  10 * time.Second,
+				WriteTimeout: 10 * time.Second,
+			}
+			go func() {
+				if err := prometheusHttpServer.ListenAndServe(); err != nil {
+					grpcLog.Tracef("Finished serving Prometheus metrics %v", err)
+				}
+			}()
+		}
+
 		return gRPCServer, nil
 
 	}
@@ -78,6 +103,11 @@ func serviceName(method string) string {
 }
 
 func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	// collect prometheus metrics before auth
+	if err := grpc_prometheus.StreamServerInterceptor(srv, ss, info, handler); err != nil {
+		return err
+	}
+
 	p, ok := peer.FromContext(ss.Context())
 	if ok {
 		grpcLog.Infof("Streaming method %s invoked by %s", info.FullMethod,
@@ -102,6 +132,11 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 }
 
 func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	resp, err = grpc_prometheus.UnaryServerInterceptor(ctx, req, info, handler)
+	if err != nil {
+		return resp, err
+	}
+
 	p, ok := peer.FromContext(ctx)
 	if ok {
 		grpcLog.Infof("Unary method %s invoked by %s", info.FullMethod,

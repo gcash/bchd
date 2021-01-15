@@ -195,6 +195,7 @@ type config struct {
 	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
 	DBCacheSize             uint64        `long:"dbcachesize" description:"The maximum size in MiB of the database cache"`
 	DBFlushInterval         uint32        `long:"dbflushinterval" description:"The number of seconds between database flushes"`
+	PrometheusListen        string        `long:"prometheus" description:"Specify an (addr):port to serve prometheus metrics (for example :9000 or my-interface:9000, default disabled)"`
 	lookup                  func(string) ([]net.IP, error)
 	oniondial               func(string, string, time.Duration) (net.Conn, error)
 	dial                    func(string, string, time.Duration) (net.Conn, error)
@@ -469,6 +470,7 @@ func loadConfig() (*config, []string, error) {
 		TargetOutboundPeers:     defaultTargetOutboundPeers,
 		DBCacheSize:             defaultDBCacheSize,
 		DBFlushInterval:         defaultDBFlushSecs,
+		PrometheusListen:        "",
 	}
 
 	// Service options which are only added on Windows.
