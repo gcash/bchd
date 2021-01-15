@@ -8,6 +8,9 @@ spec:
     - name: protocol
       port: 8333
       targetPort: 8333
+    - name: prometheus
+      port: 9000
+      targetPort: 9000
   selector:
     service: bchd
   type: LoadBalancer
