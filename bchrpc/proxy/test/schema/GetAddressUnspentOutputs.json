@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": [
+    "outputs",
+    "token_metadata"
+  ],
+  "properties": {
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "definitions.json#/definitions/pbGetUnspentOutputResponse"
+      },
+      "default": []
+    },
+    "token_metadata": {
+      "type": "array",
+      "items": {
+        "$ref": "definitions.json#/definitions/pbTokenMetadata"
+      },
+      "default": []
+    }
+  }
+}

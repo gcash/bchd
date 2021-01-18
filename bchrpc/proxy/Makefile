@@ -9,7 +9,8 @@ gen/bchrpc.pb.go: ../bchrpc.proto
 		-I../ \
 		-I${GOPATH}/src \
 		-I${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--go_out=plugins=grpc:gen \
+		--go_out=plugins=grpc:../pb \
+		--go_opt=paths=source_relative \
 		../bchrpc.proto
 
 gen/bchrpc.pb.gw.go: ../bchrpc.proto ./bchrpc.yaml
@@ -18,7 +19,8 @@ gen/bchrpc.pb.gw.go: ../bchrpc.proto ./bchrpc.yaml
 		-I../ \
 		-I${GOPATH}/src \
 		-I${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--grpc-gateway_out=logtostderr=true,grpc_api_configuration=./bchrpc.yaml:gen \
+		--grpc-gateway_out=logtostderr=true,grpc_api_configuration=./bchrpc.yaml:../pb \
+		--grpc-gateway_opt paths=source_relative \
 		../bchrpc.proto
 
 web/bchrpc.swagger.json: ../bchrpc.proto ./bchrpc.yaml
@@ -27,5 +29,5 @@ web/bchrpc.swagger.json: ../bchrpc.proto ./bchrpc.yaml
 		-I../ \
 		-I${GOPATH}/src \
 		-I${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--swagger_out=logtostderr=true,grpc_api_configuration=./bchrpc.yaml:web \
+		--openapiv2_opt=logtostderr=true,grpc_api_configuration=./bchrpc.yaml:web \
 		../bchrpc.proto

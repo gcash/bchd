@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "transaction",
+    "token_metadata"
+  ],
+  "properties": {
+    "transaction": {
+      "$ref": "definitions.json#/definitions/pbTransaction",
+      "description": "A marshaled transaction."
+    },
+    "token_metadata": {
+      "$ref": "definitions.json#/definitions/pbTokenMetadata"
+    }
+  }
+}

@@ -20,3 +20,12 @@ If you are using a certificate signed by a CA then you do not need to specify a 
 ## Swagger API Docs
 
 The proxy server will also host the static swagger files located in the `./web` directory.
+
+
+## Run tests
+
+```
+go test gw_test.go
+```
+
+You can specify another BCHD backend using the same parameters as above for `gw.go`.

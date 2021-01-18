@@ -1,0 +1,866 @@
+{
+  "definitions": {
+    "pbTokenMetadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "token_id",
+        "token_type"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "type1"
+          ]
+        },
+        {
+          "required": [
+            "nft1_group"
+          ]
+        },
+        {
+          "required": [
+            "nft1_child"
+          ]
+        }
+      ],
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_type": {
+          "$ref": "#/definitions/TokenType"
+        },
+        "type1": {
+          "$ref": "#/definitions/pbTokenMetadataTokenType1"
+        },
+        "nft1_group": {
+          "$ref": "#/definitions/pbTokenMetadataNFT1Group"
+        },
+        "nft1_child": {
+          "$ref": "#/definitions/pbTokenMetadataNFT1Child"
+        }
+      },
+      "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
+    },
+    "pbTokenMetadataNFT1Child": {
+      "type": "object",
+      "required": [
+        "token_ticker",
+        "token_name",
+        "token_document_url",
+        "token_document_hash",
+        "group_id"
+      ],
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "group_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "NOTE: group id cannot be populated until the transaction has been confirmed",
+      "title": "TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
+    },
+    "pbTokenMetadataNFT1Group": {
+      "type": "object",
+      "required": [
+        "token_ticker",
+        "token_name",
+        "token_document_url",
+        "token_document_hash",
+        "decimals",
+        "mint_baton_txid",
+        "mint_baton_vout"
+      ],
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_txid": {
+          "$ref": "#/definitions/MintBatonTxid"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "description": "NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed",
+      "title": "TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
+    },
+    "pbTokenMetadataTokenType1": {
+      "type": "object",
+      "required": [
+        "token_ticker",
+        "token_name",
+        "token_document_url",
+        "token_document_hash",
+        "decimals",
+        "mint_baton_txid",
+        "mint_baton_vout"
+      ],
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_txid": {
+          "$ref": "#/definitions/MintBatonTxid"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "description": "NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed",
+      "title": "TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
+    },
+    "TransactionOutput": {
+      "type": "object",
+      "required": [
+        "index",
+        "value",
+        "pubkey_script",
+        "address",
+        "script_class",
+        "disassembled_script",
+        "slp_token"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of the output, starting from zero."
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "The number of satoshis to be transferred."
+        },
+        "pubkey_script": {
+          "type": "string",
+          "format": "byte",
+          "description": "The public key script used to pay coins."
+        },
+        "address": {
+          "$ref": "#/definitions/CashAddress"
+        },
+        "script_class": {
+          "type": "string",
+          "description": "The type of script."
+        },
+        "disassembled_script": {
+          "type": "string",
+          "description": "The script expressed in Bitcoin Cash Script."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        }
+      }
+    },
+    "pbTransaction": {
+      "type": "object",
+      "required": [
+        "hash",
+        "version",
+        "inputs",
+        "outputs",
+        "lock_time",
+        "size",
+        "timestamp",
+        "confirmations",
+        "block_height",
+        "block_hash",
+        "slp_transaction_info"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The double sha256 hash of the encoded transaction, little-endian.\nsha256(sha256(encoded_transaction))"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The version of the transaction format."
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransactionInput"
+          },
+          "description": "List of inputs."
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransactionOutput"
+          },
+          "description": "List of outputs."
+        },
+        "lock_time": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The block height or timestamp after which this transaction is allowed.\nIf value is greater than 500 million, it is assumed to be an epoch timestamp,\notherwise it is treated as a block-height. Default is zero, or lock."
+        },
+        "size": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The size of the transaction in bytes."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "int64",
+          "description": "When the transaction was included in a block, in epoch time."
+        },
+        "confirmations": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of blocks including proof of the transaction, including\nthe block it appeared."
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of the block containing the transaction."
+        },
+        "block_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Hash of the block the transaction was recorded in, little-endian."
+        },
+        "slp_transaction_info": {
+          "$ref": "#/definitions/pbSlpTransactionInfo"
+        }
+      }
+    },
+    "pbSlpTransactionInfo": {
+      "type": "object",
+      "required": [
+        "slp_action",
+        "validity_judgement",
+        "parse_error",
+        "token_id",
+        "burn_flags"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "v1_genesis"
+          ]
+        },
+        {
+          "required": [
+            "v1_mint"
+          ]
+        },
+        {
+          "required": [
+            "v1_send"
+          ]
+        },
+        {
+          "required": [
+            "nft1_child_genesis"
+          ]
+        },
+        {
+          "required": [
+            "nft1_child_send"
+          ]
+        }
+      ],
+      "properties": {
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "validity_judgement": {
+          "$ref": "#/definitions/SlpTransactionInfoValidityJudgement"
+        },
+        "parse_error": {
+          "type": "string"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "burn_flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SlpTransactionInfoBurnFlags"
+          }
+        },
+        "v1_genesis": {
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+        },
+        "v1_mint": {
+          "$ref": "#/definitions/pbSlpV1MintMetadata"
+        },
+        "v1_send": {
+          "$ref": "#/definitions/pbSlpV1SendMetadata"
+        },
+        "nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        },
+        "nft1_child_send": {
+          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        }
+      },
+      "description": "SlpTransactionInfo is used inside the Transaction message type."
+    },
+    "pbSlpToken": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "token_id",
+        "amount",
+        "is_mint_baton",
+        "address",
+        "decimals",
+        "slp_action",
+        "token_type"
+      ],
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "is_mint_baton": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "address": {
+          "$ref": "#/definitions/SlpAddress"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "$ref": "#/definitions/TokenType"
+        }
+      },
+      "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
+      "title": "SlpToken info used in transaction inputs / outputs"
+    },
+    "pbSlpAction": {
+      "type": "string",
+      "enum": [
+        "NON_SLP",
+        "NON_SLP_BURN",
+        "SLP_PARSE_ERROR",
+        "SLP_UNSUPPORTED_VERSION",
+        "SLP_V1_GENESIS",
+        "SLP_V1_MINT",
+        "SLP_V1_SEND",
+        "SLP_NFT1_GROUP_GENESIS",
+        "SLP_NFT1_GROUP_MINT",
+        "SLP_NFT1_GROUP_SEND",
+        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
+        "SLP_NFT1_UNIQUE_CHILD_SEND"
+      ],
+      "default": "NON_SLP",
+      "description": "SlpAction is used to allow clients to identify the type of slp transaction from this single field.\n\nNOTE: All enum types except for \"NON_SLP\" may be annotated with one or more BurnFlags."
+    },
+    "SlpTransactionInfoBurnFlags": {
+      "type": "string",
+      "enum": [
+        "BURNED_INPUTS_OUTPUTS_TOO_HIGH",
+        "BURNED_INPUTS_BAD_OPRETURN",
+        "BURNED_INPUTS_OTHER_TOKEN",
+        "BURNED_OUTPUTS_MISSING_BCH_VOUT",
+        "BURNED_INPUTS_GREATER_THAN_OUTPUTS"
+      ],
+      "default": "BURNED_INPUTS_OUTPUTS_TOO_HIGH"
+    },
+    "pbSlpV1GenesisMetadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "ticker",
+        "document_url",
+        "document_hash",
+        "decimals",
+        "mint_baton_vout",
+        "mint_amount"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "document_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "title": "SlpV1GenesisMetadata is used to marshal type 1 and NFT1 Group GENESIS OP_RETURN scriptPubKey"
+    },
+    "pbSlpV1MintMetadata": {
+      "type": "object",
+      "required": [
+        "mint_baton_vout",
+        "mint_amount"
+      ],
+      "properties": {
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      },
+      "title": "SlpV1MintMetadata is used to marshal type 1 MINT OP_RETURN scriptPubKey"
+    },
+    "pbSlpV1SendMetadata": {
+      "type": "object",
+      "required": [
+        "amounts"
+      ],
+      "properties": {
+        "amounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uint64"
+          }
+        }
+      },
+      "title": "SlpV1SendMetadata is used to marshal type 1 and NFT1 Group SEND OP_RETURN scriptPubKey"
+    },
+    "TransactionInput": {
+      "type": "object",
+      "required": [
+        "index",
+        "outpoint",
+        "signature_script",
+        "sequence",
+        "value",
+        "previous_script",
+        "address",
+        "slp_token"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of the input, starting from zero."
+        },
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "The related outpoint."
+        },
+        "signature_script": {
+          "type": "string",
+          "format": "byte",
+          "title": "An unlocking script asserting a transaction is permitted to spend\nthe Outpoint (UTXO)"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "int64",
+          "description": "As of BIP-68, the sequence number is interpreted as a relative\nlock-time for the input."
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "Amount in satoshi."
+        },
+        "previous_script": {
+          "type": "string",
+          "format": "byte",
+          "description": "The pubkey_script of the previous output that is being spent."
+        },
+        "address": {
+          "$ref": "#/definitions/CashAddress"
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        }
+      }
+    },
+    "pbSlpNft1ChildGenesisMetadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "ticker",
+        "document_url",
+        "document_hash",
+        "decimals",
+        "group_token_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "document_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "SlpNft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey"
+    },
+    "InputOutpoint": {
+      "type": "object",
+      "required": [
+        "hash",
+        "index"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The hash of the transaction containing the output to be spent, little-endian"
+        },
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The index of specific output on the transaction."
+        }
+      }
+    },
+    "pbGetUnspentOutputResponse": {
+      "type": "object",
+      "required": [
+        "outpoint",
+        "pubkey_script",
+        "value",
+        "is_coinbase",
+        "block_height",
+        "slp_token"
+      ],
+      "properties": {
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "A reference to the related input."
+        },
+        "pubkey_script": {
+          "type": "string",
+          "format": "byte",
+          "title": "Locking script dictating how funds can be spent in the future"
+        },
+        "value": {
+          "type": "string",
+          "format": "int64",
+          "description": "Amount in satoshi."
+        },
+        "is_coinbase": {
+          "type": "boolean",
+          "format": "boolean",
+          "title": "When is_coinbase is true, the transaction was the first in a block,\ncreated by a miner, and used to pay the block reward"
+        },
+        "block_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The index number of the block containing the transaction creating the output."
+        },
+        "slp_token": {
+          "$ref": "#/definitions/pbSlpToken"
+        },
+        "token_metadata": {
+          "$ref": "#/definitions/pbTokenMetadata"
+        }
+      }
+    },
+    "pbGetParsedSlpScriptResponse": {
+      "type": "object",
+      "required": [
+        "parsing_error",
+        "token_id",
+        "slp_action",
+        "token_type"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "v1_genesis"
+          ]
+        },
+        {
+          "required": [
+            "v1_mint"
+          ]
+        },
+        {
+          "required": [
+            "v1_send"
+          ]
+        },
+        {
+          "required": [
+            "nft1_child_genesis"
+          ]
+        },
+        {
+          "required": [
+            "nft1_child_send"
+          ]
+        }
+      ],
+      "properties": {
+        "parsing_error": {
+          "type": "string"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "v1_genesis": {
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+        },
+        "v1_mint": {
+          "$ref": "#/definitions/pbSlpV1MintMetadata"
+        },
+        "v1_send": {
+          "$ref": "#/definitions/pbSlpV1SendMetadata"
+        },
+        "nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        },
+        "nft1_child_send": {
+          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        }
+      }
+    },
+    "pbGetTrustedSlpValidationResponse": {
+      "type": "object",
+      "required": [
+        "results"
+      ],
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
+          }
+        }
+      }
+    },
+    "GetTrustedSlpValidationResponseValidityResult": {
+      "type": "object",
+      "required": [
+        "prev_out_hash",
+        "prev_out_vout",
+        "token_id",
+        "slp_action",
+        "token_type",
+        "v1_token_amount",
+        "slp_txn_opreturn"
+      ],
+      "properties": {
+        "prev_out_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "prev_out_vout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "v1_token_amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "v1_mint_baton": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "slp_txn_opreturn": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbSlpNft1ChildSendMetadata": {
+      "type": "object",
+      "required": [
+        "group_token_id"
+      ],
+      "properties": {
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "SlpNft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey"
+    },
+    "SlpTransactionInfoValidityJudgement": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN_OR_INVALID",
+        "VALID"
+      ],
+      "default": "UNKNOWN_OR_INVALID"
+    },
+    "TokenType": {
+      "type": "integer",
+      "format": "int64",
+      "enum": [
+        1,
+        65,
+        129
+      ]
+    },
+    "MintBatonTxid": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "byte"
+    },
+    "CashAddress": {
+      "type": "string",
+      "minLength": 54,
+      "description": "An address in CashAddr format."
+    },
+    "SlpAddress": {
+      "type": "string",
+      "minLength": 55,
+      "description": "An SimpleLedgerProtocol address."
+    }
+  }
+}
