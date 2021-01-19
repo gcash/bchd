@@ -1614,12 +1614,12 @@ func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAd
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create slp pubkeyhash address from hash160: %v", err)
 		}
-		slpAddrStr = fmt.Sprintf("%s:%s", s.chainParams.SlpAddressPrefix, slpAddr.EncodeAddress())
+		slpAddrStr = slpAddr.EncodeAddress()
 	}
 
 	res := &pb.GetBip44HdAddressResponse{
 		PubKey:   pubKey.SerializeCompressed(),
-		CashAddr: fmt.Sprintf("%s:%s", s.chainParams.CashAddressPrefix, addr.EncodeAddress()),
+		CashAddr: addr.EncodeAddress(),
 		SlpAddr:  slpAddrStr,
 	}
 
