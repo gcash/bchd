@@ -854,12 +854,14 @@
     },
     "CashAddress": {
       "type": "string",
-      "minLength": 54,
+      "minLength": 42,
+      "maxLength": 42,
       "description": "An address in CashAddr format."
     },
     "SlpAddress": {
       "type": "string",
-      "minLength": 55,
+      "minLength": 42,
+      "maxLength": 42,
       "description": "An SimpleLedgerProtocol address."
     }
   }

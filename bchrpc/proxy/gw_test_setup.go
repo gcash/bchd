@@ -9,12 +9,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/xeipuuv/gojsonschema"
 	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
+
+	"github.com/golang/glog"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 // The HTTP client we use for API calls.
@@ -138,7 +139,7 @@ func isFlagPresent(name string) bool {
 	return found
 }
 
-func validateJsonSchema(apiMmethod string, res []byte) error {
+func validateJsonSchema(apiMmethod string, res []byte, ignoreErrors []string) error {
 	schemaLoader := gojsonschema.NewReferenceLoader(fmt.Sprintf("file://./test/schema/%s.json", apiMmethod))
 	documentLoader := gojsonschema.NewBytesLoader(res)
 
@@ -146,16 +147,28 @@ func validateJsonSchema(apiMmethod string, res []byte) error {
 	if err != nil {
 		return err
 	}
-
 	if result.Valid() {
 		return nil
 	}
-	errMsg := "The document is not valid. see errors :\n"
-	fmt.Printf("")
+	errMsg := ""
 	for _, desc := range result.Errors() {
+		ignore := false
+		for _, errStr := range ignoreErrors {
+			if desc.String() == errStr {
+				ignore = true
+				break
+			}
+		}
+		if ignore {
+			continue
+		}
 		errMsg += fmt.Sprintf("- %s\n", desc)
 	}
-	return errors.New(errMsg)
+	if errMsg == "" {
+		return nil
+	}
+	errMsgFront := "The document is not valid. see errors :\n"
+	return errors.New(errMsgFront + errMsg)
 }
 
 func base64ToHex(base64Str string) (string, error) {

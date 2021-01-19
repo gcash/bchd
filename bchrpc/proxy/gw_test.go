@@ -8,16 +8,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gcash/bchd/bchrpc/pb"
-	"github.com/golang/glog"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/gcash/bchd/bchrpc/pb"
+	"github.com/golang/glog"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 )
 
 const bchdTestNode = "bchd.ny1.simpleledger.io:443"
@@ -85,7 +85,7 @@ func TestGetBlockchainInfo(t *testing.T) {
 		t.Fatalf("Your node is not fully synced. Some requests will likely return incorrect data. Best height %.0f, required height %d", resMap["best_height"].(float64), minBlockHeight)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -156,7 +156,10 @@ func TestGetTransaction(t *testing.T) {
 		t.Fatalf("%s failed. Response: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	// ignore missing address on first output which is op_return in this case
+	ignores := []string{"transaction.outputs.0.address: String length must be greater than or equal to 42"}
+
+	if err := validateJsonSchema(method, res, ignores); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -190,7 +193,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -231,7 +234,7 @@ func TestGetCashAddressUnspentOutputs(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -259,7 +262,7 @@ func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -291,7 +294,7 @@ func TestGetTokenBalance(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -334,7 +337,7 @@ func TestGetTokenMetadata(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -369,7 +372,7 @@ func TestCheckSlpTransaction(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -412,7 +415,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -441,7 +444,7 @@ func TestGetBip44HdAddress(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -450,10 +453,6 @@ func TestGetBip44HdAddress(t *testing.T) {
 	err = marshaller.Unmarshal(res, &address)
 	if err != nil {
 		t.Fatalf("Error unmarshalling %s response: %+v", method, err)
-	} else if strings.Index(address.CashAddr, "bitcoincash:") != 0 {
-		t.Fatalf("%s returned invalid CashAddr %s", method, address.CashAddr)
-	} else if strings.Index(address.SlpAddr, "simpleledger:") != 0 {
-		t.Fatalf("%s returned invalid SlpAddr %s", method, address.SlpAddr)
 	}
 
 	t.Logf("Successfully passed %s test", method)
@@ -472,7 +471,7 @@ func TestGetParsedSlpScript(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -513,7 +512,7 @@ func TestGetTrustedSlpValidation(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res); err != nil {
+	if err := validateJsonSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
