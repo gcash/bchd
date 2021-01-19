@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"net/http"
 	"time"
+
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 
 	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 
@@ -24,6 +25,7 @@ var (
 	proxyPort          = flag.String("port", "8080", "port for the proxy server")
 )
 
+// GrpcProxy is the grpc gateway proxy and static webpage server implementation
 type GrpcProxy struct {
 	ctx    context.Context
 	server *http.Server
@@ -92,6 +94,7 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 	return err
 }
 
+// Shutdown shuts down the proxy server
 func (proxy *GrpcProxy) Shutdown() {
 	if proxy.server != nil {
 		err := proxy.server.Shutdown(proxy.ctx)

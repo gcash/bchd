@@ -18,57 +18,58 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-// The HTTP client we use for API calls.
-type HttpClient struct {
+// HTTPClient is the HTTP client we use for API calls.
+type HTTPClient struct {
 	Client         *http.Client
 	LogRequestBody bool // log JSON request and response body. Remember to add --alsologtostderr=true for glog output
-	apiUrl         string
+	apiURL         string
 }
 
 // D is a shortcut for map[string]interface{} for request and response data
 type D map[string]interface{}
 
-func newHttpClient(apiUrl string, logRequestBody bool) (*HttpClient, error) {
+func newHTTPClient(apiURL string, logRequestBody bool) (*HTTPClient, error) {
 	cookies, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, err
 	}
-	client := &HttpClient{
+	client := &HTTPClient{
 		Client: &http.Client{
 			Jar:     cookies,
 			Timeout: 10 * time.Second,
 		},
 		LogRequestBody: logRequestBody,
-		apiUrl:         apiUrl,
+		apiURL:         apiURL,
 	}
 	return client, nil
 }
 
-func (c *HttpClient) GetMethodUrl(method string) string {
-	return c.apiUrl + method
+// GetMethodURL provides formatting for method URL
+func (c *HTTPClient) GetMethodURL(method string) string {
+	return c.apiURL + method
 }
 
-// Perform an API request returning the raw http.Response.
+// Request performs an API request returning the raw http.Response.
 // Be sure to call resp.Body.Close() after reading.
-func (c *HttpClient) Request(method string, body D) (*http.Response, error) {
+func (c *HTTPClient) Request(method string, body D) (*http.Response, error) {
 	jsonParams, err := json.Marshal(body)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("unable to marshall request body %+v", err))
+		return nil, fmt.Errorf("unable to marshall request body %+v", err)
 	}
 	if c.LogRequestBody {
 		glog.Infof("%s req: %s", method, jsonParams)
 	}
 
-	resp, err := c.Client.Post(c.GetMethodUrl(method), "application/json", bytes.NewBuffer(jsonParams))
+	resp, err := c.Client.Post(c.GetMethodURL(method), "application/json", bytes.NewBuffer(jsonParams))
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error calling REST API response %+v", err))
+		return nil, fmt.Errorf("error calling REST API response %+v", err)
 	}
 
 	return resp, nil
 }
 
-// Make a REST API call to the given method with body as parameters.
-func (c *HttpClient) RequestRaw(method string, body D) ([]byte, error) {
+// RequestRaw makes a REST API call to the given method with body as parameters.
+func (c *HTTPClient) RequestRaw(method string, body D) ([]byte, error) {
 	resp, err := c.Request(method, body)
 	if err != nil {
 		return nil, err
@@ -76,11 +77,11 @@ func (c *HttpClient) RequestRaw(method string, body D) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(fmt.Sprintf("Invalid status code on REST call %d - res: %s", resp.StatusCode, c.PrintRes(resp)))
+		return nil, fmt.Errorf("Invalid status code on REST call %d - res: %s", resp.StatusCode, c.PrintRes(resp))
 	}
 	resData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error reading REST API data %+v", err))
+		return nil, fmt.Errorf("error reading REST API data %+v", err)
 	}
 	if c.LogRequestBody {
 		glog.Infof("%s res: %s", method, resData)
@@ -89,33 +90,33 @@ func (c *HttpClient) RequestRaw(method string, body D) ([]byte, error) {
 	return resData, nil
 }
 
-// Make a request and return the response in a map for easier parsing.
-func (c *HttpClient) RequestMap(method string, body D) (D, error) {
+// RequestMap makes a request and return the response in a map for easier parsing.
+func (c *HTTPClient) RequestMap(method string, body D) (D, error) {
 	resData, err := c.RequestRaw(method, body)
 	if err != nil {
 		return nil, err
 	}
 
-	var resJson D
-	err = json.Unmarshal(resData, &resJson)
+	var resJSON D
+	err = json.Unmarshal(resData, &resJSON)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error unmarshalling REST API data %+v", err))
+		return nil, fmt.Errorf("error unmarshalling REST API data %+v", err)
 	}
-	return resJson, nil
+	return resJSON, nil
 }
 
-// Get the response code + message as string (for logging).
-func (c *HttpClient) PrintRes(resp *http.Response) string {
+// PrintRes gets the response code + message as string (for logging).
+func (c *HTTPClient) PrintRes(resp *http.Response) string {
 	resData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Sprintf("error reading res %+v", err)
 	}
-	var resJson D
-	err = json.Unmarshal(resData, &resJson)
+	var resJSON D
+	err = json.Unmarshal(resData, &resJSON)
 	if err != nil {
 		return fmt.Sprintf("invalid JSON res %+v", err)
 	}
-	return fmt.Sprintf("Status %d\n%v", resp.StatusCode, resJson)
+	return fmt.Sprintf("Status %d\n%v", resp.StatusCode, resJSON)
 }
 
 func startLocalTestServer(proxy *GrpcProxy) {
@@ -139,7 +140,7 @@ func isFlagPresent(name string) bool {
 	return found
 }
 
-func validateJsonSchema(apiMmethod string, res []byte, ignoreErrors []string) error {
+func validateJSONSchema(apiMmethod string, res []byte, ignoreErrors []string) error {
 	schemaLoader := gojsonschema.NewReferenceLoader(fmt.Sprintf("file://./test/schema/%s.json", apiMmethod))
 	documentLoader := gojsonschema.NewBytesLoader(res)
 

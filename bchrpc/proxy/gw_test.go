@@ -21,11 +21,11 @@ import (
 )
 
 const bchdTestNode = "bchd.ny1.simpleledger.io:443"
-const logRequestJson = true // log JSON of request and responses (to glog)
+const logRequestJSON = true // log JSON of request and responses (to glog)
 
 const dustLimit = 546
 
-var httpClient *HttpClient
+var httpClient *HTTPClient
 
 func TestMain(m *testing.M) {
 	var err error
@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	}
 	go startLocalTestServer(proxy)
 	time.Sleep(1 * time.Second) // wait for HTTP server goroutine
-	httpClient, err = newHttpClient(fmt.Sprintf("http://localhost:%s/v1/", *proxyPort), logRequestJson)
+	httpClient, err = newHTTPClient(fmt.Sprintf("http://localhost:%s/v1/", *proxyPort), logRequestJSON)
 	if err != nil {
 		log.Printf("Error creating HTTP client: %+v", err)
 		os.Exit(1)
@@ -85,7 +85,7 @@ func TestGetBlockchainInfo(t *testing.T) {
 		t.Fatalf("Your node is not fully synced. Some requests will likely return incorrect data. Best height %.0f, required height %d", resMap["best_height"].(float64), minBlockHeight)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -111,7 +111,7 @@ func TestResponseHeaders(t *testing.T) {
 
 func TestOptionsRequest(t *testing.T) {
 	method := "GetTransaction"
-	urlStr := httpClient.GetMethodUrl(method)
+	urlStr := httpClient.GetMethodURL(method)
 	urlObj, _ := url.Parse(urlStr)
 	resp, err := httpClient.Client.Do(&http.Request{
 		Method: "OPTIONS",
@@ -146,7 +146,7 @@ func TestGetTransaction(t *testing.T) {
 	txHash, _ := hex.DecodeString("15388bfd9998429b2955700da25d22178658cee8a9037423793a94efc047fbed")
 	txHashBase64 := base64.StdEncoding.EncodeToString(reverseBytes(txHash))
 	tokenID := "7278363093d3b899e0e1286ff681bf50d7ddc3c2a68565df743d0efc54c0e7fd"
-	tokenIdBytes, _ := hex.DecodeString(tokenID)
+	tokenIDBytes, _ := hex.DecodeString(tokenID)
 
 	res, err := httpClient.RequestRaw(method, D{
 		"hash":                   txHashBase64,
@@ -159,7 +159,7 @@ func TestGetTransaction(t *testing.T) {
 	// ignore missing address on first output which is op_return in this case
 	ignores := []string{"transaction.outputs.0.address: String length must be greater than or equal to 42"}
 
-	if err := validateJsonSchema(method, res, ignores); err != nil {
+	if err := validateJSONSchema(method, res, ignores); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -174,7 +174,7 @@ func TestGetTransaction(t *testing.T) {
 		t.Fatalf("Expected 4 outputs on %s, got %d", method, len(tx.Transaction.Outputs))
 	} else if tx.TokenMetadata == nil {
 		t.Fatalf("Missing token metadata on %s", method)
-	} else if !bytes.Equal(tokenIdBytes, tx.TokenMetadata.TokenId) {
+	} else if !bytes.Equal(tokenIDBytes, tx.TokenMetadata.TokenId) {
 		t.Fatalf("Wrong token ID on %s: %x", method, tx.TokenMetadata.TokenId)
 	}
 
@@ -193,7 +193,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -234,7 +234,7 @@ func TestGetCashAddressUnspentOutputs(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -262,7 +262,7 @@ func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -283,7 +283,7 @@ func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
 func TestGetTokenBalance(t *testing.T) {
 	method := "GetAddressUnspentOutputs"
 	tokenID := "0be40e351ea9249b536ec3d1acd4e082e860ca02ec262777259ffe870d3b5cc3"
-	tokenIdBytes, _ := hex.DecodeString(tokenID)
+	tokenIDBytes, _ := hex.DecodeString(tokenID)
 	address := "simpleledger:qz7j7805n9yjdccpz00gq7d70k3h3nef9y75245epu"
 	res, err := httpClient.RequestRaw(method, D{
 		"address":                address,
@@ -294,7 +294,7 @@ func TestGetTokenBalance(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -315,7 +315,7 @@ func TestGetTokenBalance(t *testing.T) {
 		if out.SlpToken == nil {
 			continue
 		}
-		if !bytes.Equal(out.SlpToken.TokenId, tokenIdBytes) {
+		if !bytes.Equal(out.SlpToken.TokenId, tokenIDBytes) {
 			continue
 		}
 		balance += out.SlpToken.Amount
@@ -337,7 +337,7 @@ func TestGetTokenMetadata(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -372,7 +372,7 @@ func TestCheckSlpTransaction(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -394,7 +394,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 
 	method := "CheckSlpTransaction"
 	transactionBase64, _ := hexToBase64("0100000002cf47cdc10902e2423b3b4b4c1a750e0525f0dbdc80c9b1248d87d372822c297f020000006a47304402201abb1eb1bbee6f0a59cdeccafcf1e9f5f3609b2f1f8b06e363f99b909ddc0ccb02206cd852340c6f9749312b9a6d00059c19ec0016d6279f8442d88cc905c026e0cc412103326306e0c27c5cabcab4ff215dec7a1acb5e019b796fbd563cbc13e1176f6dacfeffffffe2dd8264c70e8da104b6113457c436096e84e4566c68dfc1e76dad8a54470117020000006b483045022100bd6a24c5c79b727515b642f6f0e7dd8ed78a326a88fafd8c61e20f7e35aa906602200b266953050d4d37eba14f34e3924277c882d08718a88377957687ef5e48437c412102e11b25ad09036672e09612cf14373bca526f976c1113d28e25de5fdedc50f054feffffff030000000000000000396a04534c50000101044d494e5420170147548aad6de7c1df686c56e4846e0936c4573411b604a18d0ec76482dde24c0008000000000000006422020000000000001976a91402ca8fafb2f521083fbb6f416b19878cc70e6de088ace31b0100000000001976a9148dffa75af65d0dc1769a8522ada9e3ec7806e4ba88ace14c0800")
-	tokenIdBase64, _ := hexToBase64("170147548aad6de7c1df686c56e4846e0936c4573411b604a18d0ec76482dde2")
+	tokenIDBase64, _ := hexToBase64("170147548aad6de7c1df686c56e4846e0936c4573411b604a18d0ec76482dde2")
 	outpointHash, _ := hex.DecodeString("170147548aad6de7c1df686c56e4846e0936c4573411b604a18d0ec76482dde2")
 	outpointHashBase64 := base64.StdEncoding.EncodeToString(reverseBytes(outpointHash))
 
@@ -405,7 +405,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 				"hash":  outpointHashBase64,
 				"index": 2,
 			},
-			"token_id":        tokenIdBase64,
+			"token_id":        tokenIDBase64,
 			"token_type":      1,
 			"amount":          "0",
 			"mint_baton_vout": 2,
@@ -415,7 +415,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -444,7 +444,7 @@ func TestGetBip44HdAddress(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -471,7 +471,7 @@ func TestGetParsedSlpScript(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
@@ -495,13 +495,13 @@ func TestGetParsedSlpScript(t *testing.T) {
 
 func TestGetTrustedSlpValidation(t *testing.T) {
 	method := "GetTrustedSlpValidation"
-	transactionId, _ := hex.DecodeString("3ff425384539519e815507f7f6739d9c12a44af84ff895601606b85157e0fb19")
-	transactionIdBase64 := base64.StdEncoding.EncodeToString(reverseBytes(transactionId))
+	transactionID, _ := hex.DecodeString("3ff425384539519e815507f7f6739d9c12a44af84ff895601606b85157e0fb19")
+	transactionIDBase64 := base64.StdEncoding.EncodeToString(reverseBytes(transactionID))
 	prevOutVout := 1
 
 	res, err := httpClient.RequestRaw(method, D{
 		"queries": []D{D{
-			"prev_out_hash":            transactionIdBase64,
+			"prev_out_hash":            transactionIDBase64,
 			"prev_out_vout":            prevOutVout,
 			"graphsearch_valid_hashes": nil,
 		}},
@@ -512,7 +512,7 @@ func TestGetTrustedSlpValidation(t *testing.T) {
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
-	if err := validateJsonSchema(method, res, nil); err != nil {
+	if err := validateJSONSchema(method, res, nil); err != nil {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
