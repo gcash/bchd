@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": [
+    "token_metadata"
+  ],
+  "properties": {
+    "token_metadata": {
+      "type": "array",
+      "items": {
+        "$ref": "definitions.json#/definitions/pbTokenMetadata"
+      },
+      "default": []
+    }
+  }
+}
