@@ -183,7 +183,7 @@ func TestGetTransaction(t *testing.T) {
 
 func TestGetAddressUnspentOutputs(t *testing.T) {
 	method := "GetAddressUnspentOutputs"
-	address := "simpleledger:qzapwgc088xj9hf8pcsrzsey8j7svcqysyp9ygxmq8"
+	address := "simpleledger:qq9djgun97em5arkvqa9le0wdstlv8lmdvgu0xc2c2"
 	res, err := httpClient.RequestRaw(method, D{
 		"address":                address,
 		"include_mempool":        true,
@@ -210,7 +210,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 	}
 
 	firstOutput := outputs.Outputs[0]
-	var minHeight int32 = 668615
+	var minHeight int32 = 668417
 	if firstOutput.BlockHeight < minHeight {
 		t.Errorf("%s first output BlockHeight must be >= %d, received %d", method, minHeight, firstOutput.BlockHeight)
 	} else if firstOutput.Value < dustLimit {
