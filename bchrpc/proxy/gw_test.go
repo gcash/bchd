@@ -276,8 +276,7 @@ func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
 	} else if len(outputs.TokenMetadata) != 0 {
 		t.Fatalf("%s is expected to have no token metadata for address %s", method, address)
 	}
-
-	t.Logf("Successfully passed %s test. Got %+v", method, outputs)
+	t.Logf("Successfully passed %s test. Got %s", method, outputs.String())
 }
 
 func TestGetTokenBalance(t *testing.T) {
@@ -382,7 +381,7 @@ func TestCheckSlpTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error unmarshalling %s response: %+v", method, err)
 	} else if txRes.IsValid == false {
-		t.Fatalf("%s said TX is invalid: %+v", method, txRes)
+		t.Fatalf("%s said TX is invalid: %s", method, txRes.String())
 	}
 
 	t.Logf("Successfully passed %s test", method)
@@ -400,7 +399,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 
 	res, err := httpClient.RequestRaw(method, D{
 		"transaction": transactionBase64,
-		"required_slp_burns": []D{D{
+		"required_slp_burns": []D{{
 			"outpoint": D{
 				"hash":  outpointHashBase64,
 				"index": 2,
@@ -425,7 +424,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error unmarshalling %s response: %+v", method, err)
 	} else if txRes.IsValid == false {
-		t.Fatalf("%s said TX is invalid: %+v", method, txRes)
+		t.Fatalf("%s said TX is invalid: %s", method, txRes.String())
 	}
 
 	t.Logf("Successfully passed %s test", method)
@@ -500,7 +499,7 @@ func TestGetTrustedSlpValidation(t *testing.T) {
 	prevOutVout := 1
 
 	res, err := httpClient.RequestRaw(method, D{
-		"queries": []D{D{
+		"queries": []D{{
 			"prev_out_hash":            transactionIDBase64,
 			"prev_out_vout":            prevOutVout,
 			"graphsearch_valid_hashes": nil,
