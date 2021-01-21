@@ -429,6 +429,33 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 	t.Logf("Successfully passed %s test", method)
 }
 
+func TestGetBip44HdAddress(t *testing.T) {
+	method := "GetBip44HdAddress"
+	xPub := "xpub6CphSGwqZvKFU9zMfC3qLxxhskBFjNAC9imbSMGXCNVD4DRynJGJCYR63DZe5T4bePEkyRoi9wtZQkmxsNiZfR9D6X3jBxyacHdtRpETDvV"
+
+	res, err := httpClient.RequestRaw(method, D{
+		"xpub":          xPub,
+		"change":        false,
+		"address_index": 12345,
+	})
+	if err != nil {
+		t.Fatalf("%s test failed: %+v", method, err)
+	}
+
+	if err := validateJSONSchema(method, res, nil); err != nil {
+		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
+	}
+
+	var address pb.GetBip44HdAddressResponse
+	marshaller := runtime.JSONPb{}
+	err = marshaller.Unmarshal(res, &address)
+	if err != nil {
+		t.Fatalf("Error unmarshalling %s response: %+v", method, err)
+	}
+
+	t.Logf("Successfully passed %s test", method)
+}
+
 func TestGetParsedSlpScript(t *testing.T) {
 	method := "GetParsedSlpScript"
 	slpScriptBase64 := "agRTTFAAAQEEU0VORCByeDYwk9O4meDhKG/2gb9Q193DwqaFZd90PQ78VMDn/QgAAABxis0TAAgAAAAC34V1AA=="
@@ -472,9 +499,11 @@ func TestGetTrustedSlpValidation(t *testing.T) {
 
 	res, err := httpClient.RequestRaw(method, D{
 		"queries": []D{{
-			"prev_out_hash": transactionIDBase64,
-			"prev_out_vout": prevOutVout,
+			"prev_out_hash":            transactionIDBase64,
+			"prev_out_vout":            prevOutVout,
+			"graphsearch_valid_hashes": nil,
 		}},
+		"include_graphsearch_count": true,
 	})
 
 	if err != nil {

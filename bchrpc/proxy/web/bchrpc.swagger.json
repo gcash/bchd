@@ -117,6 +117,39 @@
         ]
       }
     },
+    "/v1/GetBip44HdAddress": {
+      "post": {
+        "summary": "GetBip44HdAddress returns an address associated with a provided xpub, address index, and\nselecting either internal or external by setting the change boolean.  If SlpIndex is disabled\nthe slpAddress string will be an empty string.",
+        "operationId": "bchrpc_GetBip44HdAddress",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBip44HdAddressResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBip44HdAddressRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetBlock": {
       "post": {
         "summary": "GetBlock returns detailed data for a block.",
@@ -1267,6 +1300,36 @@
           "items": {
             "$ref": "#/definitions/pbTokenMetadata"
           }
+        }
+      }
+    },
+    "pbGetBip44HdAddressRequest": {
+      "type": "object",
+      "properties": {
+        "xpub": {
+          "type": "string"
+        },
+        "change": {
+          "type": "boolean"
+        },
+        "address_index": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "pbGetBip44HdAddressResponse": {
+      "type": "object",
+      "properties": {
+        "pub_key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "cash_addr": {
+          "type": "string"
+        },
+        "slp_addr": {
+          "type": "string"
         }
       }
     },
