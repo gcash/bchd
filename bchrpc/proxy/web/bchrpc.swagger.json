@@ -4,6 +4,11 @@
     "title": "bchrpc.proto",
     "version": "version not set"
   },
+  "tags": [
+    {
+      "name": "bchrpc"
+    }
+  ],
   "consumes": [
     "application/json"
   ],
@@ -23,9 +28,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -57,9 +62,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -91,9 +96,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -104,39 +109,6 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/pbGetAddressUnspentOutputsRequest"
-            }
-          }
-        ],
-        "tags": [
-          "bchrpc"
-        ]
-      }
-    },
-    "/v1/GetBip44HdAddress": {
-      "post": {
-        "summary": "GetBip44HdAddress returns an address associated with a provided xpub, address index, and\nselecting either internal or external by setting the change boolean.  If SlpIndex is disabled\nthe slpAddress string will be an empty string.",
-        "operationId": "bchrpc_GetBip44HdAddress",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/pbGetBip44HdAddressResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response",
-            "schema": {
-              "$ref": "#/definitions/runtimeError"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/pbGetBip44HdAddressRequest"
             }
           }
         ],
@@ -157,9 +129,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -191,9 +163,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -224,9 +196,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -257,9 +229,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -290,9 +262,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -323,9 +295,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -356,9 +328,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -390,9 +362,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -423,9 +395,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -457,9 +429,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -490,9 +462,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -524,9 +496,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -558,9 +530,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -592,9 +564,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -626,9 +598,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -660,9 +632,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -693,9 +665,9 @@
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -728,16 +700,16 @@
                   "$ref": "#/definitions/pbBlockNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/runtimeStreamError"
+                  "$ref": "#/definitions/rpcStatus"
                 }
               },
               "title": "Stream result of pbBlockNotification"
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -771,16 +743,16 @@
                   "$ref": "#/definitions/pbTransactionNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/runtimeStreamError"
+                  "$ref": "#/definitions/rpcStatus"
                 }
               },
               "title": "Stream result of pbTransactionNotification"
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -815,16 +787,16 @@
                   "$ref": "#/definitions/pbTransactionNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/runtimeStreamError"
+                  "$ref": "#/definitions/rpcStatus"
                 }
               },
               "title": "Stream result of pbTransactionNotification"
             }
           },
           "default": {
-            "description": "An unexpected error response",
+            "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/runtimeError"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -897,8 +869,7 @@
           "format": "uint64"
         },
         "v1_mint_baton": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         },
         "slp_txn_opreturn": {
           "type": "string",
@@ -1167,8 +1138,7 @@
       "type": "object",
       "properties": {
         "is_valid": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         }
       }
     },
@@ -1230,12 +1200,10 @@
         },
         "include_mempool": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `include_mempool` is true, unconfirmed transactions from mempool\nare returned. Default is false."
         },
         "include_token_metadata": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         }
       }
     },
@@ -1254,37 +1222,6 @@
           "items": {
             "$ref": "#/definitions/pbTokenMetadata"
           }
-        }
-      }
-    },
-    "pbGetBip44HdAddressRequest": {
-      "type": "object",
-      "properties": {
-        "xpub": {
-          "type": "string"
-        },
-        "change": {
-          "type": "boolean",
-          "format": "boolean"
-        },
-        "address_index": {
-          "type": "integer",
-          "format": "int64"
-        }
-      }
-    },
-    "pbGetBip44HdAddressResponse": {
-      "type": "object",
-      "properties": {
-        "pub_key": {
-          "type": "string",
-          "format": "byte"
-        },
-        "cash_addr": {
-          "type": "string"
-        },
-        "slp_addr": {
-          "type": "string"
         }
       }
     },
@@ -1352,7 +1289,6 @@
         },
         "full_transactions": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `full_transactions` is true, full transactions are returned\ninstead of just hashes. Default is false."
         }
       }
@@ -1398,17 +1334,14 @@
         },
         "tx_index": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `tx_index` is true, the node has full transaction index enabled."
         },
         "addr_index": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `addr_index` is true, the node has address index enabled and may\nbe used with call related by address."
         },
         "slp_index": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `slp_index` is true, the node has the slp index enabled and may\nbe used with slp related rpc methods and also causes slp metadata to be added\nin some of the existing rpc methods."
         }
       }
@@ -1467,7 +1400,6 @@
       "properties": {
         "full_transactions": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When `full_transactions` is true, full transaction data is provided\ninstead of just transaction hashes. Default is false."
         }
       }
@@ -1702,8 +1634,7 @@
           "description": "A transaction hash, little-endian."
         },
         "include_token_metadata": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         }
       },
       "description": "Get a transaction from a transaction hash."
@@ -1757,12 +1688,10 @@
         },
         "include_mempool": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When include_mempool is true, unconfirmed transactions from mempool\nare returned. Default is false."
         },
         "include_token_metadata": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         }
       }
     },
@@ -1785,7 +1714,6 @@
         },
         "is_coinbase": {
           "type": "boolean",
-          "format": "boolean",
           "title": "When is_coinbase is true, the transaction was the first in a block,\ncreated by a miner, and used to pay the block reward"
         },
         "block_height": {
@@ -1930,8 +1858,7 @@
           "format": "uint64"
         },
         "is_mint_baton": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         },
         "address": {
           "type": "string"
@@ -2061,8 +1988,7 @@
           "description": "The encoded transaction."
         },
         "skip_slp_validity_check": {
-          "type": "boolean",
-          "format": "boolean"
+          "type": "boolean"
         },
         "required_slp_burns": {
           "type": "array",
@@ -2087,17 +2013,14 @@
       "properties": {
         "full_block": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When full_block is true, a complete marshaled block is sent. See `Block`.\nDefault is false, block metadata is sent. See `BlockInfo`."
         },
         "full_transactions": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When full_transactions is true, provide full transaction info\nfor a marshaled block.\nDefault is false, only the transaction hashes are included for\na marshaled block. See `TransactionData`."
         },
         "serialize_block": {
           "type": "boolean",
-          "format": "boolean",
           "title": "When serialize_block is true, blocks are serialized using bitcoin protocol encoding.\nDefault is false, block will be Marshaled (see `BlockInfo` and `BlockNotification`)"
         }
       },
@@ -2117,17 +2040,14 @@
         },
         "include_mempool": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When include_mempool is true, new unconfirmed transactions from mempool are\nincluded apart from the ones confirmed in a block."
         },
         "include_in_block": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When include_in_block is true, transactions are included when they are confirmed.\nThis notification is sent in addition to any requested mempool notifications."
         },
         "serialize_tx": {
           "type": "boolean",
-          "format": "boolean",
           "title": "When serialize_tx is true, transactions are serialized using\nbitcoin protocol encoding. Default is false, transaction will be Marshaled\n(see `Transaction`, `MempoolTransaction` and `TransactionNotification`)"
         }
       },
@@ -2342,12 +2262,10 @@
         },
         "all_transactions": {
           "type": "boolean",
-          "format": "boolean",
           "description": "Subscribed/Unsubscribe to everything. Other filters\nwill be ignored."
         },
         "all_slp_transactions": {
           "type": "boolean",
-          "format": "boolean",
           "title": "Subscribed/Unsubscribe to everything SLP. Other filters\nwill be ignored, except this filter will be overriden by all_transactions=true"
         },
         "slp_token_ids": {
@@ -2410,7 +2328,6 @@
         },
         "is_coinbase": {
           "type": "boolean",
-          "format": "boolean",
           "description": "When is_coinbase is true, the output is the first in the block,\na generation transaction, the result of mining."
         },
         "block_height": {
@@ -2435,42 +2352,14 @@
         }
       }
     },
-    "runtimeError": {
+    "rpcStatus": {
       "type": "object",
       "properties": {
-        "error": {
-          "type": "string"
-        },
         "code": {
           "type": "integer",
           "format": "int32"
         },
         "message": {
-          "type": "string"
-        },
-        "details": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/protobufAny"
-          }
-        }
-      }
-    },
-    "runtimeStreamError": {
-      "type": "object",
-      "properties": {
-        "grpc_code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "http_code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "message": {
-          "type": "string"
-        },
-        "http_status": {
           "type": "string"
         },
         "details": {

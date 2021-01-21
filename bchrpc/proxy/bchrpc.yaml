@@ -72,6 +72,3 @@ http:
   - selector: pb.bchrpc.SubscribeBlocks
     post: /v1/SubscribeBlocks
     body: "*"
-  - selector: pb.bchrpc.GetBip44HdAddress
-    post: /v1/GetBip44HdAddress
-    body: "*"
