@@ -1553,17 +1553,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		if err != nil {
 			return nil, status.Errorf(codes.Aborted, "graph search validity cache invalid hash %v", txHash)
 		}
-		validityCache[*hash] = struct{}{}message GetBip44HdAddressRequest {
-			string xpub = 1;
-			bool change = 2;
-			uint32 address_index = 3;
-		}
-		
-		message GetBip44HdAddressResponse {
-			bytes pub_key = 1;
-			string cash_addr = 2;
-			string slp_addr = 3;
-		}
+		validityCache[*hash] = struct{}{}
 	}
 
 	// perform the graph search
