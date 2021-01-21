@@ -17,7 +17,7 @@ import (
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/golang/glog"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 const bchdTestNode = "bchd.ny1.simpleledger.io:443"
