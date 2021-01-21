@@ -645,6 +645,8 @@ func local_request_Bchrpc_GetTrustedSlpValidation_0(ctx context.Context, marshal
 
 func request_Bchrpc_GetSlpGraphSearch_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetSlpGraphSearchRequest
+func request_Bchrpc_GetBip44HdAddress_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetBip44HdAddressRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -656,12 +658,15 @@ func request_Bchrpc_GetSlpGraphSearch_0(ctx context.Context, marshaler runtime.M
 	}
 
 	msg, err := client.GetSlpGraphSearch(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.GetBip44HdAddress(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
 
 func local_request_Bchrpc_GetSlpGraphSearch_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetSlpGraphSearchRequest
+func local_request_Bchrpc_GetBip44HdAddress_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetBip44HdAddressRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -673,6 +678,7 @@ func local_request_Bchrpc_GetSlpGraphSearch_0(ctx context.Context, marshaler run
 	}
 
 	msg, err := server.GetSlpGraphSearch(ctx, &protoReq)
+	msg, err := server.GetBip44HdAddress(ctx, &protoReq)
 	return msg, metadata, err
 
 }
@@ -1268,17 +1274,20 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 	})
 
 	mux.Handle("POST", pattern_Bchrpc_GetSlpGraphSearch_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetBip44HdAddress_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetSlpGraphSearch")
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetBip44HdAddress")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 		resp, md, err := local_request_Bchrpc_GetSlpGraphSearch_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_Bchrpc_GetBip44HdAddress_0(rctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -1287,6 +1296,7 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Bchrpc_GetSlpGraphSearch_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetBip44HdAddress_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1763,11 +1773,17 @@ func RegisterBchrpcHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetSlpGraphSearch")
+	mux.Handle("POST", pattern_Bchrpc_GetBip44HdAddress_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetBip44HdAddress")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 		resp, md, err := request_Bchrpc_GetSlpGraphSearch_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_Bchrpc_GetBip44HdAddress_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -1775,6 +1791,7 @@ func RegisterBchrpcHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Bchrpc_GetSlpGraphSearch_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetBip44HdAddress_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1919,6 +1936,7 @@ var (
 	pattern_Bchrpc_GetTrustedSlpValidation_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetTrustedSlpValidation"}, ""))
 
 	pattern_Bchrpc_GetSlpGraphSearch_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpGraphSearch"}, ""))
+	pattern_Bchrpc_GetBip44HdAddress_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetBip44HdAddress"}, ""))
 
 	pattern_Bchrpc_CheckSlpTransaction_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "CheckSlpTransaction"}, ""))
 
@@ -1969,6 +1987,7 @@ var (
 	forward_Bchrpc_GetTrustedSlpValidation_0 = runtime.ForwardResponseMessage
 
 	forward_Bchrpc_GetSlpGraphSearch_0 = runtime.ForwardResponseMessage
+	forward_Bchrpc_GetBip44HdAddress_0 = runtime.ForwardResponseMessage
 
 	forward_Bchrpc_CheckSlpTransaction_0 = runtime.ForwardResponseMessage
 

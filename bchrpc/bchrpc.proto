@@ -104,6 +104,11 @@ service bchrpc {
     // **Requires SlpIndex and  SlpGraphSearch**
     rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
 
+    // GetBip44HdAddress returns an address associated with a provided xpub, address index, and
+    // selecting either internal or external by setting the change boolean.  If SlpIndex is disabled
+    // the slpAddress string will be an empty string.
+    rpc GetBip44HdAddress(GetBip44HdAddressRequest) returns (GetBip44HdAddressResponse) {}
+
     // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.
     rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
 
@@ -588,6 +593,18 @@ message GetSlpGraphSearchRequest {
 
 message GetSlpGraphSearchResponse {
     repeated bytes txdata = 1;
+}
+
+message GetBip44HdAddressRequest {
+    string xpub = 1;
+    bool change = 2;
+    uint32 address_index = 3;
+}
+
+message GetBip44HdAddressResponse {
+    bytes pub_key = 1;
+    string cash_addr = 2;
+    string slp_addr = 3;
 }
 
 // NOTIFICATIONS
