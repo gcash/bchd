@@ -18,9 +18,6 @@ http:
   - selector: pb.bchrpc.GetSlpGraphSearch
     post: /v1/GetSlpGraphSearch
     body: "*"
-  - selector: pb.bchrpc.GetBip44HdAddress
-    post: /v1/GetBip44HdAddress
-    body: "*"
   - selector: pb.bchrpc.GetMempoolInfo
     post: /v1/GetMempoolInfo
     body: "*"

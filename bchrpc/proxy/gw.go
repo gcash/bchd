@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
 	"github.com/gcash/bchd/bchrpc/proxy/middlewares"
 
@@ -36,11 +36,11 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 
 	// Register gRPC server endpoint
 	// Note: Make sure the gRPC server is running properly and accessible
+	marshaller := &runtime.JSONPb{}
+	marshaller.UseProtoNames = true
+	marshaller.EmitUnpopulated = true
 	grpcGateway := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
-			OrigName:     true,
-			EmitDefaults: true,
-		}),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, marshaller),
 	)
 	var creds credentials.TransportCredentials
 	if *grpcRootCertPath != "" {

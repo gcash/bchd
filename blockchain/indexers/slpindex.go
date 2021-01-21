@@ -980,17 +980,6 @@ func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
 	idx.cache.RemoveMempoolItems(txs)
 }
 
-// SlpIndexEntryExists returns true if the slp entry exists
-func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Hash) bool {
-	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
-	serializedData := slpIndex.Get(txHash[:])
-	if len(serializedData) != 0 {
-		return true
-	}
-	entry := idx.cache.Get(txHash)
-	return entry != nil
-}
-
 // LoadGraphSearchDb is used to load transactions and associated tokenID
 func (idx *SlpIndex) loadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, error) {
 

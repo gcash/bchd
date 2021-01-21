@@ -25,7 +25,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/gcash/bchutil/hdkeychain"
 	"github.com/gcash/bchutil/merkleblock"
 	"github.com/simpleledgerinc/goslp"
 	"github.com/simpleledgerinc/goslp/v1parser"
@@ -1554,7 +1553,17 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		if err != nil {
 			return nil, status.Errorf(codes.Aborted, "graph search validity cache invalid hash %v", txHash)
 		}
-		validityCache[*hash] = struct{}{}
+		validityCache[*hash] = struct{}{}message GetBip44HdAddressRequest {
+			string xpub = 1;
+			bool change = 2;
+			uint32 address_index = 3;
+		}
+		
+		message GetBip44HdAddressResponse {
+			bytes pub_key = 1;
+			string cash_addr = 2;
+			string slp_addr = 3;
+		}
 	}
 
 	// perform the graph search
@@ -1566,63 +1575,6 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	res := &pb.GetSlpGraphSearchResponse{}
 	res.Txdata = txData
 	log.Infof("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
-	return res, nil
-}
-
-// GetBip44HdAddress this method will return an address based on the requested HD path
-func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAddressRequest) (*pb.GetBip44HdAddressResponse, error) {
-	xpub := req.Xpub
-	if len(xpub) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "xpub is missing in request")
-	}
-
-	if xpub[:4] != "xpub" {
-		return nil, status.Error(codes.InvalidArgument, "xpub provided does not start with 'xpub'")
-	}
-
-	masterKey, err := hdkeychain.NewKeyFromString(xpub)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	var change uint32 = 0
-	if req.Change {
-		change = 1
-	}
-
-	ext, err := masterKey.Child(change)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	extK, err := ext.Child(req.AddressIndex)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	pubKey, err := extK.ECPubKey()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-	addr, err := extK.Address(s.chainParams)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-	slpAddrStr := ""
-	if s.slpIndex != nil {
-		slpAddr, err := bchutil.NewSlpAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to create slp pubkeyhash address from hash160: %v", err)
-		}
-		slpAddrStr = slpAddr.EncodeAddress()
-	}
-
-	res := &pb.GetBip44HdAddressResponse{
-		PubKey:   pubKey.SerializeCompressed(),
-		CashAddr: addr.EncodeAddress(),
-		SlpAddr:  slpAddrStr,
-	}
-
 	return res, nil
 }
 
@@ -3060,6 +3012,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				log.Criticalf("failed to parse token ID for transaction %v", tx.Hash())
 			}
 			slpInfo.TokenId = tokenID
+
 			switch slpMsg.TokenType() {
 			case v1parser.TokenTypeFungible01:
 				switch msg := slpMsg.(type) {
@@ -3103,14 +3056,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 							Decimals:     uint32(msg.Decimals),
 							DocumentUrl:  msg.DocumentURI,
 							DocumentHash: msg.DocumentHash,
-							GroupTokenId: nil,
+							GroupTokenId: nil, // NOTE: this is populated below at the validity check
 						},
 					}
 				case *v1parser.SlpSend:
 					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
 						Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
-							GroupTokenId: nil,
+							GroupTokenId: nil, // NOTE: this is populated below at the validity check
 						},
 					}
 				}
@@ -3156,14 +3109,34 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	// check slp validity
 	if s.slpIndex != nil {
 		err := s.db.View(func(dbTx database.Tx) error {
-			exists := s.slpIndex.SlpIndexEntryExists(dbTx, tx.Hash())
-			if !exists {
+			entry, err := s.slpIndex.GetSlpIndexEntry(dbTx, tx.Hash())
+			if err != nil {
 				return errors.New("slp tx does not exist")
 			}
+			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
+
+			// for nft children we populate the group token ID property in TxMetadata
+			if entry.SlpVersionType == v1parser.TokenTypeNft1Child41 {
+				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry.TokenID)
+				if err != nil {
+					msg := fmt.Sprintf("missing group token metadata for %v got '%s', %v", tx.Hash(), hex.EncodeToString(tm.MintBatonHash[:]), err)
+					log.Critical(msg)
+					return errors.New(msg)
+				}
+				if tm.NftGroupID != nil {
+					if t, ok := slpInfo.TxMetadata.(*pb.SlpTransactionInfo_Nft1ChildGenesis); ok {
+						t.Nft1ChildGenesis.GroupTokenId = tm.NftGroupID[:]
+					}
+					if t, ok := slpInfo.TxMetadata.(*pb.SlpTransactionInfo_Nft1ChildSend); ok {
+						t.Nft1ChildSend.GroupTokenId = tm.NftGroupID[:]
+					}
+				}
+			}
+
 			return nil
 		})
-		if err == nil {
-			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
+		if err != nil {
+			log.Debug(err)
 		}
 	}
 
