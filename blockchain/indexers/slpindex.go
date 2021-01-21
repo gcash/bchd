@@ -844,17 +844,6 @@ func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
 	idx.cache.RemoveMempoolItems(txs)
 }
 
-// SlpIndexEntryExists returns true if the slp entry exists
-func (idx *SlpIndex) SlpIndexEntryExists(dbTx database.Tx, txHash *chainhash.Hash) bool {
-	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
-	serializedData := slpIndex.Get(txHash[:])
-	if len(serializedData) != 0 {
-		return true
-	}
-	entry := idx.cache.Get(txHash)
-	return entry != nil
-}
-
 // SlpConfig provides the proper starting height and hash
 type SlpConfig struct {
 	StartHash    *chainhash.Hash

@@ -2895,6 +2895,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				log.Criticalf("failed to parse token ID for transaction %v", tx.Hash())
 			}
 			slpInfo.TokenId = tokenID
+
 			switch slpMsg.TokenType() {
 			case v1parser.TokenTypeFungible01:
 				switch msg := slpMsg.(type) {
@@ -2938,14 +2939,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 							Decimals:     uint32(msg.Decimals),
 							DocumentUrl:  msg.DocumentURI,
 							DocumentHash: msg.DocumentHash,
-							GroupTokenId: nil,
+							GroupTokenId: nil, // NOTE: this is populated below at the validity check
 						},
 					}
 				case *v1parser.SlpSend:
 					slpInfo.SlpAction = pb.SlpAction_SLP_NFT1_UNIQUE_CHILD_SEND
 					slpInfo.TxMetadata = &pb.SlpTransactionInfo_Nft1ChildSend{
 						Nft1ChildSend: &pb.SlpNft1ChildSendMetadata{
-							GroupTokenId: nil,
+							GroupTokenId: nil, // NOTE: this is populated below at the validity check
 						},
 					}
 				}
@@ -2991,14 +2992,34 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	// check slp validity
 	if s.slpIndex != nil {
 		err := s.db.View(func(dbTx database.Tx) error {
-			exists := s.slpIndex.SlpIndexEntryExists(dbTx, tx.Hash())
-			if !exists {
+			entry, err := s.slpIndex.GetSlpIndexEntry(dbTx, tx.Hash())
+			if err != nil {
 				return errors.New("slp tx does not exist")
 			}
+			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
+
+			// for nft children we populate the group token ID property in TxMetadata
+			if entry.SlpVersionType == v1parser.TokenTypeNft1Child41 {
+				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry.TokenID)
+				if err != nil {
+					msg := fmt.Sprintf("missing group token metadata for %v got '%s', %v", tx.Hash(), hex.EncodeToString(tm.MintBatonHash[:]), err)
+					log.Critical(msg)
+					return errors.New(msg)
+				}
+				if tm.NftGroupID != nil {
+					if t, ok := slpInfo.TxMetadata.(*pb.SlpTransactionInfo_Nft1ChildGenesis); ok {
+						t.Nft1ChildGenesis.GroupTokenId = tm.NftGroupID[:]
+					}
+					if t, ok := slpInfo.TxMetadata.(*pb.SlpTransactionInfo_Nft1ChildSend); ok {
+						t.Nft1ChildSend.GroupTokenId = tm.NftGroupID[:]
+					}
+				}
+			}
+
 			return nil
 		})
-		if err == nil {
-			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
+		if err != nil {
+			log.Debug(err)
 		}
 	}
 
