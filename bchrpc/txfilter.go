@@ -241,8 +241,8 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 	matched := f.matchAll
 
 	if len(tx.MsgTx().TxOut) > 0 {
-		slpMsg, _ := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
-		if slpMsg != nil {
+		slpMsg, err := v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
+		if err == nil && slpMsg != nil {
 			if f.matchAllSlp {
 				matched = true
 			} else {
