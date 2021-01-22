@@ -11,25 +11,27 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// SlpCache to manage slp index mempool items and recently queried items
+// SlpCache to manage slp index mempool txn and token metadata items and recently queried items
 type SlpCache struct {
 	sync.RWMutex
-	tempEntries    map[chainhash.Hash]*SlpIndexEntry
-	mempoolEntries map[chainhash.Hash]*SlpIndexEntry
-	maxEntries     int
+	maxEntries        int
+	tempEntries       map[chainhash.Hash]*SlpIndexEntry
+	mempoolEntries    map[chainhash.Hash]*SlpIndexEntry
+	tempTokenMetadata map[chainhash.Hash]*TokenMetadata
 }
 
 // NewSlpCache creates a new instance of SlpCache
 func NewSlpCache(maxEntries int) *SlpCache {
 	return &SlpCache{
-		mempoolEntries: make(map[chainhash.Hash]*SlpIndexEntry),
-		tempEntries:    make(map[chainhash.Hash]*SlpIndexEntry, maxEntries),
-		maxEntries:     maxEntries,
+		maxEntries:        maxEntries,
+		tempEntries:       make(map[chainhash.Hash]*SlpIndexEntry, maxEntries),
+		mempoolEntries:    make(map[chainhash.Hash]*SlpIndexEntry),
+		tempTokenMetadata: make(map[chainhash.Hash]*TokenMetadata, maxEntries),
 	}
 }
 
-// AddTemp puts new items in a temporary cache with limited size
-func (s *SlpCache) AddTemp(hash *chainhash.Hash, item *SlpIndexEntry) {
+// AddTempEntry puts new items in a temporary cache with limited size
+func (s *SlpCache) AddTempEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -48,9 +50,9 @@ func (s *SlpCache) AddTemp(hash *chainhash.Hash, item *SlpIndexEntry) {
 	}
 }
 
-// AddMempoolItem puts new items in the mempool cache
-func (s *SlpCache) AddMempoolItem(hash *chainhash.Hash, item *SlpIndexEntry) {
-	entry := s.Get(hash)
+// AddMempoolEntry puts new items in the mempool cache
+func (s *SlpCache) AddMempoolEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
+	entry := s.GetTxEntry(hash)
 	if entry != nil {
 		return
 	}
@@ -60,25 +62,9 @@ func (s *SlpCache) AddMempoolItem(hash *chainhash.Hash, item *SlpIndexEntry) {
 	s.mempoolEntries[*hash] = item
 }
 
-// RemoveMempoolItems a list of items from a list
-func (s *SlpCache) RemoveMempoolItems(txs []*bchutil.Tx) {
-	s.Lock()
-	defer s.Unlock()
-	for _, tx := range txs {
-		delete(s.mempoolEntries, tx.MsgTx().TxHash())
-	}
-}
-
-func (s *SlpCache) remove(hash *chainhash.Hash) {
-	s.Lock()
-	defer s.Unlock()
-	delete(s.tempEntries, *hash)
-	delete(s.mempoolEntries, *hash)
-}
-
-// Get gets items from the cache allowing concurrent read access without
+// GetTxEntry gets tx entry items from the cache allowing concurrent read access without
 // holding a lock on other readers
-func (s *SlpCache) Get(hash *chainhash.Hash) *SlpIndexEntry {
+func (s *SlpCache) GetTxEntry(hash *chainhash.Hash) *SlpIndexEntry {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -88,4 +74,42 @@ func (s *SlpCache) Get(hash *chainhash.Hash) *SlpIndexEntry {
 	}
 
 	return entry
+}
+
+// AddTempTokenMetadata puts token metadata into cache with a limited size
+func (s *SlpCache) AddTempTokenMetadata(item *TokenMetadata) {
+	s.Lock()
+	defer s.Unlock()
+
+	// Remove a random entry from the map.  For most compilers, Go's
+	// range statement iterates starting at a random item although
+	// that is not 100% guaranteed by the spec.
+	if len(s.tempTokenMetadata) > s.maxEntries {
+		for txHash := range s.tempTokenMetadata {
+			delete(s.tempTokenMetadata, txHash)
+			break
+		}
+	}
+	s.tempTokenMetadata[*item.TokenID] = item
+}
+
+// GetTokenMetadata gets token metadata from the cache allowing concurrent read access
+// without holding a lock on other readers
+func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) *TokenMetadata {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.tempTokenMetadata[*hash]
+}
+
+// RemoveMempoolItems is called on block events to remove mempool transaction items and
+// also we clear the tempTokenMetadata to avoid corrupt mint baton state from double spends
+func (s *SlpCache) RemoveMempoolItems(txs []*bchutil.Tx) {
+	s.Lock()
+	defer s.Unlock()
+	for _, tx := range txs {
+		hash := tx.MsgTx().TxHash()
+		delete(s.mempoolEntries, hash)
+	}
+	s.tempTokenMetadata = make(map[chainhash.Hash]*TokenMetadata, s.maxEntries)
 }
