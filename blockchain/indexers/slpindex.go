@@ -297,6 +297,13 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
+	idx.cache.AddTempEntry(&txHash, &SlpIndexEntry{
+		TokenID:        tokenID,
+		TokenIDHash:    *entryInfo.tokenIDHash,
+		SlpVersionType: entryInfo.slpMsg.TokenType(),
+		SlpOpReturn:    entryInfo.slpMsgPkScript,
+	})
+
 	target := make([]byte, 4+2+len(entryInfo.slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
 	byteOrder.PutUint16(target[4:], uint16(entryInfo.slpMsg.TokenType()))
