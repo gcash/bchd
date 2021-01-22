@@ -268,11 +268,11 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 			if len(entryInfo.tx.TxIn) < 1 {
 				return errors.New("entryInfo transaction has no inputs")
 			}
-			parentTokenEntry, err := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
+			groupTokenEntry, err := dbFetchSlpIndexEntry(dbTx, &entryInfo.tx.TxIn[0].PreviousOutPoint.Hash)
 			if err != nil {
 				return fmt.Errorf("failed to fetch nft parent token ID %v: %v", entryInfo.tx.TxIn[0].PreviousOutPoint.Hash, err)
 			}
-			nft1GroupID = &parentTokenEntry.TokenIDHash
+			nft1GroupID = &groupTokenEntry.TokenIDHash
 		}
 	case *v1parser.SlpMint:
 		tokenMetadataNeedsUpdated = true
@@ -915,25 +915,38 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 //
 // This function is safe for concurrent access.
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	entry := idx.cache.Get(hash)
+	entry := idx.cache.GetTxEntry(hash)
 	if entry != nil {
+		log.Debugf("using slp txn entry cache for '%v'", hash)
 		return entry, nil
 	}
 
+	// fallback to fetch entry from db
 	entry, err := dbFetchSlpIndexEntry(dbTx, hash)
 	if err != nil {
 		return nil, err
 	}
 
-	idx.cache.AddTemp(hash, entry)
+	idx.cache.AddTempEntry(hash, entry)
 	return entry, nil
 }
 
-// GetTokenMetadata fetches token ID hash and other token metadata properties for the 4 byte tokenID
-func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, tokenID uint32) (*TokenMetadata, error) {
-	serializedID := make([]byte, 4)
-	byteOrder.PutUint32(serializedID, tokenID)
-	return dbFetchTokenMetadataBySerializedID(dbTx, serializedID)
+// GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
+func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*TokenMetadata, error) {
+	tm := idx.cache.GetTokenMetadata(&entry.TokenIDHash)
+	if tm != nil {
+		log.Debugf("using token metadata cache for '%s'", hex.EncodeToString(entry.TokenIDHash[:]))
+		return tm, nil
+	}
+
+	// fallback to fetch token metadata from db
+	tm, err := dbFetchTokenMetadataByID(dbTx, entry.TokenID)
+	if err != nil {
+		return nil, err
+	}
+
+	idx.cache.AddTempTokenMetadata(tm)
+	return tm, nil
 }
 
 // AddPotentialSlpEntries checks if a transaction is SLP valid and then will add a
@@ -956,13 +969,67 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 		scriptPubKey := tx.TxOut[0].PkScript
 		hash := tx.TxHash()
-		idx.cache.AddMempoolItem(&hash, &SlpIndexEntry{
+
+		// add item to slp txn cache
+		idx.cache.AddMempoolEntry(&hash, &SlpIndexEntry{
 			TokenID:        0,
 			TokenIDHash:    *tokenIDHash,
 			SlpVersionType: slpMsg.TokenType(),
 			SlpOpReturn:    scriptPubKey,
 		})
 
+		// add or update token metadata cache
+		switch t := slpMsg.(type) {
+		case *v1parser.SlpGenesis:
+			tm := &TokenMetadata{
+				TokenID:    tokenIDHash,
+				SlpVersion: slpMsg.TokenType(),
+			}
+			if slpMsg.TokenType() == v1parser.TokenTypeNft1Child41 {
+				// handle special case for NFT child with group id
+				err := idx.db.View(func(dbTx database.Tx) error {
+					entry, err := idx.GetSlpIndexEntry(dbTx, &tx.TxIn[0].PreviousOutPoint.Hash)
+					if err != nil {
+						return fmt.Errorf("nft child genesis has invalid group in txn '%v': %v", tx.TxHash(), err)
+					}
+					tm.NftGroupID = &entry.TokenIDHash
+					if tm.NftGroupID == nil {
+						return fmt.Errorf("nft child group ID could not be resolved in txn '%v'", tx.TxHash())
+					}
+					return nil
+				})
+				if err != nil {
+					log.Debugf("AddPotentialSlpEntries: %v", err)
+				}
+			} else if t.MintBatonVout > 1 {
+				// otherwise update the mint baton location
+				hash := tx.TxHash()
+				tm.MintBatonHash = &hash
+				tm.MintBatonVout = uint32(t.MintBatonVout)
+			}
+			idx.cache.AddTempTokenMetadata(tm)
+		case *v1parser.SlpMint:
+			// update the mint baton location
+			err := idx.db.View(func(dbTx database.Tx) error {
+				hash := tx.TxHash()
+				entry, err := idx.GetSlpIndexEntry(dbTx, &hash)
+				tm, err := idx.GetTokenMetadata(dbTx, entry)
+				if err != nil {
+					return fmt.Errorf("could not retreive token metadata for mint txn '%v': %v", hash, err)
+				}
+				if t.MintBatonVout > 1 {
+					hash := tx.TxHash()
+					tm.MintBatonHash = &hash
+					tm.MintBatonVout = uint32(t.MintBatonVout)
+				} else {
+					return fmt.Errorf("invalid mint baton for mint txn '%v': %v", hash, err)
+				}
+				return nil
+			})
+			if err != nil {
+				log.Debugf("AddPotentialSlpEntries: %v", err)
+			}
+		}
 		return nil
 	}
 

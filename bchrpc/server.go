@@ -719,7 +719,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 			}
-			tokenMetadata, err = s.buildTokenMetadata(*tokenID)
+			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when building token metadata: %v", err)
 			}
@@ -762,7 +762,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token ID: %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 		}
-		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
+		tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when building token metadata for token ID: %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 		}
@@ -1104,7 +1104,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
 		tokenMetadata = make([]*pb.TokenMetadata, 0)
 		for hash := range tokenMetadataSet {
-			tm, err := s.buildTokenMetadata(hash)
+			tm, err := s.marshalTokenMetadata(hash)
 			if err != nil {
 				log.Debugf("Could not build slp token metadata for %v", hash)
 			}
@@ -1188,8 +1188,8 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 	}
 
 	var (
-		slpToken      *pb.SlpToken
-		tokenMetadata *pb.TokenMetadata
+		slpToken *pb.SlpToken
+		tm       *pb.TokenMetadata
 	)
 	if s.slpIndex != nil && req.Index > 0 && isSlpInMempool && req.IncludeMempool {
 		slpToken, err = s.getSlpToken(txnHash, req.Index, scriptPubkey)
@@ -1200,7 +1200,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
 		}
-		tokenMetadata, err = s.buildTokenMetadata(*tokenID)
+		tm, err = s.marshalTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "cannot build token metadata for token id: %s", hex.EncodeToString(slpToken.TokenId))
 		}
@@ -1216,7 +1216,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		BlockHeight:   blockHeight,
 		IsCoinbase:    coinbase,
 		SlpToken:      slpToken,
-		TokenMetadata: tokenMetadata,
+		TokenMetadata: tm,
 	}
 	return ret, nil
 }
@@ -1293,7 +1293,7 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 			return nil, status.Errorf(codes.Aborted, "token ID hash %s is invalid: %s", hex.EncodeToString(hash), err)
 		}
 
-		tm, err := s.buildTokenMetadata(*tokenID)
+		tm, err := s.marshalTokenMetadata(*tokenID)
 		if err != nil {
 			return nil, status.Errorf(codes.Aborted, "token ID %v does not exist", hex.EncodeToString(hash))
 		}
@@ -2899,11 +2899,9 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	return true
 }
 
-// buildTokenMetadata returns metadata for the provided tokenID
+// marshalTokenMetadata returns marshalled token metadata for the provided tokenID hash
 //
-// NOTE: Unconfirmed changes to mint baton status will not be reflected the returned TokenMetadata value.
-//
-func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetadata, error) {
+func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetadata, error) {
 
 	if s.slpIndex == nil {
 		return nil, errors.New("slpindex required")
@@ -2941,12 +2939,11 @@ func (s *GrpcServer) buildTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetada
 
 	var dbTm *indexers.TokenMetadata
 	err = s.db.View(func(dbTx database.Tx) error {
-		dbTm, err = s.slpIndex.GetTokenMetadata(dbTx, entry.TokenID)
+		dbTm, err = s.slpIndex.GetTokenMetadata(dbTx, entry)
 		return err
 	})
 
-	// Mint baton hash and NFT Group ID will be nil until the transaction is confirmed,
-	// so we need to check this condition before taking a slice.
+	// Mint baton hash and NFT group id may be nil so we need to check this condition before taking a slice.
 	var (
 		mintBatonHash []byte
 		nftGroupID    []byte
@@ -3166,7 +3163,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 			// for nft children we populate the group token ID property in TxMetadata
 			if entry.SlpVersionType == v1parser.TokenTypeNft1Child41 {
-				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry.TokenID)
+				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry)
 				if err != nil {
 					msg := fmt.Sprintf("missing group token metadata for %v got '%s', %v", tx.Hash(), hex.EncodeToString(tm.MintBatonHash[:]), err)
 					log.Critical(msg)
