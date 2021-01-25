@@ -1539,7 +1539,7 @@ func (s *GrpcServer) checkTransactionForSlp(msgTx *wire.MsgTx, requiredBurns []*
 
 			// check to see if the previous
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, nil)
-			if slpEntry == nil && err == nil {
+			if slpEntry == nil {
 				continue
 			}
 			if err != nil {
