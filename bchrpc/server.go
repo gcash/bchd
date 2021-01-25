@@ -1527,11 +1527,19 @@ func (s *GrpcServer) checkTransactionForSlp(msgTx *wire.MsgTx, requiredBurns []*
 		return status.Error(codes.InvalidArgument, "transaction has no outputs")
 	}
 
-	isMaybeSlp := isMaybeSlpTransaction(msgTx)
-	if !isMaybeSlp {
+	// check non-slp transactions for slp inputs
+	if !isMaybeSlpTransaction(msgTx) {
 		for _, txIn := range msgTx.TxIn {
+			idx := txIn.PreviousOutPoint.Index
+
+			// we can always skip previous output index 0 since it cannot contain an slp token
+			if idx == 0 {
+				continue
+			}
+
+			// check to see if the previous
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, nil)
-			if slpEntry == nil {
+			if slpEntry == nil && err == nil {
 				continue
 			}
 			if err != nil {
@@ -1564,11 +1572,10 @@ func (s *GrpcServer) checkTransactionForSlp(msgTx *wire.MsgTx, requiredBurns []*
 					return status.Errorf(codes.Internal, "could not parse previously stored slp entry %v having slp message %s", txIn.PreviousOutPoint.Hash, hex.EncodeToString(slpEntry.SlpOpReturn))
 				}
 				idx := txIn.PreviousOutPoint.Index
-				amt, err := inputSlpMsg.GetVoutAmount(int(idx))
-				if err != nil {
-					return status.Errorf(codes.Internal, "an error occured when getting amount for outpoint: %v:%v, with error: %v", txIn.PreviousOutPoint.Hash, idx, err)
+				amt, _ := inputSlpMsg.GetVoutValue(int(idx))
+				if amt != nil {
+					inputVal.Add(inputVal, amt)
 				}
-				inputVal.Add(inputVal, amt)
 			}
 
 			// check inputs != outputs (use check for explict burn requests i.e., 'req.AllowedSlpBurns')
@@ -1698,18 +1705,12 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 		return nil, errors.New("could not parse slpMsg from and existing db entry, this should never happen")
 	}
 
-	// exit early if the outpoint is not an slp outpoint
-	switch t := inputSlpMsg.(type) {
-	case *v1parser.SlpGenesis:
-		if outpoint.Index != 1 && int(outpoint.Index) != t.MintBatonVout {
-			return nil, nil
-		}
-	case *v1parser.SlpMint:
-		if outpoint.Index != 1 && int(outpoint.Index) != t.MintBatonVout {
-			return nil, nil
-		}
-	case *v1parser.SlpSend:
-		if int(outpoint.Index) > len(t.Amounts) {
+	// exit early if the outpoint is not an slp outpoint, or is a zero output slp
+	amt, isBaton := inputSlpMsg.GetVoutValue(int(outpoint.Index))
+	if amt == nil && isBaton == false {
+		return nil, nil
+	} else if isBaton == false {
+		if amt != nil && amt.Cmp(new(big.Int).SetUint64(0)) == 0 {
 			return nil, nil
 		}
 	}
@@ -1786,11 +1787,8 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 
 			// check burn intent (amount or mint)
 			if _, isAmountBurn := burn.BurnIntention.(*pb.SlpRequiredBurn_Amount); isAmountBurn {
-				amt, err := inputSlpMsg.GetVoutAmount(int(outpoint.Index))
-				if err != nil {
-					return slpEntry, err
-				}
-				if amt.Cmp(new(big.Int).SetUint64(burn.GetAmount())) != 0 {
+				amt, _ := inputSlpMsg.GetVoutValue(int(outpoint.Index))
+				if amt != nil && amt.Cmp(new(big.Int).SetUint64(burn.GetAmount())) != 0 {
 					return slpEntry, status.Error(codes.InvalidArgument, "the requested burn amount does not match the amount to be burned")
 				}
 
@@ -2683,11 +2681,11 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 		}
 	}
 
-	// get amount
-	amount, err := slpMsg.GetVoutAmount(int(vout))
-	if err != nil {
-		log.Criticalf("failed to get slp amount for %v, with error: %v", hash, err)
-		return nil, err
+	// get amount value
+	amount := uint64(0)
+	amt, _ := slpMsg.GetVoutValue(int(vout))
+	if amt != nil {
+		amount = amt.Uint64()
 	}
 
 	// set the slp address string
@@ -2705,7 +2703,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 
 	slpToken := &pb.SlpToken{
 		TokenId:     entry.TokenIDHash[:],
-		Amount:      amount.Uint64(),
+		Amount:      amount,
 		IsMintBaton: isMintBaton,
 		Decimals:    uint32(decimals),
 		SlpAction:   slpAction,

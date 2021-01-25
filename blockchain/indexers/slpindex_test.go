@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Simple Ledger, Inc.
+// Copyright (c) 2020-2021 Simple Ledger, Inc.
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 

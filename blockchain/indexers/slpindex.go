@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Simple Ledger, Inc.
+// Copyright (c) 2020-2021 Simple Ledger, Inc.
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -658,9 +658,9 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			return false, nil, fmt.Errorf("previously saved slp scriptPubKey cannot be parsed: %v", err)
 		}
 
-		amt, err := inputSlpMsg.GetVoutAmount(prevIdx)
-		if err != nil {
-			return false, nil, fmt.Errorf("failed to get amount for vout %v: %v", prevIdx, err)
+		amt, _ := inputSlpMsg.GetVoutValue(prevIdx)
+		if amt == nil {
+			amt = new(big.Int).SetUint64(0)
 		}
 
 		_, isGenesis := txSlpMsg.(*v1parser.SlpGenesis)
