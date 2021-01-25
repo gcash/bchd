@@ -1480,6 +1480,10 @@ func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
 // CheckSlpTransaction checks validity of a submitted transaction and with return an error if the transaction is invalid
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
 
+	if s.slpIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex required")
+	}
+
 	msgTx := &wire.MsgTx{}
 	if err := msgTx.BchDecode(bytes.NewReader(req.Transaction), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
@@ -1487,11 +1491,6 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 
 	if len(msgTx.TxIn) == 0 || len(msgTx.TxOut) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "transaction is missing inputs or outputs")
-	}
-
-	isMaybeSlp := isMaybeSlpTransaction(msgTx)
-	if !isMaybeSlp {
-		return nil, status.Error(codes.Aborted, "invalid slp (lokad id is missing)")
 	}
 
 	err := s.checkSlpTransaction(msgTx, req.RequiredSlpBurns)
@@ -1507,10 +1506,6 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 
 func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.SlpRequiredBurn) error {
 
-	if s.slpIndex == nil {
-		return status.Error(codes.Unavailable, "slpindex required")
-	}
-
 	if len(msgTx.TxOut) < 1 {
 		return status.Error(codes.InvalidArgument, "transaction has no outputs")
 	}
@@ -1520,6 +1515,9 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 		return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: error parsing slp op_return message: %v", err)
 	}
 
+	isMaybeSlp := isMaybeSlpTransaction(msgTx)
+
+	// check slp transactions for burn prevention
 	switch msg := slpMsg.(type) {
 	case *v1parser.SlpSend:
 		inputVal := big.NewInt(0)
@@ -1532,6 +1530,10 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 			}
 			if err != nil {
 				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v", err)
+			}
+
+			if !isMaybeSlp {
+				return status.Errorf(codes.Aborted, "submitted non-slp transaction contains slp inputs, use SlpRequiredBurn to allow slp burns")
 			}
 
 			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1590,6 +1592,10 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v ", err)
 			}
 
+			if !isMaybeSlp {
+				return status.Errorf(codes.Aborted, "submitted non-slp transaction contains slp inputs, use SlpRequiredBurn to allow slp burns")
+			}
+
 			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 			if err != nil {
 				return status.Errorf(codes.Internal, "an error occured when parsing slp op_return entry previously stored in the db for txn: %v, with error: %v", msgTx.TxHash(), err)
@@ -1627,6 +1633,14 @@ func (s *GrpcServer) checkSlpTransaction(msgTx *wire.MsgTx, requiredBurns []*pb.
 			if slpEntry == nil {
 				continue
 			}
+			if err != nil {
+				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v ", err)
+			}
+
+			if !isMaybeSlp {
+				return status.Errorf(codes.Aborted, "submitted non-slp transaction contains slp inputs, use SlpRequiredBurn to allow slp burns")
+			}
+
 			if err != nil {
 				return status.Errorf(codes.Aborted, "submitted transaction rejected to prevent token burn: use SlpRequiredBurn to allow burns: %v", err)
 			}
@@ -1792,6 +1806,8 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurn(outpoint wire.OutPoint, requir
 }
 
 // SubmitTransaction submits a transaction to all connected peers.
+//
+// If SLP index is enabled it will not allow slp burns by default
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 
 	msgTx := &wire.MsgTx{}
@@ -1799,8 +1815,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 		return nil, status.Error(codes.InvalidArgument, "unable to deserialize transaction")
 	}
 
-	isMaybeSlp := isMaybeSlpTransaction(msgTx)
-	if isMaybeSlp && !req.GetSkipSlpValidityCheck() {
+	if s.slpIndex != nil && !req.GetSkipSlpValidityCheck() {
 		err := s.checkSlpTransaction(msgTx, req.RequiredSlpBurns)
 		if err != nil {
 			return nil, err
