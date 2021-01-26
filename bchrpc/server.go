@@ -1707,10 +1707,10 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 
 	// exit early if the outpoint is not an slp outpoint, or is a zero output slp
 	amt, isBaton := inputSlpMsg.GetVoutValue(int(outpoint.Index))
-	if amt == nil && isBaton == false {
-		return nil, nil
-	} else if isBaton == false {
-		if amt != nil && amt.Cmp(new(big.Int).SetUint64(0)) == 0 {
+	if !isBaton {
+		if amt == nil {
+			return nil, nil
+		} else if amt.Cmp(new(big.Int).SetUint64(0)) == 0 {
 			return nil, nil
 		}
 	}
