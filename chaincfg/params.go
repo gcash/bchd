@@ -259,7 +259,6 @@ var MainNetParams = Params{
 	DNSSeeds: []DNSSeed{
 		{"seed.bchd.cash", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
-		{"seed-bch.bitcoinforks.org", true},
 		{"seed.bch.loping.net", true},
 		{"dnsseed.electroncash.de", true},
 	},
