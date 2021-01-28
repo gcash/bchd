@@ -3088,8 +3088,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		}
 		respTx.Inputs = append(respTx.Inputs, in)
 
-		// loop through SLP inputs to set some SLP txn info BURN_FLAGS
-		if inputToken != nil {
+		// add burn labels for destroyed slp inputs caused by wrong tokenID or invalid slp message
+		//
+		// NOTE: We do not add burn labels to 0 value slp inputs.
+		if inputToken != nil && (inputToken.Amount > 0 || inputToken.IsMintBaton) {
 			if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 				if !bytes.Equal(slpInfo.TokenId, inputToken.TokenId) || uint32(slpMsg.TokenType()) != inputToken.TokenType {
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
@@ -3134,7 +3136,10 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		respTx.Outputs = append(respTx.Outputs, out)
 	}
 
-	// check for slp burns caused by missing vouts or inputs > outputs
+	// label slp burns caused by missing bch outputs, or input amt > output amt
+	//
+	// NOTE: For the sake of simplicity, the BURNED_OUTPUTS_MISSING_BCH_VOUT flag will be set even
+	// when the slp output burned is a 0 token amount.
 	if s.slpIndex != nil {
 		if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			switch t := slpMsg.(type) {
