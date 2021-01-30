@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Simple Ledger, Inc.
+// Copyright (c) 2020-2021 Simple Ledger, Inc.
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -791,9 +791,9 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 			return false, nil, fmt.Errorf("previously saved slp scriptPubKey cannot be parsed: %v", err)
 		}
 
-		amt, err := inputSlpMsg.GetVoutAmount(prevIdx)
-		if err != nil {
-			return false, nil, fmt.Errorf("failed to get amount for vout %v: %v", prevIdx, err)
+		amt, _ := inputSlpMsg.GetVoutValue(prevIdx)
+		if amt == nil {
+			amt = new(big.Int).SetUint64(0)
 		}
 
 		_, isGenesis := txSlpMsg.(*v1parser.SlpGenesis)
@@ -924,7 +924,7 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
 	entry := idx.cache.GetTxEntry(hash)
 	if entry != nil {
-		log.Debugf("using slp txn entry cache for '%v'", hash)
+		log.Debugf("using slp txn entry cache for txid %v", hash)
 		return entry, nil
 	}
 
@@ -940,10 +940,19 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
 func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*TokenMetadata, error) {
-	tm := idx.cache.GetTokenMetadata(&entry.TokenIDHash)
+	tm := idx.cache.GetTokenMetadata(entry.TokenIDHash)
 	if tm != nil {
-		log.Debugf("using token metadata cache for '%s'", hex.EncodeToString(entry.TokenIDHash[:]))
+		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
 		return tm, nil
+	}
+
+	if entry.TokenID == 0 {
+		id, err := dbFetchTokenIDByHash(dbTx, &entry.TokenIDHash)
+		if err != nil {
+			log.Debugf("db is missing tokenID %s", hex.EncodeToString(entry.TokenIDHash[:]))
+			return nil, err
+		}
+		entry.TokenID = id
 	}
 
 	// fallback to fetch token metadata from db
@@ -997,11 +1006,11 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 				err := idx.db.View(func(dbTx database.Tx) error {
 					entry, err := idx.GetSlpIndexEntry(dbTx, &tx.TxIn[0].PreviousOutPoint.Hash)
 					if err != nil {
-						return fmt.Errorf("nft child genesis has invalid group in txn '%v': %v", tx.TxHash(), err)
+						return fmt.Errorf("nft child genesis has invalid group in txn %v: %v", tx.TxHash(), err)
 					}
 					tm.NftGroupID = &entry.TokenIDHash
 					if tm.NftGroupID == nil {
-						return fmt.Errorf("nft child group ID could not be resolved in txn '%v'", tx.TxHash())
+						return fmt.Errorf("nft child group ID could not be resolved in txn %v", tx.TxHash())
 					}
 					return nil
 				})
@@ -1022,14 +1031,14 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 				entry, err := idx.GetSlpIndexEntry(dbTx, &hash)
 				tm, err := idx.GetTokenMetadata(dbTx, entry)
 				if err != nil {
-					return fmt.Errorf("could not retreive token metadata for mint txn '%v': %v", hash, err)
+					return fmt.Errorf("could not retreive token metadata for mint txn %v: %v", hash, err)
 				}
 				if t.MintBatonVout > 1 {
 					hash := tx.TxHash()
 					tm.MintBatonHash = &hash
 					tm.MintBatonVout = uint32(t.MintBatonVout)
 				} else {
-					return fmt.Errorf("invalid mint baton for mint txn '%v': %v", hash, err)
+					return fmt.Errorf("invalid mint baton for mint txn %v: %v", hash, err)
 				}
 				return nil
 			})
