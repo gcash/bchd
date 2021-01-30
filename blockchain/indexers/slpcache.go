@@ -95,11 +95,11 @@ func (s *SlpCache) AddTempTokenMetadata(item *TokenMetadata) {
 
 // GetTokenMetadata gets token metadata from the cache allowing concurrent read access
 // without holding a lock on other readers
-func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) *TokenMetadata {
+func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) *TokenMetadata {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.tempTokenMetadata[*hash]
+	return s.tempTokenMetadata[hash]
 }
 
 // RemoveMempoolItems is called on block events to remove mempool transaction items and
