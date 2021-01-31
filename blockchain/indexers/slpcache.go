@@ -7,7 +7,6 @@ package indexers
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -151,19 +150,34 @@ func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpI
 
 // GetGraphSearchDb retrieves the graph search DB
 func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
+
+	s.RLock()
+	if s.graphSearchDb != nil {
+		dbState := s.graphSearchDb.State
+		if dbState == 1 {
+			s.RUnlock()
+			return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
+		} else if dbState == 0 {
+			s.RUnlock()
+			return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
+		}
+	}
+	s.RUnlock()
+
 	s.Lock()
 	defer s.Unlock()
 
-	if s.graphSearchDb == nil {
-		s.graphSearchDb = slpgraphsearch.NewDb()
+	if s.graphSearchDb != nil {
+		dbState := s.graphSearchDb.State
+		if dbState == 1 {
+			s.RUnlock()
+			return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
+		} else if dbState == 0 {
+			s.RUnlock()
+			return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
+		}
 	}
 
-	dbState := atomic.LoadUint32(&s.graphSearchDb.State)
-	if dbState == 1 {
-		return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
-	} else if dbState == 0 {
-		return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
-	}
-
+	s.graphSearchDb = slpgraphsearch.NewDb()
 	return s.graphSearchDb, nil
 }

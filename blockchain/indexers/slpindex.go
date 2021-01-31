@@ -529,6 +529,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		return dbPutSlpIndexEntry(idx, dbTx, entry)
 	}
 
+	var gsDb *slpgraphsearch.Db
+	if idx.config.GraphSearch {
+		var err error
+		gsDb, err = idx.cache.GetGraphSearchDb()
+		if err != nil {
+			log.Debugf("loading graph search db: %v", err)
+		}
+
+		// try to advance state to ready
+		gsDb.SetGsState(2)
+	}
+
 	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
@@ -564,18 +576,11 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		}
 
 		// Add Graph search entries here
-		if isValid && idx.config.GraphSearch {
-			gsDb, err := idx.cache.GetGraphSearchDb()
-			if err != nil {
-				log.Debugf("adding block transaction for graph search: %v", err)
-			}
+		if isValid && gsDb != nil {
 			err = gsDb.AddTxn(tx)
 			if err != nil {
 				log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
 			}
-
-			// try to advance state to ready
-			idx.cache.graphSearchDb.SetGsState(2)
 		}
 
 		idx.RemoveMempoolTxs(block.Transactions())

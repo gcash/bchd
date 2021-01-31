@@ -131,6 +131,14 @@ func (gs *Db) findInternal(hash *chainhash.Hash, tokenGraph *TokenGraph, seen *m
 
 // getTokenGraph gets a token graph item from the db
 func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *TokenGraph {
+
+	gs.RLock()
+	if tg, ok := gs.db[*tokenID]; ok {
+		gs.RUnlock()
+		return tg
+	}
+	gs.RUnlock()
+
 	gs.Lock()
 	defer gs.Unlock()
 
