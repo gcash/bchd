@@ -721,6 +721,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			}
 			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 			if err != nil {
+				log.Criticalf("a unknown problem occurred when building token metadata: %v", err)
 				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when building token metadata: %v", err)
 			}
 		}
@@ -2974,6 +2975,9 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 		dbTm, err = s.slpIndex.GetTokenMetadata(dbTx, entry)
 		return err
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Mint baton hash and NFT group id may be nil so we need to check this condition before taking a slice.
 	var (
