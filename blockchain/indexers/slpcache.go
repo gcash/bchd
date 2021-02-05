@@ -62,8 +62,7 @@ func (s *SlpCache) AddMempoolEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
 	s.mempoolEntries[*hash] = item
 }
 
-// GetTxEntry gets tx entry items from the cache allowing concurrent read access without
-// holding a lock on other readers
+// GetTxEntry gets tx entry items from the cache
 func (s *SlpCache) GetTxEntry(hash *chainhash.Hash) *SlpIndexEntry {
 	s.RLock()
 	defer s.RUnlock()
@@ -93,8 +92,7 @@ func (s *SlpCache) AddTempTokenMetadata(item *TokenMetadata) {
 	s.tempTokenMetadata[*item.TokenID] = item
 }
 
-// GetTokenMetadata gets token metadata from the cache allowing concurrent read access
-// without holding a lock on other readers
+// GetTokenMetadata gets token metadata from the cache
 func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) *TokenMetadata {
 	s.RLock()
 	defer s.RUnlock()
@@ -102,14 +100,22 @@ func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) *TokenMetadata {
 	return s.tempTokenMetadata[hash]
 }
 
+// RemoveTokenMetadata removes a token metadata item from cache
+func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.tempTokenMetadata, hash)
+}
+
 // RemoveMempoolItems is called on block events to remove mempool transaction items and
 // also we clear the tempTokenMetadata to avoid corrupt mint baton state from double spends
 func (s *SlpCache) RemoveMempoolItems(txs []*bchutil.Tx) {
 	s.Lock()
 	defer s.Unlock()
+
 	for _, tx := range txs {
 		hash := tx.MsgTx().TxHash()
 		delete(s.mempoolEntries, hash)
 	}
-	s.tempTokenMetadata = make(map[chainhash.Hash]*TokenMetadata, s.maxEntries)
 }
