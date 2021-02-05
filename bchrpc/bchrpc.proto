@@ -459,10 +459,12 @@ message SubmitTransactionResponse {
 message CheckSlpTransactionRequest {
     bytes transaction = 1;
     repeated SlpRequiredBurn required_slp_burns = 2;
+    bool disable_slp_burn_errors = 3;
 }
 
 message CheckSlpTransactionResponse {
     bool is_valid = 1;
+    string invalid_reason = 2;
 }
 
 // Request to subscribe or unsubscribe from a stream of transactions.
