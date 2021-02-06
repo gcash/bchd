@@ -409,6 +409,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		return nil, status.Error(codes.Internal, "unknown network parameters")
 	}
 
+	// check if slp graph search is enabled
 	gsEnabled := false
 	if s.slpIndex != nil {
 		if gsDb, _ := s.slpIndex.GetGraphSearchDb(); gsDb != nil {
@@ -2986,20 +2987,22 @@ func (s *GrpcServer) slpEventHandler() {
 		case *rpcEventTxAccepted:
 			txDesc := event
 			log.Debugf("new mempool txn %v", txDesc.Tx.Hash())
-			s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
-			continue
 
-			// Add mempool transactions to graph search
-			gsDb, err := s.slpIndex.GetGraphSearchDb()
-			if err != nil {
-				log.Debugf("slp: %v", err)
-			}
-			if gsDb != nil {
-				err = gsDb.AddTxn(event.Tx.MsgTx())
+			isSlpValid := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
+			if isSlpValid {
+				gsDb, err := s.slpIndex.GetGraphSearchDb()
 				if err != nil {
-					log.Criticalf("could not add mempool transaction %v to graph search db: %v", event.Tx.Hash(), err)
+					log.Debugf("slp: %v", err)
+				}
+				if gsDb != nil {
+					err = gsDb.AddTxn(event.Tx.MsgTx())
+					if err != nil {
+						log.Criticalf("could not add mempool transaction %v to graph search db: %v", event.Tx.Hash(), err)
+					}
 				}
 			}
+
+			continue
 		}
 	}
 }

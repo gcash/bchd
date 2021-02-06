@@ -553,15 +553,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	}
 
 	var gsDb *slpgraphsearch.Db
-	if idx.config.GraphSearch {
+	if idx.config.SlpGraphSearchEnabled {
 		var err error
-		gsDb, err = idx.cache.GetGraphSearchDb()
+		gsDb, err = idx.GetGraphSearchDb()
 		if err != nil {
 			log.Debugf("loading graph search db: %v", err)
 		}
 
 		// try to advance state to ready
-		gsDb.SetGsState(2)
+		err = gsDb.SetGsState(2)
+		if err != nil {
+			log.Debugf("couldn't set gs db state to 2")
+		}
 	}
 
 	burnedInputs := make([]*BurnedInput, 0)
@@ -722,7 +725,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 
 // GetGraphSearchDb checks if graph search is enabled and returns the db
 func (idx *SlpIndex) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
-	if !idx.config.GraphSearch {
+	if !idx.config.SlpGraphSearchEnabled {
 		return nil, errors.New("slp graph search is not enabled")
 	}
 
@@ -1097,7 +1100,7 @@ func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
 // LoadGraphSearchDb is used to load transactions and associated tokenID
 func (idx *SlpIndex) loadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, error) {
 
-	if !idx.config.GraphSearch {
+	if !idx.config.SlpGraphSearchEnabled {
 		return nil, errors.New("slp graph search is disabled")
 	}
 
@@ -1143,11 +1146,11 @@ func (idx *SlpIndex) loadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, e
 
 // SlpConfig provides the proper starting height and hash
 type SlpConfig struct {
-	StartHash    *chainhash.Hash
-	StartHeight  int32
-	AddrPrefix   string
-	MaxCacheSize int
-	GraphSearch  bool
+	StartHash             *chainhash.Hash
+	StartHeight           int32
+	AddrPrefix            string
+	MaxCacheSize          int
+	SlpGraphSearchEnabled bool
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a

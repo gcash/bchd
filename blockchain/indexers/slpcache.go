@@ -30,6 +30,7 @@ func NewSlpCache(maxEntries int) *SlpCache {
 		tempEntries:       make(map[chainhash.Hash]*SlpIndexEntry, maxEntries),
 		mempoolEntries:    make(map[chainhash.Hash]*SlpIndexEntry),
 		tempTokenMetadata: make(map[chainhash.Hash]*TokenMetadata, maxEntries),
+		graphSearchDb:     slpgraphsearch.NewDb(),
 	}
 }
 
@@ -158,32 +159,14 @@ func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpI
 func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 
 	s.RLock()
-	if s.graphSearchDb != nil {
-		dbState := s.graphSearchDb.State
-		if dbState == 1 {
-			s.RUnlock()
-			return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
-		} else if dbState == 0 {
-			s.RUnlock()
-			return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
-		}
-	}
-	s.RUnlock()
+	defer s.RUnlock()
 
-	s.Lock()
-	defer s.Unlock()
-
-	if s.graphSearchDb != nil {
-		dbState := s.graphSearchDb.State
-		if dbState == 1 {
-			s.RUnlock()
-			return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
-		} else if dbState == 0 {
-			s.RUnlock()
-			return s.graphSearchDb, fmt.Errorf("graph search db is loading, please try again in a few minutes")
-		}
+	dbState := s.graphSearchDb.State
+	if dbState == 1 {
+		return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
+	} else if dbState == 0 {
+		return s.graphSearchDb, fmt.Errorf("graph search db is loading or is not enabled, please try again in a few minutes")
 	}
 
-	s.graphSearchDb = slpgraphsearch.NewDb()
 	return s.graphSearchDb, nil
 }
