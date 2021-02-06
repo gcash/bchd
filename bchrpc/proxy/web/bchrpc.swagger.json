@@ -1209,6 +1209,9 @@
           "items": {
             "$ref": "#/definitions/pbSlpRequiredBurn"
           }
+        },
+        "disable_slp_burn_errors": {
+          "type": "boolean"
         }
       }
     },
@@ -1217,6 +1220,9 @@
       "properties": {
         "is_valid": {
           "type": "boolean"
+        },
+        "invalid_reason": {
+          "type": "string"
         }
       }
     },

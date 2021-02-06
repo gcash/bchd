@@ -526,6 +526,29 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			tokenIDHash:    tokenIDHash,
 			slpMsgPkScript: tx.TxOut[0].PkScript,
 		}
+
+		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
+		// has been mined but the SlpCache.tempTokenMetadata cache contains metadata with a current mint baton
+		// outpoint location that is based the first seen mint baton spend. This scenario would not impact slp validation,
+		// however it would result in the gRPC server sending the client the wrong mint baton hash until the cache
+		// was cleared in a bchd restart or cleared from exceeding the SlpCache.maxEntries limit.
+		//
+		// The consequence of the following logic handling this case is that situations w having chained unconfirmed
+		// mint transactions may return outdated mint baton outpoint if the chained parent is confirmed but any children
+		// are remaining in the mempool.
+		//
+		// Since the mint baton outpoint location is the only stateful property of token metadata there are no other
+		// similar situations with slp v1/nft1.
+		if msg, ok := slpMsg.(v1parser.SlpMint); ok {
+			hash, err := chainhash.NewHash(msg.TokenID())
+			if err != nil {
+				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
+			} else if tm := idx.cache.GetTokenMetadata(*hash); tm != nil {
+				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
+				idx.cache.RemoveTokenMetadata(*hash)
+			}
+		}
+
 		return dbPutSlpIndexEntry(idx, dbTx, entry)
 	}
 
@@ -1002,6 +1025,8 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		// add or update token metadata cache
 		switch t := slpMsg.(type) {
 		case *v1parser.SlpGenesis:
+			// add genesis token metadata to cache
+			log.Debugf("adding slp genesis token metadata for %v", hex.EncodeToString(tokenIDHash[:]))
 			tm := &TokenMetadata{
 				TokenID:    tokenIDHash,
 				SlpVersion: slpMsg.TokenType(),
@@ -1031,6 +1056,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 			idx.cache.AddTempTokenMetadata(tm)
 		case *v1parser.SlpMint:
 			// update the mint baton location
+			log.Debugf("adding slp mint token metadata for %v", hex.EncodeToString(tokenIDHash[:]))
 			err := idx.db.View(func(dbTx database.Tx) error {
 				hash := tx.TxHash()
 				entry, err := idx.GetSlpIndexEntry(dbTx, &hash)
