@@ -1602,7 +1602,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			return nil, status.Errorf(codes.Internal, "an error occured when getting total slp amount in txn: %v, with error: %v", msgTx.TxHash(), err)
 		}
 		if inputVal.Cmp(outputVal) < 0 {
-			invalidReason := "outputs less than inputs"
+			invalidReason := "outputs greater than inputs"
 			if disableSlpBurnErrors {
 				return slpInvalid(invalidReason), nil
 			}

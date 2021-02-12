@@ -519,9 +519,9 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		// however it would result in the gRPC server sending the client the wrong mint baton hash until the cache
 		// was cleared in a bchd restart or cleared from exceeding the SlpCache.maxEntries limit.
 		//
-		// The consequence of the following logic handling this case is that situations w having chained unconfirmed
-		// mint transactions may return outdated mint baton outpoint if the chained parent is confirmed but any children
-		// are remaining in the mempool.
+		// The consequence of this is chained unconfirmed mint transactions may cause an outdated mint baton outpoint
+		// to be returned if a chained parent is recently confirmed mint children are remaining in the mempool.
+		// This situation only presents an inconvenience to the user.
 		//
 		// Since the mint baton outpoint location is the only stateful property of token metadata there are no other
 		// similar situations with slp v1/nft1.
