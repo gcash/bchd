@@ -2106,7 +2106,6 @@
           "format": "byte"
         }
       },
-      "description": "NOTE: group id cannot be populated until the transaction has been confirmed",
       "title": "TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
     "pbTokenMetadataNFT1Group": {
@@ -2141,7 +2140,6 @@
           "format": "int64"
         }
       },
-      "description": "NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed",
       "title": "TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
     "pbTokenMetadataTokenType1": {
@@ -2176,7 +2174,6 @@
           "format": "int64"
         }
       },
-      "description": "NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed",
       "title": "TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
     },
     "pbTransaction": {

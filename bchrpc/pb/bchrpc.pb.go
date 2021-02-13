@@ -4707,8 +4707,6 @@ func (*TokenMetadata_Nft1Group) isTokenMetadata_TypeMetadata() {}
 func (*TokenMetadata_Nft1Child) isTokenMetadata_TypeMetadata() {}
 
 // TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs
-//
-// NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed
 type TokenMetadataTokenType1 struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -4805,8 +4803,6 @@ func (x *TokenMetadataTokenType1) GetMintBatonVout() uint32 {
 }
 
 // TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs
-//
-//  NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed
 type TokenMetadataNFT1Group struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -4903,8 +4899,6 @@ func (x *TokenMetadataNFT1Group) GetMintBatonVout() uint32 {
 }
 
 // TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs
-//
-//  NOTE: group id cannot be populated until the transaction has been confirmed
 type TokenMetadataNFT1Child struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
