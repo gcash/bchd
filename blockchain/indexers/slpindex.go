@@ -169,7 +169,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		return nil, fmt.Errorf("failed to create hash from %s", hex.EncodeToString(serializedData[0:32]))
 	}
 	if len(serializedData) < 34 {
-		return &TokenMetadata{TokenID: tokenIDHash}, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
+		return nil, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
 	}
 
 	slpVersion := v1parser.TokenType(byteOrder.Uint16(serializedData[32:34]))
@@ -283,7 +283,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
-	idx.cache.AddTempEntry(&txHash, &SlpIndexEntry{
+	idx.cache.AddTempEntry(&txHash, SlpIndexEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
@@ -506,12 +506,6 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		if len(tx.TxOut) < 1 {
 			return errors.New("transaction has no outputs")
 		}
-		entry := &dbSlpIndexEntry{
-			tx:             tx,
-			slpMsg:         slpMsg,
-			tokenIDHash:    tokenIDHash,
-			slpMsgPkScript: tx.TxOut[0].PkScript,
-		}
 
 		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
 		// has been mined but the SlpCache.tempTokenMetadata cache contains metadata with a current mint baton
@@ -529,13 +523,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			hash, err := chainhash.NewHash(msg.TokenID())
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
-			} else if tm := idx.cache.GetTokenMetadata(*hash); tm != nil {
+			} else if _, ok := idx.cache.GetTokenMetadata(*hash); ok {
 				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
 				idx.cache.RemoveTokenMetadata(*hash)
 			}
 		}
 
-		return dbPutSlpIndexEntry(idx, dbTx, entry)
+		return dbPutSlpIndexEntry(idx, dbTx, &dbSlpIndexEntry{
+			tx:             tx,
+			slpMsg:         slpMsg,
+			tokenIDHash:    tokenIDHash,
+			slpMsgPkScript: tx.TxOut[0].PkScript,
+		})
 	}
 
 	burnedInputs := make([]*BurnedInput, 0)
@@ -812,10 +811,9 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 //
 // This function is safe for concurrent access.
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	entry := idx.cache.GetTxEntry(hash)
-	if entry != nil {
+	if entry, ok := idx.cache.GetTxEntry(hash); ok {
 		log.Debugf("using slp txn entry cache for txid %v", hash)
-		return entry, nil
+		return &entry, nil
 	}
 
 	// fallback to fetch entry from db
@@ -824,16 +822,15 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 		return nil, err
 	}
 
-	idx.cache.AddTempEntry(hash, entry)
+	idx.cache.AddTempEntry(hash, *entry)
 	return entry, nil
 }
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
 func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*TokenMetadata, error) {
-	tm := idx.cache.GetTokenMetadata(entry.TokenIDHash)
-	if tm != nil {
+	if tm, ok := idx.cache.GetTokenMetadata(entry.TokenIDHash); ok {
 		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
-		return tm, nil
+		return &tm, nil
 	}
 
 	if entry.TokenID == 0 {
@@ -851,7 +848,7 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*
 		return nil, err
 	}
 
-	idx.cache.AddTempTokenMetadata(tm)
+	idx.cache.AddTempTokenMetadata(*tm)
 	return tm, nil
 }
 
@@ -877,7 +874,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		hash := tx.TxHash()
 
 		// add item to slp txn cache
-		idx.cache.AddMempoolEntry(&hash, &SlpIndexEntry{
+		idx.cache.AddMempoolEntry(&hash, SlpIndexEntry{
 			TokenID:        0,
 			TokenIDHash:    *tokenIDHash,
 			SlpVersionType: slpMsg.TokenType(),
@@ -889,7 +886,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		case *v1parser.SlpGenesis:
 			// add genesis token metadata to cache
 			log.Debugf("adding slp genesis token metadata for %v", hex.EncodeToString(tokenIDHash[:]))
-			tm := &TokenMetadata{
+			tm := TokenMetadata{
 				TokenID:    tokenIDHash,
 				SlpVersion: slpMsg.TokenType(),
 			}

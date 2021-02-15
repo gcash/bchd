@@ -31,7 +31,7 @@ func NewSlpCache(maxEntries int) *SlpCache {
 }
 
 // AddTempEntry puts new items in a temporary cache with limited size
-func (s *SlpCache) AddTempEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
+func (s *SlpCache) AddTempEntry(hash *chainhash.Hash, item SlpIndexEntry) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -46,37 +46,38 @@ func (s *SlpCache) AddTempEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
 	}
 	_, ok := s.mempoolEntries[*hash]
 	if !ok {
-		s.tempEntries[*hash] = item
+		s.tempEntries[*hash] = &item
 	}
 }
 
 // AddMempoolEntry puts new items in the mempool cache
-func (s *SlpCache) AddMempoolEntry(hash *chainhash.Hash, item *SlpIndexEntry) {
-	entry := s.GetTxEntry(hash)
-	if entry != nil {
+func (s *SlpCache) AddMempoolEntry(hash *chainhash.Hash, item SlpIndexEntry) {
+	if _, ok := s.GetTxEntry(hash); ok {
 		return
 	}
 
 	s.Lock()
 	defer s.Unlock()
-	s.mempoolEntries[*hash] = item
+	s.mempoolEntries[*hash] = &item
 }
 
 // GetTxEntry gets tx entry items from the cache
-func (s *SlpCache) GetTxEntry(hash *chainhash.Hash) *SlpIndexEntry {
+func (s *SlpCache) GetTxEntry(hash *chainhash.Hash) (SlpIndexEntry, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	entry := s.mempoolEntries[*hash]
-	if entry == nil {
-		entry = s.tempEntries[*hash]
+	if entry, ok := s.mempoolEntries[*hash]; ok {
+		return *entry, ok
 	}
 
-	return entry
+	if entry, ok := s.tempEntries[*hash]; ok {
+		return *entry, ok
+	}
+	return SlpIndexEntry{}, false
 }
 
 // AddTempTokenMetadata puts token metadata into cache with a limited size
-func (s *SlpCache) AddTempTokenMetadata(item *TokenMetadata) {
+func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -89,15 +90,18 @@ func (s *SlpCache) AddTempTokenMetadata(item *TokenMetadata) {
 			break
 		}
 	}
-	s.tempTokenMetadata[*item.TokenID] = item
+	s.tempTokenMetadata[*item.TokenID] = &item
 }
 
 // GetTokenMetadata gets token metadata from the cache
-func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) *TokenMetadata {
+func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) (TokenMetadata, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.tempTokenMetadata[hash]
+	if entry, ok := s.tempTokenMetadata[hash]; ok {
+		return *entry, ok
+	}
+	return TokenMetadata{}, false
 }
 
 // RemoveTokenMetadata removes a token metadata item from cache
