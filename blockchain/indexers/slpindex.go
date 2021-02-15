@@ -360,11 +360,9 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 			return nil
 		}
 
-		// NOTE: In the future token metadata may contain properties which
-		// need to be updated here.  Currently, token metadata only have mint baton location
-		// and NFT1 group ID.  Neither of these items need special handling
-		// on DisconnectBlock since they are properly updated during
-		// the subsequently called ConnectBlock.
+		// NOTE: We don't need to worry about updating mint baton token metadata here since it isn't
+		// relied upon for the purpose of validation.  If a mint boton double spend occurs
+		// then the token metadata record will be updated when ConnectBlock is called.
 
 		return slpIndex.Delete(txHash[:])
 	}
@@ -575,16 +573,12 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
 	//
-	// NOTE: items in burnedInputs are not topologically ordered
+	// Currently the only stateful property is Mint Baton location.
 	//
 	for _, burn := range burnedInputs {
-		// Currently we only need to check for a burned mint baton
-		isMintBatonBurned, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
+		_, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
 		if err != nil {
 			return err
-		}
-		if isMintBatonBurned {
-			continue
 		}
 	}
 	return nil
