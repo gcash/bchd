@@ -7,9 +7,6 @@
   "tags": [
     {
       "name": "bchrpc"
-    },
-    {
-      "name": "slprpc"
     }
   ],
   "consumes": [
@@ -22,7 +19,7 @@
     "/v1/CheckSlpTransaction": {
       "post": {
         "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.",
-        "operationId": "slprpc_CheckSlpTransaction",
+        "operationId": "bchrpc_CheckSlpTransaction",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -48,7 +45,7 @@
           }
         ],
         "tags": [
-          "slprpc"
+          "bchrpc"
         ]
       }
     },
@@ -389,7 +386,7 @@
     "/v1/GetParsedSlpScript": {
       "post": {
         "summary": "GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
-        "operationId": "slprpc_GetParsedSlpScript",
+        "operationId": "bchrpc_GetParsedSlpScript",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -415,7 +412,7 @@
           }
         ],
         "tags": [
-          "slprpc"
+          "bchrpc"
         ]
       }
     },
@@ -524,7 +521,7 @@
       "post": {
         "summary": "GetTokenMetadata return SLP token metadata for one or more tokens.",
         "description": "**Requires SlpIndex**",
-        "operationId": "slprpc_GetTokenMetadata",
+        "operationId": "bchrpc_GetTokenMetadata",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -550,7 +547,7 @@
           }
         ],
         "tags": [
-          "slprpc"
+          "bchrpc"
         ]
       }
     },
@@ -592,7 +589,7 @@
       "post": {
         "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions.",
         "description": "**Requires SlpIndex**",
-        "operationId": "slprpc_GetTrustedSlpValidation",
+        "operationId": "bchrpc_GetTrustedSlpValidation",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -618,7 +615,7 @@
           }
         ],
         "tags": [
-          "slprpc"
+          "bchrpc"
         ]
       }
     },
