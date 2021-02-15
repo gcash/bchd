@@ -6,15 +6,6 @@ http:
   - selector: pb.bchrpc.GetBlockchainInfo
     post: /v1/GetBlockchainInfo
     body: "*"
-  - selector: pb.bchrpc.CheckSlpTransaction
-    post: /v1/CheckSlpTransaction
-    body: "*"
-  - selector: pb.bchrpc.GetParsedSlpScript
-    post: /v1/GetParsedSlpScript
-    body: "*"
-  - selector: pb.bchrpc.GetTrustedSlpValidation
-    post: /v1/GetTrustedSlpValidation
-    body: "*"
   - selector: pb.bchrpc.GetMempoolInfo
     post: /v1/GetMempoolInfo
     body: "*"
@@ -35,9 +26,6 @@ http:
     body: "*"
   - selector: pb.bchrpc.GetHeaders
     post: /v1/GetBlockHeaders
-    body: "*"
-  - selector: pb.bchrpc.GetTokenMetadata
-    post: /v1/GetTokenMetadata
     body: "*"
   - selector: pb.bchrpc.GetTransaction
     post: /v1/GetTransaction
@@ -71,4 +59,16 @@ http:
     body: "*"
   - selector: pb.bchrpc.SubscribeBlocks
     post: /v1/SubscribeBlocks
+    body: "*"
+  - selector: pb.slprpc.CheckSlpTransaction
+    post: /v1/CheckSlpTransaction
+    body: "*"
+  - selector: pb.slprpc.GetParsedSlpScript
+    post: /v1/GetParsedSlpScript
+    body: "*"
+  - selector: pb.slprpc.GetTrustedSlpValidation
+    post: /v1/GetTrustedSlpValidation
+    body: "*"
+  - selector: pb.slprpc.GetTokenMetadata
+    post: /v1/GetTokenMetadata
     body: "*"

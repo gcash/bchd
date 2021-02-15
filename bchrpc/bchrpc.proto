@@ -85,23 +85,6 @@ service bchrpc {
     // **Requires TxIndex**
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // GetTokenMetadata return SLP token metadata for one or more tokens.
-    //
-    // **Requires SlpIndex**
-    rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
-
-    // GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript 
-    // using goslp package.  This endpoint does not require SlpIndex.
-    rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
-
-    // GetTrustedValidation returns SLP validity related information for one or more transactions.
-    //
-    // **Requires SlpIndex**
-    rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
-
-    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.
-    rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
-
     // Submit a transaction to all connected peers.
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse) {}
 
@@ -133,7 +116,7 @@ service bchrpc {
 }
 
 
-// RPC MESSAGES
+// BCH RPC MESSAGES
 
 message GetMempoolInfoRequest {}
 message GetMempoolInfoResponse {
@@ -456,17 +439,6 @@ message SubmitTransactionResponse {
     bytes hash = 1;
 }
 
-message CheckSlpTransactionRequest {
-    bytes transaction = 1;
-    repeated SlpRequiredBurn required_slp_burns = 2;
-    bool disable_slp_burn_errors = 3;
-}
-
-message CheckSlpTransactionResponse {
-    bool is_valid = 1;
-    string invalid_reason = 2;
-}
-
 // Request to subscribe or unsubscribe from a stream of transactions.
 message SubscribeTransactionsRequest {
     // Subscribe to a filter. add items to a filter
@@ -522,56 +494,6 @@ message SubscribeBlocksRequest {
     bool serialize_block = 3;
 }
 
-message GetTokenMetadataRequest {
-    repeated bytes token_ids = 1;
-}
-
-message GetTokenMetadataResponse {
-    repeated TokenMetadata token_metadata = 1;
-}
-
-message GetParsedSlpScriptRequest {
-    bytes slp_opreturn_script = 1;
-}
-
-message GetParsedSlpScriptResponse {
-    string parsing_error = 1;
-    bytes token_id = 2;
-    SlpAction slp_action = 3;
-    uint32 token_type = 4;
-    oneof slp_metadata {
-        SlpV1GenesisMetadata v1_genesis = 5;    // NFT1 Group also uses this
-        SlpV1MintMetadata v1_mint = 6;          // NFT1 Group also uses this
-        SlpV1SendMetadata v1_send = 7;          // NFT1 Group also uses this
-        SlpNft1ChildGenesisMetadata nft1_child_genesis = 8;
-        SlpNft1ChildSendMetadata nft1_child_send = 9;
-    }
-}
-
-message GetTrustedSlpValidationRequest {
-    message Query {
-        bytes prev_out_hash = 1;
-        uint32 prev_out_vout = 2;
-    }
-    repeated Query queries = 1;
-}
-
-message GetTrustedSlpValidationResponse {
-    message ValidityResult {
-        bytes prev_out_hash = 1;
-        uint32 prev_out_vout = 2;
-        bytes token_id = 3;
-        SlpAction slp_action = 4;
-        uint32 token_type = 5;
-        oneof validity_result_type {
-            uint64 v1_token_amount = 6 [jstype = JS_STRING];
-            bool v1_mint_baton = 7;
-        }
-        bytes slp_txn_opreturn = 8;
-    }
-
-    repeated ValidityResult results = 1;
-}
 
 // NOTIFICATIONS
 
@@ -798,6 +720,93 @@ message TransactionFilter {
 
     // only transactions associated with the included tokenIds
     repeated bytes slp_token_ids = 6;
+}
+
+// slprpc contains a set of RPCs that can be exposed publicly via
+// the command line options. This service could be authenticated or
+// unauthenticated.
+service slprpc {
+
+    // GetTokenMetadata return SLP token metadata for one or more tokens.
+    //
+    // **Requires SlpIndex**
+    rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
+
+    // GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript 
+    // using goslp package.  This endpoint does not require SlpIndex.
+    rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
+
+    // GetTrustedValidation returns SLP validity related information for one or more transactions.
+    //
+    // **Requires SlpIndex**
+    rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
+
+    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.
+    rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
+}
+
+// SLP RPC MESSAGES
+
+message CheckSlpTransactionRequest {
+    bytes transaction = 1;
+    repeated SlpRequiredBurn required_slp_burns = 2;
+    bool disable_slp_burn_errors = 3;
+}
+
+message CheckSlpTransactionResponse {
+    bool is_valid = 1;
+    string invalid_reason = 2;
+}
+
+message GetTokenMetadataRequest {
+    repeated bytes token_ids = 1;
+}
+
+message GetTokenMetadataResponse {
+    repeated TokenMetadata token_metadata = 1;
+}
+
+message GetParsedSlpScriptRequest {
+    bytes slp_opreturn_script = 1;
+}
+
+message GetParsedSlpScriptResponse {
+    string parsing_error = 1;
+    bytes token_id = 2;
+    SlpAction slp_action = 3;
+    uint32 token_type = 4;
+    oneof slp_metadata {
+        SlpV1GenesisMetadata v1_genesis = 5;    // NFT1 Group also uses this
+        SlpV1MintMetadata v1_mint = 6;          // NFT1 Group also uses this
+        SlpV1SendMetadata v1_send = 7;          // NFT1 Group also uses this
+        SlpNft1ChildGenesisMetadata nft1_child_genesis = 8;
+        SlpNft1ChildSendMetadata nft1_child_send = 9;
+    }
+}
+
+message GetTrustedSlpValidationRequest {
+    message Query {
+        bytes prev_out_hash = 1;
+        uint32 prev_out_vout = 2;
+    }
+    repeated Query queries = 1;
+}
+
+message GetTrustedSlpValidationResponse {
+    message ValidityResult {
+        bytes prev_out_hash = 1;
+        uint32 prev_out_vout = 2;
+        bytes token_id = 3;
+        SlpAction slp_action = 4;
+        uint32 token_type = 5;
+        oneof validity_result_type {
+            uint64 v1_token_amount = 6 [jstype = JS_STRING];
+            bool v1_mint_baton = 7;
+        }
+        bytes slp_txn_opreturn = 8;
+    }
+
+    repeated ValidityResult results = 1;
 }
 
 // SlpToken info used in transaction inputs / outputs
