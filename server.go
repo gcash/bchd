@@ -2671,9 +2671,15 @@ out:
 		}
 	}
 
+	srvrLog.Info("Stopping connManager")
 	s.connManager.Stop()
+	srvrLog.Info("connManager stopped")
+	srvrLog.Info("Stopping syncManager")
 	s.syncManager.Stop()
+	srvrLog.Info("syncManager stopped")
+	srvrLog.Info("Stopping addrManger")
 	s.addrManager.Stop()
+	srvrLog.Info("addrManager stopped")
 
 	// Drain channels before exiting so nothing is left waiting around
 	// to send.
@@ -2691,7 +2697,7 @@ cleanup:
 		}
 	}
 	s.wg.Done()
-	srvrLog.Tracef("Peer handler done")
+	srvrLog.Info("Peer handler done")
 }
 
 // AddPeer adds a new peer that has already been connected to the server.
@@ -2871,16 +2877,23 @@ func (s *server) Stop() error {
 	srvrLog.Warnf("Server shutting down")
 
 	// Stop the CPU miner if needed
+	srvrLog.Info("Stopping cpuMiner")
 	s.cpuMiner.Stop()
+	srvrLog.Info("cpuMiner stopped")
 
 	// Shutdown the RPC server if it's not disabled.
 	if !cfg.DisableRPC {
+		srvrLog.Info("Stopping rpcServer")
 		s.rpcServer.Stop()
+		srvrLog.Info("rpcServer stopped")
 		if s.gRPCServer != nil {
+			srvrLog.Info("Stopping grpcServer")
 			s.gRPCServer.Stop()
+			srvrLog.Info("grpcServer stopped")
 		}
 	}
 
+	srvrLog.Info("Saving final fee estimate to db")
 	// Save fee estimator state in the database.
 	s.db.Update(func(tx database.Tx) error {
 		metadata := tx.Metadata()
@@ -2888,6 +2901,7 @@ func (s *server) Stop() error {
 
 		return nil
 	})
+	srvrLog.Info("Fee estimate save complete")
 
 	// Signal the remaining goroutines to quit.
 	close(s.quit)
@@ -2896,7 +2910,9 @@ func (s *server) Stop() error {
 
 // WaitForShutdown blocks until the main listener and peer handlers are stopped.
 func (s *server) WaitForShutdown() {
+	srvrLog.Info("Waiting for server waitgroup to finish")
 	s.wg.Wait()
+	srvrLog.Info("Server waitgroup to finished")
 }
 
 // ScheduleShutdown schedules a server shutdown after the specified duration.
