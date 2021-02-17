@@ -7,6 +7,7 @@ package indexers
 import (
 	"sync"
 
+	"github.com/bluele/gcache"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchutil"
 )
@@ -16,8 +17,8 @@ type SlpCache struct {
 	sync.RWMutex
 	maxEntries          int
 	mempoolSlpTxEntries map[chainhash.Hash]*SlpTxEntry
-	slpTxEntries        map[chainhash.Hash]*SlpTxEntry
-	tokenMetadata       map[chainhash.Hash]*TokenMetadata
+	slpTxEntries        gcache.Cache
+	tokenMetadata       gcache.Cache
 }
 
 // InitSlpCache creates a new instance of SlpCache
@@ -25,8 +26,8 @@ func InitSlpCache(maxEntries int) *SlpCache {
 	return &SlpCache{
 		maxEntries:          maxEntries,
 		mempoolSlpTxEntries: make(map[chainhash.Hash]*SlpTxEntry),
-		slpTxEntries:        make(map[chainhash.Hash]*SlpTxEntry, maxEntries),
-		tokenMetadata:       make(map[chainhash.Hash]*TokenMetadata, maxEntries),
+		slpTxEntries:        gcache.New(maxEntries).LRU().Build(),
+		tokenMetadata:       gcache.New(maxEntries).LRU().Build(),
 	}
 }
 
@@ -35,19 +36,9 @@ func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
 	s.Lock()
 	defer s.Unlock()
 
-	// Remove a random entry from the map.  For most compilers, Go's
-	// range statement iterates starting at a random item although
-	// that is not 100% guaranteed by the spec.
-	if len(s.slpTxEntries) > s.maxEntries {
-		for txHash := range s.slpTxEntries {
-			delete(s.slpTxEntries, txHash)
-			break
-		}
-	}
-
 	_, ok := s.mempoolSlpTxEntries[*hash]
 	if !ok {
-		s.slpTxEntries[*hash] = &item
+		s.slpTxEntries.Set(*hash, &item)
 	}
 }
 
@@ -71,8 +62,10 @@ func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 		return *entry, ok
 	}
 
-	if entry, ok := s.slpTxEntries[*hash]; ok {
-		return *entry, ok
+	if entry, err := s.slpTxEntries.Get(*hash); err == nil {
+		if val, ok := entry.(*SlpTxEntry); ok {
+			return *val, true
+		}
 	}
 	return SlpTxEntry{}, false
 }
@@ -82,25 +75,18 @@ func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) {
 	s.Lock()
 	defer s.Unlock()
 
-	// Remove a random entry from the map.  For most compilers, Go's
-	// range statement iterates starting at a random item although
-	// that is not 100% guaranteed by the spec.
-	if len(s.tokenMetadata) > s.maxEntries {
-		for txHash := range s.tokenMetadata {
-			delete(s.tokenMetadata, txHash)
-			break
-		}
-	}
-	s.tokenMetadata[*item.TokenID] = &item
+	s.tokenMetadata.Set(*item.TokenID, &item)
 }
 
 // GetTokenMetadata gets token metadata from the cache
-func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) (TokenMetadata, bool) {
+func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) (TokenMetadata, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	if entry, ok := s.tokenMetadata[hash]; ok {
-		return *entry, ok
+	if entry, err := s.tokenMetadata.Get(*hash); err != nil {
+		if val, ok := entry.(*TokenMetadata); ok {
+			return *val, true
+		}
 	}
 	return TokenMetadata{}, false
 }
@@ -110,7 +96,7 @@ func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
 	s.Lock()
 	defer s.Unlock()
 
-	delete(s.tokenMetadata, hash)
+	s.tokenMetadata.Remove(hash)
 }
 
 // RemoveMempoolSlpTxItems is called on block events to remove mempool transaction items and

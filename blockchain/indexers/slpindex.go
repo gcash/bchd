@@ -525,7 +525,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			hash, err := chainhash.NewHash(msg.TokenID())
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
-			} else if _, ok := idx.cache.GetTokenMetadata(*hash); ok {
+			} else if _, ok := idx.cache.GetTokenMetadata(hash); ok {
 				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
 				idx.cache.RemoveTokenMetadata(*hash)
 			}
@@ -826,7 +826,7 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
 func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*TokenMetadata, error) {
-	if tm, ok := idx.cache.GetTokenMetadata(entry.TokenIDHash); ok {
+	if tm, ok := idx.cache.GetTokenMetadata(&entry.TokenIDHash); ok {
 		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
 		return &tm, nil
 	}
