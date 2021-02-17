@@ -697,7 +697,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			}
 			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 			if err != nil {
-				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", tx.SlpTransactionInfo.TokenId, err)
+				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 				log.Criticalf(msg)
 				return nil, status.Errorf(codes.Internal, msg)
 			}
@@ -738,11 +738,11 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, err := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 		}
 		tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 		if err != nil {
-			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 			log.Criticalf(msg)
 			return nil, status.Errorf(codes.Internal, msg)
 		}
@@ -1766,7 +1766,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 //
 // NOTE: nft1 child genesis is allowed without error as long as the burned outpoint is a
 //       nft1 Group type and the quanity is 1.
-func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoint, requiredBurns []*pb.SlpRequiredBurn, txnSlpMsg v1parser.ParseResult, inputIdx int) (*indexers.SlpIndexEntry, error) {
+func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoint, requiredBurns []*pb.SlpRequiredBurn, txnSlpMsg v1parser.ParseResult, inputIdx int) (*indexers.SlpTxEntry, error) {
 
 	slpEntry, err := s.getSlpIndexEntry(&outpoint.Hash)
 	if err != nil {
@@ -2638,13 +2638,13 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 }
 
 // getSlpIndexEntry fetches an SlpIndexEntry object leveraging a cache of SlpIndexEntry items
-func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
+func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpTxEntry, error) {
 
 	if s.slpIndex == nil {
 		return nil, errors.New("slpindex required")
 	}
 
-	var entry *indexers.SlpIndexEntry
+	var entry *indexers.SlpTxEntry
 
 	// Otherwise, try to fetch from the db
 	err := s.db.View(func(dbTx database.Tx) error {
@@ -2817,7 +2817,7 @@ func (s *GrpcServer) manageSlpEntryCache() {
 
 		case *rpcEventBlockConnected:
 			block := event
-			s.slpIndex.RemoveMempoolTxs(block.Transactions())
+			s.slpIndex.RemoveMempoolSlpTxs(block.Transactions())
 		}
 	}
 }

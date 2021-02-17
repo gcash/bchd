@@ -47,7 +47,7 @@ var (
 )
 
 // -----------------------------------------------------------------------------
-// The slp index consists of an entry for every SLP-like transaction in the main
+// The slp index consists of an entry for every slp-like transaction in the main
 // chain.  In order to significantly optimize the space requirements a separate
 // index which provides an internal mapping between each TokenID that has been
 // indexed and a unique ID for use within the hash to location mappings.  The ID
@@ -92,10 +92,10 @@ var (
 //   slp version	    uint16            2 bytes
 //	 op_return			[]bytes			  typically <220 bytes
 //   -----
-//   Max: 258 bytes (if OP_RETURN is limited to 220 bytes)
+//   Max: 258 bytes (if op_return is limited to 220 bytes)
 //	 Min: 43 bytes (4 + 2 + 37)
 //
-//   NOTE: The minimum possible SLP OP_RETURN is 37 bytes, this is empty GENESIS
+//   NOTE: The minimum possible slp op_return is 37 bytes, this is empty genesis
 //
 // -----------------------------------------------------------------------------
 
@@ -287,7 +287,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
-	idx.cache.AddTempEntry(&txHash, SlpIndexEntry{
+	idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
@@ -302,8 +302,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 	return slpIndex.Put(txHash[:], target)
 }
 
-// SlpIndexEntry is a valid SLP token stored in the SLP index
-type SlpIndexEntry struct {
+// SlpTxEntry is a valid slp token stored in the slp index
+type SlpTxEntry struct {
 	TokenID        uint32
 	TokenIDHash    chainhash.Hash
 	SlpVersionType v1parser.TokenType
@@ -313,7 +313,7 @@ type SlpIndexEntry struct {
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // nil will be returned for the both the entry and the error.
-func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEntry, error) {
+func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry, error) {
 	// Load the record from the database and return now if it doesn't exist.
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
@@ -330,7 +330,7 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 				"entry for %s", txHash),
 		}
 	}
-	entry := &SlpIndexEntry{
+	entry := &SlpTxEntry{
 		TokenID: byteOrder.Uint32(serializedData[0:4]),
 	}
 	tokenMetadata, err := dbFetchTokenMetadataByID(dbTx, entry.TokenID)
@@ -432,7 +432,7 @@ func (idx *SlpIndex) Init() error {
 		return err
 	}
 
-	log.Infof("Current number of SLP tokens in index: %v", idx.curTokenID)
+	log.Infof("Current number of slp tokens in index: %v", idx.curTokenID)
 	return nil
 }
 
@@ -488,7 +488,7 @@ type BurnedInput struct {
 	Tx      *wire.MsgTx
 	TxInput *wire.TxIn
 	SlpMsg  v1parser.ParseResult
-	Entry   *SlpIndexEntry
+	Entry   *SlpTxEntry
 }
 
 // ConnectBlock is invoked by the index manager when a new block has been
@@ -500,7 +500,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	sortedTxns := TopologicallySortTxs(block.Transactions())
 
-	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		return idx.GetSlpIndexEntry(dbTx, txiHash)
 	}
 
@@ -546,7 +546,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			return err
 		}
 
-		// look for burned inputs within non-SLP txns
+		// look for burned inputs within non-slp txns
 		if !isValid {
 			for _, txi := range tx.TxIn {
 				slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
@@ -631,7 +631,7 @@ func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *Burned
 }
 
 // GetSlpIndexEntryHandler provides a function interface for CheckSlpTx
-type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
+type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpTxEntry, error)
 
 // AddTxIndexEntryHandler provides a function interface for CheckSlpTx
 type AddTxIndexEntryHandler func(*wire.MsgTx, v1parser.ParseResult, *chainhash.Hash) error
@@ -753,7 +753,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		}
 	}
 
-	// Check if tx is a valid SLP. SLP validity has two requirements:
+	// Check if tx is a valid slp. Slp validity has two requirements:
 	//  (1) the slpMsg must be valid, and
 	//  (2) the input requirements must be satisfied.
 	isValid := false
@@ -808,8 +808,8 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 // will be returned for the both the entry and the error, which would mean the transaction is invalid
 //
 // This function is safe for concurrent access.
-func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	if entry, ok := idx.cache.GetTxEntry(hash); ok {
+func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpTxEntry, error) {
+	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok {
 		log.Debugf("using slp txn entry cache for txid %v", hash)
 		return &entry, nil
 	}
@@ -820,12 +820,12 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 		return nil, err
 	}
 
-	idx.cache.AddTempEntry(hash, *entry)
+	idx.cache.AddSlpTxEntry(hash, *entry)
 	return entry, nil
 }
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
-func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*TokenMetadata, error) {
+func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*TokenMetadata, error) {
 	if tm, ok := idx.cache.GetTokenMetadata(entry.TokenIDHash); ok {
 		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
 		return &tm, nil
@@ -850,15 +850,15 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*
 	return tm, nil
 }
 
-// AddPotentialSlpEntries checks if a transaction is SLP valid and then will add a
+// AddPotentialSlpEntries checks if a transaction is slp valid and then will add a
 // new SlpIndexEntry to the shared cache of valid slp transactions.
 //
-// This method should be used to assess SLP validity of newly received mempool items and also in rpc
+// This method should be used to assess slp validity of newly received mempool items and also in rpc
 // client subscriber methods that return notifications for both mempool and block events to prevent
 // any possibility of a race conditions with manageSlpEntryCache.
 func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
 
-	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
 		if entry != nil {
 			return entry, nil
@@ -872,7 +872,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		hash := tx.TxHash()
 
 		// add item to slp txn cache
-		idx.cache.AddMempoolEntry(&hash, SlpIndexEntry{
+		idx.cache.AddMempoolSlpTxEntry(&hash, SlpTxEntry{
 			TokenID:        0,
 			TokenIDHash:    *tokenIDHash,
 			SlpVersionType: slpMsg.TokenType(),
@@ -942,10 +942,10 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	return valid, err
 }
 
-// RemoveMempoolTxs removes a list of transactions from the temporary cache that holds
+// RemoveMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
-func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
-	idx.cache.RemoveMempoolItems(txs)
+func (idx *SlpIndex) RemoveMempoolSlpTxs(txs []*bchutil.Tx) {
+	idx.cache.RemoveMempoolSlpTxItems(txs)
 }
 
 // SlpConfig provides the proper starting height and hash
@@ -967,7 +967,7 @@ func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	return &SlpIndex{
 		db:     db,
 		config: cfg,
-		cache:  NewSlpCache(cfg.MaxCacheSize),
+		cache:  InitSlpCache(cfg.MaxCacheSize),
 	}
 }
 

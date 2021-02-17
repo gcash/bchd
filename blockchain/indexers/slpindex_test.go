@@ -48,7 +48,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 	for i, test := range tests {
 
 		// create temporary db of input conditions
-		entryDb := make(map[[32]byte]*indexers.SlpIndexEntry)
+		entryDb := make(map[[32]byte]*indexers.SlpTxEntry)
 
 		for _, wen := range test.When {
 			if !wen.Valid {
@@ -75,7 +75,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 			if err != nil {
 				t.Fatal(err.Error())
 			}
-			entry := &indexers.SlpIndexEntry{
+			entry := &indexers.SlpTxEntry{
 				TokenIDHash:    *tokenIDHash,
 				TokenID:        0,
 				SlpVersionType: slpMsg.TokenType(),
@@ -86,7 +86,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 		}
 
 		// add "When" and "Should" variables
-		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*indexers.SlpIndexEntry, error) {
+		getSlpIndexEntry := func(txiHash *chainhash.Hash) (*indexers.SlpTxEntry, error) {
 			var hash [32]byte
 			copy(hash[:], txiHash[:])
 			slpEntry := entryDb[hash]

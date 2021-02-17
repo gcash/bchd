@@ -14,66 +14,67 @@ import (
 // SlpCache to manage slp index mempool txn and token metadata items and recently queried items
 type SlpCache struct {
 	sync.RWMutex
-	maxEntries        int
-	tempEntries       map[chainhash.Hash]*SlpIndexEntry
-	mempoolEntries    map[chainhash.Hash]*SlpIndexEntry
-	tempTokenMetadata map[chainhash.Hash]*TokenMetadata
+	maxEntries          int
+	mempoolSlpTxEntries map[chainhash.Hash]*SlpTxEntry
+	slpTxEntries        map[chainhash.Hash]*SlpTxEntry
+	tokenMetadata       map[chainhash.Hash]*TokenMetadata
 }
 
-// NewSlpCache creates a new instance of SlpCache
-func NewSlpCache(maxEntries int) *SlpCache {
+// InitSlpCache creates a new instance of SlpCache
+func InitSlpCache(maxEntries int) *SlpCache {
 	return &SlpCache{
-		maxEntries:        maxEntries,
-		tempEntries:       make(map[chainhash.Hash]*SlpIndexEntry, maxEntries),
-		mempoolEntries:    make(map[chainhash.Hash]*SlpIndexEntry),
-		tempTokenMetadata: make(map[chainhash.Hash]*TokenMetadata, maxEntries),
+		maxEntries:          maxEntries,
+		mempoolSlpTxEntries: make(map[chainhash.Hash]*SlpTxEntry),
+		slpTxEntries:        make(map[chainhash.Hash]*SlpTxEntry, maxEntries),
+		tokenMetadata:       make(map[chainhash.Hash]*TokenMetadata, maxEntries),
 	}
 }
 
-// AddTempEntry puts new items in a temporary cache with limited size
-func (s *SlpCache) AddTempEntry(hash *chainhash.Hash, item SlpIndexEntry) {
+// AddSlpTxEntry puts new items in a temporary cache with limited size
+func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
 	s.Lock()
 	defer s.Unlock()
 
 	// Remove a random entry from the map.  For most compilers, Go's
 	// range statement iterates starting at a random item although
 	// that is not 100% guaranteed by the spec.
-	if len(s.tempEntries) > s.maxEntries {
-		for txHash := range s.tempEntries {
-			delete(s.tempEntries, txHash)
+	if len(s.slpTxEntries) > s.maxEntries {
+		for txHash := range s.slpTxEntries {
+			delete(s.slpTxEntries, txHash)
 			break
 		}
 	}
-	_, ok := s.mempoolEntries[*hash]
+
+	_, ok := s.mempoolSlpTxEntries[*hash]
 	if !ok {
-		s.tempEntries[*hash] = &item
+		s.slpTxEntries[*hash] = &item
 	}
 }
 
-// AddMempoolEntry puts new items in the mempool cache
-func (s *SlpCache) AddMempoolEntry(hash *chainhash.Hash, item SlpIndexEntry) {
-	if _, ok := s.GetTxEntry(hash); ok {
+// AddMempoolSlpTxEntry puts new items in the mempool cache
+func (s *SlpCache) AddMempoolSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
+	if _, ok := s.GetSlpTxEntry(hash); ok {
 		return
 	}
 
 	s.Lock()
 	defer s.Unlock()
-	s.mempoolEntries[*hash] = &item
+	s.mempoolSlpTxEntries[*hash] = &item
 }
 
-// GetTxEntry gets tx entry items from the cache
-func (s *SlpCache) GetTxEntry(hash *chainhash.Hash) (SlpIndexEntry, bool) {
+// GetSlpTxEntry gets tx entry items from the cache
+func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	if entry, ok := s.mempoolEntries[*hash]; ok {
+	if entry, ok := s.mempoolSlpTxEntries[*hash]; ok {
 		return *entry, ok
 	}
 
-	if entry, ok := s.tempEntries[*hash]; ok {
+	if entry, ok := s.slpTxEntries[*hash]; ok {
 		return *entry, ok
 	}
-	return SlpIndexEntry{}, false
+	return SlpTxEntry{}, false
 }
 
 // AddTempTokenMetadata puts token metadata into cache with a limited size
@@ -84,13 +85,13 @@ func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) {
 	// Remove a random entry from the map.  For most compilers, Go's
 	// range statement iterates starting at a random item although
 	// that is not 100% guaranteed by the spec.
-	if len(s.tempTokenMetadata) > s.maxEntries {
-		for txHash := range s.tempTokenMetadata {
-			delete(s.tempTokenMetadata, txHash)
+	if len(s.tokenMetadata) > s.maxEntries {
+		for txHash := range s.tokenMetadata {
+			delete(s.tokenMetadata, txHash)
 			break
 		}
 	}
-	s.tempTokenMetadata[*item.TokenID] = &item
+	s.tokenMetadata[*item.TokenID] = &item
 }
 
 // GetTokenMetadata gets token metadata from the cache
@@ -98,7 +99,7 @@ func (s *SlpCache) GetTokenMetadata(hash chainhash.Hash) (TokenMetadata, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	if entry, ok := s.tempTokenMetadata[hash]; ok {
+	if entry, ok := s.tokenMetadata[hash]; ok {
 		return *entry, ok
 	}
 	return TokenMetadata{}, false
@@ -109,17 +110,17 @@ func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
 	s.Lock()
 	defer s.Unlock()
 
-	delete(s.tempTokenMetadata, hash)
+	delete(s.tokenMetadata, hash)
 }
 
-// RemoveMempoolItems is called on block events to remove mempool transaction items and
+// RemoveMempoolSlpTxItems is called on block events to remove mempool transaction items and
 // also we clear the tempTokenMetadata to avoid corrupt mint baton state from double spends
-func (s *SlpCache) RemoveMempoolItems(txs []*bchutil.Tx) {
+func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 	s.Lock()
 	defer s.Unlock()
 
 	for _, tx := range txs {
 		hash := tx.MsgTx().TxHash()
-		delete(s.mempoolEntries, hash)
+		delete(s.mempoolSlpTxEntries, hash)
 	}
 }
