@@ -693,12 +693,13 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			tokenID, err := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
+				return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 			}
 			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 			if err != nil {
-				log.Criticalf("a unknown problem occurred when building token metadata: %v", err)
-				return nil, status.Errorf(codes.Internal, "a unknown problem occurred when building token metadata: %v", err)
+				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", tx.SlpTransactionInfo.TokenId, err)
+				log.Criticalf(msg)
+				return nil, status.Errorf(codes.Internal, msg)
 			}
 		}
 
@@ -723,7 +724,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 
 	header, err := s.chain.HeaderByHash(blockHash)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to load block header: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to load block header %v", err)
 	}
 
 	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
@@ -737,11 +738,13 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, err := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id %s: %v", respTx.SlpTransactionInfo.TokenId, err)
 		}
 		tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when building token metadata for token ID: %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", respTx.SlpTransactionInfo.TokenId, err)
+			log.Criticalf(msg)
+			return nil, status.Errorf(codes.Internal, msg)
 		}
 	}
 

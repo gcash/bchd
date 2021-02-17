@@ -37,9 +37,13 @@ var (
 	// the token hash -> token id index and token metadata.
 	tokenMetadataByIDIndexBucketName = []byte("tokenhashbyididx")
 
-	// errNoTokenIDEntry is an error that indicates a requested entry does
-	// not exist in the token ID index.
-	errNoTokenIDEntry = errors.New("no entry in the Token ID index")
+	// errNoTokenMetadataEntry is an error that indicates a requested entry does
+	// not exist in the token metadata index.
+	errNoTokenMetadataEntry = errors.New("no entry in the token metadata db")
+
+	// errNoTokenIDHashEntry is an error that indicates a requested entry does
+	// not exist in the token id by hash index.
+	errNoTokenIDHashEntry = errors.New("no entry in the token id by hash db")
 )
 
 // -----------------------------------------------------------------------------
@@ -150,7 +154,7 @@ func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error
 	hashIndex := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
 	serializedID := hashIndex.Get(hash[:])
 	if serializedID == nil {
-		return 0, errNoTokenIDEntry
+		return 0, errNoTokenIDHashEntry
 	}
 	return byteOrder.Uint32(serializedID), nil
 }
@@ -161,7 +165,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 	idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
 	serializedData := idIndex.Get(serializedID)
 	if serializedData == nil {
-		return nil, errNoTokenIDEntry
+		return nil, errNoTokenMetadataEntry
 	}
 
 	tokenIDHash, err := chainhash.NewHash(serializedData[0:32])
