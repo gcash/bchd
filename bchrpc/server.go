@@ -506,6 +506,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						respTx.Inputs[i].Address = addrs[0].String()
+						s.setInputSlpTokenAddress(respTx.Inputs[i], addrs[0])
 					}
 
 					spendIdx++
@@ -682,14 +683,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
-						if s.slpIndex != nil && tx.Inputs[i].SlpToken != nil {
-							slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
-							if err != nil {
-								log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
-							} else {
-								tx.Inputs[i].SlpToken.Address = slpAddr.String()
-							}
-						}
+						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
 					}
 				}
 			}
@@ -868,14 +862,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
-						if s.slpIndex != nil && tx.Inputs[i].SlpToken != nil {
-							slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
-							if err != nil {
-								log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
-							} else {
-								tx.Inputs[i].SlpToken.Address = slpAddr.String()
-							}
-						}
+						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
 					}
 				}
 			}
@@ -1479,9 +1466,9 @@ func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
 }
 
 // CheckSlpTransaction checks a submitted transaction for slp validity. The method returns the marshalled response
-// including a slp validity boolean and a reason for invalid validity. A nil value for the validity object when the slp
-// metadata is valid but an error is returned before input validity could be determined (e.g., due to burns).
-// The error response behavior on burn detection can be disabled by setting "DisableSlpBurnErrors" to true.
+// including a slp validity boolean and a reason for invalid validity. A nil value for the response object is returned
+// when an token burn is found. The error response behavior on burn detection can be disabled by setting "DisableSlpBurnErrors"
+// to true.
 //
 // By default an error will be returned for the following circumstances:
 //   1. output index 0 contains slp magic but cannot be parsed to a known slp message type,
@@ -1504,13 +1491,13 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 		return nil, status.Error(codes.InvalidArgument, "transaction is missing inputs or outputs")
 	}
 
-	// all slp unintentional slp burns are caught here with an error
+	// all slp unintentional slp burns are caught here with an error unless disableSlpBurnErrors is true
 	return s.checkTransactionSlpValidity(msgTx, req.RequiredSlpBurns, req.DisableSlpBurnErrors)
 }
 
 func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurns []*pb.SlpRequiredBurn, disableSlpBurnErrors bool) (*pb.CheckSlpTransactionResponse, error) {
 
-	// these are helpers to keep the return statements more clean
+	// slpValid() and slpInvalid() are helpers to keep the return statements clean
 	slpValid := func() *pb.CheckSlpTransactionResponse {
 		return &pb.CheckSlpTransactionResponse{
 			IsValid: true,
@@ -2507,6 +2494,7 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(prevTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
+				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
 			}
 		} else {
 			blockRegion, err := s.txIndex.TxBlockRegion(ch)
@@ -2538,14 +2526,7 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
-				if s.slpIndex != nil && in.SlpToken != nil {
-					slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
-					if err != nil {
-						log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
-					} else {
-						tx.Inputs[i].SlpToken.Address = slpAddr.String()
-					}
-				}
+				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
 			}
 
 			inputTxMap[*ch] = &loadedTx
@@ -3305,15 +3286,20 @@ func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rp
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				respTx.Inputs[i].Address = addrs[0].String()
-				if s.slpIndex != nil && respTx.Inputs[i].SlpToken != nil {
-					slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
-					if err != nil {
-						log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
-					} else {
-						respTx.Inputs[i].SlpToken.Address = slpAddr.String()
-					}
-				}
+				s.setInputSlpTokenAddress(respTx.Inputs[i], addrs[0])
 			}
+		}
+	}
+}
+
+// setInputSlpTokenAddress is used to apply the SlpToken.Aaddress to a transaction input
+func (s *GrpcServer) setInputSlpTokenAddress(input *pb.Transaction_Input, addr bchutil.Address) {
+	if s.slpIndex != nil && input.SlpToken != nil {
+		slpAddr, err := bchutil.ConvertCashToSlpAddress(addr, s.chainParams)
+		if err != nil {
+			log.Debugf("could not convert address %s: %v", addr.String(), err)
+		} else {
+			input.SlpToken.Address = slpAddr.String()
 		}
 	}
 }
