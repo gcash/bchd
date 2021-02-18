@@ -1477,6 +1477,10 @@ func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
 //   1. output index 0 contains slp magic but cannot be parsed to a known slp message type,
 //   2. contains inputs that would be burned if broadcasted and these inputs are not included in req.RequiredSlpBurns
 //
+// If disableSlpBurnErrors is being used then the response will return invalid in any case where some kind of burn would
+// occur. Technically, this could be a valid slp transaction but we return invalid so the client avoids burns.  In the future,
+// we could add an optional flag to return the strict slp validity per spec.
+//
 // NOTE: Non-slp transactions will be checked for burned inputs and will return an error as described in #2 above.
 //       Otherwise, these non-slp transactions will return a response with res.IsValid set to false.
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
@@ -1567,12 +1571,13 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				continue
 			}
 			if err != nil {
-				msg := fmt.Sprintf("transaction includes slp token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v", err)
+				invalidReason := "transaction includes slp token burn with an input from the wrong token"
+				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
 				if !disableSlpBurnErrors {
 					return nil, status.Error(codes.Aborted, msg)
 				}
 				log.Debug(msg)
-				continue
+				return slpInvalid(invalidReason), nil
 			}
 
 			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1597,7 +1602,12 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				return slpInvalid(invalidReason), nil
 			}
 			return slpInvalid(invalidReason), status.Errorf(codes.Aborted, "invalid slp: %s", invalidReason)
-		} else if inputVal.Cmp(outputVal) > 0 && !disableSlpBurnErrors {
+		} else if inputVal.Cmp(outputVal) > 0 {
+
+			if disableSlpBurnErrors {
+				return slpInvalid("inputs are greater than outputs"), nil
+			}
+
 			if len(requiredBurns) == 0 {
 				return slpValid(), status.Errorf(codes.Aborted, "transaction includes slp token burn: inputs greater than outputs, use SlpRequiredBurn to allow burns")
 			}
@@ -1637,12 +1647,13 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				continue
 			}
 			if err != nil {
-				msg := fmt.Sprintf("transaction includes slp token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v ", err)
+				invalidReason := "transaction includes slp token burn with an input from the wrong token"
+				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
 				if !disableSlpBurnErrors {
 					return nil, status.Error(codes.Aborted, msg)
 				}
 				log.Debug(msg)
-				continue
+				return slpInvalid(invalidReason), nil
 			}
 
 			inpSlpMd, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1700,12 +1711,13 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				continue
 			}
 			if err != nil {
-				msg := fmt.Sprintf("transaction includes slp token burn: slp input from wrong token, use SlpRequiredBurn to allow burns: %v ", err)
+				invalidReason := "transaction includes slp token burn with an input from the wrong token"
+				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
 				if !disableSlpBurnErrors {
 					return slpValid(), status.Error(codes.Aborted, msg)
 				}
 				log.Debug(msg)
-				continue
+				return slpInvalid(invalidReason), nil
 			}
 
 			// check for invalid nft genesis
