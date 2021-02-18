@@ -2979,16 +2979,15 @@ func (s *GrpcServer) slpEventHandler() {
 			// validate new slp txns
 			isSlpValid := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
 			if isSlpValid && s.slpIndex.GraphSearchEnabled() {
-				gsDb, err := s.slpIndex.GetGraphSearchDb()
-				if err != nil {
-					log.Debug(err)
-				}
+				gsDb, _ := s.slpIndex.GetGraphSearchDb()
 				if gsDb == nil {
 					log.Critical("slp graph search db isn't created yet mempool transaction cannot be added to the db")
 				} else {
-					err = gsDb.AddTxn(event.Tx.MsgTx())
+					err := gsDb.AddTxn(event.Tx.MsgTx())
 					if err != nil {
 						log.Criticalf("could not add mempool transaction %v to slp graph search db: %v", event.Tx.Hash(), err)
+					} else {
+						log.Debugf("txn added to gs db %v", event.Tx.Hash())
 					}
 				}
 			}
