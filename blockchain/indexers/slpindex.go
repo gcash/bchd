@@ -42,13 +42,17 @@ var (
 	// the token hash -> token id index and token metadata.
 	tokenMetadataByIDIndexBucketName = []byte("tokenhashbyididx")
 
-	// errNoTokenIDEntry is an error that indicates a requested entry does
-	// not exist in the token ID index.
-	errNoTokenIDEntry = errors.New("no entry in the Token ID index")
+	// errNoTokenMetadataEntry is an error that indicates a requested entry does
+	// not exist in the token metadata index.
+	errNoTokenMetadataEntry = errors.New("no entry in the token metadata db")
+
+	// errNoTokenIDHashEntry is an error that indicates a requested entry does
+	// not exist in the token id by hash index.
+	errNoTokenIDHashEntry = errors.New("no entry in the token id by hash db")
 )
 
 // -----------------------------------------------------------------------------
-// The slp index consists of an entry for every SLP-like transaction in the main
+// The slp index consists of an entry for every slp-like transaction in the main
 // chain.  In order to significantly optimize the space requirements a separate
 // index which provides an internal mapping between each TokenID that has been
 // indexed and a unique ID for use within the hash to location mappings.  The ID
@@ -100,12 +104,12 @@ var (
 //   txhash          	chainhash.Hash    32 bytes
 //   token ID        	uint32            4 bytes
 //   slp version	    uint16            2 bytes
-//	 op_return			[]bytes			  typically < 220 bytes
+//	 op_return			[]bytes			  typically <220 bytes
+//   -----
+//   Max: 258 bytes (if op_return is limited to 220 bytes)
+//	 Min: 43 bytes (4 + 2 + 37)
 //
-//   Max Item Size: 258 bytes (if OP_RETURN is limited to 220 bytes)
-//	 Min Item Size: 43 bytes (4 + 2 + 37)
-//
-//   NOTE: The minimum possible SLP OP_RETURN is 37 bytes, this is empty GENESIS
+//   NOTE: The minimum possible slp op_return is 37 bytes, this is empty genesis
 //
 // -----------------------------------------------------------------------------
 
@@ -164,7 +168,7 @@ func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error
 	hashIndex := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
 	serializedID := hashIndex.Get(hash[:])
 	if serializedID == nil {
-		return 0, errNoTokenIDEntry
+		return 0, errNoTokenIDHashEntry
 	}
 	return byteOrder.Uint32(serializedID), nil
 }
@@ -175,7 +179,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 	idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
 	serializedData := idIndex.Get(serializedID)
 	if serializedData == nil {
-		return nil, errNoTokenIDEntry
+		return nil, errNoTokenMetadataEntry
 	}
 
 	tokenIDHash, err := chainhash.NewHash(serializedData[0:32])
@@ -183,7 +187,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		return nil, fmt.Errorf("failed to create hash from %s", hex.EncodeToString(serializedData[0:32]))
 	}
 	if len(serializedData) < 34 {
-		return &TokenMetadata{TokenID: tokenIDHash}, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
+		return nil, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
 	}
 
 	slpVersion := v1parser.TokenType(byteOrder.Uint16(serializedData[32:34]))
@@ -297,7 +301,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
-	idx.cache.AddTempEntry(&txHash, &SlpIndexEntry{
+	idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
@@ -312,8 +316,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 	return slpIndex.Put(txHash[:], target)
 }
 
-// SlpIndexEntry is a valid SLP token stored in the SLP index
-type SlpIndexEntry struct {
+// SlpTxEntry is a valid slp token stored in the slp index
+type SlpTxEntry struct {
 	TokenID        uint32
 	TokenIDHash    chainhash.Hash
 	SlpVersionType v1parser.TokenType
@@ -323,7 +327,7 @@ type SlpIndexEntry struct {
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // nil will be returned for the both the entry and the error.
-func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEntry, error) {
+func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry, error) {
 	// Load the record from the database and return now if it doesn't exist.
 	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
 	serializedData := SlpIndex.Get(txHash[:])
@@ -340,7 +344,7 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpIndexEn
 				"entry for %s", txHash),
 		}
 	}
-	entry := &SlpIndexEntry{
+	entry := &SlpTxEntry{
 		TokenID: byteOrder.Uint32(serializedData[0:4]),
 	}
 	tokenMetadata, err := dbFetchTokenMetadataByID(dbTx, entry.TokenID)
@@ -374,11 +378,9 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 			return nil
 		}
 
-		// NOTE: In the future token metadata may contain properties which
-		// need to be updated here.  Currently, token metadata only have mint baton location
-		// and NFT1 group ID.  Neither of these items need special handling
-		// on DisconnectBlock since they are properly updated during
-		// the subsequently called ConnectBlock.
+		// NOTE: We don't need to worry about updating mint baton token metadata here since it isn't
+		// relied upon for the purpose of validation.  If a mint boton double spend occurs
+		// then the token metadata record will be updated when ConnectBlock is called.
 
 		return slpIndex.Delete(txHash[:])
 	}
@@ -444,7 +446,7 @@ func (idx *SlpIndex) Init() error {
 		return err
 	}
 
-	log.Infof("Current number of SLP tokens in index: %v", idx.curTokenID)
+	log.Infof("Current number of slp tokens in index: %v", idx.curTokenID)
 	return nil
 }
 
@@ -500,7 +502,7 @@ type BurnedInput struct {
 	Tx      *wire.MsgTx
 	TxInput *wire.TxIn
 	SlpMsg  v1parser.ParseResult
-	Entry   *SlpIndexEntry
+	Entry   *SlpTxEntry
 }
 
 // ConnectBlock is invoked by the index manager when a new block has been
@@ -512,19 +514,13 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	sortedTxns := TopologicallySortTxs(block.Transactions())
 
-	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		return idx.GetSlpIndexEntry(dbTx, txiHash)
 	}
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 		if len(tx.TxOut) < 1 {
 			return errors.New("transaction has no outputs")
-		}
-		entry := &dbSlpIndexEntry{
-			tx:             tx,
-			slpMsg:         slpMsg,
-			tokenIDHash:    tokenIDHash,
-			slpMsgPkScript: tx.TxOut[0].PkScript,
 		}
 
 		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
@@ -533,9 +529,9 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		// however it would result in the gRPC server sending the client the wrong mint baton hash until the cache
 		// was cleared in a bchd restart or cleared from exceeding the SlpCache.maxEntries limit.
 		//
-		// The consequence of the following logic handling this case is that situations w having chained unconfirmed
-		// mint transactions may return outdated mint baton outpoint if the chained parent is confirmed but any children
-		// are remaining in the mempool.
+		// The consequence of this is chained unconfirmed mint transactions may cause an outdated mint baton outpoint
+		// to be returned if a chained parent is recently confirmed mint children are remaining in the mempool.
+		// This situation only presents an inconvenience to the user.
 		//
 		// Since the mint baton outpoint location is the only stateful property of token metadata there are no other
 		// similar situations with slp v1/nft1.
@@ -543,13 +539,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			hash, err := chainhash.NewHash(msg.TokenID())
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
-			} else if tm := idx.cache.GetTokenMetadata(*hash); tm != nil {
+			} else if _, ok := idx.cache.GetTokenMetadata(hash); ok {
 				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
 				idx.cache.RemoveTokenMetadata(*hash)
 			}
 		}
 
-		return dbPutSlpIndexEntry(idx, dbTx, entry)
+		return dbPutSlpIndexEntry(idx, dbTx, &dbSlpIndexEntry{
+			tx:             tx,
+			slpMsg:         slpMsg,
+			tokenIDHash:    tokenIDHash,
+			slpMsgPkScript: tx.TxOut[0].PkScript,
+		})
 	}
 
 	var gsDb *slpgraphsearch.Db
@@ -574,7 +575,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			return err
 		}
 
-		// look for burned inputs within non-SLP txns
+		// look for burned inputs within non-slp txns
 		if !isValid {
 			for _, txi := range tx.TxIn {
 				slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
@@ -616,16 +617,12 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
 	//
-	// NOTE: items in burnedInputs are not topologically ordered
+	// Currently the only stateful property is Mint Baton location.
 	//
 	for _, burn := range burnedInputs {
-		// Currently we only need to check for a burned mint baton
-		isMintBatonBurned, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
+		_, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
 		if err != nil {
 			return err
-		}
-		if isMintBatonBurned {
-			continue
 		}
 	}
 	return nil
@@ -775,7 +772,7 @@ func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *Burned
 }
 
 // GetSlpIndexEntryHandler provides a function interface for CheckSlpTx
-type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpIndexEntry, error)
+type GetSlpIndexEntryHandler func(*chainhash.Hash) (*SlpTxEntry, error)
 
 // AddTxIndexEntryHandler provides a function interface for CheckSlpTx
 type AddTxIndexEntryHandler func(*wire.MsgTx, v1parser.ParseResult, *chainhash.Hash) error
@@ -897,7 +894,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		}
 	}
 
-	// Check if tx is a valid SLP. SLP validity has two requirements:
+	// Check if tx is a valid slp. Slp validity has two requirements:
 	//  (1) the slpMsg must be valid, and
 	//  (2) the input requirements must be satisfied.
 	isValid := false
@@ -952,11 +949,10 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 // will be returned for the both the entry and the error, which would mean the transaction is invalid
 //
 // This function is safe for concurrent access.
-func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpIndexEntry, error) {
-	entry := idx.cache.GetTxEntry(hash)
-	if entry != nil {
+func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpTxEntry, error) {
+	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok {
 		log.Debugf("using slp txn entry cache for txid %v", hash)
-		return entry, nil
+		return &entry, nil
 	}
 
 	// fallback to fetch entry from db
@@ -965,16 +961,15 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 		return nil, err
 	}
 
-	idx.cache.AddTempEntry(hash, entry)
+	idx.cache.AddSlpTxEntry(hash, *entry)
 	return entry, nil
 }
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
-func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*TokenMetadata, error) {
-	tm := idx.cache.GetTokenMetadata(entry.TokenIDHash)
-	if tm != nil {
+func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*TokenMetadata, error) {
+	if tm, ok := idx.cache.GetTokenMetadata(&entry.TokenIDHash); ok {
 		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
-		return tm, nil
+		return &tm, nil
 	}
 
 	if entry.TokenID == 0 {
@@ -992,19 +987,19 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpIndexEntry) (*
 		return nil, err
 	}
 
-	idx.cache.AddTempTokenMetadata(tm)
+	idx.cache.AddTempTokenMetadata(*tm)
 	return tm, nil
 }
 
-// AddPotentialSlpEntries checks if a transaction is SLP valid and then will add a
+// AddPotentialSlpEntries checks if a transaction is slp valid and then will add a
 // new SlpIndexEntry to the shared cache of valid slp transactions.
 //
-// This method should be used to assess SLP validity of newly received mempool items and also in rpc
+// This method should be used to assess slp validity of newly received mempool items and also in rpc
 // client subscriber methods that return notifications for both mempool and block events to prevent
 // any possibility of a race conditions with manageSlpEntryCache.
 func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
 
-	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpIndexEntry, error) {
+	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
 		if entry != nil {
 			return entry, nil
@@ -1018,7 +1013,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		hash := tx.TxHash()
 
 		// add item to slp txn cache
-		idx.cache.AddMempoolEntry(&hash, &SlpIndexEntry{
+		idx.cache.AddMempoolSlpTxEntry(&hash, SlpTxEntry{
 			TokenID:        0,
 			TokenIDHash:    *tokenIDHash,
 			SlpVersionType: slpMsg.TokenType(),
@@ -1030,7 +1025,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		case *v1parser.SlpGenesis:
 			// add genesis token metadata to cache
 			log.Debugf("adding slp genesis token metadata for %v", hex.EncodeToString(tokenIDHash[:]))
-			tm := &TokenMetadata{
+			tm := TokenMetadata{
 				TokenID:    tokenIDHash,
 				SlpVersion: slpMsg.TokenType(),
 			}
@@ -1091,10 +1086,10 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	return valid, nil
 }
 
-// RemoveMempoolTxs removes a list of transactions from the temporary cache that holds
+// RemoveMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
-func (idx *SlpIndex) RemoveMempoolTxs(txs []*bchutil.Tx) {
-	idx.cache.RemoveMempoolItems(txs)
+func (idx *SlpIndex) RemoveMempoolSlpTxs(txs []*bchutil.Tx) {
+	idx.cache.RemoveMempoolSlpTxItems(txs)
 }
 
 // LoadGraphSearchDb is used to load transactions and associated tokenID
@@ -1164,7 +1159,7 @@ func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	idx := &SlpIndex{
 		db:     db,
 		config: cfg,
-		cache:  NewSlpCache(cfg.MaxCacheSize),
+		cache:  InitSlpCache(cfg.MaxCacheSize),
 	}
 
 	return idx

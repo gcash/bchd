@@ -948,8 +948,6 @@ message TokenMetadata {
 }
 
 // TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs
-//
-// NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed
 message TokenMetadataTokenType1 {
     bytes token_ticker = 1;
 	bytes token_name = 2;
@@ -961,8 +959,6 @@ message TokenMetadataTokenType1 {
 }
 
 // TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs
-//
-//  NOTE: mint baton txid/vout cannot be populated until the transaction has been confirmed
 message TokenMetadataNFT1Group {
     bytes token_ticker = 1;
 	bytes token_name = 2;
@@ -974,8 +970,6 @@ message TokenMetadataNFT1Group {
 }
 
 // TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs
-//
-//  NOTE: group id cannot be populated until the transaction has been confirmed
 message TokenMetadataNFT1Child {
     bytes token_ticker = 1;
 	bytes token_name = 2;
