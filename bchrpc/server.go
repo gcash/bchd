@@ -2946,6 +2946,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 //
 func (s *GrpcServer) slpEventHandler() {
 
+	// track the first mempool event for special handling
 	firstMempoolTxnSeen := false
 
 	if s.slpIndex == nil {
@@ -2964,6 +2965,7 @@ func (s *GrpcServer) slpEventHandler() {
 
 			// kickoff slp graph search loading here
 			if !firstMempoolTxnSeen {
+				firstMempoolTxnSeen = true
 				if s.slpIndex.GraphSearchEnabled() {
 					log.Debug("starting slp graph search")
 					fetchTxn := func(txnHash *chainhash.Hash) ([]byte, error) {
@@ -2972,8 +2974,6 @@ func (s *GrpcServer) slpEventHandler() {
 					}
 					go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &s.shutdown)
 				}
-			} else {
-				firstMempoolTxnSeen = true
 			}
 
 			// validate new slp txns

@@ -1099,7 +1099,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 // both mempool and recently queried SlpIndexEntries
 func (idx *SlpIndex) RemoveMempoolSlpTxs(txs []*bchutil.Tx) {
 	// if slp graph search enabled and is still loading so we don't miss any slp txns
-	if idx.config.SlpGraphSearchEnabled && idx.graphSearchDb != nil && !idx.graphSearchDb.IsLoaded() {
+	if idx.config.SlpGraphSearchEnabled && (idx.graphSearchDb == nil || !idx.graphSearchDb.IsLoaded()) {
 		return
 	}
 	idx.cache.RemoveMempoolSlpTxItems(txs)

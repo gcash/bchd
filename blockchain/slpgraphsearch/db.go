@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
@@ -15,7 +14,7 @@ import (
 type Db struct {
 	sync.RWMutex
 	graphs map[chainhash.Hash]*tokenGraph
-	state  uint32 // atomic, 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
+	state  uint32 // 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
 }
 
 // NewDb creates a new instance of SlpCache
@@ -28,38 +27,58 @@ func NewDb() *Db {
 
 // IsLoaded indicates the db is initially loaded and can be used internally
 func (gs *Db) IsLoaded() bool {
-	return atomic.LoadUint32(&gs.state) > 0
+	gs.RLock()
+	defer gs.RUnlock()
+
+	return gs.state > 0
 }
 
 // IsReady indicates the db is loaded and ready for client queries
 func (gs *Db) IsReady() bool {
-	return atomic.LoadUint32(&gs.state) > 1
+	gs.RLock()
+	defer gs.RUnlock()
+
+	return gs.state > 1
 }
 
 // SetLoaded allows external callers to determine when all of the graph search db has been loaded
 func (gs *Db) SetLoaded() error {
-	state := atomic.LoadUint32(&gs.state)
+	gs.RLock()
+	state := gs.state
+	gs.RUnlock()
+
 	if state == 1 {
 		return nil
 	}
+
 	if state == 0 {
-		atomic.AddUint32(&gs.state, 1)
+		gs.Lock()
+		defer gs.Unlock()
+
+		gs.state++
 		return nil
 	}
-	return fmt.Errorf("slp gs db was not set to loaded with current state is %s", fmt.Sprint(state))
+	return fmt.Errorf("slp gs db was not set to loaded with current state is %s", fmt.Sprint(gs.state))
 }
 
 // SetReady allows external callers to determine when the graph search db is ready for use
 func (gs *Db) SetReady() error {
-	state := atomic.LoadUint32(&gs.state)
+	gs.RLock()
+	state := gs.state
+	gs.RUnlock()
+
 	if state == 2 {
 		return nil
 	}
+
 	if state == 1 {
-		atomic.AddUint32(&gs.state, 1)
+		gs.Lock()
+		defer gs.Unlock()
+
+		gs.state++
 		return nil
 	}
-	return fmt.Errorf("slp gs db was not set to ready with current state is %s", fmt.Sprint(state))
+	return fmt.Errorf("slp gs db was not set to ready with current state is %s", fmt.Sprint(gs.state))
 }
 
 // AddTxn adds a transaction to the graph search database
