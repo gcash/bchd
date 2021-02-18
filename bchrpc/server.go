@@ -154,7 +154,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 	serviceMap["pb.bchrpc"] = s
 
 	// listen to changes in the mempool for adding/removing from slp entry cache
-	go s.manageSlpEntryCache()
+	go s.slpEventHandler()
 
 	return s
 }
@@ -2793,11 +2793,11 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 	return slpToken, nil
 }
 
-// manageSlpEntryCache keeps the SlpEntryCache updated on transaction and block events
+// slpEventHandler keeps the SlpEntryCache updated on transaction and block events
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
-func (s *GrpcServer) manageSlpEntryCache() {
+func (s *GrpcServer) slpEventHandler() {
 
 	if s.slpIndex == nil {
 		return
@@ -2814,10 +2814,10 @@ func (s *GrpcServer) manageSlpEntryCache() {
 			log.Debugf("new mempool txn %v", txDesc.Tx.Hash())
 			s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
 			continue
-
 		case *rpcEventBlockConnected:
 			block := event
 			s.slpIndex.RemoveMempoolSlpTxs(block.Transactions())
+			continue
 		}
 	}
 }
