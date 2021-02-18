@@ -559,6 +559,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		})
 	}
 
+	isSlpGraphSearchReady := false
 	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
@@ -598,11 +599,17 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			err = idx.graphSearchDb.AddTxn(tx)
 			if err != nil {
 				log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
+			} else if !isSlpGraphSearchReady {
+				isSlpGraphSearchReady = true
 			}
 		}
 
 		idx.RemoveMempoolSlpTxs(block.Transactions())
 		log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
+	}
+
+	if isSlpGraphSearchReady {
+		idx.graphSearchDb.SetReady()
 	}
 
 	// Loop through burned inputs and check for different situations
