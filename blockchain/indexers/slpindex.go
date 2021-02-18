@@ -610,7 +610,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			}
 		}
 
-		idx.RemoveMempoolTxs(block.Transactions())
+		idx.RemoveMempoolSlpTxs(block.Transactions())
 		log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
 	}
 
@@ -1127,7 +1127,7 @@ func (idx *SlpIndex) loadGraphSearchDb() (*map[chainhash.Hash]*chainhash.Hash, e
 		return nil, err
 	}
 
-	err = idx.cache.ForEachMempoolItem(func(h *chainhash.Hash, e *SlpIndexEntry) error {
+	err = idx.cache.ForEachMempoolItem(func(h *chainhash.Hash, e *SlpTxEntry) error {
 		db[*h] = &e.TokenIDHash
 		return nil
 	})
