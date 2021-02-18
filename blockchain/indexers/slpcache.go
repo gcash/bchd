@@ -33,13 +33,7 @@ func InitSlpCache(maxEntries int) *SlpCache {
 
 // AddSlpTxEntry puts new items in a temporary cache with limited size
 func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
-	s.Lock()
-	defer s.Unlock()
-
-	_, ok := s.mempoolSlpTxEntries[*hash]
-	if !ok {
-		s.slpTxEntries.Set(*hash, &item)
-	}
+	s.slpTxEntries.Set(*hash, &item)
 }
 
 // AddMempoolSlpTxEntry puts new items in the mempool cache
@@ -51,6 +45,7 @@ func (s *SlpCache) AddMempoolSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
 	s.Lock()
 	defer s.Unlock()
 	s.mempoolSlpTxEntries[*hash] = &item
+	s.slpTxEntries.Set(*hash, &item)
 }
 
 // GetSlpTxEntry gets tx entry items from the cache
@@ -80,9 +75,6 @@ func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) {
 
 // GetTokenMetadata gets token metadata from the cache
 func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) (TokenMetadata, bool) {
-	s.RLock()
-	defer s.RUnlock()
-
 	if entry, err := s.tokenMetadata.Get(*hash); err != nil {
 		if val, ok := entry.(*TokenMetadata); ok {
 			return *val, true
@@ -93,9 +85,6 @@ func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) (TokenMetadata, bool) 
 
 // RemoveTokenMetadata removes a token metadata item from cache
 func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
-	s.Lock()
-	defer s.Unlock()
-
 	s.tokenMetadata.Remove(hash)
 }
 
