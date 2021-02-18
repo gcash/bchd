@@ -5,11 +5,9 @@
 package indexers
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/bluele/gcache"
-	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchutil"
 )
@@ -21,7 +19,6 @@ type SlpCache struct {
 	mempoolSlpTxEntries map[chainhash.Hash]*SlpTxEntry
 	slpTxEntries        gcache.Cache
 	tokenMetadata       gcache.Cache
-	graphSearchDb       *slpgraphsearch.Db
 }
 
 // InitSlpCache creates a new instance of SlpCache
@@ -31,7 +28,6 @@ func InitSlpCache(maxEntries int) *SlpCache {
 		mempoolSlpTxEntries: make(map[chainhash.Hash]*SlpTxEntry),
 		slpTxEntries:        gcache.New(maxEntries).LRU().Build(),
 		tokenMetadata:       gcache.New(maxEntries).LRU().Build(),
-		graphSearchDb:       slpgraphsearch.NewDb(),
 	}
 }
 
@@ -133,20 +129,4 @@ func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpT
 	}
 
 	return nil
-}
-
-// GetGraphSearchDb retrieves the graph search DB
-func (s *SlpCache) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
-
-	s.RLock()
-	defer s.RUnlock()
-
-	dbState := s.graphSearchDb.State
-	if dbState == 1 {
-		return s.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
-	} else if dbState == 0 {
-		return s.graphSearchDb, fmt.Errorf("graph search db is loading or is not enabled, please try again in a few minutes")
-	}
-
-	return s.graphSearchDb, nil
 }

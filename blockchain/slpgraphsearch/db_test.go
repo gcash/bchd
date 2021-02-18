@@ -106,7 +106,7 @@ func TestSlpGraphSearch(t *testing.T) {
 
 		// perform the graph search
 		gsDb := NewDb()
-		gsDb.db[*tokenID] = tokenGraph
+		gsDb.graphs[*tokenID] = tokenGraph
 		gsRes, err := gsDb.Find(hash, tokenID, &validityCacheSet)
 		if err != nil {
 			t.Fatal(err.Error())

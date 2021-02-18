@@ -651,6 +651,15 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// SlpGraphSearch doesn't work without txindex and slpindex
+	if cfg.SlpGraphSearch && (!cfg.TxIndex || !cfg.SlpIndex) {
+		str := "%s: slpgraphsearch can not be used without both txindex and slpindex."
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Set the default policy for relaying non-standard transactions
 	// according to the default of the active network. The set
 	// configuration value takes precedence over the default value for the

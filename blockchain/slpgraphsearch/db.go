@@ -2,7 +2,6 @@ package slpgraphsearch
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -15,27 +14,52 @@ import (
 // Db manages slp token graphs for graph search and TODO: recently queried items
 type Db struct {
 	sync.RWMutex
-	db    map[chainhash.Hash]*TokenGraph
-	State uint32 // atomic, 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
+	graphs map[chainhash.Hash]*tokenGraph
+	state  uint32 // atomic, 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
 }
 
 // NewDb creates a new instance of SlpCache
 func NewDb() *Db {
 	return &Db{
-		db:    make(map[chainhash.Hash]*TokenGraph),
-		State: 0,
+		graphs: make(map[chainhash.Hash]*tokenGraph),
+		state:  0,
 	}
 }
 
-// SetGsState sets the internal graph search state
-func (gs *Db) SetGsState(desiredState uint32) error {
-	state := atomic.LoadUint32(&gs.State)
-	if state == desiredState-1 {
-		atomic.AddUint32(&gs.State, desiredState)
-	} else if state != desiredState {
-		return errors.New("invalid state change")
+// IsLoaded indicates the db is initially loaded and can be used internally
+func (gs *Db) IsLoaded() bool {
+	return atomic.LoadUint32(&gs.state) > 0
+}
+
+// IsReady indicates the db is loaded and ready for client queries
+func (gs *Db) IsReady() bool {
+	return atomic.LoadUint32(&gs.state) > 1
+}
+
+// SetLoaded allows external callers to determine when all of the graph search db has been loaded
+func (gs *Db) SetLoaded() error {
+	state := atomic.LoadUint32(&gs.state)
+	if state == 1 {
+		return nil
 	}
-	return nil
+	if state == 0 {
+		atomic.AddUint32(&gs.state, 1)
+		return nil
+	}
+	return fmt.Errorf("slp gs db was not set to loaded with current state is %s", fmt.Sprint(state))
+}
+
+// SetReady allows external callers to determine when the graph search db is ready for use
+func (gs *Db) SetReady() error {
+	state := atomic.LoadUint32(&gs.state)
+	if state == 2 {
+		return nil
+	}
+	if state == 1 {
+		atomic.AddUint32(&gs.state, 1)
+		return nil
+	}
+	return fmt.Errorf("slp gs db was not set to ready with current state is %s", fmt.Sprint(state))
 }
 
 // AddTxn adds a transaction to the graph search database
@@ -90,10 +114,10 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	return txdata[0:i], nil
 }
 
-func (gs *Db) findInternal(hash *chainhash.Hash, tokenGraph *TokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func (gs *Db) findInternal(hash *chainhash.Hash, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
 
 	// check if txn is valid slp
-	txMsg := tokenGraph.getTxn(hash)
+	txMsg := graph.getTxn(hash)
 	if txMsg == nil {
 		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
 	}
@@ -120,7 +144,7 @@ func (gs *Db) findInternal(hash *chainhash.Hash, tokenGraph *TokenGraph, seen *m
 
 	// loop through inputs and recurse
 	for _, txn := range txMsg.TxIn {
-		err := gs.findInternal(&txn.PreviousOutPoint.Hash, tokenGraph, seen, validityCache, txdata, counter)
+		err := gs.findInternal(&txn.PreviousOutPoint.Hash, graph, seen, validityCache, txdata, counter)
 		if err != nil {
 			//*logger.Debugf("%v", err)
 			continue
@@ -130,10 +154,10 @@ func (gs *Db) findInternal(hash *chainhash.Hash, tokenGraph *TokenGraph, seen *m
 }
 
 // getTokenGraph gets a token graph item from the db
-func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *TokenGraph {
+func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *tokenGraph {
 
 	gs.RLock()
-	if tg, ok := gs.db[*tokenID]; ok {
+	if tg, ok := gs.graphs[*tokenID]; ok {
 		gs.RUnlock()
 		return tg
 	}
@@ -142,11 +166,11 @@ func (gs *Db) getTokenGraph(tokenID *chainhash.Hash) *TokenGraph {
 	gs.Lock()
 	defer gs.Unlock()
 
-	if tg, ok := gs.db[*tokenID]; ok {
+	if tg, ok := gs.graphs[*tokenID]; ok {
 		return tg
 	}
 
 	item := newTokenGraph(tokenID)
-	gs.db[*tokenID] = item
+	gs.graphs[*tokenID] = item
 	return item
 }
