@@ -25,7 +25,6 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/gcash/bchutil/hdkeychain"
 	"github.com/gcash/bchutil/merkleblock"
 	"github.com/simpleledgerinc/goslp"
 	"github.com/simpleledgerinc/goslp/v1parser"
@@ -1550,63 +1549,6 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	res := &pb.GetSlpGraphSearchResponse{}
 	res.Txdata = txData
 	log.Infof("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
-
-	return res, nil
-}
-
-// GetBip44HdAddress this method will return an address based on the requested HD path
-func (s *GrpcServer) GetBip44HdAddress(ctx context.Context, req *pb.GetBip44HdAddressRequest) (*pb.GetBip44HdAddressResponse, error) {
-	xpub := req.Xpub
-	if len(xpub) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "xpub is missing in request")
-	}
-
-	if xpub[:4] != "xpub" {
-		return nil, status.Error(codes.InvalidArgument, "xpub provided does not start with 'xpub'")
-	}
-
-	masterKey, err := hdkeychain.NewKeyFromString(xpub)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	var change uint32 = 0
-	if req.Change {
-		change = 1
-	}
-
-	ext, err := masterKey.Child(change)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	extK, err := ext.Child(req.AddressIndex)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid xpub: %v", err)
-	}
-
-	pubKey, err := extK.ECPubKey()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-	addr, err := extK.Address(s.chainParams)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-	slpAddrStr := ""
-	if s.slpIndex != nil {
-		slpAddr, err := bchutil.NewSlpAddressPubKeyHash(addr.Hash160()[:], s.chainParams)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to create slp pubkeyhash address from hash160: %v", err)
-		}
-		slpAddrStr = slpAddr.EncodeAddress()
-	}
-
-	res := &pb.GetBip44HdAddressResponse{
-		PubKey:   pubKey.SerializeCompressed(),
-		CashAddr: addr.EncodeAddress(),
-		SlpAddr:  slpAddrStr,
-	}
 
 	return res, nil
 }
