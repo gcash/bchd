@@ -1850,12 +1850,13 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 		}
 	}
 
-	// exit without error if this outpoint is being spent for an nft child genesis
+	// exit without error if this outpoint is being spent for a nft child genesis burning 1 nft group token
 	if txnSlpMsg != nil && inputIdx == 0 {
-		if md, ok := txnSlpMsg.(v1parser.SlpGenesis); ok {
+		if md, ok := txnSlpMsg.(*v1parser.SlpGenesis); ok {
 			if md.TokenType() == v1parser.TokenTypeNft1Child41 && slpEntry.SlpVersionType == v1parser.TokenTypeNft1Group81 {
 				val, _ := inputSlpMsg.GetVoutValue(int(outpoint.Index))
 				if val != nil && val.Cmp(new(big.Int).SetUint64(1)) == 0 {
+					log.Debugf("allowed nft group token burn in %s", hex.EncodeToString(txnSlpMsg.TokenID()))
 					return slpEntry, nil
 				}
 			}
