@@ -2835,6 +2835,10 @@ func (s *GrpcServer) slpEventHandler() {
 	}
 }
 
+// checkSlpTxOnEvent is used to make sure slp information has been processed before
+// returning subscriber event info to the client.  Without this, a race condition exists
+// where the subscriber event can be returned before the slp validation is completed.
+//
 func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	if !isMaybeSlpTransaction(tx) {
 		return false
