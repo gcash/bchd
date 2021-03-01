@@ -3012,7 +3012,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		var err error
 		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 		if err != nil {
-			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
+			if err.Error() == v1parser.ErrUnsupportedSlpVersion.Error() {
 				slpInfo.SlpAction = pb.SlpAction_SLP_UNSUPPORTED_VERSION
 			} else {
 				slpInfo.ParseError = err.Error()

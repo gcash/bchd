@@ -509,7 +509,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 		if len(tx.TxOut) < 1 {
-			return errors.New("transaction has no outputs")
+			return fmt.Errorf("transaction has no outputs %v", tx.TxHash())
 		}
 
 		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
@@ -546,6 +546,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
 		if err != nil {
+			log.Critical(err)
 			return err
 		}
 
@@ -585,6 +586,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	for _, burn := range burnedInputs {
 		_, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
 		if err != nil {
+			log.Critical(err)
 			return err
 		}
 	}
