@@ -301,12 +301,15 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
-	idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
+	err = idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
 		SlpOpReturn:    entryInfo.slpMsgPkScript,
 	})
+	if err != nil {
+		log.Criticalf("AddSlpTxEntry in dbPutSlpIndexEntry failed: ", err)
+	}
 
 	target := make([]byte, 4+2+len(entryInfo.slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
@@ -526,7 +529,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
 		if len(tx.TxOut) < 1 {
-			return errors.New("transaction has no outputs")
+			return fmt.Errorf("transaction has no outputs %v", tx.TxHash())
 		}
 
 		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
@@ -564,6 +567,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
 		if err != nil {
+			log.Critical(err)
 			return err
 		}
 
@@ -620,6 +624,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	for _, burn := range burnedInputs {
 		_, err := idx.checkBurnedInputForMintBaton(dbTx, burn)
 		if err != nil {
+			log.Critical(err)
 			return err
 		}
 	}
@@ -977,7 +982,10 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 		return nil, err
 	}
 
-	idx.cache.AddSlpTxEntry(hash, *entry)
+	err = idx.cache.AddSlpTxEntry(hash, *entry)
+	if err != nil {
+		log.Criticalf("AddSlpTxEntry in GetSlpINdexEntry failed: ", err)
+	}
 	return entry, nil
 }
 
@@ -1003,7 +1011,10 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*Tok
 		return nil, err
 	}
 
-	idx.cache.AddTempTokenMetadata(*tm)
+	err = idx.cache.AddTempTokenMetadata(*tm)
+	if err != nil {
+		log.Criticalf("AddTempTokenMetadata in GetTokenMetadata failed: ", err)
+	}
 	return tm, nil
 }
 
@@ -1067,7 +1078,10 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 				tm.MintBatonHash = &hash
 				tm.MintBatonVout = uint32(t.MintBatonVout)
 			}
-			idx.cache.AddTempTokenMetadata(tm)
+			err := idx.cache.AddTempTokenMetadata(tm)
+			if err != nil {
+				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed: ", err)
+			}
 		case *v1parser.SlpMint:
 			// update the mint baton location
 			log.Debugf("adding slp mint token metadata for %v", hex.EncodeToString(tokenIDHash[:]))

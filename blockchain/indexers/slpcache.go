@@ -12,7 +12,9 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// SlpCache to manage slp index mempool txn and token metadata items and recently queried items
+// SlpCache to manage slp index mempool inventory and recently queried slp index entries and
+// token metadata items. The RWMutex lock is held for mempoolSlpTxEntries operations since
+// gcache.Cache holds its own locks.
 type SlpCache struct {
 	sync.RWMutex
 	maxEntries          int
@@ -32,8 +34,8 @@ func InitSlpCache(maxEntries int) *SlpCache {
 }
 
 // AddSlpTxEntry puts new items in a temporary cache with limited size
-func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
-	s.slpTxEntries.Set(*hash, &item)
+func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) error {
+	return s.slpTxEntries.Set(*hash, &item)
 }
 
 // AddMempoolSlpTxEntry puts new items in the mempool cache
@@ -53,6 +55,9 @@ func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
+	// The purpose of checking mempoolSlpTxEntries first is to guarantee
+	// that a mempool txn is kept around in cache and isn't prematurely removed
+	// by the LRU cache algorithm.
 	if entry, ok := s.mempoolSlpTxEntries[*hash]; ok {
 		return *entry, ok
 	}
@@ -66,16 +71,13 @@ func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 }
 
 // AddTempTokenMetadata puts token metadata into cache with a limited size
-func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) {
-	s.Lock()
-	defer s.Unlock()
-
-	s.tokenMetadata.Set(*item.TokenID, &item)
+func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) error {
+	return s.tokenMetadata.Set(*item.TokenID, &item)
 }
 
 // GetTokenMetadata gets token metadata from the cache
 func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) (TokenMetadata, bool) {
-	if entry, err := s.tokenMetadata.Get(*hash); err != nil {
+	if entry, err := s.tokenMetadata.Get(*hash); err == nil {
 		if val, ok := entry.(*TokenMetadata); ok {
 			return *val, true
 		}

@@ -1943,12 +1943,13 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 		}
 	}
 
-	// exit without error if this outpoint is being spent for an nft child genesis
+	// exit without error if this outpoint is being spent for a nft child genesis burning 1 nft group token
 	if txnSlpMsg != nil && inputIdx == 0 {
-		if md, ok := txnSlpMsg.(v1parser.SlpGenesis); ok {
+		if md, ok := txnSlpMsg.(*v1parser.SlpGenesis); ok {
 			if md.TokenType() == v1parser.TokenTypeNft1Child41 && slpEntry.SlpVersionType == v1parser.TokenTypeNft1Group81 {
 				val, _ := inputSlpMsg.GetVoutValue(int(outpoint.Index))
 				if val != nil && val.Cmp(new(big.Int).SetUint64(1)) == 0 {
+					log.Debugf("allowed nft group token burn in %s", hex.EncodeToString(txnSlpMsg.TokenID()))
 					return slpEntry, nil
 				}
 			}
@@ -2959,6 +2960,10 @@ func (s *GrpcServer) slpEventHandler() {
 	}
 }
 
+// checkSlpTxOnEvent is used to make sure slp information has been processed before
+// returning subscriber event info to the client.  Without this, a race condition exists
+// where the subscriber event can be returned before the slp validation is completed.
+//
 func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	if !isMaybeSlpTransaction(tx) {
 		return false
@@ -3132,7 +3137,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		var err error
 		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 		if err != nil {
-			if err.Error() == "token_type not token-type1, nft1-group, or nft1-child" {
+			if err.Error() == v1parser.ErrUnsupportedSlpVersion.Error() {
 				slpInfo.SlpAction = pb.SlpAction_SLP_UNSUPPORTED_VERSION
 			} else {
 				slpInfo.ParseError = err.Error()
