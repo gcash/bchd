@@ -1132,7 +1132,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		scriptPubkey = tx.MsgTx().TxOut[req.Index].PkScript
 		coinbase = blockchain.IsCoinBase(tx)
 
-		// check if this txn is possibly an SLP transaction
+		// check if this txn is possibly an slp transaction
 		if len(tx.MsgTx().TxOut) > 0 {
 			_, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 			if err == nil {
@@ -1353,7 +1353,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	return resp, nil
 }
 
-// GetTrustedSlpValidation returns SLP validity information about a specific token output
+// GetTrustedSlpValidation returns slp validity information about a specific token output
 func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTrustedSlpValidationRequest) (*pb.GetTrustedSlpValidationResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
@@ -1416,7 +1416,7 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 		switch msg := slpMsg.(type) {
 		case *v1parser.SlpSend:
 			if len(msg.Amounts) < int(query.PrevOutVout) {
-				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+				return nil, status.Error(codes.Aborted, "vout is not a valid slp output")
 			}
 			result.TokenId = msg.TokenID()
 			result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
@@ -1433,7 +1433,7 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 					V1MintBaton: true,
 				}
 			} else {
-				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+				return nil, status.Error(codes.Aborted, "vout is not a valid slp output")
 			}
 		case *v1parser.SlpGenesis:
 			hash := query.PrevOutHash
@@ -1449,7 +1449,7 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 					V1MintBaton: true,
 				}
 			} else {
-				return nil, status.Error(codes.Aborted, "vout is not a valid SLP output")
+				return nil, status.Error(codes.Aborted, "vout is not a valid slp output")
 			}
 		}
 
@@ -1468,21 +1468,24 @@ func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
 	return false
 }
 
-// CheckSlpTransaction checks a submitted transaction for slp validity. The method returns the marshalled response
-// including a slp validity boolean and a reason for invalid validity. A nil value for the response object is returned
-// when an token burn is found. The error response behavior on burn detection can be disabled by setting "DisableSlpBurnErrors"
-// to true.
+// CheckSlpTransaction checks a supposed slp transaction for slp validity. The method returns the marshalled
+// response including a slp validity boolean and a reason for invalid validity.
 //
-// By default an error will be returned for the following circumstances:
-//   1. output index 0 contains slp magic but cannot be parsed to a known slp message type,
-//   2. contains inputs that would be burned if broadcasted and these inputs are not included in req.RequiredSlpBurns
+// Using the slp specification as a basis for validity judgement can lead to confusion for new users and
+// result in accidental token burns.  use_spec_validity_judgement will cause the response's is_valid property
+// to be returned according to the slp specification.  Therefore, use_spec_validity_judgement is false by
+// default in order to avoid accidental token burns.  When use_spec_validity_judgement is false we return
+// invalid in any case which would result in a burned token, unless the burn is explicitly included as an
+// item in required_slp_burns property.
 //
-// If disableSlpBurnErrors is being used then the response will return invalid in any case where some kind of burn would
-// occur. Technically, this could be a valid slp transaction but we return invalid so the client avoids burns.  In the future,
-// we could add an optional flag to return the strict slp validity per spec.
+// When use_spec_validity_judgement is true, there are three cases where the is_valid response property
+// will be returned as valid, instead of invalid, as per the slp specification.
+//   1) inputs > outputs
+//   2) missing transaction outputs
+//   3) burned inputs from other tokens
 //
-// NOTE: Non-slp transactions will be checked for burned inputs and will return an error as described in #2 above.
-//       Otherwise, these non-slp transactions will return a response with res.IsValid set to false.
+// required_slp_burns is not used when use_spec_validity_judgement is set to true.
+//
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
 
 	if s.slpIndex == nil {
@@ -1498,11 +1501,10 @@ func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTr
 		return nil, status.Error(codes.InvalidArgument, "transaction is missing inputs or outputs")
 	}
 
-	// all slp unintentional slp burns are caught here with an error unless disableSlpBurnErrors is true
-	return s.checkTransactionSlpValidity(msgTx, req.RequiredSlpBurns, req.DisableSlpBurnErrors)
+	return s.checkTransactionSlpValidity(msgTx, req.RequiredSlpBurns, true, !req.UseSpecValidityJudgement)
 }
 
-func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurns []*pb.SlpRequiredBurn, disableSlpBurnErrors bool) (*pb.CheckSlpTransactionResponse, error) {
+func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurns []*pb.SlpRequiredBurn, disableErrorResponse bool, useSafeValidityJudgement bool) (*pb.CheckSlpTransactionResponse, error) {
 
 	// slpValid() and slpInvalid() are helpers to keep the return statements clean
 	slpValid := func() *pb.CheckSlpTransactionResponse {
@@ -1527,14 +1529,13 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 	if err != nil {
 		msg := fmt.Sprintf("error parsing scriptPubKey as an slp metadata for transaction %v: %v", msgTx.TxHash(), err)
 
-		if disableSlpBurnErrors {
+		if disableErrorResponse {
 			return slpInvalid(msg), nil
 		}
 
 		if isMaybeSlpTransaction(msgTx) {
 			return slpInvalid(msg), status.Error(codes.Aborted, msg)
 		}
-		log.Debug(msg)
 
 		// loop through the inputs to check for slp burns
 		for i, txIn := range msgTx.TxIn {
@@ -1556,7 +1557,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			}
 		}
 
-		return slpInvalid("non-slp transaction"), nil
+		return slpInvalid(msg), nil
 	}
 
 	// check slp transactions for burn prevention
@@ -1564,7 +1565,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 	case *v1parser.SlpSend:
 		inputVal := big.NewInt(0)
 
-		// loop through inputs, accumulate input amount for tokenID, abort on SLP input with wrong ID
+		// loop through inputs, accumulate input amount for tokenID, abort on slp input with wrong ID
 		for i, txIn := range msgTx.TxIn {
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, md, i)
 			if slpEntry == nil {
@@ -1573,11 +1574,14 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			if err != nil {
 				invalidReason := "transaction includes slp token burn with an input from the wrong token"
 				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
-				if !disableSlpBurnErrors {
+				if !disableErrorResponse {
 					return nil, status.Error(codes.Aborted, msg)
 				}
-				log.Debug(msg)
-				return slpInvalid(invalidReason), nil
+
+				// returning invalid here is for user protection, this isn't per slp spec
+				if useSafeValidityJudgement {
+					return slpInvalid(invalidReason), nil
+				}
 			}
 
 			inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1598,18 +1602,23 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		}
 		if inputVal.Cmp(outputVal) < 0 {
 			invalidReason := "outputs greater than inputs"
-			if disableSlpBurnErrors {
+			if disableErrorResponse {
 				return slpInvalid(invalidReason), nil
 			}
 			return slpInvalid(invalidReason), status.Errorf(codes.Aborted, "invalid slp: %s", invalidReason)
 		} else if inputVal.Cmp(outputVal) > 0 {
 
-			if disableSlpBurnErrors {
-				return slpInvalid("inputs are greater than outputs"), nil
+			validity := slpValid()
+			if useSafeValidityJudgement {
+				validity = slpInvalid("inputs are greater than outputs")
+
+				if disableErrorResponse {
+					return validity, nil
+				}
 			}
 
 			if len(requiredBurns) == 0 {
-				return slpValid(), status.Errorf(codes.Aborted, "transaction includes slp token burn: inputs greater than outputs, use SlpRequiredBurn to allow burns")
+				return validity, status.Errorf(codes.Aborted, "transaction includes slp token burn: inputs greater than outputs, use SlpRequiredBurn to allow burns")
 			}
 
 			// here we need to check for allowed burns in this type of a burn case
@@ -1620,22 +1629,27 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 
 			inputAmtUsed := inputVal.Sub(inputVal, burnAmt)
 			if inputAmtUsed.Cmp(outputVal) < 0 {
-				return slpValid(), status.Errorf(codes.Aborted, "transaction includes slp token burn: specified burn ammount %s is too high, use SlpRequiredBurn to allow burns", burnAmt.String())
+				return validity, status.Errorf(codes.Aborted, "transaction includes slp token burn: specified burn ammount %s is too high, use SlpRequiredBurn to allow burns", burnAmt.String())
 			} else if inputAmtUsed.Cmp(outputVal) > 0 {
-				return slpValid(), status.Errorf(codes.Aborted, "transaction includes slp token burn: specified burn ammount %s is too low, use SlpRequiredBurn to allow burns", burnAmt.String())
+				return validity, status.Errorf(codes.Aborted, "transaction includes slp token burn: specified burn ammount %s is too low, use SlpRequiredBurn to allow burns", burnAmt.String())
 			}
 		}
+
+		validity := slpValid()
 
 		// prevent missing token outputs
 		if len(md.Amounts) > len(msgTx.TxOut)-1 {
 			msg := "transaction includes slp token burn: transaction is missing outputs"
-			if !disableSlpBurnErrors {
-				return slpValid(), status.Error(codes.Aborted, msg)
+			if useSafeValidityJudgement {
+				validity = slpInvalid(msg)
 			}
-			log.Debug(msg)
+			if !disableErrorResponse {
+				return validity, status.Error(codes.Aborted, msg)
+			}
+			return validity, nil
 		}
 
-		return slpValid(), nil
+		return validity, nil
 
 	case *v1parser.SlpMint:
 		hasBaton := false
@@ -1649,11 +1663,14 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			if err != nil {
 				invalidReason := "transaction includes slp token burn with an input from the wrong token"
 				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
-				if !disableSlpBurnErrors {
+				if !disableErrorResponse {
 					return nil, status.Error(codes.Aborted, msg)
 				}
-				log.Debug(msg)
-				return slpInvalid(invalidReason), nil
+
+				// returning invalid here is for user protection, this isn't per slp spec
+				if useSafeValidityJudgement {
+					return slpInvalid(invalidReason), nil
+				}
 			}
 
 			inpSlpMd, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
@@ -1674,34 +1691,41 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		}
 
 		if !hasBaton {
-			msg := "transaction includes slp token burn: missing valid baton"
-			if !disableSlpBurnErrors {
+			msg := "missing valid baton"
+			if !disableErrorResponse {
 				return slpInvalid(msg), status.Error(codes.Aborted, msg)
 			}
-			log.Debug(msg)
 			return slpInvalid(msg), nil
 		}
+
+		validity := slpValid()
 
 		// prevent missing mint output
 		if len(msgTx.TxOut) < 2 {
 			msg := "transaction includes slp token burn: transaction is missing outputs"
-			if !disableSlpBurnErrors {
-				return slpValid(), status.Error(codes.Aborted, msg)
+			if useSafeValidityJudgement {
+				validity = slpInvalid(msg)
 			}
-			log.Debug(msg)
+			if !disableErrorResponse {
+				return validity, status.Error(codes.Aborted, msg)
+			}
+			return validity, nil
 		}
 
 		// prevent missing mint baton output
 		batonVout := md.MintBatonVout
 		if batonVout > 1 && batonVout > len(msgTx.TxOut)-1 {
 			msg := "transaction includes slp token burn: transaction is missing mint baton output"
-			if !disableSlpBurnErrors {
-				return slpValid(), status.Error(codes.Aborted, msg)
+			if useSafeValidityJudgement {
+				validity = slpInvalid(msg)
 			}
-			log.Debug(msg)
+			if !disableErrorResponse {
+				return validity, status.Error(codes.Aborted, msg)
+			}
+			return validity, nil
 		}
 
-		return slpValid(), nil
+		return validity, nil
 
 	case *v1parser.SlpGenesis:
 		// loop through inputs, check for input burns
@@ -1713,18 +1737,21 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			if err != nil {
 				invalidReason := "transaction includes slp token burn with an input from the wrong token"
 				msg := fmt.Sprintf("%s, use SlpRequiredBurn to allow burns: %v", invalidReason, err)
-				if !disableSlpBurnErrors {
-					return slpValid(), status.Error(codes.Aborted, msg)
+				if !disableErrorResponse {
+					return nil, status.Error(codes.Aborted, msg)
 				}
-				log.Debug(msg)
-				return slpInvalid(invalidReason), nil
+
+				// returning invalid here is for user protection, this isn't per slp spec
+				if useSafeValidityJudgement {
+					return slpInvalid(invalidReason), nil
+				}
 			}
 
 			// check for invalid nft genesis
 			if i == 0 && slpMd.TokenType() == v1parser.TokenTypeNft1Child41 {
 				if slpEntry.SlpVersionType != v1parser.TokenTypeNft1Group81 {
 					invalidReason := "missing nft group input"
-					if !disableSlpBurnErrors {
+					if !disableErrorResponse {
 						return slpInvalid(invalidReason), status.Error(codes.Aborted, invalidReason)
 					}
 					return slpInvalid(invalidReason), nil
@@ -1737,7 +1764,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				val, _ := inpSlpMd.GetVoutValue(int(txIn.PreviousOutPoint.Index))
 				if val.Cmp(new(big.Int).SetUint64(1)) < 0 {
 					invalidReason := "insufficient nft group tokens burned"
-					if !disableSlpBurnErrors {
+					if !disableErrorResponse {
 						return slpInvalid(invalidReason), status.Error(codes.Aborted, invalidReason)
 					}
 					return slpInvalid(invalidReason), nil
@@ -1745,26 +1772,34 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			}
 		}
 
+		validity := slpValid()
+
 		// prevent missing token output
 		if len(msgTx.TxOut) < 2 {
 			msg := "transaction includes slp token burn: transaction is missing outputs"
-			if !disableSlpBurnErrors {
-				return slpValid(), status.Error(codes.Aborted, msg)
+			if useSafeValidityJudgement {
+				validity = slpInvalid(msg)
 			}
-			log.Debug(msg)
+			if !disableErrorResponse {
+				return validity, status.Error(codes.Aborted, msg)
+			}
+			return validity, nil
 		}
 
 		// prevent missing mint baton output
 		batonVout := md.MintBatonVout
 		if batonVout > 1 && batonVout > len(msgTx.TxOut)-1 {
 			msg := "transaction includes slp token burn: transaction is missing mint baton output"
-			if !disableSlpBurnErrors {
-				return slpValid(), status.Error(codes.Aborted, msg)
+			if useSafeValidityJudgement {
+				validity = slpInvalid(msg)
 			}
+			if !disableErrorResponse {
+				return validity, status.Error(codes.Aborted, msg)
+			}
+			return validity, nil
 		}
 
-		return slpValid(), nil
-
+		return validity, nil
 	}
 
 	return nil, status.Errorf(codes.Internal, "an unknown error occured checking transaction %v", msgTx.TxHash())
@@ -1773,7 +1808,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 // getSlpIndexEntryAndCheckBurnOtherToken checks for burns FROM OTHER TOKEN TYPES.
 //
 // This method does not check burn prevention for input qty > output qty, or missing vout,
-// in valid SLP Send/Mint.  Checking for burns of the same token ID and versionType needs
+// in valid slp send/mint.  Checking for burns of the same token id and versionType needs
 // to be checked elsewhere.
 //
 // NOTE: nft1 child genesis is allowed without error as long as the burned outpoint is a
@@ -1921,7 +1956,7 @@ func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoi
 
 // SubmitTransaction submits a transaction to all connected peers.
 //
-// If SLP index is enabled it will not allow slp burns unless the burned token is
+// If slp index is enabled it will not allow slp burns unless the burned token is
 // included in req.RequiredSlpBurns, or if req.SkipSlpValidityCheck is set to true
 func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransactionRequest) (*pb.SubmitTransactionResponse, error) {
 
@@ -1931,7 +1966,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 	}
 
 	if s.slpIndex != nil && !req.GetSkipSlpValidityCheck() {
-		_, err := s.checkTransactionSlpValidity(msgTx, req.RequiredSlpBurns, false)
+		_, err := s.checkTransactionSlpValidity(msgTx, req.RequiredSlpBurns, false, true)
 		if err != nil {
 			return nil, err
 		}
@@ -3007,7 +3042,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		burnFlagSet = make(map[pb.SlpTransactionInfo_BurnFlags]struct{})
 	)
 
-	// always try to parse the transaction for SLP attributes (even when slpindex is not enabled)
+	// always try to parse the transaction for slp attributes (even when slpindex is not enabled)
 	if isMaybeSlpTransaction(tx.MsgTx()) {
 		var err error
 		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)

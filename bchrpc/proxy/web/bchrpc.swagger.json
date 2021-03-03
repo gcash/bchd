@@ -18,7 +18,7 @@
   "paths": {
     "/v1/CheckSlpTransaction": {
       "post": {
-        "summary": "CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.",
+        "summary": "CheckSlpTransaction checks the validity of a supposed slp transaction before it is broadcasted.",
         "operationId": "bchrpc_CheckSlpTransaction",
         "responses": {
           "200": {
@@ -385,7 +385,7 @@
     },
     "/v1/GetParsedSlpScript": {
       "post": {
-        "summary": "GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
+        "summary": "GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
         "operationId": "bchrpc_GetParsedSlpScript",
         "responses": {
           "200": {
@@ -519,7 +519,7 @@
     },
     "/v1/GetTokenMetadata": {
       "post": {
-        "summary": "GetTokenMetadata return SLP token metadata for one or more tokens.",
+        "summary": "GetTokenMetadata return slp token metadata for one or more tokens.",
         "description": "**Requires SlpIndex**",
         "operationId": "bchrpc_GetTokenMetadata",
         "responses": {
@@ -587,7 +587,7 @@
     },
     "/v1/GetTrustedSlpValidation": {
       "post": {
-        "summary": "GetTrustedValidation returns SLP validity related information for one or more transactions.",
+        "summary": "GetTrustedValidation returns slp validity related information for one or more transactions.",
         "description": "**Requires SlpIndex**",
         "operationId": "bchrpc_GetTrustedSlpValidation",
         "responses": {
@@ -1132,8 +1132,9 @@
             "$ref": "#/definitions/pbSlpRequiredBurn"
           }
         },
-        "disable_slp_burn_errors": {
-          "type": "boolean"
+        "use_spec_validity_judgement": {
+          "type": "boolean",
+          "description": "Using the slp specification as a basis for validity judgement can lead to confusion for new users and\nresult in accidental token burns.  use_spec_validity_judgement will cause the response's is_valid property\nto be returned according to the slp specification.  Therefore, use_spec_validity_judgement is false by\ndefault in order to avoid accidental token burns.  When use_spec_validity_judgement is false we return\ninvalid in any case which would result in a burned token, unless the burn is explicitly included as an\nitem in required_slp_burns property.\n\nWhen use_spec_validity_judgement is true, there are three cases where the is_valid response property\nwill be returned as valid, instead of invalid, as per the slp specification.  \n  1) inputs \u003e outputs\n  2) missing transaction outputs\n  3) burned inputs from other tokens\n\nrequired_slp_burns is not used when use_spec_validity_judgement is set to true."
         }
       }
     },
@@ -2269,7 +2270,7 @@
         },
         "all_slp_transactions": {
           "type": "boolean",
-          "title": "Subscribed/Unsubscribe to everything SLP. Other filters\nwill be ignored, except this filter will be overriden by all_transactions=true"
+          "title": "Subscribed/Unsubscribe to everything slp. Other filters\nwill be ignored, except this filter will be overriden by all_transactions=true"
         },
         "slp_token_ids": {
           "type": "array",
