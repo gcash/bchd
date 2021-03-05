@@ -740,11 +740,11 @@ func (idx *SlpIndex) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 	}
 
 	if !idx.graphSearchDb.IsLoaded() {
-		return idx.graphSearchDb, fmt.Errorf("graph search db is loaded but is not ready, waiting for the next block")
+		return idx.graphSearchDb, fmt.Errorf("graph search db is loading")
 	}
 
 	if !idx.graphSearchDb.IsReady() {
-		return idx.graphSearchDb, fmt.Errorf("graph search db is loading or is not enabled, please try again in a few minutes")
+		return idx.graphSearchDb, fmt.Errorf("graph search db is waiting on the next block")
 	}
 
 	return idx.graphSearchDb, nil
