@@ -85,16 +85,16 @@ service bchrpc {
     // **Requires TxIndex**
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // GetTokenMetadata return SLP token metadata for one or more tokens.
+    // GetTokenMetadata return slp token metadata for one or more tokens.
     //
     // **Requires SlpIndex**
     rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
 
-    // GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript 
+    // GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript 
     // using goslp package.  This endpoint does not require SlpIndex.
     rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
 
-    // GetTrustedValidation returns SLP validity related information for one or more transactions.
+    // GetTrustedValidation returns slp validity related information for one or more transactions.
     //
     // **Requires SlpIndex**
     rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
@@ -104,7 +104,7 @@ service bchrpc {
     // **Requires SlpIndex and  SlpGraphSearch**
     rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
 
-    // CheckSlpTransaction checks the SLP validity of an unbroadcasted transaction.
+    // CheckSlpTransaction checks the validity of a supposed slp transaction before it is broadcasted.
     rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
 
     // Submit a transaction to all connected peers.
@@ -466,7 +466,23 @@ message SubmitTransactionResponse {
 message CheckSlpTransactionRequest {
     bytes transaction = 1;
     repeated SlpRequiredBurn required_slp_burns = 2;
-    bool disable_slp_burn_errors = 3;
+
+    // Using the slp specification as a basis for validity judgement can lead to confusion for new users and
+    // result in accidental token burns.  use_spec_validity_judgement will cause the response's is_valid property
+    // to be returned according to the slp specification.  Therefore, use_spec_validity_judgement is false by
+    // default in order to avoid accidental token burns.  When use_spec_validity_judgement is false we return
+    // invalid in any case which would result in a burned token, unless the burn is explicitly included as an
+    // item in required_slp_burns property.
+    //
+    // When use_spec_validity_judgement is true, there are three cases where the is_valid response property
+    // will be returned as valid, instead of invalid, as per the slp specification.  
+    //   1) inputs > outputs
+    //   2) missing transaction outputs
+    //   3) burned inputs from other tokens
+    // 
+    // required_slp_burns is not used when use_spec_validity_judgement is set to true.
+    //
+    bool use_spec_validity_judgement = 3;
 }
 
 message CheckSlpTransactionResponse {
@@ -811,7 +827,7 @@ message TransactionFilter {
     // will be ignored.
     bool all_transactions = 4;
 
-    // Subscribed/Unsubscribe to everything SLP. Other filters
+    // Subscribed/Unsubscribe to everything slp. Other filters
     // will be ignored, except this filter will be overriden by all_transactions=true
     bool all_slp_transactions = 5;
 
@@ -937,7 +953,7 @@ message TokenMetadataTokenType1 {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;
+    bytes mint_baton_hash = 6;
     uint32 mint_baton_vout = 7;
 }
 
@@ -948,7 +964,7 @@ message TokenMetadataNFT1Group {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;
+    bytes mint_baton_hash = 6;
     uint32 mint_baton_vout = 7;
 }
 

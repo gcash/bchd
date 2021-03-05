@@ -2473,9 +2473,24 @@ type CheckSlpTransactionRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Transaction          []byte             `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
-	RequiredSlpBurns     []*SlpRequiredBurn `protobuf:"bytes,2,rep,name=required_slp_burns,json=requiredSlpBurns,proto3" json:"required_slp_burns,omitempty"`
-	DisableSlpBurnErrors bool               `protobuf:"varint,3,opt,name=disable_slp_burn_errors,json=disableSlpBurnErrors,proto3" json:"disable_slp_burn_errors,omitempty"`
+	Transaction      []byte             `protobuf:"bytes,1,opt,name=transaction,proto3" json:"transaction,omitempty"`
+	RequiredSlpBurns []*SlpRequiredBurn `protobuf:"bytes,2,rep,name=required_slp_burns,json=requiredSlpBurns,proto3" json:"required_slp_burns,omitempty"`
+	// Using the slp specification as a basis for validity judgement can lead to confusion for new users and
+	// result in accidental token burns.  use_spec_validity_judgement will cause the response's is_valid property
+	// to be returned according to the slp specification.  Therefore, use_spec_validity_judgement is false by
+	// default in order to avoid accidental token burns.  When use_spec_validity_judgement is false we return
+	// invalid in any case which would result in a burned token, unless the burn is explicitly included as an
+	// item in required_slp_burns property.
+	//
+	// When use_spec_validity_judgement is true, there are three cases where the is_valid response property
+	// will be returned as valid, instead of invalid, as per the slp specification.
+	//   1) inputs > outputs
+	//   2) missing transaction outputs
+	//   3) burned inputs from other tokens
+	//
+	// required_slp_burns is not used when use_spec_validity_judgement is set to true.
+	//
+	UseSpecValidityJudgement bool `protobuf:"varint,3,opt,name=use_spec_validity_judgement,json=useSpecValidityJudgement,proto3" json:"use_spec_validity_judgement,omitempty"`
 }
 
 func (x *CheckSlpTransactionRequest) Reset() {
@@ -2524,9 +2539,9 @@ func (x *CheckSlpTransactionRequest) GetRequiredSlpBurns() []*SlpRequiredBurn {
 	return nil
 }
 
-func (x *CheckSlpTransactionRequest) GetDisableSlpBurnErrors() bool {
+func (x *CheckSlpTransactionRequest) GetUseSpecValidityJudgement() bool {
 	if x != nil {
-		return x.DisableSlpBurnErrors
+		return x.UseSpecValidityJudgement
 	}
 	return false
 }
@@ -4032,7 +4047,7 @@ type TransactionFilter struct {
 	// Subscribed/Unsubscribe to everything. Other filters
 	// will be ignored.
 	AllTransactions bool `protobuf:"varint,4,opt,name=all_transactions,json=allTransactions,proto3" json:"all_transactions,omitempty"`
-	// Subscribed/Unsubscribe to everything SLP. Other filters
+	// Subscribed/Unsubscribe to everything slp. Other filters
 	// will be ignored, except this filter will be overriden by all_transactions=true
 	AllSlpTransactions bool `protobuf:"varint,5,opt,name=all_slp_transactions,json=allSlpTransactions,proto3" json:"all_slp_transactions,omitempty"`
 	// only transactions associated with the included tokenIds
@@ -4836,7 +4851,7 @@ type TokenMetadataTokenType1 struct {
 	TokenDocumentUrl  []byte `protobuf:"bytes,3,opt,name=token_document_url,json=tokenDocumentUrl,proto3" json:"token_document_url,omitempty"`
 	TokenDocumentHash []byte `protobuf:"bytes,4,opt,name=token_document_hash,json=tokenDocumentHash,proto3" json:"token_document_hash,omitempty"`
 	Decimals          uint32 `protobuf:"varint,5,opt,name=decimals,proto3" json:"decimals,omitempty"`
-	MintBatonTxid     []byte `protobuf:"bytes,6,opt,name=mint_baton_txid,json=mintBatonTxid,proto3" json:"mint_baton_txid,omitempty"`
+	MintBatonHash     []byte `protobuf:"bytes,6,opt,name=mint_baton_hash,json=mintBatonHash,proto3" json:"mint_baton_hash,omitempty"`
 	MintBatonVout     uint32 `protobuf:"varint,7,opt,name=mint_baton_vout,json=mintBatonVout,proto3" json:"mint_baton_vout,omitempty"`
 }
 
@@ -4907,9 +4922,9 @@ func (x *TokenMetadataTokenType1) GetDecimals() uint32 {
 	return 0
 }
 
-func (x *TokenMetadataTokenType1) GetMintBatonTxid() []byte {
+func (x *TokenMetadataTokenType1) GetMintBatonHash() []byte {
 	if x != nil {
-		return x.MintBatonTxid
+		return x.MintBatonHash
 	}
 	return nil
 }
@@ -4932,7 +4947,7 @@ type TokenMetadataNFT1Group struct {
 	TokenDocumentUrl  []byte `protobuf:"bytes,3,opt,name=token_document_url,json=tokenDocumentUrl,proto3" json:"token_document_url,omitempty"`
 	TokenDocumentHash []byte `protobuf:"bytes,4,opt,name=token_document_hash,json=tokenDocumentHash,proto3" json:"token_document_hash,omitempty"`
 	Decimals          uint32 `protobuf:"varint,5,opt,name=decimals,proto3" json:"decimals,omitempty"`
-	MintBatonTxid     []byte `protobuf:"bytes,6,opt,name=mint_baton_txid,json=mintBatonTxid,proto3" json:"mint_baton_txid,omitempty"`
+	MintBatonHash     []byte `protobuf:"bytes,6,opt,name=mint_baton_hash,json=mintBatonHash,proto3" json:"mint_baton_hash,omitempty"`
 	MintBatonVout     uint32 `protobuf:"varint,7,opt,name=mint_baton_vout,json=mintBatonVout,proto3" json:"mint_baton_vout,omitempty"`
 }
 
@@ -5003,9 +5018,9 @@ func (x *TokenMetadataNFT1Group) GetDecimals() uint32 {
 	return 0
 }
 
-func (x *TokenMetadataNFT1Group) GetMintBatonTxid() []byte {
+func (x *TokenMetadataNFT1Group) GetMintBatonHash() []byte {
 	if x != nil {
-		return x.MintBatonTxid
+		return x.MintBatonHash
 	}
 	return nil
 }
@@ -7996,14 +8011,14 @@ type BchrpcClient interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
-	// GetTokenMetadata return SLP token metadata for one or more tokens.
+	// GetTokenMetadata return slp token metadata for one or more tokens.
 	//
 	// **Requires SlpIndex**
 	GetTokenMetadata(ctx context.Context, in *GetTokenMetadataRequest, opts ...grpc.CallOption) (*GetTokenMetadataResponse, error)
-	// GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript
+	// GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript
 	// using goslp package.  This endpoint does not require SlpIndex.
 	GetParsedSlpScript(ctx context.Context, in *GetParsedSlpScriptRequest, opts ...grpc.CallOption) (*GetParsedSlpScriptResponse, error)
-	// GetTrustedValidation returns SLP validity related information for one or more transactions.
+	// GetTrustedValidation returns slp validity related information for one or more transactions.
 	//
 	// **Requires SlpIndex**
 	GetTrustedSlpValidation(ctx context.Context, in *GetTrustedSlpValidationRequest, opts ...grpc.CallOption) (*GetTrustedSlpValidationResponse, error)
@@ -8395,14 +8410,14 @@ type BchrpcServer interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
-	// GetTokenMetadata return SLP token metadata for one or more tokens.
+	// GetTokenMetadata return slp token metadata for one or more tokens.
 	//
 	// **Requires SlpIndex**
 	GetTokenMetadata(context.Context, *GetTokenMetadataRequest) (*GetTokenMetadataResponse, error)
-	// GetParsedSlpScript returns marshalled object from parsing an SLP pubKeyScript
+	// GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript
 	// using goslp package.  This endpoint does not require SlpIndex.
 	GetParsedSlpScript(context.Context, *GetParsedSlpScriptRequest) (*GetParsedSlpScriptResponse, error)
-	// GetTrustedValidation returns SLP validity related information for one or more transactions.
+	// GetTrustedValidation returns slp validity related information for one or more transactions.
 	//
 	// **Requires SlpIndex**
 	GetTrustedSlpValidation(context.Context, *GetTrustedSlpValidationRequest) (*GetTrustedSlpValidationResponse, error)
