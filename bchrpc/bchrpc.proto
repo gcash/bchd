@@ -934,7 +934,7 @@ message TokenMetadataTokenType1 {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;
+    bytes mint_baton_hash = 6;
     uint32 mint_baton_vout = 7;
 }
 
@@ -945,7 +945,7 @@ message TokenMetadataNFT1Group {
 	bytes token_document_url = 3;
 	bytes token_document_hash = 4;
 	uint32 decimals = 5;
-    bytes mint_baton_txid = 6;
+    bytes mint_baton_hash = 6;
     uint32 mint_baton_vout = 7;
 }
 

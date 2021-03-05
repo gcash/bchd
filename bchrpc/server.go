@@ -2964,7 +2964,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 				TokenDocumentUrl:  genMsg.DocumentURI,
 				TokenDocumentHash: genMsg.DocumentHash,
 				Decimals:          uint32(genMsg.Decimals),
-				MintBatonTxid:     mintBatonHash,
+				MintBatonHash:     mintBatonHash,
 				MintBatonVout:     dbTm.MintBatonVout,
 			},
 		}
@@ -2986,7 +2986,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 				TokenDocumentUrl:  genMsg.DocumentURI,
 				TokenDocumentHash: genMsg.DocumentHash,
 				Decimals:          uint32(genMsg.Decimals),
-				MintBatonTxid:     mintBatonHash,
+				MintBatonHash:     mintBatonHash,
 				MintBatonVout:     dbTm.MintBatonVout,
 			},
 		}

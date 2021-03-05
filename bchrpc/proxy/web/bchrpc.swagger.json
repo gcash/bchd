@@ -2132,7 +2132,7 @@
           "type": "integer",
           "format": "int64"
         },
-        "mint_baton_txid": {
+        "mint_baton_hash": {
           "type": "string",
           "format": "byte"
         },
@@ -2166,7 +2166,7 @@
           "type": "integer",
           "format": "int64"
         },
-        "mint_baton_txid": {
+        "mint_baton_hash": {
           "type": "string",
           "format": "byte"
         },
