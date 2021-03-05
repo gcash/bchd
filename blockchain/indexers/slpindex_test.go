@@ -20,7 +20,7 @@ import (
 	"github.com/simpleledgerinc/goslp/v1parser"
 )
 
-// TestSlpInputUnitTests downloads SLP input unit tests and checks the input conditions for each test are met
+// TestSlpInputUnitTests downloads slp input unit tests and checks the input conditions for each test are met
 func TestSlpInputUnitTests(t *testing.T) {
 	inputTestsFile, err := os.Open("slpindex_test_inputs.json")
 	if err != nil {

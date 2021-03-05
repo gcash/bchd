@@ -705,7 +705,7 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		}
 	}
 
-	// Call extra index specific deinitialization for the SLP index.
+	// Call extra index specific deinitialization for the slp index.
 	if idxName == slpIndexName {
 		if err := dropTokenIndexes(db); err != nil {
 			return err

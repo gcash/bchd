@@ -3175,7 +3175,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indexes = append(indexes, s.addrIndex)
 	}
 	if cfg.SlpIndex {
-		indxLog.Info("SLP index is enabled")
+		indxLog.Info("Slp index is enabled")
 
 		slpCfg := &indexers.SlpConfig{
 			AddrPrefix:   chainParams.SlpAddressPrefix,
