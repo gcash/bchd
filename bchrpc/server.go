@@ -1042,6 +1042,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		fetch = 10000
 	)
 	for {
+		if atomic.LoadInt32(&s.shutdown) > 0 {
+			return nil, status.Error(codes.Canceled, "canceled by server")
+		}
 		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
 		if err != nil {
 			return nil, err
