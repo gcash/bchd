@@ -653,6 +653,11 @@ func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
 
 // updateSyncPeer picks a new peer to sync from.
 func (sm *SyncManager) updateSyncPeer() {
+	// Ignore if we are shutting down.
+	if atomic.LoadInt32(&sm.shutdown) != 0 {
+		return
+	}
+
 	if sm.syncPeer != nil {
 		state, exists := sm.peerStates[sm.syncPeer]
 		if exists {
