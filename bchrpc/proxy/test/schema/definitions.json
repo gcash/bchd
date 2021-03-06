@@ -845,7 +845,7 @@
         129
       ]
     },
-    "MintBatonTxid": {
+    "MintBatonHash": {
       "type": [
         "string",
         "null"
