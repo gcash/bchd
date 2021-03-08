@@ -916,14 +916,13 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 					log.Debugf("AddPotentialSlpEntries: %v", err)
 				}
 			} else if t.MintBatonVout > 1 {
-				// otherwise update the mint baton location
 				hash := tx.TxHash()
 				tm.MintBatonHash = &hash
 				tm.MintBatonVout = uint32(t.MintBatonVout)
 			}
 			err := idx.cache.AddTempTokenMetadata(tm)
 			if err != nil {
-				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed: ", err)
+				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Genesis: ", err)
 			}
 		case *v1parser.SlpMint:
 			// update the mint baton location
@@ -939,6 +938,10 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 					hash := tx.TxHash()
 					tm.MintBatonHash = &hash
 					tm.MintBatonVout = uint32(t.MintBatonVout)
+					err := idx.cache.AddTempTokenMetadata(*tm)
+					if err != nil {
+						log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: ", err)
+					}
 				} else {
 					return fmt.Errorf("invalid mint baton for mint txn %v: %v", hash, err)
 				}
