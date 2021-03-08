@@ -524,6 +524,13 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
 	}
 
+	// Do not allow connections to Bitcoin ABC peers
+	if strings.Contains(msg.UserAgent, "Bitcoin ABC") {
+		srvrLog.Debugf("Rejecting peer %s for running Bitcoin ABC", sp.Peer)
+		reason := "Not Bitcoin Cash node"
+		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
+	}
+
 	// Reject outbound peers that are not full nodes.
 	wantServices := wire.SFNodeNetwork
 	if !isInbound && !hasServices(msg.Services, wantServices) {
