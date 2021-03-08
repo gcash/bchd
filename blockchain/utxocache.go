@@ -791,12 +791,9 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 		}
 	}
 
-	// Now we can update the status already to avoid redoing this work when
+	// Now we can flush and update the status to avoid redoing this work when
 	// interrupted.
-	err = s.db.Update(func(dbTx database.Tx) error {
-		return dbPutUtxoStateConsistency(dbTx, ucsConsistent, statusHash)
-	})
-	if err != nil {
+	if err := s.flush(&BestState{Hash: *statusHash}); err != nil {
 		return err
 	}
 
@@ -828,9 +825,7 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 			}
 		}
 
-		// We can update this after each batch to avoid having to redo the work
-		// when interrupted.
-		return node, dbPutUtxoStateConsistency(dbTx, ucsConsistent, &node.hash)
+		return node, nil
 	}
 
 	for node := statusNodeNext; node.height <= tip.height; {
@@ -842,6 +837,12 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 			return err
 		})
 		if err != nil {
+			return err
+		}
+
+		// We can flush after each batch to avoid having to redo the work
+		// when interrupted.
+		if err := s.flush(&BestState{Hash: node.hash}); err != nil {
 			return err
 		}
 

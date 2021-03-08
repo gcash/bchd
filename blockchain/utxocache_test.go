@@ -498,7 +498,7 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 	// should roll the utxo set forward to block 4.
 
 	// Reset the utxo cache
-	chain.utxoCache = newUtxoCache(chain.db, 10 * 1024 * 1024)
+	chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
 
 	err := chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), false, nil)
 	if err != nil {
