@@ -1561,12 +1561,8 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			}
 		}
 
-		// otherwise, assume this is a non-slp transaction attempt
-		invalidReason := "non-slp transaction"
-		if disableErrorResponse {
-			return slpInvalid(invalidReason), nil
-		}
-		return nil, status.Error(codes.Aborted, invalidReason)
+		// otherwise, we can assume this is a non-slp transaction attempt, return invalid without an error
+		return slpInvalid("non-slp transaction"), nil
 	}
 
 	// check slp transactions for burn prevention
