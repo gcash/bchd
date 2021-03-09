@@ -804,9 +804,10 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 	// avoid redoing the work when interrupted.
 	rollforwardBatch := func(dbTx database.Tx, node *blockNode) (*blockNode, error) {
 		nbBatchBlocks := 0
+		toRemove := make([]*list.Element, 0, utxoBatchSizeBlocks)
 		for e := attachNodes.Front(); e != nil; e = e.Next() {
 			node = e.Value.(*blockNode)
-			attachNodes.Remove(e)
+			toRemove = append(toRemove, e)
 
 			block, err := dbFetchBlockByNode(dbTx, node)
 			if err != nil {
@@ -821,6 +822,9 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 			if nbBatchBlocks >= utxoBatchSizeBlocks {
 				break
 			}
+		}
+		for _, e := range toRemove {
+			attachNodes.Remove(e)
 		}
 
 		return node, nil
