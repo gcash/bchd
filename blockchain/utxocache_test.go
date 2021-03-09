@@ -457,3 +457,158 @@ func TestUtxoCache_Reorg(t *testing.T) {
 	assertConsistencyState(t, chain, ucsConsistent, b5b.Hash())
 	assertNbEntriesOnDisk(t, chain, len(totalSpendableOuts))
 }
+
+func TestUtxoCache_InitConsistentState(t *testing.T) {
+	// First we are going to simulate a hard shutdown where the utxo cache has
+	// entries (spends plus new utxos) that are not persisted to the database.
+	//
+	// On next startup the chain height should be ahead of the utxo set height
+	// and this should trigger the utxo set on disk to be rolled forward using
+	// the blocks from the chain.
+	t.Run("Hard shutdown before flush", func(t *testing.T) {
+		chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_InitConsistentState")
+		defer tearDown()
+		tip := bchutil.NewBlock(params.GenesisBlock)
+
+		// Create base blocks 1 and 2 and flush to disk.
+		var emptySpendableOuts []*spendableOut
+		b1, spendableOuts1 := addBlock(chain, tip, emptySpendableOuts)
+		b2, spendableOuts2 := addBlock(chain, b1, spendableOuts1)
+		t.Log(spew.Sdump(spendableOuts2))
+		//                 db       cache
+		// block 1:                  stxo
+		// block 2:                  utxo
+
+		if err := chain.FlushCachedState(FlushRequired); err != nil {
+			t.Fatalf("unexpected error while flushing cache: %v", err)
+		}
+
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       utxo
+		assertConsistencyState(t, chain, ucsConsistent, b2.Hash())
+		assertNbEntriesOnDisk(t, chain, len(spendableOuts2))
+
+		// Add blocks 3 and 4.
+		// Spend the outputs of block 2 and 3.
+		b3, spendableOuts3 := addBlock(chain, b2, spendableOuts2)
+		b4, spendableOuts4 := addBlock(chain, b3, spendableOuts3)
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       utxo       stxo      << these are left spent without flush
+		// ---
+		// block 3:                  stxo
+		// block 4:                  utxo
+
+		// At this point the chain should have blocks 1-4 saved on disk, but the utxo set
+		// should only be persisted through block 2. Calling InitConsistentState at this point
+		// should roll the utxo set forward to block 4.
+
+		// Reset the utxo cache
+		chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
+
+		err := chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), false, nil)
+		if err != nil {
+			t.Fatalf("failed to init utxo cache: %v", err)
+		}
+
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       stxo
+		// block 3:       stxo
+		// block 4:       utxo
+
+		assertConsistencyState(t, chain, ucsConsistent, b4.Hash())
+		assertNbEntriesOnDisk(t, chain, len(spendableOuts4))
+	})
+
+	// Next we are going to simulate a crash mid-flush where the state is left as ucsFlushOngoing.
+	t.Run("Hard shutdown mid flush", func(t *testing.T) {
+		chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_InitConsistentState")
+		defer tearDown()
+		tip := bchutil.NewBlock(params.GenesisBlock)
+
+		// Create base blocks 1 and 2 and flush to disk.
+		var emptySpendableOuts []*spendableOut
+		b1, spendableOuts1 := addBlock(chain, tip, emptySpendableOuts)
+		b2, spendableOuts2 := addBlock(chain, b1, spendableOuts1)
+		t.Log(spew.Sdump(spendableOuts2))
+		//                 db       cache
+		// block 1:                  stxo
+		// block 2:                  utxo
+
+		if err := chain.FlushCachedState(FlushRequired); err != nil {
+			t.Fatalf("unexpected error while flushing cache: %v", err)
+		}
+
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       utxo
+		assertConsistencyState(t, chain, ucsConsistent, b2.Hash())
+		assertNbEntriesOnDisk(t, chain, len(spendableOuts2))
+
+		// Add blocks 3 and 4.
+		// Spend the outputs of block 2 and 3.
+		b3, spendableOuts3 := addBlock(chain, b2, spendableOuts2)
+		b4, spendableOuts4 := addBlock(chain, b3, spendableOuts3)
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       utxo       stxo      << these are left spent without flush
+		// ---
+		// block 3:                  stxo
+		// block 4:                  utxo
+
+		// At this point the chain should have blocks 1-4 saved on disk, but the utxo set
+		// should only be persisted through block 2.
+
+		// Now we're going to manually save one utxo and delete one spend and then stop,
+		// simulating a hard shutdown.
+
+		addedUtxo, deletedSpend := false, false
+		err := chain.db.Update(func(dbTx database.Tx) error {
+			for outpoint, entry := range chain.utxoCache.cachedEntries {
+				if entry == nil {
+					continue
+				}
+				if entry.IsSpent() && !deletedSpend {
+					if err := dbDeleteUtxoEntries(dbTx, []wire.OutPoint{outpoint}); err != nil {
+						return err
+					}
+					deletedSpend = true
+				}
+				if !entry.IsSpent() && !addedUtxo {
+					if err := dbPutUtxoEntries(dbTx, map[wire.OutPoint]*UtxoEntry{outpoint: entry}); err != nil {
+						return err
+					}
+					addedUtxo = true
+				}
+				if deletedSpend && addedUtxo {
+					break
+				}
+			}
+
+			return dbPutUtxoStateConsistency(dbTx, ucsFlushOngoing, &chain.utxoCache.lastFlushHash)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error while puting utxo state to db: %v", err)
+		}
+
+		// Reset the utxo cache
+		chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
+
+		err = chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), false, nil)
+		if err != nil {
+			t.Fatalf("failed to init utxo cache: %v", err)
+		}
+
+		//                 db       cache
+		// block 1:       stxo
+		// block 2:       stxo
+		// block 3:       stxo
+		// block 4:       utxo
+
+		assertConsistencyState(t, chain, ucsConsistent, b4.Hash())
+		assertNbEntriesOnDisk(t, chain, len(spendableOuts4))
+	})
+
+}
