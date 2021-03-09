@@ -692,17 +692,13 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 	log.Tracef("UTXO cache consistency status from disk: [%d] hash %v",
 		statusCode, statusHash)
 
-	// We can set this variable now already because it will always be valid
-	// unless an error is returned, in which case the state is entirely invalid.
-	// Doing it here prevents forgetting it later.
-	s.lastFlushHash = tip.hash
-
 	// If no status was found, the database is old and didn't have a cached utxo
 	// state yet. In that case, we set the status to the best state and write
 	// this to the database.
 	if statusCode == ucsEmpty {
 		log.Debugf("Database didn't specify UTXO state consistency: consistent "+
 			"to best chain tip (%v)", tip.hash)
+		s.lastFlushHash = tip.hash
 		err := s.db.Update(func(dbTx database.Tx) error {
 			return dbPutUtxoStateConsistency(dbTx, ucsConsistent, &tip.hash)
 		})
@@ -713,9 +709,11 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 	// If state is consistent, we are done.
 	if statusCode == ucsConsistent && *statusHash == tip.hash {
 		log.Debugf("UTXO state consistent (%d:%v)", tip.height, tip.hash)
-
+		s.lastFlushHash = tip.hash
 		return nil
 	}
+
+	s.lastFlushHash = *statusHash
 
 	log.Info("Reconstructing UTXO state after unclean shutdown. This may take " +
 		"a long time...")
