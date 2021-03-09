@@ -610,5 +610,4 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 		assertConsistencyState(t, chain, ucsConsistent, b4.Hash())
 		assertNbEntriesOnDisk(t, chain, len(spendableOuts4))
 	})
-
 }
