@@ -1,0 +1,46 @@
+version: "3.8"
+services:
+
+  # a bchd full node for gs++ to connect to
+  bchd1:
+    image: "bchd_regtest"
+    build:
+      dockerfile: "./bchrpc/regtest/Dockerfile.bchd"
+      context: "../.."
+    depends_on: 
+      - bchd2  # uses the test.sh script to delete the prev key/pair, otherwise we need to manually delete 
+    volumes: 
+      - ./:/data       # stores self-generated rpc.bchd1.key & rpc.bchd1.cert here so we can use it with gRPC client
+    entrypoint: [ "/data/bchd-entrypoint.sh", "bchd1" ]
+    expose:
+      - "18444"        # bitcoin regtest network
+    ports:
+      - "18335:18335"  # gRPC bchrpc service
+      - "18336:18334"  # RPC service
+
+  # a second bchd full node using json-rpc to generate blocks, connect nodes, and double spend
+  bchd2: 
+    image: "bchd_regtest"
+    build:
+      dockerfile: "./bchrpc/regtest/Dockerfile.bchd"
+      context: "../.."
+    volumes: 
+      - ./:/data       # stores bchd.sh here
+    entrypoint: [ "/data/bchd-entrypoint.sh", "bchd2" ]
+    expose:
+      - "18444"        # bitcoin regtest network
+    ports:
+      - "18334:18334"  # RPC service
+
+  # a node.js image for running the actual unit tests (via `docker-compose exec` in ./test.sh)
+  nodejs:
+    image: "nodejs_regtest"
+    build:
+      dockerfile: "./bchrpc/regtest/Dockerfile.nodejs"
+      context: "../.."
+    volumes:
+      - ./:/data
+    depends_on:
+      - "bchd1"
+      - "bchd2"
+    command: tail -F anything
