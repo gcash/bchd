@@ -1297,8 +1297,8 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	switch msg := slpMsg.(type) {
 	case *v1parser.SlpGenesis:
 		if slpMsg.TokenType() == v1parser.TokenTypeNft1Child41 {
-			meta := &pb.GetParsedSlpScriptResponse_Nft1ChildGenesis{
-				Nft1ChildGenesis: &pb.SlpV1Nft1ChildGenesisMetadata{
+			meta := &pb.GetParsedSlpScriptResponse_V1Nft1ChildGenesis{
+				V1Nft1ChildGenesis: &pb.SlpV1Nft1ChildGenesisMetadata{
 					Name:         msg.Name,
 					Ticker:       msg.Ticker,
 					DocumentUrl:  msg.DocumentURI,
@@ -1335,8 +1335,8 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 		resp.SlpAction = pb.SlpAction_SLP_V1_MINT
 	case *v1parser.SlpSend:
 		if slpMsg.TokenType() == v1parser.TokenTypeNft1Child41 {
-			meta := &pb.GetParsedSlpScriptResponse_Nft1ChildSend{
-				Nft1ChildSend: &pb.SlpV1Nft1ChildSendMetadata{},
+			meta := &pb.GetParsedSlpScriptResponse_V1Nft1ChildSend{
+				V1Nft1ChildSend: &pb.SlpV1Nft1ChildSendMetadata{},
 			}
 			resp.SlpMetadata = meta
 			resp.TokenId = msg.TokenID()

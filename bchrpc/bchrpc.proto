@@ -559,8 +559,8 @@ message GetParsedSlpScriptResponse {
         SlpV1GenesisMetadata v1_genesis = 5;    // NFT1 Group also uses this
         SlpV1MintMetadata v1_mint = 6;          // NFT1 Group also uses this
         SlpV1SendMetadata v1_send = 7;          // NFT1 Group also uses this
-        SlpV1Nft1ChildGenesisMetadata nft1_child_genesis = 8;
-        SlpV1Nft1ChildSendMetadata nft1_child_send = 9;
+        SlpV1Nft1ChildGenesisMetadata v1_nft1_child_genesis = 8;
+        SlpV1Nft1ChildSendMetadata v1_nft1_child_send = 9;
     }
 }
 

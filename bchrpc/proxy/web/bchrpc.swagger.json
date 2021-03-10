@@ -1504,10 +1504,10 @@
         "v1_send": {
           "$ref": "#/definitions/pbSlpV1SendMetadata"
         },
-        "nft1_child_genesis": {
+        "v1_nft1_child_genesis": {
           "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
         },
-        "nft1_child_send": {
+        "v1_nft1_child_send": {
           "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
         }
       }
