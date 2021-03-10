@@ -28,10 +28,10 @@ install:
 script:
   - export PATH=$PATH:$HOME/gopath/bin
   - ./goclean.sh
+  - sh -c 'cd ./bchrpc/regtest && ./test.sh'
 
 after_script:
   - if [ "$TRAVIS_GO_VERSION" = "1.15.5" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/inconshreveable/mousetrap; fi
   - if [ "$TRAVIS_GO_VERSION" = "1.15.5" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/mitchellh/gox; fi
   - if [ "$TRAVIS_GO_VERSION" = "1.15.5" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/tcnksm/ghr; fi
   - if [ "$TRAVIS_GO_VERSION" = "1.15.5" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then make compile; ghr --username gcash --token $GITHUB_TOKEN --replace $TRAVIS_TAG pkg/; fi
-  - ./bchrpc/regtest/test.sh
