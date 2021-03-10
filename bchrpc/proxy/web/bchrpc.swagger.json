@@ -1505,10 +1505,10 @@
           "$ref": "#/definitions/pbSlpV1SendMetadata"
         },
         "nft1_child_genesis": {
-          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
         },
         "nft1_child_send": {
-          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
         }
       }
     },
@@ -1779,54 +1779,14 @@
         "SLP_V1_GENESIS",
         "SLP_V1_MINT",
         "SLP_V1_SEND",
-        "SLP_NFT1_GROUP_GENESIS",
-        "SLP_NFT1_GROUP_MINT",
-        "SLP_NFT1_GROUP_SEND",
-        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
-        "SLP_NFT1_UNIQUE_CHILD_SEND"
+        "SLP_V1_NFT1_GROUP_GENESIS",
+        "SLP_V1_NFT1_GROUP_MINT",
+        "SLP_V1_NFT1_GROUP_SEND",
+        "SLP_V1_NFT1_UNIQUE_CHILD_GENESIS",
+        "SLP_V1_NFT1_UNIQUE_CHILD_SEND"
       ],
       "default": "NON_SLP",
       "description": "SlpAction is used to allow clients to identify the type of slp transaction from this single field.\n\nNOTE: All enum types except for \"NON_SLP\" may be annotated with one or more BurnFlags."
-    },
-    "pbSlpNft1ChildGenesisMetadata": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "format": "byte"
-        },
-        "ticker": {
-          "type": "string",
-          "format": "byte"
-        },
-        "document_url": {
-          "type": "string",
-          "format": "byte"
-        },
-        "document_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "decimals": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "group_token_id": {
-          "type": "string",
-          "format": "byte"
-        }
-      },
-      "title": "SlpNft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey"
-    },
-    "pbSlpNft1ChildSendMetadata": {
-      "type": "object",
-      "properties": {
-        "group_token_id": {
-          "type": "string",
-          "format": "byte"
-        }
-      },
-      "title": "SlpNft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey"
     },
     "pbSlpRequiredBurn": {
       "type": "object",
@@ -1916,11 +1876,11 @@
         "v1_send": {
           "$ref": "#/definitions/pbSlpV1SendMetadata"
         },
-        "nft1_child_genesis": {
-          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        "v1_nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
         },
-        "nft1_child_send": {
-          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        "v1_nft1_child_send": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
         }
       },
       "description": "SlpTransactionInfo is used inside the Transaction message type."
@@ -1972,6 +1932,46 @@
         }
       },
       "title": "SlpV1MintMetadata is used to marshal type 1 MINT OP_RETURN scriptPubKey"
+    },
+    "pbSlpV1Nft1ChildGenesisMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "SlpV1Nft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey"
+    },
+    "pbSlpV1Nft1ChildSendMetadata": {
+      "type": "object",
+      "properties": {
+        "group_token_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "SlpV1Nft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey"
     },
     "pbSlpV1SendMetadata": {
       "type": "object",
@@ -2071,19 +2071,53 @@
           "type": "integer",
           "format": "int64"
         },
-        "type1": {
-          "$ref": "#/definitions/pbTokenMetadataTokenType1"
+        "v1_fungible": {
+          "$ref": "#/definitions/pbTokenMetadataV1Fungible"
         },
-        "nft1_group": {
-          "$ref": "#/definitions/pbTokenMetadataNFT1Group"
+        "v1_nft1_group": {
+          "$ref": "#/definitions/pbTokenMetadataV1NFT1Group"
         },
-        "nft1_child": {
-          "$ref": "#/definitions/pbTokenMetadataNFT1Child"
+        "v1_nft1_child": {
+          "$ref": "#/definitions/pbTokenMetadataV1NFT1Child"
         }
       },
       "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
     },
-    "pbTokenMetadataNFT1Child": {
+    "pbTokenMetadataV1Fungible": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_name": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_url": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "title": "TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs"
+    },
+    "pbTokenMetadataV1NFT1Child": {
       "type": "object",
       "properties": {
         "token_ticker": {
@@ -2107,9 +2141,9 @@
           "format": "byte"
         }
       },
-      "title": "TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
+      "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
-    "pbTokenMetadataNFT1Group": {
+    "pbTokenMetadataV1NFT1Group": {
       "type": "object",
       "properties": {
         "token_ticker": {
@@ -2141,41 +2175,7 @@
           "format": "int64"
         }
       },
-      "title": "TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
-    },
-    "pbTokenMetadataTokenType1": {
-      "type": "object",
-      "properties": {
-        "token_ticker": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_name": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_url": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "decimals": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "mint_baton_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "mint_baton_vout": {
-          "type": "integer",
-          "format": "int64"
-        }
-      },
-      "title": "TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
+      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
     "pbTransaction": {
       "type": "object",
