@@ -44,7 +44,7 @@ const wallet3 = {
   pubKey: privKey3.toPublicKey()
 };
 
-describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
+describe("SlpAction: Genesis NFT1 Group (confirmed)", () => {
   step("bchd1 ready", async (): Promise<void> => {
     const info1 = await bchd1Grpc.getBlockchainInfo();
     assert.strictEqual(info1.getBitcoinNet(), GetBlockchainInfoResponse.BitcoinNet.REGTEST);
