@@ -12,17 +12,17 @@
       "oneOf": [
         {
           "required": [
-            "type1"
+            "v1_fungible"
           ]
         },
         {
           "required": [
-            "nft1_group"
+            "v1_nft1_group"
           ]
         },
         {
           "required": [
-            "nft1_child"
+            "v1_nft1_child"
           ]
         }
       ],
@@ -35,18 +35,18 @@
           "$ref": "#/definitions/TokenType"
         },
         "type1": {
-          "$ref": "#/definitions/pbTokenMetadataTokenType1"
+          "$ref": "#/definitions/pbTokenMetadataV1Fungible"
         },
-        "nft1_group": {
-          "$ref": "#/definitions/pbTokenMetadataNFT1Group"
+        "v1_nft1_group": {
+          "$ref": "#/definitions/pbTokenMetadataV1NFT1Group"
         },
-        "nft1_child": {
-          "$ref": "#/definitions/pbTokenMetadataNFT1Child"
+        "v1_nft1_child": {
+          "$ref": "#/definitions/pbTokenMetadataV1NFT1Child"
         }
       },
       "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
     },
-    "pbTokenMetadataNFT1Child": {
+    "pbTokenMetadataV1NFT1Child": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -84,9 +84,9 @@
         }
       },
       "description": "NOTE: group id cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
+      "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
-    "pbTokenMetadataNFT1Group": {
+    "pbTokenMetadataV1NFT1Group": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -133,9 +133,9 @@
         }
       },
       "description": "NOTE: mint baton hash/vout cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
+      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
-    "pbTokenMetadataTokenType1": {
+    "pbTokenMetadataV1Fungible": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -329,12 +329,12 @@
         },
         {
           "required": [
-            "nft1_child_genesis"
+            "v1_nft1_child_genesis"
           ]
         },
         {
           "required": [
-            "nft1_child_send"
+            "v1_nft1_child_send"
           ]
         }
       ],
@@ -367,11 +367,11 @@
         "v1_send": {
           "$ref": "#/definitions/pbSlpV1SendMetadata"
         },
-        "nft1_child_genesis": {
-          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        "v1_nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
         },
-        "nft1_child_send": {
-          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        "v1_nft1_child_send": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
         }
       },
       "description": "SlpTransactionInfo is used inside the Transaction message type."
@@ -430,11 +430,11 @@
         "SLP_V1_GENESIS",
         "SLP_V1_MINT",
         "SLP_V1_SEND",
-        "SLP_NFT1_GROUP_GENESIS",
-        "SLP_NFT1_GROUP_MINT",
-        "SLP_NFT1_GROUP_SEND",
-        "SLP_NFT1_UNIQUE_CHILD_GENESIS",
-        "SLP_NFT1_UNIQUE_CHILD_SEND"
+        "SLP_V1_NFT1_GROUP_GENESIS",
+        "SLP_V1_NFT1_GROUP_MINT",
+        "SLP_V1_NFT1_GROUP_SEND",
+        "SLP_V1_NFT1_UNIQUE_CHILD_GENESIS",
+        "SLP_V1_NFT1_UNIQUE_CHILD_SEND"
       ],
       "default": "NON_SLP",
       "description": "SlpAction is used to allow clients to identify the type of slp transaction from this single field.\n\nNOTE: All enum types except for \"NON_SLP\" may be annotated with one or more BurnFlags."
@@ -583,7 +583,7 @@
         }
       }
     },
-    "pbSlpNft1ChildGenesisMetadata": {
+    "pbSlpV1Nft1ChildGenesisMetadata": {
       "type": "object",
       "required": [
         "name",
@@ -625,7 +625,7 @@
           "format": "byte"
         }
       },
-      "title": "SlpNft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey"
+      "title": "SlpV1Nft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey"
     },
     "InputOutpoint": {
       "type": "object",
@@ -715,12 +715,12 @@
         },
         {
           "required": [
-            "nft1_child_genesis"
+            "v1_nft1_child_genesis"
           ]
         },
         {
           "required": [
-            "nft1_child_send"
+            "v1_nft1_child_send"
           ]
         }
       ],
@@ -748,11 +748,11 @@
         "v1_send": {
           "$ref": "#/definitions/pbSlpV1SendMetadata"
         },
-        "nft1_child_genesis": {
-          "$ref": "#/definitions/pbSlpNft1ChildGenesisMetadata"
+        "v1_nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
         },
-        "nft1_child_send": {
-          "$ref": "#/definitions/pbSlpNft1ChildSendMetadata"
+        "v1_nft1_child_send": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
         }
       }
     },
@@ -815,7 +815,7 @@
         }
       }
     },
-    "pbSlpNft1ChildSendMetadata": {
+    "pbSlpV1Nft1ChildSendMetadata": {
       "type": "object",
       "required": [
         "group_token_id"
@@ -826,7 +826,7 @@
           "format": "byte"
         }
       },
-      "title": "SlpNft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey"
+      "title": "SlpV1Nft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey"
     },
     "SlpTransactionInfoValidityJudgement": {
       "type": "string",
@@ -845,7 +845,7 @@
         129
       ]
     },
-    "MintBatonTxid": {
+    "MintBatonHash": {
       "type": [
         "string",
         "null"

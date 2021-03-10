@@ -43,3 +43,8 @@ _testmain.go
 
 node_modules/
 bchrpc/pb-js/yarn.lock
+
+# ./bchrpc/regtest related
+.vscode
+*.cert
+*.key

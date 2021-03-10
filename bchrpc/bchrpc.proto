@@ -566,8 +566,8 @@ message GetParsedSlpScriptResponse {
         SlpV1GenesisMetadata v1_genesis = 5;    // NFT1 Group also uses this
         SlpV1MintMetadata v1_mint = 6;          // NFT1 Group also uses this
         SlpV1SendMetadata v1_send = 7;          // NFT1 Group also uses this
-        SlpNft1ChildGenesisMetadata nft1_child_genesis = 8;
-        SlpNft1ChildSendMetadata nft1_child_send = 9;
+        SlpV1Nft1ChildGenesisMetadata v1_nft1_child_genesis = 8;
+        SlpV1Nft1ChildSendMetadata v1_nft1_child_send = 9;
     }
 }
 
@@ -874,8 +874,8 @@ message SlpTransactionInfo {
         SlpV1GenesisMetadata v1_genesis = 6;    // NFT1 Group also uses this
         SlpV1MintMetadata v1_mint = 7;          // NFT1 Group also uses this
         SlpV1SendMetadata v1_send = 8;          // NFT1 Group also uses this
-        SlpNft1ChildGenesisMetadata nft1_child_genesis = 9;
-        SlpNft1ChildSendMetadata nft1_child_send = 10;
+        SlpV1Nft1ChildGenesisMetadata v1_nft1_child_genesis = 9;
+        SlpV1Nft1ChildSendMetadata v1_nft1_child_send = 10;
     }
 }
 
@@ -901,8 +901,8 @@ message SlpV1SendMetadata {
     repeated uint64 amounts = 1 [jstype = JS_STRING];
 }
 
-// SlpNft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey
-message SlpNft1ChildGenesisMetadata {
+// SlpV1Nft1ChildGenesisMetadata is used to marshal NFT1 Child GENESIS OP_RETURN scriptPubKey
+message SlpV1Nft1ChildGenesisMetadata {
     bytes name = 1;
     bytes ticker = 2;
     bytes document_url = 3;
@@ -911,8 +911,8 @@ message SlpNft1ChildGenesisMetadata {
     bytes group_token_id = 6;
 }
 
-// SlpNft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey
-message SlpNft1ChildSendMetadata {
+// SlpV1Nft1ChildSendMetadata is used to marshal NFT1 Child SEND OP_RETURN scriptPubKey
+message SlpV1Nft1ChildSendMetadata {
     bytes group_token_id = 1;
 }
 
@@ -928,11 +928,11 @@ enum SlpAction {
     SLP_V1_GENESIS = 4;
     SLP_V1_MINT = 5;
     SLP_V1_SEND = 6;
-    SLP_NFT1_GROUP_GENESIS = 7;
-    SLP_NFT1_GROUP_MINT = 8;
-    SLP_NFT1_GROUP_SEND = 9;
-    SLP_NFT1_UNIQUE_CHILD_GENESIS = 10;
-    SLP_NFT1_UNIQUE_CHILD_SEND = 11;
+    SLP_V1_NFT1_GROUP_GENESIS = 7;
+    SLP_V1_NFT1_GROUP_MINT = 8;
+    SLP_V1_NFT1_GROUP_SEND = 9;
+    SLP_V1_NFT1_UNIQUE_CHILD_GENESIS = 10;
+    SLP_V1_NFT1_UNIQUE_CHILD_SEND = 11;
 }
 
 // TokenMetadata is used to marshal metadata about a specific TokenID
@@ -940,14 +940,14 @@ message TokenMetadata {
 	bytes token_id = 1;
  	uint32 token_type = 2;
 	oneof type_metadata {
-        TokenMetadataTokenType1 type1 = 3;
-        TokenMetadataNFT1Group nft1_group = 4;
-        TokenMetadataNFT1Child nft1_child = 5;
+        TokenMetadataV1Fungible v1_fungible = 3;
+        TokenMetadataV1NFT1Group v1_nft1_group = 4;
+        TokenMetadataV1NFT1Child v1_nft1_child = 5;
     }
 }
 
-// TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs
-message TokenMetadataTokenType1 {
+// TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs
+message TokenMetadataV1Fungible {
     bytes token_ticker = 1;
 	bytes token_name = 2;
 	bytes token_document_url = 3;
@@ -957,8 +957,8 @@ message TokenMetadataTokenType1 {
     uint32 mint_baton_vout = 7;
 }
 
-// TokenMetadataNFT1Group is used to marshal metadata specific to NFT1 Group token IDs
-message TokenMetadataNFT1Group {
+// TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs
+message TokenMetadataV1NFT1Group {
     bytes token_ticker = 1;
 	bytes token_name = 2;
 	bytes token_document_url = 3;
@@ -968,8 +968,8 @@ message TokenMetadataNFT1Group {
     uint32 mint_baton_vout = 7;
 }
 
-// TokenMetadataNFT1Child is used to marshal metadata specific to NFT1 Child token IDs
-message TokenMetadataNFT1Child {
+// TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs
+message TokenMetadataV1NFT1Child {
     bytes token_ticker = 1;
 	bytes token_name = 2;
 	bytes token_document_url = 3;

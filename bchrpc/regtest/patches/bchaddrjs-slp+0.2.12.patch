@@ -1,0 +1,33 @@
+diff --git a/node_modules/bchaddrjs-slp/src/bchaddr.d.ts b/node_modules/bchaddrjs-slp/src/bchaddr.d.ts
+index 37a8b4b..a1a7bb1 100644
+--- a/node_modules/bchaddrjs-slp/src/bchaddr.d.ts
++++ b/node_modules/bchaddrjs-slp/src/bchaddr.d.ts
+@@ -1,11 +1,22 @@
+-export type Format = string;
+-
+-export type Network = string;
+-
+-export type Type = string;
++export enum Format {
++    Legacy = "legacy",
++    Bitpay = "bitpay",
++    Cashaddr = "cashaddr",
++    Slpaddr = "slpaddr"
++};
++
++export enum Network {
++    Mainnet = "mainnet",
++    Testnet = "testnet"
++};
++
++export enum Type {
++    P2PKH = "p2pkh",
++    P2SH = "p2sh"
++};
+ 
+ export interface decoded {
+-    hash: Uint8Array;
++    hash: Array<number>;
+     format: Format;
+     network: Network;
+     type: Type;

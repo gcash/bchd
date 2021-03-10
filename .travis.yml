@@ -5,6 +5,9 @@ go:
   - "1.14.12"
   - "1.15.5"
 
+services:
+  - docker
+
 sudo: false
 
 cache:
@@ -25,6 +28,7 @@ install:
 script:
   - export PATH=$PATH:$HOME/gopath/bin
   - ./goclean.sh
+  - sh -c 'cd ./bchrpc/regtest && ./test.sh'
 
 after_script:
   - if [ "$TRAVIS_GO_VERSION" = "1.15.5" ] && [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_TAG" != "" ]; then go get github.com/inconshreveable/mousetrap; fi
