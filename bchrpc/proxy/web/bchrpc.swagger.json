@@ -520,7 +520,7 @@
     "/v1/GetSlpGraphSearch": {
       "post": {
         "summary": "GraphSearch returns all the transactions needed for a client to validate an SLP graph",
-        "description": "**Requires SlpIndex and  SlpGraphSearch**",
+        "description": "**Requires SlpIndex and SlpGraphSearch**",
         "operationId": "bchrpc_GetSlpGraphSearch",
         "responses": {
           "200": {

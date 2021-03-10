@@ -101,7 +101,7 @@ service bchrpc {
 
     // GraphSearch returns all the transactions needed for a client to validate an SLP graph
     //
-    // **Requires SlpIndex and  SlpGraphSearch**
+    // **Requires SlpIndex and SlpGraphSearch**
     rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
 
     // CheckSlpTransaction checks the validity of a supposed slp transaction before it is broadcasted.
