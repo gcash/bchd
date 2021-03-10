@@ -203,7 +203,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const resTx = await bchd1Grpc.getTransaction({ hash: prevOutBch.txid, reversedHashOrder: true, includeTokenMetadata: true });
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -217,7 +217,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Genesis = info.getV1Genesis()!;
@@ -239,7 +239,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
     // check mint baton output
@@ -248,12 +248,12 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(outputs[2].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[2].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[2].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[2].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
   });
 
-  step("SlpAction: SLP_NFT1_GROUP_SEND", async () => {
+  step("SlpAction: SLP_V1_NFT1_GROUP_SEND", async () => {
 
     // using bitcore-lib to build a transaction
     const txn = new Transaction();
@@ -326,7 +326,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const resTx = await bchd1Grpc.getTransaction({ hash: prevOutBch.txid, reversedHashOrder: true, includeTokenMetadata: true });
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -340,7 +340,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_SEND);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_SEND);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Send = info.getV1Send()!;
@@ -358,7 +358,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(inputToken.getDecimals() === tokenMetadata.decimals);
     assert.ok(inputToken.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(inputToken.getTokenType() === 0x81);
-    assert.ok(inputToken.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);  // the slp action from previous txn
+    assert.ok(inputToken.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);  // the slp action from previous txn
     assert.ok(Buffer.from(inputToken.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
 
     const outputs = resTx.getTransaction()!.getOutputsList()!;
@@ -369,7 +369,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_SEND);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_SEND);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
 
     // check token send output 2
@@ -377,7 +377,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(outputs[2].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[2].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[2].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_SEND);
+    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_SEND);
     assert.ok(Buffer.from(outputs[2].getSlpToken()!.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
 
   });
@@ -448,7 +448,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const resTx = await bchd1Grpc.getTransaction({ hash: prevOutBch.txid, reversedHashOrder: true, includeTokenMetadata: true });
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Child()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Child()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === nftTokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === nftTokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === nftTokenMetadata.url);
@@ -460,10 +460,10 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_UNIQUE_CHILD_GENESIS);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_UNIQUE_CHILD_GENESIS);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
-    const infoNft1Genesis = info.getNft1ChildGenesis()!;
+    const infoNft1Genesis = info.getV1Nft1ChildGenesis()!;
     assert.ok(Buffer.from(infoNft1Genesis.getName_asU8()).toString("utf-8") === nftTokenMetadata.name);
     assert.ok(Buffer.from(infoNft1Genesis.getTicker_asU8()).toString("utf-8") === nftTokenMetadata.ticker);
     assert.ok(Buffer.from(infoNft1Genesis.getDocumentUrl_asU8()).toString("utf-8") === nftTokenMetadata.url);
@@ -480,7 +480,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(inputToken.getDecimals() === tokenMetadata.decimals);
     assert.ok(inputToken.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(inputToken.getTokenType() === 0x81);
-    assert.ok(inputToken.getSlpAction() === SlpAction.SLP_NFT1_GROUP_SEND);  // the slp action from previous txn
+    assert.ok(inputToken.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_SEND);  // the slp action from previous txn
     assert.ok(Buffer.from(inputToken.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
 
     const outputs = resTx.getTransaction()!.getOutputsList()!;
@@ -491,7 +491,7 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === 0);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x41);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_UNIQUE_CHILD_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_UNIQUE_CHILD_GENESIS);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
   });
 

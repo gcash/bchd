@@ -201,7 +201,7 @@ describe("SlpAction: Genesis V1 (unconfirmed)", () => {
     assert.ok(resTx.getTransaction()!.getConfirmations() === 0);
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getType1()!;
+    const tm = resTx.getTokenMetadata()!.getV1Fungible()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -315,7 +315,7 @@ describe("SlpAction: Genesis V1 (unconfirmed)", () => {
     assert.ok(resTx.getTransaction()!.getConfirmations() === 0);
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getType1()!;
+    const tm = resTx.getTokenMetadata()!.getV1Fungible()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);

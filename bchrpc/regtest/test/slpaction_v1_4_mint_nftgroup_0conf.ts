@@ -203,7 +203,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     const resTx = await bchd1Grpc.getTransaction({ hash: prevOutBch.txid, reversedHashOrder: true, includeTokenMetadata: true });
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -217,7 +217,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Genesis = info.getV1Genesis()!;
@@ -238,7 +238,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
     // check mint baton output
@@ -247,7 +247,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[2].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[2].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[2].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[2].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
   });
@@ -325,7 +325,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     const resTx = await bchd1Grpc.getTransaction({ hash: prevOutBch.txid, reversedHashOrder: true, includeTokenMetadata: true });
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -339,7 +339,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === tokenIdHex);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_MINT);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_MINT);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Mint = info.getV1Mint()!;
@@ -356,7 +356,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     assert.ok(baton.getDecimals() === tokenMetadata.decimals);
     assert.ok(baton.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(baton.getTokenType() === 0x81);
-    assert.ok(baton.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);  // the slp action from previous txn
+    assert.ok(baton.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);  // the slp action from previous txn
     assert.ok(Buffer.from(baton.getTokenId_asU8()).toString("hex") === tokenIdHex);
 
     const outputs = resTx.getTransaction()!.getOutputsList()!;
@@ -367,7 +367,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_MINT);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_MINT);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === tokenIdHex);
 
     // check mint baton output
@@ -376,7 +376,7 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[2].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[2].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[2].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_MINT);
+    assert.ok(outputs[2].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_MINT);
     assert.ok(Buffer.from(outputs[2].getSlpToken()!.getTokenId_asU8()).toString("hex") === tokenIdHex);
 
   });

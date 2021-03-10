@@ -146,7 +146,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
 
   let tokenMetadata: { name: string, ticker: string, decimals: number, url: string, hashHex: string };
 
-  step("SlpAction: SLP_NFT1_GROUP_GENESIS (with baton)", async () => {
+  step("SlpAction: SLP_V1_NFT1_GROUP_GENESIS (with baton)", async () => {
 
     // using bitcore-lib to build a transaction
     const txn = new Transaction();
@@ -216,7 +216,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     }
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -230,7 +230,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Genesis = info.getV1Genesis()!;
@@ -251,7 +251,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
     // check mint baton output
@@ -260,13 +260,13 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[2].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[2].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[2].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
   });
 
 
-  step("SlpAction: SLP_NFT1_GROUP_GENESIS (without baton)", async () => {
+  step("SlpAction: SLP_V1_NFT1_GROUP_GENESIS (without baton)", async () => {
 
     // using bitcore-lib to build a transaction
     const txn = new Transaction();
@@ -336,7 +336,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     }
 
     // check token metadata
-    const tm = resTx.getTokenMetadata()!.getNft1Group()!;
+    const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
     assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
     assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
     assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
@@ -352,7 +352,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     const info = resTx.getTransaction()!.getSlpTransactionInfo()!;
     assert.ok(Buffer.from(info.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(info.getValidityJudgement() === SlpTransactionInfo.ValidityJudgement.VALID);
-    assert.ok(info.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(info.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
 
     // check txn output slp transction info -- i.e., the specific parsed OP_RETURN info
     const infoV1Genesis = info.getV1Genesis()!;
@@ -373,7 +373,7 @@ describe("SlpAction: Genesis NFT1 Group (unconfirmed)", () => {
     assert.ok(outputs[1].getSlpToken()!.getDecimals() === tokenMetadata.decimals);
     assert.ok(outputs[1].getSlpToken()!.getAddress() === wallet3.slpRegTestAddressNoPrefix);
     assert.ok(outputs[1].getSlpToken()!.getTokenType() === 0x81);
-    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_NFT1_GROUP_GENESIS);
+    assert.ok(outputs[1].getSlpToken()!.getSlpAction() === SlpAction.SLP_V1_NFT1_GROUP_GENESIS);
     assert.ok(Buffer.from(outputs[1].getSlpToken()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
 
   });
