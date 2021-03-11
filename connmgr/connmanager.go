@@ -22,10 +22,6 @@ var (
 	//ErrDialNil is used to indicate that Dial cannot be nil in the configuration.
 	ErrDialNil = errors.New("Config: Dial cannot be nil")
 
-	// errDuplicateAddr is used to indicate a connection attempt to an address
-	// we are either already connected to or trying to connect to.
-	errDuplicateAddr = errors.New("duplicate address")
-
 	// maxRetryDuration is the max duration of time retrying of a persistent
 	// connection is allowed to grow to.  This is necessary since the retry
 	// logic uses a backoff mechanism which increases the interval base times
@@ -385,25 +381,6 @@ out:
 	log.Trace("Connection handler done")
 }
 
-// newAddress returns a new address that is guaranteed to be a non-duplicate.
-func (cm *ConnManager) newAddress() (net.Addr, error) {
-	addr, err := cm.cfg.GetNewAddress()
-	if err != nil {
-		return nil, err
-	}
-	resp := make(chan bool)
-	cm.requests <- checkDuplicate{addr: addr, resp: resp}
-	select {
-	case dup := <-resp:
-		if dup {
-			return nil, errDuplicateAddr
-		}
-	case <-cm.quit:
-		return nil, errors.New("shutdown requested")
-	}
-	return addr, nil
-}
-
 // NewConnReq creates a new connection request and connects to the
 // corresponding address.
 func (cm *ConnManager) NewConnReq() {
@@ -436,12 +413,27 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	addr, err := cm.newAddress()
+	addr, err := cm.cfg.GetNewAddress()
 	if err != nil {
 		select {
 		case cm.requests <- handleFailed{c, err}:
 		case <-cm.quit:
 		}
+		return
+	}
+
+	resp := make(chan bool)
+	cm.requests <- checkDuplicate{addr: addr, resp: resp}
+	select {
+	case dup := <-resp:
+		if dup {
+			select {
+			case cm.requests <- handleFailed{c, err}:
+			case <-cm.quit:
+			}
+			return
+		}
+	case <-cm.quit:
 		return
 	}
 
