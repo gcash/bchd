@@ -186,13 +186,15 @@ func TestConnectMode(t *testing.T) {
 func TestTargetOutbound(t *testing.T) {
 	targetOutbound := uint32(10)
 	connected := make(chan *ConnReq)
+	port := 18555
 	cmgr, err := New(&Config{
 		TargetOutbound: targetOutbound,
 		Dial:           mockDialer,
 		GetNewAddress: func() (net.Addr, error) {
+			port++
 			return &net.TCPAddr{
 				IP:   net.ParseIP("127.0.0.1"),
-				Port: 18555,
+				Port: port,
 			}, nil
 		},
 		OnConnection: func(c *ConnReq, conn net.Conn) {
@@ -513,6 +515,7 @@ func TestCancelIgnoreDelayedConnection(t *testing.T) {
 			IP:   net.ParseIP("127.0.0.1"),
 			Port: 18555,
 		},
+		Permanent: true,
 	}
 	cmgr.Connect(cr)
 
