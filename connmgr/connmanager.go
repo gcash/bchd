@@ -373,6 +373,7 @@ out:
 				connReq.updateState(ConnFailing)
 				log.Debugf("Failed to connect to %v: %v",
 					connReq, msg.err)
+				delete(pending, connReq.id)
 				cm.handleFailedConn(connReq)
 			}
 
