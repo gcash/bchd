@@ -263,7 +263,7 @@ out:
 				}
 				if !dup {
 					for _, v := range pending {
-						if v.Addr.String() == msg.addr.String() {
+						if v.Addr != nil && v.Addr.String() == msg.addr.String() {
 							dup = true
 							break
 						}
