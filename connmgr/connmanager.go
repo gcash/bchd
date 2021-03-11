@@ -22,6 +22,10 @@ var (
 	//ErrDialNil is used to indicate that Dial cannot be nil in the configuration.
 	ErrDialNil = errors.New("Config: Dial cannot be nil")
 
+	// errDuplicateAddr is used to indicate a connection attempt to an address
+	// we are either already connected to or trying to connect to.
+	errDuplicateAddr = errors.New("duplicate address")
+
 	// maxRetryDuration is the max duration of time retrying of a persistent
 	// connection is allowed to grow to.  This is necessary since the retry
 	// logic uses a backoff mechanism which increases the interval base times
@@ -171,6 +175,13 @@ type handleFailed struct {
 	err error
 }
 
+//checkDuplicate is used to poll the connHandler to see if an
+// open connection to the address already exists.
+type checkDuplicate struct {
+	addr net.Addr
+	resp chan bool
+}
+
 // ConnManager provides a manager to handle network connections.
 type ConnManager struct {
 	// The following variables must only be used atomically.
@@ -241,6 +252,24 @@ out:
 		select {
 		case req := <-cm.requests:
 			switch msg := req.(type) {
+
+			case checkDuplicate:
+				dup := false
+				for _, v := range conns {
+					if v.Addr.String() == msg.addr.String() {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					for _, v := range pending {
+						if v.Addr.String() == msg.addr.String() {
+							dup = true
+							break
+						}
+					}
+				}
+				msg.resp <- dup
 
 			case registerPending:
 				connReq := msg.c
@@ -356,6 +385,25 @@ out:
 	log.Trace("Connection handler done")
 }
 
+// newAddress returns a new address that is guaranteed to be a non-duplicate.
+func (cm *ConnManager) newAddress() (net.Addr, error) {
+	addr, err := cm.cfg.GetNewAddress()
+	if err != nil {
+		return nil, err
+	}
+	resp := make(chan bool)
+	cm.requests <- checkDuplicate{addr: addr, resp: resp}
+	select {
+	case dup := <-resp:
+		if dup {
+			return nil, errDuplicateAddr
+		}
+	case <-cm.quit:
+		return nil, errors.New("shutdown requested")
+	}
+	return addr, nil
+}
+
 // NewConnReq creates a new connection request and connects to the
 // corresponding address.
 func (cm *ConnManager) NewConnReq() {
@@ -388,7 +436,7 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	addr, err := cm.cfg.GetNewAddress()
+	addr, err := cm.newAddress()
 	if err != nil {
 		select {
 		case cm.requests <- handleFailed{c, err}:
