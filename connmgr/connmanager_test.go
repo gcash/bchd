@@ -515,6 +515,7 @@ func TestCancelIgnoreDelayedConnection(t *testing.T) {
 			IP:   net.ParseIP("127.0.0.1"),
 			Port: 18555,
 		},
+		Permanent: true,
 	}
 	cmgr.Connect(cr)
 

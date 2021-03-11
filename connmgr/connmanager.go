@@ -370,6 +370,9 @@ out:
 				log.Debugf("Failed to connect to %v: %v",
 					connReq, msg.err)
 				cm.handleFailedConn(connReq)
+				if !connReq.Permanent {
+					delete(pending, connReq.id)
+				}
 			}
 
 		case <-cm.quit:
