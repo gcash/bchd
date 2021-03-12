@@ -268,6 +268,7 @@ type server struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+	slpIndex  *indexers.SlpIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
@@ -3180,6 +3181,18 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.addrIndex = indexers.NewAddrIndex(db, chainParams)
 		indexes = append(indexes, s.addrIndex)
 	}
+	if cfg.SlpIndex {
+		indxLog.Info("Slp index is enabled")
+
+		slpCfg := &indexers.SlpConfig{
+			AddrPrefix:   chainParams.SlpAddressPrefix,
+			StartHash:    chainParams.SlpIndexStartHash,
+			StartHeight:  chainParams.SlpIndexStartHeight,
+			MaxCacheSize: int(cfg.SlpCacheMaxSize),
+		}
+		s.slpIndex = indexers.NewSlpIndex(db, slpCfg)
+		indexes = append(indexes, s.slpIndex)
+	}
 	if !cfg.FastSync && !cfg.NoCFilters {
 		indxLog.Info("Committed filter index is enabled")
 		s.cfIndex = indexers.NewCfIndex(db, chainParams)
@@ -3440,6 +3453,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:        s.txIndex,
 			AddrIndex:      s.addrIndex,
 			CfIndex:        s.cfIndex,
+			SlpIndex:       s.slpIndex,
 			FeeEstimator:   s.feeEstimator,
 			Services:       s.services,
 			RPCAuthTimeout: cfg.RPCAuthTimeout,
@@ -3462,6 +3476,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:     s.txIndex,
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
+			SlpIndex:    s.slpIndex,
 		}, &s)
 		if err != nil {
 			return nil, err

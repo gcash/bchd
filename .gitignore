@@ -4,6 +4,7 @@
 # Binaries
 bchd
 bchctl
+gw
 
 # Databases
 btcd.db
@@ -42,3 +43,8 @@ _testmain.go
 
 node_modules/
 bchrpc/pb-js/yarn.lock
+
+# ./bchrpc/regtest related
+.vscode
+*.cert
+*.key

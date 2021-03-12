@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "properties": {
+    "bitcoin_net": {
+      "$ref": "#/definitions/GetBlockchainInfoResponseBitcoinNet",
+      "description": "Which network the node is operating on."
+    },
+    "best_height": {
+      "type": "integer",
+      "format": "int32",
+      "minimum": 668619,
+      "description": "The current number of blocks on the longest chain."
+    },
+    "best_block_hash": {
+      "type": "string",
+      "format": "byte",
+      "description": "The hash of the best (tip) block in the most-work fully-validated chain, little-endian."
+    },
+    "difficulty": {
+      "type": "number",
+      "format": "double",
+      "description": "Threshold for adding new blocks."
+    },
+    "median_time": {
+      "type": "string",
+      "format": "int64",
+      "description": "Median time of the last 11 blocks."
+    },
+    "tx_index": {
+      "type": "boolean",
+      "format": "boolean",
+      "description": "When `tx_index` is true, the node has full transaction index enabled."
+    },
+    "addr_index": {
+      "type": "boolean",
+      "format": "boolean",
+      "description": "When `addr_index` is true, the node has address index enabled and may\nbe used with call related by address."
+    },
+    "slp_index": {
+      "type": "boolean",
+      "format": "boolean",
+      "description": "When `slp_index` is true, the node has the slp index enabled and may\nbe used with slp related rpc methods and also causes slp metadata to be added\nin some of the existing rpc methods."
+    }
+  },
+  "required": [
+    "bitcoin_net",
+    "best_height",
+    "best_block_hash",
+    "difficulty",
+    "median_time",
+    "tx_index",
+    "addr_index",
+    "slp_index"
+  ],
+  "definitions": {
+    "GetBlockchainInfoResponseBitcoinNet": {
+      "type": "string",
+      "enum": [
+        "MAINNET"
+      ],
+      "default": "MAINNET",
+      "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.",
+      "title": "Bitcoin network types"
+    }
+  }
+}
