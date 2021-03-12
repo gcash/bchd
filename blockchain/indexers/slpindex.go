@@ -562,7 +562,6 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		})
 	}
 
-	isSlpGraphSearchReady := false
 	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
@@ -599,21 +598,12 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		}
 
 		// Add Graph search entries here once the gs db is available
-		if isValid && idx.graphSearchDb != nil {
-			err = idx.graphSearchDb.AddTxn(tx)
-			if err != nil {
-				log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
-			} else if !isSlpGraphSearchReady {
-				isSlpGraphSearchReady = true
-			}
+		if idx.GraphSearchEnabled() && isValid {
+			go idx.AddGraphSearchTxn(tx)
 		}
 
 		idx.RemoveMempoolSlpTxs(block.Transactions())
 		log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
-	}
-
-	if isSlpGraphSearchReady {
-		idx.graphSearchDb.SetReady()
 	}
 
 	// Loop through burned inputs and check for different situations
@@ -631,11 +621,27 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	return nil
 }
 
+// AddGraphSearchTxn
+func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
+	if idx.graphSearchDb == nil {
+		return
+	}
+
+	if !idx.graphSearchDb.IsReady() {
+		idx.graphSearchDb.SetReady()
+	}
+
+	err := idx.graphSearchDb.AddTxn(tx)
+	if err != nil {
+		log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
+	}
+}
+
 // LoadSlpGraphSearchDb is used to load data needed for slp graph search
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
-func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), interupt *int32) {
+func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), initWg *sync.WaitGroup, interupt *int32) {
 
 	// this method shouldn't be called more than once or if gs is disabled
 	if idx.graphSearchDb != nil || !idx.config.SlpGraphSearchEnabled {
@@ -643,6 +649,11 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 	}
 
 	idx.graphSearchDb = slpgraphsearch.NewDb()
+
+	// now that graphSearchDB is set we can call Done()
+	if initWg != nil {
+		initWg.Done()
+	}
 
 	// build an initial map containing all slp transactions mapped to their token ID hash
 	txnTokenIDMap, err := idx.buildGraphSearchTokenMap()

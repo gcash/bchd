@@ -2919,7 +2919,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 	return slpToken, nil
 }
 
-// slpEventHandler handles valid slp transactions events from mempool and block
+// slpEventHandler handles valid slp transaction events from mempool and block
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
@@ -2929,8 +2929,12 @@ func (s *GrpcServer) slpEventHandler() {
 		return
 	}
 
-	// track the first mempool event for special handling
+	// track the first mempool event for starting certain services (e.g., graph search)
 	firstMempoolTxnSeen := false
+
+	// use this wait group to ensure sure the graph search db is created before we try to add
+	// any txns to the graph search db
+	initWg := sync.WaitGroup{}
 
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
@@ -2951,24 +2955,16 @@ func (s *GrpcServer) slpEventHandler() {
 						txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
 						return txn, err
 					}
-					go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &s.shutdown)
+					initWg.Add(1)
+					go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &initWg, &s.shutdown)
 				}
 			}
 
 			// validate new slp txns
 			isSlpValid := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
 			if isSlpValid && s.slpIndex.GraphSearchEnabled() {
-				gsDb, _ := s.slpIndex.GetGraphSearchDb()
-				if gsDb == nil {
-					log.Critical("slp graph search db isn't created yet mempool transaction cannot be added to the db")
-				} else {
-					err := gsDb.AddTxn(event.Tx.MsgTx())
-					if err != nil {
-						log.Criticalf("could not add mempool transaction %v to slp graph search db: %v", event.Tx.Hash(), err)
-					} else {
-						log.Debugf("txn added to gs db %v", event.Tx.Hash())
-					}
-				}
+				initWg.Wait()
+				go s.slpIndex.AddGraphSearchTxn(txDesc.Tx.MsgTx())
 			}
 
 			continue
