@@ -35,18 +35,18 @@
           "$ref": "#/definitions/TokenType"
         },
         "type1": {
-          "$ref": "#/definitions/pbTokenMetadataV1Fungible"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1Fungible"
         },
         "v1_nft1_group": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Group"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1NFT1Group"
         },
         "v1_nft1_child": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Child"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1NFT1Child"
         }
       },
       "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
     },
-    "pbTokenMetadataV1NFT1Child": {
+    "pbSlpTokenMetadataV1NFT1Child": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -86,7 +86,7 @@
       "description": "NOTE: group id cannot be populated until the transaction has been confirmed",
       "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
-    "pbTokenMetadataV1NFT1Group": {
+    "pbSlpTokenMetadataV1NFT1Group": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -133,9 +133,9 @@
         }
       },
       "description": "NOTE: mint baton hash/vout cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
+      "title": "SlpTokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
-    "pbTokenMetadataV1Fungible": {
+    "pbSlpTokenMetadataV1Fungible": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -182,7 +182,7 @@
         }
       },
       "description": "NOTE: mint baton hash/vout cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
+      "title": "SlpTokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
     },
     "TransactionOutput": {
       "type": "object",
@@ -689,7 +689,7 @@
         }
       }
     },
-    "pbGetParsedSlpScriptResponse": {
+    "pbGetSlpParsedScriptResponse": {
       "type": "object",
       "required": [
         "parsing_error",
@@ -756,7 +756,7 @@
         }
       }
     },
-    "pbGetTrustedSlpValidationResponse": {
+    "pbGetSlpTrustedValidationResponse": {
       "type": "object",
       "required": [
         "results"
@@ -765,12 +765,12 @@
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
+            "$ref": "#/definitions/GetSlpTrustedValidationResponseValidityResult"
           }
         }
       }
     },
-    "GetTrustedSlpValidationResponseValidityResult": {
+    "GetSlpTrustedValidationResponseValidityResult": {
       "type": "object",
       "required": [
         "prev_out_hash",

@@ -689,7 +689,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			}
 		}
 
-		var tokenMetadata *pb.TokenMetadata
+		var tokenMetadata *pb.SlpTokenMetadata
 		if req.IncludeTokenMetadata && tx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 			tokenID, err := chainhash.NewHash(tx.SlpTransactionInfo.TokenId)
 			if err != nil {
@@ -734,7 +734,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		}
 	}
 
-	var tokenMetadata *pb.TokenMetadata
+	var tokenMetadata *pb.SlpTokenMetadata
 	if req.IncludeTokenMetadata && respTx.SlpTransactionInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
 		tokenID, err := chainhash.NewHash(respTx.SlpTransactionInfo.TokenId)
 		if err != nil {
@@ -1076,9 +1076,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		}
 	}
 
-	var tokenMetadata []*pb.TokenMetadata
+	var tokenMetadata []*pb.SlpTokenMetadata
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
-		tokenMetadata = make([]*pb.TokenMetadata, 0)
+		tokenMetadata = make([]*pb.SlpTokenMetadata, 0)
 		for hash := range tokenMetadataSet {
 			tm, err := s.marshalTokenMetadata(hash)
 			if err != nil {
@@ -1165,7 +1165,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 
 	var (
 		slpToken *pb.SlpToken
-		tm       *pb.TokenMetadata
+		tm       *pb.SlpTokenMetadata
 	)
 	if s.slpIndex != nil && req.Index > 0 && isSlpInMempool && req.IncludeMempool {
 		slpToken, err = s.getSlpToken(txnHash, req.Index, scriptPubkey)
@@ -1256,13 +1256,13 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	return resp, nil
 }
 
-// GetTokenMetadata returns metadata associated with a Token ID
-func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetadataRequest) (*pb.GetTokenMetadataResponse, error) {
+// GetSlpTokenMetadata returns metadata associated with a Token ID
+func (s *GrpcServer) GetSlpTokenMetadata(ctx context.Context, req *pb.GetSlpTokenMetadataRequest) (*pb.GetSlpTokenMetadataResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
 
-	tokenMetadata := make([]*pb.TokenMetadata, 0)
+	tokenMetadata := make([]*pb.SlpTokenMetadata, 0)
 	for _, hash := range req.GetTokenIds() {
 		tokenID, err := chainhash.NewHash(hash)
 		if err != nil {
@@ -1277,27 +1277,27 @@ func (s *GrpcServer) GetTokenMetadata(ctx context.Context, req *pb.GetTokenMetad
 		tokenMetadata = append(tokenMetadata, tm)
 	}
 
-	resp := &pb.GetTokenMetadataResponse{
+	resp := &pb.GetSlpTokenMetadataResponse{
 		TokenMetadata: tokenMetadata,
 	}
 
 	return resp, nil
 }
 
-// GetParsedSlpScript returns a parsed object from a provided serialized slp OP_RETURN message
-func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSlpScriptRequest) (*pb.GetParsedSlpScriptResponse, error) {
-	resp := &pb.GetParsedSlpScriptResponse{}
+// GetSlpParsedScript returns a parsed object from a provided serialized slp OP_RETURN message
+func (s *GrpcServer) GetSlpParsedScript(ctx context.Context, req *pb.GetSlpParsedScriptRequest) (*pb.GetSlpParsedScriptResponse, error) {
+	resp := &pb.GetSlpParsedScriptResponse{}
 	slpMsg, err := v1parser.ParseSLP(req.GetSlpOpreturnScript())
 	if err != nil {
 		resp.ParsingError = err.Error()
 		return resp, nil
 	}
-	resp.TokenType = uint32(slpMsg.TokenType())
+	resp.TokenType = getTokenType(slpMsg.TokenType())
 
 	switch msg := slpMsg.(type) {
 	case *v1parser.SlpGenesis:
 		if slpMsg.TokenType() == v1parser.TokenTypeNft1Child41 {
-			meta := &pb.GetParsedSlpScriptResponse_V1Nft1ChildGenesis{
+			meta := &pb.GetSlpParsedScriptResponse_V1Nft1ChildGenesis{
 				V1Nft1ChildGenesis: &pb.SlpV1Nft1ChildGenesisMetadata{
 					Name:         msg.Name,
 					Ticker:       msg.Ticker,
@@ -1309,7 +1309,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 			resp.SlpMetadata = meta
 			resp.SlpAction = pb.SlpAction_SLP_V1_NFT1_UNIQUE_CHILD_GENESIS
 		} else {
-			meta := &pb.GetParsedSlpScriptResponse_V1Genesis{
+			meta := &pb.GetSlpParsedScriptResponse_V1Genesis{
 				V1Genesis: &pb.SlpV1GenesisMetadata{
 					Name:          msg.Name,
 					Ticker:        msg.Ticker,
@@ -1324,7 +1324,7 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 			resp.SlpAction = pb.SlpAction_SLP_V1_GENESIS
 		}
 	case *v1parser.SlpMint:
-		meta := &pb.GetParsedSlpScriptResponse_V1Mint{
+		meta := &pb.GetSlpParsedScriptResponse_V1Mint{
 			V1Mint: &pb.SlpV1MintMetadata{
 				MintAmount:    msg.Qty,
 				MintBatonVout: uint32(msg.MintBatonVout),
@@ -1335,14 +1335,14 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 		resp.SlpAction = pb.SlpAction_SLP_V1_MINT
 	case *v1parser.SlpSend:
 		if slpMsg.TokenType() == v1parser.TokenTypeNft1Child41 {
-			meta := &pb.GetParsedSlpScriptResponse_V1Nft1ChildSend{
+			meta := &pb.GetSlpParsedScriptResponse_V1Nft1ChildSend{
 				V1Nft1ChildSend: &pb.SlpV1Nft1ChildSendMetadata{},
 			}
 			resp.SlpMetadata = meta
 			resp.TokenId = msg.TokenID()
 			resp.SlpAction = pb.SlpAction_SLP_V1_NFT1_UNIQUE_CHILD_SEND
 		} else {
-			meta := &pb.GetParsedSlpScriptResponse_V1Send{
+			meta := &pb.GetSlpParsedScriptResponse_V1Send{
 				V1Send: &pb.SlpV1SendMetadata{
 					Amounts: msg.Amounts,
 				},
@@ -1356,16 +1356,16 @@ func (s *GrpcServer) GetParsedSlpScript(ctx context.Context, req *pb.GetParsedSl
 	return resp, nil
 }
 
-// GetTrustedSlpValidation returns slp validity information about a specific token output
-func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTrustedSlpValidationRequest) (*pb.GetTrustedSlpValidationResponse, error) {
+// GetSlpTrustedSlpValidation returns slp validity information about a specific token output
+func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlpTrustedValidationRequest) (*pb.GetSlpTrustedValidationResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
 	}
 
-	resp := &pb.GetTrustedSlpValidationResponse{}
-	results := make([]*pb.GetTrustedSlpValidationResponse_ValidityResult, len(req.Queries))
+	resp := &pb.GetSlpTrustedValidationResponse{}
+	results := make([]*pb.GetSlpTrustedValidationResponse_ValidityResult, len(req.Queries))
 	for i, query := range req.Queries {
-		result := &pb.GetTrustedSlpValidationResponse_ValidityResult{}
+		result := &pb.GetSlpTrustedValidationResponse_ValidityResult{}
 		result.PrevOutHash = query.PrevOutHash
 		result.PrevOutVout = query.PrevOutVout
 
@@ -1422,17 +1422,17 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				return nil, status.Error(codes.Aborted, "vout is not a valid slp output")
 			}
 			result.TokenId = msg.TokenID()
-			result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
+			result.ValidityResultType = &pb.GetSlpTrustedValidationResponse_ValidityResult_V1TokenAmount{
 				V1TokenAmount: msg.Amounts[query.PrevOutVout-1],
 			}
 		case *v1parser.SlpMint:
 			result.TokenId = msg.TokenID()
 			if query.PrevOutVout == 1 {
-				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
+				result.ValidityResultType = &pb.GetSlpTrustedValidationResponse_ValidityResult_V1TokenAmount{
 					V1TokenAmount: msg.Qty,
 				}
 			} else if int(query.PrevOutVout) == msg.MintBatonVout {
-				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1MintBaton{
+				result.ValidityResultType = &pb.GetSlpTrustedValidationResponse_ValidityResult_V1MintBaton{
 					V1MintBaton: true,
 				}
 			} else {
@@ -1444,11 +1444,11 @@ func (s *GrpcServer) GetTrustedSlpValidation(ctx context.Context, req *pb.GetTru
 				result.TokenId = append(result.TokenId, hash[i])
 			}
 			if query.PrevOutVout == 1 {
-				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1TokenAmount{
+				result.ValidityResultType = &pb.GetSlpTrustedValidationResponse_ValidityResult_V1TokenAmount{
 					V1TokenAmount: msg.Qty,
 				}
 			} else if int(query.PrevOutVout) == msg.MintBatonVout {
-				result.ValidityResultType = &pb.GetTrustedSlpValidationResponse_ValidityResult_V1MintBaton{
+				result.ValidityResultType = &pb.GetSlpTrustedValidationResponse_ValidityResult_V1MintBaton{
 					V1MintBaton: true,
 				}
 			} else {
@@ -2819,7 +2819,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 		IsMintBaton: isMintBaton,
 		Decimals:    uint32(decimals),
 		SlpAction:   slpAction,
-		TokenType:   uint32(slpMsg.TokenType()),
+		TokenType:   getTokenType(slpMsg.TokenType()),
 		Address:     address,
 	}
 
@@ -2883,7 +2883,7 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 
 // marshalTokenMetadata returns marshalled token metadata for the provided tokenID hash
 //
-func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMetadata, error) {
+func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenMetadata, error) {
 
 	if s.slpIndex == nil {
 		return nil, errors.New("slpindex required")
@@ -2914,9 +2914,9 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 		return nil, errors.New("cannot build token metadata from a non-genesis entry")
 	}
 
-	tm := &pb.TokenMetadata{
+	tm := &pb.SlpTokenMetadata{
 		TokenId:   tokenID[:],
-		TokenType: uint32(slpMsg.TokenType()),
+		TokenType: getTokenType(slpMsg.TokenType()),
 	}
 
 	var dbTm *indexers.TokenMetadata
@@ -2942,11 +2942,11 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 
 	switch slpMsg.TokenType() {
 	case v1parser.TokenTypeFungible01:
-		tm.TypeMetadata = &pb.TokenMetadata_V1Fungible{
-			V1Fungible: &pb.TokenMetadataV1Fungible{
-				TokenTicker:       genMsg.Ticker,
-				TokenName:         genMsg.Name,
-				TokenDocumentUrl:  genMsg.DocumentURI,
+		tm.TypeMetadata = &pb.SlpTokenMetadata_V1Fungible_{
+			V1Fungible: &pb.SlpTokenMetadata_V1Fungible{
+				TokenTicker:       string(genMsg.Ticker),
+				TokenName:         string(genMsg.Name),
+				TokenDocumentUrl:  string(genMsg.DocumentURI),
 				TokenDocumentHash: genMsg.DocumentHash,
 				Decimals:          uint32(genMsg.Decimals),
 				MintBatonHash:     mintBatonHash,
@@ -2954,21 +2954,21 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.TokenMeta
 			},
 		}
 	case v1parser.TokenTypeNft1Child41:
-		tm.TypeMetadata = &pb.TokenMetadata_V1Nft1Child{
-			V1Nft1Child: &pb.TokenMetadataV1NFT1Child{
-				TokenTicker:       genMsg.Ticker,
-				TokenName:         genMsg.Name,
-				TokenDocumentUrl:  genMsg.DocumentURI,
+		tm.TypeMetadata = &pb.SlpTokenMetadata_V1Nft1Child{
+			V1Nft1Child: &pb.SlpTokenMetadata_V1NFT1Child{
+				TokenTicker:       string(genMsg.Ticker),
+				TokenName:         string(genMsg.Name),
+				TokenDocumentUrl:  string(genMsg.DocumentURI),
 				TokenDocumentHash: genMsg.DocumentHash,
 				GroupId:           nftGroupID,
 			},
 		}
 	case v1parser.TokenTypeNft1Group81:
-		tm.TypeMetadata = &pb.TokenMetadata_V1Nft1Group{
-			V1Nft1Group: &pb.TokenMetadataV1NFT1Group{
-				TokenTicker:       genMsg.Ticker,
-				TokenName:         genMsg.Name,
-				TokenDocumentUrl:  genMsg.DocumentURI,
+		tm.TypeMetadata = &pb.SlpTokenMetadata_V1Nft1Group{
+			V1Nft1Group: &pb.SlpTokenMetadata_V1NFT1Group{
+				TokenTicker:       string(genMsg.Ticker),
+				TokenName:         string(genMsg.Name),
+				TokenDocumentUrl:  string(genMsg.DocumentURI),
 				TokenDocumentHash: genMsg.DocumentHash,
 				Decimals:          uint32(genMsg.Decimals),
 				MintBatonHash:     mintBatonHash,
@@ -3216,7 +3216,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		// NOTE: We do not add burn labels to 0 value slp inputs.
 		if inputToken != nil && (inputToken.Amount > 0 || inputToken.IsMintBaton) {
 			if slpInfo.ValidityJudgement == pb.SlpTransactionInfo_VALID {
-				if !bytes.Equal(slpInfo.TokenId, inputToken.TokenId) || uint32(slpMsg.TokenType()) != inputToken.TokenType {
+				if !bytes.Equal(slpInfo.TokenId, inputToken.TokenId) || getTokenType(slpMsg.TokenType()) != inputToken.TokenType {
 					burnFlagSet[pb.SlpTransactionInfo_BURNED_INPUTS_OTHER_TOKEN] = struct{}{}
 				} else {
 					inputAmount.Add(inputAmount, new(big.Int).SetUint64(inputToken.Amount))
@@ -3341,6 +3341,20 @@ func (s *GrpcServer) setInputSlpTokenAddress(input *pb.Transaction_Input, addr b
 		} else {
 			input.SlpToken.Address = slpAddr.String()
 		}
+	}
+}
+
+// getTokenType is a helper used to map token type int to pb enum type
+func getTokenType(t v1parser.TokenType) pb.SlpTokenType {
+	switch t {
+	case v1parser.TokenTypeFungible01:
+		return pb.SlpTokenType_V1_FUNGIBLE
+	case v1parser.TokenTypeNft1Group81:
+		return pb.SlpTokenType_V1_NFT1_GROUP
+	case v1parser.TokenTypeNft1Child41:
+		return pb.SlpTokenType_V1_NFT1_CHILD
+	default:
+		return pb.SlpTokenType_VERSION_NOT_SET
 	}
 }
 
