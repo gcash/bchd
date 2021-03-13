@@ -204,9 +204,9 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === tokenIdHex);
@@ -326,9 +326,9 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === tokenIdHex);

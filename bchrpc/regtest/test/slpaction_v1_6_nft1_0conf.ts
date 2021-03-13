@@ -204,9 +204,9 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
@@ -327,9 +327,9 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === groupTokenIdHex);
@@ -449,9 +449,9 @@ describe("SlpAction: Send V1 NFT1 Child (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Child()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === nftTokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === nftTokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === nftTokenMetadata.url);
+    assert.ok(tm.getTokenName() === nftTokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === nftTokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === nftTokenMetadata.url);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === nftTokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === prevOutBch.txid);
     assert.ok(Buffer.from(tm.getGroupId_asU8()).toString("hex"), groupTokenIdHex);
