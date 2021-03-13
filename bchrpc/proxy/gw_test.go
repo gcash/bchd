@@ -430,7 +430,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 }
 
 func TestGetSlpParsedScript(t *testing.T) {
-	method := "GetSlpParsedSlpScript"
+	method := "GetSlpParsedScript"
 	slpScriptBase64 := "agRTTFAAAQEEU0VORCByeDYwk9O4meDhKG/2gb9Q193DwqaFZd90PQ78VMDn/QgAAABxis0TAAgAAAAC34V1AA=="
 	tokenID, _ := base64.StdEncoding.DecodeString("cng2MJPTuJng4Shv9oG/UNfdw8KmhWXfdD0O/FTA5/0=")
 	t.Logf("test %x", tokenID)
