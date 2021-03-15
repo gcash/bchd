@@ -39,7 +39,7 @@ const wallet3 = {
   _privKey: privKey3,
   address: privKey3.toAddress().toString(),
   bchRegtestAddress: bchaddrjs.toRegtestAddress(privKey3.toAddress().toString()),
-  slpRegTestAddressNoPrefix: bchaddrjs.toSlpAddress(bchaddrjs.toRegtestAddress(privKey3.toAddress().toString())).split(":")[1],
+  slpRegTestAddressNoPrefix: bchaddrjs.toRegtestAddress(bchaddrjs.toSlpAddress(privKey3.toAddress().toString())).split(":")[1],
   wif: privKey3.toWIF(),
   pubKey: privKey3.toPublicKey()
 };
