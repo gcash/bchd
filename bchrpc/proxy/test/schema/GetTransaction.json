@@ -10,7 +10,7 @@
       "description": "A marshaled transaction."
     },
     "token_metadata": {
-      "$ref": "definitions.json#/definitions/pbTokenMetadata"
+      "$ref": "definitions.json#/definitions/pbSlpTokenMetadata"
     }
   }
 }

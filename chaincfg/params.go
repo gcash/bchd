@@ -502,7 +502,7 @@ var RegressionNetParams = Params{
 	// slp indexer parameters
 	SlpIndexStartHeight: -1,
 	SlpIndexStartHash:   &chainhash.Hash{},
-	SlpAddressPrefix:    "slptest",
+	SlpAddressPrefix:    "slpreg",
 }
 
 // TestNet3Params defines the network parameters for the test Bitcoin network

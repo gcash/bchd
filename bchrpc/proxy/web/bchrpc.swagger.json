@@ -383,39 +383,6 @@
         ]
       }
     },
-    "/v1/GetParsedSlpScript": {
-      "post": {
-        "summary": "GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
-        "operationId": "bchrpc_GetParsedSlpScript",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/pbGetParsedSlpScriptResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/pbGetParsedSlpScriptRequest"
-            }
-          }
-        ],
-        "tags": [
-          "bchrpc"
-        ]
-      }
-    },
     "/v1/GetRawAddressTransactions": {
       "post": {
         "summary": "GetRawAddressTransactions the serialized raw transactions for\nthe given address. Offers offset, limit, and from block options.",
@@ -517,16 +484,15 @@
         ]
       }
     },
-    "/v1/GetTokenMetadata": {
+    "/v1/GetSlpParsedScript": {
       "post": {
-        "summary": "GetTokenMetadata return slp token metadata for one or more tokens.",
-        "description": "**Requires SlpIndex**",
-        "operationId": "bchrpc_GetTokenMetadata",
+        "summary": "GetSlpParsedScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
+        "operationId": "bchrpc_GetSlpParsedScript",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/pbGetTokenMetadataResponse"
+              "$ref": "#/definitions/pbGetSlpParsedScriptResponse"
             }
           },
           "default": {
@@ -542,7 +508,75 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/pbGetTokenMetadataRequest"
+              "$ref": "#/definitions/pbGetSlpParsedScriptRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetSlpTokenMetadata": {
+      "post": {
+        "summary": "GetSlpTokenMetadata return slp token metadata for one or more tokens.",
+        "description": "**Requires SlpIndex**",
+        "operationId": "bchrpc_GetSlpTokenMetadata",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpTokenMetadataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpTokenMetadataRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetSlpTrustedValidation": {
+      "post": {
+        "summary": "GetSlpTrustedValidation returns slp validity related information for one or more transactions.",
+        "description": "**Requires SlpIndex**",
+        "operationId": "bchrpc_GetSlpTrustedValidation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpTrustedValidationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpTrustedValidationRequest"
             }
           }
         ],
@@ -577,40 +611,6 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/pbGetTransactionRequest"
-            }
-          }
-        ],
-        "tags": [
-          "bchrpc"
-        ]
-      }
-    },
-    "/v1/GetTrustedSlpValidation": {
-      "post": {
-        "summary": "GetTrustedValidation returns slp validity related information for one or more transactions.",
-        "description": "**Requires SlpIndex**",
-        "operationId": "bchrpc_GetTrustedSlpValidation",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/pbGetTrustedSlpValidationResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/pbGetTrustedSlpValidationRequest"
             }
           }
         ],
@@ -775,7 +775,7 @@
     "/v1/SubscribeTransactions": {
       "post": {
         "summary": "SubscribeTransactions creates subscription to all relevant transactions based on\nthe subscription filter.",
-        "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the subscription filter. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**",
+        "description": "This RPC does not use bidirectional streams and therefore can be used\nwith grpc-web. You will need to close and reopen the stream whenever\nyou want to update the subscription filter. If you are not using grpc-web\nthen SubscribeTransactionStream is more appropriate.\n\n**Requires TxIndex to receive input metadata**\n**Requires SlpIndex to receive slp input/output metadata, or SlpTokenMetadata**",
         "operationId": "bchrpc_SubscribeTransactions",
         "responses": {
           "200": {
@@ -829,7 +829,7 @@
       "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.",
       "title": "Bitcoin network types"
     },
-    "GetTrustedSlpValidationRequestQuery": {
+    "GetSlpTrustedValidationRequestQuery": {
       "type": "object",
       "properties": {
         "prev_out_hash": {
@@ -842,7 +842,7 @@
         }
       }
     },
-    "GetTrustedSlpValidationResponseValidityResult": {
+    "GetSlpTrustedValidationResponseValidityResult": {
       "type": "object",
       "properties": {
         "prev_out_hash": {
@@ -861,8 +861,7 @@
           "$ref": "#/definitions/pbSlpAction"
         },
         "token_type": {
-          "type": "integer",
-          "format": "int64"
+          "$ref": "#/definitions/pbSlpTokenType"
         },
         "v1_token_amount": {
           "type": "string",
@@ -891,6 +890,91 @@
           "description": "The index of specific output on the transaction."
         }
       }
+    },
+    "SlpTokenMetadataV1Fungible": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string"
+        },
+        "token_name": {
+          "type": "string"
+        },
+        "token_document_url": {
+          "type": "string"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "title": "TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs"
+    },
+    "SlpTokenMetadataV1NFT1Child": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string"
+        },
+        "token_name": {
+          "type": "string"
+        },
+        "token_document_url": {
+          "type": "string"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "group_id": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
+    },
+    "SlpTokenMetadataV1NFT1Group": {
+      "type": "object",
+      "properties": {
+        "token_ticker": {
+          "type": "string"
+        },
+        "token_name": {
+          "type": "string"
+        },
+        "token_document_url": {
+          "type": "string"
+        },
+        "token_document_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "decimals": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "mint_baton_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "mint_baton_vout": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
     "SlpTransactionInfoBurnFlags": {
       "type": "string",
@@ -1227,7 +1311,7 @@
         "token_metadata": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/pbTokenMetadata"
+            "$ref": "#/definitions/pbSlpTokenMetadata"
           }
         }
       }
@@ -1469,49 +1553,6 @@
         }
       }
     },
-    "pbGetParsedSlpScriptRequest": {
-      "type": "object",
-      "properties": {
-        "slp_opreturn_script": {
-          "type": "string",
-          "format": "byte"
-        }
-      }
-    },
-    "pbGetParsedSlpScriptResponse": {
-      "type": "object",
-      "properties": {
-        "parsing_error": {
-          "type": "string"
-        },
-        "token_id": {
-          "type": "string",
-          "format": "byte"
-        },
-        "slp_action": {
-          "$ref": "#/definitions/pbSlpAction"
-        },
-        "token_type": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "v1_genesis": {
-          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
-        },
-        "v1_mint": {
-          "$ref": "#/definitions/pbSlpV1MintMetadata"
-        },
-        "v1_send": {
-          "$ref": "#/definitions/pbSlpV1SendMetadata"
-        },
-        "v1_nft1_child_genesis": {
-          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
-        },
-        "v1_nft1_child_send": {
-          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
-        }
-      }
-    },
     "pbGetRawAddressTransactionsRequest": {
       "type": "object",
       "properties": {
@@ -1609,7 +1650,49 @@
         }
       }
     },
-    "pbGetTokenMetadataRequest": {
+    "pbGetSlpParsedScriptRequest": {
+      "type": "object",
+      "properties": {
+        "slp_opreturn_script": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "pbGetSlpParsedScriptResponse": {
+      "type": "object",
+      "properties": {
+        "parsing_error": {
+          "type": "string"
+        },
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "slp_action": {
+          "$ref": "#/definitions/pbSlpAction"
+        },
+        "token_type": {
+          "$ref": "#/definitions/pbSlpTokenType"
+        },
+        "v1_genesis": {
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+        },
+        "v1_mint": {
+          "$ref": "#/definitions/pbSlpV1MintMetadata"
+        },
+        "v1_send": {
+          "$ref": "#/definitions/pbSlpV1SendMetadata"
+        },
+        "v1_nft1_child_genesis": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
+        },
+        "v1_nft1_child_send": {
+          "$ref": "#/definitions/pbSlpV1Nft1ChildSendMetadata"
+        }
+      }
+    },
+    "pbGetSlpTokenMetadataRequest": {
       "type": "object",
       "properties": {
         "token_ids": {
@@ -1621,13 +1704,35 @@
         }
       }
     },
-    "pbGetTokenMetadataResponse": {
+    "pbGetSlpTokenMetadataResponse": {
       "type": "object",
       "properties": {
         "token_metadata": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/pbTokenMetadata"
+            "$ref": "#/definitions/pbSlpTokenMetadata"
+          }
+        }
+      }
+    },
+    "pbGetSlpTrustedValidationRequest": {
+      "type": "object",
+      "properties": {
+        "queries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GetSlpTrustedValidationRequestQuery"
+          }
+        }
+      }
+    },
+    "pbGetSlpTrustedValidationResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GetSlpTrustedValidationResponseValidityResult"
           }
         }
       }
@@ -1654,29 +1759,7 @@
           "description": "A marshaled transaction."
         },
         "token_metadata": {
-          "$ref": "#/definitions/pbTokenMetadata"
-        }
-      }
-    },
-    "pbGetTrustedSlpValidationRequest": {
-      "type": "object",
-      "properties": {
-        "queries": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationRequestQuery"
-          }
-        }
-      }
-    },
-    "pbGetTrustedSlpValidationResponse": {
-      "type": "object",
-      "properties": {
-        "results": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
-          }
+          "$ref": "#/definitions/pbSlpTokenMetadata"
         }
       }
     },
@@ -1732,7 +1815,7 @@
           "$ref": "#/definitions/pbSlpToken"
         },
         "token_metadata": {
-          "$ref": "#/definitions/pbTokenMetadata"
+          "$ref": "#/definitions/pbSlpTokenMetadata"
         }
       }
     },
@@ -1799,8 +1882,7 @@
           "format": "byte"
         },
         "token_type": {
-          "type": "integer",
-          "format": "int64"
+          "$ref": "#/definitions/pbSlpTokenType"
         },
         "amount": {
           "type": "string",
@@ -1838,12 +1920,43 @@
           "$ref": "#/definitions/pbSlpAction"
         },
         "token_type": {
-          "type": "integer",
-          "format": "int64"
+          "$ref": "#/definitions/pbSlpTokenType"
         }
       },
       "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
       "title": "SlpToken info used in transaction inputs / outputs"
+    },
+    "pbSlpTokenMetadata": {
+      "type": "object",
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "token_type": {
+          "$ref": "#/definitions/pbSlpTokenType"
+        },
+        "v1_fungible": {
+          "$ref": "#/definitions/SlpTokenMetadataV1Fungible"
+        },
+        "v1_nft1_group": {
+          "$ref": "#/definitions/SlpTokenMetadataV1NFT1Group"
+        },
+        "v1_nft1_child": {
+          "$ref": "#/definitions/SlpTokenMetadataV1NFT1Child"
+        }
+      },
+      "title": "SlpTokenMetadata is used to marshal metadata about a specific TokenID"
+    },
+    "pbSlpTokenType": {
+      "type": "string",
+      "enum": [
+        "VERSION_NOT_SET",
+        "V1_FUNGIBLE",
+        "V1_NFT1_CHILD",
+        "V1_NFT1_GROUP"
+      ],
+      "default": "VERSION_NOT_SET"
     },
     "pbSlpTransactionInfo": {
       "type": "object",
@@ -2059,123 +2172,6 @@
         }
       },
       "description": "Request to subscribe or unsubscribe from a stream of transactions."
-    },
-    "pbTokenMetadata": {
-      "type": "object",
-      "properties": {
-        "token_id": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_type": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "v1_fungible": {
-          "$ref": "#/definitions/pbTokenMetadataV1Fungible"
-        },
-        "v1_nft1_group": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Group"
-        },
-        "v1_nft1_child": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Child"
-        }
-      },
-      "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
-    },
-    "pbTokenMetadataV1Fungible": {
-      "type": "object",
-      "properties": {
-        "token_ticker": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_name": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_url": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "decimals": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "mint_baton_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "mint_baton_vout": {
-          "type": "integer",
-          "format": "int64"
-        }
-      },
-      "title": "TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs"
-    },
-    "pbTokenMetadataV1NFT1Child": {
-      "type": "object",
-      "properties": {
-        "token_ticker": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_name": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_url": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "group_id": {
-          "type": "string",
-          "format": "byte"
-        }
-      },
-      "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
-    },
-    "pbTokenMetadataV1NFT1Group": {
-      "type": "object",
-      "properties": {
-        "token_ticker": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_name": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_url": {
-          "type": "string",
-          "format": "byte"
-        },
-        "token_document_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "decimals": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "mint_baton_hash": {
-          "type": "string",
-          "format": "byte"
-        },
-        "mint_baton_vout": {
-          "type": "integer",
-          "format": "int64"
-        }
-      },
-      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
     "pbTransaction": {
       "type": "object",

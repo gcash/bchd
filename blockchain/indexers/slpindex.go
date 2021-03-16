@@ -30,11 +30,11 @@ var (
 	slpIndexKey = []byte("slptxbyhashidx")
 
 	// tokenIDByHashIndexBucketName is the name of the db bucket used to house
-	// the token id -> token hash index.
+	// the token id (hash) -> token id (uint32) index.
 	tokenIDByHashIndexBucketName = []byte("tokenidbyhashidx")
 
 	// tokenMetadataByIDIndexBucketName is the name of the db bucket used to house
-	// the token hash -> token id index and token metadata.
+	// the token id (uint32) -> token id (hash) and token metadata index.
 	tokenMetadataByIDIndexBucketName = []byte("tokenhashbyididx")
 
 	// errNoTokenMetadataEntry is an error that indicates a requested entry does

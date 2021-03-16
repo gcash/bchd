@@ -325,8 +325,8 @@ func TestGetTokenBalance(t *testing.T) {
 	t.Logf("Successfully got token balance %d of address %s", balance, address)
 }
 
-func TestGetTokenMetadata(t *testing.T) {
-	method := "GetTokenMetadata"
+func TestGetSlpTokenMetadata(t *testing.T) {
+	method := "GetSlpTokenMetadata"
 	tokenID := "7278363093d3b899e0e1286ff681bf50d7ddc3c2a68565df743d0efc54c0e7fd"
 	tokenIDBase64, _ := hexToBase64(tokenID)
 	res, err := httpClient.RequestRaw(method, D{
@@ -340,7 +340,7 @@ func TestGetTokenMetadata(t *testing.T) {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
-	var meta pb.GetTokenMetadataResponse
+	var meta pb.GetSlpTokenMetadataResponse
 	marshaller := runtime.JSONPb{}
 	err = marshaller.Unmarshal(res, &meta)
 	if err != nil {
@@ -429,8 +429,8 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 	t.Logf("Successfully passed %s test", method)
 }
 
-func TestGetParsedSlpScript(t *testing.T) {
-	method := "GetParsedSlpScript"
+func TestGetSlpParsedScript(t *testing.T) {
+	method := "GetSlpParsedScript"
 	slpScriptBase64 := "agRTTFAAAQEEU0VORCByeDYwk9O4meDhKG/2gb9Q193DwqaFZd90PQ78VMDn/QgAAABxis0TAAgAAAAC34V1AA=="
 	tokenID, _ := base64.StdEncoding.DecodeString("cng2MJPTuJng4Shv9oG/UNfdw8KmhWXfdD0O/FTA5/0=")
 	t.Logf("test %x", tokenID)
@@ -446,7 +446,7 @@ func TestGetParsedSlpScript(t *testing.T) {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
-	var script pb.GetParsedSlpScriptResponse
+	var script pb.GetSlpParsedScriptResponse
 	marshaller := runtime.JSONPb{}
 	err = marshaller.Unmarshal(res, &script)
 	if err != nil {
@@ -464,8 +464,8 @@ func TestGetParsedSlpScript(t *testing.T) {
 	t.Logf("Successfully passed %s test", method)
 }
 
-func TestGetTrustedSlpValidation(t *testing.T) {
-	method := "GetTrustedSlpValidation"
+func TestGetSlpTrustedValidation(t *testing.T) {
+	method := "GetSlpTrustedValidation"
 	transactionID, _ := hex.DecodeString("3ff425384539519e815507f7f6739d9c12a44af84ff895601606b85157e0fb19")
 	transactionIDBase64 := base64.StdEncoding.EncodeToString(reverseBytes(transactionID))
 	prevOutVout := 1
@@ -485,7 +485,7 @@ func TestGetTrustedSlpValidation(t *testing.T) {
 		t.Fatalf("Error validating %s JSON schema: %+v", method, err)
 	}
 
-	var validation pb.GetTrustedSlpValidationResponse
+	var validation pb.GetSlpTrustedValidationResponse
 	marshaller := runtime.JSONPb{}
 	err = marshaller.Unmarshal(res, &validation)
 	if err != nil {
