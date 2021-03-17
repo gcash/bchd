@@ -268,6 +268,7 @@ type server struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+	slpIndex  *indexers.SlpIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
@@ -520,6 +521,13 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 	// Do not allow connections to Bitcoin SV peers
 	if strings.Contains(msg.UserAgent, "Bitcoin SV") {
 		srvrLog.Debugf("Rejecting peer %s for running Bitcoin SV", sp.Peer)
+		reason := "Not Bitcoin Cash node"
+		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
+	}
+
+	// Do not allow connections to Bitcoin ABC peers
+	if strings.Contains(msg.UserAgent, "Bitcoin ABC") {
+		srvrLog.Debugf("Rejecting peer %s for running Bitcoin ABC", sp.Peer)
 		reason := "Not Bitcoin Cash node"
 		return wire.NewMsgReject(msg.Command(), wire.RejectNonstandard, reason)
 	}
@@ -2671,9 +2679,15 @@ out:
 		}
 	}
 
+	srvrLog.Info("Stopping: connManager")
 	s.connManager.Stop()
+	srvrLog.Info("Stopped: connManager")
+	srvrLog.Info("Stopping: syncManager")
 	s.syncManager.Stop()
+	srvrLog.Info("Stopped: syncManager")
+	srvrLog.Info("Stopping: addrManger")
 	s.addrManager.Stop()
+	srvrLog.Info("Stopped: addrManager")
 
 	// Drain channels before exiting so nothing is left waiting around
 	// to send.
@@ -2691,7 +2705,7 @@ cleanup:
 		}
 	}
 	s.wg.Done()
-	srvrLog.Tracef("Peer handler done")
+	srvrLog.Info("Peer handler complete")
 }
 
 // AddPeer adds a new peer that has already been connected to the server.
@@ -2871,16 +2885,23 @@ func (s *server) Stop() error {
 	srvrLog.Warnf("Server shutting down")
 
 	// Stop the CPU miner if needed
+	srvrLog.Info("Stopping: cpuMiner")
 	s.cpuMiner.Stop()
+	srvrLog.Info("Stopped: cpuMiner")
 
 	// Shutdown the RPC server if it's not disabled.
 	if !cfg.DisableRPC {
+		srvrLog.Info("Stopping: rpcServer")
 		s.rpcServer.Stop()
+		srvrLog.Info("Stopped: rpcServer")
 		if s.gRPCServer != nil {
+			srvrLog.Info("Stopping: grpcServer")
 			s.gRPCServer.Stop()
+			srvrLog.Info("Stopped: grpcServer")
 		}
 	}
 
+	srvrLog.Info("Saving fee estimate to database")
 	// Save fee estimator state in the database.
 	s.db.Update(func(tx database.Tx) error {
 		metadata := tx.Metadata()
@@ -2888,6 +2909,7 @@ func (s *server) Stop() error {
 
 		return nil
 	})
+	srvrLog.Info("Fee estimate save complete")
 
 	// Signal the remaining goroutines to quit.
 	close(s.quit)
@@ -2896,7 +2918,9 @@ func (s *server) Stop() error {
 
 // WaitForShutdown blocks until the main listener and peer handlers are stopped.
 func (s *server) WaitForShutdown() {
+	srvrLog.Info("Waiting for server waitgroup to complete")
 	s.wg.Wait()
+	srvrLog.Info("Server waitgroup completed")
 }
 
 // ScheduleShutdown schedules a server shutdown after the specified duration.
@@ -3173,6 +3197,18 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.addrIndex = indexers.NewAddrIndex(db, chainParams)
 		indexes = append(indexes, s.addrIndex)
 	}
+	if cfg.SlpIndex {
+		indxLog.Info("Slp index is enabled")
+
+		slpCfg := &indexers.SlpConfig{
+			AddrPrefix:   chainParams.SlpAddressPrefix,
+			StartHash:    chainParams.SlpIndexStartHash,
+			StartHeight:  chainParams.SlpIndexStartHeight,
+			MaxCacheSize: int(cfg.SlpCacheMaxSize),
+		}
+		s.slpIndex = indexers.NewSlpIndex(db, slpCfg)
+		indexes = append(indexes, s.slpIndex)
+	}
 	if !cfg.FastSync && !cfg.NoCFilters {
 		indxLog.Info("Committed filter index is enabled")
 		s.cfIndex = indexers.NewCfIndex(db, chainParams)
@@ -3433,6 +3469,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:        s.txIndex,
 			AddrIndex:      s.addrIndex,
 			CfIndex:        s.cfIndex,
+			SlpIndex:       s.slpIndex,
 			FeeEstimator:   s.feeEstimator,
 			Services:       s.services,
 			RPCAuthTimeout: cfg.RPCAuthTimeout,
@@ -3455,6 +3492,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			TxIndex:     s.txIndex,
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
+			SlpIndex:    s.slpIndex,
 		}, &s)
 		if err != nil {
 			return nil, err

@@ -597,6 +597,13 @@ func (idx *AddrIndex) Init() error {
 	return nil
 }
 
+// StartBlock is used to indicate the proper start block for the index manager.
+//
+// This is part of the Indexer interface.
+func (idx *AddrIndex) StartBlock() (*chainhash.Hash, int32) {
+	return nil, -1
+}
+
 // Migrate is only provided to satisfy the Indexer interface as there is nothing to
 // migrate this index.
 //

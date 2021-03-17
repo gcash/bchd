@@ -171,6 +171,13 @@ type handleFailed struct {
 	err error
 }
 
+//checkDuplicate is used to poll the connHandler to see if an
+// open connection to the address already exists.
+type checkDuplicate struct {
+	addr net.Addr
+	resp chan bool
+}
+
 // ConnManager provides a manager to handle network connections.
 type ConnManager struct {
 	// The following variables must only be used atomically.
@@ -241,6 +248,24 @@ out:
 		select {
 		case req := <-cm.requests:
 			switch msg := req.(type) {
+
+			case checkDuplicate:
+				dup := false
+				for _, v := range conns {
+					if v.Addr.String() == msg.addr.String() {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					for _, v := range pending {
+						if v.Addr != nil && v.Addr.String() == msg.addr.String() {
+							dup = true
+							break
+						}
+					}
+				}
+				msg.resp <- dup
 
 			case registerPending:
 				connReq := msg.c
@@ -345,6 +370,9 @@ out:
 				log.Debugf("Failed to connect to %v: %v",
 					connReq, msg.err)
 				cm.handleFailedConn(connReq)
+				if !connReq.Permanent {
+					delete(pending, connReq.id)
+				}
 			}
 
 		case <-cm.quit:
@@ -394,6 +422,21 @@ func (cm *ConnManager) NewConnReq() {
 		case cm.requests <- handleFailed{c, err}:
 		case <-cm.quit:
 		}
+		return
+	}
+
+	resp := make(chan bool)
+	cm.requests <- checkDuplicate{addr: addr, resp: resp}
+	select {
+	case dup := <-resp:
+		if dup {
+			select {
+			case cm.requests <- handleFailed{c, err}:
+			case <-cm.quit:
+			}
+			return
+		}
+	case <-cm.quit:
 		return
 	}
 

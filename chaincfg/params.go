@@ -245,7 +245,7 @@ type Params struct {
 	// address generation.
 	HDCoinType uint32
 
-	// SLP indexer parameters
+	// slp indexer parameters
 	SlpIndexStartHeight int32
 	SlpIndexStartHash   *chainhash.Hash
 	SlpAddressPrefix    string
@@ -259,7 +259,6 @@ var MainNetParams = Params{
 	DNSSeeds: []DNSSeed{
 		{"seed.bchd.cash", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
-		{"seed-bch.bitcoinforks.org", true},
 		{"seed.bch.loping.net", true},
 		{"dnsseed.electroncash.de", true},
 	},
@@ -415,7 +414,7 @@ var MainNetParams = Params{
 	// address generation.
 	HDCoinType: 145,
 
-	// SLP indexer parameters
+	// slp indexer parameters
 	SlpIndexStartHeight: 543374,
 	SlpIndexStartHash:   newHashFromStr("0000000000000000020322dc9d6da5bb55c4c12aa5040a7c4c2f673e28a5b9f0"),
 	SlpAddressPrefix:    "simpleledger",
@@ -500,10 +499,10 @@ var RegressionNetParams = Params{
 	// address generation.
 	HDCoinType: 1, // all coins use 1
 
-	// SLP indexer parameters
+	// slp indexer parameters
 	SlpIndexStartHeight: -1,
 	SlpIndexStartHash:   &chainhash.Hash{},
-	SlpAddressPrefix:    "slptest",
+	SlpAddressPrefix:    "slpreg",
 }
 
 // TestNet3Params defines the network parameters for the test Bitcoin network
@@ -606,7 +605,7 @@ var TestNet3Params = Params{
 	// address generation.
 	HDCoinType: 1, // all coins use 1
 
-	// SLP indexer parameters
+	// slp indexer parameters
 	SlpIndexStartHeight: 1253800,
 	SlpIndexStartHash:   newHashFromStr("000000000000e8d3d53ad5dcb555d1119b650c8f3e1cb7d106764b455a87b10a"),
 	SlpAddressPrefix:    "slptest",
