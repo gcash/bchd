@@ -222,7 +222,7 @@ type utxoCache struct {
 func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 	return &utxoCache{
 		db:            db,
-		cachedEntries: gcache.New(int(maxTotalMemoryUsage) / 36).LRU().Build(),
+		cachedEntries: gcache.New(int(maxTotalMemoryUsage) / 36).Simple().Build(),
 	}
 }
 
