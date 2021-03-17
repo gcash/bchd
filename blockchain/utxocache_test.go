@@ -293,7 +293,7 @@ func utxoCacheTestChain(testName string) (*BlockChain, *chaincfg.Params, func())
 	}
 
 	chain.TstSetCoinbaseMaturity(1)
-	chain.utxoCache.maxTotalMemoryUsage = 10 * 1024 * 1024
+	//chain.utxoCache.maxTotalMemoryUsage = 10 * 1024 * 1024
 
 	return chain, &params, tearDown
 }
@@ -318,12 +318,16 @@ func TestUtxoCache_SimpleFlush(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		tip, _ = addBlock(chain, tip, nil)
 	}
-	if len(cache.cachedEntries) != 10 {
-		t.Fatalf("Expected 10 entries, has %d instead", len(cache.cachedEntries))
+	if cache.cachedEntries.Len(false) != 10 {
+		t.Fatalf("Expected 10 entries, has %d instead", cache.cachedEntries.Len(false))
 	}
 
 	// All elements should be fresh and modified.
-	for outpoint, elem := range cache.cachedEntries {
+	cachedEntries := cache.cachedEntries.GetALL(false)
+	for op, el := range cachedEntries {
+		outpoint := op.(wire.OutPoint)
+		elem := el.(*UtxoEntry)
+
 		if elem == nil {
 			t.Fatalf("Unexpected nil entry found for %v", outpoint)
 		}
@@ -343,8 +347,8 @@ func TestUtxoCache_SimpleFlush(t *testing.T) {
 	if err := chain.FlushCachedState(FlushRequired); err != nil {
 		t.Fatalf("unexpected error while flushing cache: %v", err)
 	}
-	if len(cache.cachedEntries) != 0 {
-		t.Fatalf("Expected 0 entries, has %d instead", len(cache.cachedEntries))
+	if cache.cachedEntries.Len(false) != 0 {
+		t.Fatalf("Expected 0 entries, has %d instead", cache.cachedEntries.Len(false))
 	}
 	assertConsistencyState(t, chain, ucsConsistent, tip.Hash())
 	assertNbEntriesOnDisk(t, chain, 10)
@@ -358,13 +362,13 @@ func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
 
 	// Set the limit to the size of 10 empty elements.  This will trigger
 	// flushing when adding 10 non-empty elements.
-	cache.maxTotalMemoryUsage = (*UtxoEntry)(nil).memoryUsage() * 10
+	//cache.maxTotalMemoryUsage = (*UtxoEntry)(nil).memoryUsage() * 10
 
 	// Add 10 elems and let it exceed the threshold.
 	var flushedAt *chainhash.Hash
 	for i := 0; i < 10; i++ {
 		tip, _ = addBlock(chain, tip, nil)
-		if len(cache.cachedEntries) == 0 {
+		if cache.cachedEntries.Len(false) == 0 {
 			flushedAt = tip.Hash()
 		}
 	}
@@ -374,18 +378,18 @@ func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
 		t.Fatal("should have flushed")
 	}
 	assertConsistencyState(t, chain, ucsConsistent, flushedAt)
-	if len(cache.cachedEntries) >= 10 {
+	if cache.cachedEntries.Len(false) >= 10 {
 		t.Fatalf("Expected less than 10 entries, has %d instead",
-			len(cache.cachedEntries))
+			cache.cachedEntries.Len(false))
 	}
 
 	// Make sure flushes on periodic.
-	cache.maxTotalMemoryUsage = (90*cache.totalMemoryUsage())/100 - 1
+	//cache.maxTotalMemoryUsage = (90*cache.totalMemoryUsage())/100 - 1
 	if err := chain.FlushCachedState(FlushPeriodic); err != nil {
 		t.Fatalf("unexpected error while flushing cache: %v", err)
 	}
-	if len(cache.cachedEntries) != 0 {
-		t.Fatalf("Expected 0 entries, has %d instead", len(cache.cachedEntries))
+	if cache.cachedEntries.Len(false) != 0 {
+		t.Fatalf("Expected 0 entries, has %d instead", cache.cachedEntries.Len(false))
 	}
 	assertConsistencyState(t, chain, ucsConsistent, tip.Hash())
 	assertNbEntriesOnDisk(t, chain, 10)
@@ -566,7 +570,11 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 
 		addedUtxo, deletedSpend := false, false
 		err := chain.db.Update(func(dbTx database.Tx) error {
-			for outpoint, entry := range chain.utxoCache.cachedEntries {
+			cachedEntries := chain.utxoCache.cachedEntries.GetALL(false)
+			for op, ent := range cachedEntries {
+				outpoint := op.(wire.OutPoint)
+				entry := ent.(*UtxoEntry)
+
 				if entry == nil {
 					continue
 				}

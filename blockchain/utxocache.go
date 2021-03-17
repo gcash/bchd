@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bluele/gcache"
 	"github.com/gcash/bchd/txscript"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -197,7 +198,7 @@ type utxoCache struct {
 
 	// maxTotalMemoryUsage is the maximum memory usage in bytes that the state
 	// should contain in normal circumstances.
-	maxTotalMemoryUsage uint64
+	//maxTotalMemoryUsage uint64
 
 	// This mutex protects the internal state.
 	// A simple mutex instead of a read-write mutex is chosen because the main
@@ -208,7 +209,7 @@ type utxoCache struct {
 	// flag indicates that the state of the entry (potentially) deviates from the
 	// state in the database.  Explicit nil values in the map are used to
 	// indicate that the database does not contain the entry.
-	cachedEntries    map[wire.OutPoint]*UtxoEntry
+	cachedEntries    gcache.Cache
 	totalEntryMemory uint64 // Total memory usage in bytes.
 	lastFlushHash    chainhash.Hash
 
@@ -220,10 +221,8 @@ type utxoCache struct {
 // to the given maximum.
 func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 	return &utxoCache{
-		db:                  db,
-		maxTotalMemoryUsage: maxTotalMemoryUsage,
-
-		cachedEntries: make(map[wire.OutPoint]*UtxoEntry),
+		db:            db,
+		cachedEntries: gcache.New(int(maxTotalMemoryUsage) / 36).LRU().Build(),
 	}
 }
 
@@ -235,21 +234,18 @@ func (s *utxoCache) totalMemoryUsage() uint64 {
 	// unsafe.Sizeof(wire.OutPoint{})
 	outpointSize := uint64(36)
 
-	// Total memory is all the keys plus the total memory of all the entries.
-	nbEntries := uint64(len(s.cachedEntries))
-
 	// Total size is total size of the keys + total size of the pointers in the
 	// map + total size of the elements held in the pointers.
-	return nbEntries*outpointSize + nbEntries*8 + s.totalEntryMemory
+	return uint64(s.cachedEntries.Len(false))*outpointSize + s.totalEntryMemory
 }
 
 // TotalMemoryUsage returns the total memory usage in bytes of the UTXO cache.
 //
 // This method is safe for concurrent access.
 func (s *utxoCache) TotalMemoryUsage() uint64 {
-	s.mtx.Lock()
+	//s.mtx.Lock()
 	tmu := s.totalMemoryUsage()
-	s.mtx.Unlock()
+	//s.mtx.Unlock()
 	return tmu
 }
 
@@ -271,7 +267,7 @@ func (s *utxoCache) fetchAndCacheEntry(outpoint wire.OutPoint) (*UtxoEntry, erro
 	// Add the entry to the memory cache.
 	// NOTE: When the fetched entry is nil, it is still added to the cache as a
 	// miss; this prevents future lookups to perform the same database fetch.
-	s.cachedEntries[outpoint] = entry
+	s.cachedEntries.Set(outpoint, entry)
 	s.totalEntryMemory += entry.memoryUsage()
 
 	return entry, nil
@@ -284,8 +280,8 @@ func (s *utxoCache) fetchAndCacheEntry(outpoint wire.OutPoint) (*UtxoEntry, erro
 // This method should be called with the state lock held.
 // The returned entry is NOT safe for concurrent access.
 func (s *utxoCache) getEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
-	if entry, found := s.cachedEntries[outpoint]; found {
-		return entry, nil
+	if entry, err := s.cachedEntries.Get(outpoint); err == nil {
+		return entry.(*UtxoEntry), nil
 	}
 
 	return s.fetchAndCacheEntry(outpoint)
@@ -296,9 +292,9 @@ func (s *utxoCache) getEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 //
 // This method is safe for concurrent access.
 func (s *utxoCache) FetchEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
-	s.mtx.Lock()
+	//s.mtx.Lock()
 	entry, err := s.getEntry(outpoint)
-	s.mtx.Unlock()
+	//s.mtx.Unlock()
 	return entry.Clone(), err
 }
 
@@ -324,7 +320,10 @@ func (b *BlockChain) FetchUtxoEntry(outpoint wire.OutPoint) (*UtxoEntry, error) 
 // This method is part of the utxoView interface.
 // This method should be called with the state lock held.
 func (s *utxoCache) spendEntry(outpoint wire.OutPoint, addIfNil *UtxoEntry) error {
-	entry := s.cachedEntries[outpoint]
+	var entry *UtxoEntry
+	if utxo, err := s.cachedEntries.Get(outpoint); err == nil {
+		entry = utxo.(*UtxoEntry)
+	}
 
 	// If we don't have an entry in cache and an entry was provided, we add it.
 	if entry == nil && addIfNil != nil {
@@ -345,7 +344,7 @@ func (s *utxoCache) spendEntry(outpoint wire.OutPoint, addIfNil *UtxoEntry) erro
 		// We don't delete it from the map, but set the value to nil, so that
 		// later lookups for the entry know that the entry does not exist in the
 		// database.
-		s.cachedEntries[outpoint] = nil
+		s.cachedEntries.Remove(outpoint)
 		s.totalEntryMemory -= entry.memoryUsage()
 		return nil
 	}
@@ -368,8 +367,8 @@ func (s *utxoCache) spendEntry(outpoint wire.OutPoint, addIfNil *UtxoEntry) erro
 //
 // This function is safe for concurrent access
 func (s *utxoCache) AddEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite bool) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	//s.mtx.Lock()
+	//defer s.mtx.Unlock()
 	return s.addEntry(outpoint, entry, overwrite)
 }
 
@@ -385,7 +384,10 @@ func (s *utxoCache) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite
 		return nil
 	}
 
-	cachedEntry := s.cachedEntries[outpoint]
+	var cachedEntry *UtxoEntry
+	if entry, err := s.cachedEntries.Get(outpoint); err == nil {
+		cachedEntry = entry.(*UtxoEntry)
+	}
 
 	// In overwrite mode, simply add the entry without doing these checks.
 	if !overwrite {
@@ -407,7 +409,7 @@ func (s *utxoCache) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite
 	}
 
 	entry.packedFlags |= tfModified
-	s.cachedEntries[outpoint] = entry
+	s.cachedEntries.Set(outpoint, entry)
 	s.totalEntryMemory -= cachedEntry.memoryUsage() // 0 for nil
 	s.totalEntryMemory += entry.memoryUsage()
 	return nil
@@ -417,8 +419,8 @@ func (s *utxoCache) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite
 //
 // This method is safe for concurrent access.
 func (s *utxoCache) FetchTxView(tx *bchutil.Tx) (*UtxoViewpoint, error) {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	//s.mtx.Lock()
+	//defer s.mtx.Unlock()
 
 	view := NewUtxoViewpoint()
 	viewEntries := view.Entries()
@@ -469,7 +471,10 @@ func (s *utxoCache) Commit(view *UtxoViewpoint) error {
 
 		// We can't use the view entry directly because it can be modified
 		// later on.
-		ourEntry := s.cachedEntries[outpoint]
+		var ourEntry *UtxoEntry
+		if entry, err := s.cachedEntries.Get(outpoint); err == nil {
+			ourEntry = entry.(*UtxoEntry)
+		}
 		if ourEntry == nil {
 			ourEntry = entry.Clone()
 		}
@@ -537,12 +542,17 @@ func (s *utxoCache) flush(bestState *BestState) error {
 			entriesPut     = make(map[wire.OutPoint]*UtxoEntry)
 			entriesDelete  = make([]wire.OutPoint, 0)
 		)
-		for outpoint, entry := range s.cachedEntries {
+
+		cachedEntries := s.cachedEntries.GetALL(false)
+		for op, ent := range cachedEntries {
+			outpoint := op.(wire.OutPoint)
+			entry := ent.(*UtxoEntry)
+
 			// Nil entries or unmodified entries can just be pruned.
 			// They don't count for the batch size.
 			if entry == nil || !entry.isModified() {
 				s.totalEntryMemory -= entry.memoryUsage()
-				delete(s.cachedEntries, outpoint)
+				s.cachedEntries.Remove(outpoint)
 				continue
 			}
 
@@ -554,7 +564,7 @@ func (s *utxoCache) flush(bestState *BestState) error {
 			nbBatchEntries++
 
 			s.totalEntryMemory -= entry.memoryUsage()
-			delete(s.cachedEntries, outpoint)
+			s.cachedEntries.Remove(outpoint)
 
 			// End this batch when the maximum number of entries per batch has
 			// been reached.
@@ -574,8 +584,8 @@ func (s *utxoCache) flush(bestState *BestState) error {
 	}
 	s.flushInProgress = true
 	defer func() { s.flushInProgress = false }()
-	for len(s.cachedEntries) > 0 {
-		log.Tracef("Flushing %d more entries...", len(s.cachedEntries))
+	for s.cachedEntries.Len(false) > 0 {
+		log.Tracef("Flushing %d more entries...", s.cachedEntries.Len(false))
 		err := s.db.Update(func(dbTx database.Tx) error {
 			return flushBatch(dbTx)
 		})
@@ -610,10 +620,14 @@ func (s *utxoCache) Flush(mode FlushMode, bestState *BestState) error {
 		threshold = 0
 
 	case FlushIfNeeded:
-		threshold = s.maxTotalMemoryUsage
+		//log.Infof("Skipping FlushIfNeeded with experimental utxo cache (size: %s)", fmt.Sprint(s.totalMemoryUsage()))
+		return nil
+		//threshold = s.maxTotalMemoryUsage
 
 	case FlushPeriodic:
-		threshold = (utxoFlushPeriodicThreshold * s.maxTotalMemoryUsage) / 100
+		log.Infof("Skipping FlushPeriodic with experimental utxo cache (size: %s)", fmt.Sprint(s.totalMemoryUsage()))
+		return nil
+		//threshold = (utxoFlushPeriodicThreshold * s.maxTotalMemoryUsage) / 100
 	}
 
 	if s.totalMemoryUsage() > threshold {
