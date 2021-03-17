@@ -210,6 +210,7 @@ type utxoCache struct {
 	// state in the database.  Explicit nil values in the map are used to
 	// indicate that the database does not contain the entry.
 	cachedEntries    gcache.Cache
+	flushQueue       map[wire.OutPoint]*UtxoEntry
 	totalEntryMemory uint64 // Total memory usage in bytes.
 	lastFlushHash    chainhash.Hash
 
@@ -220,10 +221,21 @@ type utxoCache struct {
 // newUtxoCache initiates a new utxo cache instance with its memory usage limited
 // to the given maximum.
 func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
-	return &utxoCache{
-		db:            db,
-		cachedEntries: gcache.New(int(maxTotalMemoryUsage) / 36).Simple().Build(),
+	cache := &utxoCache{
+		db:         db,
+		flushQueue: make(map[wire.OutPoint]*UtxoEntry),
 	}
+
+	cache.cachedEntries = gcache.New(int(maxTotalMemoryUsage) / 36).
+		Simple().
+		EvictedFunc(func(key, value interface{}) {
+			// NOTE: sends evicted items to a queue for periodically flushing,
+			// FIXME: the flush queue items should also be considered as part of the utxocache
+			WIP_DONT_USE cache.flushQueue[key.(wire.OutPoint)] = value.(*UtxoEntry)
+		}).
+		Build()
+
+	return cache
 }
 
 // totalMemoryUsage returns the total memory usage in bytes of the UTXO cache.
