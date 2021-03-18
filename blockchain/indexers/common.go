@@ -69,7 +69,9 @@ type Indexer interface {
 	DisconnectBlock(database.Tx, *bchutil.Block, []blockchain.SpentTxOut) error
 
 	// StartBlock is invoked to get which block the indexer should be
-	// started from.
+	// started from.  The first indexed height is after this block, and the
+	// block hash returned here is compared against the first indexed block's
+	// previous block hash.
 	StartBlock() (hash *chainhash.Hash, height int32)
 }
 
