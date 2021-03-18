@@ -301,13 +301,6 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			return err
 		}
 
-		switch v := indexer.(type) {
-		case *SlpIndex:
-			if height == v.config.StartHeight {
-				continue
-			}
-		}
-
 		// Nothing to do if the index does not have any entries yet.
 		if height == -1 {
 			continue
@@ -322,6 +315,14 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			// loaded directly since it is no longer in the main
 			// chain and thus the chain.BlockByHash function would
 			// error.
+
+			// Don't rollback to any height at or before the indexer's
+			// configured start height.
+			_, idxStartHeight := indexer.StartBlock()
+			if height <= idxStartHeight {
+				break
+			}
+
 			var block *bchutil.Block
 			err := m.db.View(func(dbTx database.Tx) error {
 				blockBytes, err := dbTx.FetchBlock(hash)
@@ -525,9 +526,22 @@ func (m *Manager) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	for _, index := range m.enabledIndexes {
 
 		// Check the specified start block for the indexer
-		_, idxStartHeight := index.StartBlock()
+		idxStartHash, idxStartHeight := index.StartBlock()
 		if block.Height() <= idxStartHeight {
-			return nil
+			log.Debugf("Skipping ConnectBlock for %s until block %s, currently on %s",
+				index.Name(), fmt.Sprint(idxStartHeight+1), fmt.Sprint(block.Height()))
+			continue
+		}
+
+		// For cases where the indexer has a specified start block height & hash,
+		// check the first block added has correct previous block hash. This could happen
+		// if there is a chain fork just before the indexer's start height.
+		if idxStartHeight > -1 &&
+			idxStartHeight+1 == block.Height() &&
+			idxStartHash.Compare(&block.MsgBlock().Header.PrevBlock) != 0 {
+			log.Warnf("Skipping ConnectBlock for %s at height %s, requires prev hash of %v, not %v",
+				index.Name(), block.Height(), idxStartHash, &block.MsgBlock().Header.PrevBlock)
+			continue
 		}
 
 		err := dbIndexConnectBlock(dbTx, index, block, stxos)
