@@ -9,11 +9,11 @@ http:
   - selector: pb.bchrpc.CheckSlpTransaction
     post: /v1/CheckSlpTransaction
     body: "*"
-  - selector: pb.bchrpc.GetParsedSlpScript
-    post: /v1/GetParsedSlpScript
+  - selector: pb.bchrpc.GetSlpParsedScript
+    post: /v1/GetSlpParsedScript
     body: "*"
-  - selector: pb.bchrpc.GetTrustedSlpValidation
-    post: /v1/GetTrustedSlpValidation
+  - selector: pb.bchrpc.GetSlpTrustedValidation
+    post: /v1/GetSlpTrustedValidation
     body: "*"
   - selector: pb.bchrpc.GetSlpGraphSearch
     post: /v1/GetSlpGraphSearch
@@ -39,8 +39,8 @@ http:
   - selector: pb.bchrpc.GetHeaders
     post: /v1/GetBlockHeaders
     body: "*"
-  - selector: pb.bchrpc.GetTokenMetadata
-    post: /v1/GetTokenMetadata
+  - selector: pb.bchrpc.GetSlpTokenMetadata
+    post: /v1/GetSlpTokenMetadata
     body: "*"
   - selector: pb.bchrpc.GetTransaction
     post: /v1/GetTransaction

@@ -15,7 +15,7 @@
     "token_metadata": {
       "type": "array",
       "items": {
-        "$ref": "definitions.json#/definitions/pbTokenMetadata"
+        "$ref": "definitions.json#/definitions/pbSlpTokenMetadata"
       },
       "default": []
     }

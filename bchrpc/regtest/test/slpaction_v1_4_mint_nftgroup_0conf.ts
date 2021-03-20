@@ -39,7 +39,7 @@ const wallet3 = {
   _privKey: privKey3,
   address: privKey3.toAddress().toString(),
   bchRegtestAddress: bchaddrjs.toRegtestAddress(privKey3.toAddress().toString()),
-  slpRegTestAddressNoPrefix: bchaddrjs.toSlpAddress(bchaddrjs.toRegtestAddress(privKey3.toAddress().toString())).split(":")[1],
+  slpRegTestAddressNoPrefix: bchaddrjs.toRegtestAddress(bchaddrjs.toSlpAddress(privKey3.toAddress().toString())).split(":")[1],
   wif: privKey3.toWIF(),
   pubKey: privKey3.toPublicKey()
 };
@@ -204,9 +204,9 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === tokenIdHex);
@@ -326,9 +326,9 @@ describe("SlpAction: Mint NFT1 Group (unconfirmed)", () => {
 
     // check token metadata
     const tm = resTx.getTokenMetadata()!.getV1Nft1Group()!;
-    assert.ok(Buffer.from(tm.getTokenName_asU8()).toString("utf-8") === tokenMetadata.name);
-    assert.ok(Buffer.from(tm.getTokenTicker_asU8()).toString("utf-8") === tokenMetadata.ticker);
-    assert.ok(Buffer.from(tm.getTokenDocumentUrl_asU8()).toString("utf-8") === tokenMetadata.url);
+    assert.ok(tm.getTokenName() === tokenMetadata.name);
+    assert.ok(tm.getTokenTicker() === tokenMetadata.ticker);
+    assert.ok(tm.getTokenDocumentUrl() === tokenMetadata.url);
     assert.ok(tm.getDecimals() === tokenMetadata.decimals);
     assert.ok(Buffer.from(tm.getTokenDocumentHash_asU8()).toString("hex") === tokenMetadata.hashHex);
     assert.ok(Buffer.from(resTx.getTokenMetadata()!.getTokenId_asU8()).toString("hex") === tokenIdHex);

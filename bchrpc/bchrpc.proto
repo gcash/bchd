@@ -85,19 +85,19 @@ service bchrpc {
     // **Requires TxIndex**
     rpc GetMerkleProof(GetMerkleProofRequest) returns (GetMerkleProofResponse) {}
 
-    // GetTokenMetadata return slp token metadata for one or more tokens.
+    // GetSlpTokenMetadata return slp token metadata for one or more tokens.
     //
     // **Requires SlpIndex**
-    rpc GetTokenMetadata(GetTokenMetadataRequest) returns (GetTokenMetadataResponse) {}
+    rpc GetSlpTokenMetadata(GetSlpTokenMetadataRequest) returns (GetSlpTokenMetadataResponse) {}
 
-    // GetParsedSlpScript returns marshalled object from parsing an slp pubKeyScript 
+    // GetSlpParsedScript returns marshalled object from parsing an slp pubKeyScript 
     // using goslp package.  This endpoint does not require SlpIndex.
-    rpc GetParsedSlpScript(GetParsedSlpScriptRequest) returns (GetParsedSlpScriptResponse) {}
+    rpc GetSlpParsedScript(GetSlpParsedScriptRequest) returns (GetSlpParsedScriptResponse) {}
 
-    // GetTrustedValidation returns slp validity related information for one or more transactions.
+    // GetSlpTrustedValidation returns slp validity related information for one or more transactions.
     //
     // **Requires SlpIndex**
-    rpc GetTrustedSlpValidation(GetTrustedSlpValidationRequest) returns (GetTrustedSlpValidationResponse) {}
+    rpc GetSlpTrustedValidation(GetSlpTrustedValidationRequest) returns (GetSlpTrustedValidationResponse) {}
 
     // GraphSearch returns all the transactions needed for a client to validate an SLP graph
     //
@@ -119,7 +119,7 @@ service bchrpc {
     // then SubscribeTransactionStream is more appropriate.
     //
     // **Requires TxIndex to receive input metadata**
-    // **Requires SlpIndex to receive slp input/output metadata, or TokenMetadata**
+    // **Requires SlpIndex to receive slp input/output metadata, or SlpTokenMetadata**
     rpc SubscribeTransactions(SubscribeTransactionsRequest) returns (stream TransactionNotification) {}
 
     // SubscribeTransactionStream subscribes to relevant transactions based on
@@ -295,7 +295,7 @@ message GetTransactionResponse {
     // A marshaled transaction.
     Transaction transaction = 1;
 
-    TokenMetadata token_metadata = 2;
+    SlpTokenMetadata token_metadata = 2;
 }
 
 // Get an encoded transaction from a transaction hash.
@@ -405,7 +405,7 @@ message GetAddressUnspentOutputsRequest {
 message GetAddressUnspentOutputsResponse {
     // List of unspent outputs.
     repeated UnspentOutput outputs = 1;
-    repeated TokenMetadata token_metadata = 2;
+    repeated SlpTokenMetadata token_metadata = 2;
 }
 
 message GetUnspentOutputRequest {
@@ -432,7 +432,7 @@ message GetUnspentOutputResponse {
     int32 block_height = 5;
 
     SlpToken slp_token = 6;
-    TokenMetadata token_metadata = 7;
+    SlpTokenMetadata token_metadata = 7;
 }
 
 message GetMerkleProofRequest {
@@ -545,23 +545,23 @@ message SubscribeBlocksRequest {
     bool serialize_block = 3;
 }
 
-message GetTokenMetadataRequest {
+message GetSlpTokenMetadataRequest {
     repeated bytes token_ids = 1;
 }
 
-message GetTokenMetadataResponse {
-    repeated TokenMetadata token_metadata = 1;
+message GetSlpTokenMetadataResponse {
+    repeated SlpTokenMetadata token_metadata = 1;
 }
 
-message GetParsedSlpScriptRequest {
+message GetSlpParsedScriptRequest {
     bytes slp_opreturn_script = 1;
 }
 
-message GetParsedSlpScriptResponse {
+message GetSlpParsedScriptResponse {
     string parsing_error = 1;
     bytes token_id = 2;
     SlpAction slp_action = 3;
-    uint32 token_type = 4;
+    SlpTokenType token_type = 4;
     oneof slp_metadata {
         SlpV1GenesisMetadata v1_genesis = 5;    // NFT1 Group also uses this
         SlpV1MintMetadata v1_mint = 6;          // NFT1 Group also uses this
@@ -571,7 +571,7 @@ message GetParsedSlpScriptResponse {
     }
 }
 
-message GetTrustedSlpValidationRequest {
+message GetSlpTrustedValidationRequest {
     message Query {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
@@ -581,13 +581,13 @@ message GetTrustedSlpValidationRequest {
     bool include_graphsearch_count = 2;
 }
 
-message GetTrustedSlpValidationResponse {
+message GetSlpTrustedValidationResponse {
     message ValidityResult {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
         bytes token_id = 3;
         SlpAction slp_action = 4;
-        uint32 token_type = 5;
+        SlpTokenType token_type = 5;
         oneof validity_result_type {
             uint64 v1_token_amount = 6 [jstype = JS_STRING];
             bool v1_mint_baton = 7;
@@ -849,7 +849,14 @@ message SlpToken {
     string address = 4;
     uint32 decimals = 5;
     SlpAction slp_action = 6;
-    uint32 token_type = 7;
+    SlpTokenType token_type = 7;
+}
+
+enum SlpTokenType {
+    VERSION_NOT_SET = 0;
+    V1_FUNGIBLE = 1;
+    V1_NFT1_CHILD = 65;
+    V1_NFT1_GROUP = 129;
 }
 
 // SlpTransactionInfo is used inside the Transaction message type.
@@ -935,53 +942,53 @@ enum SlpAction {
     SLP_V1_NFT1_UNIQUE_CHILD_SEND = 11;
 }
 
-// TokenMetadata is used to marshal metadata about a specific TokenID
-message TokenMetadata {
+// SlpTokenMetadata is used to marshal metadata about a specific TokenID
+message SlpTokenMetadata {
 	bytes token_id = 1;
- 	uint32 token_type = 2;
+ 	SlpTokenType token_type = 2;
 	oneof type_metadata {
-        TokenMetadataV1Fungible v1_fungible = 3;
-        TokenMetadataV1NFT1Group v1_nft1_group = 4;
-        TokenMetadataV1NFT1Child v1_nft1_child = 5;
+        V1Fungible v1_fungible = 3;
+        V1NFT1Group v1_nft1_group = 4;
+        V1NFT1Child v1_nft1_child = 5;
     }
-}
 
-// TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs
-message TokenMetadataV1Fungible {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-	uint32 decimals = 5;
-    bytes mint_baton_hash = 6;
-    uint32 mint_baton_vout = 7;
-}
+    // TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs
+    message V1Fungible {
+        string token_ticker = 1;
+        string token_name = 2;
+        string token_document_url = 3;
+        bytes token_document_hash = 4;
+        uint32 decimals = 5;
+        bytes mint_baton_hash = 6;
+        uint32 mint_baton_vout = 7;
+    }
 
-// TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs
-message TokenMetadataV1NFT1Group {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-	uint32 decimals = 5;
-    bytes mint_baton_hash = 6;
-    uint32 mint_baton_vout = 7;
-}
+    // TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs
+    message V1NFT1Group {
+        string token_ticker = 1;
+        string token_name = 2;
+        string token_document_url = 3;
+        bytes token_document_hash = 4;
+        uint32 decimals = 5;
+        bytes mint_baton_hash = 6;
+        uint32 mint_baton_vout = 7;
+    }
 
-// TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs
-message TokenMetadataV1NFT1Child {
-    bytes token_ticker = 1;
-	bytes token_name = 2;
-	bytes token_document_url = 3;
-	bytes token_document_hash = 4;
-    bytes group_id = 5;
+    // TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs
+    message V1NFT1Child {
+        string token_ticker = 1;
+        string token_name = 2;
+        string token_document_url = 3;
+        bytes token_document_hash = 4;
+        bytes group_id = 5;
+    }
 }
 
 // SlpRequiredBurn is used by clients to allow token burning
 message SlpRequiredBurn {
     Transaction.Input.Outpoint outpoint = 1;
     bytes token_id = 2;
-    uint32 token_type = 3;
+    SlpTokenType token_type = 3;
     oneof burn_intention {
         uint64 amount = 4 [jstype = JS_STRING];
         uint32 mint_baton_vout = 5;

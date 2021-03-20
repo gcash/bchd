@@ -541,8 +541,8 @@ func local_request_Bchrpc_GetMerkleProof_0(ctx context.Context, marshaler runtim
 
 }
 
-func request_Bchrpc_GetTokenMetadata_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetTokenMetadataRequest
+func request_Bchrpc_GetSlpTokenMetadata_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpTokenMetadataRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -553,13 +553,13 @@ func request_Bchrpc_GetTokenMetadata_0(ctx context.Context, marshaler runtime.Ma
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := client.GetTokenMetadata(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.GetSlpTokenMetadata(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
 
-func local_request_Bchrpc_GetTokenMetadata_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetTokenMetadataRequest
+func local_request_Bchrpc_GetSlpTokenMetadata_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpTokenMetadataRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -570,13 +570,13 @@ func local_request_Bchrpc_GetTokenMetadata_0(ctx context.Context, marshaler runt
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := server.GetTokenMetadata(ctx, &protoReq)
+	msg, err := server.GetSlpTokenMetadata(ctx, &protoReq)
 	return msg, metadata, err
 
 }
 
-func request_Bchrpc_GetParsedSlpScript_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetParsedSlpScriptRequest
+func request_Bchrpc_GetSlpParsedScript_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpParsedScriptRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -587,13 +587,13 @@ func request_Bchrpc_GetParsedSlpScript_0(ctx context.Context, marshaler runtime.
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := client.GetParsedSlpScript(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.GetSlpParsedScript(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
 
-func local_request_Bchrpc_GetParsedSlpScript_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetParsedSlpScriptRequest
+func local_request_Bchrpc_GetSlpParsedScript_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpParsedScriptRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -604,13 +604,13 @@ func local_request_Bchrpc_GetParsedSlpScript_0(ctx context.Context, marshaler ru
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := server.GetParsedSlpScript(ctx, &protoReq)
+	msg, err := server.GetSlpParsedScript(ctx, &protoReq)
 	return msg, metadata, err
 
 }
 
-func request_Bchrpc_GetTrustedSlpValidation_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetTrustedSlpValidationRequest
+func request_Bchrpc_GetSlpTrustedValidation_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpTrustedValidationRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -621,13 +621,13 @@ func request_Bchrpc_GetTrustedSlpValidation_0(ctx context.Context, marshaler run
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := client.GetTrustedSlpValidation(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.GetSlpTrustedValidation(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
 
-func local_request_Bchrpc_GetTrustedSlpValidation_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetTrustedSlpValidationRequest
+func local_request_Bchrpc_GetSlpTrustedValidation_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetSlpTrustedValidationRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -638,7 +638,7 @@ func local_request_Bchrpc_GetTrustedSlpValidation_0(ctx context.Context, marshal
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := server.GetTrustedSlpValidation(ctx, &protoReq)
+	msg, err := server.GetSlpTrustedValidation(ctx, &protoReq)
 	return msg, metadata, err
 
 }
@@ -1198,18 +1198,18 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetTokenMetadata")
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetSlpTokenMetadata")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_Bchrpc_GetTokenMetadata_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_Bchrpc_GetSlpTokenMetadata_0(rctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -1217,22 +1217,22 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 			return
 		}
 
-		forward_Bchrpc_GetTokenMetadata_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpTokenMetadata_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetParsedSlpScript_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpParsedScript_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetParsedSlpScript")
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetSlpParsedScript")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_Bchrpc_GetParsedSlpScript_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_Bchrpc_GetSlpParsedScript_0(rctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -1240,22 +1240,22 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 			return
 		}
 
-		forward_Bchrpc_GetParsedSlpScript_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpParsedScript_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetTrustedSlpValidation_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpTrustedValidation_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetTrustedSlpValidation")
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetSlpTrustedValidation")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_Bchrpc_GetTrustedSlpValidation_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_Bchrpc_GetSlpTrustedValidation_0(rctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -1263,7 +1263,7 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 			return
 		}
 
-		forward_Bchrpc_GetTrustedSlpValidation_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpTrustedValidation_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1698,63 +1698,63 @@ func RegisterBchrpcHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetTokenMetadata")
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetSlpTokenMetadata")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_Bchrpc_GetTokenMetadata_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_Bchrpc_GetSlpTokenMetadata_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_Bchrpc_GetTokenMetadata_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpTokenMetadata_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetParsedSlpScript_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpParsedScript_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetParsedSlpScript")
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetSlpParsedScript")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_Bchrpc_GetParsedSlpScript_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_Bchrpc_GetSlpParsedScript_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_Bchrpc_GetParsedSlpScript_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpParsedScript_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
-	mux.Handle("POST", pattern_Bchrpc_GetTrustedSlpValidation_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_Bchrpc_GetSlpTrustedValidation_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetTrustedSlpValidation")
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetSlpTrustedValidation")
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_Bchrpc_GetTrustedSlpValidation_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_Bchrpc_GetSlpTrustedValidation_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_Bchrpc_GetTrustedSlpValidation_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_Bchrpc_GetSlpTrustedValidation_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1912,11 +1912,11 @@ var (
 
 	pattern_Bchrpc_GetMerkleProof_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetMerkleProof"}, ""))
 
-	pattern_Bchrpc_GetTokenMetadata_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetTokenMetadata"}, ""))
+	pattern_Bchrpc_GetSlpTokenMetadata_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpTokenMetadata"}, ""))
 
-	pattern_Bchrpc_GetParsedSlpScript_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetParsedSlpScript"}, ""))
+	pattern_Bchrpc_GetSlpParsedScript_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpParsedScript"}, ""))
 
-	pattern_Bchrpc_GetTrustedSlpValidation_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetTrustedSlpValidation"}, ""))
+	pattern_Bchrpc_GetSlpTrustedValidation_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpTrustedValidation"}, ""))
 
 	pattern_Bchrpc_GetSlpGraphSearch_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpGraphSearch"}, ""))
 
@@ -1962,11 +1962,11 @@ var (
 
 	forward_Bchrpc_GetMerkleProof_0 = runtime.ForwardResponseMessage
 
-	forward_Bchrpc_GetTokenMetadata_0 = runtime.ForwardResponseMessage
+	forward_Bchrpc_GetSlpTokenMetadata_0 = runtime.ForwardResponseMessage
 
-	forward_Bchrpc_GetParsedSlpScript_0 = runtime.ForwardResponseMessage
+	forward_Bchrpc_GetSlpParsedScript_0 = runtime.ForwardResponseMessage
 
-	forward_Bchrpc_GetTrustedSlpValidation_0 = runtime.ForwardResponseMessage
+	forward_Bchrpc_GetSlpTrustedValidation_0 = runtime.ForwardResponseMessage
 
 	forward_Bchrpc_GetSlpGraphSearch_0 = runtime.ForwardResponseMessage
 

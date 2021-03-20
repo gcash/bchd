@@ -1,6 +1,6 @@
 {
   "definitions": {
-    "pbTokenMetadata": {
+    "pbSlpTokenMetadata": {
       "type": [
         "object",
         "null"
@@ -32,21 +32,21 @@
           "format": "byte"
         },
         "token_type": {
-          "$ref": "#/definitions/TokenType"
+          "$ref": "#/definitions/SlpTokenType"
         },
         "type1": {
-          "$ref": "#/definitions/pbTokenMetadataV1Fungible"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1Fungible"
         },
         "v1_nft1_group": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Group"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1NFT1Group"
         },
         "v1_nft1_child": {
-          "$ref": "#/definitions/pbTokenMetadataV1NFT1Child"
+          "$ref": "#/definitions/pbSlpTokenMetadataV1NFT1Child"
         }
       },
-      "title": "TokenMetadata is used to marshal metadata about a specific TokenID"
+      "title": "SlpTokenMetadata is used to marshal metadata about a specific TokenID"
     },
-    "pbTokenMetadataV1NFT1Child": {
+    "pbSlpTokenMetadataV1NFT1Child": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -86,7 +86,7 @@
       "description": "NOTE: group id cannot be populated until the transaction has been confirmed",
       "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
-    "pbTokenMetadataV1NFT1Group": {
+    "pbSlpTokenMetadataV1NFT1Group": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -133,9 +133,9 @@
         }
       },
       "description": "NOTE: mint baton hash/vout cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
+      "title": "SlpTokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
-    "pbTokenMetadataV1Fungible": {
+    "pbSlpTokenMetadataV1Fungible": {
       "type": "object",
       "required": [
         "token_ticker",
@@ -182,7 +182,7 @@
         }
       },
       "description": "NOTE: mint baton hash/vout cannot be populated until the transaction has been confirmed",
-      "title": "TokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
+      "title": "SlpTokenMetadataTokenType1 is used to marshal metadata specific to Type 1 token IDs"
     },
     "TransactionOutput": {
       "type": "object",
@@ -414,7 +414,7 @@
           "$ref": "#/definitions/pbSlpAction"
         },
         "token_type": {
-          "$ref": "#/definitions/TokenType"
+          "$ref": "#/definitions/SlpTokenType"
         }
       },
       "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
@@ -685,11 +685,11 @@
           "$ref": "#/definitions/pbSlpToken"
         },
         "token_metadata": {
-          "$ref": "#/definitions/pbTokenMetadata"
+          "$ref": "#/definitions/pbSlpTokenMetadata"
         }
       }
     },
-    "pbGetParsedSlpScriptResponse": {
+    "pbGetSlpParsedScriptResponse": {
       "type": "object",
       "required": [
         "parsing_error",
@@ -736,8 +736,14 @@
           "$ref": "#/definitions/pbSlpAction"
         },
         "token_type": {
-          "type": "integer",
-          "format": "int64"
+          "type": "string",
+          "enum": [
+            "VERSION_NOT_SET",
+            "V1_FUNGIBLE",
+            "V1_NFT1_CHILD",
+            "V1_NFT1_GROUP"
+          ],
+          "default": "VERSION_NOT_SET"
         },
         "v1_genesis": {
           "$ref": "#/definitions/pbSlpV1GenesisMetadata"
@@ -756,7 +762,7 @@
         }
       }
     },
-    "pbGetTrustedSlpValidationResponse": {
+    "pbGetSlpTrustedValidationResponse": {
       "type": "object",
       "required": [
         "results"
@@ -765,12 +771,12 @@
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
+            "$ref": "#/definitions/GetSlpTrustedValidationResponseValidityResult"
           }
         }
       }
     },
-    "GetTrustedSlpValidationResponseValidityResult": {
+    "GetSlpTrustedValidationResponseValidityResult": {
       "type": "object",
       "required": [
         "prev_out_hash",
@@ -798,8 +804,14 @@
           "$ref": "#/definitions/pbSlpAction"
         },
         "token_type": {
-          "type": "integer",
-          "format": "int64"
+          "type": "string",
+          "enum": [
+            "VERSION_NOT_SET",
+            "V1_FUNGIBLE",
+            "V1_NFT1_CHILD",
+            "V1_NFT1_GROUP"
+          ],
+          "default": "VERSION_NOT_SET"
         },
         "v1_token_amount": {
           "type": "string",
@@ -836,14 +848,15 @@
       ],
       "default": "UNKNOWN_OR_INVALID"
     },
-    "TokenType": {
-      "type": "integer",
-      "format": "int64",
+    "SlpTokenType": {
+      "type": "string",
       "enum": [
-        1,
-        65,
-        129
-      ]
+        "VERSION_NOT_SET",
+        "V1_FUNGIBLE",
+        "V1_NFT1_CHILD",
+        "V1_NFT1_GROUP"
+      ],
+      "default": "VERSION_NOT_SET"
     },
     "MintBatonHash": {
       "type": [
