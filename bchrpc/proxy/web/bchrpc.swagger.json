@@ -484,40 +484,6 @@
         ]
       }
     },
-    "/v1/GetSlpParsedScript": {
-      "post": {
-        "summary": "GetSlpParsedScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
-        "operationId": "bchrpc_GetSlpParsedScript",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/pbGetSlpParsedScriptResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/pbGetSlpParsedScriptRequest"
-            }
-          }
-        ],
-        "tags": [
-          "bchrpc"
-        ]
-      }
-    },
-<<<<<<< HEAD
     "/v1/GetSlpGraphSearch": {
       "post": {
         "summary": "GraphSearch returns all the transactions needed for a client to validate an SLP graph",
@@ -552,10 +518,40 @@
         ]
       }
     },
-    "/v1/GetTokenMetadata": {
-=======
+    "/v1/GetSlpParsedScript": {
+      "post": {
+        "summary": "GetSlpParsedScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
+        "operationId": "bchrpc_GetSlpParsedScript",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpParsedScriptResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpParsedScriptRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetSlpTokenMetadata": {
->>>>>>> master
       "post": {
         "summary": "GetSlpTokenMetadata return slp token metadata for one or more tokens.",
         "description": "**Requires SlpIndex**",
@@ -1703,7 +1699,6 @@
         }
       }
     },
-<<<<<<< HEAD
     "pbGetSlpGraphSearchRequest": {
       "type": "object",
       "properties": {
@@ -1732,8 +1727,6 @@
         }
       }
     },
-    "pbGetTokenMetadataRequest": {
-=======
     "pbGetSlpParsedScriptRequest": {
       "type": "object",
       "properties": {
@@ -1777,7 +1770,6 @@
       }
     },
     "pbGetSlpTokenMetadataRequest": {
->>>>>>> master
       "type": "object",
       "properties": {
         "token_ids": {
@@ -1808,6 +1800,9 @@
           "items": {
             "$ref": "#/definitions/GetSlpTrustedValidationRequestQuery"
           }
+        },
+        "include_graphsearch_count": {
+          "type": "boolean"
         }
       }
     },
@@ -1844,36 +1839,7 @@
           "description": "A marshaled transaction."
         },
         "token_metadata": {
-<<<<<<< HEAD
-          "$ref": "#/definitions/pbTokenMetadata"
-        }
-      }
-    },
-    "pbGetTrustedSlpValidationRequest": {
-      "type": "object",
-      "properties": {
-        "queries": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationRequestQuery"
-          }
-        },
-        "include_graphsearch_count": {
-          "type": "boolean"
-        }
-      }
-    },
-    "pbGetTrustedSlpValidationResponse": {
-      "type": "object",
-      "properties": {
-        "results": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/GetTrustedSlpValidationResponseValidityResult"
-          }
-=======
           "$ref": "#/definitions/pbSlpTokenMetadata"
->>>>>>> master
         }
       }
     },
