@@ -71,6 +71,39 @@ func TestMuSession(t *testing.T) {
 	}
 }
 
+func TestSignMuSig(t *testing.T) {
+	m := sha256.Sum256([]byte("hello world"))
+
+	for i := 0; i < 32; i++ {
+		privkeys := make([]*PrivateKey, 3)
+		pubkeys := make([]*PublicKey, 3)
+
+		for x := 0; x < 3; x++ {
+			priv, err := NewPrivateKey(S256())
+			if err != nil {
+				t.Fatal(err)
+			}
+			privkeys[x] = priv
+			pubkeys[x] = priv.PubKey()
+		}
+
+		signature, err := SignMuSig(m[:], privkeys...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pubkey, err := AggregatePublicKeys(pubkeys...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		valid := signature.Verify(m[:], pubkey)
+		if !valid {
+			t.Fatal("invalid signature")
+		}
+	}
+}
+
 func BenchmarkAggregatePublicKeys(b *testing.B) {
 	priv1, err := NewPrivateKey(S256())
 	if err != nil {
