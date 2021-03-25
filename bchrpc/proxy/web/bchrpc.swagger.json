@@ -920,7 +920,7 @@
           "format": "int64"
         }
       },
-      "title": "TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs"
+      "title": "V1Fungible is used to marshal metadata specific to Type 1 token IDs"
     },
     "SlpTokenMetadataV1NFT1Child": {
       "type": "object",
@@ -943,7 +943,7 @@
           "format": "byte"
         }
       },
-      "title": "TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
+      "title": "V1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs"
     },
     "SlpTokenMetadataV1NFT1Group": {
       "type": "object",
@@ -974,7 +974,7 @@
           "format": "int64"
         }
       },
-      "title": "TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
+      "title": "V1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs"
     },
     "SlpTransactionInfoBurnFlags": {
       "type": "string",
@@ -1230,6 +1230,10 @@
         },
         "invalid_reason": {
           "type": "string"
+        },
+        "best_height": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },

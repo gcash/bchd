@@ -481,6 +481,7 @@ message CheckSlpTransactionRequest {
 message CheckSlpTransactionResponse {
     bool is_valid = 1;
     string invalid_reason = 2;
+    int32 best_height = 3;
 }
 
 // Request to subscribe or unsubscribe from a stream of transactions.
@@ -933,7 +934,7 @@ message SlpTokenMetadata {
         V1NFT1Child v1_nft1_child = 5;
     }
 
-    // TokenMetadataV1Fungible is used to marshal metadata specific to Type 1 token IDs
+    // V1Fungible is used to marshal metadata specific to Type 1 token IDs
     message V1Fungible {
         string token_ticker = 1;
         string token_name = 2;
@@ -944,7 +945,7 @@ message SlpTokenMetadata {
         uint32 mint_baton_vout = 7;
     }
 
-    // TokenMetadataV1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs
+    // V1NFT1Group is used to marshal metadata specific to NFT1 Group token IDs
     message V1NFT1Group {
         string token_ticker = 1;
         string token_name = 2;
@@ -955,7 +956,7 @@ message SlpTokenMetadata {
         uint32 mint_baton_vout = 7;
     }
 
-    // TokenMetadataV1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs
+    // V1NFT1Child is used to marshal metadata specific to NFT1 Child token IDs
     message V1NFT1Child {
         string token_ticker = 1;
         string token_name = 2;
