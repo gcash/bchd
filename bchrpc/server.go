@@ -1512,13 +1512,15 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 	// slpValid() and slpInvalid() are helpers to keep the return statements clean
 	slpValid := func() *pb.CheckSlpTransactionResponse {
 		return &pb.CheckSlpTransactionResponse{
-			IsValid: true,
+			IsValid:    true,
+			BestHeight: s.chain.BestSnapshot().Height,
 		}
 	}
 	slpInvalid := func(reason string) *pb.CheckSlpTransactionResponse {
 		return &pb.CheckSlpTransactionResponse{
 			IsValid:       false,
 			InvalidReason: reason,
+			BestHeight:    s.chain.BestSnapshot().Height,
 		}
 	}
 
