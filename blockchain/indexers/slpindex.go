@@ -602,9 +602,11 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			go idx.AddGraphSearchTxn(tx)
 		}
 
-		idx.RemoveMempoolSlpTxs(block.Transactions())
-		log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
 	}
+
+	// remove txn items from mempool cache
+	idx.removeMempoolSlpTxs(block.Transactions())
+	log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
 
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
@@ -1130,9 +1132,9 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	return valid, nil
 }
 
-// RemoveMempoolSlpTxs removes a list of transactions from the temporary cache that holds
+// removeMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
-func (idx *SlpIndex) RemoveMempoolSlpTxs(txs []*bchutil.Tx) {
+func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
 	// if slp graph search enabled and is still loading so we don't miss any slp txns
 	if idx.config.SlpGraphSearchEnabled && (idx.graphSearchDb == nil || !idx.graphSearchDb.IsLoaded()) {
 		return

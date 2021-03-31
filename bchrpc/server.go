@@ -2969,8 +2969,6 @@ func (s *GrpcServer) slpEventHandler() {
 
 			continue
 		case *rpcEventBlockConnected:
-			block := event
-			s.slpIndex.RemoveMempoolSlpTxs(block.Transactions())
 			continue
 		}
 	}
