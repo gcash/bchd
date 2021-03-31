@@ -578,6 +578,9 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		}
 	}
 
+	// Remove block transactions from the slp mempool cache
+	idx.removeMempoolSlpTxs(block.Transactions())
+
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
 	//
@@ -959,9 +962,9 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	return valid, err
 }
 
-// RemoveMempoolSlpTxs removes a list of transactions from the temporary cache that holds
+// removeMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
-func (idx *SlpIndex) RemoveMempoolSlpTxs(txs []*bchutil.Tx) {
+func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
 	idx.cache.RemoveMempoolSlpTxItems(txs)
 }
 

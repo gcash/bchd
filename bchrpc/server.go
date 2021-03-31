@@ -2848,8 +2848,6 @@ func (s *GrpcServer) slpEventHandler() {
 			s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
 			continue
 		case *rpcEventBlockConnected:
-			block := event
-			s.slpIndex.RemoveMempoolSlpTxs(block.Transactions())
 			continue
 		}
 	}
