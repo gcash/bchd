@@ -255,6 +255,11 @@ type SyncManager struct {
 	// signal that it has finished the UTXO set download before proceeding
 	// to make the standard getblocks request.
 	fastSyncMode bool
+
+	// regTestSyncAnyHost allows any host when regression test network is
+	// being used.  For example, when running regression test network in
+	// docker containers the host is not a localhost.
+	regTestSyncAnyHost bool
 }
 
 // resetHeaderState sets the headers-first mode state to values appropriate for
@@ -450,7 +455,7 @@ func (sm *SyncManager) isSyncCandidate(peer *peerpkg.Peer) bool {
 	// Typically a peer is not a candidate for sync if it's not a full node,
 	// however regression test is special in that the regression tool is
 	// not a full node and still needs to be considered a sync candidate.
-	if sm.chainParams == &chaincfg.RegressionNetParams {
+	if sm.chainParams == &chaincfg.RegressionNetParams && !sm.regTestSyncAnyHost {
 		// The peer is not a candidate if it's not coming from localhost
 		// or the hostname can't be determined for some reason.
 		host, _, err := net.SplitHostPort(peer.Addr())
@@ -1820,6 +1825,7 @@ func New(config *Config) (*SyncManager, error) {
 		feeEstimator:            config.FeeEstimator,
 		minSyncPeerNetworkSpeed: config.MinSyncPeerNetworkSpeed,
 		fastSyncMode:            config.FastSyncMode,
+		regTestSyncAnyHost:      config.RegTestSyncAnyHost,
 	}
 
 	best := sm.chain.BestSnapshot()

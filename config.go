@@ -155,6 +155,8 @@ type config struct {
 	TorIsolation            bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TestNet3                bool          `long:"testnet" description:"Use the test network"`
 	RegressionTest          bool          `long:"regtest" description:"Use the regression test network"`
+	RegressionTestAnyHost   bool          `long:"regtestanyhost" description:"In regression test mode, allow connections from any host, not just localhost"`
+	RegressionTestNoReset   bool          `long:"regtestnoreset" description:"In regression test mode, don't reset the network db on node restart"`
 	SimNet                  bool          `long:"simnet" description:"Use the simulation test network"`
 	AddCheckpoints          []string      `long:"addcheckpoint" description:"Add a custom checkpoint.  Format: '<height>:<hash>'"`
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`

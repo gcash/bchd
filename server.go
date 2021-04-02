@@ -3312,6 +3312,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		FeeEstimator:            s.feeEstimator,
 		MinSyncPeerNetworkSpeed: cfg.MinSyncPeerNetworkSpeed,
 		FastSyncMode:            cfg.FastSync,
+		RegTestSyncAnyHost:      cfg.RegressionTestAnyHost,
 	})
 	if err != nil {
 		return nil, err
