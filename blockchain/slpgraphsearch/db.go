@@ -8,6 +8,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/simpleledgerinc/goslp"
+	"github.com/simpleledgerinc/goslp/v1parser"
 )
 
 // Db manages slp token graphs for graph search and TODO: recently queried items
@@ -122,8 +123,13 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 		}
 	}
 
+	txMsg := tokenGraph.getTxn(hash)
+	if txMsg == nil {
+		return nil, fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
+	}
+
 	// perform the recursive graph search
-	err := gs.findInternal(hash, tokenGraph, &seen, validityCache, &txdata, &i)
+	err := gs.findInternal(txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
 	if err != nil {
 		return nil, err
 	}
@@ -133,19 +139,15 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	return txdata[0:i], nil
 }
 
-func (gs *Db) findInternal(hash *chainhash.Hash, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func (gs *Db) findInternal(txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
 
-	// check if txn is valid slp
-	txMsg := graph.getTxn(hash)
-	if txMsg == nil {
-		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
-	}
+	hash := txMsg.TxHash()
 
 	// check seen list
-	if _, ok := (*seen)[*hash]; ok {
+	if _, ok := (*seen)[hash]; ok {
 		return fmt.Errorf("txn %v already seen in graph search", hash)
 	}
-	(*seen)[*hash] = struct{}{}
+	(*seen)[hash] = struct{}{}
 
 	// add txn buffer to results
 	txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
@@ -156,16 +158,53 @@ func (gs *Db) findInternal(hash *chainhash.Hash, graph *tokenGraph, seen *map[ch
 	(*counter)++
 
 	// check exclude txids here, don't return with error
-	if _, ok := (*validityCache)[*hash]; ok {
+	if _, ok := (*validityCache)[hash]; ok {
 		//gs.logger.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
 		return nil
 	}
 
 	// loop through inputs and recurse
 	for _, txn := range txMsg.TxIn {
-		err := gs.findInternal(&txn.PreviousOutPoint.Hash, graph, seen, validityCache, txdata, counter)
+		prevTxHash := &txn.PreviousOutPoint.Hash
+		prevTxVout := txn.PreviousOutPoint.Index
+
+		inpTxMsg := graph.getTxn(prevTxHash)
+		if inpTxMsg == nil {
+			continue
+		}
+
+		// try to parse slp msg to check if this input contributes to this transaction
+		inpSlpMsg, err := v1parser.ParseSLP(inpTxMsg.TxOut[0].PkScript)
 		if err != nil {
-			//*logger.Debugf("%v", err)
+			continue
+		}
+
+		// check to see if this parent contributed
+		switch msg := inpSlpMsg.(type) {
+		case *v1parser.SlpGenesis:
+			if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+				continue
+			}
+			if prevTxVout == 1 && msg.Qty == 0 {
+				continue
+			}
+		case *v1parser.SlpMint:
+			if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+				continue
+			}
+			if prevTxVout == 1 && msg.Qty == 0 {
+				continue
+			}
+		case *v1parser.SlpSend:
+			if int(prevTxVout) > len(msg.Amounts) {
+				continue
+			}
+		default:
+			return fmt.Errorf("txn %v was parsed as an unknown kind of slp transaction", prevTxHash)
+		}
+
+		err = gs.findInternal(inpTxMsg, graph, seen, validityCache, txdata, counter)
+		if err != nil {
 			continue
 		}
 	}
