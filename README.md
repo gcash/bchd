@@ -109,7 +109,8 @@ docker build . -t bchd
 To run the image:
 
 ```
-docker run bchd
+# Use stop-timeout to make sure the container exits cleanly!
+docker run --stop-timeout=1200 bchd
 ```
 
 To run `bchctl` and connect to your `bchd` instance:

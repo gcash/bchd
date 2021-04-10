@@ -204,8 +204,8 @@ func (s *GrpcServer) subscribeEvents() *rpcEventSubscription {
 
 	// Start a queue handler for the subscription so that slow connections don't
 	// hold up faster ones.
+	s.wg.Add(1)
 	go func() {
-		s.wg.Add(1)
 		queueHandler(sub.in, sub.out, s.quit)
 		s.wg.Done()
 	}()
@@ -1605,13 +1605,15 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 	// slpValid() and slpInvalid() are helpers to keep the return statements clean
 	slpValid := func() *pb.CheckSlpTransactionResponse {
 		return &pb.CheckSlpTransactionResponse{
-			IsValid: true,
+			IsValid:    true,
+			BestHeight: s.chain.BestSnapshot().Height,
 		}
 	}
 	slpInvalid := func(reason string) *pb.CheckSlpTransactionResponse {
 		return &pb.CheckSlpTransactionResponse{
 			IsValid:       false,
 			InvalidReason: reason,
+			BestHeight:    s.chain.BestSnapshot().Height,
 		}
 	}
 
