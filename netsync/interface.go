@@ -42,4 +42,6 @@ type Config struct {
 	MinSyncPeerNetworkSpeed uint64
 
 	FastSyncMode bool
+
+	RegTestSyncAnyHost bool
 }

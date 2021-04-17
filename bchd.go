@@ -192,6 +192,11 @@ func removeRegressionDB(dbPath string) error {
 		return nil
 	}
 
+	// Don't reset the db if specified by config
+	if cfg.RegressionTestNoReset {
+		return nil
+	}
+
 	// Remove the old regression test database if it already exists.
 	fi, err := os.Stat(dbPath)
 	if err == nil {

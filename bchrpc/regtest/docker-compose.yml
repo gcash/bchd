@@ -38,3 +38,18 @@ services:
       - "bchd1"
       - "bchd2"
     command: tail -F anything
+  bchd3: # a third bchd container for the purpose of manual observation separate from automated tests (see tools directory)
+    image: "bchd_regtest"
+    build:
+      dockerfile: "./bchrpc/regtest/Dockerfile.bchd"
+      context: "../.."
+    volumes: 
+      - ./:/data  # stores bchd.sh here
+    entrypoint: ["tail", "-F", "anything"]  # this allows us to start and stop a node via docker-compose exec
+    depends_on:
+      - "bchd1"
+      - "bchd2"
+    expose:
+      - "18444"        # bitcoin regtest network
+    ports:
+      - "18337:18334"  # RPC service
