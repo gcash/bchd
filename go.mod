@@ -15,10 +15,12 @@ require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.4.3
 	github.com/gorilla/mux v1.8.0
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.1.0
 	github.com/improbable-eng/grpc-web v0.13.0
 	github.com/jessevdk/go-flags v0.0.0-20181221193153-c0795c8afcf4
 	github.com/jrick/logrotate v1.0.0
+	github.com/prometheus/client_golang v1.9.0
 	github.com/simpleledgerinc/goslp v0.0.0-20210310142058-5920ead5c7a0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1

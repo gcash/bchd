@@ -52,7 +52,9 @@ func bchdMain(serverChan chan<- *server) error {
 	cfg = tcfg
 	defer func() {
 		if logRotator != nil {
+			bchdLog.Infof("Closing: logRotator")
 			logRotator.Close()
+			bchdLog.Infof("Closed: logRotator")
 		}
 	}()
 
@@ -113,6 +115,7 @@ func bchdMain(serverChan chan<- *server) error {
 		// Ensure the database is sync'd and closed on shutdown.
 		bchdLog.Infof("Gracefully shutting down the database...")
 		db.Close()
+		bchdLog.Infof("Database has gracefully shutdown")
 	}()
 
 	// Return now if an interrupt signal was triggered.
