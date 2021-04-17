@@ -165,7 +165,7 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 	for _, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := bchutil.DecodeAddress(addrStr, params)
 		if err != nil {
-			return fmt.Errorf("Unable to decode address '%v': %v", addrStr, err)
+			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
 		f.AddAddress(addr)
 	}

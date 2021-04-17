@@ -27,6 +27,9 @@ func TestSlpInputUnitTests(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	data, err := ioutil.ReadAll(inputTestsFile)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	defer inputTestsFile.Close()
 
 	type TxItem struct {
@@ -71,6 +74,9 @@ func TestSlpInputUnitTests(t *testing.T) {
 				continue
 			}
 			tokenID, err := goslp.GetSlpTokenID(tx)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 			tokenIDHash, err := chainhash.NewHash(tokenID[:])
 			if err != nil {
 				t.Fatal(err.Error())
@@ -114,7 +120,10 @@ func TestSlpInputUnitTests(t *testing.T) {
 		}
 
 		// check the slp txns
-		isValid, _, _ := indexers.CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		isValid, _, err := indexers.CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
 		if isValid != test.Should[0].Valid {
 			t.Errorf("Test %d: Expected valid = %t, got %t, \n%s", i, test.Should[0].Valid, isValid, test.Description)
 		}
