@@ -857,7 +857,7 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Validate the the minrelaytxfee.
+	// Validate the minrelaytxfee.
 	cfg.minRelayTxFee, err = bchutil.NewAmount(cfg.MinRelayTxFee)
 	if err != nil {
 		str := "%s: invalid minrelaytxfee: %v"
@@ -867,7 +867,7 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Limit the max orphan count to a sane vlue.
+	// Limit the max orphan count to a sane value.
 	if cfg.MaxOrphanTxs < 0 {
 		str := "%s: The maxorphantx option may not be less than 0 " +
 			"-- parsed [%d]"
