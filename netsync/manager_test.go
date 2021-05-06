@@ -85,9 +85,10 @@ func (ctx *testContext) Setup(config *testConfig) error {
 
 	txMemPool := mempool.New(&mempool.Config{
 		Policy: mempool.Policy{
-			MaxTxVersion:    2,
-			MaxOrphanTxSize: 100,
-			MaxOrphanTxs:    1,
+			MaxTxVersion:            2,
+			MaxOrphanTxSize:         100,
+			MaxOrphanTxs:            1,
+			MaxRelayDataCarrierSize: txscript.MaxDataCarrierSize,
 		},
 		ChainParams:    ctx.cfg.chainParams,
 		FetchUtxoView:  chain.FetchUtxoView,
