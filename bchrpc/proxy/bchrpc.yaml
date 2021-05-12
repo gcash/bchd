@@ -15,6 +15,9 @@ http:
   - selector: pb.bchrpc.GetSlpTrustedValidation
     post: /v1/GetSlpTrustedValidation
     body: "*"
+  - selector: pb.bchrpc.GetSlpGraphSearch
+    post: /v1/GetSlpGraphSearch
+    body: "*"
   - selector: pb.bchrpc.GetMempoolInfo
     post: /v1/GetMempoolInfo
     body: "*"

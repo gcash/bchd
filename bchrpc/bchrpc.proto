@@ -99,6 +99,11 @@ service bchrpc {
     // **Requires SlpIndex**
     rpc GetSlpTrustedValidation(GetSlpTrustedValidationRequest) returns (GetSlpTrustedValidationResponse) {}
 
+    // GraphSearch returns all the transactions needed for a client to validate an SLP graph
+    //
+    // **Requires SlpIndex and SlpGraphSearch**
+    rpc GetSlpGraphSearch (GetSlpGraphSearchRequest) returns (GetSlpGraphSearchResponse) {}
+
     // CheckSlpTransaction checks the validity of a supposed slp transaction before it is broadcasted.
     rpc CheckSlpTransaction(CheckSlpTransactionRequest) returns (CheckSlpTransactionResponse) {}
 
@@ -202,6 +207,8 @@ message GetBlockchainInfoResponse {
     // be used with slp related rpc methods and also causes slp metadata to be added
     // in some of the existing rpc methods.
     bool slp_index = 8;
+    // When `slp_graphsearch` is true, the node is able to handle calls to slp graph search
+    bool slp_graphsearch = 9;
 }
 
 message GetBlockInfoRequest {
@@ -569,8 +576,10 @@ message GetSlpTrustedValidationRequest {
     message Query {
         bytes prev_out_hash = 1;
         uint32 prev_out_vout = 2;
+        repeated bytes graphsearch_valid_hashes = 3;
     }
     repeated Query queries = 1;
+    bool include_graphsearch_count = 2;
 }
 
 message GetSlpTrustedValidationResponse {
@@ -585,9 +594,19 @@ message GetSlpTrustedValidationResponse {
             bool v1_mint_baton = 7;
         }
         bytes slp_txn_opreturn = 8;
+        uint32 graphsearch_txn_count = 9;
     }
 
     repeated ValidityResult results = 1;
+}
+
+message GetSlpGraphSearchRequest {
+    bytes hash = 1;
+    repeated bytes valid_hashes = 2;
+}
+
+message GetSlpGraphSearchResponse {
+    repeated bytes txdata = 1;
 }
 
 // NOTIFICATIONS

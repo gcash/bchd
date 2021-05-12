@@ -20,7 +20,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
-const bchdTestNode = "bchd.ny1.simpleledger.io:443"
+const bchdTestNode = "bchd-mainnet.electroncash.de:8335"
 const logRequestJSON = true // log JSON of request and responses (to glog)
 
 const dustLimit = 546
@@ -472,9 +472,11 @@ func TestGetSlpTrustedValidation(t *testing.T) {
 
 	res, err := httpClient.RequestRaw(method, D{
 		"queries": []D{{
-			"prev_out_hash": transactionIDBase64,
-			"prev_out_vout": prevOutVout,
+			"prev_out_hash":            transactionIDBase64,
+			"prev_out_vout":            prevOutVout,
+			"graphsearch_valid_hashes": nil,
 		}},
+		"include_graphsearch_count": true,
 	})
 
 	if err != nil {

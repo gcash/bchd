@@ -399,15 +399,21 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		return nil, status.Error(codes.Internal, "unknown network parameters")
 	}
 
+	gsEnabled := false
+	if s.slpIndex != nil {
+		gsEnabled = s.slpIndex.GraphSearchEnabled()
+	}
+
 	resp := &pb.GetBlockchainInfoResponse{
-		AddrIndex:     s.addrIndex != nil,
-		TxIndex:       s.txIndex != nil,
-		SlpIndex:      s.slpIndex != nil,
-		BestHeight:    bestSnapShot.Height,
-		BestBlockHash: bestSnapShot.Hash[:],
-		BitcoinNet:    net,
-		Difficulty:    getDifficultyRatio(bestSnapShot.Bits, s.chainParams),
-		MedianTime:    bestSnapShot.MedianTime.Unix(),
+		AddrIndex:      s.addrIndex != nil,
+		TxIndex:        s.txIndex != nil,
+		SlpIndex:       s.slpIndex != nil,
+		SlpGraphsearch: gsEnabled,
+		BestHeight:     bestSnapShot.Height,
+		BestBlockHash:  bestSnapShot.Hash[:],
+		BitcoinNet:     net,
+		Difficulty:     getDifficultyRatio(bestSnapShot.Bits, s.chainParams),
+		MedianTime:     bestSnapShot.MedianTime.Unix(),
 	}
 	return resp, nil
 }
@@ -1271,7 +1277,7 @@ func (s *GrpcServer) GetSlpTokenMetadata(ctx context.Context, req *pb.GetSlpToke
 
 		tm, err := s.marshalTokenMetadata(*tokenID)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "token ID %v does not exist", tokenID)
+			return nil, status.Errorf(codes.Aborted, "token ID %v does not exist", hex.EncodeToString(hash))
 		}
 
 		tokenMetadata = append(tokenMetadata, tm)
@@ -1460,10 +1466,97 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 		}
 
 		result.SlpTxnOpreturn = entry.SlpOpReturn
+
+		// include graph search count if client includes any value for excludes
+		if req.IncludeGraphsearchCount {
+			hash, err := chainhash.NewHash(query.PrevOutHash)
+			if err != nil {
+				return nil, status.Errorf(codes.Aborted, "slp graph search error: %v", err)
+			}
+
+			validityCache := make(map[chainhash.Hash]struct{})
+			if query.GraphsearchValidHashes != nil {
+				for _, validTxid := range query.GraphsearchValidHashes {
+					hash, err := chainhash.NewHash(validTxid)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "graph search validity txid %v, error: %v", hex.EncodeToString(validTxid), err)
+					}
+					validityCache[*hash] = struct{}{}
+				}
+			}
+
+			gsDb, err := s.slpIndex.GetGraphSearchDb()
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
+			txData, err := gsDb.Find(hash, &entry.TokenIDHash, &validityCache)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "%v", err)
+			}
+			log.Infof("SLP graph search count is %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
+			result.GraphsearchTxnCount = uint32(len(txData[:]))
+		}
+
 		results[i] = result
 	}
 	resp.Results = results
 	return resp, nil
+}
+
+// GetSlpGraphSearch returns all transactions required for a client to validate locally
+func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphSearchRequest) (*pb.GetSlpGraphSearchResponse, error) {
+
+	if !s.slpIndex.GraphSearchEnabled() {
+		return nil, status.Error(codes.Unavailable, "slpgraphsearch must be enabled")
+	}
+
+	if s.slpIndex == nil || s.txIndex == nil {
+		return nil, status.Error(codes.Unavailable, "slpindex and txindex must be enabled")
+	}
+
+	if _, err := s.slpIndex.GetGraphSearchDb(); err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+
+	// check slp validity, get graph tokenId
+	hash, err := chainhash.NewHash(req.GetHash())
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "graph search hash %s: %v", hex.EncodeToString(req.GetHash()), err)
+	}
+	log.Debugf("received graph search for txid: %v", hash)
+
+	entry, err := s.getSlpIndexEntry(hash)
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txn: %s: %v", hash, err)
+	}
+
+	// get map for token and do graph search
+	gsDb, err := s.slpIndex.GetGraphSearchDb()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+
+	// setup the validity cache
+	validityCache := make(map[chainhash.Hash]struct{})
+	for _, txHash := range req.GetValidHashes() {
+		hash, err := chainhash.NewHash(txHash)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "graph search validity cache invalid hash %v", txHash)
+		}
+		validityCache[*hash] = struct{}{}
+	}
+
+	// perform the graph search
+	txData, err := gsDb.Find(hash, &entry.TokenIDHash, &validityCache)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%v", err)
+	}
+
+	res := &pb.GetSlpGraphSearchResponse{}
+	res.Txdata = txData
+	log.Infof("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
+
+	return res, nil
 }
 
 func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
@@ -2705,17 +2798,17 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 	}
 	tokenIDRev, err := chainhash.NewHash(tokenIDHash)
 	if err != nil {
-		log.Criticalf("failed to create chainhash from token ID from %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+		log.Criticalf("Failed to create chainhash from token ID from %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
 		return -1, err
 	}
 	genEntry, err := s.getSlpIndexEntry(tokenIDRev)
 	if err != nil {
-		log.Criticalf("failed to fetch slp entry for %s, with error: %v, with error: %v", tokenIDRev, err)
+		log.Criticalf("Failed to fetch slp entry for %s, with error: %v, with error: %v", tokenIDRev, err)
 		return -1, err
 	}
 	genSlpMsg, err := v1parser.ParseSLP(genEntry.SlpOpReturn)
 	if err != nil {
-		log.Criticalf("failed to parse slp message for %v, with error: %v", tokenIDRev, err)
+		log.Criticalf("Failed to parse slp message for %v, with error: %v", tokenIDRev, err)
 		return -1, err
 	}
 	decimals := genSlpMsg.(*v1parser.SlpGenesis).Decimals
@@ -2746,7 +2839,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 
 	slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
 	if err != nil {
-		log.Criticalf("failed to parse an slp entry message stored in the index db for txn: %v, this should never happen.", hash)
+		log.Criticalf("Failed to parse an slp entry message stored in the index db for txn: %v, this should never happen.", hash)
 		return nil, err
 	}
 
@@ -2831,7 +2924,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 	return slpToken, nil
 }
 
-// slpEventHandler keeps the SlpEntryCache updated on transaction and block events
+// slpEventHandler handles valid slp transaction events from mempool and block
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 //
@@ -2840,6 +2933,13 @@ func (s *GrpcServer) slpEventHandler() {
 	if s.slpIndex == nil {
 		return
 	}
+
+	// track the first mempool event for starting certain services (e.g., graph search)
+	firstMempoolTxnSeen := false
+
+	// use this wait group to ensure sure the graph search db is created before we try to add
+	// any txns to the graph search db
+	initWg := sync.WaitGroup{}
 
 	subscription := s.subscribeEvents()
 	defer subscription.Unsubscribe()
@@ -2850,7 +2950,28 @@ func (s *GrpcServer) slpEventHandler() {
 		case *rpcEventTxAccepted:
 			txDesc := event
 			log.Debugf("new mempool txn %v", txDesc.Tx.Hash())
-			s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
+
+			// kickoff slp graph search loading here
+			if !firstMempoolTxnSeen {
+				firstMempoolTxnSeen = true
+				if s.slpIndex.GraphSearchEnabled() {
+					log.Debug("starting slp graph search")
+					fetchTxn := func(txnHash *chainhash.Hash) ([]byte, error) {
+						txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
+						return txn, err
+					}
+					initWg.Add(1)
+					go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &initWg, &s.shutdown)
+				}
+			}
+
+			// validate new slp txns
+			isSlpValid := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
+			if isSlpValid && s.slpIndex.GraphSearchEnabled() {
+				initWg.Wait()
+				go s.slpIndex.AddGraphSearchTxn(txDesc.Tx.MsgTx())
+			}
+
 			continue
 		case *rpcEventBlockConnected:
 			continue
@@ -2898,12 +3019,12 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 	}
 	tokenIDRev, err := chainhash.NewHash(tokenIDHash)
 	if err != nil {
-		log.Criticalf("failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+		log.Criticalf("Failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
 		return nil, err
 	}
 	entry, err := s.getSlpIndexEntry(tokenIDRev)
 	if err != nil {
-		log.Criticalf("failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+		log.Criticalf("Failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
 		return nil, err
 	}
 
@@ -3199,7 +3320,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 		inputToken, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index, nil)
 		if err != nil {
-			log.Debugf("no slp token for input %v:%s, error: %v", input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index), err)
+			log.Debugf("error: %v (input %v:%s)", err, input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index))
 		}
 
 		in := &pb.Transaction_Input{

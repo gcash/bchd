@@ -5,12 +5,17 @@
 package indexers
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
+	"sync"
+	"sync/atomic"
 
 	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
@@ -61,32 +66,41 @@ var (
 // unique uint32 ID back to the TokenID hash.
 //
 //
+// DB Bucket Variable: "tokenIDByHashIndexBucketName"
 // The serialized format for keys and values in the TokenID hash to ID bucket is:
 //   <hash> = <ID>
 //
 //   Field           Type              Size
+//   -----           -----             -----
 //   TokenID hash    chainhash.Hash    32 bytes
 //   ID              uint32            4 bytes
-//   -----
-//   Total: 36 bytes
 //
+//   Total Item Size: 36 bytes
+//
+//
+// DB Bucket Variable: "tokenMetadataByIDIndexBucketName"
 // The serialized format for keys and values in the ID to TokenID hash bucket is:
 //   <ID> = <token id txid><mint baton hash><uint32>
 //
+//
 //   Field            					Type              Size
+//   -----                              -----             -----
 //   ID               					uint32            4 bytes
 //   TokenID hash                   	chainhash.Hash    32 bytes
 //   slp version	    				uint16            2 bytes
 //   Mint baton hash (or nft group id)  chainhash.Hash    32 bytes (optional)
 //   Mint baton vout  					uint32			  4 bytes  (optional)
-//   -----
-//   Max: 74 bytes max
 //
+//   Max Item Size: 74 bytes
+//   Min Item Size: 36 bytes
+//
+//
+// DB Bucket Variable: "slpIndexKey"
 // The serialized format for the keys and values in the slp index bucket is:
-//
 //   <txhash> = <token ID><slp version><slp op_return>
 //
 //   Field           	Type              Size
+//   -----				-----			  -----
 //   txhash          	chainhash.Hash    32 bytes
 //   token ID        	uint32            4 bytes
 //   slp version	    uint16            2 bytes
@@ -388,10 +402,11 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 // SlpIndex implements a transaction by hash index.  That is to say, it supports
 // querying all transactions by their hash.
 type SlpIndex struct {
-	db         database.DB
-	curTokenID uint32
-	config     *SlpConfig
-	cache      *SlpCache
+	db            database.DB
+	curTokenID    uint32
+	config        *SlpConfig
+	cache         *SlpCache
+	graphSearchDb *slpgraphsearch.Db
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -437,6 +452,11 @@ func (idx *SlpIndex) Init() error {
 
 	log.Infof("Current number of slp tokens in index: %v", idx.curTokenID)
 	return nil
+}
+
+// GraphSearchEnabled indicates if slp graph search is enabled
+func (idx *SlpIndex) GraphSearchEnabled() bool {
+	return idx.config.SlpGraphSearchEnabled
 }
 
 // StartBlock is used to indicate the proper start block for the index manager.
@@ -576,6 +596,12 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		if txnInputsBurned != nil {
 			burnedInputs = append(burnedInputs, txnInputsBurned...)
 		}
+
+		// Add Graph search entries here once the gs db is available
+		if idx.GraphSearchEnabled() && isValid {
+			go idx.AddGraphSearchTxn(tx)
+		}
+
 	}
 
 	// Remove block transactions from the slp mempool cache
@@ -594,6 +620,146 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		}
 	}
 	return nil
+}
+
+// AddGraphSearchTxn
+func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
+	if idx.graphSearchDb == nil {
+		return
+	}
+
+	if !idx.graphSearchDb.IsReady() {
+		idx.graphSearchDb.SetReady()
+	}
+
+	err := idx.graphSearchDb.AddTxn(tx)
+	if err != nil {
+		log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
+	}
+}
+
+// LoadSlpGraphSearchDb is used to load data needed for slp graph search
+//
+// NOTE: this is launched as a goroutine and does not return errors!
+//
+func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), initWg *sync.WaitGroup, interupt *int32) {
+
+	// this method shouldn't be called more than once or if gs is disabled
+	if idx.graphSearchDb != nil || !idx.config.SlpGraphSearchEnabled {
+		return
+	}
+
+	idx.graphSearchDb = slpgraphsearch.NewDb()
+
+	// now that graphSearchDB is set we can call Done()
+	if initWg != nil {
+		initWg.Done()
+	}
+
+	// build an initial map containing all slp transactions mapped to their token ID hash
+	txnTokenIDMap, err := idx.buildGraphSearchTokenMap()
+	if err != nil {
+		log.Debugf("slp graph search failed to load with error: %v", err)
+		return
+	}
+
+	// loop through the map and load full transactions into s.slpGraphSearchDb
+	//
+	// Future TODO: this can be optimized by storing slp txn block region in an index
+	//
+	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
+	//	      of token IDs for graph search can be added.
+	log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnTokenIDMap)))
+	getTxn := func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) error {
+		if wg != nil {
+			defer wg.Done()
+		}
+
+		var msgTx wire.MsgTx
+
+		txBytes, err := fetchTxn(&txnHash)
+		if err != nil {
+			log.Debugf("slp graph search transaction %v was not found")
+		} else {
+			err = msgTx.Deserialize(bytes.NewReader(txBytes))
+			if err != nil {
+				return fmt.Errorf("loadSlpGraphSearchDb failed to deserialize transaction: %v", err)
+			}
+		}
+
+		return idx.graphSearchDb.AddTxn(&msgTx)
+	}
+
+	// Limit the number of goroutines to do script validation based on the
+	// number of processor cores.  This helps ensure the system stays
+	// reasonably responsive under heavy load.
+	maxGoroutines := runtime.NumCPU() * 3
+	guard := make(chan struct{}, maxGoroutines)
+	var wg sync.WaitGroup
+
+	txnCount := 0
+	for txnHash, tokenIDHash := range *txnTokenIDMap {
+		if interupt != nil && atomic.LoadInt32(interupt) == 1 {
+			log.Warn("slp graph search loading interupted signal received")
+			break
+		}
+
+		if txnCount > 0 && txnCount%10000 == 0 {
+			log.Infof("slp graph search %s transactions loaded...", fmt.Sprint(txnCount))
+		}
+		txnCount++
+
+		if len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
+			if txnCount == 1 {
+				log.Debug("loading slp graph search transactions concurrently")
+			}
+			guard <- struct{}{}
+			wg.Add(1)
+			go func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) {
+				err := getTxn(txnHash, tokenIDHash, wg)
+				if err != nil {
+					log.Warn(err.Error())
+				}
+				<-guard
+			}(txnHash, tokenIDHash, &wg)
+		} else {
+			err := getTxn(txnHash, tokenIDHash, nil)
+			if err != nil {
+				log.Warn(err.Error())
+			}
+		}
+	}
+
+	wg.Wait()
+
+	// try to set db state to loaded
+	err = idx.graphSearchDb.SetLoaded()
+	if err != nil {
+		log.Debug("couldn't set state to loaded: %v", err)
+	} else {
+		log.Infof("slp graph search finished fetching %s transactions", fmt.Sprint(txnCount))
+	}
+}
+
+// GetGraphSearchDb checks if graph search is enabled and returns the db
+func (idx *SlpIndex) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
+	if !idx.config.SlpGraphSearchEnabled {
+		return nil, errors.New("slp graph search is not enabled")
+	}
+
+	if idx.graphSearchDb == nil {
+		return nil, errors.New("an internal error has occurred, slp graph search db has not been created yet")
+	}
+
+	if !idx.graphSearchDb.IsLoaded() {
+		return idx.graphSearchDb, fmt.Errorf("graph search db is loading")
+	}
+
+	if !idx.graphSearchDb.IsReady() {
+		return idx.graphSearchDb, fmt.Errorf("graph search db is waiting on the next block")
+	}
+
+	return idx.graphSearchDb, nil
 }
 
 func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) (bool, error) {
@@ -964,22 +1130,74 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	}
 
 	valid, _, err := CheckSlpTx(msgTx, getSlpIndexEntry, putTxIndexEntry)
+	if err != nil {
+		return valid, err
+	}
 
-	return valid, err
+	return valid, nil
 }
 
 // removeMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
 func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
+	// skip removal if slp graph search enabled but is still loading, this way gs db won't miss any txns
+	if idx.config.SlpGraphSearchEnabled && (idx.graphSearchDb == nil || !idx.graphSearchDb.IsLoaded()) {
+		return
+	}
 	idx.cache.RemoveMempoolSlpTxItems(txs)
+}
+
+// buildGraphSearchTokenMap is used to load transactions and associated tokenID
+func (idx *SlpIndex) buildGraphSearchTokenMap() (*map[chainhash.Hash]*chainhash.Hash, error) {
+
+	db := make(map[chainhash.Hash]*chainhash.Hash)
+
+	err := idx.db.View(func(dbTx database.Tx) error {
+		idxBucket := dbTx.Metadata().Bucket(slpIndexKey)
+
+		// loop through all of the valid slp txn items stored in the db
+		err := idxBucket.ForEach(func(k []byte, v []byte) error {
+			ch, err := chainhash.NewHash(k)
+			if err != nil {
+				return err
+			}
+			tm, err := dbFetchTokenMetadataBySerializedID(dbTx, v[0:4])
+			if err != nil {
+				return err
+			}
+			db[*ch] = tm.TokenID
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// loop through all of the valid slp txn items in the mempool slp cache
+	err = idx.cache.ForEachMempoolItem(func(h *chainhash.Hash, e *SlpTxEntry) error {
+		db[*h] = &e.TokenIDHash
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof("SLP graph search is loading %s transactions...", fmt.Sprint(len(db)))
+	return &db, nil
 }
 
 // SlpConfig provides the proper starting height and hash
 type SlpConfig struct {
-	StartHash    *chainhash.Hash
-	StartHeight  int32
-	AddrPrefix   string
-	MaxCacheSize int
+	StartHash             *chainhash.Hash
+	StartHeight           int32
+	AddrPrefix            string
+	MaxCacheSize          int
+	SlpGraphSearchEnabled bool
 }
 
 // NewSlpIndex returns a new instance of an indexer that is used to create a
@@ -990,11 +1208,13 @@ type SlpConfig struct {
 // turn is used by the blockchain package.  This allows the index to be
 // seamlessly maintained along with the chain.
 func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
-	return &SlpIndex{
+	idx := &SlpIndex{
 		db:     db,
 		config: cfg,
 		cache:  InitSlpCache(cfg.MaxCacheSize),
 	}
+
+	return idx
 }
 
 // dropTokenIndexes drops the internal token id index.

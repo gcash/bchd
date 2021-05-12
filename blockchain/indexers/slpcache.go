@@ -101,3 +101,34 @@ func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 		delete(s.mempoolSlpTxEntries, hash)
 	}
 }
+
+// GetMempoolItem gets items from only mempool entries
+func (s *SlpCache) GetMempoolItem(hash *chainhash.Hash) *SlpTxEntry {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.mempoolSlpTxEntries[*hash]
+}
+
+// MempoolSize returns the size of the slp mempool cache
+func (s *SlpCache) MempoolSize() int {
+	s.RLock()
+	defer s.RUnlock()
+
+	return len(s.mempoolSlpTxEntries)
+}
+
+// ForEachMempoolItem provides thread-safe access to all mempool entries
+func (s *SlpCache) ForEachMempoolItem(fnc func(hash *chainhash.Hash, entry *SlpTxEntry) error) error {
+	s.RLock()
+	defer s.RUnlock()
+
+	for k, v := range s.mempoolSlpTxEntries {
+		err := fnc(&k, v)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}

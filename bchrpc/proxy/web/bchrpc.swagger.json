@@ -484,6 +484,40 @@
         ]
       }
     },
+    "/v1/GetSlpGraphSearch": {
+      "post": {
+        "summary": "GraphSearch returns all the transactions needed for a client to validate an SLP graph",
+        "description": "**Requires SlpIndex and SlpGraphSearch**",
+        "operationId": "bchrpc_GetSlpGraphSearch",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpGraphSearchResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetSlpGraphSearchRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetSlpParsedScript": {
       "post": {
         "summary": "GetSlpParsedScript returns marshalled object from parsing an slp pubKeyScript \nusing goslp package.  This endpoint does not require SlpIndex.",
@@ -839,6 +873,13 @@
         "prev_out_vout": {
           "type": "integer",
           "format": "int64"
+        },
+        "graphsearch_valid_hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
         }
       }
     },
@@ -873,6 +914,10 @@
         "slp_txn_opreturn": {
           "type": "string",
           "format": "byte"
+        },
+        "graphsearch_txn_count": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -1438,6 +1483,10 @@
         "slp_index": {
           "type": "boolean",
           "description": "When `slp_index` is true, the node has the slp index enabled and may\nbe used with slp related rpc methods and also causes slp metadata to be added\nin some of the existing rpc methods."
+        },
+        "slp_graphsearch": {
+          "type": "boolean",
+          "title": "When `slp_graphsearch` is true, the node is able to handle calls to slp graph search"
         }
       }
     },
@@ -1654,6 +1703,34 @@
         }
       }
     },
+    "pbGetSlpGraphSearchRequest": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "valid_hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      }
+    },
+    "pbGetSlpGraphSearchResponse": {
+      "type": "object",
+      "properties": {
+        "txdata": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      }
+    },
     "pbGetSlpParsedScriptRequest": {
       "type": "object",
       "properties": {
@@ -1727,6 +1804,9 @@
           "items": {
             "$ref": "#/definitions/GetSlpTrustedValidationRequestQuery"
           }
+        },
+        "include_graphsearch_count": {
+          "type": "boolean"
         }
       }
     },
