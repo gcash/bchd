@@ -604,9 +604,8 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	}
 
-	// remove txn items from mempool cache
+	// Remove block transactions from the slp mempool cache
 	idx.removeMempoolSlpTxs(block.Transactions())
-	log.Debugf("slp mempool cache size (after removal): %s", fmt.Sprint(idx.cache.MempoolSize()))
 
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
@@ -844,6 +843,9 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		prevIdx := int(txi.PreviousOutPoint.Index)
 
 		slpEntry, err := getSlpIndexEntry(&txi.PreviousOutPoint.Hash)
+		if err != nil {
+			log.Tracef("no slp input entry for %v, %v", txi.PreviousOutPoint.Hash, err)
+		}
 		if slpEntry == nil {
 			continue
 		}
@@ -1100,6 +1102,9 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 			err := idx.db.View(func(dbTx database.Tx) error {
 				hash := tx.TxHash()
 				entry, err := idx.GetSlpIndexEntry(dbTx, &hash)
+				if err != nil {
+					return fmt.Errorf("could not retreive token entry for mint txn %v: %v", hash, err)
+				}
 				tm, err := idx.GetTokenMetadata(dbTx, entry)
 				if err != nil {
 					return fmt.Errorf("could not retreive token metadata for mint txn %v: %v", hash, err)
@@ -1135,7 +1140,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 // removeMempoolSlpTxs removes a list of transactions from the temporary cache that holds
 // both mempool and recently queried SlpIndexEntries
 func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
-	// if slp graph search enabled and is still loading so we don't miss any slp txns
+	// skip removal if slp graph search enabled but is still loading, this way gs db won't miss any txns
 	if idx.config.SlpGraphSearchEnabled && (idx.graphSearchDb == nil || !idx.graphSearchDb.IsLoaded()) {
 		return
 	}
@@ -1276,16 +1281,4 @@ func TopologicallySortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
 		}
 	}
 	return sorted
-}
-
-func removeDups(txs []*wire.MsgTx) []*wire.MsgTx {
-	keys := make(map[*wire.MsgTx]bool)
-	var ret []*wire.MsgTx
-	for _, tx := range txs {
-		if _, ok := keys[tx]; !ok {
-			keys[tx] = true
-			ret = append(ret, tx)
-		}
-	}
-	return ret
 }

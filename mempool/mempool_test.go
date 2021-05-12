@@ -6,7 +6,6 @@ package mempool
 
 import (
 	"encoding/hex"
-	"github.com/gcash/bchd/mining"
 	"reflect"
 	"runtime"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -312,13 +312,14 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 		chain: chain,
 		txPool: New(&Config{
 			Policy: Policy{
-				DisableRelayPriority: true,
-				FreeTxRelayLimit:     15.0,
-				MaxOrphanTxs:         5,
-				MaxOrphanTxSize:      1000,
-				LimitSigChecks:       true,
-				MinRelayTxFee:        1000, // 1 Satoshi per byte
-				MaxTxVersion:         1,
+				DisableRelayPriority:    true,
+				FreeTxRelayLimit:        15.0,
+				MaxOrphanTxs:            5,
+				MaxOrphanTxSize:         1000,
+				LimitSigChecks:          true,
+				MinRelayTxFee:           1000, // 1 Satoshi per byte
+				MaxTxVersion:            1,
+				MaxRelayDataCarrierSize: txscript.MaxDataCarrierSize,
 			},
 			ChainParams:      chainParams,
 			FetchUtxoView:    chain.FetchUtxoView,

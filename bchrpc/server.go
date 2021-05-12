@@ -1390,6 +1390,9 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 		}
 
 		slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "could not parse existing entry slp metadata scriptPubKey %s", hex.EncodeToString(entry.SlpOpReturn))
+		}
 
 		// set the proper slp version type
 		switch slpMsg.TokenType() {

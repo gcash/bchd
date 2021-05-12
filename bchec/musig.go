@@ -2,6 +2,7 @@ package bchec
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -15,6 +16,50 @@ func AggregatePublicKeys(keys ...*PublicKey) (*PublicKey, error) {
 	sortPubkeys(keys)
 	tweak := computeTweak(keys...)
 	return aggregatePubkeys(tweak, keys...)
+}
+
+// SignMuSig creates a MuSig aggregate signature for the provided message
+// hash using the provided private keys.
+func SignMuSig(hash []byte, keys ...*PrivateKey) (*Signature, error) {
+	sessionID := make([]byte, 32)
+	rand.Read(sessionID)
+
+	// Sort the private keys by their corresponding public keys
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].PubKey().X.Cmp(keys[j].PubKey().X) < 0
+	})
+
+	pubkeys := make([]*PublicKey, 0, len(keys))
+	noncePrivkeys := make([]*PrivateKey, 0, len(keys))
+	noncePubkeys := make([]*PublicKey, 0, len(keys))
+	sVals := make([]*big.Int, len(keys))
+	for _, key := range keys {
+		pubkeys = append(pubkeys, key.PubKey())
+	}
+
+	tweak := computeTweak(pubkeys...)
+	aggregatePubkey, err := aggregatePubkeys(tweak, pubkeys...)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		noncePriv := createNonceKeyPair(key, pubkeys, sessionID, hash)
+		noncePrivkeys = append(noncePrivkeys, noncePriv)
+		noncePubkeys = append(noncePubkeys, noncePriv.PubKey())
+	}
+
+	aggregateNoncePubkey, err := calculateAggregateNonce(noncePubkeys...)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, key := range keys {
+		aggNonce, _ := ParsePubKey(aggregateNoncePubkey.SerializeUncompressed(), S256())
+		sVals[i] = calculateSignature(hash, aggregatePubkey, aggNonce, key, noncePrivkeys[i], tweak)
+	}
+
+	return calculateAggregateSignature(aggregateNoncePubkey, sVals...), nil
 }
 
 func aggregatePubkeys(tweak []byte, keys ...*PublicKey) (*PublicKey, error) {
@@ -94,18 +139,22 @@ func (sess *Session) AggregatePublicKey() *PublicKey {
 // the hash. The nonce private key is derived from the private key,
 // each public key in the session, the message, and the session ID.
 func (sess *Session) NonceCommitment(message []byte) []byte {
-	preimage := sess.privKey.Serialize()
-	for _, pubkey := range sess.pubkeys {
+	sess.noncePriv = createNonceKeyPair(sess.privKey, sess.pubkeys, sess.sessionID[:], message)
+	h := sha256.Sum256(sess.noncePriv.PubKey().SerializeCompressed())
+	return h[:]
+}
+
+func createNonceKeyPair(privKey *PrivateKey, pubKeys []*PublicKey, sessionID, message []byte) *PrivateKey {
+	preimage := privKey.Serialize()
+	for _, pubkey := range pubKeys {
 		preimage = append(preimage, pubkey.SerializeCompressed()...)
 	}
 	preimage = append(preimage, message...)
-	preimage = append(preimage, sess.sessionID[:]...)
+	preimage = append(preimage, sessionID...)
 	r := sha256.Sum256(preimage)
 
-	sess.noncePriv, _ = PrivKeyFromBytes(S256(), r[:])
-
-	h := sha256.Sum256(sess.noncePriv.PubKey().SerializeCompressed())
-	return h[:]
+	priv, _ := PrivKeyFromBytes(S256(), r[:])
+	return priv
 }
 
 // Nonce returns the nonce public key for this session.
@@ -139,15 +188,24 @@ func (sess *Session) SetNonces(noncePubkeys ...*PublicKey) error {
 		}
 	}
 
+	aggregateNoncePubkey, err := calculateAggregateNonce(noncePubkeys...)
+	if err != nil {
+		return err
+	}
+
+	sess.aggregateNonce = aggregateNoncePubkey
+	return nil
+}
+
+func calculateAggregateNonce(noncePubkeys ...*PublicKey) (*PublicKey, error) {
 	aggregateNoncePubkey := *noncePubkeys[0]
 	for _, pubkey := range noncePubkeys[1:] {
 		if pubkey == nil {
-			return errors.New("noncePubkey is nil")
+			return nil, errors.New("noncePubkey is nil")
 		}
 		aggregateNoncePubkey.X, aggregateNoncePubkey.Y = aggregateNoncePubkey.Curve.Add(aggregateNoncePubkey.X, aggregateNoncePubkey.Y, pubkey.X, pubkey.Y)
 	}
-	sess.aggregateNonce = &aggregateNoncePubkey
-	return nil
+	return &aggregateNoncePubkey, nil
 }
 
 // Sign returns the S value for this node. Technically we don't need to return the
@@ -156,36 +214,42 @@ func (sess *Session) Sign(hash []byte) (*big.Int, error) {
 	if sess.aggregatePubkey == nil || sess.aggregateNonce == nil || sess.privKey == nil || sess.noncePriv == nil {
 		return nil, errors.New("state not fully set")
 	}
+	return calculateSignature(hash, sess.aggregatePubkey, sess.aggregateNonce, sess.privKey, sess.noncePriv, sess.tweak), nil
+}
 
+func calculateSignature(hash []byte, aggregatePubkey, aggregateNonce *PublicKey, privKey, noncePriv *PrivateKey, tweak []byte) *big.Int {
 	// If R's y coordinate has jacobi symbol -1, then all parties negate k and R_i
-	r := new(big.Int).SetBytes(sess.noncePriv.Serialize())
-	if big.Jacobi(sess.aggregateNonce.Y, S256().P) == -1 {
-		sess.aggregateNonce.Y.Neg(sess.aggregateNonce.Y)
+	r := new(big.Int).SetBytes(noncePriv.Serialize())
+	if big.Jacobi(aggregateNonce.Y, S256().P) == -1 {
+		aggregateNonce.Y.Neg(aggregateNonce.Y)
 		r.Neg(r)
 	}
 
 	// Compute scalar e = Hash(AggregateNoncePubkey.x || AggregatePubkey || m) mod N
-	eBytes := sha256.Sum256(append(append(padIntBytes(sess.aggregateNonce.X), sess.aggregatePubkey.SerializeCompressed()...), hash...))
+	eBytes := sha256.Sum256(append(append(padIntBytes(aggregateNonce.X), aggregatePubkey.SerializeCompressed()...), hash...))
 	e := new(big.Int).SetBytes(eBytes[:])
-	e.Mod(e, sess.aggregatePubkey.Params().N)
+	e.Mod(e, aggregatePubkey.Params().N)
 
 	// Compute x =  Hash(L || Pubkey) * privkey
-	tweaki := sha256.Sum256(append(sess.tweak, sess.privKey.PubKey().SerializeCompressed()...))
+	tweaki := sha256.Sum256(append(tweak, privKey.PubKey().SerializeCompressed()...))
 
-	x := new(big.Int).SetBytes(sess.privKey.Serialize())
+	x := new(big.Int).SetBytes(privKey.Serialize())
 	x = x.Mul(x, new(big.Int).SetBytes(tweaki[:]))
 
 	// Compute s = (r + e * x) mod N
 	s := e.Mul(e, x)
 	s.Add(s, r)
 	s.Mod(s, S256().N)
-
-	return s, nil
+	return s
 }
 
 // AggregateSignature aggregates the S and R values and returns a signature
 // that is value for the aggregate public key.
 func (sess *Session) AggregateSignature(svals ...*big.Int) *Signature {
+	return calculateAggregateSignature(sess.aggregateNonce, svals...)
+}
+
+func calculateAggregateSignature(aggregateNonce *PublicKey, svals ...*big.Int) *Signature {
 	s := new(big.Int)
 
 	for _, v := range svals {
@@ -194,7 +258,7 @@ func (sess *Session) AggregateSignature(svals ...*big.Int) *Signature {
 	s.Mod(s, S256().N)
 
 	return &Signature{
-		R:       sess.aggregateNonce.X,
+		R:       aggregateNonce.X,
 		S:       s,
 		sigType: SignatureTypeSchnorr,
 	}
