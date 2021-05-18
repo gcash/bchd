@@ -329,6 +329,9 @@ func (sm *SyncManager) startSync() {
 	bestPeers := []*peerpkg.Peer{}
 	okPeers := []*peerpkg.Peer{}
 	for peer, state := range sm.peerStates {
+		// Check if this node is a sync candidate. These nodes will be used
+		// when determining switching sync peers.  See 'medianSyncPeerCandidateBlockHeight'.
+		state.syncCandidate = sm.isSyncCandidate(peer)
 		if !state.syncCandidate {
 			continue
 		}
