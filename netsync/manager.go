@@ -455,7 +455,14 @@ func (sm *SyncManager) isSyncCandidate(peer *peerpkg.Peer) bool {
 	// Typically a peer is not a candidate for sync if it's not a full node,
 	// however regression test is special in that the regression tool is
 	// not a full node and still needs to be considered a sync candidate.
-	if sm.chainParams == &chaincfg.RegressionNetParams && !sm.regTestSyncAnyHost {
+	if sm.chainParams != &chaincfg.RegressionNetParams {
+		// The peer is not a candidate for sync if it's not a full
+		// node.
+		nodeServices := peer.Services()
+		return nodeServices&wire.SFNodeNetwork == wire.SFNodeNetwork
+	}
+
+	if !sm.regTestSyncAnyHost {
 		// The peer is not a candidate if it's not coming from localhost
 		// or the hostname can't be determined for some reason.
 		host, _, err := net.SplitHostPort(peer.Addr())
@@ -464,13 +471,6 @@ func (sm *SyncManager) isSyncCandidate(peer *peerpkg.Peer) bool {
 		}
 
 		if host != "127.0.0.1" && host != "localhost" {
-			return false
-		}
-	} else {
-		// The peer is not a candidate for sync if it's not a full
-		// node.
-		nodeServices := peer.Services()
-		if nodeServices&wire.SFNodeNetwork != wire.SFNodeNetwork {
 			return false
 		}
 	}
