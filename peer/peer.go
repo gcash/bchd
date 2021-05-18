@@ -1453,7 +1453,7 @@ cleanup:
 			break cleanup
 		}
 	}
-	log.Tracef("Peer stall handler done for %s", p)
+	log.Debugf("Peer stall handler done for %s", p)
 }
 
 // inHandler handles all incoming messages for the peer.  It must be run as a
@@ -1731,7 +1731,7 @@ out:
 	p.Disconnect()
 
 	close(p.inQuit)
-	log.Tracef("Peer input handler done for %s", p)
+	log.Debugf("Peer input handler done for %s", p)
 }
 
 // queueHandler handles the queuing of outgoing data for the peer. This runs as
@@ -1894,7 +1894,7 @@ cleanup:
 		}
 	}
 	close(p.queueQuit)
-	log.Tracef("Peer queue handler done for %s", p)
+	log.Debugf("Peer queue handler done for %s", p)
 }
 
 // shouldLogWriteError returns whether or not the passed error, which is
@@ -1987,7 +1987,7 @@ cleanup:
 		}
 	}
 	close(p.outQuit)
-	log.Tracef("Peer output handler done for %s", p)
+	log.Debugf("Peer output handler done for %s", p)
 }
 
 // pingHandler periodically pings the peer.  It must be run as a goroutine.
@@ -2080,7 +2080,7 @@ func (p *Peer) Disconnect() {
 		return
 	}
 
-	log.Tracef("Disconnecting %s", p)
+	log.Debugf("Disconnecting %s", p)
 	if atomic.LoadInt32(&p.connected) != 0 {
 		p.conn.Close()
 	}
@@ -2331,7 +2331,7 @@ func (p *Peer) negotiateOutboundProtocol() error {
 
 // start begins processing input and output messages.
 func (p *Peer) start() error {
-	log.Tracef("Starting peer %s", p)
+	log.Debugf("Starting peer %s", p)
 
 	negotiateErr := make(chan error, 1)
 	go func() {
