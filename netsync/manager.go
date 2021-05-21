@@ -329,9 +329,6 @@ func (sm *SyncManager) startSync() {
 	bestPeers := []*peerpkg.Peer{}
 	okPeers := []*peerpkg.Peer{}
 	for peer, state := range sm.peerStates {
-		// Check if this node is a sync candidate. These nodes will be used
-		// when determining switching sync peers.  See 'medianSyncPeerCandidateBlockHeight'.
-		state.syncCandidate = sm.isSyncCandidate(peer)
 		if !state.syncCandidate {
 			continue
 		}
@@ -348,10 +345,8 @@ func (sm *SyncManager) startSync() {
 			continue
 		}
 
-		// Remove sync candidate peers that are no longer candidates due
-		// to passing their latest known block.
+		// Don't pick a peer that is behind us.
 		if peer.LastBlock() < best.Height {
-			state.syncCandidate = false
 			continue
 		}
 
@@ -570,7 +565,8 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 	sm.updateSyncPeer()
 }
 
-// medianSyncPeerCandidateBlockHeight returns the median block height of sync peer candidates.
+// medianSyncPeerCandidateBlockHeight returns the median block height of sync peer candidates,
+// at or above our block height.
 func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 	heights := []int32{}
 
@@ -579,7 +575,6 @@ func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 			continue
 		}
 
-		// Peer isn't connected, skip.
 		if !peer.Connected() {
 			continue
 		}
@@ -587,6 +582,10 @@ func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 		topBlock := peer.LastBlock()
 		if topBlock < peer.StartingHeight() {
 			topBlock = peer.StartingHeight()
+		}
+
+		if topBlock < sm.topBlock() {
+			continue
 		}
 
 		heights = append(heights, topBlock)
