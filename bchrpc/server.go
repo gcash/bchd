@@ -2929,8 +2929,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 // NOTE: this is launched as a goroutine and does not return errors!
 //
 func (s *GrpcServer) slpEventHandler() {
-
-	if s.slpIndex == nil {
+	if s.slpIndex == nil || s.txIndex == nil {
 		return
 	}
 

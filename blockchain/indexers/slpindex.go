@@ -166,6 +166,9 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 // token id for the provided hash from the index.
 func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error) {
 	hashIndex := dbTx.Metadata().Bucket(tokenIDByHashIndexBucketName)
+	if hashIndex == nil {
+		return 0, fmt.Errorf("bucket nil for key: %s", tokenIDByHashIndexBucketName)
+	}
 	serializedID := hashIndex.Get(hash[:])
 	if serializedID == nil {
 		return 0, errNoTokenIDHashEntry
@@ -177,6 +180,9 @@ func dbFetchTokenIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error
 // retrieve the hash for the provided serialized token id from the index.
 func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (*TokenMetadata, error) {
 	idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
+	if idIndex == nil {
+		return nil, fmt.Errorf("bucket nil for key: %s", tokenMetadataByIDIndexBucketName)
+	}
 	serializedData := idIndex.Get(serializedID)
 	if serializedData == nil {
 		return nil, errNoTokenMetadataEntry
@@ -316,6 +322,9 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 	byteOrder.PutUint16(target[4:], uint16(entryInfo.slpMsg.TokenType()))
 	copy(target[6:], entryInfo.slpMsgPkScript)
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+	if slpIndex == nil {
+		return fmt.Errorf("bucket nil for key: %s", slpIndexKey)
+	}
 	return slpIndex.Put(txHash[:], target)
 }
 
@@ -332,8 +341,11 @@ type SlpTxEntry struct {
 // nil will be returned for the both the entry and the error.
 func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry, error) {
 	// Load the record from the database and return now if it doesn't exist.
-	SlpIndex := dbTx.Metadata().Bucket(slpIndexKey)
-	serializedData := SlpIndex.Get(txHash[:])
+	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+	if slpIndex == nil {
+		return nil, fmt.Errorf("bucket nil for key: %s", slpIndexKey)
+	}
+	serializedData := slpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
 		return nil, fmt.Errorf("slp entry does not exist %v", txHash)
 	}
@@ -376,6 +388,9 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 	// this method should only be called after a topological sort
 	dbRemoveSlpIndexEntry := func(dbTx database.Tx, txHash *chainhash.Hash) error {
 		slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
+		if slpIndex == nil {
+			return fmt.Errorf("bucket nil for key: %s", slpIndexKey)
+		}
 		serializedData := slpIndex.Get(txHash[:])
 		if len(serializedData) == 0 {
 			return nil
@@ -1154,6 +1169,9 @@ func (idx *SlpIndex) buildGraphSearchTokenMap() (*map[chainhash.Hash]*chainhash.
 
 	err := idx.db.View(func(dbTx database.Tx) error {
 		idxBucket := dbTx.Metadata().Bucket(slpIndexKey)
+		if idxBucket == nil {
+			return fmt.Errorf("bucket nil for key: %s", slpIndexKey)
+		}
 
 		// loop through all of the valid slp txn items stored in the db
 		err := idxBucket.ForEach(func(k []byte, v []byte) error {
