@@ -21,8 +21,9 @@ const (
 
 const (
 	// MaxCFilterDataSize is the maximum byte size of a committed filter.
-	// The maximum size is currently defined as 2MiB.
-	MaxCFilterDataSize = 2 * 1024 * 1024
+	// The maximum size is currently defined as 4MiB. This allows it to
+	// accomodate a large mempool.
+	MaxCFilterDataSize = 4 * 1024 * 1024
 )
 
 // MsgCFilter implements the Message interface and represents a bitcoin cfilter

@@ -34,10 +34,7 @@ func (msg *MsgSendCmpct) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 		return err
 	}
 
-	if err := readElement(r, &msg.Version); err != nil {
-		return err
-	}
-	return nil
+	return readElement(r, &msg.Version)
 }
 
 // BchEncode encodes the receiver to w using the bitcoin protocol encoding.
@@ -53,10 +50,7 @@ func (msg *MsgSendCmpct) BchEncode(w io.Writer, pver uint32, enc MessageEncoding
 		return err
 	}
 
-	if err := writeElement(w, msg.Version); err != nil {
-		return err
-	}
-	return nil
+	return writeElement(w, msg.Version)
 }
 
 // Command returns the protocol command string for the message.  This is part
