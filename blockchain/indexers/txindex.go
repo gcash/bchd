@@ -134,6 +134,9 @@ func dbRemoveBlockIDIndexEntry(dbTx database.Tx, hash *chainhash.Hash) error {
 // block id for the provided hash from the index.
 func dbFetchBlockIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error) {
 	hashIndex := dbTx.Metadata().Bucket(idByHashIndexBucketName)
+	if hashIndex == nil {
+		return 0, fmt.Errorf("bucket nil for key: %s", idByHashIndexBucketName)
+	}
 	serializedID := hashIndex.Get(hash[:])
 	if serializedID == nil {
 		return 0, errNoBlockIDEntry
@@ -146,6 +149,9 @@ func dbFetchBlockIDByHash(dbTx database.Tx, hash *chainhash.Hash) (uint32, error
 // retrieve the hash for the provided serialized block id from the index.
 func dbFetchBlockHashBySerializedID(dbTx database.Tx, serializedID []byte) (*chainhash.Hash, error) {
 	idIndex := dbTx.Metadata().Bucket(hashByIDIndexBucketName)
+	if idIndex == nil {
+		return nil, fmt.Errorf("bucket nil for key: %s", hashByIDIndexBucketName)
+	}
 	hashBytes := idIndex.Get(serializedID)
 	if hashBytes == nil {
 		return nil, errNoBlockIDEntry
@@ -179,6 +185,9 @@ func putTxIndexEntry(target []byte, blockID uint32, txLoc wire.TxLoc) {
 // been serialized putTxIndexEntry.
 func dbPutTxIndexEntry(dbTx database.Tx, txHash *chainhash.Hash, serializedData []byte) error {
 	txIndex := dbTx.Metadata().Bucket(txIndexKey)
+	if txIndex == nil {
+		return fmt.Errorf("bucket nil for key: %s", txIndexKey)
+	}
 	return txIndex.Put(txHash[:], serializedData)
 }
 
@@ -189,6 +198,9 @@ func dbPutTxIndexEntry(dbTx database.Tx, txHash *chainhash.Hash, serializedData 
 func dbFetchTxIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*database.BlockRegion, error) {
 	// Load the record from the database and return now if it doesn't exist.
 	txIndex := dbTx.Metadata().Bucket(txIndexKey)
+	if txIndex == nil {
+		return nil, fmt.Errorf("bucket nil for key: %s", txIndexKey)
+	}
 	serializedData := txIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
 		return nil, nil
@@ -257,6 +269,9 @@ func dbAddTxIndexEntries(dbTx database.Tx, block *bchutil.Block, blockID uint32)
 // recent transaction index entry for the given hash.
 func dbRemoveTxIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) error {
 	txIndex := dbTx.Metadata().Bucket(txIndexKey)
+	if txIndex == nil {
+		return fmt.Errorf("bucket nil for key: %s", txIndexKey)
+	}
 	serializedData := txIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
 		return fmt.Errorf("can't remove non-existent transaction %s "+

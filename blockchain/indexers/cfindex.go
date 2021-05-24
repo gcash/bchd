@@ -7,6 +7,7 @@ package indexers
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -66,25 +67,49 @@ var (
 // dbFetchFilterIdxEntry retrieves a data blob from the filter index database.
 // An entry's absence is not considered an error.
 func dbFetchFilterIdxEntry(dbTx database.Tx, key []byte, h *chainhash.Hash) ([]byte, error) {
-	idx := dbTx.Metadata().Bucket(cfIndexParentBucketKey).Bucket(key)
+	parentIdx := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	if parentIdx == nil {
+		return []byte{}, fmt.Errorf("bucket nil for key: %s", cfIndexParentBucketKey)
+	}
+	idx := parentIdx.Bucket(key)
+	if idx == nil {
+		return []byte{}, fmt.Errorf("bucket nil for key: %s", key)
+	}
 	return idx.Get(h[:]), nil
 }
 
 // dbStoreFilterIdxEntry stores a data blob in the filter index database.
 func dbStoreFilterIdxEntry(dbTx database.Tx, key []byte, h *chainhash.Hash, f []byte) error {
-	idx := dbTx.Metadata().Bucket(cfIndexParentBucketKey).Bucket(key)
+	parentIdx := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	if parentIdx == nil {
+		return fmt.Errorf("bucket nil for key: %s", cfIndexParentBucketKey)
+	}
+	idx := parentIdx.Bucket(key)
+	if idx == nil {
+		return fmt.Errorf("bucket nil for key: %s", key)
+	}
 	return idx.Put(h[:], f)
 }
 
 // dbDeleteFilterIdxEntry deletes a data blob from the filter index database.
 func dbDeleteFilterIdxEntry(dbTx database.Tx, key []byte, h *chainhash.Hash) error {
-	idx := dbTx.Metadata().Bucket(cfIndexParentBucketKey).Bucket(key)
+	parentIdx := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	if parentIdx == nil {
+		return fmt.Errorf("bucket nil for key: %s", cfIndexParentBucketKey)
+	}
+	idx := parentIdx.Bucket(key)
+	if idx == nil {
+		return fmt.Errorf("bucket nil for key: %s", key)
+	}
 	return idx.Delete(h[:])
 }
 
 // dbFetchMigrationVersion retrieves the migration version from the bucket.
 func dbFetchMigrationVersion(dbTx database.Tx) (uint32, error) {
 	bucket := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	if bucket == nil {
+		return 0, fmt.Errorf("bucket nil for key: %s", cfIndexParentBucketKey)
+	}
 	versionBytes := bucket.Get(cfIndexMigrationVersionKey)
 	version := uint32(0)
 	if len(versionBytes) == 4 {
@@ -96,6 +121,9 @@ func dbFetchMigrationVersion(dbTx database.Tx) (uint32, error) {
 // dbStoreMigrationVersion stores the migration version in the bucket.
 func dbStoreMigrationVersion(dbTx database.Tx, version uint32) error {
 	bucket := dbTx.Metadata().Bucket(cfIndexParentBucketKey)
+	if bucket == nil {
+		return fmt.Errorf("bucket nil for key: %s", cfIndexParentBucketKey)
+	}
 	versionBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(versionBytes, version)
 	return bucket.Put(cfIndexMigrationVersionKey, versionBytes)

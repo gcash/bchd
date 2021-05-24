@@ -735,6 +735,9 @@ func (idx *AddrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 	// Add all of the index entries for each address.
 	addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if addrIdxBucket == nil {
+		return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
 	for addrKey, txIdxs := range addrsToTxns {
 		for _, txIdx := range txIdxs {
 			err := dbPutAddrIndexEntry(addrIdxBucket, addrKey,
@@ -762,6 +765,9 @@ func (idx *AddrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 	// Remove all of the index entries for each address.
 	bucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if bucket == nil {
+		return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
 	for addrKey, txIdxs := range addrsToTxns {
 		err := dbRemoveAddrIndexEntries(bucket, addrKey, len(txIdxs))
 		if err != nil {
@@ -801,6 +807,9 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 
 		var err error
 		addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
+		if addrIdxBucket == nil {
+			return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+		}
 		regions, skipped, err = dbFetchAddrIndexEntries(addrIdxBucket,
 			addrKey, numToSkip, numRequested, reverse,
 			fetchBlockHash)
