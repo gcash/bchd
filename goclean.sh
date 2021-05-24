@@ -19,7 +19,7 @@ fi
 # Automatic checks
 test -z "$(env GO111MODULE=on golangci-lint run --disable-all \
 --enable=gofmt \
---enable=golint \
+--enable=revive \
 --enable=vet \
 --enable=gosimple \
 --enable=unconvert \

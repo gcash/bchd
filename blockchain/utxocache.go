@@ -567,10 +567,8 @@ func (s *utxoCache) flush(bestState *BestState) error {
 		if err := dbPutUtxoEntries(dbTx, entriesPut); err != nil {
 			return err
 		}
-		if err := dbDeleteUtxoEntries(dbTx, entriesDelete); err != nil {
-			return err
-		}
-		return nil
+
+		return dbDeleteUtxoEntries(dbTx, entriesDelete)
 	}
 	s.flushInProgress = true
 	defer func() { s.flushInProgress = false }()

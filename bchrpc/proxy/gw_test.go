@@ -309,7 +309,7 @@ func TestGetTokenBalance(t *testing.T) {
 	}
 
 	// get token balance
-	var balance uint64 = 0
+	var balance uint64
 	for _, out := range outputs.Outputs {
 		if out.SlpToken == nil {
 			continue

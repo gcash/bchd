@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-// Disables caching of our responses.
+// NoCacheMiddleware disables caching of our responses.
 // If caching of API responses is desired you should always explicitly enable it by setting
 // the appropriate 'Cache-Control' header value.
 // Sending no header defaults to 'private' which allows browsers to cache responses: https://docs.microsoft.com/en-us/previous-versions/iis/6.0-sdk/ms524721(v=vs.90)?redirectedfrom=MSDN

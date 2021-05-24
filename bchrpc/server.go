@@ -1362,7 +1362,7 @@ func (s *GrpcServer) GetSlpParsedScript(ctx context.Context, req *pb.GetSlpParse
 	return resp, nil
 }
 
-// GetSlpTrustedSlpValidation returns slp validity information about a specific token output
+// GetSlpTrustedValidation returns slp validity information about a specific token output
 func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlpTrustedValidationRequest) (*pb.GetSlpTrustedValidationResponse, error) {
 	if s.slpIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex required")
@@ -2832,7 +2832,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 	}
 
 	var (
-		isMintBaton bool = false
+		isMintBaton bool
 		slpAction   pb.SlpAction
 		decimals    int
 	)

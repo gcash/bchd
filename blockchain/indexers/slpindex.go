@@ -255,8 +255,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 	}
 
 	var (
-		tokenMetadataNeedsUpdated bool   = false
-		mintBatonVout             uint32 = 0
+		tokenMetadataNeedsUpdated = false
+		mintBatonVout             uint32
 		mintBatonHash             *chainhash.Hash
 		nft1GroupID               *chainhash.Hash
 	)
@@ -622,7 +622,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	return nil
 }
 
-// AddGraphSearchTxn
+// AddGraphSearchTxn adds a transaction to graph search.
 func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 	if idx.graphSearchDb == nil {
 		return
@@ -970,13 +970,8 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
-
 	// Remove all of the transactions in the block from the index.
-	if err := dbRemoveSlpIndexEntries(dbTx, block); err != nil {
-		return err
-	}
-
-	return nil
+	return dbRemoveSlpIndexEntries(dbTx, block)
 }
 
 // GetSlpIndexEntry returns a serialized slp index entry for the provided transaction hash
