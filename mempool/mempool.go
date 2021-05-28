@@ -138,10 +138,6 @@ type Policy struct {
 	// MinRelayTxFee defines the minimum transaction fee in BCH/kB to be
 	// considered a non-zero fee.
 	MinRelayTxFee bchutil.Amount
-
-	// MaxRelayDataCarrierSize is the total maximum size of null data in
-	// a transaction's outputs
-	MaxRelayDataCarrierSize int
 }
 
 // TxDesc is a descriptor containing a transaction in the mempool along with

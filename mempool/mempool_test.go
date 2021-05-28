@@ -312,14 +312,13 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 		chain: chain,
 		txPool: New(&Config{
 			Policy: Policy{
-				DisableRelayPriority:    true,
-				FreeTxRelayLimit:        15.0,
-				MaxOrphanTxs:            5,
-				MaxOrphanTxSize:         1000,
-				LimitSigChecks:          true,
-				MinRelayTxFee:           1000, // 1 Satoshi per byte
-				MaxTxVersion:            1,
-				MaxRelayDataCarrierSize: txscript.MaxDataCarrierSize,
+				DisableRelayPriority: true,
+				FreeTxRelayLimit:     15.0,
+				MaxOrphanTxs:         5,
+				MaxOrphanTxSize:      1000,
+				LimitSigChecks:       true,
+				MinRelayTxFee:        1000, // 1 Satoshi per byte
+				MaxTxVersion:         1,
 			},
 			ChainParams:      chainParams,
 			FetchUtxoView:    chain.FetchUtxoView,

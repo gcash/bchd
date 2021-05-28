@@ -319,8 +319,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		}
 	}
 
-	// A standard transaction must not have more than one output script that
-	// only carries data.
+	// A standard transaction cannot have null data exceeding txscript.MaxDataCarrierSize
 	if dataCarrierSize > txscript.MaxDataCarrierSize {
 		str := fmt.Sprintf("transaction nulldata exceeds %d bytes", txscript.MaxDataCarrierSize)
 		return txRuleError(wire.RejectNonstandard, str)
