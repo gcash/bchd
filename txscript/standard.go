@@ -164,6 +164,9 @@ func isNullData(pops []parsedOpcode) bool {
 			isDataOpcode = true
 			scriptLen += len(pop.data)
 			scriptLen += -pop.opcode.length + 1
+		} else if pop.opcode.value < OP_16 {
+			isDataOpcode = true
+			scriptLen++
 		}
 		if !isDataOpcode {
 			return false
