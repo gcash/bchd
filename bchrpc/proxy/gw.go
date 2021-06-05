@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gcash/bchutil"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -20,9 +22,17 @@ import (
 )
 
 var (
+	defaultHomeDir = bchutil.AppDataDir("bchd", false)
+
+	// BCHD backend
 	grpcServerEndpoint = flag.String("bchd-grpc-url", "localhost:8335", "BCHD gRPC server endpoint")
 	grpcRootCertPath   = flag.String("bchd-grpc-certpath", "", "BCHD gRPC server self-signed root certificate path")
-	proxyPort          = flag.String("port", "8080", "port for the proxy server")
+
+	// HTTP proxy
+	proxyAddr = flag.String("http-addr", ":8080", "addr:port for the proxy server - defaults to :8080")
+	useHTTPS  = flag.Bool("https", false, "Run the gRPC proxy using HTTPS - default false")
+	httpsCert = flag.String("https-cert", filepath.Join(defaultHomeDir, "rpc.cert"), "The certificate to serve HTTPS - defaults to rpc.cert in HOME dir")
+	httpsKey  = flag.String("https-key", filepath.Join(defaultHomeDir, "rpc.key"), "The key to serve HTTPS - defaults to rpc.key in HOME dir")
 )
 
 // GrpcProxy is the grpc gateway proxy and static webpage server implementation
@@ -80,15 +90,22 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 
 	// Start HTTP server
 	proxy.server = &http.Server{
-		Addr:         ":" + *proxyPort,
+		Addr:         *proxyAddr,
 		Handler:      router,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
 
-	fmt.Printf("Serving HTTP at port %s\n", *proxyPort)
-	if err := proxy.server.ListenAndServe(); err != http.ErrServerClosed {
-		glog.Errorf("Error serving HTTP %+v", err)
+	if *useHTTPS == true {
+		fmt.Printf("Serving HTTPS at %s\n", *proxyAddr)
+		if err := proxy.server.ListenAndServeTLS(*httpsCert, *httpsKey); err != http.ErrServerClosed {
+			glog.Errorf("Error serving HTTP %+v", err)
+		}
+	} else {
+		fmt.Printf("Serving HTTP at %s\n", *proxyAddr)
+		if err := proxy.server.ListenAndServe(); err != http.ErrServerClosed {
+			glog.Errorf("Error serving HTTP %+v", err)
+		}
 	}
 
 	return err
