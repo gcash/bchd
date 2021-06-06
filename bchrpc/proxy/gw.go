@@ -96,7 +96,7 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	if *useHTTPS == true {
+	if *useHTTPS {
 		fmt.Printf("Serving HTTPS at %s\n", *proxyAddr)
 		if err := proxy.server.ListenAndServeTLS(*httpsCert, *httpsKey); err != http.ErrServerClosed {
 			glog.Errorf("Error serving HTTP %+v", err)
