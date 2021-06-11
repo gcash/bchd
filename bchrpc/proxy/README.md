@@ -22,7 +22,7 @@ This will generate all of the files required for the gateway proxy and also the 
 
 ## Run the Proxy
 
-`$ ./gw -port 8080 -bchd-grpc-url <BCHD gRPC server url>:8335 -bchd-grpc-certpath <path to self-signed cert>`
+`$ ./gw -http-addr :8080 -bchd-grpc-url <BCHD gRPC server url>:8335 -bchd-grpc-certpath <path to self-signed cert>`
 
 If you are using a certificate signed by a CA then you do not need to specify a value for `-bchd-grpc-certpath`.
 

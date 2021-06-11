@@ -50,7 +50,18 @@ func TestMain(m *testing.M) {
 	}
 	go startLocalTestServer(proxy)
 	time.Sleep(1 * time.Second) // wait for HTTP server goroutine
-	httpClient, err = newHTTPClient(fmt.Sprintf("http://localhost:%s/v1/", *proxyPort), logRequestJSON)
+
+	// connect the HTTP test client to address:port
+	httpAddr := *proxyAddr
+	urlObj, err := url.Parse("http://" + httpAddr)
+	if err != nil {
+		log.Printf("Error parsing proxy backend address %s: %+v", httpAddr, err)
+		os.Exit(1)
+	}
+	if len(urlObj.Host) != 0 && urlObj.Host[0:1] == ":" {
+		httpAddr = "localhost" + httpAddr // only port specified -> use localhost
+	}
+	httpClient, err = newHTTPClient(fmt.Sprintf("http://%s/v1/", httpAddr), logRequestJSON)
 	if err != nil {
 		log.Printf("Error creating HTTP client: %+v", err)
 		os.Exit(1)
