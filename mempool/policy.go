@@ -161,11 +161,6 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass) er
 // particular, if the cost to the network to spend coins is more than 1/3 of the
 // minimum transaction relay fee, it is considered dust.
 func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
-	// Unspendable outputs are considered dust.
-	if txscript.IsUnspendable(txOut.PkScript) {
-		return true
-	}
-
 	// The total serialized size consists of the output and the associated
 	// input script to redeem it.  Since there is no input script
 	// to redeem it yet, use the minimum size of a typical input script.
@@ -315,6 +310,10 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		} else if isDust(txOut, minRelayTxFee) {
 			str := fmt.Sprintf("transaction output %d: payment "+
 				"of %d is dust", i, txOut.Value)
+			return txRuleError(wire.RejectDust, str)
+		} else if txscript.IsUnspendable(txOut.PkScript) {
+			str := fmt.Sprintf("transaction output %d: payment "+
+				"of %d is unspendable", i, txOut.Value)
 			return txRuleError(wire.RejectDust, str)
 		}
 	}

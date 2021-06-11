@@ -319,61 +319,11 @@ var MainNetParams = Params{
 		{Height: 470000, Hash: newHashFromStr("0000000000000000006c539c722e280a0769abd510af0073430159d71e6d7589")},
 		{Height: 510000, Hash: newHashFromStr("00000000000000000367922b6457e21d591ef86b360d78a598b14c2f1f6b0e04")},
 		{Height: 552979, Hash: newHashFromStr("0000000000000000015648768ac1b788a83187d706f858919fcc5c096b76fbf2")},
-		{
-			Height:      556767,
-			Hash:        newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c"),
-			UtxoSetHash: newHashFromStr("352a96fdd4dd229ced594b6bae5c658da514eb76e9b04eb469a7effaada6a14e"),
-			UtxoSetSize: 3102076686,
-			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
-				"https://ipfs.greyh.at/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
-				"https://ipfs.io/ipfs/QmQECm1yUgKh7oQg2syCFo5BLvhFSSH9m95fw41b3GTrXV",
-			},
-		},
-		{
-			Height:      582680,
-			Hash:        newHashFromStr("000000000000000001b4b8e36aec7d4f9671a47872cb9a74dc16ca398c7dcc18"),
-			UtxoSetHash: newHashFromStr("2406189cf8e15140c2004d4e9aa012711f48183689a305223c9bafdd3af8887e"),
-			UtxoSetSize: 3178882199,
-			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
-				"https://ipfs.greyh.at/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
-				"https://ipfs.io/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv",
-			},
-		},
-		{
-			Height:      609136,
-			Hash:        newHashFromStr("000000000000000000b48bb207faac5ac655c313e41ac909322eaa694f5bc5b1"),
-			UtxoSetHash: newHashFromStr("105b794be6370014bef629b61db50716eea29e2d6c712e11cad9fa9c2aaeee30"),
-			UtxoSetSize: 3214790044,
-			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
-				"https://ipfs.greyh.at/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
-				"https://ipfs.io/ipfs/QmZQFi5kiY1cAu6hEpLCEaAZ3FX1CtmFVtE8DiLvkYNg62",
-			},
-		},
-		{
-			Height:      635259,
-			Hash:        newHashFromStr("00000000000000000033dfef1fc2d6a5d5520b078c55193a9bf498c5b27530f7"),
-			UtxoSetHash: newHashFromStr("45dc882e48bf4b6d894db29512f35296ffda5ea32c2b82920aa5ae1ba056689a"),
-			UtxoSetSize: 3282796875,
-			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
-				"https://ipfs.greyh.at/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
-				"https://ipfs.io/ipfs/QmYhcrsLgGfRTuxoZUCPCEj5xzZx5sAgV32Z7p1qPerJBr",
-			},
-		},
-		{
-			Height:      661648,
-			Hash:        newHashFromStr("0000000000000000029e471c41818d24b8b74c911071c4ef0b4a0509f9b5a8ce"),
-			UtxoSetHash: newHashFromStr("fff228b2f788d2be35868fc2517d2557f856cbb9d6e2dad7310ab6054a29ef67"),
-			UtxoSetSize: 2931107971,
-			UtxoSetSources: []string{
-				"http://localhost:8080/ipfs/QmY9Anst9NB42RVSGZehNCF52B2DxAzAYXEPrLrar75VMT",
-				"https://ipfs.greyh.at/ipfs/QmY9Anst9NB42RVSGZehNCF52B2DxAzAYXEPrLrar75VMT",
-				"https://ipfs.io/ipfs/QmY9Anst9NB42RVSGZehNCF52B2DxAzAYXEPrLrar75VMT",
-			},
-		},
+		{Height: 556767, Hash: newHashFromStr("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c")},
+		{Height: 582680, Hash: newHashFromStr("000000000000000001b4b8e36aec7d4f9671a47872cb9a74dc16ca398c7dcc18")},
+		{Height: 609136, Hash: newHashFromStr("000000000000000000b48bb207faac5ac655c313e41ac909322eaa694f5bc5b1")},
+		{Height: 635259, Hash: newHashFromStr("00000000000000000033dfef1fc2d6a5d5520b078c55193a9bf498c5b27530f7")},
+		{Height: 661648, Hash: newHashFromStr("0000000000000000029e471c41818d24b8b74c911071c4ef0b4a0509f9b5a8ce")},
 	},
 
 	// Consensus rule change deployments.
