@@ -629,14 +629,13 @@ func asSmallInt(op *opcode) int {
 	return int(op.value - (OP_1 - 1))
 }
 
-// IsUnspendable returns whether the passed public key script is unspendable, or
-// guaranteed to fail at execution.  This allows outputs to be pruned instantly
-// when entering the UTXO set.
+// IsUnspendable returns true if the passed public key script is provably
+// unspendable. Scripts may still be otherwise unspendable due to script
+// validation rules which this function intentionally does not account for
+// due to compatibility with other implementations. Provably unspendable
+// outputs are pruned instantly when entering the UTXO set.
 func IsUnspendable(pkScript []byte) bool {
-	pops, err := parseScript(pkScript)
-	if err != nil {
-		return true
-	}
-
-	return len(pops) > 0 && pops[0].opcode.value == OP_RETURN
+	scriptSize := len(pkScript)
+	return (scriptSize > 0 && pkScript[0] == OP_RETURN) ||
+		(scriptSize > MaxScriptSize)
 }

@@ -258,14 +258,6 @@ func TestDust(t *testing.T) {
 			1<<63 - 1,
 			true,
 		},
-		{
-			// Unspendable pkScript due to an invalid public key
-			// script.
-			"unspendable pkScript",
-			wire.TxOut{Value: 5000, PkScript: []byte{0x01}},
-			0, // no relay fee
-			true,
-		},
 	}
 	for _, test := range tests {
 		res := isDust(&test.txOut, test.relayFee)
@@ -630,6 +622,23 @@ func TestCheckTransactionStandard(t *testing.T) {
 			},
 			height:     300000,
 			isStandard: true,
+			code:       wire.RejectNonstandard,
+		},
+		{
+			// Unspendable pkScript due to an invalid public key
+			// script.
+			name: "unspendable pkScript",
+			tx: wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{&dummyTxIn},
+				TxOut: []*wire.TxOut{{
+					Value:    5000,
+					PkScript: []byte{0x01},
+				}},
+				LockTime: 0,
+			},
+			height:     0, // no relay fee
+			isStandard: false,
 			code:       wire.RejectNonstandard,
 		},
 	}
