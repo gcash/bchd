@@ -125,6 +125,21 @@ func TestInvVectWire(t *testing.T) {
 		0x26, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Block 203707 hash
 	}
 
+	// dsProofInvVect is an inventory vector representing a dsproof.
+	dsProofInvVect := InvVect{
+		Type: InvTypeDSProof,
+		Hash: *baseHash,
+	}
+
+	// dsProofInvVectEncoded is the wire encoded bytes of dsProofInvVect.
+	dsProofInvVectEncoded := []byte{
+		0xa0, 0x94, 0x00, 0x00, // InvTypeDSProof
+		0xdc, 0xe9, 0x69, 0x10, 0x94, 0xda, 0x23, 0xc7,
+		0xe7, 0x67, 0x13, 0xd0, 0x75, 0xd4, 0xa1, 0x0b,
+		0x79, 0x40, 0x08, 0xa6, 0x36, 0xac, 0xc2, 0x4b,
+		0x26, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Block 203707 hash
+	}
+
 	tests := []struct {
 		in   InvVect // NetAddress to encode
 		out  InvVect // Expected decoded NetAddress
@@ -288,6 +303,14 @@ func TestInvVectWire(t *testing.T) {
 			cmpctBlockInvVect,
 			cmpctBlockInvVect,
 			cmpctBlockInvVectEncoded,
+			MultipleAddressVersion,
+		},
+
+		// Protocol version MultipleAddressVersion dsproof inventory vector.
+		{
+			dsProofInvVect,
+			dsProofInvVect,
+			dsProofInvVectEncoded,
 			MultipleAddressVersion,
 		},
 	}

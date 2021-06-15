@@ -160,6 +160,7 @@ func WaitUntil(fn func() bool, timeout time.Duration) bool {
 // the call arguments in a channel for a receiver to make assertions about.
 type MockPeerNotifier struct {
 	announceNewTransactionsChan chan *announceNewTransactionsCall
+	announceNewDSProofChan      chan *announceNewDSProofCall
 	updatePeerHeightsChan       chan *updatePeerHeightsCall
 	relayInventoryChan          chan *relayInventoryCall
 	transactionConfirmedChan    chan *transactionConfirmedCall
@@ -167,6 +168,10 @@ type MockPeerNotifier struct {
 
 type announceNewTransactionsCall struct {
 	newTxs []*mempool.TxDesc
+}
+
+type announceNewDSProofCall struct {
+	newDSProof *wire.MsgDSProof
 }
 
 type updatePeerHeightsCall struct {
@@ -187,6 +192,12 @@ type transactionConfirmedCall struct {
 func (mock *MockPeerNotifier) AnnounceNewTransactions(newTxs []*mempool.TxDesc) {
 	mock.announceNewTransactionsChan <- &announceNewTransactionsCall{
 		newTxs: newTxs,
+	}
+}
+
+func (mock *MockPeerNotifier) AnnounceNewDSProof(newDSProof *wire.MsgDSProof) {
+	mock.announceNewDSProofChan <- &announceNewDSProofCall{
+		newDSProof: newDSProof,
 	}
 }
 
@@ -214,6 +225,7 @@ func (mock *MockPeerNotifier) TransactionConfirmed(tx *bchutil.Tx) {
 func NewMockPeerNotifier() *MockPeerNotifier {
 	return &MockPeerNotifier{
 		announceNewTransactionsChan: make(chan *announceNewTransactionsCall, 10),
+		announceNewDSProofChan:      make(chan *announceNewDSProofCall, 10),
 		updatePeerHeightsChan:       make(chan *updatePeerHeightsCall, 10),
 		relayInventoryChan:          make(chan *relayInventoryCall, 10),
 		transactionConfirmedChan:    make(chan *transactionConfirmedCall, 10),

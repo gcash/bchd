@@ -30,6 +30,7 @@ const (
 	InvTypeBlock         InvType = 2
 	InvTypeFilteredBlock InvType = 3
 	InvTypeCmpctBlock    InvType = 4
+	InvTypeDSProof       InvType = 0x94a0
 )
 
 // Map of service flags back to their constant names for pretty printing.
@@ -39,6 +40,7 @@ var ivStrings = map[InvType]string{
 	InvTypeBlock:         "MSG_BLOCK",
 	InvTypeFilteredBlock: "MSG_FILTERED_BLOCK",
 	InvTypeCmpctBlock:    "MSG_CMPCT_BLOCK",
+	InvTypeDSProof:       "MSG_DOUBLE_SPEND_PROOF",
 }
 
 // String returns the InvType in human-readable form.

@@ -13,7 +13,7 @@ import (
 // XXX pedro: we will probably need to bump this.
 const (
 	// ProtocolVersion is the latest protocol version this package supports.
-	ProtocolVersion uint32 = 70015
+	ProtocolVersion uint32 = 70016
 
 	// MultipleAddressVersion is the protocol version which added multiple
 	// addresses per message (pver >= MultipleAddressVersion).
@@ -61,6 +61,11 @@ const (
 	// accept compact block relay but pledge not to ban nodes which
 	// relay blocks without validating them first.
 	NoValidationRelayVersion uint32 = 70015
+
+	// DoubleSpendProofVersion is the prootocol version which added
+	// double spend proof relaying.
+	// FIXME: What is this supposed to be?
+	DoubleSpendProofVersion uint32 = 70016
 )
 
 // ServiceFlag identifies services supported by a bitcoin peer.

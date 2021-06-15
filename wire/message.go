@@ -74,6 +74,7 @@ const (
 	CmdCmpctBlock   = "cmpctblock"
 	CmdGetBlockTxns = "getblocktxn"
 	CmdBlockTxns    = "blocktxn"
+	CmdDSProof      = "dsproof-beta"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -209,6 +210,9 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdBlockTxns:
 		msg = &MsgBlockTxns{}
+
+	case CmdDSProof:
+		msg = &MsgDSProof{}
 
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)
