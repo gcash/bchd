@@ -60,7 +60,7 @@ service bchrpc {
     // **Requires SlpIndex for slp related information **
     rpc GetAddressTransactions(GetAddressTransactionsRequest) returns (GetAddressTransactionsResponse) {}
 
-    // GetRawAddressTransactions the serialized raw transactions for
+    // GetRawAddressTransactions returns the serialized raw transactions for
     // the given address. Offers offset, limit, and from block options.
     //
     // **Requires AddressIndex**
