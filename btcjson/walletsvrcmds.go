@@ -385,6 +385,25 @@ func NewListSinceBlockCmd(blockHash *string, targetConfirms *int, includeWatchOn
 	}
 }
 
+type SignRawTransactionWithKeyCmd struct {
+	//Name 	  string 	`json:"name"`
+	Hexstring   string    `json:"hexstring"`
+	Privkeys    []string  `json:"privkeys"`
+	Prevtxs     *[]string `json:"prevtxs"`
+	Sighashtype *string   `json:"sighashtype"`
+	//Args []interface{}	`json:"args"`
+}
+
+func NewSignRawTransactionWithKey(name, hexStr string, privkeys *[]string, prevtxs *[]string, sighashtype *string) *SignRawTransactionWithKeyCmd {
+	return &SignRawTransactionWithKeyCmd{
+		//Name:name,
+		Hexstring:   hexStr,
+		Privkeys:    *privkeys,
+		Prevtxs:     nil,
+		Sighashtype: sighashtype,
+	}
+}
+
 // ListTransactionsCmd defines the listtransactions JSON-RPC command.
 type ListTransactionsCmd struct {
 	Account          *string
