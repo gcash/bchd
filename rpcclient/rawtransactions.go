@@ -514,6 +514,39 @@ func (c *Client) SignRawTransaction4(tx *wire.MsgTx,
 		hashType).Receive()
 }
 
+func (c *Client) SignRawTransaction5Async(tx *wire.MsgTx,
+	inputs []btcjson.RawTxInput, privKeysWIF []string) (*wire.MsgTx, bool, error) {
+
+	txHex := ""
+	if tx != nil {
+		// Serialize the transaction and convert to hex string.
+		buf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
+		if err := tx.Serialize(buf); err != nil {
+			return nil, false, err
+		}
+		txHex = hex.EncodeToString(buf.Bytes())
+	}
+	//cmd := btcjson.NewSignRawTransactionCmd(txHex, &inputs, &privKeysWIF,
+	//	btcjson.String(string(hashType)))
+	return c.SignRawTransactionWithKey(txHex, privKeysWIF, nil, "ALL")
+	//return c.sendCmd(cmd)
+}
+
+func (c *Client) SignRawTransactionWithKey(txHex string, privkeys []string, prevtxs interface{}, sighashtype string) (*wire.MsgTx, bool, error) {
+	return c.SignRawTransactionWithKeyEntire(txHex, privkeys, prevtxs, sighashtype)
+}
+
+func (c *Client) SignRawTransactionWithKeyEntire(txHex string, privkeys []string, prevtxs interface{}, sighashtype string) (*wire.MsgTx, bool, error) {
+	return c.SignRawTransactionWithKeyAsync(txHex, privkeys, prevtxs, sighashtype).Receive()
+}
+
+func (c *Client) SignRawTransactionWithKeyAsync(txHex string, privkeys []string, prevtxs interface{}, sighashtype string) FutureSignRawTransactionResult {
+	cmd := btcjson.NewSignRawTransactionWithKey("signrawtransactionwithkey", txHex, &privkeys, nil, &sighashtype)
+	//cmd := NewCommand("signrawtransactionwithkey", txHex, privkeys, prevtxs, sighashtype)
+	log.Info(fmt.Sprintf("-----CMD-----:%v", cmd))
+	return c.sendCmd(cmd)
+}
+
 // FutureSearchRawTransactionsResult is a future promise to deliver the result
 // of the SearchRawTransactionsAsync RPC invocation (or an applicable error).
 type FutureSearchRawTransactionsResult chan *response
