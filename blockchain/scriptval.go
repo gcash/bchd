@@ -77,9 +77,30 @@ out:
 			sigScript := txIn.SignatureScript
 			pkScript := utxo.PkScript()
 			inputAmount := utxo.Amount()
+
+			utxoEntryCache := txscript.NewUtxoCache()
+			for i, in := range txVI.tx.MsgTx().TxIn {
+				if i == txVI.txInIndex {
+					utxoEntryCache.AddEntry(i, *wire.NewTxOut(utxo.amount, utxo.pkScript))
+					continue
+				}
+				u := v.utxoView.LookupEntry(in.PreviousOutPoint)
+				if u == nil {
+					str := fmt.Sprintf("unable to find unspent "+
+						"output %v referenced from "+
+						"transaction %s:%d",
+						in.PreviousOutPoint, txVI.tx.Hash(),
+						i)
+					err := ruleError(ErrMissingTxOut, str)
+					v.sendResult(err)
+					break out
+				}
+				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript))
+			}
+
 			vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),
 				txVI.txInIndex, v.flags, v.sigCache, txVI.sigHashes,
-				inputAmount)
+				utxoEntryCache, inputAmount)
 			if err != nil {
 				str := fmt.Sprintf("failed to parse input "+
 					"%s:%d which references output %v - "+

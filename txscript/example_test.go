@@ -168,7 +168,7 @@ func ExampleSignTxOutput() {
 		txscript.ScriptVerifyBip143SigHash |
 		txscript.ScriptVerifySchnorr
 	vm, err := txscript.NewEngine(originTx.TxOut[0].PkScript, redeemTx, 0,
-		flags, nil, nil, -1)
+		flags, nil, nil, nil, -1)
 	if err != nil {
 		fmt.Println(err)
 		return

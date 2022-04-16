@@ -232,20 +232,20 @@ const (
 	OP_UNKNOWN189          = 0xbd // 189
 	OP_UNKNOWN190          = 0xbe // 190
 	OP_UNKNOWN191          = 0xbf // 191
-	OP_UNKNOWN192          = 0xc0 // 192
-	OP_UNKNOWN193          = 0xc1 // 193
-	OP_UNKNOWN194          = 0xc2 // 194
-	OP_UNKNOWN195          = 0xc3 // 195
-	OP_UNKNOWN196          = 0xc4 // 196
-	OP_UNKNOWN197          = 0xc5 // 197
-	OP_UNKNOWN198          = 0xc6 // 198
-	OP_UNKNOWN199          = 0xc7 // 199
-	OP_UNKNOWN200          = 0xc8 // 200
-	OP_UNKNOWN201          = 0xc9 // 201
-	OP_UNKNOWN202          = 0xca // 202
-	OP_UNKNOWN203          = 0xcb // 203
-	OP_UNKNOWN204          = 0xcc // 204
-	OP_UNKNOWN205          = 0xcd // 205
+	OP_INPUTINDEX          = 0xc0 // 192
+	OP_ACTIVEBYTECODE      = 0xc1 // 193
+	OP_TXVERSION           = 0xc2 // 194
+	OP_TXINPUTCOUNT        = 0xc3 // 195
+	OP_TXOUTPUTCOUNT       = 0xc4 // 196
+	OP_TXLOCKTIME          = 0xc5 // 197
+	OP_UTXOVALUE           = 0xc6 // 198
+	OP_UTXOBYTECODE        = 0xc7 // 199
+	OP_OUTPOINTTXHASH      = 0xc8 // 200
+	OP_OUTPOINTINDEX       = 0xc9 // 201
+	OP_INPUTBYTECODE       = 0xca // 202
+	OP_INPUTSEQUENCENUMBER = 0xcb // 203
+	OP_OUTPUTVALUE         = 0xcc // 204
+	OP_OUTPUTBYTECODE      = 0xcd // 205
 	OP_UNKNOWN206          = 0xce // 206
 	OP_UNKNOWN207          = 0xcf // 207
 	OP_UNKNOWN208          = 0xd0 // 208
@@ -504,6 +504,22 @@ var opcodeArray = [256]opcode{
 	OP_CHECKDATASIG:        {OP_CHECKDATASIG, "OP_CHECKDATASIG", 1, opcodeCheckDataSig},
 	OP_CHECKDATASIGVERIFY:  {OP_CHECKDATASIGVERIFY, "OP_CHECKDATASIGVERIFY", 1, opcodeCheckDataSigVerify},
 
+	// Native introspection opcodes.
+	OP_INPUTINDEX:          {OP_INPUTINDEX, "OP_INPUTINDEX", 1, opcodeInputIndex},
+	OP_ACTIVEBYTECODE:      {OP_ACTIVEBYTECODE, "OP_ACTIVEBYTECODE", 1, opcodeActiveBytecode},
+	OP_TXVERSION:           {OP_TXVERSION, "OP_TXVERSION", 1, opcodeTxVersion},
+	OP_TXINPUTCOUNT:        {OP_TXINPUTCOUNT, "OP_TXINPUTCOUNT", 1, opcodeTxInputCount},
+	OP_TXOUTPUTCOUNT:       {OP_TXOUTPUTCOUNT, "OP_TXOUTPUTCOUNT", 1, opcodeTxOutputCount},
+	OP_TXLOCKTIME:          {OP_TXLOCKTIME, "OP_TXLOCKTIME", 1, opcodeTxLocktime},
+	OP_UTXOVALUE:           {OP_UTXOVALUE, "OP_UTXOVALUE", 1, opcodeUtxoValue},
+	OP_UTXOBYTECODE:        {OP_UTXOBYTECODE, "OP_UTXOBYTECODE", 1, opcodeUtxoByteCode},
+	OP_OUTPOINTTXHASH:      {OP_OUTPOINTTXHASH, "OP_OUTPOINTTXHASH", 1, opcodeOutpointTxHash},
+	OP_OUTPOINTINDEX:       {OP_OUTPOINTINDEX, "OP_OUTPOINTINDEX", 1, opcodeOutpointIndex},
+	OP_INPUTBYTECODE:       {OP_INPUTBYTECODE, "OP_INPUTBYTECODE", 1, opcodeInputBytecode},
+	OP_INPUTSEQUENCENUMBER: {OP_INPUTSEQUENCENUMBER, "OP_INPUTSEQUENCENUMBER", 1, opcodeInputSequenceNumber},
+	OP_OUTPUTVALUE:         {OP_OUTPUTVALUE, "OP_OUTPUTVALUE", 1, opcodeOutputValue},
+	OP_OUTPUTBYTECODE:      {OP_OUTPUTBYTECODE, "OP_OUTPUTBYTECODE", 1, opcodeOutputBytecode},
+
 	// Reserved opcodes.
 	OP_NOP1:  {OP_NOP1, "OP_NOP1", 1, opcodeNop},
 	OP_NOP4:  {OP_NOP4, "OP_NOP4", 1, opcodeNop},
@@ -518,20 +534,6 @@ var opcodeArray = [256]opcode{
 	OP_UNKNOWN189: {OP_UNKNOWN189, "OP_UNKNOWN189", 1, opcodeInvalid},
 	OP_UNKNOWN190: {OP_UNKNOWN190, "OP_UNKNOWN190", 1, opcodeInvalid},
 	OP_UNKNOWN191: {OP_UNKNOWN191, "OP_UNKNOWN191", 1, opcodeInvalid},
-	OP_UNKNOWN192: {OP_UNKNOWN192, "OP_UNKNOWN192", 1, opcodeInvalid},
-	OP_UNKNOWN193: {OP_UNKNOWN193, "OP_UNKNOWN193", 1, opcodeInvalid},
-	OP_UNKNOWN194: {OP_UNKNOWN194, "OP_UNKNOWN194", 1, opcodeInvalid},
-	OP_UNKNOWN195: {OP_UNKNOWN195, "OP_UNKNOWN195", 1, opcodeInvalid},
-	OP_UNKNOWN196: {OP_UNKNOWN196, "OP_UNKNOWN196", 1, opcodeInvalid},
-	OP_UNKNOWN197: {OP_UNKNOWN197, "OP_UNKNOWN197", 1, opcodeInvalid},
-	OP_UNKNOWN198: {OP_UNKNOWN198, "OP_UNKNOWN198", 1, opcodeInvalid},
-	OP_UNKNOWN199: {OP_UNKNOWN199, "OP_UNKNOWN199", 1, opcodeInvalid},
-	OP_UNKNOWN200: {OP_UNKNOWN200, "OP_UNKNOWN200", 1, opcodeInvalid},
-	OP_UNKNOWN201: {OP_UNKNOWN201, "OP_UNKNOWN201", 1, opcodeInvalid},
-	OP_UNKNOWN202: {OP_UNKNOWN202, "OP_UNKNOWN202", 1, opcodeInvalid},
-	OP_UNKNOWN203: {OP_UNKNOWN203, "OP_UNKNOWN203", 1, opcodeInvalid},
-	OP_UNKNOWN204: {OP_UNKNOWN204, "OP_UNKNOWN204", 1, opcodeInvalid},
-	OP_UNKNOWN205: {OP_UNKNOWN205, "OP_UNKNOWN205", 1, opcodeInvalid},
 	OP_UNKNOWN206: {OP_UNKNOWN206, "OP_UNKNOWN206", 1, opcodeInvalid},
 	OP_UNKNOWN207: {OP_UNKNOWN207, "OP_UNKNOWN207", 1, opcodeInvalid},
 	OP_UNKNOWN208: {OP_UNKNOWN208, "OP_UNKNOWN208", 1, opcodeInvalid},
@@ -2891,6 +2893,200 @@ func opcodeCheckDataSigVerify(op *parsedOpcode, vm *Engine) error {
 		err = abstractVerify(op, vm, ErrCheckDataSigVerify)
 	}
 	return err
+}
+
+// opcodeInputIndex pushes the index of the input being evaluated to the
+// stack as a Script Number.
+func opcodeInputIndex(op *parsedOpcode, vm *Engine) error {
+	vm.dstack.PushInt(scriptNum(vm.txIdx))
+	return nil
+}
+
+// TODO
+// opcodeActiveBytecode pushes the bytecode currently being evaluated, beginning
+// after the last executed OP_CODESEPARATOR, to the stack1. For Pay-to-Script-Hash
+// (P2SH) evaluations, this is the redeem bytecode of the Unspent Transaction Output
+// (UTXO) being spent; for all other evaluations, this is the locking bytecode of
+// the UTXO being spent.
+//
+// This behavior matches the existing behavior of the BCH VM during P2SH evaluation –
+// once the P2SH pattern is matched, the remaining stack is copied, and the VM begins
+// evaluation again with the P2SH redeem bytecode set as the new active bytecode.
+// (In the Satoshi implementation, this P2SH redeem bytecode is passed as a CScript
+// to a new execution of EvalScript.)
+func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
+	subScript := vm.subScript()
+	l := 0
+	for _, parsedOpcode := range subScript {
+		l += parsedOpcode.opcode.length
+	}
+	script := make([]byte, 0, l)
+	for _, parsedOpcode := range subScript {
+		b, err := parsedOpcode.bytes()
+		if err != nil {
+			return err
+		}
+		script = append(script, b...)
+	}
+	vm.dstack.PushByteArray(script)
+	return nil
+}
+
+// opcodeTxVersion pushes the version of the current transaction to the stack as a
+// Script Number.
+func opcodeTxVersion(op *parsedOpcode, vm *Engine) error {
+	vm.dstack.PushInt(scriptNum(vm.tx.Version))
+	return nil
+}
+
+// opcodeTxInputCount pushes the count of inputs in the current transaction to the
+// stack as a Script Number.
+func opcodeTxInputCount(op *parsedOpcode, vm *Engine) error {
+	vm.dstack.PushInt(scriptNum(len(vm.tx.TxIn)))
+	return nil
+}
+
+// opcodeTxOutputCount pushes the count of outputs in the current transaction to the
+// stack as a Script Number.
+func opcodeTxOutputCount(op *parsedOpcode, vm *Engine) error {
+	vm.dstack.PushInt(scriptNum(len(vm.tx.TxOut)))
+	return nil
+}
+
+// opcodeTxLocktime pushes the locktime of the current transaction to the stack
+// as a Script Number.
+func opcodeTxLocktime(op *parsedOpcode, vm *Engine) error {
+	vm.dstack.PushInt(scriptNum(vm.tx.LockTime))
+	return nil
+}
+
+// opcodeUtxoValue pops the top item from the stack as an input index (Script Number)
+// and pushes the value (in satoshis) of the Unspent Transaction Output (UTXO) spent by that
+// input to the stack as a Script Number.
+//
+// Stack transformation: a OP_UTXOVALUE -> b
+func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushInt(scriptNum(utxo.Value))
+	return nil
+}
+
+// opcodeUtxoByteCode pops the top item from the stack as an input index (Script Number)
+// and pushes the full locking bytecode of the Unspent Transaction Output (UTXO) spent
+// by that input to the stack.
+//
+// Stack transformation: a OP_UTXOBYTECODE -> x
+func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushByteArray(utxo.PkScript)
+	return nil
+}
+
+// opcodeOutpointTxHash pop the top item from the stack as an input index (Script Number).
+// From that input, push the outpoint transaction hash – the hash of the transaction which
+// created the Unspent Transaction Output (UTXO) which is being spent – to the stack in
+// OP_HASH256 byte order.
+//
+// This is the byte order produced/required by all BCH VM operations which employ SHA-256
+// (including OP_SHA256 and OP_HASH256), the byte order used for outpoint transaction hashes
+// in the P2P transaction format, and the byte order produced by most SHA-256 libraries.
+// For reference, the genesis block header in this byte order is little-endian –
+// 6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000 – and can be produced
+// by this script: <0x010000000000000000000000000000000000000000000000000000000000000000000000
+// 3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c>
+// OP_HASH256. (Note, this is the opposite byte order as is commonly used in user interfaces
+// like block explorers.)
+//
+// Stack transformation: a OP_OUTPOINTTXHASH -> x
+func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	outpointHash := vm.tx.TxIn[i].PreviousOutPoint.Hash
+	vm.dstack.PushByteArray(outpointHash[:])
+	return nil
+}
+
+// opcodeOutpointIndex pops the top item from the stack as an input index (Script Number).
+// From that input, push the outpoint index – the index of the output in the transaction
+// which created the Unspent Transaction Output (UTXO) which is being spent – to the
+// stack as a Script Number.
+//
+// Stack transformation: a OP_OUTPOINTINDEX -> b
+func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].PreviousOutPoint.Index))
+	return nil
+}
+
+// opcodeInputBytecode pops the top item from the stack as an input index (Script Number)
+// and pushes the unlocking bytecode of the input at that index to the stack.
+//
+// Stack transformation: a OP_INPUTBYTECODE -> x
+func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushByteArray(vm.tx.TxIn[i].SignatureScript)
+	return nil
+}
+
+// opcodeInputSequenceNumber pops the top item from the stack as an input index (Script Number)
+// and pushes the sequence number of the input at that index to the stack as a Script Number.
+//
+// Stack transformation: a OP_INPUTSEQUENCENUMBER -> b
+func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].Sequence))
+	return nil
+}
+
+// opcodeOutputValue pops the top item from the stack as an output index (Script Number)
+// and pushes the value (in satoshis) of the output at that index to the stack as a Script Number.
+//
+// Stack transformation: a OP_OUTPUTVALUE -> b
+func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushInt(scriptNum(vm.tx.TxOut[i].Value))
+	return nil
+}
+
+// opcodeOutputBytecode pops the top item from the stack as an output index (Script Number)
+// and pushes the locking bytecode of the output at that index to the stack.
+//
+// Stack transformation: a OP_OUTPUTBYTECODE -> x
+func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	vm.dstack.PushByteArray(vm.tx.TxOut[i].PkScript)
+	return nil
 }
 
 // OpcodeByName is a map that can be used to lookup an opcode by its

@@ -161,6 +161,7 @@ type Engine struct {
 	flags           ScriptFlags
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
+	utxoCache       *UtxoCache
 	bip16           bool     // treat execution as pay-to-script-hash
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
@@ -876,7 +877,7 @@ func (vm *Engine) Clone() *Engine {
 // transaction, and input index.  The flags modify the behavior of the script
 // engine according to the description provided by each flag.
 func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, hashCache *TxSigHashes, inputAmount int64) (*Engine, error) {
+	sigCache *SigCache, hashCache *TxSigHashes, utxoCache *UtxoCache, inputAmount int64) (*Engine, error) {
 
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.TxIn) {
@@ -904,7 +905,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	// it possible to have a situation where P2SH would not be a soft fork
 	// when it should be.
 	vm := Engine{flags: flags, sigCache: sigCache, hashCache: hashCache,
-		inputAmount: inputAmount}
+		utxoCache: utxoCache, inputAmount: inputAmount}
 	if vm.hasFlag(ScriptVerifyCleanStack) && (!vm.hasFlag(ScriptBip16)) {
 		return nil, scriptError(ErrInvalidFlags,
 			"invalid flags combination")

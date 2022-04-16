@@ -5,6 +5,7 @@
 package txscript
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -86,4 +87,39 @@ func (h *HashCache) PurgeSigHashes(txid *chainhash.Hash) {
 	h.Lock()
 	delete(h.sigHashes, *txid)
 	h.Unlock()
+}
+
+// UtxoCache houses the utxos (scriptPubkey and value) for each input index
+// in a single transaction. We use this class for the native introspection
+// opcodes instead of the UtxoViewpoint class from the blockchain package to
+// avoid circular imports.
+type UtxoCache struct {
+	utxos map[int]wire.TxOut
+
+	sync.RWMutex
+}
+
+// NewUtxoCache returns a new instance of the UtxoCache.
+func NewUtxoCache() *UtxoCache {
+	return &UtxoCache{
+		utxos: make(map[int]wire.TxOut),
+	}
+}
+
+// AddEntry adds a utxo entry for the given input index.
+func (u *UtxoCache) AddEntry(i int, output wire.TxOut) {
+	u.Lock()
+	u.utxos[i] = output
+	u.Unlock()
+}
+
+// GetEntry adds a utxo entry for the given input index.
+func (u *UtxoCache) GetEntry(i int) (wire.TxOut, error) {
+	u.RLock()
+	utxo, ok := u.utxos[i]
+	if !ok {
+		return wire.TxOut{}, errors.New("not found")
+	}
+	u.RUnlock()
+	return utxo, nil
 }

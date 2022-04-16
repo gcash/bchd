@@ -57,7 +57,7 @@ func TestBadPC(t *testing.T) {
 	pkScript := mustParseShortForm("NOP")
 
 	for _, test := range tests {
-		vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, -1)
+		vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, nil, -1)
 		if err != nil {
 			t.Errorf("Failed to create script: %v", err)
 		}
@@ -114,7 +114,7 @@ func TestCheckErrorCondition(t *testing.T) {
 	pkScript := mustParseShortForm("NOP NOP NOP NOP NOP NOP NOP NOP NOP" +
 		" NOP TRUE")
 
-	vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, 0)
+	vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, nil, 0)
 	if err != nil {
 		t.Errorf("failed to create script: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestInvalidFlagCombinations(t *testing.T) {
 	pkScript := []byte{OP_NOP}
 
 	for i, test := range tests {
-		_, err := NewEngine(pkScript, tx, 0, test, nil, nil, -1)
+		_, err := NewEngine(pkScript, tx, 0, test, nil, nil, nil, -1)
 		if !IsErrorCode(err, ErrInvalidFlags) {
 			t.Fatalf("TestInvalidFlagCombinations #%d unexpected "+
 				"error: %v", i, err)
@@ -729,7 +729,7 @@ func TestSegwitExemption(t *testing.T) {
 	}
 
 	// This should fail the clean stack rule.
-	vm, err := NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16, nil, nil, 0)
+	vm, err := NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16, nil, nil, nil, 0)
 	if err != nil {
 		t.Errorf("failed to create script: %v", err)
 	}
@@ -739,7 +739,7 @@ func TestSegwitExemption(t *testing.T) {
 	}
 
 	// We add the segwit exemption flag and now the same input should pass.
-	vm, err = NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16|ScriptVerifyAllowSegwitRecovery, nil, nil, 0)
+	vm, err = NewEngine(pkScript, tx, 0, ScriptVerifyCleanStack|ScriptBip16|ScriptVerifyAllowSegwitRecovery, nil, nil, nil, 0)
 	if err != nil {
 		t.Errorf("failed to create script: %v", err)
 	}
@@ -849,7 +849,7 @@ func TestScriptVerifyInputSigChecks(t *testing.T) {
 
 		tx.TxIn[0].SignatureScript = sigBytes
 
-		vm, err := NewEngine(pkScript, tx, 0, StandardVerifyFlags, nil, nil, 0)
+		vm, err := NewEngine(pkScript, tx, 0, StandardVerifyFlags, nil, nil, nil, 0)
 		if err != nil {
 			t.Errorf("failed to create script: %v", err)
 		}

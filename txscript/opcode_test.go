@@ -74,6 +74,13 @@ func TestOpcodeDisasm(t *testing.T) {
 		0xae: "OP_CHECKMULTISIG", 0xaf: "OP_CHECKMULTISIGVERIFY",
 		0xba: "OP_CHECKDATASIG", 0xbb: "OP_CHECKDATASIGVERIFY",
 		0xbc: "OP_REVERSEBYTES", 0xfa: "OP_SMALLINTEGER",
+		0xc0: "OP_INPUTINDEX", 0xc1: "OP_ACTIVEBYTECODE",
+		0xc2: "OP_TXVERSION", 0xc3: "OP_TXINPUTCOUNT",
+		0xc4: "OP_TXOUTPUTCOUNT", 0xc5: "OP_TXLOCKTIME",
+		0xc6: "OP_UTXOVALUE", 0xc7: "OP_UTXOBYTECODE",
+		0xc8: "OP_OUTPOINTTXHASH", 0xc9: "OP_OUTPOINTINDEX",
+		0xca: "OP_INPUTBYTECODE", 0xcb: "OP_INPUTSEQUENCENUMBER",
+		0xcc: "OP_OUTPUTVALUE", 0xcd: "OP_OUTPUTBYTECODE",
 		0xfb: "OP_PUBKEYS", 0xfd: "OP_PUBKEYHASH",
 		0xfe: "OP_PUBKEY", 0xff: "OP_INVALIDOPCODE",
 	}
@@ -121,7 +128,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case opcodeVal >= 0xbd && opcodeVal <= 0xf9 || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xce && opcodeVal <= 0xf9) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 
@@ -187,7 +194,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case opcodeVal >= 0xbd && opcodeVal <= 0xf9 || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xce && opcodeVal <= 0xf9) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 

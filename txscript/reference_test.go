@@ -430,7 +430,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		tx := createSpendingTx(scriptSig, scriptPubKey,
 			int64(inputAmt))
 
-		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, nil,
+		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, nil, nil,
 			int64(inputAmt))
 		if err == nil {
 			err = vm.Execute()
@@ -638,7 +638,7 @@ testloop:
 			// input fails the transaction has failed. (some of the
 			// test txns have good inputs, too..
 			vm, err := NewEngine(prevOut.pkScript, tx.MsgTx(), k,
-				flags, nil, nil, prevOut.inputVal)
+				flags, nil, nil, nil, prevOut.inputVal)
 			if err != nil {
 				continue testloop
 			}
@@ -790,7 +790,7 @@ testloop:
 				continue testloop
 			}
 			vm, err := NewEngine(prevOut.pkScript, tx.MsgTx(), k,
-				flags, nil, nil, prevOut.inputVal)
+				flags, nil, nil, nil, prevOut.inputVal)
 			if err != nil {
 				t.Errorf("test (%d:%v:%d) failed to create "+
 					"script: %v", i, test, k, err)
