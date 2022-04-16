@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"testing"
 )
 
@@ -133,6 +134,39 @@ func TestMakeScriptNum(t *testing.T) {
 		{hexToBytes("00008080"), -8388608, defaultSmallScriptNumLen, true, nil},
 		{hexToBytes("ffffff7f"), 2147483647, defaultSmallScriptNumLen, true, nil},
 		{hexToBytes("ffffffff"), -2147483647, defaultSmallScriptNumLen, true, nil},
+
+		{nil, 0, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("01"), 1, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("81"), -1, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("7f"), 127, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ff"), -127, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8000"), 128, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8080"), -128, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8100"), 129, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8180"), -129, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0001"), 256, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0081"), -256, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ff7f"), 32767, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff"), -32767, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("008000"), 32768, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("008080"), -32768, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff00"), 65535, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff80"), -65535, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000008"), 524288, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000088"), -524288, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000070"), 7340032, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000f0"), -7340032, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00008000"), 8388608, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00008080"), -8388608, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffff7f"), 2147483647, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffff"), -2147483647, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000002"), 8589934592, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000082"), -8589934592, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000000000040"), 4611686018427387904, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00000000000000c0"), -4611686018427387904, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffffffffff7f"), 9223372036854775807, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffffffffffff"), -9223372036854775807, defaultBigScriptNumLen, true, nil},
+
 		{hexToBytes("ffffffff7f"), 549755813887, 5, true, nil},
 		{hexToBytes("ffffffffff"), -549755813887, 5, true, nil},
 		{hexToBytes("ffffffffffffff7f"), 9223372036854775807, 8, true, nil},
@@ -159,6 +193,9 @@ func TestMakeScriptNum(t *testing.T) {
 		{hexToBytes("ffffffffffffff80"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
 		{hexToBytes("ffffffffffffff7f"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
 		{hexToBytes("ffffffffffffffff"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+
+		{hexToBytes("ffffffffffffff7fff"), 0, defaultBigScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffffffff"), 0, defaultBigScriptNumLen, true, errNumTooBig},
 
 		// Non-minimally encoded, but otherwise valid values with
 		// minimal encoding flag.  Should error and return 0.
@@ -272,6 +309,65 @@ func TestScriptNumInt32(t *testing.T) {
 	}
 }
 
+// TestScriptNumInt64 ensures that the Int64 function on script number behaves
+// as expected.
+func TestScriptNumInt64(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   scriptNum
+		want int64
+	}{
+		// Values inside the valid int64 range are just the values
+		// themselves cast to an int64.
+		{0, 0},
+		{1, 1},
+		{-1, -1},
+		{127, 127},
+		{-127, -127},
+		{128, 128},
+		{-128, -128},
+		{129, 129},
+		{-129, -129},
+		{256, 256},
+		{-256, -256},
+		{32767, 32767},
+		{-32767, -32767},
+		{32768, 32768},
+		{-32768, -32768},
+		{65535, 65535},
+		{-65535, -65535},
+		{524288, 524288},
+		{-524288, -524288},
+		{7340032, 7340032},
+		{-7340032, -7340032},
+		{8388608, 8388608},
+		{-8388608, -8388608},
+		{2147483647, 2147483647},
+		{-2147483647, -2147483647},
+		{-2147483648, -2147483648},
+		{2147483648, 2147483648},
+		{-2147483649, -2147483649},
+		{1152921504606846975, 1152921504606846975},
+		{-1152921504606846975, -1152921504606846975},
+		{2305843009213693951, 2305843009213693951},
+		{-2305843009213693951, -2305843009213693951},
+		{4611686018427387903, 4611686018427387903},
+		{-4611686018427387903, -4611686018427387903},
+		{9223372036854775807, 9223372036854775807},
+		{-9223372036854775808, -9223372036854775808},
+	}
+
+	for _, test := range tests {
+		got := test.in.Int64()
+		if got != test.want {
+			t.Errorf("Int64: did not get expected value for %d - "+
+				"got %d, want %d", test.in, got, test.want)
+			continue
+		}
+	}
+}
+
 func Test_minimallyEncode(t *testing.T) {
 	tests := []struct {
 		data     []byte
@@ -309,4 +405,43 @@ func Test_minimallyEncode(t *testing.T) {
 			t.Errorf("Test %d: Result not minimally encoded", i)
 		}
 	}
+}
+
+func TestScriptNum_Bytes(t *testing.T) {
+	n := int64(-4611686018427387904)
+
+	// Take the absolute value and keep track of whether it was originally
+	// negative.
+	isNegative := n < 0
+	if isNegative {
+		n = -n
+	}
+
+	// Encode to little endian.  The maximum number of encoded bytes is 9
+	// (8 bytes for max int64 plus a potential byte for sign extension).
+	result := make([]byte, 0, 9)
+	for n > 0 {
+		result = append(result, byte(n&0xff))
+		n >>= 8
+	}
+
+	// When the most significant byte already has the high bit set, an
+	// additional high byte is required to indicate whether the number is
+	// negative or positive.  The additional byte is removed when converting
+	// back to an integral and its high bit is used to denote the sign.
+	//
+	// Otherwise, when the most significant byte does not already have the
+	// high bit set, use it to indicate the value is negative, if needed.
+	if result[len(result)-1]&0x80 != 0 {
+		extraByte := byte(0x00)
+		if isNegative {
+			extraByte = 0x80
+		}
+		result = append(result, extraByte)
+
+	} else if isNegative {
+		result[len(result)-1] |= 0x80
+	}
+
+	fmt.Println(hex.EncodeToString(minimallyEncode(result)))
 }

@@ -1,3 +1,4 @@
+//go:build freebsd
 // +build freebsd
 
 // Copyright (c) 2013-2018 The btcsuite developers

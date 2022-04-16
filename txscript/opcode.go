@@ -2461,7 +2461,6 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		str := fmt.Sprintf("number of signatures %d is negative",
 			numSignatures)
 		return scriptError(ErrInvalidSignatureCount, str)
-
 	}
 	if numSignatures > numPubKeys {
 		str := fmt.Sprintf("more signatures than pubkeys: %d > %d",

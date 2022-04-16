@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 // Copyright (c) 2013-2018 The btcsuite developers
