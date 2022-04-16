@@ -905,7 +905,9 @@ func TestStack(t *testing.T) {
 
 	for _, test := range tests {
 		// Setup the initial stack state and perform the test operation.
-		s := stack{}
+		s := stack{
+			defaultScriptNumLen: defaultSmallScriptNumLen,
+		}
 		for i := range test.before {
 			s.PushByteArray(test.before[i])
 		}

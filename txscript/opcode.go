@@ -1466,7 +1466,16 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	size := int(n.Int32())
+	var (
+		defaultScriptNumLen = defaultSmallScriptNumLen
+		size                int
+	)
+	if vm.hasFlag(Script64BitIntegers) {
+		size = int(n.Int64())
+		defaultScriptNumLen = defaultBigScriptNumLen
+	} else {
+		size = int(n.Int32())
+	}
 
 	if size > MaxScriptElementSize {
 		return scriptError(ErrNumberTooBig,
@@ -1512,6 +1521,11 @@ func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
 	n, err := makeScriptNum(a, false, len(a))
 	if err != nil {
 		return err
+	}
+
+	defaultScriptNumLen := defaultSmallScriptNumLen
+	if vm.hasFlag(Script64BitIntegers) {
+		defaultScriptNumLen = defaultBigScriptNumLen
 	}
 	if len(n.Bytes()) > defaultScriptNumLen {
 		return scriptError(ErrNumberTooBig,

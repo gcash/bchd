@@ -12,9 +12,16 @@ const (
 	maxInt32 = 1<<31 - 1
 	minInt32 = -1 << 31
 
-	// defaultScriptNumLen is the default number of bytes
-	// data being interpreted as an integer may be.
-	defaultScriptNumLen = 4
+	maxInt64 = 1<<63 - 1
+	minInt64 = -1 << 63
+
+	// defaultSmallScriptNumLen is the default number of bytes
+	// data being interpreted as a small integer may be.
+	defaultSmallScriptNumLen = 4
+
+	// defaultBigScriptNumLen is the default number of bytes
+	// data being interpreted as a big integer may be.
+	defaultBigScriptNumLen = 8
 )
 
 // scriptNum represents a numeric value used in the scripting engine with
@@ -154,6 +161,31 @@ func (n scriptNum) Int32() int32 {
 	}
 
 	return int32(n)
+}
+
+// Int64 returns the script number clamped to a valid int64.  That is to say
+// when the script number is higher than the max allowed int64, the max int64
+// value is returned and vice versa for the minimum value.  Note that this
+// behavior is different from a simple int64 cast because that truncates
+// and the consensus rules dictate numbers which are directly cast to ints
+// provide this behavior.
+//
+// In practice, for most opcodes, the number should never be out of range since
+// it will have been created with makeScriptNum using the defaultScriptLen
+// value, which rejects them.  In case something in the future ends up calling
+// this function against the result of some arithmetic, which IS allowed to be
+// out of range before being reinterpreted as an integer, this will provide the
+// correct behavior.
+func (n scriptNum) Int64() int64 {
+	if n > maxInt64 {
+		return maxInt64
+	}
+
+	if n < minInt64 {
+		return minInt64
+	}
+
+	return int64(n)
 }
 
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
