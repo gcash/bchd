@@ -121,12 +121,12 @@ const (
 	// script.
 	ScriptVerifyReverseBytes
 
-	// Script64BitIntegers enables the use of 64 bit ScriptNums
-	Script64BitIntegers
+	// ScriptVerify64BitIntegers enables the use of 64 bit ScriptNums
+	ScriptVerify64BitIntegers
 
-	// ScriptNativeIntrospection enables the suite of native introspection
+	// ScriptVerifyNativeIntrospection enables the suite of native introspection
 	// opcodes.
-	ScriptNativeIntrospection
+	ScriptVerifyNativeIntrospection
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -956,7 +956,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true
 	}
-	if vm.hasFlag(Script64BitIntegers) {
+	if vm.hasFlag(ScriptVerify64BitIntegers) {
 		vm.dstack.defaultScriptNumLen = defaultBigScriptNumLen
 		vm.astack.defaultScriptNumLen = defaultBigScriptNumLen
 	} else {

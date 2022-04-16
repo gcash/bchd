@@ -1472,7 +1472,7 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		defaultScriptNumLen = defaultSmallScriptNumLen
 		size                int
 	)
-	if vm.hasFlag(Script64BitIntegers) {
+	if vm.hasFlag(ScriptVerify64BitIntegers) {
 		size = int(n.Int64())
 		defaultScriptNumLen = defaultBigScriptNumLen
 	} else {
@@ -1526,7 +1526,7 @@ func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
 	}
 
 	defaultScriptNumLen := defaultSmallScriptNumLen
-	if vm.hasFlag(Script64BitIntegers) {
+	if vm.hasFlag(ScriptVerify64BitIntegers) {
 		defaultScriptNumLen = defaultBigScriptNumLen
 	}
 	if len(n.Bytes()) > defaultScriptNumLen {
@@ -2898,11 +2898,15 @@ func opcodeCheckDataSigVerify(op *parsedOpcode, vm *Engine) error {
 // opcodeInputIndex pushes the index of the input being evaluated to the
 // stack as a Script Number.
 func opcodeInputIndex(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.txIdx))
 	return nil
 }
 
-// TODO
 // opcodeActiveBytecode pushes the bytecode currently being evaluated, beginning
 // after the last executed OP_CODESEPARATOR, to the stack1. For Pay-to-Script-Hash
 // (P2SH) evaluations, this is the redeem bytecode of the Unspent Transaction Output
@@ -2915,6 +2919,11 @@ func opcodeInputIndex(op *parsedOpcode, vm *Engine) error {
 // (In the Satoshi implementation, this P2SH redeem bytecode is passed as a CScript
 // to a new execution of EvalScript.)
 func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	subScript := vm.subScript()
 	l := 0
 	for _, parsedOpcode := range subScript {
@@ -2935,6 +2944,11 @@ func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
 // opcodeTxVersion pushes the version of the current transaction to the stack as a
 // Script Number.
 func opcodeTxVersion(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.tx.Version))
 	return nil
 }
@@ -2942,6 +2956,11 @@ func opcodeTxVersion(op *parsedOpcode, vm *Engine) error {
 // opcodeTxInputCount pushes the count of inputs in the current transaction to the
 // stack as a Script Number.
 func opcodeTxInputCount(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	vm.dstack.PushInt(scriptNum(len(vm.tx.TxIn)))
 	return nil
 }
@@ -2949,6 +2968,11 @@ func opcodeTxInputCount(op *parsedOpcode, vm *Engine) error {
 // opcodeTxOutputCount pushes the count of outputs in the current transaction to the
 // stack as a Script Number.
 func opcodeTxOutputCount(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	vm.dstack.PushInt(scriptNum(len(vm.tx.TxOut)))
 	return nil
 }
@@ -2956,6 +2980,11 @@ func opcodeTxOutputCount(op *parsedOpcode, vm *Engine) error {
 // opcodeTxLocktime pushes the locktime of the current transaction to the stack
 // as a Script Number.
 func opcodeTxLocktime(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.tx.LockTime))
 	return nil
 }
@@ -2966,6 +2995,11 @@ func opcodeTxLocktime(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_UTXOVALUE -> b
 func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -2984,6 +3018,11 @@ func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_UTXOBYTECODE -> x
 func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3013,6 +3052,11 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_OUTPOINTTXHASH -> x
 func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3029,6 +3073,11 @@ func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_OUTPOINTINDEX -> b
 func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3042,6 +3091,11 @@ func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_INPUTBYTECODE -> x
 func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3055,6 +3109,11 @@ func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_INPUTSEQUENCENUMBER -> b
 func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3068,6 +3127,11 @@ func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_OUTPUTVALUE -> b
 func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
@@ -3081,6 +3145,11 @@ func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a OP_OUTPUTBYTECODE -> x
 func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
