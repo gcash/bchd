@@ -714,3 +714,110 @@ func TestPhononActivation(t *testing.T) {
 		}
 	}
 }
+
+// TestCosmicInflationActivation tests that 64 bit integers and native introspection
+// opcodes activate correctly.
+func TestCosmicInflationActivation(t *testing.T) {
+	tests, err := fullblocktests.GeneratePhononBlocks()
+	if err != nil {
+		t.Fatalf("failed to generate tests: %v", err)
+	}
+
+	// Create a new database and chain instance to run tests against.
+	params := &chaincfg.RegressionNetParams
+	params.CosmicInflationActivationTime = 0
+	params.PhononForkHeight = 0
+	params.GravitonForkHeight = 0
+	params.MagneticAnonomalyForkHeight = 0
+	params.UahfForkHeight = 0
+	chain, teardownFunc, err := chainSetup("fullblocktest",
+		params, 32000000)
+	if err != nil {
+		t.Errorf("Failed to setup chain instance: %v", err)
+		return
+	}
+	defer teardownFunc()
+
+	// testAcceptedBlock attempts to process the block in the provided test
+	// instance and ensures that it was accepted according to the flags
+	// specified in the test.
+	testAcceptedBlock := func(item fullblocktests.AcceptedBlock) {
+		blockHeight := item.Height
+		block := bchutil.NewBlock(item.Block)
+		block.SetHeight(blockHeight)
+		t.Logf("Testing block %s (hash %s, height %d)",
+			item.Name, block.Hash(), blockHeight)
+
+		isMainChain, isOrphan, err := chain.ProcessBlock(block,
+			blockchain.BFNone)
+		if err != nil {
+			t.Fatalf("block %q (hash %s, height %d) should "+
+				"have been accepted: %v", item.Name,
+				block.Hash(), blockHeight, err)
+		}
+
+		// Ensure the main chain and orphan flags match the values
+		// specified in the test.
+		if isMainChain != item.IsMainChain {
+			t.Fatalf("block %q (hash %s, height %d) unexpected main "+
+				"chain flag -- got %v, want %v", item.Name,
+				block.Hash(), blockHeight, isMainChain,
+				item.IsMainChain)
+		}
+		if isOrphan != item.IsOrphan {
+			t.Fatalf("block %q (hash %s, height %d) unexpected "+
+				"orphan flag -- got %v, want %v", item.Name,
+				block.Hash(), blockHeight, isOrphan,
+				item.IsOrphan)
+		}
+	}
+
+	// testRejectedBlock attempts to process the block in the provided test
+	// instance and ensures that it was rejected with the reject code
+	// specified in the test.
+	testRejectedBlock := func(item fullblocktests.RejectedBlock) {
+		blockHeight := item.Height
+		block := bchutil.NewBlock(item.Block)
+		block.SetHeight(blockHeight)
+		t.Logf("Testing block %s (hash %s, height %d)",
+			item.Name, block.Hash(), blockHeight)
+
+		_, _, err := chain.ProcessBlock(block, blockchain.BFNone)
+		if err == nil {
+			t.Fatalf("block %q (hash %s, height %d) should not "+
+				"have been accepted", item.Name, block.Hash(),
+				blockHeight)
+		}
+
+		// Ensure the error code is of the expected type and the reject
+		// code matches the value specified in the test instance.
+		rerr, ok := err.(blockchain.RuleError)
+		if !ok {
+			t.Fatalf("block %q (hash %s, height %d) returned "+
+				"unexpected error type -- got %T, want "+
+				"blockchain.RuleError", item.Name, block.Hash(),
+				blockHeight, err)
+		}
+		if rerr.ErrorCode != item.RejectCode {
+			t.Fatalf("block %q (hash %s, height %d) does not have "+
+				"expected reject code -- got %v, want %v",
+				item.Name, block.Hash(), blockHeight,
+				rerr.ErrorCode, item.RejectCode)
+		}
+	}
+
+	for testNum, test := range tests {
+		for itemNum, item := range test {
+			switch item := item.(type) {
+			case fullblocktests.AcceptedBlock:
+				testAcceptedBlock(item)
+			case fullblocktests.RejectedBlock:
+				testRejectedBlock(item)
+			default:
+				t.Fatalf("test #%d, item #%d is not one of "+
+					"the supported test instance types -- "+
+					"got type: %T", testNum, itemNum, item)
+			}
+		}
+	}
+}
