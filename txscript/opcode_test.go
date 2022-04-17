@@ -6,7 +6,11 @@ package txscript
 
 import (
 	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/wire"
 	"strconv"
 	"strings"
 	"testing"
@@ -205,6 +209,751 @@ func TestOpcodeDisasm(t *testing.T) {
 				"string - got %v, want %v", opcodeVal, gotStr,
 				expectedStr)
 			continue
+		}
+	}
+}
+
+func TestNativeIntrospectionOpcodes(t *testing.T) {
+	newHashFromStr := func(hexStr string) chainhash.Hash {
+		hash, err := chainhash.NewHashFromStr(hexStr)
+		if err != nil {
+			panic(err)
+		}
+		return *hash
+	}
+	newScript := func(builder *ScriptBuilder) []byte {
+		script, err := builder.Script()
+		if err != nil {
+			panic(err)
+		}
+		return script
+	}
+	fromHex := func(s string) []byte {
+		b, err := hex.DecodeString(s)
+		if err != nil {
+			panic(err)
+		}
+		return b
+	}
+
+	testVectors := [][]struct {
+		name          string
+		scriptPubkey  []byte
+		scriptSig     []byte
+		index         int
+		flags         ScriptFlags
+		expectedError ErrorCode
+	}{
+		// OP_INPUTINDEX (nullary)
+		{
+			{
+				name: "OP_INPUTINDEX 0",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTINDEX).
+					AddInt64(0).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_INPUTINDEX 1",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTINDEX).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index: 1,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_INPUTINDEX Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTINDEX).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index:         1,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_ACTIVEBYTECODE (nullary)
+		{
+			{
+				name: "OP_ACTIVEBYTECODE OP_9",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_9).
+					AddOp(OP_DROP).
+					AddOp(OP_EQUAL)),
+				scriptSig: fromHex("04c1597587"),
+				index:     0,
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE OP_10",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_10).
+					AddOp(OP_DROP).
+					AddOp(OP_EQUAL)),
+				scriptSig: fromHex("04c15a7587"),
+				index:     0,
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE OP_CODESEPERATOR first",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_10).
+					AddOp(OP_11).
+					AddInt64(7654321).
+					AddOp(OP_DROP).
+					AddOp(OP_DROP).
+					AddOp(OP_DROP).
+					AddOp(OP_CODESEPARATOR).
+					AddOp(OP_5).
+					AddOp(OP_DROP).
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_EQUAL)),
+				scriptSig: fromHex("045575c187"),
+				index:     0,
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE OP_CODESEPERATOR second",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_10).
+					AddOp(OP_DROP).
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_EQUALVERIFY).
+					AddOp(OP_CODESEPARATOR).
+					AddOp(OP_1)),
+				scriptSig: fromHex("065a75c188ab51"),
+				index:     0,
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE max",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddData(make([]byte, MaxScriptElementSize-6)).
+					AddOp(OP_DROP).
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_EQUAL)),
+				scriptSig: fromHex("4d08024d02020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000075c187"),
+				index:     0,
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE exceeds max",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddData(make([]byte, MaxScriptElementSize-5)).
+					AddOp(OP_DROP).
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_EQUAL)),
+				scriptSig:     fromHex("4d09024d0302000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000075c187"),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrElementTooBig,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_10).
+					AddOp(OP_DROP).
+					AddOp(OP_ACTIVEBYTECODE).
+					AddOp(OP_EQUALVERIFY).
+					AddOp(OP_CODESEPARATOR).
+					AddOp(OP_1)),
+				scriptSig:     fromHex("065a75c188ab51"),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_TXVERSION (nullary)
+		{
+			{
+				name: "OP_TXVERSION",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXVERSION).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index: 1,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_TXVERSION Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTINDEX).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index:         1,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_TXINPUTCOUNT (nullary)
+		{
+			{
+				name: "OP_TXINPUTCOUNT",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXINPUTCOUNT).
+					AddInt64(2).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_TXINPUTCOUNT Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXINPUTCOUNT).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_TXOUTPUTCOUNT (nullary)
+		{
+			{
+				name: "OP_TXOUTPUTCOUNT",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXOUTPUTCOUNT).
+					AddInt64(2).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_TXOUTPUTCOUNT Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXOUTPUTCOUNT).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_TXLOCKTIME (nullary)
+		{
+			{
+				name: "OP_TXLOCKTIME",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXLOCKTIME).
+					AddInt64(10000).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_TXLOCKTIME Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_TXLOCKTIME).
+					AddInt64(1).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_UTXOVALUE (unary)
+		{
+			{
+				name: "OP_UTXOVALUE first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_UTXOVALUE).
+					AddInt64(2000).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_UTXOVALUE second input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_UTXOVALUE).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_UTXOVALUE out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_UTXOVALUE).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_UTXOVALUE missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_UTXOVALUE).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_UTXOVALUE Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_UTXOVALUE)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_UTXOBYTECODE (unary)
+		{
+			{
+				name: "OP_UTXOBYTECODE first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_UTXOBYTECODE).
+					AddData(fromHex("0000000000000000")).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_UTXOBYTECODE exceeds max size",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_UTXOBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrElementTooBig,
+			},
+			{
+				name: "OP_UTXOBYTECODE out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_UTXOBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_UTXOBYTECODE missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_UTXOBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_UTXOBYTECODE Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_UTXOBYTECODE)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_OUTPOINTTXHASH (unary)
+		{
+			{
+				name: "OP_OUTPOINTHASH first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_OUTPOINTTXHASH).
+					AddData(fromHex("2f663b097fa3439dc2a637d350f410a969587750a99459104363526995ae89be")).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPOINTTXHASH second input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPOINTTXHASH).
+					AddData(fromHex("48b36698efedb8c0a26282e46441948cfb15fae9b78193d3ce4f092b00fcd508")).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPOINTTXHASH out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_OUTPOINTTXHASH).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_OUTPOINTTXHASH missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_OUTPOINTTXHASH).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_OUTPOINTTXHASH Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPOINTTXHASH)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_OUTPOINTINDEX (unary)
+		{
+			{
+				name: "OP_OUTPOINTINDEX first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_OUTPOINTINDEX).
+					AddInt64(5).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPOINTINDEX second input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPOINTINDEX).
+					AddInt64(7).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPOINTINDEX out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_OUTPOINTINDEX).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_OUTPOINTINDEX missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_OUTPOINTINDEX).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_OUTPOINTINDEX Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPOINTINDEX)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_INPUTBYTECODE (unary)
+		{
+			{
+				name: "OP_INPUTBYTECODE first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_DROP).
+					AddInt64(0).
+					AddOp(OP_INPUTBYTECODE).
+					AddData(fromHex("0000000000000000")).
+					AddOp(OP_EQUAL)),
+				index:     0,
+				scriptSig: fromHex("0000000000000000"),
+				flags:     ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_INPUTBYTECODE exceeds max size",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_DROP).
+					AddInt64(0).
+					AddOp(OP_INPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				scriptSig:     make([]byte, MaxScriptElementSize+1),
+				expectedError: ErrElementTooBig,
+			},
+			{
+				name: "OP_INPUTBYTECODE out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_INPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_INPUTBYTECODE missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_INPUTBYTECODE Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_INPUTBYTECODE)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_INPUTSEQUENCENUMBER (unary)
+		{
+			{
+				name: "OP_INPUTSEQUENCENUMBER first input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_INPUTSEQUENCENUMBER).
+					AddInt64(13).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_INPUTSEQUENCENUMBER second input",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_INPUTSEQUENCENUMBER).
+					AddInt64(22).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_INPUTSEQUENCENUMBER out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_INPUTSEQUENCENUMBER).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_INPUTSEQUENCENUMBER missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_INPUTSEQUENCENUMBER).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_INPUTSEQUENCENUMBER Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_INPUTSEQUENCENUMBER)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_OUTPUTVALUE (unary)
+		{
+			{
+				name: "OP_OUTPUTVALUE first output",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_OUTPUTVALUE).
+					AddInt64(10000).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPUTVALUE second output",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPUTVALUE).
+					AddInt64(20000).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPUTVALUE out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_OUTPUTVALUE).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_OUTPUTVALUE missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_OUTPUTVALUE).
+					AddInt64(12000).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_OUTPUTVALUE Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPUTVALUE)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+		// OP_OUTPUTBYTECODE (unary)
+		{
+			{
+				name: "OP_OUTPUTBYTECODE first output",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(0).
+					AddOp(OP_OUTPUTBYTECODE).
+					AddData(fromHex("76a914000000000000000000000000000000000000000088ac")).
+					AddOp(OP_EQUAL)),
+				index: 0,
+				flags: ScriptVerifyNativeIntrospection,
+			},
+			{
+				name: "OP_OUTPUTBYTECODE exceeds max size",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrElementTooBig,
+			},
+			{
+				name: "OP_OUTPUTBYTECODE out of range",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(2).
+					AddOp(OP_OUTPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidIndex,
+			},
+			{
+				name: "OP_OUTPUTBYTECODE missing arg",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_OUTPUTBYTECODE).
+					AddData(fromHex("0000000000000001")).
+					AddOp(OP_EQUAL)),
+				index:         0,
+				flags:         ScriptVerifyNativeIntrospection,
+				expectedError: ErrInvalidStackOperation,
+			},
+			{
+				name: "OP_OUTPUTBYTECODE Not activated",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddInt64(1).
+					AddOp(OP_OUTPUTBYTECODE)),
+				index:         0,
+				expectedError: ErrDisabledOpcode,
+			},
+		},
+	}
+
+	tx := &wire.MsgTx{
+		Version: 1,
+		TxIn: []*wire.TxIn{
+			{
+				PreviousOutPoint: wire.OutPoint{
+					Hash:  newHashFromStr("be89ae9569526343105994a950775869a910f450d337a6c29d43a37f093b662f"),
+					Index: 5,
+				},
+				SignatureScript: nil,
+				Sequence:        13,
+			},
+			{
+				PreviousOutPoint: wire.OutPoint{
+					Hash:  newHashFromStr("08d5fc002b094fced39381b7e9fa15fb8c944164e48262a2c0b8edef9866b348"),
+					Index: 7,
+				},
+				SignatureScript: nil,
+				Sequence:        22,
+			},
+		},
+		TxOut: []*wire.TxOut{
+			{
+				Value: 10000,
+				PkScript: newScript(NewScriptBuilder().
+					AddOp(OP_DUP).
+					AddOp(OP_HASH160).
+					addData(fromHex("0000000000000000000000000000000000000000")).
+					AddOp(OP_EQUALVERIFY).
+					AddOp(OP_CHECKSIG)),
+			},
+			{
+				Value: 20000,
+				PkScript: newScript(NewScriptBuilder().
+					AddOp(OP_HASH160).
+					addData(make([]byte, MaxScriptElementSize)).
+					AddOp(OP_EQUAL)),
+			},
+		},
+		LockTime: 10000,
+	}
+
+	cache := NewUtxoCache()
+	for i := range tx.TxIn {
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, uint64(i))
+		if i == 1 {
+			b = make([]byte, MaxScriptElementSize+1)
+		}
+		cache.AddEntry(i, wire.TxOut{
+			Value:    int64(2000 + (i * 10000)),
+			PkScript: b,
+		})
+	}
+
+	for i, group := range testVectors {
+		for x, test := range group {
+			utxo, err := cache.GetEntry(test.index)
+			if err != nil {
+				t.Fatalf("Test %d - %s: Utxo not found", i*x, test.name)
+			}
+
+			if test.scriptSig != nil {
+				tx.TxIn[test.index].SignatureScript = test.scriptSig
+			}
+
+			vm, err := NewEngine(test.scriptPubkey, tx, test.index, test.flags, nil, nil, cache, utxo.Value)
+			if err == nil {
+				err = vm.Execute()
+			}
+			if err != nil {
+				if !IsErrorCode(err, test.expectedError) {
+					t.Errorf("Test %d - %s: Expected error %v got %v", i*x, test.name, test.expectedError, err)
+				}
+			} else {
+				if test.expectedError != ErrInternal {
+					t.Errorf("Test %d - %s: Expected error %v got nil", i*x, test.name, test.expectedError)
+				}
+			}
+			tx.TxIn[test.index].SignatureScript = nil
 		}
 	}
 }

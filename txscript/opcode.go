@@ -2937,6 +2937,11 @@ func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
 		}
 		script = append(script, b...)
 	}
+	if len(script) > MaxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(script), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
+	}
 	vm.dstack.PushByteArray(script)
 	return nil
 }
@@ -3006,7 +3011,7 @@ func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return err
+		return scriptError(ErrInvalidIndex, "index out of range")
 	}
 	vm.dstack.PushInt(scriptNum(utxo.Value))
 	return nil
@@ -3029,7 +3034,12 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return err
+		return scriptError(ErrInvalidIndex, "index out of range")
+	}
+	if len(utxo.PkScript) > MaxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(utxo.PkScript), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
 	}
 	vm.dstack.PushByteArray(utxo.PkScript)
 	return nil
@@ -3061,6 +3071,11 @@ func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
+	if i.Int32() >= int32(len(vm.tx.TxIn)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
 	outpointHash := vm.tx.TxIn[i].PreviousOutPoint.Hash
 	vm.dstack.PushByteArray(outpointHash[:])
 	return nil
@@ -3082,6 +3097,11 @@ func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
+	if i.Int32() >= int32(len(vm.tx.TxIn)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].PreviousOutPoint.Index))
 	return nil
 }
@@ -3099,6 +3119,16 @@ func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
+	}
+	if i.Int32() >= int32(len(vm.tx.TxIn)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
+	if len(vm.tx.TxIn[i].SignatureScript) > MaxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(vm.tx.TxIn[i].SignatureScript), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
 	}
 	vm.dstack.PushByteArray(vm.tx.TxIn[i].SignatureScript)
 	return nil
@@ -3118,6 +3148,11 @@ func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
+	if i.Int32() >= int32(len(vm.tx.TxIn)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].Sequence))
 	return nil
 }
@@ -3136,6 +3171,11 @@ func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
+	if i.Int32() >= int32(len(vm.tx.TxOut)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
 	vm.dstack.PushInt(scriptNum(vm.tx.TxOut[i].Value))
 	return nil
 }
@@ -3153,6 +3193,16 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
+	}
+	if i.Int32() >= int32(len(vm.tx.TxOut)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
+	if len(vm.tx.TxOut[i].PkScript) > MaxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(vm.tx.TxOut[i].PkScript), MaxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
 	}
 	vm.dstack.PushByteArray(vm.tx.TxOut[i].PkScript)
 	return nil
