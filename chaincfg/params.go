@@ -140,13 +140,14 @@ type Params struct {
 
 	// The following are the heights at which the Bitcoin Cash specific forks
 	// became active.
-	UahfForkHeight              int32 // August 1, 2017 hardfork
-	DaaForkHeight               int32 // November 13, 2017 hardfork
-	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
-	GreatWallForkHeight         int32 // May 15, 2019 hardfork
-	GravitonForkHeight          int32 // Nov 15, 2019 hardfork
-	PhononForkHeight            int32 // May 15, 2020 hardfork
-	AxionActivationHeight       int32 // Nov 15, 2020 hardfork
+	UahfForkHeight                int32  // August 1, 2017 hardfork
+	DaaForkHeight                 int32  // November 13, 2017 hardfork
+	MagneticAnonomalyForkHeight   int32  // November 15, 2018 hardfork
+	GreatWallForkHeight           int32  // May 15, 2019 hardfork
+	GravitonForkHeight            int32  // Nov 15, 2019 hardfork
+	PhononForkHeight              int32  // May 15, 2020 hardfork
+	AxionActivationHeight         int32  // Nov 15, 2020 hardfork
+	CosmicInflationActivationTime uint64 // May 15, 2022 hardfork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -279,6 +280,8 @@ var MainNetParams = Params{
 	GravitonForkHeight:          609135, // 0000000000000000026f7ec9e79be2f5bb839f29ebcf734066d4bb9a13f6ea83
 	PhononForkHeight:            635258, // 000000000000000003302c47d01e78f1c86aa3b0e96b066761a5059bc8f5781a
 	AxionActivationHeight:       661647, // 00000000000000000083ed4b7a780d59e3983513215518ad75654bb02deee62f
+
+	CosmicInflationActivationTime: 1652616000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -445,6 +448,8 @@ var RegressionNetParams = Params{
 	PhononForkHeight:            1000,
 	AxionActivationHeight:       0, // Always active on regtest
 
+	CosmicInflationActivationTime: 1652616000,
+
 	SubsidyReductionInterval:             150,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
@@ -534,6 +539,8 @@ var TestNet3Params = Params{
 	GravitonForkHeight:          1341711, // 00000000c678f67ea16d5bf803f68ce42991839d13849f77332d6f586f62d421
 	PhononForkHeight:            1378460, // 0000000070f33c64cb94629680fbc57d17bea354a73e693affcb366d023db324
 	AxionActivationHeight:       1421481, // 00000000062c7f32591d883c99fc89ebe74a83287c0f2b7ffeef72e62217d40b
+
+	CosmicInflationActivationTime: 1652616000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,

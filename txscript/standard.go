@@ -45,7 +45,9 @@ const (
 		ScriptVerifySchnorrMultisig |
 		ScriptVerifyReverseBytes |
 		ScriptReportSigChecks |
-		ScriptVerifyInputSigChecks
+		ScriptVerifyInputSigChecks |
+		ScriptVerify64BitIntegers |
+		ScriptVerifyNativeIntrospection
 )
 
 // ScriptClass is an enumeration for the list of standard types of script.
