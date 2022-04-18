@@ -3041,7 +3041,9 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 			len(utxo.PkScript), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
-	vm.dstack.PushByteArray(utxo.PkScript)
+	ret := make([]byte, len(utxo.PkScript))
+	copy(ret, utxo.PkScript)
+	vm.dstack.PushByteArray(ret)
 	return nil
 }
 
@@ -3077,7 +3079,9 @@ func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrInvalidIndex, str)
 	}
 	outpointHash := vm.tx.TxIn[i].PreviousOutPoint.Hash
-	vm.dstack.PushByteArray(outpointHash[:])
+	ret := make([]byte, len(outpointHash))
+	copy(ret, outpointHash[:])
+	vm.dstack.PushByteArray(ret)
 	return nil
 }
 
@@ -3130,7 +3134,9 @@ func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
 			len(vm.tx.TxIn[i].SignatureScript), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
-	vm.dstack.PushByteArray(vm.tx.TxIn[i].SignatureScript)
+	ret := make([]byte, len(vm.tx.TxIn[i].SignatureScript))
+	copy(ret, vm.tx.TxIn[i].SignatureScript)
+	vm.dstack.PushByteArray(ret)
 	return nil
 }
 
@@ -3204,7 +3210,9 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 			len(vm.tx.TxOut[i].PkScript), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
-	vm.dstack.PushByteArray(vm.tx.TxOut[i].PkScript)
+	ret := make([]byte, len(vm.tx.TxOut[i].PkScript))
+	copy(ret, vm.tx.TxOut[i].PkScript)
+	vm.dstack.PushByteArray(ret)
 	return nil
 }
 
