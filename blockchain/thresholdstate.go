@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+	"github.com/gcash/bchd/chaincfg"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
@@ -297,6 +298,12 @@ func (b *BlockChain) IsDeploymentActive(deploymentID uint32) (bool, error) {
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) deploymentState(prevNode *blockNode, deploymentID uint32) (ThresholdState, error) {
+	if deploymentID == chaincfg.DeploymentCSV && b.chainParams.CSVHeight > 0 {
+		if prevNode.height+1 >= b.chainParams.CSVHeight {
+			return ThresholdActive, nil
+		}
+	}
+
 	if deploymentID > uint32(len(b.chainParams.Deployments)) {
 		return ThresholdFailed, DeploymentError(deploymentID)
 	}

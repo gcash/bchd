@@ -155,6 +155,7 @@ type config struct {
 	NoOnion                 bool          `long:"noonion" description:"Disable connecting to tor hidden services"`
 	TorIsolation            bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TestNet3                bool          `long:"testnet" description:"Use the test network"`
+	TestNet4                bool          `long:"testnet4" description:"Use the test 4 network"`
 	RegressionTest          bool          `long:"regtest" description:"Use the regression test network"`
 	RegressionTestAnyHost   bool          `long:"regtestanyhost" description:"In regression test mode, allow connections from any host, not just localhost"`
 	RegressionTestNoReset   bool          `long:"regtestnoreset" description:"In regression test mode, don't reset the network db on node restart"`
@@ -589,6 +590,10 @@ func loadConfig() (*config, []string, error) {
 	if cfg.TestNet3 {
 		numNets++
 		activeNetParams = &testNet3Params
+	}
+	if cfg.TestNet4 {
+		numNets++
+		activeNetParams = &testNet4Params
 	}
 	if cfg.RegressionTest {
 		numNets++

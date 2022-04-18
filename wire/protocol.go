@@ -185,6 +185,9 @@ const (
 	// TestNet3 represents the test network (version 3).
 	TestNet3 BitcoinNet = 0xf4f3e5f4
 
+	// TestNet4 represents the test network (version 4).
+	TestNet4 BitcoinNet = 0xafdab7e2
+
 	// SimNet represents the simulation test network.
 	SimNet BitcoinNet = 0x12141c16
 )
