@@ -718,7 +718,7 @@ func TestPhononActivation(t *testing.T) {
 // TestCosmicInflationActivation tests that 64 bit integers and native introspection
 // opcodes activate correctly.
 func TestCosmicInflationActivation(t *testing.T) {
-	tests, err := fullblocktests.GeneratePhononBlocks()
+	tests, err := fullblocktests.GenerateCosmicInflationBlocks()
 	if err != nil {
 		t.Fatalf("failed to generate tests: %v", err)
 	}

@@ -472,7 +472,7 @@ var opcodeArray = [256]opcode{
 	OP_0NOTEQUAL:          {OP_0NOTEQUAL, "OP_0NOTEQUAL", 1, opcode0NotEqual},
 	OP_ADD:                {OP_ADD, "OP_ADD", 1, opcodeAdd},
 	OP_SUB:                {OP_SUB, "OP_SUB", 1, opcodeSub},
-	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeDisabled},
+	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeMul},
 	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDiv},
 	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeMod},
 	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeDisabled},
@@ -1800,8 +1800,15 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	vm.dstack.PushInt(v0 + v1)
-	return nil
+	c := v0 + v1
+	if c == minInt64 {
+		return scriptError(ErrIntegerOverflow, "integer overflow")
+	}
+	if (c > v0) == (v1 > 0) {
+		vm.dstack.PushInt(c)
+		return nil
+	}
+	return scriptError(ErrIntegerOverflow, "integer overflow")
 }
 
 // opcodeSub treats the top two items on the data stack as integers and replaces
@@ -1820,8 +1827,46 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	vm.dstack.PushInt(v1 - v0)
-	return nil
+	c := v1 - v0
+	if c == minInt64 {
+		return scriptError(ErrIntegerOverflow, "integer overflow")
+	}
+	if (c < v1) == (v0 > 0) {
+		vm.dstack.PushInt(c)
+		return nil
+	}
+	return scriptError(ErrIntegerOverflow, "integer overflow")
+}
+
+// opcodeMul return the integer product of a and b.
+//
+// Stack transformation: a b OP_MUL -> out
+func opcodeMul(op *parsedOpcode, vm *Engine) error {
+	b, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	a, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if a == 0 || b == 0 {
+		vm.dstack.PushInt(0)
+		return nil
+	}
+	c := a * b
+	if c == minInt64 {
+		return scriptError(ErrIntegerOverflow, "integer overflow")
+	}
+	if (c < 0) == ((a < 0) != (b < 0)) {
+		if c/b == a {
+			vm.dstack.PushInt(c)
+			return nil
+		}
+	}
+	return scriptError(ErrIntegerOverflow, "integer overflow")
 }
 
 // opcodeDiv return the integer quotient of a and b. If the result

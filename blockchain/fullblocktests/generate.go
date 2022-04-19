@@ -2982,8 +2982,10 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 		}
 
 		// Create one tx paying a p2sh output
-		tx1 := createSpendTx(outs[0], 0)
+		tx1 := createSpendTx(outs[1], 0)
 		builder := txscript.NewScriptBuilder().
+			AddData(make([]byte, 20)).
+			AddOp(txscript.OP_DROP).
 			AddOp(txscript.OP_ACTIVEBYTECODE).
 			AddOp(txscript.OP_EQUAL)
 		redeemScript, err := builder.Script()

@@ -324,6 +324,9 @@ const (
 	// allowed signature density.
 	ErrInputSigChecks
 
+	// ErrIntegerOverflow is returned when a stack operation overflows an int64.
+	ErrIntegerOverflow
+
 	// numErrorCodes is the maximum error code number used in tests.  This
 	// entry MUST be the last entry in the enum.
 	numErrorCodes
@@ -393,6 +396,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidDummy:             "ErrInvalidDummy",
 	ErrInvalidBitCount:          "ErrInvalidBitCount",
 	ErrInputSigChecks:           "ErrInputSigChecks",
+	ErrIntegerOverflow:          "ErrIntegerOverflow",
 }
 
 // String returns the ErrorCode as a human-readable name.
