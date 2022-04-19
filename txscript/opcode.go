@@ -631,8 +631,6 @@ func (pop *parsedOpcode) isDisabled() bool {
 		return true
 	case OP_2DIV:
 		return true
-	case OP_MUL:
-		return true
 	case OP_LSHIFT:
 		return true
 	case OP_RSHIFT:
@@ -1842,6 +1840,11 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a b OP_MUL -> out
 func opcodeMul(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerify64BitIntegers) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
 	b, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
