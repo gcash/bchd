@@ -29,21 +29,33 @@ const (
 //
 // All numbers are stored on the data and alternate stacks encoded as little
 // endian with a sign bit.  All numeric opcodes such as OP_ADD, OP_SUB,
-// and OP_MUL, are only allowed to operate on 4-byte integers in the range
-// [-2^31 + 1, 2^31 - 1], however the results of numeric operations may overflow
-// and remain valid so long as they are not used as inputs to other numeric
-// operations or otherwise interpreted as an integer.
+// and OP_MUL, are only allowed to operate on n-byte integers where n=4 bytes
+// until the CosmicInflation upgrade, and n=8 bytes after the upgrade.  That is,
+// before CosmicInflation the range is [-2^31 + 1, 2^31 - 1], and after the
+// range is [-2^63 + 1, 2^63 - 1].
 //
-// For example, it is possible for OP_ADD to have 2^31 - 1 for its two operands
-// resulting 2^32 - 2, which overflows, but is still pushed to the stack as the
+// However the results of numeric operations may overflow. Before the
+// CosmicInflation upgrade, overflows remain valid so long as they are not used
+// as inputs to other numeric operations or otherwise interpreted as an integer.
+// After the CosmicInflation upgrade, overflows result in an error and
+// termination of script execution.
+//
+// For example, before the CosmicInflation upgrade:
+// It is possible for OP_ADD to have 2^31 - 1 for its two operands resulting
+// in 2^32 - 2, which overflows, but is still pushed to the stack as the
 // result of the addition.  That value can then be used as input to OP_VERIFY
 // which will succeed because the data is being interpreted as a boolean.
 // However, if that same value were to be used as input to another numeric
 // opcode, such as OP_SUB, it must fail.
 //
+// In a similar example after the CosmicInflation upgrade:
+// It is possible for OP_ADD to have 2^63 - 1 for its two operands resulting
+// in 2^64 - 2, which overflows, and results in an error and termination of
+// script execution.
+//
 // This type handles the aforementioned requirements by storing all numeric
-// operation results as an int64 to handle overflow and provides the Bytes
-// method to get the serialized representation (including values that overflow).
+// operation results as an int64 and provides the Bytes method to get the
+//serialized representation (including values that overflow).
 //
 // Then, whenever data is interpreted as an integer, it is converted to this
 // type by using the makeScriptNum function which will return an error if the
@@ -191,14 +203,6 @@ func (n scriptNum) Int64() int64 {
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
 // and returns the result as a script number.
 //
-// Since the consensus rules dictate that serialized bytes interpreted as ints
-// are only allowed to be in the range determined by a maximum number of bytes,
-// on a per opcode basis, an error will be returned when the provided bytes
-// would result in a number outside of that range.  In particular, the range for
-// the vast majority of opcodes dealing with numeric values are limited to 4
-// bytes and therefore will pass that value to this function resulting in an
-// allowed range of [-2^31 + 1, 2^31 - 1].
-//
 // The requireMinimal flag causes an error to be returned if additional checks
 // on the encoding determine it is not represented with the smallest possible
 // number of bytes or is the negative 0 encoding, [0x80].  For example, consider
@@ -208,10 +212,11 @@ func (n scriptNum) Int64() int64 {
 //
 // The scriptNumLen is the maximum number of bytes the encoded value can be
 // before an ErrStackNumberTooBig is returned.  This effectively limits the
-// range of allowed values.
+// range of allowed values and is important, for example, where script
+// arguments are allowed only in a limited range on a per opcode basis.
+//
 // WARNING:  Great care should be taken if passing a value larger than
-// defaultScriptNumLen, which could lead to addition and multiplication
-// overflows.
+// defaultScriptNumLen, which could lead to undefined behavior.
 //
 // See the Bytes function documentation for example encodings.
 func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, error) {
