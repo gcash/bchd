@@ -624,7 +624,7 @@ var TestNet3Params = Params{
 }
 
 // TestNet4Params defines the network parameters for the test Bitcoin network
-// (version 3).  Not to be confused with the regression test network, this
+// (version 4).  Not to be confused with the regression test network, this
 // network is sometimes simply called "testnet".
 var TestNet4Params = Params{
 	Name:        "testnet4",

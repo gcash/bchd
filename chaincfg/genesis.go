@@ -157,7 +157,7 @@ var testNet4GenesisHash = chainhash.Hash([chainhash.HashSize]byte{ // Make go ve
 // for the main network.
 var testNet4GenesisMerkleRoot = genesisMerkleRoot
 
-// testNet3GenesisBlock defines the genesis block of the block chain which
+// testNet4GenesisBlock defines the genesis block of the block chain which
 // serves as the public transaction ledger for the test network (version 4).
 var testNet4GenesisBlock = wire.MsgBlock{
 	Header: wire.BlockHeader{
