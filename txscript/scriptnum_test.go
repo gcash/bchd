@@ -104,35 +104,68 @@ func TestMakeScriptNum(t *testing.T) {
 		err             error
 	}{
 		// Minimal encoding must reject negative 0.
-		{hexToBytes("80"), 0, defaultScriptNumLen, true, errMinimalData},
+		{hexToBytes("80"), 0, defaultSmallScriptNumLen, true, errMinimalData},
 
 		// Minimally encoded valid values with minimal encoding flag.
 		// Should not error and return expected integral number.
-		{nil, 0, defaultScriptNumLen, true, nil},
-		{hexToBytes("01"), 1, defaultScriptNumLen, true, nil},
-		{hexToBytes("81"), -1, defaultScriptNumLen, true, nil},
-		{hexToBytes("7f"), 127, defaultScriptNumLen, true, nil},
-		{hexToBytes("ff"), -127, defaultScriptNumLen, true, nil},
-		{hexToBytes("8000"), 128, defaultScriptNumLen, true, nil},
-		{hexToBytes("8080"), -128, defaultScriptNumLen, true, nil},
-		{hexToBytes("8100"), 129, defaultScriptNumLen, true, nil},
-		{hexToBytes("8180"), -129, defaultScriptNumLen, true, nil},
-		{hexToBytes("0001"), 256, defaultScriptNumLen, true, nil},
-		{hexToBytes("0081"), -256, defaultScriptNumLen, true, nil},
-		{hexToBytes("ff7f"), 32767, defaultScriptNumLen, true, nil},
-		{hexToBytes("ffff"), -32767, defaultScriptNumLen, true, nil},
-		{hexToBytes("008000"), 32768, defaultScriptNumLen, true, nil},
-		{hexToBytes("008080"), -32768, defaultScriptNumLen, true, nil},
-		{hexToBytes("ffff00"), 65535, defaultScriptNumLen, true, nil},
-		{hexToBytes("ffff80"), -65535, defaultScriptNumLen, true, nil},
-		{hexToBytes("000008"), 524288, defaultScriptNumLen, true, nil},
-		{hexToBytes("000088"), -524288, defaultScriptNumLen, true, nil},
-		{hexToBytes("000070"), 7340032, defaultScriptNumLen, true, nil},
-		{hexToBytes("0000f0"), -7340032, defaultScriptNumLen, true, nil},
-		{hexToBytes("00008000"), 8388608, defaultScriptNumLen, true, nil},
-		{hexToBytes("00008080"), -8388608, defaultScriptNumLen, true, nil},
-		{hexToBytes("ffffff7f"), 2147483647, defaultScriptNumLen, true, nil},
-		{hexToBytes("ffffffff"), -2147483647, defaultScriptNumLen, true, nil},
+		{nil, 0, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("01"), 1, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("81"), -1, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("7f"), 127, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ff"), -127, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("8000"), 128, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("8080"), -128, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("8100"), 129, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("8180"), -129, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("0001"), 256, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("0081"), -256, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ff7f"), 32767, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ffff"), -32767, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("008000"), 32768, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("008080"), -32768, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ffff00"), 65535, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ffff80"), -65535, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("000008"), 524288, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("000088"), -524288, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("000070"), 7340032, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("0000f0"), -7340032, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("00008000"), 8388608, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("00008080"), -8388608, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ffffff7f"), 2147483647, defaultSmallScriptNumLen, true, nil},
+		{hexToBytes("ffffffff"), -2147483647, defaultSmallScriptNumLen, true, nil},
+
+		{nil, 0, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("01"), 1, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("81"), -1, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("7f"), 127, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ff"), -127, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8000"), 128, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8080"), -128, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8100"), 129, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("8180"), -129, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0001"), 256, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0081"), -256, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ff7f"), 32767, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff"), -32767, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("008000"), 32768, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("008080"), -32768, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff00"), 65535, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffff80"), -65535, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000008"), 524288, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000088"), -524288, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("000070"), 7340032, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000f0"), -7340032, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00008000"), 8388608, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00008080"), -8388608, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffff7f"), 2147483647, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffff"), -2147483647, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000002"), 8589934592, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000082"), -8589934592, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("0000000000000040"), 4611686018427387904, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("00000000000000c0"), -4611686018427387904, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffffffffff7f"), 9223372036854775807, defaultBigScriptNumLen, true, nil},
+		{hexToBytes("ffffffffffffffff"), -9223372036854775807, defaultBigScriptNumLen, true, nil},
+
 		{hexToBytes("ffffffff7f"), 549755813887, 5, true, nil},
 		{hexToBytes("ffffffffff"), -549755813887, 5, true, nil},
 		{hexToBytes("ffffffffffffff7f"), 9223372036854775807, 8, true, nil},
@@ -145,50 +178,53 @@ func TestMakeScriptNum(t *testing.T) {
 		// Minimally encoded values that are out of range for data that
 		// is interpreted as script numbers with the minimal encoding
 		// flag set.  Should error and return 0.
-		{hexToBytes("0000008000"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("0000008080"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("0000009000"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("0000009080"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffff00"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffff80"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("0000000001"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("0000000081"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffff00"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffff80"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffffff00"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffffff80"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffffff7f"), 0, defaultScriptNumLen, true, errNumTooBig},
-		{hexToBytes("ffffffffffffffff"), 0, defaultScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000008000"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000008080"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000009000"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000009080"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffff00"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffff80"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000000001"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("0000000081"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffff00"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffff80"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffff00"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffff80"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffff7f"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffffff"), 0, defaultSmallScriptNumLen, true, errNumTooBig},
+
+		{hexToBytes("ffffffffffffff7fff"), 0, defaultBigScriptNumLen, true, errNumTooBig},
+		{hexToBytes("ffffffffffffffffff"), 0, defaultBigScriptNumLen, true, errNumTooBig},
 
 		// Non-minimally encoded, but otherwise valid values with
 		// minimal encoding flag.  Should error and return 0.
-		{hexToBytes("00"), 0, defaultScriptNumLen, true, errMinimalData},       // 0
-		{hexToBytes("0100"), 0, defaultScriptNumLen, true, errMinimalData},     // 1
-		{hexToBytes("7f00"), 0, defaultScriptNumLen, true, errMinimalData},     // 127
-		{hexToBytes("800000"), 0, defaultScriptNumLen, true, errMinimalData},   // 128
-		{hexToBytes("810000"), 0, defaultScriptNumLen, true, errMinimalData},   // 129
-		{hexToBytes("000100"), 0, defaultScriptNumLen, true, errMinimalData},   // 256
-		{hexToBytes("ff7f00"), 0, defaultScriptNumLen, true, errMinimalData},   // 32767
-		{hexToBytes("00800000"), 0, defaultScriptNumLen, true, errMinimalData}, // 32768
-		{hexToBytes("ffff0000"), 0, defaultScriptNumLen, true, errMinimalData}, // 65535
-		{hexToBytes("00000800"), 0, defaultScriptNumLen, true, errMinimalData}, // 524288
-		{hexToBytes("00007000"), 0, defaultScriptNumLen, true, errMinimalData}, // 7340032
-		{hexToBytes("0009000100"), 0, 5, true, errMinimalData},                 // 16779520
+		{hexToBytes("00"), 0, defaultSmallScriptNumLen, true, errMinimalData},       // 0
+		{hexToBytes("0100"), 0, defaultSmallScriptNumLen, true, errMinimalData},     // 1
+		{hexToBytes("7f00"), 0, defaultSmallScriptNumLen, true, errMinimalData},     // 127
+		{hexToBytes("800000"), 0, defaultSmallScriptNumLen, true, errMinimalData},   // 128
+		{hexToBytes("810000"), 0, defaultSmallScriptNumLen, true, errMinimalData},   // 129
+		{hexToBytes("000100"), 0, defaultSmallScriptNumLen, true, errMinimalData},   // 256
+		{hexToBytes("ff7f00"), 0, defaultSmallScriptNumLen, true, errMinimalData},   // 32767
+		{hexToBytes("00800000"), 0, defaultSmallScriptNumLen, true, errMinimalData}, // 32768
+		{hexToBytes("ffff0000"), 0, defaultSmallScriptNumLen, true, errMinimalData}, // 65535
+		{hexToBytes("00000800"), 0, defaultSmallScriptNumLen, true, errMinimalData}, // 524288
+		{hexToBytes("00007000"), 0, defaultSmallScriptNumLen, true, errMinimalData}, // 7340032
+		{hexToBytes("0009000100"), 0, 5, true, errMinimalData},                      // 16779520
 
 		// Non-minimally encoded, but otherwise valid values without
 		// minimal encoding flag.  Should not error and return expected
 		// integral number.
-		{hexToBytes("00"), 0, defaultScriptNumLen, false, nil},
-		{hexToBytes("0100"), 1, defaultScriptNumLen, false, nil},
-		{hexToBytes("7f00"), 127, defaultScriptNumLen, false, nil},
-		{hexToBytes("800000"), 128, defaultScriptNumLen, false, nil},
-		{hexToBytes("810000"), 129, defaultScriptNumLen, false, nil},
-		{hexToBytes("000100"), 256, defaultScriptNumLen, false, nil},
-		{hexToBytes("ff7f00"), 32767, defaultScriptNumLen, false, nil},
-		{hexToBytes("00800000"), 32768, defaultScriptNumLen, false, nil},
-		{hexToBytes("ffff0000"), 65535, defaultScriptNumLen, false, nil},
-		{hexToBytes("00000800"), 524288, defaultScriptNumLen, false, nil},
-		{hexToBytes("00007000"), 7340032, defaultScriptNumLen, false, nil},
+		{hexToBytes("00"), 0, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("0100"), 1, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("7f00"), 127, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("800000"), 128, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("810000"), 129, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("000100"), 256, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("ff7f00"), 32767, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("00800000"), 32768, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("ffff0000"), 65535, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("00000800"), 524288, defaultSmallScriptNumLen, false, nil},
+		{hexToBytes("00007000"), 7340032, defaultSmallScriptNumLen, false, nil},
 		{hexToBytes("0009000100"), 16779520, 5, false, nil},
 	}
 
@@ -266,6 +302,65 @@ func TestScriptNumInt32(t *testing.T) {
 		got := test.in.Int32()
 		if got != test.want {
 			t.Errorf("Int32: did not get expected value for %d - "+
+				"got %d, want %d", test.in, got, test.want)
+			continue
+		}
+	}
+}
+
+// TestScriptNumInt64 ensures that the Int64 function on script number behaves
+// as expected.
+func TestScriptNumInt64(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   scriptNum
+		want int64
+	}{
+		// Values inside the valid int64 range are just the values
+		// themselves cast to an int64.
+		{0, 0},
+		{1, 1},
+		{-1, -1},
+		{127, 127},
+		{-127, -127},
+		{128, 128},
+		{-128, -128},
+		{129, 129},
+		{-129, -129},
+		{256, 256},
+		{-256, -256},
+		{32767, 32767},
+		{-32767, -32767},
+		{32768, 32768},
+		{-32768, -32768},
+		{65535, 65535},
+		{-65535, -65535},
+		{524288, 524288},
+		{-524288, -524288},
+		{7340032, 7340032},
+		{-7340032, -7340032},
+		{8388608, 8388608},
+		{-8388608, -8388608},
+		{2147483647, 2147483647},
+		{-2147483647, -2147483647},
+		{-2147483648, -2147483648},
+		{2147483648, 2147483648},
+		{-2147483649, -2147483649},
+		{1152921504606846975, 1152921504606846975},
+		{-1152921504606846975, -1152921504606846975},
+		{2305843009213693951, 2305843009213693951},
+		{-2305843009213693951, -2305843009213693951},
+		{4611686018427387903, 4611686018427387903},
+		{-4611686018427387903, -4611686018427387903},
+		{9223372036854775807, 9223372036854775807},
+		{-9223372036854775808, -9223372036854775808},
+	}
+
+	for _, test := range tests {
+		got := test.in.Int64()
+		if got != test.want {
+			t.Errorf("Int64: did not get expected value for %d - "+
 				"got %d, want %d", test.in, got, test.want)
 			continue
 		}

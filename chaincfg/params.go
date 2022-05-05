@@ -138,15 +138,21 @@ type Params struct {
 	BIP0065Height int32
 	BIP0066Height int32
 
+	// Only testnet4 uses CSV activation by height. All the others use the
+	// deployment schedule. If this value is set to anything other than zero
+	// then it will activate at this height.
+	CSVHeight int32
+
 	// The following are the heights at which the Bitcoin Cash specific forks
 	// became active.
-	UahfForkHeight              int32 // August 1, 2017 hardfork
-	DaaForkHeight               int32 // November 13, 2017 hardfork
-	MagneticAnonomalyForkHeight int32 // November 15, 2018 hardfork
-	GreatWallForkHeight         int32 // May 15, 2019 hardfork
-	GravitonForkHeight          int32 // Nov 15, 2019 hardfork
-	PhononForkHeight            int32 // May 15, 2020 hardfork
-	AxionActivationHeight       int32 // Nov 15, 2020 hardfork
+	UahfForkHeight                int32  // August 1, 2017 hardfork
+	DaaForkHeight                 int32  // November 13, 2017 hardfork
+	MagneticAnonomalyForkHeight   int32  // November 15, 2018 hardfork
+	GreatWallForkHeight           int32  // May 15, 2019 hardfork
+	GravitonForkHeight            int32  // Nov 15, 2019 hardfork
+	PhononForkHeight              int32  // May 15, 2020 hardfork
+	AxionActivationHeight         int32  // Nov 15, 2020 hardfork
+	CosmicInflationActivationTime uint64 // May 15, 2022 hardfork
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -279,6 +285,8 @@ var MainNetParams = Params{
 	GravitonForkHeight:          609135, // 0000000000000000026f7ec9e79be2f5bb839f29ebcf734066d4bb9a13f6ea83
 	PhononForkHeight:            635258, // 000000000000000003302c47d01e78f1c86aa3b0e96b066761a5059bc8f5781a
 	AxionActivationHeight:       661647, // 00000000000000000083ed4b7a780d59e3983513215518ad75654bb02deee62f
+
+	CosmicInflationActivationTime: 1652616000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -445,6 +453,8 @@ var RegressionNetParams = Params{
 	PhononForkHeight:            1000,
 	AxionActivationHeight:       0, // Always active on regtest
 
+	CosmicInflationActivationTime: 1652616000,
+
 	SubsidyReductionInterval:             150,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
@@ -535,6 +545,8 @@ var TestNet3Params = Params{
 	PhononForkHeight:            1378460, // 0000000070f33c64cb94629680fbc57d17bea354a73e693affcb366d023db324
 	AxionActivationHeight:       1421481, // 00000000062c7f32591d883c99fc89ebe74a83287c0f2b7ffeef72e62217d40b
 
+	CosmicInflationActivationTime: 1652616000,
+
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
@@ -611,6 +623,97 @@ var TestNet3Params = Params{
 	SlpAddressPrefix:    "slptest",
 }
 
+// TestNet4Params defines the network parameters for the test Bitcoin network
+// (version 4).  Not to be confused with the regression test network, this
+// network is sometimes simply called "testnet".
+var TestNet4Params = Params{
+	Name:        "testnet4",
+	Net:         wire.TestNet4,
+	DefaultPort: "28333",
+	DNSSeeds: []DNSSeed{
+		{"testnet4.imaginary.cash", true},
+	},
+
+	// Chain parameters
+	GenesisBlock:  &testNet4GenesisBlock,
+	GenesisHash:   &testNet4GenesisHash,
+	PowLimit:      testNet3PowLimit,
+	PowLimitBits:  0x1d00ffff,
+	BIP0034Height: 2,
+	BIP0065Height: 3,
+	BIP0066Height: 4,
+	CSVHeight:     5,
+
+	UahfForkHeight:              5,
+	DaaForkHeight:               3000,
+	MagneticAnonomalyForkHeight: 3999,
+	GreatWallForkHeight:         0,
+	GravitonForkHeight:          4999,
+	PhononForkHeight:            0,
+	AxionActivationHeight:       16844,
+
+	CosmicInflationActivationTime: 1637694000,
+
+	CoinbaseMaturity:                     100,
+	SubsidyReductionInterval:             210000,
+	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:             4,                   // 25% less, 400% more
+	ReduceMinDifficulty:                  true,
+	NoDifficultyAdjustment:               false,
+	MinDiffReductionTime:                 time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:              3600,             // 1 hour
+	AsertDifficultyAnchorHeight:          16844,
+	AsertDifficultyAnchorParentTimestamp: 1605451779,
+	AsertDifficultyAnchorBits:            0x1d00ffff,
+	GenerateSupported:                    false,
+
+	// Checkpoints ordered from oldest to newest.
+	Checkpoints: []Checkpoint{},
+
+	// Consensus rule change deployments.
+	//
+	// The miner confirmation window is defined as:
+	//   target proof of work timespan / target proof of work spacing
+	RuleChangeActivationThreshold: 1512, // 75% of MinerConfirmationWindow
+	MinerConfirmationWindow:       2016,
+	Deployments: [DefinedDeployments]ConsensusDeployment{
+		DeploymentTestDummy: {
+			BitNumber:  28,
+			StartTime:  1199145601, // January 1, 2008 UTC
+			ExpireTime: 1230767999, // December 31, 2008 UTC
+		},
+		DeploymentCSV: {
+			BitNumber:  0,
+			StartTime:  1456790400, // March 1st, 2016
+			ExpireTime: 1493596800, // May 1st, 2017
+		},
+	},
+
+	// Mempool parameters
+	RelayNonStdTxs: false,
+
+	// The prefix for the cashaddress
+	CashAddressPrefix: "bchtest", // always bchtest for testnet
+
+	// Address encoding magics
+	LegacyPubKeyHashAddrID: 0x6f, // starts with m or n
+	LegacyScriptHashAddrID: 0xc4, // starts with 2
+	PrivateKeyID:           0xef, // starts with 9 (uncompressed) or c (compressed)
+
+	// BIP32 hierarchical deterministic extended key magics
+	HDPrivateKeyID: [4]byte{0x04, 0x35, 0x83, 0x94}, // starts with tprv
+	HDPublicKeyID:  [4]byte{0x04, 0x35, 0x87, 0xcf}, // starts with tpub
+
+	// BIP44 coin type used in the hierarchical deterministic path for
+	// address generation.
+	HDCoinType: 1, // all coins use 1
+
+	// slp indexer parameters
+	SlpIndexStartHeight: 0,
+	SlpAddressPrefix:    "slptest",
+}
+
 // SimNetParams defines the network parameters for the simulation test Bitcoin
 // network.  This network is similar to the normal test network except it is
 // intended for private use within a group of individuals doing simulation
@@ -637,6 +740,7 @@ var SimNetParams = Params{
 	MagneticAnonomalyForkHeight:          3000,
 	GreatWallForkHeight:                  0,
 	AxionActivationHeight:                4000,
+	CosmicInflationActivationTime:        0,
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days

@@ -997,6 +997,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// OP_REVERSEBYTES.
 	phononActive := node.height > b.chainParams.PhononForkHeight
 
+	// If CosmicInflation is active we enforce 64BitIntegers and NativeIntrospection
+	cosmicInflationActive := node.parent.CalcPastMedianTime().Unix() >= int64(b.chainParams.CosmicInflationActivationTime)
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1089,6 +1092,11 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// transactions as well as activate OP_REVERSEBYTES.
 	if phononActive {
 		scriptFlags |= txscript.ScriptReportSigChecks | txscript.ScriptVerifyReverseBytes
+	}
+
+	// If CosmicInflation hardfork is active enforce 64BitIntegers and NativeIntrospection
+	if cosmicInflationActive {
+		scriptFlags |= txscript.ScriptVerify64BitIntegers | txscript.ScriptVerifyNativeIntrospection
 	}
 
 	// Perform several checks on the inputs for each transaction.  Also

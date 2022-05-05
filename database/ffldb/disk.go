@@ -1,3 +1,4 @@
+//go:build solaris || plan9 || netbsd || openbsd
 // +build solaris plan9 netbsd openbsd
 
 // Copyright (c) 2013-2018 The btcsuite developers

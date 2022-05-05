@@ -120,6 +120,13 @@ const (
 	// ScriptVerifyReverseBytes enables the use of OP_REVERSEBYTES in the
 	// script.
 	ScriptVerifyReverseBytes
+
+	// ScriptVerify64BitIntegers enables the use of 64 bit ScriptNums
+	ScriptVerify64BitIntegers
+
+	// ScriptVerifyNativeIntrospection enables the suite of native introspection
+	// opcodes.
+	ScriptVerifyNativeIntrospection
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -154,6 +161,7 @@ type Engine struct {
 	flags           ScriptFlags
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
+	utxoCache       *UtxoCache
 	bip16           bool     // treat execution as pay-to-script-hash
 	savedFirstStack [][]byte // stack from first script for bip16 scripts
 	inputAmount     int64
@@ -869,7 +877,7 @@ func (vm *Engine) Clone() *Engine {
 // transaction, and input index.  The flags modify the behavior of the script
 // engine according to the description provided by each flag.
 func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, hashCache *TxSigHashes, inputAmount int64) (*Engine, error) {
+	sigCache *SigCache, hashCache *TxSigHashes, utxoCache *UtxoCache, inputAmount int64) (*Engine, error) {
 
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.TxIn) {
@@ -897,7 +905,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	// it possible to have a situation where P2SH would not be a soft fork
 	// when it should be.
 	vm := Engine{flags: flags, sigCache: sigCache, hashCache: hashCache,
-		inputAmount: inputAmount}
+		utxoCache: utxoCache, inputAmount: inputAmount}
 	if vm.hasFlag(ScriptVerifyCleanStack) && (!vm.hasFlag(ScriptBip16)) {
 		return nil, scriptError(ErrInvalidFlags,
 			"invalid flags combination")
@@ -947,6 +955,13 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	if vm.hasFlag(ScriptVerifyMinimalData) {
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true
+	}
+	if vm.hasFlag(ScriptVerify64BitIntegers) {
+		vm.dstack.defaultScriptNumLen = defaultBigScriptNumLen
+		vm.astack.defaultScriptNumLen = defaultBigScriptNumLen
+	} else {
+		vm.dstack.defaultScriptNumLen = defaultSmallScriptNumLen
+		vm.astack.defaultScriptNumLen = defaultSmallScriptNumLen
 	}
 
 	vm.tx = *tx

@@ -1,3 +1,4 @@
+//go:build dragonfly
 // +build dragonfly
 
 // Copyright (c) 2013-2018 The btcsuite developers
