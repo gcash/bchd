@@ -857,6 +857,7 @@ func (vm *Engine) Clone() *Engine {
 	}
 
 	newVM.astack.verifyMinimalData = vm.astack.verifyMinimalData
+	newVM.astack.defaultScriptNumLen = vm.astack.defaultScriptNumLen
 	newVM.astack.stk = make([][]byte, len(vm.astack.stk))
 	for i, data := range vm.astack.stk {
 		newVM.astack.stk[i] = make([]byte, len(data))
@@ -864,6 +865,7 @@ func (vm *Engine) Clone() *Engine {
 	}
 
 	newVM.dstack.verifyMinimalData = vm.dstack.verifyMinimalData
+	newVM.dstack.defaultScriptNumLen = vm.dstack.defaultScriptNumLen
 	newVM.dstack.stk = make([][]byte, len(vm.dstack.stk))
 	for i, data := range vm.dstack.stk {
 		newVM.dstack.stk[i] = make([]byte, len(data))
