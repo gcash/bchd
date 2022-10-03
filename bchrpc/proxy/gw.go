@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gcash/bchutil"
 	"net/http"
 	"path/filepath"
 	"time"
+
+	"github.com/gcash/bchutil"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
@@ -92,8 +93,8 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 	proxy.server = &http.Server{
 		Addr:         *proxyAddr,
 		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  5 * time.Minute,
+		WriteTimeout: 5 * time.Minute,
 	}
 
 	if *useHTTPS {
