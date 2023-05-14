@@ -542,8 +542,6 @@ func (c *Client) SignRawTransactionWithKeyEntire(txHex string, privkeys []string
 
 func (c *Client) SignRawTransactionWithKeyAsync(txHex string, privkeys []string, prevtxs interface{}, sighashtype string) FutureSignRawTransactionResult {
 	cmd := btcjson.NewSignRawTransactionWithKey("signrawtransactionwithkey", txHex, &privkeys, nil, &sighashtype)
-	//cmd := NewCommand("signrawtransactionwithkey", txHex, privkeys, prevtxs, sighashtype)
-	log.Info(fmt.Sprintf("-----CMD-----:%v", cmd))
 	return c.sendCmd(cmd)
 }
 
