@@ -44,6 +44,9 @@ func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	testProxyAddr := ":8282"
+	proxyAddr = &testProxyAddr
+
 	proxy := &GrpcProxy{
 		ctx:    ctx,
 		server: nil,
