@@ -20,7 +20,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
-const bchdTestNode = "bchd-mainnet.electroncash.de:8335"
+const bchdTestNode = "bchd.greyh.at:8335"
 const logRequestJSON = true // log JSON of request and responses (to glog)
 
 const dustLimit = 546
