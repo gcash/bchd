@@ -55,7 +55,7 @@ const (
 
 	// MinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
-	MinTransactionSize = 100
+	MinTransactionSize = 65
 
 	// BlockMaxBytesMaxSigChecksRatio is the ratio between the maximum allowable
 	// block size and the maximum allowable * SigChecks (executed signature check
