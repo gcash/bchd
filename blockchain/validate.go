@@ -53,8 +53,12 @@ const (
 	// after the UAHF hard fork
 	MaxTransactionSize = oneMegabyte
 
-	// MinTransactionSize is the minimum transaction size allowed on the
+	// MagneticAnomalyMinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
+	MagneticAnomalyMinTransactionSize = 100
+
+	// MinTransactionSize is the minimum transaction size allowed on the
+	// network after the upgrade9 hardfork
 	MinTransactionSize = 65
 
 	// BlockMaxBytesMaxSigChecksRatio is the ratio between the maximum allowable
@@ -235,7 +239,7 @@ func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
 // ensure it is sane.  These checks are context free.
-func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFlags txscript.ScriptFlags) error {
+func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9Active bool, scriptFlags txscript.ScriptFlags) error {
 	// A transaction must have at least one input.
 	msgTx := tx.MsgTx()
 	if len(msgTx.TxIn) == 0 {
@@ -255,9 +259,14 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFl
 			"%d, max %d", serializedTxSize, MaxTransactionSize)
 		return ruleError(ErrTxTooBig, str)
 	}
-	if magneticAnomalyActive && serializedTxSize < MinTransactionSize {
+
+	if magneticAnomalyActive && serializedTxSize < MagneticAnomalyMinTransactionSize {
+		minTxSize := MagneticAnomalyMinTransactionSize
+		if upgrade9Active {
+			minTxSize = MinTransactionSize
+		}
 		str := fmt.Sprintf("serialized transaction is too small - got "+
-			"%d, min %d", serializedTxSize, MinTransactionSize)
+			"%d, min %d", serializedTxSize, minTxSize)
 		return ruleError(ErrTxTooSmall, str)
 	}
 
@@ -457,6 +466,8 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	magneticAnomaly := flags.HasFlag(BFMagneticAnomaly)
 
+	upgrade9 := flags.HasFlag(BFUpgrade9)
+
 	// TODO: This is not a full set of ScriptFlags and only
 	// covers the Nov 2018 fork.
 	var scriptFlags txscript.ScriptFlags
@@ -476,7 +487,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
 		}
 		lastTxid = tx.Hash()
-		err := CheckTransactionSanity(tx, magneticAnomaly, scriptFlags)
+		err := CheckTransactionSanity(tx, magneticAnomaly, upgrade9, scriptFlags)
 		if err != nil {
 			return err
 		}
@@ -516,11 +527,14 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 // CheckBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context free.
-func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool) error {
+func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool, upgrade9Active bool) error {
 	behaviorFlags := BFNone
 
 	if magneticAnomalyActive {
 		behaviorFlags |= BFMagneticAnomaly
+	}
+	if upgrade9Active {
+		behaviorFlags |= BFUpgrade9
 	}
 
 	return checkBlockSanity(block, powLimit, timeSource, behaviorFlags)

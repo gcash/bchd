@@ -3841,18 +3841,22 @@ func verifyChain(s *rpcServer, level, depth int32) error {
 		}
 
 		magneticAnomalyActive := false
+		upgrade9Active := false
 
 		prevHeight := height - 1
 		if prevHeight > 0 {
 			if height > s.cfg.ChainParams.MagneticAnonomalyForkHeight {
 				magneticAnomalyActive = true
 			}
+			if height > s.cfg.ChainParams.Upgrade9ForkHeight {
+				upgrade9Active = true
+			}
 		}
 
 		// Level 1 does basic chain sanity checks.
 		if level > 0 {
 			err := blockchain.CheckBlockSanity(block,
-				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource, magneticAnomalyActive)
+				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource, magneticAnomalyActive, upgrade9Active)
 			if err != nil {
 				rpcsLog.Errorf("Verify is unable to validate "+
 					"block at hash %v height %d: %v",

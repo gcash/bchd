@@ -33,6 +33,11 @@ const (
 	// set.
 	BFMagneticAnomaly
 
+	// BFUpgrade9 signals that the upgrade9 hardfork is
+	// active and the block should be validated according the new rule
+	// set.
+	BFUpgrade9
+
 	// BFNoDupBlockCheck signals if the block should skip existence
 	// checks.
 	BFNoDupBlockCheck
@@ -193,6 +198,10 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 
 	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
 		flags |= BFMagneticAnomaly
+	}
+
+	if block.Height() > b.chainParams.Upgrade9ForkHeight {
+		flags |= BFUpgrade9
 	}
 
 	// Perform preliminary sanity checks on the block and its transactions.
