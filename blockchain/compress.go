@@ -201,6 +201,20 @@ func isScriptHash(script []byte) (bool, []byte) {
 	return false, nil
 }
 
+// isScriptHash32 returns whether or not the passed public key script is a
+// standard pay-to-script-hash script along with the script hash it is paying to
+// if it is.
+func isScriptHash32(script []byte) (bool, []byte) {
+	if len(script) == 35 && script[0] == txscript.OP_HASH256 &&
+		script[1] == txscript.OP_DATA_32 &&
+		script[22] == txscript.OP_EQUAL {
+
+		return true, script[2:34]
+	}
+
+	return false, nil
+}
+
 // isPubKey returns whether or not the passed public key script is a standard
 // pay-to-pubkey script that pays to a valid compressed or uncompressed public
 // key along with the serialized pubkey it is paying to if it is.

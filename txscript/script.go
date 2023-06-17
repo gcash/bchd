@@ -64,6 +64,15 @@ func isScriptHash(pops []parsedOpcode) bool {
 		pops[2].opcode.value == OP_EQUAL
 }
 
+// isScriptHash32 returns true if the script passed is a pay-to-script-hash-32
+// transaction, false otherwise.
+func isScriptHash32(pops []parsedOpcode) bool {
+	return len(pops) == 3 &&
+		pops[0].opcode.value == OP_HASH256 &&
+		pops[1].opcode.value == OP_DATA_32 &&
+		pops[2].opcode.value == OP_EQUAL
+}
+
 // IsPayToScriptHash returns true if the script is in the standard
 // pay-to-script-hash (P2SH) format, false otherwise.
 func IsPayToScriptHash(script []byte) bool {
@@ -72,6 +81,16 @@ func IsPayToScriptHash(script []byte) bool {
 		return false
 	}
 	return isScriptHash(pops)
+}
+
+// IsPayToScriptHash32 returns true if the script is in the standard
+// pay-to-script-hash-32 (P2SH) format, false otherwise.
+func IsPayToScriptHash32(script []byte) bool {
+	pops, err := parseScript(script)
+	if err != nil {
+		return false
+	}
+	return isScriptHash32(pops)
 }
 
 // isPushOnly returns true if the script only pushes data, false otherwise.

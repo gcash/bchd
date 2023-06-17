@@ -30,7 +30,14 @@ const (
 
 	// addrKeySize is the number of bytes an address key consumes in the
 	// index.  It consists of 1 byte address type + 20 bytes hash160.
-	addrKeySize = 1 + 20
+	//addrKeySize = 1 + 20
+
+	// addrKeySize is the number of bytes an address key consumes in the
+	// index.  It consists of 1 byte address type + 32 bytes hash256.
+	// TODO: Since we updated the size, please note that we need to either:
+	// a) detect old indexes and force them to be rebuilt
+	// b) write a migration of the existing index
+	addrKeySize = 1 + 32
 
 	// levelKeySize is the number of bytes a level key in the address index
 	// consumes.  It consists of the address key + 1 byte for the level.
@@ -529,6 +536,11 @@ func addrToKey(addr bchutil.Address) ([addrKeySize]byte, error) {
 		copy(result[1:], addr.Hash160()[:])
 		return result, nil
 
+	case *bchutil.AddressScriptHash32:
+		var result [addrKeySize]byte
+		result[0] = addrKeyTypeScriptHash
+		copy(result[1:], addr.Hash256()[:])
+		return result, nil
 	case *bchutil.AddressPubKey:
 		var result [addrKeySize]byte
 		result[0] = addrKeyTypePubKeyHash
