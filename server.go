@@ -704,6 +704,29 @@ func (sp *serverPeer) OnTx(_ *peer.Peer, msg *wire.MsgTx) {
 	<-sp.txProcessed
 }
 
+// OnDSProof is invoked when a peer receives a dsproof bitcoin message.  It blocks
+// until the proof has been fully processed.
+func (sp *serverPeer) OnDSProof(_ *peer.Peer, msg *wire.MsgDSProof) {
+	if cfg.BlocksOnly {
+		peerLog.Tracef("Ignoring dsproof %v from %v - blocksonly enabled",
+			msg.ProofHash(), sp)
+		return
+	}
+
+	// Add the proof to the known inventory for the peer.
+	h := msg.ProofHash()
+	iv := wire.NewInvVect(wire.InvTypeTx, &h)
+	sp.AddKnownInventory(iv)
+
+	// Queue the proof up to be handled by the sync manager and
+	// intentionally block further receives until the proof is fully
+	// processed and known good or bad.  This helps prevent a malicious peer
+	// from queuing up a bunch of bad proofs before disconnecting (or
+	// being disconnected) and wasting memory.
+	sp.server.syncManager.QueueDSProof(msg, sp.Peer, sp.txProcessed)
+	<-sp.txProcessed
+}
+
 // OnBlock is invoked when a peer receives a block bitcoin message.  It
 // blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
@@ -990,6 +1013,8 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		case wire.InvTypeFilteredBlock:
 			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+		case wire.InvTypeDSProof:
+			err = sp.server.pushDSProofMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		default:
 			peerLog.Warnf("Unknown type in inventory request %d",
 				iv.Type)
@@ -1676,6 +1701,36 @@ func (sp *serverPeer) OnWrite(_ *peer.Peer, bytesWritten int, msg wire.Message, 
 	sp.server.AddBytesSent(uint64(bytesWritten))
 }
 
+// doubleSpendFilterMatch takes a bloom filter from an SPV peer and an outpoint. It loads
+// the transaction from the mempool spending the outpoint and iterates over the outputs to
+// check to see if any match the filter. If so we return true. We also must recursively
+// check any child transactions for output filter matches as well so as to properly determine
+// if we should relay the double spend notification.
+func (sp *serverPeer) doubleSpendFilterMatch(filter *bloom.Filter, op wire.OutPoint) bool {
+	tx := sp.server.txMemPool.CheckSpend(op)
+	if tx == nil {
+		return false
+	}
+
+	outpoints := make([]wire.OutPoint, len(tx.MsgTx().TxOut))
+	for i, out := range tx.MsgTx().TxOut {
+		if sp.filter.Matches(out.PkScript) {
+			return true
+		}
+		outpoints = append(outpoints, wire.OutPoint{
+			Hash:  tx.MsgTx().TxHash(),
+			Index: uint32(i),
+		})
+	}
+
+	for _, outpoint := range outpoints {
+		if sp.doubleSpendFilterMatch(filter, outpoint) {
+			return true
+		}
+	}
+	return false
+}
+
 // randomUint16Number returns a random uint16 in a specified input range.  Note
 // that the range is in zeroth ordering; if you pass it 1800, you will get
 // values from 0 to 1800.
@@ -1746,6 +1801,31 @@ func (s *server) AnnounceNewTransactions(txns []*mempool.TxDesc) {
 	}
 }
 
+// AnnounceNewDSProof generates and relays inventory vectors and notifies
+// both rpc and grpc clients.  This function should be called whenever
+// new double spend proofs are added to the mempool.
+func (s *server) AnnounceNewDSProof(msg *wire.MsgDSProof) {
+	proofHash := msg.ProofHash()
+	// Generate and relay inventory vectors for all newly accepted
+	// double spend proofs.
+	iv := wire.NewInvVect(wire.InvTypeDSProof, &proofHash)
+	s.RelayInventory(iv, msg)
+
+	// TODO: notify RPC server
+	/*
+		if s.rpcServer != nil {
+			s.rpcServer.NotifyNewDSProof(msg)
+		}
+	*/
+
+	// TODO: notify gRPC server
+	/*
+		if s.gRPCServer != nil {
+			s.gRPCServer.NotifyNewDSProof(msg)
+		}
+	*/
+}
+
 // Transaction has one confirmation on the main chain. Now we can mark it as no
 // longer needing rebroadcasting.
 func (s *server) TransactionConfirmed(tx *bchutil.Tx) {
@@ -1783,6 +1863,35 @@ func (s *server) pushTxMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<-
 	}
 
 	sp.QueueMessageWithEncoding(tx.MsgTx(), doneChan, encoding)
+
+	return nil
+}
+
+// pushDSProofMsg sends a dsproof message for the provided proof hash to the
+// connected peer.  An error is returned if the proof hash is not known.
+func (s *server) pushDSProofMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
+	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	// Attempt to fetch the requested transaction from the pool.  A
+	// call could be made to check for existence first, but simply trying
+	// to fetch a missing transaction results in the same behavior.
+	msg, err := s.txMemPool.FetchDSProof(hash)
+	if err != nil {
+		peerLog.Tracef("Unable to fetch tx %v from transaction "+
+			"pool: %v", hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	// Once we have fetched data wait for any previous operation to finish.
+	if waitChan != nil {
+		<-waitChan
+	}
+
+	sp.QueueMessageWithEncoding(msg, doneChan, encoding)
 
 	return nil
 }
@@ -2272,6 +2381,35 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			}
 		}
 
+		if msg.invVect.Type == wire.InvTypeDSProof {
+			// Don't relay the proof to the peer when it has
+			// transaction relaying disabled.
+			if sp.relayTxDisabled() {
+				return
+			}
+
+			dsproof, ok := msg.data.(*wire.MsgDSProof)
+			if !ok {
+				peerLog.Warnf("Underlying data for dsproof inv "+
+					"relay is not a *wire.MsgDSProof: %T",
+					msg.data)
+				return
+			}
+
+			// Don't relay the transaction if there is a bloom
+			// filter loaded and the transaction doesn't match it.
+			if sp.filter.IsLoaded() {
+				op := wire.OutPoint{
+					Hash:  dsproof.TxInPrevHash,
+					Index: dsproof.TxInPrevIndex,
+				}
+
+				if !sp.doubleSpendFilterMatch(sp.filter, op) {
+					return
+				}
+			}
+		}
+
 		// Queue the inventory to be relayed with the next batch.
 		// It will be ignored if the peer is already known to
 		// have the inventory.
@@ -2512,6 +2650,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
+			OnDSProof:      sp.OnDSProof,
 		},
 		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
