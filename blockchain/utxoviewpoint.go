@@ -189,6 +189,7 @@ func addTxOuts(view utxoView, tx *bchutil.Tx, blockHeight int32, overwrite bool)
 		entry := &UtxoEntry{
 			amount:      txOut.Value,
 			pkScript:    pkScript,
+			tokenData:   txOut.TokenData,
 			blockHeight: blockHeight,
 			packedFlags: tfModified,
 		}
@@ -339,8 +340,10 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			copy(pkScript, stxo.PkScript)
 
 			entry := &UtxoEntry{
-				amount:      stxo.Amount,
-				pkScript:    pkScript,
+				amount:   stxo.Amount,
+				pkScript: pkScript,
+				// tokenData: stxo.tokenData,
+				// TODO TODO SpentTxOut
 				blockHeight: stxo.Height,
 				packedFlags: tfModified,
 			}
@@ -391,6 +394,7 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			entry := &UtxoEntry{
 				amount:      txOut.Value,
 				pkScript:    pkScript,
+				tokenData:   txOut.TokenData,
 				blockHeight: block.Height(),
 				packedFlags: packedFlags,
 			}

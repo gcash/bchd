@@ -207,7 +207,7 @@ func isScriptHash(script []byte) (bool, []byte) {
 func isScriptHash32(script []byte) (bool, []byte) {
 	if len(script) == 35 && script[0] == txscript.OP_HASH256 &&
 		script[1] == txscript.OP_DATA_32 &&
-		script[22] == txscript.OP_EQUAL {
+		script[34] == txscript.OP_EQUAL {
 
 		return true, script[2:34]
 	}

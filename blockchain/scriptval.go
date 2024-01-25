@@ -77,11 +77,12 @@ out:
 			sigScript := txIn.SignatureScript
 			pkScript := utxo.PkScript()
 			inputAmount := utxo.Amount()
+			tokenData := utxo.tokenData
 
 			utxoEntryCache := txscript.NewUtxoCache()
 			for i, in := range txVI.tx.MsgTx().TxIn {
 				if i == txVI.txInIndex {
-					utxoEntryCache.AddEntry(i, *wire.NewTxOut(utxo.amount, utxo.pkScript))
+					utxoEntryCache.AddEntry(i, *wire.NewTxOut(utxo.amount, utxo.pkScript, tokenData))
 					continue
 				}
 				u := v.utxoView.LookupEntry(in.PreviousOutPoint)
@@ -95,7 +96,7 @@ out:
 					v.sendResult(err)
 					break out
 				}
-				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript))
+				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
 			}
 
 			vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),
@@ -255,6 +256,19 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 		cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
 	}
 
+	if cachedHashes != nil {
+		utxoCache := txscript.NewUtxoCache()
+		for i, in := range tx.MsgTx().TxIn {
+			u := utxoView.LookupEntry(in.PreviousOutPoint)
+			if u == nil {
+				break // Raise error?
+			}
+			utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+		}
+
+		cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
+	}
+
 	// Collect all of the transaction inputs and required information for
 	// validation.
 	sigChecks := uint32(0)
@@ -317,6 +331,19 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 			cachedHashes, _ = hashCache.GetSigHashes(hash)
 		} else {
 			cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
+		}
+
+		if cachedHashes != nil {
+			utxoCache := txscript.NewUtxoCache()
+			for i, in := range tx.MsgTx().TxIn {
+				u := utxoView.LookupEntry(in.PreviousOutPoint)
+				if u == nil {
+					break // Raise error?
+				}
+				utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+			}
+
+			cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
 		}
 
 		for txInIdx, txIn := range tx.MsgTx().TxIn {

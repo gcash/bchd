@@ -34,6 +34,8 @@ const (
 	// used by the Uahf hardfork.
 	SigHashForkID SigHashType = 0x40
 
+	SigHashUTXO SigHashType = 0x20
+
 	// sigHashMask defines the number of bits of the hash type which is used
 	// to identify which outputs are signed.
 	sigHashMask = 0x1f
@@ -354,6 +356,36 @@ func calcHashPrevOuts(tx *wire.MsgTx) chainhash.Hash {
 	return chainhash.DoubleHashH(b.Bytes())
 }
 
+func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
+	var b bytes.Buffer
+
+	for i, _ := range tx.TxIn {
+		utxo, err := utxoCache.GetEntry(i)
+		if err == nil { // TODO have better error handling
+			wire.WriteTxOut(&b, 0, 0, &utxo)
+		}
+	}
+
+	if b.Len() > 0 {
+		return chainhash.DoubleHashH(b.Bytes())
+	}
+	return chainhash.Hash{}
+}
+
+func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) [][]byte {
+	tokenDataList := make([][]byte, len(tx.TxIn))
+	for i, _ := range tx.TxIn {
+		utxo, err := utxoCache.GetEntry(i)
+		if err == nil { // TODO have better error handling
+			if !utxo.TokenData.IsEmpty() {
+				b := utxo.TokenData.TokenDataBuffer()
+				tokenDataList[i] = b.Bytes()
+			}
+		}
+	}
+	return tokenDataList
+}
+
 // calcHashSequence computes an aggregated hash of each of the sequence numbers
 // within the inputs of the passed transaction. This single hash can be re-used
 // when validating all inputs spending outputs, which include signatures using
@@ -581,6 +613,13 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 		sigHash.Write(zeroHash[:])
 	}
 
+	// add CashTokens data here hashUtxos is a 32-byte double SHA256
+	// of the serialization of all UTXOs spent by the transaction's inputs,
+	// concatenated in input order, excluding output count.
+	if hashType&SigHashUTXO > 0 {
+		sigHash.Write(sigHashes.HashUTXOS[:])
+	}
+
 	// If the sighash isn't anyone can pay, single, or none, the use the
 	// cached hash sequences, otherwise write all zeroes for the
 	// hashSequence.
@@ -597,6 +636,10 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	var bIndex [4]byte
 	binary.LittleEndian.PutUint32(bIndex[:], tx.TxIn[idx].PreviousOutPoint.Index)
 	sigHash.Write(bIndex[:])
+
+	if len(sigHashes.tokenDataList[idx]) > 0 {
+		sigHash.Write(sigHashes.tokenDataList[idx])
+	}
 
 	scriptBytes, _ := unparseScript(subScript)
 

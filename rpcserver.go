@@ -609,7 +609,7 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			return nil, internalRPCError(err.Error(), context)
 		}
 
-		txOut := wire.NewTxOut(int64(satoshi), pkScript)
+		txOut := wire.NewTxOut(int64(satoshi), pkScript, wire.TokenData{}) // TODO TODO FIX THIS! This shouldn't be an empty token data
 		mtx.AddTxOut(txOut)
 	}
 

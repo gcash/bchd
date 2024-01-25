@@ -73,6 +73,8 @@ type UtxoEntry struct {
 	pkScript    []byte // The public key script for the output.
 	blockHeight int32  // Height of block containing tx.
 
+	tokenData wire.TokenData // TODO this can use better memorry optimization. Check the paddings.
+
 	// packedFlags contains additional info about output such as whether it
 	// is a coinbase, whether it is spent, and whether it has been modified
 	// since it was loaded.  This approach is used in order to reduce memory
@@ -90,6 +92,7 @@ func NewUtxoEntry(txOut *wire.TxOut, blockHeight int32, isCoinbase bool) *UtxoEn
 	return &UtxoEntry{
 		amount:      txOut.Value,
 		pkScript:    txOut.PkScript,
+		tokenData:   txOut.TokenData,
 		blockHeight: blockHeight,
 		packedFlags: cbFlag,
 	}
@@ -145,6 +148,8 @@ func (entry *UtxoEntry) memoryUsage() uint64 {
 	//   unsafe.Sizeof(UtxoEntry{})
 	baseEntrySize := uint64(40)
 
+	baseEntrySize += uint64(88) // Size of TokenData
+
 	return baseEntrySize + uint64(len(entry.pkScript))
 }
 
@@ -169,6 +174,7 @@ func (entry *UtxoEntry) Clone() *UtxoEntry {
 	return &UtxoEntry{
 		amount:      entry.amount,
 		pkScript:    entry.pkScript,
+		tokenData:   entry.tokenData,
 		blockHeight: entry.blockHeight,
 		packedFlags: entry.packedFlags,
 	}

@@ -260,14 +260,17 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9
 		return ruleError(ErrTxTooBig, str)
 	}
 
-	if magneticAnomalyActive && serializedTxSize < MagneticAnomalyMinTransactionSize {
+	if magneticAnomalyActive || upgrade9Active {
 		minTxSize := MagneticAnomalyMinTransactionSize
 		if upgrade9Active {
 			minTxSize = MinTransactionSize
 		}
-		str := fmt.Sprintf("serialized transaction is too small - got "+
-			"%d, min %d", serializedTxSize, minTxSize)
-		return ruleError(ErrTxTooSmall, str)
+		if serializedTxSize < minTxSize {
+
+			str := fmt.Sprintf("serialized transaction is too small - got "+
+				"%d, min %d", serializedTxSize, minTxSize)
+			return ruleError(ErrTxTooSmall, str)
+		}
 	}
 
 	// Ensure the transaction amounts are in range.  Each transaction
@@ -1014,6 +1017,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If CosmicInflation is active we enforce 64BitIntegers and NativeIntrospection
 	cosmicInflationActive := node.parent.CalcPastMedianTime().Unix() >= int64(b.chainParams.CosmicInflationActivationTime)
 
+	upgrade9Active := node.height > b.chainParams.Upgrade9ForkHeight
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1111,6 +1116,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If CosmicInflation hardfork is active enforce 64BitIntegers and NativeIntrospection
 	if cosmicInflationActive {
 		scriptFlags |= txscript.ScriptVerify64BitIntegers | txscript.ScriptVerifyNativeIntrospection
+	}
+
+	if upgrade9Active {
+		scriptFlags |= txscript.ScriptAllowSighashUTXO
 	}
 
 	// Perform several checks on the inputs for each transaction.  Also

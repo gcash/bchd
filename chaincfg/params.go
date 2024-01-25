@@ -651,6 +651,7 @@ var ChipNetParams = Params{
 	GravitonForkHeight:          4999,
 	PhononForkHeight:            0,
 	AxionActivationHeight:       16844,
+	Upgrade9ForkHeight:          121956,
 
 	CosmicInflationActivationTime: 1637694000,
 

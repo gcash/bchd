@@ -279,7 +279,7 @@ const (
 	OP_UNKNOWN236            = 0xec // 236
 	OP_UNKNOWN237            = 0xed // 237
 	OP_UNKNOWN238            = 0xee // 238
-	OP_UNKNOWN239            = 0xef // 239
+	SPECIAL_TOKEN_PREFIX     = 0xef // 239
 	OP_UNKNOWN240            = 0xf0 // 240
 	OP_UNKNOWN241            = 0xf1 // 241
 	OP_UNKNOWN242            = 0xf2 // 242
@@ -531,55 +531,55 @@ var opcodeArray = [256]opcode{
 	OP_NOP10: {OP_NOP10, "OP_NOP10", 1, opcodeNop},
 
 	// CashTokens opcodes.
-	OP_UTXOTOKENCATEGORY:     {OP_UTXOTOKENCATEGORY, "OP_UTXOTOKENCATEGORY", 1, opcodeDummy},
-	OP_UTXOTOKENCOMMITMENT:   {OP_UTXOTOKENCOMMITMENT, "OP_UTXOTOKENCOMMITMENT", 1, opcodeDummy},
-	OP_UTXOTOKENAMOUNT:       {OP_UTXOTOKENAMOUNT, "OP_UTXOTOKENAMOUNT", 1, opcodeDummy},
-	OP_OUTPUTTOKENCATEGORY:   {OP_OUTPUTTOKENCATEGORY, "OP_OUTPUTTOKENCATEGORY", 1, opcodeDummy},
-	OP_OUTPUTTOKENCOMMITMENT: {OP_OUTPUTTOKENCOMMITMENT, "OP_OUTPUTTOKENCOMMITMENT", 1, opcodeDummy},
-	OP_OUTPUTTOKENAMOUNT:     {OP_OUTPUTTOKENAMOUNT, "OP_OUTPUTTOKENAMOUNT", 1, opcodeDummy},
+	OP_UTXOTOKENCATEGORY:     {OP_UTXOTOKENCATEGORY, "OP_UTXOTOKENCATEGORY", 1, opcodeUtxoTokenCategory},
+	OP_UTXOTOKENCOMMITMENT:   {OP_UTXOTOKENCOMMITMENT, "OP_UTXOTOKENCOMMITMENT", 1, opcodeUtxoTokenCommitment},
+	OP_UTXOTOKENAMOUNT:       {OP_UTXOTOKENAMOUNT, "OP_UTXOTOKENAMOUNT", 1, opcodeUtxoTokenAmount},
+	OP_OUTPUTTOKENCATEGORY:   {OP_OUTPUTTOKENCATEGORY, "OP_OUTPUTTOKENCATEGORY", 1, opcodeOutputTokenCategory},
+	OP_OUTPUTTOKENCOMMITMENT: {OP_OUTPUTTOKENCOMMITMENT, "OP_OUTPUTTOKENCOMMITMENT", 1, opcodeOutputTokenCommitment},
+	OP_OUTPUTTOKENAMOUNT:     {OP_OUTPUTTOKENAMOUNT, "OP_OUTPUTTOKENAMOUNT", 1, opcodeOutputTokenAmount},
 
 	// Undefined opcodes.
-	OP_UNKNOWN189: {OP_UNKNOWN189, "OP_UNKNOWN189", 1, opcodeInvalid},
-	OP_UNKNOWN190: {OP_UNKNOWN190, "OP_UNKNOWN190", 1, opcodeInvalid},
-	OP_UNKNOWN191: {OP_UNKNOWN191, "OP_UNKNOWN191", 1, opcodeInvalid},
-	OP_UNKNOWN212: {OP_UNKNOWN212, "OP_UNKNOWN212", 1, opcodeInvalid},
-	OP_UNKNOWN213: {OP_UNKNOWN213, "OP_UNKNOWN213", 1, opcodeInvalid},
-	OP_UNKNOWN214: {OP_UNKNOWN214, "OP_UNKNOWN214", 1, opcodeInvalid},
-	OP_UNKNOWN215: {OP_UNKNOWN215, "OP_UNKNOWN215", 1, opcodeInvalid},
-	OP_UNKNOWN216: {OP_UNKNOWN216, "OP_UNKNOWN216", 1, opcodeInvalid},
-	OP_UNKNOWN217: {OP_UNKNOWN217, "OP_UNKNOWN217", 1, opcodeInvalid},
-	OP_UNKNOWN218: {OP_UNKNOWN218, "OP_UNKNOWN218", 1, opcodeInvalid},
-	OP_UNKNOWN219: {OP_UNKNOWN219, "OP_UNKNOWN219", 1, opcodeInvalid},
-	OP_UNKNOWN220: {OP_UNKNOWN220, "OP_UNKNOWN220", 1, opcodeInvalid},
-	OP_UNKNOWN221: {OP_UNKNOWN221, "OP_UNKNOWN221", 1, opcodeInvalid},
-	OP_UNKNOWN222: {OP_UNKNOWN222, "OP_UNKNOWN222", 1, opcodeInvalid},
-	OP_UNKNOWN223: {OP_UNKNOWN223, "OP_UNKNOWN223", 1, opcodeInvalid},
-	OP_UNKNOWN224: {OP_UNKNOWN224, "OP_UNKNOWN224", 1, opcodeInvalid},
-	OP_UNKNOWN225: {OP_UNKNOWN225, "OP_UNKNOWN225", 1, opcodeInvalid},
-	OP_UNKNOWN226: {OP_UNKNOWN226, "OP_UNKNOWN226", 1, opcodeInvalid},
-	OP_UNKNOWN227: {OP_UNKNOWN227, "OP_UNKNOWN227", 1, opcodeInvalid},
-	OP_UNKNOWN228: {OP_UNKNOWN228, "OP_UNKNOWN228", 1, opcodeInvalid},
-	OP_UNKNOWN229: {OP_UNKNOWN229, "OP_UNKNOWN229", 1, opcodeInvalid},
-	OP_UNKNOWN230: {OP_UNKNOWN230, "OP_UNKNOWN230", 1, opcodeInvalid},
-	OP_UNKNOWN231: {OP_UNKNOWN231, "OP_UNKNOWN231", 1, opcodeInvalid},
-	OP_UNKNOWN232: {OP_UNKNOWN232, "OP_UNKNOWN232", 1, opcodeInvalid},
-	OP_UNKNOWN233: {OP_UNKNOWN233, "OP_UNKNOWN233", 1, opcodeInvalid},
-	OP_UNKNOWN234: {OP_UNKNOWN234, "OP_UNKNOWN234", 1, opcodeInvalid},
-	OP_UNKNOWN235: {OP_UNKNOWN235, "OP_UNKNOWN235", 1, opcodeInvalid},
-	OP_UNKNOWN236: {OP_UNKNOWN236, "OP_UNKNOWN236", 1, opcodeInvalid},
-	OP_UNKNOWN237: {OP_UNKNOWN237, "OP_UNKNOWN237", 1, opcodeInvalid},
-	OP_UNKNOWN238: {OP_UNKNOWN238, "OP_UNKNOWN238", 1, opcodeInvalid},
-	OP_UNKNOWN239: {OP_UNKNOWN239, "OP_UNKNOWN239", 1, opcodeInvalid},
-	OP_UNKNOWN240: {OP_UNKNOWN240, "OP_UNKNOWN240", 1, opcodeInvalid},
-	OP_UNKNOWN241: {OP_UNKNOWN241, "OP_UNKNOWN241", 1, opcodeInvalid},
-	OP_UNKNOWN242: {OP_UNKNOWN242, "OP_UNKNOWN242", 1, opcodeInvalid},
-	OP_UNKNOWN243: {OP_UNKNOWN243, "OP_UNKNOWN243", 1, opcodeInvalid},
-	OP_UNKNOWN244: {OP_UNKNOWN244, "OP_UNKNOWN244", 1, opcodeInvalid},
-	OP_UNKNOWN245: {OP_UNKNOWN245, "OP_UNKNOWN245", 1, opcodeInvalid},
-	OP_UNKNOWN246: {OP_UNKNOWN246, "OP_UNKNOWN246", 1, opcodeInvalid},
-	OP_UNKNOWN247: {OP_UNKNOWN247, "OP_UNKNOWN247", 1, opcodeInvalid},
-	OP_UNKNOWN248: {OP_UNKNOWN248, "OP_UNKNOWN248", 1, opcodeInvalid},
-	OP_UNKNOWN249: {OP_UNKNOWN249, "OP_UNKNOWN249", 1, opcodeInvalid},
+	OP_UNKNOWN189:        {OP_UNKNOWN189, "OP_UNKNOWN189", 1, opcodeInvalid},
+	OP_UNKNOWN190:        {OP_UNKNOWN190, "OP_UNKNOWN190", 1, opcodeInvalid},
+	OP_UNKNOWN191:        {OP_UNKNOWN191, "OP_UNKNOWN191", 1, opcodeInvalid},
+	OP_UNKNOWN212:        {OP_UNKNOWN212, "OP_UNKNOWN212", 1, opcodeInvalid},
+	OP_UNKNOWN213:        {OP_UNKNOWN213, "OP_UNKNOWN213", 1, opcodeInvalid},
+	OP_UNKNOWN214:        {OP_UNKNOWN214, "OP_UNKNOWN214", 1, opcodeInvalid},
+	OP_UNKNOWN215:        {OP_UNKNOWN215, "OP_UNKNOWN215", 1, opcodeInvalid},
+	OP_UNKNOWN216:        {OP_UNKNOWN216, "OP_UNKNOWN216", 1, opcodeInvalid},
+	OP_UNKNOWN217:        {OP_UNKNOWN217, "OP_UNKNOWN217", 1, opcodeInvalid},
+	OP_UNKNOWN218:        {OP_UNKNOWN218, "OP_UNKNOWN218", 1, opcodeInvalid},
+	OP_UNKNOWN219:        {OP_UNKNOWN219, "OP_UNKNOWN219", 1, opcodeInvalid},
+	OP_UNKNOWN220:        {OP_UNKNOWN220, "OP_UNKNOWN220", 1, opcodeInvalid},
+	OP_UNKNOWN221:        {OP_UNKNOWN221, "OP_UNKNOWN221", 1, opcodeInvalid},
+	OP_UNKNOWN222:        {OP_UNKNOWN222, "OP_UNKNOWN222", 1, opcodeInvalid},
+	OP_UNKNOWN223:        {OP_UNKNOWN223, "OP_UNKNOWN223", 1, opcodeInvalid},
+	OP_UNKNOWN224:        {OP_UNKNOWN224, "OP_UNKNOWN224", 1, opcodeInvalid},
+	OP_UNKNOWN225:        {OP_UNKNOWN225, "OP_UNKNOWN225", 1, opcodeInvalid},
+	OP_UNKNOWN226:        {OP_UNKNOWN226, "OP_UNKNOWN226", 1, opcodeInvalid},
+	OP_UNKNOWN227:        {OP_UNKNOWN227, "OP_UNKNOWN227", 1, opcodeInvalid},
+	OP_UNKNOWN228:        {OP_UNKNOWN228, "OP_UNKNOWN228", 1, opcodeInvalid},
+	OP_UNKNOWN229:        {OP_UNKNOWN229, "OP_UNKNOWN229", 1, opcodeInvalid},
+	OP_UNKNOWN230:        {OP_UNKNOWN230, "OP_UNKNOWN230", 1, opcodeInvalid},
+	OP_UNKNOWN231:        {OP_UNKNOWN231, "OP_UNKNOWN231", 1, opcodeInvalid},
+	OP_UNKNOWN232:        {OP_UNKNOWN232, "OP_UNKNOWN232", 1, opcodeInvalid},
+	OP_UNKNOWN233:        {OP_UNKNOWN233, "OP_UNKNOWN233", 1, opcodeInvalid},
+	OP_UNKNOWN234:        {OP_UNKNOWN234, "OP_UNKNOWN234", 1, opcodeInvalid},
+	OP_UNKNOWN235:        {OP_UNKNOWN235, "OP_UNKNOWN235", 1, opcodeInvalid},
+	OP_UNKNOWN236:        {OP_UNKNOWN236, "OP_UNKNOWN236", 1, opcodeInvalid},
+	OP_UNKNOWN237:        {OP_UNKNOWN237, "OP_UNKNOWN237", 1, opcodeInvalid},
+	OP_UNKNOWN238:        {OP_UNKNOWN238, "OP_UNKNOWN238", 1, opcodeInvalid},
+	SPECIAL_TOKEN_PREFIX: {SPECIAL_TOKEN_PREFIX, "SPECIAL_TOKEN_PREFIX", 1, opcodeInvalid},
+	OP_UNKNOWN240:        {OP_UNKNOWN240, "OP_UNKNOWN240", 1, opcodeInvalid},
+	OP_UNKNOWN241:        {OP_UNKNOWN241, "OP_UNKNOWN241", 1, opcodeInvalid},
+	OP_UNKNOWN242:        {OP_UNKNOWN242, "OP_UNKNOWN242", 1, opcodeInvalid},
+	OP_UNKNOWN243:        {OP_UNKNOWN243, "OP_UNKNOWN243", 1, opcodeInvalid},
+	OP_UNKNOWN244:        {OP_UNKNOWN244, "OP_UNKNOWN244", 1, opcodeInvalid},
+	OP_UNKNOWN245:        {OP_UNKNOWN245, "OP_UNKNOWN245", 1, opcodeInvalid},
+	OP_UNKNOWN246:        {OP_UNKNOWN246, "OP_UNKNOWN246", 1, opcodeInvalid},
+	OP_UNKNOWN247:        {OP_UNKNOWN247, "OP_UNKNOWN247", 1, opcodeInvalid},
+	OP_UNKNOWN248:        {OP_UNKNOWN248, "OP_UNKNOWN248", 1, opcodeInvalid},
+	OP_UNKNOWN249:        {OP_UNKNOWN249, "OP_UNKNOWN249", 1, opcodeInvalid},
 
 	// Bitcoin Core internal use opcode.  Defined here for completeness.
 	OP_SMALLINTEGER: {OP_SMALLINTEGER, "OP_SMALLINTEGER", 1, opcodeInvalid},
@@ -2383,6 +2383,8 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		sigHashes = NewTxSigHashes(&vm.tx)
 	}
 
+	sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
+
 	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 	if err != nil {
@@ -2571,6 +2573,8 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			sigHashes = NewTxSigHashes(&vm.tx)
 		}
 	}
+
+	sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
 
 	success := true
 
@@ -3268,6 +3272,207 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 	ret := make([]byte, len(vm.tx.TxOut[i].PkScript))
 	copy(ret, vm.tx.TxOut[i].PkScript)
 	vm.dstack.PushByteArray(ret)
+	return nil
+}
+
+// OP_UTXOTOKENCATEGORY Pop the top item from the stack as an input index (VM Number).
+// If the Unspent Transaction Output (UTXO) spent by that input includes no tokens, push
+// a 0 (VM Number) to the stack. If the UTXO does not include a non-fungible token with a
+// capability, push the UTXO's token category, otherwise, push the concatenation of the token
+// category and capability, where the mutable capability is represented by 1 (VM Number) and
+// the minting capability is represented by 2 (VM Number).
+func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
+	if err != nil {
+		return scriptError(ErrInvalidIndex, "index out of range")
+	}
+	if utxo.TokenData.IsEmpty() {
+		vm.dstack.PushInt(0)
+	} else {
+		data := utxo.TokenData.CategoryID[:]
+		if utxo.TokenData.IsMutableNFT() {
+			data = append(data, 0x01)
+		} else if utxo.TokenData.IsMintingNFT() {
+			data = append(data, 0x02)
+		}
+		vm.dstack.PushByteArray(data)
+	}
+	return nil
+}
+
+// OP_UTXOTOKENCOMMITMENT Pop the top item from the stack as an input index (VM Number).
+// Push the token commitment of the Unspent Transaction Output (UTXO) spent by that input
+// to the stack. If the UTXO does not include a non-fungible token, or if it includes a
+// non-fungible token with a zero-length commitment, push a 0 (VM Number).
+func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
+	// fmt.Println("Entered opcodeUtxoTokenCommitment")
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
+	if err != nil {
+		return scriptError(ErrInvalidIndex, "index out of range")
+	}
+	if !utxo.TokenData.HasNFT() || len(utxo.TokenData.Commitment) == 0 {
+		vm.dstack.PushInt(0)
+	} else {
+		vm.dstack.PushByteArray(utxo.TokenData.Commitment)
+	}
+
+	return nil
+}
+
+// OP_UTXOTOKENAMOUNT Pop the top item from the stack as an input index (VM Number).
+// Push the fungible token amount of the Unspent Transaction Output (UTXO) spent by
+// that input to the stack as a VM Number. If the UTXO includes no fungible tokens, push a 0 (VM Number).
+func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
+	// fmt.Println("Entered opcodeUtxoTokenAmount")
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
+	if err != nil {
+		return scriptError(ErrInvalidIndex, "index out of range")
+	}
+
+	if !utxo.TokenData.HasAmount() {
+		vm.dstack.PushInt(0)
+	} else {
+		vm.dstack.PushInt(scriptNum(utxo.TokenData.Amount))
+	}
+
+	return nil
+}
+
+// OP_OUTPUTTOKENCATEGORY Pop the top item from the stack as an output index (VM Number).
+// If the output at that index includes no tokens, push a 0 (VM Number) to the stack.
+// If the output does not include a non-fungible token with a capability, push the output's
+// token category, otherwise, push the concatenation of the token category and capability,
+// where the mutable capability is represented by 1 (VM Number) and the minting capability
+// is represented by 2 (VM Number).
+func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
+	// fmt.Println("Entered opcodeOutputTokenCategory")
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	if i.Int32() >= int32(len(vm.tx.TxOut)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
+	txOut := vm.tx.TxOut[i]
+
+	if txOut.TokenData.IsEmpty() {
+		vm.dstack.PushInt(0)
+	} else {
+		data := txOut.TokenData.CategoryID[:]
+		if txOut.TokenData.IsMutableNFT() {
+			data = append(data, 0x01)
+		} else if txOut.TokenData.IsMintingNFT() {
+			data = append(data, 0x02)
+		}
+		vm.dstack.PushByteArray(data)
+	}
+
+	return nil
+}
+
+// OP_OUTPUTTOKENCOMMITMENT Pop the top item from the stack as an output index (VM Number).
+// Push the token commitment of the output at that index to the stack. If the output does
+// not include a non-fungible token, or if it includes a non-fungible token with a
+// zero-length commitment, push a 0 (VM Number).
+func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
+	// fmt.Println("Entered opcodeOutputTokenCommitment")
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	if i.Int32() >= int32(len(vm.tx.TxOut)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
+	txOut := vm.tx.TxOut[i]
+	if !txOut.TokenData.HasNFT() || len(txOut.TokenData.Commitment) == 0 {
+		vm.dstack.PushInt(0)
+	} else {
+		vm.dstack.PushByteArray(txOut.TokenData.Commitment)
+	}
+
+	return nil
+}
+
+// OP_OUTPUTTOKENAMOUNT Pop the top item from the stack as an output index (VM Number).
+// Push the fungible token amount of the output at that index to the stack as a VM Number.
+// If the output includes no fungible tokens, push a 0 (VM Number).
+func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
+	// fmt.Println("Entered opcodeOutputTokenAmount")
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	// TODO check for upgrade 9 too maybe?
+
+	i, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+	if i.Int32() >= int32(len(vm.tx.TxOut)) {
+		str := fmt.Sprintf("index %d out of range",
+			i.Int32())
+		return scriptError(ErrInvalidIndex, str)
+	}
+	txOut := vm.tx.TxOut[i]
+
+	if !txOut.TokenData.HasAmount() {
+		vm.dstack.PushInt(0)
+	} else {
+		vm.dstack.PushInt(scriptNum(txOut.TokenData.Amount))
+	}
+
 	return nil
 }
 
