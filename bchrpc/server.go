@@ -1017,7 +1017,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			matchAddr := ""
 
 			switch typedAddr := addrs[0].(type) {
-			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash:
+			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
 				matchAddr = addrs[0].EncodeAddress()
 
 			case *bchutil.AddressPubKey:

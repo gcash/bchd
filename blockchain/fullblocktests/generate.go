@@ -230,6 +230,19 @@ func payToScriptHashScript(redeemScript []byte) []byte {
 	return script
 }
 
+// payToScriptHashScript32 returns a standard pay-to-script-hash for the provided
+// redeem script.
+func payToScriptHashScript32(redeemScript []byte) []byte {
+	redeemScriptHash := bchutil.Hash256(redeemScript)
+	script, err := txscript.NewScriptBuilder().
+		AddOp(txscript.OP_HASH256).AddData(redeemScriptHash).
+		AddOp(txscript.OP_EQUAL).Script()
+	if err != nil {
+		panic(err)
+	}
+	return script
+}
+
 // pushDataScript returns a script with the provided items individually pushed
 // to the stack.
 func pushDataScript(items ...[]byte) []byte {

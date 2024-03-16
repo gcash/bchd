@@ -740,6 +740,10 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	if nextBlockHeight > mp.cfg.ChainParams.MagneticAnonomalyForkHeight {
 		magneticAnomalyActive = true
 	}
+	upgrade9Active := false
+	if nextBlockHeight > mp.cfg.ChainParams.Upgrade9ForkHeight {
+		upgrade9Active = true
+	}
 
 	scriptFlags := txscript.StandardVerifyFlags
 	if !mp.cfg.Policy.LimitSigChecks {
@@ -749,7 +753,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// Perform preliminary sanity checks on the transaction.  This makes
 	// use of blockchain which contains the invariant rules for what
 	// transactions are allowed into blocks.
-	err := blockchain.CheckTransactionSanity(tx, magneticAnomalyActive, scriptFlags)
+	err := blockchain.CheckTransactionSanity(tx, magneticAnomalyActive, upgrade9Active, scriptFlags)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)
