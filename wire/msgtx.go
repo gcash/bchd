@@ -241,8 +241,15 @@ type TxOut struct {
 // the transaction output.
 func (t *TxOut) SerializeSize() int {
 	// Value 8 bytes + serialized varint size for the length of PkScript +
-	// PkScript bytes.
-	return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
+	// PkScript bytes. Including token data if present.
+
+	if t.TokenData.IsEmpty() {
+		return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
+	} else {
+		b := t.TokenData.TokenDataBuffer()
+		PkScriptAndTDataSize := len(b.Bytes()) + len(t.PkScript)
+		return 8 + VarIntSerializeSize(uint64(PkScriptAndTDataSize)) + PkScriptAndTDataSize
+	}
 }
 
 // NewTxOut returns a new bitcoin transaction output with the provided
@@ -781,6 +788,11 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 	}
 	to.PkScript, err = to.TokenData.SeparateTokenDataFromPKScriptIfExists(ScriptAndPossibleTokenData, pver)
 	return scriptAndTokendataSize, err
+}
+
+// TODO TODO delete this?
+func ReadTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
+	return readTxOut(r, pver, version, to)
 }
 
 // WriteTxOut encodes to into the bitcoin protocol encoding for a transaction

@@ -128,8 +128,9 @@ const (
 	// opcodes.
 	ScriptVerifyNativeIntrospection
 
-	// ScriptAllowSighashUTXO enables the use of SighashUTXO signing serialization type
-	ScriptAllowSighashUTXO
+	// ScriptAllowCashTokens enables the use of SighashUTXO signing
+	// serialization type and CashTokens related OP codes
+	ScriptAllowCashTokens
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -506,7 +507,7 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 		}
 	}
 
-	if vm.hasFlag(ScriptAllowSighashUTXO) {
+	if vm.hasFlag(ScriptAllowCashTokens) {
 		sigHashType &= ^SigHashUTXO
 	} else {
 		if hashType&SigHashUTXO != 0 {
@@ -974,7 +975,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	}
 
 	if vm.hasFlag(ScriptBip16) && isScriptHash32(vm.scripts[1]) {
-		// Only accept input scripts that push data for P2SH.
+		// Only accept input scripts that push data for P2SH32.
 		if !isPushOnly(vm.scripts[0]) {
 			return nil, scriptError(ErrNotPushOnly,
 				"pay to script hash is not push only")

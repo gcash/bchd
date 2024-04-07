@@ -637,7 +637,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	binary.LittleEndian.PutUint32(bIndex[:], tx.TxIn[idx].PreviousOutPoint.Index)
 	sigHash.Write(bIndex[:])
 
-	if len(sigHashes.tokenDataList[idx]) > 0 {
+	if len(sigHashes.tokenDataList) > 0 && len(sigHashes.tokenDataList[idx]) > 0 {
 		sigHash.Write(sigHashes.tokenDataList[idx])
 	}
 

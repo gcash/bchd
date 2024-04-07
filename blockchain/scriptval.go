@@ -72,7 +72,6 @@ out:
 				v.sendResult(err)
 				break out
 			}
-
 			// Create a new script engine for the script pair.
 			sigScript := txIn.SignatureScript
 			pkScript := utxo.PkScript()
@@ -97,6 +96,11 @@ out:
 					break out
 				}
 				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+			}
+
+			_, err := wire.RunCashTokensValidityAlgorithm(utxoEntryCache, txVI.tx.MsgTx())
+			if err != nil {
+				v.sendResult(err)
 			}
 
 			vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),

@@ -194,6 +194,15 @@ type utxoView interface {
 	spendEntry(outpoint wire.OutPoint, entry *UtxoEntry) error
 }
 
+type utxoCacheInterface interface {
+
+	// AddEntry adds a utxo entry for the given input index.
+	AddEntry(i int, output wire.TxOut)
+
+	// GetEntry adds a utxo entry for the given input index.
+	GetEntry(i int) (wire.TxOut, error)
+}
+
 // utxoCache is a cached utxo view in the chainstate of a BlockChain.
 //
 // It implements the utxoView interface, but should only be used as such with the

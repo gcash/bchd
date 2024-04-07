@@ -1119,7 +1119,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	if upgrade9Active {
-		scriptFlags |= txscript.ScriptAllowSighashUTXO
+		scriptFlags |= txscript.ScriptAllowCashTokens
 	}
 
 	// Perform several checks on the inputs for each transaction.  Also
@@ -1146,6 +1146,14 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			return ruleError(ErrBadFees, "total fees for block "+
 				"overflows accumulator")
 		}
+
+		// TODO TODO
+		// if upgrade9Active {
+		// 	_, err := wire.RunCashTokensValidityAlgorithm(view, tx)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// }
 
 		// Add all of the outputs for this transaction which are not
 		// provably unspendable as available utxos.  Also, the passed

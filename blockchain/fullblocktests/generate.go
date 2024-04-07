@@ -466,8 +466,8 @@ func createSpendTx(spend *spendableOut, fee bchutil.Amount) *wire.MsgTx {
 		SignatureScript:  nil,
 	})
 	spendTx.AddTxOut(wire.NewTxOut(int64(spend.amount-fee),
-		opTrueScript))
-	spendTx.AddTxOut(wire.NewTxOut(0, uniqueOpReturnScript()))
+		opTrueScript, wire.TokenData{}))
+	spendTx.AddTxOut(wire.NewTxOut(0, uniqueOpReturnScript(), wire.TokenData{}))
 
 	return spendTx
 }
@@ -1249,7 +1249,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		for i := 0; i < txnsNeeded; i++ {
 			prevTx = createSpendTxForTx(prevTx, lowFee)
 			prevTx.TxOut[0].Value -= 2
-			prevTx.AddTxOut(wire.NewTxOut(2, p2shScript))
+			prevTx.AddTxOut(wire.NewTxOut(2, p2shScript, wire.TokenData{}))
 			b.AddTransaction(prevTx)
 		}
 	})
@@ -1823,7 +1823,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		const zeroCoin = int64(0)
 		spendTx := b.Transactions[1]
 		for i := 0; i < numAdditionalOutputs; i++ {
-			spendTx.AddTxOut(wire.NewTxOut(zeroCoin, opTrueScript))
+			spendTx.AddTxOut(wire.NewTxOut(zeroCoin, opTrueScript, wire.TokenData{}))
 		}
 
 		// Add transactions spending from the outputs added above that
@@ -1889,7 +1889,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		spendTx := b.Transactions[1]
 		for i := 0; i < numAdditionalOutputs; i++ {
 			opRetScript := uniqueOpReturnScript()
-			spendTx.AddTxOut(wire.NewTxOut(zeroCoin, opRetScript))
+			spendTx.AddTxOut(wire.NewTxOut(zeroCoin, opRetScript, wire.TokenData{}))
 		}
 	})
 	for i := uint32(2); i < 6; i++ {
@@ -2659,7 +2659,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
 
 		tx1 := wire.NewMsgTx(1)
-		tx1.AddTxOut(wire.NewTxOut(1000, script))
+		tx1.AddTxOut(wire.NewTxOut(1000, script, wire.TokenData{}))
 
 		for i := 0; i < blockchain.MaxTransactionSigChecks; i++ {
 			tx1.AddTxIn(&wire.TxIn{
@@ -2734,7 +2734,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
 
 		tx1 := wire.NewMsgTx(1)
-		tx1.AddTxOut(wire.NewTxOut(1000, script))
+		tx1.AddTxOut(wire.NewTxOut(1000, script, wire.TokenData{}))
 
 		for i := 0; i < blockchain.MaxTransactionSigChecks+1; i++ {
 			tx1.AddTxIn(&wire.TxIn{
@@ -2811,7 +2811,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 
 		for i := 0; i < ((32000000/blockchain.BlockMaxBytesMaxSigChecksRatio)/2)+1; i++ {
 			tx1 := wire.NewMsgTx(1)
-			tx1.AddTxOut(wire.NewTxOut(1000, script))
+			tx1.AddTxOut(wire.NewTxOut(1000, script, wire.TokenData{}))
 
 			tx1.AddTxIn(&wire.TxIn{
 				PreviousOutPoint: so.prevOut,

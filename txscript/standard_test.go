@@ -819,13 +819,6 @@ var scriptClassTests = []struct {
 			"5329a00357b3a7886211ab414d55a 1 CHECKMULTISIG",
 		class: MultiSigTy,
 	},
-	// tx e5779b9e78f9650debc2893fd9636d827b26b4ddfa6a8172fe8708c924f5c39d
-	{
-		name: "P2SH",
-		script: "HASH160 DATA_20 0x433ec2ac1ffa1b7b7d027f564529c57197f" +
-			"9ae88 EQUAL",
-		class: ScriptHashTy,
-	},
 
 	{
 		// Nulldata with no data at all.

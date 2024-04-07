@@ -9,6 +9,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/bits"
 
@@ -3282,12 +3283,11 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 // category and capability, where the mutable capability is represented by 1 (VM Number) and
 // the minting capability is represented by 2 (VM Number).
 func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
@@ -3316,13 +3316,11 @@ func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
 // to the stack. If the UTXO does not include a non-fungible token, or if it includes a
 // non-fungible token with a zero-length commitment, push a 0 (VM Number).
 func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
-	// fmt.Println("Entered opcodeUtxoTokenCommitment")
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
@@ -3345,13 +3343,11 @@ func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
 // Push the fungible token amount of the Unspent Transaction Output (UTXO) spent by
 // that input to the stack as a VM Number. If the UTXO includes no fungible tokens, push a 0 (VM Number).
 func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
-	// fmt.Println("Entered opcodeUtxoTokenAmount")
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
@@ -3378,18 +3374,20 @@ func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
 // where the mutable capability is represented by 1 (VM Number) and the minting capability
 // is represented by 2 (VM Number).
 func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
-	// fmt.Println("Entered opcodeOutputTokenCategory")
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
+	if i < 0 {
+		return errors.New("OP_OUTPUTTOKENCATEGORY requires a positive index from the stack")
+	}
+
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
@@ -3417,18 +3415,20 @@ func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
 // not include a non-fungible token, or if it includes a non-fungible token with a
 // zero-length commitment, push a 0 (VM Number).
 func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
-	// fmt.Println("Entered opcodeOutputTokenCommitment")
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
+	if i < 0 {
+		return errors.New("OP_OUTPUTTOKENCOMMITMENT requires a positive index from the stack")
+	}
+
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
@@ -3448,18 +3448,20 @@ func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
 // Push the fungible token amount of the output at that index to the stack as a VM Number.
 // If the output includes no fungible tokens, push a 0 (VM Number).
 func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
-	// fmt.Println("Entered opcodeOutputTokenAmount")
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	// TODO check for upgrade 9 too maybe?
 
 	i, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
+	if i < 0 {
+		return errors.New("OP_OUTPUTTOKENAMOUNT requires a positive index from the stack")
+	}
+
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
