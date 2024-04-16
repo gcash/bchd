@@ -36,8 +36,9 @@ const (
 // from the block being located.
 //
 // For example, assume a block chain with a side chain as depicted below:
-// 	genesis -> 1 -> 2 -> ... -> 15 -> 16  -> 17  -> 18
-// 	                              \-> 16a -> 17a
+//
+//	genesis -> 1 -> 2 -> ... -> 15 -> 16  -> 17  -> 18
+//	                              \-> 16a -> 17a
 //
 // The block locator for block 17a would be the hashes of blocks:
 // [17a 16a 15 14 13 12 11 10 9 8 7 6 4 genesis]
@@ -132,6 +133,10 @@ type BlockChain struct {
 	// chainLock protects concurrent access to the vast majority of the
 	// fields in this struct below this point.
 	chainLock sync.RWMutex
+
+	// This is abla state. TODO TODO: maybe protect it with chainLock
+	ablaConfig ABLAConfig
+	ablaState  ABLAState
 
 	// These fields are related to the memory block index.  They both have
 	// their own locks, however they are often also protected by the chain
@@ -591,7 +596,7 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 // LockTimeToSequence converts the passed relative locktime to a sequence
 // number in accordance to BIP-68.
 // See: https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki
-//  * (Compatibility)
+//   - (Compatibility)
 func LockTimeToSequence(isSeconds bool, locktime uint32) uint32 {
 	// If we're expressing the relative lock time in blocks, then the
 	// corresponding sequence number is simply the desired input age.
@@ -774,6 +779,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
 
+	b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
+
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
 	// allows the old version to act as a snapshot which callers can use
@@ -910,6 +917,8 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
+
+	b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -1226,8 +1235,8 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 // a reorganization to become the main chain).
 //
 // The flags modify the behavior of this function as follows:
-//  - BFFastAdd: Avoids several expensive transaction validation operations.
-//    This is useful when using checkpoints.
+//   - BFFastAdd: Avoids several expensive transaction validation operations.
+//     This is useful when using checkpoints.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, flags BehaviorFlags) (bool, error) {
@@ -1365,8 +1374,8 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 // isCurrent returns whether or not the chain believes it is current.  Several
 // factors are used to guess, but the key factors that allow the chain to
 // believe it is current are:
-//  - Latest block height is after the latest checkpoint (if enabled)
-//  - Latest block has a timestamp newer than 24 hours ago
+//   - Latest block height is after the latest checkpoint (if enabled)
+//   - Latest block has a timestamp newer than 24 hours ago
 //
 // This function MUST be called with the chain state lock held (for reads).
 func (b *BlockChain) isCurrent() bool {
@@ -1389,8 +1398,8 @@ func (b *BlockChain) isCurrent() bool {
 // IsCurrent returns whether or not the chain believes it is current.  Several
 // factors are used to guess, but the key factors that allow the chain to
 // believe it is current are:
-//  - Latest block height is after the latest checkpoint (if enabled)
-//  - Latest block has a timestamp newer than 24 hours ago
+//   - Latest block height is after the latest checkpoint (if enabled)
+//   - Latest block has a timestamp newer than 24 hours ago
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) IsCurrent() bool {
@@ -1649,11 +1658,11 @@ func (b *BlockChain) IntervalBlockHashes(endHash *chainhash.Hash, interval int,
 //
 // In addition, there are two special cases:
 //
-// - When no locators are provided, the stop hash is treated as a request for
-//   that block, so it will either return the node associated with the stop hash
-//   if it is known, or nil if it is unknown
-// - When locators are provided, but none of them are known, nodes starting
-//   after the genesis block will be returned
+//   - When no locators are provided, the stop hash is treated as a request for
+//     that block, so it will either return the node associated with the stop hash
+//     if it is known, or nil if it is unknown
+//   - When locators are provided, but none of them are known, nodes starting
+//     after the genesis block will be returned
 //
 // This is primarily a helper function for the locateBlocks and locateHeaders
 // functions.
@@ -1747,11 +1756,11 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 //
 // In addition, there are two special cases:
 //
-// - When no locators are provided, the stop hash is treated as a request for
-//   that block, so it will either return the stop hash itself if it is known,
-//   or nil if it is unknown
-// - When locators are provided, but none of them are known, hashes starting
-//   after the genesis block will be returned
+//   - When no locators are provided, the stop hash is treated as a request for
+//     that block, so it will either return the stop hash itself if it is known,
+//     or nil if it is unknown
+//   - When locators are provided, but none of them are known, hashes starting
+//     after the genesis block will be returned
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateBlocks(locator BlockLocator, hashStop *chainhash.Hash, maxHashes uint32) []chainhash.Hash {
@@ -2085,11 +2094,11 @@ func (b *BlockChain) ReIndexChainState() error {
 //
 // In addition, there are two special cases:
 //
-// - When no locators are provided, the stop hash is treated as a request for
-//   that header, so it will either return the header for the stop hash itself
-//   if it is known, or nil if it is unknown
-// - When locators are provided, but none of them are known, headers starting
-//   after the genesis block will be returned
+//   - When no locators are provided, the stop hash is treated as a request for
+//     that header, so it will either return the header for the stop hash itself
+//     if it is known, or nil if it is unknown
+//   - When locators are provided, but none of them are known, headers starting
+//     after the genesis block will be returned
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateHeaders(locator BlockLocator, hashStop *chainhash.Hash) []wire.BlockHeader {
@@ -2258,6 +2267,35 @@ func New(config *Config) (*BlockChain, error) {
 	targetTimespan := int64(params.TargetTimespan / time.Second)
 	targetTimePerBlock := int64(params.TargetTimePerBlock / time.Second)
 	adjustmentFactor := params.RetargetAdjustmentFactor
+
+	ablaConfig := ABLAConfig{
+		epsilon0:        params.ABLAConfig.Epsilon0,
+		beta0:           params.ABLAConfig.Beta0,
+		n0:              params.ABLAConfig.N0,
+		gammaReciprocal: params.ABLAConfig.GammaReciprocal,
+		zeta_xB7:        params.ABLAConfig.Zeta_xB7,
+		thetaReciprocal: params.ABLAConfig.ThetaReciprocal,
+		delta:           params.ABLAConfig.Delta,
+	}
+	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 {
+		ablaConfig.epsilon0 = uint64(config.ExcessiveBlockSize) - ablaConfig.beta0
+		ablaConfig.SetMax()
+	}
+	err := ablaConfig.IsValid()
+	if err != nil {
+		return nil, AssertError(err.String())
+	}
+
+	ablaState := ABLAState{
+		blockHeight:       0,
+		controlBlockSize:  ablaConfig.epsilon0,
+		elasticBufferSize: ablaConfig.beta0,
+	}
+	err = ablaState.IsValid(&ablaConfig)
+	if err != nil {
+		return nil, AssertError(err.String())
+	}
+
 	b := BlockChain{
 		checkpoints:         config.Checkpoints,
 		checkpointsByHeight: checkpointsByHeight,
@@ -2266,6 +2304,8 @@ func New(config *Config) (*BlockChain, error) {
 		timeSource:          config.TimeSource,
 		sigCache:            config.SigCache,
 		excessiveBlockSize:  config.ExcessiveBlockSize,
+		ablaConfig:          ablaConfig,
+		ablaState:           ablaState,
 		indexManager:        config.IndexManager,
 		minRetargetTimespan: targetTimespan / adjustmentFactor,
 		maxRetargetTimespan: targetTimespan * adjustmentFactor,

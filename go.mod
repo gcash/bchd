@@ -43,5 +43,6 @@ require (
 	google.golang.org/grpc v1.55.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	lukechampine.com/uint128 v1.3.0 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )

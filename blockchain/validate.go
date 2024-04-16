@@ -90,9 +90,13 @@ var (
 // MaxBlockSize returns the is the maximum number of bytes allowed in
 // a block. If the UAHF hardfork is active the returned value is the
 // excessive blocksize. Otherwise it's the legacy blocksize.
-func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
+func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 	if uahfActive {
-		return int(b.excessiveBlockSize)
+		if !ablaActive {
+			return uint64(b.excessiveBlockSize)
+		} else {
+			return b.ablaState.getBlockSizeLimit()
+		}
 	}
 	return LegacyMaxBlockSize
 }
@@ -352,8 +356,8 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9
 // target difficulty as claimed.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFNoPoWCheck: The check to ensure the block hash is less than the target
-//    difficulty is not performed.
+//   - BFNoPoWCheck: The check to ensure the block hash is less than the target
+//     difficulty is not performed.
 func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags BehaviorFlags) error {
 	// The target difficulty must be larger than zero.
 	target := CompactToBig(header.Bits)
@@ -626,8 +630,8 @@ func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
 // which depend on its position within the block chain.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFFastAdd: All checks except those involving comparing the header against
-//    the checkpoints are not performed.
+//   - BFFastAdd: All checks except those involving comparing the header against
+//     the checkpoints are not performed.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode *blockNode, flags BehaviorFlags) error {
@@ -706,8 +710,8 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 // on its position within the block chain.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFFastAdd: The transaction are not checked to see if they are finalized
-//    and the somewhat expensive BIP0034 validation is not performed.
+//   - BFFastAdd: The transaction are not checked to see if they are finalized
+//     and the somewhat expensive BIP0034 validation is not performed.
 //
 // The flags are also passed to checkBlockHeaderContext.  See its documentation
 // for how the flags modify its behavior.
@@ -722,15 +726,16 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	}
 
 	uahfActive := block.Height() > b.chainParams.UahfForkHeight
+	ablaActive := block.Height() > b.chainParams.ABLAForkHeight
 
 	// A block must not have more transactions than the max block payload or
 	// else it is certainly over the size limit.
 	// We need to check the blocksize here rather than in checkBlockSanity
 	// because after the Uahf activation it is not longer context free as
 	// the max size depends on whether Uahf has activated or not.
-	maxBlockSize := b.MaxBlockSize(uahfActive)
+	maxBlockSize := b.MaxBlockSize(uahfActive, ablaActive)
 	numTx := len(block.MsgBlock().Transactions)
-	if numTx > maxBlockSize {
+	if uint64(numTx) > maxBlockSize {
 		str := fmt.Sprintf("block contains too many transactions - "+
 			"got %d, max %d", numTx, maxBlockSize)
 		return ruleError(ErrBlockTooBig, str)
@@ -750,7 +755,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	// A block must not exceed the maximum allowed block payload when
 	// serialized.
 	serializedSize := block.MsgBlock().SerializeSize()
-	if serializedSize > maxBlockSize {
+	if uint64(serializedSize) > maxBlockSize {
 		str := fmt.Sprintf("serialized block is too big - got %d, "+
 			"max %d", serializedSize, maxBlockSize)
 		return ruleError(ErrBlockTooBig, str)
@@ -1254,7 +1259,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// expensive ECDSA signature check scripts.  Doing this last helps
 	// prevent CPU exhaustion attacks.
 	if runScripts {
-		maxSigChecks := b.excessiveBlockSize / BlockMaxBytesMaxSigChecksRatio
+		maxSigChecks := uint32(b.ablaState.getBlockSizeLimit()) / BlockMaxBytesMaxSigChecksRatio // TODO change this to uint64
 		err := checkBlockScripts(block, view, scriptFlags, b.sigCache,
 			b.hashCache, maxSigChecks, b.chainParams.Upgrade9ForkHeight)
 		if err != nil {

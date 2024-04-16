@@ -101,6 +101,16 @@ const (
 	DefinedDeployments
 )
 
+type ABLAConstants struct {
+	Epsilon0        uint64
+	Beta0           uint64
+	N0              uint64
+	GammaReciprocal uint64
+	Zeta_xB7        uint64
+	ThetaReciprocal uint64
+	Delta           uint64
+}
+
 // Params defines a Bitcoin network by its parameters.  These parameters may be
 // used by Bitcoin applications to differentiate networks as well as addresses
 // and keys for one network from those intended for use on another network.
@@ -154,6 +164,10 @@ type Params struct {
 	AxionActivationHeight         int32  // Nov 15, 2020 hardfork
 	CosmicInflationActivationTime uint64 // May 15, 2022 hardfork
 	Upgrade9ForkHeight            int32  // May 15 2023 hardfork
+	ABLAForkHeight                int32
+
+	// The ABLA algorithm constants
+	ABLAConfig ABLAConstants
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -290,6 +304,17 @@ var MainNetParams = Params{
 	CosmicInflationActivationTime: 1652616000,
 
 	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
+	ABLAForkHeight:     845890,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        0,
+		Beta0:           0,
+		N0:              0,
+		GammaReciprocal: 0,
+		Zeta_xB7:        0,
+		ThetaReciprocal: 0,
+		Delta:           0,
+	},
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -652,6 +677,17 @@ var ChipNetParams = Params{
 	PhononForkHeight:            0,
 	AxionActivationHeight:       16844,
 	Upgrade9ForkHeight:          121956,
+	ABLAForkHeight:              174519,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        0,
+		Beta0:           0,
+		N0:              0,
+		GammaReciprocal: 0,
+		Zeta_xB7:        0,
+		ThetaReciprocal: 0,
+		Delta:           0,
+	},
 
 	CosmicInflationActivationTime: 1637694000,
 
