@@ -1440,7 +1440,7 @@ var sigScriptTests = []tstSigScript{
 		name: "one input uncompressed",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1454,13 +1454,13 @@ var sigScriptTests = []tstSigScript{
 		name: "two inputs uncompressed",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
 			},
 			{
-				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1474,7 +1474,7 @@ var sigScriptTests = []tstSigScript{
 		name: "one input compressed",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, compressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, compressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1488,13 +1488,13 @@ var sigScriptTests = []tstSigScript{
 		name: "two inputs compressed",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, compressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, compressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
 			},
 			{
-				txout:              wire.NewTxOut(coinbaseVal+fee, compressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal+fee, compressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1508,7 +1508,7 @@ var sigScriptTests = []tstSigScript{
 		name: "hashType SigHashNone",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1522,7 +1522,7 @@ var sigScriptTests = []tstSigScript{
 		name: "hashType SigHashSingle",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1536,7 +1536,7 @@ var sigScriptTests = []tstSigScript{
 		name: "hashType SigHashAnyoneCanPay",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1550,7 +1550,7 @@ var sigScriptTests = []tstSigScript{
 		name: "hashType non-standard",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1564,7 +1564,7 @@ var sigScriptTests = []tstSigScript{
 		name: "invalid compression",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     false,
 				indexOutOfRange:    false,
@@ -1578,7 +1578,7 @@ var sigScriptTests = []tstSigScript{
 		name: "short PkScript",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, shortPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, shortPkScript, wire.TokenData{}),
 				sigscriptGenerates: false,
 				indexOutOfRange:    false,
 			},
@@ -1591,13 +1591,13 @@ var sigScriptTests = []tstSigScript{
 		name: "valid script at wrong index",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
 			},
 			{
-				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1611,13 +1611,13 @@ var sigScriptTests = []tstSigScript{
 		name: "index out of range",
 		inputs: []tstInput{
 			{
-				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
 			},
 			{
-				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript),
+				txout:              wire.NewTxOut(coinbaseVal+fee, uncompressedPkScript, wire.TokenData{}),
 				sigscriptGenerates: true,
 				inputValidates:     true,
 				indexOutOfRange:    false,
@@ -1649,7 +1649,7 @@ nexttest:
 	for i := range sigScriptTests {
 		tx := wire.NewMsgTx(wire.TxVersion)
 
-		output := wire.NewTxOut(500, []byte{OP_RETURN})
+		output := wire.NewTxOut(500, []byte{OP_RETURN}, wire.TokenData{})
 		tx.AddTxOut(output)
 
 		for range sigScriptTests[i].inputs {

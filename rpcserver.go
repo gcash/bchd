@@ -580,6 +580,7 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 		switch addr.(type) {
 		case *bchutil.AddressPubKeyHash:
 		case *bchutil.AddressScriptHash:
+		case *bchutil.AddressScriptHash32:
 		default:
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCInvalidAddressOrKey,
@@ -608,7 +609,7 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			return nil, internalRPCError(err.Error(), context)
 		}
 
-		txOut := wire.NewTxOut(int64(satoshi), pkScript)
+		txOut := wire.NewTxOut(int64(satoshi), pkScript, wire.TokenData{}) // TODO TODO FIX THIS! This shouldn't be an empty token data
 		mtx.AddTxOut(txOut)
 	}
 
@@ -3841,18 +3842,22 @@ func verifyChain(s *rpcServer, level, depth int32) error {
 		}
 
 		magneticAnomalyActive := false
+		upgrade9Active := false
 
 		prevHeight := height - 1
 		if prevHeight > 0 {
 			if height > s.cfg.ChainParams.MagneticAnonomalyForkHeight {
 				magneticAnomalyActive = true
 			}
+			if height > s.cfg.ChainParams.Upgrade9ForkHeight {
+				upgrade9Active = true
+			}
 		}
 
 		// Level 1 does basic chain sanity checks.
 		if level > 0 {
 			err := blockchain.CheckBlockSanity(block,
-				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource, magneticAnomalyActive)
+				s.cfg.ChainParams.PowLimit, s.cfg.TimeSource, magneticAnomalyActive, upgrade9Active)
 			if err != nil {
 				rpcsLog.Errorf("Verify is unable to validate "+
 					"block at hash %v height %d: %v",

@@ -61,6 +61,15 @@ var testNet4Params = params{
 	gRRPPort: "18335",
 }
 
+// chipNetParams contains parameters specific to the chip network
+// (wire.ChipNet).  NOTE: The RPC port is intentionally different than the
+// reference implementation - see the mainNetParams comment for details.
+var chipNetParams = params{
+	Params:   &chaincfg.ChipNetParams,
+	rpcPort:  "18334",
+	gRRPPort: "18335",
+}
+
 // simNetParams contains parameters specific to the simulation test network
 // (wire.SimNet).
 var simNetParams = params{

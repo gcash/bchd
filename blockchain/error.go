@@ -223,6 +223,9 @@ const (
 	// ErrInvalidTxOrder indicates the order of the transactions in the block
 	// does not follow the active transaction ordering consensus rule.
 	ErrInvalidTxOrder
+
+	// ErrCashTokensValidation indicates the token data is invalid in some way
+	ErrCashTokensValidation
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -270,6 +273,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidTxOrder:        "ErrInvalidTxOrder",
 	ErrTooManySigChecks:      "ErrTooManySigChecks",
 	ErrTxTooManySigChecks:    "ErrTxTooManySigChecks",
+	ErrCashTokensValidation:  "ErrCashTokensValidation",
 }
 
 // String returns the ErrorCode as a human-readable name.
