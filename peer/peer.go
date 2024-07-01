@@ -29,7 +29,7 @@ import (
 
 const (
 	// MaxProtocolVersion is the max protocol version the peer supports.
-	MaxProtocolVersion = wire.NoValidationRelayVersion
+	MaxProtocolVersion = wire.DoubleSpendProofVersion
 
 	// DefaultTrickleInterval is the min time between attempts to send an
 	// inv message to a peer.
@@ -216,6 +216,10 @@ type MessageListeners struct {
 	// OnBlockTxns is invoked when a peer receives a blocktxns bitcoin
 	// message.
 	OnBlockTxns func(p *Peer, msg *wire.MsgBlockTxns)
+
+	// OnDSProof is invoked when a peer receives a dsproof bitcoin
+	// message.
+	OnDSProof func(p *Peer, msg *wire.MsgDSProof)
 
 	// OnRead is invoked when a peer receives a bitcoin message.  It
 	// consists of the number of bytes read, the message, and whether or not
@@ -1712,6 +1716,11 @@ out:
 		case *wire.MsgBlockTxns:
 			if p.cfg.Listeners.OnBlockTxns != nil {
 				p.cfg.Listeners.OnBlockTxns(p, msg)
+			}
+
+		case *wire.MsgDSProof:
+			if p.cfg.Listeners.OnDSProof != nil {
+				p.cfg.Listeners.OnDSProof(p, msg)
 			}
 
 		default:
