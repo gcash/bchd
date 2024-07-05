@@ -28,7 +28,7 @@ require (
 	github.com/onsi/gomega v1.10.5 // indirect
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/common v0.43.0 // indirect
-	github.com/rs/cors v1.9.0 // indirect
+	github.com/rs/cors v1.11.0 // indirect
 	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0
