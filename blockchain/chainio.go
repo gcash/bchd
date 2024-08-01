@@ -666,16 +666,23 @@ func serializeUtxoEntry(entry *UtxoEntry) ([]byte, error) {
 		return nil, err
 	}
 
+	pkScript := entry.PkScript()
+	if !entry.tokenData.IsEmpty() {
+		buf := entry.tokenData.TokenDataBuffer()
+		buf.Write(pkScript)
+		pkScript = buf.Bytes()
+	}
+
 	// Calculate the size needed to serialize the entry.
 	size := serializeSizeVLQ(headerCode) +
-		compressedTxOutSize(uint64(entry.Amount()), entry.PkScript())
+		compressedTxOutSize(uint64(entry.Amount()), pkScript)
 
 	// Serialize the header code followed by the compressed unspent
 	// transaction output.
 	serialized := make([]byte, size)
 	offset := putVLQ(serialized, headerCode)
 	putCompressedTxOut(serialized[offset:], uint64(entry.Amount()),
-		entry.PkScript())
+		pkScript)
 
 	return serialized, nil
 }
@@ -710,6 +717,8 @@ func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 		blockHeight: blockHeight,
 		packedFlags: 0,
 	}
+	entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(entry.pkScript, 0)
+
 	if isCoinBase {
 		entry.packedFlags |= tfCoinBase
 	}
@@ -744,6 +753,7 @@ func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEn
 		pkScript:    pkScript,
 		packedFlags: 0,
 	}
+	entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(entry.pkScript, 0)
 	if coinbaseFlag > 0 {
 		entry.packedFlags |= tfCoinBase
 	}

@@ -428,6 +428,7 @@ func deserializeUtxoEntryV0(serialized []byte) (map[uint32]*UtxoEntry, error) {
 			blockHeight: int32(blockHeight),
 			packedFlags: packedFlags,
 		}
+		entries[outputIndex].pkScript, _ = entries[outputIndex].tokenData.SeparateTokenDataFromPKScriptIfExists(entries[outputIndex].pkScript, 0)
 	}
 
 	return entries, nil

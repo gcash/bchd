@@ -88,7 +88,7 @@ func NewUtxoEntry(txOut *wire.TxOut, blockHeight int32, isCoinbase bool) *UtxoEn
 	if isCoinbase {
 		cbFlag |= tfCoinBase
 	}
-
+	txOut.PkScript, _ = txOut.TokenData.SeparateTokenDataFromPKScriptIfExists(txOut.PkScript, 0)
 	return &UtxoEntry{
 		amount:      txOut.Value,
 		pkScript:    txOut.PkScript,
