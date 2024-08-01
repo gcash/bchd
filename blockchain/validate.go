@@ -1256,7 +1256,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	if runScripts {
 		maxSigChecks := b.excessiveBlockSize / BlockMaxBytesMaxSigChecksRatio
 		err := checkBlockScripts(block, view, scriptFlags, b.sigCache,
-			b.hashCache, maxSigChecks)
+			b.hashCache, maxSigChecks, b.chainParams.Upgrade9ForkHeight)
 		if err != nil {
 			return err
 		}

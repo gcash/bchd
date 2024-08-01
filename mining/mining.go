@@ -698,7 +698,7 @@ mempoolLoop:
 		}
 		sigchecks, err := blockchain.ValidateTransactionScripts(tx, blockUtxos,
 			txscript.StandardVerifyFlags, g.sigCache,
-			g.hashCache)
+			g.hashCache, g.chainParams.Upgrade9ForkHeight)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"ValidateTransactionScripts: %v", tx.Hash(), err)

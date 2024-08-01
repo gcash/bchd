@@ -2384,7 +2384,9 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		sigHashes = NewTxSigHashes(&vm.tx)
 	}
 
-	sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
+	if hashType&SigHashUTXO != 0 { // TODO TODO use hashType. For other places that use AddTxSigHashUtxoFromUtxoCache too
+		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
+	}
 
 	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
@@ -2574,9 +2576,9 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			sigHashes = NewTxSigHashes(&vm.tx)
 		}
 	}
-
-	sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
-
+	if vm.hasFlag(ScriptAllowCashTokens) {
+		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
+	}
 	success := true
 
 	if vm.hasFlag(ScriptVerifySchnorrMultisig) && len(dummy) > 0 { // Schnorr multisig

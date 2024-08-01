@@ -783,10 +783,17 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 
 	scriptAndTokendataSize := len(ScriptAndPossibleTokenData)
 
-	if ScriptAndPossibleTokenData[0] != 0xef { // Todo maybe change this
+	if scriptAndTokendataSize > 0 && ScriptAndPossibleTokenData[0] != 0xef { // Todo maybe change this
+		to.PkScript = ScriptAndPossibleTokenData
+		return scriptAndTokendataSize, err
+	}
+	var tokenDataSeparationErr error
+	to.PkScript, tokenDataSeparationErr = to.TokenData.SeparateTokenDataFromPKScriptIfExists(ScriptAndPossibleTokenData, pver)
+
+	if tokenDataSeparationErr != nil { // after activation this must fail! TODO TODO
+		to.TokenData = TokenData{} // Maybe move this inside TokenData.SeparateTokenDataFromPKScriptIfExists()
 		to.PkScript = ScriptAndPossibleTokenData
 	}
-	to.PkScript, err = to.TokenData.SeparateTokenDataFromPKScriptIfExists(ScriptAndPossibleTokenData, pver)
 	return scriptAndTokendataSize, err
 }
 

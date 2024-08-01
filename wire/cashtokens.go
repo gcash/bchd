@@ -30,7 +30,7 @@ type TokenData struct {
 }
 
 func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pver uint32) ([]byte, error) {
-	if buf[0] != PREFIX_BYTE {
+	if len(buf) == 0 || buf[0] != PREFIX_BYTE {
 		// There is no token data. Return the whole buffer as script
 		return buf, nil
 	} else {
@@ -201,7 +201,6 @@ func IsCoinBaseTx(msgTx *MsgTx) bool {
 
 // Token Validation Algorithm
 func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, error) {
-
 	if IsCoinBaseTx(tx) {
 		return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 	}

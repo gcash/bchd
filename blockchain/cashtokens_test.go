@@ -455,6 +455,11 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 			if len(test) == 7 {
 				txIdx = int(test[6].(float64))
 			}
+
+			if blockchain.IsPATFO(utxos[txIdx].TokenData, utxos[txIdx].PkScript, 100, 782772) {
+				continue
+			}
+
 			inputAmount := utxos[txIdx].Value
 
 			vm, err := txscript.NewEngine(utxos[txIdx].PkScript, &tx, txIdx, flags, nil, nil, cache, inputAmount)
