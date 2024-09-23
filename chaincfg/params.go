@@ -307,13 +307,13 @@ var MainNetParams = Params{
 	ABLAForkHeight:     845890,
 
 	ABLAConfig: ABLAConstants{
-		Epsilon0:        0,
-		Beta0:           0,
-		N0:              0,
-		GammaReciprocal: 0,
-		Zeta_xB7:        0,
-		ThetaReciprocal: 0,
-		Delta:           0,
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		Zeta_xB7:        192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
 	},
 
 	CoinbaseMaturity:                     100,
@@ -680,13 +680,13 @@ var ChipNetParams = Params{
 	ABLAForkHeight:              174519,
 
 	ABLAConfig: ABLAConstants{
-		Epsilon0:        0,
-		Beta0:           0,
-		N0:              0,
-		GammaReciprocal: 0,
-		Zeta_xB7:        0,
-		ThetaReciprocal: 0,
-		Delta:           0,
+		Epsilon0:        1000000,
+		Beta0:           1000000,
+		N0:              174519,
+		GammaReciprocal: 37938,
+		Zeta_xB7:        192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
 	},
 
 	CosmicInflationActivationTime: 1637694000,
