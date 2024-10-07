@@ -47,6 +47,10 @@ var (
 	// the block height -> block hash index.
 	heightIndexBucketName = []byte("heightidx")
 
+	// ablaStateBucketName is the name of the db bucket used to house to
+	// the block height -> ablaState index.
+	ablaStateBucketName = []byte("ablaidx")
+
 	// chainStateKeyName is the name of the db key used to store the best
 	// chain state.
 	chainStateKeyName = []byte("chainstate")
@@ -965,6 +969,88 @@ func dbFetchHashByHeight(dbTx database.Tx, height int32) (*chainhash.Hash, error
 }
 
 // -----------------------------------------------------------------------------
+// The ablaState index consists of a bucket with an entry for every block in the
+// main chain.  One bucket is for the hash to height mapping and the other is
+// for the height to hash mapping.
+//
+// The serialized format for values in the height to hash bucket is:
+//   <ablaState>
+//
+// The serialized format is:
+//
+//   <controlBlockSize><elasticBufferSize>
+//
+//   Field      		 Type     Size
+//   controlBlockSize    uint64   8 bytes
+//   elasticBufferSize   uint64   8 bytes
+// -----------------------------------------------------------------------------
+
+// dbPutABLAStateIndex uses an existing database transaction to update or add the
+// ablaState index entries for the height to state mapping for
+// the provided values.
+func dbPutABLAStateIndex(dbTx database.Tx, ablaState ABLAState, height int32) error {
+	// Serialize the height for use in the index entries.
+	var serializedHeight [4]byte
+	byteOrder.PutUint32(serializedHeight[:], uint32(height))
+
+	var serializedAblaState [16]byte
+	byteOrder.PutUint64(serializedAblaState[:], ablaState.controlBlockSize)
+	byteOrder.PutUint64(serializedAblaState[:], ablaState.elasticBufferSize)
+
+	// Add the block hash to height mapping to the index.
+	meta := dbTx.Metadata()
+	ablaStateIndex := meta.Bucket(ablaStateBucketName)
+	return ablaStateIndex.Put(serializedHeight[:], serializedAblaState[:])
+
+}
+
+// dbRemoveABLAStateIndex uses an existing database transaction remove ABLA state index
+// entries from height to state mapping for the provided
+// value.
+func dbRemoveABLAStateIndex(dbTx database.Tx, height int32) error {
+
+	// Remove the block hash to height mapping.
+	meta := dbTx.Metadata()
+
+	// Remove the block height to state mapping.
+	var serializedHeight [4]byte
+	byteOrder.PutUint32(serializedHeight[:], uint32(height))
+	ablaStateIndex := meta.Bucket(ablaStateBucketName)
+	return ablaStateIndex.Delete(serializedHeight[:])
+}
+
+// dbFetchHashByHeight uses an existing database transaction to retrieve the
+// hash for the provided height from the index.
+func dbFetchAblaStateByHeight(dbTx database.Tx, height int32) (*ABLAState, error) {
+	var serializedHeight [4]byte
+	byteOrder.PutUint32(serializedHeight[:], uint32(height))
+
+	meta := dbTx.Metadata()
+	ablaStateIndex := meta.Bucket(ablaStateBucketName)
+	serializedData := ablaStateIndex.Get(serializedHeight[:])
+	if serializedData == nil {
+		str := fmt.Sprintf("no ABLA state at height %d exists", height)
+		return nil, errNotInMainChain(str)
+	}
+
+	// Ensure the serialized data has the right length.
+	if uint32(len(serializedData[:])) > 16 {
+		return &ABLAState{}, database.Error{
+			ErrorCode:   database.ErrCorruption,
+			Description: "corrupt ABLA state",
+		}
+	}
+
+	var ablaState ABLAState
+	ablaState.blockHeight = uint64(height)
+	ablaState.controlBlockSize = byteOrder.Uint64(serializedData[0:8])
+	ablaState.elasticBufferSize = byteOrder.Uint64(serializedData[8:])
+
+	return &ablaState, nil
+
+}
+
+// -----------------------------------------------------------------------------
 // The best chain state consists of the best block hash and height, the total
 // number of transactions up to and including those in the best block, and the
 // accumulated work sum up to and including the best block.
@@ -1072,17 +1158,18 @@ func dbPutBestState(dbTx database.Tx, snapshot *BestState, workSum *big.Int) err
 //
 // The serialized format is:
 //
-//   <status code><consistent hash>
+//	<status code><consistent hash>
 //
-//   Field             Type             Size
-//   status code       byte             1
-//   consistent hash   chainhash.Hash   chainhash.HashSize
+//	Field             Type             Size
+//	status code       byte             1
+//	consistent hash   chainhash.Hash   chainhash.HashSize
 //
 // The possible values for the state code are:
 //
-//   1: consistent with the given hash, no flush ongoing
-//   2: flush ongoing from the stored consistent hash to best state (see best
-//      state bucket)
+//	1: consistent with the given hash, no flush ongoing
+//	2: flush ongoing from the stored consistent hash to best state (see best
+//	   state bucket)
+//
 // -----------------------------------------------------------------------------
 const (
 	// UTXO consistency status (UCS) codes are used to indicate the
@@ -1231,6 +1318,13 @@ func (b *BlockChain) createChainState() error {
 		// Create the bucket that houses the chain block height to hash
 		// index.
 		_, err = meta.CreateBucket(heightIndexBucketName)
+		if err != nil {
+			return err
+		}
+
+		// Create the bucket that houses the chain block height to hash
+		// index.
+		_, err = meta.CreateBucket(ablaStateBucketName)
 		if err != nil {
 			return err
 		}
@@ -1389,6 +1483,17 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 				"chain tip %s in block index", state.hash))
 		}
 		b.bestChain.SetTip(tip)
+
+		ablaState, err := dbFetchAblaStateByHeight(dbTx, tip.height)
+		if err == nil {
+			b.ablaState = *ablaState
+		} else {
+			// check if upgrade is active for block
+			if tip.height > b.chainParams.ABLAForkHeight {
+				return AssertError(fmt.Sprintf("initChainState: cannot find "+
+					"ABLA state index for block at height: ", tip.height))
+			}
+		}
 
 		// Load the raw block bytes for the best block.
 		var block wire.MsgBlock

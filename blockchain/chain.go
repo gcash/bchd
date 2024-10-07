@@ -730,10 +730,18 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	state := newBestState(node, blockSize, numTxns,
 		curTotalTxns+numTxns, node.CalcPastMedianTime())
 
+	b.ablaState = b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
+
 	// Atomically insert info into the database.
 	err = b.db.Update(func(dbTx database.Tx) error {
 		// Update best block state.
 		err := dbPutBestState(dbTx, state, node.workSum)
+		if err != nil {
+			return err
+		}
+
+		// Add ABLA state for block
+		err = dbPutABLAStateIndex(dbTx, b.ablaState, block.Height())
 		if err != nil {
 			return err
 		}
@@ -778,8 +786,6 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
-
-	b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -870,6 +876,14 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 			return err
 		}
 
+		// Add ABLA state for block
+		err = dbRemoveABLAStateIndex(dbTx, block.Height())
+		if err != nil {
+			return err
+		}
+		ablaState, err := dbFetchAblaStateByHeight(dbTx, prevBlock.Height())
+		b.ablaState = *ablaState
+
 		// Remove the block hash and height from the block index which
 		// tracks the main chain.
 		err = dbRemoveBlockIndex(dbTx, block.Hash(), node.height)
@@ -917,8 +931,6 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
-
-	b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -2287,7 +2299,7 @@ func New(config *Config) (*BlockChain, error) {
 	}
 
 	ablaState := ABLAState{
-		blockHeight:       0,
+		blockHeight:       uint64(params.ABLAForkHeight),
 		controlBlockSize:  ablaConfig.epsilon0,
 		elasticBufferSize: ablaConfig.beta0,
 	}
