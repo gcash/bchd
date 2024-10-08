@@ -1152,14 +1152,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 				"overflows accumulator")
 		}
 
-		// TODO TODO
-		// if upgrade9Active {
-		// 	_, err := wire.RunCashTokensValidityAlgorithm(view, tx)
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// }
-
 		// Add all of the outputs for this transaction which are not
 		// provably unspendable as available utxos.  Also, the passed
 		// spent txos slice is updated to contain an entry for each

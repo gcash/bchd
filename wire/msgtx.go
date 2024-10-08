@@ -797,7 +797,6 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 	return scriptAndTokendataSize, err
 }
 
-// TODO TODO delete this?
 func ReadTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
 	return readTxOut(r, pver, version, to)
 }

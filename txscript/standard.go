@@ -358,7 +358,7 @@ func payToScriptHashScript(scriptHash []byte) ([]byte, error) {
 		AddOp(OP_EQUAL).Script()
 }
 
-// payToScriptHashScript creates a new script to pay a transaction output to a
+// payToScriptHashScript32 creates a new script to pay a transaction output to a
 // script hash. It is expected that the input is a valid hash.
 func payToScriptHashScript32(scriptHash []byte) ([]byte, error) {
 	return NewScriptBuilder().AddOp(OP_HASH256).AddData(scriptHash).

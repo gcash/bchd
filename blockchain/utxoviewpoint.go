@@ -348,10 +348,8 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			copy(pkScript, stxo.PkScript)
 
 			entry := &UtxoEntry{
-				amount:   stxo.Amount,
-				pkScript: pkScript,
-				// tokenData: stxo.tokenData,
-				// TODO TODO SpentTxOut
+				amount:      stxo.Amount,
+				pkScript:    pkScript,
 				blockHeight: stxo.Height,
 				packedFlags: tfModified,
 			}

@@ -134,7 +134,7 @@ type BlockChain struct {
 	// fields in this struct below this point.
 	chainLock sync.RWMutex
 
-	// This is abla state. TODO TODO: maybe protect it with chainLock
+	// This is abla state.
 	ablaConfig ABLAConfig
 	ablaState  ABLAState
 

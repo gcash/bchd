@@ -19,7 +19,7 @@ const (
 	HAS_COMMITMENT_LENGTH = 0x40
 	RESERVED_BIT          = 0x80
 
-	BASE_TOEN_DATA_LENGTH = 1 + 32 + 1
+	BASE_TOKEN_DATA_LENGTH = 1 + 32 + 1
 )
 
 type TokenData struct {
@@ -66,7 +66,6 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 					scriptLengthCount -= (1 + len(b)) // commitmentLength
 				} else {
 					return nil, errors.New("invalid commitment length")
-					//TODO TODO raise error if commitment length bigger than 40
 				}
 			}
 			if tokenData.HasAmount() {
@@ -278,11 +277,9 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		}
 
 		if txOut.TokenData.HasAmount() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > 9223372036854775807) {
-			// TODO TODO return error
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 		if len(txOut.TokenData.Commitment) > 40 {
-			// TODO TODO return error
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 
@@ -341,7 +338,6 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		categoryIsMissing = false
 	}
 	if categoryIsMissing {
-		// TODO TODO throw an error!
 		return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 	}
 
@@ -358,7 +354,6 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 				}
 			}
 			if !existsInGenesisCategories || tokenOutputValue > 9223372036854775807 {
-				// TODO TODO return error
 				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 			}
 		}
@@ -378,7 +373,6 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		if !existsInAvailableMintingCategories {
 			Available_Mutable_Tokens_By_Category[outputCategory] -= tokenOutputValue
 			if Available_Mutable_Tokens_By_Category[outputCategory] < 0 {
-				// TODO TODO return error
 				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 			}
 		}
@@ -408,13 +402,10 @@ out:
 			}
 			_, ok := Available_Mutable_Tokens_By_Category[outputImmutableToken.category]
 			if !ok {
-				// TODO TODO double check this part and return proper error
 				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 			}
 			if ok {
 				if Available_Mutable_Tokens_By_Category[outputImmutableToken.category] <= 0 {
-					// TODO TODO double check this part and return proper error
-					// TODO TODO remove what and where?
 					return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 				}
 				Available_Mutable_Tokens_By_Category[outputImmutableToken.category] -= 1
