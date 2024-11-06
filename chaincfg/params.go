@@ -306,6 +306,7 @@ var MainNetParams = Params{
 	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
 	ABLAForkHeight:     845890,
 
+	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
 		Beta0:           16000000,
@@ -679,6 +680,7 @@ var ChipNetParams = Params{
 	Upgrade9ForkHeight:          121956,
 	ABLAForkHeight:              174519,
 
+	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
 		Beta0:           1000000,
