@@ -145,10 +145,12 @@ func (entry *UtxoEntry) memoryUsage() uint64 {
 	}
 
 	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(UtxoEntry{})
+	//   unsafe.Sizeof(UtxoEntry{}) before adding tokenData
 	baseEntrySize := uint64(40)
 
-	baseEntrySize += uint64(88) // Size of TokenData
+	// This value is calculated by running the following on a 64-bit system:
+	//   unsafe.Sizeof(TokenData{}) assuming commitment of length 40
+	baseEntrySize += uint64(88)
 
 	return baseEntrySize + uint64(len(entry.pkScript))
 }
