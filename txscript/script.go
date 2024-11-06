@@ -361,8 +361,10 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 
 	for i, _ := range tx.TxIn {
 		utxo, err := utxoCache.GetEntry(i)
-		if err == nil { // TODO have better error handling
+		if err == nil {
 			wire.WriteTxOut(&b, 0, 0, &utxo)
+		} else {
+			log.Debugf("%v", err)
 		}
 	}
 
@@ -376,11 +378,13 @@ func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) [][]byte {
 	tokenDataList := make([][]byte, len(tx.TxIn))
 	for i, _ := range tx.TxIn {
 		utxo, err := utxoCache.GetEntry(i)
-		if err == nil { // TODO have better error handling
+		if err == nil {
 			if !utxo.TokenData.IsEmpty() {
 				b := utxo.TokenData.TokenDataBuffer()
 				tokenDataList[i] = b.Bytes()
 			}
+		} else {
+			log.Debugf("%v", err)
 		}
 	}
 	return tokenDataList

@@ -538,6 +538,8 @@ func ExtractPkScriptAddrs(pkScript []byte, chainParams *chaincfg.Params) (Script
 			chainParams)
 		if err == nil {
 			addrs = append(addrs, addr)
+		} else {
+			log.Debugf("%v", err)
 		}
 
 	case MultiSigTy:
