@@ -428,7 +428,11 @@ func deserializeUtxoEntryV0(serialized []byte) (map[uint32]*UtxoEntry, error) {
 			blockHeight: int32(blockHeight),
 			packedFlags: packedFlags,
 		}
-		entries[outputIndex].pkScript, _ = entries[outputIndex].tokenData.SeparateTokenDataFromPKScriptIfExists(entries[outputIndex].pkScript, 0)
+		entries[outputIndex].pkScript, err = entries[outputIndex].tokenData.SeparateTokenDataFromPKScriptIfExists(entries[outputIndex].pkScript, 0)
+		if err != nil {
+			return nil, errDeserialize(fmt.Sprintf("unable to "+
+				"decode utxo at index %d: %v, Could not parse token data", i, err))
+		}
 	}
 
 	return entries, nil

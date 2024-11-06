@@ -82,7 +82,10 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 
 				scriptLengthCount -= 1
 			}
+		} else {
+			return nil, errors.New("invalid bitfield")
 		}
+
 		var pkScript []byte
 		//b := scriptPool.Borrow(uint64(scriptLengthCount))
 		b := scriptPool.Borrow(uint64(r.Len()))
