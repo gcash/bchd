@@ -47,7 +47,7 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 
 		scriptLengthCount -= (1 + 32 + 1) //PREFIX_BYTE + CategoryID + BitField
 
-		if tokenData.IsValidBitfield() { // Raise error if false?
+		if tokenData.IsValidBitfield() {
 
 			if tokenData.HasCommitmentLength() {
 				commitmentLength, err := ReadVarInt(r, pver)
