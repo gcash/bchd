@@ -20,6 +20,8 @@ const (
 	RESERVED_BIT          = 0x80
 
 	BASE_TOKEN_DATA_LENGTH = 1 + 32 + 1
+
+	MAX_FT_AMOUNT = 9223372036854775807
 )
 
 type TokenData struct {
@@ -74,7 +76,7 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 					return nil, err
 				}
 
-				if amount >= 1 && amount <= 9223372036854775807 {
+				if amount >= 1 && amount <= MAX_FT_AMOUNT {
 					tokenData.Amount = amount
 				} else {
 					return nil, errors.New("invalid amount")
@@ -277,7 +279,7 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 			continue
 		}
 
-		if txOut.TokenData.HasAmount() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > 9223372036854775807) {
+		if txOut.TokenData.HasAmount() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > MAX_FT_AMOUNT) {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 		if len(txOut.TokenData.Commitment) > 40 {
@@ -354,7 +356,7 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 					existsInGenesisCategories = true
 				}
 			}
-			if !existsInGenesisCategories || tokenOutputValue > 9223372036854775807 {
+			if !existsInGenesisCategories || tokenOutputValue > MAX_FT_AMOUNT {
 				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 			}
 		}
