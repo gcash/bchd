@@ -783,7 +783,7 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 
 	scriptAndTokendataSize := len(ScriptAndPossibleTokenData)
 
-	if scriptAndTokendataSize > 0 && ScriptAndPossibleTokenData[0] != 0xef { // Todo maybe change this
+	if scriptAndTokendataSize > 0 && ScriptAndPossibleTokenData[0] != PREFIX_BYTE { // Todo maybe change this
 		to.PkScript = ScriptAndPossibleTokenData
 		return scriptAndTokendataSize, err
 	}
