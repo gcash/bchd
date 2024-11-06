@@ -87,7 +87,6 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 		}
 
 		var pkScript []byte
-		//b := scriptPool.Borrow(uint64(scriptLengthCount))
 		b := scriptPool.Borrow(uint64(r.Len()))
 		_, err = io.ReadFull(r, b)
 		if err != nil {
@@ -161,7 +160,6 @@ func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	buf.WriteByte(tokenData.BitField)
 	if tokenData.HasCommitmentLength() {
 		WriteVarInt(&buf, 0, uint64(len(tokenData.Commitment)))
-		//WriteVarInt(&buf, 0, uint64(tokenData.BitField&HAS_COMMITMENT_LENGTH))
 
 		buf.Write(tokenData.Commitment[:])
 	}
