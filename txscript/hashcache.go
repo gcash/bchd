@@ -32,7 +32,6 @@ func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
 		HashSequence: calcHashSequence(tx),
 		HashOutputs:  calcHashOutputs(tx),
 		// HashUTXOS:    calcHashUtxos(tx),
-		HashUTXOS: chainhash.Hash{},
 	}
 }
 
