@@ -140,10 +140,6 @@ func TestHashCacheAddGet(t *testing.T) {
 		t.Fatalf("sighashes don't match: expected %v, got %v",
 			spew.Sdump(sigHashes), spew.Sdump(cacheHashes))
 	}
-	// if *sigHashes != *cacheHashes {
-	// 	t.Fatalf("sighashes don't match: expected %v, got %v",
-	// 		spew.Sdump(sigHashes), spew.Sdump(cacheHashes))
-	// }
 }
 
 // TestHashCachePurge tests that items are able to be properly removed from the
