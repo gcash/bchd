@@ -431,8 +431,10 @@ message GetUnspentOutputResponse {
     // The index number of the block containing the transaction creating the output.
     int32 block_height = 5;
 
-    SlpToken slp_token = 6;
-    SlpTokenMetadata token_metadata = 7;
+    CashToken cash_token = 6;
+
+    SlpToken slp_token = 7;
+    SlpTokenMetadata token_metadata = 8;
 }
 
 message GetMerkleProofRequest {
@@ -734,7 +736,8 @@ message Transaction {
         bytes previous_script = 6;
         // The bitcoin addresses associated with this input.
         string address = 7;
-        SlpToken slp_token = 8;
+        CashToken cash_token = 8;
+        SlpToken slp_token = 9;
     }
 
     message Output {
@@ -750,7 +753,8 @@ message Transaction {
         string script_class = 5;
         // The script expressed in Bitcoin Cash Script.
         string disassembled_script = 6;
-        SlpToken slp_token = 7;
+        CashToken cash_token = 7;
+        SlpToken slp_token = 8;
     }
 
     // The double sha256 hash of the encoded transaction, little-endian.
@@ -811,7 +815,9 @@ message UnspentOutput {
     // The block number containing the UXTO.
     int32 block_height = 5;
 
-    SlpToken slp_token = 6;
+    CashToken cash_token = 6;
+
+    SlpToken slp_token = 7;
 }
 
 message TransactionFilter {
@@ -834,6 +840,20 @@ message TransactionFilter {
 
     // only transactions associated with the included tokenIds
     repeated bytes slp_token_ids = 6;
+}
+
+// CashToken info used in transaction inputs / outputs
+//
+// WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'
+// for large amounts. For this reason, an annotation has been added for JS to
+// return a string for the amount field instead of casting uint64 to the JS 'number'
+// type. Other languages may require similar treatment.
+//
+message CashToken {
+    bytes category_id = 1;
+    uint64 amount = 2 [jstype = JS_STRING];
+    bytes commitment = 3;
+    bytes bitfield = 4;
 }
 
 // SlpToken info used in transaction inputs / outputs
