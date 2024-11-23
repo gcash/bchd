@@ -54,11 +54,20 @@ type TransactionInput struct {
 	Vout uint32 `json:"vout"`
 }
 
+type TransactionOutputCashToken struct {
+	Address    string
+	Category   string // hex
+	Amount     uint64
+	Capability string // none, mutable or minting
+	Commitment string // hex
+}
+
 // CreateRawTransactionCmd defines the createrawtransaction JSON-RPC command.
 type CreateRawTransactionCmd struct {
-	Inputs   []TransactionInput
-	Amounts  map[string]float64 `jsonrpcusage:"{\"address\":amount,...}"` // In BTC
-	LockTime *int64
+	Inputs     []TransactionInput
+	Amounts    map[string]float64 `jsonrpcusage:"{\"address\":amount,...}"` // In BTC
+	CashTokens *[]TransactionOutputCashToken
+	LockTime   *int64
 }
 
 // NewCreateRawTransactionCmd returns a new instance which can be used to issue
@@ -66,18 +75,22 @@ type CreateRawTransactionCmd struct {
 //
 // Amounts are in BTC.
 func NewCreateRawTransactionCmd(inputs []TransactionInput, amounts map[string]float64,
-	lockTime *int64) *CreateRawTransactionCmd {
+	cashTokens *[]TransactionOutputCashToken, lockTime *int64) *CreateRawTransactionCmd {
 
 	// To make sure we're serializing this to the empty list and not null, we
 	// explicitly initialize the list
 	if inputs == nil {
 		inputs = []TransactionInput{}
 	}
+	if cashTokens == nil {
+		cashTokens = &[]TransactionOutputCashToken{}
+	}
 
 	return &CreateRawTransactionCmd{
-		Inputs:   inputs,
-		Amounts:  amounts,
-		LockTime: lockTime,
+		Inputs:     inputs,
+		Amounts:    amounts,
+		CashTokens: cashTokens,
+		LockTime:   lockTime,
 	}
 }
 

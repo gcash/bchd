@@ -609,7 +609,60 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			return nil, internalRPCError(err.Error(), context)
 		}
 
-		txOut := wire.NewTxOut(int64(satoshi), pkScript, wire.TokenData{}) // TODO TODO FIX THIS! This shouldn't be an empty token data
+		tokenData := &wire.TokenData{}
+
+		for _, ct := range *c.CashTokens {
+			if ct.Address == encodedAddr {
+				if ct.Amount <= 0 || ct.Amount > wire.MAX_FT_AMOUNT {
+					return nil, &btcjson.RPCError{
+						Code:    btcjson.ErrRPCType,
+						Message: "Invalid token amount",
+					}
+				}
+
+				category, err := hex.DecodeString(ct.Category)
+				if err != nil {
+					return nil, rpcDecodeHexError(ct.Category)
+				}
+				if len(category) != 32 {
+					return nil, &btcjson.RPCError{
+						Code:    btcjson.ErrRPCType,
+						Message: "Invalid token category",
+					}
+				}
+				var categoryId [32]byte
+				copy(categoryId[:], category)
+
+				commitment, err := hex.DecodeString(ct.Category)
+				if err != nil {
+					return nil, rpcDecodeHexError(ct.Category)
+				}
+
+				var capability byte
+				if ct.Capability == "none" {
+					capability = wire.NONE
+				} else if ct.Capability == "mutable" {
+					capability = wire.MUTABLE
+				} else if ct.Capability == "minting" {
+					capability = wire.MINTING
+				} else {
+					return nil, &btcjson.RPCError{
+						Code:    btcjson.ErrRPCType,
+						Message: "Invalid token capability",
+					}
+				}
+
+				tokenData, err = wire.NewTokenData(categoryId, &ct.Amount, &commitment, &capability)
+				if err != nil {
+					return nil, &btcjson.RPCError{
+						Code:    btcjson.ErrRPCType,
+						Message: err.Error(),
+					}
+				}
+			}
+		}
+
+		txOut := wire.NewTxOut(int64(satoshi), pkScript, *tokenData)
 		mtx.AddTxOut(txOut)
 	}
 
