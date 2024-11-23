@@ -21,7 +21,8 @@ const (
 
 	BASE_TOKEN_DATA_LENGTH = 1 + 32 + 1
 
-	MAX_FT_AMOUNT = 9223372036854775807
+	MAX_FT_AMOUNT         = 9223372036854775807
+	MAX_COMMITMENT_LENGTH = 40
 )
 
 type TokenData struct {
@@ -29,6 +30,51 @@ type TokenData struct {
 	Commitment []byte
 	Amount     uint64
 	BitField   byte
+}
+
+func NewTokenData(categoryID [32]byte, amount *uint64, commitment *[]byte, compability *byte) (*TokenData, error) {
+	tokenData := TokenData{}
+	tokenData.CategoryID = categoryID
+	tokenData.BitField = 0
+
+	if amount != nil {
+
+		if *amount <= 0 || *amount > MAX_FT_AMOUNT {
+			return nil, errors.New("invalid token amount")
+		}
+		tokenData.Amount = *amount
+
+		// bitfield has amount
+		tokenData.BitField = tokenData.BitField | HAS_AMOUNT
+	}
+
+	if commitment != nil {
+
+		if len(*commitment) > MAX_COMMITMENT_LENGTH {
+			return nil, errors.New("invalid token commitment length")
+		}
+
+		tokenData.Commitment = *commitment
+		// bitfield has commitment length
+		tokenData.BitField = tokenData.BitField | HAS_NFT
+		tokenData.BitField = tokenData.BitField | HAS_COMMITMENT_LENGTH
+	}
+
+	if compability != nil {
+		if *compability < NONE || *compability > MINTING {
+			return nil, errors.New("invalid token compability")
+		}
+		// bitfield has nft
+		tokenData.BitField = tokenData.BitField | HAS_NFT
+		tokenData.BitField = tokenData.BitField | *compability
+
+	}
+	isValid := tokenData.IsValidBitfield()
+	if !isValid {
+		return nil, errors.New("invalid token bitfield")
+	}
+
+	return &tokenData, nil
 }
 
 func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pver uint32) ([]byte, error) {
@@ -79,7 +125,7 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 				if amount >= 1 && amount <= MAX_FT_AMOUNT {
 					tokenData.Amount = amount
 				} else {
-					return nil, errors.New("invalid amount")
+					return nil, errors.New("invalid token amount")
 				}
 
 				scriptLengthCount -= 1
@@ -135,7 +181,7 @@ func (tokenData *TokenData) IsImmutableNFT() bool {
 }
 
 func (tokenData *TokenData) IsValidBitfield() bool {
-	if tokenData.BitField&0xf0 >= 0x80 || tokenData.BitField&0xf0 == 0x00 {
+	if tokenData.BitField&0xf0 >= RESERVED_BIT || tokenData.BitField&0xf0 == 0x00 {
 		return false
 	}
 	if tokenData.BitField&0x0f > 0x02 {
@@ -282,7 +328,7 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		if txOut.TokenData.HasAmount() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > MAX_FT_AMOUNT) {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
-		if len(txOut.TokenData.Commitment) > 40 {
+		if len(txOut.TokenData.Commitment) > MAX_COMMITMENT_LENGTH {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 
