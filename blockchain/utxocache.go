@@ -34,6 +34,16 @@ const (
 	utxoFlushPeriodicThreshold = 90
 )
 
+const (
+	// This value is calculated by running the following on a 64-bit system:
+	//   unsafe.Sizeof(UtxoEntry{}) before adding tokenData
+	baseUtxoEntrySizeWithoutTokenData = 40
+
+	// This value is calculated by running the following on a 64-bit system:
+	//   unsafe.Sizeof(wire.TokenData{}) assuming commitment of length 40
+	baseUtxoEntryTokenDataSize = 88
+)
+
 // txoFlags is a bitmask defining additional information and state for a
 // transaction output in a utxo view.
 type txoFlags uint8
@@ -144,13 +154,7 @@ func (entry *UtxoEntry) memoryUsage() uint64 {
 		return 0
 	}
 
-	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(UtxoEntry{}) before adding tokenData
-	baseEntrySize := uint64(40)
-
-	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(TokenData{}) assuming commitment of length 40
-	baseEntrySize += uint64(88)
+	baseEntrySize := uint64(baseUtxoEntrySizeWithoutTokenData + baseUtxoEntryTokenDataSize)
 
 	return baseEntrySize + uint64(len(entry.pkScript))
 }
