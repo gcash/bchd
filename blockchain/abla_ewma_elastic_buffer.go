@@ -1,3 +1,6 @@
+// This file is based on code from ebaa
+// https://gitlab.com/0353F40E/ebaa/
+
 package blockchain
 
 import (
