@@ -188,6 +188,9 @@ const (
 	// TestNet4 represents the test network (version 4).
 	TestNet4 BitcoinNet = 0xafdab7e2
 
+	// ChipNet represents the chip network.
+	ChipNet BitcoinNet = 0xafdab7e2
+
 	// SimNet represents the simulation test network.
 	SimNet BitcoinNet = 0x12141c16
 )

@@ -826,7 +826,6 @@ var scriptClassTests = []struct {
 			"9ae88 EQUAL",
 		class: ScriptHashTy,
 	},
-
 	{
 		// Nulldata with no data at all.
 		name:   "nulldata no data",

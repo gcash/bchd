@@ -164,9 +164,9 @@ func addBlock(chain *BlockChain, prev *bchutil.Block, spends []*spendableOut) (*
 			SignatureScript:  nil,
 		})
 		spendTx.AddTxOut(wire.NewTxOut(int64(spend.amount-lowFee),
-			opTrueScript))
+			opTrueScript, wire.TokenData{}))
 		// Add a random (prunable) OP_RETURN output to make the txid unique.
-		spendTx.AddTxOut(wire.NewTxOut(0, uniqueOpReturnScript()))
+		spendTx.AddTxOut(wire.NewTxOut(0, uniqueOpReturnScript(), wire.TokenData{}))
 
 		cb.TxOut[0].Value += int64(lowFee)
 		txns = append(txns, spendTx)

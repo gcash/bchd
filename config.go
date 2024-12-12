@@ -156,6 +156,7 @@ type config struct {
 	TorIsolation            bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TestNet3                bool          `long:"testnet" description:"Use the test network"`
 	TestNet4                bool          `long:"testnet4" description:"Use the test 4 network"`
+	ChipNet                 bool          `long:"chipnet" description:"Use the chip network"`
 	RegressionTest          bool          `long:"regtest" description:"Use the regression test network"`
 	RegressionTestAnyHost   bool          `long:"regtestanyhost" description:"In regression test mode, allow connections from any host, not just localhost"`
 	RegressionTestNoReset   bool          `long:"regtestnoreset" description:"In regression test mode, don't reset the network db on node restart"`
@@ -595,6 +596,10 @@ func loadConfig() (*config, []string, error) {
 		numNets++
 		activeNetParams = &testNet4Params
 	}
+	if cfg.ChipNet {
+		numNets++
+		activeNetParams = &chipNetParams
+	}
 	if cfg.RegressionTest {
 		numNets++
 		activeNetParams = &regressionNetParams
@@ -606,7 +611,7 @@ func loadConfig() (*config, []string, error) {
 		cfg.DisableDNSSeed = true
 	}
 	if numNets > 1 {
-		str := "%s: The testnet, regtest, segnet, and simnet params " +
+		str := "%s: The testnet, chipnet, regtest, segnet, and simnet params " +
 			"can't be used together -- choose one of the four"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)

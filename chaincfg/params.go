@@ -101,6 +101,16 @@ const (
 	DefinedDeployments
 )
 
+type ABLAConstants struct {
+	Epsilon0        uint64
+	Beta0           uint64
+	N0              uint64
+	GammaReciprocal uint64
+	Zeta_xB7        uint64
+	ThetaReciprocal uint64
+	Delta           uint64
+}
+
 // Params defines a Bitcoin network by its parameters.  These parameters may be
 // used by Bitcoin applications to differentiate networks as well as addresses
 // and keys for one network from those intended for use on another network.
@@ -138,7 +148,7 @@ type Params struct {
 	BIP0065Height int32
 	BIP0066Height int32
 
-	// Only testnet4 uses CSV activation by height. All the others use the
+	// Only testnet4 and chipnet uses CSV activation by height. All the others use the
 	// deployment schedule. If this value is set to anything other than zero
 	// then it will activate at this height.
 	CSVHeight int32
@@ -153,6 +163,11 @@ type Params struct {
 	PhononForkHeight              int32  // May 15, 2020 hardfork
 	AxionActivationHeight         int32  // Nov 15, 2020 hardfork
 	CosmicInflationActivationTime uint64 // May 15, 2022 hardfork
+	Upgrade9ForkHeight            int32  // May 15 2023 hardfork
+	ABLAForkHeight                int32
+
+	// The ABLA algorithm constants
+	ABLAConfig ABLAConstants
 
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
@@ -262,7 +277,7 @@ var MainNetParams = Params{
 	Name:        "mainnet",
 	Net:         wire.MainNet,
 	DefaultPort: "8333",
-	DNSSeeds: []DNSSeed{
+	DNSSeeds: []DNSSeed{ // TODO change this to proper dns seed
 		{"seed.bchd.cash", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
 		{"seed.bch.loping.net", true},
@@ -287,6 +302,20 @@ var MainNetParams = Params{
 	AxionActivationHeight:       661647, // 00000000000000000083ed4b7a780d59e3983513215518ad75654bb02deee62f
 
 	CosmicInflationActivationTime: 1652616000,
+
+	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
+	ABLAForkHeight:     845890,
+
+	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		Zeta_xB7:        192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+	},
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -620,6 +649,107 @@ var TestNet3Params = Params{
 	// slp indexer parameters
 	SlpIndexStartHeight: 1253800,
 	SlpIndexStartHash:   newHashFromStr("000000000000e8d3d53ad5dcb555d1119b650c8f3e1cb7d106764b455a87b10a"),
+	SlpAddressPrefix:    "slptest",
+}
+
+var ChipNetParams = Params{
+	Name:        "chipnet",
+	Net:         wire.ChipNet,
+	DefaultPort: "48333",
+	DNSSeeds: []DNSSeed{
+		{"chipnet.bitjson.com", true},
+	},
+
+	// Chain parameters
+	GenesisBlock:  &testNet4GenesisBlock, // Same value as testnet4
+	GenesisHash:   &testNet4GenesisHash,  // Same value as testnet4
+	PowLimit:      testNet3PowLimit,      // Same value as testnet3
+	PowLimitBits:  0x1d00ffff,
+	BIP0034Height: 2,
+	BIP0065Height: 3,
+	BIP0066Height: 4,
+	CSVHeight:     5,
+
+	UahfForkHeight:              5,
+	DaaForkHeight:               3000,
+	MagneticAnonomalyForkHeight: 3999,
+	GreatWallForkHeight:         0,
+	GravitonForkHeight:          4999,
+	PhononForkHeight:            0,
+	AxionActivationHeight:       16844,
+	Upgrade9ForkHeight:          121956,
+	ABLAForkHeight:              174519,
+
+	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        1000000,
+		Beta0:           1000000,
+		N0:              174519,
+		GammaReciprocal: 37938,
+		Zeta_xB7:        192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+	},
+
+	CosmicInflationActivationTime: 1637694000,
+
+	CoinbaseMaturity:                     100,
+	SubsidyReductionInterval:             210000,
+	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
+	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
+	RetargetAdjustmentFactor:             4,                   // 25% less, 400% more
+	ReduceMinDifficulty:                  true,
+	NoDifficultyAdjustment:               false,
+	MinDiffReductionTime:                 time.Minute * 20, // TargetTimePerBlock * 2
+	AsertDifficultyHalflife:              3600,             // 1 hour
+	AsertDifficultyAnchorHeight:          16844,
+	AsertDifficultyAnchorParentTimestamp: 1605451779,
+	AsertDifficultyAnchorBits:            0x1d00ffff,
+	GenerateSupported:                    false,
+
+	// Checkpoints ordered from oldest to newest.
+	Checkpoints: []Checkpoint{},
+
+	// Consensus rule change deployments.
+	//
+	// The miner confirmation window is defined as:
+	//   target proof of work timespan / target proof of work spacing
+	RuleChangeActivationThreshold: 1512, // 75% of MinerConfirmationWindow
+	MinerConfirmationWindow:       2016,
+	Deployments: [DefinedDeployments]ConsensusDeployment{
+		DeploymentTestDummy: {
+			BitNumber:  28,
+			StartTime:  1199145601, // January 1, 2008 UTC
+			ExpireTime: 1230767999, // December 31, 2008 UTC
+		},
+		DeploymentCSV: {
+			BitNumber:  0,
+			StartTime:  1456790400, // March 1st, 2016
+			ExpireTime: 1493596800, // May 1st, 2017
+		},
+	},
+
+	// Mempool parameters
+	RelayNonStdTxs: false,
+
+	// The prefix for the cashaddress
+	CashAddressPrefix: "bchtest", // always bchtest for testnet
+
+	// Address encoding magics
+	LegacyPubKeyHashAddrID: 0x6f, // starts with m or n
+	LegacyScriptHashAddrID: 0xc4, // starts with 2
+	PrivateKeyID:           0xef, // starts with 9 (uncompressed) or c (compressed)
+
+	// BIP32 hierarchical deterministic extended key magics
+	HDPrivateKeyID: [4]byte{0x04, 0x35, 0x83, 0x94}, // starts with tprv
+	HDPublicKeyID:  [4]byte{0x04, 0x35, 0x87, 0xcf}, // starts with tpub
+
+	// BIP44 coin type used in the hierarchical deterministic path for
+	// address generation.
+	HDCoinType: 1, // all coins use 1
+
+	// slp indexer parameters
+	SlpIndexStartHeight: 0,
 	SlpAddressPrefix:    "slptest",
 }
 

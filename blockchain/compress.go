@@ -201,6 +201,20 @@ func isScriptHash(script []byte) (bool, []byte) {
 	return false, nil
 }
 
+// isScriptHash32 returns whether or not the passed public key script is a
+// standard pay-to-script-hash script along with the script hash it is paying to
+// if it is.
+func isScriptHash32(script []byte) (bool, []byte) {
+	if len(script) == 35 && script[0] == txscript.OP_HASH256 &&
+		script[1] == txscript.OP_DATA_32 &&
+		script[34] == txscript.OP_EQUAL {
+
+		return true, script[2:34]
+	}
+
+	return false, nil
+}
+
 // isPubKey returns whether or not the passed public key script is a standard
 // pay-to-pubkey script that pays to a valid compressed or uncompressed public
 // key along with the serialized pubkey it is paying to if it is.
@@ -239,9 +253,25 @@ func isPubKey(script []byte) (bool, []byte) {
 	return false, nil
 }
 
+// isCashTokensScript returns whether or not the script is a
+// cashtokens script along with the script itself if it is.
+// We can do better compression on this.
+func isCashTokensScript(script []byte) (bool, []byte) {
+	if len(script) > 0 && script[0] == txscript.SPECIAL_TOKEN_PREFIX {
+		return true, script
+	}
+	return false, nil
+}
+
 // compressedScriptSize returns the number of bytes the passed script would take
 // when encoded with the domain specific compression algorithm described above.
 func compressedScriptSize(pkScript []byte) int {
+
+	if valid, _ := isCashTokensScript(pkScript); valid {
+		return serializeSizeVLQ(uint64(len(pkScript)+numSpecialScripts)) +
+			len(pkScript)
+	}
+
 	// Pay-to-pubkey-hash script.
 	if valid, _ := isPubKeyHash(pkScript); valid {
 		return 21
@@ -297,34 +327,38 @@ func decodeCompressedScriptSize(serialized []byte) int {
 // handle the number of bytes returned by the compressedScriptSize function or
 // it will panic.
 func putCompressedScript(target, pkScript []byte) int {
-	// Pay-to-pubkey-hash script.
-	if valid, hash := isPubKeyHash(pkScript); valid {
-		target[0] = cstPayToPubKeyHash
-		copy(target[1:21], hash)
-		return 21
-	}
 
-	// Pay-to-script-hash script.
-	if valid, hash := isScriptHash(pkScript); valid {
-		target[0] = cstPayToScriptHash
-		copy(target[1:21], hash)
-		return 21
-	}
+	if valid, _ := isCashTokensScript(pkScript); !valid {
 
-	// Pay-to-pubkey (compressed or uncompressed) script.
-	if valid, serializedPubKey := isPubKey(pkScript); valid {
-		pubKeyFormat := serializedPubKey[0]
-		switch pubKeyFormat {
-		case 0x02, 0x03:
-			target[0] = pubKeyFormat
-			copy(target[1:33], serializedPubKey[1:33])
-			return 33
-		case 0x04:
-			// Encode the oddness of the serialized pubkey into the
-			// compressed script type.
-			target[0] = pubKeyFormat | (serializedPubKey[64] & 0x01)
-			copy(target[1:33], serializedPubKey[1:33])
-			return 33
+		// Pay-to-pubkey-hash script.
+		if valid, hash := isPubKeyHash(pkScript); valid {
+			target[0] = cstPayToPubKeyHash
+			copy(target[1:21], hash)
+			return 21
+		}
+
+		// Pay-to-script-hash script.
+		if valid, hash := isScriptHash(pkScript); valid {
+			target[0] = cstPayToScriptHash
+			copy(target[1:21], hash)
+			return 21
+		}
+
+		// Pay-to-pubkey (compressed or uncompressed) script.
+		if valid, serializedPubKey := isPubKey(pkScript); valid {
+			pubKeyFormat := serializedPubKey[0]
+			switch pubKeyFormat {
+			case 0x02, 0x03:
+				target[0] = pubKeyFormat
+				copy(target[1:33], serializedPubKey[1:33])
+				return 33
+			case 0x04:
+				// Encode the oddness of the serialized pubkey into the
+				// compressed script type.
+				target[0] = pubKeyFormat | (serializedPubKey[64] & 0x01)
+				copy(target[1:33], serializedPubKey[1:33])
+				return 33
+			}
 		}
 	}
 

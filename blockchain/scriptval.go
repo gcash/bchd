@@ -29,15 +29,16 @@ type txValidateItem struct {
 // inputs.  It provides several channels for communication and a processing
 // function that is intended to be in run multiple goroutines.
 type txValidator struct {
-	validateChan chan *txValidateItem
-	quitChan     chan struct{}
-	resultChan   chan error
-	utxoView     *UtxoViewpoint
-	flags        txscript.ScriptFlags
-	sigCache     *txscript.SigCache
-	hashCache    *txscript.HashCache
-	sigChecks    uint32
-	maxSigChecks uint32
+	validateChan       chan *txValidateItem
+	quitChan           chan struct{}
+	resultChan         chan error
+	utxoView           *UtxoViewpoint
+	flags              txscript.ScriptFlags
+	sigCache           *txscript.SigCache
+	hashCache          *txscript.HashCache
+	sigChecks          uint32
+	maxSigChecks       uint32
+	upgrade9ForkHeight int32
 }
 
 // sendResult sends the result of a script pair validation on the internal
@@ -72,16 +73,16 @@ out:
 				v.sendResult(err)
 				break out
 			}
-
 			// Create a new script engine for the script pair.
 			sigScript := txIn.SignatureScript
 			pkScript := utxo.PkScript()
 			inputAmount := utxo.Amount()
+			tokenData := utxo.tokenData
 
 			utxoEntryCache := txscript.NewUtxoCache()
 			for i, in := range txVI.tx.MsgTx().TxIn {
 				if i == txVI.txInIndex {
-					utxoEntryCache.AddEntry(i, *wire.NewTxOut(utxo.amount, utxo.pkScript))
+					utxoEntryCache.AddEntry(i, *wire.NewTxOut(utxo.amount, utxo.pkScript, tokenData))
 					continue
 				}
 				u := v.utxoView.LookupEntry(in.PreviousOutPoint)
@@ -95,7 +96,32 @@ out:
 					v.sendResult(err)
 					break out
 				}
-				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript))
+				utxoEntryCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+			}
+
+			isPATFO := IsPATFO(
+				utxo.tokenData, utxo.pkScript,
+				utxo.blockHeight, v.upgrade9ForkHeight)
+
+			if isPATFO {
+				// PATFOs are provably unspendable. The software ignores
+				// other types of provably unspendable tokens so we use
+				// the same behaviour here.
+				str := fmt.Sprintf("unable to find unspent "+
+					"output %v referenced from "+
+					"transaction %s:%d",
+					txIn.PreviousOutPoint, txVI.tx.Hash(),
+					txVI.txInIndex)
+				err := ruleError(ErrMissingTxOut, str)
+				v.sendResult(err)
+				break out
+			}
+
+			if v.flags.HasFlag(txscript.ScriptAllowCashTokens) {
+				_, err := wire.RunCashTokensValidityAlgorithm(utxoEntryCache, txVI.tx.MsgTx())
+				if err != nil {
+					v.sendResult(err)
+				}
 			}
 
 			vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),
@@ -217,16 +243,17 @@ func (v *txValidator) Validate(items []*txValidateItem) error {
 // newTxValidator returns a new instance of txValidator to be used for
 // validating transaction scripts asynchronously.
 func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
-	sigCache *txscript.SigCache, hashCache *txscript.HashCache, maxSigChecks uint32) *txValidator {
+	sigCache *txscript.SigCache, hashCache *txscript.HashCache, maxSigChecks uint32, upgrade9ForkHeight int32) *txValidator {
 	return &txValidator{
-		validateChan: make(chan *txValidateItem),
-		quitChan:     make(chan struct{}),
-		resultChan:   make(chan error),
-		utxoView:     utxoView,
-		sigCache:     sigCache,
-		hashCache:    hashCache,
-		flags:        flags,
-		maxSigChecks: maxSigChecks,
+		validateChan:       make(chan *txValidateItem),
+		quitChan:           make(chan struct{}),
+		resultChan:         make(chan error),
+		utxoView:           utxoView,
+		sigCache:           sigCache,
+		hashCache:          hashCache,
+		flags:              flags,
+		maxSigChecks:       maxSigChecks,
+		upgrade9ForkHeight: upgrade9ForkHeight,
 	}
 }
 
@@ -234,7 +261,7 @@ func newTxValidator(utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
 // using multiple goroutines. It returns the number of sigchecks in the transaction.
 func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
-	hashCache *txscript.HashCache) (uint32, error) {
+	hashCache *txscript.HashCache, upgrade9ForkHeight int32) (uint32, error) {
 
 	// If the HashCache is present, and it doesn't yet contain the
 	// partial sighashes for this transaction, then we add the
@@ -253,6 +280,20 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 		cachedHashes, _ = hashCache.GetSigHashes(hash)
 	} else {
 		cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
+	}
+
+	if cachedHashes != nil {
+		utxoCache := txscript.NewUtxoCache()
+		for i, in := range tx.MsgTx().TxIn {
+			u := utxoView.LookupEntry(in.PreviousOutPoint)
+			if u == nil {
+				break // Raise error?
+			}
+			utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+		}
+		if flags.HasFlag(txscript.ScriptAllowCashTokens) {
+			cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
+		}
 	}
 
 	// Collect all of the transaction inputs and required information for
@@ -277,18 +318,32 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	}
 
 	// Validate all of the inputs.
-	validator := newTxValidator(utxoView, flags, sigCache, hashCache, 0)
+	validator := newTxValidator(utxoView, flags, sigCache, hashCache, 0, upgrade9ForkHeight)
 	if err := validator.Validate(txValItems); err != nil {
 		return 0, err
 	}
 	return sigChecks, nil
 }
 
+// Checks if the input contains pre-activation token-forgery output.
+// PATFOs are provably unspendable so a better place to check for them might be inside
+// txscript.IsUnspendable() but since we need to check for block heights, to mimimize
+// changes in the codebase, we handle it here. It might be a good idea to change this later.
+func IsPATFO(tokenData wire.TokenData, pkScript []byte, utxoBlockHeight int32, upgrade9ForkHeight int32) bool {
+	isPATFO := false
+	if !tokenData.IsEmpty() || pkScript[0] == 0xef {
+		if utxoBlockHeight < upgrade9ForkHeight {
+			isPATFO = true
+		}
+	}
+	return isPATFO
+}
+
 // checkBlockScripts executes and validates the scripts for all transactions in
 // the passed block using multiple goroutines.
 func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	scriptFlags txscript.ScriptFlags, sigCache *txscript.SigCache,
-	hashCache *txscript.HashCache, maxSigChecks uint32) error {
+	hashCache *txscript.HashCache, maxSigChecks uint32, upgrade9ForkHeight int32) error {
 
 	// Collect all of the transaction inputs and required information for
 	// validation for all transactions in the block into a single slice.
@@ -319,6 +374,20 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 			cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
 		}
 
+		if cachedHashes != nil {
+			utxoCache := txscript.NewUtxoCache()
+			for i, in := range tx.MsgTx().TxIn {
+				u := utxoView.LookupEntry(in.PreviousOutPoint)
+				if u == nil {
+					break // Raise error?
+				}
+				utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
+			}
+			if scriptFlags.HasFlag(txscript.ScriptAllowCashTokens) {
+				cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
+			}
+		}
+
 		for txInIdx, txIn := range tx.MsgTx().TxIn {
 			// Skip coinbases.
 			if txIn.PreviousOutPoint.Index == math.MaxUint32 {
@@ -337,7 +406,7 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 	}
 
 	// Validate all of the inputs.
-	validator := newTxValidator(utxoView, scriptFlags, sigCache, hashCache, maxSigChecks)
+	validator := newTxValidator(utxoView, scriptFlags, sigCache, hashCache, maxSigChecks, upgrade9ForkHeight)
 	start := time.Now()
 	if err := validator.Validate(txValItems); err != nil {
 		return err

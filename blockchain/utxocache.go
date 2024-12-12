@@ -34,6 +34,16 @@ const (
 	utxoFlushPeriodicThreshold = 90
 )
 
+const (
+	// This value is calculated by running the following on a 64-bit system:
+	//   unsafe.Sizeof(UtxoEntry{}) before adding tokenData
+	baseUtxoEntrySizeWithoutTokenData = 40
+
+	// This value is calculated by running the following on a 64-bit system:
+	//   unsafe.Sizeof(wire.TokenData{}) assuming commitment of length 40
+	baseUtxoEntryTokenDataSize = 88
+)
+
 // txoFlags is a bitmask defining additional information and state for a
 // transaction output in a utxo view.
 type txoFlags uint8
@@ -73,6 +83,8 @@ type UtxoEntry struct {
 	pkScript    []byte // The public key script for the output.
 	blockHeight int32  // Height of block containing tx.
 
+	tokenData wire.TokenData // TODO this can use better memorry optimization. Check the paddings.
+
 	// packedFlags contains additional info about output such as whether it
 	// is a coinbase, whether it is spent, and whether it has been modified
 	// since it was loaded.  This approach is used in order to reduce memory
@@ -86,10 +98,11 @@ func NewUtxoEntry(txOut *wire.TxOut, blockHeight int32, isCoinbase bool) *UtxoEn
 	if isCoinbase {
 		cbFlag |= tfCoinBase
 	}
-
+	txOut.PkScript, _ = txOut.TokenData.SeparateTokenDataFromPKScriptIfExists(txOut.PkScript, 0)
 	return &UtxoEntry{
 		amount:      txOut.Value,
 		pkScript:    txOut.PkScript,
+		tokenData:   txOut.TokenData,
 		blockHeight: blockHeight,
 		packedFlags: cbFlag,
 	}
@@ -141,9 +154,7 @@ func (entry *UtxoEntry) memoryUsage() uint64 {
 		return 0
 	}
 
-	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(UtxoEntry{})
-	baseEntrySize := uint64(40)
+	baseEntrySize := uint64(baseUtxoEntrySizeWithoutTokenData + baseUtxoEntryTokenDataSize)
 
 	return baseEntrySize + uint64(len(entry.pkScript))
 }
@@ -169,6 +180,7 @@ func (entry *UtxoEntry) Clone() *UtxoEntry {
 	return &UtxoEntry{
 		amount:      entry.amount,
 		pkScript:    entry.pkScript,
+		tokenData:   entry.tokenData,
 		blockHeight: entry.blockHeight,
 		packedFlags: entry.packedFlags,
 	}
@@ -186,6 +198,15 @@ type utxoView interface {
 
 	// spendEntry marks an entry as spent.
 	spendEntry(outpoint wire.OutPoint, entry *UtxoEntry) error
+}
+
+type utxoCacheInterface interface {
+
+	// AddEntry adds a utxo entry for the given input index.
+	AddEntry(i int, output wire.TxOut)
+
+	// GetEntry adds a utxo entry for the given input index.
+	GetEntry(i int) (wire.TxOut, error)
 }
 
 // utxoCache is a cached utxo view in the chainstate of a BlockChain.

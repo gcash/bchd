@@ -345,7 +345,7 @@ func newBlockImporter(db database.DB, r io.ReadSeeker) (*blockImporter, error) {
 		IndexManager: indexManager,
 		// No nice way to get the main configuration here.
 		// For now just accept up to the default.
-		ExcessiveBlockSize: 32000000,
+		ExcessiveBlockSize: 32000000 * 4, // TODO TODO, is it needed to do that here really?
 	})
 	if err != nil {
 		return nil, err

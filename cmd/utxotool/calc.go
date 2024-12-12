@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
+
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
-	"io"
 )
 
 var (
@@ -53,7 +54,7 @@ func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash
 		TimeSource:  blockchain.NewMedianTime(),
 		// No nice way to get the main configuration here.
 		// For now just accept up to the default.
-		ExcessiveBlockSize: 32000000,
+		ExcessiveBlockSize: 32000000 * 4, // TODO TODO, is it needed to do that here really?
 	})
 	if err != nil {
 		return nil, 0, err

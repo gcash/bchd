@@ -53,9 +53,13 @@ const (
 	// after the UAHF hard fork
 	MaxTransactionSize = oneMegabyte
 
-	// MinTransactionSize is the minimum transaction size allowed on the
+	// MagneticAnomalyMinTransactionSize is the minimum transaction size allowed on the
 	// network after the magneticanomaly hardfork
-	MinTransactionSize = 100
+	MagneticAnomalyMinTransactionSize = 100
+
+	// MinTransactionSize is the minimum transaction size allowed on the
+	// network after the upgrade9 hardfork
+	MinTransactionSize = 65
 
 	// BlockMaxBytesMaxSigChecksRatio is the ratio between the maximum allowable
 	// block size and the maximum allowable * SigChecks (executed signature check
@@ -86,9 +90,13 @@ var (
 // MaxBlockSize returns the is the maximum number of bytes allowed in
 // a block. If the UAHF hardfork is active the returned value is the
 // excessive blocksize. Otherwise it's the legacy blocksize.
-func (b *BlockChain) MaxBlockSize(uahfActive bool) int {
+func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 	if uahfActive {
-		return int(b.excessiveBlockSize)
+		if !ablaActive {
+			return uint64(b.excessiveBlockSize)
+		} else {
+			return b.ablaState.getBlockSizeLimit()
+		}
 	}
 	return LegacyMaxBlockSize
 }
@@ -235,7 +243,7 @@ func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
 // ensure it is sane.  These checks are context free.
-func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFlags txscript.ScriptFlags) error {
+func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9Active bool, scriptFlags txscript.ScriptFlags) error {
 	// A transaction must have at least one input.
 	msgTx := tx.MsgTx()
 	if len(msgTx.TxIn) == 0 {
@@ -255,10 +263,18 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFl
 			"%d, max %d", serializedTxSize, MaxTransactionSize)
 		return ruleError(ErrTxTooBig, str)
 	}
-	if magneticAnomalyActive && serializedTxSize < MinTransactionSize {
-		str := fmt.Sprintf("serialized transaction is too small - got "+
-			"%d, min %d", serializedTxSize, MinTransactionSize)
-		return ruleError(ErrTxTooSmall, str)
+
+	if magneticAnomalyActive || upgrade9Active {
+		minTxSize := MagneticAnomalyMinTransactionSize
+		if upgrade9Active {
+			minTxSize = MinTransactionSize
+		}
+		if serializedTxSize < minTxSize {
+
+			str := fmt.Sprintf("serialized transaction is too small - got "+
+				"%d, min %d", serializedTxSize, minTxSize)
+			return ruleError(ErrTxTooSmall, str)
+		}
 	}
 
 	// Ensure the transaction amounts are in range.  Each transaction
@@ -340,8 +356,8 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, scriptFl
 // target difficulty as claimed.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFNoPoWCheck: The check to ensure the block hash is less than the target
-//    difficulty is not performed.
+//   - BFNoPoWCheck: The check to ensure the block hash is less than the target
+//     difficulty is not performed.
 func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags BehaviorFlags) error {
 	// The target difficulty must be larger than zero.
 	target := CompactToBig(header.Bits)
@@ -457,6 +473,8 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	magneticAnomaly := flags.HasFlag(BFMagneticAnomaly)
 
+	upgrade9 := flags.HasFlag(BFUpgrade9)
+
 	// TODO: This is not a full set of ScriptFlags and only
 	// covers the Nov 2018 fork.
 	var scriptFlags txscript.ScriptFlags
@@ -476,7 +494,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
 		}
 		lastTxid = tx.Hash()
-		err := CheckTransactionSanity(tx, magneticAnomaly, scriptFlags)
+		err := CheckTransactionSanity(tx, magneticAnomaly, upgrade9, scriptFlags)
 		if err != nil {
 			return err
 		}
@@ -516,11 +534,14 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 // CheckBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context free.
-func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool) error {
+func CheckBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource MedianTimeSource, magneticAnomalyActive bool, upgrade9Active bool) error {
 	behaviorFlags := BFNone
 
 	if magneticAnomalyActive {
 		behaviorFlags |= BFMagneticAnomaly
+	}
+	if upgrade9Active {
+		behaviorFlags |= BFUpgrade9
 	}
 
 	return checkBlockSanity(block, powLimit, timeSource, behaviorFlags)
@@ -609,8 +630,8 @@ func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
 // which depend on its position within the block chain.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFFastAdd: All checks except those involving comparing the header against
-//    the checkpoints are not performed.
+//   - BFFastAdd: All checks except those involving comparing the header against
+//     the checkpoints are not performed.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode *blockNode, flags BehaviorFlags) error {
@@ -689,8 +710,8 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 // on its position within the block chain.
 //
 // The flags modify the behavior of this function as follows:
-//  - BFFastAdd: The transaction are not checked to see if they are finalized
-//    and the somewhat expensive BIP0034 validation is not performed.
+//   - BFFastAdd: The transaction are not checked to see if they are finalized
+//     and the somewhat expensive BIP0034 validation is not performed.
 //
 // The flags are also passed to checkBlockHeaderContext.  See its documentation
 // for how the flags modify its behavior.
@@ -705,15 +726,16 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	}
 
 	uahfActive := block.Height() > b.chainParams.UahfForkHeight
+	ablaActive := block.Height() > b.chainParams.ABLAForkHeight
 
 	// A block must not have more transactions than the max block payload or
 	// else it is certainly over the size limit.
 	// We need to check the blocksize here rather than in checkBlockSanity
 	// because after the Uahf activation it is not longer context free as
 	// the max size depends on whether Uahf has activated or not.
-	maxBlockSize := b.MaxBlockSize(uahfActive)
+	maxBlockSize := b.MaxBlockSize(uahfActive, ablaActive)
 	numTx := len(block.MsgBlock().Transactions)
-	if numTx > maxBlockSize {
+	if uint64(numTx) > maxBlockSize {
 		str := fmt.Sprintf("block contains too many transactions - "+
 			"got %d, max %d", numTx, maxBlockSize)
 		return ruleError(ErrBlockTooBig, str)
@@ -733,7 +755,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	// A block must not exceed the maximum allowed block payload when
 	// serialized.
 	serializedSize := block.MsgBlock().SerializeSize()
-	if serializedSize > maxBlockSize {
+	if uint64(serializedSize) > maxBlockSize {
 		str := fmt.Sprintf("serialized block is too big - got %d, "+
 			"max %d", serializedSize, maxBlockSize)
 		return ruleError(ErrBlockTooBig, str)
@@ -1000,6 +1022,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If CosmicInflation is active we enforce 64BitIntegers and NativeIntrospection
 	cosmicInflationActive := node.parent.CalcPastMedianTime().Unix() >= int64(b.chainParams.CosmicInflationActivationTime)
 
+	upgrade9Active := node.height > b.chainParams.Upgrade9ForkHeight
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1097,6 +1121,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// If CosmicInflation hardfork is active enforce 64BitIntegers and NativeIntrospection
 	if cosmicInflationActive {
 		scriptFlags |= txscript.ScriptVerify64BitIntegers | txscript.ScriptVerifyNativeIntrospection
+	}
+
+	if upgrade9Active {
+		scriptFlags |= txscript.ScriptAllowCashTokens
 	}
 
 	// Perform several checks on the inputs for each transaction.  Also
@@ -1223,9 +1251,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// expensive ECDSA signature check scripts.  Doing this last helps
 	// prevent CPU exhaustion attacks.
 	if runScripts {
-		maxSigChecks := b.excessiveBlockSize / BlockMaxBytesMaxSigChecksRatio
+		maxSigChecks := uint32(b.ablaState.getBlockSizeLimit()) / BlockMaxBytesMaxSigChecksRatio // TODO change this to uint64
 		err := checkBlockScripts(block, view, scriptFlags, b.sigCache,
-			b.hashCache, maxSigChecks)
+			b.hashCache, maxSigChecks, b.chainParams.Upgrade9ForkHeight)
 		if err != nil {
 			return err
 		}

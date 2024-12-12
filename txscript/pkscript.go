@@ -139,7 +139,7 @@ func (s PkScript) String() string {
 // ComputePkScript computes the pkScript of an transaction output by looking at
 // the transaction input's signature script.
 //
-// NOTE: Only P2PKH, and P2SH redeem scripts are supported.
+// NOTE: Only P2PKH, P2SH and P2SH32 redeem scripts are supported.
 func ComputePkScript(sigScript []byte) (PkScript, error) {
 	var pkScript PkScript
 

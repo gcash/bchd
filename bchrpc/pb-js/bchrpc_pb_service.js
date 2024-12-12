@@ -145,6 +145,51 @@ bchrpc.GetMerkleProof = {
   responseType: bchrpc_pb.GetMerkleProofResponse
 };
 
+bchrpc.GetSlpTokenMetadata = {
+  methodName: "GetSlpTokenMetadata",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetSlpTokenMetadataRequest,
+  responseType: bchrpc_pb.GetSlpTokenMetadataResponse
+};
+
+bchrpc.GetSlpParsedScript = {
+  methodName: "GetSlpParsedScript",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetSlpParsedScriptRequest,
+  responseType: bchrpc_pb.GetSlpParsedScriptResponse
+};
+
+bchrpc.GetSlpTrustedValidation = {
+  methodName: "GetSlpTrustedValidation",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetSlpTrustedValidationRequest,
+  responseType: bchrpc_pb.GetSlpTrustedValidationResponse
+};
+
+bchrpc.GetSlpGraphSearch = {
+  methodName: "GetSlpGraphSearch",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetSlpGraphSearchRequest,
+  responseType: bchrpc_pb.GetSlpGraphSearchResponse
+};
+
+bchrpc.CheckSlpTransaction = {
+  methodName: "CheckSlpTransaction",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.CheckSlpTransactionRequest,
+  responseType: bchrpc_pb.CheckSlpTransactionResponse
+};
+
 bchrpc.SubmitTransaction = {
   methodName: "SubmitTransaction",
   service: bchrpc,
@@ -627,6 +672,161 @@ bchrpcClient.prototype.getMerkleProof = function getMerkleProof(requestMessage, 
     callback = arguments[1];
   }
   var client = grpc.unary(bchrpc.GetMerkleProof, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getSlpTokenMetadata = function getSlpTokenMetadata(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetSlpTokenMetadata, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getSlpParsedScript = function getSlpParsedScript(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetSlpParsedScript, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getSlpTrustedValidation = function getSlpTrustedValidation(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetSlpTrustedValidation, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getSlpGraphSearch = function getSlpGraphSearch(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetSlpGraphSearch, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.checkSlpTransaction = function checkSlpTransaction(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.CheckSlpTransaction, {
     request: requestMessage,
     host: this.serviceHost,
     metadata: metadata,

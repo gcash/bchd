@@ -233,22 +233,32 @@ func NewTxIn(prevOut *OutPoint, signatureScript []byte) *TxIn {
 type TxOut struct {
 	Value    int64
 	PkScript []byte
+
+	TokenData TokenData
 }
 
 // SerializeSize returns the number of bytes it would take to serialize the
 // the transaction output.
 func (t *TxOut) SerializeSize() int {
 	// Value 8 bytes + serialized varint size for the length of PkScript +
-	// PkScript bytes.
-	return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
+	// PkScript bytes. Including token data if present.
+
+	if t.TokenData.IsEmpty() {
+		return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
+	} else {
+		b := t.TokenData.TokenDataBuffer()
+		PkScriptAndTDataSize := len(b.Bytes()) + len(t.PkScript)
+		return 8 + VarIntSerializeSize(uint64(PkScriptAndTDataSize)) + PkScriptAndTDataSize
+	}
 }
 
 // NewTxOut returns a new bitcoin transaction output with the provided
 // transaction value and public key script.
-func NewTxOut(value int64, pkScript []byte) *TxOut {
+func NewTxOut(value int64, pkScript []byte, tokenData TokenData) *TxOut {
 	return &TxOut{
-		Value:    value,
-		PkScript: pkScript,
+		Value:     value,
+		PkScript:  pkScript,
+		TokenData: tokenData,
 	}
 }
 
@@ -337,11 +347,19 @@ func (msg *MsgTx) Copy() *MsgTx {
 			copy(newScript, oldScript[:oldScriptLen])
 		}
 
+		newTokenData := TokenData{
+			CategoryID: oldTxOut.TokenData.CategoryID,
+			BitField:   oldTxOut.TokenData.BitField,
+			Commitment: oldTxOut.TokenData.Commitment,
+			Amount:     oldTxOut.TokenData.Amount,
+		}
+
 		// Create new txOut with the deep copied data and append it to
 		// new Tx.
 		newTxOut := TxOut{
-			Value:    oldTxOut.Value,
-			PkScript: newScript,
+			Value:     oldTxOut.Value,
+			PkScript:  newScript,
+			TokenData: newTokenData,
 		}
 		newTx.TxOut = append(newTx.TxOut, &newTxOut)
 	}
@@ -438,12 +456,13 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		// and needs to be returned to the pool on error.
 		to := &txOuts[i]
 		msg.TxOut[i] = to
-		err = readTxOut(r, pver, msg.Version, to)
+		pkScriptAndTokenDataSize, err := readTxOut(r, pver, msg.Version, to)
 		if err != nil {
 			returnScriptBuffers()
 			return err
 		}
-		totalScriptSize += uint64(len(to.PkScript))
+		//totalScriptSize += uint64(len(to.PkScript))
+		totalScriptSize += uint64(pkScriptAndTokenDataSize)
 	}
 
 	msg.LockTime, err = binarySerializer.Uint32(r, littleEndian)
@@ -703,7 +722,7 @@ func readScript(r io.Reader, pver uint32, maxAllowed uint32, fieldName string) (
 	// Prevent byte array larger than the max message size.  It would
 	// be possible to cause memory exhaustion and panics without a sane
 	// upper bound on this count.
-	if count > uint64(maxAllowed) {
+	if count > uint64(maxAllowed) { // TODO do we need to increase the maxAllowed
 		str := fmt.Sprintf("%s is larger than the max allowed size "+
 			"[count %d, max %d]", fieldName, count, maxAllowed)
 		return nil, messageError("readScript", str)
@@ -753,15 +772,33 @@ func writeTxIn(w io.Writer, pver uint32, version int32, ti *TxIn) error {
 
 // readTxOut reads the next sequence of bytes from r as a transaction output
 // (TxOut).
-func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) error {
+func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
 	err := readElement(r, &to.Value)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	var ScriptAndPossibleTokenData []byte
+	ScriptAndPossibleTokenData, err = readScript(r, pver, maxMessagePayload(),
+		"transaction output public key script and possible token data")
 
-	to.PkScript, err = readScript(r, pver, maxMessagePayload(),
-		"transaction output public key script")
-	return err
+	scriptAndTokendataSize := len(ScriptAndPossibleTokenData)
+
+	if scriptAndTokendataSize > 0 && ScriptAndPossibleTokenData[0] != PREFIX_BYTE { // Todo maybe change this
+		to.PkScript = ScriptAndPossibleTokenData
+		return scriptAndTokendataSize, err
+	}
+	var tokenDataSeparationErr error
+	to.PkScript, tokenDataSeparationErr = to.TokenData.SeparateTokenDataFromPKScriptIfExists(ScriptAndPossibleTokenData, pver)
+
+	if tokenDataSeparationErr != nil { // after activation this must fail! TODO TODO
+		to.TokenData = TokenData{} // Maybe move this inside TokenData.SeparateTokenDataFromPKScriptIfExists()
+		to.PkScript = ScriptAndPossibleTokenData
+	}
+	return scriptAndTokendataSize, err
+}
+
+func ReadTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
+	return readTxOut(r, pver, version, to)
 }
 
 // WriteTxOut encodes to into the bitcoin protocol encoding for a transaction
@@ -773,6 +810,12 @@ func WriteTxOut(w io.Writer, pver uint32, version int32, to *TxOut) error {
 	err := binarySerializer.PutUint64(w, littleEndian, uint64(to.Value))
 	if err != nil {
 		return err
+	}
+	if !to.TokenData.IsEmpty() {
+		buf := to.TokenData.TokenDataBuffer()
+
+		buf.Write(to.PkScript)
+		return WriteVarBytes(w, pver, buf.Bytes())
 	}
 
 	return WriteVarBytes(w, pver, to.PkScript)

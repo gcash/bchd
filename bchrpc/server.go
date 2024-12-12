@@ -354,10 +354,21 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				entry := stxos.LookupEntry(in.PreviousOutPoint)
 				if entry != nil {
-					respTx.Inputs[i].Value = entry.Amount()
-					respTx.Inputs[i].PreviousScript = entry.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(entry.PkScript(), s.chainParams)
+					pk, cashToken, err := getTokenDataForInputIfExists(entry.PkScript())
+					if err != nil {
+						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
+					}
+					if err != nil || cashToken == nil {
+						pk = entry.PkScript()
+					} else { // cash token data exists.
+						respTx.Inputs[i].CashToken = cashToken
+					}
+
+					respTx.Inputs[i].Value = entry.Amount()
+					respTx.Inputs[i].PreviousScript = pk
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						respTx.Inputs[i].Address = addrs[0].String()
 					}
@@ -506,10 +517,21 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 			for i := range tx.MsgTx().TxIn {
 				if idx > 0 {
 					stxo := spentTxos[spendIdx]
-					respTx.Inputs[i].Value = stxo.Amount
-					respTx.Inputs[i].PreviousScript = stxo.PkScript
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+					if err != nil {
+						log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
+					}
+					if err != nil || cashToken == nil {
+						pk = stxo.PkScript
+					} else { // cash token data exists.
+						respTx.Inputs[i].CashToken = cashToken
+					}
+
+					respTx.Inputs[i].Value = stxo.Amount
+					respTx.Inputs[i].PreviousScript = pk
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						respTx.Inputs[i].Address = addrs[0].String()
 						s.setInputSlpTokenAddress(respTx.Inputs[i], addrs[0])
@@ -683,10 +705,21 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				stxo := view.LookupEntry(in.PreviousOutPoint)
 				if stxo != nil {
-					tx.Inputs[i].Value = stxo.Amount()
-					tx.Inputs[i].PreviousScript = stxo.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
+					if err != nil {
+						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
+					}
+					if err != nil || cashToken == nil {
+						pk = stxo.PkScript()
+					} else { // cash token data exists.
+						tx.Inputs[i].CashToken = cashToken
+					}
+
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].PreviousScript = pk
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
 						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -865,10 +898,21 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				stxo := view.LookupEntry(in.PreviousOutPoint)
 				if stxo != nil {
-					tx.Inputs[i].Value = stxo.Amount()
-					tx.Inputs[i].PreviousScript = stxo.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
+					if err != nil {
+						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
+					}
+					if err != nil || cashToken == nil {
+						pk = stxo.PkScript()
+					} else { // cash token data exists.
+						tx.Inputs[i].CashToken = cashToken
+					}
+
+					tx.Inputs[i].Value = stxo.Amount()
+					tx.Inputs[i].PreviousScript = pk
+
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
 						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -1017,7 +1061,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			matchAddr := ""
 
 			switch typedAddr := addrs[0].(type) {
-			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash:
+			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
 				matchAddr = addrs[0].EncodeAddress()
 
 			case *bchutil.AddressPubKey:
@@ -1579,12 +1623,11 @@ func isMaybeSlpTransaction(txn *wire.MsgTx) bool {
 //
 // When use_spec_validity_judgement is true, there are three cases where the is_valid response property
 // will be returned as valid, instead of invalid, as per the slp specification.
-//   1) inputs > outputs
-//   2) missing transaction outputs
-//   3) burned inputs from other tokens
+//  1. inputs > outputs
+//  2. missing transaction outputs
+//  3. burned inputs from other tokens
 //
 // required_slp_burns is not used when use_spec_validity_judgement is set to true.
-//
 func (s *GrpcServer) CheckSlpTransaction(ctx context.Context, req *pb.CheckSlpTransactionRequest) (*pb.CheckSlpTransactionResponse, error) {
 
 	if s.slpIndex == nil {
@@ -1895,7 +1938,8 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 // to be checked elsewhere.
 //
 // NOTE: nft1 child genesis is allowed without error as long as the burned outpoint is a
-//       nft1 Group type and the quanity is 1.
+//
+//	nft1 Group type and the quanity is 1.
 func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoint, requiredBurns []*pb.SlpRequiredBurn, txnSlpMsg v1parser.ParseResult, inputIdx int) (*indexers.SlpTxEntry, error) {
 
 	slpEntry, err := s.getSlpIndexEntry(&outpoint.Hash)
@@ -2439,10 +2483,20 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 							for i := range tx.MsgTx().TxIn {
 								if idx > 0 {
 									stxo := spentTxos[spendIdx]
-									respTx.Inputs[i].Value = stxo.Amount
-									respTx.Inputs[i].PreviousScript = stxo.PkScript
+									pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+									if err != nil {
+										log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
+									}
+									if err != nil || cashToken == nil {
+										pk = stxo.PkScript
+									} else { // cash token data exists.
+										respTx.Inputs[i].CashToken = cashToken
+									}
 
-									_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+									respTx.Inputs[i].Value = stxo.Amount
+									respTx.Inputs[i].PreviousScript = pk
+
+									_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 									if err == nil && len(addrs) > 0 {
 										respTx.Inputs[i].Address = addrs[0].String()
 									}
@@ -2524,10 +2578,21 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 							for i := range tx.MsgTx().TxIn {
 								if idx > 0 {
 									stxo := spentTxos[spendIdx]
-									respTx.Inputs[i].Value = stxo.Amount
-									respTx.Inputs[i].PreviousScript = stxo.PkScript
 
-									_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript, s.chainParams)
+									pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+									if err != nil {
+										log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
+									}
+									if err != nil || cashToken == nil {
+										pk = stxo.PkScript
+									} else { // cash token data exists.
+										respTx.Inputs[i].CashToken = cashToken
+									}
+
+									respTx.Inputs[i].Value = stxo.Amount
+									respTx.Inputs[i].PreviousScript = pk
+
+									_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 									if err == nil && len(addrs) > 0 {
 										respTx.Inputs[i].Address = addrs[0].String()
 									}
@@ -2622,10 +2687,21 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 			continue
 		}
 		if prevTx, ok := inputTxMap[*ch]; ok {
-			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = prevTx.TxOut[in.Outpoint.Index].PkScript
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(prevTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
+			pk, cashToken, err := getTokenDataForInputIfExists(prevTx.TxOut[in.Outpoint.Index].PkScript)
+			if err != nil {
+				log.Debugf("could not parse token data for %v index: %v", prevTx.TxHash(), uint32(i))
+			}
+			if err != nil || cashToken == nil {
+				pk = prevTx.TxOut[in.Outpoint.Index].PkScript
+			} else { // cash token data exists.
+				tx.Inputs[i].CashToken = cashToken
+			}
+
+			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
+			tx.Inputs[i].PreviousScript = pk
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -2654,10 +2730,20 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 				return status.Error(codes.Internal, "failed to unmarshal transaction")
 			}
 
-			tx.Inputs[i].Value = loadedTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = loadedTx.TxOut[in.Outpoint.Index].PkScript
+			pk, cashToken, err := getTokenDataForInputIfExists(loadedTx.TxOut[in.Outpoint.Index].PkScript)
+			if err != nil {
+				log.Debugf("could not parse token data for %v index: %v", prevTx.TxHash(), uint32(i))
+			}
+			if err != nil || cashToken == nil {
+				pk = loadedTx.TxOut[in.Outpoint.Index].PkScript
+			} else { // cash token data exists.
+				tx.Inputs[i].CashToken = cashToken
+			}
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
+			tx.Inputs[i].Value = loadedTx.TxOut[in.Outpoint.Index].Value
+			tx.Inputs[i].PreviousScript = pk
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -2927,7 +3013,6 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 // slpEventHandler handles valid slp transaction events from mempool and block
 //
 // NOTE: this is launched as a goroutine and does not return errors!
-//
 func (s *GrpcServer) slpEventHandler() {
 	if s.slpIndex == nil {
 		return
@@ -2981,7 +3066,6 @@ func (s *GrpcServer) slpEventHandler() {
 // checkSlpTxOnEvent is used to make sure slp information has been processed before
 // returning subscriber event info to the client.  Without this, a race condition exists
 // where the subscriber event can be returned before the slp validation is completed.
-//
 func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	if !isMaybeSlpTransaction(tx) {
 		return false
@@ -3005,7 +3089,6 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 }
 
 // marshalTokenMetadata returns marshalled token metadata for the provided tokenID hash
-//
 func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenMetadata, error) {
 
 	if s.slpIndex == nil {
@@ -3332,6 +3415,18 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			},
 			SlpToken: inputToken,
 		}
+
+		signatureScript, cashToken, err := getTokenDataForInputIfExists(input.SignatureScript)
+		if err != nil {
+			log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
+		}
+		if err != nil || cashToken == nil {
+			in.SignatureScript = input.SignatureScript
+		} else { // cash token data exists.
+			respTx.Inputs[i].CashToken = cashToken
+			in.SignatureScript = signatureScript
+		}
+
 		respTx.Inputs = append(respTx.Inputs, in)
 
 		// add burn labels for destroyed slp inputs caused by wrong tokenID or invalid slp message
@@ -3353,6 +3448,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	// loop through outputs
 	for i, output := range tx.MsgTx().TxOut {
 
+		pkScript, err := output.TokenData.SeparateTokenDataFromPKScriptIfExists(output.PkScript, 0)
+		if err != nil {
+			log.Debugf("could not parse token data for %v index: %v", txid, uint32(i))
+		}
+		if pkScript != nil {
+			output.PkScript = pkScript
+		}
+
 		outputToken, err := s.getSlpToken(tx.Hash(), uint32(i), output.PkScript)
 		if err != nil {
 			log.Debugf("no token stored for %v index: %v", txid, uint32(i))
@@ -3364,6 +3467,16 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			PubkeyScript: output.PkScript,
 			SlpToken:     outputToken,
 		}
+		if !output.TokenData.IsEmpty() {
+			cashToken := &pb.CashToken{
+				CategoryId: output.TokenData.CategoryID[:],
+				Amount:     output.TokenData.Amount,
+				Commitment: output.TokenData.Commitment,
+				Bitfield:   []byte{output.TokenData.BitField},
+			}
+			out.CashToken = cashToken
+		}
+
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
 		if err == nil {
 			if scriptClass == txscript.NullDataTy {
@@ -3443,10 +3556,21 @@ func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rp
 	for i, in := range txDesc.Tx.MsgTx().TxIn {
 		stxo := view.LookupEntry(in.PreviousOutPoint)
 		if stxo != nil {
-			respTx.Inputs[i].Value = stxo.Amount()
-			respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
+			pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
+			if err != nil {
+				log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
+			}
+			if err != nil || cashToken == nil {
+				pk = stxo.PkScript()
+			} else { // cash token data exists.
+				respTx.Inputs[i].CashToken = cashToken
+			}
+
+			respTx.Inputs[i].Value = stxo.Amount()
+			respTx.Inputs[i].PreviousScript = pk
+
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				respTx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(respTx.Inputs[i], addrs[0])
@@ -3479,6 +3603,26 @@ func getTokenType(t v1parser.TokenType) pb.SlpTokenType {
 	default:
 		return pb.SlpTokenType_VERSION_NOT_SET
 	}
+}
+
+func getTokenDataForInputIfExists(fullBytes []byte) ([]byte, *pb.CashToken, error) {
+	tokenData := wire.TokenData{}
+	pk, err := tokenData.SeparateTokenDataFromPKScriptIfExists(fullBytes, 0)
+	if err != nil || pk == nil {
+		return fullBytes, nil, err
+	}
+
+	if !tokenData.IsEmpty() {
+		cashToken := &pb.CashToken{
+			CategoryId: tokenData.CategoryID[:],
+			Amount:     tokenData.Amount,
+			Commitment: tokenData.Commitment,
+			Bitfield:   []byte{tokenData.BitField},
+		}
+		return pk, cashToken, nil
+	}
+	return fullBytes, nil, nil
+
 }
 
 // queueHandler manages a queue of empty interfaces, reading from in and

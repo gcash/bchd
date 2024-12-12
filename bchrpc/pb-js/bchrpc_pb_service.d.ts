@@ -139,6 +139,51 @@ type bchrpcGetMerkleProof = {
   readonly responseType: typeof bchrpc_pb.GetMerkleProofResponse;
 };
 
+type bchrpcGetSlpTokenMetadata = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetSlpTokenMetadataRequest;
+  readonly responseType: typeof bchrpc_pb.GetSlpTokenMetadataResponse;
+};
+
+type bchrpcGetSlpParsedScript = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetSlpParsedScriptRequest;
+  readonly responseType: typeof bchrpc_pb.GetSlpParsedScriptResponse;
+};
+
+type bchrpcGetSlpTrustedValidation = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetSlpTrustedValidationRequest;
+  readonly responseType: typeof bchrpc_pb.GetSlpTrustedValidationResponse;
+};
+
+type bchrpcGetSlpGraphSearch = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetSlpGraphSearchRequest;
+  readonly responseType: typeof bchrpc_pb.GetSlpGraphSearchResponse;
+};
+
+type bchrpcCheckSlpTransaction = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.CheckSlpTransactionRequest;
+  readonly responseType: typeof bchrpc_pb.CheckSlpTransactionResponse;
+};
+
 type bchrpcSubmitTransaction = {
   readonly methodName: string;
   readonly service: typeof bchrpc;
@@ -192,6 +237,11 @@ export class bchrpc {
   static readonly GetAddressUnspentOutputs: bchrpcGetAddressUnspentOutputs;
   static readonly GetUnspentOutput: bchrpcGetUnspentOutput;
   static readonly GetMerkleProof: bchrpcGetMerkleProof;
+  static readonly GetSlpTokenMetadata: bchrpcGetSlpTokenMetadata;
+  static readonly GetSlpParsedScript: bchrpcGetSlpParsedScript;
+  static readonly GetSlpTrustedValidation: bchrpcGetSlpTrustedValidation;
+  static readonly GetSlpGraphSearch: bchrpcGetSlpGraphSearch;
+  static readonly CheckSlpTransaction: bchrpcCheckSlpTransaction;
   static readonly SubmitTransaction: bchrpcSubmitTransaction;
   static readonly SubscribeTransactions: bchrpcSubscribeTransactions;
   static readonly SubscribeTransactionStream: bchrpcSubscribeTransactionStream;
@@ -364,6 +414,51 @@ export class bchrpcClient {
   getMerkleProof(
     requestMessage: bchrpc_pb.GetMerkleProofRequest,
     callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetMerkleProofResponse|null) => void
+  ): UnaryResponse;
+  getSlpTokenMetadata(
+    requestMessage: bchrpc_pb.GetSlpTokenMetadataRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpTokenMetadataResponse|null) => void
+  ): UnaryResponse;
+  getSlpTokenMetadata(
+    requestMessage: bchrpc_pb.GetSlpTokenMetadataRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpTokenMetadataResponse|null) => void
+  ): UnaryResponse;
+  getSlpParsedScript(
+    requestMessage: bchrpc_pb.GetSlpParsedScriptRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpParsedScriptResponse|null) => void
+  ): UnaryResponse;
+  getSlpParsedScript(
+    requestMessage: bchrpc_pb.GetSlpParsedScriptRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpParsedScriptResponse|null) => void
+  ): UnaryResponse;
+  getSlpTrustedValidation(
+    requestMessage: bchrpc_pb.GetSlpTrustedValidationRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpTrustedValidationResponse|null) => void
+  ): UnaryResponse;
+  getSlpTrustedValidation(
+    requestMessage: bchrpc_pb.GetSlpTrustedValidationRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpTrustedValidationResponse|null) => void
+  ): UnaryResponse;
+  getSlpGraphSearch(
+    requestMessage: bchrpc_pb.GetSlpGraphSearchRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpGraphSearchResponse|null) => void
+  ): UnaryResponse;
+  getSlpGraphSearch(
+    requestMessage: bchrpc_pb.GetSlpGraphSearchRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetSlpGraphSearchResponse|null) => void
+  ): UnaryResponse;
+  checkSlpTransaction(
+    requestMessage: bchrpc_pb.CheckSlpTransactionRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.CheckSlpTransactionResponse|null) => void
+  ): UnaryResponse;
+  checkSlpTransaction(
+    requestMessage: bchrpc_pb.CheckSlpTransactionRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.CheckSlpTransactionResponse|null) => void
   ): UnaryResponse;
   submitTransaction(
     requestMessage: bchrpc_pb.SubmitTransactionRequest,

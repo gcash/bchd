@@ -133,7 +133,10 @@ func TestHashCacheAddGet(t *testing.T) {
 
 	// Finally, the sighashes retrieved should exactly match the sighash
 	// originally inserted into the cache.
-	if *sigHashes != *cacheHashes {
+	// TODO TODO
+	if sigHashes.HashOutputs != cacheHashes.HashOutputs ||
+		sigHashes.HashPrevOuts != cacheHashes.HashPrevOuts ||
+		sigHashes.HashSequence != cacheHashes.HashSequence {
 		t.Fatalf("sighashes don't match: expected %v, got %v",
 			spew.Sdump(sigHashes), spew.Sdump(cacheHashes))
 	}

@@ -127,6 +127,10 @@ const (
 	// ScriptVerifyNativeIntrospection enables the suite of native introspection
 	// opcodes.
 	ScriptVerifyNativeIntrospection
+
+	// ScriptAllowCashTokens enables the use of SighashUTXO signing
+	// serialization type and CashTokens related OP codes
+	ScriptAllowCashTokens
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -375,6 +379,7 @@ func (vm *Engine) Step() (done bool, err error) {
 	if err != nil {
 		return true, err
 	}
+
 	opcode := &vm.scripts[vm.scriptIdx][vm.scriptOff]
 	vm.scriptOff++
 
@@ -500,6 +505,20 @@ func (vm *Engine) checkHashTypeEncoding(hashType SigHashType) error {
 			str := fmt.Sprintf("hash type does not contain uahf forkID 0x%x", hashType)
 			return scriptError(ErrInvalidSigHashType, str)
 		}
+	}
+
+	if vm.hasFlag(ScriptAllowCashTokens) {
+		sigHashType &= ^SigHashUTXO
+	} else {
+		if hashType&SigHashUTXO != 0 {
+			str := fmt.Sprintf("invalid hash type containing SIGHASH_UTXOS 0x%x", hashType)
+			return scriptError(ErrInvalidSigHashType, str)
+		}
+	}
+
+	if hashType&SigHashUTXO != 0 && hashType&SigHashAnyOneCanPay != 0 {
+		str := fmt.Sprintf("invalid hash type containing both SIGHASH_UTXOS and SIGHASH_ANYONECANPAY 0x%x", hashType)
+		return scriptError(ErrInvalidSigHashType, str)
 	}
 
 	if sigHashType < SigHashAll || sigHashType > SigHashSingle {
@@ -954,6 +973,16 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 		}
 		vm.bip16 = true
 	}
+
+	if vm.hasFlag(ScriptBip16) && isScriptHash32(vm.scripts[1]) {
+		// Only accept input scripts that push data for P2SH32.
+		if !isPushOnly(vm.scripts[0]) {
+			return nil, scriptError(ErrNotPushOnly,
+				"pay to script hash is not push only")
+		}
+		vm.bip16 = true
+	}
+
 	if vm.hasFlag(ScriptVerifyMinimalData) {
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true

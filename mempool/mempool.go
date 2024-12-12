@@ -740,6 +740,10 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	if nextBlockHeight > mp.cfg.ChainParams.MagneticAnonomalyForkHeight {
 		magneticAnomalyActive = true
 	}
+	upgrade9Active := false
+	if nextBlockHeight > mp.cfg.ChainParams.Upgrade9ForkHeight {
+		upgrade9Active = true
+	}
 
 	scriptFlags := txscript.StandardVerifyFlags
 	if !mp.cfg.Policy.LimitSigChecks {
@@ -749,7 +753,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// Perform preliminary sanity checks on the transaction.  This makes
 	// use of blockchain which contains the invariant rules for what
 	// transactions are allowed into blocks.
-	err := blockchain.CheckTransactionSanity(tx, magneticAnomalyActive, scriptFlags)
+	err := blockchain.CheckTransactionSanity(tx, magneticAnomalyActive, upgrade9Active, scriptFlags)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)
@@ -769,7 +773,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	if !mp.cfg.Policy.AcceptNonStd {
 		err = checkTransactionStandard(tx, nextBlockHeight,
 			medianTimePast, mp.cfg.Policy.MinRelayTxFee,
-			mp.cfg.Policy.MaxTxVersion)
+			mp.cfg.Policy.MaxTxVersion, upgrade9Active)
 		if err != nil {
 			// Attempt to extract a reject code from the error so
 			// it can be retained.  When not possible, fall back to
@@ -951,7 +955,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// Verify crypto signatures for each input and reject the transaction if
 	// any don't verify.
 	_, err = blockchain.ValidateTransactionScripts(tx, utxoView, scriptFlags,
-		mp.cfg.SigCache, mp.cfg.HashCache)
+		mp.cfg.SigCache, mp.cfg.HashCache, mp.cfg.ChainParams.Upgrade9ForkHeight)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)

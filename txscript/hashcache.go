@@ -17,9 +17,11 @@ import (
 // transaction when validating all inputs. As a result, validation complexity
 // for SigHashAll can be reduced by a polynomial factor.
 type TxSigHashes struct {
-	HashPrevOuts chainhash.Hash
-	HashSequence chainhash.Hash
-	HashOutputs  chainhash.Hash
+	HashPrevOuts  chainhash.Hash
+	HashSequence  chainhash.Hash
+	HashOutputs   chainhash.Hash
+	HashUTXOS     chainhash.Hash
+	tokenDataList [][]byte
 }
 
 // NewTxSigHashes computes, and returns the cached sighashes of the given
@@ -29,7 +31,14 @@ func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
 		HashPrevOuts: calcHashPrevOuts(tx),
 		HashSequence: calcHashSequence(tx),
 		HashOutputs:  calcHashOutputs(tx),
+		// HashUTXOS:    calcHashUtxos(tx),
 	}
+}
+
+func (txSighashes *TxSigHashes) AddTxSigHashUtxoFromUtxoCache(tx *wire.MsgTx, utxoCache *UtxoCache) {
+	hash := calcHashUtxos(tx, utxoCache)
+	txSighashes.HashUTXOS = hash
+	txSighashes.tokenDataList = calUtxoTokenData(tx, utxoCache)
 }
 
 // HashCache houses a set of partial sighashes keyed by txid. The set of partial

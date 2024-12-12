@@ -55,12 +55,13 @@ type ScriptClass byte
 
 // Classes of script payment known about in the blockchain.
 const (
-	NonStandardTy ScriptClass = iota // None of the recognized forms.
-	PubKeyTy                         // Pay pubkey.
-	PubKeyHashTy                     // Pay pubkey hash.
-	ScriptHashTy                     // Pay to script hash.
-	MultiSigTy                       // Multi signature.
-	NullDataTy                       // Empty data-only (provably prunable).
+	NonStandardTy  ScriptClass = iota // None of the recognized forms.
+	PubKeyTy                          // Pay pubkey.
+	PubKeyHashTy                      // Pay pubkey hash.
+	ScriptHashTy                      // Pay to script hash.
+	ScriptHash32Ty                    // Pay to script hash 32
+	MultiSigTy                        // Multi signature.
+	NullDataTy                        // Empty data-only (provably prunable).
 )
 
 // scriptClassToName houses the human-readable strings which describe each
@@ -186,6 +187,8 @@ func typeOfScript(pops []parsedOpcode) ScriptClass {
 		return PubKeyHashTy
 	} else if isScriptHash(pops) {
 		return ScriptHashTy
+	} else if isScriptHash32(pops) {
+		return ScriptHash32Ty
 	} else if isMultiSig(pops) {
 		return MultiSigTy
 	} else if isNullData(pops) {
@@ -355,6 +358,13 @@ func payToScriptHashScript(scriptHash []byte) ([]byte, error) {
 		AddOp(OP_EQUAL).Script()
 }
 
+// payToScriptHashScript32 creates a new script to pay a transaction output to a
+// script hash. It is expected that the input is a valid hash.
+func payToScriptHashScript32(scriptHash []byte) ([]byte, error) {
+	return NewScriptBuilder().AddOp(OP_HASH256).AddData(scriptHash).
+		AddOp(OP_EQUAL).Script()
+}
+
 // payToPubkeyScript creates a new script to pay a transaction output to a
 // public key. It is expected that the input is a valid pubkey.
 func payToPubKeyScript(serializedPubKey []byte) ([]byte, error) {
@@ -392,6 +402,12 @@ func PayToAddrScript(addr bchutil.Address) ([]byte, error) {
 				nilAddrErrStr)
 		}
 		return payToScriptHashScript(addr.ScriptAddress())
+	case *bchutil.AddressScriptHash32:
+		if addr == nil {
+			return nil, scriptError(ErrUnsupportedAddress,
+				nilAddrErrStr)
+		}
+		return payToScriptHashScript32(addr.ScriptAddress())
 	case *bchutil.AddressPubKey:
 		if addr == nil {
 			return nil, scriptError(ErrUnsupportedAddress,
@@ -510,6 +526,20 @@ func ExtractPkScriptAddrs(pkScript []byte, chainParams *chaincfg.Params) (Script
 			chainParams)
 		if err == nil {
 			addrs = append(addrs, addr)
+		}
+
+	case ScriptHash32Ty:
+		// A pay-to-script-hash32 script is of the form:
+		//  OP_HASH256 <scripthash> OP_EQUAL
+		// Therefore the script hash is the 2nd item on the stack.
+		// Skip the script hash if it's invalid for some reason.
+		requiredSigs = 1
+		addr, err := bchutil.NewAddressScriptHash32FromHash(pops[1].data,
+			chainParams)
+		if err == nil {
+			addrs = append(addrs, addr)
+		} else {
+			log.Debugf("%v", err)
 		}
 
 	case MultiSigTy:
