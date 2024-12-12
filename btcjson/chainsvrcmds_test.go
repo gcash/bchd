@@ -54,7 +54,7 @@ func TestChainSvrCmds(t *testing.T) {
 				amounts := map[string]float64{"456": .0123}
 				return btcjson.NewCreateRawTransactionCmd(txInputs, amounts, nil, nil)
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[{"txid":"123","vout":1}],{"456":0.0123}],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[{"txid":"123","vout":1}],{"456":0.0123},[]],"id":1}`,
 			unmarshalled: &btcjson.CreateRawTransactionCmd{
 				Inputs:  []btcjson.TransactionInput{{Txid: "123", Vout: 1}},
 				Amounts: map[string]float64{"456": .0123},
@@ -69,7 +69,7 @@ func TestChainSvrCmds(t *testing.T) {
 				amounts := map[string]float64{"456": .0123}
 				return btcjson.NewCreateRawTransactionCmd(nil, amounts, nil, nil)
 			},
-			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[],{"456":0.0123}],"id":1}`,
+			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[],{"456":0.0123},[]],"id":1}`,
 			unmarshalled: &btcjson.CreateRawTransactionCmd{
 				Inputs:  []btcjson.TransactionInput{},
 				Amounts: map[string]float64{"456": .0123},
