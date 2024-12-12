@@ -6,11 +6,12 @@ package mining
 
 import (
 	"container/heap"
+	"math/rand"
+	"testing"
+
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/txscript"
-	"math/rand"
-	"testing"
 
 	"github.com/gcash/bchutil"
 )
@@ -126,7 +127,7 @@ func Test_createCoinbaseTx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = blockchain.CheckTransactionSanity(coinbase, true, txscript.StandardVerifyFlags)
+	err = blockchain.CheckTransactionSanity(coinbase, true, true, txscript.StandardVerifyFlags)
 	if err != nil {
 		t.Fatal(err)
 	}

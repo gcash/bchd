@@ -91,7 +91,7 @@ func TestTx(t *testing.T) {
 		0xa6, // 65-byte signature
 		0xac, // OP_CHECKSIG
 	}
-	txOut := NewTxOut(txValue, pkScript)
+	txOut := NewTxOut(txValue, pkScript, TokenData{})
 	if txOut.Value != txValue {
 		t.Errorf("NewTxOut: wrong pk script - got %v, want %v",
 			txOut.Value, txValue)

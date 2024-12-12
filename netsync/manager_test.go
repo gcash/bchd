@@ -766,6 +766,6 @@ func createSpendingTx(prevTx *bchutil.Tx, index uint32, scriptSig []byte, addres
 
 	spendTx := wire.NewMsgTx(1)
 	spendTx.AddTxIn(wire.NewTxIn(prevOutPoint, scriptSig))
-	spendTx.AddTxOut(wire.NewTxOut(prevOut.Value, scriptPubKey))
+	spendTx.AddTxOut(wire.NewTxOut(prevOut.Value, scriptPubKey, wire.TokenData{}))
 	return bchutil.NewTx(spendTx), nil
 }

@@ -20,10 +20,9 @@ fi
 test -z "$(env GO111MODULE=on golangci-lint run --disable-all \
 --enable=gofmt \
 --enable=revive \
---enable=vet \
+--enable=govet \
 --enable=gosimple \
 --enable=unconvert \
---deadline=10m \
 --exclude="OP_" \
 --exclude="ALL_CAPS" \
 2>&1 | tee /dev/stderr)"
