@@ -60,7 +60,7 @@ func (iter *ldbCacheIter) Error() error {
 // need to override it.
 //
 // This is part of the leveldb iterator.Iterator interface implementation.
-func (iter *ldbCacheIter) SetReleaser(releaser util.Releaser) {
+func (iter *ldbCacheIter) SetReleaser(_ util.Releaser) {
 }
 
 // Release is only provided to satisfy the iterator interface.
@@ -258,7 +258,7 @@ func (iter *dbCacheIterator) Value() []byte {
 // need to override it.
 //
 // This is part of the leveldb iterator.Iterator interface implementation.
-func (iter *dbCacheIterator) SetReleaser(releaser util.Releaser) {
+func (iter *dbCacheIterator) SetReleaser(_ util.Releaser) {
 }
 
 // Release releases the iterator by removing the underlying treap iterator from
@@ -466,7 +466,7 @@ func (c *dbCache) commitTreaps(pendingKeys, pendingRemove TreapForEacher) error 
 			return innerErr
 		}
 
-		pendingRemove.ForEach(func(k, v []byte) bool {
+		pendingRemove.ForEach(func(k, _ []byte) bool {
 			if dbErr := ldbTx.Delete(k, nil); dbErr != nil {
 				str := fmt.Sprintf("failed to delete "+
 					"key %q from ldb transaction",
@@ -604,7 +604,7 @@ func (c *dbCache) commitTx(tx *transaction) error {
 	tx.pendingKeys = nil
 
 	// Apply every key to remove in the database transaction to the cache.
-	tx.pendingRemove.ForEach(func(k, v []byte) bool {
+	tx.pendingRemove.ForEach(func(k, _ []byte) bool {
 		newCachedKeys = newCachedKeys.Delete(k)
 		newCachedRemove = newCachedRemove.Put(k, nil)
 		return true

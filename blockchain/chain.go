@@ -2285,7 +2285,7 @@ func New(config *Config) (*BlockChain, error) {
 		beta0:           params.ABLAConfig.Beta0,
 		n0:              params.ABLAConfig.N0,
 		gammaReciprocal: params.ABLAConfig.GammaReciprocal,
-		zeta_xB7:        params.ABLAConfig.Zeta_xB7,
+		zetaXB7:         params.ABLAConfig.ZetaXB7,
 		thetaReciprocal: params.ABLAConfig.ThetaReciprocal,
 		delta:           params.ABLAConfig.Delta,
 	}

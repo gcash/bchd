@@ -42,7 +42,7 @@ func TestMutableEmpty(t *testing.T) {
 	// Ensure the number of keys iterated by ForEach on an empty treap is
 	// zero.
 	var numIterated int
-	testTreap.ForEach(func(k, v []byte) bool {
+	testTreap.ForEach(func(_, _ []byte) bool {
 		numIterated++
 		return true
 	})
@@ -98,7 +98,7 @@ func TestMutableReset(t *testing.T) {
 
 	// Ensure the number of keys iterated by ForEach is zero.
 	var numIterated int
-	testTreap.ForEach(func(k, v []byte) bool {
+	testTreap.ForEach(func(_, _ []byte) bool {
 		numIterated++
 		return true
 	})
@@ -454,7 +454,7 @@ func TestMutableForEachStopIterator(t *testing.T) {
 
 	// Ensure ForEach exits early on false return by caller.
 	var numIterated int
-	testTreap.ForEach(func(k, v []byte) bool {
+	testTreap.ForEach(func(_, _ []byte) bool {
 		numIterated++
 		return numIterated != numItems/2
 	})

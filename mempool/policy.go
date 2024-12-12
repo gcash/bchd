@@ -83,7 +83,7 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amoun
 // because the script engine already does this more accurately and concisely
 // via the txscript.ScriptVerifyCleanStack and txscript.ScriptVerifySigPushOnly
 // flags.
-func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {
+func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, _ txscript.ScriptFlags) error {
 	// NOTE: The reference implementation also does a coinbase check here,
 	// but coinbases have already been rejected prior to calling this
 	// function so no need to recheck.
@@ -291,7 +291,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 
 		if !upgrade9Active && !txOut.TokenData.IsEmpty() {
 			rejectCode := wire.RejectNonstandard
-			str := fmt.Sprintf("txn-tokens-before-activation")
+			str := "txn-tokens-before-activation"
 			return txRuleError(rejectCode, str)
 		}
 

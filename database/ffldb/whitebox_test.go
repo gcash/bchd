@@ -241,7 +241,7 @@ func TestCornerCases(t *testing.T) {
 	// properly.
 	testName = "View: underlying leveldb error"
 	wantErrCode = database.ErrDbNotOpen
-	err = idb.View(func(tx database.Tx) error {
+	err = idb.View(func(_ database.Tx) error {
 		return nil
 	})
 	if !checkDbError(t, testName, err, wantErrCode) {
@@ -251,7 +251,7 @@ func TestCornerCases(t *testing.T) {
 	// Ensure the Update handles errors in the underlying leveldb database
 	// properly.
 	testName = "Update: underlying leveldb error"
-	err = idb.Update(func(tx database.Tx) error {
+	err = idb.Update(func(_ database.Tx) error {
 		return nil
 	})
 	if !checkDbError(t, testName, err, wantErrCode) {

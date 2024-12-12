@@ -42,7 +42,7 @@ func testSendOutputs(r *Harness, t *testing.T) {
 		if err != nil {
 			t.Fatalf("unable to generate pkscript to addr: %v", err)
 		}
-		output := wire.NewTxOut(int64(amt), addrScript)
+		output := wire.NewTxOut(int64(amt), addrScript, wire.TokenData{})
 		txid, err := r.SendOutputs([]*wire.TxOut{output}, 10)
 		if err != nil {
 			t.Fatalf("coinbase spend failed: %v", err)
@@ -216,7 +216,7 @@ func testJoinMempools(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to generate pkscript to addr: %v", err)
 	}
-	output := wire.NewTxOut(5e8, addrScript)
+	output := wire.NewTxOut(5e8, addrScript, wire.TokenData{})
 	testTx, err := r.CreateTransaction([]*wire.TxOut{output}, 10, true)
 	if err != nil {
 		t.Fatalf("coinbase spend failed: %v", err)
@@ -346,7 +346,7 @@ func testGenerateAndSubmitBlock(r *Harness, t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create script: %v", err)
 	}
-	output := wire.NewTxOut(bchutil.SatoshiPerBitcoin, pkScript)
+	output := wire.NewTxOut(bchutil.SatoshiPerBitcoin, pkScript, wire.TokenData{})
 
 	const numTxns = 5
 	txns := make([]*bchutil.Tx, 0, numTxns)
@@ -413,7 +413,7 @@ func testGenerateAndSubmitBlockWithCustomCoinbaseOutputs(r *Harness,
 	if err != nil {
 		t.Fatalf("unable to create script: %v", err)
 	}
-	output := wire.NewTxOut(bchutil.SatoshiPerBitcoin, pkScript)
+	output := wire.NewTxOut(bchutil.SatoshiPerBitcoin, pkScript, wire.TokenData{})
 
 	const numTxns = 5
 	txns := make([]*bchutil.Tx, 0, numTxns)
@@ -532,7 +532,7 @@ func testMemWalletLockedOutputs(r *Harness, t *testing.T) {
 		t.Fatalf("unable to create script: %v", err)
 	}
 	outputAmt := bchutil.Amount(50 * bchutil.SatoshiPerBitcoin)
-	output := wire.NewTxOut(int64(outputAmt), pkScript)
+	output := wire.NewTxOut(int64(outputAmt), pkScript, wire.TokenData{})
 	tx, err := r.CreateTransaction([]*wire.TxOut{output}, 10, true)
 	if err != nil {
 		t.Fatalf("unable to create transaction: %v", err)

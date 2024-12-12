@@ -376,7 +376,6 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry
 // latest slp transaction entry for every transaction in the passed block.
 //
 // This method should only be called by DisconnectBlock()
-//
 func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 	// toposort and reverse order so we can unwind slp token metadata state if needed
 	txs := TopologicallySortTxs(block.Transactions())
@@ -656,7 +655,6 @@ func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 // LoadSlpGraphSearchDb is used to load data needed for slp graph search
 //
 // NOTE: this is launched as a goroutine and does not return errors!
-//
 func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), initWg *sync.WaitGroup, interupt *int32) {
 
 	// this method shouldn't be called more than once or if gs is disabled
@@ -685,7 +683,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
 	//	      of token IDs for graph search can be added.
 	log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnTokenIDMap)))
-	getTxn := func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) error {
+	getTxn := func(txnHash chainhash.Hash, _ *chainhash.Hash, wg *sync.WaitGroup) error {
 		if wg != nil {
 			defer wg.Done()
 		}

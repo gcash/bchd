@@ -431,7 +431,7 @@ func testBucketInterface(tc *testContext, bucket database.Bucket) bool {
 		// Ensure errors returned from the user-supplied ForEach
 		// function are returned.
 		forEachError := fmt.Errorf("example foreach error")
-		err := bucket.ForEach(func(k, v []byte) error {
+		err := bucket.ForEach(func(_, _ []byte) error {
 			return forEachError
 		})
 		if err != forEachError {
@@ -494,7 +494,7 @@ func testBucketInterface(tc *testContext, bucket database.Bucket) bool {
 
 		// Ensure errors returned from the user-supplied ForEachBucket
 		// function are returned.
-		err = bucket.ForEachBucket(func(k []byte) error {
+		err = bucket.ForEachBucket(func(_ []byte) error {
 			return forEachError
 		})
 		if err != forEachError {
@@ -756,7 +756,8 @@ func testMetadataManualTxInterface(tc *testContext) bool {
 	deleteValues := func(values []keyPair) bool {
 		tx, err := tc.db.Begin(true)
 		if err != nil {
-
+			tc.t.Errorf("Transaction: failed to begin db transaction")
+			return false
 		}
 		defer rollbackOnPanic(tc.t, tx)
 
@@ -963,7 +964,7 @@ func testMetadataTxInterface(tc *testContext) bool {
 	// Ensure errors returned from the user-supplied View function are
 	// returned.
 	viewError := fmt.Errorf("example view error")
-	err = tc.db.View(func(tx database.Tx) error {
+	err = tc.db.View(func(_ database.Tx) error {
 		return viewError
 	})
 	if err != viewError {
@@ -2092,7 +2093,7 @@ func testConcurrecy(tc *testContext) bool {
 	concurrentVal := []byte("someval")
 	started := make(chan struct{})
 	writeComplete := make(chan struct{})
-	reader = func(blockNum int) {
+	reader = func(_ int) {
 		err := tc.db.View(func(tx database.Tx) error {
 			started <- struct{}{}
 
@@ -2146,7 +2147,7 @@ func testConcurrecy(tc *testContext) bool {
 	// can be active at a time.
 	writeSleepTime := time.Millisecond * 250
 	writer := func() {
-		err := tc.db.Update(func(tx database.Tx) error {
+		err := tc.db.Update(func(_ database.Tx) error {
 			time.Sleep(writeSleepTime)
 			return nil
 		})
@@ -2196,7 +2197,7 @@ func testConcurrentClose(tc *testContext) bool {
 	finishReaders := make(chan struct{})
 	resultChan := make(chan bool, numReaders+1)
 	reader := func() {
-		err := tc.db.View(func(tx database.Tx) error {
+		err := tc.db.View(func(_ database.Tx) error {
 			atomic.AddInt32(&activeReaders, 1)
 			started <- struct{}{}
 			<-finishReaders

@@ -110,7 +110,7 @@ func TestABLA(t *testing.T) {
 			beta0:           beta0,
 			n0:              testData.ABLAConfig.N0,
 			gammaReciprocal: testData.ABLAConfig.GammaReciprocal,
-			zeta_xB7:        testData.ABLAConfig.Zeta,
+			zetaXB7:         testData.ABLAConfig.Zeta,
 			thetaReciprocal: testData.ABLAConfig.ThetaReciprocal,
 			delta:           testData.ABLAConfig.Delta,
 		}

@@ -113,7 +113,7 @@ func TestCreateOpenFail(t *testing.T) {
 	db.Close()
 
 	wantErrCode = database.ErrDbNotOpen
-	err = db.View(func(tx database.Tx) error {
+	err = db.View(func(_ database.Tx) error {
 		return nil
 	})
 	if !checkDbError(t, "View", err, wantErrCode) {
@@ -121,7 +121,7 @@ func TestCreateOpenFail(t *testing.T) {
 	}
 
 	wantErrCode = database.ErrDbNotOpen
-	err = db.Update(func(tx database.Tx) error {
+	err = db.Update(func(_ database.Tx) error {
 		return nil
 	})
 	if !checkDbError(t, "Update", err, wantErrCode) {

@@ -102,7 +102,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 			return slpEntry, nil
 		}
 
-		putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		putTxIndexEntry := func(_ *wire.MsgTx, _ v1parser.ParseResult, _ *chainhash.Hash) error {
 			return nil
 		}
 

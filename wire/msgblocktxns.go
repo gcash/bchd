@@ -3,8 +3,9 @@ package wire
 import (
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/chaincfg/chainhash"
 	"io"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 // MsgBlockTxns implements the Message interface and represents a Bitcoin blocktxn
@@ -76,7 +77,7 @@ func (msg *MsgBlockTxns) Command() string {
 
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
-func (msg *MsgBlockTxns) MaxPayloadLength(pver uint32) uint32 {
+func (msg *MsgBlockTxns) MaxPayloadLength(_ uint32) uint32 {
 	// In practice this will always be less than the payload but the number
 	// of txs in a block can vary so we really don't know the real max.
 	return maxMessagePayload()

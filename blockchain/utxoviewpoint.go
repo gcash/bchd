@@ -41,7 +41,7 @@ func (view *UtxoViewpoint) getEntry(outpoint wire.OutPoint) (*UtxoEntry, error) 
 
 // addEntry adds a new entry to the view.  Set overwrite to true if this
 // entry should overwrite any existing entry for the same outpoint.
-func (view *UtxoViewpoint) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, overwrite bool) error {
+func (view *UtxoViewpoint) addEntry(outpoint wire.OutPoint, entry *UtxoEntry, _ bool) error {
 	view.entries[outpoint] = entry
 	return nil
 }

@@ -171,7 +171,7 @@ type handleFailed struct {
 	err error
 }
 
-//checkDuplicate is used to poll the connHandler to see if an
+// checkDuplicate is used to poll the connHandler to see if an
 // open connection to the address already exists.
 type checkDuplicate struct {
 	addr net.Addr

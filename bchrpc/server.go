@@ -738,7 +738,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			if err != nil {
 				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 				log.Criticalf(msg)
-				return nil, status.Errorf(codes.Internal, msg)
+				return nil, status.Error(codes.Internal, msg)
 			}
 		}
 
@@ -783,7 +783,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if err != nil {
 			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 			log.Criticalf(msg)
-			return nil, status.Errorf(codes.Internal, msg)
+			return nil, status.Error(codes.Internal, msg)
 		}
 	}
 
@@ -1698,7 +1698,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 				if disableErrorResponse {
 					return slpInvalid(invalidReason), nil
 				}
-				return nil, status.Errorf(codes.Aborted, err.Error())
+				return nil, status.Error(codes.Aborted, err.Error())
 			}
 		}
 

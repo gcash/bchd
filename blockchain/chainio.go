@@ -1491,7 +1491,7 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 			// check if upgrade is active for block
 			if tip.height > b.chainParams.ABLAForkHeight {
 				return AssertError(fmt.Sprintf("initChainState: cannot find "+
-					"ABLA state index for block at height: ", tip.height))
+					"ABLA state index for block at height: %d", tip.height))
 			}
 		}
 

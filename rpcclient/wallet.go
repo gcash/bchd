@@ -1999,15 +1999,15 @@ func (r FutureWalletPassphraseChangeResult) Receive() error {
 // function on the returned instance.
 //
 // See WalletPassphraseChange for the blocking version and more details.
-func (c *Client) WalletPassphraseChangeAsync(old, new string) FutureWalletPassphraseChangeResult {
-	cmd := btcjson.NewWalletPassphraseChangeCmd(old, new)
+func (c *Client) WalletPassphraseChangeAsync(old, newPass string) FutureWalletPassphraseChangeResult {
+	cmd := btcjson.NewWalletPassphraseChangeCmd(old, newPass)
 	return c.sendCmd(cmd)
 }
 
 // WalletPassphraseChange changes the wallet passphrase from the specified old
 // to new passphrase.
-func (c *Client) WalletPassphraseChange(old, new string) error {
-	return c.WalletPassphraseChangeAsync(old, new).Receive()
+func (c *Client) WalletPassphraseChange(old, newPass string) error {
+	return c.WalletPassphraseChangeAsync(old, newPass).Receive()
 }
 
 // *************************

@@ -5,7 +5,7 @@
 /*
 Package addrmgr implements concurrency safe Bitcoin Cash address manager.
 
-Address Manager Overview
+# Address Manager Overview
 
 In order maintain the peer-to-peer Bitcoin Cash network, there needs to be a source
 of addresses to connect to as nodes come and go.  The Bitcoin Cash protocol provides

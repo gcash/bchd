@@ -342,10 +342,8 @@ func TestExtractPkScriptAddrs(t *testing.T) {
 
 	t.Logf("Running %d tests.", len(tests))
 	for i, test := range tests {
-		class, addrs, reqSigs, err := ExtractPkScriptAddrs(
+		class, addrs, reqSigs, _ := ExtractPkScriptAddrs(
 			test.script, &chaincfg.MainNetParams)
-		if err != nil {
-		}
 
 		if !reflect.DeepEqual(addrs, test.addrs) {
 			t.Errorf("ExtractPkScriptAddrs #%d (%s) unexpected "+

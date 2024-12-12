@@ -137,7 +137,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := bytes.NewReader(fromHex(string(test[5].(string))))
+		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, _ := wire.ReadVarInt(r, 0)
 
 		tx := wire.MsgTx{}
@@ -225,7 +225,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := bytes.NewReader(fromHex(string(test[5].(string))))
+		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, _ := wire.ReadVarInt(r, 0)
 
 		tx := wire.MsgTx{}
@@ -396,7 +396,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := bytes.NewReader(fromHex(string(test[5].(string))))
+		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, _ := wire.ReadVarInt(r, 0)
 
 		tx := wire.MsgTx{}
@@ -489,7 +489,7 @@ func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := bytes.NewReader(fromHex(string(test[5].(string))))
+		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, _ := wire.ReadVarInt(r, 0)
 
 		tx := wire.MsgTx{}

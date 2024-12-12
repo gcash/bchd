@@ -98,7 +98,7 @@ func addNaTest(ip string, port uint16, want string) {
 	naTests = append(naTests, test)
 }
 
-func lookupFunc(host string) ([]net.IP, error) {
+func lookupFunc(_ string) ([]net.IP, error) {
 	return nil, errors.New("not implemented")
 }
 

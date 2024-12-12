@@ -394,7 +394,7 @@ type SignRawTransactionWithKeyCmd struct {
 	//Args []interface{}	`json:"args"`
 }
 
-func NewSignRawTransactionWithKey(name, hexStr string, privkeys *[]string, prevtxs *[]string, sighashtype *string) *SignRawTransactionWithKeyCmd {
+func NewSignRawTransactionWithKey(_, hexStr string, privkeys *[]string, _ *[]string, sighashtype *string) *SignRawTransactionWithKeyCmd {
 	return &SignRawTransactionWithKeyCmd{
 		//Name:name,
 		Hexstring:   hexStr,

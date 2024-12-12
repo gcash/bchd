@@ -61,7 +61,7 @@ func TestAddDuplicateDriver(t *testing.T) {
 	// driver function and intentionally returns a failure that can be
 	// detected if the interface allows a duplicate driver to overwrite an
 	// existing one.
-	bogusCreateDB := func(args ...interface{}) (database.DB, error) {
+	bogusCreateDB := func(_ ...interface{}) (database.DB, error) {
 		return nil, fmt.Errorf("duplicate driver allowed for database "+
 			"type [%v]", dbType)
 	}
@@ -90,7 +90,7 @@ func TestCreateOpenFail(t *testing.T) {
 	dbType := "createopenfail"
 	openError := fmt.Errorf("failed to create or open database for "+
 		"database type [%v]", dbType)
-	bogusCreateDB := func(args ...interface{}) (database.DB, error) {
+	bogusCreateDB := func(_ ...interface{}) (database.DB, error) {
 		return nil, openError
 	}
 

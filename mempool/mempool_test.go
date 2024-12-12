@@ -100,8 +100,8 @@ func (s *fakeChain) SetMedianTimePast(mtp time.Time) {
 
 // CalcSequenceLock returns the current sequence lock for the passed
 // transaction associated with the fake chain instance.
-func (s *fakeChain) CalcSequenceLock(tx *bchutil.Tx,
-	view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+func (s *fakeChain) CalcSequenceLock(_ *bchutil.Tx,
+	_ *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
 	return &blockchain.SequenceLock{
 		Seconds:     -1,

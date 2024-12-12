@@ -229,7 +229,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 		t.Errorf("%s first output BlockHeight must be >= %d, received %d", method, minHeight, firstOutput.BlockHeight)
 	} else if firstOutput.Value < dustLimit {
 		t.Errorf("%s first output should have value >= dust limit, received %d", method, firstOutput.Value)
-	} else if outputs.TokenMetadata == nil || len(outputs.TokenMetadata) == 0 {
+	} else if len(outputs.TokenMetadata) == 0 {
 		t.Errorf("expected token metadata in %s", method)
 	} else {
 		t.Logf("Successfully passed %s test. Got %d ouputs", method, len(outputs.Outputs))

@@ -106,7 +106,7 @@ type ABLAConstants struct {
 	Beta0           uint64
 	N0              uint64
 	GammaReciprocal uint64
-	Zeta_xB7        uint64
+	ZetaXB7         uint64
 	ThetaReciprocal uint64
 	Delta           uint64
 }
@@ -312,7 +312,7 @@ var MainNetParams = Params{
 		Beta0:           16000000,
 		N0:              845890,
 		GammaReciprocal: 37938,
-		Zeta_xB7:        192,
+		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
 	},
@@ -686,7 +686,7 @@ var ChipNetParams = Params{
 		Beta0:           1000000,
 		N0:              174519,
 		GammaReciprocal: 37938,
-		Zeta_xB7:        192,
+		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
 	},

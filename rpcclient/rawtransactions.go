@@ -517,7 +517,7 @@ func (c *Client) SignRawTransaction4(tx *wire.MsgTx,
 }
 
 func (c *Client) SignRawTransaction5Async(tx *wire.MsgTx,
-	inputs []btcjson.RawTxInput, privKeysWIF []string) (*wire.MsgTx, bool, error) {
+	_ []btcjson.RawTxInput, privKeysWIF []string) (*wire.MsgTx, bool, error) {
 
 	txHex := ""
 	if tx != nil {
@@ -542,7 +542,7 @@ func (c *Client) SignRawTransactionWithKeyEntire(txHex string, privkeys []string
 	return c.SignRawTransactionWithKeyAsync(txHex, privkeys, prevtxs, sighashtype).Receive()
 }
 
-func (c *Client) SignRawTransactionWithKeyAsync(txHex string, privkeys []string, prevtxs interface{}, sighashtype string) FutureSignRawTransactionResult {
+func (c *Client) SignRawTransactionWithKeyAsync(txHex string, privkeys []string, _ interface{}, sighashtype string) FutureSignRawTransactionResult {
 	cmd := btcjson.NewSignRawTransactionWithKey("signrawtransactionwithkey", txHex, &privkeys, nil, &sighashtype)
 	return c.sendCmd(cmd)
 }

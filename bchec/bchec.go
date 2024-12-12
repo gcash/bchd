@@ -712,10 +712,7 @@ func NAF(k []byte) ([]byte, []byte) {
 				nextIsOne = curByte&2 == 2
 			}
 			if carry {
-				if curIsOne {
-					// This bit is 1, so continue to carry
-					// and don't need to do anything.
-				} else {
+				if !curIsOne {
 					// We've hit a 0 after some number of
 					// 1s.
 					if nextIsOne {

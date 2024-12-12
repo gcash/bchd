@@ -488,16 +488,16 @@ func (b *estimateFeeSet) estimateFee(confirmations int) SatoshiPerByte {
 		return 0
 	}
 
-	var min int
+	var minVal int
 	for i := 0; i < confirmations-1; i++ {
-		min += int(b.bin[i])
+		minVal += int(b.bin[i])
 	}
 
-	max := min + int(b.bin[confirmations-1]) - 1
-	if max < min {
-		max = min
+	maxVal := minVal + int(b.bin[confirmations-1]) - 1
+	if maxVal < minVal {
+		maxVal = minVal
 	}
-	feeIndex := (min + max) / 2
+	feeIndex := (minVal + maxVal) / 2
 	if feeIndex >= len(b.feeRate) {
 		feeIndex = len(b.feeRate) - 1
 	}

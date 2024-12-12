@@ -66,15 +66,15 @@ func (conn *pipeConn) RemoteAddr() net.Addr {
 	return conn.remoteAddr
 }
 
-func (conn *pipeConn) SetDeadline(t time.Time) error {
+func (conn *pipeConn) SetDeadline(_ time.Time) error {
 	return errors.New("deadline not supported")
 }
 
-func (conn *pipeConn) SetReadDeadline(t time.Time) error {
+func (conn *pipeConn) SetReadDeadline(_ time.Time) error {
 	return errors.New("deadline not supported")
 }
 
-func (conn *pipeConn) SetWriteDeadline(t time.Time) error {
+func (conn *pipeConn) SetWriteDeadline(_ time.Time) error {
 	return errors.New("deadline not supported")
 }
 

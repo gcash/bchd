@@ -62,18 +62,16 @@ func muldiv(x, y, z uint64) uint64 {
 func minUint64(a, b uint64) uint64 {
 	if a < b {
 		return a
-	} else {
-		return b
 	}
+	return b
 }
 
 // Utility function
 func maxUint64(a, b uint64) uint64 {
 	if a > b {
 		return a
-	} else {
-		return b
 	}
+	return b
 }
 
 // Algorithm configuration
@@ -87,7 +85,7 @@ type ABLAConfig struct {
 	// Reciprocal of control function "forget factor" value
 	gammaReciprocal uint64
 	// Control function "asymmetry factor" value
-	zeta_xB7 uint64
+	zetaXB7 uint64
 	// Reciprocal of elastic buffer decay rate
 	thetaReciprocal uint64
 	// Elastic buffer "gear factor"
@@ -100,11 +98,11 @@ type ABLAConfig struct {
 
 // Set epsilonMax and betaMax such that algo's internal arithmetic ops can't overflow UINT64_MAX
 func (config *ABLAConfig) SetMax() {
-	maxSafeBlocksizeLimit := UINT64_MAX / config.zeta_xB7 * B7
+	maxSafeBlocksizeLimit := UINT64_MAX / config.zetaXB7 * B7
 
 	// elastic_buffer_ratio_max = (delta * gamma / theta * (zeta - 1)) / (gamma / theta * (zeta - 1) + 1)
-	maxElasticBufferRatioNumerator := config.delta * ((config.zeta_xB7 - B7) * config.thetaReciprocal / config.gammaReciprocal)
-	maxElasticBufferRatioDenominator := (config.zeta_xB7-B7)*config.thetaReciprocal/config.gammaReciprocal + B7
+	maxElasticBufferRatioNumerator := config.delta * ((config.zetaXB7 - B7) * config.thetaReciprocal / config.gammaReciprocal)
+	maxElasticBufferRatioDenominator := (config.zetaXB7-B7)*config.thetaReciprocal/config.gammaReciprocal + B7
 
 	config.epsilonMax = maxSafeBlocksizeLimit / (maxElasticBufferRatioNumerator + maxElasticBufferRatioDenominator) * maxElasticBufferRatioDenominator
 	config.betaMax = maxSafeBlocksizeLimit - config.epsilonMax
@@ -123,7 +121,7 @@ func (config *ABLAConfig) IsValid() (errs *strings.Builder) {
 		errs.WriteString("Error, initial elastic buffer size sanity check failed (betaMax).")
 		return errs
 	}
-	if config.zeta_xB7 < MIN_ZETA_XB7 || config.zeta_xB7 > MAX_ZETA_XB7 {
+	if config.zetaXB7 < MIN_ZETA_XB7 || config.zetaXB7 > MAX_ZETA_XB7 {
 		errs = new(strings.Builder)
 		errs.WriteString("Error, zeta sanity check failed.")
 		return errs
@@ -143,7 +141,7 @@ func (config *ABLAConfig) IsValid() (errs *strings.Builder) {
 		errs.WriteString("Error, thetaReciprocal sanity check failed.")
 		return errs
 	}
-	if config.epsilon0 < muldiv(config.gammaReciprocal, B7, config.zeta_xB7-B7) {
+	if config.epsilon0 < muldiv(config.gammaReciprocal, B7, config.zetaXB7-B7) {
 		// Required due to truncation of integer ops.
 		// With this we ensure that the control size can be adjusted for at least 1 byte.
 		// Also, with this we ensure that divisior bytesMax in calculateNextABLAState() can't be 0.
@@ -227,7 +225,7 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 		// control function
 
 		// zeta * x_{n-1}
-		amplifiedCurrentBlockSize := muldiv(config.zeta_xB7, currentBlockSize, B7)
+		amplifiedCurrentBlockSize := muldiv(config.zetaXB7, currentBlockSize, B7)
 
 		// if zeta * x_{n-1} > epsilon_{n-1} then increase
 		// else decrease or no change
@@ -236,13 +234,13 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 			bytesToAdd := amplifiedCurrentBlockSize - state.controlBlockSize
 
 			// zeta * y_{n-1}
-			amplifiedBlockSizeLimit := muldiv(config.zeta_xB7, state.controlBlockSize+state.elasticBufferSize, B7)
+			amplifiedBlockSizeLimit := muldiv(config.zetaXB7, state.controlBlockSize+state.elasticBufferSize, B7)
 
 			// zeta * y_{n-1} - epsilon_{n-1}
 			bytesMax := amplifiedBlockSizeLimit - state.controlBlockSize
 
 			// zeta * beta_{n-1} * (zeta * x_{n-1} - epsilon_{n-1}) / (zeta * y_{n-1} - epsilon_{n-1})
-			scalingOffset := muldiv(muldiv(config.zeta_xB7, state.elasticBufferSize, B7),
+			scalingOffset := muldiv(muldiv(config.zetaXB7, state.elasticBufferSize, B7),
 				bytesToAdd, bytesMax)
 			// epsilon_n = epsilon_{n-1} + gamma * (zeta * x_{n-1} - epsilon_{n-1} - zeta * beta_{n-1} * (zeta * x_{n-1} - epsilon_{n-1}) / (zeta * y_{n-1} - epsilon_{n-1}))
 			newState.controlBlockSize = state.controlBlockSize + (bytesToAdd-scalingOffset)/config.gammaReciprocal

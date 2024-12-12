@@ -55,7 +55,7 @@ const (
 //
 // This type handles the aforementioned requirements by storing all numeric
 // operation results as an int64 and provides the Bytes method to get the
-//serialized representation (including values that overflow).
+// serialized representation (including values that overflow).
 //
 // Then, whenever data is interpreted as an integer, it is converted to this
 // type by using the makeScriptNum function which will return an error if the
@@ -96,18 +96,19 @@ func checkMinimalDataEncoding(v []byte) error {
 // Bytes returns the number serialized as a little endian with a sign bit.
 //
 // Example encodings:
-//       127 -> [0x7f]
-//      -127 -> [0xff]
-//       128 -> [0x80 0x00]
-//      -128 -> [0x80 0x80]
-//       129 -> [0x81 0x00]
-//      -129 -> [0x81 0x80]
-//       256 -> [0x00 0x01]
-//      -256 -> [0x00 0x81]
-//     32767 -> [0xff 0x7f]
-//    -32767 -> [0xff 0xff]
-//     32768 -> [0x00 0x80 0x00]
-//    -32768 -> [0x00 0x80 0x80]
+//
+//	   127 -> [0x7f]
+//	  -127 -> [0xff]
+//	   128 -> [0x80 0x00]
+//	  -128 -> [0x80 0x80]
+//	   129 -> [0x81 0x00]
+//	  -129 -> [0x81 0x80]
+//	   256 -> [0x00 0x01]
+//	  -256 -> [0x00 0x81]
+//	 32767 -> [0xff 0x7f]
+//	-32767 -> [0xff 0xff]
+//	 32768 -> [0x00 0x80 0x00]
+//	-32768 -> [0x00 0x80 0x80]
 func (n scriptNum) Bytes() []byte {
 	// Zero encodes as an empty byte slice.
 	if n == 0 {

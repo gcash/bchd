@@ -33,7 +33,7 @@ func (iter *ldbTreapIter) Error() error {
 // need to override it.
 //
 // This is part of the leveldb iterator.Iterator interface implementation.
-func (iter *ldbTreapIter) SetReleaser(releaser util.Releaser) {
+func (iter *ldbTreapIter) SetReleaser(_ util.Releaser) {
 }
 
 // Release releases the iterator by removing the underlying treap iterator from

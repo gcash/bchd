@@ -72,9 +72,9 @@ func (c conn) Close() error {
 	return c.Closer.Close()
 }
 
-func (c conn) SetDeadline(t time.Time) error      { return nil }
-func (c conn) SetReadDeadline(t time.Time) error  { return nil }
-func (c conn) SetWriteDeadline(t time.Time) error { return nil }
+func (c conn) SetDeadline(_ time.Time) error      { return nil }
+func (c conn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c conn) SetWriteDeadline(_ time.Time) error { return nil }
 
 // addr mocks a network address
 type addr struct {
@@ -225,11 +225,11 @@ func TestPeerConnection(t *testing.T) {
 	verack := make(chan struct{})
 	peer1Cfg := &peer.Config{
 		Listeners: peer.MessageListeners{
-			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			OnVerAck: func(_ *peer.Peer, _ *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
-			OnWrite: func(p *peer.Peer, bytesWritten int, msg wire.Message,
-				err error) {
+			OnWrite: func(_ *peer.Peer, _ int, msg wire.Message,
+				_ error) {
 				if _, ok := msg.(*wire.MsgVerAck); ok {
 					verack <- struct{}{}
 				}
@@ -364,86 +364,86 @@ func TestPeerListeners(t *testing.T) {
 	ok := make(chan wire.Message, 20)
 	peerCfg := &peer.Config{
 		Listeners: peer.MessageListeners{
-			OnGetAddr: func(p *peer.Peer, msg *wire.MsgGetAddr) {
+			OnGetAddr: func(_ *peer.Peer, msg *wire.MsgGetAddr) {
 				ok <- msg
 			},
-			OnAddr: func(p *peer.Peer, msg *wire.MsgAddr) {
+			OnAddr: func(_ *peer.Peer, msg *wire.MsgAddr) {
 				ok <- msg
 			},
-			OnPing: func(p *peer.Peer, msg *wire.MsgPing) {
+			OnPing: func(_ *peer.Peer, msg *wire.MsgPing) {
 				ok <- msg
 			},
-			OnPong: func(p *peer.Peer, msg *wire.MsgPong) {
+			OnPong: func(_ *peer.Peer, msg *wire.MsgPong) {
 				ok <- msg
 			},
-			OnMemPool: func(p *peer.Peer, msg *wire.MsgMemPool) {
+			OnMemPool: func(_ *peer.Peer, msg *wire.MsgMemPool) {
 				ok <- msg
 			},
-			OnTx: func(p *peer.Peer, msg *wire.MsgTx) {
+			OnTx: func(_ *peer.Peer, msg *wire.MsgTx) {
 				ok <- msg
 			},
-			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
+			OnBlock: func(_ *peer.Peer, msg *wire.MsgBlock, _ []byte) {
 				ok <- msg
 			},
-			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
+			OnInv: func(_ *peer.Peer, msg *wire.MsgInv) {
 				ok <- msg
 			},
-			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
+			OnHeaders: func(_ *peer.Peer, msg *wire.MsgHeaders) {
 				ok <- msg
 			},
-			OnNotFound: func(p *peer.Peer, msg *wire.MsgNotFound) {
+			OnNotFound: func(_ *peer.Peer, msg *wire.MsgNotFound) {
 				ok <- msg
 			},
-			OnGetData: func(p *peer.Peer, msg *wire.MsgGetData) {
+			OnGetData: func(_ *peer.Peer, msg *wire.MsgGetData) {
 				ok <- msg
 			},
-			OnGetBlocks: func(p *peer.Peer, msg *wire.MsgGetBlocks) {
+			OnGetBlocks: func(_ *peer.Peer, msg *wire.MsgGetBlocks) {
 				ok <- msg
 			},
-			OnGetHeaders: func(p *peer.Peer, msg *wire.MsgGetHeaders) {
+			OnGetHeaders: func(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 				ok <- msg
 			},
-			OnGetCFilters: func(p *peer.Peer, msg *wire.MsgGetCFilters) {
+			OnGetCFilters: func(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 				ok <- msg
 			},
-			OnGetCFHeaders: func(p *peer.Peer, msg *wire.MsgGetCFHeaders) {
+			OnGetCFHeaders: func(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 				ok <- msg
 			},
-			OnGetCFCheckpt: func(p *peer.Peer, msg *wire.MsgGetCFCheckpt) {
+			OnGetCFCheckpt: func(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 				ok <- msg
 			},
-			OnCFilter: func(p *peer.Peer, msg *wire.MsgCFilter) {
+			OnCFilter: func(_ *peer.Peer, msg *wire.MsgCFilter) {
 				ok <- msg
 			},
-			OnCFHeaders: func(p *peer.Peer, msg *wire.MsgCFHeaders) {
+			OnCFHeaders: func(_ *peer.Peer, msg *wire.MsgCFHeaders) {
 				ok <- msg
 			},
-			OnFeeFilter: func(p *peer.Peer, msg *wire.MsgFeeFilter) {
+			OnFeeFilter: func(_ *peer.Peer, msg *wire.MsgFeeFilter) {
 				ok <- msg
 			},
-			OnFilterAdd: func(p *peer.Peer, msg *wire.MsgFilterAdd) {
+			OnFilterAdd: func(_ *peer.Peer, msg *wire.MsgFilterAdd) {
 				ok <- msg
 			},
-			OnFilterClear: func(p *peer.Peer, msg *wire.MsgFilterClear) {
+			OnFilterClear: func(_ *peer.Peer, msg *wire.MsgFilterClear) {
 				ok <- msg
 			},
-			OnFilterLoad: func(p *peer.Peer, msg *wire.MsgFilterLoad) {
+			OnFilterLoad: func(_ *peer.Peer, msg *wire.MsgFilterLoad) {
 				ok <- msg
 			},
-			OnMerkleBlock: func(p *peer.Peer, msg *wire.MsgMerkleBlock) {
+			OnMerkleBlock: func(_ *peer.Peer, msg *wire.MsgMerkleBlock) {
 				ok <- msg
 			},
-			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) *wire.MsgReject {
+			OnVersion: func(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgReject {
 				ok <- msg
 				return nil
 			},
-			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			OnVerAck: func(_ *peer.Peer, _ *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
-			OnReject: func(p *peer.Peer, msg *wire.MsgReject) {
+			OnReject: func(_ *peer.Peer, msg *wire.MsgReject) {
 				ok <- msg
 			},
-			OnSendHeaders: func(p *peer.Peer, msg *wire.MsgSendHeaders) {
+			OnSendHeaders: func(_ *peer.Peer, msg *wire.MsgSendHeaders) {
 				ok <- msg
 			},
 		},
@@ -463,7 +463,7 @@ func TestPeerListeners(t *testing.T) {
 	inPeer.AssociateConnection(inConn)
 
 	peerCfg.Listeners = peer.MessageListeners{
-		OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+		OnVerAck: func(_ *peer.Peer, _ *wire.MsgVerAck) {
 			verack <- struct{}{}
 		},
 	}
@@ -866,7 +866,7 @@ func TestDuplicateVersionMsg(t *testing.T) {
 	verack := make(chan struct{})
 	peerCfg := &peer.Config{
 		Listeners: peer.MessageListeners{
-			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			OnVerAck: func(_ *peer.Peer, _ *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
 		},
@@ -928,7 +928,7 @@ func TestUpdateLastBlockHeight(t *testing.T) {
 	verack := make(chan struct{})
 	peerCfg := peer.Config{
 		Listeners: peer.MessageListeners{
-			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			OnVerAck: func(_ *peer.Peer, _ *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
 		},

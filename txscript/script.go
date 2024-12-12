@@ -282,7 +282,7 @@ func DisasmString(buf []byte) (string, error) {
 	return disbuf.String(), err
 }
 
-// removeOpcode will remove any opcode matching ``opcode'' from the opcode
+// removeOpcode will remove any opcode matching “opcode” from the opcode
 // stream in pkscript
 func removeOpcode(pkscript []parsedOpcode, opcode byte) []parsedOpcode {
 	retScript := make([]parsedOpcode, 0, len(pkscript))
@@ -359,7 +359,7 @@ func calcHashPrevOuts(tx *wire.MsgTx) chainhash.Hash {
 func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 	var b bytes.Buffer
 
-	for i, _ := range tx.TxIn {
+	for i := range tx.TxIn {
 		utxo, err := utxoCache.GetEntry(i)
 		if err == nil {
 			wire.WriteTxOut(&b, 0, 0, &utxo)
@@ -376,7 +376,7 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 
 func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) [][]byte {
 	tokenDataList := make([][]byte, len(tx.TxIn))
-	for i, _ := range tx.TxIn {
+	for i := range tx.TxIn {
 		utxo, err := utxoCache.GetEntry(i)
 		if err == nil {
 			if !utxo.TokenData.IsEmpty() {
