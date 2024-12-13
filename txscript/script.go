@@ -360,11 +360,15 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 	var b bytes.Buffer
 
 	for i := range tx.TxIn {
-		utxo, err := utxoCache.GetEntry(i)
-		if err == nil {
-			wire.WriteTxOut(&b, 0, 0, &utxo)
+		if utxoCache != nil {
+			utxo, err := utxoCache.GetEntry(i)
+			if err == nil {
+				wire.WriteTxOut(&b, 0, 0, &utxo)
+			} else {
+				log.Debugf("%v", err)
+			}
 		} else {
-			log.Debugf("%v", err)
+			log.Debugf("utxoCache is nil.") // It might not be a bad idea to fail the function at this point.
 		}
 	}
 
