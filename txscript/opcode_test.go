@@ -87,6 +87,10 @@ func TestOpcodeDisasm(t *testing.T) {
 		0xcc: "OP_OUTPUTVALUE", 0xcd: "OP_OUTPUTBYTECODE",
 		0xfb: "OP_PUBKEYS", 0xfd: "OP_PUBKEYHASH",
 		0xfe: "OP_PUBKEY", 0xff: "OP_INVALIDOPCODE",
+		0xce: "OP_UTXOTOKENCATEGORY", 0xcf: "OP_UTXOTOKENCOMMITMENT",
+		0xd0: "OP_UTXOTOKENAMOUNT", 0xd1: "OP_OUTPUTTOKENCATEGORY",
+		0xd2: "OP_OUTPUTTOKENCOMMITMENT", 0xd3: "OP_OUTPUTTOKENAMOUNT",
+		0xef: "SPECIAL_TOKEN_PREFIX",
 	}
 	for opcodeVal, expectedStr := range expectedStrings {
 		var data []byte
@@ -132,7 +136,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xce && opcodeVal <= 0xf9) || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd4 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 
@@ -198,7 +202,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xce && opcodeVal <= 0xf9) || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd4 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 
