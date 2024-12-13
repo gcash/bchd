@@ -451,7 +451,7 @@ func calcSignatureHash(script []parsedOpcode, sigHashes *TxSigHashes, hType SigH
 	if !useBip143SigHashAlgo {
 		return calcLegacySignatureHash(script, hType, tx, idx)
 	}
-	return calcBip143SignatureHash(script, sigHashes, hType, tx, idx, amt)
+	return calcBip143SignatureHash(script, sigHashes, hType, tx, idx, amt, true)
 }
 
 // shallowCopyTx creates a shallow copy of the transaction for use when
@@ -595,7 +595,7 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 // wallet if fed an invalid input amount, the real sighash will differ causing
 // the produced signature to be invalid.
 func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
-	hashType SigHashType, tx *wire.MsgTx, idx int, amt int64) ([]byte, error) {
+	hashType SigHashType, tx *wire.MsgTx, idx int, amt int64, scriptAllowCashTokens bool) ([]byte, error) {
 
 	// As a sanity check, ensure the passed input index for the transaction
 	// is valid.
@@ -628,7 +628,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	// add CashTokens data here hashUtxos is a 32-byte double SHA256
 	// of the serialization of all UTXOs spent by the transaction's inputs,
 	// concatenated in input order, excluding output count.
-	if hashType&SigHashUTXO > 0 {
+	if scriptAllowCashTokens && hashType&SigHashUTXO > 0 {
 		sigHash.Write(sigHashes.HashUTXOS[:])
 	}
 
