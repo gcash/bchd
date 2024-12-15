@@ -882,7 +882,15 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 			return err
 		}
 		ablaState, err := dbFetchAblaStateByHeight(dbTx, prevBlock.Height())
-		b.ablaState = *ablaState
+		if err == nil {
+			b.ablaState = *ablaState
+		} else {
+			// check if upgrade is active for block
+			if prevBlock.Height() > b.chainParams.ABLAForkHeight {
+				return AssertError(fmt.Sprintf("disconnectBlock: cannot find "+
+					"ABLA state index for block at height: %d", prevBlock.Height()))
+			}
+		}
 
 		// Remove the block hash and height from the block index which
 		// tracks the main chain.
