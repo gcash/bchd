@@ -2291,8 +2291,8 @@ func New(config *Config) (*BlockChain, error) {
 	}
 	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 {
 		ablaConfig.epsilon0 = uint64(config.ExcessiveBlockSize) - ablaConfig.beta0
-		ablaConfig.SetMax()
 	}
+	ablaConfig.SetMax()
 	err := ablaConfig.IsValid()
 	if err != nil {
 		return nil, AssertError(err.String())
