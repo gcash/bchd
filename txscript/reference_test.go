@@ -911,7 +911,7 @@ func TestCalcBip143SignatureHash(t *testing.T) {
 
 		sigHashes := NewTxSigHashes(&tx)
 		hash, err = calcBip143SignatureHash(parsedScript, sigHashes, hashType, &tx,
-			int(test[2].(float64)), 0)
+			int(test[2].(float64)), 0, false)
 		if err != nil {
 			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+
 				"calcLegacySignatureHash returned error: %v", i, err)

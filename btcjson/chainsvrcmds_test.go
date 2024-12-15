@@ -45,54 +45,60 @@ func TestChainSvrCmds(t *testing.T) {
 			name: "createrawtransaction",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("createrawtransaction", `[{"txid":"123","vout":1}]`,
-					`{"456":0.0123}`)
+					`{"456":0.0123}`, `[]`)
 			},
 			staticCmd: func() interface{} {
 				txInputs := []btcjson.TransactionInput{
 					{Txid: "123", Vout: 1},
 				}
 				amounts := map[string]float64{"456": .0123}
-				return btcjson.NewCreateRawTransactionCmd(txInputs, amounts, nil, nil)
+				cashTokens := &[]btcjson.TransactionOutputCashToken{}
+				return btcjson.NewCreateRawTransactionCmd(txInputs, amounts, cashTokens, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[{"txid":"123","vout":1}],{"456":0.0123},[]],"id":1}`,
 			unmarshalled: &btcjson.CreateRawTransactionCmd{
-				Inputs:  []btcjson.TransactionInput{{Txid: "123", Vout: 1}},
-				Amounts: map[string]float64{"456": .0123},
+				Inputs:     []btcjson.TransactionInput{{Txid: "123", Vout: 1}},
+				Amounts:    map[string]float64{"456": .0123},
+				CashTokens: &[]btcjson.TransactionOutputCashToken{},
 			},
 		},
 		{
 			name: "createrawtransaction - no inputs",
 			newCmd: func() (interface{}, error) {
-				return btcjson.NewCmd("createrawtransaction", `[]`, `{"456":0.0123}`)
+				return btcjson.NewCmd("createrawtransaction", `[]`, `{"456":0.0123}`, `[]`)
 			},
 			staticCmd: func() interface{} {
 				amounts := map[string]float64{"456": .0123}
-				return btcjson.NewCreateRawTransactionCmd(nil, amounts, nil, nil)
+				cashTokens := &[]btcjson.TransactionOutputCashToken{}
+				return btcjson.NewCreateRawTransactionCmd(nil, amounts, cashTokens, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[],{"456":0.0123},[]],"id":1}`,
 			unmarshalled: &btcjson.CreateRawTransactionCmd{
-				Inputs:  []btcjson.TransactionInput{},
-				Amounts: map[string]float64{"456": .0123},
+				Inputs:     []btcjson.TransactionInput{},
+				Amounts:    map[string]float64{"456": .0123},
+				CashTokens: &[]btcjson.TransactionOutputCashToken{},
 			},
 		},
 		{
 			name: "createrawtransaction optional",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("createrawtransaction", `[{"txid":"123","vout":1}]`,
-					`{"456":0.0123}`, int64(12312333333))
+					`{"456":0.0123}`, `[]`, int64(12312333333))
 			},
 			staticCmd: func() interface{} {
 				txInputs := []btcjson.TransactionInput{
 					{Txid: "123", Vout: 1},
 				}
 				amounts := map[string]float64{"456": .0123}
-				return btcjson.NewCreateRawTransactionCmd(txInputs, amounts, nil, btcjson.Int64(12312333333))
+				cashTokens := &[]btcjson.TransactionOutputCashToken{}
+				return btcjson.NewCreateRawTransactionCmd(txInputs, amounts, cashTokens, btcjson.Int64(12312333333))
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[{"txid":"123","vout":1}],{"456":0.0123},[],12312333333],"id":1}`,
 			unmarshalled: &btcjson.CreateRawTransactionCmd{
-				Inputs:   []btcjson.TransactionInput{{Txid: "123", Vout: 1}},
-				Amounts:  map[string]float64{"456": .0123},
-				LockTime: btcjson.Int64(12312333333),
+				Inputs:     []btcjson.TransactionInput{{Txid: "123", Vout: 1}},
+				Amounts:    map[string]float64{"456": .0123},
+				CashTokens: &[]btcjson.TransactionOutputCashToken{},
+				LockTime:   btcjson.Int64(12312333333),
 			},
 		},
 

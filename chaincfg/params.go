@@ -484,6 +484,16 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 1652616000,
 
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+	},
+
 	SubsidyReductionInterval:             150,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
 	TargetTimePerBlock:                   time.Minute * 10,    // 10 minutes
@@ -884,6 +894,16 @@ var SimNetParams = Params{
 	AsertDifficultyAnchorParentTimestamp: simNetGenesisBlock.Header.Timestamp.Unix(),
 	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
 	GenerateSupported:                    true,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+	},
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,

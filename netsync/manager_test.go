@@ -77,7 +77,7 @@ func (ctx *testContext) Setup(config *testConfig) error {
 		DB:                 db,
 		ChainParams:        ctx.cfg.chainParams,
 		TimeSource:         blockchain.NewMedianTime(),
-		ExcessiveBlockSize: 1000000,
+		ExcessiveBlockSize: 32000000,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create blockchain: %v", err)
