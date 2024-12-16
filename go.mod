@@ -1,6 +1,6 @@
 module github.com/gcash/bchd
 
-go 1.22.7
+go 1.23.4
 
 toolchain go1.23.4
 
