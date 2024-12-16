@@ -2384,7 +2384,7 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		sigHashes = NewTxSigHashes(&vm.tx)
 	}
 
-	if hashType&SigHashUTXO != 0 { // TODO TODO use hashType. For other places that use AddTxSigHashUtxoFromUtxoCache too
+	if vm.hasFlag(ScriptAllowCashTokens) {
 		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
 	}
 
