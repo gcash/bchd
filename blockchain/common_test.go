@@ -180,7 +180,7 @@ func chainSetup(dbName string, params *chaincfg.Params) (*BlockChain, func(), er
 		TimeSource:         NewMedianTime(),
 		SigCache:           txscript.NewSigCache(1000),
 		UtxoCacheMaxSize:   250 * 1024 * 1024,
-		ExcessiveBlockSize: 1000000,
+		ExcessiveBlockSize: 32000000,
 	})
 	if err != nil {
 		teardown()

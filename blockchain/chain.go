@@ -2297,7 +2297,7 @@ func New(config *Config) (*BlockChain, error) {
 		thetaReciprocal: params.ABLAConfig.ThetaReciprocal,
 		delta:           params.ABLAConfig.Delta,
 	}
-	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 {
+	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 && ablaConfig.beta0 > 0 {
 		ablaConfig.epsilon0 = uint64(config.ExcessiveBlockSize) - ablaConfig.beta0
 	}
 	ablaConfig.SetMax()

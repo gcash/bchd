@@ -898,6 +898,16 @@ var SimNetParams = Params{
 	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
 	GenerateSupported:                    true,
 
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+	},
+
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
 
