@@ -99,6 +99,10 @@ type Config struct {
 	// FeeEstimatator provides a feeEstimator. If it is not nil, the mempool
 	// records all new transactions it observes into the feeEstimator.
 	FeeEstimator *FeeEstimator
+
+	// AnnounceNewDSProof is used to announce new double spend messages when
+	// they are detected by the mempool.
+	AnnounceNewDSProof func(msg *wire.MsgDSProof)
 }
 
 // Policy houses the policy (configuration parameters) which is used to
@@ -159,6 +163,14 @@ type orphanTx struct {
 	expiration time.Time
 }
 
+// orphanDSProof is normal dsproofs that references an ancestor transaction
+// that is not yet available.  It also contains additional information related
+// to it such as an expiration time to help prevent caching the orphan forever.
+type orphanDSProof struct {
+	msg         *wire.MsgDSProof
+	expiration time.Time
+}
+
 // TxPool is used as a source of transactions that need to be mined into blocks
 // and relayed to other peers.  It is safe for concurrent access from multiple
 // peers.
@@ -172,6 +184,9 @@ type TxPool struct {
 	orphans       map[chainhash.Hash]*orphanTx
 	orphansByPrev map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx
 	outpoints     map[wire.OutPoint]*bchutil.Tx
+	dsProofs      map[chainhash.Hash]*wire.MsgDSProof
+	dsOutpoints   map[wire.OutPoint]chainhash.Hash
+	dsOrphans     map[wire.OutPoint]*orphanDSProof
 	pennyTotal    float64 // exponentially decaying total for penny spends.
 	lastPennyUnix int64   // unix time of last ``penny spend''
 
@@ -273,6 +288,12 @@ func (mp *TxPool) limitNumOrphans() error {
 			}
 		}
 
+		for op, otx := range mp.dsOrphans {
+			if now.After(otx.expiration) {
+				delete(mp.dsOrphans, op)
+			}
+		}
+
 		// Set next expiration scan to occur after the scan interval.
 		mp.nextExpireScan = now.Add(orphanExpireScanInterval)
 
@@ -281,6 +302,14 @@ func (mp *TxPool) limitNumOrphans() error {
 			log.Debugf("Expired %d %s (remaining: %d)", numExpired,
 				pickNoun(numExpired, "orphan", "orphans"),
 				numOrphans)
+		}
+	}
+
+	// Delete a random double spend orphan if we go over the limit.
+	if len(mp.dsOrphans)+1 > mp.cfg.Policy.MaxOrphanTxs {
+		for op := range mp.dsOrphans {
+			delete(mp.dsOrphans, op)
+			break
 		}
 	}
 
@@ -335,6 +364,30 @@ func (mp *TxPool) addOrphan(tx *bchutil.Tx, tag Tag) {
 
 	log.Debugf("Stored orphan transaction %v (total: %d)", tx.Hash(),
 		len(mp.orphans))
+}
+
+// addOrphanDSProof adds an orphan dsproof to the orphan pool.
+//
+// This function MUST be called with the mempool lock held (for writes).
+func (mp *TxPool) addOrphanDSProof(msg *wire.MsgDSProof) {
+	// Nothing to do if no orphans are allowed.
+	if mp.cfg.Policy.MaxOrphanTxs <= 0 {
+		return
+	}
+
+	// Limit the number orphan transactions to prevent memory exhaustion.
+	// This will periodically remove any expired orphans and evict a random
+	// orphan if space is still needed.
+	mp.limitNumOrphans()
+
+	op := wire.OutPoint{Hash: msg.TxInPrevHash, Index: msg.TxInPrevIndex}
+	mp.dsOrphans[op] = &orphanDSProof{
+		msg: msg,
+		expiration: time.Now().Add(orphanTTL),
+	}
+
+	log.Debugf("Stored orphan dsproof %v (total: %d)", msg.ProofHash(),
+		len(mp.dsOrphans))
 }
 
 // maybeAddOrphan potentially adds an orphan to the orphan pool.
@@ -431,14 +484,6 @@ func (mp *TxPool) IsOrphanInPool(hash *chainhash.Hash) bool {
 	return inPool
 }
 
-// haveTransaction returns whether or not the passed transaction already exists
-// in the main pool or in the orphan pool.
-//
-// This function MUST be called with the mempool lock held (for reads).
-func (mp *TxPool) haveTransaction(hash *chainhash.Hash) bool {
-	return mp.isTransactionInPool(hash) || mp.isOrphanInPool(hash)
-}
-
 // HaveTransaction returns whether or not the passed transaction already exists
 // in the main pool or in the orphan pool.
 //
@@ -450,6 +495,36 @@ func (mp *TxPool) HaveTransaction(hash *chainhash.Hash) bool {
 	mp.mtx.RUnlock()
 
 	return haveTx
+}
+
+// haveTransaction returns whether or not the passed transaction already exists
+// in the main pool or in the orphan pool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) haveTransaction(hash *chainhash.Hash) bool {
+	return mp.isTransactionInPool(hash) || mp.isOrphanInPool(hash)
+}
+
+// HaveDoubleSpendProof returns whether or not the passed double spend proof
+// already exists in the main pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) HaveDoubleSpendProof(hash *chainhash.Hash) bool {
+	// Protect concurrent access.
+	mp.mtx.RLock()
+	haveProof := mp.haveDoubleSpendProof(hash)
+	mp.mtx.RUnlock()
+
+	return haveProof
+}
+
+// HaveDoubleSpendProof returns whether or not the passed double spend proof
+// already exists in the main pool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) haveDoubleSpendProof(hash *chainhash.Hash) bool {
+	_, ok := mp.dsProofs[*hash]
+	return ok
 }
 
 // removeTransaction is the internal function which implements the public
@@ -482,6 +557,14 @@ func (mp *TxPool) removeTransaction(tx *bchutil.Tx, removeRedeemers bool) {
 		}
 		delete(mp.pool, *txHash)
 		atomic.StoreInt64(&mp.lastUpdated, time.Now().Unix())
+	}
+
+	for _, in := range tx.MsgTx().TxIn {
+		proofHash, ok := mp.dsOutpoints[in.PreviousOutPoint]
+		if ok {
+			delete(mp.dsOutpoints, in.PreviousOutPoint)
+			delete(mp.dsProofs, proofHash)
+		}
 	}
 }
 
@@ -709,6 +792,22 @@ func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
 	return nil, fmt.Errorf("transaction is not in the pool")
 }
 
+// FetchDSProof returns the requested dsproof from the mempool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) FetchDSProof(proofHash *chainhash.Hash) (*wire.MsgDSProof, error) {
+	// Protect concurrent access.
+	mp.mtx.RLock()
+	proof, exists := mp.dsProofs[*proofHash]
+	mp.mtx.RUnlock()
+
+	if exists {
+		return proof, nil
+	}
+
+	return nil, fmt.Errorf("dsproof is not in the pool")
+}
+
 // maybeAcceptTransaction is the internal function which implements the public
 // MaybeAcceptTransaction.  See the comment for MaybeAcceptTransaction for
 // more details.
@@ -798,6 +897,23 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// which examines the actual spend data and prevents double spends.
 	err = mp.checkPoolDoubleSpend(tx)
 	if err != nil {
+		// If this is a double spend and we have the announce callback registered
+		// then we will build a double spend proof message and relay it to connected
+		// peers.
+		if mp.cfg.AnnounceNewDSProof != nil {
+			msg, err := mp.buildDSProof(tx)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if msg != nil {
+				mp.dsProofs[msg.ProofHash()] = msg
+				mp.dsOutpoints[wire.OutPoint{Hash: msg.TxInPrevHash, Index: msg.TxInPrevIndex}] = msg.ProofHash()
+
+				mp.cfg.AnnounceNewDSProof(msg)
+			}
+		}
+
 		return nil, nil, err
 	}
 
@@ -992,6 +1108,219 @@ func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit bool) 
 	return hashes, txD, err
 }
 
+// buildDSProof constructs a double spend proof for the given transaction.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) buildDSProof(tx *bchutil.Tx) (*wire.MsgDSProof, error) {
+	var (
+		dsI, fsI     int
+		firstSpender *bchutil.Tx
+	)
+	// Grab the first spender tx and set the index of double spent input.
+	for i, txIn := range tx.MsgTx().TxIn {
+		if txR, exists := mp.outpoints[txIn.PreviousOutPoint]; exists {
+			dsI = i
+			firstSpender = txR
+			break
+		}
+	}
+	if firstSpender == nil {
+		return nil, errors.New("double spend not found in mempool")
+	}
+
+	// Find the index of the affected input in the first spent tx.
+	for i, txIn := range firstSpender.MsgTx().TxIn {
+		if tx.MsgTx().TxIn[dsI].PreviousOutPoint == txIn.PreviousOutPoint {
+			fsI = i
+			break
+		}
+	}
+
+	firstSpenderSigHashes := txscript.NewTxSigHashes(firstSpender.MsgTx())
+	doubleSpenderSigHashes := txscript.NewTxSigHashes(tx.MsgTx())
+
+	firstSpenderDataElements, err := txscript.ExtractDataElements(firstSpender.MsgTx().TxIn[fsI].SignatureScript)
+	if err != nil {
+		return nil, err
+	}
+	doubleSpenderDataElements, err := txscript.ExtractDataElements(tx.MsgTx().TxIn[dsI].SignatureScript)
+	if err != nil {
+		return nil, err
+	}
+
+	spender1 := wire.Spender{
+		Version:         firstSpender.MsgTx().Version,
+		Sequence:        firstSpender.MsgTx().TxIn[fsI].Sequence,
+		LockTime:        firstSpender.MsgTx().LockTime,
+		HashOutputs:     firstSpenderSigHashes.HashOutputs,
+		HashSequence:    firstSpenderSigHashes.HashSequence,
+		HashPrevOutputs: firstSpenderSigHashes.HashPrevOuts,
+		PushData:        firstSpenderDataElements,
+	}
+
+	spender2 := wire.Spender{
+		Version:         tx.MsgTx().Version,
+		Sequence:        tx.MsgTx().TxIn[dsI].Sequence,
+		LockTime:        tx.MsgTx().LockTime,
+		HashOutputs:     doubleSpenderSigHashes.HashOutputs,
+		HashSequence:    doubleSpenderSigHashes.HashSequence,
+		HashPrevOutputs: doubleSpenderSigHashes.HashPrevOuts,
+		PushData:        doubleSpenderDataElements,
+	}
+
+	msg := &wire.MsgDSProof{
+		TxInPrevHash:  tx.MsgTx().TxIn[dsI].PreviousOutPoint.Hash,
+		TxInPrevIndex: tx.MsgTx().TxIn[dsI].PreviousOutPoint.Index,
+	}
+
+	// Sort by HashOutputs ascending. If that's the same, sort by HashPrevOutputs
+	// ascending.
+	// FIXME: theoretically both hashes can be the same. Shouldn't we sort by
+	// scriptSig in this case?
+	if spender1.HashOutputs.Compare(&spender2.HashOutputs) < 0 {
+		msg.FirstSpender = spender1
+		msg.DoubleSpender = spender2
+	} else if spender2.HashOutputs.Compare(&spender1.HashOutputs) < 0 {
+		msg.FirstSpender = spender2
+		msg.DoubleSpender = spender1
+	} else {
+		if spender2.HashPrevOutputs.Compare(&spender1.HashPrevOutputs) < 0 {
+			msg.FirstSpender = spender2
+			msg.DoubleSpender = spender1
+		} else {
+			msg.FirstSpender = spender1
+			msg.DoubleSpender = spender2
+		}
+	}
+
+	valid, err := mp.validateDSProofMsg(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	// If it's not valid we're going to return nil with no error. This means the caller
+	// should not relay it.
+	if !valid {
+		return nil, nil
+	}
+
+	return msg, nil
+}
+
+// validateDSProofMsg validates the double spend proof using data from the mempool.
+//
+// This function MUST be called with the mempool lock held (for reads).
+func (mp *TxPool) validateDSProofMsg(msg *wire.MsgDSProof) (bool, error) {
+	op := wire.OutPoint{Hash: msg.TxInPrevHash, Index: msg.TxInPrevIndex}
+	// If the outpoint is not spent in the pool we consider it invalid.
+	tx, ok := mp.outpoints[op]
+	if !ok {
+		return false, nil
+	}
+
+	// If the two pushdatas are the same we consider it invalid.
+	if len(msg.FirstSpender.PushData) == len(msg.DoubleSpender.PushData) {
+		same := true
+		for i, a := range msg.FirstSpender.PushData {
+			if !bytes.Equal(a, msg.DoubleSpender.PushData[i]) {
+				same = false
+				break
+			}
+		}
+		if same {
+			return false, nil
+		}
+	}
+
+	// Validate sort order.
+	if msg.FirstSpender.HashOutputs.Compare(&msg.DoubleSpender.HashOutputs) > 0 ||
+		(msg.FirstSpender.HashOutputs.Compare(&msg.DoubleSpender.HashOutputs) == 0 &&
+			msg.FirstSpender.HashPrevOutputs.Compare(&msg.DoubleSpender.HashPrevOutputs) > 0) {
+		return false, nil
+	}
+
+	utxoView, err := mp.fetchInputUtxos(tx)
+	if err != nil {
+		return false, err
+	}
+
+	entry := utxoView.LookupEntry(op)
+	if entry == nil {
+		return false, nil
+	}
+
+	// Validate first spender
+	builder := txscript.NewScriptBuilder()
+	for _, data := range msg.FirstSpender.PushData {
+		builder.AddData(data)
+	}
+	scriptSig, err := builder.Script()
+	if err != nil {
+		return false, err
+	}
+
+	mTx := &wire.MsgTx{
+		Version: msg.FirstSpender.Version,
+		TxIn: []*wire.TxIn{
+			{
+				Sequence:         msg.FirstSpender.Sequence,
+				PreviousOutPoint: op,
+				SignatureScript:  scriptSig,
+			},
+		},
+		LockTime: msg.FirstSpender.LockTime,
+	}
+	hashCache := txscript.TxSigHashes{
+		HashOutputs:  msg.FirstSpender.HashOutputs,
+		HashSequence: msg.FirstSpender.HashSequence,
+		HashPrevOuts: msg.FirstSpender.HashPrevOutputs,
+	}
+	vm, err := txscript.NewEngine(entry.PkScript(), mTx, 0, txscript.StandardVerifyFlags, nil, &hashCache, entry.Amount())
+	if err != nil {
+		return false, err
+	}
+	if err := vm.Execute(); err != nil {
+		return false, nil
+	}
+
+	// Validate double spender
+	builder = txscript.NewScriptBuilder()
+	for _, data := range msg.DoubleSpender.PushData {
+		builder.AddData(data)
+	}
+	scriptSig, err = builder.Script()
+	if err != nil {
+		return false, err
+	}
+
+	mTx = &wire.MsgTx{
+		Version: msg.DoubleSpender.Version,
+		TxIn: []*wire.TxIn{
+			{
+				Sequence:         msg.DoubleSpender.Sequence,
+				PreviousOutPoint: op,
+				SignatureScript:  scriptSig,
+			},
+		},
+		LockTime: msg.DoubleSpender.LockTime,
+	}
+	hashCache = txscript.TxSigHashes{
+		HashOutputs:  msg.DoubleSpender.HashOutputs,
+		HashSequence: msg.DoubleSpender.HashSequence,
+		HashPrevOuts: msg.DoubleSpender.HashPrevOutputs,
+	}
+	vm, err = txscript.NewEngine(entry.PkScript(), mTx, 0, txscript.StandardVerifyFlags, nil, &hashCache, entry.Amount())
+	if err != nil {
+		return false, err
+	}
+	if err := vm.Execute(); err != nil {
+		return false, nil
+	}
+
+	return true, nil
+
+}
+
 // processOrphans is the internal function which implements the public
 // ProcessOrphans.  See the comment for ProcessOrphans for more details.
 //
@@ -1131,6 +1460,18 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 		acceptedTxs[0] = txD
 		copy(acceptedTxs[1:], newTxs)
 
+		// Process any orphan double spend messages.
+		for _, in := range tx.MsgTx().TxIn {
+			orphan, ok := mp.dsOrphans[in.PreviousOutPoint]
+			if ok {
+				isOrphan, err := mp.processDSProof(orphan.msg)
+				if !isOrphan && err != nil {
+					mp.cfg.AnnounceNewDSProof(orphan.msg)
+				}
+				delete(mp.dsOrphans, in.PreviousOutPoint)
+			}
+		}
+
 		return acceptedTxs, nil
 	}
 
@@ -1155,6 +1496,58 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 	// Potentially add the orphan transaction to the orphan pool.
 	err = mp.maybeAddOrphan(tx, tag)
 	return nil, err
+}
+
+// ProcessDSProof handles inserting a new double spend proof into the mempool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) ProcessDSProof(msg *wire.MsgDSProof) (bool, error) {
+	// Protect concurrent access.
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+
+	return mp.processDSProof(msg)
+}
+
+// ProcessDSProof handles inserting a new double spend proof into the mempool.
+//
+// This function MUST be called with the mempool lock held (for writes).
+func (mp *TxPool) processDSProof(msg *wire.MsgDSProof) (bool, error) {
+	proofHash := msg.ProofHash()
+	log.Tracef("Processing dsproof %v", proofHash)
+
+
+	op := wire.OutPoint{
+		Hash:  msg.TxInPrevHash,
+		Index: msg.TxInPrevIndex,
+	}
+
+	_, ok1 := mp.dsOutpoints[op]
+	_, ok2 := mp.dsProofs[proofHash]
+	if ok1 || ok2 {
+		str := fmt.Sprintf("duplicate dsproof %v", proofHash)
+		return false, txRuleError(wire.RejectDuplicate, str)
+	}
+
+	_, ok := mp.outpoints[op]
+	if !ok {
+		mp.addOrphanDSProof(msg)
+		return true, nil
+	}
+
+	valid, err := mp.validateDSProofMsg(msg)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		str := fmt.Sprintf("invalid dsproof %v", proofHash)
+		return false, txRuleError(wire.RejectInvalid, str)
+	}
+
+	mp.dsProofs[proofHash] = msg
+	mp.dsOutpoints[op] = proofHash
+
+	return false, nil
 }
 
 // Count returns the number of transactions in the main pool.  It does not
@@ -1387,5 +1780,8 @@ func New(cfg *Config) *TxPool {
 		orphansByPrev:  make(map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx),
 		nextExpireScan: time.Now().Add(orphanExpireScanInterval),
 		outpoints:      make(map[wire.OutPoint]*bchutil.Tx),
+		dsProofs:       make(map[chainhash.Hash]*wire.MsgDSProof),
+		dsOutpoints:    make(map[wire.OutPoint]chainhash.Hash),
+		dsOrphans:      make(map[wire.OutPoint]*orphanDSProof),
 	}
 }
