@@ -162,9 +162,9 @@ func (node *blockNode) Ancestor(height int32) *blockNode {
 	}
 
 	n := node
-	// for ; n != nil && n.height != height; n = n.parent {
-	// Intentionally left blank
-	// }
+	for n != nil && n.height != height {
+		n = n.parent
+	}
 
 	return n
 }

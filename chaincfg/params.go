@@ -484,9 +484,12 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 1652616000,
 
+	Upgrade9ForkHeight: 100000000,
+	ABLAForkHeight:     100000000,
+
 	ABLAConfig: ABLAConstants{
-		Epsilon0:        16000000,
-		Beta0:           16000000,
+		Epsilon0:        500000,
+		Beta0:           500000,
 		N0:              845890,
 		GammaReciprocal: 37938,
 		ZetaXB7:         192,

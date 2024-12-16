@@ -313,9 +313,9 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		PkScript: opTrueScript,
 	})
 
-	if tx.SerializeSize() < blockchain.MinTransactionSize {
+	if tx.SerializeSize() < blockchain.MagneticAnomalyMinTransactionSize {
 		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
-			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
+			make([]byte, blockchain.MagneticAnomalyMinTransactionSize-tx.SerializeSize())...)
 	}
 
 	return tx
@@ -2083,8 +2083,8 @@ func GenerateWithTxs(chainLength int, txsPerBlock int) (tests [][]TestInstance, 
 		}
 		for i := 0; i < txsPerBlock; i++ {
 			tx := createSpendTx(lastUnspentOut, 0)
-			if tx.SerializeSize() < blockchain.MinTransactionSize {
-				padLen := blockchain.MinTransactionSize - tx.SerializeSize()
+			if tx.SerializeSize() < blockchain.MagneticAnomalyMinTransactionSize {
+				padLen := blockchain.MagneticAnomalyMinTransactionSize - tx.SerializeSize()
 				tx.AddTxOut(&wire.TxOut{
 					Value:    0,
 					PkScript: opReturnScript(make([]byte, padLen)),

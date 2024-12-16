@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"testing"
 	"time"
@@ -111,7 +110,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 			txIdx = int(test[6].(float64))
 		}
 		inputAmount := utxos[txIdx].Value
-		fmt.Println(test[0].(string), len(tx.TxIn), len(utxos), len(tx.TxOut))
+
 		vm, err := txscript.NewEngine(utxos[txIdx].PkScript, &tx, txIdx, flags, nil, nil, cache, inputAmount)
 		if err == nil {
 			err = vm.Execute()
@@ -370,7 +369,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 			txIdx = int(test[6].(float64))
 		}
 		inputAmount := utxos[txIdx].Value
-		fmt.Println(test[0].(string), len(tx.TxIn), len(utxos), len(tx.TxOut))
+
 		vm, err := txscript.NewEngine(utxos[txIdx].PkScript, &tx, txIdx, flags, nil, nil, cache, inputAmount)
 		if err == nil {
 			err = vm.Execute()
