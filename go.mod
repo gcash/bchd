@@ -2,8 +2,6 @@ module github.com/gcash/bchd
 
 go 1.23.4
 
-toolchain go1.23.4
-
 require (
 	github.com/bluele/gcache v0.0.2
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
