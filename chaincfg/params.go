@@ -109,6 +109,7 @@ type ABLAConstants struct {
 	ZetaXB7         uint64
 	ThetaReciprocal uint64
 	Delta           uint64
+	FixedSize       bool
 }
 
 // Params defines a Bitcoin network by its parameters.  These parameters may be
@@ -315,6 +316,7 @@ var MainNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       false,
 	},
 
 	CoinbaseMaturity:                     100,
@@ -495,6 +497,7 @@ var RegressionNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       true,
 	},
 
 	SubsidyReductionInterval:             150,
@@ -702,6 +705,7 @@ var ChipNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       false,
 	},
 
 	CosmicInflationActivationTime: 1637694000,
@@ -906,6 +910,7 @@ var SimNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       true,
 	},
 
 	// Checkpoints ordered from oldest to newest.

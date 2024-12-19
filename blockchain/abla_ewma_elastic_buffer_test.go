@@ -113,6 +113,7 @@ func TestABLA(t *testing.T) {
 			zetaXB7:         testData.ABLAConfig.Zeta,
 			thetaReciprocal: testData.ABLAConfig.ThetaReciprocal,
 			delta:           testData.ABLAConfig.Delta,
+			fixedSize:       false,
 		}
 		ablaConfig.SetMax()
 
