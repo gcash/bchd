@@ -606,7 +606,6 @@ var TestNet3Params = Params{
 		FixedSize:       true,
 	},
 
-
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
