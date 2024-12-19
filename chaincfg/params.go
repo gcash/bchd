@@ -109,6 +109,7 @@ type ABLAConstants struct {
 	ZetaXB7         uint64
 	ThetaReciprocal uint64
 	Delta           uint64
+	FixedSize       bool
 }
 
 // Params defines a Bitcoin network by its parameters.  These parameters may be
@@ -315,6 +316,7 @@ var MainNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       false,
 	},
 
 	CoinbaseMaturity:                     100,
@@ -495,6 +497,7 @@ var RegressionNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       true,
 	},
 
 	SubsidyReductionInterval:             150,
@@ -588,6 +591,20 @@ var TestNet3Params = Params{
 	AxionActivationHeight:       1421481, // 00000000062c7f32591d883c99fc89ebe74a83287c0f2b7ffeef72e62217d40b
 
 	CosmicInflationActivationTime: 1652616000,
+
+	Upgrade9ForkHeight: 1552787,
+	ABLAForkHeight:     1605520,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+		FixedSize:       true,
+	},
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -702,6 +719,7 @@ var ChipNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       false,
 	},
 
 	CosmicInflationActivationTime: 1637694000,
@@ -796,6 +814,20 @@ var TestNet4Params = Params{
 	AxionActivationHeight:       16844,
 
 	CosmicInflationActivationTime: 1637694000,
+
+	Upgrade9ForkHeight: 148043,
+	ABLAForkHeight:     200740,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        1000000,
+		Beta0:           1000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+		FixedSize:       true,
+	},
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -906,6 +938,7 @@ var SimNetParams = Params{
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
+		FixedSize:       true,
 	},
 
 	// Checkpoints ordered from oldest to newest.

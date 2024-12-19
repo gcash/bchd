@@ -94,18 +94,26 @@ type ABLAConfig struct {
 	epsilonMax uint64
 	// Maximum elastic buffer size value
 	betaMax uint64
+	// If true, it means we have a flat block size limit so epsilonMax and betaMax must equal epsilon0 and beta0
+	fixedSize bool
 }
 
 // Set epsilonMax and betaMax such that algo's internal arithmetic ops can't overflow UINT64_MAX
 func (config *ABLAConfig) SetMax() {
-	maxSafeBlocksizeLimit := UINT64_MAX / config.zetaXB7 * B7
+	if !config.fixedSize {
+		maxSafeBlocksizeLimit := UINT64_MAX / config.zetaXB7 * B7
 
-	// elastic_buffer_ratio_max = (delta * gamma / theta * (zeta - 1)) / (gamma / theta * (zeta - 1) + 1)
-	maxElasticBufferRatioNumerator := config.delta * ((config.zetaXB7 - B7) * config.thetaReciprocal / config.gammaReciprocal)
-	maxElasticBufferRatioDenominator := (config.zetaXB7-B7)*config.thetaReciprocal/config.gammaReciprocal + B7
+		// elastic_buffer_ratio_max = (delta * gamma / theta * (zeta - 1)) / (gamma / theta * (zeta - 1) + 1)
+		maxElasticBufferRatioNumerator := config.delta * ((config.zetaXB7 - B7) * config.thetaReciprocal / config.gammaReciprocal)
+		maxElasticBufferRatioDenominator := (config.zetaXB7-B7)*config.thetaReciprocal/config.gammaReciprocal + B7
 
-	config.epsilonMax = maxSafeBlocksizeLimit / (maxElasticBufferRatioNumerator + maxElasticBufferRatioDenominator) * maxElasticBufferRatioDenominator
-	config.betaMax = maxSafeBlocksizeLimit - config.epsilonMax
+		config.epsilonMax = maxSafeBlocksizeLimit / (maxElasticBufferRatioNumerator + maxElasticBufferRatioDenominator) * maxElasticBufferRatioDenominator
+		config.betaMax = maxSafeBlocksizeLimit - config.epsilonMax
+	} else {
+		// we have a flat limit
+		config.epsilonMax = config.epsilon0
+		config.betaMax = config.beta0
+	}
 
 	fmt.Fprintf(os.Stderr, "[INFO] Auto-configured epsilonMax: %d, betaMax: %d\n", config.epsilonMax, config.betaMax)
 }

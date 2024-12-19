@@ -2296,6 +2296,7 @@ func New(config *Config) (*BlockChain, error) {
 		zetaXB7:         params.ABLAConfig.ZetaXB7,
 		thetaReciprocal: params.ABLAConfig.ThetaReciprocal,
 		delta:           params.ABLAConfig.Delta,
+		fixedSize:       params.ABLAConfig.FixedSize,
 	}
 	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 && ablaConfig.beta0 > 0 {
 		ablaConfig.epsilon0 = uint64(config.ExcessiveBlockSize) - ablaConfig.beta0
