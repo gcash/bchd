@@ -819,8 +819,8 @@ var TestNet4Params = Params{
 	ABLAForkHeight:     200740,
 
 	ABLAConfig: ABLAConstants{
-		Epsilon0:        16000000,
-		Beta0:           16000000,
+		Epsilon0:        1000000,
+		Beta0:           1000000,
 		N0:              845890,
 		GammaReciprocal: 37938,
 		ZetaXB7:         192,
