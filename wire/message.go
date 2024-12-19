@@ -74,6 +74,7 @@ const (
 	CmdCmpctBlock   = "cmpctblock"
 	CmdGetBlockTxns = "getblocktxn"
 	CmdBlockTxns    = "blocktxn"
+	CmdSendAddrV2   = "sendaddrv2"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -113,6 +114,9 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdVerAck:
 		msg = &MsgVerAck{}
+
+	case CmdSendAddrV2:
+		msg = &MsgSendAddrV2{}
 
 	case CmdXVerAck:
 		msg = &MsgXVerAck{}
