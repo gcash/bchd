@@ -592,6 +592,21 @@ var TestNet3Params = Params{
 
 	CosmicInflationActivationTime: 1652616000,
 
+	Upgrade9ForkHeight: 1552787,
+	ABLAForkHeight:     1605520,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+		FixedSize:       true,
+	},
+
+
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
@@ -800,6 +815,20 @@ var TestNet4Params = Params{
 	AxionActivationHeight:       16844,
 
 	CosmicInflationActivationTime: 1637694000,
+
+	Upgrade9ForkHeight: 148043,
+	ABLAForkHeight:     200740,
+
+	ABLAConfig: ABLAConstants{
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              845890,
+		GammaReciprocal: 37938,
+		ZetaXB7:         192,
+		ThetaReciprocal: 37938,
+		Delta:           10,
+		FixedSize:       true,
+	},
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
