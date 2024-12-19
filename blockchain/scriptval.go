@@ -331,7 +331,7 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 // changes in the codebase, we handle it here. It might be a good idea to change this later.
 func IsPATFO(tokenData wire.TokenData, pkScript []byte, utxoBlockHeight int32, upgrade9ForkHeight int32) bool {
 	isPATFO := false
-	if !tokenData.IsEmpty() || pkScript[0] == 0xef {
+	if !tokenData.IsEmpty() || (len(pkScript) > 0 && pkScript[0] == 0xef) {
 		if utxoBlockHeight < upgrade9ForkHeight {
 			isPATFO = true
 		}
