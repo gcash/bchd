@@ -1,7 +1,7 @@
 database
 ========
 
-[![Build Status](https://travis-ci.org/gcash/bchd.png?branch=master)](https://travis-ci.org/gcash/bchd)
+![Build Status](https://github.com/gcash/bchd/actions/workflows/main.yml/badge.svg?branch=master)
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
 [![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/github.com/gcash/bchd/database)
 
@@ -42,11 +42,11 @@ $ go get -u github.com/gcash/bchd/database
 
 ## Examples
 
-* [Basic Usage Example](http://godoc.org/github.com/gcash/bchd/database#example-package--BasicUsage)  
+* [Basic Usage Example](http://godoc.org/github.com/gcash/bchd/database#example-package--BasicUsage)
   Demonstrates creating a new database and using a managed read-write
   transaction to store and retrieve metadata.
 
-* [Block Storage and Retrieval Example](http://godoc.org/github.com/gcash/bchd/database#example-package--BlockStorageAndRetrieval)  
+* [Block Storage and Retrieval Example](http://godoc.org/github.com/gcash/bchd/database#example-package--BlockStorageAndRetrieval)
   Demonstrates creating a new database, using a managed read-write transaction
   to store a block, and then using a managed read-only transaction to fetch the
   block.

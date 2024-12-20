@@ -1,7 +1,7 @@
 mempool
 =======
 
-[![Build Status](https://travis-ci.org/gcash/bchd.png?branch=master)](https://travis-ci.org/gcash/bchd)
+![Build Status](https://github.com/gcash/bchd/actions/workflows/main.yml/badge.svg?branch=master)
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
 [![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/github.com/gcash/bchd/mempool)
 

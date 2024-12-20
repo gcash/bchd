@@ -1,7 +1,7 @@
 bchec
 =====
 
-[![Build Status](https://travis-ci.org/gcash/bchd.png?branch=master)](https://travis-ci.org/gcash/bchd)
+![Build Status](https://github.com/gcash/bchd/actions/workflows/main.yml/badge.svg?branch=master)
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
 [![GoDoc](https://godoc.org/github.com/gcash/bchd/bchec?status.png)](http://godoc.org/github.com/gcash/bchd/bchec)
 
@@ -25,11 +25,11 @@ $ go get -u github.com/gcash/bchd/bchec
 
 ## Examples
 
-* [Sign Message](http://godoc.org/github.com/gcash/bchd/bchec#example-package--SignMessage)  
+* [Sign Message](http://godoc.org/github.com/gcash/bchd/bchec#example-package--SignMessage)
   Demonstrates signing a message with a secp256k1 private key that is first
   parsed form raw bytes and serializing the generated signature.
 
-* [Verify Signature](http://godoc.org/github.com/gcash/bchd/bchec#example-package--VerifySignature)  
+* [Verify Signature](http://godoc.org/github.com/gcash/bchd/bchec#example-package--VerifySignature)
   Demonstrates verifying a secp256k1 signature against a public key that is
   first parsed from raw bytes.  The signature is also parsed from raw bytes.
 
@@ -65,4 +65,3 @@ verify the signature perform the following:
 
 Package bchec is licensed under the [copyfree](http://copyfree.org) ISC License
 except for bchec.go and bchec_test.go which is under the same license as Go.
-

@@ -1,6 +1,6 @@
 bchd
 ====
-[![Build Status](https://travis-ci.org/gcash/bchd.png?branch=master)](https://travis-ci.org/gcash/bchd)
+![Build Status](https://github.com/gcash/bchd/actions/workflows/main.yml/badge.svg?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gcash/bchd)](https://goreportcard.com/report/github.com/gcash/bchd)
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
 [![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/github.com/gcash/bchd)
@@ -11,8 +11,8 @@ This project is a port of the [btcd](https://github.com/btcsuite/btcd) codebase 
 and reliable blockchain server which makes it a suitable backend to serve blockchain data to lite clients and block explorers
 or to power your local wallet.
 
-bchd does not include any wallet functionality by design as it makes the codebase more modular and easy to maintain. 
-The [bchwallet](https://github.com/gcash/bchwallet) is a separate application that provides a secure Bitcoin Cash wallet 
+bchd does not include any wallet functionality by design as it makes the codebase more modular and easy to maintain.
+The [bchwallet](https://github.com/gcash/bchwallet) is a separate application that provides a secure Bitcoin Cash wallet
 that communicates with your running bchd instance via the API.
 
 ## Table of Contents
@@ -28,7 +28,7 @@ that communicates with your running bchd instance via the API.
 
 ## Requirements
 
-[Go](http://golang.org) 1.16.4 or newer.
+[Go](http://golang.org) 1.23.4 or newer.
 
 ## Install
 
@@ -139,7 +139,7 @@ Chris Pacia (ctpacia@gmail.com) - GPG Fingerprint: 0150 2502 DD3A 928D CE52 8CB9
 
 or
 
-Josh Ellithorpe (quest@mac.com) - GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD 
+Josh Ellithorpe (quest@mac.com) - GPG Fingerprint: B6DE 3514 E07E 30BB 5F40  8D74 E49B 7E00 0022 8DDD
 
 ## License
 

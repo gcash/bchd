@@ -1,0 +1,31 @@
+name: build
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.2
+        env:
+          GO111MODULE: on
+      - name: Run goclean.sh
+        run: ./goclean.sh
+        env:
+          GO111MODULE: on
+      - name: Go Build/Install
+        run: go build && go install . ./cmd/...
+        env:
+          GO111MODULE: on
