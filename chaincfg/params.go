@@ -792,7 +792,11 @@ var TestNet4Params = Params{
 	Net:         wire.TestNet4,
 	DefaultPort: "28333",
 	DNSSeeds: []DNSSeed{
+		{"testnet4-seed.bchd.cash", true},
 		{"testnet4.imaginary.cash", true},
+		{"testnet4-seed-bch.toom.im", true},
+		{"seed.tbch4.loping.net", true},
+		{"testnet4-seed.flowee.cash", true},
 	},
 
 	// Chain parameters
