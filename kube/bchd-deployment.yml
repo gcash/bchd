@@ -4,7 +4,7 @@ metadata:
   namespace: default
   labels:
     service: bchd
-    version: 0.18.0
+    version: 0.20.0
   name: bchd
 spec:
   strategy:
@@ -19,27 +19,45 @@ spec:
         service: bchd
     spec:
       containers:
-      - env:
-        - name: BCHD_RPC_USER
-          valueFrom:
-            secretKeyRef:
-              name: bchd
-              key: rpcuser
-        - name: BCHD_RPC_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: bchd
-              key: rpcpass
-        image: zquestz/bchd:latest
-        command: ["bchd"]
-        args: ["-u", "$(BCHD_RPC_USER)", "-P", "$(BCHD_RPC_PASSWORD)", "--addrindex", "--txindex", "-b", "/data", "-C", "/data/bchd.conf"]
-        name: bchd
-        volumeMounts:
-          - mountPath: /data
-            name: bchd-data
-        resources:
-          requests:
-            memory: "3Gi"
+        - env:
+            - name: BCHD_RPC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bchd
+                  key: rpcuser
+            - name: BCHD_RPC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bchd
+                  key: rpcpass
+          image: zquestz/bchd:latest
+          command: ["bchd"]
+          args:
+            [
+              "-u",
+              "$(BCHD_RPC_USER)",
+              "-P",
+              "$(BCHD_RPC_PASSWORD)",
+              "--addrindex",
+              "--txindex",
+              "-b",
+              "/data",
+              "-C",
+              "/data/bchd.conf",
+            ]
+          name: bchd
+          volumeMounts:
+            - mountPath: /data
+              name: bchd-data
+            - name: bchd-config
+              mountPath: /data/rpc.cert
+              subPath: cert
+            - name: bchd-config
+              mountPath: /data/rpc.key
+              subPath: key
+          resources:
+            requests:
+              memory: "3Gi"
       restartPolicy: Always
       terminationGracePeriodSeconds: 600
       volumes:
@@ -47,3 +65,6 @@ spec:
           gcePersistentDisk:
             pdName: bchd-data
             fsType: ext4
+        - name: bchd-config
+          secret:
+            secretName: "bchd"
