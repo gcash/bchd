@@ -402,6 +402,8 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		net = pb.GetBlockchainInfoResponse_MAINNET
 	case &chaincfg.TestNet3Params:
 		net = pb.GetBlockchainInfoResponse_TESTNET3
+	case &chaincfg.TestNet4Params:
+		net = pb.GetBlockchainInfoResponse_TESTNET4
 	case &chaincfg.RegressionNetParams:
 		net = pb.GetBlockchainInfoResponse_REGTEST
 	case &chaincfg.SimNetParams:

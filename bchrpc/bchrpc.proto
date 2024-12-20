@@ -185,6 +185,8 @@ message GetBlockchainInfoResponse {
         // Private testnets for large scale simulations (or stress testing),
         // where a specified list of nodes is used, rather than node discovery.
         SIMNET   = 3;
+        // Latest Testnet.
+        TESTNET4 = 4;
     }
 
     // Which network the node is operating on.
