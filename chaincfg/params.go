@@ -781,6 +781,7 @@ var ChipNetParams = Params{
 
 	// slp indexer parameters
 	SlpIndexStartHeight: 0,
+	SlpIndexStartHash:   newHashFromStr("000000001dd410c49a788668ce26751718cc797474d3152a5fc073dd44fd9f7b"),
 	SlpAddressPrefix:    "slptest",
 }
 
@@ -890,6 +891,7 @@ var TestNet4Params = Params{
 
 	// slp indexer parameters
 	SlpIndexStartHeight: 0,
+	SlpIndexStartHash:   newHashFromStr("000000001dd410c49a788668ce26751718cc797474d3152a5fc073dd44fd9f7b"),
 	SlpAddressPrefix:    "slptest",
 }
 
