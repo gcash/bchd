@@ -201,6 +201,7 @@ var bnStrings = map[BitcoinNet]string{
 	MainNet:  "MainNet",
 	TestNet:  "TestNet",
 	TestNet3: "TestNet3",
+	TestNet4: "TestNet4",
 	SimNet:   "SimNet",
 }
 
