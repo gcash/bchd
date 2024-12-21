@@ -2180,6 +2180,16 @@ func (p *Peer) readRemoteVerAckMsg() error {
 		return err
 	}
 
+	// We might see a sendaddrv2 message here, that is OKAY based on
+	// the spec!
+	_, ok := remoteMsg.(*wire.MsgSendAddrV2)
+	if ok {
+		remoteMsg, _, err = p.readMessage(wire.LatestEncoding)
+		if err != nil {
+			return err
+		}
+	}
+
 	// It should be a verack message, otherwise send a reject message to the
 	// peer explaining why.
 	msg, ok := remoteMsg.(*wire.MsgVerAck)
