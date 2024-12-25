@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 		server: nil,
 	}
 	go startLocalTestServer(proxy)
-	time.Sleep(1 * time.Second) // wait for HTTP server goroutine
+	time.Sleep(5 * time.Second) // wait for HTTP server goroutine
 
 	// connect the HTTP test client to address:port
 	httpAddr := *proxyAddr
