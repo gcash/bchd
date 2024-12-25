@@ -17,7 +17,9 @@ RUN go install ./cmd/bchctl
 # Symlink the config to /root/.bchd/bchd.conf
 # so bchctl requires fewer flags.
 RUN mkdir -p /root/.bchd
+RUN mkdir -p /root/.bchctl
 RUN ln -s /data/bchd.conf /root/.bchd/bchd.conf
+RUN ln -s /data/bchctl.conf /root/.bchctl/bchctl.conf
 
 # Create the data volume.
 VOLUME ["/data"]
