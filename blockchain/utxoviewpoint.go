@@ -139,7 +139,7 @@ func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, 
 	// Build a map of in-flight transactions because some of the inputs in
 	// this block could be referencing other transactions earlier in this
 	// block which are not yet in the chain.
-	txInFlight := map[chainhash.Hash]int{}
+	txInFlight := make(map[chainhash.Hash]int, len(block.Transactions()))
 	transactions := block.Transactions()
 	for i, tx := range transactions {
 		txInFlight[*tx.Hash()] = i

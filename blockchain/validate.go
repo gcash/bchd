@@ -318,7 +318,7 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9
 	}
 
 	// Check for duplicate transaction inputs.
-	existingTxOut := make(map[wire.OutPoint]struct{})
+	existingTxOut := make(map[wire.OutPoint]struct{}, len(msgTx.TxIn))
 	for _, txIn := range msgTx.TxIn {
 		if _, exists := existingTxOut[txIn.PreviousOutPoint]; exists {
 			return ruleError(ErrDuplicateTxInputs, "transaction "+
@@ -518,7 +518,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 	// Check for duplicate transactions.  This check will be fairly quick
 	// since the transaction hashes are already cached due to building the
 	// merkle tree above.
-	existingTxHashes := make(map[chainhash.Hash]struct{})
+	existingTxHashes := make(map[chainhash.Hash]struct{}, len(transactions))
 	for _, tx := range transactions {
 		hash := tx.Hash()
 		if _, exists := existingTxHashes[*hash]; exists {
