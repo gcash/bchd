@@ -1253,7 +1253,7 @@ func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
 func TopologicallySortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
 
 	sorted := make([]*wire.MsgTx, 0, len(transactions))
-	txids := make(map[chainhash.Hash]struct{})
+	txids := make(map[chainhash.Hash]struct{}, len(transactions))
 	outpoints := make(map[wire.OutPoint]struct{})
 
 	for _, tx := range transactions {
