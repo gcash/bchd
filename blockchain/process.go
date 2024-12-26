@@ -99,16 +99,12 @@ func (b *BlockChain) blockExists(hash *chainhash.Hash) (bool, error) {
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) error {
-	// Start with processing at least the passed hash.  Leave a little room
-	// for additional orphan blocks that need to be processed without
-	// needing to grow the array in the common case.
-	processHashes := make([]*chainhash.Hash, 0, 10)
+	// Start with processing at least the passed hash.
+	var processHashes []*chainhash.Hash
 	processHashes = append(processHashes, hash)
 	for len(processHashes) > 0 {
-		// Pop the first hash to process from the slice.
-		processHash := processHashes[0]
-		processHashes[0] = nil // Prevent GC leak.
-		processHashes = processHashes[1:]
+		processHash := processHashes[len(processHashes)-1]
+		processHashes = processHashes[:len(processHashes)-1]
 
 		// Look up all orphans that are parented by the block we just
 		// accepted.  This will typically only be one, but it could
