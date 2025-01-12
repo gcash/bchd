@@ -354,21 +354,15 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				entry := stxos.LookupEntry(in.PreviousOutPoint)
 				if entry != nil {
-
-					pk, cashToken, err := getTokenDataForInputIfExists(entry.PkScript())
-					if err != nil {
-						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
-					}
-					if err != nil || cashToken == nil {
-						pk = entry.PkScript()
-					} else { // cash token data exists.
-						respTx.Inputs[i].CashToken = cashToken
+					tokenData := entry.TokenData()
+					if !tokenData.IsEmpty() {
+						respTx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 					}
 
 					respTx.Inputs[i].Value = entry.Amount()
-					respTx.Inputs[i].PreviousScript = pk
+					respTx.Inputs[i].PreviousScript = entry.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(entry.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						respTx.Inputs[i].Address = addrs[0].String()
 					}
@@ -520,7 +514,7 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 				if idx > 0 {
 					stxo := spentTxos[spendIdx]
 
-					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+					pk, cashToken, err := getPbCashTokenDataFormPkScriptIfExists(stxo.PkScript)
 					if err != nil {
 						log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
 					}
@@ -707,21 +701,15 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				stxo := view.LookupEntry(in.PreviousOutPoint)
 				if stxo != nil {
-
-					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
-					if err != nil {
-						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
-					}
-					if err != nil || cashToken == nil {
-						pk = stxo.PkScript()
-					} else { // cash token data exists.
-						tx.Inputs[i].CashToken = cashToken
+					tokenData := stxo.TokenData()
+					if !tokenData.IsEmpty() {
+						tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 					}
 
 					tx.Inputs[i].Value = stxo.Amount()
-					tx.Inputs[i].PreviousScript = pk
+					tx.Inputs[i].PreviousScript = stxo.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
 						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -900,21 +888,15 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			for i, in := range txDesc.Tx.MsgTx().TxIn {
 				stxo := view.LookupEntry(in.PreviousOutPoint)
 				if stxo != nil {
-
-					pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
-					if err != nil {
-						log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
-					}
-					if err != nil || cashToken == nil {
-						pk = stxo.PkScript()
-					} else { // cash token data exists.
-						tx.Inputs[i].CashToken = cashToken
+					tokenData := stxo.TokenData()
+					if !tokenData.IsEmpty() {
+						tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 					}
 
 					tx.Inputs[i].Value = stxo.Amount()
-					tx.Inputs[i].PreviousScript = pk
+					tx.Inputs[i].PreviousScript = stxo.PkScript()
 
-					_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+					_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 					if err == nil && len(addrs) > 0 {
 						tx.Inputs[i].Address = addrs[0].String()
 						s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -1043,6 +1025,12 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			pkScript := make([]byte, len(out.PkScript))
 			copy(pkScript, out.PkScript)
 
+			tokenData := out.TokenData
+			var cashToken *pb.CashToken
+			if !tokenData.IsEmpty() {
+				cashToken = getPbCashTokenDataFromTokenData(tokenData)
+			}
+
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, s.chainParams)
 			if err != nil || len(addrs) == 0 {
 				continue
@@ -1078,6 +1066,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 					},
 					Value:        entry.Amount(),
 					PubkeyScript: pkScript,
+					CashToken:    cashToken,
 					IsCoinbase:   entry.IsCoinBase(),
 					BlockHeight:  entry.BlockHeight(),
 					SlpToken:     slpToken,
@@ -1167,6 +1156,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		value          int64
 		blockHeight    int32
 		scriptPubkey   []byte
+		cashToken      *pb.CashToken
 		coinbase       bool
 		isSlpInMempool = false
 	)
@@ -1185,6 +1175,10 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		value = tx.MsgTx().TxOut[req.Index].Value
 		blockHeight = mining.UnminedHeight
 		scriptPubkey = tx.MsgTx().TxOut[req.Index].PkScript
+		tokenData := tx.MsgTx().TxOut[req.Index].TokenData
+		if !tokenData.IsEmpty() {
+			cashToken = getPbCashTokenDataFromTokenData(tokenData)
+		}
 		coinbase = blockchain.IsCoinBase(tx)
 
 		// check if this txn is possibly an slp transaction
@@ -1212,6 +1206,10 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		value = entry.Amount()
 		blockHeight = entry.BlockHeight()
 		scriptPubkey = entry.PkScript()
+		tokenData := entry.TokenData()
+		if !tokenData.IsEmpty() {
+			cashToken = getPbCashTokenDataFromTokenData(entry.TokenData())
+		}
 		coinbase = entry.IsCoinBase()
 	}
 
@@ -1241,6 +1239,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		},
 		Value:         value,
 		PubkeyScript:  scriptPubkey,
+		CashToken:     cashToken,
 		BlockHeight:   blockHeight,
 		IsCoinbase:    coinbase,
 		SlpToken:      slpToken,
@@ -2485,7 +2484,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 							for i := range tx.MsgTx().TxIn {
 								if idx > 0 {
 									stxo := spentTxos[spendIdx]
-									pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+									pk, cashToken, err := getPbCashTokenDataFormPkScriptIfExists(stxo.PkScript)
 									if err != nil {
 										log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
 									}
@@ -2581,7 +2580,7 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 								if idx > 0 {
 									stxo := spentTxos[spendIdx]
 
-									pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript)
+									pk, cashToken, err := getPbCashTokenDataFormPkScriptIfExists(stxo.PkScript)
 									if err != nil {
 										log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
 									}
@@ -2689,21 +2688,15 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 			continue
 		}
 		if prevTx, ok := inputTxMap[*ch]; ok {
-
-			pk, cashToken, err := getTokenDataForInputIfExists(prevTx.TxOut[in.Outpoint.Index].PkScript)
-			if err != nil {
-				log.Debugf("could not parse token data for %v index: %v", prevTx.TxHash(), uint32(i))
-			}
-			if err != nil || cashToken == nil {
-				pk = prevTx.TxOut[in.Outpoint.Index].PkScript
-			} else { // cash token data exists.
-				tx.Inputs[i].CashToken = cashToken
+			tokenData := prevTx.TxOut[in.Outpoint.Index].TokenData
+			if !tokenData.IsEmpty() {
+				tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 			}
 
 			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = pk
+			tx.Inputs[i].PreviousScript = prevTx.TxOut[in.Outpoint.Index].PkScript
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(prevTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -2732,20 +2725,15 @@ func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 				return status.Error(codes.Internal, "failed to unmarshal transaction")
 			}
 
-			pk, cashToken, err := getTokenDataForInputIfExists(loadedTx.TxOut[in.Outpoint.Index].PkScript)
-			if err != nil {
-				log.Debugf("could not parse token data for %v index: %v", prevTx.TxHash(), uint32(i))
-			}
-			if err != nil || cashToken == nil {
-				pk = loadedTx.TxOut[in.Outpoint.Index].PkScript
-			} else { // cash token data exists.
-				tx.Inputs[i].CashToken = cashToken
+			tokenData := loadedTx.TxOut[in.Outpoint.Index].TokenData
+			if !tokenData.IsEmpty() {
+				tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 			}
 
 			tx.Inputs[i].Value = loadedTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = pk
+			tx.Inputs[i].PreviousScript = loadedTx.TxOut[in.Outpoint.Index].PkScript
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				tx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
@@ -3418,17 +3406,6 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			SlpToken: inputToken,
 		}
 
-		signatureScript, cashToken, err := getTokenDataForInputIfExists(input.SignatureScript)
-		if err != nil {
-			log.Debugf("could not parse token data for %v index: %v", tx.Hash(), uint32(i))
-		}
-		if err != nil || cashToken == nil {
-			in.SignatureScript = input.SignatureScript
-		} else { // cash token data exists.
-			respTx.Inputs[i].CashToken = cashToken
-			in.SignatureScript = signatureScript
-		}
-
 		respTx.Inputs = append(respTx.Inputs, in)
 
 		// add burn labels for destroyed slp inputs caused by wrong tokenID or invalid slp message
@@ -3470,13 +3447,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			SlpToken:     outputToken,
 		}
 		if !output.TokenData.IsEmpty() {
-			cashToken := &pb.CashToken{
-				CategoryId: output.TokenData.CategoryID[:],
-				Amount:     output.TokenData.Amount,
-				Commitment: output.TokenData.Commitment,
-				Bitfield:   []byte{output.TokenData.BitField},
-			}
-			out.CashToken = cashToken
+			out.CashToken = getPbCashTokenDataFromTokenData(output.TokenData)
 		}
 
 		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
@@ -3558,21 +3529,15 @@ func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rp
 	for i, in := range txDesc.Tx.MsgTx().TxIn {
 		stxo := view.LookupEntry(in.PreviousOutPoint)
 		if stxo != nil {
-
-			pk, cashToken, err := getTokenDataForInputIfExists(stxo.PkScript())
-			if err != nil {
-				log.Debugf("could not parse token data for %v index: %v", txDesc.Tx.Hash(), uint32(i))
-			}
-			if err != nil || cashToken == nil {
-				pk = stxo.PkScript()
-			} else { // cash token data exists.
-				respTx.Inputs[i].CashToken = cashToken
+			tokenData := stxo.TokenData()
+			if !tokenData.IsEmpty() {
+				respTx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
 			}
 
 			respTx.Inputs[i].Value = stxo.Amount()
-			respTx.Inputs[i].PreviousScript = pk
+			respTx.Inputs[i].PreviousScript = stxo.PkScript()
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pk, s.chainParams)
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(stxo.PkScript(), s.chainParams)
 			if err == nil && len(addrs) > 0 {
 				respTx.Inputs[i].Address = addrs[0].String()
 				s.setInputSlpTokenAddress(respTx.Inputs[i], addrs[0])
@@ -3607,7 +3572,7 @@ func getTokenType(t v1parser.TokenType) pb.SlpTokenType {
 	}
 }
 
-func getTokenDataForInputIfExists(fullBytes []byte) ([]byte, *pb.CashToken, error) {
+func getPbCashTokenDataFormPkScriptIfExists(fullBytes []byte) ([]byte, *pb.CashToken, error) {
 	tokenData := wire.TokenData{}
 	pk, err := tokenData.SeparateTokenDataFromPKScriptIfExists(fullBytes, 0)
 	if err != nil || pk == nil {
@@ -3625,6 +3590,16 @@ func getTokenDataForInputIfExists(fullBytes []byte) ([]byte, *pb.CashToken, erro
 	}
 	return fullBytes, nil, nil
 
+}
+
+func getPbCashTokenDataFromTokenData(tokenData wire.TokenData) *pb.CashToken {
+	cashTokens := &pb.CashToken{
+		CategoryId: tokenData.CategoryID[:],
+		Amount:     tokenData.Amount,
+		Commitment: tokenData.Commitment,
+		Bitfield:   []byte{tokenData.BitField},
+	}
+	return cashTokens
 }
 
 // queueHandler manages a queue of empty interfaces, reading from in and
