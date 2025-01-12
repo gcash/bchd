@@ -147,6 +147,11 @@ func (entry *UtxoEntry) PkScript() []byte {
 	return entry.pkScript
 }
 
+// TokenData returns the token data for the output.
+func (entry *UtxoEntry) TokenData() wire.TokenData {
+	return entry.tokenData
+}
+
 // memoryUsage returns the memory usage in bytes of the UTXO entry.
 // It returns 0 for the nil element.
 func (entry *UtxoEntry) memoryUsage() uint64 {
