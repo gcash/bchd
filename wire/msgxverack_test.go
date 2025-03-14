@@ -12,7 +12,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-// TestVerAck tests the MsgXVerAck API.
+// TestXVerAck tests the MsgXVerAck API.
 func TestXVerAck(t *testing.T) {
 	pver := ProtocolVersion
 
