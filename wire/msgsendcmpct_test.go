@@ -8,7 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-// TestSendCompact tests the MsgSendCmpct API against the latest protocol
+// TestSendCmpct tests the MsgSendCmpct API against the latest protocol
 // version.
 func TestSendCmpct(t *testing.T) {
 	pver := ProtocolVersion
