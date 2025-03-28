@@ -39,15 +39,6 @@ type Policy struct {
 	TxMinFreeFee bchutil.Amount
 }
 
-// minInt is a helper function to return the minimum of two ints.  This avoids
-// a math import and the need to cast to floats.
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // calcInputValueAge is a helper function used to calculate the input age of
 // a transaction.  The input age for a txin is the number of confirmations
 // since the referenced txout multiplied by its output value.  The total input
@@ -110,7 +101,7 @@ func CalcPriority(tx *wire.MsgTx, utxoView *blockchain.UtxoViewpoint, nextBlockH
 	overhead := 0
 	for _, txIn := range tx.TxIn {
 		// Max inputs + size can't possibly overflow here.
-		overhead += 41 + minInt(110, len(txIn.SignatureScript))
+		overhead += 41 + min(110, len(txIn.SignatureScript))
 	}
 
 	serializedTxSize := tx.SerializeSize()

@@ -306,15 +306,6 @@ type Config struct {
 	MaxKnownInventory uint
 }
 
-// minUint32 is a helper function to return the minimum of two uint32s.
-// This avoids a math import and the need to cast to floats.
-func minUint32(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // newNetAddress attempts to extract the IP address and port from the passed
 // net.Addr interface and create a bitcoin NetAddress structure using that
 // information.
@@ -2117,7 +2108,7 @@ func (p *Peer) readRemoteVersionMsg() error {
 	// peer advertised.
 	p.flagsMtx.Lock()
 	p.advertisedProtoVer = uint32(msg.ProtocolVersion)
-	p.protocolVersion = minUint32(p.protocolVersion, p.advertisedProtoVer)
+	p.protocolVersion = min(p.protocolVersion, p.advertisedProtoVer)
 	p.versionKnown = true
 	p.services = msg.Services
 	p.flagsMtx.Unlock()

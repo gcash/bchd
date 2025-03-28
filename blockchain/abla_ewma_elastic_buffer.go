@@ -58,22 +58,6 @@ func muldiv(x, y, z uint64) uint64 {
 	return q.Lo
 }
 
-// Utility function
-func minUint64(a, b uint64) uint64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// Utility function
-func maxUint64(a, b uint64) uint64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // Algorithm configuration
 type ABLAConfig struct {
 	// Initial control block size value, also used as floor value
@@ -191,7 +175,7 @@ func (state *ABLAState) IsValid(config *ABLAConfig) (errs *strings.Builder) {
 // Calculate the limit for the block to which the algorithm's state
 // applies, given algorithm state
 func (state *ABLAState) getBlockSizeLimit() uint64 {
-	return minUint64(state.controlBlockSize+state.elasticBufferSize, TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT)
+	return min(state.controlBlockSize+state.elasticBufferSize, TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT)
 	// Note: Remove the TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT limit once 32-bit architecture is deprecated:
 	// return state.controlBlockSize + state.elasticBufferSize
 }
@@ -220,7 +204,7 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 	// For safety: we clamp this current block's blocksize to the maximum value this algorithm expects. Normally this
 	// won't happen unless the node is run with some -excessiveblocksize parameter that permits larger blocks than this
 	// algo's current state expects.
-	currentBlockSize = minUint64(currentBlockSize, state.controlBlockSize+state.elasticBufferSize)
+	currentBlockSize = min(currentBlockSize, state.controlBlockSize+state.elasticBufferSize)
 
 	// if block height is in range 0 to n0 inclusive use initialization values
 	// else use algorithmic limit
@@ -262,7 +246,7 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 			newState.controlBlockSize = state.controlBlockSize - bytesToRemove/config.gammaReciprocal
 
 			// epsilon_n = max(epsilon_{n-1} + gamma * (zeta * x_{n-1} - epsilon_{n-1}), epsilon_0)
-			newState.controlBlockSize = maxUint64(newState.controlBlockSize, config.epsilon0)
+			newState.controlBlockSize = max(newState.controlBlockSize, config.epsilon0)
 		}
 
 		// elastic buffer function
@@ -284,12 +268,12 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 		}
 		// max(beta_{n-1} - beta_{n-1} * theta + (epsilon_{n} - epsilon_{n-1}) * delta, beta_0) , if zeta * x_{n-1} > epsilon_{n-1}
 		// max(beta_{n-1} - beta_{n-1} * theta, beta_0) , if zeta * x_{n-1} <= epsilon_{n-1}
-		newState.elasticBufferSize = maxUint64(newState.elasticBufferSize, config.beta0)
+		newState.elasticBufferSize = max(newState.elasticBufferSize, config.beta0)
 
 		// clip controlBlockSize to epsilonMax to avoid integer overflow for extreme sizes
-		newState.controlBlockSize = minUint64(newState.controlBlockSize, config.epsilonMax)
+		newState.controlBlockSize = min(newState.controlBlockSize, config.epsilonMax)
 		// clip elasticBufferSize to betaMax to avoid integer overflow for extreme sizes
-		newState.elasticBufferSize = minUint64(newState.elasticBufferSize, config.betaMax)
+		newState.elasticBufferSize = min(newState.elasticBufferSize, config.betaMax)
 	}
 	return newState
 }
