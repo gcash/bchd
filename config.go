@@ -91,24 +91,6 @@ var (
 // to parse and execute service commands specified via the -s flag.
 var runServiceCommand func(string) error
 
-// minUint32 is a helper function to return the minimum of two uint32s.
-// This avoids a math import and the need to cast to floats.
-func minUint32(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// maxUint32 is a helper function to return the maximum of two uint32s.
-// This avoids a math import and the need to cast to floats.
-func maxUint32(a, b uint32) uint32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // config defines the configuration options for bchd.
 //
 // See loadConfig for details on the configuration load process.
@@ -900,7 +882,7 @@ func loadConfig() (*config, []string, error) {
 	}
 
 	// Excessive blocksize cannot be set less than the default but it can be higher.
-	cfg.ExcessiveBlockSize = maxUint32(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
+	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
 
 	// Limit the max block size to a sane value.
 	blockMaxSizeMax := cfg.ExcessiveBlockSize - 1000
@@ -916,8 +898,8 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 	// Limit the block priority and minimum block sizes to max block size.
-	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
-	cfg.BlockMinSize = minUint32(cfg.BlockMinSize, cfg.BlockMaxSize)
+	cfg.BlockPrioritySize = min(cfg.BlockPrioritySize, cfg.BlockMaxSize)
+	cfg.BlockMinSize = min(cfg.BlockMinSize, cfg.BlockMaxSize)
 
 	// Prepend ExcessiveBlockSize signaling to the UserAgentComments
 	cfg.UserAgentComments = append([]string{fmt.Sprintf("EB%.1f", float64(cfg.ExcessiveBlockSize)/1000000)}, cfg.UserAgentComments...)
