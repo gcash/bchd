@@ -13,7 +13,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
-// TestInvVectStringer tests the stringized output for inventory vector types.
+// TestInvTypeStringer tests the stringized output for inventory vector types.
 func TestInvTypeStringer(t *testing.T) {
 	tests := []struct {
 		in   InvType

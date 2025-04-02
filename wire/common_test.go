@@ -418,7 +418,7 @@ func TestVarIntNonCanonical(t *testing.T) {
 	}
 }
 
-// TestVarIntWire tests the serialize size for variable length integers.
+// TestVarIntSerializeSize tests the serialize size for variable length integers.
 func TestVarIntSerializeSize(t *testing.T) {
 	tests := []struct {
 		val  uint64 // Value to get the serialized size for
