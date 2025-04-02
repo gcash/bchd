@@ -116,7 +116,7 @@ func TestBlockTxnsCrossProtocol(t *testing.T) {
 	}
 }
 
-// TestGetBlockTxnsWire tests the GetBlockTxnsWire wire encode and decode for
+// TestBlockTxnsWire tests the GetBlockTxnsWire wire encode and decode for
 // various protocol versions.
 func TestBlockTxnsWire(t *testing.T) {
 	msgBlockTxns := NewMsgBlockTxns(chainhash.Hash{}, []*MsgTx{blockOne.Transactions[0]})

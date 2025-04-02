@@ -12,7 +12,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-// TestFilterCLearLatest tests the MsgFilterClear API against the latest
+// TestFilterClearLatest tests the MsgFilterClear API against the latest
 // protocol version.
 func TestFilterClearLatest(t *testing.T) {
 	pver := ProtocolVersion
