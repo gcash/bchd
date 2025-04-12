@@ -28,7 +28,7 @@ package bchec
 // arithmetic between each array element which would lead to expensive carry
 // propagation.
 //
-// Given the above, this implementation represents the the field elements as
+// Given the above, this implementation represents the field elements as
 // 10 uint32s with each word (array entry) treated as base 2^26.  This was
 // chosen for the following reasons:
 // 1) Most systems at the current time are 64-bit (or at least have 64-bit
@@ -36,7 +36,7 @@ package bchec
 //    intermediate results can typically be done using a native register (and
 //    using uint64s to avoid the need for additional half-word arithmetic)
 // 2) In order to allow addition of the internal words without having to
-//    propagate the the carry, the max normalized value for each register must
+//    propagate the carry, the max normalized value for each register must
 //    be less than the number of bits available in the register
 // 3) Since we're dealing with 32-bit values, 64-bits of overflow is a
 //    reasonable choice for #2
