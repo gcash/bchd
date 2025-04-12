@@ -222,7 +222,7 @@ func (n scriptNum) Int64() int64 {
 // See the Bytes function documentation for example encodings.
 func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, error) {
 	// Interpreting data requires that it is not larger than
-	// the the passed scriptNumLen value.
+	// the passed scriptNumLen value.
 	if len(v) > scriptNumLen {
 		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
 			"which exceeds the max allowed of %d", v, len(v),

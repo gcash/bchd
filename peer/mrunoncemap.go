@@ -76,7 +76,7 @@ func (m *mruNonceMap) Add(nonce uint64) {
 		return
 	}
 
-	// Evict the least recently used entry (back of the list) if the the new
+	// Evict the least recently used entry (back of the list) if the new
 	// entry would exceed the size limit for the map.  Also reuse the list
 	// node so a new one doesn't have to be allocated.
 	if uint(len(m.nonceMap))+1 > m.limit {
