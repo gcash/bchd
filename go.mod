@@ -12,7 +12,7 @@ require (
 	github.com/dchest/siphash v1.2.3
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
 	github.com/gcash/bchutil v0.0.0-20241212050246-0c57b5a81c23
-	github.com/golang/glog v1.2.3
+	github.com/golang/glog v1.2.4
 	github.com/golang/protobuf v1.5.4
 	github.com/gorilla/mux v1.8.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
