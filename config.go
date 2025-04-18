@@ -158,7 +158,7 @@ type config struct {
 	MaxOrphanTxs            int           `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
 	Generate                bool          `long:"generate" description:"Generate (mine) bitcoins using the CPU"`
 	MiningAddrs             []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
-	BlockMinSize            uint32        `long:"blockminsize" description:"Mininum block size in bytes to be used when creating a block"`
+	BlockMinSize            uint32        `long:"blockminsize" description:"Minimum block size in bytes to be used when creating a block"`
 	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block"`
 	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Size in bytes for high-priority/low-fee transactions when creating a block"`
 	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
