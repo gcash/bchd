@@ -34,7 +34,7 @@ export interface RpcPeerInfoRes {
     addr: string;
     addnode: boolean;
 
-    // TODO: type this inteface
+    // TODO: type this interface
     //     "id": n,                   (numeric) Peer index
     //     "addr":"host:port",      (string) The IP address and port of the peer
     //     "addrbind":"ip:port",    (string) Bind address of the connection to the peer
