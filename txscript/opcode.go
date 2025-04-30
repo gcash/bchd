@@ -875,12 +875,24 @@ func opcodeFalse(op *parsedOpcode, vm *Engine) error {
 // raw data (bytes) to the data stack.
 func opcodePushData(op *parsedOpcode, vm *Engine) error {
 	vm.dstack.PushByteArray(op.data)
+
+	// Used for 2025 upgrade
+	if op.opcode.value >= OP_DATA_1 && op.opcode.value <= OP_DATA_75 {
+		vm.metrics.AddOPCost(int(op.opcode.value))
+	} else if op.opcode.value >= OP_PUSHDATA1 && op.opcode.value <= OP_PUSHDATA4 {
+		vm.metrics.AddOPCost(len(op.data))
+	}
+
 	return nil
 }
 
 // opcode1Negate pushes -1, encoded as a number, to the data stack.
 func opcode1Negate(op *parsedOpcode, vm *Engine) error {
 	vm.dstack.PushInt(scriptNum(-1))
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(1)
+
 	return nil
 }
 
@@ -891,6 +903,10 @@ func opcodeN(op *parsedOpcode, vm *Engine) error {
 	// The opcodes are all defined consecutively, so the numeric value is
 	// the difference.
 	vm.dstack.PushInt(scriptNum((op.opcode.value - (OP_1 - 1))))
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(1)
+
 	return nil
 }
 
@@ -1253,6 +1269,9 @@ func opcodeFromAltStack(op *parsedOpcode, vm *Engine) error {
 	}
 	vm.dstack.PushByteArray(so)
 
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(so))
+
 	return nil
 }
 
@@ -1267,28 +1286,48 @@ func opcode2Drop(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2 x3] -> [... x1 x2 x3 x2 x3]
 func opcode2Dup(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.DupN(2)
+	totalDuplicatedItemsLength, err := vm.dstack.DupN(2)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalDuplicatedItemsLength)
+
+	return err
 }
 
 // opcode3Dup duplicates the top 3 items on the data stack.
 //
 // Stack transformation: [... x1 x2 x3] -> [... x1 x2 x3 x1 x2 x3]
 func opcode3Dup(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.DupN(3)
+	totalDuplicatedItemsLength, err := vm.dstack.DupN(3)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalDuplicatedItemsLength)
+
+	return err
 }
 
 // opcode2Over duplicates the 2 items before the top 2 items on the data stack.
 //
 // Stack transformation: [... x1 x2 x3 x4] -> [... x1 x2 x3 x4 x1 x2]
 func opcode2Over(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.OverN(2)
+	totalCopiedItemsLength, err := vm.dstack.OverN(2)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalCopiedItemsLength)
+
+	return err
 }
 
 // opcode2Rot rotates the top 6 items on the data stack to the left twice.
 //
 // Stack transformation: [... x1 x2 x3 x4 x5 x6] -> [... x3 x4 x5 x6 x1 x2]
 func opcode2Rot(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.RotN(2)
+	totalRotatedItemsLength, err := vm.dstack.RotN(2)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalRotatedItemsLength)
+
+	return err
 }
 
 // opcode2Swap swaps the top 2 items on the data stack with the 2 that come
@@ -1312,6 +1351,9 @@ func opcodeIfDup(op *parsedOpcode, vm *Engine) error {
 	// Push copy of data iff it isn't zero
 	if asBool(so) {
 		vm.dstack.PushByteArray(so)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(so))
 	}
 
 	return nil
@@ -1324,7 +1366,12 @@ func opcodeIfDup(op *parsedOpcode, vm *Engine) error {
 // Example with 2 items: [x1 x2] -> [x1 x2 2]
 // Example with 3 items: [x1 x2 x3] -> [x1 x2 x3 3]
 func opcodeDepth(op *parsedOpcode, vm *Engine) error {
-	vm.dstack.PushInt(scriptNum(vm.dstack.Depth()))
+	depth := scriptNum(vm.dstack.Depth())
+	vm.dstack.PushInt(depth)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(depth.Bytes()))
+
 	return nil
 }
 
@@ -1339,7 +1386,12 @@ func opcodeDrop(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2 x3] -> [... x1 x2 x3 x3]
 func opcodeDup(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.DupN(1)
+	totalDuplicatedItemsLength, err := vm.dstack.DupN(1)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalDuplicatedItemsLength)
+
+	return err
 }
 
 // opcodeNip removes the item before the top item on the data stack.
@@ -1353,7 +1405,12 @@ func opcodeNip(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2 x3] -> [... x1 x2 x3 x2]
 func opcodeOver(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.OverN(1)
+	totalCopiedItemsLength, err := vm.dstack.OverN(1)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(totalCopiedItemsLength)
+
+	return err
 }
 
 // opcodePick treats the top item on the data stack as an integer and duplicates
@@ -1368,7 +1425,12 @@ func opcodePick(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	return vm.dstack.PickN(val.Int32())
+	pickedItemLength, err := vm.dstack.PickN(val.Int32())
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(pickedItemLength)
+
+	return err
 }
 
 // opcodeRoll treats the top item on the data stack as an integer and moves
@@ -1382,15 +1444,21 @@ func opcodeRoll(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
+	rolledItemLength, err := vm.dstack.RollN(val.Int32())
 
-	return vm.dstack.RollN(val.Int32())
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(int(val.Int32()))
+	vm.metrics.AddOPCost(rolledItemLength)
+
+	return err
 }
 
 // opcodeRot rotates the top 3 items on the data stack to the left.
 //
 // Stack transformation: [... x1 x2 x3] -> [... x2 x3 x1]
 func opcodeRot(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.RotN(1)
+	_, err := vm.dstack.RotN(1)
+	return err
 }
 
 // opcodeSwap swaps the top two items on the stack.
@@ -1405,7 +1473,12 @@ func opcodeSwap(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... x2 x1 x2]
 func opcodeTuck(op *parsedOpcode, vm *Engine) error {
-	return vm.dstack.Tuck()
+	tuckedItemLength, err := vm.dstack.Tuck()
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(tuckedItemLength)
+
+	return err
 }
 
 // opcodeCat concatenates two byte sequences. The result must
@@ -1430,6 +1503,10 @@ func opcodeCat(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrElementTooBig, str)
 	}
 	vm.dstack.PushByteArray(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(a) + len(b))
+
 	return nil
 }
 
@@ -1456,6 +1533,10 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 	b := c[n:]
 	vm.dstack.PushByteArray(a)
 	vm.dstack.PushByteArray(b)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(a) + len(b))
+
 	return nil
 }
 
@@ -1496,6 +1577,10 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 	}
 	if len(b) == size {
 		vm.dstack.PushByteArray(b)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(b))
+
 		return nil
 	}
 
@@ -1512,6 +1597,10 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 	b = append(b, signbit)
 
 	vm.dstack.PushByteArray(b)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(b))
+
 	return nil
 }
 
@@ -1541,6 +1630,10 @@ func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(n)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(n.Bytes()))
+
 	return nil
 }
 
@@ -1555,6 +1648,10 @@ func opcodeSize(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(scriptNum(len(so)))
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(scriptNum(len(so)).Bytes()))
+
 	return nil
 }
 
@@ -1582,6 +1679,10 @@ func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
 		b[i] = a[len(a)-i-1]
 	}
 	vm.dstack.PushByteArray(b)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(b))
+
 	return nil
 }
 
@@ -1605,6 +1706,10 @@ func opcodeAnd(op *parsedOpcode, vm *Engine) error {
 		c[i] = a[i] & b[i]
 	}
 	vm.dstack.PushByteArray(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(c))
+
 	return nil
 }
 
@@ -1628,6 +1733,10 @@ func opcodeOr(op *parsedOpcode, vm *Engine) error {
 		c[i] = a[i] | b[i]
 	}
 	vm.dstack.PushByteArray(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(c))
+
 	return nil
 }
 
@@ -1651,6 +1760,10 @@ func opcodeXor(op *parsedOpcode, vm *Engine) error {
 		c[i] = a[i] ^ b[i]
 	}
 	vm.dstack.PushByteArray(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(c))
+
 	return nil
 }
 
@@ -1668,7 +1781,14 @@ func opcodeEqual(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	vm.dstack.PushBool(bytes.Equal(a, b))
+	c := bytes.Equal(a, b)
+	vm.dstack.PushBool(c)
+
+	// Used for 2025 upgrade
+	if c {
+		vm.metrics.AddOPCost(1)
+	}
+
 	return nil
 }
 
@@ -1684,6 +1804,10 @@ func opcodeEqualVerify(op *parsedOpcode, vm *Engine) error {
 	if err == nil {
 		err = abstractVerify(op, vm, ErrEqualVerify)
 	}
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(1)
+
 	return err
 }
 
@@ -1698,6 +1822,10 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(m + 1)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2 * len((m + 1).Bytes()))
+
 	return nil
 }
 
@@ -1711,6 +1839,9 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 	vm.dstack.PushInt(m - 1)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2 * len((m - 1).Bytes()))
 
 	return nil
 }
@@ -1726,6 +1857,10 @@ func opcodeNegate(op *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushInt(-m)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2 * len((-m).Bytes()))
+
 	return nil
 }
 
@@ -1743,6 +1878,10 @@ func opcodeAbs(op *parsedOpcode, vm *Engine) error {
 		m = -m
 	}
 	vm.dstack.PushInt(m)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2 * len(m.Bytes()))
+
 	return nil
 }
 
@@ -1766,6 +1905,9 @@ func opcodeNot(op *parsedOpcode, vm *Engine) error {
 
 	if m == 0 {
 		vm.dstack.PushInt(scriptNum(1))
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -1786,6 +1928,8 @@ func opcode0NotEqual(op *parsedOpcode, vm *Engine) error {
 
 	if m != 0 {
 		m = 1
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	}
 	vm.dstack.PushInt(m)
 	return nil
@@ -1812,6 +1956,10 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 	}
 	if (c > v0) == (v1 > 0) {
 		vm.dstack.PushInt(c)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(2 * len(c.Bytes()))
+
 		return nil
 	}
 	return scriptError(ErrIntegerOverflow, "integer overflow")
@@ -1839,6 +1987,10 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 	}
 	if (c < v1) == (v0 > 0) {
 		vm.dstack.PushInt(c)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(2 * len(c.Bytes()))
+
 		return nil
 	}
 	return scriptError(ErrIntegerOverflow, "integer overflow")
@@ -1865,15 +2017,21 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 
 	if a == 0 || b == 0 {
 		vm.dstack.PushInt(0)
+		// TODO no need to add any costs. Right?
 		return nil
 	}
 	c := a * b
+
 	if c == minInt64 {
 		return scriptError(ErrIntegerOverflow, "integer overflow")
 	}
 	if (c < 0) == ((a < 0) != (b < 0)) {
 		if c/b == a {
 			vm.dstack.PushInt(c)
+
+			// Used for 2025 upgrade
+			vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) + len(b.Bytes())))
+
 			return nil
 		}
 	}
@@ -1898,7 +2056,13 @@ func opcodeDiv(op *parsedOpcode, vm *Engine) error {
 	if b == 0 {
 		return scriptError(ErrNumberTooSmall, "divide by zero")
 	}
-	vm.dstack.PushInt(a / b)
+
+	c := a / b
+	vm.dstack.PushInt(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) + len(b.Bytes())))
+
 	return nil
 }
 
@@ -1920,7 +2084,12 @@ func opcodeMod(op *parsedOpcode, vm *Engine) error {
 	if b == 0 {
 		return scriptError(ErrNumberTooSmall, "mod by zero")
 	}
-	vm.dstack.PushInt(a % b)
+	c := a % b
+	vm.dstack.PushInt(c)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) + len(b.Bytes())))
+
 	return nil
 }
 
@@ -1944,6 +2113,8 @@ func opcodeBoolAnd(op *parsedOpcode, vm *Engine) error {
 
 	if v0 != 0 && v1 != 0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -1971,6 +2142,8 @@ func opcodeBoolOr(op *parsedOpcode, vm *Engine) error {
 
 	if v0 != 0 || v1 != 0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -1996,6 +2169,8 @@ func opcodeNumEqual(op *parsedOpcode, vm *Engine) error {
 
 	if v0 == v1 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2016,6 +2191,10 @@ func opcodeNumEqualVerify(op *parsedOpcode, vm *Engine) error {
 	if err == nil {
 		err = abstractVerify(op, vm, ErrNumEqualVerify)
 	}
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(1)
+
 	return err
 }
 
@@ -2037,6 +2216,8 @@ func opcodeNumNotEqual(op *parsedOpcode, vm *Engine) error {
 
 	if v0 != v1 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2062,6 +2243,8 @@ func opcodeLessThan(op *parsedOpcode, vm *Engine) error {
 
 	if v1 < v0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2087,6 +2270,8 @@ func opcodeGreaterThan(op *parsedOpcode, vm *Engine) error {
 
 	if v1 > v0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2111,6 +2296,8 @@ func opcodeLessThanOrEqual(op *parsedOpcode, vm *Engine) error {
 
 	if v1 <= v0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2135,6 +2322,8 @@ func opcodeGreaterThanOrEqual(op *parsedOpcode, vm *Engine) error {
 
 	if v1 >= v0 {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2157,11 +2346,16 @@ func opcodeMin(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
+	cost := 2 * len(v1.Bytes())
 	if v1 < v0 {
 		vm.dstack.PushInt(v1)
 	} else {
 		vm.dstack.PushInt(v0)
+		cost = 2 * len(v0.Bytes())
 	}
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(cost)
 
 	return nil
 }
@@ -2181,11 +2375,16 @@ func opcodeMax(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
+	cost := 2 * len(v1.Bytes())
 	if v1 > v0 {
 		vm.dstack.PushInt(v1)
 	} else {
 		vm.dstack.PushInt(v0)
+		cost = 2 * len(v0.Bytes())
 	}
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(cost)
 
 	return nil
 }
@@ -2216,6 +2415,8 @@ func opcodeWithin(op *parsedOpcode, vm *Engine) error {
 
 	if x >= minVal && x < maxVal {
 		vm.dstack.PushInt(scriptNum(1))
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(1)
 	} else {
 		vm.dstack.PushInt(scriptNum(0))
 	}
@@ -2238,7 +2439,13 @@ func opcodeRipemd160(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	vm.dstack.PushByteArray(calcHash(buf, ripemd160.New()))
+	hash := calcHash(buf, ripemd160.New())
+	vm.dstack.PushByteArray(hash)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddHashCost(len(buf), false)
+	vm.metrics.AddOPCost(len(hash))
+
 	return nil
 }
 
@@ -2254,6 +2461,11 @@ func opcodeSha1(op *parsedOpcode, vm *Engine) error {
 
 	hash := sha1.Sum(buf)
 	vm.dstack.PushByteArray(hash[:])
+
+	// Used for 2025 upgrade
+	vm.metrics.AddHashCost(len(buf), false)
+	vm.metrics.AddOPCost(len(hash))
+
 	return nil
 }
 
@@ -2269,6 +2481,11 @@ func opcodeSha256(op *parsedOpcode, vm *Engine) error {
 
 	hash := sha256.Sum256(buf)
 	vm.dstack.PushByteArray(hash[:])
+
+	// Used for 2025 upgrade
+	vm.metrics.AddHashCost(len(buf), false)
+	vm.metrics.AddOPCost(len(hash))
+
 	return nil
 }
 
@@ -2283,7 +2500,13 @@ func opcodeHash160(op *parsedOpcode, vm *Engine) error {
 	}
 
 	hash := sha256.Sum256(buf)
-	vm.dstack.PushByteArray(calcHash(hash[:], ripemd160.New()))
+	doubleHash := calcHash(hash[:], ripemd160.New())
+	vm.dstack.PushByteArray(doubleHash)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddHashCost(len(buf), true)
+	vm.metrics.AddOPCost(len(doubleHash))
+
 	return nil
 }
 
@@ -2297,7 +2520,13 @@ func opcodeHash256(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	vm.dstack.PushByteArray(chainhash.DoubleHashB(buf))
+	doubleHash := chainhash.DoubleHashB(buf)
+	vm.dstack.PushByteArray(doubleHash)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddHashCost(len(buf), true)
+	vm.metrics.AddOPCost(len(doubleHash))
+
 	return nil
 }
 
@@ -2388,7 +2617,7 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
 	}
 
-	hash, err = calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
+	hash, totalBytesHashedlength, err := calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 	if err != nil {
 		vm.dstack.PushBool(false)
@@ -2435,6 +2664,12 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 			return scriptError(ErrNullFail, str)
 		}
 	}
+
+	// TODO CHECK IF WE omit null checksig and replace it with proper comment.
+	// TODO also increase sig number
+	vm.metrics.AddHashCost(totalBytesHashedlength, true)
+	vm.metrics.AddNumSigChecks(1)
+	// vm.metrics.AddOPCost(1) // TODO
 
 	vm.dstack.PushBool(valid)
 	return nil
@@ -2673,8 +2908,13 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			}
 
 			// Generate the signature hash based on the signature hash type.
-			signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+			signatureHash, totalBytesHashedlength, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
 				vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+
+			// Used for 2025 upgrade
+			vm.metrics.AddHashCost(totalBytesHashedlength, true)
+			vm.metrics.AddNumSigChecks(1)
+
 			if err != nil {
 				vm.dstack.PushBool(false)
 				return nil
@@ -2794,8 +3034,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			}
 
 			// Generate the signature hash based on the signature hash type.
-			signatureHash, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
+			signatureHash, totalBytesHashedlength, err := calcSignatureHash(script, sigHashes, hashType, &vm.tx, vm.txIdx,
 				vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
+
+			// Used for 2025 upgrade
+			vm.metrics.AddHashCost(totalBytesHashedlength, true)
+
 			if err != nil {
 				vm.dstack.PushBool(false)
 				return nil
@@ -2823,6 +3067,9 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		}
 		if !allSignaturesAreNil {
 			vm.sigChecks += numPubKeys
+
+			// Used for 2025 upgrade
+			vm.metrics.AddNumSigChecks(numPubKeys)
 		}
 	}
 
@@ -2934,6 +3181,10 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 		}
 	}
 
+	// Used for 2025 upgrade
+	vm.metrics.AddNumSigChecks(1)
+	vm.metrics.AddHashCost(len(messageBytes), false)
+
 	vm.dstack.PushBool(valid)
 	return nil
 }
@@ -2965,7 +3216,12 @@ func opcodeInputIndex(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.txIdx))
+	index := scriptNum(vm.txIdx)
+	vm.dstack.PushInt(index)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(index.Bytes()))
+
 	return nil
 }
 
@@ -3005,6 +3261,10 @@ func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrElementTooBig, str)
 	}
 	vm.dstack.PushByteArray(script)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(script))
+
 	return nil
 }
 
@@ -3016,7 +3276,12 @@ func opcodeTxVersion(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.tx.Version))
+	version := scriptNum(vm.tx.Version)
+	vm.dstack.PushInt(version)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(version.Bytes()))
+
 	return nil
 }
 
@@ -3028,7 +3293,13 @@ func opcodeTxInputCount(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	vm.dstack.PushInt(scriptNum(len(vm.tx.TxIn)))
+
+	txInputCount := scriptNum(len(vm.tx.TxIn))
+	vm.dstack.PushInt(txInputCount)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(txInputCount.Bytes()))
+
 	return nil
 }
 
@@ -3040,7 +3311,12 @@ func opcodeTxOutputCount(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	vm.dstack.PushInt(scriptNum(len(vm.tx.TxOut)))
+	txOutputCount := scriptNum(len(vm.tx.TxOut))
+	vm.dstack.PushInt(txOutputCount)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(txOutputCount.Bytes()))
+
 	return nil
 }
 
@@ -3052,7 +3328,12 @@ func opcodeTxLocktime(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.tx.LockTime))
+	lockTime := scriptNum(vm.tx.LockTime)
+	vm.dstack.PushInt(lockTime)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(lockTime.Bytes()))
+
 	return nil
 }
 
@@ -3075,7 +3356,13 @@ func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return scriptError(ErrInvalidIndex, "index out of range")
 	}
-	vm.dstack.PushInt(scriptNum(utxo.Value))
+
+	value := scriptNum(utxo.Value)
+	vm.dstack.PushInt(value)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(value.Bytes()))
+
 	return nil
 }
 
@@ -3106,6 +3393,10 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 	ret := make([]byte, len(utxo.PkScript))
 	copy(ret, utxo.PkScript)
 	vm.dstack.PushByteArray(ret)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(ret))
+
 	return nil
 }
 
@@ -3144,6 +3435,10 @@ func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
 	ret := make([]byte, len(outpointHash))
 	copy(ret, outpointHash[:])
 	vm.dstack.PushByteArray(ret)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(ret))
+
 	return nil
 }
 
@@ -3168,7 +3463,13 @@ func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
 			i.Int32())
 		return scriptError(ErrInvalidIndex, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].PreviousOutPoint.Index))
+
+	index := scriptNum(vm.tx.TxIn[i].PreviousOutPoint.Index)
+	vm.dstack.PushInt(index)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(index.Bytes()))
+
 	return nil
 }
 
@@ -3199,6 +3500,10 @@ func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
 	ret := make([]byte, len(vm.tx.TxIn[i].SignatureScript))
 	copy(ret, vm.tx.TxIn[i].SignatureScript)
 	vm.dstack.PushByteArray(ret)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(ret))
+
 	return nil
 }
 
@@ -3221,7 +3526,12 @@ func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
 			i.Int32())
 		return scriptError(ErrInvalidIndex, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.tx.TxIn[i].Sequence))
+	sequence := scriptNum(vm.tx.TxIn[i].Sequence)
+	vm.dstack.PushInt(sequence)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(sequence.Bytes()))
+
 	return nil
 }
 
@@ -3244,7 +3554,12 @@ func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
 			i.Int32())
 		return scriptError(ErrInvalidIndex, str)
 	}
-	vm.dstack.PushInt(scriptNum(vm.tx.TxOut[i].Value))
+	value := scriptNum(vm.tx.TxOut[i].Value)
+	vm.dstack.PushInt(value)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(value.Bytes()))
+
 	return nil
 }
 
@@ -3275,6 +3590,10 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 	ret := make([]byte, len(vm.tx.TxOut[i].PkScript))
 	copy(ret, vm.tx.TxOut[i].PkScript)
 	vm.dstack.PushByteArray(ret)
+
+	// Used for 2025 upgrade
+	vm.metrics.AddOPCost(len(ret))
+
 	return nil
 }
 
@@ -3301,6 +3620,7 @@ func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
 	}
 	if utxo.TokenData.IsEmpty() {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
 		data := utxo.TokenData.CategoryID[:]
 		if utxo.TokenData.IsMutableNFT() {
@@ -3309,6 +3629,9 @@ func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
 			data = append(data, 0x02)
 		}
 		vm.dstack.PushByteArray(data)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(data))
 	}
 	return nil
 }
@@ -3334,8 +3657,12 @@ func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
 	}
 	if !utxo.TokenData.HasNFT() || len(utxo.TokenData.Commitment) == 0 {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
 		vm.dstack.PushByteArray(utxo.TokenData.Commitment)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(utxo.TokenData.Commitment))
 	}
 
 	return nil
@@ -3362,8 +3689,13 @@ func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
 
 	if !utxo.TokenData.HasAmount() {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
-		vm.dstack.PushInt(scriptNum(utxo.TokenData.Amount))
+		amount := scriptNum(utxo.TokenData.Amount)
+		vm.dstack.PushInt(amount)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(amount.Bytes()))
 	}
 
 	return nil
@@ -3399,6 +3731,7 @@ func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
 
 	if txOut.TokenData.IsEmpty() {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
 		data := txOut.TokenData.CategoryID[:]
 		if txOut.TokenData.IsMutableNFT() {
@@ -3407,6 +3740,9 @@ func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
 			data = append(data, 0x02)
 		}
 		vm.dstack.PushByteArray(data)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(data))
 	}
 
 	return nil
@@ -3439,8 +3775,12 @@ func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
 	txOut := vm.tx.TxOut[i]
 	if !txOut.TokenData.HasNFT() || len(txOut.TokenData.Commitment) == 0 {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
 		vm.dstack.PushByteArray(txOut.TokenData.Commitment)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(txOut.TokenData.Commitment))
 	}
 
 	return nil
@@ -3473,8 +3813,13 @@ func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
 
 	if !txOut.TokenData.HasAmount() {
 		vm.dstack.PushInt(0)
+		// TODO make sure we don't need to add cost here.
 	} else {
-		vm.dstack.PushInt(scriptNum(txOut.TokenData.Amount))
+		amount := scriptNum(txOut.TokenData.Amount)
+		vm.dstack.PushInt(amount)
+
+		// Used for 2025 upgrade
+		vm.metrics.AddOPCost(len(amount.Bytes()))
 	}
 
 	return nil

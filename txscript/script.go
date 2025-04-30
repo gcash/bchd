@@ -46,6 +46,7 @@ const (
 	MaxOpsPerScript       = 201 // Max number of non-push operations.
 	MaxPubKeysPerMultiSig = 20  // Multisig can't have more sigs than this.
 	MaxScriptElementSize  = 520 // Max bytes pushable to the stack.
+	// MaxScriptElementSizeUpgrade11 = 10000 // Max bytes pushable to the stack after upgrade 11.
 )
 
 // isSmallInt returns whether or not the opcode is considered a small integer,
@@ -447,7 +448,7 @@ func CalcSignatureHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
 // engine instance, calculate the signature hash to be used for signing and
 // verification using the given signature hashing algorithm.
 func calcSignatureHash(script []parsedOpcode, sigHashes *TxSigHashes, hType SigHashType,
-	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, error) {
+	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, int, error) {
 	if !useBip143SigHashAlgo {
 		return calcLegacySignatureHash(script, hType, tx, idx)
 	}
@@ -485,11 +486,14 @@ func shallowCopyTx(tx *wire.MsgTx) wire.MsgTx {
 // calcSignatureHash will, given a script and hash type for the current script
 // engine instance, calculate the signature hash to be used for signing and
 // verification.
-func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wire.MsgTx, idx int) ([]byte, error) {
+func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wire.MsgTx, idx int) ([]byte, int, error) {
+	// This value is needed to calculate hash digest iterations after may 2025 upgrade.
+	totalBytesHashedlength := 0
+
 	// As a sanity check, ensure the passed input index for the transaction
 	// is valid.
 	if idx > len(tx.TxIn)-1 {
-		return nil, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
+		return nil, totalBytesHashedlength, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
 	}
 
 	// The SigHashSingle signature type signs only the corresponding input
@@ -515,7 +519,7 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 	if hashType&sigHashMask == SigHashSingle && idx >= len(tx.TxOut) {
 		var hash chainhash.Hash
 		hash[0] = 0x01
-		return hash[:], nil
+		return hash[:], totalBytesHashedlength, nil
 	}
 
 	// Remove all instances of OP_CODESEPARATOR from the script.
@@ -580,7 +584,10 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 	wbuf := bytes.NewBuffer(make([]byte, 0, txCopy.SerializeSize()+4))
 	txCopy.Serialize(wbuf)
 	binary.Write(wbuf, binary.LittleEndian, hashType)
-	return chainhash.DoubleHashB(wbuf.Bytes()), nil
+
+	totalBytesHashedlength += wbuf.Len()
+
+	return chainhash.DoubleHashB(wbuf.Bytes()), totalBytesHashedlength, nil
 }
 
 // calcBip143SignatureHash computes the sighash digest of a transaction's
@@ -595,12 +602,15 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 // wallet if fed an invalid input amount, the real sighash will differ causing
 // the produced signature to be invalid.
 func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
-	hashType SigHashType, tx *wire.MsgTx, idx int, amt int64, scriptAllowCashTokens bool) ([]byte, error) {
+	hashType SigHashType, tx *wire.MsgTx, idx int, amt int64, scriptAllowCashTokens bool) ([]byte, int, error) {
+
+	// This value is needed to calculate hash digest iterations after may 2025 upgrade.
+	totalBytesHashedlength := 0
 
 	// As a sanity check, ensure the passed input index for the transaction
 	// is valid.
 	if idx > len(tx.TxIn)-1 {
-		return nil, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
+		return nil, totalBytesHashedlength, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
 	}
 
 	// We'll utilize this buffer throughout to incrementally calculate
@@ -690,7 +700,9 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	binary.LittleEndian.PutUint32(bHashType[:], uint32(hashType))
 	sigHash.Write(bHashType[:])
 
-	return chainhash.DoubleHashB(sigHash.Bytes()), nil
+	totalBytesHashedlength += sigHash.Len()
+
+	return chainhash.DoubleHashB(sigHash.Bytes()), totalBytesHashedlength, nil
 }
 
 // asSmallInt returns the passed opcode, which must be true according to

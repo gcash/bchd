@@ -162,6 +162,7 @@ type Engine struct {
 	txIdx           int
 	condStack       []int
 	numOps          int
+	metrics         ScriptExecutionMetrics
 	flags           ScriptFlags
 	sigCache        *SigCache
 	hashCache       *TxSigHashes
@@ -220,6 +221,11 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 			len(pop.data), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
+
+	// Op-code cost accounting.
+	// May 2025 upgrade, upgrade11: Cost of 100 per instruction executed. This is executed unconditionally but
+	// the limit is only enforced after the upgrade.
+	vm.metrics.AddOPCost(OpcodeBaseCost)
 
 	// Nothing left to do when this is not a conditional opcode and it is
 	// not in an executing branch.
@@ -852,6 +858,7 @@ func (vm *Engine) Clone() *Engine {
 		scriptOff:   vm.scriptOff,
 		scriptIdx:   vm.scriptIdx,
 		numOps:      vm.numOps,
+		metrics:     vm.metrics,
 		lastCodeSep: vm.lastCodeSep,
 		tx:          vm.tx,
 		bip16:       vm.bip16,
@@ -927,6 +934,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	// when it should be.
 	vm := Engine{flags: flags, sigCache: sigCache, hashCache: hashCache,
 		utxoCache: utxoCache, inputAmount: inputAmount}
+	vm.metrics = *NewScriptExecutionMetrics(len(scriptSig), false)
 	if vm.hasFlag(ScriptVerifyCleanStack) && (!vm.hasFlag(ScriptBip16)) {
 		return nil, scriptError(ErrInvalidFlags,
 			"invalid flags combination")
