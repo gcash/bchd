@@ -78,7 +78,7 @@ func NewTokenData(categoryID [32]byte, amount *uint64, commitment *[]byte, compa
 }
 
 func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pver uint32) ([]byte, error) {
-	if len(buf) == 0 || buf[0] != PREFIX_BYTE {
+	if len(buf) < 34 || buf[0] != PREFIX_BYTE {
 		// There is no token data. Return the whole buffer as script
 		return buf, nil
 	}
@@ -96,43 +96,46 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 
 	scriptLengthCount -= (1 + 32 + 1) //PREFIX_BYTE + CategoryID + BitField
 
-	if tokenData.IsValidBitfield() {
+	var parseError error
 
-		if tokenData.HasCommitmentLength() {
-			commitmentLength, err := ReadVarInt(r, pver)
-			if err != nil {
-				return nil, err
-			}
-
-			if commitmentLength >= 0x01 && commitmentLength <= 0x28 {
-				b := scriptPool.Borrow(commitmentLength)
-				_, err := io.ReadFull(r, b)
-				if err != nil {
-					scriptPool.Return(b)
-					return nil, err
-				}
-				tokenData.Commitment = b
-				scriptLengthCount -= (1 + len(b)) // commitmentLength
-			} else {
-				return nil, errors.New("invalid commitment length")
-			}
+	if tokenData.HasCommitmentLength() {
+		commitmentLength, err := ReadVarInt(r, pver)
+		if err != nil {
+			return nil, err
 		}
-		if tokenData.HasAmount() {
-			amount, err := ReadVarInt(r, pver)
-			if err != nil {
-				return nil, err
-			}
 
-			if amount >= 1 && amount <= MAX_FT_AMOUNT {
-				tokenData.Amount = amount
-			} else {
-				return nil, errors.New("invalid token amount")
-			}
-
-			scriptLengthCount -= 1
+		b := scriptPool.Borrow(commitmentLength)
+		_, err = io.ReadFull(r, b)
+		if err != nil {
+			scriptPool.Return(b)
+			return nil, err
 		}
-	} else {
-		return nil, errors.New("invalid bitfield")
+		tokenData.Commitment = b
+		scriptLengthCount -= (1 + len(b)) // commitmentLength
+		if !(commitmentLength >= 0x01 && commitmentLength <= 0x28) {
+			parseError = errors.New("invalid commitment length")
+
+		}
+	}
+	if tokenData.HasAmount() {
+		amount, err := ReadVarInt(r, pver)
+		if err != nil {
+			return nil, err
+		}
+
+		tokenData.Amount = amount
+
+		if !(amount >= 1 && amount <= MAX_FT_AMOUNT) {
+			parseError = errors.New("invalid token amount")
+		}
+
+		scriptLengthCount -= 1
+	}
+	if !tokenData.IsValidBitfield() {
+		parseError = errors.New("invalid bitfield")
+	}
+	if parseError != nil {
+		return nil, parseError
 	}
 
 	var pkScript []byte
@@ -321,11 +324,12 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		commitment []byte
 	}
 	for _, txOut := range tx.TxOut {
+
 		if txOut.TokenData.IsEmpty() {
 			continue
 		}
 
-		if txOut.TokenData.HasAmount() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > MAX_FT_AMOUNT) {
+		if !txOut.TokenData.HasNFT() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > MAX_FT_AMOUNT) {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 		if len(txOut.TokenData.Commitment) > MAX_COMMITMENT_LENGTH {
