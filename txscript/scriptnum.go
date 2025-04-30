@@ -263,6 +263,81 @@ func (n *scriptNum) IsLessThanInt(v int64) bool {
 	return result == -1
 }
 
+// Add sets n to the sum x+y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Add(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Add(a, b))
+
+	return n
+}
+
+// Sub sets n to the sum x-y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Sub(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Sub(a, b))
+
+	return n
+}
+
+// Div sets n to the quotient x/y for y!=0 and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Div(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Quo(a, b))
+
+	return n
+}
+
+// Mul sets n to the product x*y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Mul(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Mul(a, b))
+
+	return n
+}
+
+// Mod sets n to the modulus x%y for y!=0 and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Mod(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Rem(a, b))
+
+	return n
+}
+
+// Neg sets n to -x and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Neg(x *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Neg(a))
+
+	return n
+}
+
+// Abs sets n to |x| (the absolute value of x) and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Abs(x *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Abs(a))
+
+	return n
+}
+
 func makeScriptNumFromInt(v int) *scriptNum {
 	num := big.NewInt(int64(v))
 
