@@ -1,0 +1,10 @@
+{
+"wjydw4":[41,32800,0,"Transaction structure and limits: Empty unlocking bytecode is supported (nonP2SH)"],
+"gt2may":[41,32800,0,"Transaction structure and limits: (Nonstandard) outputs may be malformed (nonP2SH)"],
+"9d7zh2":[43,34400,0,"Transaction structure and limits: (Nonstandard) outputs may be malformed (P2SH20)"],
+"x48wxa":[43,34400,0,"Transaction structure and limits: (Nonstandard) outputs may be malformed (P2SH32)"],
+"2293th":[42,33600,0,"Transaction structure and limits: Empty locking bytecode is supported (nonP2SH)"],
+"q03e0h":[42,33600,0,"Transaction structure and limits: Drop item and succeed (nonP2SH)"],
+"r7ulrj":[41,32800,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations) (nonP2SH)"],
+"qa6yh5":[41,32800,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations, CashToken operations) (nonP2SH)"]
+}

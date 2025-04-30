@@ -1,0 +1,9 @@
+{
+"h2hh2g":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"0w0zue":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"n5733l":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"4gx46s":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"h2eg22":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"a2sq7s":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"qx3sh4":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN)."
+}

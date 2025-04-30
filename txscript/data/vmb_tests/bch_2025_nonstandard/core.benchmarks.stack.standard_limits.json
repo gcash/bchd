@@ -1,0 +1,6 @@
+{
+"4z3ggm":[1488,1190400,146218,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize stack usage (nonP2SH)"],
+"9nd5e9":[2544,2035200,1036046,"Transaction validation benchmarks: Within BCH_2025_05 nonP2SH/nonstandard, single-input limits, maximize stack usage checking (OP_1ADD) (nonP2SH)"],
+"m7sdck":[1295,1036000,1035758,"Transaction validation benchmarks: Within BCH_2025_05 nonP2SH/nonstandard, single-input limits, maximize alternate stack usage checking (OP_1ADD) (nonP2SH)"],
+"nevxwn":[1293,1034400,1033859,"Transaction validation benchmarks: Within BCH_2025_05 nonP2SH/nonstandard, single-input limits, maximize control stack and stack usage checking (OP_NOTIF, OP_1ADD) (nonP2SH)"]
+}

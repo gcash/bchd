@@ -1,0 +1,6 @@
+{
+"35f8yl":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack (P2SH20)"],
+"p7aeva":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack (P2SH32)"],
+"x4ddtw":[1691,1352800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize stack usage (P2SH20)"],
+"y05lce":[1691,1352800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize stack usage (P2SH32)"]
+}

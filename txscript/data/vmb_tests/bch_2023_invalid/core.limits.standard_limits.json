@@ -1,0 +1,23 @@
+{
+"wht0t5":[42,33600,0,"Transaction structure and limits: Empty locking bytecode requires truthy result (nonP2SH)"],
+"t82988":[43,34400,0,"Transaction structure and limits: Empty locking bytecode requires truthy result (P2SH20)"],
+"gzsgc9":[43,34400,0,"Transaction structure and limits: Empty locking bytecode requires truthy result (P2SH32)"],
+"rmy9zg":[41,32800,0,"Transaction structure and limits: Drop non-existent item (nonP2SH)"],
+"45cw83":[44,35200,0,"Transaction structure and limits: Drop non-existent item (P2SH20)"],
+"ufh6ua":[44,35200,0,"Transaction structure and limits: Drop non-existent item (P2SH32)"],
+"0vejmj":[43,34400,0,"Transaction structure and limits: non-clean stack (all unlocking bytecode) (nonP2SH)"],
+"jc2g22":[44,35200,0,"Transaction structure and limits: non-clean stack (all unlocking bytecode) (P2SH20)"],
+"4tjjy2":[44,35200,0,"Transaction structure and limits: non-clean stack (all unlocking bytecode) (P2SH32)"],
+"tvxm06":[41,32800,0,"Transaction structure and limits: non-clean stack (all locking bytecode) (nonP2SH)"],
+"e5hl6w":[44,35200,0,"Transaction structure and limits: non-clean stack (all locking bytecode) (P2SH20)"],
+"p6rxhw":[44,35200,0,"Transaction structure and limits: non-clean stack (all locking bytecode) (P2SH32)"],
+"c2g0k4":[42,33600,0,"Transaction structure and limits: non-clean stack (both unlocking and locking bytecode) (nonP2SH)"],
+"5gs4c0":[44,35200,0,"Transaction structure and limits: non-clean stack (both unlocking and locking bytecode) (P2SH20)"],
+"e0nnvf":[44,35200,0,"Transaction structure and limits: non-clean stack (both unlocking and locking bytecode) (P2SH32)"],
+"v3spvn":[41,32800,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations) (nonP2SH)"],
+"dm48pk":[280,224000,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations) (P2SH20)"],
+"sxg5nu":[280,224000,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations) (P2SH32)"],
+"xq9wjf":[41,32800,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations, CashToken operations) (nonP2SH)"],
+"cgsjja":[280,224000,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations, CashToken operations) (P2SH20)"],
+"t5uu4j":[280,224000,0,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations, CashToken operations) (P2SH32)"]
+}

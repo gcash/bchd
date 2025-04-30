@@ -238,8 +238,9 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 	}
 
 	// Op-code cost accounting.
-	// May 2025 upgrade, upgrade11: Cost of 100 per instruction executed. This is executed unconditionally but
-	// the limit is only enforced after the upgrade.
+	// May 2025 upgrade, upgrade11: Cost of 100 per instruction executed.
+	// This is executed unconditionally but the limit is only enforced after the upgrade.
+	// https://github.com/bitjson/bch-vm-limits/blob/master/operation-costs.md
 	vm.metrics.AddOPCost(OpcodeBaseCost)
 
 	// Nothing left to do when this is not a conditional opcode and it is
@@ -938,6 +939,10 @@ func (vm *Engine) Clone() *Engine {
 	}
 
 	return newVM
+}
+
+func (vm *Engine) GetMetrics() *ScriptExecutionMetrics {
+	return vm.metrics
 }
 
 // NewEngine returns a new script engine for the provided public key script,

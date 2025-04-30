@@ -1,0 +1,6 @@
+{
+"xuxr6e":[114,91200,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, 1-of-3 bare multisig input, 1 output (ECDSA signature, bottom slot) (nonP2SH)"],
+"l0fhm3":[115,92000,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, packed 1-of-3 bare multisig inputs, 1 output (all ECDSA signatures, bottom slot) (nonP2SH)"],
+"c4chnz":[114,91200,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, 1-of-3 bare multisig input, 1 output (ECDSA signature, top slot) (nonP2SH)"],
+"vzvufa":[114,91200,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, packed 1-of-3 bare multisig inputs, 1 output (all ECDSA signatures, top slot) (nonP2SH)"]
+}

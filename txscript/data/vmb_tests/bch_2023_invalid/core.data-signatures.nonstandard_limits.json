@@ -1,0 +1,20 @@
+{
+"8u7cce":[112,89600,0,"Data signatures: OP_CHECKDATASIG for 521 byte message (nonP2SH)"],
+"dm3y7y":[153,122400,0,"Data signatures: OP_CHECKDATASIG for 521 byte message (P2SH20)"],
+"c222ve":[153,122400,0,"Data signatures: OP_CHECKDATASIG for 521 byte message (P2SH32)"],
+"tketns":[112,89600,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 521 byte message (nonP2SH)"],
+"c474j3":[154,123200,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 521 byte message (P2SH20)"],
+"7fm206":[154,123200,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 521 byte message (P2SH32)"],
+"9fq9fn":[113,90400,0,"Data signatures: OP_CHECKDATASIG for 1015 byte message (nonP2SH)"],
+"tryc47":[154,123200,0,"Data signatures: OP_CHECKDATASIG for 1015 byte message (P2SH20)"],
+"hfjljw":[154,123200,0,"Data signatures: OP_CHECKDATASIG for 1015 byte message (P2SH32)"],
+"jdukqd":[113,90400,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1015 byte message (nonP2SH)"],
+"y6s8x8":[155,124000,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1015 byte message (P2SH20)"],
+"fk2pej":[155,124000,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1015 byte message (P2SH32)"],
+"nyv9q6":[112,89600,0,"Data signatures: OP_CHECKDATASIG for 1016 byte message (nonP2SH)"],
+"ynzwvc":[153,122400,0,"Data signatures: OP_CHECKDATASIG for 1016 byte message (P2SH20)"],
+"2j4qtu":[153,122400,0,"Data signatures: OP_CHECKDATASIG for 1016 byte message (P2SH32)"],
+"cqzyng":[112,89600,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1016 byte message (nonP2SH)"],
+"5hvuqv":[154,123200,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1016 byte message (P2SH20)"],
+"ve72th":[154,123200,0,"Data signatures: OP_CHECKDATASIGVERIFY <1> for 1016 byte message (P2SH32)"]
+}

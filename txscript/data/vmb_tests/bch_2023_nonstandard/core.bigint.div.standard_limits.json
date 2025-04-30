@@ -1,0 +1,16 @@
+{
+"utql0r":[42,33600,0,"BigInt: OP_DIV 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"de8kl0":[42,33600,0,"BigInt: OP_DIV 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"raxg5x":[50,40000,0,"BigInt: OP_DIV 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"jcs2qm":[42,33600,0,"BigInt: OP_DIV 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"l2ffrj":[42,33600,0,"BigInt: OP_DIV 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"k4u2jv":[42,33600,0,"BigInt: OP_DIV 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"eu70mw":[50,40000,0,"BigInt: OP_DIV 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"9m442e":[42,33600,0,"BigInt: OP_DIV 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"crnnys":[42,33600,0,"BigInt: OP_DIV 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"efj25q":[42,33600,0,"BigInt: OP_DIV 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"6f4y5j":[50,40000,0,"BigInt: OP_DIV 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"z2745x":[42,33600,0,"BigInt: OP_DIV 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"vrx8u0":[50,40000,0,"BigInt: OP_DIV 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"nfqlfa":[42,33600,0,"BigInt: OP_DIV 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

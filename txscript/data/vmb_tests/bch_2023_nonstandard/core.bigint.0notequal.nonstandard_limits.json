@@ -1,0 +1,9 @@
+{
+"h2hh2g":[42,33600,0,"BigInt: OP_0NOTEQUAL 1-byte number (all bits set) (nonP2SH)"],
+"0w0zue":[42,33600,0,"BigInt: OP_0NOTEQUAL 8-byte number (all bits set) (nonP2SH)"],
+"n5733l":[42,33600,0,"BigInt: OP_0NOTEQUAL 1-byte number (alternating bits set) (nonP2SH)"],
+"4gx46s":[42,33600,0,"BigInt: OP_0NOTEQUAL 8-byte number (alternating bits set) (nonP2SH)"],
+"h2eg22":[42,33600,0,"BigInt: OP_0NOTEQUAL 1-byte number (highest-bit set) (nonP2SH)"],
+"a2sq7s":[42,33600,0,"BigInt: OP_0NOTEQUAL 8-byte number (highest-bit set) (nonP2SH)"],
+"qx3sh4":[42,33600,0,"BigInt: OP_0NOTEQUAL 8-byte number (one bit set per byte) (nonP2SH)"]
+}

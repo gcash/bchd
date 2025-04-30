@@ -1,0 +1,6 @@
+{
+"mzgxue":[257,205600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_DIV (P2SH20)"],
+"cps57g":[257,205600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_DIV (P2SH32)"],
+"xyd798":[257,205600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_MOD (P2SH20)"],
+"djc9j4":[257,205600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_MOD (P2SH32)"]
+}

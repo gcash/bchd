@@ -1,0 +1,12 @@
+{
+"rk3h8w":[43,34400,0,"Transaction structure and limits: Empty unlocking bytecode is supported (P2SH20)"],
+"p7snyd":[43,34400,0,"Transaction structure and limits: Empty unlocking bytecode is supported (P2SH32)"],
+"aj94zg":[43,34400,0,"Transaction structure and limits: Empty locking bytecode is supported (P2SH20)"],
+"wfp34x":[43,34400,0,"Transaction structure and limits: Empty locking bytecode is supported (P2SH32)"],
+"dmmcy2":[45,36000,0,"Transaction structure and limits: Drop item and succeed (P2SH20)"],
+"w5vqj2":[45,36000,0,"Transaction structure and limits: Drop item and succeed (P2SH32)"],
+"ymts3m":[279,223200,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations) (P2SH20)"],
+"4aumh2":[279,223200,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations) (P2SH32)"],
+"86hf4f":[279,223200,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations, CashToken operations) (P2SH20)"],
+"wfz3nh":[279,223200,0,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations, CashToken operations) (P2SH32)"]
+}

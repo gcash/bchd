@@ -1,0 +1,22 @@
+{
+"n6xue4":[51,40800,0,"BigInt: OP_ADD 1-byte number (all bits set) and 1-byte number (all bits set) (P2SH20)"],
+"46l3hv":[51,40800,0,"BigInt: OP_ADD 1-byte number (all bits set) and 1-byte number (all bits set) (P2SH32)"],
+"c0gt9f":[51,40800,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH20)"],
+"986xyz":[51,40800,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH32)"],
+"y9k6ra":[64,51200,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (P2SH20)"],
+"8jwrkv":[64,51200,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (P2SH32)"],
+"sza6r8":[64,51200,0,"BigInt: OP_ADD 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH20)"],
+"0jgezh":[64,51200,0,"BigInt: OP_ADD 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH32)"],
+"grdrje":[47,37600,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH20)"],
+"ujl8f6":[47,37600,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH32)"],
+"ky7s6j":[63,50400,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH20)"],
+"902k7j":[63,50400,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH32)"],
+"2zed4a":[63,50400,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH20)"],
+"knpaa5":[63,50400,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH32)"],
+"6r5dn3":[71,56800,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH20)"],
+"hruqh3":[71,56800,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH32)"],
+"rzx4hx":[63,50400,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (P2SH20)"],
+"etjj6w":[63,50400,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (P2SH32)"],
+"fwhnd8":[71,56800,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (P2SH20)"],
+"a04dyn":[71,56800,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (P2SH32)"]
+}

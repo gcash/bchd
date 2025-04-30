@@ -1,0 +1,16 @@
+{
+"srgm9y":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"5wnma0":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"54lfkc":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"akqvfm":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"g8g6km":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"rgs38w":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"rwuwsz":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"sm3xy0":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"pw3a7t":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"vd7ljc":[42,33600,0,"BigInt: OP_LESSTHAN 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"5u404s":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"gdzsqt":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"c229g6":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"yhmxek":[42,33600,0,"BigInt: OP_LESSTHAN 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

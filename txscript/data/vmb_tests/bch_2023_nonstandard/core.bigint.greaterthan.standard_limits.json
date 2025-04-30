@@ -1,0 +1,16 @@
+{
+"hrntaq":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"jl50td":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"czwts3":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"vyl0dm":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"aq3yzs":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"myhmll":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"rf7n59":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"mkmshd":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"593z8z":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"255jep":[42,33600,0,"BigInt: OP_GREATERTHAN 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"lvscr6":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"rehfa2":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"w3jxnp":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"v7pz44":[42,33600,0,"BigInt: OP_GREATERTHAN 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

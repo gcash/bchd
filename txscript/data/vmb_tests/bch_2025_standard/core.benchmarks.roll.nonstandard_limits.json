@@ -1,0 +1,10 @@
+{
+"uuz4z3":[267,213600,146629,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (6) (P2SH20)"],
+"wfd0jv":[267,213600,146653,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (6) (P2SH32)"],
+"2h5x79":[313,250400,149810,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (21) (P2SH20)"],
+"aqa938":[313,250400,149834,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (21) (P2SH32)"],
+"64h7ly":[463,370400,156428,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (71) (P2SH20)"],
+"23tlfd":[463,370400,156452,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack, inner OP_ROLLs (71) (P2SH32)"],
+"se6qet":[1689,1351200,398302,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_ROLL (P2SH20)"],
+"ap38fd":[1689,1351200,398326,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_ROLL (P2SH32)"]
+}

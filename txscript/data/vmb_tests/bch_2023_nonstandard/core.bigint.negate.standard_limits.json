@@ -1,0 +1,9 @@
+{
+"kshzrn":[43,34400,0,"BigInt: OP_NEGATE 1-byte number (all bits set) (nonP2SH)"],
+"2rch5l":[50,40000,0,"BigInt: OP_NEGATE 8-byte number (all bits set) (nonP2SH)"],
+"vyap37":[43,34400,0,"BigInt: OP_NEGATE 1-byte number (alternating bits set) (nonP2SH)"],
+"jrkur3":[50,40000,0,"BigInt: OP_NEGATE 8-byte number (alternating bits set) (nonP2SH)"],
+"0f30tj":[42,33600,0,"BigInt: OP_NEGATE 1-byte number (highest-bit set) (nonP2SH)"],
+"2vk0u3":[50,40000,0,"BigInt: OP_NEGATE 8-byte number (highest-bit set) (nonP2SH)"],
+"my5ae7":[50,40000,0,"BigInt: OP_NEGATE 8-byte number (one bit set per byte) (nonP2SH)"]
+}

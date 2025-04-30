@@ -1,0 +1,20 @@
+{
+"h44xm2":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"dpucyg":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"qxpcz3":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"akkuk0":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"7yjjd3":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"egylx2":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"47r6cw":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"f0xleu":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"a66ncc":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"m25spw":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"wc9g4j":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"adj606":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"20tp5h":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"spr0ed":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"utzp9d":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"xedne2":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"rpxwye":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations.",
+"r0szy0":"Unable to verify standard transaction: unlocking bytecode must only include push operations. The unlocking bytecode at input index 1 contains non-push operations."
+}

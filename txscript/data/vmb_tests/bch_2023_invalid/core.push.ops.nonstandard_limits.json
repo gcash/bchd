@@ -1,0 +1,11 @@
+{
+"x3x6xr":[45,36000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 521 bytes (nonP2SH)"],
+"5ma7h5":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 521 bytes (P2SH20)"],
+"80hy9g":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 521 bytes (P2SH32)"],
+"xefsdr":[45,36000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,000 bytes (nonP2SH)"],
+"0resea":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,000 bytes (P2SH20)"],
+"f4rzkt":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,000 bytes (P2SH32)"],
+"ezg2h9":[45,36000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (nonP2SH)"],
+"244vyp":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (P2SH20)"],
+"v6nnk4":[55,44000,0,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (P2SH32)"]
+}

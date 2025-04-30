@@ -1,0 +1,16 @@
+{
+"syrh6t":[43,34400,0,"BigInt: OP_MIN 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"frjpns":[50,40000,0,"BigInt: OP_MIN 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"mfs9yd":[50,40000,0,"BigInt: OP_MIN 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"mne904":[50,40000,0,"BigInt: OP_MIN 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"xwgx9v":[43,34400,0,"BigInt: OP_MIN 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"am8l2q":[43,34400,0,"BigInt: OP_MIN 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"ktqxnc":[43,34400,0,"BigInt: OP_MIN 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"vh8wdz":[50,40000,0,"BigInt: OP_MIN 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"rtyt2d":[42,33600,0,"BigInt: OP_MIN 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"m50lkl":[42,33600,0,"BigInt: OP_MIN 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"ulztms":[42,33600,0,"BigInt: OP_MIN 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"6rmmf8":[50,40000,0,"BigInt: OP_MIN 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"zu8kkc":[42,33600,0,"BigInt: OP_MIN 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"70m238":[50,40000,0,"BigInt: OP_MIN 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

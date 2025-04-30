@@ -1,0 +1,18 @@
+{
+"8axx59":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10001 bytes.",
+"97ypfh":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10001 bytes.",
+"wgxfpd":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10007 bytes.",
+"c67q6q":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10007 bytes.",
+"flxrpp":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"zcap6u":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10008 bytes.",
+"4a4f8d":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10008 bytes.",
+"glcr6v":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"7lele6":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10010 bytes.",
+"ffxn82":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 10010 bytes.",
+"49e6f3":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"0qpak7":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 65546 bytes.",
+"z5zrq7":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 65546 bytes.",
+"kga37m":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"ddm5jj":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 65549 bytes.",
+"se3q23":"Unable to verify standard transaction: excessive unlocking bytecode length. The maximum standard unlocking bytecode length is 1650 bytes, but the unlocking bytecode at input index 1 is 65549 bytes."
+}

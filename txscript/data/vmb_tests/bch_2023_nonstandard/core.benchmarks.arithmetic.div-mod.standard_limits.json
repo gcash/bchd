@@ -1,0 +1,4 @@
+{
+"nsw96e":[54,43200,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_DIV (nonP2SH)"],
+"deq7jk":[54,43200,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_MOD (nonP2SH)"]
+}
