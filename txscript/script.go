@@ -43,10 +43,10 @@ const (
 
 // These are the constants specified for maximums in individual scripts.
 const (
-	MaxOpsPerScript       = 201 // Max number of non-push operations.
-	MaxPubKeysPerMultiSig = 20  // Multisig can't have more sigs than this.
-	MaxScriptElementSize  = 520 // Max bytes pushable to the stack.
-	// MaxScriptElementSizeUpgrade11 = 10000 // Max bytes pushable to the stack after upgrade 11.
+	MaxOpsPerScript            = 201                           // Max number of non-push operations.
+	MaxPubKeysPerMultiSig      = 20                            // Multisig can't have more sigs than this.
+	MaxScriptElementSizeLegacy = 520                           // Max bytes pushable to the stack.
+	MaxScriptElementSize       = MaxScriptElementSizeUpgrade11 // Max bytes pushable to the stack after upgrade 11.
 )
 
 // isSmallInt returns whether or not the opcode is considered a small integer,
@@ -435,11 +435,11 @@ func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 // before and after the Uahf fork, the 'useBip143SigHashAlgo' bool is used
 // to specify which algorithm to use.
 func CalcSignatureHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
-	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, error) {
+	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, int, error) {
 
 	parsedScript, err := parseScript(script)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse output script: %v", err)
+		return nil, 0, fmt.Errorf("cannot parse output script: %v", err)
 	}
 	return calcSignatureHash(parsedScript, sigHashes, hType, tx, idx, amt, useBip143SigHashAlgo)
 }

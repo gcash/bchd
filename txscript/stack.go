@@ -84,7 +84,7 @@ func (s *stack) PopByteArray() ([]byte, error) {
 func (s *stack) PopInt() (scriptNum, error) {
 	so, err := s.PopByteArray()
 	if err != nil {
-		return 0, err
+		return *makeScriptNumFromInt(0), err
 	}
 
 	return makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
@@ -124,7 +124,7 @@ func (s *stack) PeekByteArray(idx int32) ([]byte, error) {
 func (s *stack) PeekInt(idx int32) (scriptNum, error) {
 	so, err := s.PeekByteArray(idx)
 	if err != nil {
-		return 0, err
+		return *makeScriptNumFromInt(0), err
 	}
 
 	return makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
