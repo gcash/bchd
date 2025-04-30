@@ -131,6 +131,14 @@ const (
 	// ScriptAllowCashTokens enables the use of SighashUTXO signing
 	// serialization type and CashTokens related OP codes
 	ScriptAllowCashTokens
+
+	// ScriptAllowMay2025 enables the new vm-limits when activated
+	// after may 2025
+	ScriptAllowMay2025
+
+	// ScriptAllowMay2025StandardOnly is only used if ScriptAllowMay2025 is set
+	// Use "relay" costing rules: Hashing is costed 3x for standard transactions
+	ScriptAllowMay2025StandardOnly
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
@@ -145,6 +153,10 @@ const (
 
 	// MaxScriptSize is the maximum allowed length of a raw script.
 	MaxScriptSize = 10000
+
+	MinTxVersion = 1
+
+	MaxTxVersion = 2
 )
 
 // halforder is used to tame ECDSA malleability (see BIP0062).
@@ -152,25 +164,26 @@ var halfOrder = new(big.Int).Rsh(bchec.S256().N, 1)
 
 // Engine is the virtual machine that executes scripts.
 type Engine struct {
-	scripts         [][]parsedOpcode
-	scriptIdx       int
-	scriptOff       int
-	lastCodeSep     int
-	dstack          stack // data stack
-	astack          stack // alt stack
-	tx              wire.MsgTx
-	txIdx           int
-	condStack       []int
-	numOps          int
-	metrics         ScriptExecutionMetrics
-	flags           ScriptFlags
-	sigCache        *SigCache
-	hashCache       *TxSigHashes
-	utxoCache       *UtxoCache
-	bip16           bool     // treat execution as pay-to-script-hash
-	savedFirstStack [][]byte // stack from first script for bip16 scripts
-	inputAmount     int64
-	sigChecks       int
+	scripts              [][]parsedOpcode
+	scriptIdx            int
+	scriptOff            int
+	lastCodeSep          int
+	dstack               stack // data stack
+	astack               stack // alt stack
+	tx                   wire.MsgTx
+	txIdx                int
+	condStack            []int
+	numOps               int
+	metrics              *ScriptExecutionMetrics
+	maxScriptElementSize int
+	flags                ScriptFlags
+	sigCache             *SigCache
+	hashCache            *TxSigHashes
+	utxoCache            *UtxoCache
+	bip16                bool     // treat execution as pay-to-script-hash
+	savedFirstStack      [][]byte // stack from first script for bip16 scripts
+	inputAmount          int64
+	sigChecks            int
 }
 
 // hasFlag returns whether the script engine instance has the passed flag set.
@@ -209,16 +222,18 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 
 	// Note that this includes OP_RESERVED which counts as a push operation.
 	if pop.opcode.value > OP_16 {
-		vm.numOps++
-		if vm.numOps > MaxOpsPerScript {
-			str := fmt.Sprintf("exceeded max operation limit of %d",
-				MaxOpsPerScript)
-			return scriptError(ErrTooManyOperations, str)
+		if !vm.hasFlag(ScriptAllowMay2025) {
+			vm.numOps++
+			if vm.numOps > MaxOpsPerScript {
+				str := fmt.Sprintf("exceeded max operation limit of %d",
+					MaxOpsPerScript)
+				return scriptError(ErrTooManyOperations, str)
+			}
 		}
 
-	} else if len(pop.data) > MaxScriptElementSize {
+	} else if len(pop.data) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("element size %d exceeds max allowed size %d",
-			len(pop.data), MaxScriptElementSize)
+			len(pop.data), vm.maxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
 
@@ -395,6 +410,30 @@ func (vm *Engine) Step() (done bool, err error) {
 	err = vm.executeOpcode(opcode)
 	if err != nil {
 		return true, err
+	}
+
+	// Enforce VM limits CHIP.
+	if vm.hasFlag(ScriptAllowMay2025) {
+		// Check that this opcode did not cause us to to exceed opCost and/or hash iterations limits.
+		if vm.metrics.IsOverOpCostLimit(vm.hasFlag(ScriptAllowMay2025StandardOnly)) {
+			str := fmt.Sprintf("vm cost limit exceeded. vm opcost limit: %d, script opcost: %d",
+				vm.metrics.GetMaxOpCostLimit(),
+				vm.metrics.GetCompositeOPCost(vm.hasFlag(ScriptAllowMay2025StandardOnly)))
+			return false, scriptError(ErrOpCost, str)
+		}
+		if vm.metrics.IsOverHashIterationsLimit(vm.hasFlag(ScriptAllowMay2025StandardOnly)) {
+			str := fmt.Sprintf("hash iteration limit exceeded. hash iteration limit: %d, script hash iterations: %d",
+				vm.metrics.GetMaxDigestIterationLimit(),
+				vm.metrics.GetHashDigestIterations())
+			return false, scriptError(ErrTooManyHashIters, str)
+		}
+
+		// Conditional stack may not exceed depth of 100.
+		if len(vm.condStack) > MaxConditionalStackDepth {
+			str := fmt.Sprintf("conditional stack depth %d is larger than max allowed depth: %d",
+				len(vm.condStack), MaxConditionalStackDepth)
+			return false, scriptError(ErrConditionalStackDepth, str)
+		}
 	}
 
 	// The number of elements in the combination of the data and alt stacks
@@ -915,6 +954,15 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	}
 	scriptSig := tx.TxIn[txIdx].SignatureScript
 
+	// enforce the tx version rule
+	if flags.HasFlag(ScriptAllowCashTokens) {
+		if tx.Version < MinTxVersion || tx.Version > MaxTxVersion {
+			str := fmt.Sprintf("transaction version %d is not in the valid range of %d-%d.",
+				tx.Version, MinTxVersion, MaxTxVersion)
+			return nil, scriptError(ErrOpCost, str)
+		}
+	}
+
 	// When both the signature script and public key script are empty the
 	// result is necessarily an error since the stack would end up being
 	// empty which is equivalent to a false top element.  Thus, just return
@@ -934,7 +982,9 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	// when it should be.
 	vm := Engine{flags: flags, sigCache: sigCache, hashCache: hashCache,
 		utxoCache: utxoCache, inputAmount: inputAmount}
-	vm.metrics = *NewScriptExecutionMetrics(len(scriptSig), false)
+
+	vm.metrics = NewScriptExecutionMetrics(len(scriptSig), flags.HasFlag(ScriptAllowMay2025StandardOnly))
+
 	if vm.hasFlag(ScriptVerifyCleanStack) && (!vm.hasFlag(ScriptBip16)) {
 		return nil, scriptError(ErrInvalidFlags,
 			"invalid flags combination")
@@ -995,7 +1045,16 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 		vm.dstack.verifyMinimalData = true
 		vm.astack.verifyMinimalData = true
 	}
-	if vm.hasFlag(ScriptVerify64BitIntegers) {
+
+	vm.maxScriptElementSize = MaxScriptElementSizeLegacy
+
+	if vm.hasFlag(ScriptAllowMay2025) {
+
+		vm.maxScriptElementSize = MaxScriptElementSize
+
+		vm.dstack.defaultScriptNumLen = defaultBigIntScriptNumLen
+		vm.astack.defaultScriptNumLen = defaultBigIntScriptNumLen
+	} else if vm.hasFlag(ScriptVerify64BitIntegers) {
 		vm.dstack.defaultScriptNumLen = defaultBigScriptNumLen
 		vm.astack.defaultScriptNumLen = defaultBigScriptNumLen
 	} else {
