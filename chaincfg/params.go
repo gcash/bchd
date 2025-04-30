@@ -164,8 +164,9 @@ type Params struct {
 	PhononForkHeight              int32  // May 15, 2020 hardfork
 	AxionActivationHeight         int32  // Nov 15, 2020 hardfork
 	CosmicInflationActivationTime uint64 // May 15, 2022 hardfork
-	Upgrade9ForkHeight            int32  // May 15 2023 hardfork
-	ABLAForkHeight                int32
+	Upgrade9ForkHeight            int32  // May 15, 2023 hardfork
+	ABLAForkHeight                int32  // May 15, 2024 hardfork
+	Upgrade11ActivationTime       uint64 // May 15, 2025 hardfork
 
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
@@ -306,6 +307,8 @@ var MainNetParams = Params{
 
 	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
 	ABLAForkHeight:     845890,
+
+	Upgrade11ActivationTime: 1747310400,
 
 	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
 	ABLAConfig: ABLAConstants{
@@ -486,8 +489,9 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 1652616000,
 
-	Upgrade9ForkHeight: 100000000,
-	ABLAForkHeight:     100000000,
+	Upgrade9ForkHeight:      100000000,
+	ABLAForkHeight:          100000000,
+	Upgrade11ActivationTime: 9999999999,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        500000,
@@ -594,6 +598,8 @@ var TestNet3Params = Params{
 
 	Upgrade9ForkHeight: 1552787,
 	ABLAForkHeight:     1605520,
+
+	Upgrade11ActivationTime: 1747310400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -707,8 +713,13 @@ var ChipNetParams = Params{
 	GravitonForkHeight:          4999,
 	PhononForkHeight:            0,
 	AxionActivationHeight:       16844,
-	Upgrade9ForkHeight:          121956,
-	ABLAForkHeight:              174519,
+
+	CosmicInflationActivationTime: 1637694000,
+
+	Upgrade9ForkHeight: 121956,
+	ABLAForkHeight:     174519,
+
+	Upgrade11ActivationTime: 1731672000,
 
 	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
 	ABLAConfig: ABLAConstants{
@@ -721,8 +732,6 @@ var ChipNetParams = Params{
 		Delta:           10,
 		FixedSize:       false,
 	},
-
-	CosmicInflationActivationTime: 1637694000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -822,6 +831,8 @@ var TestNet4Params = Params{
 
 	Upgrade9ForkHeight: 148043,
 	ABLAForkHeight:     200740,
+
+	Upgrade11ActivationTime: 1747310400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
@@ -935,6 +946,10 @@ var SimNetParams = Params{
 	AsertDifficultyAnchorParentTimestamp: simNetGenesisBlock.Header.Timestamp.Unix(),
 	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
 	GenerateSupported:                    true,
+
+	Upgrade9ForkHeight:      100000000,
+	ABLAForkHeight:          100000000,
+	Upgrade11ActivationTime: 9999999999,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
