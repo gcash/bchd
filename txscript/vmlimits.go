@@ -9,7 +9,7 @@ const (
 	OpcodeBaseCost = 100
 	// Conditional stack depth limit. (Max depth of OP_IF and firends)
 	MaxConditionalStackDepth = 100
-	//Each sigcheck by an input adds this amount to the total op cost.
+	// Each sigcheck by an input adds this amount to the total op cost.
 	SigCheckCostFactor = 26000
 
 	// 'non-standard' txns (block txns) get a 7x bonus to their hash iteration limit.

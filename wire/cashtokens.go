@@ -78,7 +78,7 @@ func NewTokenData(categoryID [32]byte, amount *uint64, commitment *[]byte, compa
 }
 
 func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pver uint32) ([]byte, error) {
-	if len(buf) < 34 || buf[0] != PREFIX_BYTE {
+	if len(buf) < BASE_TOKEN_DATA_LENGTH || buf[0] != PREFIX_BYTE {
 		// There is no token data. Return the whole buffer as script
 		return buf, nil
 	}
@@ -94,7 +94,7 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 	}
 	tokenData.BitField = bitField
 
-	scriptLengthCount -= (1 + 32 + 1) //PREFIX_BYTE + CategoryID + BitField
+	scriptLengthCount -= (BASE_TOKEN_DATA_LENGTH) //PREFIX_BYTE + CategoryID + BitField
 
 	var parseError error
 
@@ -112,7 +112,8 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 		}
 		tokenData.Commitment = b
 		scriptLengthCount -= (1 + len(b)) // commitmentLength
-		if !(commitmentLength >= 0x01 && commitmentLength <= 0x28) {
+		// token commitment length has to be positive and limited to MAX_COMMITMENT_LENGTH
+		if !(commitmentLength >= 1 && commitmentLength <= MAX_COMMITMENT_LENGTH) {
 			parseError = errors.New("invalid commitment length")
 
 		}
