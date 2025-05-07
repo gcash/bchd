@@ -1,0 +1,10 @@
+{
+"pxknd8":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH20)"],
+"cmayp9":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH32)"],
+"wg648r":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH20)"],
+"2tmhns":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH32)"],
+"vyfs9e":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_XOR (trailing OP_DROP) (P2SH20)"],
+"desctt":[248,198400,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_XOR (trailing OP_DROP) (P2SH32)"],
+"rdn5u2":[247,197600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_EQUAL (P2SH20)"],
+"630nga":[247,197600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_EQUAL (P2SH32)"]
+}

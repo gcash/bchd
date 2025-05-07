@@ -1,0 +1,20 @@
+{
+"pxknd8":[248,198400,176745,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH20)"],
+"cmayp9":[248,198400,176769,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH32)"],
+"wg648r":[248,198400,176745,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH20)"],
+"2tmhns":[248,198400,176769,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH32)"],
+"vyfs9e":[248,198400,176225,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_XOR (trailing OP_DROP) (P2SH20)"],
+"desctt":[248,198400,176249,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_XOR (trailing OP_DROP) (P2SH32)"],
+"4wm0d3":[49,39200,31075,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH20)"],
+"7lm98w":[49,39200,31099,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_AND (P2SH32)"],
+"ayavrh":[49,39200,31075,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH20)"],
+"u57mex":[49,39200,31099,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_OR (P2SH32)"],
+"4g330z":[1690,1352000,1347033,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_AND density, then operand bytes, then stack usage (P2SH20)"],
+"gjj3m6":[1690,1352000,1347057,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_AND density, then operand bytes, then stack usage (P2SH32)"],
+"pzkpz6":[1690,1352000,1347033,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_OR density, then operand bytes, then stack usage (P2SH20)"],
+"vy8dax":[1690,1352000,1347057,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_OR density, then operand bytes, then stack usage (P2SH32)"],
+"mtwr0s":[1690,1352000,1347033,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_XOR density, then operand bytes, then stack usage (P2SH20)"],
+"ny933k":[1690,1352000,1347057,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_XOR density, then operand bytes, then stack usage (P2SH32)"],
+"rdn5u2":[247,197600,145043,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_EQUAL (P2SH20)"],
+"630nga":[247,197600,145067,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_EQUAL (P2SH32)"]
+}

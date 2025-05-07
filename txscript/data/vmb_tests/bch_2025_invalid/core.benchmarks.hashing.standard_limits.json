@@ -1,0 +1,16 @@
+{
+"xlnnzx":[42,33600,7911,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_RIPEMD160 hashed (nonP2SH)"],
+"3tywer":[42,33600,7911,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_SHA1 hashed (nonP2SH)"],
+"mvypwk":[42,33600,7947,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_SHA256 hashed (nonP2SH)"],
+"n4qn5c":[42,33600,8487,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_HASH160 hashed (nonP2SH)"],
+"vdqk6h":[42,33600,8523,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_HASH256 hashed (nonP2SH)"],
+"ntjj3l":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_RIPEMD160 hashed (nonP2SH)"],
+"r83vmf":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA1 hashed (nonP2SH)"],
+"k8mg8c":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA256 hashed (nonP2SH)"],
+"4t390w":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH160 hashed (nonP2SH)"],
+"xpw62x":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH256 hashed (nonP2SH)"],
+"vr4rff":[45,36000,40735,"Transaction validation benchmarks: OP_HASH160 hash 9976 bytes (nonP2SH)"],
+"twst6j":[45,36000,40759,"Transaction validation benchmarks: OP_HASH160 hash 10000 bytes (nonP2SH)"],
+"0vuq37":[45,36000,40747,"Transaction validation benchmarks: OP_HASH256 hash 9976 bytes (nonP2SH)"],
+"0j2276":[45,36000,40771,"Transaction validation benchmarks: OP_HASH256 hash 10000 bytes (nonP2SH)"]
+}

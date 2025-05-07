@@ -1,0 +1,10 @@
+{
+"luecwg":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (all bits set) (P2SH20)"],
+"kh0yg9":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (all bits set) (P2SH32)"],
+"watntq":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (alternating bits set) (P2SH20)"],
+"2962yy":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (alternating bits set) (P2SH32)"],
+"qr790v":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (highest-bit set) (P2SH20)"],
+"r82ts3":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (highest-bit set) (P2SH32)"],
+"dwcx7d":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (one bit set per byte) (P2SH20)"],
+"zpdkj3":[16436,13148800,0,"BigInt: OP_1ADD 8192-byte number (one bit set per byte) (P2SH32)"]
+}

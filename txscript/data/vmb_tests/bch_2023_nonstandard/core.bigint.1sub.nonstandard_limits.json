@@ -1,0 +1,8 @@
+{
+"yxzgx2":[44,35200,0,"BigInt: OP_1SUB 1-byte number (all bits set) (nonP2SH)"],
+"z84hnk":[43,34400,0,"BigInt: OP_1SUB 1-byte number (alternating bits set) (nonP2SH)"],
+"hmfmxg":[50,40000,0,"BigInt: OP_1SUB 8-byte number (alternating bits set) (nonP2SH)"],
+"t9v5zr":[42,33600,0,"BigInt: OP_1SUB 1-byte number (highest-bit set) (nonP2SH)"],
+"5t89ts":[50,40000,0,"BigInt: OP_1SUB 8-byte number (highest-bit set) (nonP2SH)"],
+"dadxxw":[50,40000,0,"BigInt: OP_1SUB 8-byte number (one bit set per byte) (nonP2SH)"]
+}

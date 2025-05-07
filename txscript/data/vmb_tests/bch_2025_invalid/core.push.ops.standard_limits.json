@@ -1,0 +1,5 @@
+{
+"ezg2h9":[45,36000,302,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (nonP2SH)"],
+"244vyp":[55,44000,1136,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (P2SH20)"],
+"v6nnk4":[55,44000,1160,"Operations which push to the stack: OP_TOALTSTACK/OP_FROMALTSTACK 10,001 bytes (P2SH32)"]
+}

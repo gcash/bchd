@@ -1,0 +1,15 @@
+{
+"yldh09":[669,535200,30153,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_1ADD OP_WITHIN, 10,000 bytes of 0x00 (nonP2SH)"],
+"338d0t":[669,535200,30052,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP <1> OP_WITHIN, 10,000 bytes of 0x00 (nonP2SH)"],
+"6cnnt0":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_1ADD OP_WITHIN, 10,000 bytes of 0x7f (nonP2SH)"],
+"d2zwky":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_NEGATE OP_WITHIN, 10,000 bytes of 0x80 (nonP2SH)"],
+"y80cv2":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_ABS OP_WITHIN, 10,000 bytes of 0x80 (nonP2SH)"],
+"7tykpx":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_1ADD OP_WITHIN, 10,000 bytes of 0x80 (nonP2SH)"],
+"h66m5w":[669,535200,50051,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP <0> OP_WITHIN, 10,000 bytes of 0x80 (nonP2SH)"],
+"da0h2z":[669,535200,50052,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP <1> OP_WITHIN, 10,000 bytes of 0x80 (nonP2SH)"],
+"levn7a":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_NEGATE OP_WITHIN, 10,000 bytes of 0xff (nonP2SH)"],
+"xp602d":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_ABS OP_WITHIN, 10,000 bytes of 0xff (nonP2SH)"],
+"sqsza4":[669,535200,80151,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP OP_DUP OP_1ADD OP_WITHIN, 10,000 bytes of 0xff (nonP2SH)"],
+"nk824r":[669,535200,50051,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP <0> OP_WITHIN, 10,000 bytes of 0xff (nonP2SH)"],
+"t3eghh":[669,535200,50052,"BigInt ternary operation limits: OP_BIN2NUM OP_DUP <1> OP_WITHIN, 10,000 bytes of 0xff (nonP2SH)"]
+}

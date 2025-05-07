@@ -1,0 +1,7 @@
+{
+"8r8vvg":[44,35200,0,"BigInt: padded one is truthy (nonP2SH)"],
+"f458y3":[42,33600,0,"BigInt: negative one is truthy (nonP2SH)"],
+"mwkwyu":[44,35200,0,"BigInt: padded negative one is truthy (nonP2SH)"],
+"xvl3xn":[564,451200,0,"BigInt: padded one (520 bytes) is truthy (nonP2SH)"],
+"eatwtc":[564,451200,0,"BigInt: padded negative one (520 bytes) is truthy (nonP2SH)"]
+}

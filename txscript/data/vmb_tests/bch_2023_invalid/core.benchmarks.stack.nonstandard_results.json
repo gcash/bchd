@@ -1,0 +1,18 @@
+{
+"3ne030":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"7z9hne":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"9p30lt":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"ss72kv":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"l0acpe":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"9nd5e9":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 2500 bytes.",
+"8zmhnl":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"xxy89j":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"m7sdck":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1251 bytes.",
+"a3ujmu":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"5sxtzw":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"nevxwn":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1249 bytes.",
+"g2qj8r":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"xqlhvr":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"w6v3jd":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"5pvlyk":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes."
+}

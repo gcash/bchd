@@ -1,0 +1,22 @@
+{
+"uvjc66":[41,32800,0,"Operations copy by value: each OP_INPUTINDEX pushes an independent stack item (nonP2SH)"],
+"ts85pp":[41,32800,0,"Operations copy by value: each OP_ACTIVEBYTECODE pushes an independent stack item (nonP2SH)"],
+"ujtmtc":[41,32800,0,"Operations copy by value: each OP_TXVERSION pushes an independent stack item (nonP2SH)"],
+"snqe8w":[41,32800,0,"Operations copy by value: each OP_TXINPUTCOUNT pushes an independent stack item (nonP2SH)"],
+"fqz8yd":[41,32800,0,"Operations copy by value: each OP_TXOUTPUTCOUNT pushes an independent stack item (nonP2SH)"],
+"rlhyhu":[41,32800,0,"Operations copy by value: each OP_TXLOCKTIME pushes an independent stack item (nonP2SH)"],
+"x5f2jx":[41,32800,0,"Operations copy by value: each OP_UTXOVALUE pushes an independent stack item (nonP2SH)"],
+"rj4s42":[41,32800,0,"Operations copy by value: each OP_UTXOBYTECODE pushes an independent stack item (nonP2SH)"],
+"g97mr8":[41,32800,0,"Operations copy by value: each OP_OUTPOINTTXHASH pushes an independent stack item (nonP2SH)"],
+"kdlcje":[41,32800,0,"Operations copy by value: each OP_OUTPOINTINDEX pushes an independent stack item (nonP2SH)"],
+"4yesjx":[41,32800,0,"Operations copy by value: each OP_INPUTBYTECODE pushes an independent stack item (nonP2SH)"],
+"l5rly7":[41,32800,0,"Operations copy by value: each OP_INPUTSEQUENCENUMBER pushes an independent stack item (nonP2SH)"],
+"qxvhp8":[41,32800,0,"Operations copy by value: each OP_OUTPUTVALUE pushes an independent stack item (nonP2SH)"],
+"tg6tsq":[41,32800,0,"Operations copy by value: each OP_OUTPUTBYTECODE pushes an independent stack item (nonP2SH)"],
+"keymvy":[41,32800,0,"Operations copy by value: each OP_UTXOTOKENCATEGORY pushes an independent stack item (nonP2SH)"],
+"kaevvh":[41,32800,0,"Operations copy by value: each OP_OUTPUTTOKENCATEGORY pushes an independent stack item (nonP2SH)"],
+"a22vgl":[41,32800,0,"Operations copy by value: each OP_UTXOTOKENCOMMITMENT pushes an independent stack item (nonP2SH)"],
+"qhmurd":[41,32800,0,"Operations copy by value: each OP_OUTPUTTOKENCOMMITMENT pushes an independent stack item (nonP2SH)"],
+"yyhtmm":[41,32800,0,"Operations copy by value: each OP_UTXOTOKENAMOUNT pushes an independent stack item (nonP2SH)"],
+"yn39z0":[41,32800,0,"Operations copy by value: each OP_OUTPUTTOKENAMOUNT pushes an independent stack item (nonP2SH)"]
+}

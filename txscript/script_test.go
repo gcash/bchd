@@ -3799,7 +3799,7 @@ func TestHasCanonicalPush(t *testing.T) {
 			}
 		}
 	}
-	for i := 0; i <= MaxScriptElementSize; i++ {
+	for i := 0; i <= MaxScriptElementSizeLegacy; i++ {
 		builder := NewScriptBuilder()
 		builder.AddData(bytes.Repeat([]byte{0x49}, i))
 		script, err := builder.Script()
@@ -3827,7 +3827,7 @@ func TestHasCanonicalPush(t *testing.T) {
 
 // TestExtractDataElements ensures the ExtractDataElements function works as expected.
 func TestExtractDataElements(t *testing.T) {
-	for i := 0; i <= MaxScriptElementSize; i++ {
+	for i := 0; i <= MaxScriptElementSizeLegacy; i++ {
 		builder := NewScriptBuilder()
 		numElements := i % 3
 		for a := 0; a < numElements; a++ {

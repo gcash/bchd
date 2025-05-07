@@ -84,7 +84,7 @@ func (s *stack) PopByteArray() ([]byte, error) {
 func (s *stack) PopInt() (scriptNum, error) {
 	so, err := s.PopByteArray()
 	if err != nil {
-		return 0, err
+		return *makeScriptNumFromInt(0), err
 	}
 
 	return makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
@@ -124,7 +124,7 @@ func (s *stack) PeekByteArray(idx int32) ([]byte, error) {
 func (s *stack) PeekInt(idx int32) (scriptNum, error) {
 	so, err := s.PeekByteArray(idx)
 	if err != nil {
-		return 0, err
+		return *makeScriptNumFromInt(0), err
 	}
 
 	return makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
@@ -185,20 +185,22 @@ func (s *stack) NipN(idx int32) error {
 // to top item.
 //
 // Stack transformation: [... x1 x2] -> [... x2 x1 x2]
-func (s *stack) Tuck() error {
+func (s *stack) Tuck() (int, error) {
 	so2, err := s.PopByteArray()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	so1, err := s.PopByteArray()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	s.PushByteArray(so2) // stack [... x2]
 	s.PushByteArray(so1) // stack [... x2 x1]
 	s.PushByteArray(so2) // stack [... x2 x1 x2]
 
-	return nil
+	tuckedItemLength := len(so2)
+
+	return tuckedItemLength, nil
 }
 
 // DropN removes the top N items from the stack.
@@ -226,10 +228,13 @@ func (s *stack) DropN(n int32) error {
 // Stack transformation:
 // DupN(1): [... x1 x2] -> [... x1 x2 x2]
 // DupN(2): [... x1 x2] -> [... x1 x2 x1 x2]
-func (s *stack) DupN(n int32) error {
+func (s *stack) DupN(n int32) (int, error) {
+	// This value is needed to calculate opsCost after may 2025 upgrade.
+	totalDuplicatedItemsLength := 0
+
 	if n < 1 {
 		str := fmt.Sprintf("attempt to dup %d stack items", n)
-		return scriptError(ErrInvalidStackOperation, str)
+		return totalDuplicatedItemsLength, scriptError(ErrInvalidStackOperation, str)
 	}
 
 	// Iteratively duplicate the value n-1 down the stack n times.
@@ -237,11 +242,12 @@ func (s *stack) DupN(n int32) error {
 	for i := n; i > 0; i-- {
 		so, err := s.PeekByteArray(n - 1)
 		if err != nil {
-			return err
+			return totalDuplicatedItemsLength, err
 		}
 		s.PushByteArray(so)
+		totalDuplicatedItemsLength += len(so)
 	}
-	return nil
+	return totalDuplicatedItemsLength, nil
 }
 
 // RotN rotates the top 3N items on the stack to the left N times.
@@ -249,10 +255,13 @@ func (s *stack) DupN(n int32) error {
 // Stack transformation:
 // RotN(1): [... x1 x2 x3] -> [... x2 x3 x1]
 // RotN(2): [... x1 x2 x3 x4 x5 x6] -> [... x3 x4 x5 x6 x1 x2]
-func (s *stack) RotN(n int32) error {
+func (s *stack) RotN(n int32) (int, error) {
+	// This value is needed to calculate opsCost after may 2025 upgrade.
+	totalRotatedItemsLength := 0
+
 	if n < 1 {
 		str := fmt.Sprintf("attempt to rotate %d stack items", n)
-		return scriptError(ErrInvalidStackOperation, str)
+		return totalRotatedItemsLength, scriptError(ErrInvalidStackOperation, str)
 	}
 
 	// Nip the 3n-1th item from the stack to the top n times to rotate
@@ -261,12 +270,13 @@ func (s *stack) RotN(n int32) error {
 	for i := n; i > 0; i-- {
 		so, err := s.nipN(entry)
 		if err != nil {
-			return err
+			return totalRotatedItemsLength, err
 		}
 
 		s.PushByteArray(so)
+		totalRotatedItemsLength += len(so)
 	}
-	return nil
+	return totalRotatedItemsLength, nil
 }
 
 // SwapN swaps the top N items on the stack with those below them.
@@ -298,11 +308,14 @@ func (s *stack) SwapN(n int32) error {
 // Stack transformation:
 // OverN(1): [... x1 x2 x3] -> [... x1 x2 x3 x2]
 // OverN(2): [... x1 x2 x3 x4] -> [... x1 x2 x3 x4 x1 x2]
-func (s *stack) OverN(n int32) error {
+func (s *stack) OverN(n int32) (int, error) {
+
+	totalCopiedItemsLength := 0
+
 	if n < 1 {
 		str := fmt.Sprintf("attempt to perform over on %d stack items",
 			n)
-		return scriptError(ErrInvalidStackOperation, str)
+		return totalCopiedItemsLength, scriptError(ErrInvalidStackOperation, str)
 	}
 
 	// Copy 2n-1th entry to top of the stack.
@@ -310,12 +323,13 @@ func (s *stack) OverN(n int32) error {
 	for ; n > 0; n-- {
 		so, err := s.PeekByteArray(entry)
 		if err != nil {
-			return err
+			return totalCopiedItemsLength, err
 		}
 		s.PushByteArray(so)
+		totalCopiedItemsLength += len(so)
 	}
 
-	return nil
+	return totalCopiedItemsLength, nil
 }
 
 // PickN copies the item N items back in the stack to the top.
@@ -324,14 +338,16 @@ func (s *stack) OverN(n int32) error {
 // PickN(0): [x1 x2 x3] -> [x1 x2 x3 x3]
 // PickN(1): [x1 x2 x3] -> [x1 x2 x3 x2]
 // PickN(2): [x1 x2 x3] -> [x1 x2 x3 x1]
-func (s *stack) PickN(n int32) error {
+func (s *stack) PickN(n int32) (int, error) {
 	so, err := s.PeekByteArray(n)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	s.PushByteArray(so)
 
-	return nil
+	pickedItemLength := len(so)
+
+	return pickedItemLength, nil
 }
 
 // RollN moves the item N items back in the stack to the top.
@@ -340,15 +356,17 @@ func (s *stack) PickN(n int32) error {
 // RollN(0): [x1 x2 x3] -> [x1 x2 x3]
 // RollN(1): [x1 x2 x3] -> [x1 x3 x2]
 // RollN(2): [x1 x2 x3] -> [x2 x3 x1]
-func (s *stack) RollN(n int32) error {
+func (s *stack) RollN(n int32) (int, error) {
 	so, err := s.nipN(n)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	s.PushByteArray(so)
 
-	return nil
+	rolledItemLength := len(so)
+
+	return rolledItemLength, nil
 }
 
 // String returns the stack in a readable format.

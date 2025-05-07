@@ -1,0 +1,13 @@
+{
+"xzn37n":[119,95200,0,"Push data operations: OP_PUSHDATA_1 of 76 non-zero bytes (nonP2SH)"],
+"q2r4e2":[298,238400,0,"Push data operations: OP_PUSHDATA_1 of 255 non-zero bytes (nonP2SH)"],
+"mcdtmc":[300,240000,0,"Push data operations: OP_PUSHDATA_2 of 256 non-zero bytes (nonP2SH)"],
+"cagp4c":[41,32800,0,"Push data operations: OP_PUSHDATA_1 of 76 non-zero bytes produces expected stack item (nonP2SH)"],
+"dscwpd":[41,32800,0,"Push data operations: OP_PUSHDATA_1 of 76 zero bytes produces expected stack item (nonP2SH)"],
+"xcyp3t":[41,32800,0,"Push data operations: OP_PUSHDATA_1 of 255 non-zero bytes produces expected stack item (nonP2SH)"],
+"ruhrpq":[41,32800,0,"Push data operations: OP_PUSHDATA_1 of 255 zero bytes produces expected stack item (nonP2SH)"],
+"m0vklc":[41,32800,0,"Push data operations: OP_PUSHDATA_2 of 256 non-zero bytes produces expected stack item (nonP2SH)"],
+"e6tfx8":[41,32800,0,"Push data operations: OP_PUSHDATA_2 of 256 zero bytes produces expected stack item (nonP2SH)"],
+"atxaha":[41,32800,0,"Push data operations: <1> OP_IF OP_PUSHDATA_1 ... OP_ENDIF in locking bytecode (nonP2SH)"],
+"gs5rlf":[41,32800,0,"Push data operations: <1> OP_IF OP_PUSHDATA_2 ... OP_ENDIF in locking bytecode (nonP2SH)"]
+}

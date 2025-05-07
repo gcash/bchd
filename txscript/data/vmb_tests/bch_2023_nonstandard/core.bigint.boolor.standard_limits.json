@@ -1,0 +1,15 @@
+{
+"c643nx":[42,33600,0,"BigInt: OP_BOOLOR 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"msfmuu":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"znjrsd":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"2d5kmc":[42,33600,0,"BigInt: OP_BOOLOR 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"6qephz":[42,33600,0,"BigInt: OP_BOOLOR 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"z9x39m":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"9jx2yn":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"w820mj":[42,33600,0,"BigInt: OP_BOOLOR 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"klg5ee":[42,33600,0,"BigInt: OP_BOOLOR 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"vkvemf":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"hx4p0x":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"mt9awv":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"we2y0m":[42,33600,0,"BigInt: OP_BOOLOR 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

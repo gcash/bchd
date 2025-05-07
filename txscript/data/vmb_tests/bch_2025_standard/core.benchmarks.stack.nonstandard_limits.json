@@ -1,0 +1,19 @@
+{
+"35f8yl":[248,198400,145025,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack (P2SH20)"],
+"p7aeva":[248,198400,145049,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize bytes pushed to the stack (P2SH32)"],
+"x4ddtw":[1691,1352800,147180,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize stack usage (P2SH20)"],
+"y05lce":[1691,1352800,147204,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize stack usage (P2SH32)"],
+"3ne030":[52,41600,41277,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, maximize stack usage (P2SH20)"],
+"7z9hne":[52,41600,41301,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, maximize stack usage (P2SH32)"],
+"9p30lt":[74,59200,56842,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, maximize OP_DUP OP_CAT (P2SH20)"],
+"ss72kv":[1691,1352800,168549,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize stack usage checking (OP_1ADD) (P2SH20)"],
+"l0acpe":[1691,1352800,168573,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize stack usage checking (OP_1ADD) (P2SH32)"],
+"8zmhnl":[1691,1352800,169510,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize alternate stack usage checking (OP_1ADD) (P2SH20)"],
+"xxy89j":[1691,1352800,169534,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize alternate stack usage checking (OP_1ADD) (P2SH32)"],
+"a3ujmu":[1691,1352800,167613,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack and stack usage checking (OP_NOTIF, OP_1ADD) (P2SH20)"],
+"5sxtzw":[1691,1352800,167637,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack and stack usage checking (OP_NOTIF, OP_1ADD) (P2SH32)"],
+"g2qj8r":[1691,1352800,169221,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack usage checking (OP_IF) (P2SH20)"],
+"xqlhvr":[1691,1352800,169245,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack usage checking (OP_IF) (P2SH32)"],
+"w6v3jd":[1691,1352800,168616,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack usage checking (OP_ELSE) (P2SH20)"],
+"5pvlyk":[1691,1352800,168640,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize control stack usage checking (OP_ELSE) (P2SH32)"]
+}

@@ -1,0 +1,7 @@
+{
+"aktdrv":[114,91200,0,"Signature checking: 1-of-15 multisig with checkBits of zero (ECDSA key 1) (nonP2SH)"],
+"mnkcy7":[114,91200,0,"Signature checking: 1-of-15 multisig with checkBits of zero (ECDSA key 7) (nonP2SH)"],
+"ylckl2":[114,91200,0,"Signature checking: 1-of-15 multisig with checkBits of zero (ECDSA key 15) (nonP2SH)"],
+"tc2lq7":[188,150400,0,"Signature checking: 2-of-15 ECDSA multisig (keys 1 and 2) (nonP2SH)"],
+"xf3ptg":[44,35200,0,"Signature checking: 2-of-15 ECDSA multisig (null signatures) (nonP2SH)"]
+}

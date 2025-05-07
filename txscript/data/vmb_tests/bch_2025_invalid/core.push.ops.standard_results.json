@@ -1,0 +1,5 @@
+{
+"ezg2h9":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"244vyp":"Unable to verify transaction: error in evaluating input index 1: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 10000 bytes. Item length: 10001 bytes.",
+"v6nnk4":"Unable to verify transaction: error in evaluating input index 1: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 10000 bytes. Item length: 10001 bytes."
+}

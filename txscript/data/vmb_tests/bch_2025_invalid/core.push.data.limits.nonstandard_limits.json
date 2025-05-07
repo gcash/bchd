@@ -1,0 +1,18 @@
+{
+"8axx59":[10042,8033600,0,"PUSHDATA limits: OP_PUSHDATA_2 9,991 bytes (P2SH20)"],
+"97ypfh":[10042,8033600,0,"PUSHDATA limits: OP_PUSHDATA_2 9,991 bytes (P2SH32)"],
+"wgxfpd":[10048,8038400,0,"PUSHDATA limits: OP_PUSHDATA_2 9,997 bytes (P2SH20)"],
+"c67q6q":[10048,8038400,0,"PUSHDATA limits: OP_PUSHDATA_2 9,997 bytes (P2SH32)"],
+"flxrpp":[10042,8033600,0,"PUSHDATA limits: OP_PUSHDATA_2 9,998 bytes (nonP2SH)"],
+"zcap6u":[10049,8039200,0,"PUSHDATA limits: OP_PUSHDATA_2 9,998 bytes (P2SH20)"],
+"4a4f8d":[10049,8039200,0,"PUSHDATA limits: OP_PUSHDATA_2 9,998 bytes (P2SH32)"],
+"glcr6v":[10044,8035200,0,"PUSHDATA limits: OP_PUSHDATA_2 10,000 bytes (nonP2SH)"],
+"7lele6":[10051,8040800,0,"PUSHDATA limits: OP_PUSHDATA_2 10,000 bytes (P2SH20)"],
+"ffxn82":[10051,8040800,0,"PUSHDATA limits: OP_PUSHDATA_2 10,000 bytes (P2SH32)"],
+"49e6f3":[65579,52463200,0,"PUSHDATA limits: Max OP_PUSHDATA_2 in unlocking bytecode (nonP2SH)"],
+"0qpak7":[65587,52469600,0,"PUSHDATA limits: Max OP_PUSHDATA_2 in unlocking bytecode (P2SH20)"],
+"z5zrq7":[65587,52469600,0,"PUSHDATA limits: Max OP_PUSHDATA_2 in unlocking bytecode (P2SH32)"],
+"kga37m":[65582,52465600,0,"PUSHDATA limits: Min OP_PUSHDATA_4 in unlocking bytecode (nonP2SH)"],
+"ddm5jj":[65590,52472000,0,"PUSHDATA limits: Min OP_PUSHDATA_4 in unlocking bytecode (P2SH20)"],
+"se3q23":[65590,52472000,0,"PUSHDATA limits: Min OP_PUSHDATA_4 in unlocking bytecode (P2SH32)"]
+}

@@ -1,0 +1,16 @@
+{
+"vvx6hs":[42,33600,0,"BigInt: OP_MOD 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"jauhkx":[43,34400,0,"BigInt: OP_MOD 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"q5r6gh":[42,33600,0,"BigInt: OP_MOD 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"e3cffn":[42,33600,0,"BigInt: OP_MOD 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"6n3yyj":[42,33600,0,"BigInt: OP_MOD 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"mjplfk":[43,34400,0,"BigInt: OP_MOD 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"3pgvmv":[42,33600,0,"BigInt: OP_MOD 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"0vv3j4":[42,33600,0,"BigInt: OP_MOD 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"zhyujc":[42,33600,0,"BigInt: OP_MOD 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"fstq7r":[42,33600,0,"BigInt: OP_MOD 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"atn065":[42,33600,0,"BigInt: OP_MOD 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"k3r84z":[42,33600,0,"BigInt: OP_MOD 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"e5khke":[42,33600,0,"BigInt: OP_MOD 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"wcryax":[42,33600,0,"BigInt: OP_MOD 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

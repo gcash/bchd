@@ -1,0 +1,9 @@
+{
+"95wm7u":[43,34400,0,"BigInt: OP_ABS 1-byte number (all bits set) (nonP2SH)"],
+"psta9t":[50,40000,0,"BigInt: OP_ABS 8-byte number (all bits set) (nonP2SH)"],
+"vql03g":[43,34400,0,"BigInt: OP_ABS 1-byte number (alternating bits set) (nonP2SH)"],
+"jwapt9":[50,40000,0,"BigInt: OP_ABS 8-byte number (alternating bits set) (nonP2SH)"],
+"a0ks3a":[42,33600,0,"BigInt: OP_ABS 1-byte number (highest-bit set) (nonP2SH)"],
+"gwyrcc":[50,40000,0,"BigInt: OP_ABS 8-byte number (highest-bit set) (nonP2SH)"],
+"aene2m":[50,40000,0,"BigInt: OP_ABS 8-byte number (one bit set per byte) (nonP2SH)"]
+}

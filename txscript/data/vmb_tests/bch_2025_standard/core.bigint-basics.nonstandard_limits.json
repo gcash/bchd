@@ -1,0 +1,16 @@
+{
+"3tf3fs":[45,36000,671,"BigInt: padded one is truthy (P2SH20)"],
+"g06fs9":[45,36000,695,"BigInt: padded one is truthy (P2SH32)"],
+"jjecl8":[43,34400,670,"BigInt: negative one is truthy (P2SH20)"],
+"a8n473":[43,34400,694,"BigInt: negative one is truthy (P2SH32)"],
+"utzw6h":[45,36000,671,"BigInt: padded negative one is truthy (P2SH20)"],
+"jdm63f":[45,36000,695,"BigInt: padded negative one is truthy (P2SH32)"],
+"xyusg0":[565,452000,1189,"BigInt: padded one (520 bytes) is truthy (P2SH20)"],
+"a37s87":[565,452000,1213,"BigInt: padded one (520 bytes) is truthy (P2SH32)"],
+"dd6gyk":[565,452000,1189,"BigInt: padded negative one (520 bytes) is truthy (P2SH20)"],
+"mru6n8":[565,452000,1213,"BigInt: padded negative one (520 bytes) is truthy (P2SH32)"],
+"rvrxrg":[566,452800,1190,"BigInt: padded one (521 bytes) is truthy (P2SH20)"],
+"45suuj":[566,452800,1214,"BigInt: padded one (521 bytes) is truthy (P2SH32)"],
+"693kj6":[566,452800,1190,"BigInt: padded negative one (521 bytes) is truthy (P2SH20)"],
+"tl4ylu":[566,452800,1214,"BigInt: padded negative one (521 bytes) is truthy (P2SH32)"]
+}

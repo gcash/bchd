@@ -1,0 +1,20 @@
+{
+"h44xm2":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCATEGORY is invalid in unlocking bytecode (nonP2SH)"],
+"dpucyg":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCATEGORY is invalid in unlocking bytecode (P2SH20)"],
+"qxpcz3":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCATEGORY is invalid in unlocking bytecode (P2SH32)"],
+"akkuk0":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCATEGORY is invalid in unlocking bytecode (nonP2SH)"],
+"7yjjd3":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCATEGORY is invalid in unlocking bytecode (P2SH20)"],
+"egylx2":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCATEGORY is invalid in unlocking bytecode (P2SH32)"],
+"47r6cw":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCOMMITMENT is invalid in unlocking bytecode (nonP2SH)"],
+"f0xleu":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCOMMITMENT is invalid in unlocking bytecode (P2SH20)"],
+"a66ncc":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENCOMMITMENT is invalid in unlocking bytecode (P2SH32)"],
+"m25spw":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCOMMITMENT is invalid in unlocking bytecode (nonP2SH)"],
+"wc9g4j":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCOMMITMENT is invalid in unlocking bytecode (P2SH20)"],
+"adj606":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENCOMMITMENT is invalid in unlocking bytecode (P2SH32)"],
+"20tp5h":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENAMOUNT is invalid in unlocking bytecode (nonP2SH)"],
+"spr0ed":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENAMOUNT is invalid in unlocking bytecode (P2SH20)"],
+"utzp9d":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_UTXOTOKENAMOUNT is invalid in unlocking bytecode (P2SH32)"],
+"xedne2":[43,34400,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENAMOUNT is invalid in unlocking bytecode (nonP2SH)"],
+"rpxwye":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENAMOUNT is invalid in unlocking bytecode (P2SH20)"],
+"r0szy0":[46,36800,0,"Standard and P2SH transaction inputs may only include push operations: OP_OUTPUTTOKENAMOUNT is invalid in unlocking bytecode (P2SH32)"]
+}

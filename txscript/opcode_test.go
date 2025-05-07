@@ -9,11 +9,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/gcash/bchd/chaincfg/chainhash"
-	"github.com/gcash/bchd/wire"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/wire"
 )
 
 // TestOpcodeDisabled tests the opcodeDisabled function manually because all
@@ -336,7 +337,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 			{
 				name: "OP_ACTIVEBYTECODE max",
 				scriptPubkey: newScript(NewScriptBuilder().
-					AddData(make([]byte, MaxScriptElementSize-6)).
+					AddData(make([]byte, MaxScriptElementSizeLegacy-6)).
 					AddOp(OP_DROP).
 					AddOp(OP_ACTIVEBYTECODE).
 					AddOp(OP_EQUAL)),
@@ -347,7 +348,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 			{
 				name: "OP_ACTIVEBYTECODE exceeds max",
 				scriptPubkey: newScript(NewScriptBuilder().
-					AddData(make([]byte, MaxScriptElementSize-5)).
+					AddData(make([]byte, MaxScriptElementSizeLegacy-5)).
 					AddOp(OP_DROP).
 					AddOp(OP_ACTIVEBYTECODE).
 					AddOp(OP_EQUAL)),
@@ -687,7 +688,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				scriptSig:     make([]byte, MaxScriptElementSize+1),
+				scriptSig:     make([]byte, MaxScriptElementSizeLegacy+1),
 				expectedError: ErrElementTooBig,
 			},
 			{
@@ -913,7 +914,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 				Value: 20000,
 				PkScript: newScript(NewScriptBuilder().
 					AddOp(OP_HASH160).
-					addData(make([]byte, MaxScriptElementSize)).
+					addData(make([]byte, MaxScriptElementSizeLegacy)).
 					AddOp(OP_EQUAL)),
 			},
 		},
@@ -925,7 +926,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 		b := make([]byte, 8)
 		binary.BigEndian.PutUint64(b, uint64(i))
 		if i == 1 {
-			b = make([]byte, MaxScriptElementSize+1)
+			b = make([]byte, MaxScriptElementSizeLegacy+1)
 		}
 		cache.AddEntry(i, wire.TxOut{
 			Value:    int64(2000 + (i * 10000)),

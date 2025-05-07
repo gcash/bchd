@@ -1,0 +1,6 @@
+{
+"vx8cqv":[141,112800,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, P2PKH input, 1 output (Schnorr signature) (nonP2SH)"],
+"99mssa":[141,112800,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, packed P2PKH inputs, 1 output (all Schnorr signatures) (nonP2SH)"],
+"jyqemh":[148,118400,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, P2PKH input, 1 output (ECDSA signature) (nonP2SH)"],
+"p406sl":[148,118400,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, packed P2PKH inputs, 1 output (all ECDSA signatures) (nonP2SH)"]
+}

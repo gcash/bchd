@@ -635,7 +635,7 @@ func ExtractAtomicSwapDataPushes(version uint16, pkScript []byte) (*AtomicSwapDa
 		if err != nil {
 			return nil, nil
 		}
-		pushes.SecretSize = int64(locktime)
+		pushes.SecretSize = locktime.Int64()
 	} else if op := pops[2].opcode; isSmallInt(op) {
 		pushes.SecretSize = int64(asSmallInt(op))
 	} else {
@@ -646,7 +646,7 @@ func ExtractAtomicSwapDataPushes(version uint16, pkScript []byte) (*AtomicSwapDa
 		if err != nil {
 			return nil, nil
 		}
-		pushes.LockTime = int64(locktime)
+		pushes.LockTime = locktime.Int64()
 	} else if op := pops[11].opcode; isSmallInt(op) {
 		pushes.LockTime = int64(asSmallInt(op))
 	} else {

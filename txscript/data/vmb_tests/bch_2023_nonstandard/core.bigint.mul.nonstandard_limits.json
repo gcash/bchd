@@ -1,0 +1,8 @@
+{
+"k5x66j":[44,35200,0,"BigInt: OP_MUL 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"sp8acx":[44,35200,0,"BigInt: OP_MUL 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"a4l7pa":[42,33600,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"vufgf2":[50,40000,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"vgh055":[50,40000,0,"BigInt: OP_MUL 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"mqfmwk":[50,40000,0,"BigInt: OP_MUL 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"]
+}

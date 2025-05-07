@@ -1,0 +1,21 @@
+{
+"ux6mm3":[188,150400,0,"Signature checking: 2-of-20 multisig with checkBits of zero (ECDSA, key 1 and key 13) (nonP2SH)"],
+"6hpkq0":[188,150400,0,"Signature checking: 2-of-20 multisig with checkBits of zero (ECDSA, key 1 and key 20) (nonP2SH)"],
+"3hs5el":[188,150400,0,"Signature checking: 2-of-20 multisig with checkBits of zero (ECDSA, key 13 and key 20) (nonP2SH)"],
+"z9jrrh":[177,141600,0,"Signature checking: 2-of-20 multisig with checkBits of keys 1 and 13 (Schnorr, key 1 and key 13) (nonP2SH)"],
+"82qta4":[177,141600,0,"Signature checking: 2-of-20 multisig with checkBits of keys 1 and 20 (Schnorr, key 1 and key 20) (nonP2SH)"],
+"8w36xu":[177,141600,0,"Signature checking: 2-of-20 multisig with checkBits of keys 13 and 20 (Schnorr, key 13 and key 20) (nonP2SH)"],
+"a07lsl":[621,496800,0,"Signature checking: 8-of-20 ECDSA multisig with checkBits of zero (keys 1 to 8) (nonP2SH)"],
+"dvpekm":[573,458400,0,"Signature checking: 8-of-20 Schnorr multisig with checkBits of keys 1 to 8 (keys 1 to 8) (nonP2SH)"],
+"g49kxl":[695,556000,0,"Signature checking: 9-of-20 ECDSA multisig with checkBits of zero (keys 1 to 9) (nonP2SH)"],
+"03ejhx":[639,511200,0,"Signature checking: 9-of-20 Schnorr multisig with checkBits of keys 1 to 9 (keys 1 to 9) (nonP2SH)"],
+"4rga76":[187,149600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 15 and 20, and valid public key 19 (nonP2SH)"],
+"j2nmsv":[312,249600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 15 and 20, and valid public key 19 (P2SH20)"],
+"q4qzxm":[312,249600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 15 and 20, and valid public key 19 (P2SH32)"],
+"7ec3qf":[187,149600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 19 and 20, and valid public key 19 (nonP2SH)"],
+"qwd238":[312,249600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 19 and 20, and valid public key 19 (P2SH20)"],
+"qwqmel":[312,249600,0,"Signature checking: 2-of-20 ECDSA multisig with checkBits of zero, signatures 19 and 20, and valid public key 19 (P2SH32)"],
+"9tc6ml":[177,141600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and valid public key 19 (nonP2SH)"],
+"a9d40w":[177,141600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and invalid public key 19 (nonP2SH)"],
+"h9jw4f":[177,141600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 19 and 20, signatures 19 and 20, and valid public key 19 (nonP2SH)"]
+}

@@ -1,0 +1,12 @@
+{
+"5xkumg":[44,35200,0,"BigInt: OP_ADD 1-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"e8hmk9":[44,35200,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"g75d8w":[50,40000,0,"BigInt: OP_ADD 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"6lzkfz":[50,40000,0,"BigInt: OP_ADD 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"35s8uq":[42,33600,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"jv2s6w":[50,40000,0,"BigInt: OP_ADD 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"uh3tuj":[50,40000,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"y8k95e":[50,40000,0,"BigInt: OP_ADD 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"9vdmmn":[50,40000,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"94vpf5":[50,40000,0,"BigInt: OP_ADD 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

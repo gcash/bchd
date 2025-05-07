@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"fmt"
+	"math/big"
 )
 
 const (
@@ -20,8 +21,12 @@ const (
 	defaultSmallScriptNumLen = 4
 
 	// defaultBigScriptNumLen is the default number of bytes
-	// data being interpreted as a big integer may be.
+	// data being interpreted as a biger integer(int64) may be.
 	defaultBigScriptNumLen = 8
+
+	// defaultBigIntScriptNumLen is the default number of bytes
+	// data being interpreted as big integer (big.Int) may be.
+	defaultBigIntScriptNumLen = MaxScriptElementSizeUpgrade11
 )
 
 // scriptNum represents a numeric value used in the scripting engine with
@@ -62,7 +67,7 @@ const (
 // number is out of range or not minimally encoded depending on parameters.
 // Since all numeric opcodes involve pulling data from the stack and
 // interpreting it as an integer, it provides the required behavior.
-type scriptNum int64
+type scriptNum big.Int
 
 // checkMinimalDataEncoding returns whether or not the passed byte array adheres
 // to the minimal encoding requirements.
@@ -110,24 +115,23 @@ func checkMinimalDataEncoding(v []byte) error {
 //	 32768 -> [0x00 0x80 0x00]
 //	-32768 -> [0x00 0x80 0x80]
 func (n scriptNum) Bytes() []byte {
+
+	bigN := (*big.Int)(&n)
+
 	// Zero encodes as an empty byte slice.
-	if n == 0 {
+	if bigN.Sign() == 0 {
 		return nil
 	}
 
-	// Take the absolute value and keep track of whether it was originally
+	// Take the absolute bytes and keep track of whether it was originally
 	// negative.
-	isNegative := n < 0
-	if isNegative {
-		n = -n
-	}
+	absBytes := bigN.Bytes()
+	isNegative := bigN.Sign() == -1
 
-	// Encode to little endian.  The maximum number of encoded bytes is 9
-	// (8 bytes for max int64 plus a potential byte for sign extension).
-	result := make([]byte, 0, 9)
-	for n > 0 {
-		result = append(result, byte(n&0xff))
-		n >>= 8
+	// reverse the byte slice to convert to little-endian
+	result := make([]byte, len(absBytes))
+	for i := range absBytes {
+		result[i] = absBytes[len(absBytes)-1-i]
 	}
 
 	// When the most significant byte already has the high bit set, an
@@ -165,15 +169,15 @@ func (n scriptNum) Bytes() []byte {
 // out of range before being reinterpreted as an integer, this will provide the
 // correct behavior.
 func (n scriptNum) Int32() int32 {
-	if n > maxInt32 {
+	if n.IsGreaterThanInt(maxInt32) {
 		return maxInt32
 	}
 
-	if n < minInt32 {
+	if n.IsLessThanInt(minInt32) {
 		return minInt32
 	}
 
-	return int32(n)
+	return (int32)((*big.Int)(&n).Int64())
 }
 
 // Int64 returns the script number clamped to a valid int64.  That is to say
@@ -190,15 +194,168 @@ func (n scriptNum) Int32() int32 {
 // out of range before being reinterpreted as an integer, this will provide the
 // correct behavior.
 func (n scriptNum) Int64() int64 {
-	if n > maxInt64 {
+	if n.IsGreaterThanInt(maxInt64) {
 		return maxInt64
 	}
 
-	if n < minInt64 {
+	if n.IsLessThanInt(minInt64) {
 		return minInt64
 	}
 
-	return int64(n)
+	return (*big.Int)(&n).Int64()
+}
+
+func (n scriptNum) String() string {
+	return (*big.Int)(&n).String()
+}
+
+func (n *scriptNum) IsEqualeTo(v *scriptNum) bool {
+	a := (*big.Int)(n)
+	b := (*big.Int)(v)
+
+	result := a.Cmp(b)
+
+	return result == 0
+}
+
+func (n *scriptNum) IsGreaterThan(v *scriptNum) bool {
+	a := (*big.Int)(n)
+	b := (*big.Int)(v)
+
+	result := a.Cmp(b)
+
+	return result == 1
+}
+
+func (n *scriptNum) IsLessThan(v *scriptNum) bool {
+	a := (*big.Int)(n)
+	b := (*big.Int)(v)
+
+	result := a.Cmp(b)
+
+	return result == -1
+}
+
+func (n *scriptNum) IsEqualeToInt(v int64) bool {
+	a := (*big.Int)(n)
+	b := big.NewInt(v)
+
+	result := a.Cmp(b)
+
+	return result == 0
+}
+
+func (n *scriptNum) IsGreaterThanInt(v int64) bool {
+	a := (*big.Int)(n)
+	b := big.NewInt(v)
+
+	result := a.Cmp(b)
+
+	return result == 1
+}
+
+func (n *scriptNum) IsLessThanInt(v int64) bool {
+	a := (*big.Int)(n)
+	b := big.NewInt(v)
+
+	result := a.Cmp(b)
+
+	return result == -1
+}
+
+// Add sets n to the sum x+y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Add(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Add(a, b))
+
+	return n
+}
+
+// Sub sets n to the sum x-y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Sub(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Sub(a, b))
+
+	return n
+}
+
+// Div sets n to the quotient x/y for y!=0 and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Div(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Quo(a, b))
+
+	return n
+}
+
+// Mul sets n to the product x*y and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Mul(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Mul(a, b))
+
+	return n
+}
+
+// Mod sets n to the modulus x%y for y!=0 and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Mod(x, y *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+	b := (*big.Int)(y)
+
+	(*big.Int)(n).Set(new(big.Int).Rem(a, b))
+
+	return n
+}
+
+// Neg sets n to -x and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Neg(x *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Neg(a))
+
+	return n
+}
+
+// Abs sets n to |x| (the absolute value of x) and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) Abs(x *scriptNum) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Abs(a))
+
+	return n
+}
+
+func makeScriptNumFromInt(v int) *scriptNum {
+	num := big.NewInt(int64(v))
+
+	return (*scriptNum)(num)
+}
+
+func makeScriptNumFromInt64(v int64) *scriptNum {
+	num := big.NewInt(v)
+
+	return (*scriptNum)(num)
+}
+
+func makeScriptNumFromUInt64(v uint64) *scriptNum {
+	num := big.NewInt(0)
+
+	num.SetUint64(v)
+
+	return (*scriptNum)(num)
 }
 
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
@@ -227,39 +384,43 @@ func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, 
 		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
 			"which exceeds the max allowed of %d", v, len(v),
 			scriptNumLen)
-		return 0, scriptError(ErrNumberTooBig, str)
+		return *makeScriptNumFromInt(0), scriptError(ErrNumberTooBig, str)
 	}
 
 	// Enforce minimal encoded if requested.
 	if requireMinimal {
 		if err := checkMinimalDataEncoding(v); err != nil {
-			return 0, err
+			return *makeScriptNumFromInt(0), err
 		}
 	}
 
 	// Zero is encoded as an empty byte slice.
 	if len(v) == 0 {
-		return 0, nil
+		return *makeScriptNumFromInt(0), nil
 	}
-
-	// Decode from little endian.
-	var result int64
-	for i, val := range v {
-		result |= int64(val) << uint8(8*i)
+	// reverse the byte slice to convert to big-endian
+	bigEndian := make([]byte, len(v))
+	for i := range v {
+		bigEndian[i] = v[len(v)-1-i]
 	}
 
 	// When the most significant byte of the input bytes has the sign bit
 	// set, the result is negative.  So, remove the sign bit from the result
-	// and make it negative.
-	if v[len(v)-1]&0x80 != 0 {
-		// The maximum length of v has already been determined to be 4
-		// above, so uint8 is enough to cover the max possible shift
-		// value of 24.
-		result &= ^(int64(0x80) << uint8(8*(len(v)-1)))
-		return scriptNum(-result), nil
+	// and set the isNegative to true.
+	isNegative := false
+	if bigEndian[0]&0x80 != 0 {
+		bigEndian[0] = bigEndian[0] & ^byte(0x80)
+		isNegative = true
 	}
 
-	return scriptNum(result), nil
+	result := new(big.Int).SetBytes(bigEndian)
+
+	// Make the reslut negative.
+	if isNegative {
+		result.Neg(result)
+	}
+
+	return (scriptNum)(*result), nil
 }
 
 // minimallyEncode takes in a byte slice and returns a slice that contains a

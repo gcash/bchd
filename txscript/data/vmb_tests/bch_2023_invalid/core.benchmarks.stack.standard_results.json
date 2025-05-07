@@ -1,0 +1,18 @@
+{
+"3ne030":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"7z9hne":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"9p30lt":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"ss72kv":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"l0acpe":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"9nd5e9":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 0 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"8zmhnl":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"xxy89j":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"m7sdck":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 0 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"a3ujmu":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"5sxtzw":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"nevxwn":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 0 is non-standard: locking bytecode does not match a standard pattern: P2PKH, P2PK, P2SH, P2MS, or arbitrary data (OP_RETURN).",
+"g2qj8r":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"xqlhvr":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"w6v3jd":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes.",
+"5pvlyk":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 1646 bytes."
+}

@@ -1,0 +1,12 @@
+{
+"gf8rlx":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_RIPEMD160 hashed (packed transaction) (P2SH20)"],
+"4u6jsk":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_RIPEMD160 hashed (packed transaction) (P2SH32)"],
+"3y7jmz":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_SHA1 hashed (packed transaction) (P2SH20)"],
+"3kftnk":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_SHA1 hashed (packed transaction) (P2SH32)"],
+"jallhq":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_SHA256 hashed (packed transaction) (P2SH20)"],
+"mws83a":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_SHA256 hashed (packed transaction) (P2SH32)"],
+"0ns36s":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_HASH160 hashed (packed transaction) (P2SH20)"],
+"7r6evv":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_HASH160 hashed (packed transaction) (P2SH32)"],
+"pmk7we":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_HASH256 hashed (packed transaction) (P2SH20)"],
+"maydtv":[547,437600,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard, single-input limits, maximize bytes OP_HASH256 hashed (packed transaction) (P2SH32)"]
+}

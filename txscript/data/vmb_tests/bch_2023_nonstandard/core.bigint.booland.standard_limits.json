@@ -1,0 +1,15 @@
+{
+"e8y8he":[42,33600,0,"BigInt: OP_BOOLAND 1-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"dh4kd8":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (all bits set) and 1-byte number (all bits set) (nonP2SH)"],
+"uhthwd":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (all bits set) and 8-byte number (all bits set) (nonP2SH)"],
+"ck9jqe":[42,33600,0,"BigInt: OP_BOOLAND 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"xdfda8":[42,33600,0,"BigInt: OP_BOOLAND 1-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"ucana8":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (alternating bits set) and 1-byte number (alternating bits set) (nonP2SH)"],
+"gdav5p":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (alternating bits set) and 8-byte number (alternating bits set) (nonP2SH)"],
+"druuny":[42,33600,0,"BigInt: OP_BOOLAND 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"w8gp4q":[42,33600,0,"BigInt: OP_BOOLAND 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"qepzvm":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (nonP2SH)"],
+"c8kdaj":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (highest-bit set) and 8-byte number (highest-bit set) (nonP2SH)"],
+"c7mvch":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (nonP2SH)"],
+"f9w9tz":[42,33600,0,"BigInt: OP_BOOLAND 8-byte number (one bit set per byte) and 8-byte number (one bit set per byte) (nonP2SH)"]
+}

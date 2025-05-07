@@ -1,0 +1,12 @@
+{
+"xlnnzx":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_RIPEMD160 hashed (nonP2SH)"],
+"3tywer":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_SHA1 hashed (nonP2SH)"],
+"mvypwk":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_SHA256 hashed (nonP2SH)"],
+"n4qn5c":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_HASH160 hashed (nonP2SH)"],
+"vdqk6h":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes OP_HASH256 hashed (nonP2SH)"],
+"ntjj3l":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_RIPEMD160 hashed (nonP2SH)"],
+"r83vmf":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA1 hashed (nonP2SH)"],
+"k8mg8c":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA256 hashed (nonP2SH)"],
+"4t390w":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH160 hashed (nonP2SH)"],
+"xpw62x":[42,33600,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH256 hashed (nonP2SH)"]
+}
