@@ -82,6 +82,10 @@ func (view *UtxoViewpoint) addTxOut(outpoint wire.OutPoint, txOut *wire.TxOut, i
 	pkScript := make([]byte, len(txOut.PkScript))
 	copy(pkScript, txOut.PkScript)
 
+	if !txOut.TokenData.IsEmpty() {
+		entry.tokenData = txOut.TokenData
+	}
+
 	entry.amount = txOut.Value
 	entry.pkScript = pkScript
 	entry.blockHeight = blockHeight

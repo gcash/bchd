@@ -752,6 +752,10 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
 	}
 
+	if upgrade9Active {
+		scriptFlags |= txscript.ScriptAllowCashTokens
+	}
+
 	if upgrade11Active {
 		scriptFlags |= txscript.ScriptAllowMay2025
 		if !mp.cfg.Policy.AcceptNonStd {
