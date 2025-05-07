@@ -491,7 +491,7 @@ var RegressionNetParams = Params{
 
 	Upgrade9ForkHeight:      100000000,
 	ABLAForkHeight:          100000000,
-	Upgrade11ActivationTime: 9999999999,
+	Upgrade11ActivationTime: 0, // Always active on regtest
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        500000,
@@ -949,7 +949,7 @@ var SimNetParams = Params{
 
 	Upgrade9ForkHeight:      100000000,
 	ABLAForkHeight:          100000000,
-	Upgrade11ActivationTime: 9999999999,
+	Upgrade11ActivationTime: 0, // Always active on simnet
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,

@@ -1237,7 +1237,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//
 	//   ... -> b35(10) -> b39(11)
 	g.setTip("b35")
-	b39 := g.nextBlock("b39", outs[11], func(b *wire.MsgBlock) {
+	g.nextBlock("b39", outs[11], func(b *wire.MsgBlock) {
 		// Create a chain of transactions each spending from the
 		// previous one such that each contains an output that pays to
 		// the redeem script and the total number of signature
@@ -1256,38 +1256,11 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	g.assertTipBlockNumTxns((maxBlockSigOpsPerMB / redeemScriptSigOps) + 3)
 	accepted()
 
-	// Create a block with the max allowed signature operations where the
-	// majority of them are in pay-to-script-hash scripts.
+	// Create a non-significant block to reach the required maturity needed in subsequent blocks.
 	//
 	//   ... -> b35(10) -> b39(11) -> b41(12)
 	g.setTip("b39")
-	g.nextBlock("b41", outs[12], func(b *wire.MsgBlock) {
-		txnsNeeded := (maxBlockSigOpsPerMB / redeemScriptSigOps)
-		for i := 0; i < txnsNeeded; i++ {
-			spend := makeSpendableOutForTx(b39.Transactions[i+2], 2)
-			tx := createSpendTx(&spend, lowFee)
-			sig, err := txscript.RawTxInECDSASignature(tx, 0,
-				redeemScript, txscript.SigHashAll, g.privKey, int64(spend.amount.ToUnit(bchutil.AmountSatoshi)))
-			if err != nil {
-				panic(err)
-			}
-			tx.TxIn[0].SignatureScript = pushDataScript(sig,
-				redeemScript)
-			b.AddTransaction(tx)
-		}
-
-		// Create a final tx that includes a non-pay-to-script-hash
-		// output with the number of signature operations needed to push
-		// the block to exactly the max allowed.
-		fill := maxBlockSigOpsPerMB - (txnsNeeded * redeemScriptSigOps)
-		if fill == 0 {
-			return
-		}
-		finalTx := b.Transactions[len(b.Transactions)-1]
-		tx := createSpendTxForTx(finalTx, lowFee)
-		tx.TxOut[0].PkScript = repeatOpcode(txscript.OP_CHECKSIG, fill)
-		b.AddTransaction(tx)
-	})
+	g.nextBlock("b41", outs[12])
 	accepted()
 
 	// ---------------------------------------------------------------------
