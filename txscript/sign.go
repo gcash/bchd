@@ -25,7 +25,7 @@ func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 	}
 
 	sigHashes := NewTxSigHashes(tx)
-	hash, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+	hash, _, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	}
 
 	sigHashes := NewTxSigHashes(tx)
-	hash, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+	hash, _, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey) ([]byte, error) {
 
 	script, _ := parseScript(subScript)
-	hash, err := calcLegacySignatureHash(script, hashType, tx, idx)
+	hash, _, err := calcLegacySignatureHash(script, hashType, tx, idx)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +364,7 @@ sigLoop:
 		// would make the transaction nonstandard and thus not
 		// MultiSigTy, so we just need to hash the full thing.
 		sigHashes := NewTxSigHashes(tx)
-		hash, err := calcSignatureHash(pkPops, sigHashes, hashType, tx, idx, amt, true)
+		hash, _, err := calcSignatureHash(pkPops, sigHashes, hashType, tx, idx, amt, true)
 		if err != nil {
 			return nil, err
 		}

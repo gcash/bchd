@@ -1,0 +1,4 @@
+{
+"0r7ngd":[108,86400,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, 1-of-3 bare multisig input, 1 output (Schnorr signature) (nonP2SH)"],
+"d5rw9l":[108,86400,0,"Transaction validation benchmarks: Within BCH_2023_05 standard limits, packed 1-of-3 bare multisig inputs, 1 output (all Schnorr signatures) (nonP2SH)"]
+}

@@ -1,0 +1,8 @@
+{
+"zjv9dh":[302,241600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and valid public key 19 (P2SH20)"],
+"9gpfva":[302,241600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and valid public key 19 (P2SH32)"],
+"ar3uyn":[269,215200,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and invalid public key 19 (P2SH20)"],
+"r7d6t8":[269,215200,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 15 and 20, signatures 15 and 20, and invalid public key 19 (P2SH32)"],
+"z4frfp":[302,241600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 19 and 20, signatures 19 and 20, and valid public key 19 (P2SH20)"],
+"aa4an6":[302,241600,0,"Signature checking: 2-of-20 Schnorr multisig with checkBits of keys 19 and 20, signatures 19 and 20, and valid public key 19 (P2SH32)"]
+}

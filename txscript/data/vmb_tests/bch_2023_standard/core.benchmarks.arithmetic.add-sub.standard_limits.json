@@ -1,0 +1,8 @@
+{
+"479864":[260,208000,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (minimize 0 results) (P2SH20)"],
+"7s4l4d":[251,200800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_ADD (P2SH20)"],
+"wjg8aj":[251,200800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_ADD (P2SH32)"],
+"wc6z2q":[251,200800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (P2SH20)"],
+"3z4fuw":[251,200800,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (P2SH32)"],
+"pp6twr":[260,208000,0,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (minimize 0 results) (P2SH32)"]
+}

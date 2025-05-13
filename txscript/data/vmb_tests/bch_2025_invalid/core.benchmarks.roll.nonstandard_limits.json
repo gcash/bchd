@@ -1,0 +1,6 @@
+{
+"805675":[1040,832000,342300,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize abusive OP_ROLL (ends with non-clean stack) (nonP2SH)"],
+"xxw95u":[1847,1477600,344340,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize abusive OP_ROLL (ends with non-clean stack) (P2SH20)"],
+"eadlnt":[1847,1477600,344364,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize abusive OP_ROLL (ends with non-clean stack) (P2SH32)"],
+"sznv46":[45,36000,36102,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_ROLL (nonP2SH)"]
+}

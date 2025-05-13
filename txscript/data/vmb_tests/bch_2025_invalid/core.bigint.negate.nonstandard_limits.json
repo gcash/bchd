@@ -1,0 +1,10 @@
+{
+"79v2zw":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (all bits set) (P2SH20)"],
+"ea2gew":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (all bits set) (P2SH32)"],
+"myq69m":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (alternating bits set) (P2SH20)"],
+"c36qam":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (alternating bits set) (P2SH32)"],
+"4kcger":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (highest-bit set) (P2SH20)"],
+"jek8l3":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (highest-bit set) (P2SH32)"],
+"ktrctl":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (one bit set per byte) (P2SH20)"],
+"ca8ddx":[16436,13148800,0,"BigInt: OP_NEGATE 8192-byte number (one bit set per byte) (P2SH32)"]
+}

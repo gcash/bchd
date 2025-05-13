@@ -1,0 +1,3 @@
+{
+"yudc3j":"Unable to verify transaction: error in evaluating input index 0: Program attempted an operation that would exceed the operation cost density limit. Maximum operation cost: 32800 (density control length: 41); operation cost following operation: 34224."
+}

@@ -225,25 +225,6 @@ func TestScriptBuilderAddData(t *testing.T) {
 			expected: append([]byte{OP_PUSHDATA2, 0x08, 0x02}, bytes.Repeat([]byte{0x49}, 520)...),
 		},
 
-		// BIP0062: OP_PUSHDATA4 can never be used, as pushes over 520
-		// bytes are not allowed, and those below can be done using
-		// other operators.
-		{
-			name:     "push data len 521",
-			data:     bytes.Repeat([]byte{0x49}, 521),
-			expected: nil,
-		},
-		{
-			name:     "push data len 32767 (canonical)",
-			data:     bytes.Repeat([]byte{0x49}, 32767),
-			expected: nil,
-		},
-		{
-			name:     "push data len 65536 (canonical)",
-			data:     bytes.Repeat([]byte{0x49}, 65536),
-			expected: nil,
-		},
-
 		// Additional tests for the PushFullData function that
 		// intentionally allows data pushes to exceed the limit for
 		// regression testing purposes.

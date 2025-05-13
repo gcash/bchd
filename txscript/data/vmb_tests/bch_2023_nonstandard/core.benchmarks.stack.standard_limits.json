@@ -1,0 +1,4 @@
+{
+"yudc3j":[41,32800,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize bytes pushed to the stack (nonP2SH)"],
+"4z3ggm":[1488,1190400,0,"Transaction validation benchmarks: Within BCH_2023_05 nonP2SH/nonstandard, single-input limits, maximize stack usage (nonP2SH)"]
+}

@@ -745,9 +745,23 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 		upgrade9Active = true
 	}
 
+	upgrade11Active := medianTimePast.Unix() >= int64(mp.cfg.ChainParams.Upgrade11ActivationTime)
+
 	scriptFlags := txscript.StandardVerifyFlags
 	if !mp.cfg.Policy.LimitSigChecks {
 		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
+	}
+
+	if upgrade9Active {
+		scriptFlags |= txscript.ScriptAllowCashTokens
+	}
+
+	if upgrade11Active {
+		scriptFlags |= txscript.ScriptAllowMay2025
+		if !mp.cfg.Policy.AcceptNonStd {
+			scriptFlags |= txscript.ScriptAllowMay2025StandardOnly
+		}
+
 	}
 
 	// Perform preliminary sanity checks on the transaction.  This makes

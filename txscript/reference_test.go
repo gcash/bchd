@@ -197,6 +197,8 @@ func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 			flags |= ScriptVerifySchnorrMultisig
 		case "REVERSEBYTES":
 			flags |= ScriptVerifyReverseBytes
+		case "DUP":
+			flags |= ScriptVerify64BitIntegers
 		default:
 			return flags, fmt.Errorf("invalid flag: %s", flag)
 		}
@@ -212,7 +214,7 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 	case "OK":
 		return nil, nil
 	case "UNKNOWN_ERROR", "OPERAND_SIZE":
-		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall, ErrMinimalData, ErrInvalidInputLength}, nil
+		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall, ErrMinimalData, ErrInvalidInputLength, ErrIntegerOverflow}, nil
 	case "PUBKEYTYPE", "NONCOMPRESSED_PUBKEY":
 		return []ErrorCode{ErrPubKeyType}, nil
 	case "SIG_DER", "SIG_BADLENGTH", "MISSING_FORKID":
@@ -439,7 +441,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 		// Ensure there were no errors when the expected result is OK.
 		if resultStr == "OK" {
 			if err != nil {
-				t.Errorf("%s failed to execute: %v", name, err)
+				t.Errorf("%d - %s failed to execute: %v", i, name, err)
 			}
 			continue
 		}
@@ -851,7 +853,7 @@ func TestCalcLegacySignatureHash(t *testing.T) {
 
 		hashType := SigHashType(testVecF64ToUint32(test[3].(float64)))
 		var hash []byte
-		hash, err = calcLegacySignatureHash(parsedScript, hashType, &tx,
+		hash, _, err = calcLegacySignatureHash(parsedScript, hashType, &tx,
 			int(test[2].(float64)))
 		if err != nil {
 			t.Errorf("TestCalcLegacySignatureHash failed test #%d: "+
@@ -910,7 +912,7 @@ func TestCalcBip143SignatureHash(t *testing.T) {
 		var hash []byte
 
 		sigHashes := NewTxSigHashes(&tx)
-		hash, err = calcBip143SignatureHash(parsedScript, sigHashes, hashType, &tx,
+		hash, _, err = calcBip143SignatureHash(parsedScript, sigHashes, hashType, &tx,
 			int(test[2].(float64)), 0, false)
 		if err != nil {
 			t.Errorf("TestCalcBip143SignatureHash failed test #%d: "+

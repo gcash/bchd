@@ -1,0 +1,9 @@
+{
+"769w0t":[43,34400,0,"BigInt: OP_1ADD 1-byte number (all bits set) (nonP2SH)"],
+"g2kvxx":[50,40000,0,"BigInt: OP_1ADD 8-byte number (all bits set) (nonP2SH)"],
+"rl6xlk":[43,34400,0,"BigInt: OP_1ADD 1-byte number (alternating bits set) (nonP2SH)"],
+"pk8zs6":[50,40000,0,"BigInt: OP_1ADD 8-byte number (alternating bits set) (nonP2SH)"],
+"ad8pyu":[42,33600,0,"BigInt: OP_1ADD 1-byte number (highest-bit set) (nonP2SH)"],
+"vfzvwf":[50,40000,0,"BigInt: OP_1ADD 8-byte number (highest-bit set) (nonP2SH)"],
+"zuztj3":[50,40000,0,"BigInt: OP_1ADD 8-byte number (one bit set per byte) (nonP2SH)"]
+}

@@ -1,0 +1,11 @@
+{
+"des0rv":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"xg7206":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 10000 bytes.",
+"v8lscg":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 9999 bytes.",
+"2xhecr":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520 bytes. Item length: 9999 bytes.",
+"y54lkh":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"9vkccn":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"53s3xu":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"f7qhsg":"Unable to verify transaction: error in evaluating input index 0: Program attempted to push a stack item that exceeded the maximum stack item length. Maximum stack item length: 520; item length: 1024 bytes.",
+"09macl":"Unable to verify transaction: error in evaluating input index 0: Invalid input: this operation requires a valid VM Number. Failed to decode VM Number: overflows VM Number range."
+}

@@ -1,0 +1,14 @@
+{
+"2qmp2v":[51,40800,0,"BigInt: OP_MUL 1-byte number (all bits set) and 1-byte number (all bits set) (P2SH20)"],
+"ens7pj":[51,40800,0,"BigInt: OP_MUL 1-byte number (all bits set) and 1-byte number (all bits set) (P2SH32)"],
+"q0fwgh":[51,40800,0,"BigInt: OP_MUL 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH20)"],
+"pgf4tc":[51,40800,0,"BigInt: OP_MUL 1-byte number (alternating bits set) and 1-byte number (alternating bits set) (P2SH32)"],
+"djke9j":[47,37600,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH20)"],
+"j44ye2":[47,37600,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH32)"],
+"c87td4":[63,50400,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH20)"],
+"dft6qa":[63,50400,0,"BigInt: OP_MUL 1-byte number (highest-bit set) and 8-byte number (highest-bit set) (P2SH32)"],
+"mdtcqn":[63,50400,0,"BigInt: OP_MUL 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH20)"],
+"ttq67y":[63,50400,0,"BigInt: OP_MUL 8-byte number (highest-bit set) and 1-byte number (highest-bit set) (P2SH32)"],
+"pl3jyu":[63,50400,0,"BigInt: OP_MUL 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (P2SH20)"],
+"k4cq5u":[63,50400,0,"BigInt: OP_MUL 8-byte number (one bit set per byte) and 1-byte number (one bit set per byte) (P2SH32)"]
+}

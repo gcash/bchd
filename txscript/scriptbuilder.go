@@ -249,7 +249,7 @@ func (b *ScriptBuilder) AddInt64(val int64) *ScriptBuilder {
 		return b
 	}
 
-	return b.AddData(scriptNum(val).Bytes())
+	return b.AddData(makeScriptNumFromInt64(val).Bytes())
 }
 
 // Reset resets the script so it has no content.

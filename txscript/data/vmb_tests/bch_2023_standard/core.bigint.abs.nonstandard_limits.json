@@ -1,0 +1,16 @@
+{
+"szex5w":[48,38400,0,"BigInt: OP_ABS 1-byte number (all bits set) (P2SH20)"],
+"cnsw98":[48,38400,0,"BigInt: OP_ABS 1-byte number (all bits set) (P2SH32)"],
+"22ze82":[62,49600,0,"BigInt: OP_ABS 8-byte number (all bits set) (P2SH20)"],
+"pecy5p":[62,49600,0,"BigInt: OP_ABS 8-byte number (all bits set) (P2SH32)"],
+"m3u4rs":[48,38400,0,"BigInt: OP_ABS 1-byte number (alternating bits set) (P2SH20)"],
+"daeakn":[48,38400,0,"BigInt: OP_ABS 1-byte number (alternating bits set) (P2SH32)"],
+"9q2ggg":[62,49600,0,"BigInt: OP_ABS 8-byte number (alternating bits set) (P2SH20)"],
+"5al7yv":[62,49600,0,"BigInt: OP_ABS 8-byte number (alternating bits set) (P2SH32)"],
+"gx3pel":[46,36800,0,"BigInt: OP_ABS 1-byte number (highest-bit set) (P2SH20)"],
+"g3hvp5":[46,36800,0,"BigInt: OP_ABS 1-byte number (highest-bit set) (P2SH32)"],
+"yf5ytz":[62,49600,0,"BigInt: OP_ABS 8-byte number (highest-bit set) (P2SH20)"],
+"mrmj5r":[62,49600,0,"BigInt: OP_ABS 8-byte number (highest-bit set) (P2SH32)"],
+"w40xem":[62,49600,0,"BigInt: OP_ABS 8-byte number (one bit set per byte) (P2SH20)"],
+"9lwc9j":[62,49600,0,"BigInt: OP_ABS 8-byte number (one bit set per byte) (P2SH32)"]
+}

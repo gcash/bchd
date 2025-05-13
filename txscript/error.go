@@ -117,6 +117,16 @@ const (
 	// input may fail with this code.
 	ErrNumberTooSmall
 
+	// ErrOpCost is returned when the VM cost limit exceeds.
+	ErrOpCost
+
+	// ErrTooManyHashIters is returned when hash iteration limit exceeds
+	ErrTooManyHashIters
+
+	// ErrConditionalStackDepth is returned when size of the conditional stack
+	// is over MaxConditionalStackDepth
+	ErrConditionalStackDepth
+
 	// --------------------------------------------
 	// Failures related to verification operations.
 	// --------------------------------------------
@@ -354,6 +364,9 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidSignatureCount:    "ErrInvalidSignatureCount",
 	ErrNumberTooBig:             "ErrNumberTooBig",
 	ErrNumberTooSmall:           "ErrNumberTooSmall",
+	ErrOpCost:                   "ErrOpCost",
+	ErrTooManyHashIters:         "ErrTooManyHashIters",
+	ErrConditionalStackDepth:    "ErrConditionalStackDepth",
 	ErrVerify:                   "ErrVerify",
 	ErrEqualVerify:              "ErrEqualVerify",
 	ErrNumEqualVerify:           "ErrNumEqualVerify",
