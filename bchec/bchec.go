@@ -803,10 +803,7 @@ func (curve *KoblitzCurve) scalarMultJacobian(Bx, By *big.Int, k []byte) (*field
 	k1Len := len(k1PosNAF)
 	k2Len := len(k2PosNAF)
 
-	m := k1Len
-	if m < k2Len {
-		m = k2Len
-	}
+	m := max(k1Len, k2Len)
 
 	// Add left-to-right using the NAF optimization.  See algorithm 3.77
 	// from [GECC].  This should be faster overall since there will be a lot

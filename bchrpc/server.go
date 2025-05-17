@@ -2770,10 +2770,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	// Override the default number of entries to skip if needed.
 	var numToSkip int
 	if nbSkip > 0 {
-		numToSkip = nbSkip
-		if numToSkip < 0 {
-			numToSkip = 0
-		}
+		numToSkip = max(nbSkip, 0)
 	}
 
 	// Add transactions from mempool first if client asked for reverse
