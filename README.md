@@ -46,7 +46,7 @@ If you prefer to install from source do the following:
 - Run the following commands to obtain bchd, all dependencies, and install it:
 
 ```bash
-go install github.com/gcash/bchd@v0.21.0
+go install github.com/gcash/bchd@v0.21.1
 ```
 
 This will download the source code into your GOPATH and compile `bchd` and install it in your path.
