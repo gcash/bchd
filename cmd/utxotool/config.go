@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/database"
@@ -44,13 +45,7 @@ type config struct {
 
 // validDbType returns whether or not dbType is a supported database type.
 func validDbType(dbType string) bool {
-	for _, knownType := range knownDbTypes {
-		if dbType == knownType {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(knownDbTypes, dbType)
 }
 
 // netName returns the name used when referring to a bitcoin network.  At the
