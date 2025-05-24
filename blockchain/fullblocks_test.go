@@ -34,7 +34,7 @@ const (
 	blockDataNet = wire.MainNet
 )
 
-// filesExists returns whether or not the named file or directory exists.
+// fileExists returns whether or not the named file or directory exists.
 func fileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {
 		if os.IsNotExist(err) {

@@ -3519,7 +3519,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	return respTx
 }
 
-// setInputMetadata will set the value, previous script, and address for each input in the mempool transaction
+// setInputMetadataFromView will set the value, previous script, and address for each input in the mempool transaction
 // from blockchain data adjusted upon the contents of the transaction pool.
 // Used when no s.txIndex is available
 func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rpcEventTxAccepted, view *blockchain.UtxoViewpoint) {
