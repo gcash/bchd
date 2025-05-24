@@ -1019,7 +1019,7 @@ func dbRemoveABLAStateIndex(dbTx database.Tx, height int32) error {
 	return ablaStateIndex.Delete(serializedHeight[:])
 }
 
-// dbFetchHashByHeight uses an existing database transaction to retrieve the
+// dbFetchAblaStateByHeight uses an existing database transaction to retrieve the
 // hash for the provided height from the index.
 func dbFetchAblaStateByHeight(dbTx database.Tx, height int32) (*ABLAState, error) {
 	var serializedHeight [4]byte
