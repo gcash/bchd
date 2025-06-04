@@ -652,10 +652,7 @@ out:
 				// retries so there is a backoff up to a max
 				// of 1 minute.
 				scaledInterval := connectionRetryInterval.Nanoseconds() * c.retryCount
-				scaledDuration := time.Duration(scaledInterval)
-				if scaledDuration > time.Minute {
-					scaledDuration = time.Minute
-				}
+				scaledDuration := min(time.Duration(scaledInterval), time.Minute)
 				log.Infof("Retrying connection to %s in "+
 					"%s", c.config.Host, scaledDuration)
 				time.Sleep(scaledDuration)
@@ -1389,10 +1386,7 @@ func (c *Client) Connect(tries int) error {
 		var wsConn *websocket.Conn
 		wsConn, err = dial(c.config)
 		if err != nil {
-			backoff = connectionRetryInterval * time.Duration(i+1)
-			if backoff > time.Minute {
-				backoff = time.Minute
-			}
+			backoff = min(connectionRetryInterval*time.Duration(i+1), time.Minute)
 			time.Sleep(backoff)
 			continue
 		}

@@ -203,10 +203,7 @@ func (cm *ConnManager) handleFailedConn(c *ConnReq) {
 	}
 	if c.Permanent {
 		c.retryCount++
-		d := time.Duration(c.retryCount) * cm.cfg.RetryDuration
-		if d > maxRetryDuration {
-			d = maxRetryDuration
-		}
+		d := min(time.Duration(c.retryCount)*cm.cfg.RetryDuration, maxRetryDuration)
 		log.Debugf("Retrying connection to %v in %v", c, d)
 		time.AfterFunc(d, func() {
 			cm.Connect(c)

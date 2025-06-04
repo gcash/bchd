@@ -52,10 +52,7 @@ func init() {
 // Read returns the fake reader error and the lesser of the fake reader value
 // and the length of p.
 func (r *fakeRandReader) Read(p []byte) (int, error) {
-	n := r.n
-	if n > len(p) {
-		n = len(p)
-	}
+	n := min(r.n, len(p))
 	return n, r.err
 }
 
