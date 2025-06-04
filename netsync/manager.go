@@ -579,10 +579,7 @@ func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 			continue
 		}
 
-		topBlock := peer.LastBlock()
-		if topBlock < peer.StartingHeight() {
-			topBlock = peer.StartingHeight()
-		}
+		topBlock := max(peer.LastBlock(), peer.StartingHeight())
 
 		if topBlock < sm.topBlock() {
 			continue
