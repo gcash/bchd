@@ -271,7 +271,7 @@ func BenchmarkWriteTxIn(b *testing.B) {
 	}
 }
 
-// BenchmarkDeserializeTx performs a benchmark on how long it takes to
+// BenchmarkDeserializeTxSmall performs a benchmark on how long it takes to
 // deserialize a small transaction.
 func BenchmarkDeserializeTxSmall(b *testing.B) {
 	buf := []byte{
