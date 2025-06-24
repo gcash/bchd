@@ -24,7 +24,7 @@ type FutureDebugLevelResult chan *response
 
 // Receive waits for the response promised by the future and returns the result
 // of setting the debug logging level to the passed level specification or the
-// list of of the available subsystems for the special keyword 'show'.
+// list of the available subsystems for the special keyword 'show'.
 func (r FutureDebugLevelResult) Receive() (string, error) {
 	res, err := receiveFuture(r)
 	if err != nil {
