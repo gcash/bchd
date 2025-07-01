@@ -601,7 +601,7 @@ func (g *testGenerator) setTip(blockName string) {
 	g.tipHeight = g.blockHeights[blockName]
 }
 
-// oldestCoinbaseOuts removes the oldest coinbase output that was previously
+// oldestCoinbaseOut removes the oldest coinbase output that was previously
 // saved to the generator and returns the set as a slice.
 func (g *testGenerator) oldestCoinbaseOut() spendableOut {
 	op := g.spendableOuts[0]
