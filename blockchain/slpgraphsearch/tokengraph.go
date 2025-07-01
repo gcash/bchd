@@ -15,7 +15,7 @@ type tokenGraph struct {
 	graph   map[chainhash.Hash]*wire.MsgTx
 }
 
-// newSlpTokenGraph creates a new instance of SlpCache
+// newTokenGraph creates a new instance of tokenGraph
 func newTokenGraph(tokenID *chainhash.Hash) *tokenGraph {
 	return &tokenGraph{
 		graph:   make(map[chainhash.Hash]*wire.MsgTx),
