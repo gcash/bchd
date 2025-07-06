@@ -871,7 +871,7 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan bool
 
 	// Get information about the script.
 	// Ignore the error here since an error means the script couldn't parse
-	// and there is no additinal information about it anyways.
+	// and there is no additional information about it anyways.
 	scriptClass, addrs, reqSigs, _ := txscript.ExtractPkScriptAddrs(script,
 		s.cfg.ChainParams)
 	addresses := make([]string, len(addrs))
@@ -3484,7 +3484,7 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 	addressTxns := make([]retrievedTx, 0, numRequested)
 	if reverse {
 		// Transactions in the mempool are not in a block header yet,
-		// so the block header field in the retieved transaction struct
+		// so the block header field in the retrieved transaction struct
 		// is left nil.
 		mpTxns, mpSkipped := fetchMempoolTxnsForAddress(s, addr,
 			uint32(numToSkip), uint32(numRequested))
@@ -3538,7 +3538,7 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 	// order and the number of results is still under the number requested.
 	if !reverse && len(addressTxns) < numRequested {
 		// Transactions in the mempool are not in a block header yet,
-		// so the block header field in the retieved transaction struct
+		// so the block header field in the retrieved transaction struct
 		// is left nil.
 		mpTxns, mpSkipped := fetchMempoolTxnsForAddress(s, addr,
 			uint32(numToSkip)-numSkipped, uint32(numRequested-

@@ -178,7 +178,7 @@ func isNullData(pops []parsedOpcode) bool {
 	return scriptLen <= MaxDataCarrierSize
 }
 
-// scriptType returns the type of the script being inspected from the known
+// typeOfScript returns the type of the script being inspected from the known
 // standard types.
 func typeOfScript(pops []parsedOpcode) ScriptClass {
 	if isPubkey(pops) {
@@ -365,7 +365,7 @@ func payToScriptHashScript32(scriptHash []byte) ([]byte, error) {
 		AddOp(OP_EQUAL).Script()
 }
 
-// payToPubkeyScript creates a new script to pay a transaction output to a
+// payToPubKeyScript creates a new script to pay a transaction output to a
 // public key. It is expected that the input is a valid pubkey.
 func payToPubKeyScript(serializedPubKey []byte) ([]byte, error) {
 	return NewScriptBuilder().AddData(serializedPubKey).
