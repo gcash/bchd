@@ -512,7 +512,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 		addrManager.SetServices(remoteAddr, msg.Services)
 	}
 
-	// Ignore peers that have a protcol version that is too old.  The peer
+	// Ignore peers that have a protocol version that is too old.  The peer
 	// negotiation logic will disconnect it after this callback returns.
 	if msg.ProtocolVersion < int32(peer.MinAcceptableProtocolVersion) {
 		return nil

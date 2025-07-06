@@ -483,7 +483,7 @@ func shallowCopyTx(tx *wire.MsgTx) wire.MsgTx {
 	return txCopy
 }
 
-// calcSignatureHash will, given a script and hash type for the current script
+// calcLegacySignatureHash will, given a script and hash type for the current script
 // engine instance, calculate the signature hash to be used for signing and
 // verification.
 func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wire.MsgTx, idx int) ([]byte, int, error) {
