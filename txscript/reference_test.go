@@ -298,7 +298,7 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 		expected)
 }
 
-// createSpendTx generates a basic spending transaction given the passed
+// createSpendingTx generates a basic spending transaction given the passed
 // signature, witness and public key scripts.
 func createSpendingTx(sigScript, pkScript []byte,
 	outputValue int64) *wire.MsgTx {
@@ -809,7 +809,7 @@ testloop:
 	}
 }
 
-// TestCalcSignatureHash runs the Bitcoin Core signature hash calculation tests
+// TestCalcLegacySignatureHash runs the Bitcoin Core signature hash calculation tests
 // in sighash.json.
 // https://github.com/bitcoin/bitcoin/blob/master/src/test/data/sighash.json
 func TestCalcLegacySignatureHash(t *testing.T) {
