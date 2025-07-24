@@ -795,7 +795,7 @@ func testSignAndVerifyECDSA(t *testing.T, c *KoblitzCurve, tag string) {
 	pub := priv.PubKey()
 
 	for i := 0; i < 32; i++ {
-		s := []byte(fmt.Sprintf("testing %d", i))
+		s := fmt.Appendf(nil, "testing %d", i)
 		hashed := sha256.Sum256(s)
 		sig, err := priv.SignECDSA(hashed[:])
 		if err != nil {
@@ -819,7 +819,7 @@ func testSignAndVerifySchnorr(t *testing.T, c *KoblitzCurve, tag string) {
 	pub := priv.PubKey()
 
 	for i := 0; i < 32; i++ {
-		s := []byte(fmt.Sprintf("testing %d", i))
+		s := fmt.Appendf(nil, "testing %d", i)
 		hashed := sha256.Sum256(s)
 		sig, err := priv.SignSchnorr(hashed[:])
 		if err != nil {
