@@ -1969,7 +1969,7 @@ func (s *server) pushMerkleBlockMsg(sp *serverPeer, hash *chainhash.Hash,
 	return nil
 }
 
-// handleUpdatePeerHeight updates the heights of all peers who were known to
+// handleUpdatePeerHeights updates the heights of all peers who were known to
 // announce a block we recently accepted.
 func (s *server) handleUpdatePeerHeights(state *peerState, umsg updatePeerHeightsMsg) {
 	state.forAllPeers(func(sp *serverPeer) {

@@ -1531,7 +1531,7 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-// opcodeNum2Bin converts the numeric value into a byte sequence of a
+// opcodeNum2bin converts the numeric value into a byte sequence of a
 // certain size, taking account of the sign bit. The byte sequence
 // produced uses the little-endian encoding.
 //
@@ -3191,7 +3191,7 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-// opcodeCheckDataSigVerifyis a combination of opcodeCheckDataSig and
+// opcodeCheckDataSigVerify is a combination of opcodeCheckDataSig and
 // opcodeVerify.  The opcodeCheckDataSig is invoked followed by opcodeVerify.
 // See the documentation for each of those opcodes for more details.
 //
