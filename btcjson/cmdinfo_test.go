@@ -217,7 +217,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test int `jsonrpcusage:"testvalue"`
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: "testvalue",
@@ -228,7 +228,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test interface{}
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `test`,
@@ -239,7 +239,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `"test"`,
@@ -250,7 +250,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: func() *reflect.Value {
 				value := "default"
@@ -265,7 +265,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test []string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `["test",...]`,
@@ -276,7 +276,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Keys []string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `["key",...]`,
@@ -287,7 +287,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Addresses []string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `["address",...]`,
@@ -298,7 +298,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Capabilities []string
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `["capability",...]`,
@@ -312,7 +312,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Capabilities []s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `[{"txid":"value"},...]`,
@@ -323,7 +323,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test []int
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `[test,...]`,
@@ -337,7 +337,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{testusage}`,
@@ -351,7 +351,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{"txid":"value"}`,
@@ -365,7 +365,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{"vout":n}`,
@@ -379,7 +379,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{"amount":n.nnn}`,
@@ -396,7 +396,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{"template":{"amount":n.nnn}}`,
@@ -410,7 +410,7 @@ func TestFieldUsage(t *testing.T) {
 				type s struct {
 					Test s2
 				}
-				return reflect.TypeOf((*s)(nil)).Elem().Field(0)
+				return reflect.TypeFor[s]().Field(0)
 			}(),
 			defValue: nil,
 			expected: `{"capabilities":["capability",...]}`,
