@@ -101,13 +101,12 @@ func subStructUsage(structType reflect.Type) string {
 func subArrayUsage(arrayType reflect.Type, fieldName string) string {
 	// Convert plural field names to singular.  Only works for English.
 	singularFieldName := fieldName
-	if strings.HasSuffix(fieldName, "ies") {
-		singularFieldName = strings.TrimSuffix(fieldName, "ies")
-		singularFieldName = singularFieldName + "y"
-	} else if strings.HasSuffix(fieldName, "es") {
-		singularFieldName = strings.TrimSuffix(fieldName, "es")
-	} else if strings.HasSuffix(fieldName, "s") {
-		singularFieldName = strings.TrimSuffix(fieldName, "s")
+	if before, ok := strings.CutSuffix(fieldName, "ies"); ok {
+		singularFieldName = before + "y"
+	} else if before, ok := strings.CutSuffix(fieldName, "es"); ok {
+		singularFieldName = before
+	} else if before, ok := strings.CutSuffix(fieldName, "s"); ok {
+		singularFieldName = before
 	}
 
 	elemType := arrayType.Elem()
