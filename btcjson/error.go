@@ -27,7 +27,7 @@ const (
 	ErrInvalidType
 
 	// ErrEmbeddedType indicates the provided command struct contains an
-	// embedded type which is not not supported.
+	// embedded type which is not supported.
 	ErrEmbeddedType
 
 	// ErrUnexportedField indiciates the provided command struct contains an
