@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Copyright (c) 2013-2018 The btcsuite developers
 // Use of this source code is governed by an ISC
