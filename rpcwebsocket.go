@@ -133,8 +133,8 @@ type wsNotificationManager struct {
 	queueNotification chan interface{}
 
 	// notificationMsgs feeds notificationHandler with notifications
-	// and client (un)registeration requests from a queue as well as
-	// registeration and unregisteration requests from clients.
+	// and client (un)registration requests from a queue as well as
+	// registration and unregistration requests from clients.
 	notificationMsgs chan interface{}
 
 	// Access channel for current number of connected clients.
