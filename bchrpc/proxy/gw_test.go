@@ -110,7 +110,7 @@ func TestResponseHeaders(t *testing.T) {
 	method := "GetBlockchainInfo"
 	res, err := httpClient.Request(method, D{})
 	if err != nil {
-		t.Fatalf("%s requst failed: %+v", method, err)
+		t.Fatalf("%s request failed: %+v", method, err)
 	}
 	defer res.Body.Close()
 
@@ -132,7 +132,7 @@ func TestOptionsRequest(t *testing.T) {
 		URL:    urlObj,
 	})
 	if err != nil {
-		t.Fatalf("%s requst failed: %+v", method, err)
+		t.Fatalf("%s request failed: %+v", method, err)
 	}
 	defer resp.Body.Close()
 
@@ -232,7 +232,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 	} else if len(outputs.TokenMetadata) == 0 {
 		t.Errorf("expected token metadata in %s", method)
 	} else {
-		t.Logf("Successfully passed %s test. Got %d ouputs", method, len(outputs.Outputs))
+		t.Logf("Successfully passed %s test. Got %d outputs", method, len(outputs.Outputs))
 	}
 }
 
@@ -261,7 +261,7 @@ func TestGetCashAddressUnspentOutputs(t *testing.T) {
 		t.Fatalf("%s has no outputs for address %s", method, address)
 	}
 
-	t.Logf("Successfully passed %s test. Got %d ouputs", method, len(outputs.Outputs))
+	t.Logf("Successfully passed %s test. Got %d outputs", method, len(outputs.Outputs))
 }
 
 func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
@@ -360,7 +360,7 @@ func TestGetSlpTokenMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error unmarshalling %s response: %+v", method, err)
 	} else if len(meta.TokenMetadata) != 1 {
-		t.Fatalf("%s expected to return exacty 1 token info, got %d", method, len(meta.TokenMetadata))
+		t.Fatalf("%s expected to return exactly 1 token info, got %d", method, len(meta.TokenMetadata))
 	}
 	token := meta.TokenMetadata[0]
 	if hex.EncodeToString(token.TokenId) != tokenID {

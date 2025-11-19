@@ -1740,7 +1740,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		// check inputs != outputs (use check for explict burn requests i.e., 'req.AllowedSlpBurns')
 		outputVal, err := slpMd.TotalSlpMsgOutputValue()
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "an error occured when getting total slp amount in txn: %v, with error: %v", msgTx.TxHash(), err)
+			return nil, status.Errorf(codes.Internal, "an error occurred when getting total slp amount in txn: %v, with error: %v", msgTx.TxHash(), err)
 		}
 		if inputVal.Cmp(outputVal) < 0 {
 			invalidReason := "outputs greater than inputs"
@@ -1766,13 +1766,13 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			}
 			inputAmtUsed := inputVal.Sub(inputVal, burnAmt)
 			if inputAmtUsed.Cmp(outputVal) < 0 {
-				invalidReason := fmt.Sprintf("specified burn ammount %s is too high", burnAmt.String())
+				invalidReason := fmt.Sprintf("specified burn amount %s is too high", burnAmt.String())
 				if disableErrorResponse {
 					return slpInvalid(invalidReason), nil
 				}
 				return nil, status.Errorf(codes.Aborted, "%s, use SlpRequiredBurn to allow burns", invalidReason)
 			} else if inputAmtUsed.Cmp(outputVal) > 0 {
-				invalidReason := fmt.Sprintf("specified burn ammount %s is too low", burnAmt.String())
+				invalidReason := fmt.Sprintf("specified burn amount %s is too low", burnAmt.String())
 				if disableErrorResponse {
 					return slpInvalid(invalidReason), nil
 				}
@@ -1929,7 +1929,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		return slpValid(), nil
 	}
 
-	return nil, status.Errorf(codes.Internal, "an unknown error occured checking transaction %v", msgTx.TxHash())
+	return nil, status.Errorf(codes.Internal, "an unknown error occurred checking transaction %v", msgTx.TxHash())
 }
 
 // getSlpIndexEntryAndCheckBurnOtherToken checks for burns FROM OTHER TOKEN TYPES.
@@ -1940,7 +1940,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 //
 // NOTE: nft1 child genesis is allowed without error as long as the burned outpoint is a
 //
-//	nft1 Group type and the quanity is 1.
+//	nft1 Group type and the quantity is 1.
 func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoint, requiredBurns []*pb.SlpRequiredBurn, txnSlpMsg v1parser.ParseResult, inputIdx int) (*indexers.SlpTxEntry, error) {
 
 	slpEntry, err := s.getSlpIndexEntry(&outpoint.Hash)

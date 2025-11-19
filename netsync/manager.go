@@ -878,7 +878,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// or recognition of an orphan, we also use this information to update
 	// the block heights over other peers who's invs may have been ignored
 	// if we are actively syncing while the chain is not yet current or
-	// who may have lost the lock announcment race.
+	// who may have lost the lock announcement race.
 	var heightUpdate int32
 	var blkHashUpdate *chainhash.Hash
 
