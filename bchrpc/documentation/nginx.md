@@ -1,7 +1,7 @@
 # NGINX
 
 ## Serving bchrpc API through an NGINX reverse proxy (optional)
-For various reasons, like load balancing, ssl handling, etc. It might be handy to serve the bchrpc API thourgh a reverse proxy, although not necessary. Here we provide a sample config for NGINX.
+For various reasons, like load balancing, ssl handling, etc. It might be handy to serve the bchrpc API through a reverse proxy, although not necessary. Here we provide a sample config for NGINX.
 
 ### Upstream
 With load balancing

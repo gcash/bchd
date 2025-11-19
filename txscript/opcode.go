@@ -742,7 +742,7 @@ func (pop *parsedOpcode) checkMinimalDataPush() error {
 func (pop *parsedOpcode) print(oneline bool) string {
 	// The reference implementation one-line disassembly replaces opcodes
 	// which represent values (e.g. OP_0 through OP_16 and OP_1NEGATE)
-	// with the raw value.  However, when not doing a one-line dissassembly,
+	// with the raw value.  However, when not doing a one-line disassembly,
 	// we prefer to show the actual opcode names.  Thus, only replace the
 	// opcodes in question when the oneline flag is set.
 	opcodeName := pop.opcode.name

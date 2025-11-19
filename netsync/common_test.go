@@ -155,7 +155,7 @@ func WaitUntil(fn func() bool, timeout time.Duration) bool {
 	}
 }
 
-// MockPeerNotifier is a mock implemenation of netsync.PeerNotifierInterface.
+// MockPeerNotifier is a mock implementation of netsync.PeerNotifierInterface.
 // Whenever one of the interface methods is called, the MockPeerNotifier puts
 // the call arguments in a channel for a receiver to make assertions about.
 type MockPeerNotifier struct {

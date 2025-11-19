@@ -22,7 +22,7 @@ Similar operation as above with the following exceptions:
 - For each confirmed transaction make a  `GetMerkleProof` to download the merkle proof. Validate the proof. 
 
 *Operation*
-- Upon receving a `BlockNotification` disconnect or connect the headers to your chain as appropriate. 
+- Upon receiving a `BlockNotification` disconnect or connect the headers to your chain as appropriate. 
 - Upon receiving a `TransactionNotification` for a confirmed transaction request the merkle proof using the `GetMerkleProof` RPC.
 
 *Next startup*
