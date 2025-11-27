@@ -14,8 +14,8 @@ import (
 // function.
 func BenchmarkIsCoinBase(b *testing.B) {
 	tx, _ := bchutil.NewBlock(&Block100000).Tx(1)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		IsCoinBase(tx)
 	}
 }
@@ -24,8 +24,8 @@ func BenchmarkIsCoinBase(b *testing.B) {
 // function.
 func BenchmarkIsCoinBaseTx(b *testing.B) {
 	tx := Block100000.Transactions[1]
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		IsCoinBaseTx(tx)
 	}
 }

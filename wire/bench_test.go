@@ -63,7 +63,7 @@ var genesisCoinbaseTx = MsgTx{
 // BenchmarkWriteVarInt1 performs a benchmark on how long it takes to write
 // a single byte variable length integer.
 func BenchmarkWriteVarInt1(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarInt(ioutil.Discard, 0, 1)
 	}
 }
@@ -71,7 +71,7 @@ func BenchmarkWriteVarInt1(b *testing.B) {
 // BenchmarkWriteVarInt3 performs a benchmark on how long it takes to write
 // a three byte variable length integer.
 func BenchmarkWriteVarInt3(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarInt(ioutil.Discard, 0, 65535)
 	}
 }
@@ -79,7 +79,7 @@ func BenchmarkWriteVarInt3(b *testing.B) {
 // BenchmarkWriteVarInt5 performs a benchmark on how long it takes to write
 // a five byte variable length integer.
 func BenchmarkWriteVarInt5(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarInt(ioutil.Discard, 0, 4294967295)
 	}
 }
@@ -87,7 +87,7 @@ func BenchmarkWriteVarInt5(b *testing.B) {
 // BenchmarkWriteVarInt9 performs a benchmark on how long it takes to write
 // a nine byte variable length integer.
 func BenchmarkWriteVarInt9(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarInt(ioutil.Discard, 0, 18446744073709551615)
 	}
 }
@@ -97,7 +97,7 @@ func BenchmarkWriteVarInt9(b *testing.B) {
 func BenchmarkReadVarInt1(b *testing.B) {
 	buf := []byte{0x01}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarInt(r, 0)
 	}
@@ -108,7 +108,7 @@ func BenchmarkReadVarInt1(b *testing.B) {
 func BenchmarkReadVarInt3(b *testing.B) {
 	buf := []byte{0x0fd, 0xff, 0xff}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarInt(r, 0)
 	}
@@ -119,7 +119,7 @@ func BenchmarkReadVarInt3(b *testing.B) {
 func BenchmarkReadVarInt5(b *testing.B) {
 	buf := []byte{0xfe, 0xff, 0xff, 0xff, 0xff}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarInt(r, 0)
 	}
@@ -130,7 +130,7 @@ func BenchmarkReadVarInt5(b *testing.B) {
 func BenchmarkReadVarInt9(b *testing.B) {
 	buf := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarInt(r, 0)
 	}
@@ -141,7 +141,7 @@ func BenchmarkReadVarInt9(b *testing.B) {
 func BenchmarkReadVarStr4(b *testing.B) {
 	buf := []byte{0x04, 't', 'e', 's', 't'}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarString(r, 0)
 	}
@@ -152,7 +152,7 @@ func BenchmarkReadVarStr4(b *testing.B) {
 func BenchmarkReadVarStr10(b *testing.B) {
 	buf := []byte{0x0a, 't', 'e', 's', 't', '0', '1', '2', '3', '4', '5'}
 	r := bytes.NewReader(buf)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		ReadVarString(r, 0)
 	}
@@ -161,7 +161,7 @@ func BenchmarkReadVarStr10(b *testing.B) {
 // BenchmarkWriteVarStr4 performs a benchmark on how long it takes to write a
 // four byte variable length string.
 func BenchmarkWriteVarStr4(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarString(ioutil.Discard, 0, "test")
 	}
 }
@@ -169,7 +169,7 @@ func BenchmarkWriteVarStr4(b *testing.B) {
 // BenchmarkWriteVarStr10 performs a benchmark on how long it takes to write a
 // ten byte variable length string.
 func BenchmarkWriteVarStr10(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteVarString(ioutil.Discard, 0, "test012345")
 	}
 }
@@ -186,7 +186,7 @@ func BenchmarkReadOutPoint(b *testing.B) {
 	}
 	r := bytes.NewReader(buf)
 	var op OutPoint
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		readOutPoint(r, 0, 0, &op)
 	}
@@ -199,7 +199,7 @@ func BenchmarkWriteOutPoint(b *testing.B) {
 		Hash:  chainhash.Hash{},
 		Index: 0,
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		writeOutPoint(ioutil.Discard, 0, 0, op)
 	}
 }
@@ -224,7 +224,7 @@ func BenchmarkReadTxOut(b *testing.B) {
 	}
 	r := bytes.NewReader(buf)
 	var txOut TxOut
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		readTxOut(r, 0, 0, &txOut)
 		scriptPool.Return(txOut.PkScript)
@@ -235,7 +235,7 @@ func BenchmarkReadTxOut(b *testing.B) {
 // a transaction output.
 func BenchmarkWriteTxOut(b *testing.B) {
 	txOut := blockOne.Transactions[0].TxOut[0]
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		WriteTxOut(ioutil.Discard, 0, 0, txOut)
 	}
 }
@@ -255,7 +255,7 @@ func BenchmarkReadTxIn(b *testing.B) {
 	}
 	r := bytes.NewReader(buf)
 	var txIn TxIn
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		readTxIn(r, 0, 0, &txIn)
 		scriptPool.Return(txIn.SignatureScript)
@@ -266,7 +266,7 @@ func BenchmarkReadTxIn(b *testing.B) {
 // a transaction input.
 func BenchmarkWriteTxIn(b *testing.B) {
 	txIn := blockOne.Transactions[0].TxIn[0]
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		writeTxIn(ioutil.Discard, 0, 0, txIn)
 	}
 }
@@ -304,7 +304,7 @@ func BenchmarkDeserializeTxSmall(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var tx MsgTx
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		tx.Deserialize(r)
 	}
@@ -327,7 +327,7 @@ func BenchmarkDeserializeTxLarge(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var tx MsgTx
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		tx.Deserialize(r)
 	}
@@ -337,7 +337,7 @@ func BenchmarkDeserializeTxLarge(b *testing.B) {
 // a transaction.
 func BenchmarkSerializeTx(b *testing.B) {
 	tx := blockOne.Transactions[0]
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		tx.Serialize(ioutil.Discard)
 
 	}
@@ -363,7 +363,7 @@ func BenchmarkReadBlockHeader(b *testing.B) {
 	}
 	r := bytes.NewReader(buf)
 	var header BlockHeader
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, 0)
 		readBlockHeader(r, 0, &header)
 	}
@@ -373,7 +373,7 @@ func BenchmarkReadBlockHeader(b *testing.B) {
 // serialize a block header.
 func BenchmarkWriteBlockHeader(b *testing.B) {
 	header := blockOne.Header
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		writeBlockHeader(ioutil.Discard, 0, &header)
 	}
 }
@@ -401,8 +401,8 @@ func BenchmarkDecodeGetHeaders(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgGetHeaders
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -431,8 +431,8 @@ func BenchmarkDecodeHeaders(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgHeaders
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -461,8 +461,8 @@ func BenchmarkDecodeGetBlocks(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgGetBlocks
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -488,8 +488,8 @@ func BenchmarkDecodeAddr(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgAddr
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -518,8 +518,8 @@ func BenchmarkDecodeInv(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgInv
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -548,8 +548,8 @@ func BenchmarkDecodeNotFound(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgNotFound
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -586,8 +586,8 @@ func BenchmarkDecodeMerkleBlock(b *testing.B) {
 
 	r := bytes.NewReader(buf)
 	var msg MsgMerkleBlock
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		r.Seek(0, 0)
 		msg.BchDecode(r, pver, LatestEncoding)
 	}
@@ -596,7 +596,7 @@ func BenchmarkDecodeMerkleBlock(b *testing.B) {
 // BenchmarkTxHash performs a benchmark on how long it takes to hash a
 // transaction.
 func BenchmarkTxHash(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		genesisCoinbaseTx.TxHash()
 	}
 }
@@ -611,8 +611,7 @@ func BenchmarkDoubleHashB(b *testing.B) {
 	}
 	txBytes := buf.Bytes()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = chainhash.DoubleHashB(txBytes)
 	}
 }
@@ -627,8 +626,7 @@ func BenchmarkDoubleHashH(b *testing.B) {
 	}
 	txBytes := buf.Bytes()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = chainhash.DoubleHashH(txBytes)
 	}
 }

@@ -11,7 +11,7 @@ import (
 // BenchmarkAddJacobian benchmarks the secp256k1 curve addJacobian function with
 // Z values of 1 so that the associated optimizations are used.
 func BenchmarkAddJacobian(b *testing.B) {
-	b.StopTimer()
+
 	x1 := new(fieldVal).SetHex("34f9460f0e4f08393d192b3c5133a6ba099aa0ad9fd54ebccfacdfa239ff49c6")
 	y1 := new(fieldVal).SetHex("0b71ea9bd730fd8923f6d25a7a91e7dd7728a960686cb5a901bb419e0f2ca232")
 	z1 := new(fieldVal).SetHex("1")
@@ -20,8 +20,8 @@ func BenchmarkAddJacobian(b *testing.B) {
 	z2 := new(fieldVal).SetHex("1")
 	x3, y3, z3 := new(fieldVal), new(fieldVal), new(fieldVal)
 	curve := S256()
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		curve.addJacobian(x1, y1, z1, x2, y2, z2, x3, y3, z3)
 	}
 }
@@ -30,7 +30,7 @@ func BenchmarkAddJacobian(b *testing.B) {
 // function with Z values other than one so the optimizations associated with
 // Z=1 aren't used.
 func BenchmarkAddJacobianNotZOne(b *testing.B) {
-	b.StopTimer()
+
 	x1 := new(fieldVal).SetHex("d3e5183c393c20e4f464acf144ce9ae8266a82b67f553af33eb37e88e7fd2718")
 	y1 := new(fieldVal).SetHex("5b8f54deb987ec491fb692d3d48f3eebb9454b034365ad480dda0cf079651190")
 	z1 := new(fieldVal).SetHex("2")
@@ -39,8 +39,8 @@ func BenchmarkAddJacobianNotZOne(b *testing.B) {
 	z2 := new(fieldVal).SetHex("3")
 	x3, y3, z3 := new(fieldVal), new(fieldVal), new(fieldVal)
 	curve := S256()
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		curve.addJacobian(x1, y1, z1, x2, y2, z2, x3, y3, z3)
 	}
 }
@@ -50,7 +50,7 @@ func BenchmarkAddJacobianNotZOne(b *testing.B) {
 func BenchmarkScalarBaseMult(b *testing.B) {
 	k := fromHex("d74bf844b0862475103d96a611cf2d898447e288d34b360bc885cb8ce7c00575")
 	curve := S256()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		curve.ScalarBaseMult(k.Bytes())
 	}
 }
@@ -60,7 +60,7 @@ func BenchmarkScalarBaseMult(b *testing.B) {
 func BenchmarkScalarBaseMultLarge(b *testing.B) {
 	k := fromHex("d74bf844b0862475103d96a611cf2d898447e288d34b360bc885cb8ce7c005751111111011111110")
 	curve := S256()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		curve.ScalarBaseMult(k.Bytes())
 	}
 }
@@ -71,7 +71,7 @@ func BenchmarkScalarMult(b *testing.B) {
 	y := fromHex("0b71ea9bd730fd8923f6d25a7a91e7dd7728a960686cb5a901bb419e0f2ca232")
 	k := fromHex("d74bf844b0862475103d96a611cf2d898447e288d34b360bc885cb8ce7c00575")
 	curve := S256()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		curve.ScalarMult(x, y, k.Bytes())
 	}
 }
@@ -79,7 +79,7 @@ func BenchmarkScalarMult(b *testing.B) {
 // BenchmarkNAF benchmarks the NAF function.
 func BenchmarkNAF(b *testing.B) {
 	k := fromHex("d74bf844b0862475103d96a611cf2d898447e288d34b360bc885cb8ce7c00575")
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		NAF(k.Bytes())
 	}
 }
@@ -87,7 +87,7 @@ func BenchmarkNAF(b *testing.B) {
 // BenchmarkECDSASigVerify benchmarks how long it takes the secp256k1 curve to
 // verify signatures.
 func BenchmarkECDSASigVerify(b *testing.B) {
-	b.StopTimer()
+
 	// Randomly generated keypair.
 	// Private key: 9e0699c91ca1e3b7e3c9ba71eb71c89890872be97576010fe593fbf3fd57e66d
 	pubKey := PublicKey{
@@ -108,9 +108,8 @@ func BenchmarkECDSASigVerify(b *testing.B) {
 		b.Errorf("Signature failed to verify")
 		return
 	}
-	b.StartTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		sig.Verify(msgHash.Bytes(), &pubKey)
 	}
 }
@@ -118,7 +117,7 @@ func BenchmarkECDSASigVerify(b *testing.B) {
 // BenchmarkSchnorrSigVerify benchmarks how long it takes the secp256k1 curve to
 // verify signatures.
 func BenchmarkSchnorrSigVerify(b *testing.B) {
-	b.StopTimer()
+
 	// Randomly generated keypair.
 	// Private key: 9e0699c91ca1e3b7e3c9ba71eb71c89890872be97576010fe593fbf3fd57e66d
 	pubKey := PublicKey{
@@ -139,9 +138,8 @@ func BenchmarkSchnorrSigVerify(b *testing.B) {
 		b.Errorf("Signature failed to verify")
 		return
 	}
-	b.StartTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		sig.Verify(msgHash.Bytes(), &pubKey)
 	}
 }
@@ -151,7 +149,7 @@ func BenchmarkSchnorrSigVerify(b *testing.B) {
 func BenchmarkFieldNormalize(b *testing.B) {
 	// The normalize function is constant time so default value is fine.
 	f := new(fieldVal)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		f.Normalize()
 	}
 }

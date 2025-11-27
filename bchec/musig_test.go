@@ -118,7 +118,7 @@ func BenchmarkAggregatePublicKeys(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		AggregatePublicKeys(priv1.PubKey(), priv2.PubKey(), priv3.PubKey())
 	}
 }

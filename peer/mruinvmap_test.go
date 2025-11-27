@@ -148,7 +148,7 @@ func TestMruInventoryMapStringer(t *testing.T) {
 func BenchmarkMruInventoryList(b *testing.B) {
 	// Create a bunch of fake inventory vectors to use in benchmarking
 	// the mru inventory code.
-	b.StopTimer()
+
 	numInvVects := 100000
 	invVects := make([]*wire.InvVect, 0, numInvVects)
 	for i := 0; i < numInvVects; i++ {
@@ -158,12 +158,11 @@ func BenchmarkMruInventoryList(b *testing.B) {
 		iv := wire.NewInvVect(wire.InvTypeBlock, hash)
 		invVects = append(invVects, iv)
 	}
-	b.StartTimer()
 
 	// Benchmark the add plus evicition code.
 	limit := 20000
 	mruInvMap := newMruInventoryMap(uint(limit))
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		mruInvMap.Add(invVects[i%numInvVects])
 	}
 }
