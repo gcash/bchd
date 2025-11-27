@@ -135,18 +135,17 @@ func TestMruNonceMapStringer(t *testing.T) {
 func BenchmarkMruNonceList(b *testing.B) {
 	// Create a bunch of fake nonces to use in benchmarking the mru nonce
 	// code.
-	b.StopTimer()
+
 	numNonces := 100000
 	nonces := make([]uint64, 0, numNonces)
 	for i := 0; i < numNonces; i++ {
 		nonces = append(nonces, uint64(i))
 	}
-	b.StartTimer()
 
 	// Benchmark the add plus evicition code.
 	limit := 20000
 	mruNonceMap := newMruNonceMap(uint(limit))
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		mruNonceMap.Add(nonces[i%numNonces])
 	}
 }
