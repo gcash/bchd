@@ -2147,7 +2147,7 @@ func handleNotifySpent(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	return nil, nil
 }
 
-// handleNotifyNewTransations implements the notifynewtransactions command
+// handleNotifyNewTransactions implements the notifynewtransactions command
 // extension for websocket connections.
 func handleNotifyNewTransactions(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	cmd, ok := icmd.(*btcjson.NotifyNewTransactionsCmd)
@@ -2160,7 +2160,7 @@ func handleNotifyNewTransactions(wsc *wsClient, icmd interface{}) (interface{}, 
 	return nil, nil
 }
 
-// handleStopNotifyNewTransations implements the stopnotifynewtransactions
+// handleStopNotifyNewTransactions implements the stopnotifynewtransactions
 // command extension for websocket connections.
 func handleStopNotifyNewTransactions(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	wsc.server.ntfnMgr.UnregisterNewMempoolTxsUpdates(wsc)
