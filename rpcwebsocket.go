@@ -2716,7 +2716,7 @@ fetchRange:
 				// was any) still exists in the database.  If it
 				// doesn't, we error.
 				//
-				// A goto is used to branch executation back to
+				// A goto is used to branch execution back to
 				// before the range was evaluated, as it must be
 				// reevaluated for the new hashList.
 				minBlock += int32(i)
