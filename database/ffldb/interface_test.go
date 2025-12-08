@@ -258,7 +258,7 @@ func testDeleteValues(tc *testContext, bucket database.Bucket, values []keyPair)
 	return true
 }
 
-// testCursorInterface ensures the cursor itnerface is working properly by
+// testCursorInterface ensures the cursor interface is working properly by
 // exercising all of its functions on the passed bucket.
 func testCursorInterface(tc *testContext, bucket database.Bucket) bool {
 	// Ensure a cursor can be obtained for the bucket.
@@ -642,7 +642,7 @@ func rollbackOnPanic(t *testing.T, tx database.Tx) {
 func testMetadataManualTxInterface(tc *testContext) bool {
 	// populateValues tests that populating values works as expected.
 	//
-	// When the writable flag is false, a read-only tranasction is created,
+	// When the writable flag is false, a read-only transaction is created,
 	// standard bucket tests for read-only transactions are performed, and
 	// the Commit function is checked to ensure it fails as expected.
 	//
