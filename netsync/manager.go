@@ -8,7 +8,7 @@ import (
 	"container/list"
 	"math/rand"
 	"net"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -594,7 +594,7 @@ func (sm *SyncManager) medianSyncPeerCandidateBlockHeight() int32 {
 		return 0
 	}
 
-	sort.Slice(heights, func(i, j int) bool { return heights[i] < heights[j] })
+	slices.Sort(heights)
 
 	mNumber := len(heights) / 2
 
