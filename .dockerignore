@@ -1,7 +1,10 @@
 .git
 .gitignore
 .dockerignore
+.idea
 .travis.yml
+.vscode
+kube
 Dockerfile
 CHANGES
 LICENSE
