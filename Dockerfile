@@ -1,6 +1,6 @@
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM golang:1.23.4
+FROM golang:1.25.5
 
 LABEL maintainer="Josh Ellithorpe <quest@mac.com>"
 
