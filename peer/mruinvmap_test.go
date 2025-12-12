@@ -7,9 +7,10 @@ package peer
 import (
 	"crypto/rand"
 	"fmt"
+	"testing"
+
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"testing"
 )
 
 // TestMruInventoryMap ensures the MruInventoryMap behaves as expected including

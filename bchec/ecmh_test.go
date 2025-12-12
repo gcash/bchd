@@ -3,8 +3,9 @@ package bchec
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/gcash/bchd/chaincfg/chainhash"
 	"testing"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 var testVectors = []struct {

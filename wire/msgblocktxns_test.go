@@ -2,10 +2,11 @@ package wire
 
 import (
 	"bytes"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/gcash/bchd/chaincfg/chainhash"
 	"reflect"
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 // TestBlockTxns tests the MsgBlockTxns API against the latest protocol
