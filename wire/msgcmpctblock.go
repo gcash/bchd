@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"io"
+
 	"github.com/dchest/siphash"
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"io"
 )
 
 // ShortIDSize is the number of bytes in a short ID.

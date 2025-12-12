@@ -5,10 +5,11 @@
 package blockchain
 
 import (
-	"github.com/gcash/bchd/chaincfg"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/gcash/bchd/chaincfg"
 )
 
 // TestBigToCompact ensures BigToCompact converts big integers to the expected

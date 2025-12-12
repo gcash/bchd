@@ -3,8 +3,9 @@ package wire
 import (
 	"errors"
 	"fmt"
-	"github.com/gcash/bchd/chaincfg/chainhash"
 	"io"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 // MsgGetBlockTxns implements the Message interface and represents a Bitcoin getblocktxn

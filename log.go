@@ -7,9 +7,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/gcash/bchd/bchrpc"
 	"os"
 	"path/filepath"
+
+	"github.com/gcash/bchd/bchrpc"
 
 	"github.com/gcash/bchd/addrmgr"
 	"github.com/gcash/bchd/blockchain"

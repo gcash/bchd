@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
