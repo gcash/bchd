@@ -391,7 +391,7 @@ func (sp *serverPeer) setSupportsCompactBlocks(supports bool) {
 	sp.cbMtx.Unlock()
 }
 
-// compactBlocksEnabled returns if compact block is enabled for this peer.
+// compactBlocksSupported returns if compact block is supported for this peer.
 // It is safe for concurrent access.
 func (sp *serverPeer) compactBlocksSupported() bool {
 	sp.cbMtx.Lock()
