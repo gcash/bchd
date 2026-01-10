@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 )
 
 const PREFIX_BYTE = 0xef
@@ -417,14 +418,7 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 	// Else: Deduct the sum in OutputMutableTokensByCategory from the sum available in Available_Mutable_Tokens_By_Category.
 	// If the value falls below 0, fail validation.
 	for outputCategory, tokenOutputValue := range OutputMutableTokensByCategory {
-		existsInAvailableMintingCategories := false
-		for _, mintingCategory := range AvailableMintingCategories {
-			if mintingCategory == outputCategory {
-				existsInAvailableMintingCategories = true
-				break
-			}
-		}
-		if !existsInAvailableMintingCategories {
+		if !slices.Contains(AvailableMintingCategories, outputCategory) {
 			AvailableMutableTokensByCategory[outputCategory] -= tokenOutputValue
 			if AvailableMutableTokensByCategory[outputCategory] < 0 {
 				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
