@@ -51,7 +51,7 @@ func TestHeaders(t *testing.T) {
 	for i := 0; i < MaxBlockHeadersPerMsg+1; i++ {
 		err = msg.AddBlockHeader(bh)
 	}
-	if reflect.TypeOf(err) != reflect.TypeOf(&MessageError{}) {
+	if reflect.TypeOf(err) != reflect.TypeFor[*MessageError]() {
 		t.Errorf("AddBlockHeader: expected error on too many headers " +
 			"not received")
 	}
