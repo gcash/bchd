@@ -483,7 +483,7 @@ func TestOrphanReject(t *testing.T) {
 				"%v when allow orphans flag is false", tx.Hash())
 		}
 		expectedErr := RuleError{}
-		if reflect.TypeOf(err) != reflect.TypeOf(expectedErr) {
+		if reflect.TypeOf(err) != reflect.TypeFor[RuleError]() {
 			t.Fatalf("ProcessTransaction: wrong error got: <%T> %v, "+
 				"want: <%T>", err, err, expectedErr)
 		}
