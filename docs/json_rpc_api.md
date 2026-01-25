@@ -44,7 +44,7 @@ differences between bchd and bitcoind as far as how RPCs are serviced:
   [Websockets](http://en.wikipedia.org/wiki/WebSocket)
 
 Websockets are the preferred transport for bchd RPC and are used by applications
-such as [bchwallet](https://github.com/bchsuite/bchwallet) for inter-process
+such as [bchwallet](https://github.com/gcash/bchwallet) for inter-process
 communication with bchd.  The websocket connection endpoint for bchd is
 `wss://your_ip_or_domain:8334/ws`.
 

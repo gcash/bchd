@@ -34,7 +34,7 @@ listen=127.0.0.1:8333
 listen=[::1]:8333
 ```
 
-In addition, if you are starting btcd with TLS and want to make it
+In addition, if you are starting bchd with TLS and want to make it
 available via a hostname, then you will need to generate the TLS
 certificates for that host. For example,
  ```
