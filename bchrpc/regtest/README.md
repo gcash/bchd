@@ -2,9 +2,9 @@
 
 This setup allows for additional tests into bchd's continuous integration pipeline using regtest.  Docker compose is used to setup a regtest network with two bchd instances connected.
 
-## Travis CI
+## CI
 
-These tests are configured to run in `.travis.yml` with the docker service added along with the script `sh -c 'cd ./bchrpc/regtest && ./test.sh'`.
+These tests are configured to run in `.github/workflows/main.yml` with the docker service. See the workflow file for details.
 
 ## Run Tests
 

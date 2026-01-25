@@ -182,7 +182,7 @@ information.
 <a name="GoPackages" />
 
 * The gcash Bitcoin Cash-related Go Packages:
-    * [pcclient](https://github.com/gcash/bchd/tree/master/rpcclient) - Implements a
+    * [rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) - Implements a
       robust and easy to use Websocket-enabled Bitcoin JSON-RPC client
     * [btcjson](https://github.com/gcash/bchd/tree/master/btcjson) - Provides an extensive API
       for the underlying JSON-RPC command and return values
