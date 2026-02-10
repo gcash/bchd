@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
@@ -153,14 +154,7 @@ func validateJSONSchema(apiMmethod string, res []byte, ignoreErrors []string) er
 	}
 	errMsg := ""
 	for _, desc := range result.Errors() {
-		ignore := false
-		for _, errStr := range ignoreErrors {
-			if desc.String() == errStr {
-				ignore = true
-				break
-			}
-		}
-		if ignore {
+		if slices.Contains(ignoreErrors, desc.String()) {
 			continue
 		}
 		errMsg += fmt.Sprintf("- %s\n", desc)
