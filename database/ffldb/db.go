@@ -1203,7 +1203,7 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 	return nil
 }
 
-// DeleteBlock deletes the provided block from the database if it
+// DeleteBlocks deletes the provided block from the database if it
 // exists. Not error will be returned if it does not exist.
 //
 // The interface contract guarantees at least the following errors will
