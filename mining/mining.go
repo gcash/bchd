@@ -292,7 +292,7 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 	return bchutil.NewTx(tx), nil
 }
 
-// padCoinbase makes sure the coinbase script is above the minimum tx size
+// padCoinbaseScript makes sure the coinbase script is above the minimum tx size
 // threshold.
 func padCoinbaseScript(tx *wire.MsgTx) {
 	if tx.SerializeSize() < blockchain.MinTransactionSize {
