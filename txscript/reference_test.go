@@ -150,8 +150,8 @@ func parseShortForm(script string) ([]byte, error) {
 func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 	var flags ScriptFlags
 
-	sFlags := strings.Split(flagStr, ",")
-	for _, flag := range sFlags {
+	sFlags := strings.SplitSeq(flagStr, ",")
+	for flag := range sFlags {
 		switch flag {
 		case "":
 			// Nothing.
