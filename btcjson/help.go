@@ -395,16 +395,17 @@ func argHelp(xT descLookupFunc, rtp reflect.Type, defaults map[int]reflect.Value
 // function.
 func methodHelp(xT descLookupFunc, rtp reflect.Type, defaults map[int]reflect.Value, method string, resultTypes []interface{}) string {
 	// Start off with the method usage and help synopsis.
-	help := fmt.Sprintf("%s\n\n%s\n", methodUsageText(rtp, defaults, method),
-		xT(method+"--synopsis"))
+	var help strings.Builder
+	help.WriteString(fmt.Sprintf("%s\n\n%s\n", methodUsageText(rtp, defaults, method),
+		xT(method+"--synopsis")))
 
 	// Generate the help for each argument in the command.
 	if argText := argHelp(xT, rtp, defaults, method); argText != "" {
-		help += fmt.Sprintf("\n%s:\n%s", xT("help-arguments"),
-			argText)
+		help.WriteString(fmt.Sprintf("\n%s:\n%s", xT("help-arguments"),
+			argText))
 	} else {
-		help += fmt.Sprintf("\n%s:\n%s\n", xT("help-arguments"),
-			xT("help-arguments-none"))
+		help.WriteString(fmt.Sprintf("\n%s:\n%s\n", xT("help-arguments"),
+			xT("help-arguments-none")))
 	}
 
 	// Generate the help text for each result type.
@@ -427,17 +428,17 @@ func methodHelp(xT descLookupFunc, rtp reflect.Type, defaults map[int]reflect.Va
 	if len(resultTexts) > 1 {
 		for i, resultText := range resultTexts {
 			condKey := fmt.Sprintf("%s--condition%d", method, i)
-			help += fmt.Sprintf("\n%s (%s):\n%s\n",
-				xT("help-result"), xT(condKey), resultText)
+			help.WriteString(fmt.Sprintf("\n%s (%s):\n%s\n",
+				xT("help-result"), xT(condKey), resultText))
 		}
 	} else if len(resultTexts) > 0 {
-		help += fmt.Sprintf("\n%s:\n%s\n", xT("help-result"),
-			resultTexts[0])
+		help.WriteString(fmt.Sprintf("\n%s:\n%s\n", xT("help-result"),
+			resultTexts[0]))
 	} else {
-		help += fmt.Sprintf("\n%s:\n%s\n", xT("help-result"),
-			xT("help-result-nothing"))
+		help.WriteString(fmt.Sprintf("\n%s:\n%s\n", xT("help-result"),
+			xT("help-result-nothing")))
 	}
-	return help
+	return help.String()
 }
 
 // isValidResultType returns whether the passed reflect kind is one of the

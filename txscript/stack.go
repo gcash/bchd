@@ -7,6 +7,7 @@ package txscript
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 )
 
 // asBool gets the boolean value of the byte array.
@@ -371,13 +372,13 @@ func (s *stack) RollN(n int32) (int, error) {
 
 // String returns the stack in a readable format.
 func (s *stack) String() string {
-	var result string
+	var result strings.Builder
 	for _, stack := range s.stk {
 		if len(stack) == 0 {
-			result += "00000000  <empty>\n"
+			result.WriteString("00000000  <empty>\n")
 		}
-		result += hex.Dump(stack)
+		result.WriteString(hex.Dump(stack))
 	}
 
-	return result
+	return result.String()
 }
