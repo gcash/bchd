@@ -116,11 +116,10 @@ func Discover() (nat NAT, err error) {
 			continue
 		}
 		loc := answer[locIndex+len(locString):]
-		endIndex := strings.Index(loc, "\r\n")
-		if endIndex < 0 {
+		locURL, _, ok := strings.Cut(loc, "\r\n")
+		if !ok {
 			continue
 		}
-		locURL := loc[0:endIndex]
 		var serviceURL string
 		serviceURL, err = getServiceURL(locURL)
 		if err != nil {
