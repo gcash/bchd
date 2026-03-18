@@ -24,11 +24,11 @@ require (
 	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
-	golang.org/x/crypto v0.45.0
-	golang.org/x/net v0.47.0
-	golang.org/x/text v0.31.0
-	google.golang.org/grpc v1.72.0
-	google.golang.org/protobuf v1.36.6
+	golang.org/x/crypto v0.46.0
+	golang.org/x/net v0.48.0
+	golang.org/x/text v0.32.0
+	google.golang.org/grpc v1.79.3
+	google.golang.org/protobuf v1.36.10
 	lukechampine.com/uint128 v1.3.0
 )
 
@@ -47,9 +47,9 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 )
