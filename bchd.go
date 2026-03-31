@@ -220,7 +220,7 @@ func removeRegressionDB(dbPath string) error {
 	return nil
 }
 
-// dbPath returns the path to the block database given a database type.
+// blockDbPath returns the path to the block database given a database type.
 func blockDbPath(dbType string) string {
 	// The database name is based on the database type.
 	dbName := blockDbNamePrefix + "_" + dbType
