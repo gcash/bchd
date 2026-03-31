@@ -280,7 +280,7 @@ func loadConfig() (*config, []string, error) {
 	return &cfg, remainingArgs, nil
 }
 
-// createDefaultConfig creates a basic config file at the given destination path.
+// createDefaultConfigFile creates a basic config file at the given destination path.
 // For this it tries to read the config file for the RPC server (either bchd or
 // bchwallet), and extract the RPC user and password from it.
 func createDefaultConfigFile(destinationPath, serverConfigPath string) error {
