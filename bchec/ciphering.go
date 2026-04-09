@@ -50,7 +50,7 @@ func GenerateSharedSecret(privkey *PrivateKey, pubkey *PublicKey) []byte {
 
 // Encrypt encrypts data for the target public key using AES-256-CBC. It also
 // generates a private key (the pubkey of which is also in the output). The only
-// supported curve is secp256k1. The `structure' that it encodes everything into
+// supported curve is secp256k1. The `structure` that it encodes everything into
 // is:
 //
 //	struct {

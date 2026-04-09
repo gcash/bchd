@@ -290,7 +290,7 @@ func parseSchnorrSig(sigStr []byte) (*Signature, error) {
 	}, nil
 }
 
-// ParseBERSignature parses an ECDSA signature in BER format for the curve type `curve'
+// ParseBERSignature parses an ECDSA signature in BER format for the curve type `curve`
 // into a Signature type, perfoming some basic sanity checks.  If parsing
 // according to the more strict DER format is needed, use ParseDERSignature.
 func ParseBERSignature(sigStr []byte, curve elliptic.Curve) (*Signature, error) {
