@@ -2460,7 +2460,7 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 // passed peer list. Targets are identified via usage of the passed
 // `compareFunc`, which should return `true` if the passed peer is the target
 // peer. This function returns true on success and false if the peer is unable
-// to be located. If the peer is found, and the passed callback: `whenFound'
+// to be located. If the peer is found, and the passed callback: `whenFound`
 // isn't nil, we call it with the peer as the argument before it is removed
 // from the peerList, and is disconnected from the server.
 func disconnectPeer(peerList map[int32]*serverPeer, compareFunc func(*serverPeer) bool, whenFound func(*serverPeer)) bool {
