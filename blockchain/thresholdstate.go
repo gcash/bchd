@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -186,8 +187,7 @@ func (b *BlockChain) thresholdState(prevNode *blockNode, checker thresholdCondit
 
 	// Since each threshold state depends on the state of the previous
 	// window, iterate starting from the oldest unknown window.
-	for neededNum := len(neededStates) - 1; neededNum >= 0; neededNum-- {
-		prevNode := neededStates[neededNum]
+	for _, prevNode := range slices.Backward(neededStates) {
 
 		switch state {
 		case ThresholdDefined:
