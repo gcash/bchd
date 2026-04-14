@@ -1280,8 +1280,8 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 	// not be one.
 	lastBlock := -1
 	invVects := imsg.inv.InvList
-	for i := len(invVects) - 1; i >= 0; i-- {
-		if invVects[i].Type == wire.InvTypeBlock {
+	for i, v := range slices.Backward(invVects) {
+		if v.Type == wire.InvTypeBlock {
 			lastBlock = i
 			break
 		}

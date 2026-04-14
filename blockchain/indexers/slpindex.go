@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -380,8 +381,8 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 	// toposort and reverse order so we can unwind slp token metadata state if needed
 	txs := TopologicallySortTxs(block.Transactions())
 	var txsRev []*wire.MsgTx
-	for i := len(txs) - 1; i >= 0; i-- {
-		txsRev = append(txsRev, txs[i])
+	for _, v := range slices.Backward(txs) {
+		txsRev = append(txsRev, v)
 	}
 
 	// this method should only be called after a topological sort

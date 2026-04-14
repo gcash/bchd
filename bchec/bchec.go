@@ -22,6 +22,7 @@ package bchec
 import (
 	"crypto/elliptic"
 	"math/big"
+	"slices"
 	"sync"
 )
 
@@ -698,8 +699,7 @@ func NAF(k []byte) ([]byte, []byte) {
 	// these default to zero
 	retPos := make([]byte, len(k)+1)
 	retNeg := make([]byte, len(k)+1)
-	for i := len(k) - 1; i >= 0; i-- {
-		curByte := k[i]
+	for i, curByte := range slices.Backward(k) {
 		for j := uint(0); j < 8; j++ {
 			curIsOne = curByte&1 == 1
 			if j == 7 {

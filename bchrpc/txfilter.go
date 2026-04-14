@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
@@ -251,8 +252,8 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 				case *v1parser.SlpGenesis:
 					txnHash := tx.Hash().CloneBytes()
 					var txid []byte
-					for i := len(txnHash) - 1; i >= 0; i-- {
-						txid = append(txid, txnHash[i])
+					for _, v := range slices.Backward(txnHash) {
+						txid = append(txid, v)
 					}
 					copy(tokenID[:], txid)
 				case *v1parser.SlpMint:
