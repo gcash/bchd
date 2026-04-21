@@ -212,7 +212,7 @@ func (vm *Engine) IsBranchExecuting() bool {
 // tested in this case.
 func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 	// Disabled opcodes are fail on program counter.
-	if pop.isDisabled() {
+	if pop.isDisabled(vm) {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			pop.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
