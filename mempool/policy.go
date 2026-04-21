@@ -48,6 +48,10 @@ const (
 
 	// maxStandardTxSize is the maximum size of a transaction
 	maxStandardTxSize = 100000
+
+	// maxStandardP2SScriptSize is the maximum length of currently
+	// standard bare multi-signature (BMS) outputs.
+	maxStandardP2SScriptSize = 201
 )
 
 // calcMinRequiredTxRelayFee returns the minimum transaction fee required for a
@@ -110,7 +114,7 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, _ t
 // A standard public key script is one that is a recognized form, and for
 // multi-signature scripts, only contains from 1 to maxStandardMultiSigKeys
 // public keys.
-func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass) error {
+func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass, upgrade12Active bool) error {
 	switch scriptClass {
 	case txscript.MultiSigTy:
 		numPubKeys, numSigs, err := txscript.CalcMultiSigStats(pkScript)
@@ -148,8 +152,13 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass) er
 		}
 
 	case txscript.NonStandardTy:
-		return txRuleError(wire.RejectNonstandard,
-			"non-standard script form")
+		// After the May 2026 upgrade, any script that does not match any of the
+		// P2PK, P2PKH, P2SH20, P2SH32, OP_RETURN, or BMS types, is considered
+		// standard if it has a length less or equal to maxStandardP2SScriptSize.
+		if !upgrade12Active || len(pkScript) > maxStandardP2SScriptSize {
+			return txRuleError(wire.RejectNonstandard,
+				"non-standard script form")
+		}
 	}
 
 	return nil
@@ -233,7 +242,7 @@ func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
 // so small it costs more to process them than they are worth).
 func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	medianTimePast time.Time, minRelayTxFee bchutil.Amount,
-	maxTxVersion int32, upgrade9Active bool) error {
+	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
 
 	// The transaction must be a currently supported version.
 	msgTx := tx.MsgTx()
@@ -267,11 +276,20 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		// maximum size allowed for a standard transaction.  See
 		// the comment on maxStandardSigScriptSize for more details.
 		sigScriptLen := len(txIn.SignatureScript)
-		if sigScriptLen > maxStandardSigScriptSize {
+		maxStandardSizeAllowed := maxStandardSigScriptSize
+		if upgrade12Active {
+			// After the May 2026 upgrade, the limit on maximum standard
+			// input bytecode length (A.K.A. MAX_TX_IN_SCRIPT_SIG_SIZE –
+			// 1,650 bytes) is removed such that the maximum unlocking
+			// bytecode length is equal for both standard and consensus
+			// validation: 10,000 bytes (A.K.A. MAX_SCRIPT_SIZE).
+			maxStandardSizeAllowed = maxStandardTxSize
+		}
+		if sigScriptLen > maxStandardSizeAllowed {
 			str := fmt.Sprintf("transaction input %d: signature "+
 				"script size of %d bytes is large than max "+
 				"allowed size of %d bytes", i, sigScriptLen,
-				maxStandardSigScriptSize)
+				maxStandardSizeAllowed)
 			return txRuleError(wire.RejectNonstandard, str)
 		}
 
@@ -296,7 +314,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		}
 
 		scriptClass := txscript.GetScriptClass(txOut.PkScript)
-		err := checkPkScriptStandard(txOut.PkScript, scriptClass)
+		err := checkPkScriptStandard(txOut.PkScript, scriptClass, upgrade12Active)
 		if err != nil {
 			// Attempt to extract a reject code from the error so
 			// it can be retained.  When not possible, fall back to
@@ -331,8 +349,8 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 }
 
 func CheckTransactionStandard(tx *bchutil.Tx, height int32, medianTimePast time.Time, minRelayTxFee bchutil.Amount,
-	maxTxVersion int32, upgrade9Active bool) error {
-	return checkTransactionStandard(tx, height, medianTimePast, minRelayTxFee, maxTxVersion, upgrade9Active)
+	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
+	return checkTransactionStandard(tx, height, medianTimePast, minRelayTxFee, maxTxVersion, upgrade9Active, upgrade12Active)
 }
 
 func CheckInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {

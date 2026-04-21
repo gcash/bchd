@@ -83,7 +83,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Now(), bchutil.Amount(1000), 2, true)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Now(), bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -105,7 +105,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 			cache.AddEntry(i, utxos[i])
 		}
 
-		valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 		if !valid || err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -175,7 +175,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			continue
 		}
@@ -192,7 +192,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 			continue
 		}
 
-		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 
 		if valid || validationErr == nil {
 
@@ -263,7 +263,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			continue
 		}
@@ -280,7 +280,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 			continue
 		}
 
-		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 
 		if valid || validationErr == nil {
 
@@ -347,7 +347,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Now(), bchutil.Amount(1000), 2, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Now(), bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -369,7 +369,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 			cache.AddEntry(i, utxos[i])
 		}
 
-		valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 		if !valid || err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -439,7 +439,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			continue
 		}
@@ -456,7 +456,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 			continue
 		}
 
-		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 
 		if valid || validationErr == nil {
 
@@ -532,7 +532,7 @@ func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			continue
 		}
@@ -549,7 +549,7 @@ func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 			continue
 		}
 
-		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+		valid, validationErr := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 
 		if valid || validationErr == nil {
 
