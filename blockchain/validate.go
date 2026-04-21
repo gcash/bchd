@@ -1026,6 +1026,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	upgrade11Active := node.parent.CalcPastMedianTime().Unix() >= int64(b.chainParams.Upgrade11ActivationTime)
 
+	upgrade12Active := node.parent.CalcPastMedianTime().Unix() >= int64(b.chainParams.Upgrade12ActivationTime)
+
+
 	// BIP0030 added a rule to prevent blocks which contain duplicate
 	// transactions that 'overwrite' older transactions which are not fully
 	// spent.  See the documentation for checkBIP0030 for more details.
@@ -1131,6 +1134,10 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 
 	if upgrade11Active {
 		scriptFlags |= txscript.ScriptAllowMay2025
+	}
+
+	if upgrade12Active {
+		scriptFlags |= txscript.ScriptAllowMay2026
 	}
 
 	// Perform several checks on the inputs for each transaction.  Also

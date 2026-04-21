@@ -139,6 +139,11 @@ const (
 	// ScriptAllowMay2025StandardOnly is only used if ScriptAllowMay2025 is set
 	// Use "relay" costing rules: Hashing is costed 3x for standard transactions
 	ScriptAllowMay2025StandardOnly
+
+	// ScriptAllowMay2026 re-enables bitwise operations, enables looping,
+	// enables functions definision and invocation operations and standardizes p2s
+	// after may 2026
+	ScriptAllowMay2026
 )
 
 // HasFlag returns whether the ScriptFlags has the passed flag set.
