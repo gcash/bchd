@@ -2243,33 +2243,33 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_VERIF",
+			name: "OP_BEGIN",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_VERIF],
+				opcode: &opcodeArray[OP_BEGIN],
 				data:   nil,
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "OP_VERIF long",
+			name: "OP_BEGIN long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_VERIF],
+				opcode: &opcodeArray[OP_BEGIN],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_VERNOTIF",
+			name: "OP_UNTIL",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_VERNOTIF],
+				opcode: &opcodeArray[OP_UNTIL],
 				data:   nil,
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "OP_VERNOTIF long",
+			name: "OP_UNTIL long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_VERNOTIF],
+				opcode: &opcodeArray[OP_UNTIL],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
@@ -2835,7 +2835,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_RESERVED1",
+			name: "OP_DEFINE",
 			pop: &parsedOpcode{
 				opcode: &opcodeArray[OP_DEFINE],
 				data:   nil,
@@ -2843,7 +2843,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			name: "OP_RESERVED1 long",
+			name: "OP_DEFINE long",
 			pop: &parsedOpcode{
 				opcode: &opcodeArray[OP_DEFINE],
 				data:   make([]byte, 1),
@@ -2851,7 +2851,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: scriptError(ErrInternal, ""),
 		},
 		{
-			name: "OP_RESERVED2",
+			name: "OP_INVOKE",
 			pop: &parsedOpcode{
 				opcode: &opcodeArray[OP_INVOKE],
 				data:   nil,
@@ -2859,7 +2859,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			name: "OP_RESERVED2 long",
+			name: "OP_INVOKE long",
 			pop: &parsedOpcode{
 				opcode: &opcodeArray[OP_INVOKE],
 				data:   make([]byte, 1),

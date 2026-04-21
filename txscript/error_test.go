@@ -82,6 +82,9 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrInvalidBitCount, "ErrInvalidBitCount"},
 		{ErrInputSigChecks, "ErrInputSigChecks"},
 		{ErrIntegerOverflow, "ErrIntegerOverflow"},
+		{ErrInvalidFunctionIdentifier, "ErrInvalidFunctionIdentifier"},
+		{ErrFunctionAlreadyDefined, "ErrFunctionAlreadyDefined"},
+		{ErrUndefinedFunction, "ErrUndefinedFunction"},
 		{0xffff, "Unknown ErrorCode (65535)"},
 	}
 

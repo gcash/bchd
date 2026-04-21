@@ -172,6 +172,7 @@ type stackFrame struct {
 	script       []parsedOpcode
 	scriptOff    int
 	lastCodeStep int
+	condStack    []int
 }
 
 // halforder is used to tame ECDSA malleability (see BIP0062).
@@ -488,8 +489,12 @@ func (vm *Engine) Step() (done bool, err error) {
 		if vm.hasFlag(ScriptAllowMay2026) {
 			// Return from invoked function if applicable
 			if len(vm.frameStack) > 0 {
-				vm.returnFromInvoke()
-				return false, nil
+				for vm.scriptOff >= len(vm.scripts[vm.scriptIdx]) && len(vm.frameStack) > 0 {
+					vm.returnFromInvoke()
+				}
+				if !(vm.scriptOff >= len(vm.scripts[vm.scriptIdx])) {
+					return false, nil
+				}
 			}
 		}
 
@@ -556,6 +561,7 @@ func (vm *Engine) returnFromInvoke() bool {
 	vm.scripts[vm.scriptIdx] = frame.script
 	vm.scriptOff = frame.scriptOff
 	vm.lastCodeSep = frame.lastCodeStep
+	vm.condStack = frame.condStack
 
 	return true
 }
@@ -957,18 +963,19 @@ func (vm *Engine) Clone() *Engine {
 		return nil
 	}
 	newVM := &Engine{
-		txIdx:       vm.txIdx,
-		scriptOff:   vm.scriptOff,
-		scriptIdx:   vm.scriptIdx,
-		numOps:      vm.numOps,
-		metrics:     vm.metrics,
-		lastCodeSep: vm.lastCodeSep,
-		tx:          vm.tx,
-		bip16:       vm.bip16,
-		flags:       vm.flags,
-		inputAmount: vm.inputAmount,
-		sigCache:    vm.sigCache,
-		hashCache:   vm.hashCache,
+		txIdx:                vm.txIdx,
+		scriptOff:            vm.scriptOff,
+		scriptIdx:            vm.scriptIdx,
+		numOps:               vm.numOps,
+		metrics:              vm.metrics,
+		lastCodeSep:          vm.lastCodeSep,
+		tx:                   vm.tx,
+		bip16:                vm.bip16,
+		flags:                vm.flags,
+		inputAmount:          vm.inputAmount,
+		sigCache:             vm.sigCache,
+		hashCache:   		  vm.hashCache,
+		definedFunctionCount: vm.definedFunctionCount,
 	}
 	newVM.savedFirstStack = make([][]byte, len(vm.savedFirstStack))
 	for i, stack := range vm.savedFirstStack {
@@ -999,6 +1006,26 @@ func (vm *Engine) Clone() *Engine {
 	for i, data := range vm.dstack.stk {
 		newVM.dstack.stk[i] = make([]byte, len(data))
 		copy(newVM.dstack.stk[i], data)
+	}
+
+	newVM.functionTable = make(map[string][]byte, len(vm.functionTable))
+	for k, v := range(vm.functionTable) {
+		b := make([]byte, len(v))
+		copy(b, v)
+		newVM.functionTable[k] = b
+	}
+
+	newVM.frameStack = make([]stackFrame, len(vm.frameStack))
+	for i, f := range(vm.frameStack) {
+		newVM.frameStack[i] = f
+		if f.script != nil {
+			s := make([]parsedOpcode, len(f.script))
+			copy(s, f.script)
+			newVM.frameStack[i].script = s
+		}
+
+		newVM.frameStack[i].condStack = make([]int, len(vm.frameStack[i].condStack))
+		copy(newVM.frameStack[i].condStack, vm.frameStack[i].condStack)
 	}
 
 	return newVM
