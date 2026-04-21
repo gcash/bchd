@@ -482,8 +482,8 @@ var opcodeArray = [256]opcode{
 	OP_EQUALVERIFY: {OP_EQUALVERIFY, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
 	OP_DEFINE:      {OP_DEFINE, "OP_DEFINE", 1, opcodeDefine},
 	// opcodeInvoke uses opcodeArray; assign opcode opfunc filed in init() instead.
-	// OP_INVOKE:      {OP_INVOKE, "OP_INVOKE", 1, opcodeInvoke},
-	OP_INVOKE:      {OP_INVOKE, "OP_INVOKE", 1, nil},
+	// OP_INVOKE: {OP_INVOKE, "OP_INVOKE", 1, opcodeInvoke},
+	OP_INVOKE: {OP_INVOKE, "OP_INVOKE", 1, nil},
 
 	// Numeric related opcodes.
 	OP_1ADD:               {OP_1ADD, "OP_1ADD", 1, opcode1Add},
@@ -1030,8 +1030,7 @@ func opcodeNotIf(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-
-//opcodeBegin pushes the next instruction pointer index to the control stack.
+// opcodeBegin pushes the next instruction pointer index to the control stack.
 // Control stack transformation: [...] -> [... LoopPosition]
 func opcodeBegin(op *parsedOpcode, vm *Engine) error {
 	if !vm.hasFlag(ScriptAllowMay2026) {
@@ -1045,7 +1044,6 @@ func opcodeBegin(op *parsedOpcode, vm *Engine) error {
 
 	return nil
 }
-
 
 // opcodeUntil inspects the top item from the control stack. If this control
 // item is not an instruction pointer position (set by OP_BEGIN), it fails.
@@ -1061,7 +1059,7 @@ func opcodeUntil(op *parsedOpcode, vm *Engine) error {
 
 	if len(vm.condStack) == 0 {
 		return scriptError(ErrUnbalancedConditional,
-		"OP_UNTIL without matching OP_BEGIN")
+			"OP_UNTIL without matching OP_BEGIN")
 	}
 
 	top := vm.condStack[len(vm.condStack)-1]
@@ -1105,7 +1103,7 @@ func opcodeElse(op *parsedOpcode, vm *Engine) error {
 	if isCondStackLoop(vm.condStack[conditionalIdx]) {
 		return scriptError(ErrUnbalancedConditional,
 			"OP_ELSE cannot appear inside an OP_BEGIN block"+
-			"without a matching OP_IF")
+				"without a matching OP_IF")
 	}
 
 	switch vm.condStack[conditionalIdx] {
@@ -1940,18 +1938,18 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 		return opcodeReserved(op, vm)
 	}
 
-	identifier , err := vm.dstack.PopByteArray()
+	identifier, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
 	}
 	if len(identifier) > MaxFunctionIdentifierLength {
 		return scriptError(ErrInvalidFunctionIdentifier,
-		fmt.Sprintf(
-			"function identifier length %d exeeds max %d",
-			len(identifier), MaxFunctionIdentifierLength))
+			fmt.Sprintf(
+				"function identifier length %d exeeds max %d",
+				len(identifier), MaxFunctionIdentifierLength))
 	}
 
-	body , err := vm.dstack.PopByteArray()
+	body, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
 	}
@@ -1997,7 +1995,7 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 		return opcodeReserved(op, vm)
 	}
 
-	identifier , err := vm.dstack.PopByteArray()
+	identifier, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
 	}
@@ -2033,10 +2031,10 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 	}
 
 	frame := stackFrame{
-		script: vm.scripts[vm.scriptIdx],
-		scriptOff: vm.scriptOff,
+		script:       vm.scripts[vm.scriptIdx],
+		scriptOff:    vm.scriptOff,
 		lastCodeStep: vm.lastCodeSep,
-		condStack: vm.condStack,
+		condStack:    vm.condStack,
 	}
 	vm.frameStack = append(vm.frameStack, frame)
 	vm.scripts[vm.scriptIdx] = parsedBody
@@ -2089,7 +2087,6 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-
 // opcode2Mul AKA OP_LSHIFTNUM fails immediately if the stack is empty.
 // Otherwise it pops the top item from the stack as a bit count,
 // then pops the next item from the stack as the value to shift
@@ -2106,7 +2103,7 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	if (bitcount.IsLessThanInt(0)) {
+	if bitcount.IsLessThanInt(0) {
 		return scriptError(ErrNumberTooSmall, "negative shift count")
 	}
 
@@ -2118,7 +2115,6 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 	shift := uint(bitcount.Int32())
 
 	result := m.LShift(&m, shift)
-
 
 	if len(result.Bytes()) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
@@ -2132,8 +2128,6 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 
 	return nil
 }
-
-
 
 // opcode2Div AKA OP_RSHIFTNUM fails immediately if the stack is empty.
 // Otherwise it pops the top item from the stack as a bit count,
@@ -2151,7 +2145,7 @@ func opcode2Div(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	if (bitcount.IsLessThanInt(0)) {
+	if bitcount.IsLessThanInt(0) {
 		return scriptError(ErrNumberTooSmall, "negative shift count")
 	}
 
@@ -2176,7 +2170,6 @@ func opcode2Div(op *parsedOpcode, vm *Engine) error {
 
 	return nil
 }
-
 
 // opcodeNegate treats the top item on the data stack as an integer and replaces
 // it with its negation.
@@ -2425,7 +2418,6 @@ func opcodeMod(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-
 // opcodeLShift fails immediately if the stack is empty.
 // Otherwise it pops the top item from the stack as a bit count
 // then pops the next item from the stack as the binary data to shift.
@@ -2443,7 +2435,7 @@ func opcodeLShift(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	if (bitcount.IsLessThanInt(0)) {
+	if bitcount.IsLessThanInt(0) {
 		return scriptError(ErrNumberTooSmall, "negative shift count")
 	}
 
@@ -2469,7 +2461,7 @@ func opcodeLShift(op *parsedOpcode, vm *Engine) error {
 	if bitShift == 0 {
 		copy(result, data[byteShift:])
 	} else {
-		for i:=uint(0); i < dataLen-byteShift; i++ {
+		for i := uint(0); i < dataLen-byteShift; i++ {
 			src := i + byteShift
 			hi := uint16(data[src] << bitShift)
 			lo := uint16(0)
@@ -2485,7 +2477,6 @@ func opcodeLShift(op *parsedOpcode, vm *Engine) error {
 	return nil
 
 }
-
 
 // opcodeRShift fails immediately if the stack is empty.
 // Otherwise it pops the top item from the stack as a bit count
@@ -2504,7 +2495,7 @@ func opcodeRShift(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	if (bitcount.IsLessThanInt(0)) {
+	if bitcount.IsLessThanInt(0) {
 		return scriptError(ErrNumberTooSmall, "negative shift count")
 	}
 
@@ -2530,7 +2521,7 @@ func opcodeRShift(op *parsedOpcode, vm *Engine) error {
 	if bitShift == 0 {
 		copy(result[byteShift:], data)
 	} else {
-		for i:=int(dataLen)-1; i >= int(byteShift); i-- {
+		for i := int(dataLen) - 1; i >= int(byteShift); i-- {
 			src := uint(i - int(byteShift))
 
 			lo := uint16(data[src] >> bitShift)
@@ -4284,5 +4275,5 @@ func init() {
 	OpcodeByName["OP_NOP2"] = OP_CHECKLOCKTIMEVERIFY
 	OpcodeByName["OP_NOP3"] = OP_CHECKSEQUENCEVERIFY
 
-	opcodeArray[OP_INVOKE].opfunc= opcodeInvoke
+	opcodeArray[OP_INVOKE].opfunc = opcodeInvoke
 }
