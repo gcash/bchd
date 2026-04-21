@@ -175,7 +175,7 @@ func TestVMlimitsAndBigInt2023Standard(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				fatalf(t, err.Error(), test, i)
 			}
@@ -323,7 +323,7 @@ func TestVMlimitsAndBigInt2023NonStandard(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				fatalf(t, err.Error(), test, i)
 			}
@@ -474,7 +474,7 @@ func TestVMlimitsAndBigInt2023Invalid(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				continue
 			}
@@ -640,7 +640,7 @@ func TestVMlimitsAndBigInt2025Standard(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				fatalf(t, err.Error(), test, i)
 			}
@@ -815,7 +815,7 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx), false
 			if !valid || err != nil {
 				fatalf(t, err.Error(), test, i)
 			}
@@ -983,7 +983,7 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx)
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				continue
 			}

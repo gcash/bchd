@@ -118,7 +118,8 @@ out:
 			}
 
 			if v.flags.HasFlag(txscript.ScriptAllowCashTokens) {
-				_, err := wire.RunCashTokensValidityAlgorithm(utxoEntryCache, txVI.tx.MsgTx())
+				_, err := wire.RunCashTokensValidityAlgorithm(
+					utxoEntryCache, txVI.tx.MsgTx(), v.flags.HasFlag(txscript.ScriptAllowMay2026))
 				if err != nil {
 					v.sendResult(err)
 				}

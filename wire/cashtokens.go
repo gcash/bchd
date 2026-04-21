@@ -23,7 +23,9 @@ const (
 	BASE_TOKEN_DATA_LENGTH = 1 + 32 + 1
 
 	MAX_FT_AMOUNT         = 9223372036854775807
-	MAX_COMMITMENT_LENGTH = 40
+
+	MAX_COMMITMENT_LENGTH_LEGACY = 40
+	MAX_COMMITMENT_LENGTH        = 128
 )
 
 type TokenData struct {
@@ -248,7 +250,7 @@ func IsCoinBaseTx(msgTx *MsgTx) bool {
 }
 
 // Token Validation Algorithm
-func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, error) {
+func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScriptAllowMay2026 bool) (bool, error) {
 	if IsCoinBaseTx(tx) {
 		return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 	}
@@ -320,6 +322,11 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		category   [32]byte
 		commitment []byte
 	}
+	maxCommitmentLength := MAX_COMMITMENT_LENGTH_LEGACY
+	if hasScriptAllowMay2026 {
+		maxCommitmentLength = MAX_COMMITMENT_LENGTH
+	}
+
 	for _, txOut := range tx.TxOut {
 
 		if txOut.TokenData.IsEmpty() {
@@ -329,7 +336,7 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx) (bool, 
 		if !txOut.TokenData.HasNFT() && (txOut.TokenData.Amount < 1 || txOut.TokenData.Amount > MAX_FT_AMOUNT) {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
-		if len(txOut.TokenData.Commitment) > MAX_COMMITMENT_LENGTH {
+		if len(txOut.TokenData.Commitment) > maxCommitmentLength {
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 
