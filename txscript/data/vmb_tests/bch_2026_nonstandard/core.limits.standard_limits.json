@@ -1,0 +1,9 @@
+{
+"gt2may":[41,32800,101,"Transaction structure and limits: (Nonstandard) outputs may be malformed (P2S)"],
+"9d7zh2":[43,34400,927,"Transaction structure and limits: (Nonstandard) outputs may be malformed (P2SH20)"],
+"x48wxa":[43,34400,951,"Transaction structure and limits: (Nonstandard) outputs may be malformed (P2SH32)"],
+"r7ulrj":[41,32800,25413,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations) (P2S)"],
+"v3spvn":[41,32800,25514,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations) (P2S)"],
+"qa6yh5":[41,32800,25401,"Transaction structure and limits: Evaluation of 201 operations (non-signature operations, CashToken operations) (P2S)"],
+"xq9wjf":[41,32800,25502,"Transaction structure and limits: Evaluation of 202 operations (non-signature operations, CashToken operations) (P2S)"]
+}

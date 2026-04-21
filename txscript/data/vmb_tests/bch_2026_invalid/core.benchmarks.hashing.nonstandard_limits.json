@@ -1,0 +1,16 @@
+{
+"xlnnzx":[42,33600,24307,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard, single-input limits, maximize bytes OP_RIPEMD160 hashed (P2S)"],
+"3tywer":[42,33600,24307,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard, single-input limits, maximize bytes OP_SHA1 hashed (P2S)"],
+"mvypwk":[42,33600,24511,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard, single-input limits, maximize bytes OP_SHA256 hashed (P2S)"],
+"n4qn5c":[42,33600,22431,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard, single-input limits, maximize bytes OP_HASH160 hashed (P2S)"],
+"vdqk6h":[42,33600,22611,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard, single-input limits, maximize bytes OP_HASH256 hashed (P2S)"],
+"ntjj3l":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard limits, maximize hash digests per byte, then total bytes OP_RIPEMD160 hashed (P2S)"],
+"r83vmf":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA1 hashed (P2S)"],
+"k8mg8c":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard limits, maximize hash digests per byte, then total bytes OP_SHA256 hashed (P2S)"],
+"4t390w":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH160 hashed (P2S)"],
+"xpw62x":[42,33600,33835,"Transaction validation benchmarks: Within BCH_2023_05 P2S/nonstandard limits, maximize hash digests per byte, then total bytes OP_HASH256 hashed (P2S)"],
+"vr4rff":[45,36000,20511,"Transaction validation benchmarks: OP_HASH160 hash 9976 bytes (P2S)"],
+"twst6j":[45,36000,20535,"Transaction validation benchmarks: OP_HASH160 hash 10000 bytes (P2S)"],
+"0vuq37":[45,36000,20523,"Transaction validation benchmarks: OP_HASH256 hash 9976 bytes (P2S)"],
+"0j2276":[45,36000,20547,"Transaction validation benchmarks: OP_HASH256 hash 10000 bytes (P2S)"]
+}

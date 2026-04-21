@@ -1,0 +1,4 @@
+{
+"nsw96e":"Unable to verify standard transaction: standard transactions may not have dust outputs. Transaction output 0 must have a value of at least 471 satoshis. Current value: 0",
+"deq7jk":"Unable to verify standard transaction: standard transactions may not have dust outputs. Transaction output 0 must have a value of at least 471 satoshis. Current value: 0"
+}

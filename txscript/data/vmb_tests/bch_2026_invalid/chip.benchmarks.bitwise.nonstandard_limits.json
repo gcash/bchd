@@ -1,0 +1,13 @@
+{
+"rg8apq":[41,32800,41102,"Transaction validation benchmarks: infinite loop of OP_INVERT (P2S)"],
+"2xv60f":[41,32800,20603,"Transaction validation benchmarks:  invalid OP_LSHIFTNUM (by min_number) (P2S)"],
+"w6j874":[41,32800,41916,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (1 << 79998) (P2S)"],
+"uj33cp":[41,32800,32885,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (0 << 18446744073709551615) (P2S)"],
+"2f2c6g":[41,32800,410,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (1 << 18446744073709551615) (P2S)"],
+"hdckll":[41,32800,41502,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (0 << max_number) (P2S)"],
+"l89ycg":[41,32800,30902,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (1 << max_number) (P2S)"],
+"7fnxag":[41,32800,40901,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (max_number << max_number) (P2S)"],
+"2kcvyv":[41,32800,40901,"Transaction validation benchmarks: infinite loop of max OP_LSHIFTNUM (min_number << max_number) (P2S)"],
+"d26kac":[41,32800,41502,"Transaction validation benchmarks: infinite loop of max OP_RSHIFTNUM (0 >> max_number) (P2S)"],
+"78fp6t":[41,32800,20702,"Transaction validation benchmarks: infinite loop of max OP_RSHIFTNUM (0 >> minNumber) (P2S)"]
+}

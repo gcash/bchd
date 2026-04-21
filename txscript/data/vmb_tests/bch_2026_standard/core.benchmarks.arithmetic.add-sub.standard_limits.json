@@ -1,0 +1,17 @@
+{
+"479864":[260,208000,24811,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (minimize 0 results) (P2SH20)"],
+"7s4l4d":[251,200800,24808,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_ADD (P2SH20)"],
+"wjg8aj":[251,200800,24832,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_ADD (P2SH32)"],
+"wc6z2q":[251,200800,23608,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (P2SH20)"],
+"3z4fuw":[251,200800,23632,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (P2SH32)"],
+"pp6twr":[260,208000,24835,"Transaction validation benchmarks: Within BCH_2023_05 P2SH/standard, single-input limits, maximize OP_SUB (minimize 0 results) (P2SH32)"],
+"des0rv":[65,52000,51449,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_ADD operand bytes (P2SH20)"],
+"xg7206":[65,52000,51473,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_ADD operand bytes (P2SH32)"],
+"v8lscg":[65,52000,51446,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_SUB operand bytes (P2SH20)"],
+"2xhecr":[65,52000,51470,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize OP_SUB operand bytes (P2SH32)"],
+"y54lkh":[71,56800,52495,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize (OP_DUP OP_CAT) OP_ADD operand bytes (P2SH20)"],
+"9vkccn":[71,56800,52519,"Transaction validation benchmarks: Within BCH_2025_05 P2SH/standard, single-input limits, maximize (OP_DUP OP_CAT) OP_ADD operand bytes (P2SH32)"],
+"53s3xu":[72,57600,36211,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, maximize (OP_DUP OP_CAT) OP_SUB operand bytes (OP_DUP OP_SUB OP_NOT) (P2SH20)"],
+"f7qhsg":[71,56800,44304,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, maximize (OP_DUP OP_CAT) OP_SUB operand bytes (<1> OP_SUB) (P2SH20)"],
+"09macl":[163,130400,129610,"Transaction validation benchmarks: Within BCH_2025_05 P2SH20/standard, single-input limits, balance (OP_DUP OP_CAT) OP_ADD density and operand bytes (P2SH20)"]
+}

@@ -1,0 +1,7 @@
+{
+"xcyp3t":[41,32800,760,"Push data operations: OP_PUSHDATA_1 of 255 non-zero bytes produces expected stack item (P2S)"],
+"ruhrpq":[41,32800,760,"Push data operations: OP_PUSHDATA_1 of 255 zero bytes produces expected stack item (P2S)"],
+"m0vklc":[41,32800,761,"Push data operations: OP_PUSHDATA_2 of 256 non-zero bytes produces expected stack item (P2S)"],
+"e6tfx8":[41,32800,761,"Push data operations: OP_PUSHDATA_2 of 256 zero bytes produces expected stack item (P2S)"],
+"gs5rlf":[41,32800,1062,"Push data operations: <1> OP_IF OP_PUSHDATA_2 ... OP_ENDIF in locking bytecode (P2S)"]
+}

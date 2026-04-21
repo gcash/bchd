@@ -1,0 +1,6 @@
+{
+"lx24w3":[41,32800,32798,"Transaction validation benchmarks: max-cost OP_INVERT (P2S)"],
+"8qnlgt":[41,32800,6753,"Transaction validation benchmarks: max-cost OP_LSHIFTNUM (P2S)"],
+"4r9wdp":[65,52000,51527,"Transaction validation benchmarks: max-cost OP_RSHIFTNUM (min_number >> max_number) (P2S)"],
+"e2knc8":[41,32800,31002,"Transaction validation benchmarks: max-cost OP_RSHIFTNUM (0 >> max_number) (P2S)"]
+}

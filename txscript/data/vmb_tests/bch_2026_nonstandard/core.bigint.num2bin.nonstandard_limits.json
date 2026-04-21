@@ -1,0 +1,10 @@
+{
+"wyj88x":[42,33600,1021,"BigInt: OP_NUM2BIN padded zero (520 bytes) with length of zero is zero (P2S)"],
+"hn6esq":[42,33600,1021,"BigInt: OP_NUM2BIN padded negative zero (520 bytes) with length of zero is zero (P2S)"],
+"58sq7e":[42,33600,1022,"BigInt: OP_NUM2BIN padded zero (521 bytes) with length of zero is zero (P2S)"],
+"h9nxd5":[42,33600,1022,"BigInt: OP_NUM2BIN padded negative zero (521 bytes) with length of zero is zero (P2S)"],
+"hfl9dg":[43,34400,1024,"BigInt: OP_NUM2BIN padded zero (520 bytes) with length of one is padded zero (P2S)"],
+"v97fg7":[43,34400,1024,"BigInt: OP_NUM2BIN padded negative zero (520 bytes) with length of one is padded zero (P2S)"],
+"5c22kw":[43,34400,1025,"BigInt: OP_NUM2BIN padded zero (521 bytes) with length of one is padded zero (P2S)"],
+"a82rhl":[43,34400,1025,"BigInt: OP_NUM2BIN padded negative zero (521 bytes) with length of one is padded zero (P2S)"]
+}

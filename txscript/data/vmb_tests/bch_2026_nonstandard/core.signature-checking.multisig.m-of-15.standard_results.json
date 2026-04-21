@@ -1,0 +1,3 @@
+{
+"xf3ptg":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 514 exceeds the maximum standard locking bytecode length of 201."
+}

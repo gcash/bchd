@@ -1,0 +1,14 @@
+{
+"qf0xy5":[42,33600,915,"BigInt: OP_0NOTEQUAL 512-byte number (all bits set) (P2S)"],
+"velmq0":[42,33600,4499,"BigInt: OP_0NOTEQUAL 4096-byte number (all bits set) (P2S)"],
+"4nrxyh":[42,33600,8595,"BigInt: OP_0NOTEQUAL 8192-byte number (all bits set) (P2S)"],
+"x8dd4y":[42,33600,915,"BigInt: OP_0NOTEQUAL 512-byte number (alternating bits set) (P2S)"],
+"lcacng":[42,33600,4499,"BigInt: OP_0NOTEQUAL 4096-byte number (alternating bits set) (P2S)"],
+"easndq":[42,33600,8595,"BigInt: OP_0NOTEQUAL 8192-byte number (alternating bits set) (P2S)"],
+"93xdvc":[42,33600,915,"BigInt: OP_0NOTEQUAL 512-byte number (highest-bit set) (P2S)"],
+"e3f74w":[42,33600,4499,"BigInt: OP_0NOTEQUAL 4096-byte number (highest-bit set) (P2S)"],
+"ht5vda":[42,33600,8595,"BigInt: OP_0NOTEQUAL 8192-byte number (highest-bit set) (P2S)"],
+"qnf7af":[42,33600,915,"BigInt: OP_0NOTEQUAL 512-byte number (one bit set per byte) (P2S)"],
+"9z88ed":[42,33600,4499,"BigInt: OP_0NOTEQUAL 4096-byte number (one bit set per byte) (P2S)"],
+"4yrh8v":[42,33600,8595,"BigInt: OP_0NOTEQUAL 8192-byte number (one bit set per byte) (P2S)"]
+}

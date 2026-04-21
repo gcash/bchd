@@ -1,0 +1,8 @@
+{
+"z9jrrh":[177,141600,57316,"Signature checking: 2-of-20 multisig with checkBits of keys 1 and 13 (Schnorr, key 1 and key 13) (P2S)"],
+"82qta4":[177,141600,57316,"Signature checking: 2-of-20 multisig with checkBits of keys 1 and 20 (Schnorr, key 1 and key 20) (P2S)"],
+"8w36xu":[177,141600,57316,"Signature checking: 2-of-20 multisig with checkBits of keys 13 and 20 (Schnorr, key 13 and key 20) (P2S)"],
+"dvpekm":[573,458400,220066,"Signature checking: 8-of-20 Schnorr multisig with checkBits of keys 1 to 8 (keys 1 to 8) (P2S)"],
+"g49kxl":[695,556000,543807,"Signature checking: 9-of-20 ECDSA multisig with checkBits of zero (keys 1 to 9) (P2S)"],
+"03ejhx":[639,511200,247191,"Signature checking: 9-of-20 Schnorr multisig with checkBits of keys 1 to 9 (keys 1 to 9) (P2S)"]
+}

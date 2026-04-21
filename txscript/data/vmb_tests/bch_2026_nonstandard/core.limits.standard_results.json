@@ -1,0 +1,9 @@
+{
+"gt2may":"Unable to verify standard transaction: standard transactions may not have dust outputs. Transaction output 0 must have a value of at least 474 satoshis. Current value: 0",
+"9d7zh2":"Unable to verify standard transaction: standard transactions may not have dust outputs. Transaction output 0 must have a value of at least 474 satoshis. Current value: 0",
+"x48wxa":"Unable to verify standard transaction: standard transactions may not have dust outputs. Transaction output 0 must have a value of at least 474 satoshis. Current value: 0",
+"r7ulrj":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 236 exceeds the maximum standard locking bytecode length of 201.",
+"v3spvn":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 237 exceeds the maximum standard locking bytecode length of 201.",
+"qa6yh5":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 236 exceeds the maximum standard locking bytecode length of 201.",
+"xq9wjf":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 237 exceeds the maximum standard locking bytecode length of 201."
+}
