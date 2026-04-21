@@ -337,6 +337,18 @@ const (
 	// ErrIntegerOverflow is returned when a stack operation overflows an int64.
 	ErrIntegerOverflow
 
+	// ErrInvalidFunctionIdentifier is returned when the length of a function
+	// identifier exceeds MaxFunctionIdentifierLength.
+	ErrInvalidFunctionIdentifier
+
+	// ErrFunctionAlreadyDefined is returned when OP_DEFINE is called with
+	// an identifier that already exists in the function table.
+	ErrFunctionAlreadyDefined
+
+	// ErrUndefinedFunction is returned when OP_INVOKE is called with
+	// an identifier that does not exist in the function table.
+	ErrUndefinedFunction
+
 	// numErrorCodes is the maximum error code number used in tests.  This
 	// entry MUST be the last entry in the enum.
 	numErrorCodes

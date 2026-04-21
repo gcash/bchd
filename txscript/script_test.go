@@ -2837,7 +2837,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 		{
 			name: "OP_RESERVED1",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_RESERVED1],
+				opcode: &opcodeArray[OP_DEFINE],
 				data:   nil,
 			},
 			expectedErr: nil,
@@ -2845,7 +2845,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 		{
 			name: "OP_RESERVED1 long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_RESERVED1],
+				opcode: &opcodeArray[OP_DEFINE],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
@@ -2853,7 +2853,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 		{
 			name: "OP_RESERVED2",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_RESERVED2],
+				opcode: &opcodeArray[OP_INVOKE],
 				data:   nil,
 			},
 			expectedErr: nil,
@@ -2861,7 +2861,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 		{
 			name: "OP_RESERVED2 long",
 			pop: &parsedOpcode{
-				opcode: &opcodeArray[OP_RESERVED2],
+				opcode: &opcodeArray[OP_INVOKE],
 				data:   make([]byte, 1),
 			},
 			expectedErr: scriptError(ErrInternal, ""),
