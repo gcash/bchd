@@ -461,7 +461,7 @@ var opcodeArray = [256]opcode{
 	OP_REVERSEBYTES: {OP_REVERSEBYTES, "OP_REVERSEBYTES", 1, opcodeReverseBytes},
 
 	// Bitwise logic opcodes.
-	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeDisabled},
+	OP_INVERT:      {OP_INVERT, "OP_INVERT", 1, opcodeInvert},
 	OP_AND:         {OP_AND, "OP_AND", 1, opcodeAnd},
 	OP_OR:          {OP_OR, "OP_OR", 1, opcodeOr},
 	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeXor},
@@ -473,8 +473,8 @@ var opcodeArray = [256]opcode{
 	// Numeric related opcodes.
 	OP_1ADD:               {OP_1ADD, "OP_1ADD", 1, opcode1Add},
 	OP_1SUB:               {OP_1SUB, "OP_1SUB", 1, opcode1Sub},
-	OP_2MUL:               {OP_2MUL, "OP_2MUL", 1, opcodeDisabled},
-	OP_2DIV:               {OP_2DIV, "OP_2DIV", 1, opcodeDisabled},
+	OP_2MUL:               {OP_2MUL, "OP_2MUL", 1, opcode2Mul},
+	OP_2DIV:               {OP_2DIV, "OP_2DIV", 1, opcode2Div},
 	OP_NEGATE:             {OP_NEGATE, "OP_NEGATE", 1, opcodeNegate},
 	OP_ABS:                {OP_ABS, "OP_ABS", 1, opcodeAbs},
 	OP_NOT:                {OP_NOT, "OP_NOT", 1, opcodeNot},
@@ -484,8 +484,8 @@ var opcodeArray = [256]opcode{
 	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeMul},
 	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDiv},
 	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeMod},
-	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeDisabled},
-	OP_RSHIFT:             {OP_RSHIFT, "OP_RSHIFT", 1, opcodeDisabled},
+	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeLShift},
+	OP_RSHIFT:             {OP_RSHIFT, "OP_RSHIFT", 1, opcodeRShift},
 	OP_BOOLAND:            {OP_BOOLAND, "OP_BOOLAND", 1, opcodeBoolAnd},
 	OP_BOOLOR:             {OP_BOOLOR, "OP_BOOLOR", 1, opcodeBoolOr},
 	OP_NUMEQUAL:           {OP_NUMEQUAL, "OP_NUMEQUAL", 1, opcodeNumEqual},
@@ -634,18 +634,20 @@ type parsedOpcode struct {
 
 // isDisabled returns whether or not the opcode is disabled and thus is always
 // bad to see in the instruction stream (even if turned off by a conditional).
-func (pop *parsedOpcode) isDisabled() bool {
+func (pop *parsedOpcode) isDisabled(vm *Engine) bool {
+	opcodesDisabled := !vm.hasFlag(ScriptAllowMay2026)
+
 	switch pop.opcode.value {
 	case OP_INVERT:
-		return true
+		return opcodesDisabled
 	case OP_2MUL:
-		return true
+		return opcodesDisabled
 	case OP_2DIV:
-		return true
+		return opcodesDisabled
 	case OP_LSHIFT:
-		return true
+		return opcodesDisabled
 	case OP_RSHIFT:
-		return true
+		return opcodesDisabled
 	default:
 		return false
 	}
@@ -1680,6 +1682,32 @@ func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
+// opcodeInvert fails immediately if the stack is empty.
+// Otherwise it pops the top item from the stack and
+// inverts (bitwise "NOT") each byte of the item, then push the result to the stack.
+//
+// Stack transformation: [... x] -> [... ~x]
+func opcodeInvert(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeDisabled(op, vm)
+	}
+
+	a, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	b := make([]byte, len(a))
+
+	for i := 0; i < len(a); i++ {
+		b[i] = ^a[i]
+	}
+	vm.dstack.PushByteArray(b)
+
+	vm.metrics.AddOPCost(len(b))
+
+	return nil
+}
+
 // opcodeAnd executes a boolean and between each bit in the operands
 //
 // Stack transformation: x1 x2 OP_AND -> out
@@ -1848,6 +1876,95 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 
 	return nil
 }
+
+
+// opcode2Mul AKA OP_LSHIFTNUM fails immediately if the stack is empty.
+// Otherwise it pops the top item from the stack as a bit count,
+// then pops the next item from the stack as the value to shift
+// And performs an arithmetic left shift of the value by the bit count (`result = value * (2 ^ bit_count)`),
+// then pushes the result to the stack.
+// Stack transformation: [... value bit_count] -> [... value * (2 ^ bit_count)]
+func opcode2Mul(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeDisabled(op, vm)
+	}
+
+	bitcount, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if (bitcount.IsLessThanInt(0)) {
+		return scriptError(ErrNumberTooSmall, "negative shift count")
+	}
+
+	m, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	shift := uint(bitcount.Int64())
+
+	result := m.LShift(&m, shift)
+
+
+	if len(result.Bytes()) > vm.maxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(result.Bytes()), vm.maxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
+	}
+
+	vm.dstack.PushInt(*result)
+
+	vm.metrics.AddOPCost(len(result.Bytes()))
+
+	return nil
+}
+
+
+
+// opcode2Div AKA OP_RSHIFTNUM fails immediately if the stack is empty.
+// Otherwise it pops the top item from the stack as a bit count,
+// then pops the next item from the stack as the value to shift
+// And performs an arithmetic right shift of the value by the bit count (`result = value / (2 ^ bit_count)`),
+// then pushes the result to the stack.
+// Stack transformation: [... value bit_count] -> [... value / (2 ^ bit_count)]
+func opcode2Div(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeDisabled(op, vm)
+	}
+
+	bitcount, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if (bitcount.IsLessThanInt(0)) {
+		return scriptError(ErrNumberTooSmall, "negative shift count")
+	}
+
+	m, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	shift := uint(bitcount.Int64())
+
+	result := m.RShift(&m, shift)
+
+	if len(result.Bytes()) > vm.maxScriptElementSize {
+		str := fmt.Sprintf("size %d exceeds max allowed size %d",
+			len(result.Bytes()), vm.maxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
+	}
+
+	vm.dstack.PushInt(*result)
+
+	vm.metrics.AddOPCost(len(result.Bytes()))
+
+	return nil
+}
+
 
 // opcodeNegate treats the top item on the data stack as an integer and replaces
 // it with its negation.
@@ -2093,6 +2210,123 @@ func opcodeMod(op *parsedOpcode, vm *Engine) error {
 
 	vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) * len(b.Bytes())))
 
+	return nil
+}
+
+
+// opcodeLShift fails immediately if the stack is empty.
+// Otherwise it pops the top item from the stack as a bit count
+// then pops the next item from the stack as the binary data to shift.
+// and performs a fixed-length, logical left shift of the data by the bit count,
+// shifting-in `0` bits from the right and dropping shifted-out bits on the left,
+// then push the result to the stack.
+// Stack transformation: [... data bit_count] -> [... data << bit_count] (same length, zero-filled right)
+func opcodeLShift(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeDisabled(op, vm)
+	}
+
+	bitcount, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if (bitcount.IsLessThanInt(0)) {
+		return scriptError(ErrNumberTooSmall, "negative shift count")
+	}
+
+	shift := uint(bitcount.Int64())
+
+	data, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	dataLen := uint(len(data))
+	result := make([]byte, dataLen)
+
+	if dataLen == 0 || shift >= dataLen*8 {
+		vm.dstack.PushByteArray(result)
+		vm.metrics.AddOPCost(int(dataLen))
+		return nil
+	}
+
+	byteShift := shift / 8
+	bitShift := uint(shift % 8)
+
+	if bitShift == 0 {
+		copy(result, data[byteShift:])
+	} else {
+		for i:=uint(0); i < dataLen-byteShift; i++ {
+			src := i + byteShift
+			result[i] = data[src] << bitShift
+			if src+1 < dataLen {
+				result[i] = data[src+1] >> (8 - bitShift)
+			}
+		}
+	}
+
+	vm.dstack.PushByteArray(result)
+	vm.metrics.AddOPCost(int(dataLen))
+	return nil
+
+}
+
+
+// opcodeRShift fails immediately if the stack is empty.
+// Otherwise it pops the top item from the stack as a bit count
+// then pops the next item from the stack as the binary data to shift.
+// and performs a fixed-length, logical right shift of the data by the bit count,
+// shifting-in `0` bits from the left and dropping shifted-out bits on the right,
+// then push the result to the stack.
+// Stack transformation: [... data bit_count] -> [... data >> bit_count] (same length, zero-filled left)
+func opcodeRShift(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeDisabled(op, vm)
+	}
+
+	bitcount, err := vm.dstack.PopInt()
+	if err != nil {
+		return err
+	}
+
+	if (bitcount.IsLessThanInt(0)) {
+		return scriptError(ErrNumberTooSmall, "negative shift count")
+	}
+
+	shift := uint(bitcount.Int64())
+
+	data, err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	dataLen := uint(len(data))
+	result := make([]byte, dataLen)
+
+	if dataLen == 0 || shift >= dataLen*8 {
+		vm.dstack.PushByteArray(result)
+		vm.metrics.AddOPCost(int(dataLen))
+		return nil
+	}
+
+	byteShift := shift / 8
+	bitShift := uint(shift % 8)
+
+	if bitShift == 0 {
+		copy(result[byteShift:], data)
+	} else {
+		for i:=dataLen-1; i >= byteShift; i-- {
+			src := int(i - byteShift)
+			result[i] = data[src] >> bitShift
+			if src+1 >= 0 {
+				result[i] = data[src-1] << (8 - bitShift)
+			}
+		}
+	}
+
+	vm.dstack.PushByteArray(result)
+	vm.metrics.AddOPCost(int(dataLen))
 	return nil
 }
 

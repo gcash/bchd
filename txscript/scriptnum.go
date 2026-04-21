@@ -338,6 +338,26 @@ func (n *scriptNum) Abs(x *scriptNum) *scriptNum {
 	return n
 }
 
+// LShift sets n to x << shift and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) LShift(x *scriptNum, shift uint) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Lsh(a, shift))
+
+	return n
+}
+
+// RShift sets n to x >> shift and returns n.
+// This follows the design of big.Int for consistency.
+func (n *scriptNum) RShift(x *scriptNum, shift uint) *scriptNum {
+	a := (*big.Int)(x)
+
+	(*big.Int)(n).Set(new(big.Int).Rsh(a, shift))
+
+	return n
+}
+
 func makeScriptNumFromInt(v int) *scriptNum {
 	num := big.NewInt(int64(v))
 
