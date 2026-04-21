@@ -1,0 +1,14 @@
+{
+"3v9ryq":[556,444800,2449,"BigInt: OP_1ADD 512-byte number (all bits set) (P2S)"],
+"6zh40a":[4140,3312000,16785,"BigInt: OP_1ADD 4096-byte number (all bits set) (P2S)"],
+"072chc":[8236,6588800,33169,"BigInt: OP_1ADD 8192-byte number (all bits set) (P2S)"],
+"s4yw57":[556,444800,2449,"BigInt: OP_1ADD 512-byte number (alternating bits set) (P2S)"],
+"raqz0g":[4140,3312000,16785,"BigInt: OP_1ADD 4096-byte number (alternating bits set) (P2S)"],
+"ptmdg9":[8236,6588800,33169,"BigInt: OP_1ADD 8192-byte number (alternating bits set) (P2S)"],
+"873g0t":[556,444800,2449,"BigInt: OP_1ADD 512-byte number (highest-bit set) (P2S)"],
+"va7zrm":[4140,3312000,16785,"BigInt: OP_1ADD 4096-byte number (highest-bit set) (P2S)"],
+"4f9sdu":[8236,6588800,33169,"BigInt: OP_1ADD 8192-byte number (highest-bit set) (P2S)"],
+"7stz37":[556,444800,2449,"BigInt: OP_1ADD 512-byte number (one bit set per byte) (P2S)"],
+"k4pu4m":[4140,3312000,16785,"BigInt: OP_1ADD 4096-byte number (one bit set per byte) (P2S)"],
+"vjff9l":[8236,6588800,33169,"BigInt: OP_1ADD 8192-byte number (one bit set per byte) (P2S)"]
+}

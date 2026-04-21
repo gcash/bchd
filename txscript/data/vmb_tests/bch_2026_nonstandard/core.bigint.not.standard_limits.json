@@ -1,0 +1,14 @@
+{
+"nwerp2":[42,33600,913,"BigInt: OP_NOT 512-byte number (all bits set) (P2S)"],
+"cwyvfr":[42,33600,4497,"BigInt: OP_NOT 4096-byte number (all bits set) (P2S)"],
+"a6ygq6":[42,33600,8593,"BigInt: OP_NOT 8192-byte number (all bits set) (P2S)"],
+"gqc65w":[42,33600,913,"BigInt: OP_NOT 512-byte number (alternating bits set) (P2S)"],
+"dzmpel":[42,33600,4497,"BigInt: OP_NOT 4096-byte number (alternating bits set) (P2S)"],
+"uxpqdd":[42,33600,8593,"BigInt: OP_NOT 8192-byte number (alternating bits set) (P2S)"],
+"0dv23m":[42,33600,913,"BigInt: OP_NOT 512-byte number (highest-bit set) (P2S)"],
+"qayyp9":[42,33600,4497,"BigInt: OP_NOT 4096-byte number (highest-bit set) (P2S)"],
+"e242vz":[42,33600,8593,"BigInt: OP_NOT 8192-byte number (highest-bit set) (P2S)"],
+"gqgcu2":[42,33600,913,"BigInt: OP_NOT 512-byte number (one bit set per byte) (P2S)"],
+"fmva80":[42,33600,4497,"BigInt: OP_NOT 4096-byte number (one bit set per byte) (P2S)"],
+"ctuhgc":[42,33600,8593,"BigInt: OP_NOT 8192-byte number (one bit set per byte) (P2S)"]
+}

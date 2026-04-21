@@ -1,0 +1,6 @@
+{
+"nlslve":[259,207200,84596,"Pay to Script: Maximum length BCH_2025_05 standard UTXO and output (3-of-3 bare multisig, uncompressed keys), ECDSA signatures (P2S)"],
+"20d42l":[240,192000,84578,"Pay to Script: Maximum length BCH_2025_05 standard UTXO and output (3-of-3 bare multisig, uncompressed keys), Schnorr signatures (P2S)"],
+"a3h4p9":[260,208000,84597,"Pay to Script: Maximum length BCH_2025_05 standard UTXO and output (3-of-3 bare multisig, uncompressed keys), ECDSA signatures, 41-byte commitment (P2S)"],
+"vjfze6":[240,192000,84578,"Pay to Script: Maximum length BCH_2025_05 standard UTXO and output (3-of-3 bare multisig, uncompressed keys), Schnorr signatures, 41-byte commitment (P2S)"]
+}

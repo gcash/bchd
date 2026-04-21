@@ -1,0 +1,20 @@
+{
+"pwran7":[43,34400,603,"OP_BEGIN/OP_UNTIL: loop until the first 0x01 (P2S)"],
+"ll48n6":[48,38400,1432,"OP_BEGIN/OP_UNTIL: loop until the first 0x01 (P2SH20)"],
+"earn55":[48,38400,1456,"OP_BEGIN/OP_UNTIL: loop until the first 0x01 (P2SH32)"],
+"mxmwrr":[45,36000,2219,"OP_BEGIN/OP_UNTIL: sum stack (1 + 2 + 3 + 4 == 10) (P2S)"],
+"3hlq32":[54,43200,3052,"OP_BEGIN/OP_UNTIL: sum stack (1 + 2 + 3 + 4 == 10) (P2SH20)"],
+"vqmyvn":[54,43200,3076,"OP_BEGIN/OP_UNTIL: sum stack (1 + 2 + 3 + 4 == 10) (P2SH32)"],
+"r2usf6":[44,35200,1614,"OP_BEGIN/OP_UNTIL: sum stack (2 + 3 + 5 == 10) (P2S)"],
+"zsscpw":[53,42400,2447,"OP_BEGIN/OP_UNTIL: sum stack (2 + 3 + 5 == 10) (P2SH20)"],
+"p9ncaz":[53,42400,2471,"OP_BEGIN/OP_UNTIL: sum stack (2 + 3 + 5 == 10) (P2SH32)"],
+"89dn79":[43,34400,1009,"OP_BEGIN/OP_UNTIL: sum stack (1 + 9 == 10) (P2S)"],
+"af0enq":[52,41600,1842,"OP_BEGIN/OP_UNTIL: sum stack (1 + 9 == 10) (P2SH20)"],
+"hafrhn":[52,41600,1866,"OP_BEGIN/OP_UNTIL: sum stack (1 + 9 == 10) (P2SH32)"],
+"dvm3p0":[44,35200,25717,"OP_BEGIN/OP_UNTIL: 2**32 == 2**32 (P2S)"],
+"8t65vp":[61,48800,26558,"OP_BEGIN/OP_UNTIL: 2**32 == 2**32 (P2SH20)"],
+"7nsx5a":[61,48800,26582,"OP_BEGIN/OP_UNTIL: 2**32 == 2**32 (P2SH32)"],
+"838k9p":[42,33600,6243,"OP_BEGIN/OP_UNTIL: Fibonacci to 13 (P2S)"],
+"pqydxn":[59,47200,7084,"OP_BEGIN/OP_UNTIL: Fibonacci to 13 (P2SH20)"],
+"ug0w55":[59,47200,7108,"OP_BEGIN/OP_UNTIL: Fibonacci to 13 (P2SH32)"]
+}

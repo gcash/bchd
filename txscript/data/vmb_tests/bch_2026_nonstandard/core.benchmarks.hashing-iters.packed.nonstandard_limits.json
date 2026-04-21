@@ -1,0 +1,12 @@
+{
+"nhzssk":[248,198400,156016,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_RIPEMD160 hashed (packed transaction) (P2SH20)"],
+"7w3kz4":[248,198400,156040,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_RIPEMD160 hashed (packed transaction) (P2SH32)"],
+"j6nl2n":[248,198400,156016,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_SHA1 hashed (packed transaction) (P2SH20)"],
+"d53dwe":[248,198400,156040,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_SHA1 hashed (packed transaction) (P2SH32)"],
+"z9y43g":[248,198400,158044,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_SHA256 hashed (packed transaction) (P2SH20)"],
+"ta05ww":[248,198400,158068,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_SHA256 hashed (packed transaction) (P2SH32)"],
+"n0yzej":[248,198400,161456,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_HASH160 hashed (packed transaction) (P2SH20)"],
+"7tq2sl":[248,198400,161480,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_HASH160 hashed (packed transaction) (P2SH32)"],
+"lcennk":[248,198400,163484,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_HASH256 hashed (packed transaction) (P2SH20)"],
+"ntcrvp":[248,198400,163508,"Transaction validation benchmarks: Within BCH_2023_05 P2SH20/standard limits, maximize hash digests per byte, then total bytes OP_HASH256 hashed (packed transaction) (P2SH32)"]
+}

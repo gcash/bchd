@@ -1,0 +1,14 @@
+{
+"ucddf3":[556,444800,2449,"BigInt: OP_NEGATE 512-byte number (all bits set) (P2S)"],
+"l7mtx5":[4140,3312000,16785,"BigInt: OP_NEGATE 4096-byte number (all bits set) (P2S)"],
+"8y6p9x":[8236,6588800,33169,"BigInt: OP_NEGATE 8192-byte number (all bits set) (P2S)"],
+"lavmtu":[556,444800,2449,"BigInt: OP_NEGATE 512-byte number (alternating bits set) (P2S)"],
+"jpv0mh":[4140,3312000,16785,"BigInt: OP_NEGATE 4096-byte number (alternating bits set) (P2S)"],
+"zgyl7w":[8236,6588800,33169,"BigInt: OP_NEGATE 8192-byte number (alternating bits set) (P2S)"],
+"gc47zh":[556,444800,2449,"BigInt: OP_NEGATE 512-byte number (highest-bit set) (P2S)"],
+"jng5wh":[4140,3312000,16785,"BigInt: OP_NEGATE 4096-byte number (highest-bit set) (P2S)"],
+"9s4kyw":[8236,6588800,33169,"BigInt: OP_NEGATE 8192-byte number (highest-bit set) (P2S)"],
+"0gngjy":[556,444800,2449,"BigInt: OP_NEGATE 512-byte number (one bit set per byte) (P2S)"],
+"z3jr88":[4140,3312000,16785,"BigInt: OP_NEGATE 4096-byte number (one bit set per byte) (P2S)"],
+"9ektgl":[8236,6588800,33169,"BigInt: OP_NEGATE 8192-byte number (one bit set per byte) (P2S)"]
+}

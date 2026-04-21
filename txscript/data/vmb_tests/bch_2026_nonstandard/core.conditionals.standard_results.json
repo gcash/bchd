@@ -1,0 +1,5 @@
+{
+"wdl08m":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 203 exceeds the maximum standard locking bytecode length of 201.",
+"xsna0k":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 205 exceeds the maximum standard locking bytecode length of 201.",
+"5rxgac":"Unable to verify standard transaction: standard transactions may only spend standard output types. Source output 1 is non-standard: locking bytecode length of 203 exceeds the maximum standard locking bytecode length of 201."
+}

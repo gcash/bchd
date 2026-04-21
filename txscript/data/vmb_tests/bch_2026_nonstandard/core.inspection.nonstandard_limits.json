@@ -1,0 +1,22 @@
+{
+"jp0ase":[43,34400,303,"Transaction inspection: OP_TXOUTPUTCOUNT (100 outputs; non-standard beyond per-transaction OP_RETURN data limit) (P2S)"],
+"4y85zq":[46,36800,874,"Transaction inspection: OP_TXOUTPUTCOUNT (100 outputs; non-standard beyond per-transaction OP_RETURN data limit) (P2SH20)"],
+"tag2ez":[46,36800,898,"Transaction inspection: OP_TXOUTPUTCOUNT (100 outputs; non-standard beyond per-transaction OP_RETURN data limit) (P2SH32)"],
+"l03ud7":[564,451200,2155,"Transaction inspection: OP_UTXOBYTECODE (maximum size UTXO bytecode) (P2S)"],
+"w74278":[42,33600,1635,"Transaction inspection: OP_UTXOBYTECODE (ignore result, not excessive size) (P2S)"],
+"j055a3":[42,33600,1637,"Transaction inspection: OP_UTXOBYTECODE (ignore result, excessive size) (P2S)"],
+"qpxh9r":[561,448800,2159,"Transaction inspection: OP_INPUTBYTECODE (maximum size) (P2S)"],
+"kkqs7m":[562,449600,2162,"Transaction inspection: OP_INPUTBYTECODE (excessive size) (P2S)"],
+"qv9a03":[564,451200,1441,"Transaction inspection: OP_OUTPUTBYTECODE (maximum size) (P2S)"],
+"tm0j3u":[568,454400,2013,"Transaction inspection: OP_OUTPUTBYTECODE (maximum size) (P2SH20)"],
+"236zhk":[568,454400,2037,"Transaction inspection: OP_OUTPUTBYTECODE (maximum size) (P2SH32)"],
+"hdyexe":[565,452000,1443,"Transaction inspection: OP_OUTPUTBYTECODE (excessive size) (P2S)"],
+"hlrhs5":[569,455200,2015,"Transaction inspection: OP_OUTPUTBYTECODE (excessive size) (P2SH20)"],
+"urx4u0":[569,455200,2039,"Transaction inspection: OP_OUTPUTBYTECODE (excessive size) (P2SH32)"],
+"glj96c":[42,33600,921,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, not 2023 excessive size) (P2S)"],
+"7a3f28":[46,36800,1493,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, not 2023 excessive size) (P2SH20)"],
+"8jcu48":[46,36800,1517,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, not 2023 excessive size) (P2SH32)"],
+"qa6uek":[42,33600,922,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, 2023 excessive size) (P2S)"],
+"wrc6v7":[46,36800,1494,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, 2023 excessive size) (P2SH20)"],
+"ql8nql":[46,36800,1518,"Transaction inspection: OP_OUTPUTBYTECODE (ignore result, 2023 excessive size) (P2SH32)"]
+}

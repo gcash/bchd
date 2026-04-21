@@ -1,0 +1,10 @@
+{
+"at9727":[42,33600,921,"BigInt: OP_BIN2NUM padded zero (520 bytes) is zero (P2S)"],
+"a45zgl":[42,33600,921,"BigInt: OP_BIN2NUM padded negative zero (520 bytes) is zero (P2S)"],
+"j9n7lt":[42,33600,922,"BigInt: OP_BIN2NUM padded zero (521 bytes) is zero (P2S)"],
+"czzjs0":[42,33600,922,"BigInt: OP_BIN2NUM padded negative zero (521 bytes) is zero (P2S)"],
+"x32a4f":[42,33600,923,"BigInt: OP_BIN2NUM padded one (520 bytes) is one (P2S)"],
+"mv8j35":[42,33600,924,"BigInt: OP_BIN2NUM padded one (521 bytes) is one (P2S)"],
+"w0s6rw":[42,33600,923,"BigInt: OP_BIN2NUM padded negative one (520 bytes) is negative one (P2S)"],
+"4mt2qf":[42,33600,924,"BigInt: OP_BIN2NUM padded negative one (521 bytes) is negative one (P2S)"]
+}
