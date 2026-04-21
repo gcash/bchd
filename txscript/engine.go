@@ -219,7 +219,7 @@ func (vm *Engine) IsBranchExecuting() bool {
 		return true
 	}
 	//return vm.condStack[len(vm.condStack)-1] == OpCondTrue
-	for i := len(vm.condStack) - 1; i>=0; i-- {
+	for i := len(vm.condStack) - 1; i >= 0; i-- {
 		if !isCondStackLoop(vm.condStack[i]) {
 			return vm.condStack[i] == OpCondTrue
 		}
@@ -544,7 +544,6 @@ func (vm *Engine) Step() (done bool, err error) {
 	}
 	return false, nil
 }
-
 
 // returnFromInvoke restores the original bytecode, instruction pointer,
 // and last executed code separator, when the evaluation is complete to
@@ -974,7 +973,7 @@ func (vm *Engine) Clone() *Engine {
 		flags:                vm.flags,
 		inputAmount:          vm.inputAmount,
 		sigCache:             vm.sigCache,
-		hashCache:   		  vm.hashCache,
+		hashCache:            vm.hashCache,
 		definedFunctionCount: vm.definedFunctionCount,
 	}
 	newVM.savedFirstStack = make([][]byte, len(vm.savedFirstStack))
@@ -1009,14 +1008,14 @@ func (vm *Engine) Clone() *Engine {
 	}
 
 	newVM.functionTable = make(map[string][]byte, len(vm.functionTable))
-	for k, v := range(vm.functionTable) {
+	for k, v := range vm.functionTable {
 		b := make([]byte, len(v))
 		copy(b, v)
 		newVM.functionTable[k] = b
 	}
 
 	newVM.frameStack = make([]stackFrame, len(vm.frameStack))
-	for i, f := range(vm.frameStack) {
+	for i, f := range vm.frameStack {
 		newVM.frameStack[i] = f
 		if f.script != nil {
 			s := make([]parsedOpcode, len(f.script))

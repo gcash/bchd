@@ -169,7 +169,6 @@ type Params struct {
 	Upgrade11ActivationTime       uint64 // May 15, 2025 hardfork
 	Upgrade12ActivationTime       uint64 // May 15, 2026 hardfork
 
-
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
 
@@ -497,7 +496,6 @@ var RegressionNetParams = Params{
 	Upgrade11ActivationTime: 0, // Always active on regtest
 	Upgrade12ActivationTime: 0,
 
-
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        500000,
 		Beta0:           500000,
@@ -606,7 +604,6 @@ var TestNet3Params = Params{
 
 	Upgrade11ActivationTime: 1747310400,
 	Upgrade12ActivationTime: 1778846400,
-
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -729,7 +726,6 @@ var ChipNetParams = Params{
 	Upgrade11ActivationTime: 1731672000,
 	Upgrade12ActivationTime: 1763208000,
 
-
 	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
@@ -843,7 +839,6 @@ var TestNet4Params = Params{
 
 	Upgrade11ActivationTime: 1747310400,
 	Upgrade12ActivationTime: 1778846400,
-
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
@@ -962,7 +957,6 @@ var SimNetParams = Params{
 	ABLAForkHeight:          100000000,
 	Upgrade11ActivationTime: 0, // Always active on simnet
 	Upgrade12ActivationTime: 0,
-
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
