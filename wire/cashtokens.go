@@ -264,6 +264,12 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 		commitment []byte
 	}
 	var AvailableMintingCategories [][32]byte
+
+	maxCommitmentLength := MAX_COMMITMENT_LENGTH_LEGACY
+	if hasScriptAllowMay2026 {
+		maxCommitmentLength = MAX_COMMITMENT_LENGTH
+	}
+
 	for i, txIn := range tx.TxIn {
 		utxo, _ := cache.GetEntry(i)
 
@@ -274,6 +280,11 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 		if utxo.TokenData.IsEmpty() {
 			continue
 		}
+
+		if len(utxo.TokenData.Commitment) > maxCommitmentLength {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
+		}
+
 		value, ok := AvailableSumsByCategory[utxo.TokenData.CategoryID]
 		if ok {
 			AvailableSumsByCategory[utxo.TokenData.CategoryID] = value + utxo.TokenData.Amount
@@ -321,10 +332,6 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 	var OutputImmutableTokens []struct {
 		category   [32]byte
 		commitment []byte
-	}
-	maxCommitmentLength := MAX_COMMITMENT_LENGTH_LEGACY
-	if hasScriptAllowMay2026 {
-		maxCommitmentLength = MAX_COMMITMENT_LENGTH
 	}
 
 	for _, txOut := range tx.TxOut {

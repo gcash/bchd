@@ -815,7 +815,7 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 				cache.AddEntry(i, utxos[i])
 			}
 
-			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx), false
+			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, false)
 			if !valid || err != nil {
 				fatalf(t, err.Error(), test, i)
 			}

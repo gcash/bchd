@@ -87,7 +87,7 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amoun
 // because the script engine already does this more accurately and concisely
 // via the txscript.ScriptVerifyCleanStack and txscript.ScriptVerifySigPushOnly
 // flags.
-func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, _ txscript.ScriptFlags) error {
+func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {
 	// NOTE: The reference implementation also does a coinbase check here,
 	// but coinbases have already been rejected prior to calling this
 	// function so no need to recheck.
@@ -100,9 +100,14 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, _ t
 		originPkScript := entry.PkScript()
 		switch txscript.GetScriptClass(originPkScript) {
 		case txscript.NonStandardTy:
-			str := fmt.Sprintf("transaction input #%d has a "+
-				"non-standard script form", i)
-			return txRuleError(wire.RejectNonstandard, str)
+			// After the May 2026 upgrade, any script that does not match any of the
+			// P2PK, P2PKH, P2SH20, P2SH32, OP_RETURN, or BMS types, is considered
+			// standard if it has a length less or equal to maxStandardP2SScriptSize.
+			if !scriptFlags.HasFlag(txscript.ScriptAllowMay2026) || len(originPkScript) > maxStandardP2SScriptSize {
+				str := fmt.Sprintf("transaction input #%d has a "+
+					"non-standard script form", i)
+				return txRuleError(wire.RejectNonstandard, str)
+			}
 		}
 	}
 
