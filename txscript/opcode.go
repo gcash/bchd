@@ -304,7 +304,20 @@ const (
 	OpCondFalse = 0
 	OpCondTrue  = 1
 	OpCondSkip  = 2
+
+	// OpCondLoopBase is the offset added to instruction
+	// pointer position stored in the CondStack to
+	// distinguish them from conditional execution values.
+	OpCondLoopBase = 3
 )
+
+func isCondStackLoop(val int) bool {
+	return val >= OpCondLoopBase
+}
+
+func condStackLoopPos(val int) int {
+	return val - OpCondLoopBase
+}
 
 const (
 	// SatoshiPerBitcoinCash is number of satoshi in one bitcoincash
@@ -656,12 +669,14 @@ func (pop *parsedOpcode) isDisabled(vm *Engine) bool {
 // alwaysIllegal returns whether or not the opcode is always illegal when passed
 // over by the program counter even if in a non-executed branch (it isn't a
 // coincidence that they are conditionals).
-func (pop *parsedOpcode) alwaysIllegal() bool {
+func (pop *parsedOpcode) alwaysIllegal(vm *Engine) bool {
+	opcodeIllegal := !vm.hasFlag(ScriptAllowMay2026)
+
 	switch pop.opcode.value {
 	case OP_VERIF:
-		return true
+		return opcodeIllegal
 	case OP_VERNOTIF:
-		return true
+		return opcodeIllegal
 	default:
 		return false
 	}
@@ -669,7 +684,9 @@ func (pop *parsedOpcode) alwaysIllegal() bool {
 
 // isConditional returns whether or not the opcode is a conditional opcode which
 // changes the conditional execution stack when executed.
-func (pop *parsedOpcode) isConditional() bool {
+func (pop *parsedOpcode) isConditional(vm *Engine) bool {
+	opcodeIllegal := !vm.hasFlag(ScriptAllowMay2026)
+
 	switch pop.opcode.value {
 	case OP_IF:
 		return true
@@ -679,6 +696,10 @@ func (pop *parsedOpcode) isConditional() bool {
 		return true
 	case OP_ENDIF:
 		return true
+	case OP_VERIF:
+		return opcodeIllegal
+	case OP_VERNOTIF:
+		return opcodeIllegal
 	default:
 		return false
 	}
@@ -1007,6 +1028,65 @@ func opcodeNotIf(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
+
+//opcodeBegin pushes the next instruction pointer index to the control stack.
+// Control stack transformation: [...] -> [... LoopPosition]
+func opcodeBegin(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeReserved(op, vm)
+	}
+
+	vm.condStack = append(
+		vm.condStack,
+		vm.scriptOff+OpCondLoopBase,
+	)
+
+	return nil
+}
+
+
+// opcodeUntil inspects the top item from the control stack. If this control
+// item is not an instruction pointer position (set by OP_BEGIN), it fails.
+// Otherwise the top item is popped from the stack.
+// If the value is 0 (the same test as OP_NOTIF) the evaluation's instruction
+// pointer is set to the position indicated by the control item
+// (immediately after the matching OP_BEGIN instruction); otherwise,
+// evaluation continues past the OP_UNTIL.
+func opcodeUntil(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeReserved(op, vm)
+	}
+
+	if len(vm.condStack) == 0 {
+		return scriptError(ErrUnbalancedConditional,
+		"OP_UNTIL without matching OP_BEGIN")
+	}
+
+	top := vm.condStack[len(vm.condStack)-1]
+	if !isCondStackLoop(top) {
+		return scriptError(ErrUnbalancedConditional,
+			"OP_UNTIL found but top of control stack is not a loop pointer")
+	}
+
+	if !vm.IsBranchExecuting() {
+		vm.condStack = vm.condStack[:len(vm.condStack)-1]
+		return nil
+	}
+
+	val, err := vm.dstack.PopBool(false)
+	if err != nil {
+		return err
+	}
+
+	if !val {
+		vm.scriptOff = condStackLoopPos(top)
+	} else {
+		vm.condStack = vm.condStack[:len(vm.condStack)-1]
+	}
+
+	return nil
+}
+
 // opcodeElse inverts conditional execution for other half of if/else/endif.
 //
 // An error is returned if there has not already been a matching OP_IF.
@@ -1020,6 +1100,12 @@ func opcodeElse(op *parsedOpcode, vm *Engine) error {
 	}
 
 	conditionalIdx := len(vm.condStack) - 1
+	if isCondStackLoop(vm.condStack[conditionalIdx]) {
+		return scriptError(ErrUnbalancedConditional,
+			"OP_ELSE cannot appear inside an OP_BEGIN block"+
+			"without a matching OP_IF")
+	}
+
 	switch vm.condStack[conditionalIdx] {
 	case OpCondTrue:
 		vm.condStack[conditionalIdx] = OpCondFalse
@@ -1043,6 +1129,12 @@ func opcodeEndif(op *parsedOpcode, vm *Engine) error {
 		str := fmt.Sprintf("encountered opcode %s with no matching "+
 			"opcode to begin conditional execution", op.opcode.name)
 		return scriptError(ErrUnbalancedConditional, str)
+	}
+
+	top := vm.condStack[len(vm.condStack)-1]
+	if isCondStackLoop(top) {
+		return scriptError(ErrUnbalancedConditional,
+			"OP_ENDIF cannot close an OP_BEGIN block")
 	}
 
 	vm.condStack = vm.condStack[:len(vm.condStack)-1]
