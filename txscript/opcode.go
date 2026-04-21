@@ -1978,9 +1978,7 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 	vm.functionTable[key] = bodyCopy
 	vm.definedFunctionCount++
 
-	// TODO: Investigate why commenting this line makes tests pass. The spec requires adding
-	// "Stack-Pushed Bytes cost for the function body" to opCost and BCHN contains a similar line.
-	// vm.metrics.AddOPCost(len(body))
+	vm.metrics.AddOPCost(len(body))
 
 	return nil
 }
