@@ -176,8 +176,8 @@ const (
 	OP_XOR                   = 0x86 // 134
 	OP_EQUAL                 = 0x87 // 135
 	OP_EQUALVERIFY           = 0x88 // 136
-	OP_RESERVED1             = 0x89 // 137
-	OP_RESERVED2             = 0x8a // 138
+	OP_DEFINE                = 0x89 // 137
+	OP_INVOKE                = 0x8a // 138
 	OP_1ADD                  = 0x8b // 139
 	OP_1SUB                  = 0x8c // 140
 	OP_2MUL                  = 0x8d // 141
@@ -480,8 +480,10 @@ var opcodeArray = [256]opcode{
 	OP_XOR:         {OP_XOR, "OP_XOR", 1, opcodeXor},
 	OP_EQUAL:       {OP_EQUAL, "OP_EQUAL", 1, opcodeEqual},
 	OP_EQUALVERIFY: {OP_EQUALVERIFY, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
-	OP_RESERVED1:   {OP_RESERVED1, "OP_RESERVED1", 1, opcodeReserved},
-	OP_RESERVED2:   {OP_RESERVED2, "OP_RESERVED2", 1, opcodeReserved},
+	OP_DEFINE:      {OP_DEFINE, "OP_DEFINE", 1, opcodeDefine},
+	// opcodeInvoke uses opcodeArray; assign opcode opfunc filed in init() instead.
+	// OP_INVOKE:      {OP_INVOKE, "OP_INVOKE", 1, opcodeInvoke},
+	OP_INVOKE:      {OP_INVOKE, "OP_INVOKE", 1, nil},
 
 	// Numeric related opcodes.
 	OP_1ADD:               {OP_1ADD, "OP_1ADD", 1, opcode1Add},
@@ -1925,6 +1927,122 @@ func opcodeEqualVerify(op *parsedOpcode, vm *Engine) error {
 	}
 
 	return err
+}
+
+// opcodeDefine pops the top item from the stack to interpret as a function
+// identifier (a binary string of length 0 to 7, inclusive).
+// Then pops the next item from the stack to interpret as the function body,
+// and copy it to the function table at the key equal to the function identifier.
+// If that function key is already defined, an error is returned.
+// Otherwise it increments the Defined Function Count by one.
+func opcodeDefine(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeReserved(op, vm)
+	}
+
+	identifier , err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	if len(identifier) > MaxFunctionIdentifierLength {
+		return scriptError(ErrInvalidFunctionIdentifier,
+		fmt.Sprintf(
+			"function identifier length %d exeeds max %d",
+			len(identifier), MaxFunctionIdentifierLength))
+	}
+
+	body , err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+
+	key := string(identifier)
+	if _, exists := vm.functionTable[key]; exists {
+		return scriptError(ErrFunctionAlreadyDefined,
+			fmt.Sprintf(
+				"function %x is already defined",
+				identifier))
+	}
+
+	newDefinedCount := vm.definedFunctionCount + 1
+	total := vm.dstack.Depth() + vm.astack.Depth() + int32(newDefinedCount)
+
+	if total > MaxStackSize {
+		return scriptError(ErrStackOverflow, fmt.Sprintf(
+			"combined stack size + function count %d > max allowed %d",
+			total, MaxStackSize))
+	}
+
+	bodyCopy := make([]byte, len(body))
+	copy(bodyCopy, body)
+	vm.functionTable[key] = bodyCopy
+	vm.definedFunctionCount++
+
+	vm.metrics.AddOPCost(len(body))
+
+	return nil
+}
+
+// opcodeInvoke pops the top item from the stack to interpret as a function identifier.
+// Then reserves the active bytecode (A.K.A. script), instruction pointer
+// (A.K.A. program counter or pc), and index of the last executed code separator
+// (A.K.A. pbegincodehash) by pushing them to the top of the control stack.
+// (This subjects function invocations to the existing control stack depth limit of 100.)
+// Then resets the instruction pointer and last executed code separator, then the engine
+// executes the function body as if it were the active bytecode. If the bytecode is
+// malformed (i.e. a push operation requires more bytes than are available in the remaining
+// segment of bytecode to be parsed), an error is returned.
+func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptAllowMay2026) {
+		return opcodeReserved(op, vm)
+	}
+
+	identifier , err := vm.dstack.PopByteArray()
+	if err != nil {
+		return err
+	}
+	key := string(identifier)
+
+	body, exists := vm.functionTable[key]
+	if !exists {
+		return scriptError(ErrUndefinedFunction,
+			fmt.Sprintf(
+				"function %x is not defined",
+				identifier))
+	}
+
+	// current conditionals and loops + current nested invocations
+	// + the frame we're about to add for this invocation
+	controlStackDepth := len(vm.condStack) + len(vm.frameStack) + 1
+
+	// check control depth limit
+	if controlStackDepth > MaxConditionalStackDepth {
+		return scriptError(ErrConditionalStackDepth, fmt.Sprintf(
+			"control stack depth %d is larger than max allowed depth: %d",
+			controlStackDepth, MaxConditionalStackDepth))
+	}
+
+	// empty function body: no operations
+	if len(body) == 0 {
+		return nil
+	}
+
+	parsedBody, err := parseScript(body)
+	if err != nil {
+		return err
+	}
+
+	frame := stackFrame{
+		script: vm.scripts[vm.scriptIdx],
+		scriptOff: vm.scriptOff,
+		lastCodeStep: vm.lastCodeSep,
+	}
+	vm.frameStack = append(vm.frameStack, frame)
+	vm.scripts[vm.scriptIdx] = parsedBody
+	vm.scriptOff = 0
+	vm.lastCodeSep = 0
+
+	return nil
 }
 
 // opcode1Add treats the top item on the data stack as an integer and replaces
@@ -4158,4 +4276,6 @@ func init() {
 	OpcodeByName["OP_TRUE"] = OP_TRUE
 	OpcodeByName["OP_NOP2"] = OP_CHECKLOCKTIMEVERIFY
 	OpcodeByName["OP_NOP3"] = OP_CHECKSEQUENCEVERIFY
+
+	opcodeArray[OP_INVOKE].opfunc= opcodeInvoke
 }

@@ -162,7 +162,17 @@ const (
 	MinTxVersion = 1
 
 	MaxTxVersion = 2
+
+	// MaxFunctionIdentifierLength is the maximum length of a function
+	// identifier key in the function table
+	MaxFunctionIdentifierLength = 7
 )
+
+type stackFrame struct {
+	script       []parsedOpcode
+	scriptOff    int
+	lastCodeStep int
+}
 
 // halforder is used to tame ECDSA malleability (see BIP0062).
 var halfOrder = new(big.Int).Rsh(bchec.S256().N, 1)
@@ -189,6 +199,9 @@ type Engine struct {
 	savedFirstStack      [][]byte // stack from first script for bip16 scripts
 	inputAmount          int64
 	sigChecks            int
+	functionTable        map[string][]byte
+	definedFunctionCount int
+	frameStack           []stackFrame
 }
 
 // hasFlag returns whether the script engine instance has the passed flag set.
@@ -451,6 +464,13 @@ func (vm *Engine) Step() (done bool, err error) {
 	// The number of elements in the combination of the data and alt stacks
 	// must not exceed the maximum number of stack elements allowed.
 	combinedStackSize := vm.dstack.Depth() + vm.astack.Depth()
+	if vm.hasFlag(ScriptAllowMay2026) {
+		// After the May 2026 upgrade, the existing cumulative stack and altstack
+		// depth limit is modified to incorporate Defined Function Count: the sum
+		// of stack depth, alternate stack depth, and Defined Function Count must
+		// be less than Maximum Memory Slots, set to 1000.
+		combinedStackSize += int32(vm.definedFunctionCount)
+	}
 	if combinedStackSize > MaxStackSize {
 		str := fmt.Sprintf("combined stack size %d > max allowed %d",
 			combinedStackSize, MaxStackSize)
@@ -463,6 +483,14 @@ func (vm *Engine) Step() (done bool, err error) {
 		if len(vm.condStack) != 0 {
 			return false, scriptError(ErrUnbalancedConditional,
 				"end of script reached in conditional execution")
+		}
+
+		if vm.hasFlag(ScriptAllowMay2026) {
+			// Return from invoked function if applicable
+			if len(vm.frameStack) > 0 {
+				vm.returnFromInvoke()
+				return false, nil
+			}
 		}
 
 		// Alt stack doesn't persist.
@@ -501,11 +529,35 @@ func (vm *Engine) Step() (done bool, err error) {
 			vm.scriptIdx++
 		}
 		vm.lastCodeSep = 0
+		if vm.hasFlag(ScriptAllowMay2026) {
+			vm.functionTable = make(map[string][]byte)
+			vm.definedFunctionCount = 0
+		}
 		if vm.scriptIdx >= len(vm.scripts) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+
+// returnFromInvoke restores the original bytecode, instruction pointer,
+// and last executed code separator, when the evaluation is complete to
+// continue evaluation after the OP_INVOKE instruction.
+func (vm *Engine) returnFromInvoke() bool {
+	if len(vm.frameStack) == 0 {
+		return false
+	}
+
+	top := len(vm.frameStack) - 1
+	frame := vm.frameStack[top]
+	vm.frameStack = vm.frameStack[:top]
+
+	vm.scripts[vm.scriptIdx] = frame.script
+	vm.scriptOff = frame.scriptOff
+	vm.lastCodeSep = frame.lastCodeStep
+
+	return true
 }
 
 // Execute will execute all scripts in the script engine and return either nil
@@ -1076,6 +1128,12 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	} else {
 		vm.dstack.defaultScriptNumLen = defaultSmallScriptNumLen
 		vm.astack.defaultScriptNumLen = defaultSmallScriptNumLen
+	}
+
+	if vm.hasFlag(ScriptAllowMay2026) {
+		vm.functionTable = make(map[string][]byte)
+		vm.definedFunctionCount = 0
+		vm.frameStack = nil
 	}
 
 	vm.tx = *tx
