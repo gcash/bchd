@@ -204,7 +204,13 @@ func (vm *Engine) IsBranchExecuting() bool {
 	if len(vm.condStack) == 0 {
 		return true
 	}
-	return vm.condStack[len(vm.condStack)-1] == OpCondTrue
+	//return vm.condStack[len(vm.condStack)-1] == OpCondTrue
+	for i := len(vm.condStack) - 1; i>=0; i-- {
+		if !isCondStackLoop(vm.condStack[i]) {
+			return vm.condStack[i] == OpCondTrue
+		}
+	}
+	return true
 }
 
 // executeOpcode performs execution on the passed opcode. It takes into account
@@ -219,7 +225,7 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 	}
 
 	// Always-illegal opcodes are fail on program counter.
-	if pop.alwaysIllegal() {
+	if pop.alwaysIllegal(vm) {
 		str := fmt.Sprintf("attempt to execute reserved opcode %s",
 			pop.opcode.name)
 		return scriptError(ErrReservedOpcode, str)
@@ -250,7 +256,7 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 
 	// Nothing left to do when this is not a conditional opcode and it is
 	// not in an executing branch.
-	if !vm.IsBranchExecuting() && !pop.isConditional() {
+	if !vm.IsBranchExecuting() && !pop.isConditional(vm) {
 		return nil
 	}
 
