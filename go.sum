@@ -103,6 +103,8 @@ github.com/gcash/bchutil v0.0.0-20250513235300-39ac514d072b h1:2jMtYvmzwzNGcRF/U
 github.com/gcash/bchutil v0.0.0-20250513235300-39ac514d072b/go.mod h1:cbex4ExcZ7sTzvi/ZRpHBTlDKFd4duEuAjuhPfgvv90=
 github.com/gcash/bchutil v0.0.0-20250514010653-ef9bffba99e1 h1:AOz9edXkrh8GeXk2j3l4xBSQSyhBszMkDqZqYnwhDPY=
 github.com/gcash/bchutil v0.0.0-20250514010653-ef9bffba99e1/go.mod h1:fdua14YuBVIZLlKVXHi8CDrwkvGMGUpGGNvZNgBBv5M=
+github.com/gcash/bchutil v0.0.0-20260423044137-a3c041e4cc77 h1:suD4cUc9IqSMoQ8e4Vk+eTwCkLq2PHTrJvwZ6xXMJ14=
+github.com/gcash/bchutil v0.0.0-20260423044137-a3c041e4cc77/go.mod h1:FQSg915Ivel7j7bvWujtfwbVYEL/lRpErZLR07mQAXA=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=
 github.com/gin-gonic/gin v1.6.3/go.mod h1:75u5sXoLsGZoRN5Sgbi1eraJ4GU3++wFwWzhwvtwp4M=
