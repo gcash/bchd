@@ -451,6 +451,20 @@ func TestMay2026Invalid(t *testing.T) {
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testFileName, err)
+
+		}
+
+		testLimitsFileName := testFileName[:len(testFileName)-15] + ".standard_limits.json"
+
+		testLimitsFile, err := os.ReadFile("data/vmb_tests/" + testLimitsFileName)
+		if err != nil {
+			t.Fatalf("TestScripts: %v\n", err)
+		}
+
+		var testLimits map[string]interface{}
+		err = json.Unmarshal(testLimitsFile, &testLimits)
+		if err != nil {
+			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
 		}
 
 		for i, test := range tests {
