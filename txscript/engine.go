@@ -141,7 +141,7 @@ const (
 	ScriptAllowMay2025StandardOnly
 
 	// ScriptAllowMay2026 re-enables bitwise operations, enables looping,
-	// enables functions definision and invocation operations and standardizes p2s
+	// enables function definition and invocation operations and standardizes p2s
 	// after may 2026
 	ScriptAllowMay2026
 )
@@ -208,6 +208,17 @@ type Engine struct {
 // hasFlag returns whether the script engine instance has the passed flag set.
 func (vm *Engine) hasFlag(flag ScriptFlags) bool {
 	return vm.flags.HasFlag(flag)
+}
+
+// controlStackDepth returns the total control-stack depth across all invocation
+// frames: current-frame conditional/loop markers, saved markers in parent frames,
+// and the count of parent frames themselves. Matches BCHN's evalStack.depth().
+func (vm *Engine) controlStackDepth() int {
+	n := len(vm.condStack) + len(vm.frameStack)
+	for i := range vm.frameStack {
+		n += len(vm.frameStack[i].condStack)
+	}
+	return n
 }
 
 // IsBranchExecuting returns whether or not the current conditional branch is
@@ -454,10 +465,12 @@ func (vm *Engine) Step() (done bool, err error) {
 			return false, scriptError(ErrTooManyHashIters, str)
 		}
 
-		// Conditional stack may not exceed depth of 100.
-		if len(vm.condStack) > MaxConditionalStackDepth {
-			str := fmt.Sprintf("conditional stack depth %d is larger than max allowed depth: %d",
-				len(vm.condStack), MaxConditionalStackDepth)
+		// Control stack may not exceed depth of 100. Post-upgrade12 this includes
+		// OP_INVOKE frames and saved conditionals from outer frames, not just the
+		// current frame's condStack.
+		if depth := vm.controlStackDepth(); depth > MaxConditionalStackDepth {
+			str := fmt.Sprintf("control stack depth %d is larger than max allowed depth: %d",
+				depth, MaxConditionalStackDepth)
 			return false, scriptError(ErrConditionalStackDepth, str)
 		}
 	}
@@ -966,15 +979,21 @@ func (vm *Engine) Clone() *Engine {
 		scriptOff:            vm.scriptOff,
 		scriptIdx:            vm.scriptIdx,
 		numOps:               vm.numOps,
-		metrics:              vm.metrics,
 		lastCodeSep:          vm.lastCodeSep,
 		tx:                   vm.tx,
 		bip16:                vm.bip16,
 		flags:                vm.flags,
+		maxScriptElementSize: vm.maxScriptElementSize,
 		inputAmount:          vm.inputAmount,
+		sigChecks:            vm.sigChecks,
 		sigCache:             vm.sigCache,
 		hashCache:            vm.hashCache,
+		utxoCache:            vm.utxoCache,
 		definedFunctionCount: vm.definedFunctionCount,
+	}
+	if vm.metrics != nil {
+		m := *vm.metrics
+		newVM.metrics = &m
 	}
 	newVM.savedFirstStack = make([][]byte, len(vm.savedFirstStack))
 	for i, stack := range vm.savedFirstStack {

@@ -288,7 +288,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 			// 1,650 bytes) is removed such that the maximum unlocking
 			// bytecode length is equal for both standard and consensus
 			// validation: 10,000 bytes (A.K.A. MAX_SCRIPT_SIZE).
-			maxStandardSizeAllowed = maxStandardTxSize
+			maxStandardSizeAllowed = txscript.MaxScriptSize
 		}
 		if sigScriptLen > maxStandardSizeAllowed {
 			str := fmt.Sprintf("transaction input %d: signature "+

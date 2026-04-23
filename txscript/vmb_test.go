@@ -95,37 +95,31 @@ func TestMay2026Standard(t *testing.T) {
 
 		testFile, err := os.ReadFile("data/vmb_tests/" + testFileName)
 		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
+			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
 		var tests [][]interface{}
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
+			t.Fatalf("unmarshalling %s: %v", testFileName, err)
 		}
 
 		testLimitsFileName := testFileName[:len(testFileName)-15] + ".standard_limits.json"
 
 		testLimitsFile, err := os.ReadFile("data/vmb_tests/" + testLimitsFileName)
 		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
+			t.Fatalf("reading %s: %v", testLimitsFileName, err)
 		}
 
 		var testLimits map[string]interface{}
 		err = json.Unmarshal(testLimitsFile, &testLimits)
 		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
+			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
 		}
 
 		for i, test := range tests {
-			if test[0].(string) == "7zwtg5" {
-				i++
-				i--
-			}
 			r := bytes.NewReader(fromHex(test[5].(string)))
 			utxoCount, _ := wire.ReadVarInt(r, 0)
-
-			utxos := make([]wire.TxOut, utxoCount)
 
 			tx := wire.MsgTx{}
 			txr := bytes.NewReader(fromHex(test[4].(string)))
@@ -135,6 +129,12 @@ func TestMay2026Standard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
+			if utxoCount != uint64(len(tx.TxIn)) {
+				fatalf(t, fmt.Sprintf("utxoCount %d != len(tx.TxIn) %d",
+					utxoCount, len(tx.TxIn)), test, i)
+			}
+
+			utxos := make([]wire.TxOut, utxoCount)
 			viewPoint := blockchain.NewUtxoViewpoint()
 
 			for i := uint64(0); i < utxoCount; i++ {
@@ -167,8 +167,11 @@ func TestMay2026Standard(t *testing.T) {
 			}
 
 			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, true)
-			if !valid || err != nil {
+			if err != nil {
 				fatalf(t, err.Error(), test, i)
+			}
+			if !valid {
+				fatalf(t, "cashtokens validity algorithm returned invalid", test, i)
 			}
 
 			txIdx := 0
@@ -186,7 +189,8 @@ func TestMay2026Standard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
-			densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
+			// Fixture schema: [effectiveInputSize (41+sigScriptSize), maxOpCost, opCost, description].
+			// Field [0] is the input byte budget, not hash-iter count — verified by maxOpCost == [0]*800.
 			maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
 			operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
 
@@ -195,12 +199,6 @@ func TestMay2026Standard(t *testing.T) {
 					operationCost,
 					vm.GetMetrics().GetCompositeOPCost(true))
 				fatalf(t, "operation cost did not match. "+str, test, i)
-			}
-
-			if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-				if err != nil {
-					fatalf(t, "number of hash digest iterations did not match", test, i)
-				}
 			}
 
 			if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
@@ -262,34 +260,32 @@ func TestMay2026NonStandard(t *testing.T) {
 
 		testFile, err := os.ReadFile("data/vmb_tests/" + testFileName)
 		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
+			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
 		var tests [][]interface{}
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
+			t.Fatalf("unmarshalling %s: %v", testFileName, err)
 		}
 
 		testLimitsFileName := testFileName[:len(testFileName)-15] + ".nonstandard_limits.json"
 
 		testLimitsFile, err := os.ReadFile("data/vmb_tests/" + testLimitsFileName)
 		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
+			t.Fatalf("reading %s: %v", testLimitsFileName, err)
 		}
 
 		var testLimits map[string]interface{}
 		err = json.Unmarshal(testLimitsFile, &testLimits)
 		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
+			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
 		}
 
 		for i, test := range tests {
 
 			r := bytes.NewReader(fromHex(test[5].(string)))
 			utxoCount, _ := wire.ReadVarInt(r, 0)
-
-			utxos := make([]wire.TxOut, utxoCount)
 
 			tx := wire.MsgTx{}
 			txr := bytes.NewReader(fromHex(test[4].(string)))
@@ -299,6 +295,12 @@ func TestMay2026NonStandard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
+			if utxoCount != uint64(len(tx.TxIn)) {
+				fatalf(t, fmt.Sprintf("utxoCount %d != len(tx.TxIn) %d",
+					utxoCount, len(tx.TxIn)), test, i)
+			}
+
+			utxos := make([]wire.TxOut, utxoCount)
 			viewPoint := blockchain.NewUtxoViewpoint()
 
 			for i := uint64(0); i < utxoCount; i++ {
@@ -313,7 +315,7 @@ func TestMay2026NonStandard(t *testing.T) {
 			bchutilTx := bchutil.NewTx(&tx)
 
 			flags := txscript.StandardVerifyFlags | txscript.ScriptAllowCashTokens | txscript.ScriptAllowMay2025
-			flags ^= txscript.ScriptDiscourageUpgradableNops
+			flags &^= txscript.ScriptDiscourageUpgradableNops
 			flags |= txscript.ScriptAllowMay2026
 
 			err = blockchain.CheckTransactionSanity(bchutilTx, true, true, flags)
@@ -327,8 +329,11 @@ func TestMay2026NonStandard(t *testing.T) {
 			}
 
 			valid, err := wire.RunCashTokensValidityAlgorithm(cache, &tx, true)
-			if !valid || err != nil {
+			if err != nil {
 				fatalf(t, err.Error(), test, i)
+			}
+			if !valid {
+				fatalf(t, "cashtokens validity algorithm returned invalid", test, i)
 			}
 
 			txIdx := 0
@@ -346,7 +351,8 @@ func TestMay2026NonStandard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
-			densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
+			// Fixture schema: [effectiveInputSize (41+sigScriptSize), maxOpCost, opCost, description].
+			// Field [0] is the input byte budget, not hash-iter count — verified by maxOpCost == [0]*800.
 			maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
 			operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
 
@@ -355,12 +361,6 @@ func TestMay2026NonStandard(t *testing.T) {
 					operationCost,
 					vm.GetMetrics().GetCompositeOPCost(false))
 				fatalf(t, "operation cost did not match. "+str, test, i)
-			}
-
-			if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-				if err != nil {
-					fatalf(t, "number of hash digest iterations did not match", test, i)
-				}
 			}
 
 			if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
@@ -436,26 +436,13 @@ func TestMay2026Invalid(t *testing.T) {
 
 		testFile, err := os.ReadFile("data/vmb_tests/" + testFileName)
 		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
+			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
 		var tests [][]interface{}
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
-		}
-
-		testLimitsFileName := testFileName[:len(testFileName)-15] + ".standard_limits.json"
-
-		testLimitsFile, err := os.ReadFile("data/vmb_tests/" + testLimitsFileName)
-		if err != nil {
-			t.Fatalf("TestScripts: %v\n", err)
-		}
-
-		var testLimits map[string]interface{}
-		err = json.Unmarshal(testLimitsFile, &testLimits)
-		if err != nil {
-			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
+			t.Fatalf("unmarshalling %s: %v", testFileName, err)
 		}
 
 		for i, test := range tests {
@@ -463,25 +450,35 @@ func TestMay2026Invalid(t *testing.T) {
 			r := bytes.NewReader(fromHex(test[5].(string)))
 			utxoCount, _ := wire.ReadVarInt(r, 0)
 
-			utxos := make([]wire.TxOut, utxoCount)
-
 			tx := wire.MsgTx{}
 			txr := bytes.NewReader(fromHex(test[4].(string)))
 
 			err = tx.BchDecode(txr, 0, 0)
 			if err != nil {
-				fatalf(t, err.Error(), test, i)
+				// Invalid tx encoding is a valid rejection mode.
+				continue
 			}
 
+			if utxoCount != uint64(len(tx.TxIn)) {
+				// Malformed fixture; skip rather than allocate an unbounded slice.
+				continue
+			}
+
+			utxos := make([]wire.TxOut, utxoCount)
 			viewPoint := blockchain.NewUtxoViewpoint()
 
+			readUtxosOK := true
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
-					t.Fatal(err)
+					readUtxosOK = false
+					break
 				}
 				entry := blockchain.NewUtxoEntry(&utxos[i], 0, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
+			}
+			if !readUtxosOK {
+				continue
 			}
 
 			bchutilTx := bchutil.NewTx(&tx)
@@ -519,29 +516,7 @@ func TestMay2026Invalid(t *testing.T) {
 				continue
 			}
 
-			if testLimits[test[0].(string)] != nil {
-				densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
-				maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
-				operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
-
-				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
-					continue
-				}
-
-				if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-					if err != nil {
-						continue
-					}
-				}
-
-				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
-					continue
-				}
-			}
-
-			if err == nil {
-				t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
-			}
+			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}
 }

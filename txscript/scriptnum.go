@@ -435,7 +435,7 @@ func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, 
 
 	result := new(big.Int).SetBytes(bigEndian)
 
-	// Make the reslut negative.
+	// Make the result negative.
 	if isNegative {
 		result.Neg(result)
 	}

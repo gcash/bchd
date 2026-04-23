@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 	"math/bits"
 
 	"golang.org/x/crypto/ripemd160"
@@ -685,10 +686,10 @@ func (pop *parsedOpcode) alwaysIllegal(vm *Engine) bool {
 }
 
 // isConditional returns whether or not the opcode is a conditional opcode which
-// changes the conditional execution stack when executed.
+// changes the conditional execution stack when executed. Opcodes returning true
+// here always execute regardless of branch state; pre-upgrade OP_BEGIN/OP_UNTIL
+// are caught earlier by alwaysIllegal, so returning true unconditionally is safe.
 func (pop *parsedOpcode) isConditional(vm *Engine) bool {
-	opcodeIllegal := !vm.hasFlag(ScriptAllowMay2026)
-
 	switch pop.opcode.value {
 	case OP_IF:
 		return true
@@ -699,9 +700,9 @@ func (pop *parsedOpcode) isConditional(vm *Engine) bool {
 	case OP_ENDIF:
 		return true
 	case OP_BEGIN:
-		return opcodeIllegal
+		return true
 	case OP_UNTIL:
-		return opcodeIllegal
+		return true
 	default:
 		return false
 	}
@@ -1945,7 +1946,7 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 	if len(identifier) > MaxFunctionIdentifierLength {
 		return scriptError(ErrInvalidFunctionIdentifier,
 			fmt.Sprintf(
-				"function identifier length %d exeeds max %d",
+				"function identifier length %d exceeds max %d",
 				len(identifier), MaxFunctionIdentifierLength))
 	}
 
@@ -2008,12 +2009,8 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 				identifier))
 	}
 
-	// current conditionals and loops + current nested invocations
-	// + the frame we're about to add for this invocation
-	controlStackDepth := len(vm.condStack) + len(vm.frameStack) + 1
-
-	// check control depth limit
-	if controlStackDepth > MaxConditionalStackDepth {
+	// Check control-stack depth including the frame we're about to push.
+	if controlStackDepth := vm.controlStackDepth() + 1; controlStackDepth > MaxConditionalStackDepth {
 		return scriptError(ErrConditionalStackDepth, fmt.Sprintf(
 			"control stack depth %d is larger than max allowed depth: %d",
 			controlStackDepth, MaxConditionalStackDepth))
@@ -2054,11 +2051,17 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	increamentedVal := m.Add(&m, makeScriptNumFromInt(1)) // m + 1
+	incrementedVal := m.Add(&m, makeScriptNumFromInt(1)) // m + 1
 
-	vm.dstack.PushInt(*increamentedVal)
+	resultBytes := incrementedVal.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
+		return scriptError(ErrElementTooBig, fmt.Sprintf(
+			"result size %d exceeds max allowed size %d",
+			len(resultBytes), vm.maxScriptElementSize))
+	}
+	vm.dstack.PushInt(*incrementedVal)
 
-	vm.metrics.AddOPCost(2 * len(increamentedVal.Bytes()))
+	vm.metrics.AddOPCost(2 * len(resultBytes))
 
 	return nil
 }
@@ -2079,9 +2082,15 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrIntegerOverflow, "integer overflow")
 	}
 
+	resultBytes := decrementedVal.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
+		return scriptError(ErrElementTooBig, fmt.Sprintf(
+			"result size %d exceeds max allowed size %d",
+			len(resultBytes), vm.maxScriptElementSize))
+	}
 	vm.dstack.PushInt(*decrementedVal)
 
-	vm.metrics.AddOPCost(2 * len(decrementedVal.Bytes()))
+	vm.metrics.AddOPCost(2 * len(resultBytes))
 
 	return nil
 }
@@ -2109,6 +2118,18 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 	m, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
+	}
+
+	// DoS preflight: a shift count exceeding maxScriptElementSize*8 bits
+	// applied to a non-zero value is guaranteed to produce a result larger
+	// than maxScriptElementSize bytes, so the post-hoc check below would
+	// reject it. Reject up front to avoid allocating hundreds of MB in
+	// big.Int.Lsh.
+	if (*big.Int)(&m).Sign() != 0 &&
+		bitcount.IsGreaterThanInt(int64(vm.maxScriptElementSize)*8) {
+		str := fmt.Sprintf("shift result exceeds max allowed size %d",
+			vm.maxScriptElementSize)
+		return scriptError(ErrElementTooBig, str)
 	}
 
 	shift := uint(bitcount.Int32())
@@ -2181,9 +2202,15 @@ func opcodeNegate(op *parsedOpcode, vm *Engine) error {
 	}
 	negatedVal := m.Neg(&m) // -m
 
+	resultBytes := negatedVal.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
+		return scriptError(ErrElementTooBig, fmt.Sprintf(
+			"result size %d exceeds max allowed size %d",
+			len(resultBytes), vm.maxScriptElementSize))
+	}
 	vm.dstack.PushInt(*negatedVal)
 
-	vm.metrics.AddOPCost(2 * len(negatedVal.Bytes()))
+	vm.metrics.AddOPCost(2 * len(resultBytes))
 
 	return nil
 }
@@ -2200,9 +2227,15 @@ func opcodeAbs(op *parsedOpcode, vm *Engine) error {
 
 	m.Abs(&m) // m = -m if m < 0
 
+	resultBytes := m.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
+		return scriptError(ErrElementTooBig, fmt.Sprintf(
+			"result size %d exceeds max allowed size %d",
+			len(resultBytes), vm.maxScriptElementSize))
+	}
 	vm.dstack.PushInt(m)
 
-	vm.metrics.AddOPCost(2 * len(m.Bytes()))
+	vm.metrics.AddOPCost(2 * len(resultBytes))
 
 	return nil
 }
@@ -2277,9 +2310,15 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 	}
 
 	if (c.IsGreaterThan(&v0)) == (v1.IsGreaterThanInt(0)) {
+		resultBytes := c.Bytes()
+		if len(resultBytes) > vm.maxScriptElementSize {
+			return scriptError(ErrElementTooBig, fmt.Sprintf(
+				"result size %d exceeds max allowed size %d",
+				len(resultBytes), vm.maxScriptElementSize))
+		}
 		vm.dstack.PushInt(c)
 
-		vm.metrics.AddOPCost(2 * len(c.Bytes()))
+		vm.metrics.AddOPCost(2 * len(resultBytes))
 
 		return nil
 	}
@@ -2309,9 +2348,15 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrIntegerOverflow, "integer overflow")
 	}
 	if (c.IsLessThan(&v1)) == (v0.IsGreaterThanInt(0)) {
+		resultBytes := c.Bytes()
+		if len(resultBytes) > vm.maxScriptElementSize {
+			return scriptError(ErrElementTooBig, fmt.Sprintf(
+				"result size %d exceeds max allowed size %d",
+				len(resultBytes), vm.maxScriptElementSize))
+		}
 		vm.dstack.PushInt(c)
 
-		vm.metrics.AddOPCost(2 * len(c.Bytes()))
+		vm.metrics.AddOPCost(2 * len(resultBytes))
 
 		return nil
 	}
@@ -2351,9 +2396,15 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 		var d scriptNum
 		d.Div(&c, &b)
 		if d.IsEqualeTo(&a) {
+			resultBytes := c.Bytes()
+			if len(resultBytes) > vm.maxScriptElementSize {
+				return scriptError(ErrElementTooBig, fmt.Sprintf(
+					"result size %d exceeds max allowed size %d",
+					len(resultBytes), vm.maxScriptElementSize))
+			}
 			vm.dstack.PushInt(c)
 
-			vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) * len(b.Bytes())))
+			vm.metrics.AddOPCost(2*len(resultBytes) + (len(a.Bytes()) * len(b.Bytes())))
 
 			return nil
 		}
