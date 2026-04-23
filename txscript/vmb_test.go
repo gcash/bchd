@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2017 The btcsuite developers
+// Copyright (c) 2026 The BCHD developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -139,9 +139,11 @@ func TestMay2026Standard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
-				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
+				entry := blockchain.NewUtxoEntry(&utxos[i], 0, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
 			}
 
@@ -301,9 +303,10 @@ func TestMay2026NonStandard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
-
-				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
+				entry := blockchain.NewUtxoEntry(&utxos[i], 0, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
 			}
 
@@ -474,9 +477,10 @@ func TestMay2026Invalid(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
-
-				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
+				entry := blockchain.NewUtxoEntry(&utxos[i], 0, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
 			}
 
@@ -488,7 +492,6 @@ func TestMay2026Invalid(t *testing.T) {
 			err = blockchain.CheckTransactionSanity(bchutilTx, true, true, flags)
 			if err != nil { // Failed TX, move to the next one
 				continue
-				// fatalf(t, err, test, i)
 			}
 
 			cache := txscript.NewUtxoCache()
@@ -514,7 +517,6 @@ func TestMay2026Invalid(t *testing.T) {
 
 			if err != nil {
 				continue
-				// fatalf(t, err.Error(), test, i)
 			}
 
 			if testLimits[test[0].(string)] != nil {
@@ -524,19 +526,16 @@ func TestMay2026Invalid(t *testing.T) {
 
 				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
 					continue
-					// fatalf(t, "operation cost did not match", test, i)
 				}
 
 				if vm.GetMetrics().GetHashDigestIterations() != densityControl {
 					if err != nil {
 						continue
-						// fatalf(t, "number of hash digest iterations did not match", test, i)
 					}
 				}
 
 				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
 					continue
-					// fatalf(t, "max operation cost limit did not match", test, i)
 				}
 			}
 

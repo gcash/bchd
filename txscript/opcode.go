@@ -1999,9 +1999,8 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
-	key := string(identifier)
 
-	body, exists := vm.functionTable[key]
+	body, exists := vm.functionTable[string(identifier)]
 	if !exists {
 		return scriptError(ErrUndefinedFunction,
 			fmt.Sprintf(
