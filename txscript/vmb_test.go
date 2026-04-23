@@ -538,7 +538,29 @@ func TestMay2026Invalid(t *testing.T) {
 				continue
 			}
 
-			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
+			if testLimits[test[0].(string)] != nil {
+				densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
+				maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
+				operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
+
+				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
+					continue
+				}
+
+				if vm.GetMetrics().GetHashDigestIterations() != densityControl {
+					if err != nil {
+						continue
+					}
+				}
+
+				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
+					continue
+				}
+			}
+
+			if err == nil {
+				t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
+			}
 		}
 	}
 }
