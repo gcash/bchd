@@ -3041,7 +3041,8 @@ out:
 				err = s.addrManager.AddLocalAddress(na, addrmgr.UpnpPrio)
 				if err != nil {
 					// XXX DeletePortMapping?
-					srvrLog.Debugf("UPnP AddLocalAddress failed: %v", err)
+					srvrLog.Warnf("UPnP AddLocalAddress failed: %v", err)
+					continue out
 				}
 				srvrLog.Warnf("Successfully bound via UPnP to %s", addrmgr.NetAddressKey(na))
 				first = false
