@@ -17,6 +17,5 @@ if [ ! -x "$(type -p golangci-lint)" ]; then
 fi
 
 # Automatic checks
-test -z "$(env GO111MODULE=on golangci-lint run \
-2>&1 | tee /dev/stderr)"
+env GO111MODULE=on golangci-lint run
 env GO111MODULE=on go test -tags rpctest ./...
