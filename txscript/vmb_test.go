@@ -189,6 +189,8 @@ func TestMay2026Standard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
+			densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
+
 			// Fixture schema: [effectiveInputSize (41+sigScriptSize), maxOpCost, opCost, description].
 			// Field [0] is the input byte budget, not hash-iter count — verified by maxOpCost == [0]*800.
 			maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
@@ -199,6 +201,12 @@ func TestMay2026Standard(t *testing.T) {
 					operationCost,
 					vm.GetMetrics().GetCompositeOPCost(true))
 				fatalf(t, "operation cost did not match. "+str, test, i)
+			}
+
+			if vm.GetMetrics().GetHashDigestIterations() != densityControl {
+				if err != nil {
+					fatalf(t, "number of hash digest iterations did not match", test, i)
+				}
 			}
 
 			if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
