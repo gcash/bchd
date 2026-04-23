@@ -261,7 +261,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 	if !strings.Contains(debugLevel, ",") && !strings.Contains(debugLevel, "=") {
 		// Validate debug log level.
 		if !validLogLevel(debugLevel) {
-			str := "The specified debug level [%v] is invalid"
+			str := "the specified debug level [%v] is invalid"
 			return fmt.Errorf(str, debugLevel)
 		}
 
@@ -275,7 +275,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 	// issues and update the log levels accordingly.
 	for logLevelPair := range strings.SplitSeq(debugLevel, ",") {
 		if !strings.Contains(logLevelPair, "=") {
-			str := "The specified debug level contains an invalid " +
+			str := "the specified debug level contains an invalid " +
 				"subsystem/level pair [%v]"
 			return fmt.Errorf(str, logLevelPair)
 		}
@@ -286,14 +286,14 @@ func parseAndSetDebugLevels(debugLevel string) error {
 
 		// Validate subsystem.
 		if _, exists := subsystemLoggers[subsysID]; !exists {
-			str := "The specified subsystem [%v] is invalid -- " +
+			str := "the specified subsystem [%v] is invalid -- " +
 				"supported subsystems %v"
 			return fmt.Errorf(str, subsysID, supportedSubsystems())
 		}
 
 		// Validate log level.
 		if !validLogLevel(logLevel) {
-			str := "The specified debug level [%v] is invalid"
+			str := "the specified debug level [%v] is invalid"
 			return fmt.Errorf(str, logLevel)
 		}
 
@@ -404,7 +404,7 @@ func fileExists(name string) bool {
 func newConfigParser(cfg *config, so *serviceOptions, options flags.Options) *flags.Parser {
 	parser := flags.NewParser(cfg, options)
 	if runtime.GOOS == "windows" {
-		parser.AddGroup("Service Options", "Service Options", so)
+		_, _ = parser.AddGroup("Service Options", "Service Options", so)
 	}
 	return parser
 }
@@ -598,7 +598,7 @@ func loadConfig() (*config, []string, error) {
 
 	// Re-indexing and pruning don't mix.
 	if cfg.ReIndexChainState && cfg.Prune {
-		str := "%s: reindexchainstate can not be used with a pruned blockchain."
+		str := "%s: reindexchainstate can not be used with a pruned blockchain"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -607,7 +607,7 @@ func loadConfig() (*config, []string, error) {
 
 	// Re-indexing and fast sync don't mix either.
 	if cfg.ReIndexChainState && cfg.FastSync {
-		str := "%s: reindexchainstate can not be used with fast sync mode."
+		str := "%s: reindexchainstate can not be used with fast sync mode"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -616,7 +616,7 @@ func loadConfig() (*config, []string, error) {
 
 	// Indexing doesn't work with a pruned blockchain.
 	if (cfg.TxIndex || cfg.AddrIndex) && cfg.Prune {
-		str := "%s: txindex and addrindex can not be used with a pruned blockchain."
+		str := "%s: txindex and addrindex can not be used with a pruned blockchain"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -626,7 +626,7 @@ func loadConfig() (*config, []string, error) {
 	// Indexing also doesn't work with fast sync as the indexes will not go
 	// back to genesis.
 	if (cfg.TxIndex || cfg.AddrIndex) && cfg.FastSync {
-		str := "%s: txindex and addrindex can not be used with fast sync mode."
+		str := "%s: txindex and addrindex can not be used with fast sync mode"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -635,7 +635,7 @@ func loadConfig() (*config, []string, error) {
 
 	// Checkpoints must not be disabled in fast sync mode
 	if cfg.FastSync && cfg.DisableCheckpoints {
-		str := "%s: disablecheckpoints can not be used with fast sync mode."
+		str := "%s: disablecheckpoints can not be used with fast sync mode"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -644,7 +644,7 @@ func loadConfig() (*config, []string, error) {
 
 	// SlpGraphSearch doesn't work without txindex and slpindex
 	if cfg.SlpGraphSearch && (!cfg.TxIndex || !cfg.SlpIndex) {
-		str := "%s: slpgraphsearch can not be used without both txindex and slpindex."
+		str := "%s: slpgraphsearch can not be used without both txindex and slpindex"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -736,7 +736,7 @@ func loadConfig() (*config, []string, error) {
 
 	if cfg.Prune && cfg.PruneDepth < minPruneDepth {
 		str := "%s: The pruneheight option may not be less than %d -- parsed [%d]"
-		err := fmt.Errorf(str, minPruneDepth, funcName, cfg.PruneDepth)
+		err := fmt.Errorf(str, funcName, minPruneDepth, cfg.PruneDepth)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err

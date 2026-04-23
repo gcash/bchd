@@ -204,6 +204,8 @@ func isScriptHash(script []byte) (bool, []byte) {
 // isScriptHash32 returns whether or not the passed public key script is a
 // standard pay-to-script-hash script along with the script hash it is paying to
 // if it is.
+//
+//nolint:unused // retained for future callers
 func isScriptHash32(script []byte) (bool, []byte) {
 	if len(script) == 35 && script[0] == txscript.OP_HASH256 &&
 		script[1] == txscript.OP_DATA_32 &&

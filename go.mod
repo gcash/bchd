@@ -1,6 +1,6 @@
 module github.com/gcash/bchd
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/bluele/gcache v0.0.2
@@ -24,11 +24,19 @@ require (
 	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
+<<<<<<< HEAD
 	golang.org/x/crypto v0.46.0
 	golang.org/x/net v0.48.0
 	golang.org/x/text v0.32.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
+=======
+	golang.org/x/crypto v0.45.0
+	golang.org/x/net v0.47.0
+	golang.org/x/text v0.34.0
+	google.golang.org/grpc v1.72.0
+	google.golang.org/protobuf v1.36.8
+>>>>>>> f9166e49 (chore: satisfy golangci-lint v2 — fix printf/ineffassign/logic bugs, modernize deprecated APIs, mark retained-but-unused code with //nolint:unused)
 	lukechampine.com/uint128 v1.3.0
 )
 
@@ -39,6 +47,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/desertbit/timer v1.0.1 // indirect
+	github.com/golangci/golangci-lint v1.64.8 // indirect
+	github.com/golangci/golangci-lint/v2 v2.11.4 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -47,9 +57,15 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
+<<<<<<< HEAD
 	golang.org/x/sys v0.39.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+=======
+	golang.org/x/sys v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
+>>>>>>> f9166e49 (chore: satisfy golangci-lint v2 — fix printf/ineffassign/logic bugs, modernize deprecated APIs, mark retained-but-unused code with //nolint:unused)
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 )

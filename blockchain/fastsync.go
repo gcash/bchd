@@ -122,7 +122,6 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		}
 		totalRead += n
 
-		serializedUtxo = make([]byte, 52+scriptLen)
 		serializedUtxo = append(buf52, pkScript...)
 
 		jobsChan <- serializedUtxo

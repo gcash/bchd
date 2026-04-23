@@ -99,7 +99,9 @@ func loadBlocks(filename string) (blocks []*bchutil.Block, err error) {
 		rbytes := make([]byte, blocklen)
 
 		// read block
-		dr.Read(rbytes)
+		if _, err = io.ReadFull(dr, rbytes); err != nil {
+			return
+		}
 
 		block, err = bchutil.NewBlockFromBytes(rbytes)
 		if err != nil {
@@ -257,6 +259,8 @@ func loadUtxoView(filename string) (*UtxoViewpoint, error) {
 // out using the latest format.  It is only useful for converting utxostore data
 // used in the tests, which has already been done.  However, the code is left
 // available for future reference.
+//
+//nolint:unused // retained for future reference per the comment above
 func convertUtxoStore(r io.Reader, w io.Writer) error {
 	// The old utxostore file format was:
 	// <tx hash><serialized utxo len><serialized utxo>

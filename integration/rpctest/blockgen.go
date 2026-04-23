@@ -212,7 +212,7 @@ func CreateBlock(prevBlock *bchutil.Block, inclusionTxs []*bchutil.Tx,
 
 	found := solveBlock(&block.Header, net.PowLimit)
 	if !found {
-		return nil, errors.New("Unable to solve block")
+		return nil, errors.New("unable to solve block")
 	}
 
 	utilBlock := bchutil.NewBlock(&block)

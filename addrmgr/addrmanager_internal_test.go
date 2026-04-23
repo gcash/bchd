@@ -1,7 +1,7 @@
 package addrmgr
 
 import (
-	"io/ioutil"
+	crand "crypto/rand"
 	"math/rand"
 	"net"
 	"os"
@@ -18,13 +18,13 @@ func randAddr(t *testing.T) *wire.NetAddress {
 	var ip net.IP
 	if ipv4 {
 		var b [4]byte
-		if _, err := rand.Read(b[:]); err != nil {
+		if _, err := crand.Read(b[:]); err != nil {
 			t.Fatal(err)
 		}
 		ip = b[:]
 	} else {
 		var b [16]byte
-		if _, err := rand.Read(b[:]); err != nil {
+		if _, err := crand.Read(b[:]); err != nil {
 			t.Fatal(err)
 		}
 		ip = b[:]
@@ -84,7 +84,7 @@ func TestAddrManagerSerialization(t *testing.T) {
 
 	// We'll start by creating our address manager backed by a temporary
 	// directory.
-	tempDir, err := ioutil.TempDir("", "addrmgr")
+	tempDir, err := os.MkdirTemp("", "addrmgr")
 	if err != nil {
 		t.Fatalf("unable to create temp dir: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestAddrManagerV1ToV2(t *testing.T) {
 
 	// We'll start by creating our address manager backed by a temporary
 	// directory.
-	tempDir, err := ioutil.TempDir("", "addrmgr")
+	tempDir, err := os.MkdirTemp("", "addrmgr")
 	if err != nil {
 		t.Fatalf("unable to create temp dir: %v", err)
 	}

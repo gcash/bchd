@@ -113,7 +113,7 @@ func loadConfig() (*config, []string, error) {
 	if cfg.BlockHeight < activeNetParams.Checkpoints[len(activeNetParams.Checkpoints)-1].Height && !cfg.Force {
 		str := "%s: You are attempting a rollback deeper than the last checkpoint height of %d. " +
 			"This is expected to use a lot of memory as the utxos for each block that gets " +
-			"rolled back are held in memory. If you wish to continue use --force."
+			"rolled back are held in memory. If you wish to continue use --force"
 		err := fmt.Errorf(str, funcName, activeNetParams.Checkpoints[len(activeNetParams.Checkpoints)-1].Height)
 		fmt.Fprintln(os.Stderr, err)
 		return nil, nil, err

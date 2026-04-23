@@ -140,7 +140,9 @@ func (msg *MsgVersion) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 		// field is true when transactions should be relayed, so reverse
 		// it for the DisableRelayTx field.
 		var relayTx bool
-		readElement(r, &relayTx)
+		if err := readElement(r, &relayTx); err != nil {
+			return err
+		}
 		msg.DisableRelayTx = !relayTx
 	}
 

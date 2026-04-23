@@ -6,7 +6,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -290,7 +290,7 @@ func createDefaultConfigFile(destinationPath, serverConfigPath string) error {
 		return err
 	}
 	defer serverConfigFile.Close()
-	content, err := ioutil.ReadAll(serverConfigFile)
+	content, err := io.ReadAll(serverConfigFile)
 	if err != nil {
 		return err
 	}
@@ -344,7 +344,9 @@ func createDefaultConfigFile(destinationPath, serverConfigPath string) error {
 		destString += fmt.Sprintf("notls=%s\n", noTLSSubmatches[1])
 	}
 
-	dest.WriteString(destString)
+	if _, err := dest.WriteString(destString); err != nil {
+		return err
+	}
 
 	return nil
 }

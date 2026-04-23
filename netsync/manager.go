@@ -403,7 +403,7 @@ func (sm *SyncManager) startSync() {
 			best.Height < sm.nextCheckpoint.Height &&
 			sm.chainParams != &chaincfg.RegressionNetParams {
 
-			bestPeer.PushGetHeadersMsg(locator, sm.nextCheckpoint.Hash)
+			_ = bestPeer.PushGetHeadersMsg(locator, sm.nextCheckpoint.Hash)
 			sm.headersFirstMode = true
 			log.Infof("Downloading headers for blocks %d to "+
 				"%d from peer %s", best.Height+1,
@@ -423,7 +423,7 @@ func (sm *SyncManager) startSync() {
 			// set this bool to false once the UTXO download/verification
 			// finishes and then we can proceed as if we are syncing
 			// normally.
-			bestPeer.PushGetBlocksMsg(locator, &zeroHash)
+			_ = bestPeer.PushGetBlocksMsg(locator, &zeroHash)
 		}
 
 		bestPeer.SetSyncPeer(true)
@@ -910,7 +910,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 			log.Warnf("Failed to get block locator for the "+
 				"latest block: %v", err)
 		} else {
-			peer.PushGetBlocksMsg(locator, orphanRoot)
+			_ = peer.PushGetBlocksMsg(locator, orphanRoot)
 		}
 	} else {
 		// Only consider non-orphans for the timer.
@@ -1054,7 +1054,7 @@ func (sm *SyncManager) fetchHeaderBlocks() {
 			sm.requestedBlocks[*node.hash] = struct{}{}
 			syncPeerState.requestedBlocks[*node.hash] = struct{}{}
 
-			gdmsg.AddInvVect(iv)
+			_ = gdmsg.AddInvVect(iv)
 			numRequested++
 		}
 		sm.startHeader = e.Next()
@@ -1378,7 +1378,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 						"%v", err)
 					continue
 				}
-				peer.PushGetBlocksMsg(locator, orphanRoot)
+				_ = peer.PushGetBlocksMsg(locator, orphanRoot)
 				continue
 			}
 
@@ -1391,7 +1391,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				// final one the remote peer knows about (zero
 				// stop hash).
 				locator := sm.chain.BlockLocatorFromHash(&iv.Hash)
-				peer.PushGetBlocksMsg(locator, &zeroHash)
+				_ = peer.PushGetBlocksMsg(locator, &zeroHash)
 			}
 		}
 	}
@@ -1419,7 +1419,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				if sm.current() && imsg.peer.ProtocolVersion() >= wire.BIP0152Version {
 					iv.Type = wire.InvTypeCmpctBlock
 				}
-				gdmsg.AddInvVect(iv)
+				_ = gdmsg.AddInvVect(iv)
 				numRequested++
 			}
 
@@ -1431,7 +1431,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				sm.limitMap(sm.requestedTxns, maxRequestedTxns)
 				state.requestedTxns[iv.Hash] = struct{}{}
 
-				gdmsg.AddInvVect(iv)
+				_ = gdmsg.AddInvVect(iv)
 				numRequested++
 			}
 		}
@@ -1656,7 +1656,7 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 
 		// Rollback previous block recorded by the fee estimator.
 		if sm.feeEstimator != nil {
-			sm.feeEstimator.Rollback(block.Hash())
+			_ = sm.feeEstimator.Rollback(block.Hash())
 		}
 	}
 }

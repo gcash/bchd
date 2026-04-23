@@ -232,6 +232,8 @@ func payToScriptHashScript(redeemScript []byte) []byte {
 
 // payToScriptHashScript32 returns a standard pay-to-script-hash for the provided
 // redeem script.
+//
+//nolint:unused // retained for future callers
 func payToScriptHashScript32(redeemScript []byte) []byte {
 	redeemScriptHash := bchutil.Hash256(redeemScript)
 	script, err := txscript.NewScriptBuilder().
@@ -449,7 +451,7 @@ func replaceCoinbaseSigScript(script []byte) func(*wire.MsgBlock) {
 // adding the provided transaction.
 func additionalTx(tx *wire.MsgTx) func(*wire.MsgBlock) {
 	return func(b *wire.MsgBlock) {
-		b.AddTransaction(tx)
+		_ = b.AddTransaction(tx)
 	}
 }
 
@@ -658,10 +660,10 @@ func nonCanonicalVarInt(val uint32) []byte {
 // encoding.
 func encodeNonCanonicalBlock(b *wire.MsgBlock) []byte {
 	var buf bytes.Buffer
-	b.Header.BchEncode(&buf, 0, wire.BaseEncoding)
+	_ = b.Header.BchEncode(&buf, 0, wire.BaseEncoding)
 	buf.Write(nonCanonicalVarInt(uint32(len(b.Transactions))))
 	for _, tx := range b.Transactions {
-		tx.BchEncode(&buf, 0, wire.BaseEncoding)
+		_ = tx.BchEncode(&buf, 0, wire.BaseEncoding)
 	}
 	return buf.Bytes()
 }
@@ -671,7 +673,7 @@ func cloneBlock(b *wire.MsgBlock) wire.MsgBlock {
 	var blockCopy wire.MsgBlock
 	blockCopy.Header = b.Header
 	for _, tx := range b.Transactions {
-		blockCopy.AddTransaction(tx.Copy())
+		_ = blockCopy.AddTransaction(tx.Copy())
 	}
 	return blockCopy
 }
@@ -790,7 +792,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -1250,7 +1252,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 			prevTx = createSpendTxForTx(prevTx, lowFee)
 			prevTx.TxOut[0].Value -= 2
 			prevTx.AddTxOut(wire.NewTxOut(2, p2shScript, wire.TokenData{}))
-			b.AddTransaction(prevTx)
+			_ = b.AddTransaction(prevTx)
 		}
 	})
 	g.assertTipBlockNumTxns((maxBlockSigOpsPerMB / redeemScriptSigOps) + 3)
@@ -1393,7 +1395,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//                 \-> b51(14)
 	g.setTip("b43")
 	g.nextBlock("b51", outs[14], func(b *wire.MsgBlock) {
-		b.AddTransaction(b.Transactions[1])
+		_ = b.AddTransaction(b.Transactions[1])
 	})
 	g.assertTipBlockNumTxns(3)
 	rejected(blockchain.ErrDuplicateTx)
@@ -1493,14 +1495,14 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	b57 := g.nextBlock("b57", outs[16], func(b *wire.MsgBlock) {
 		tx2 := b.Transactions[1]
 		tx3 := createSpendTxForTx(tx2, lowFee)
-		b.AddTransaction(tx3)
+		_ = b.AddTransaction(tx3)
 	})
 	g.assertTipBlockNumTxns(3)
 
 	g.setTip("b55")
 	b56 := g.nextBlock("b56", nil, func(b *wire.MsgBlock) {
 		*b = cloneBlock(b57)
-		b.AddTransaction(b.Transactions[2])
+		_ = b.AddTransaction(b.Transactions[2])
 	})
 	g.assertTipBlockNumTxns(4)
 	g.assertTipBlockHash(b57.BlockHash())
@@ -1538,12 +1540,12 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		spendTx := b.Transactions[1]
 		for i := 0; i < 4; i++ {
 			spendTx = createSpendTxForTx(spendTx, lowFee)
-			b.AddTransaction(spendTx)
+			_ = b.AddTransaction(spendTx)
 		}
 
 		// Add the duplicate transactions (3rd and 4th).
-		b.AddTransaction(b.Transactions[2])
-		b.AddTransaction(b.Transactions[3])
+		_ = b.AddTransaction(b.Transactions[2])
+		_ = b.AddTransaction(b.Transactions[3])
 	})
 	g.assertTipBlockNumTxns(8)
 	rejected(blockchain.ErrDuplicateTx)
@@ -1675,7 +1677,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	g.setTip("b64")
 	g.nextBlock("b65", outs[19], func(b *wire.MsgBlock) {
 		tx3 := createSpendTxForTx(b.Transactions[1], lowFee)
-		b.AddTransaction(tx3)
+		_ = b.AddTransaction(tx3)
 	})
 	accepted()
 
@@ -1686,8 +1688,8 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	g.nextBlock("b66", nil, func(b *wire.MsgBlock) {
 		tx2 := createSpendTx(outs[20], lowFee)
 		tx3 := createSpendTxForTx(tx2, lowFee)
-		b.AddTransaction(tx3)
-		b.AddTransaction(tx2)
+		_ = b.AddTransaction(tx3)
+		_ = b.AddTransaction(tx2)
 	})
 	rejected(blockchain.ErrMissingTxOut)
 
@@ -1701,8 +1703,8 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		tx2 := b.Transactions[1]
 		tx3 := createSpendTxForTx(tx2, lowFee)
 		tx4 := createSpendTxForTx(tx2, lowFee)
-		b.AddTransaction(tx3)
-		b.AddTransaction(tx4)
+		_ = b.AddTransaction(tx3)
+		_ = b.AddTransaction(tx4)
 	})
 	rejected(blockchain.ErrSpentTxOut)
 
@@ -1777,7 +1779,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		tx2 := b.Transactions[1]
 		tx3 := createSpendTxForTx(tx2, lowFee)
 		tx3.TxIn[0].SignatureScript = []byte{txscript.OP_FALSE}
-		b.AddTransaction(tx3)
+		_ = b.AddTransaction(tx3)
 	})
 	accepted()
 
@@ -1807,7 +1809,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 		for i := uint32(0); i < numAdditionalOutputs; i++ {
 			spend := makeSpendableOut(b, 1, i+2)
 			tx := createSpendTx(&spend, zeroFee)
-			b.AddTransaction(tx)
+			_ = b.AddTransaction(tx)
 		}
 	})
 	g.assertTipBlockNumTxns(6)
@@ -1975,7 +1977,7 @@ func GenerateWithTxs(chainLength int, txsPerBlock int) (tests [][]TestInstance, 
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -2141,7 +2143,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -2198,7 +2200,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1 using a Schnorr signature
@@ -2217,7 +2219,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 		tx2.TxIn[0].SignatureScript = pushDataScript(sig)
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Create one tx paying a p2sh address with a witness redeem script
@@ -2236,7 +2238,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx3.TxOut[0].PkScript = script2
 
-		block.AddTransaction(tx3)
+		_ = block.AddTransaction(tx3)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx3))
 
 		// Spend from tx3 using a push of a witness redeem script
@@ -2250,7 +2252,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 
 		tx4 := createSpendTx(so2, 0)
 		tx4.TxIn[0].SignatureScript = pushDataScript(redeemScript)
-		block.AddTransaction(tx4)
+		_ = block.AddTransaction(tx4)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx4))
 
 		// Sort the unsortedTxs slice
@@ -2290,7 +2292,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -2361,7 +2363,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1 using a Schnorr multi-signature
@@ -2382,7 +2384,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 		tx2.TxIn[0].SignatureScript = append([]byte{0x51, 0x4c, 0x41}, sig...) // OP_1, OP_PUSHDATA1 not minimally encoded.
 		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, txscript.OP_DATA_37)
 		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, redeemScript...)
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Sort the unsortedTxs slice
@@ -2427,7 +2429,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1 using a Schnorr multi-signature
@@ -2446,7 +2448,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 		tx2.TxIn[0].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Sort the unsortedTxs slice
@@ -2490,7 +2492,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -2560,7 +2562,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1
@@ -2576,7 +2578,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		tx2.TxIn[0].SignatureScript = []byte{txscript.OP_DATA_11, 0x11, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01}
 		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, txscript.OP_DATA_14)
 		tx2.TxIn[0].SignatureScript = append(tx2.TxIn[0].SignatureScript, redeemScript...)
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Sort the unsortedTxs slice
@@ -2628,7 +2630,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 				Value:    int64(outAmount),
 			})
 		}
-		block.AddTransaction(tx0)
+		_ = block.AddTransaction(tx0)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
 
 		tx1 := wire.NewMsgTx(1)
@@ -2651,7 +2653,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			tx1.TxIn[i].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
 		}
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Sort the unsortedTxs slice
@@ -2703,7 +2705,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 				Value:    int64(outAmount),
 			})
 		}
-		block.AddTransaction(tx0)
+		_ = block.AddTransaction(tx0)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
 
 		tx1 := wire.NewMsgTx(1)
@@ -2726,7 +2728,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			tx1.TxIn[i].SignatureScript = pushDataScript([]byte{0x01}, sig, redeemScript)
 		}
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Sort the unsortedTxs slice
@@ -2771,7 +2773,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 				PkScript: append([]byte{txscript.OP_RETURN}, bytes.Repeat([]byte{0x00}, 20)...),
 			},
 		}
-		block.AddTransaction(tx0)
+		_ = block.AddTransaction(tx0)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx0))
 
 		so = &spendableOut{
@@ -2796,7 +2798,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 			}
 			tx1.TxIn[0].SignatureScript = pushDataScript(sig)
 
-			block.AddTransaction(tx1)
+			_ = block.AddTransaction(tx1)
 			unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 			so = &spendableOut{
@@ -2857,7 +2859,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 			case error:
 				err = rt
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -2924,7 +2926,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1
@@ -2944,7 +2946,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 		tx2.TxIn[0].SignatureScript = scriptSig
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Sort the unsortedTxs slice
@@ -2989,7 +2991,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 		}
 		tx1.TxOut[0].PkScript = script
 
-		block.AddTransaction(tx1)
+		_ = block.AddTransaction(tx1)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx1))
 
 		// Spend from tx1
@@ -3009,7 +3011,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 			panic(err)
 		}
 		tx2.TxIn[0].SignatureScript = scriptSig
-		block.AddTransaction(tx2)
+		_ = block.AddTransaction(tx2)
 		unsortedTxs = append(unsortedTxs, bchutil.NewTx(tx2))
 
 		// Sort the unsortedTxs slice

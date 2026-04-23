@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -53,7 +52,7 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 
 func TestCreateDefaultConfigFile(t *testing.T) {
 	// Setup a temporary directory
-	tmpDir, err := ioutil.TempDir("", "bchd")
+	tmpDir, err := os.MkdirTemp("", "bchd")
 	if err != nil {
 		t.Fatalf("Failed creating a temporary directory: %v", err)
 	}
@@ -71,7 +70,7 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 		t.Fatalf("Failed to create a default config file: %v", err)
 	}
 
-	content, err := ioutil.ReadFile(testpath)
+	content, err := os.ReadFile(testpath)
 	if err != nil {
 		t.Fatalf("Failed to read generated default config file: %v", err)
 	}

@@ -8,7 +8,7 @@ import (
 	"compress/zlib"
 	"encoding/base64"
 	"encoding/binary"
-	"io/ioutil"
+	"io"
 	"strings"
 )
 
@@ -34,7 +34,7 @@ func loadS256BytePoints() error {
 	if err != nil {
 		return err
 	}
-	serialized, err := ioutil.ReadAll(r)
+	serialized, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

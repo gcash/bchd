@@ -73,22 +73,37 @@ func realMain() error {
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	parserFlags := flags.Options(flags.HelpFlag | flags.PassDoubleDash)
 	parser := flags.NewNamedParser(appName, parserFlags)
-	parser.AddGroup("Global Options", "", cfg)
-	parser.AddCommand("insecureimport",
+	if _, err := parser.AddGroup("Global Options", "", cfg); err != nil {
+		log.Errorf("Failed to add global options: %v", err)
+		return err
+	}
+	if _, err := parser.AddCommand("insecureimport",
 		"Insecurely import bulk block data from bootstrap.dat",
 		"Insecurely import bulk block data from bootstrap.dat.  "+
 			"WARNING: This is NOT secure because it does NOT "+
 			"verify chain rules.  It is only provided for testing "+
-			"purposes.", &importCfg)
-	parser.AddCommand("loadheaders",
+			"purposes.", &importCfg); err != nil {
+		log.Errorf("Failed to add insecureimport command: %v", err)
+		return err
+	}
+	if _, err := parser.AddCommand("loadheaders",
 		"Time how long to load headers for all blocks in the database",
-		"", &headersCfg)
-	parser.AddCommand("fetchblock",
+		"", &headersCfg); err != nil {
+		log.Errorf("Failed to add loadheaders command: %v", err)
+		return err
+	}
+	if _, err := parser.AddCommand("fetchblock",
 		"Fetch the specific block hash from the database", "",
-		&fetchBlockCfg)
-	parser.AddCommand("fetchblockregion",
+		&fetchBlockCfg); err != nil {
+		log.Errorf("Failed to add fetchblock command: %v", err)
+		return err
+	}
+	if _, err := parser.AddCommand("fetchblockregion",
 		"Fetch the specified block region from the database", "",
-		&blockRegionCfg)
+		&blockRegionCfg); err != nil {
+		log.Errorf("Failed to add fetchblockregion command: %v", err)
+		return err
+	}
 
 	// Parse command line and invoke the Execute function for the specified
 	// command.

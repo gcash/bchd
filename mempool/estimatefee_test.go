@@ -77,7 +77,7 @@ func (eft *estimateFeeTester) newBlock(txs []*wire.MsgTx) {
 
 	eft.last = &lastBlock{block.Hash(), eft.last}
 
-	eft.ef.RegisterBlock(block)
+	_ = eft.ef.RegisterBlock(block)
 }
 
 func (eft *estimateFeeTester) rollback() {

@@ -78,7 +78,7 @@ const (
 
 	// fieldOverflowBits is the minimum number of "overflow" bits for each
 	// word in the field value.
-	fieldOverflowBits = 32 - fieldBase
+	fieldOverflowBits = 32 - fieldBase //nolint:unused // kept for documentation of field representation
 
 	// fieldBaseMask is the mask for the bits in each word needed to
 	// represent the numeric base of each word (except the most significant

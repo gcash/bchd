@@ -5,9 +5,9 @@
 package txscript
 
 import (
+	crand "crypto/rand"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gcash/bchd/wire"
@@ -26,7 +26,7 @@ func genTestTx() (*wire.MsgTx, error) {
 			},
 			Sequence: uint32(rand.Int31()),
 		}
-		_, err := rand.Read(randTxIn.PreviousOutPoint.Hash[:])
+		_, err := crand.Read(randTxIn.PreviousOutPoint.Hash[:])
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +40,7 @@ func genTestTx() (*wire.MsgTx, error) {
 			Value:    rand.Int63(),
 			PkScript: make([]byte, rand.Intn(30)),
 		}
-		if _, err := rand.Read(randTxOut.PkScript); err != nil {
+		if _, err := crand.Read(randTxOut.PkScript); err != nil {
 			return nil, err
 		}
 		tx.TxOut = append(tx.TxOut, &randTxOut)
@@ -55,8 +55,6 @@ func genTestTx() (*wire.MsgTx, error) {
 // _not_ in the hash cache.
 func TestHashCacheAddContainsHashes(t *testing.T) {
 	t.Parallel()
-
-	rand.Seed(time.Now().Unix())
 
 	cache := NewHashCache(10)
 
@@ -109,8 +107,6 @@ func TestHashCacheAddContainsHashes(t *testing.T) {
 func TestHashCacheAddGet(t *testing.T) {
 	t.Parallel()
 
-	rand.Seed(time.Now().Unix())
-
 	cache := NewHashCache(10)
 
 	// To start, we'll generate a random transaction and compute the set of
@@ -146,8 +142,6 @@ func TestHashCacheAddGet(t *testing.T) {
 // hash cache.
 func TestHashCachePurge(t *testing.T) {
 	t.Parallel()
-
-	rand.Seed(time.Now().Unix())
 
 	cache := NewHashCache(10)
 

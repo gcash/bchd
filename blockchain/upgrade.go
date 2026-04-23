@@ -65,7 +65,7 @@ func migrateBlockIndex(db database.DB) error {
 	err := db.Update(func(dbTx database.Tx) error {
 		v1BlockIdxBucket := dbTx.Metadata().Bucket(v1BucketName)
 		if v1BlockIdxBucket == nil {
-			return fmt.Errorf("Bucket %s does not exist", v1BucketName)
+			return fmt.Errorf("bucket %s does not exist", v1BucketName)
 		}
 
 		log.Info("Re-indexing block information in the database. This might take a while...")
@@ -111,7 +111,7 @@ func migrateBlockIndex(db database.DB) error {
 			chainContext := blocksMap[hash]
 
 			if chainContext.height == -1 {
-				return fmt.Errorf("Unable to calculate chain height for "+
+				return fmt.Errorf("unable to calculate chain height for "+
 					"stored block %s", hash)
 			}
 
@@ -191,7 +191,7 @@ func determineBlockHeights(blocksMap map[chainhash.Hash]*blockChainContext) erro
 	// because that is the value of the PrevBlock field in the genesis header.
 	preGenesisContext, exists := blocksMap[zeroHash]
 	if !exists || len(preGenesisContext.children) == 0 {
-		return fmt.Errorf("Unable to find genesis block")
+		return fmt.Errorf("unable to find genesis block")
 	}
 
 	for _, genesisHash := range preGenesisContext.children {

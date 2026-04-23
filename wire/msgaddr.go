@@ -78,7 +78,7 @@ func (msg *MsgAddr) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) err
 		if err != nil {
 			return err
 		}
-		msg.AddAddress(na)
+		_ = msg.AddAddress(na)
 	}
 	return nil
 }

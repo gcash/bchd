@@ -33,8 +33,8 @@ import (
 type logWriter struct{}
 
 func (logWriter) Write(p []byte) (n int, err error) {
-	os.Stdout.Write(p)
-	logRotator.Write(p)
+	_, _ = os.Stdout.Write(p)
+	_, _ = logRotator.Write(p)
 	return len(p), nil
 }
 

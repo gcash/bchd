@@ -22,7 +22,7 @@ import (
 // script validation and double spend prevention.
 type UtxoViewpoint struct {
 	entries  map[wire.OutPoint]*UtxoEntry
-	bestHash chainhash.Hash
+	bestHash chainhash.Hash //nolint:unused // retained for future use
 }
 
 // LookupEntry returns information about a given transaction output according to
@@ -276,12 +276,13 @@ func spendTransactionInputs(view utxoView, tx *bchutil.Tx, stxos *[]SpentTxOut) 
 func connectTransaction(view utxoView, tx *bchutil.Tx, blockHeight int32, stxos *[]SpentTxOut, overwrite bool) error {
 	// Skip input processing when tx is coinbase.
 	if !IsCoinBase(tx) {
-		spendTransactionInputs(view, tx, stxos)
+		if err := spendTransactionInputs(view, tx, stxos); err != nil {
+			return err
+		}
 	}
 
 	// Add the transaction's outputs as available utxos.
-	addTxOuts(view, tx, blockHeight, overwrite)
-	return nil
+	return addTxOuts(view, tx, blockHeight, overwrite)
 }
 
 // connectTransactions updates the view by adding all new utxos created by all

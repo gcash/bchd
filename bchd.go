@@ -89,7 +89,7 @@ func bchdMain(serverChan chan<- *server) error {
 			bchdLog.Errorf("Unable to create cpu profile: %v", err)
 			return err
 		}
-		pprof.StartCPUProfile(f)
+		_ = pprof.StartCPUProfile(f)
 		defer f.Close()
 		defer pprof.StopCPUProfile()
 	}
@@ -171,7 +171,7 @@ func bchdMain(serverChan chan<- *server) error {
 	}
 	defer func() {
 		bchdLog.Infof("Gracefully shutting down the server...")
-		server.Stop()
+		_ = server.Stop()
 		server.WaitForShutdown()
 		srvrLog.Infof("Server shutdown complete")
 	}()
@@ -289,7 +289,9 @@ func loadBlockDB() (database.DB, error) {
 
 	// The regression test is special in that it needs a clean database for
 	// each run, so remove it now if it already exists.
-	removeRegressionDB(dbPath)
+	if err := removeRegressionDB(dbPath); err != nil {
+		bchdLog.Errorf("Failed to remove regression test db: %v", err)
+	}
 
 	bchdLog.Infof("Loading block database from '%s'", dbPath)
 	db, err := database.Open(cfg.DbType, dbPath, activeNetParams.Net, cfg.DBCacheSize*1024*1024, cfg.DBFlushInterval)

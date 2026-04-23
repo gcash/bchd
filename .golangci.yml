@@ -1,10 +1,66 @@
+version: "2"
 linters:
   enable:
     - revive
-linters-settings:
-  revive:
-    ignore-generated-header: true
-    severity: warning
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: var-naming
+          arguments:
+            - - ID
+              - IDS
+            - []
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: var-naming
-        arguments: [["ID", "IDS"], []]
+      # Bitcoin script opcode constants are intentionally named OP_* / ALL_CAPS
+      # to match the protocol spec; do not let revive rename them.
+      - path: txscript/opcode\.go
+        linters: [revive]
+        text: 'var-naming.*(OP_|ALL_CAPS)'
+      - path: wire/cashtokens\.go
+        linters: [revive]
+        text: 'var-naming.*ALL_CAPS'
+      # ABLA (adaptive block-size limit) constants mirror the reference
+      # specification naming; keep them as-is.
+      - path: blockchain/abla_ewma_elastic_buffer\.go
+        linters: [revive]
+        text: 'var-naming.*ALL_CAPS'
+      # secp256k1 curve operations in bchec are consensus-critical; the
+      # suggested crypto/ecdh replacements are NIST-curve-only and do not
+      # apply here.
+      - path: bchec/
+        linters: [staticcheck]
+        text: 'SA1019.*(ScalarMult|ScalarBaseMult|IsOnCurve|Curve\.Add)'
+      # RIPEMD-160 is mandated by Bitcoin consensus (P2PKH/P2SH) and cannot
+      # be replaced with a modern hash.
+      - linters: [staticcheck]
+        text: 'SA1019.*ripemd160'
+      # btcjson has both the legacy (pre-filter) and modern notification
+      # commands; rpcclient and the websocket server must continue to
+      # recognize the deprecated ones for protocol backward compatibility.
+      - path: (rpcclient/|rpcwebsocket\.go)
+        linters: [staticcheck]
+        text: 'SA1019.*btcjson\.'
+      # QF* are "quickfix" refactor suggestions (De Morgan's law, embedded
+      # field simplification, tagged switch). They're stylistic, not
+      # correctness issues — silence them project-wide.
+      - linters: [staticcheck]
+        text: '^QF[0-9]+:'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

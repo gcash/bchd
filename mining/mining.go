@@ -718,7 +718,7 @@ mempoolLoop:
 		// an entry for it to ensure any transactions which reference
 		// this one have it available as an input and can ensure they
 		// aren't double spending.
-		spendTransaction(blockUtxos, tx, nextBlockHeight)
+		_ = spendTransaction(blockUtxos, tx, nextBlockHeight)
 
 		// Add the transaction to the block, increment counters, and
 		// save the fees and signature operation counts to the block
@@ -730,7 +730,7 @@ mempoolLoop:
 		txFees = append(txFees, prioItem.fee)
 		txSigChecks = append(txSigChecks, int64(sigchecks))
 
-		log.Tracef("Adding tx %s (priority %.2f, feePerKB %.2f)",
+		log.Tracef("Adding tx %s (priority %.2f, feePerKB %d)",
 			prioItem.tx.Hash(), prioItem.priority, prioItem.feePerKB)
 
 		// Add transactions which depend on this one (and also do not

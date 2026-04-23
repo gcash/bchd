@@ -110,7 +110,9 @@ func (msg *MsgCmpctBlock) BchEncode(w io.Writer, pver uint32, enc MessageEncodin
 	}
 
 	for _, shortID := range msg.ShortIDs {
-		w.Write(shortID[:])
+		if _, err := w.Write(shortID[:]); err != nil {
+			return err
+		}
 	}
 
 	if err := WriteVarInt(w, pver, uint64(len(msg.PrefilledTxs))); err != nil {

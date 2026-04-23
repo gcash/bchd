@@ -89,7 +89,7 @@ func (msg *MsgCFHeaders) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) 
 		if err != nil {
 			return err
 		}
-		msg.AddCFHash(&cfh)
+		_ = msg.AddCFHash(&cfh)
 	}
 
 	return nil

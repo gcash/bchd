@@ -84,6 +84,8 @@ var (
 var addrMe *wire.NetAddress
 
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
+//
+//nolint:unused // retained for future callers
 var zeroHash chainhash.Hash
 
 // onionAddr implements the net.Addr interface and represents a tor address.
@@ -618,7 +620,7 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 		// one.
 		if !sp.filter.IsLoaded() || sp.filter.MatchTxAndUpdate(txDesc.Tx) {
 			iv := wire.NewInvVect(wire.InvTypeTx, txDesc.Tx.Hash())
-			invMsg.AddInvVect(iv)
+			_ = invMsg.AddInvVect(iv)
 			if len(invMsg.InvList)+1 > wire.MaxInvPerMsg {
 				break
 			}
@@ -866,8 +868,10 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 	// only making sure we aren't currently processing the block that is
 	// being requested. So we will acquire lock but we can release it right
 	// away.
+	// Used as a barrier: waits for any in-progress block processing to
+	// release the mutex, then releases it immediately.
 	sp.processBlockMtx.Lock()
-	sp.processBlockMtx.Unlock()
+	sp.processBlockMtx.Unlock() //nolint:staticcheck // SA2001: intentional barrier
 
 	// A decaying ban score increase is applied to prevent flooding.
 	// The ban score accumulates and passes the ban threshold if a burst of
@@ -997,7 +1001,7 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 			continue
 		}
 		if err != nil {
-			notFound.AddInvVect(iv)
+			_ = notFound.AddInvVect(iv)
 
 			// When there is a failure fetching the final entry
 			// and the done channel was sent in due to there
@@ -1046,7 +1050,7 @@ func (sp *serverPeer) OnGetBlocks(_ *peer.Peer, msg *wire.MsgGetBlocks) {
 	invMsg := wire.NewMsgInv()
 	for i := range hashList {
 		iv := wire.NewInvVect(wire.InvTypeBlock, &hashList[i])
-		invMsg.AddInvVect(iv)
+		_ = invMsg.AddInvVect(iv)
 	}
 
 	// Send the inventory message if there is anything to send.
@@ -1070,7 +1074,7 @@ func (sp *serverPeer) OnGetBlocks(_ *peer.Peer, msg *wire.MsgGetBlocks) {
 		// not found message.
 		notFound := wire.NewMsgNotFound()
 		for _, inv := range invMsg.InvList {
-			notFound.AddInvVect(inv)
+			_ = notFound.AddInvVect(inv)
 		}
 		sp.QueueMessage(notFound, nil)
 	}
@@ -1269,7 +1273,7 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 			return
 		}
 
-		headersMsg.AddCFHash(filterHash)
+		_ = headersMsg.AddCFHash(filterHash)
 	}
 
 	headersMsg.FilterType = msg.FilterType
@@ -1375,7 +1379,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 	// query, we'll populate our check point message with the cache as is.
 	// Shortly below, we'll populate the new elements of the cache.
 	for i := 0; i < forkIdx; i++ {
-		checkptMsg.AddCFHeader(&checkptCache[i].filterHeader)
+		_ = checkptMsg.AddCFHeader(&checkptCache[i].filterHeader)
 	}
 
 	// We'll now collect the set of hashes that are beyond our cache so we
@@ -1408,7 +1412,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 			return
 		}
 
-		checkptMsg.AddCFHeader(filterHeader)
+		_ = checkptMsg.AddCFHeader(filterHeader)
 
 		// If the new main chain is longer than what's in the cache,
 		// then we'll override it beyond the fork point.
@@ -1554,16 +1558,14 @@ func (sp *serverPeer) OnGetAddr(_ *peer.Peer, msg *wire.MsgGetAddr) {
 	// Do not accept getaddr requests from outbound peers.  This reduces
 	// fingerprinting attacks.
 	if !sp.Inbound() {
-		peerLog.Debugf("Ignoring getaddr request from outbound peer ",
-			"%v", sp)
+		peerLog.Debugf("Ignoring getaddr request from outbound peer %v", sp)
 		return
 	}
 
 	// Only allow one getaddr request per connection to discourage
 	// address stamping of inv announcements.
 	if sp.sentAddrs {
-		peerLog.Debugf("Ignoring repeated getaddr request from peer ",
-			"%v", sp)
+		peerLog.Debugf("Ignoring repeated getaddr request from peer %v", sp)
 		return
 	}
 	sp.sentAddrs = true
@@ -1688,7 +1690,7 @@ func randomUint16Number(max uint16) uint16 {
 	var randomNumber uint16
 	var limitRange = (math.MaxUint16 / max) * max
 	for {
-		binary.Read(rand.Reader, binary.LittleEndian, &randomNumber)
+		_ = binary.Read(rand.Reader, binary.LittleEndian, &randomNumber)
 		if randomNumber < limitRange {
 			return (randomNumber % max)
 		}
@@ -1847,7 +1849,7 @@ func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan cha
 		best := sp.server.chain.BestSnapshot()
 		invMsg := wire.NewMsgInvSizeHint(1)
 		iv := wire.NewInvVect(wire.InvTypeBlock, &best.Hash)
-		invMsg.AddInvVect(iv)
+		_ = invMsg.AddInvVect(iv)
 		sp.QueueMessage(invMsg, doneChan)
 		sp.continueHash = nil
 	}
@@ -2682,10 +2684,10 @@ out:
 	s.connManager.Stop()
 	srvrLog.Info("Stopped: connManager")
 	srvrLog.Info("Stopping: syncManager")
-	s.syncManager.Stop()
+	_ = s.syncManager.Stop()
 	srvrLog.Info("Stopped: syncManager")
 	srvrLog.Info("Stopping: addrManger")
-	s.addrManager.Stop()
+	_ = s.addrManager.Stop()
 	srvrLog.Info("Stopped: addrManager")
 
 	// Drain channels before exiting so nothing is left waiting around
@@ -2891,23 +2893,23 @@ func (s *server) Stop() error {
 	// Shutdown the RPC server if it's not disabled.
 	if !cfg.DisableRPC {
 		srvrLog.Info("Stopping: rpcServer")
-		s.rpcServer.Stop()
+		_ = s.rpcServer.Stop()
 		srvrLog.Info("Stopped: rpcServer")
 		if s.gRPCServer != nil {
 			srvrLog.Info("Stopping: grpcServer")
-			s.gRPCServer.Stop()
+			_ = s.gRPCServer.Stop()
 			srvrLog.Info("Stopped: grpcServer")
 		}
 	}
 
 	srvrLog.Info("Saving fee estimate to database")
 	// Save fee estimator state in the database.
-	s.db.Update(func(tx database.Tx) error {
+	if err := s.db.Update(func(tx database.Tx) error {
 		metadata := tx.Metadata()
-		metadata.Put(mempool.EstimateFeeDatabaseKey, s.feeEstimator.Save())
-
-		return nil
-	})
+		return metadata.Put(mempool.EstimateFeeDatabaseKey, s.feeEstimator.Save())
+	}); err != nil {
+		srvrLog.Errorf("Failed to save fee estimate: %v", err)
+	}
 	srvrLog.Info("Fee estimate save complete")
 
 	// Signal the remaining goroutines to quit.
@@ -2941,7 +2943,7 @@ func (s *server) ScheduleShutdown(duration time.Duration) {
 			select {
 			case <-done:
 				ticker.Stop()
-				s.Stop()
+				_ = s.Stop()
 				break out
 			case <-ticker.C:
 				remaining = remaining - tickDuration
@@ -3039,6 +3041,7 @@ out:
 				err = s.addrManager.AddLocalAddress(na, addrmgr.UpnpPrio)
 				if err != nil {
 					// XXX DeletePortMapping?
+					srvrLog.Debugf("UPnP AddLocalAddress failed: %v", err)
 				}
 				srvrLog.Warnf("Successfully bound via UPnP to %s", addrmgr.NetAddressKey(na))
 				first = false
@@ -3258,13 +3261,15 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 
 	// Search for a FeeEstimator state in the database. If none can be found
 	// or if it cannot be loaded, create a new one.
-	db.Update(func(tx database.Tx) error {
+	if err := db.Update(func(tx database.Tx) error {
 		metadata := tx.Metadata()
 		feeEstimationData := metadata.Get(mempool.EstimateFeeDatabaseKey)
 		if feeEstimationData != nil {
 			// delete it from the database so that we don't try to restore the
 			// same thing again somehow.
-			metadata.Delete(mempool.EstimateFeeDatabaseKey)
+			if err := metadata.Delete(mempool.EstimateFeeDatabaseKey); err != nil {
+				return err
+			}
 
 			// If there is an error, log it and make a new fee estimator.
 			var err error
@@ -3276,7 +3281,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		}
 
 		return nil
-	})
+	}); err != nil {
+		peerLog.Errorf("Failed to load fee estimator: %v", err)
+	}
 
 	// If no feeEstimator has been found, or if the one that has been found
 	// is behind somehow, create a new one and start over.
@@ -3689,7 +3696,7 @@ func addLocalAddress(addrMgr *addrmgr.AddrManager, addr string, services wire.Se
 			}
 
 			netAddr := wire.NewNetAddressIPPort(ifaceIP, uint16(port), services)
-			addrMgr.AddLocalAddress(netAddr, addrmgr.BoundPrio)
+			_ = addrMgr.AddLocalAddress(netAddr, addrmgr.BoundPrio)
 		}
 	} else {
 		netAddr, err := addrMgr.HostToNetAddress(host, uint16(port), services)
@@ -3697,7 +3704,7 @@ func addLocalAddress(addrMgr *addrmgr.AddrManager, addr string, services wire.Se
 			return err
 		}
 
-		addrMgr.AddLocalAddress(netAddr, addrmgr.BoundPrio)
+		_ = addrMgr.AddLocalAddress(netAddr, addrmgr.BoundPrio)
 	}
 
 	return nil

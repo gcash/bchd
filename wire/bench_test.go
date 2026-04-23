@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"compress/bzip2"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"testing"
@@ -64,7 +64,7 @@ var genesisCoinbaseTx = MsgTx{
 // a single byte variable length integer.
 func BenchmarkWriteVarInt1(b *testing.B) {
 	for b.Loop() {
-		WriteVarInt(ioutil.Discard, 0, 1)
+		_ = WriteVarInt(io.Discard, 0, 1)
 	}
 }
 
@@ -72,7 +72,7 @@ func BenchmarkWriteVarInt1(b *testing.B) {
 // a three byte variable length integer.
 func BenchmarkWriteVarInt3(b *testing.B) {
 	for b.Loop() {
-		WriteVarInt(ioutil.Discard, 0, 65535)
+		_ = WriteVarInt(io.Discard, 0, 65535)
 	}
 }
 
@@ -80,7 +80,7 @@ func BenchmarkWriteVarInt3(b *testing.B) {
 // a five byte variable length integer.
 func BenchmarkWriteVarInt5(b *testing.B) {
 	for b.Loop() {
-		WriteVarInt(ioutil.Discard, 0, 4294967295)
+		_ = WriteVarInt(io.Discard, 0, 4294967295)
 	}
 }
 
@@ -88,7 +88,7 @@ func BenchmarkWriteVarInt5(b *testing.B) {
 // a nine byte variable length integer.
 func BenchmarkWriteVarInt9(b *testing.B) {
 	for b.Loop() {
-		WriteVarInt(ioutil.Discard, 0, 18446744073709551615)
+		_ = WriteVarInt(io.Discard, 0, 18446744073709551615)
 	}
 }
 
@@ -98,8 +98,8 @@ func BenchmarkReadVarInt1(b *testing.B) {
 	buf := []byte{0x01}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarInt(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarInt(r, 0)
 	}
 }
 
@@ -109,8 +109,8 @@ func BenchmarkReadVarInt3(b *testing.B) {
 	buf := []byte{0x0fd, 0xff, 0xff}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarInt(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarInt(r, 0)
 	}
 }
 
@@ -120,8 +120,8 @@ func BenchmarkReadVarInt5(b *testing.B) {
 	buf := []byte{0xfe, 0xff, 0xff, 0xff, 0xff}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarInt(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarInt(r, 0)
 	}
 }
 
@@ -131,8 +131,8 @@ func BenchmarkReadVarInt9(b *testing.B) {
 	buf := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarInt(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarInt(r, 0)
 	}
 }
 
@@ -142,8 +142,8 @@ func BenchmarkReadVarStr4(b *testing.B) {
 	buf := []byte{0x04, 't', 'e', 's', 't'}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarString(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarString(r, 0)
 	}
 }
 
@@ -153,8 +153,8 @@ func BenchmarkReadVarStr10(b *testing.B) {
 	buf := []byte{0x0a, 't', 'e', 's', 't', '0', '1', '2', '3', '4', '5'}
 	r := bytes.NewReader(buf)
 	for b.Loop() {
-		r.Seek(0, 0)
-		ReadVarString(r, 0)
+		_, _ = r.Seek(0, 0)
+		_, _ = ReadVarString(r, 0)
 	}
 }
 
@@ -162,7 +162,7 @@ func BenchmarkReadVarStr10(b *testing.B) {
 // four byte variable length string.
 func BenchmarkWriteVarStr4(b *testing.B) {
 	for b.Loop() {
-		WriteVarString(ioutil.Discard, 0, "test")
+		_ = WriteVarString(io.Discard, 0, "test")
 	}
 }
 
@@ -170,7 +170,7 @@ func BenchmarkWriteVarStr4(b *testing.B) {
 // ten byte variable length string.
 func BenchmarkWriteVarStr10(b *testing.B) {
 	for b.Loop() {
-		WriteVarString(ioutil.Discard, 0, "test012345")
+		_ = WriteVarString(io.Discard, 0, "test012345")
 	}
 }
 
@@ -187,8 +187,8 @@ func BenchmarkReadOutPoint(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var op OutPoint
 	for b.Loop() {
-		r.Seek(0, 0)
-		readOutPoint(r, 0, 0, &op)
+		_, _ = r.Seek(0, 0)
+		_ = readOutPoint(r, 0, 0, &op)
 	}
 }
 
@@ -200,7 +200,7 @@ func BenchmarkWriteOutPoint(b *testing.B) {
 		Index: 0,
 	}
 	for b.Loop() {
-		writeOutPoint(ioutil.Discard, 0, 0, op)
+		_ = writeOutPoint(io.Discard, 0, 0, op)
 	}
 }
 
@@ -225,8 +225,8 @@ func BenchmarkReadTxOut(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var txOut TxOut
 	for b.Loop() {
-		r.Seek(0, 0)
-		readTxOut(r, 0, 0, &txOut)
+		_, _ = r.Seek(0, 0)
+		_, _ = readTxOut(r, 0, 0, &txOut)
 		scriptPool.Return(txOut.PkScript)
 	}
 }
@@ -236,7 +236,7 @@ func BenchmarkReadTxOut(b *testing.B) {
 func BenchmarkWriteTxOut(b *testing.B) {
 	txOut := blockOne.Transactions[0].TxOut[0]
 	for b.Loop() {
-		WriteTxOut(ioutil.Discard, 0, 0, txOut)
+		_ = WriteTxOut(io.Discard, 0, 0, txOut)
 	}
 }
 
@@ -256,8 +256,8 @@ func BenchmarkReadTxIn(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var txIn TxIn
 	for b.Loop() {
-		r.Seek(0, 0)
-		readTxIn(r, 0, 0, &txIn)
+		_, _ = r.Seek(0, 0)
+		_ = readTxIn(r, 0, 0, &txIn)
 		scriptPool.Return(txIn.SignatureScript)
 	}
 }
@@ -267,7 +267,7 @@ func BenchmarkReadTxIn(b *testing.B) {
 func BenchmarkWriteTxIn(b *testing.B) {
 	txIn := blockOne.Transactions[0].TxIn[0]
 	for b.Loop() {
-		writeTxIn(ioutil.Discard, 0, 0, txIn)
+		_ = writeTxIn(io.Discard, 0, 0, txIn)
 	}
 }
 
@@ -305,8 +305,8 @@ func BenchmarkDeserializeTxSmall(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var tx MsgTx
 	for b.Loop() {
-		r.Seek(0, 0)
-		tx.Deserialize(r)
+		_, _ = r.Seek(0, 0)
+		_ = tx.Deserialize(r)
 	}
 }
 
@@ -320,7 +320,7 @@ func BenchmarkDeserializeTxLarge(b *testing.B) {
 		b.Fatalf("Failed to read transaction data: %v", err)
 	}
 	defer fi.Close()
-	buf, err := ioutil.ReadAll(bzip2.NewReader(fi))
+	buf, err := io.ReadAll(bzip2.NewReader(fi))
 	if err != nil {
 		b.Fatalf("Failed to read transaction data: %v", err)
 	}
@@ -328,8 +328,8 @@ func BenchmarkDeserializeTxLarge(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var tx MsgTx
 	for b.Loop() {
-		r.Seek(0, 0)
-		tx.Deserialize(r)
+		_, _ = r.Seek(0, 0)
+		_ = tx.Deserialize(r)
 	}
 }
 
@@ -338,7 +338,7 @@ func BenchmarkDeserializeTxLarge(b *testing.B) {
 func BenchmarkSerializeTx(b *testing.B) {
 	tx := blockOne.Transactions[0]
 	for b.Loop() {
-		tx.Serialize(ioutil.Discard)
+		_ = tx.Serialize(io.Discard)
 
 	}
 }
@@ -364,8 +364,8 @@ func BenchmarkReadBlockHeader(b *testing.B) {
 	r := bytes.NewReader(buf)
 	var header BlockHeader
 	for b.Loop() {
-		r.Seek(0, 0)
-		readBlockHeader(r, 0, &header)
+		_, _ = r.Seek(0, 0)
+		_ = readBlockHeader(r, 0, &header)
 	}
 }
 
@@ -374,7 +374,7 @@ func BenchmarkReadBlockHeader(b *testing.B) {
 func BenchmarkWriteBlockHeader(b *testing.B) {
 	header := blockOne.Header
 	for b.Loop() {
-		writeBlockHeader(ioutil.Discard, 0, &header)
+		_ = writeBlockHeader(io.Discard, 0, &header)
 	}
 }
 
@@ -389,7 +389,7 @@ func BenchmarkDecodeGetHeaders(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddBlockLocatorHash(hash)
+		_ = m.AddBlockLocatorHash(hash)
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -403,8 +403,8 @@ func BenchmarkDecodeGetHeaders(b *testing.B) {
 	var msg MsgGetHeaders
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -419,7 +419,7 @@ func BenchmarkDecodeHeaders(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddBlockHeader(NewBlockHeader(1, hash, hash, 0, uint32(i)))
+		_ = m.AddBlockHeader(NewBlockHeader(1, hash, hash, 0, uint32(i)))
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -433,8 +433,8 @@ func BenchmarkDecodeHeaders(b *testing.B) {
 	var msg MsgHeaders
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -449,7 +449,7 @@ func BenchmarkDecodeGetBlocks(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddBlockLocatorHash(hash)
+		_ = m.AddBlockLocatorHash(hash)
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -463,8 +463,8 @@ func BenchmarkDecodeGetBlocks(b *testing.B) {
 	var msg MsgGetBlocks
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -476,7 +476,7 @@ func BenchmarkDecodeAddr(b *testing.B) {
 	ip := net.ParseIP("127.0.0.1")
 	ma := NewMsgAddr()
 	for port := uint16(0); port < MaxAddrPerMsg; port++ {
-		ma.AddAddress(NewNetAddressIPPort(ip, port, SFNodeNetwork))
+		_ = ma.AddAddress(NewNetAddressIPPort(ip, port, SFNodeNetwork))
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -490,8 +490,8 @@ func BenchmarkDecodeAddr(b *testing.B) {
 	var msg MsgAddr
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -506,7 +506,7 @@ func BenchmarkDecodeInv(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddInvVect(NewInvVect(InvTypeBlock, hash))
+		_ = m.AddInvVect(NewInvVect(InvTypeBlock, hash))
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -520,8 +520,8 @@ func BenchmarkDecodeInv(b *testing.B) {
 	var msg MsgInv
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -536,7 +536,7 @@ func BenchmarkDecodeNotFound(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddInvVect(NewInvVect(InvTypeBlock, hash))
+		_ = m.AddInvVect(NewInvVect(InvTypeBlock, hash))
 	}
 
 	// Serialize it so the bytes are available to test the decode below.
@@ -550,8 +550,8 @@ func BenchmarkDecodeNotFound(b *testing.B) {
 	var msg MsgNotFound
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 
@@ -571,7 +571,7 @@ func BenchmarkDecodeMerkleBlock(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 		}
-		m.AddTxHash(hash)
+		_ = m.AddTxHash(hash)
 		if i%8 == 0 {
 			m.Flags = append(m.Flags, uint8(i))
 		}
@@ -588,8 +588,8 @@ func BenchmarkDecodeMerkleBlock(b *testing.B) {
 	var msg MsgMerkleBlock
 
 	for b.Loop() {
-		r.Seek(0, 0)
-		msg.BchDecode(r, pver, LatestEncoding)
+		_, _ = r.Seek(0, 0)
+		_ = msg.BchDecode(r, pver, LatestEncoding)
 	}
 }
 

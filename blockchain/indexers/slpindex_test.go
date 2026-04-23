@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -26,7 +26,7 @@ func TestSlpInputUnitTests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	data, err := ioutil.ReadAll(inputTestsFile)
+	data, err := io.ReadAll(inputTestsFile)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

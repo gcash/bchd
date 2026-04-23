@@ -84,18 +84,16 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 		return buf, nil
 	}
 
-	scriptLengthCount := len(buf)
-
 	r := bytes.NewReader(buf[1:])
-	io.ReadFull(r, tokenData.CategoryID[:])
+	if _, err := io.ReadFull(r, tokenData.CategoryID[:]); err != nil {
+		return nil, err
+	}
 	// tokenData.CategoryID = buf[1:33]
 	bitField, err := r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 	tokenData.BitField = bitField
-
-	scriptLengthCount -= (BASE_TOKEN_DATA_LENGTH) //PREFIX_BYTE + CategoryID + BitField
 
 	var parseError error
 
@@ -112,7 +110,6 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 			return nil, err
 		}
 		tokenData.Commitment = b
-		scriptLengthCount -= (1 + len(b)) // commitmentLength
 		// token commitment length has to be positive and limited to MAX_COMMITMENT_LENGTH
 		if !(commitmentLength >= 1 && commitmentLength <= MAX_COMMITMENT_LENGTH) {
 			parseError = errors.New("invalid commitment length")
@@ -130,8 +127,6 @@ func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pv
 		if !(amount >= 1 && amount <= MAX_FT_AMOUNT) {
 			parseError = errors.New("invalid token amount")
 		}
-
-		scriptLengthCount -= 1
 	}
 	if !tokenData.IsValidBitfield() {
 		parseError = errors.New("invalid bitfield")
@@ -212,12 +207,12 @@ func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	buf.Write(tokenData.CategoryID[:])
 	buf.WriteByte(tokenData.BitField)
 	if tokenData.HasCommitmentLength() {
-		WriteVarInt(&buf, 0, uint64(len(tokenData.Commitment)))
+		_ = WriteVarInt(&buf, 0, uint64(len(tokenData.Commitment)))
 
 		buf.Write(tokenData.Commitment[:])
 	}
 	if tokenData.HasAmount() {
-		WriteVarInt(&buf, 0, tokenData.Amount)
+		_ = WriteVarInt(&buf, 0, tokenData.Amount)
 	} else {
 		var buf2 bytes.Buffer
 		buf2.Write(tokenData.CategoryID[:])

@@ -7,7 +7,6 @@ package treap
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"math/rand"
 	"reflect"
 	"testing"
 )
@@ -16,6 +15,8 @@ import (
 // there is an error.  This is only provided for the hard-coded constants so
 // errors in the source code can be detected. It will only (and must only) be
 // called for initialization purposes.
+//
+//nolint:unused // retained for future tests
 func fromHex(s string) []byte {
 	r, err := hex.DecodeString(s)
 	if err != nil {
@@ -115,7 +116,3 @@ testLoop:
 	}
 }
 
-func init() {
-	// Force the same pseudo random numbers for each test run.
-	rand.Seed(0)
-}

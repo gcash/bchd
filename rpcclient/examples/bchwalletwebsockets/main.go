@@ -5,8 +5,8 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -29,7 +29,7 @@ func main() {
 
 	// Connect to local bchwallet RPC server using websockets.
 	certHomeDir := bchutil.AppDataDir("bchwallet", false)
-	certs, err := ioutil.ReadFile(filepath.Join(certHomeDir, "rpc.cert"))
+	certs, err := os.ReadFile(filepath.Join(certHomeDir, "rpc.cert"))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -38,7 +38,7 @@ func TestHeaders(t *testing.T) {
 
 	// Ensure headers are added properly.
 	bh := &blockOne.Header
-	msg.AddBlockHeader(bh)
+	_ = msg.AddBlockHeader(bh)
 	if !reflect.DeepEqual(msg.Headers[0], bh) {
 		t.Errorf("AddHeader: wrong header - got %v, want %v",
 			spew.Sdump(msg.Headers),
@@ -76,7 +76,7 @@ func TestHeadersWire(t *testing.T) {
 
 	// Headers message with one header.
 	oneHeader := NewMsgHeaders()
-	oneHeader.AddBlockHeader(bh)
+	_ = oneHeader.AddBlockHeader(bh)
 	oneHeaderEncoded := []byte{
 		0x01,                   // VarInt for number of headers.
 		0x01, 0x00, 0x00, 0x00, // Version 1
@@ -238,7 +238,7 @@ func TestHeadersWireErrors(t *testing.T) {
 
 	// Headers message with one header.
 	oneHeader := NewMsgHeaders()
-	oneHeader.AddBlockHeader(bh)
+	_ = oneHeader.AddBlockHeader(bh)
 	oneHeaderEncoded := []byte{
 		0x01,                   // VarInt for number of headers.
 		0x01, 0x00, 0x00, 0x00, // Version 1
@@ -260,7 +260,7 @@ func TestHeadersWireErrors(t *testing.T) {
 	// headers.
 	maxHeaders := NewMsgHeaders()
 	for i := 0; i < MaxBlockHeadersPerMsg; i++ {
-		maxHeaders.AddBlockHeader(bh)
+		_ = maxHeaders.AddBlockHeader(bh)
 	}
 	maxHeaders.Headers = append(maxHeaders.Headers, bh)
 	maxHeadersEncoded := []byte{
@@ -274,7 +274,7 @@ func TestHeadersWireErrors(t *testing.T) {
 	bhTrans.Timestamp = blockOne.Header.Timestamp
 
 	transHeader := NewMsgHeaders()
-	transHeader.AddBlockHeader(bhTrans)
+	_ = transHeader.AddBlockHeader(bhTrans)
 	transHeaderEncoded := []byte{
 		0x01,                   // VarInt for number of headers.
 		0x01, 0x00, 0x00, 0x00, // Version 1

@@ -2,7 +2,7 @@ package blockchain
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 )
@@ -86,14 +86,16 @@ type TestData struct {
 func TestABLA(t *testing.T) {
 
 	for _, fileName := range ebaaVectorsFileNames {
-		file, err := ioutil.ReadFile("testdata/ebaa_vectors/" + fileName)
+		file, err := os.ReadFile("testdata/ebaa_vectors/" + fileName)
 
 		if err != nil {
 			t.Fatalf("TestScripts couldn't Unmarshal: %v", err)
 		}
 
 		var testData TestData
-		json.Unmarshal(file, &testData)
+		if err := json.Unmarshal(file, &testData); err != nil {
+			t.Fatalf("failed to unmarshal %s: %v", fileName, err)
+		}
 
 		epsilon, _ := strconv.ParseUint(testData.ABLAStateInitial.Epsilon, 10, 64)
 		beta, _ := strconv.ParseUint(testData.ABLAStateInitial.Beta, 10, 64)

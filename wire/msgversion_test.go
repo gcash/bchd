@@ -62,14 +62,14 @@ func TestVersion(t *testing.T) {
 			"default - got %v, want %v", msg.DisableRelayTx, false)
 	}
 
-	msg.AddUserAgent("myclient", "1.2.3", "optional", "comments")
+	_ = msg.AddUserAgent("myclient", "1.2.3", "optional", "comments")
 	customUserAgent := "myclient:1.2.3(optional; comments)/"
 	if msg.UserAgent != customUserAgent {
 		t.Errorf("AddUserAgent: wrong user agent - got %s, want %s",
 			msg.UserAgent, customUserAgent)
 	}
 
-	msg.AddUserAgent(msg.UserAgent+"mygui", "3.4.5")
+	_ = msg.AddUserAgent(msg.UserAgent+"mygui", "3.4.5")
 	customUserAgent += "mygui:3.4.5/"
 	if msg.UserAgent != customUserAgent {
 		t.Errorf("AddUserAgent: wrong user agent - got %s, want %s",

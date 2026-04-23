@@ -25,6 +25,8 @@ var (
 	// that iterate all supported DB types.  This allows some tests to add
 	// bogus drivers for testing purposes while still allowing other tests
 	// to easily iterate all supported drivers.
+	//
+	//nolint:unused // retained for future tests
 	ignoreDbTypes = map[string]bool{"createopenfail": true}
 )
 
@@ -101,7 +103,7 @@ func TestCreateOpenFail(t *testing.T) {
 		Create: bogusCreateDB,
 		Open:   bogusCreateDB,
 	}
-	database.RegisterDriver(driver)
+	_ = database.RegisterDriver(driver)
 
 	// Ensure creating a database with the new type fails with the expected
 	// error.

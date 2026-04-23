@@ -96,8 +96,8 @@ func TestInvWire(t *testing.T) {
 
 	// Inv message with multiple inventory vectors.
 	MultiInv := NewMsgInv()
-	MultiInv.AddInvVect(iv)
-	MultiInv.AddInvVect(iv2)
+	_ = MultiInv.AddInvVect(iv)
+	_ = MultiInv.AddInvVect(iv2)
 	MultiInvEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -258,7 +258,7 @@ func TestInvWireErrors(t *testing.T) {
 
 	// Base inv message used to induce errors.
 	baseInv := NewMsgInv()
-	baseInv.AddInvVect(iv)
+	_ = baseInv.AddInvVect(iv)
 	baseInvEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -272,7 +272,7 @@ func TestInvWireErrors(t *testing.T) {
 	// inv vectors.
 	maxInv := NewMsgInv()
 	for i := 0; i < MaxInvPerMsg; i++ {
-		maxInv.AddInvVect(iv)
+		_ = maxInv.AddInvVect(iv)
 	}
 	maxInv.InvList = append(maxInv.InvList, iv)
 	maxInvEncoded := []byte{

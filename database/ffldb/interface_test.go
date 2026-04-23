@@ -855,8 +855,8 @@ func testManagedTxPanics(tc *testContext) bool {
 
 	// Ensure calling Commit on a managed read-only transaction panics.
 	paniced := testPanic(func() {
-		tc.db.View(func(tx database.Tx) error {
-			tx.Commit()
+		_ = tc.db.View(func(tx database.Tx) error {
+			_ = tx.Commit()
 			return nil
 		})
 	})
@@ -867,8 +867,8 @@ func testManagedTxPanics(tc *testContext) bool {
 
 	// Ensure calling Rollback on a managed read-only transaction panics.
 	paniced = testPanic(func() {
-		tc.db.View(func(tx database.Tx) error {
-			tx.Rollback()
+		_ = tc.db.View(func(tx database.Tx) error {
+			_ = tx.Rollback()
 			return nil
 		})
 	})
@@ -879,8 +879,8 @@ func testManagedTxPanics(tc *testContext) bool {
 
 	// Ensure calling Commit on a managed read-write transaction panics.
 	paniced = testPanic(func() {
-		tc.db.Update(func(tx database.Tx) error {
-			tx.Commit()
+		_ = tc.db.Update(func(tx database.Tx) error {
+			_ = tx.Commit()
 			return nil
 		})
 	})
@@ -891,8 +891,8 @@ func testManagedTxPanics(tc *testContext) bool {
 
 	// Ensure calling Rollback on a managed read-write transaction panics.
 	paniced = testPanic(func() {
-		tc.db.Update(func(tx database.Tx) error {
-			tx.Rollback()
+		_ = tc.db.Update(func(tx database.Tx) error {
+			_ = tx.Rollback()
 			return nil
 		})
 	})

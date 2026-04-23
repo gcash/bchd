@@ -6,7 +6,6 @@ package rpctest
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -69,17 +68,17 @@ func newConfig(prefix, certFile, keyFile string, extra []string) (*nodeConfig, e
 // temporary data, and log directories which must be cleaned up with a call to
 // cleanup().
 func (n *nodeConfig) setDefaults() error {
-	datadir, err := ioutil.TempDir("", n.prefix+"-data")
+	datadir, err := os.MkdirTemp("", n.prefix+"-data")
 	if err != nil {
 		return err
 	}
 	n.dataDir = datadir
-	logdir, err := ioutil.TempDir("", n.prefix+"-logs")
+	logdir, err := os.MkdirTemp("", n.prefix+"-logs")
 	if err != nil {
 		return err
 	}
 	n.logDir = logdir
-	cert, err := ioutil.ReadFile(n.certFile)
+	cert, err := os.ReadFile(n.certFile)
 	if err != nil {
 		return err
 	}
@@ -231,7 +230,7 @@ func (n *node) stop() error {
 		// or error starting the process
 		return nil
 	}
-	defer n.cmd.Wait()
+	defer func() { _ = n.cmd.Wait() }()
 	if runtime.GOOS == "windows" {
 		return n.cmd.Process.Signal(os.Kill)
 	}
@@ -272,10 +271,10 @@ func genCertPair(certFile, keyFile string) error {
 	}
 
 	// Write cert and key files.
-	if err = ioutil.WriteFile(certFile, cert, 0666); err != nil {
+	if err = os.WriteFile(certFile, cert, 0666); err != nil {
 		return err
 	}
-	if err = ioutil.WriteFile(keyFile, key, 0600); err != nil {
+	if err = os.WriteFile(keyFile, key, 0600); err != nil {
 		os.Remove(certFile)
 		return err
 	}

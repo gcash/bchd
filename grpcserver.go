@@ -27,76 +27,78 @@ const AuthenticationTokenKey = "AuthenticationToken"
 var prometheusEnabled = false
 
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
-	for _, addr := range netAddrs {
-		rpcCfg.NetMgr = svr
-		opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
-		creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)
-		if err != nil {
-			return nil, err
+	if len(netAddrs) == 0 {
+		return nil, nil
+	}
+	// Only the first configured listen address is wired up; the function
+	// returns a single server instance.
+	addr := netAddrs[0]
+	rpcCfg.NetMgr = svr
+	opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
+	creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, grpc.Creds(creds))
+	server := grpc.NewServer(opts...)
+
+	allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
+		return true
+	})
+	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
+
+	rpcCfg.Server = server
+
+	handler := func(resp http.ResponseWriter, req *http.Request) {
+		if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
+			wrappedGrpc.ServeHTTP(resp, req)
+		} else {
+			server.ServeHTTP(resp, req)
 		}
-		opts = append(opts, grpc.Creds(creds))
-		server := grpc.NewServer(opts...)
+	}
 
-		allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
-			return true
-		})
-		wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
+	httpServer := &http.Server{
+		Addr:    addr.String(),
+		Handler: http.HandlerFunc(handler),
+	}
 
-		rpcCfg.Server = server
+	rpcCfg.HTTPServer = httpServer
 
-		handler := func(resp http.ResponseWriter, req *http.Request) {
-			if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
-				wrappedGrpc.ServeHTTP(resp, req)
-			} else {
-				server.ServeHTTP(resp, req)
-			}
+	gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
+
+	grpcLog.Infof("Experimental gRPC server listening on %s", addr)
+
+	go func() {
+		if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+			grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
+		}
+	}()
+
+	if len(cfg.PrometheusListen) != 0 {
+		// init Prometheus metrics
+		grpc_prometheus.EnableHandlingTimeHistogram()
+		grpc_prometheus.Register(server)
+
+		router := mux.NewRouter()
+		router.Handle("/metrics", promhttp.Handler())
+
+		prometheusHTTPServer := &http.Server{
+			Addr:         cfg.PrometheusListen,
+			Handler:      router,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
 		}
 
-		httpServer := &http.Server{
-			Addr:    addr.String(),
-			Handler: http.HandlerFunc(handler),
-		}
-
-		rpcCfg.HTTPServer = httpServer
-
-		gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
-
-		grpcLog.Infof("Experimental gRPC server listening on %s", addr)
+		prometheusEnabled = true
 
 		go func() {
-			if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
-				grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
+			if err := prometheusHTTPServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+				grpcLog.Tracef("Finished serving Prometheus metrics %v", err)
 			}
 		}()
-
-		if len(cfg.PrometheusListen) != 0 {
-			// init Prometheus metrics
-			grpc_prometheus.EnableHandlingTimeHistogram()
-			grpc_prometheus.Register(server)
-
-			router := mux.NewRouter()
-			router.Handle("/metrics", promhttp.Handler())
-
-			prometheusHTTPServer := &http.Server{
-				Addr:         cfg.PrometheusListen,
-				Handler:      router,
-				ReadTimeout:  10 * time.Second,
-				WriteTimeout: 10 * time.Second,
-			}
-
-			prometheusEnabled = true
-
-			go func() {
-				if err := prometheusHTTPServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
-					grpcLog.Tracef("Finished serving Prometheus metrics %v", err)
-				}
-			}()
-		}
-
-		return gRPCServer, nil
-
 	}
-	return nil, nil
+
+	return gRPCServer, nil
 }
 
 // serviceName returns the package.service segment from the full gRPC method

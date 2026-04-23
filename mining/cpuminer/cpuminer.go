@@ -232,7 +232,7 @@ func (m *CPUMiner) solveBlock(msgBlock *wire.MsgBlock, blockHeight int32,
 		// Update the extra nonce in the block template with the
 		// new value by regenerating the coinbase script and
 		// setting the merkle root to the new value.
-		m.g.UpdateExtraNonce(msgBlock, blockHeight, extraNonce+enOffset)
+		_ = m.g.UpdateExtraNonce(msgBlock, blockHeight, extraNonce+enOffset)
 
 		// Search through the entire nonce range for a solution while
 		// periodically checking for early quit and stale block
@@ -263,7 +263,7 @@ func (m *CPUMiner) solveBlock(msgBlock *wire.MsgBlock, blockHeight int32,
 					return false
 				}
 
-				m.g.UpdateBlockTime(msgBlock)
+				_ = m.g.UpdateBlockTime(msgBlock)
 
 			default:
 				// Non-blocking select to fall through
@@ -335,7 +335,6 @@ out:
 		}
 
 		// Choose a payment address at random.
-		rand.Seed(time.Now().UnixNano())
 		payToAddr := m.cfg.MiningAddrs[rand.Intn(len(m.cfg.MiningAddrs))]
 
 		// Create a new block template using the available transactions
@@ -346,7 +345,7 @@ out:
 		if err != nil {
 			errStr := fmt.Sprintf("Failed to create new block "+
 				"template: %v", err)
-			log.Errorf(errStr)
+			log.Errorf("%s", errStr)
 			continue
 		}
 
@@ -589,7 +588,6 @@ func (m *CPUMiner) GenerateNBlocks(n uint32) ([]*chainhash.Hash, error) {
 		curHeight := m.g.BestSnapshot().Height
 
 		// Choose a payment address at random.
-		rand.Seed(time.Now().UnixNano())
 		payToAddr := m.cfg.MiningAddrs[rand.Intn(len(m.cfg.MiningAddrs))]
 
 		// Create a new block template using the available transactions
@@ -600,7 +598,7 @@ func (m *CPUMiner) GenerateNBlocks(n uint32) ([]*chainhash.Hash, error) {
 		if err != nil {
 			errStr := fmt.Sprintf("Failed to create new block "+
 				"template: %v", err)
-			log.Errorf(errStr)
+			log.Errorf("%s", errStr)
 			continue
 		}
 

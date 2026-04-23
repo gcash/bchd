@@ -54,7 +54,7 @@ func TestBlock(t *testing.T) {
 
 	// Ensure transactions are added properly.
 	tx := blockOne.Transactions[0].Copy()
-	msg.AddTransaction(tx)
+	_ = msg.AddTransaction(tx)
 	if !reflect.DeepEqual(msg.Transactions, blockOne.Transactions) {
 		t.Errorf("AddTransaction: wrong transactions - got %v, want %v",
 			spew.Sdump(msg.Transactions),

@@ -9,7 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"slices"
@@ -78,9 +78,9 @@ func (c *HTTPClient) RequestRaw(method string, body D) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Invalid status code on REST call %d - res: %s", resp.StatusCode, c.PrintRes(resp))
+		return nil, fmt.Errorf("invalid status code on REST call %d - res: %s", resp.StatusCode, c.PrintRes(resp))
 	}
-	resData, err := ioutil.ReadAll(resp.Body)
+	resData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading REST API data %+v", err)
 	}
@@ -108,7 +108,7 @@ func (c *HTTPClient) RequestMap(method string, body D) (D, error) {
 
 // PrintRes gets the response code + message as string (for logging).
 func (c *HTTPClient) PrintRes(resp *http.Response) string {
-	resData, err := ioutil.ReadAll(resp.Body)
+	resData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Sprintf("error reading res %+v", err)
 	}
@@ -164,15 +164,6 @@ func validateJSONSchema(apiMmethod string, res []byte, ignoreErrors []string) er
 	}
 	errMsgFront := "The document is not valid. see errors :\n"
 	return errors.New(errMsgFront + errMsg)
-}
-
-func base64ToHex(base64Str string) (string, error) {
-	hexData, err := base64.StdEncoding.DecodeString(base64Str)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hexData), nil
-
 }
 
 func hexToBase64(hexStr string) (string, error) {

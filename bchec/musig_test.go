@@ -1,6 +1,7 @@
 package bchec
 
 import (
+	crand "crypto/rand"
 	"crypto/sha256"
 	"math/big"
 	"math/rand"
@@ -35,7 +36,9 @@ func TestMuSession(t *testing.T) {
 
 		for x := 0; x < r; x++ {
 			var b [32]byte
-			rand.Read(b[:])
+			if _, err := crand.Read(b[:]); err != nil {
+				t.Fatal(err)
+			}
 
 			sess, err := NewMuSession(pubkeys, privkeys[x], b)
 			if err != nil {
@@ -54,7 +57,7 @@ func TestMuSession(t *testing.T) {
 		}
 
 		for x := 0; x < r; x++ {
-			sessions[x].SetNonces(nonces...)
+			_ = sessions[x].SetNonces(nonces...)
 			svals[x], err = sessions[x].Sign(m[:])
 			if err != nil {
 				t.Fatal(err)
@@ -119,6 +122,6 @@ func BenchmarkAggregatePublicKeys(b *testing.B) {
 	}
 
 	for b.Loop() {
-		AggregatePublicKeys(priv1.PubKey(), priv2.PubKey(), priv3.PubKey())
+		_, _ = AggregatePublicKeys(priv1.PubKey(), priv2.PubKey(), priv3.PubKey())
 	}
 }

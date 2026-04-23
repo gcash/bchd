@@ -71,7 +71,7 @@ func (msg *MsgHeaders) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 				"transactions [count %v]", txCount)
 			return messageError("MsgHeaders.BchDecode", str)
 		}
-		msg.AddBlockHeader(bh)
+		_ = msg.AddBlockHeader(bh)
 	}
 
 	return nil

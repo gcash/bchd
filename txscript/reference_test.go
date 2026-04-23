@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -471,7 +471,7 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
 // TestScripts ensures all of the tests in script_tests.json execute with the
 // expected results as defined in the test data.
 func TestScripts(t *testing.T) {
-	file, err := ioutil.ReadFile("data/script_tests.json")
+	file, err := os.ReadFile("data/script_tests.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -502,7 +502,7 @@ func testVecF64ToUint32(f float64) uint32 {
 // TestTxInvalidTests ensures all of the tests in tx_invalid.json fail as
 // expected.
 func TestTxInvalidTests(t *testing.T) {
-	file, err := ioutil.ReadFile("data/tx_invalid.json")
+	file, err := os.ReadFile("data/tx_invalid.json")
 	if err != nil {
 		t.Fatalf("TestTxInvalidTests: %v\n", err)
 	}
@@ -658,7 +658,7 @@ testloop:
 
 // TestTxValidTests ensures all of the tests in tx_valid.json pass as expected.
 func TestTxValidTests(t *testing.T) {
-	file, err := ioutil.ReadFile("data/tx_valid.json")
+	file, err := os.ReadFile("data/tx_valid.json")
 	if err != nil {
 		t.Fatalf("TestTxValidTests: %v\n", err)
 	}
@@ -813,7 +813,7 @@ testloop:
 // in sighash.json.
 // https://github.com/bitcoin/bitcoin/blob/master/src/test/data/sighash.json
 func TestCalcLegacySignatureHash(t *testing.T) {
-	file, err := ioutil.ReadFile("data/sighash_legacy.json")
+	file, err := os.ReadFile("data/sighash_legacy.json")
 	if err != nil {
 		t.Fatalf("TestCalcSignatureHash: %v\n", err)
 	}
@@ -870,7 +870,7 @@ func TestCalcLegacySignatureHash(t *testing.T) {
 
 // This test data is pull out of the Bitcoin Cash mainnet blockchain
 func TestCalcBip143SignatureHash(t *testing.T) {
-	file, err := ioutil.ReadFile("data/sighash_bip143.json")
+	file, err := os.ReadFile("data/sighash_bip143.json")
 	if err != nil {
 		t.Fatalf("TestCalcSignatureHash: %v\n", err)
 	}

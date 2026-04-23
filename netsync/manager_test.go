@@ -336,7 +336,7 @@ func TestBlockchainSync(t *testing.T) {
 	invMsg := wire.NewMsgInv()
 	for _, block := range blocks {
 		invVect := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
-		invMsg.AddInvVect(invVect)
+		_ = invMsg.AddInvVect(invVect)
 	}
 	syncMgr.QueueInv(invMsg, localNode)
 
@@ -747,7 +747,7 @@ func buildBlockInv(blocks ...*bchutil.Block) *wire.MsgInv {
 	msg := wire.NewMsgInv()
 	for _, block := range blocks {
 		invVect := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
-		msg.AddInvVect(invVect)
+		_ = msg.AddInvVect(invVect)
 	}
 	return msg
 }

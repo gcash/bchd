@@ -364,7 +364,7 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 		if utxoCache != nil {
 			utxo, err := utxoCache.GetEntry(i)
 			if err == nil {
-				wire.WriteTxOut(&b, 0, 0, &utxo)
+				_ = wire.WriteTxOut(&b, 0, 0, &utxo)
 			} else {
 				log.Debugf("%v", err)
 			}
@@ -424,7 +424,7 @@ func calcHashSequence(tx *wire.MsgTx) chainhash.Hash {
 func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 	var b bytes.Buffer
 	for _, out := range tx.TxOut {
-		wire.WriteTxOut(&b, 0, 0, out)
+		_ = wire.WriteTxOut(&b, 0, 0, out)
 	}
 
 	return chainhash.DoubleHashH(b.Bytes())
@@ -582,8 +582,8 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 	// transaction and the hash type (encoded as a 4-byte little-endian
 	// value) appended.
 	wbuf := bytes.NewBuffer(make([]byte, 0, txCopy.SerializeSize()+4))
-	txCopy.Serialize(wbuf)
-	binary.Write(wbuf, binary.LittleEndian, hashType)
+	_ = txCopy.Serialize(wbuf)
+	_ = binary.Write(wbuf, binary.LittleEndian, hashType)
 
 	totalBytesHashedlength += wbuf.Len()
 
@@ -665,7 +665,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 
 	scriptBytes, _ := unparseScript(subScript)
 
-	wire.WriteVarBytes(&sigHash, 0, scriptBytes)
+	_ = wire.WriteVarBytes(&sigHash, 0, scriptBytes)
 
 	// Next, add the input amount, and sequence number of the input being
 	// signed.
@@ -685,7 +685,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 		sigHash.Write(sigHashes.HashOutputs[:])
 	} else if hashType&sigHashMask == SigHashSingle && idx < len(tx.TxOut) {
 		var b bytes.Buffer
-		wire.WriteTxOut(&b, 0, 0, tx.TxOut[idx])
+		_ = wire.WriteTxOut(&b, 0, 0, tx.TxOut[idx])
 		sigHash.Write(chainhash.DoubleHashB(b.Bytes()))
 	} else {
 		sigHash.Write(zeroHash[:])

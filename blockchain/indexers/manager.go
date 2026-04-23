@@ -487,6 +487,8 @@ func indexNeedsInputs(index Indexer) bool {
 
 // dbFetchTx looks up the passed transaction hash in the transaction index and
 // loads it from the database.
+//
+//nolint:unused // retained for future callers
 func dbFetchTx(dbTx database.Tx, hash *chainhash.Hash) (*wire.MsgTx, error) {
 	// Look up the location of the transaction.
 	blockRegion, err := dbFetchTxIndexEntry(dbTx, hash)
@@ -539,7 +541,7 @@ func (m *Manager) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		if idxStartHeight > -1 &&
 			idxStartHeight+1 == block.Height() &&
 			idxStartHash.Compare(&block.MsgBlock().Header.PrevBlock) != 0 {
-			log.Warnf("Skipping ConnectBlock for %s at height %s, requires prev hash of %v, not %v",
+			log.Warnf("Skipping ConnectBlock for %s at height %d, requires prev hash of %v, not %v",
 				index.Name(), block.Height(), idxStartHash, &block.MsgBlock().Header.PrevBlock)
 			continue
 		}
@@ -637,7 +639,7 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		// Get full bucket name and append to subBuckets for later
 		// deletion.
 		var bucketName [][]byte
-		if (tlBucket == nil) || (len(tlBucket) == 0) {
+		if len(tlBucket) == 0 {
 			bucketName = append(bucketName, subBucket)
 		} else {
 			bucketName = append(tlBucket, subBucket)

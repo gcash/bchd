@@ -18,7 +18,7 @@ jobs:
         with:
           go-version: stable
       - name: Install golangci-lint
-        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
+        run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.4
         env:
           GO111MODULE: on
       - name: Run goclean.sh

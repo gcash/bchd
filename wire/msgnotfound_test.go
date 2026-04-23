@@ -87,8 +87,8 @@ func TestNotFoundWire(t *testing.T) {
 
 	// NotFound message with multiple inventory vectors.
 	MultiInv := NewMsgNotFound()
-	MultiInv.AddInvVect(iv)
-	MultiInv.AddInvVect(iv2)
+	_ = MultiInv.AddInvVect(iv)
+	_ = MultiInv.AddInvVect(iv2)
 	MultiInvEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -249,7 +249,7 @@ func TestNotFoundWireErrors(t *testing.T) {
 
 	// Base message used to induce errors.
 	baseNotFound := NewMsgNotFound()
-	baseNotFound.AddInvVect(iv)
+	_ = baseNotFound.AddInvVect(iv)
 	baseNotFoundEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -263,7 +263,7 @@ func TestNotFoundWireErrors(t *testing.T) {
 	// vectors.
 	maxNotFound := NewMsgNotFound()
 	for i := 0; i < MaxInvPerMsg; i++ {
-		maxNotFound.AddInvVect(iv)
+		_ = maxNotFound.AddInvVect(iv)
 	}
 	maxNotFound.InvList = append(maxNotFound.InvList, iv)
 	maxNotFoundEncoded := []byte{

@@ -121,8 +121,8 @@ func TestGetBlocksWire(t *testing.T) {
 
 	// MsgGetBlocks message with multiple block locators and a stop hash.
 	multiLocators := NewMsgGetBlocks(hashStop)
-	multiLocators.AddBlockLocatorHash(hashLocator2)
-	multiLocators.AddBlockLocatorHash(hashLocator)
+	_ = multiLocators.AddBlockLocatorHash(hashLocator2)
+	_ = multiLocators.AddBlockLocatorHash(hashLocator)
 	multiLocators.ProtocolVersion = pver
 	multiLocatorsEncoded := []byte{
 		0x62, 0xea, 0x00, 0x00, // Protocol version 60002
@@ -303,8 +303,8 @@ func TestGetBlocksWireErrors(t *testing.T) {
 	// MsgGetBlocks message with multiple block locators and a stop hash.
 	baseGetBlocks := NewMsgGetBlocks(hashStop)
 	baseGetBlocks.ProtocolVersion = pver
-	baseGetBlocks.AddBlockLocatorHash(hashLocator2)
-	baseGetBlocks.AddBlockLocatorHash(hashLocator)
+	_ = baseGetBlocks.AddBlockLocatorHash(hashLocator2)
+	_ = baseGetBlocks.AddBlockLocatorHash(hashLocator)
 	baseGetBlocksEncoded := []byte{
 		0x62, 0xea, 0x00, 0x00, // Protocol version 60002
 		0x02, // Varint for number of block locator hashes
@@ -326,7 +326,7 @@ func TestGetBlocksWireErrors(t *testing.T) {
 	// block locator hashes.
 	maxGetBlocks := NewMsgGetBlocks(hashStop)
 	for i := 0; i < MaxBlockLocatorsPerMsg; i++ {
-		maxGetBlocks.AddBlockLocatorHash(&mainNetGenesisHash)
+		_ = maxGetBlocks.AddBlockLocatorHash(&mainNetGenesisHash)
 	}
 	maxGetBlocks.BlockLocatorHashes = append(maxGetBlocks.BlockLocatorHashes,
 		&mainNetGenesisHash)

@@ -42,6 +42,8 @@ const (
 	//
 	// The serialized block index row format is:
 	//   <blocklocation><blockheader>
+	//
+	//nolint:unused // documents on-disk layout
 	blockHdrOffset = blockLocSize
 
 	// bytesMiB is the number of bytes in a mebibyte.

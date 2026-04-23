@@ -314,7 +314,7 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		SlpOpReturn:    entryInfo.slpMsgPkScript,
 	})
 	if err != nil {
-		log.Criticalf("AddSlpTxEntry in dbPutSlpIndexEntry failed: ", err)
+		log.Criticalf("AddSlpTxEntry in dbPutSlpIndexEntry failed: %v", err)
 	}
 
 	target := make([]byte, 4+2+len(entryInfo.slpMsgPkScript))
@@ -643,7 +643,9 @@ func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 	}
 
 	if !idx.graphSearchDb.IsReady() {
-		idx.graphSearchDb.SetReady()
+		if err := idx.graphSearchDb.SetReady(); err != nil {
+			log.Errorf("Failed to set graph search db ready: %v", err)
+		}
 	}
 
 	err := idx.graphSearchDb.AddTxn(tx)
@@ -692,7 +694,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 
 		txBytes, err := fetchTxn(&txnHash)
 		if err != nil {
-			log.Debugf("slp graph search transaction %v was not found")
+			log.Debugf("slp graph search transaction %v was not found", txnHash)
 		} else {
 			err = msgTx.Deserialize(bytes.NewReader(txBytes))
 			if err != nil {
@@ -748,7 +750,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 	// try to set db state to loaded
 	err = idx.graphSearchDb.SetLoaded()
 	if err != nil {
-		log.Debug("couldn't set state to loaded: %v", err)
+		log.Debugf("couldn't set state to loaded: %v", err)
 	} else {
 		log.Infof("slp graph search finished fetching %s transactions", fmt.Sprint(txnCount))
 	}
@@ -1007,7 +1009,7 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 
 	err = idx.cache.AddSlpTxEntry(hash, *entry)
 	if err != nil {
-		log.Criticalf("AddSlpTxEntry in GetSlpINdexEntry failed: ", err)
+		log.Criticalf("AddSlpTxEntry in GetSlpINdexEntry failed: %v", err)
 	}
 	return entry, nil
 }
@@ -1036,7 +1038,7 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*Tok
 
 	err = idx.cache.AddTempTokenMetadata(*tm)
 	if err != nil {
-		log.Criticalf("AddTempTokenMetadata in GetTokenMetadata failed: ", err)
+		log.Criticalf("AddTempTokenMetadata in GetTokenMetadata failed: %v", err)
 	}
 	return tm, nil
 }
@@ -1102,7 +1104,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 			}
 			err := idx.cache.AddTempTokenMetadata(tm)
 			if err != nil {
-				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Genesis: ", err)
+				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Genesis: %v", err)
 			}
 		case *v1parser.SlpMint:
 			// update the mint baton location
@@ -1123,7 +1125,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 					tm.MintBatonVout = uint32(t.MintBatonVout)
 					err := idx.cache.AddTempTokenMetadata(*tm)
 					if err != nil {
-						log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: ", err)
+						log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
 					}
 				} else {
 					return fmt.Errorf("invalid mint baton for mint txn %v: %v", hash, err)

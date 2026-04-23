@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -62,7 +62,7 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 	} else {
 		creds = credentials.NewTLS(nil)
 	}
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithMaxMsgSize(4294967295)}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(4294967295))}
 	err = gw.RegisterBchrpcHandlerFromEndpoint(ctx, grpcGateway, *grpcServerEndpoint, opts)
 	if err != nil {
 		return err

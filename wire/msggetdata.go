@@ -59,7 +59,7 @@ func (msg *MsgGetData) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 		if err != nil {
 			return err
 		}
-		msg.AddInvVect(iv)
+		_ = msg.AddInvVect(iv)
 	}
 
 	return nil

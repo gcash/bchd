@@ -82,7 +82,7 @@ func (msg *MsgMerkleBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodi
 		if err != nil {
 			return err
 		}
-		msg.AddTxHash(hash)
+		_ = msg.AddTxHash(hash)
 	}
 
 	msg.Flags, err = ReadVarBytes(r, pver, maxFlagsPerMerkleBlock(),

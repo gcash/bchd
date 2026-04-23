@@ -867,6 +867,8 @@ func opcodeInvalid(op *parsedOpcode, vm *Engine) error {
 }
 
 // opcodeDummy is a common handler for all dummy opcodes.
+//
+//nolint:unused // retained for future callers / opcode table symmetry
 func opcodeDummy(op *parsedOpcode, vm *Engine) error {
 	return nil
 }

@@ -329,13 +329,13 @@ func (r FutureExportWatchingWalletResult) Receive() ([]byte, []byte, error) {
 	base64Wallet, ok := obj["wallet"].(string)
 	if !ok {
 		return nil, nil, fmt.Errorf("unexpected response type for "+
-			"exportwatchingwallet 'wallet' field: %T\n",
+			"exportwatchingwallet 'wallet' field: %T",
 			obj["wallet"])
 	}
 	base64TxStore, ok := obj["tx"].(string)
 	if !ok {
 		return nil, nil, fmt.Errorf("unexpected response type for "+
-			"exportwatchingwallet 'tx' field: %T\n",
+			"exportwatchingwallet 'tx' field: %T",
 			obj["tx"])
 	}
 

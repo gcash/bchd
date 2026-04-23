@@ -77,7 +77,7 @@ func (msg *MsgGetBlocks) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 		if err != nil {
 			return err
 		}
-		msg.AddBlockLocatorHash(hash)
+		_ = msg.AddBlockLocatorHash(hash)
 	}
 
 	return readElement(r, &msg.HashStop)

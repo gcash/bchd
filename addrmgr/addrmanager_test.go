@@ -414,7 +414,7 @@ func TestGetBestLocalAddress(t *testing.T) {
 	}
 
 	for _, localAddr := range localAddrs {
-		amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
+		_ = amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
 	}
 
 	// Test against want1
@@ -429,7 +429,7 @@ func TestGetBestLocalAddress(t *testing.T) {
 
 	// Add a public IP to the list of local addresses.
 	localAddr := wire.NetAddress{IP: net.ParseIP("204.124.8.100")}
-	amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
+	_ = amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
 
 	// Test against want2
 	for x, test := range tests {

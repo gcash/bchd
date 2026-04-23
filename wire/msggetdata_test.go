@@ -96,8 +96,8 @@ func TestGetDataWire(t *testing.T) {
 
 	// MsgGetData message with multiple inventory vectors.
 	MultiInv := NewMsgGetData()
-	MultiInv.AddInvVect(iv)
-	MultiInv.AddInvVect(iv2)
+	_ = MultiInv.AddInvVect(iv)
+	_ = MultiInv.AddInvVect(iv2)
 	MultiInvEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -258,7 +258,7 @@ func TestGetDataWireErrors(t *testing.T) {
 
 	// Base message used to induce errors.
 	baseGetData := NewMsgGetData()
-	baseGetData.AddInvVect(iv)
+	_ = baseGetData.AddInvVect(iv)
 	baseGetDataEncoded := []byte{
 		0x02,                   // Varint for number of inv vectors
 		0x02, 0x00, 0x00, 0x00, // InvTypeBlock
@@ -272,7 +272,7 @@ func TestGetDataWireErrors(t *testing.T) {
 	// vectors.
 	maxGetData := NewMsgGetData()
 	for i := 0; i < MaxInvPerMsg; i++ {
-		maxGetData.AddInvVect(iv)
+		_ = maxGetData.AddInvVect(iv)
 	}
 	maxGetData.InvList = append(maxGetData.InvList, iv)
 	maxGetDataEncoded := []byte{

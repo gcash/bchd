@@ -122,7 +122,7 @@ func TestAddrWire(t *testing.T) {
 
 	// Address message with multiple addresses.
 	multiAddr := NewMsgAddr()
-	multiAddr.AddAddresses(na, na2)
+	_ = multiAddr.AddAddresses(na, na2)
 	multiAddrEncoded := []byte{
 		0x02,                   // Varint for number of addresses
 		0x29, 0xab, 0x5f, 0x49, // Timestamp
@@ -227,7 +227,7 @@ func TestAddrWireErrors(t *testing.T) {
 
 	// Address message with multiple addresses.
 	baseAddr := NewMsgAddr()
-	baseAddr.AddAddresses(na, na2)
+	_ = baseAddr.AddAddresses(na, na2)
 	baseAddrEncoded := []byte{
 		0x02,                   // Varint for number of addresses
 		0x29, 0xab, 0x5f, 0x49, // Timestamp
@@ -247,7 +247,7 @@ func TestAddrWireErrors(t *testing.T) {
 	// addresses.
 	maxAddr := NewMsgAddr()
 	for i := 0; i < MaxAddrPerMsg; i++ {
-		maxAddr.AddAddress(na)
+		_ = maxAddr.AddAddress(na)
 	}
 	maxAddr.AddrList = append(maxAddr.AddrList, na)
 	maxAddrEncoded := []byte{

@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
@@ -41,7 +41,7 @@ func fatalf(t *testing.T, err error, test []interface{}, i int) {
 
 func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_standard.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_standard.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -55,6 +55,9 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 	for i, test := range tests {
 		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, err := wire.ReadVarInt(r, 0)
+		if err != nil {
+			fatalf(t, err, test, i)
+		}
 
 		utxos := make([]wire.TxOut, utxoCount)
 
@@ -70,7 +73,9 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
 		for i := uint64(0); i < utxoCount; i++ {
 			utxos[i] = wire.TxOut{}
-			wire.ReadTxOut(r, 0, 0, &utxos[i])
+			if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+				t.Fatal(err)
+			}
 
 			entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 			viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -124,7 +129,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
 func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_invalid.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_invalid.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -212,7 +217,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 
 func TestCashTokensNonStandardOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_nonstandard.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_chip_cashtokens_nonstandard.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -300,7 +305,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 
 func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_standard.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_standard.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -314,6 +319,9 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 	for i, test := range tests {
 		r := bytes.NewReader(fromHex(test[5].(string)))
 		utxoCount, err := wire.ReadVarInt(r, 0)
+		if err != nil {
+			fatalf(t, err, test, i)
+		}
 
 		utxos := make([]wire.TxOut, utxoCount)
 
@@ -329,7 +337,9 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
 		for i := uint64(0); i < utxoCount; i++ {
 			utxos[i] = wire.TxOut{}
-			wire.ReadTxOut(r, 0, 0, &utxos[i])
+			if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+				t.Fatal(err)
+			}
 
 			entry := blockchain.NewUtxoEntry(&utxos[i], 782771, false)
 			viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -383,7 +393,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
 func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_invalid.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_invalid.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
@@ -476,7 +486,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 
 func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 
-	file, err := ioutil.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_nonstandard.json")
+	file, err := os.ReadFile("testdata/bch_vmb_tests_before_chip_cashtokens_nonstandard.json")
 	if err != nil {
 		t.Fatalf("TestScripts: %v\n", err)
 	}

@@ -149,6 +149,7 @@ func TestCheckConnectBlockTemplate(t *testing.T) {
 	}
 }
 
+//nolint:unused // retained for future tests
 func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps int) (*wire.MsgBlock, error) {
 	prevHash := tip.Header.BlockHash()
 	prevMRoot := tip.Header.MerkleRoot
@@ -180,6 +181,8 @@ func newTestBlock(base, tip *wire.MsgBlock, coinbaseSigOps, tx1SigOps, tx2SigOps
 }
 
 // calcMerkleRoot recalculates the merkle root.
+//
+//nolint:unused // retained for future tests
 func setValidMerkleRoot(b *wire.MsgBlock) {
 	if len(b.Transactions) == 0 {
 		b.Header.MerkleRoot = chainhash.Hash{}
@@ -194,6 +197,8 @@ func setValidMerkleRoot(b *wire.MsgBlock) {
 }
 
 // repeatScript repeats a finite set of op codes n times.
+//
+//nolint:unused // retained for future tests
 func repeatScript(n int, newBytes ...byte) []byte {
 	script := make([]byte, n*len(newBytes))
 	for i := 0; i < n; i++ {

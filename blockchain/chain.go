@@ -2375,13 +2375,15 @@ func New(config *Config) (*BlockChain, error) {
 		}
 		b.isPruned = true
 	} else {
-		b.db.View(func(tx database.Tx) error {
+		if err := b.db.View(func(tx database.Tx) error {
 			chainType := dbFetchBlockchainType(tx)
 			if bytes.Equal(chainType, prunedBlockchainEntryValue) {
 				b.isPruned = true
 			}
 			return nil
-		})
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	// If we are pruned then done set any indexes as the manager cannot
@@ -2424,7 +2426,11 @@ func New(config *Config) (*BlockChain, error) {
 			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
 			return nil, AssertError(errStr)
 		}
-		go b.fastSyncUtxoSet(lastCheckpoint, config.Proxy)
+		go func() {
+			if err := b.fastSyncUtxoSet(lastCheckpoint, config.Proxy); err != nil {
+				log.Errorf("fast sync UTXO set failed: %v", err)
+			}
+		}()
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

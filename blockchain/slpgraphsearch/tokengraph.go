@@ -49,6 +49,8 @@ func (g *tokenGraph) addTxn(tx *wire.MsgTx) error {
 }
 
 // removeTxn removes a transaction from the graph
+//
+//nolint:unused // retained for future callers
 func (g *tokenGraph) removeTxn(tx *wire.MsgTx) error {
 	g.Lock()
 	defer g.Unlock()

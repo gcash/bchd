@@ -89,7 +89,7 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 
 	// Clear the read deadline that was set before the websocket hijacked
 	// the connection.
-	conn.SetReadDeadline(timeZeroVal)
+	_ = conn.SetReadDeadline(timeZeroVal)
 
 	// Limit max number of websocket clients.
 	rpcsLog.Infof("New websocket client %s", remoteAddr)
@@ -381,6 +381,8 @@ func (f *wsClientFilter) existsAddress(a bchutil.Address) bool {
 // wsClientFilter.
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
+//
+//nolint:unused // ported API kept symmetrical with addAddress
 func (f *wsClientFilter) removeAddress(a bchutil.Address) {
 	switch a := a.(type) {
 	case *bchutil.AddressPubKeyHash:
@@ -412,6 +414,8 @@ func (f *wsClientFilter) removeAddress(a bchutil.Address) {
 // wsClientFilter using removeAddress.
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
+//
+//nolint:unused // ported API kept symmetrical with addAddressStr
 func (f *wsClientFilter) removeAddressStr(s string, params *chaincfg.Params) {
 	a, err := bchutil.DecodeAddress(s, params)
 	if err == nil {
@@ -441,6 +445,8 @@ func (f *wsClientFilter) existsUnspentOutPoint(op *wire.OutPoint) bool {
 // wsClientFilter.
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
+//
+//nolint:unused // ported API kept symmetrical with addUnspentOutPoint
 func (f *wsClientFilter) removeUnspentOutPoint(op *wire.OutPoint) {
 	delete(f.unspent, *op)
 }
@@ -703,7 +709,7 @@ func (*wsNotificationManager) notifyBlockConnected(clients map[chan struct{}]*ws
 		return
 	}
 	for _, wsc := range clients {
-		wsc.QueueNotification(marshalledJSON)
+		_ = wsc.QueueNotification(marshalledJSON)
 	}
 }
 
@@ -727,7 +733,7 @@ func (*wsNotificationManager) notifyBlockDisconnected(clients map[chan struct{}]
 		return
 	}
 	for _, wsc := range clients {
-		wsc.QueueNotification(marshalledJSON)
+		_ = wsc.QueueNotification(marshalledJSON)
 	}
 }
 
@@ -772,7 +778,7 @@ func (m *wsNotificationManager) notifyFilteredBlockConnected(clients map[chan st
 				"connected notification: %v", err)
 			return
 		}
-		wsc.QueueNotification(marshalledJSON)
+		_ = wsc.QueueNotification(marshalledJSON)
 	}
 }
 
@@ -806,7 +812,7 @@ func (*wsNotificationManager) notifyFilteredBlockDisconnected(clients map[chan s
 		return
 	}
 	for _, wsc := range clients {
-		wsc.QueueNotification(marshalledJSON)
+		_ = wsc.QueueNotification(marshalledJSON)
 	}
 }
 
@@ -845,7 +851,7 @@ func (m *wsNotificationManager) notifyForNewTx(clients map[chan struct{}]*wsClie
 	for _, wsc := range clients {
 		if wsc.verboseTxUpdates {
 			if marshalledJSONVerbose != nil {
-				wsc.QueueNotification(marshalledJSONVerbose)
+				_ = wsc.QueueNotification(marshalledJSONVerbose)
 				continue
 			}
 
@@ -864,9 +870,9 @@ func (m *wsNotificationManager) notifyForNewTx(clients map[chan struct{}]*wsClie
 					"notification: %s", err.Error())
 				return
 			}
-			wsc.QueueNotification(marshalledJSONVerbose)
+			_ = wsc.QueueNotification(marshalledJSONVerbose)
 		} else {
-			wsc.QueueNotification(marshalledJSON)
+			_ = wsc.QueueNotification(marshalledJSON)
 		}
 	}
 }
@@ -960,7 +966,7 @@ func (*wsNotificationManager) removeSpentRequest(ops map[wire.OutPoint]map[chan 
 func txHexString(tx *wire.MsgTx) string {
 	buf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
 	// Ignore Serialize's error, as writing to a bytes.buffer cannot fail.
-	tx.Serialize(buf)
+	_ = tx.Serialize(buf)
 	return hex.EncodeToString(buf.Bytes())
 }
 
@@ -1032,7 +1038,7 @@ func (m *wsNotificationManager) notifyForTxOuts(ops map[wire.OutPoint]map[chan s
 
 				if _, ok := wscNotified[wscQuit]; !ok {
 					wscNotified[wscQuit] = struct{}{}
-					wsc.QueueNotification(marshalledJSON)
+					_ = wsc.QueueNotification(marshalledJSON)
 				}
 			}
 		}
@@ -1057,7 +1063,7 @@ func (m *wsNotificationManager) notifyRelevantTxAccepted(tx *bchutil.Tx,
 			return
 		}
 		for quitChan := range clientsToNotify {
-			clients[quitChan].QueueNotification(marshalled)
+			_ = clients[quitChan].QueueNotification(marshalled)
 		}
 	}
 }
@@ -1108,7 +1114,7 @@ func (m *wsNotificationManager) notifyForTxIns(ops map[wire.OutPoint]map[chan st
 
 				if _, ok := wscNotified[wscQuit]; !ok {
 					wscNotified[wscQuit] = struct{}{}
-					wsc.QueueNotification(marshalledJSON)
+					_ = wsc.QueueNotification(marshalledJSON)
 				}
 			}
 		}

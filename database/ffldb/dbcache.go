@@ -35,8 +35,11 @@ const (
 	// allocation instead of letting leveldb itself constantly grow it.
 	// This results in far less pressure on the GC and consequently helps
 	// prevent the GC from allocating a lot of extra unneeded space.
+	//
+	//nolint:unused // retained as documentation of leveldb internal sizes
 	ldbBatchHeaderSize = 12
-	ldbRecordIKeySize  = 8
+	//nolint:unused // retained as documentation of leveldb internal sizes
+	ldbRecordIKeySize = 8
 )
 
 // ldbCacheIter wraps a treap iterator to provide the additional functionality

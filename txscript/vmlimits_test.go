@@ -148,7 +148,9 @@ func TestVMlimitsAndBigInt2023Standard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -297,7 +299,9 @@ func TestVMlimitsAndBigInt2023NonStandard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -447,7 +451,9 @@ func TestVMlimitsAndBigInt2023Invalid(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -608,7 +614,9 @@ func TestVMlimitsAndBigInt2025Standard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -784,7 +792,9 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry
@@ -950,7 +960,9 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 
 			for i := uint64(0); i < utxoCount; i++ {
 				utxos[i] = wire.TxOut{}
-				wire.ReadTxOut(r, 0, 0, &utxos[i])
+				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
+					t.Fatal(err)
+				}
 
 				entry := blockchain.NewUtxoEntry(&utxos[i], 792771, false)
 				viewPoint.Entries()[tx.TxIn[i].PreviousOutPoint] = entry

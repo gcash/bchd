@@ -102,7 +102,7 @@ func TestRegisterCmdErrors(t *testing.T) {
 			name:   "embedded field",
 			method: "registertestcmd",
 			cmdFunc: func() interface{} {
-				type test struct{ int }
+				type test struct{ int } //nolint:unused // test checks rejection of embedded field
 				return (*test)(nil)
 			},
 			err: btcjson.Error{ErrorCode: btcjson.ErrEmbeddedType},
@@ -111,7 +111,7 @@ func TestRegisterCmdErrors(t *testing.T) {
 			name:   "unexported field",
 			method: "registertestcmd",
 			cmdFunc: func() interface{} {
-				type test struct{ a int }
+				type test struct{ a int } //nolint:unused // test checks rejection of unexported field
 				return (*test)(nil)
 			},
 			err: btcjson.Error{ErrorCode: btcjson.ErrUnexportedField},

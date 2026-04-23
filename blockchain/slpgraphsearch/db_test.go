@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -18,8 +18,11 @@ func TestSlpGraphSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	data, err := ioutil.ReadAll(inputTestsFile)
+	data, err := io.ReadAll(inputTestsFile)
 	defer inputTestsFile.Close()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 
 	type TestCase struct {
 		Description         string
@@ -58,7 +61,9 @@ func TestSlpGraphSearch(t *testing.T) {
 
 			r := bytes.NewReader(txnBuf)
 			msgTx := &wire.MsgTx{}
-			msgTx.Deserialize(r)
+			if err := msgTx.Deserialize(r); err != nil {
+				t.Fatal(err.Error())
+			}
 			txns[msgTx.TxHash()] = msgTx
 		}
 
@@ -80,7 +85,7 @@ func TestSlpGraphSearch(t *testing.T) {
 		} else {
 			t.Fatalf("missing genesis transaction %s", hex.EncodeToString(tokenID[:]))
 		}
-		tokenGraph.addTxn(txns[*tokenID])
+		_ = tokenGraph.addTxn(txns[*tokenID])
 		for _, txn := range txns {
 			err = tokenGraph.addTxn(txn)
 			if err != nil {
@@ -131,7 +136,9 @@ func TestSlpGraphSearch(t *testing.T) {
 		for _, txnBuf := range gsRes {
 			r := bytes.NewReader(txnBuf)
 			msgTx := wire.MsgTx{}
-			msgTx.Deserialize(r)
+			if err := msgTx.Deserialize(r); err != nil {
+				t.Fatal(err.Error())
+			}
 
 			// check the expected txid is included
 			if _, ok := expectedResults[msgTx.TxHash()]; ok != true {

@@ -318,7 +318,7 @@ func (mp *TxPool) addOrphan(tx *bchutil.Tx, tag Tag) {
 	// Limit the number orphan transactions to prevent memory exhaustion.
 	// This will periodically remove any expired orphans and evict a random
 	// orphan if space is still needed.
-	mp.limitNumOrphans()
+	_ = mp.limitNumOrphans()
 
 	mp.orphans[*tx.Hash()] = &orphanTx{
 		tx:         tx,

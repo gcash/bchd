@@ -1484,14 +1484,14 @@ out:
 				errMsg := fmt.Sprintf("Can't read message from %s: %v", p, err)
 				if err != io.ErrUnexpectedEOF {
 					if unhandledCommand {
-						log.Warnf(errMsg)
+						log.Warnf("%s", errMsg)
 
 						// Don't disconnect peers for sending an unknown message.
 						// This is the behavior of the Satoshi client!
 						continue
 					}
 
-					log.Errorf(errMsg)
+					log.Errorf("%s", errMsg)
 				}
 
 				// Push a reject message for the malformed message and disconnect
@@ -1797,7 +1797,7 @@ out:
 			// queue.
 			if iv.Type == wire.InvTypeBlock || iv.Type == wire.InvTypeCmpctBlock {
 				invMsg := wire.NewMsgInvSizeHint(1)
-				invMsg.AddInvVect(iv)
+				_ = invMsg.AddInvVect(iv)
 				waiting = queuePacket(outMsg{msg: invMsg},
 					pendingMsgs, waiting)
 				continue
@@ -1815,7 +1815,7 @@ out:
 			}
 
 			invMsg := wire.NewMsgInvSizeHint(1)
-			invMsg.AddInvVect(iv)
+			_ = invMsg.AddInvVect(iv)
 			waiting = queuePacket(outMsg{msg: invMsg}, pendingMsgs, waiting)
 
 		case <-trickleTicker.C:
@@ -1839,7 +1839,7 @@ out:
 					continue
 				}
 
-				invMsg.AddInvVect(iv)
+				_ = invMsg.AddInvVect(iv)
 				if len(invMsg.InvList) >= maxInvTrickleSize {
 					waiting = queuePacket(
 						outMsg{msg: invMsg},
@@ -2256,7 +2256,7 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 
 	// Version message.
 	msg := wire.NewMsgVersion(ourNA, theirNA, nonce, blockNum)
-	msg.AddUserAgent(p.cfg.UserAgentName, p.cfg.UserAgentVersion,
+	_ = msg.AddUserAgent(p.cfg.UserAgentName, p.cfg.UserAgentVersion,
 		p.cfg.UserAgentComments...)
 
 	// Advertise local services.
@@ -2490,6 +2490,3 @@ func NewOutboundPeer(cfg *Config, addr string) (*Peer, error) {
 	return p, nil
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}

@@ -127,6 +127,8 @@ func isDeserializeErr(err error) bool {
 
 // isDbBucketNotFoundErr returns whether or not the passed error is a
 // database.Error with an error code of database.ErrBucketNotFound.
+//
+//nolint:unused // retained for future callers; mirrors the other error helpers above
 func isDbBucketNotFoundErr(err error) bool {
 	dbErr, ok := err.(database.Error)
 	return ok && dbErr.ErrorCode == database.ErrBucketNotFound
@@ -769,6 +771,8 @@ func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEn
 //
 // When there are no entries for the provided hash, nil will be returned for the
 // both the entry and the error.
+//
+//nolint:unused // retained for future callers
 func dbFetchUtxoEntryByHash(dbTx database.Tx, hash *chainhash.Hash) (*UtxoEntry, error) {
 	// Attempt to find an entry by seeking for the hash along with a zero
 	// index.  Due to the fact the keys are serialized as <hash><index>,
@@ -951,6 +955,8 @@ func dbFetchHeightByHash(dbTx database.Tx, hash *chainhash.Hash) (int32, error) 
 
 // dbFetchHashByHeight uses an existing database transaction to retrieve the
 // hash for the provided height from the index.
+//
+//nolint:unused // called by dbFetchHeaderByHeight; retained for future callers
 func dbFetchHashByHeight(dbTx database.Tx, height int32) (*chainhash.Hash, error) {
 	var serializedHeight [4]byte
 	byteOrder.PutUint32(serializedHeight[:], uint32(height))
@@ -1177,8 +1183,8 @@ const (
 	// ucsEmpty is used as a return value to indicate that no status was
 	// stored.  The zero value should not be stored in the database.
 	ucsEmpty        byte = 0
-	ucsConsistent        = 1
-	ucsFlushOngoing      = 2
+	ucsConsistent   byte = 1
+	ucsFlushOngoing byte = 2
 	// ucsNbCodes is the number of valid utxo consistency status codes.
 	ucsNbCodes = 3
 )
@@ -1568,6 +1574,8 @@ func deserializeBlockRow(blockRow []byte) (*wire.BlockHeader, blockStatus, error
 
 // dbFetchHeaderByHash uses an existing database transaction to retrieve the
 // block header for the provided hash.
+//
+//nolint:unused // retained for future callers
 func dbFetchHeaderByHash(dbTx database.Tx, hash *chainhash.Hash) (*wire.BlockHeader, error) {
 	headerBytes, err := dbTx.FetchBlockHeader(hash)
 	if err != nil {
@@ -1585,6 +1593,8 @@ func dbFetchHeaderByHash(dbTx database.Tx, hash *chainhash.Hash) (*wire.BlockHea
 
 // dbFetchHeaderByHeight uses an existing database transaction to retrieve the
 // block header for the provided height.
+//
+//nolint:unused // retained for future callers
 func dbFetchHeaderByHeight(dbTx database.Tx, height int32) (*wire.BlockHeader, error) {
 	hash, err := dbFetchHashByHeight(dbTx, height)
 	if err != nil {

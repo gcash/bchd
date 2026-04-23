@@ -434,7 +434,8 @@ func (s *GrpcServer) GetBlockInfo(ctx context.Context, req *pb.GetBlockInfoReque
 	if len(req.GetHash()) == 0 {
 		block, err = s.chain.BlockByHeight(req.GetHeight())
 	} else {
-		h, err := chainhash.NewHash(req.GetHash())
+		var h *chainhash.Hash
+		h, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
@@ -471,7 +472,8 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	if len(req.GetHash()) == 0 {
 		block, err = s.chain.BlockByHeight(req.GetHeight())
 	} else {
-		h, err := chainhash.NewHash(req.GetHash())
+		var h *chainhash.Hash
+		h, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
@@ -562,7 +564,8 @@ func (s *GrpcServer) GetRawBlock(ctx context.Context, req *pb.GetRawBlockRequest
 	if len(req.GetHash()) == 0 {
 		block, err = s.chain.BlockByHeight(req.GetHeight())
 	} else {
-		h, err := chainhash.NewHash(req.GetHash())
+		var h *chainhash.Hash
+		h, err = chainhash.NewHash(req.GetHash())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid hash: %v", err)
 		}
@@ -727,7 +730,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 			if err != nil {
 				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
-				log.Criticalf(msg)
+				log.Criticalf("%s", msg)
 				return nil, status.Error(codes.Internal, msg)
 			}
 		}
@@ -772,7 +775,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
 		if err != nil {
 			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
-			log.Criticalf(msg)
+			log.Criticalf("%s", msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 	}
@@ -2876,7 +2879,7 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 	}
 	genEntry, err := s.getSlpIndexEntry(tokenIDRev)
 	if err != nil {
-		log.Criticalf("Failed to fetch slp entry for %s, with error: %v, with error: %v", tokenIDRev, err)
+		log.Criticalf("Failed to fetch slp entry for %s, with error: %v", tokenIDRev, err)
 		return -1, err
 	}
 	genSlpMsg, err := v1parser.ParseSLP(genEntry.SlpOpReturn)

@@ -32,9 +32,13 @@ func UseLogger(logger bchlog.Logger) {
 // LogClosure is a closure that can be printed with %v to be used to
 // generate expensive-to-create data for a detailed log level and avoid doing
 // the work if the data isn't printed.
+//
+//nolint:unused // retained for callers that want deferred log formatting
 type logClosure func() string
 
 // String invokes the log closure and returns the results string.
+//
+//nolint:unused // paired with logClosure above
 func (c logClosure) String() string {
 	return c()
 }
@@ -42,6 +46,8 @@ func (c logClosure) String() string {
 // newLogClosure returns a new closure over the passed function which allows
 // it to be used as a parameter in a logging function that is only invoked when
 // the logging level is such that the message will actually be logged.
+//
+//nolint:unused // paired with logClosure above
 func newLogClosure(c func() string) logClosure {
 	return logClosure(c)
 }

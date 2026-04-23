@@ -93,13 +93,13 @@ func setupGlobalConfig() error {
 		activeNetParams = &chaincfg.SimNetParams
 	}
 	if numNets > 1 {
-		return errors.New("The testnet, regtest, and simnet params " +
+		return errors.New("the testnet, regtest, and simnet params " +
 			"can't be used together -- choose one of the three")
 	}
 
 	// Validate database type.
 	if !validDbType(cfg.DbType) {
-		str := "The specified database type [%v] is invalid -- " +
+		str := "the specified database type [%v] is invalid -- " +
 			"supported types %v"
 		return fmt.Errorf(str, cfg.DbType, knownDbTypes)
 	}

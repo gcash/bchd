@@ -47,7 +47,7 @@ func (s *SlpCache) AddMempoolSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
 	s.Lock()
 	defer s.Unlock()
 	s.mempoolSlpTxEntries[*hash] = &item
-	s.slpTxEntries.Set(*hash, &item)
+	_ = s.slpTxEntries.Set(*hash, &item)
 }
 
 // GetSlpTxEntry gets tx entry items from the cache

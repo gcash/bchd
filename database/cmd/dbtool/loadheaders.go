@@ -44,14 +44,16 @@ func (cmd *headersCmd) Execute(args []string) error {
 		err = db.View(func(tx database.Tx) error {
 			totalHdrs := 0
 			blockIdxBucket := tx.Metadata().Bucket(blockIdxName)
-			blockIdxBucket.ForEach(func(k, v []byte) error {
+			if err := blockIdxBucket.ForEach(func(k, v []byte) error {
 				totalHdrs++
 				return nil
-			})
+			}); err != nil {
+				return err
+			}
 			log.Infof("Loading headers for %d blocks...", totalHdrs)
 			numLoaded := 0
 			startTime := time.Now()
-			blockIdxBucket.ForEach(func(k, v []byte) error {
+			if err := blockIdxBucket.ForEach(func(k, v []byte) error {
 				var hash chainhash.Hash
 				copy(hash[:], k)
 				_, err := tx.FetchBlockHeader(&hash)
@@ -60,7 +62,9 @@ func (cmd *headersCmd) Execute(args []string) error {
 				}
 				numLoaded++
 				return nil
-			})
+			}); err != nil {
+				return err
+			}
 			log.Infof("Loaded %d headers in %v", numLoaded,
 				time.Since(startTime))
 			return nil
@@ -72,12 +76,14 @@ func (cmd *headersCmd) Execute(args []string) error {
 	err = db.View(func(tx database.Tx) error {
 		blockIdxBucket := tx.Metadata().Bucket(blockIdxName)
 		hashes := make([]chainhash.Hash, 0, 500000)
-		blockIdxBucket.ForEach(func(k, v []byte) error {
+		if err := blockIdxBucket.ForEach(func(k, v []byte) error {
 			var hash chainhash.Hash
 			copy(hash[:], k)
 			hashes = append(hashes, hash)
 			return nil
-		})
+		}); err != nil {
+			return err
+		}
 
 		log.Infof("Loading headers for %d blocks...", len(hashes))
 		startTime := time.Now()

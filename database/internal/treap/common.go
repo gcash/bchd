@@ -4,10 +4,6 @@
 
 package treap
 
-import (
-	"math/rand"
-	"time"
-)
 
 const (
 	// staticDepth is the size of the static array to use for keeping track
@@ -131,6 +127,3 @@ func (s *parentStack) Push(node *treapNode) {
 	s.index++
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}

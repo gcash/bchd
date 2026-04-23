@@ -205,6 +205,7 @@ type utxoView interface {
 	spendEntry(outpoint wire.OutPoint, entry *UtxoEntry) error
 }
 
+//nolint:unused // retained for future callers
 type utxoCacheInterface interface {
 
 	// AddEntry adds a utxo entry for the given input index.
