@@ -117,7 +117,7 @@ func TestInvWire(t *testing.T) {
 		out  *MsgInv         // Expected decoded message
 		buf  []byte          // Wire encoding pver uint32
 		pver uint32          // Protocol version for wire encoding
-		enc  MessageEncoding // Message encodinf format
+		enc  MessageEncoding // Message encoding format
 	}{
 		// Latest protocol version with no inv vectors.
 		{
