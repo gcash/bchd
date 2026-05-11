@@ -204,11 +204,9 @@ func (s *GrpcServer) subscribeEvents() *rpcEventSubscription {
 
 	// Start a queue handler for the subscription so that slow connections don't
 	// hold up faster ones.
-	s.wg.Add(1)
-	go func() {
+	s.wg.Go(func() {
 		queueHandler(sub.in, sub.out, s.quit)
-		s.wg.Done()
-	}()
+	})
 
 	select {
 	case s.subscribe <- sub:
