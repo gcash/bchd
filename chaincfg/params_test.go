@@ -40,7 +40,6 @@ func TestMainNetSeeds(t *testing.T) {
 		{"seed.bchd.cash", true},
 		{"btccash-seeder.bitcoinunlimited.info", true},
 		{"seed.bch.loping.net", true},
-		{"dnsseed.electroncash.de", true},
 	}
 
 	if MainNetParams.DNSSeeds == nil {
