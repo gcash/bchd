@@ -117,7 +117,7 @@ type jsonRequest struct {
 // the returned future will block until the result is available if it's not
 // already.
 type Client struct {
-	id uint64 // atomic, so must stay 64-bit aligned
+	id atomic.Uint64 // atomic, so must stay 64-bit aligned
 
 	// config holds the connection configuration assoiated with this client.
 	config *ConnConfig
@@ -170,7 +170,7 @@ type Client struct {
 // this function should be used to ensure the ID is unique amongst all requests
 // being made.
 func (c *Client) NextID() uint64 {
-	return atomic.AddUint64(&c.id, 1)
+	return c.id.Add(1)
 }
 
 // addRequest associates the passed jsonRequest with its id.  This allows the

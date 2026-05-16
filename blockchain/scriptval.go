@@ -36,7 +36,7 @@ type txValidator struct {
 	flags              txscript.ScriptFlags
 	sigCache           *txscript.SigCache
 	hashCache          *txscript.HashCache
-	sigChecks          uint32
+	sigChecks          atomic.Uint32
 	maxSigChecks       uint32
 	upgrade9ForkHeight int32
 }
@@ -166,7 +166,7 @@ out:
 			}
 
 			if v.maxSigChecks > 0 && v.flags.HasFlag(txscript.ScriptReportSigChecks) {
-				if atomic.AddUint32(&v.sigChecks, uint32(vm.SigChecks())) > v.maxSigChecks {
+				if v.sigChecks.Add(uint32(vm.SigChecks())) > v.maxSigChecks {
 					str := "block too many sig checks"
 					err := ruleError(ErrTooManySigChecks, str)
 					v.sendResult(err)
