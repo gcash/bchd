@@ -164,7 +164,7 @@ type orphanTx struct {
 // peers.
 type TxPool struct {
 	// The following variables must only be used atomically.
-	lastUpdated int64 // last time pool was updated
+	lastUpdated atomic.Int64 // last time pool was updated
 
 	mtx           sync.RWMutex
 	cfg           Config
@@ -481,7 +481,7 @@ func (mp *TxPool) removeTransaction(tx *bchutil.Tx, removeRedeemers bool) {
 			delete(mp.outpoints, txIn.PreviousOutPoint)
 		}
 		delete(mp.pool, *txHash)
-		atomic.StoreInt64(&mp.lastUpdated, time.Now().Unix())
+		mp.lastUpdated.Store(time.Now().Unix())
 	}
 }
 
@@ -541,7 +541,7 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil
 	for _, txIn := range tx.MsgTx().TxIn {
 		mp.outpoints[txIn.PreviousOutPoint] = tx
 	}
-	atomic.StoreInt64(&mp.lastUpdated, time.Now().Unix())
+	mp.lastUpdated.Store(time.Now().Unix())
 
 	// Add unconfirmed address index entries associated with the transaction
 	// if enabled.
@@ -1303,7 +1303,7 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) LastUpdated() time.Time {
-	return time.Unix(atomic.LoadInt64(&mp.lastUpdated), 0)
+	return time.Unix(mp.lastUpdated.Load(), 0)
 }
 
 // DecodeCompressedBlock takes in a block interface and attempts to decode it

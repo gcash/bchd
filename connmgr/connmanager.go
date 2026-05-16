@@ -181,9 +181,9 @@ type checkDuplicate struct {
 // ConnManager provides a manager to handle network connections.
 type ConnManager struct {
 	// The following variables must only be used atomically.
-	connReqCount uint64
-	start        int32
-	stop         int32
+	connReqCount atomic.Uint64
+	start        atomic.Int32
+	stop         atomic.Int32
 
 	cfg            Config
 	wg             sync.WaitGroup
@@ -198,7 +198,7 @@ type ConnManager struct {
 // After maxFailedConnectionAttempts new connections will be retried after the
 // configured retry duration.
 func (cm *ConnManager) handleFailedConn(c *ConnReq) {
-	if atomic.LoadInt32(&cm.stop) != 0 {
+	if cm.stop.Load() != 0 {
 		return
 	}
 	if c.Permanent {
@@ -384,7 +384,7 @@ out:
 // NewConnReq creates a new connection request and connects to the
 // corresponding address.
 func (cm *ConnManager) NewConnReq() {
-	if atomic.LoadInt32(&cm.stop) != 0 {
+	if cm.stop.Load() != 0 {
 		return
 	}
 	if cm.cfg.GetNewAddress == nil {
@@ -392,7 +392,7 @@ func (cm *ConnManager) NewConnReq() {
 	}
 
 	c := &ConnReq{}
-	atomic.StoreUint64(&c.id, atomic.AddUint64(&cm.connReqCount, 1))
+	atomic.StoreUint64(&c.id, cm.connReqCount.Add(1))
 
 	// Submit a request of a pending connection attempt to the connection
 	// manager. By registering the id before the connection is even
@@ -445,7 +445,7 @@ func (cm *ConnManager) NewConnReq() {
 // Connect assigns an id and dials a connection to the address of the
 // connection request.
 func (cm *ConnManager) Connect(c *ConnReq) {
-	if atomic.LoadInt32(&cm.stop) != 0 {
+	if cm.stop.Load() != 0 {
 		return
 	}
 
@@ -457,7 +457,7 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 	}
 
 	if atomic.LoadUint64(&c.id) == 0 {
-		atomic.StoreUint64(&c.id, atomic.AddUint64(&cm.connReqCount, 1))
+		atomic.StoreUint64(&c.id, cm.connReqCount.Add(1))
 
 		// Submit a request of a pending connection attempt to the
 		// connection manager. By registering the id before the
@@ -500,7 +500,7 @@ func (cm *ConnManager) Connect(c *ConnReq) {
 // id. If permanent, the connection will be retried with an increasing backoff
 // duration.
 func (cm *ConnManager) Disconnect(id uint64) {
-	if atomic.LoadInt32(&cm.stop) != 0 {
+	if cm.stop.Load() != 0 {
 		return
 	}
 
@@ -516,7 +516,7 @@ func (cm *ConnManager) Disconnect(id uint64) {
 // NOTE: This method can also be used to cancel a lingering connection attempt
 // that hasn't yet succeeded.
 func (cm *ConnManager) Remove(id uint64) {
-	if atomic.LoadInt32(&cm.stop) != 0 {
+	if cm.stop.Load() != 0 {
 		return
 	}
 
@@ -530,11 +530,11 @@ func (cm *ConnManager) Remove(id uint64) {
 // run as a goroutine.
 func (cm *ConnManager) listenHandler(listener net.Listener) {
 	log.Infof("Server listening on %s", listener.Addr())
-	for atomic.LoadInt32(&cm.stop) == 0 {
+	for cm.stop.Load() == 0 {
 		conn, err := listener.Accept()
 		if err != nil {
 			// Only log the error if not forcibly shutting down.
-			if atomic.LoadInt32(&cm.stop) == 0 {
+			if cm.stop.Load() == 0 {
 				log.Errorf("Can't accept connection: %v", err)
 			}
 			continue
@@ -549,7 +549,7 @@ func (cm *ConnManager) listenHandler(listener net.Listener) {
 // Start launches the connection manager and begins connecting to the network.
 func (cm *ConnManager) Start() {
 	// Already started?
-	if atomic.AddInt32(&cm.start, 1) != 1 {
+	if cm.start.Add(1) != 1 {
 		return
 	}
 
@@ -566,7 +566,7 @@ func (cm *ConnManager) Start() {
 		}
 	}
 
-	for i := atomic.LoadUint64(&cm.connReqCount); i < uint64(cm.cfg.TargetOutbound); i++ {
+	for i := cm.connReqCount.Load(); i < uint64(cm.cfg.TargetOutbound); i++ {
 		go cm.NewConnReq()
 	}
 }
@@ -578,7 +578,7 @@ func (cm *ConnManager) Wait() {
 
 // Stop gracefully shuts down the connection manager.
 func (cm *ConnManager) Stop() {
-	if atomic.AddInt32(&cm.stop, 1) != 1 {
+	if cm.stop.Add(1) != 1 {
 		log.Warnf("Connection manager already stopped")
 		return
 	}

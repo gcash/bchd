@@ -38,8 +38,8 @@ type AddrManager struct {
 	addrIndex      map[string]*KnownAddress // address key to ka for all addrs.
 	addrNew        [newBucketCount]map[string]*KnownAddress
 	addrTried      [triedBucketCount]*list.List
-	started        int32
-	shutdown       int32
+	started        atomic.Int32
+	shutdown       atomic.Int32
 	wg             sync.WaitGroup
 	quit           chan struct{}
 	nTried         int
@@ -567,7 +567,7 @@ func (a *AddrManager) DeserializeNetAddress(addr string,
 // addresses, timeouts, and interval based writes.
 func (a *AddrManager) Start() {
 	// Already started?
-	if atomic.AddInt32(&a.started, 1) != 1 {
+	if a.started.Add(1) != 1 {
 		return
 	}
 
@@ -583,7 +583,7 @@ func (a *AddrManager) Start() {
 
 // Stop gracefully shuts down the address manager by stopping the main handler.
 func (a *AddrManager) Stop() error {
-	if atomic.AddInt32(&a.shutdown, 1) != 1 {
+	if a.shutdown.Add(1) != 1 {
 		log.Warnf("Address manager is already in the process of " +
 			"shutting down")
 		return nil

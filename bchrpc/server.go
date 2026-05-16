@@ -125,8 +125,8 @@ type GrpcServer struct {
 	quit       chan struct{}
 
 	wg       sync.WaitGroup
-	ready    uint32 // atomic
-	shutdown int32  // atomic
+	ready    atomic.Uint32 // atomic
+	shutdown int32         // atomic
 }
 
 // NewGrpcServer returns a new GrpcServer which has not yet
@@ -292,7 +292,7 @@ func (s *GrpcServer) handleBlockchainNotification(notification *blockchain.Notif
 // Start will start the GrpcServer, subscribe to blockchain notifications
 // and start the EventDispatcher in a new goroutine.
 func (s *GrpcServer) Start() {
-	if atomic.SwapUint32(&s.ready, 1) != 0 {
+	if s.ready.Swap(1) != 0 {
 		panic("service already started")
 	}
 
@@ -321,7 +321,7 @@ func (s *GrpcServer) Stop() error {
 
 // checkReady returns if the server is ready to serve data.
 func (s *GrpcServer) checkReady() bool {
-	return atomic.LoadUint32(&s.ready) != 0
+	return s.ready.Load() != 0
 }
 
 // GetMempoolInfo returns the state of the current mempool.
