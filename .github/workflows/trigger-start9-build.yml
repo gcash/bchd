@@ -31,59 +31,18 @@ jobs:
         run: start-cli init-key
         shell: bash
 
-      - name: Bump version to match release tag
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          CLEAN_TAG="${TAG#v}"
-
-          CURRENT_VAR=$(grep -E '^[[:space:]]*current:' startos/versions/index.ts | head -1 \
-            | sed -E 's/.*current:[[:space:]]*([A-Za-z0-9_]+).*/\1/')
-          VERSION_FILE_BASE=$(echo "$CURRENT_VAR" | sed -E 's/^v_//; s/_/./g')
-          CURRENT_VERSION=$(grep -E "version:[[:space:]]*'" "startos/versions/v${VERSION_FILE_BASE}.ts" \
-            | head -1 | sed -E "s/.*version:[[:space:]]*'([^']+)'.*/\1/")
-          CURRENT_UPSTREAM="${CURRENT_VERSION%%:*}"
-
-          if [ "$CURRENT_UPSTREAM" = "$CLEAN_TAG" ]; then
-            echo "Package already at $CLEAN_TAG — building as-is"
-            exit 0
-          fi
-          echo "Bumping $CURRENT_UPSTREAM -> $CLEAN_TAG"
-
-          TAG_VAR="v_$(echo "$CLEAN_TAG" | tr '.' '_')_0"
-          NEW_VERSION="${CLEAN_TAG}:0"
-          NEW_FILE="startos/versions/v${CLEAN_TAG}.0.ts"
-
-          echo "import { VersionInfo } from '@start9labs/start-sdk'" > "$NEW_FILE"
-          echo "" >> "$NEW_FILE"
-          echo "export const ${TAG_VAR} = VersionInfo.of({" >> "$NEW_FILE"
-          echo "  version: '${NEW_VERSION}'," >> "$NEW_FILE"
-          echo "  releaseNotes: 'Upstream ${TAG}.'," >> "$NEW_FILE"
-          echo "  migrations: {" >> "$NEW_FILE"
-          echo "    up: async ({ effects }) => {}," >> "$NEW_FILE"
-          echo "    down: async ({ effects }) => {}," >> "$NEW_FILE"
-          echo "  }," >> "$NEW_FILE"
-          echo "})" >> "$NEW_FILE"
-
-          sed -i "s|ARG BCHD_VERSION=v[0-9][0-9.]*|ARG BCHD_VERSION=${TAG}|" Dockerfile
-          sed -i "1a import { ${TAG_VAR} } from './${CLEAN_TAG}.0'" startos/versions/index.ts
-          sed -i "s/current: ${CURRENT_VAR}/current: ${TAG_VAR}/" startos/versions/index.ts
-          sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
-        shell: bash
-
       - name: Build service packages
-        run: |
-          RUST_LOG=debug RUST_BACKTRACE=1 make
-          echo ""
-          echo "SHA256SUMs:"
-          sha256sum *.s9pk
+        run: bash scripts/build-start9-package.sh "${{ github.ref_name }}"
         shell: bash
 
       - name: Attach s9pk assets to this release
         run: |
           TAG="${{ github.ref_name }}"
-          gh release view "$TAG" &>/dev/null || gh release create "$TAG" --title "$TAG" --generate-notes
-          gh release upload "$TAG" *.s9pk --clobber
+          if ! gh release view "$TAG" &>/dev/null; then
+            echo "No release found for $TAG — creating one"
+            gh release create "$TAG" --title "$TAG" --notes ""
+          fi
+          gh release upload "$TAG" ./*.s9pk --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
