@@ -21,7 +21,7 @@ const (
 	defaultSmallScriptNumLen = 4
 
 	// defaultBigScriptNumLen is the default number of bytes
-	// data being interpreted as a biger integer(int64) may be.
+	// data being interpreted as a bigger integer(int64) may be.
 	defaultBigScriptNumLen = 8
 
 	// defaultBigIntScriptNumLen is the default number of bytes

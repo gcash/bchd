@@ -291,7 +291,7 @@ func parseSchnorrSig(sigStr []byte) (*Signature, error) {
 }
 
 // ParseBERSignature parses an ECDSA signature in BER format for the curve type `curve`
-// into a Signature type, perfoming some basic sanity checks.  If parsing
+// into a Signature type, performing some basic sanity checks.  If parsing
 // according to the more strict DER format is needed, use ParseDERSignature.
 func ParseBERSignature(sigStr []byte, curve elliptic.Curve) (*Signature, error) {
 	return parseECDSASig(sigStr, curve, false)
@@ -491,7 +491,7 @@ func SignCompact(curve *KoblitzCurve, key *PrivateKey,
 
 // RecoverCompact verifies the compact ECDSA signature "signature" of "hash" for the
 // Koblitz curve in "curve". If the signature matches then the recovered public
-// key will be returned as well as a boolen if the original key was compressed
+// key will be returned as well as a boolean if the original key was compressed
 // or not, else an error will be returned.
 func RecoverCompact(curve *KoblitzCurve, signature,
 	hash []byte) (*PublicKey, bool, error) {
