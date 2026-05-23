@@ -816,7 +816,7 @@ func TestCheckSpend(t *testing.T) {
 	for _, op := range outputs {
 		spend := harness.txPool.CheckSpend(op.outPoint)
 		if spend != nil {
-			t.Fatalf("Unexpeced spend found in pool: %v", spend)
+			t.Fatalf("Unexpected spend found in pool: %v", spend)
 		}
 	}
 
@@ -866,7 +866,7 @@ func TestCheckSpend(t *testing.T) {
 	}
 	spend = harness.txPool.CheckSpend(op)
 	if spend != nil {
-		t.Fatalf("Unexpeced spend found in pool: %v", spend)
+		t.Fatalf("Unexpected spend found in pool: %v", spend)
 	}
 }
 

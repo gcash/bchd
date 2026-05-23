@@ -1738,7 +1738,7 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			}
 		}
 
-		// check inputs != outputs (use check for explict burn requests i.e., 'req.AllowedSlpBurns')
+		// check inputs != outputs (use check for explicit burn requests i.e., 'req.AllowedSlpBurns')
 		outputVal, err := slpMd.TotalSlpMsgOutputValue()
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "an error occurred when getting total slp amount in txn: %v, with error: %v", msgTx.TxHash(), err)
