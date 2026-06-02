@@ -8,6 +8,7 @@ package txscript
 import (
 	"fmt"
 	"math/big"
+	"slices"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/wire"
@@ -230,9 +231,9 @@ func (vm *Engine) IsBranchExecuting() bool {
 		return true
 	}
 	//return vm.condStack[len(vm.condStack)-1] == OpCondTrue
-	for i := len(vm.condStack) - 1; i >= 0; i-- {
-		if !isCondStackLoop(vm.condStack[i]) {
-			return vm.condStack[i] == OpCondTrue
+	for _, v := range slices.Backward(vm.condStack) {
+		if !isCondStackLoop(v) {
+			return v == OpCondTrue
 		}
 	}
 	return true
