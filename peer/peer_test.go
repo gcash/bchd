@@ -50,7 +50,7 @@ func (c conn) LocalAddr() net.Addr {
 	return &addr{c.lnet, c.laddr}
 }
 
-// Remote returns the remote address for the connection.
+// RemoteAddr returns the remote address for the connection.
 func (c conn) RemoteAddr() net.Addr {
 	if !c.proxy {
 		return &addr{c.rnet, c.raddr}
