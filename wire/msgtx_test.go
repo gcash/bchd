@@ -679,7 +679,7 @@ func TestTxSerializeSizeStripped(t *testing.T) {
 		in   *MsgTx // Tx to encode
 		size int    // Expected serialized size
 	}{
-		// No inputs or outpus.
+		// No inputs or outputs.
 		{noTx, 10},
 
 		// Transcaction with an input and an output.
