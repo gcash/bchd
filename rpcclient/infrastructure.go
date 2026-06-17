@@ -119,7 +119,7 @@ type jsonRequest struct {
 type Client struct {
 	id atomic.Uint64 // atomic, so must stay 64-bit aligned
 
-	// config holds the connection configuration assoiated with this client.
+	// config holds the connection configuration associated with this client.
 	config *ConnConfig
 
 	// wsConn is the underlying websocket connection when not in HTTP POST
@@ -382,7 +382,7 @@ func (c *Client) handleMessage(msg []byte) {
 // to have come from reading from the websocket connection in wsInHandler,
 // should be logged.
 func (c *Client) shouldLogReadError(err error) bool {
-	// No logging when the connetion is being forcibly disconnected.
+	// No logging when the connection is being forcibly disconnected.
 	select {
 	case <-c.shutdown:
 		return false
