@@ -620,6 +620,23 @@ mempoolLoop:
 	blockSigChecks := int64(0)
 	totalFees := int64(0)
 
+	// Consensus script-verification flags for the block being built. Mirror the
+	// mempool (mempool.AcceptTransaction): the bare StandardVerifyFlags omits
+	// the post-Upgrade9 CashTokens flag (and the May2025/May2026 flags), so
+	// token transactions — valid and already accepted into the mempool — would
+	// fail ValidateTransactionScripts below and be dropped from the template,
+	// yielding empty blocks on token-active networks (e.g. chipnet).
+	scriptFlags := txscript.StandardVerifyFlags
+	if nextBlockHeight > g.chainParams.Upgrade9ForkHeight {
+		scriptFlags |= txscript.ScriptAllowCashTokens
+	}
+	if best.MedianTime.Unix() >= int64(g.chainParams.Upgrade11ActivationTime) {
+		scriptFlags |= txscript.ScriptAllowMay2025
+	}
+	if best.MedianTime.Unix() >= int64(g.chainParams.Upgrade12ActivationTime) {
+		scriptFlags |= txscript.ScriptAllowMay2026
+	}
+
 	// Choose which transactions make it into the block.
 	for priorityQueue.Len() > 0 {
 		// Grab the highest priority (or highest fee per kilobyte
@@ -697,7 +714,7 @@ mempoolLoop:
 			continue
 		}
 		sigchecks, err := blockchain.ValidateTransactionScripts(tx, blockUtxos,
-			txscript.StandardVerifyFlags, g.sigCache,
+			scriptFlags, g.sigCache,
 			g.hashCache, g.chainParams.Upgrade9ForkHeight)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
