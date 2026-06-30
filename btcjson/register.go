@@ -94,7 +94,7 @@ var (
 // indirecting through all pointers.
 func baseKindString(rt reflect.Type) string {
 	numIndirects := 0
-	for rt.Kind() == reflect.Ptr {
+	for rt.Kind() == reflect.Pointer {
 		numIndirects++
 		rt = rt.Elem()
 	}
@@ -115,7 +115,7 @@ func isAcceptableKind(kind reflect.Kind) bool {
 		fallthrough
 	case reflect.Func:
 		fallthrough
-	case reflect.Ptr:
+	case reflect.Pointer:
 		fallthrough
 	case reflect.Interface:
 		return false
@@ -171,7 +171,7 @@ func RegisterCmd(method string, cmd interface{}, flags UsageFlag) error {
 	}
 
 	rtp := reflect.TypeOf(cmd)
-	if rtp.Kind() != reflect.Ptr {
+	if rtp.Kind() != reflect.Pointer {
 		str := fmt.Sprintf("type must be *struct not '%s (%s)'", rtp,
 			rtp.Kind())
 		return makeError(ErrInvalidType, str)
@@ -205,7 +205,7 @@ func RegisterCmd(method string, cmd interface{}, flags UsageFlag) error {
 		// if the field is optional based on it being a pointer.
 		var isOptional bool
 		switch kind := rtf.Type.Kind(); kind {
-		case reflect.Ptr:
+		case reflect.Pointer:
 			isOptional = true
 			kind = rtf.Type.Elem().Kind()
 			fallthrough

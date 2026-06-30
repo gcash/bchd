@@ -177,7 +177,7 @@ func TestAssignField(t *testing.T) {
 
 		// Inidirect through to the base types to ensure their values
 		// are the same.
-		for dst.Kind() == reflect.Ptr {
+		for dst.Kind() == reflect.Pointer {
 			dst = dst.Elem()
 		}
 		if !reflect.DeepEqual(dst.Interface(), test.expected) {

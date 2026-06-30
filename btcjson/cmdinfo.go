@@ -136,7 +136,7 @@ func fieldUsage(structField reflect.StructField, defaultVal *reflect.Value) stri
 
 	// Indirect the pointer if needed.
 	fieldType := structField.Type
-	if fieldType.Kind() == reflect.Ptr {
+	if fieldType.Kind() == reflect.Pointer {
 		fieldType = fieldType.Elem()
 	}
 
@@ -187,7 +187,7 @@ func methodUsageText(rtp reflect.Type, defaults map[int]reflect.Value, method st
 	for i := 0; i < numFields; i++ {
 		rtf := rt.Field(i)
 		var isOptional bool
-		if kind := rtf.Type.Kind(); kind == reflect.Ptr {
+		if kind := rtf.Type.Kind(); kind == reflect.Pointer {
 			isOptional = true
 		}
 
