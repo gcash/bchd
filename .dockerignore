@@ -6,6 +6,6 @@
 .vscode
 kube
 Dockerfile
-CHANGES
+CHANGELOG.md
 LICENSE
 README.md

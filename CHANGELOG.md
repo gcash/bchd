@@ -1,7 +1,460 @@
-============================================================================
-User visible changes for btcd
-  A full-node bitcoin implementation written in Go
-============================================================================
+# bchd changelog
+
+All notable user-visible changes to [bchd](https://github.com/gcash/bchd) — a full Bitcoin Cash node written in Go — are listed here, newest first. Each entry summarizes the consensus, networking, RPC/gRPC, indexing, mining, and packaging changes that landed in a release.
+
+bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
+
+## 0.22.1 (2026-06-30)
+
+### Consensus & Network
+- Remove the defunct `dnsseed.electroncash.de` DNS seed.
+
+### Mining
+- Include the Upgrade9 (CashTokens) script flags when building block templates. Templates were previously validated with the bare `StandardVerifyFlags`, so on token-active networks valid CashToken transactions already in the mempool were dropped from the template, producing empty or near-empty blocks; the flags are now computed the same way the mempool and consensus block validation do.
+
+### Other
+- Modernize `sync/atomic` usage with the typed atomic APIs and adopt `WaitGroup.Go`.
+
+## 0.22.0 (2026-04-23)
+
+### Consensus & Network
+- Add network parameters and activation logic for the May 15, 2026 BCH upgrade (Upgrade12), gating the new script flags by activation time across chains.
+- Implement CHIP-2024-12 P2S (Pay to Script).
+- Implement CHIP-2025-05 Functions: function definition and invocation operations.
+- Implement CHIP-2021-05 Loops: bounded looping operations.
+- Implement CHIP-2025-05: re-enable the bitwise opcodes OP_INVERT, OP_2MUL, OP_2DIV, OP_LSHIFT, and OP_RSHIFT.
+- Align Upgrade12 consensus, policy, and VMB tests with BCHN, including corrected operation-cost accounting.
+
+### Security
+- Fix CVE-2018-17145 (inv-message memory-exhaustion denial-of-service vector).
+
+### Build & Packaging
+- Bump the Dockerfile to the latest Go release and trim the Docker build context.
+
+### Other
+- Add VMB (VM bytecode) test vectors for the May 2026 upgrade covering bitwise ops, loops, functions, and P2S.
+
+## 0.21.1 (2025-05-18)
+
+### Build & Packaging
+- Gzip test fixtures and ignore `node_modules` to dramatically reduce the module/package size, resolving "module source tree too large" errors when installing through the Go module proxy.
+
+## 0.21.0 (2025-05-13)
+
+### Consensus & Network
+- Implement CHIP-2021-05 VM Limits and CHIP-2024-07 BigInt high-precision arithmetic (the May 2025 "Upgrade 11"), adding VM limit constants, opcode cost accounting, big-integer script numbers, and activation rules (active by default on regtest and simnet) (#570).
+
+## 0.20.0 (2025-01-14)
+
+### Consensus & Network
+- Add full support for the BCH May 2023 network upgrade (Upgrade 9): native CashTokens, new token-aware opcodes, P2SH32 outputs, and updated transaction size limits (#545).
+- Implement ABLA (Adaptive Blocksize Limit Algorithm) for the dynamic block size limit, with state persisted to the database and a fixed-size config option (#545, #553).
+- Add chipnet support and bring TestNet4 onto the correct network magic bytes with updated chain parameters (#545).
+- Bump the P2P protocol version to 70016 and update DNS seeds to match BCHN, adding bchd.cash seeds.
+- Add support for receiving the `sendaddrv2` message from peers, including before verack (#554).
+- Fix a consensus incompatibility in `txscript.IsUnspendable` that diverged from other implementations and posed a fork/UTXO-commitment risk (#475).
+
+### Mempool & Policy
+- Actively prevent network discovery and outbound connections when running in regression-test (regnet) mode (#519).
+
+### RPC & gRPC
+- Add the `signrawtransactionwithkey` JSON-RPC method (#497).
+- Expose CashTokens token data and TestNet4 in the gRPC (bchrpc) API, and populate token data correctly across endpoints.
+- Increase RPC read/write timeouts to 5 minutes for expensive lookups (#515).
+
+### Wallet & Indexing
+- Fix an SLP graph indexer bug and correct SLP index map allocation.
+
+### Performance
+- Reduce map allocations during block processing and avoid slice reallocations in `processOrphans`.
+
+### Security
+- Fix an `opcodeCheckSig` bug where input token data was not passed to the BIP143 signature hash under certain conditions (#552).
+
+### Build & Packaging
+- Update to Go 1.23.4 and migrate CI from Travis to GitHub Actions.
+- Fix `bchctl` in the Dockerfile and update the Kubernetes deployment to handle certificates.
+
+### Bug Fixes
+- Fix a bug when cloning the script engine stacks used by `meep` (#506).
+
+## 0.19.0 (2022-05-05)
+
+### Consensus & Network
+- Implement the May 2022 BCH hard fork: 64-bit script integers, native introspection opcodes, and OP_MUL, with fork activation and new TestNet4 parameters (#499).
+
+### Mempool & Policy
+- Treat `OP_RETURN OP_1NEGATE` as a standard transaction (#476).
+
+### RPC & gRPC
+- Add HTTPS support to the gRPC proxy (#478).
+
+### Bug Fixes
+- Fix `NullDataScript` handling and standardness tests (#477).
+
+## 0.18.1 (2021-05-24)
+
+### Consensus & Network
+- Improve peer and sync-manager candidate selection, including a regtest `isSyncCandidate` fix (#470).
+- Isolate height checks in peer syncing (#471).
+
+### Wallet & Indexing
+- Guard against nil buckets in the address, cfilter, SLP, and tx indexers to prevent panics (#473).
+
+### Other
+- Promote select peer logging messages from trace to debug level (#469).
+
+## 0.18.0 (2021-05-12)
+
+### Consensus & Network
+- Avoid connecting to Bitcoin ABC nodes and prevent the connection manager from dialing duplicate addresses (#450).
+- Remove the dead `seed-bch.bitcoinforks.org` DNS seed (#443).
+- Add a clean-shutdown check in `updateSyncPeer` to avoid races during node shutdown (#442).
+
+### Mempool & Policy
+- Allow multiple OP_RETURN (null-data) outputs per transaction via a configurable policy (#467).
+
+### Mining
+- Add a `SignMuSig` function to the `bchec` package (#457).
+
+### RPC & gRPC
+- Add SLP gRPC/REST endpoints and fields: `GetParsedSlpScript`, `GetTrustedValidation`, `GetTokenMetadata`, and `CheckSlpTransaction` (with `DisableSlpBurnErrors`), plus SLP token metadata/addresses on `GetTransaction`, `GetUnspentOutput`, and the transaction subscription filters (#387, #458).
+- Validate SLP transactions by default in `SubmitTransaction` (clients must opt out via `skip_slp_validity_check`) to guard against accidental token burns (#387).
+- Add a gRPC-gateway REST/JSON proxy server (with CORS and no-cache middleware) and regenerated Swagger definitions for the bchrpc API (#387).
+- Return pubkey (P2PK) outputs from `GetAddressUnspentOutputs` (#432).
+
+### Wallet & Indexing
+- Add the SLP (Simple Ledger Protocol) token index, validating SLP/NFT1 token transactions (genesis, mint, send, mint-baton tracking, burn detection) with a new `--slpindex` config option (#387, #452).
+- Add SLP Graph Search, building a token transaction graph to support trusted client-side validation (#451).
+- Fix index-manager handling of indexers whose `StartBlock()` height is greater than 0, so SLP and other late-starting indexes sync correctly (#455).
+- Refuse to start an index on a pruned node (print an error and exit) and prevent a crash when SLP index initialization fails (#433).
+
+### Performance
+- Flush the UTXO cache during state reconstruction and correctly set `lastFlushHash` on init, with tests for a hard shutdown mid-flush (#445, #446, #447).
+
+### Build & Packaging
+- Add Prometheus metrics support and per-component shutdown logging (#453).
+- Add `darwin/arm64` (Apple Silicon) binary builds.
+- Add `RegressionTestAnyHost` and `RegressionTestNoReset` regtest options for Docker-based setups (#462).
+
+### Bug Fixes
+- Fix a panic in the fee estimator triggered by chain reorgs (#434).
+- Fix a crash related to unconfirmed NFT child tokens in the gRPC server (#387).
+
+## 0.17.1 (2020-12-08)
+
+### Consensus & Network
+- Update mainnet chain params for post-hardfork (ASERT) activation, and add post-fork params for testnet3, regtest, and simnet (#430).
+- Add a UTXO-set checkpoint hash and sources to the chain params.
+- Fix the DNS seeds list after the hard fork (#428).
+
+### RPC & gRPC
+- Add an `RPCAuthTimeout` option to configure the RPC auth timeout (#421).
+
+### Performance
+- Check for known inventory before relaying a compact block, avoiding redundant relays.
+
+### Build & Packaging
+- Build with Go 1.15.5 (#423).
+
+## 0.17.0 (2020-10-24)
+
+### Consensus & Network
+- Implement the aserti3-2d (ASERT) difficulty adjustment algorithm for the November 2020 BCH hard fork, and wire up its activation (#399, #402).
+- Select a new sync peer when the median of sync-peer candidates is ahead of us, improving recovery from stalled syncs (#411).
+
+### Mempool & Policy
+- Increase the maximum standard transaction size to 100k (#405).
+- Remove `ScriptVerifyMinimalIf` from the standard verification flags to match Bitcoin ABC policy (#413).
+
+### RPC & gRPC
+- Rebuild all protobuf bindings and document little-endian field formats in the gRPC comments (#394).
+- Add a Java protobuf package (`com.bchd.rpc`) for the bchrpc API (#396).
+
+### Build & Packaging
+- Build with Go 1.15.3; drop darwin/386 support (removed in Go 1.15) (#419).
+
+## 0.16.5 (2020-07-23)
+
+### Mempool & Policy
+- Default to disabling relay of free (very low fee) transactions (#383).
+
+### RPC & gRPC
+- Support cookie-based RPC authorization (#393).
+- Accept either int or bool for the verbosity argument in `getrawtransaction` and `searchrawtransactions` (#391).
+- Add a `getbalances` RPC client command and backport `getblock` verbosity fixes (#388, #389).
+- Return the version in `getnetworkinfo` in the same format as ABC/BCHN.
+- Remove custom HTTP handling so RPC connections support keep-alives (#384).
+
+### Security
+- Avoid a panic in `bchec` `fieldVal.SetByteSlice` for oversized inputs.
+- Fix a deadlock in `dynamicbanscore`.
+
+### Bug Fixes
+- Prevent a peer's last block height from going backwards (#392).
+
+### Other
+- Document that CIFS users must turn off async preemption (#390).
+
+## 0.16.4 (2020-07-06)
+
+### RPC & gRPC
+- Fix an off-by-one error in transaction confirmation counts in the gRPC API (#376).
+
+### Wallet & Indexing
+- Raise `MaxCFilterDataSize` to 2 MiB so larger compact filters can be served.
+
+## 0.16.3 (2020-06-10)
+
+### Consensus & Network
+- Fix a bug calculating sigcheck density (#374).
+
+## 0.16.2 (2020-05-19)
+
+### Consensus & Network
+- First-pass cleanup of pre-fork hard-fork code paths (#373).
+- Add a new fastsync checkpoint and update the testnet checkpoint hash.
+
+### RPC & gRPC
+- Remove sigops references from the RPC server results.
+
+## 0.16.1 (2020-05-15)
+
+### Consensus & Network
+- Fix bugs in OP_REVERSEBYTES and set the Phonon activation time in tests (#371).
+
+## 0.16.0 (2020-05-05)
+
+### Consensus & Network
+- Activate the May 2020 (Phonon) hard fork, with sigcheck accounting replacing sigop counting (#348, #360, #366).
+- Add the OP_REVERSEBYTES script opcode (#348).
+- Do not disconnect peers that send unknown commands; only warn in the logs (#369).
+- Remove dead/invalid DNS seeds and add back the bitcoinforks seeders (#337, #359, #364).
+
+### Mining
+- Update the mining package for the May 2020 hard fork (#348, #362).
+- Add a config option to set `CoinbaseFlags` in the block-template coinbase input (#340).
+
+### RPC & gRPC
+- Improve memory usage of the `GetAddressUnspentOutputs` RPC call (#332, #333).
+
+### Security
+- Add a first-pass MuSig implementation with session commitments (#334, #347).
+
+### Build & Packaging
+- Build with Go 1.14.2 and update all dependencies, including a new bchutil (#344, #365, #368).
+
+## 0.15.2 (2019-11-30)
+
+### Consensus & Network
+- Make verack part of the version handshake; add peers on `OnVerAck` rather than `OnVersion` to harden connection negotiation (#319, #320).
+- Add configurable user-agent filtering for peer connections (#318).
+
+### RPC & gRPC
+- Update `ParsePkScript` to support multiple networks (#317).
+- Guard against a nil request in `SubscribeTransactionStream` to prevent a crash (#324).
+- Warn instead of exiting when binding the RPC/gRPC server to a non-localhost address (#314).
+
+### Performance
+- Skip transaction rescan when the client has subscribed to no addresses or UTXOs (#321).
+
+### Build & Packaging
+- Add a sample bchd systemd service unit.
+
+## 0.15.1 (2019-11-17)
+
+### Consensus & Network
+- Fix a consensus bug in OP_CHECKMULTISIG where the dummy stack element was not copied correctly (#311).
+- Update checkpoints with the new (Graviton) hard-fork parameters (#310).
+- Add the `testnet-seed.bchd.cash` DNS seed (#309).
+
+### Performance
+- Improve initial block download and syncing performance (#307).
+- Allow `wire.MsgTx` objects to be garbage-collected before the UTXO cache is flushed, reducing memory use (#292).
+
+### Security
+- Copy `pkScript` in `addTxOut` and `disconnectTransactions` to prevent UTXO data corruption (#293).
+- Add a notification lock to guard against a double unlock (#308).
+
+### Build & Packaging
+- Switch the Docker image to a multi-stage build (#301).
+
+## 0.15.0 (2019-10-21)
+
+### Consensus & Network
+- Add the November 2019 (Graviton) hard-fork rules (#284).
+
+### RPC & gRPC
+- Match bitcoind's RPC error codes when rejecting transactions (#278).
+- Fix a gRPC bug returning unspent outputs and refactor `GetUnspentOutput` to match the JSON-RPC code (#281, #282).
+- Check spent status in the mempool when returning unspent outputs (#286).
+
+### Wallet & Indexing
+- Migrate the committed-filter (cfindex) index to version 2; disable cfindex in fastsync mode and skip migration when the chain is pruned (#288).
+
+## 0.14.7 (2019-08-20)
+
+### RPC & gRPC
+- Add the `GetMempool` gRPC method to retrieve the full mempool (#270).
+- Add the `GetUnspentOutput` gRPC method and a `mempool` flag on `GetAddressUnspentOutputs` to include unconfirmed UTXOs (#267).
+- Add streaming raw (serialized) transaction and block subscriptions to gRPC (#273, #274).
+- Add median time to gRPC `BlockInfo` and fix median time in `GetBlockchainInfo` (#271).
+- Add batched JSON-RPC 2.0 request support, and accept boolean verbosity in `getblock` (ElectrumX compatibility).
+- Regenerate gRPC bindings, adding a Python library and updated JS (#275).
+
+### Build & Packaging
+- Convert the project from `dep` to Go modules (#266).
+
+### Bug Fixes
+- Ensure downstream peers receive new blocks accepted via reorg of previously-orphaned blocks (#265).
+- Only scan `.fdb` files when loading the block database, ignoring stray files (#258).
+
+## 0.14.6 (2019-06-15)
+
+### Consensus & Network
+- Fix `OP_NUM2BIN` to pop a byte array off the stack (matching Bitcoin ABC) rather than a scriptnum (#253).
+
+## 0.14.5 (2019-06-13)
+
+### Consensus & Network
+- Fix a bug in Schnorr signature validation by normalizing field values before comparison (#250).
+
+### Mempool & Policy
+- Increase `DefaultBlockPrioritySize` to 1,600,000 bytes (#238).
+
+### Mining
+- Increase the default mining block size (`blockmaxsize`) to ~32 MB (#240).
+- Fix block-template generation so coinbase padding no longer drops the coinbase below the 100-byte minimum (#238).
+
+### RPC & gRPC
+- Implement the `getnetworkinfo` JSON-RPC call (#241).
+- Fix CORS preflight (OPTIONS) handling for grpc-web (#243).
+- Generate grpc-web JavaScript client libraries (#248).
+
+### Performance
+- Set the fast-sync worker count based on `runtime.NumCPU()` (#251).
+
+## 0.14.4 (2019-05-26)
+
+### Consensus & Network
+- Activate the GreatWall (May 15, 2019) hard fork at block height 582679, enforcing the Schnorr and SegWit-recovery script flags, and add a checkpoint at the fork block (#230).
+- Switch transaction-signing functions to Schnorr and add `ScriptVerifySchnorr` to the standard verify flags (#228).
+
+### RPC & gRPC
+- Fix `GetAddressUnspentOutputs` to return all UTXOs for an address instead of only the last 100 (#225).
+
+### Build & Packaging
+- Expose the database cache size and flush interval as config options (#232).
+
+### Bug Fixes
+- Override the UTXO cache entry (using a clone) in the reorg case so spent/unspent transitions are applied correctly (#234).
+
+## 0.14.3 (2019-05-03)
+
+### RPC & gRPC
+- Add a new bchrpc gRPC API server with full node and wallet query support, gRPC-Web via protocol multiplexing for browser clients, CORS, and server reflection (#217, #222).
+- Add spent-output (stxo) metadata to transaction input responses (#217).
+- Add API, client-usage, and wallet-operation documentation (#217).
+
+### Bug Fixes
+- Fix `GetMerkleProof` returning incorrect proofs (#217).
+- Fix `GetAddressTransactions` and fetch address transactions in reverse order (#217).
+- Fix a bug subscribing to blocks (#217).
+
+## 0.14.2 (2019-04-17)
+
+### Consensus & Network
+- Update segwit-recovery handling to the latest May 2019 hard-fork spec (#216).
+- Fix a bug in OP_NUM2BIN (#215).
+
+### Mempool & Policy
+- Add the `invalidateblock` RPC and set flags on ancestors of invalidated blocks (#214, #218).
+
+### RPC & gRPC
+- Fix `getinfo` to return the correct protocol version (#212).
+
+### Wallet & Indexing
+- cfindex no longer requires transaction inputs to build filters (#213).
+
+## 0.14.1 (2019-04-10)
+
+### Consensus & Network
+- Fix a bug in OP_CAT and allow multiple data pushes in OP_RETURN (#210, #211).
+- Add `ScriptVerifyCheckDataSig` to the standard verify flags (#206).
+
+### Performance
+- Add compact block (BIP152) relay and processing support, including `sendcmpct`/`getblocktxns` handling and direct block relay to requesting peers (#197).
+- Use the hashcache for script validation where possible (#208).
+
+### Wallet & Indexing
+- Update bchutil to the new compact-filter format and add indexer database migrations (#204, #209).
+
+## 0.14.0 (2019-03-21)
+
+### Consensus & Network
+- Implement the May 2019 BCH hard fork (Great Wall): activation, tests, and the `ScriptVerifyAllowSegwitRecovery` flag (#192).
+- Add Schnorr signature support in the `bchec` package and wire OP_CHECKSIG/OP_CHECKDATASIG to accept Schnorr signatures (#180).
+- Fix `MaxBlockSigOps` enforcement so the sigop limit scales per-MB of block size with accurate byte counting (#193).
+- Fix bugs in UTXO rollback and `InitConsistentState` so the chain rolls back correctly (#174, #181).
+
+### Wallet & Indexing
+- Add `GetCFMempool` for compact block filters over the mempool (#190, #195).
+
+### Performance
+- Improve reliability of the FastSync UTXO-set download, add SOCKS5 proxy support, and show download progress (#188, #189, #198).
+
+## 0.13.0 (2018-12-18)
+
+### Overview
+- Initial bchd release — a full Bitcoin Cash node forked from btcd 0.12.x.
+
+### Consensus & Network
+- Bitcoin Cash network parameters: BCH network magic and Bitcoin Cash DNS seeds (#15).
+- UAHF support: enforce the must-be-big block consensus rule and replay-protected `SIGHASH_FORKID` signature hashing with BIP143-style digests (#22).
+- New difficulty adjustment: implement the legacy EDA and the November 2017 DAA, with per-network activation heights.
+- May 2018 hard fork rules.
+- November 2018 Magnetic Anomaly hard fork: canonical transaction ordering (CTOR) enforced in block sanity checks plus new script verification flags, with configurable activation (#26, #135).
+- Remove SegWit, keeping consensus aligned with the Bitcoin Cash chain (#16).
+- Add an ECMH multiset implementation (`bchec`) as the basis for UTXO set commitments (#156).
+- Configurable excessive block size (`--excessiveblocksize`) defaulting to 32 MB, with `EB` signaling advertised in the user-agent string (#118, #151).
+
+### Mempool & Policy
+- Magnetic Anomaly mempool activation, including one-transaction-input (OTI) ordering validation during fast block acceptance.
+
+### Mining
+- Block templates honor the configured excessive block size for `addblock` and mining (#118).
+
+### RPC & gRPC
+- Add `reconsiderblock` and `invalidateblock` RPCs for manual chain reorganization (#136).
+- Add `gettxoutproof` and `verifytxoutproof` RPCs (and matching rpcclient helpers) (#153).
+
+### Wallet & Indexing
+- cashaddr address format support throughout the node, used as the default Bitcoin Cash address encoding (#28).
+- Optional transaction index and address index for serving lite-client and block-explorer queries.
+
+### Performance
+- In-memory UTXO cache to speed up block validation (#21).
+- Optional block-file pruning to reduce on-disk storage (#126).
+- Fast-sync mode that downloads a committed UTXO set instead of replaying all historical blocks (#158, #164).
+
+### Build & Packaging
+- Dockerfile for easy node setup and Kubernetes deployment manifests (#39).
+- Travis-based release builds and a published security-disclosure policy (#62, #65).
+
+### Bug Fixes
+- Fix testnet difficulty calculation after the DAA hard fork (#37).
+- Fix a UTXO-set reorganization bug (#162).
+- Correct `ExcessiveBlockSize` handling in the `addblock` utility (#118).
+
+---
+
+# Legacy btcd changelog (pre-fork)
+
+> The entries below predate the Bitcoin Cash fork. They are the upstream
+> [btcd](https://github.com/btcsuite/btcd) changelog (0.3.0-alpha through
+> 0.12.0), preserved verbatim for historical reference. bchd forked from
+> btcd 0.12.x; see the **0.13.0** entry above for the start of bchd's own
+> history.
 
 Changes in 0.12.0 (Fri Nov 20 2015)
   - Protocol and network related changes:
