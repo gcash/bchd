@@ -24,7 +24,7 @@ require (
 	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/text v0.37.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
