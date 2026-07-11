@@ -1301,6 +1301,9 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
 		flags |= BFMagneticAnomaly
 	}
+	if block.Height() > b.chainParams.Upgrade9ForkHeight {
+		flags |= BFUpgrade9
+	}
 
 	err := checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)
 	if err != nil {
