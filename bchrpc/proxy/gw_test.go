@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -494,6 +495,9 @@ func TestGetSlpTrustedValidation(t *testing.T) {
 	})
 
 	if err != nil {
+		if strings.Contains(err.Error(), "503") {
+			t.Skipf("%s: external SLP graph search service returned 503 (unavailable), skipping", method)
+		}
 		t.Fatalf("%s test failed: %+v", method, err)
 	}
 
@@ -519,3 +523,4 @@ func TestGetSlpTrustedValidation(t *testing.T) {
 
 	t.Logf("Successfully passed %s test", method)
 }
+
