@@ -834,11 +834,22 @@ func handleDecodeRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 		return nil, rpcDecodeHexError(hexStr)
 	}
 	var mtx wire.MsgTx
-	err = mtx.Deserialize(bytes.NewReader(serializedTx))
+	txReader := bytes.NewReader(serializedTx)
+	err = mtx.Deserialize(txReader)
 	if err != nil {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCDeserialization,
 			Message: "TX decode failed: " + err.Error(),
+		}
+	}
+
+	// The transaction must consume the entire input.  Anything left over
+	// means the caller supplied a malformed transaction, so reject it rather
+	// than silently ignoring the surplus.
+	if txReader.Len() != 0 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "TX decode failed: unexpected trailing bytes",
 		}
 	}
 
@@ -3685,11 +3696,22 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 		return nil, rpcDecodeHexError(hexStr)
 	}
 	var msgTx wire.MsgTx
-	err = msgTx.Deserialize(bytes.NewReader(serializedTx))
+	txReader := bytes.NewReader(serializedTx)
+	err = msgTx.Deserialize(txReader)
 	if err != nil {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCDeserialization,
 			Message: "TX decode failed: " + err.Error(),
+		}
+	}
+
+	// The transaction must consume the entire input.  Anything left over
+	// means the caller supplied a malformed transaction, so reject it rather
+	// than relaying it to the rest of the network.
+	if txReader.Len() != 0 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "TX decode failed: unexpected trailing bytes",
 		}
 	}
 
