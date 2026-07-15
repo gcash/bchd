@@ -56,7 +56,7 @@ const (
 	// most recent checkpoint.
 	ErrTimeTooOld
 
-	// ErrTimeTooNew indicates the time is too far in the future as compared
+	// ErrTimeTooNew indicates the time is too far in the future as compared to
 	// the current time.
 	ErrTimeTooNew
 
@@ -66,12 +66,12 @@ const (
 
 	// ErrUnexpectedDifficulty indicates specified bits do not align with
 	// the expected value either because it doesn't match the calculated
-	// valued based on difficulty regarted rules or it is out of the valid
+	// value based on difficulty retarget rules or it is out of the valid
 	// range.
 	ErrUnexpectedDifficulty
 
 	// ErrHighHash indicates the block does not hash to a value which is
-	// lower than the required target difficultly.
+	// lower than the required target difficulty.
 	ErrHighHash
 
 	// ErrBadMerkleRoot indicates the calculated merkle root does not match

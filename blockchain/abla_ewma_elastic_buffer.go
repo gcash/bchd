@@ -136,7 +136,7 @@ func (config *ABLAConfig) IsValid() (errs *strings.Builder) {
 	if config.epsilon0 < muldiv(config.gammaReciprocal, B7, config.zetaXB7-B7) {
 		// Required due to truncation of integer ops.
 		// With this we ensure that the control size can be adjusted for at least 1 byte.
-		// Also, with this we ensure that divisior bytesMax in calculateNextABLAState() can't be 0.
+		// Also, with this we ensure that divisor bytesMax in calculateNextABLAState() can't be 0.
 		errs = new(strings.Builder)
 		errs.WriteString("Error, epsilon0 sanity check failed. Too low relative to gamma and zeta.")
 		return errs

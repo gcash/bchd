@@ -328,7 +328,7 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 
 // Checks if the input contains pre-activation token-forgery output.
 // PATFOs are provably unspendable so a better place to check for them might be inside
-// txscript.IsUnspendable() but since we need to check for block heights, to mimimize
+// txscript.IsUnspendable() but since we need to check for block heights, to minimize
 // changes in the codebase, we handle it here. It might be a good idea to change this later.
 func IsPATFO(tokenData wire.TokenData, pkScript []byte, utxoBlockHeight int32, upgrade9ForkHeight int32) bool {
 	isPATFO := false

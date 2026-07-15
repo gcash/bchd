@@ -22,10 +22,10 @@ type RPCError struct {
 	Message string       `json:"message,omitempty"`
 }
 
-// Guarantee RPCError satisifies the builtin error interface.
+// Guarantee RPCError satisfies the builtin error interface.
 var _, _ error = RPCError{}, (*RPCError)(nil)
 
-// Error returns a string describing the RPC error.  This satisifies the
+// Error returns a string describing the RPC error.  This satisfies the
 // builtin error interface.
 func (e RPCError) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, e.Message)
@@ -45,7 +45,7 @@ func NewRPCError(code RPCErrorCode, message string) *RPCError {
 // valid JSON type.  JSON-RPC 2.0 (which bitcoind follows for some parts) only
 // allows string, number, or null, so this function restricts the allowed types
 // to that list.  This function is only provided in case the caller is manually
-// marshalling for some reason.    The functions which accept an ID in this
+// marshalling for some reason.  The functions which accept an ID in this
 // package already call this function to ensure the provided id is valid.
 func IsValidIDType(id interface{}) bool {
 	switch id.(type) {
