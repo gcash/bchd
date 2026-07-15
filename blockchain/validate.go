@@ -706,11 +706,11 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 	return nil
 }
 
-// checkBlockContext peforms several validation checks on the block which depend
+// checkBlockContext performs several validation checks on the block which depend
 // on its position within the block chain.
 //
 // The flags modify the behavior of this function as follows:
-//   - BFFastAdd: The transaction are not checked to see if they are finalized
+//   - BFFastAdd: The transactions are not checked to see if they are finalized
 //     and the somewhat expensive BIP0034 validation is not performed.
 //
 // The flags are also passed to checkBlockHeaderContext.  See its documentation
