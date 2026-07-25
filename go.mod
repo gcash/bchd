@@ -26,7 +26,7 @@ require (
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.52.0
 	golang.org/x/text v0.37.0
-	google.golang.org/grpc v1.80.0
+	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 	lukechampine.com/uint128 v1.3.0
 )
