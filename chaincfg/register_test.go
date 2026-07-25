@@ -2,7 +2,7 @@ package chaincfg_test
 
 import (
 	"bytes"
-	"reflect"
+	"errors"
 	"strings"
 	"testing"
 
@@ -495,7 +495,7 @@ func TestRegister(t *testing.T) {
 		}
 		for i, magTest := range test.hdMagics {
 			pubKey, err := chaincfg.HDPrivateKeyToPublicKeyID(magTest.priv[:])
-			if !reflect.DeepEqual(err, magTest.err) {
+			if !errors.Is(err, magTest.err) {
 				t.Errorf("%s: HD magic %d mismatched error: got %v expected %v ",
 					test.name, i, err, magTest.err)
 				continue

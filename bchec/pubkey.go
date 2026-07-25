@@ -18,6 +18,11 @@ const (
 	PubKeyBytesLenHybrid       = 65
 )
 
+// ErrInvalidSquareRoot occurs when decompressing a public key whose X
+// coordinate does not correspond to a point on the curve, meaning the computed
+// Y value is not a square root of x^3 + B.
+var ErrInvalidSquareRoot = errors.New("invalid square root")
+
 func isOdd(a *big.Int) bool {
 	return a.Bit(0) == 1
 }
@@ -48,7 +53,7 @@ func decompressPoint(curve *KoblitzCurve, x *big.Int, ybit bool) (*big.Int, erro
 	y2 := new(big.Int).Mul(y, y)
 	y2.Mod(y2, curve.Params().P)
 	if y2.Cmp(x3) != 0 {
-		return nil, fmt.Errorf("invalid square root")
+		return nil, ErrInvalidSquareRoot
 	}
 
 	// Verify that y-coord has expected parity.
