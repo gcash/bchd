@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -152,18 +153,18 @@ func validateJSONSchema(apiMmethod string, res []byte, ignoreErrors []string) er
 	if result.Valid() {
 		return nil
 	}
-	errMsg := ""
+	var errMsg strings.Builder
 	for _, desc := range result.Errors() {
 		if slices.Contains(ignoreErrors, desc.String()) {
 			continue
 		}
-		errMsg += fmt.Sprintf("- %s\n", desc)
+		fmt.Fprintf(&errMsg, "- %s\n", desc)
 	}
-	if errMsg == "" {
+	if errMsg.Len() == 0 {
 		return nil
 	}
 	errMsgFront := "The document is not valid. see errors :\n"
-	return errors.New(errMsgFront + errMsg)
+	return errors.New(errMsgFront + errMsg.String())
 }
 
 func hexToBase64(hexStr string) (string, error) {
