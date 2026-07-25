@@ -203,7 +203,7 @@ func (v *txValidator) Validate(items []*txValidateItem) error {
 
 	// Start up validation handlers that are used to asynchronously
 	// validate each transaction input.
-	for i := 0; i < maxGoRoutines; i++ {
+	for range maxGoRoutines {
 		go v.validateHandler()
 	}
 

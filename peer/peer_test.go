@@ -304,7 +304,7 @@ func TestPeerConnection(t *testing.T) {
 				}
 				outPeer.AssociateConnection(outConn)
 
-				for i := 0; i < 4; i++ {
+				for range 4 {
 					select {
 					case <-verack:
 					case <-time.After(time.Second):
@@ -330,7 +330,7 @@ func TestPeerConnection(t *testing.T) {
 				}
 				outPeer.AssociateConnection(outConn)
 
-				for i := 0; i < 4; i++ {
+				for range 4 {
 					select {
 					case <-verack:
 					case <-time.After(time.Second):
@@ -474,7 +474,7 @@ func TestPeerListeners(t *testing.T) {
 	}
 	outPeer.AssociateConnection(outConn)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-verack:
 		case <-time.After(time.Second * 1):
@@ -722,7 +722,7 @@ func TestOutboundPeer(t *testing.T) {
 
 	// Test PushXXX
 	var addrs []*wire.NetAddress
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		na := wire.NetAddress{}
 		addrs = append(addrs, &na)
 	}
@@ -888,7 +888,7 @@ func TestDuplicateVersionMsg(t *testing.T) {
 	inPeer := peer.NewInboundPeer(peerCfg)
 	inPeer.AssociateConnection(inConn)
 	// Wait for the veracks from the initial protocol version negotiation.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-verack:
 		case <-time.After(time.Second):
@@ -955,7 +955,7 @@ func TestUpdateLastBlockHeight(t *testing.T) {
 	inPeer.AssociateConnection(inConn)
 
 	// Wait for the veracks from the initial protocol version negotiation.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-verack:
 		case <-time.After(time.Second):

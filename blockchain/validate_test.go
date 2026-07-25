@@ -201,9 +201,9 @@ func setValidMerkleRoot(b *wire.MsgBlock) {
 //nolint:unused // retained for future tests
 func repeatScript(n int, newBytes ...byte) []byte {
 	script := make([]byte, n*len(newBytes))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		offset := i * len(newBytes)
-		for j := 0; j < len(newBytes); j++ {
+		for j := range newBytes {
 			script[offset+j] = newBytes[j]
 		}
 	}

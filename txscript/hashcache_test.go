@@ -19,7 +19,7 @@ func genTestTx() (*wire.MsgTx, error) {
 	tx.Version = rand.Int31()
 
 	numTxins := rand.Intn(11)
-	for i := 0; i < numTxins; i++ {
+	for range numTxins {
 		randTxIn := wire.TxIn{
 			PreviousOutPoint: wire.OutPoint{
 				Index: uint32(rand.Int31()),
@@ -35,7 +35,7 @@ func genTestTx() (*wire.MsgTx, error) {
 	}
 
 	numTxouts := rand.Intn(11)
-	for i := 0; i < numTxouts; i++ {
+	for range numTxouts {
 		randTxOut := wire.TxOut{
 			Value:    rand.Int63(),
 			PkScript: make([]byte, rand.Intn(30)),
@@ -64,7 +64,7 @@ func TestHashCacheAddContainsHashes(t *testing.T) {
 	// tests.
 	const numTxns = 10
 	txns := make([]*wire.MsgTx, numTxns)
-	for i := 0; i < numTxns; i++ {
+	for i := range numTxns {
 		txns[i], err = genTestTx()
 		if err != nil {
 			t.Fatalf("unable to generate test tx: %v", err)
@@ -150,7 +150,7 @@ func TestHashCachePurge(t *testing.T) {
 	// First we'll start by inserting numTxns transactions into the hash cache.
 	const numTxns = 10
 	txns := make([]*wire.MsgTx, numTxns)
-	for i := 0; i < numTxns; i++ {
+	for i := range numTxns {
 		txns[i], err = genTestTx()
 		if err != nil {
 			t.Fatalf("unable to generate test tx: %v", err)

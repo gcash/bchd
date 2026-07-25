@@ -578,7 +578,7 @@ func TestBaseMult(t *testing.T) {
 func TestBaseMultVerify(t *testing.T) {
 	s256 := S256()
 	for bytes := 1; bytes < 40; bytes++ {
-		for i := 0; i < 30; i++ {
+		for i := range 30 {
 			data := make([]byte, bytes)
 			_, err := rand.Read(data)
 			if err != nil {
@@ -647,7 +647,7 @@ func TestScalarMultRand(t *testing.T) {
 	s256 := S256()
 	x, y := s256.Gx, s256.Gy
 	exponent := big.NewInt(1)
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		data := make([]byte, 32)
 		_, err := rand.Read(data)
 		if err != nil {
@@ -750,7 +750,7 @@ func TestSplitK(t *testing.T) {
 
 func TestSplitKRand(t *testing.T) {
 	s256 := S256()
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		bytesK := make([]byte, 32)
 		_, err := rand.Read(bytesK)
 		if err != nil {
@@ -794,7 +794,7 @@ func testSignAndVerifyECDSA(t *testing.T, c *KoblitzCurve, tag string) {
 	priv, _ := NewPrivateKey(c)
 	pub := priv.PubKey()
 
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		s := fmt.Appendf(nil, "testing %d", i)
 		hashed := sha256.Sum256(s)
 		sig, err := priv.SignECDSA(hashed[:])
@@ -818,7 +818,7 @@ func testSignAndVerifySchnorr(t *testing.T, c *KoblitzCurve, tag string) {
 	priv, _ := NewPrivateKey(c)
 	pub := priv.PubKey()
 
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		s := fmt.Appendf(nil, "testing %d", i)
 		hashed := sha256.Sum256(s)
 		sig, err := priv.SignSchnorr(hashed[:])
@@ -859,7 +859,7 @@ func TestNAF(t *testing.T) {
 		nafPos, nafNeg := NAF(want.Bytes())
 		got := big.NewInt(0)
 		// Check that the NAF representation comes up with the right number
-		for i := 0; i < len(nafPos); i++ {
+		for i := range nafPos {
 			bytePos := nafPos[i]
 			byteNeg := nafNeg[i]
 			for j := 7; j >= 0; j-- {
@@ -883,7 +883,7 @@ func TestNAFRand(t *testing.T) {
 	negOne := big.NewInt(-1)
 	one := big.NewInt(1)
 	two := big.NewInt(2)
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		data := make([]byte, 32)
 		_, err := rand.Read(data)
 		if err != nil {
@@ -893,7 +893,7 @@ func TestNAFRand(t *testing.T) {
 		want := new(big.Int).SetBytes(data)
 		got := big.NewInt(0)
 		// Check that the NAF representation comes up with the right number
-		for i := 0; i < len(nafPos); i++ {
+		for i := range nafPos {
 			bytePos := nafPos[i]
 			byteNeg := nafNeg[i]
 			for j := 7; j >= 0; j-- {

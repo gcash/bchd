@@ -92,7 +92,7 @@ func Discover() (nat NAT, err error) {
 			"MX: 2\r\n\r\n")
 	message := buf.Bytes()
 	answerBytes := make([]byte, 1024)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err = socket.WriteToUDP(message, ssdp)
 		if err != nil {
 			return

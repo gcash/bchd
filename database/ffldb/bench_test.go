@@ -39,7 +39,7 @@ func BenchmarkBlockHeader(b *testing.B) {
 	b.ResetTimer()
 	err = db.View(func(tx database.Tx) error {
 		blockHash := chaincfg.MainNetParams.GenesisHash
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := tx.FetchBlockHeader(blockHash)
 			if err != nil {
 				return err
@@ -80,7 +80,7 @@ func BenchmarkBlock(b *testing.B) {
 	b.ResetTimer()
 	err = db.View(func(tx database.Tx) error {
 		blockHash := chaincfg.MainNetParams.GenesisHash
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := tx.FetchBlock(blockHash)
 			if err != nil {
 				return err

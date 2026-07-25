@@ -65,7 +65,7 @@ func TestSigCacheAddEvictEntry(t *testing.T) {
 	sigCache := NewSigCache(sigCacheSize)
 
 	// Fill the sigcache up with some random sig triplets.
-	for i := uint(0); i < sigCacheSize; i++ {
+	for range sigCacheSize {
 		msg, sig, key, err := genRandomSig()
 		if err != nil {
 			t.Fatalf("unable to generate random signature test data")

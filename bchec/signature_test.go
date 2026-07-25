@@ -517,7 +517,7 @@ func testSignCompact(t *testing.T, tag string, curve *KoblitzCurve,
 }
 
 func TestSignCompact(t *testing.T) {
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		name := fmt.Sprintf("test %d", i)
 		data := make([]byte, 32)
 		_, err := rand.Read(data)

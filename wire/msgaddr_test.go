@@ -59,7 +59,7 @@ func TestAddr(t *testing.T) {
 
 	// Ensure adding more than the max allowed addresses per message returns
 	// error.
-	for i := 0; i < MaxAddrPerMsg+1; i++ {
+	for range MaxAddrPerMsg + 1 {
 		err = msg.AddAddress(na)
 	}
 	if err == nil {
@@ -246,7 +246,7 @@ func TestAddrWireErrors(t *testing.T) {
 	// Message that forces an error by having more than the max allowed
 	// addresses.
 	maxAddr := NewMsgAddr()
-	for i := 0; i < MaxAddrPerMsg; i++ {
+	for range MaxAddrPerMsg {
 		_ = maxAddr.AddAddress(na)
 	}
 	maxAddr.AddrList = append(maxAddr.AddrList, na)

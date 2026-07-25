@@ -48,7 +48,7 @@ func TestHeaders(t *testing.T) {
 	// Ensure adding more than the max allowed headers per message returns
 	// error.
 	var err error
-	for i := 0; i < MaxBlockHeadersPerMsg+1; i++ {
+	for range MaxBlockHeadersPerMsg + 1 {
 		err = msg.AddBlockHeader(bh)
 	}
 	if reflect.TypeOf(err) != reflect.TypeFor[*MessageError]() {
@@ -259,7 +259,7 @@ func TestHeadersWireErrors(t *testing.T) {
 	// Message that forces an error by having more than the max allowed
 	// headers.
 	maxHeaders := NewMsgHeaders()
-	for i := 0; i < MaxBlockHeadersPerMsg; i++ {
+	for range MaxBlockHeadersPerMsg {
 		_ = maxHeaders.AddBlockHeader(bh)
 	}
 	maxHeaders.Headers = append(maxHeaders.Headers, bh)

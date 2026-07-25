@@ -47,7 +47,7 @@ func TestParentStack(t *testing.T) {
 testLoop:
 	for i, test := range tests {
 		nodes := make([]*treapNode, 0, test.numNodes)
-		for j := 0; j < test.numNodes; j++ {
+		for j := range test.numNodes {
 			var key [4]byte
 			binary.BigEndian.PutUint32(key[:], uint32(j))
 			node := newTreapNode(key[:], key[:], 0)
@@ -81,7 +81,7 @@ testLoop:
 		}
 
 		// Ensure each popped node is the expected one.
-		for j := 0; j < len(nodes); j++ {
+		for j := range nodes {
 			node := stack.Pop()
 			expected := nodes[len(nodes)-j-1]
 			if !reflect.DeepEqual(node, expected) {
@@ -115,4 +115,3 @@ testLoop:
 		}
 	}
 }
-

@@ -42,21 +42,21 @@ func loadS256BytePoints() error {
 	// Deserialize the precomputed byte points and set the curve to them.
 	offset := 0
 	var bytePoints [32][256][3]fieldVal
-	for byteNum := 0; byteNum < 32; byteNum++ {
+	for byteNum := range 32 {
 		// All points in this window.
-		for i := 0; i < 256; i++ {
+		for i := range 256 {
 			px := &bytePoints[byteNum][i][0]
 			py := &bytePoints[byteNum][i][1]
 			pz := &bytePoints[byteNum][i][2]
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				px.n[i] = binary.LittleEndian.Uint32(serialized[offset:])
 				offset += 4
 			}
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				py.n[i] = binary.LittleEndian.Uint32(serialized[offset:])
 				offset += 4
 			}
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				pz.n[i] = binary.LittleEndian.Uint32(serialized[offset:])
 				offset += 4
 			}

@@ -86,7 +86,7 @@ func resultStructHelp(xT descLookupFunc, rt reflect.Type, indentLevel int) []str
 	// Generate the help for each of the fields in the result struct.
 	numField := rt.NumField()
 	results := make([]string, 0, numField)
-	for i := 0; i < numField; i++ {
+	for i := range numField {
 		rtf := rt.Field(i)
 
 		// The field name to display is the json name when it's
@@ -337,7 +337,7 @@ func argHelp(xT descLookupFunc, rtp reflect.Type, defaults map[int]reflect.Value
 	// simplifying assumptions are made here because the RegisterCmd
 	// function has already rigorously enforced the layout.
 	args := make([]string, 0, numFields)
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		rtf := rt.Field(i)
 		var defaultVal *reflect.Value
 		if defVal, ok := defaults[i]; ok {

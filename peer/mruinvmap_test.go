@@ -21,7 +21,7 @@ func TestMruInventoryMap(t *testing.T) {
 	// inventory code.
 	numInvVects := 10
 	invVects := make([]*wire.InvVect, 0, numInvVects)
-	for i := 0; i < numInvVects; i++ {
+	for i := range numInvVects {
 		hash := &chainhash.Hash{byte(i)}
 		iv := wire.NewInvVect(wire.InvTypeBlock, hash)
 		invVects = append(invVects, iv)
@@ -46,7 +46,7 @@ testLoop:
 		// cause evicition since there are more test inventory vectors
 		// than the limits.
 		mruInvMap := newMruInventoryMap(uint(test.limit))
-		for j := 0; j < numInvVects; j++ {
+		for j := range numInvVects {
 			mruInvMap.Add(invVects[j])
 		}
 
@@ -62,7 +62,7 @@ testLoop:
 
 		// Ensure the entries before the limited number of most recent
 		// entries in the inventory vector list do not exist.
-		for j := 0; j < numInvVects-test.limit; j++ {
+		for j := range numInvVects - test.limit {
 			if mruInvMap.Exists(invVects[j]) {
 				t.Errorf("Exists #%d (%s) entry %s exists", i,
 					test.name, *invVects[j])
@@ -106,7 +106,7 @@ testLoop:
 		// Delete all of the entries in the inventory vector list,
 		// including those that don't exist in the map, and ensure they
 		// no longer exist.
-		for j := 0; j < numInvVects; j++ {
+		for j := range numInvVects {
 			mruInvMap.Delete(invVects[j])
 			if mruInvMap.Exists(invVects[j]) {
 				t.Errorf("Delete #%d (%s) entry %s exists", i,
@@ -152,7 +152,7 @@ func BenchmarkMruInventoryList(b *testing.B) {
 
 	numInvVects := 100000
 	invVects := make([]*wire.InvVect, 0, numInvVects)
-	for i := 0; i < numInvVects; i++ {
+	for range numInvVects {
 		hashBytes := make([]byte, chainhash.HashSize)
 		rand.Read(hashBytes)
 		hash, _ := chainhash.NewHash(hashBytes)

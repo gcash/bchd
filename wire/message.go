@@ -264,7 +264,7 @@ func discardInput(r io.Reader, n uint32) {
 	bytesRemaining := n % maxSize
 	if n > 0 {
 		buf := make([]byte, maxSize)
-		for i := uint32(0); i < numReads; i++ {
+		for range numReads {
 			_, _ = io.ReadFull(r, buf)
 		}
 	}

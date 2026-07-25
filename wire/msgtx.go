@@ -419,7 +419,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	var totalScriptSize uint64
 	txIns := make([]TxIn, count)
 	msg.TxIn = make([]*TxIn, count)
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
 		ti := &txIns[i]
@@ -451,7 +451,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// Deserialize the outputs.
 	txOuts := make([]TxOut, count)
 	msg.TxOut = make([]*TxOut, count)
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
 		to := &txOuts[i]
@@ -487,7 +487,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// buffers.
 	var offset uint64
 	scripts := make([]byte, totalScriptSize)
-	for i := 0; i < len(msg.TxIn); i++ {
+	for i := range len(msg.TxIn) {
 		// Copy the signature script into the contiguous buffer at the
 		// appropriate offset.
 		signatureScript := msg.TxIn[i].SignatureScript
@@ -503,7 +503,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		// Return the temporary script buffer to the pool.
 		scriptPool.Return(signatureScript)
 	}
-	for i := 0; i < len(msg.TxOut); i++ {
+	for i := range len(msg.TxOut) {
 		// Copy the public key script into the contiguous buffer at the
 		// appropriate offset.
 		pkScript := msg.TxOut[i].PkScript

@@ -80,7 +80,7 @@ func listCommands() {
 	categoryTitles := make([]string, numCategories)
 	categoryTitles[categoryChain] = "Chain Server Commands:"
 	categoryTitles[categoryWallet] = "Wallet Server Commands (--wallet):"
-	for category := uint8(0); category < numCategories; category++ {
+	for category := range numCategories {
 		fmt.Println(categoryTitles[category])
 		for _, usage := range categorized[category] {
 			fmt.Println(usage)

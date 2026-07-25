@@ -1760,7 +1760,7 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 
 	// Populate and return the found hashes.
 	hashes := make([]chainhash.Hash, 0, total)
-	for i := uint32(0); i < total; i++ {
+	for range total {
 		hashes = append(hashes, node.hash)
 		node = b.bestChain.Next(node)
 	}
@@ -1805,7 +1805,7 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 
 	// Populate and return the found headers.
 	headers := make([]wire.BlockHeader, 0, total)
-	for i := uint32(0); i < total; i++ {
+	for range total {
 		headers = append(headers, node.Header())
 		node = b.bestChain.Next(node)
 	}

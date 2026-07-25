@@ -50,7 +50,7 @@ func TestGetData(t *testing.T) {
 
 	// Ensure adding more than the max allowed inventory vectors per
 	// message returns an error.
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for range MaxInvPerMsg {
 		err = msg.AddInvVect(iv)
 	}
 	if err == nil {
@@ -271,7 +271,7 @@ func TestGetDataWireErrors(t *testing.T) {
 	// Message that forces an error by having more than the max allowed inv
 	// vectors.
 	maxGetData := NewMsgGetData()
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for range MaxInvPerMsg {
 		_ = maxGetData.AddInvVect(iv)
 	}
 	maxGetData.InvList = append(maxGetData.InvList, iv)

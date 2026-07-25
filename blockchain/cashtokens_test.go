@@ -71,7 +71,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
 		viewPoint := blockchain.NewUtxoViewpoint()
 
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 				t.Fatal(err)
@@ -154,7 +154,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 
 		utxos := make([]wire.TxOut, utxoCount)
 		viewPoint := blockchain.NewUtxoViewpoint()
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			_, err = wire.ReadTxOut(r, 0, 0, &utxos[i])
 
@@ -242,7 +242,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 
 		utxos := make([]wire.TxOut, utxoCount)
 		viewPoint := blockchain.NewUtxoViewpoint()
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			_, err = wire.ReadTxOut(r, 0, 0, &utxos[i])
 
@@ -335,7 +335,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
 		viewPoint := blockchain.NewUtxoViewpoint()
 
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 				t.Fatal(err)
@@ -418,7 +418,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 
 		utxos := make([]wire.TxOut, utxoCount)
 		viewPoint := blockchain.NewUtxoViewpoint()
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			_, err = wire.ReadTxOut(r, 0, 0, &utxos[i])
 
@@ -511,7 +511,7 @@ func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 
 		utxos := make([]wire.TxOut, utxoCount)
 		viewPoint := blockchain.NewUtxoViewpoint()
-		for i := uint64(0); i < utxoCount; i++ {
+		for i := range utxoCount {
 			utxos[i] = wire.TxOut{}
 			_, err = wire.ReadTxOut(r, 0, 0, &utxos[i])
 

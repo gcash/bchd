@@ -456,7 +456,7 @@ func SignCompact(curve *KoblitzCurve, key *PrivateKey,
 	// bitcoind checks the bit length of R and S here. The ecdsa signature
 	// algorithm returns R and S mod N therefore they will be the bitsize of
 	// the curve, and thus correctly sized.
-	for i := 0; i < (curve.H+1)*2; i++ {
+	for i := range (curve.H + 1) * 2 {
 		pk, err := recoverKeyFromSignature(curve, sig, hash, i, true)
 		if err == nil && pk.X.Cmp(key.X) == 0 && pk.Y.Cmp(key.Y) == 0 {
 			result := make([]byte, 1, 2*curve.byteSize+1)

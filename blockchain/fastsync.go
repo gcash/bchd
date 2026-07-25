@@ -88,7 +88,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 
 	resultsChan := make(chan *result)
 	jobsChan := make(chan []byte)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		go worker(b.utxoCache, jobsChan, resultsChan)
 	}
 
@@ -131,7 +131,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	// Read each result and add the returned hash to the
 	// existing multiset.
 	m := bchec.NewMultiset(bchec.S256())
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		result := <-resultsChan
 		if result.err != nil {
 			log.Errorf("Error processing UTXO set: %s", err.Error())

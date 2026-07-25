@@ -184,7 +184,7 @@ func methodUsageText(rtp reflect.Type, defaults map[int]reflect.Value, method st
 	numFields := rt.NumField()
 	reqFieldUsages := make([]string, 0, numFields)
 	optFieldUsages := make([]string, 0, numFields)
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		rtf := rt.Field(i)
 		var isOptional bool
 		if kind := rtf.Type.Kind(); kind == reflect.Pointer {

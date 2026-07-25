@@ -72,7 +72,7 @@ func (msg *MsgAddr) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) err
 
 	addrList := make([]NetAddress, count)
 	msg.AddrList = make([]*NetAddress, 0, count)
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		na := &addrList[i]
 		err := readNetAddress(r, pver, na, true)
 		if err != nil {

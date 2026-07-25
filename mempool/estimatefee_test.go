@@ -182,7 +182,7 @@ func TestEstimateFee(t *testing.T) {
 	ef.ObserveTransaction(txC)
 
 	// Record 7 empty blocks.
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		eft.newBlock([]*wire.MsgTx{})
 	}
 
@@ -204,7 +204,7 @@ func TestEstimateFee(t *testing.T) {
 	}
 
 	// Record 5 more empty blocks.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		eft.newBlock([]*wire.MsgTx{})
 	}
 
@@ -229,7 +229,7 @@ func TestEstimateFee(t *testing.T) {
 	}
 
 	// Record 9 more empty blocks.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		eft.newBlock([]*wire.MsgTx{})
 	}
 
@@ -260,7 +260,7 @@ func (eft *estimateFeeTester) estimates() [estimateFeeDepth]BchPerKilobyte {
 
 	// Generate estimates
 	var estimates [estimateFeeDepth]BchPerKilobyte
-	for i := 0; i < estimateFeeDepth; i++ {
+	for i := range estimateFeeDepth {
 		estimates[i], _ = eft.ef.EstimateFee(uint32(i + 1))
 	}
 
@@ -282,7 +282,7 @@ func (eft *estimateFeeTester) round(txHistory [][]*TxDesc,
 
 	// generate new txs.
 	var newTxs []*TxDesc
-	for i := uint32(0); i < txPerRound; i++ {
+	for range txPerRound {
 		newTx := eft.testTx(bchutil.Amount(rand.Intn(1000000)))
 		eft.ef.ObserveTransaction(newTx)
 		newTxs = append(newTxs, newTx)
@@ -334,7 +334,7 @@ func TestEstimateFeeRollback(t *testing.T) {
 	var txHistory [][]*TxDesc
 	estimateHistory := [][estimateFeeDepth]BchPerKilobyte{eft.estimates()}
 
-	for round := 0; round < rounds; round++ {
+	for range rounds {
 		// Go forward a few rounds.
 		for step := 0; step <= stepsBack; step++ {
 			txHistory, estimateHistory =
@@ -342,7 +342,7 @@ func TestEstimateFeeRollback(t *testing.T) {
 		}
 
 		// Now go back.
-		for step := 0; step < stepsBack; step++ {
+		for step := range stepsBack {
 			eft.rollback()
 
 			// After rolling back, we should have the same estimated
@@ -351,7 +351,7 @@ func TestEstimateFeeRollback(t *testing.T) {
 			estimates := eft.estimates()
 
 			// Ensure that these are both the same.
-			for i := 0; i < estimateFeeDepth; i++ {
+			for i := range estimateFeeDepth {
 				if expected[i] != estimates[i] {
 					t.Errorf("Rollback value mismatch. Expected %f, got %f. ",
 						expected[i], estimates[i])
@@ -408,7 +408,7 @@ func TestDatabase(t *testing.T) {
 	var txHistory [][]*TxDesc
 	estimateHistory := [][estimateFeeDepth]BchPerKilobyte{eft.estimates()}
 
-	for round := 0; round < rounds; round++ {
+	for range rounds {
 		eft.checkSaveAndRestore(estimateHistory[len(estimateHistory)-1])
 
 		// Go forward one step.

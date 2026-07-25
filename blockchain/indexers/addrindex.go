@@ -292,7 +292,7 @@ func dbFetchAddrIndexEntries(bucket internalBucket, addrKey [addrKeySize]byte, n
 	// Start the offset after all skipped entries and load the calculated
 	// number.
 	results := make([]database.BlockRegion, numToLoad)
-	for i := uint32(0); i < numToLoad; i++ {
+	for i := range numToLoad {
 		// Calculate the read offset according to the reverse flag.
 		var offset uint32
 		if reverse {

@@ -322,7 +322,7 @@ func TestBlockchainSync(t *testing.T) {
 	blocks := make([]*bchutil.Block, 0, 3)
 	blockVersion := int32(2)
 	prevBlock := genesisBlock
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		block, err := rpctest.CreateBlock(prevBlock, nil, blockVersion,
 			nullTime, address, []wire.TxOut{}, &chainParams)
 		if err != nil {

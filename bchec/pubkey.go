@@ -185,7 +185,7 @@ func (p *PublicKey) IsEqual(otherPubKey *PublicKey) bool {
 // If the length of the source is smaller than the passed size, leading zero
 // bytes are appended to the dst slice before appending src.
 func paddedAppend(size uint, dst, src []byte) []byte {
-	for i := 0; i < int(size)-len(src); i++ {
+	for range int(size) - len(src) {
 		dst = append(dst, 0)
 	}
 	return append(dst, src...)

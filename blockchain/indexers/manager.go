@@ -704,7 +704,7 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		// Drop the bucket itself.
 		err = db.Update(func(dbTx database.Tx) error {
 			bucket := dbTx.Metadata()
-			for j := 0; j < len(bucketName)-1; j++ {
+			for j := range len(bucketName) - 1 {
 				bucket = bucket.Bucket(bucketName[j])
 			}
 			return bucket.DeleteBucket(bucketName[len(bucketName)-1])

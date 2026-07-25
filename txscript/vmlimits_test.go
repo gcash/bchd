@@ -146,7 +146,7 @@ func TestVMlimitsAndBigInt2023Standard(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -297,7 +297,7 @@ func TestVMlimitsAndBigInt2023NonStandard(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -449,7 +449,7 @@ func TestVMlimitsAndBigInt2023Invalid(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -495,9 +495,7 @@ func TestVMlimitsAndBigInt2023Invalid(t *testing.T) {
 				// fatalf(t, err.Error(), test, i)
 			}
 
-			if err == nil {
-				t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
-			}
+			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}
 }
@@ -612,7 +610,7 @@ func TestVMlimitsAndBigInt2025Standard(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -790,7 +788,7 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -958,7 +956,7 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -1027,9 +1025,7 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 				}
 			}
 
-			if err == nil {
-				t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
-			}
+			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}
 }

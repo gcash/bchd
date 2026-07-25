@@ -50,7 +50,7 @@ func (msg *MsgNotFound) BchDecode(r io.Reader, pver uint32, enc MessageEncoding)
 	// order to reduce the number of allocations.
 	invList := make([]InvVect, count)
 	msg.InvList = make([]*InvVect, 0, count)
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		iv := &invList[i]
 		err := readInvVect(r, pver, iv)
 		if err != nil {

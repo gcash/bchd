@@ -136,7 +136,7 @@ func TestCalcSequenceLock(t *testing.T) {
 	node := chain.bestChain.Tip()
 	blockTime := node.Header().Timestamp
 	numBlocksToActivate := (netParams.MinerConfirmationWindow * 3)
-	for i := uint32(0); i < numBlocksToActivate; i++ {
+	for range numBlocksToActivate {
 		blockTime = blockTime.Add(time.Second)
 		node = newFakeNode(node, blockVersion, 0, blockTime)
 		chain.index.AddNode(node)

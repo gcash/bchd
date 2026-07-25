@@ -670,7 +670,7 @@ func (a *AddrManager) AddressCache() []*wire.NetAddress {
 
 	// Fisher-Yates shuffle the array. We only need to do the first
 	// `numAddresses' since we are throwing the rest.
-	for i := 0; i < numAddresses; i++ {
+	for i := range numAddresses {
 		// pick a number between current index and the end
 		j := rand.Intn(len(allAddr)-i) + i
 		allAddr[i], allAddr[j] = allAddr[j], allAddr[i]

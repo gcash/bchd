@@ -200,7 +200,7 @@ func TestGetBlockTxnsWire(t *testing.T) {
 // properly contructed by the TestNewMsgGetBlockTxnsFromBlock method.
 func TestNewMsgGetBlockTxnsFromBlock(t *testing.T) {
 	txs := make([]*MsgTx, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		tx := *multiTx
 		tx.Version = int32(i)
 		txs[i] = &tx
@@ -273,7 +273,7 @@ func TestMsgGetBlockTxns_RequestedTransactions(t *testing.T) {
 
 	for _, test := range tests {
 		txs := make([]*MsgTx, 5)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			tx := *multiTx
 			tx.Version = int32(i)
 			txs[i] = &tx

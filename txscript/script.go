@@ -553,7 +553,7 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 		txCopy.TxOut = txCopy.TxOut[:idx+1]
 
 		// All but current output get zeroed out.
-		for i := 0; i < idx; i++ {
+		for i := range idx {
 			txCopy.TxOut[i].Value = -1
 			txCopy.TxOut[i].PkScript = nil
 		}

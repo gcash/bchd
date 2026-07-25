@@ -58,7 +58,7 @@ func TestGetHeaders(t *testing.T) {
 
 	// Ensure adding more than the max allowed block locator hashes per
 	// message returns an error.
-	for i := 0; i < MaxBlockLocatorsPerMsg; i++ {
+	for range MaxBlockLocatorsPerMsg {
 		err = msg.AddBlockLocatorHash(locatorHash)
 	}
 	if err == nil {
@@ -316,7 +316,7 @@ func TestGetHeadersWireErrors(t *testing.T) {
 	// Message that forces an error by having more than the max allowed
 	// block locator hashes.
 	maxGetHeaders := NewMsgGetHeaders()
-	for i := 0; i < MaxBlockLocatorsPerMsg; i++ {
+	for range MaxBlockLocatorsPerMsg {
 		_ = maxGetHeaders.AddBlockLocatorHash(&mainNetGenesisHash)
 	}
 	maxGetHeaders.BlockLocatorHashes = append(maxGetHeaders.BlockLocatorHashes,

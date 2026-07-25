@@ -1378,7 +1378,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 	// Now that we know the how much of the cache is relevant for this
 	// query, we'll populate our check point message with the cache as is.
 	// Shortly below, we'll populate the new elements of the cache.
-	for i := 0; i < forkIdx; i++ {
+	for i := range forkIdx {
 		_ = checkptMsg.AddCFHeader(&checkptCache[i].filterHeader)
 	}
 
@@ -3375,7 +3375,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	var newAddressFunc func() (net.Addr, error)
 	if !cfg.SimNet && !cfg.RegressionTest && len(cfg.ConnectPeers) == 0 {
 		newAddressFunc = func() (net.Addr, error) {
-			for tries := 0; tries < 100; tries++ {
+			for tries := range 100 {
 				addr := s.addrManager.GetAddress()
 				if addr == nil {
 					break

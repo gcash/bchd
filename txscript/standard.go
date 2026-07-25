@@ -553,7 +553,7 @@ func ExtractPkScriptAddrs(pkScript []byte, chainParams *chaincfg.Params) (Script
 
 		// Extract the public keys while skipping any that are invalid.
 		addrs = make([]bchutil.Address, 0, numPubKeys)
-		for i := 0; i < numPubKeys; i++ {
+		for i := range numPubKeys {
 			addr, err := bchutil.NewAddressPubKey(pops[i+1].data,
 				chainParams)
 			if err == nil {

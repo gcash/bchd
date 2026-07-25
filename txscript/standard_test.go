@@ -527,7 +527,7 @@ func TestPayToAddrScript(t *testing.T) {
 
 	// Taken from transaction:
 	// b0539a45de13b3e0403909b8bd1a555b8cbe45fd4e3f3fda76f3a5f52835c29d
-	p2shMain, _ := bchutil.NewAddressScriptHashFromHash(hexToBytes("e8c300"+
+	p2shMain, err := bchutil.NewAddressScriptHashFromHash(hexToBytes("e8c300"+
 		"c87986efa84c37c0519929019ef86eb5b4"), &chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("Unable to create script hash address: %v", err)

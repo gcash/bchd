@@ -1247,7 +1247,7 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 		// two outputs where one is some form of "pay-to-somebody-else"
 		// and the other is a change output.
 		prevOut := wire.OutPoint{Hash: invVect.Hash}
-		for i := uint32(0); i < 2; i++ {
+		for i := range uint32(2) {
 			prevOut.Index = i
 			entry, err := sm.chain.FetchUtxoEntry(prevOut)
 			if err != nil {

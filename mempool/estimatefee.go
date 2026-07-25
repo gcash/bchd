@@ -360,7 +360,7 @@ func (ef *FeeEstimator) Rollback(hash *chainhash.Hash) error {
 		return errors.New("no such block was recently registered")
 	}
 
-	for i := 0; i < n; i++ {
+	for range n {
 		ef.rollback()
 	}
 
@@ -489,7 +489,7 @@ func (b *estimateFeeSet) estimateFee(confirmations int) SatoshiPerByte {
 	}
 
 	var minVal int
-	for i := 0; i < confirmations-1; i++ {
+	for i := range confirmations - 1 {
 		minVal += int(b.bin[i])
 	}
 
@@ -535,7 +535,7 @@ func (ef *FeeEstimator) estimates() []SatoshiPerByte {
 	set := ef.newEstimateFeeSet()
 
 	estimates := make([]SatoshiPerByte, estimateFeeDepth)
-	for i := 0; i < estimateFeeDepth; i++ {
+	for i := range estimateFeeDepth {
 		estimates[i] = set.estimateFee(i + 1)
 	}
 
@@ -587,7 +587,7 @@ func deserializeRegisteredBlock(r io.Reader, txs map[uint32]*observedTransaction
 
 	rb.transactions = make([]*observedTransaction, lenTransactions)
 
-	for i := uint32(0); i < lenTransactions; i++ {
+	for i := range lenTransactions {
 		var index uint32
 		_ = binary.Read(r, binary.BigEndian, &index)
 		rb.transactions[i] = txs[index]
@@ -704,7 +704,7 @@ func RestoreFeeEstimator(data FeeEstimatorState) (*FeeEstimator, error) {
 	var numObserved uint32
 	observed := make(map[uint32]*observedTransaction)
 	_ = binary.Read(r, binary.BigEndian, &numObserved)
-	for i := uint32(0); i < numObserved; i++ {
+	for i := range numObserved {
 		ot, err := deserializeObservedTransaction(r)
 		if err != nil {
 			return nil, err
@@ -714,11 +714,11 @@ func RestoreFeeEstimator(data FeeEstimatorState) (*FeeEstimator, error) {
 	}
 
 	// Read bins.
-	for i := 0; i < estimateFeeDepth; i++ {
+	for i := range estimateFeeDepth {
 		var numTransactions uint32
 		_ = binary.Read(r, binary.BigEndian, &numTransactions)
 		bin := make([]*observedTransaction, numTransactions)
-		for j := uint32(0); j < numTransactions; j++ {
+		for j := range numTransactions {
 			var index uint32
 			_ = binary.Read(r, binary.BigEndian, &index)
 
@@ -735,7 +735,7 @@ func RestoreFeeEstimator(data FeeEstimatorState) (*FeeEstimator, error) {
 	var numDropped uint32
 	_ = binary.Read(r, binary.BigEndian, &numDropped)
 	ef.dropped = make([]*registeredBlock, numDropped)
-	for i := uint32(0); i < numDropped; i++ {
+	for i := range numDropped {
 		var err error
 		ef.dropped[int(i)], err = deserializeRegisteredBlock(r, observed)
 		if err != nil {

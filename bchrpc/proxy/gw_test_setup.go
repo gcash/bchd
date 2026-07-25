@@ -177,7 +177,7 @@ func hexToBase64(hexStr string) (string, error) {
 func reverseBytes(input []byte) []byte {
 	out := make([]byte, len(input))
 
-	for i := 0; i < len(input); i++ {
+	for i := range input {
 		out[i] = input[len(input)-i-1]
 	}
 	return out

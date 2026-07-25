@@ -97,7 +97,7 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 // TestCheckPkScriptStandard tests the checkPkScriptStandard API.
 func TestCheckPkScriptStandard(t *testing.T) {
 	var pubKeys [][]byte
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		pk, err := bchec.NewPrivateKey(bchec.S256())
 		if err != nil {
 			t.Fatalf("TestCheckPkScriptStandard NewPrivateKey failed: %v",

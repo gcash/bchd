@@ -53,7 +53,7 @@ func (msg *MsgCmpctBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodin
 		return err
 	}
 
-	for i := uint64(0); i < shortIDCount; i++ {
+	for range shortIDCount {
 		shortIDBytes := make([]byte, ShortIDSize)
 		_, err = io.ReadFull(r, shortIDBytes)
 		if err != nil {
@@ -70,7 +70,7 @@ func (msg *MsgCmpctBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodin
 		return err
 	}
 
-	for i := uint64(0); i < prefilledTxCount; i++ {
+	for range prefilledTxCount {
 		index, err := ReadVarInt(r, pver)
 		if err != nil {
 			return err

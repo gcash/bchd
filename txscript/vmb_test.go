@@ -98,7 +98,7 @@ func TestMay2026Standard(t *testing.T) {
 			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
-		var tests [][]interface{}
+		var tests [][]any
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testFileName, err)
@@ -111,7 +111,7 @@ func TestMay2026Standard(t *testing.T) {
 			t.Fatalf("reading %s: %v", testLimitsFileName, err)
 		}
 
-		var testLimits map[string]interface{}
+		var testLimits map[string]any
 		err = json.Unmarshal(testLimitsFile, &testLimits)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
@@ -137,7 +137,7 @@ func TestMay2026Standard(t *testing.T) {
 			utxos := make([]wire.TxOut, utxoCount)
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -189,12 +189,12 @@ func TestMay2026Standard(t *testing.T) {
 				fatalf(t, err.Error(), test, i)
 			}
 
-			densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
+			densityControl := int64(testLimits[test[0].(string)].([]any)[0].(float64))
 
 			// Fixture schema: [effectiveInputSize (41+sigScriptSize), maxOpCost, opCost, description].
 			// Field [0] is the input byte budget, not hash-iter count — verified by maxOpCost == [0]*800.
-			maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
-			operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
+			maximumOperationCost := int64(testLimits[test[0].(string)].([]any)[1].(float64))
+			operationCost := int64(testLimits[test[0].(string)].([]any)[2].(float64))
 
 			if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
 				str := fmt.Sprintf("test opcost: %d, script opcost: %d",
@@ -271,7 +271,7 @@ func TestMay2026NonStandard(t *testing.T) {
 			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
-		var tests [][]interface{}
+		var tests [][]any
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testFileName, err)
@@ -284,7 +284,7 @@ func TestMay2026NonStandard(t *testing.T) {
 			t.Fatalf("reading %s: %v", testLimitsFileName, err)
 		}
 
-		var testLimits map[string]interface{}
+		var testLimits map[string]any
 		err = json.Unmarshal(testLimitsFile, &testLimits)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
@@ -311,7 +311,7 @@ func TestMay2026NonStandard(t *testing.T) {
 			utxos := make([]wire.TxOut, utxoCount)
 			viewPoint := blockchain.NewUtxoViewpoint()
 
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					t.Fatal(err)
@@ -361,8 +361,8 @@ func TestMay2026NonStandard(t *testing.T) {
 
 			// Fixture schema: [effectiveInputSize (41+sigScriptSize), maxOpCost, opCost, description].
 			// Field [0] is the input byte budget, not hash-iter count — verified by maxOpCost == [0]*800.
-			maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
-			operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
+			maximumOperationCost := int64(testLimits[test[0].(string)].([]any)[1].(float64))
+			operationCost := int64(testLimits[test[0].(string)].([]any)[2].(float64))
 
 			if vm.GetMetrics().GetCompositeOPCost(false) != operationCost {
 				str := fmt.Sprintf("test opcost: %d, script opcost: %d",
@@ -447,7 +447,7 @@ func TestMay2026Invalid(t *testing.T) {
 			t.Fatalf("reading %s: %v", testFileName, err)
 		}
 
-		var tests [][]interface{}
+		var tests [][]any
 		err = json.Unmarshal(testFile, &tests)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testFileName, err)
@@ -461,7 +461,7 @@ func TestMay2026Invalid(t *testing.T) {
 			t.Fatalf("TestScripts: %v\n", err)
 		}
 
-		var testLimits map[string]interface{}
+		var testLimits map[string]any
 		err = json.Unmarshal(testLimitsFile, &testLimits)
 		if err != nil {
 			t.Fatalf("unmarshalling %s: %v", testLimitsFileName, err)
@@ -490,7 +490,7 @@ func TestMay2026Invalid(t *testing.T) {
 			viewPoint := blockchain.NewUtxoViewpoint()
 
 			readUtxosOK := true
-			for i := uint64(0); i < utxoCount; i++ {
+			for i := range utxoCount {
 				utxos[i] = wire.TxOut{}
 				if _, err := wire.ReadTxOut(r, 0, 0, &utxos[i]); err != nil {
 					readUtxosOK = false
@@ -539,9 +539,9 @@ func TestMay2026Invalid(t *testing.T) {
 			}
 
 			if testLimits[test[0].(string)] != nil {
-				densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
-				maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
-				operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
+				densityControl := int64(testLimits[test[0].(string)].([]any)[0].(float64))
+				maximumOperationCost := int64(testLimits[test[0].(string)].([]any)[1].(float64))
+				operationCost := int64(testLimits[test[0].(string)].([]any)[2].(float64))
 
 				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
 					continue
@@ -558,9 +558,7 @@ func TestMay2026Invalid(t *testing.T) {
 				}
 			}
 
-			if err == nil {
-				t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
-			}
+			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}
 }

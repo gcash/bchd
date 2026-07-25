@@ -28,7 +28,7 @@ type Hash [HashSize]byte
 // String returns the Hash as the hexadecimal string of the byte-reversed
 // hash.
 func (hash Hash) String() string {
-	for i := 0; i < HashSize/2; i++ {
+	for i := range HashSize / 2 {
 		hash[i], hash[HashSize-1-i] = hash[HashSize-1-i], hash[i]
 	}
 	return hex.EncodeToString(hash[:])
@@ -89,7 +89,7 @@ func (hash *Hash) Compare(target *Hash) int {
 	}
 	h := *hash
 	t := *target
-	for i := 0; i < len(h); i++ {
+	for i := range h {
 		a := h[len(h)-1-i]
 		b := t[len(t)-1-i]
 		if a > b {

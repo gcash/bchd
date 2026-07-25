@@ -33,7 +33,7 @@ func (msg *MsgBlockTxns) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 		return err
 	}
 
-	for i := uint64(0); i < txCount; i++ {
+	for range txCount {
 		tx := MsgTx{}
 		err = tx.BchDecode(r, pver, enc)
 		if err != nil {

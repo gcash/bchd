@@ -729,7 +729,7 @@ func TestRandomUint64(t *testing.T) {
 		"when only %d was expected"
 
 	numHits := 0
-	for i := 0; i < tries; i++ {
+	for i := range tries {
 		nonce, err := RandomUint64()
 		if err != nil {
 			t.Errorf("RandomUint64 iteration %d failed - err %v",

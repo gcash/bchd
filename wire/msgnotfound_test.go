@@ -50,7 +50,7 @@ func TestNotFound(t *testing.T) {
 
 	// Ensure adding more than the max allowed inventory vectors per
 	// message returns an error.
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for range MaxInvPerMsg {
 		err = msg.AddInvVect(iv)
 	}
 	if err == nil {
@@ -262,7 +262,7 @@ func TestNotFoundWireErrors(t *testing.T) {
 	// Message that forces an error by having more than the max allowed inv
 	// vectors.
 	maxNotFound := NewMsgNotFound()
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for range MaxInvPerMsg {
 		_ = maxNotFound.AddInvVect(iv)
 	}
 	maxNotFound.InvList = append(maxNotFound.InvList, iv)

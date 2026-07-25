@@ -34,7 +34,7 @@ func (msg *MsgGetBlockTxns) BchDecode(r io.Reader, pver uint32, enc MessageEncod
 		return err
 	}
 
-	for i := uint64(0); i < indexCount; i++ {
+	for range indexCount {
 		index, err := ReadVarInt(r, pver)
 		if err != nil {
 			return err

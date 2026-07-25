@@ -11,7 +11,7 @@ import (
 func TestMuSession(t *testing.T) {
 	m := sha256.Sum256([]byte("hello world"))
 
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		r := rand.Intn(9) + 1
 		sessions := make([]*Session, r)
 		privkeys := make([]*PrivateKey, r)
@@ -20,7 +20,7 @@ func TestMuSession(t *testing.T) {
 		nonces := make([]*PublicKey, r)
 		svals := make([]*big.Int, r)
 
-		for x := 0; x < r; x++ {
+		for x := range r {
 			priv, err := NewPrivateKey(S256())
 			if err != nil {
 				t.Fatal(err)
@@ -34,7 +34,7 @@ func TestMuSession(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		for x := 0; x < r; x++ {
+		for x := range r {
 			var b [32]byte
 			if _, err := crand.Read(b[:]); err != nil {
 				t.Fatal(err)
@@ -48,7 +48,7 @@ func TestMuSession(t *testing.T) {
 			commitments[x] = sess.NonceCommitment(m[:])
 		}
 
-		for x := 0; x < r; x++ {
+		for x := range r {
 			sessions[x].SetNonceCommitments(commitments...)
 			nonces[x], err = sessions[x].Nonce()
 			if err != nil {
@@ -56,7 +56,7 @@ func TestMuSession(t *testing.T) {
 			}
 		}
 
-		for x := 0; x < r; x++ {
+		for x := range r {
 			_ = sessions[x].SetNonces(nonces...)
 			svals[x], err = sessions[x].Sign(m[:])
 			if err != nil {
@@ -64,7 +64,7 @@ func TestMuSession(t *testing.T) {
 			}
 		}
 
-		for x := 0; x < r; x++ {
+		for x := range r {
 			sig := sessions[x].AggregateSignature(svals...)
 			valid := sig.Verify(m[:], aggPubkey)
 			if !valid {
@@ -77,11 +77,11 @@ func TestMuSession(t *testing.T) {
 func TestSignMuSig(t *testing.T) {
 	m := sha256.Sum256([]byte("hello world"))
 
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		privkeys := make([]*PrivateKey, 3)
 		pubkeys := make([]*PublicKey, 3)
 
-		for x := 0; x < 3; x++ {
+		for x := range 3 {
 			priv, err := NewPrivateKey(S256())
 			if err != nil {
 				t.Fatal(err)

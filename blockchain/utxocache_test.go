@@ -87,7 +87,7 @@ func solveBlock(header *wire.BlockHeader) bool {
 	stopNonce := uint32(math.MaxUint32)
 	numCores := uint32(runtime.NumCPU())
 	noncesPerCore := (stopNonce - startNonce) / numCores
-	for i := uint32(0); i < numCores; i++ {
+	for i := range numCores {
 		rangeStart := startNonce + (noncesPerCore * i)
 		rangeStop := startNonce + (noncesPerCore * (i + 1)) - 1
 		if i == numCores-1 {
@@ -95,7 +95,7 @@ func solveBlock(header *wire.BlockHeader) bool {
 		}
 		go solver(*header, rangeStart, rangeStop)
 	}
-	for i := uint32(0); i < numCores; i++ {
+	for range numCores {
 		result := <-results
 		if result.found {
 			close(quit)
@@ -315,7 +315,7 @@ func TestUtxoCache_SimpleFlush(t *testing.T) {
 	}
 
 	// First, add 10 utxos without flushing.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tip, _ = addBlock(chain, tip, nil)
 	}
 	if len(cache.cachedEntries) != 10 {
@@ -362,7 +362,7 @@ func TestUtxoCache_ThresholdPeriodicFlush(t *testing.T) {
 
 	// Add 10 elems and let it exceed the threshold.
 	var flushedAt *chainhash.Hash
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tip, _ = addBlock(chain, tip, nil)
 		if len(cache.cachedEntries) == 0 {
 			flushedAt = tip.Hash()

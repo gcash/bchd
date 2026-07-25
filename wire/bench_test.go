@@ -384,7 +384,7 @@ func BenchmarkDecodeGetHeaders(b *testing.B) {
 	// Create a message with the maximum number of block locators.
 	pver := ProtocolVersion
 	var m MsgGetHeaders
-	for i := 0; i < MaxBlockLocatorsPerMsg; i++ {
+	for i := range MaxBlockLocatorsPerMsg {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
@@ -414,7 +414,7 @@ func BenchmarkDecodeHeaders(b *testing.B) {
 	// Create a message with the maximum number of headers.
 	pver := ProtocolVersion
 	var m MsgHeaders
-	for i := 0; i < MaxBlockHeadersPerMsg; i++ {
+	for i := range MaxBlockHeadersPerMsg {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
@@ -444,7 +444,7 @@ func BenchmarkDecodeGetBlocks(b *testing.B) {
 	// Create a message with the maximum number of block locators.
 	pver := ProtocolVersion
 	var m MsgGetBlocks
-	for i := 0; i < MaxBlockLocatorsPerMsg; i++ {
+	for i := range MaxBlockLocatorsPerMsg {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
@@ -475,7 +475,7 @@ func BenchmarkDecodeAddr(b *testing.B) {
 	pver := ProtocolVersion
 	ip := net.ParseIP("127.0.0.1")
 	ma := NewMsgAddr()
-	for port := uint16(0); port < MaxAddrPerMsg; port++ {
+	for port := range uint16(MaxAddrPerMsg) {
 		_ = ma.AddAddress(NewNetAddressIPPort(ip, port, SFNodeNetwork))
 	}
 
@@ -501,7 +501,7 @@ func BenchmarkDecodeInv(b *testing.B) {
 	// Create a message with the maximum number of entries.
 	pver := ProtocolVersion
 	var m MsgInv
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for i := range MaxInvPerMsg {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
@@ -531,7 +531,7 @@ func BenchmarkDecodeNotFound(b *testing.B) {
 	// Create a message with the maximum number of entries.
 	pver := ProtocolVersion
 	var m MsgNotFound
-	for i := 0; i < MaxInvPerMsg; i++ {
+	for i := range MaxInvPerMsg {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)
@@ -566,7 +566,7 @@ func BenchmarkDecodeMerkleBlock(b *testing.B) {
 		b.Fatalf("NewHashFromStr: unexpected error: %v", err)
 	}
 	m.Header = *NewBlockHeader(1, hash, hash, 0, uint32(10000))
-	for i := 0; i < 105; i++ {
+	for i := range 105 {
 		hash, err := chainhash.NewHashFromStr(fmt.Sprintf("%x", i))
 		if err != nil {
 			b.Fatalf("NewHashFromStr: unexpected error: %v", err)

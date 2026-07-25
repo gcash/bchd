@@ -23,7 +23,7 @@ var testNoncePrng = rand.New(rand.NewSource(0))
 func chainedNodes(parent *blockNode, numNodes int) []*blockNode {
 	nodes := make([]*blockNode, numNodes)
 	tip := parent
-	for i := 0; i < numNodes; i++ {
+	for i := range numNodes {
 		// This is invalid, but all that is needed is enough to get the
 		// synthetic tests to work.
 		header := wire.BlockHeader{Nonce: testNoncePrng.Uint32()}

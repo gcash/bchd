@@ -64,7 +64,7 @@ func TestThresholdStateCache(t *testing.T) {
 nextTest:
 	for _, test := range tests {
 		cache := &newThresholdCaches(1)[0]
-		for i := 0; i < test.numEntries; i++ {
+		for i := range test.numEntries {
 			var hash chainhash.Hash
 			hash[0] = uint8(i + 1)
 

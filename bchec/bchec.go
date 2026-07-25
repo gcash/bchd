@@ -700,7 +700,7 @@ func NAF(k []byte) ([]byte, []byte) {
 	retPos := make([]byte, len(k)+1)
 	retNeg := make([]byte, len(k)+1)
 	for i, curByte := range slices.Backward(k) {
-		for j := uint(0); j < 8; j++ {
+		for j := range uint(8) {
 			curIsOne = curByte&1 == 1
 			if j == 7 {
 				if i == 0 {
@@ -810,7 +810,7 @@ func (curve *KoblitzCurve) scalarMultJacobian(Bx, By *big.Int, k []byte) (*field
 	// more instances of 0, hence reducing the number of Jacobian additions
 	// at the cost of 1 possible extra doubling.
 	var k1BytePos, k1ByteNeg, k2BytePos, k2ByteNeg byte
-	for i := 0; i < m; i++ {
+	for i := range m {
 		// Since we're going left-to-right, pad the front with 0s.
 		if i < m-k1Len {
 			k1BytePos = 0

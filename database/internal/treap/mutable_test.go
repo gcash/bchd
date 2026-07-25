@@ -60,7 +60,7 @@ func TestMutableReset(t *testing.T) {
 	// Insert a few keys.
 	numItems := 10
 	testTreap := NewMutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap.Put(key, key)
 	}
@@ -80,7 +80,7 @@ func TestMutableReset(t *testing.T) {
 	}
 
 	// Ensure the treap no longer has any of the keys.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 
 		// Ensure the treap no longer has the key.
@@ -118,7 +118,7 @@ func TestMutableSequential(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewMutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap.Put(key, key)
 
@@ -177,7 +177,7 @@ func TestMutableSequential(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap.Delete(key)
 
@@ -218,7 +218,7 @@ func TestMutableReverseSequential(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewMutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(numItems - i - 1))
 		testTreap.Put(key, key)
 
@@ -277,7 +277,7 @@ func TestMutableReverseSequential(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Intentionally use the reverse order they were inserted here.
 		key := serializeUint32(uint32(i))
 		testTreap.Delete(key)
@@ -319,7 +319,7 @@ func TestMutableUnordered(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewMutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Hash the serialized int to generate out-of-order keys.
 		hash := sha256.Sum256(serializeUint32(uint32(i)))
 		key := hash[:]
@@ -353,7 +353,7 @@ func TestMutableUnordered(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Hash the serialized int to generate out-of-order keys.
 		hash := sha256.Sum256(serializeUint32(uint32(i)))
 		key := hash[:]
@@ -447,7 +447,7 @@ func TestMutableForEachStopIterator(t *testing.T) {
 	// Insert a few keys.
 	numItems := 10
 	testTreap := NewMutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap.Put(key, key)
 	}

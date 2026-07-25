@@ -188,7 +188,7 @@ func RegisterCmd(method string, cmd interface{}, flags UsageFlag) error {
 	numFields := rt.NumField()
 	numOptFields := 0
 	defaults := make(map[int]reflect.Value)
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		rtf := rt.Field(i)
 		if rtf.Anonymous {
 			str := fmt.Sprintf("embedded fields are not supported "+

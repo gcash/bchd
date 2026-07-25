@@ -184,7 +184,7 @@ func (state *ABLAState) getBlockSizeLimit() uint64 {
 // Returns the limit for block with current+N height, assuming all blocks 100% full.
 func (state *ABLAState) lookaheadState(config *ABLAConfig, count uint) ABLAState {
 	lookaheadState := *state
-	for i := uint(0); i < count; i++ {
+	for range count {
 		maxSize := lookaheadState.getBlockSizeLimit()
 		lookaheadState = lookaheadState.nextABLAState(config, maxSize)
 	}

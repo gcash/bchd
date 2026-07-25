@@ -16,7 +16,7 @@ func TestMruNonceMap(t *testing.T) {
 	// Create a bunch of fake nonces to use in testing the mru nonce code.
 	numNonces := 10
 	nonces := make([]uint64, 0, numNonces)
-	for i := 0; i < numNonces; i++ {
+	for i := range numNonces {
 		nonces = append(nonces, uint64(i))
 	}
 
@@ -38,7 +38,7 @@ testLoop:
 		// limit and add all of the test nonces.  This will cause
 		// evicition since there are more test nonces than the limits.
 		mruNonceMap := newMruNonceMap(uint(test.limit))
-		for j := 0; j < numNonces; j++ {
+		for j := range numNonces {
 			mruNonceMap.Add(nonces[j])
 		}
 
@@ -54,7 +54,7 @@ testLoop:
 
 		// Ensure the entries before the limited number of most recent
 		// entries in the list do not exist.
-		for j := 0; j < numNonces-test.limit; j++ {
+		for j := range numNonces - test.limit {
 			if mruNonceMap.Exists(nonces[j]) {
 				t.Errorf("Exists #%d (%s) entry %d exists", i,
 					test.name, nonces[j])
@@ -95,7 +95,7 @@ testLoop:
 
 		// Delete all of the entries in the list, including those that
 		// don't exist in the map, and ensure they no longer exist.
-		for j := 0; j < numNonces; j++ {
+		for j := range numNonces {
 			mruNonceMap.Delete(nonces[j])
 			if mruNonceMap.Exists(nonces[j]) {
 				t.Errorf("Delete #%d (%s) entry %d exists", i,
@@ -138,7 +138,7 @@ func BenchmarkMruNonceList(b *testing.B) {
 
 	numNonces := 100000
 	nonces := make([]uint64, 0, numNonces)
-	for i := 0; i < numNonces; i++ {
+	for i := range numNonces {
 		nonces = append(nonces, uint64(i))
 	}
 

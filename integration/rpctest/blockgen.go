@@ -68,7 +68,7 @@ func solveBlock(header *wire.BlockHeader, targetDifficulty *big.Int) bool {
 	stopNonce := uint32(math.MaxUint32)
 	numCores := uint32(runtime.NumCPU())
 	noncesPerCore := (stopNonce - startNonce) / numCores
-	for i := uint32(0); i < numCores; i++ {
+	for i := range numCores {
 		rangeStart := startNonce + (noncesPerCore * i)
 		rangeStop := startNonce + (noncesPerCore * (i + 1)) - 1
 		if i == numCores-1 {
@@ -76,7 +76,7 @@ func solveBlock(header *wire.BlockHeader, targetDifficulty *big.Int) bool {
 		}
 		go solver(*header, rangeStart, rangeStop)
 	}
-	for i := uint32(0); i < numCores; i++ {
+	for range numCores {
 		result := <-results
 		if result.found {
 			close(quit)

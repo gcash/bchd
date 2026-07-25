@@ -205,7 +205,7 @@ func TestTargetOutbound(t *testing.T) {
 		t.Fatalf("New error: %v", err)
 	}
 	cmgr.Start()
-	for i := uint32(0); i < targetOutbound; i++ {
+	for range targetOutbound {
 		<-connected
 	}
 

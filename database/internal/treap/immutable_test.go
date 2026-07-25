@@ -62,7 +62,7 @@ func TestImmutableSequential(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap = testTreap.Put(key, key)
 
@@ -121,7 +121,7 @@ func TestImmutableSequential(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap = testTreap.Delete(key)
 
@@ -162,7 +162,7 @@ func TestImmutableReverseSequential(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(numItems - i - 1))
 		testTreap = testTreap.Put(key, key)
 
@@ -221,7 +221,7 @@ func TestImmutableReverseSequential(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Intentionally use the reverse order they were inserted here.
 		key := serializeUint32(uint32(i))
 		testTreap = testTreap.Delete(key)
@@ -263,7 +263,7 @@ func TestImmutableUnordered(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Hash the serialized int to generate out-of-order keys.
 		hash := sha256.Sum256(serializeUint32(uint32(i)))
 		key := hash[:]
@@ -297,7 +297,7 @@ func TestImmutableUnordered(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		// Hash the serialized int to generate out-of-order keys.
 		hash := sha256.Sum256(serializeUint32(uint32(i)))
 		key := hash[:]
@@ -339,7 +339,7 @@ func TestImmutableDuplicatePut(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap = testTreap.Put(key, key)
 		expectedSize += nodeFieldsSize + uint64(len(key)+len(key))
@@ -399,7 +399,7 @@ func TestImmutableForEachStopIterator(t *testing.T) {
 	// Insert a few keys.
 	numItems := 10
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		key := serializeUint32(uint32(i))
 		testTreap = testTreap.Put(key, key)
 	}
@@ -427,7 +427,7 @@ func TestImmutableSnapshot(t *testing.T) {
 	expectedSize := uint64(0)
 	numItems := 1000
 	testTreap := NewImmutable()
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		treapSnap := testTreap
 
 		key := serializeUint32(uint32(i))
@@ -462,7 +462,7 @@ func TestImmutableSnapshot(t *testing.T) {
 
 	// Delete the keys one-by-one while checking several of the treap
 	// functions work as expected.
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		treapSnap := testTreap
 
 		key := serializeUint32(uint32(i))

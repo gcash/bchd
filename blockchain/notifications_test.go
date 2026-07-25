@@ -35,7 +35,7 @@ func TestNotifications(t *testing.T) {
 	// Register callback multiple times then assert it is called that many
 	// times.
 	const numSubscribers = 3
-	for i := 0; i < numSubscribers; i++ {
+	for range numSubscribers {
 		chain.Subscribe(callback)
 	}
 

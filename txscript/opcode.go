@@ -1765,7 +1765,7 @@ func opcodeReverseBytes(op *parsedOpcode, vm *Engine) error {
 	}
 	b := make([]byte, len(a))
 
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		b[i] = a[len(a)-i-1]
 	}
 	vm.dstack.PushByteArray(b)
@@ -1791,7 +1791,7 @@ func opcodeInvert(op *parsedOpcode, vm *Engine) error {
 	}
 	b := make([]byte, len(a))
 
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		b[i] = ^a[i]
 	}
 	vm.dstack.PushByteArray(b)
@@ -2511,7 +2511,7 @@ func opcodeLShift(op *parsedOpcode, vm *Engine) error {
 	if bitShift == 0 {
 		copy(result, data[byteShift:])
 	} else {
-		for i := uint(0); i < dataLen-byteShift; i++ {
+		for i := range uint(dataLen - byteShift) {
 			src := i + byteShift
 			hi := uint16(data[src] << bitShift)
 			lo := uint16(0)
@@ -3227,7 +3227,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	}
 
 	pubKeys := make([][]byte, 0, numPubKeys)
-	for i := 0; i < numPubKeys; i++ {
+	for range numPubKeys {
 		pubKey, err := vm.dstack.PopByteArray()
 		if err != nil {
 			return err
@@ -3252,7 +3252,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	}
 
 	signatures := make([]*parsedSigInfo, 0, numSignatures)
-	for i := 0; i < numSignatures; i++ {
+	for range numSignatures {
 		signature, err := vm.dstack.PopByteArray()
 		if err != nil {
 			return err

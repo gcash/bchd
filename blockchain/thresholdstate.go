@@ -115,7 +115,7 @@ func (c *thresholdStateCache) Update(hash *chainhash.Hash, state ThresholdState)
 // threshold states.
 func newThresholdCaches(numCaches uint32) []thresholdStateCache {
 	caches := make([]thresholdStateCache, numCaches)
-	for i := 0; i < len(caches); i++ {
+	for i := range caches {
 		caches[i] = thresholdStateCache{
 			entries: make(map[chainhash.Hash]ThresholdState),
 		}
@@ -221,7 +221,7 @@ func (b *BlockChain) thresholdState(prevNode *blockNode, checker thresholdCondit
 			// confirmation window to count all of the votes in it.
 			var count uint32
 			countNode := prevNode
-			for i := int32(0); i < confirmationWindow; i++ {
+			for range confirmationWindow {
 				condition, err := checker.Condition(countNode)
 				if err != nil {
 					return ThresholdFailed, err
@@ -324,7 +324,7 @@ func (b *BlockChain) initThresholdCaches() error {
 	// populated and any states that needed to be recalculated due to
 	// definition changes is done now.
 	prevNode := b.bestChain.Tip().parent
-	for bit := uint32(0); bit < vbNumBits; bit++ {
+	for bit := range uint32(vbNumBits) {
 		checker := bitConditionChecker{bit: bit, chain: b}
 		cache := &b.warningCaches[bit]
 		_, err := b.thresholdState(prevNode, checker, cache)
@@ -332,7 +332,7 @@ func (b *BlockChain) initThresholdCaches() error {
 			return err
 		}
 	}
-	for id := 0; id < len(b.chainParams.Deployments); id++ {
+	for id := range len(b.chainParams.Deployments) {
 		deployment := &b.chainParams.Deployments[id]
 		cache := &b.deploymentCaches[id]
 		checker := deploymentChecker{deployment: deployment, chain: b}

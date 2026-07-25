@@ -1382,7 +1382,7 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 			"%d, want %d", len(blockData), len(allBlockBytes))
 		return false
 	}
-	for i := 0; i < len(blockData); i++ {
+	for i := range blockData {
 		blockHash := allBlockHashes[i]
 		wantBlockBytes := allBlockBytes[i]
 		gotBlockBytes := blockData[i]
@@ -1407,7 +1407,7 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 			len(allBlockBytes))
 		return false
 	}
-	for i := 0; i < len(blockHeaderData); i++ {
+	for i := range blockHeaderData {
 		blockHash := allBlockHashes[i]
 		wantHeaderBytes := allBlockBytes[i][0:wire.MaxBlockHeaderPayload]
 		gotHeaderBytes := blockHeaderData[i]
@@ -2042,10 +2042,10 @@ func testConcurrecy(tc *testContext) bool {
 	// Start up several concurrent readers for the same block and wait for
 	// the results.
 	startTime = time.Now()
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		go reader(0)
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		if result := <-resultChan; !result {
 			return false
 		}
@@ -2065,10 +2065,10 @@ func testConcurrecy(tc *testContext) bool {
 	// Start up several concurrent readers for different blocks and wait for
 	// the results.
 	startTime = time.Now()
-	for i := 0; i < numReaders; i++ {
+	for i := range numReaders {
 		go reader(i)
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		if result := <-resultChan; !result {
 			return false
 		}
@@ -2116,10 +2116,10 @@ func testConcurrecy(tc *testContext) bool {
 		}
 		resultChan <- true
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		go reader(0)
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		<-started
 	}
 
@@ -2136,7 +2136,7 @@ func testConcurrecy(tc *testContext) bool {
 	close(writeComplete)
 
 	// Wait for reader results.
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		if result := <-resultChan; !result {
 			return false
 		}
@@ -2160,10 +2160,10 @@ func testConcurrecy(tc *testContext) bool {
 	}
 	numWriters := 3
 	startTime = time.Now()
-	for i := 0; i < numWriters; i++ {
+	for range numWriters {
 		go writer()
 	}
-	for i := 0; i < numWriters; i++ {
+	for range numWriters {
 		if result := <-resultChan; !result {
 			return false
 		}
@@ -2211,10 +2211,10 @@ func testConcurrentClose(tc *testContext) bool {
 		}
 		resultChan <- true
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		go reader()
 	}
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		<-started
 	}
 
@@ -2247,7 +2247,7 @@ func testConcurrentClose(tc *testContext) bool {
 	}
 
 	// Wait for all results.
-	for i := 0; i < numReaders+1; i++ {
+	for range numReaders + 1 {
 		if result := <-resultChan; !result {
 			return false
 		}

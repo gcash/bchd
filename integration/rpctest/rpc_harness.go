@@ -316,7 +316,7 @@ func (h *Harness) connectRPCClient() error {
 	var err error
 
 	rpcConf := h.node.config.rpcConnConfig()
-	for i := 0; i < h.maxConnRetries; i++ {
+	for i := range h.maxConnRetries {
 		if client, err = rpcclient.New(&rpcConf, h.handlers); err != nil {
 			time.Sleep(time.Duration(i) * 50 * time.Millisecond)
 			continue

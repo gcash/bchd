@@ -80,7 +80,7 @@ func (b *addrIndexBucket) printLevels(addrKey [addrKeySize]byte) string {
 	for level := uint8(0); level <= highestLevel; level++ {
 		data := b.levels[keyForLevel(addrKey, level)]
 		numEntries := len(data) / txEntrySize
-		for i := 0; i < numEntries; i++ {
+		for i := range numEntries {
 			start := i * txEntrySize
 			num := byteOrder.Uint32(data[start:])
 			_, _ = levelBuf.WriteString(fmt.Sprintf("%02d ", num))
@@ -147,7 +147,7 @@ func (b *addrIndexBucket) sanityCheck(addrKey [addrKeySize]byte, expectedTotal i
 	for level := highestLevel + 1; level > 0; level-- {
 		data := b.levels[keyForLevel(addrKey, level)]
 		numEntries := len(data) / txEntrySize
-		for i := 0; i < numEntries; i++ {
+		for i := range numEntries {
 			start := i * txEntrySize
 			num := byteOrder.Uint32(data[start:])
 			if num != expectedNum {
@@ -219,7 +219,7 @@ nextTest:
 		populatedBucket := &addrIndexBucket{
 			levels: make(map[[levelKeySize]byte][]byte),
 		}
-		for i := 0; i < test.numInsert; i++ {
+		for i := range test.numInsert {
 			txLoc := wire.TxLoc{TxStart: i * 2}
 			err := dbPutAddrIndexEntry(populatedBucket, test.key,
 				uint32(i), txLoc)
