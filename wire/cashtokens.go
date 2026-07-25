@@ -390,19 +390,13 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 	// run checks
 
 	// Each category in OutputMintingCategories must exist in Available_Minting_Categories.
-	categoryIsMissing := true
+	// Note this must be evaluated per category: a single authorized minting
+	// category must not authorize the remaining ones, otherwise a transaction
+	// could mint an NFT for a category it holds no minting right to.
 	for _, category := range OutputMintingCategories {
-		for _, availableCategory := range AvailableMintingCategories {
-			if category == availableCategory {
-				categoryIsMissing = false
-			}
+		if !slices.Contains(AvailableMintingCategories, category) {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
-	}
-	if len(OutputMintingCategories) == 0 {
-		categoryIsMissing = false
-	}
-	if categoryIsMissing {
-		return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 	}
 
 	// Each category in OutputSumsByCategory must either:
