@@ -4,6 +4,11 @@ All notable user-visible changes to [bchd](https://github.com/gcash/bchd) — a 
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
+## 0.22.2 (2026-07-25)
+
+### Security
+- Fix a CashTokens consensus rule violation that allowed minting NFT forgery. The check enforcing that every minting NFT created by a transaction belongs to a category the transaction is authorized to mint shared a single flag across all output categories, so one authorized minting output cleared the requirement for every other minting output in the same transaction. A transaction could therefore create a minting NFT — which confers permanent unlimited issuance — for a category it held no minting right to, causing bchd to accept a transaction that other implementations reject. The rule is now evaluated per category. Reported by 0xaudron.
+
 ## 0.22.1 (2026-06-30)
 
 ### Consensus & Network
