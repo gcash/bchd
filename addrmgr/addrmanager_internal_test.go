@@ -10,30 +10,39 @@ import (
 	"github.com/gcash/bchd/wire"
 )
 
-// randAddr generates a *wire.NetAddress backed by a random IPv4/IPv6 address.
+// randAddr generates a *wire.NetAddress backed by a random routable IPv4/IPv6
+// address.  Randomly generated addresses occasionally land in a non-routable
+// range (10.0.0.0/8 and 127.0.0.0/8 for IPv4, fc00::/7 for IPv6, among others),
+// and the address manager silently discards those, so keep generating until we
+// produce one it will actually store.
 func randAddr(t *testing.T) *wire.NetAddress {
 	t.Helper()
 
-	ipv4 := rand.Intn(2) == 0
-	var ip net.IP
-	if ipv4 {
-		var b [4]byte
-		if _, err := crand.Read(b[:]); err != nil {
-			t.Fatal(err)
+	for {
+		ipv4 := rand.Intn(2) == 0
+		var ip net.IP
+		if ipv4 {
+			var b [4]byte
+			if _, err := crand.Read(b[:]); err != nil {
+				t.Fatal(err)
+			}
+			ip = b[:]
+		} else {
+			var b [16]byte
+			if _, err := crand.Read(b[:]); err != nil {
+				t.Fatal(err)
+			}
+			ip = b[:]
 		}
-		ip = b[:]
-	} else {
-		var b [16]byte
-		if _, err := crand.Read(b[:]); err != nil {
-			t.Fatal(err)
-		}
-		ip = b[:]
-	}
 
-	return &wire.NetAddress{
-		Services: wire.ServiceFlag(rand.Uint64()),
-		IP:       ip,
-		Port:     uint16(rand.Uint32()),
+		na := &wire.NetAddress{
+			Services: wire.ServiceFlag(rand.Uint64()),
+			IP:       ip,
+			Port:     uint16(rand.Uint32()),
+		}
+		if IsRoutable(na) {
+			return na
+		}
 	}
 }
 
