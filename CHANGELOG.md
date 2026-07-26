@@ -1,20 +1,47 @@
 # bchd changelog
 
-All notable user-visible changes to [bchd](https://github.com/gcash/bchd) — a full Bitcoin Cash node written in Go — are listed here, newest first. Each entry summarizes the consensus, networking, RPC/gRPC, indexing, mining, and packaging changes that landed in a release.
+All notable user-visible changes to [bchd](https://github.com/gcash/bchd), a full Bitcoin Cash node written in Go, are listed here, newest first. Each entry summarizes the consensus, networking, RPC/gRPC, indexing, mining, and packaging changes that landed in a release.
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
 ## 0.22.2 (2026-07-25)
 
 ### Consensus & Network
-- Only arm a peer stall deadline for a `getblocks` with a non-zero stop hash. The protocol does not guarantee a response to an open-ended `getblocks`, so a fully-synced peer with nothing beyond our locator legitimately sends no `inv` at all; arming a deadline unconditionally disconnected honest, fully-synced peers every 30 seconds (btcsuite/btcd#1317). A non-zero stop hash targets a block we have evidence exists, so its deadline is retained.
-- Stop responding to `getblocks` with an empty `notfound` when pruned. The message carried no inventory vectors, was also sent in the ordinary "peer is already at our tip" case, and `notfound` is defined as a response to `getdata` rather than `getblocks`.
+- Only arm a peer stall deadline for a `getblocks` with a non-zero stop hash. An open-ended `getblocks` needs no reply, so the deadline disconnected honest, fully-synced peers (btcsuite/btcd#1317).
+- Stop replying to `getblocks` with an empty `notfound` when pruned.
+- Fix a hang on shutdown caused by a blocking queue send to a peer that had already quit.
+- Always signal the send completion channel when serving a merkle block, which could otherwise wedge a peer's input handler.
+- Fix two data races in the connection manager on `ConnReq.Addr`.
+- Log a warning when a transaction is relayed to no peer, which happens when its fee rate is below every peer's fee filter.
 
 ### Mining
-- Fix block template creation failing with `serialized transaction is too small` once a chain is past the Magnetic Anomaly activation height while Upgrade9 is not yet active. The coinbase was padded to the post-Upgrade9 minimum of 65 bytes while validation still required 100, which permanently broke block generation on regtest above height 1000 and on simnet above height 3000. The padding target now follows the minimum actually enforced at the height being mined.
+- Pad the coinbase to the minimum transaction size enforced at the block height. Block generation was permanently broken on regtest above height 1000 and simnet above 3000.
+- Set the Upgrade9 behavior flag in `CheckConnectBlockTemplate`, which rejected valid CashToken transactions in `getblocktemplate`.
+
+### RPC & gRPC
+- Match transaction subscriptions on the address funding an input, so spends of outputs the subscription did not watch arrive now notify. Confirmed parents require `--txindex`.
+- Report the missing parent rather than "already have transaction" when submitting a transaction held in the orphan pool, matching BCHN.
+- Make the `estimatefee` `nblocks` parameter optional, matching BCHN and Bitcoin ABC 0.19.1.
+
+### Database
+- Fix a panic when a block rolls the block store over to a new flat file. The panic was recovered while the file lock was held, leaving the database wedged rather than crashing.
 
 ### Security
-- Fix a CashTokens consensus rule violation that allowed minting NFT forgery. The check enforcing that every minting NFT created by a transaction belongs to a category the transaction is authorized to mint shared a single flag across all output categories, so one authorized minting output cleared the requirement for every other minting output in the same transaction. A transaction could therefore create a minting NFT — which confers permanent unlimited issuance — for a category it held no minting right to, causing bchd to accept a transaction that other implementations reject. The rule is now evaluated per category. Reported by 0xaudron.
+- Fix a CashTokens consensus rule violation allowing minting NFT forgery. The authorization check shared one flag across all output categories, so a single authorized minting output authorized every other one in the same transaction. Reported by 0xaudron.
+- Fix a remotely triggerable crash in the committed filter handlers, which dereferenced a missing index. `--fastsync` also advertised `NODE_CF` without maintaining one.
+- Reject raw transactions with trailing bytes in `decoderawtransaction` and `sendrawtransaction`, which were previously discarded and the transaction relayed.
+
+### Build & Packaging
+- Publish the Docker image to GHCR on each release tag.
+- Rewrite the deprecated `io/ioutil` usage go-bindata emits, with a `make bindata` target so it survives regeneration.
+- Update dependencies, including `google.golang.org/grpc`, `golang.org/x/crypto`, and `golang.org/x/net`.
+
+### Other
+- Export `bchec.ErrInvalidSquareRoot` for use with `errors.Is`.
+- Modernize loops to range over integers, and adopt `slices.Backward` and `strings.Builder`.
+- Assert the CHIP-2021-05 hashing density limit in the VM limits tests, which previously carried a check that could never execute.
+- Fail rather than skip in the invalid VMB vector tests when a vector executes without error.
+- Fix flaky address manager tests by generating only routable addresses.
 
 ## 0.22.1 (2026-06-30)
 
@@ -22,7 +49,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - Remove the defunct `dnsseed.electroncash.de` DNS seed.
 
 ### Mining
-- Include the Upgrade9 (CashTokens) script flags when building block templates. Templates were previously validated with the bare `StandardVerifyFlags`, so on token-active networks valid CashToken transactions already in the mempool were dropped from the template, producing empty or near-empty blocks; the flags are now computed the same way the mempool and consensus block validation do.
+- Include the Upgrade9 (CashTokens) script flags when building block templates. Templates were validated with the bare `StandardVerifyFlags`, so on token-active networks valid CashToken transactions were dropped from the template, producing empty or near-empty blocks.
 
 ### Other
 - Modernize `sync/atomic` usage with the typed atomic APIs and adopt `WaitGroup.Go`.
@@ -418,7 +445,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 ## 0.13.0 (2018-12-18)
 
 ### Overview
-- Initial bchd release — a full Bitcoin Cash node forked from btcd 0.12.x.
+- Initial bchd release, a full Bitcoin Cash node forked from btcd 0.12.x.
 
 ### Consensus & Network
 - Bitcoin Cash network parameters: BCH network magic and Bitcoin Cash DNS seeds (#15).
