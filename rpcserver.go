@@ -920,11 +920,20 @@ func handleEstimateFee(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 		return nil, errors.New("fee estimation disabled")
 	}
 
-	if c.NumBlocks <= 0 {
+	// The parameter is optional so that callers written against BCHN, whose
+	// estimatefee takes no arguments, work unchanged.  When it is omitted the
+	// default from the command definition applies and the fee is estimated for
+	// the next block.
+	numBlocks := int64(1)
+	if c.NumBlocks != nil {
+		numBlocks = *c.NumBlocks
+	}
+
+	if numBlocks <= 0 {
 		return -1.0, errors.New("parameter NumBlocks must be positive")
 	}
 
-	feeRate, err := s.cfg.FeeEstimator.EstimateFee(uint32(c.NumBlocks))
+	feeRate, err := s.cfg.FeeEstimator.EstimateFee(uint32(numBlocks))
 
 	if err != nil {
 		return -1.0, err

@@ -112,7 +112,22 @@ func TestWalletSvrCmds(t *testing.T) {
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"estimatefee","params":[6],"id":1}`,
 			unmarshalled: &btcjson.EstimateFeeCmd{
-				NumBlocks: 6,
+				NumBlocks: btcjson.Int64(6),
+			},
+		},
+		{
+			// BCHN's estimatefee takes no arguments, so a call with
+			// none must unmarshal to the default rather than failing.
+			name: "estimatefee optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("estimatefee")
+			},
+			staticCmd: func() interface{} {
+				return &btcjson.EstimateFeeCmd{}
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"estimatefee","params":[],"id":1}`,
+			unmarshalled: &btcjson.EstimateFeeCmd{
+				NumBlocks: btcjson.Int64(1),
 			},
 		},
 		{

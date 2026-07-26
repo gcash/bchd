@@ -69,15 +69,20 @@ func NewEncryptWalletCmd(passphrase string) *EncryptWalletCmd {
 }
 
 // EstimateFeeCmd defines the estimatefee JSON-RPC command.
+//
+// NumBlocks is optional because Bitcoin ABC removed the parameter in 0.19.1 and
+// BCHN inherited that, so callers written against the rest of the network
+// invoke estimatefee with no arguments at all.  Omitting it estimates the fee
+// needed for the next block.
 type EstimateFeeCmd struct {
-	NumBlocks int64
+	NumBlocks *int64 `jsonrpcdefault:"1"`
 }
 
 // NewEstimateFeeCmd returns a new instance which can be used to issue a
 // estimatefee JSON-RPC command.
 func NewEstimateFeeCmd(numBlocks int64) *EstimateFeeCmd {
 	return &EstimateFeeCmd{
-		NumBlocks: numBlocks,
+		NumBlocks: &numBlocks,
 	}
 }
 
