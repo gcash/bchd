@@ -1123,6 +1123,10 @@ func (mp *TxPool) ProcessOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 // with any additional orphan transaactions that were added as a result of
 // the passed one being accepted.
 //
+// The orphan pool is only treated as a source of duplicates when the caller
+// allows orphans, which is to say for peer relay.  See the note on the
+// maybeAcceptTransaction call below.
+//
 // This function is safe for concurrent access.
 func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag) ([]*TxDesc, error) {
 	log.Tracef("Processing transaction %v", tx.Hash())
@@ -1132,8 +1136,20 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 	defer mp.mtx.Unlock()
 
 	// Potentially accept the transaction to the memory pool.
+	//
+	// Duplicates are only rejected against the orphan pool for callers that
+	// can themselves create orphans, meaning peer relay, where treating a
+	// known orphan as a duplicate avoids re-requesting it.  Callers that do
+	// not create orphans, the JSON-RPC and gRPC submit endpoints, must not
+	// consult it: a transaction sitting in the orphan pool would otherwise be
+	// reported as "already have transaction" even though it is absent from
+	// the mempool, so a lookup for it immediately afterwards returns not
+	// found.  Skipping the check lets those callers fall through to the
+	// missing parent error below, which is both accurate and what BCHN
+	// reports, since its mempool acceptance has no visibility into the orphan
+	// map held by the P2P layer.
 	missingParents, txD, err := mp.maybeAcceptTransaction(tx, true, rateLimit,
-		true)
+		allowOrphan)
 	if err != nil {
 		return nil, err
 	}

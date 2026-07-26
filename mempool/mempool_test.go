@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -508,6 +509,57 @@ func TestOrphanReject(t *testing.T) {
 		// transaction pool, and not reported as available
 		testPoolMembership(tc, tx, false, false)
 	}
+}
+
+// TestOrphanInPoolNotReportedAsDuplicate ensures a submit path that does not
+// allow orphans reports a transaction already sitting in the orphan pool as
+// having missing parents rather than as a duplicate.
+//
+// The orphan pool is not part of the mempool, so reporting a duplicate for one
+// tells the caller the node has a transaction it cannot then look up.  BCHN
+// does not have this problem because its mempool acceptance has no visibility
+// into the orphan map held by the P2P layer.
+func TestOrphanInPoolNotReportedAsDuplicate(t *testing.T) {
+	t.Parallel()
+
+	harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	tc := &testContext{t, harness}
+
+	chainedTxns, err := harness.CreateTxChain(outputs[0], 2)
+	if err != nil {
+		t.Fatalf("unable to create transaction chain: %v", err)
+	}
+	orphan := chainedTxns[1]
+
+	// Put the transaction in the orphan pool the way peer relay would, which
+	// is the only path that creates orphans.
+	if _, err := harness.txPool.ProcessTransaction(orphan, true, false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: failed to accept valid orphan: %v", err)
+	}
+	testPoolMembership(tc, orphan, true, false)
+
+	// Now submit it the way the JSON-RPC and gRPC endpoints do.  The error must
+	// describe the missing parent rather than claiming the node already has the
+	// transaction, since it is absent from the mempool and a lookup for it
+	// would report not found.
+	_, err = harness.txPool.ProcessTransaction(orphan, false, false, 0)
+	if err == nil {
+		t.Fatal("ProcessTransaction: accepted an orphan when the allow " +
+			"orphans flag is false")
+	}
+	if strings.Contains(err.Error(), "already have transaction") {
+		t.Fatalf("ProcessTransaction: orphan reported as a duplicate: %v", err)
+	}
+	if !strings.Contains(err.Error(), "references outputs of unknown") {
+		t.Fatalf("ProcessTransaction: expected a missing parent error, got: %v",
+			err)
+	}
+
+	// The failed submit must not have disturbed the orphan pool.
+	testPoolMembership(tc, orphan, true, false)
 }
 
 // TestOrphanEviction ensures that exceeding the maximum number of orphans
