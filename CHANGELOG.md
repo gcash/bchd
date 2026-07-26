@@ -42,6 +42,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - Assert the CHIP-2021-05 hashing density limit in the VM limits tests, which previously carried a check that could never execute.
 - Fail rather than skip in the invalid VMB vector tests when a vector executes without error.
 - Fix flaky address manager tests by generating only routable addresses.
+- Removed support for plan9.
 
 ## 0.22.1 (2026-06-30)
 
