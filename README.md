@@ -64,8 +64,7 @@ Dependencies will be automatically installed to `$GOPATH/pkg/mod`.
 If you are a bchd contributor and would like to change the default config file (`bchd.conf`), make any changes to `sample-bchd.conf` and then run the following commands:
 
 ```bash
-go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
-gofmt -s -w bindata.go
+make bindata  # requires github.com/go-bindata/go-bindata/
 ```
 
 ## Getting Started

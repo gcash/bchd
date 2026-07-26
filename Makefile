@@ -45,3 +45,12 @@ protoc-js:
 	cd bchrpc/pb-js && ./regen.sh
 
 protoc-all: protoc-go protoc-py protoc-js
+
+# Regenerate bindata.go from sample-bchd.conf.  go-bindata emits the deprecated
+# io/ioutil package, so rewrite that to os before formatting; doing it here keeps
+# the fix from being lost the next time the file is regenerated.
+bindata:
+	go-bindata sample-bchd.conf  # requires github.com/go-bindata/go-bindata/
+	sed -e '/"io\/ioutil"/d' -e 's/ioutil\.WriteFile/os.WriteFile/' bindata.go > bindata.go.tmp
+	mv bindata.go.tmp bindata.go
+	gofmt -s -w bindata.go
