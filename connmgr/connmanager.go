@@ -172,8 +172,14 @@ type handleFailed struct {
 }
 
 // checkDuplicate is used to poll the connHandler to see if an
-// open connection to the address already exists.
+// open connection to the address already exists.  When the address is not a
+// duplicate the connHandler also assigns it to c.  The assignment is done by
+// the connHandler rather than the caller because c is already registered as
+// pending by this point, so the connHandler may concurrently read c.Addr, and
+// because it makes the check and the assignment atomic with respect to other
+// callers racing for the same address.
 type checkDuplicate struct {
+	c    *ConnReq
 	addr net.Addr
 	resp chan bool
 }
@@ -261,6 +267,9 @@ out:
 							break
 						}
 					}
+				}
+				if !dup {
+					msg.c.Addr = msg.addr
 				}
 				msg.resp <- dup
 
@@ -423,7 +432,7 @@ func (cm *ConnManager) NewConnReq() {
 	}
 
 	resp := make(chan bool)
-	cm.requests <- checkDuplicate{addr: addr, resp: resp}
+	cm.requests <- checkDuplicate{c: c, addr: addr, resp: resp}
 	select {
 	case dup := <-resp:
 		if dup {
@@ -437,7 +446,9 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	c.Addr = addr
+	// NOTE: c.Addr was assigned by the connHandler as part of the duplicate
+	// check above; assigning it here would race with the connHandler reading
+	// it while c sits in the pending map.
 
 	cm.Connect(c)
 }

@@ -186,15 +186,19 @@ func TestConnectMode(t *testing.T) {
 func TestTargetOutbound(t *testing.T) {
 	targetOutbound := uint32(10)
 	connected := make(chan *ConnReq)
-	port := 18555
+	// GetNewAddress is called concurrently from each of the connection
+	// manager's request goroutines, so the port counter must be atomic.
+	// Handing out a duplicate port would also trip the duplicate address
+	// check and stall the test.
+	var port atomic.Int64
+	port.Store(18555)
 	cmgr, err := New(&Config{
 		TargetOutbound: targetOutbound,
 		Dial:           mockDialer,
 		GetNewAddress: func() (net.Addr, error) {
-			port++
 			return &net.TCPAddr{
 				IP:   net.ParseIP("127.0.0.1"),
-				Port: port,
+				Port: int(port.Add(1)),
 			}, nil
 		},
 		OnConnection: func(c *ConnReq, _ net.Conn) {
