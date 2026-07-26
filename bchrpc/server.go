@@ -2187,7 +2187,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactions rpcEventTxAccepted")
 				}
 
-				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
+				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.fetchPrevOutScript) {
 					continue
 				}
 
@@ -2235,7 +2235,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				block := event
 
 				for _, tx := range block.Transactions() {
-					if !filter.MatchAndUpdate(tx, s.chainParams) {
+					if !filter.MatchAndUpdate(tx, s.chainParams, s.fetchPrevOutScript) {
 						continue
 					}
 
@@ -2343,7 +2343,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactionStream rpcEventTxAccepted")
 				}
 
-				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams) {
+				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.fetchPrevOutScript) {
 					continue
 				}
 
@@ -2391,7 +2391,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				block := event
 
 				for _, tx := range block.Transactions() {
-					if !filter.MatchAndUpdate(tx, s.chainParams) {
+					if !filter.MatchAndUpdate(tx, s.chainParams, s.fetchPrevOutScript) {
 						continue
 					}
 
@@ -2678,6 +2678,52 @@ func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, 
 
 // setInputMetadata will set the value, previous script, and address for each input in the transaction
 // by loading the previous transaction from the txindex and using its data.
+// fetchPrevOutScript returns the pkScript of the output referenced by the passed
+// outpoint, looking in the mempool first and then, when the transaction index is
+// enabled, on disk.  It returns nil when the script cannot be resolved, which is
+// the expected outcome for a pruned or unindexed node rather than an error.
+//
+// It is used to match transaction subscriptions against the address that funded
+// an input, so that spending an output the subscription never watched arrive
+// still notifies.
+func (s *GrpcServer) fetchPrevOutScript(op wire.OutPoint) []byte {
+	if tx, err := s.txMemPool.FetchTransaction(&op.Hash); err == nil {
+		if op.Index < uint32(len(tx.MsgTx().TxOut)) {
+			return tx.MsgTx().TxOut[op.Index].PkScript
+		}
+		return nil
+	}
+
+	if s.txIndex == nil {
+		return nil
+	}
+
+	blockRegion, err := s.txIndex.TxBlockRegion(&op.Hash)
+	if err != nil || blockRegion == nil {
+		return nil
+	}
+
+	var txBytes []byte
+	if err := s.db.View(func(dbTx database.Tx) error {
+		var err error
+		txBytes, err = dbTx.FetchBlockRegion(blockRegion)
+		return err
+	}); err != nil {
+		return nil
+	}
+
+	var loadedTx wire.MsgTx
+	if err := loadedTx.BchDecode(bytes.NewReader(txBytes), wire.ProtocolVersion,
+		wire.BaseEncoding); err != nil {
+		return nil
+	}
+	if op.Index >= uint32(len(loadedTx.TxOut)) {
+		return nil
+	}
+
+	return loadedTx.TxOut[op.Index].PkScript
+}
+
 func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 	inputTxMap := make(map[chainhash.Hash]*wire.MsgTx)
 	for i, in := range tx.Inputs {

@@ -114,6 +114,77 @@ func (f *txFilter) AddAddress(addr bchutil.Address) {
 	}
 }
 
+// hasAddresses returns whether the filter is watching any addresses at all.
+// Resolving previous outputs to match spends is only worth the lookups when it
+// is.
+func (f *txFilter) hasAddresses() bool {
+	return len(f.pubKeyHashes) > 0 || len(f.scriptHashes) > 0 ||
+		len(f.compressedPubKeys) > 0 || len(f.uncompressedPubKeys) > 0 ||
+		len(f.fallbacks) > 0
+}
+
+// matchAddresses returns whether any of the provided addresses is watched by
+// the filter.
+func (f *txFilter) matchAddresses(addrs []bchutil.Address) bool {
+	for _, addr := range addrs {
+		switch a := addr.(type) {
+		case *bchutil.AddressPubKeyHash:
+			if _, ok := f.pubKeyHashes[*a.Hash160()]; !ok {
+				continue
+			}
+
+		case *bchutil.AddressScriptHash:
+			if _, ok := f.scriptHashes[*a.Hash160()]; !ok {
+				continue
+			}
+
+		case *bchutil.AddressPubKey:
+			found := false
+			switch sa := a.ScriptAddress(); len(sa) {
+			case 33: // Compressed
+				var key [33]byte
+				copy(key[:], sa)
+				if _, ok := f.compressedPubKeys[key]; ok {
+					found = true
+				}
+
+			case 65: // Uncompressed
+				var key [65]byte
+				copy(key[:], sa)
+				if _, ok := f.uncompressedPubKeys[key]; ok {
+					found = true
+				}
+
+			default:
+				log.Warnf("Skipping rescanned pubkey of unknown "+
+					"serialized length %d", len(sa))
+				continue
+			}
+
+			// If the output pays to the pubkey of a rescanned P2PKH
+			// address, include it as well.
+			if !found {
+				pkh := a.AddressPubKeyHash()
+				if _, ok := f.pubKeyHashes[*pkh.Hash160()]; !ok {
+					continue
+				}
+			}
+
+		default:
+			// A new address type must have been added.  Encode as a
+			// payment address string and check the fallback map.
+			addrStr := addr.EncodeAddress()
+			if _, ok := f.fallbacks[addrStr]; !ok {
+				continue
+			}
+		}
+
+		return true
+	}
+
+	return false
+}
+
 // RemoveAddress removes an address from the filter.
 func (f *txFilter) RemoveAddress(addr bchutil.Address) {
 	switch a := addr.(type) {
@@ -230,11 +301,21 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	return nil
 }
 
+// prevOutScriptFunc returns the pkScript of the output referenced by the passed
+// outpoint, or nil when it cannot be resolved.
+type prevOutScriptFunc func(wire.OutPoint) []byte
+
 // MatchAndUpdate returns whether the transaction matches against the filter.
 // When the tx contains any matching outputs, all these outputs are added to the
 // filter as outpoints for matching further spends of these outputs.
 // All matching outpoints are removed from the filter.
-func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool {
+//
+// prevOutScript is used to match spends of outputs the filter did not see
+// arrive, which is every output a watched address already held when the
+// subscription started.  It may be nil, in which case only outputs observed by
+// this filter can match on being spent.
+func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params,
+	prevOutScript prevOutScriptFunc) bool {
 	// We don't return early on a match because we prefer full processing:
 	// - all matching outputs need to be added to the filter for later matching
 	// - all matching inputs can be removed from the filter for later efficiency
@@ -274,71 +355,29 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params) bool 
 			delete(f.outpoints, txin.PreviousOutPoint)
 
 			matched = true
+			continue
+		}
+
+		// The outpoint map only holds outputs this filter watched arrive, so on
+		// its own it cannot match a spend of an output the address already held
+		// when the subscription started.  Resolve the previous output and match
+		// on its address instead.
+		if prevOutScript == nil || !f.hasAddresses() {
+			continue
+		}
+		pkScript := prevOutScript(txin.PreviousOutPoint)
+		if pkScript == nil {
+			continue
+		}
+		_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, params)
+		if err == nil && f.matchAddresses(addrs) {
+			matched = true
 		}
 	}
 
 	for txOutIdx, txout := range tx.MsgTx().TxOut {
-		outputMatch := false
 		_, addrs, _, _ := txscript.ExtractPkScriptAddrs(txout.PkScript, params)
-
-		for _, addr := range addrs {
-			switch a := addr.(type) {
-			case *bchutil.AddressPubKeyHash:
-				if _, ok := f.pubKeyHashes[*a.Hash160()]; !ok {
-					continue
-				}
-
-			case *bchutil.AddressScriptHash:
-				if _, ok := f.scriptHashes[*a.Hash160()]; !ok {
-					continue
-				}
-
-			case *bchutil.AddressPubKey:
-				found := false
-				switch sa := a.ScriptAddress(); len(sa) {
-				case 33: // Compressed
-					var key [33]byte
-					copy(key[:], sa)
-					if _, ok := f.compressedPubKeys[key]; ok {
-						found = true
-					}
-
-				case 65: // Uncompressed
-					var key [65]byte
-					copy(key[:], sa)
-					if _, ok := f.uncompressedPubKeys[key]; ok {
-						found = true
-					}
-
-				default:
-					log.Warnf("Skipping rescanned pubkey of unknown "+
-						"serialized length %d", len(sa))
-					continue
-				}
-
-				// If the transaction output pays to the pubkey of
-				// a rescanned P2PKH address, include it as well.
-				if !found {
-					pkh := a.AddressPubKeyHash()
-					if _, ok := f.pubKeyHashes[*pkh.Hash160()]; !ok {
-						continue
-					}
-				}
-
-			default:
-				// A new address type must have been added.  Encode as a
-				// payment address string and check the fallback map.
-				addrStr := addr.EncodeAddress()
-				_, ok := f.fallbacks[addrStr]
-				if !ok {
-					continue
-				}
-			}
-
-			// Matching address.
-			outputMatch = true
-			break
-		}
+		outputMatch := f.matchAddresses(addrs)
 
 		dataElements, err := txscript.ExtractDataElements(txout.PkScript)
 		if err == nil && len(dataElements) > 0 {
