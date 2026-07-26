@@ -113,22 +113,71 @@ func TestTxFeePrioHeap(t *testing.T) {
 	}
 }
 
-// Test_createCoinbaseTx tests that the coinbase is padded to be over the minimum transaction size.
+// Test_createCoinbaseTx tests that the coinbase is padded to be over the
+// minimum transaction size that is actually enforced for the block being built.
+// Upgrade9 lowered that minimum, so until it activates the larger Magnetic
+// Anomaly minimum still applies.
 func Test_createCoinbaseTx(t *testing.T) {
-	coinbaseScript, err := standardCoinbaseScript(584412, 123456789)
-	if err != nil {
-		t.Fatal(err)
-	}
 	miningAddr, err := bchutil.DecodeAddress("qr0ayr8hdlg6zl7kcn8mgc8cz04aczyw4567fpu8rl", &chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatal(err)
 	}
-	coinbase, err := createCoinbaseTx(&chaincfg.MainNetParams, coinbaseScript[:len(coinbaseScript)-2], 584412, miningAddr)
-	if err != nil {
-		t.Fatal(err)
+
+	tests := []struct {
+		name   string
+		params *chaincfg.Params
+		height int32
+		addr   bchutil.Address
+	}{
+		{
+			// Magnetic Anomaly is active but Upgrade9 is not, so the
+			// minimum transaction size is still 100.
+			name:   "mainnet between magnetic anomaly and upgrade9",
+			params: &chaincfg.MainNetParams,
+			height: 584412,
+			addr:   miningAddr,
+		},
+		{
+			name:   "mainnet after upgrade9",
+			params: &chaincfg.MainNetParams,
+			height: chaincfg.MainNetParams.Upgrade9ForkHeight + 1,
+			addr:   miningAddr,
+		},
+		{
+			// Regtest never activates Upgrade9, so every block mined above
+			// the Magnetic Anomaly height must still reach 100 bytes.
+			name:   "regtest above magnetic anomaly",
+			params: &chaincfg.RegressionNetParams,
+			height: chaincfg.RegressionNetParams.MagneticAnonomalyForkHeight + 1,
+			addr:   nil,
+		},
 	}
-	err = blockchain.CheckTransactionSanity(coinbase, true, true, txscript.StandardVerifyFlags)
-	if err != nil {
-		t.Fatal(err)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			coinbaseScript, err := standardCoinbaseScript(test.height, 123456789)
+			if err != nil {
+				t.Fatal(err)
+			}
+			coinbase, err := createCoinbaseTx(test.params,
+				coinbaseScript[:len(coinbaseScript)-2], test.height, test.addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Use the fork state that genuinely applies at this height rather
+			// than asserting a fixed one.
+			magneticAnomalyActive := test.height > test.params.MagneticAnonomalyForkHeight
+			upgrade9Active := test.height > test.params.Upgrade9ForkHeight
+
+			err = blockchain.CheckTransactionSanity(coinbase, magneticAnomalyActive,
+				upgrade9Active, txscript.StandardVerifyFlags)
+			if err != nil {
+				t.Fatalf("coinbase of %d bytes failed sanity at height %d "+
+					"(magneticAnomaly=%v upgrade9=%v): %v",
+					coinbase.MsgTx().SerializeSize(), test.height,
+					magneticAnomalyActive, upgrade9Active, err)
+			}
+		})
 	}
 }

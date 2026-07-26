@@ -287,17 +287,31 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
 		PkScript: pkScript,
 	})
-	padCoinbaseScript(tx)
+	padCoinbaseScript(tx, minCoinbaseSize(params, nextBlockHeight))
 
 	return bchutil.NewTx(tx), nil
 }
 
+// minCoinbaseSize returns the minimum serialized transaction size the coinbase
+// must reach for a block at the provided height.  Upgrade9 lowered the minimum,
+// so until it activates the larger Magnetic Anomaly minimum still applies.
+//
+// This matters well beyond the historical fork window: regtest and simnet set
+// Upgrade9ForkHeight far in the future, so on those networks the larger minimum
+// applies to every block mined above the Magnetic Anomaly height.
+func minCoinbaseSize(params *chaincfg.Params, nextBlockHeight int32) int {
+	if nextBlockHeight > params.Upgrade9ForkHeight {
+		return blockchain.MinTransactionSize
+	}
+	return blockchain.MagneticAnomalyMinTransactionSize
+}
+
 // padCoinbaseScript makes sure the coinbase script is above the minimum tx size
-// threshold.
-func padCoinbaseScript(tx *wire.MsgTx) {
-	if tx.SerializeSize() < blockchain.MinTransactionSize {
+// threshold that applies to the block being built.
+func padCoinbaseScript(tx *wire.MsgTx, minSize int) {
+	if tx.SerializeSize() < minSize {
 		tx.TxIn[0].SignatureScript = append(tx.TxIn[0].SignatureScript,
-			make([]byte, blockchain.MinTransactionSize-tx.SerializeSize())...)
+			make([]byte, minSize-tx.SerializeSize())...)
 	}
 }
 
@@ -876,7 +890,8 @@ func (g *BlkTmplGenerator) UpdateExtraNonce(msgBlock *wire.MsgBlock, blockHeight
 	msgBlock.Transactions[0].TxIn[0].SignatureScript = coinbaseScript
 
 	// Make sure the coinbase is above the minimum size threshold.
-	padCoinbaseScript((msgBlock.Transactions[0]))
+	padCoinbaseScript(msgBlock.Transactions[0],
+		minCoinbaseSize(g.chainParams, blockHeight))
 
 	// TODO(davec): A bchutil.Block should use saved in the state to avoid
 	// recalculating all of the other transaction hashes.
