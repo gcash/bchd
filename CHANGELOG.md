@@ -6,6 +6,13 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 ## 0.22.2 (2026-07-25)
 
+### Consensus & Network
+- Only arm a peer stall deadline for a `getblocks` with a non-zero stop hash. The protocol does not guarantee a response to an open-ended `getblocks`, so a fully-synced peer with nothing beyond our locator legitimately sends no `inv` at all; arming a deadline unconditionally disconnected honest, fully-synced peers every 30 seconds (btcsuite/btcd#1317). A non-zero stop hash targets a block we have evidence exists, so its deadline is retained.
+- Stop responding to `getblocks` with an empty `notfound` when pruned. The message carried no inventory vectors, was also sent in the ordinary "peer is already at our tip" case, and `notfound` is defined as a response to `getdata` rather than `getblocks`.
+
+### Mining
+- Fix block template creation failing with `serialized transaction is too small` once a chain is past the Magnetic Anomaly activation height while Upgrade9 is not yet active. The coinbase was padded to the post-Upgrade9 minimum of 65 bytes while validation still required 100, which permanently broke block generation on regtest above height 1000 and on simnet above height 3000. The padding target now follows the minimum actually enforced at the height being mined.
+
 ### Security
 - Fix a CashTokens consensus rule violation that allowed minting NFT forgery. The check enforcing that every minting NFT created by a transaction belongs to a category the transaction is authorized to mint shared a single flag across all output categories, so one authorized minting output cleared the requirement for every other minting output in the same transaction. A transaction could therefore create a minting NFT — which confers permanent unlimited issuance — for a category it held no minting right to, causing bchd to accept a transaction that other implementations reject. The rule is now evaluated per category. Reported by 0xaudron.
 
