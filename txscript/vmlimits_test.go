@@ -669,10 +669,27 @@ func TestVMlimitsAndBigInt2025Standard(t *testing.T) {
 				fatalf(t, "operation cost did not match. "+str, test, i)
 			}
 
-			if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-				if err != nil {
-					fatalf(t, "number of hash digest iterations did not match", test, i)
-				}
+			// CHIP-2021-05 maximum hashing density: an input's hash digest
+			// iteration budget is (41 + scriptSigSize) / 2, with a 7x bonus for
+			// non-standard (block) transactions.  Fixture field [0] is exactly
+			// 41 + scriptSigSize, so the expected limit follows from it.
+			hashIterBonus := int64(txscript.HashIterBonusForNonStandardTxns)
+			if flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly) {
+				hashIterBonus = 1
+			}
+			expectedHashIterLimit := (densityControl * hashIterBonus) / 2
+
+			if vm.GetMetrics().GetMaxDigestIterationLimit() != expectedHashIterLimit {
+				str := fmt.Sprintf("test hash iteration limit: %d, script hash iteration limit: %d",
+					expectedHashIterLimit,
+					vm.GetMetrics().GetMaxDigestIterationLimit())
+				fatalf(t, "hash digest iteration limit did not match. "+str, test, i)
+			}
+
+			if vm.GetMetrics().GetHashDigestIterations() > expectedHashIterLimit {
+				str := fmt.Sprintf("hash iterations: %d, limit: %d",
+					vm.GetMetrics().GetHashDigestIterations(), expectedHashIterLimit)
+				fatalf(t, "hash digest iterations exceeded the limit. "+str, test, i)
 			}
 
 			if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
@@ -844,10 +861,27 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 				fatalf(t, "operation cost did not match. "+str, test, i)
 			}
 
-			if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-				if err != nil {
-					fatalf(t, "number of hash digest iterations did not match", test, i)
-				}
+			// CHIP-2021-05 maximum hashing density: an input's hash digest
+			// iteration budget is (41 + scriptSigSize) / 2, with a 7x bonus for
+			// non-standard (block) transactions.  Fixture field [0] is exactly
+			// 41 + scriptSigSize, so the expected limit follows from it.
+			hashIterBonus := int64(txscript.HashIterBonusForNonStandardTxns)
+			if flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly) {
+				hashIterBonus = 1
+			}
+			expectedHashIterLimit := (densityControl * hashIterBonus) / 2
+
+			if vm.GetMetrics().GetMaxDigestIterationLimit() != expectedHashIterLimit {
+				str := fmt.Sprintf("test hash iteration limit: %d, script hash iteration limit: %d",
+					expectedHashIterLimit,
+					vm.GetMetrics().GetMaxDigestIterationLimit())
+				fatalf(t, "hash digest iteration limit did not match. "+str, test, i)
+			}
+
+			if vm.GetMetrics().GetHashDigestIterations() > expectedHashIterLimit {
+				str := fmt.Sprintf("hash iterations: %d, limit: %d",
+					vm.GetMetrics().GetHashDigestIterations(), expectedHashIterLimit)
+				fatalf(t, "hash digest iterations exceeded the limit. "+str, test, i)
 			}
 
 			if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
@@ -1012,11 +1046,14 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 					// fatalf(t, "operation cost did not match", test, i)
 				}
 
-				if vm.GetMetrics().GetHashDigestIterations() != densityControl {
-					if err != nil {
-						continue
-						// fatalf(t, "number of hash digest iterations did not match", test, i)
-					}
+				// See the hashing-density note in TestVMlimitsAndBigInt2025Standard.
+				hashIterBonus := int64(txscript.HashIterBonusForNonStandardTxns)
+				if flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly) {
+					hashIterBonus = 1
+				}
+
+				if vm.GetMetrics().GetMaxDigestIterationLimit() != (densityControl*hashIterBonus)/2 {
+					continue
 				}
 
 				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
