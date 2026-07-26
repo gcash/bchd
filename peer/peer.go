@@ -2048,7 +2048,21 @@ func (p *Peer) QueueMessageWithEncoding(msg wire.Message, doneChan chan<- struct
 		}
 		return
 	}
-	p.outputQueue <- outMsg{msg: msg, encoding: encoding, doneChan: doneChan}
+
+	// The check above races with the peer disconnecting, and the queue handler
+	// only drains what is buffered at the moment it exits, so a send that
+	// arrives afterwards would block forever.  Give up on the peer quitting
+	// instead, still signalling the done channel so callers waiting on it are
+	// not left blocked either.
+	select {
+	case p.outputQueue <- outMsg{msg: msg, encoding: encoding, doneChan: doneChan}:
+	case <-p.quit:
+		if doneChan != nil {
+			go func() {
+				doneChan <- struct{}{}
+			}()
+		}
+	}
 }
 
 // QueueInventory adds the passed inventory to the inventory send queue which
@@ -2070,7 +2084,15 @@ func (p *Peer) QueueInventory(invVect *wire.InvVect) {
 		return
 	}
 
-	p.outputInvChan <- invVect
+	// As in QueueMessageWithEncoding, the check above races with the peer
+	// disconnecting.  Blocking here would wedge the caller, and the server's
+	// peer handler relays inventory on the same goroutine that processes
+	// shutdown, so a single stuck peer would prevent the server from ever
+	// shutting down.
+	select {
+	case p.outputInvChan <- invVect:
+	case <-p.quit:
+	}
 }
 
 // Connected returns whether or not the peer is currently connected.
