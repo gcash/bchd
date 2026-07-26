@@ -1105,6 +1105,15 @@ func (sp *serverPeer) OnGetHeaders(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
 func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
+	// Ignore the request when the committed filter index is not maintained.
+	// A peer can send this regardless of the services we advertise, so this
+	// must be checked rather than assumed.
+	if sp.server.cfIndex == nil {
+		peerLog.Debugf("Ignoring getcfilters from %s: no committed filter "+
+			"index", sp)
+		return
+	}
+
 	// Ignore getcfilters requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
 		return
@@ -1161,6 +1170,13 @@ func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 
 // OnGetCFHeaders is invoked when a peer receives a getcfheader bitcoin message.
 func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
+	// Ignore the request when the committed filter index is not maintained.
+	if sp.server.cfIndex == nil {
+		peerLog.Debugf("Ignoring getcfheaders from %s: no committed filter "+
+			"index", sp)
+		return
+	}
+
 	// Ignore getcfilterheader requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
 		return
@@ -1278,6 +1294,13 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 
 // OnGetCFCheckpt is invoked when a peer receives a getcfcheckpt bitcoin message.
 func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
+	// Ignore the request when the committed filter index is not maintained.
+	if sp.server.cfIndex == nil {
+		peerLog.Debugf("Ignoring getcfcheckpt from %s: no committed filter "+
+			"index", sp)
+		return
+	}
+
 	// Ignore getcfcheckpt requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
 		return
@@ -3160,7 +3183,10 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	if cfg.NoPeerBloomFilters {
 		services &^= wire.SFNodeBloom
 	}
-	if cfg.NoCFilters {
+	// Only advertise committed filter support when the index that serves it is
+	// actually maintained.  Fast sync skips building it, so advertising the
+	// service in that mode invites requests that cannot be answered.
+	if cfg.NoCFilters || cfg.FastSync {
 		services &^= wire.SFNodeCF
 	}
 
