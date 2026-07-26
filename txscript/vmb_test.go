@@ -555,30 +555,9 @@ func TestMay2026Invalid(t *testing.T) {
 				continue
 			}
 
-			if testLimits[test[0].(string)] != nil {
-				densityControl := int64(testLimits[test[0].(string)].([]any)[0].(float64))
-				maximumOperationCost := int64(testLimits[test[0].(string)].([]any)[1].(float64))
-				operationCost := int64(testLimits[test[0].(string)].([]any)[2].(float64))
-
-				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
-					continue
-				}
-
-				// See the hashing-density note in TestMay2026Standard.
-				hashIterBonus := int64(txscript.HashIterBonusForNonStandardTxns)
-				if flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly) {
-					hashIterBonus = 1
-				}
-
-				if vm.GetMetrics().GetMaxDigestIterationLimit() != (densityControl*hashIterBonus)/2 {
-					continue
-				}
-
-				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
-					continue
-				}
-			}
-
+			// The vector asserts this script is invalid, so reaching here --
+			// execution succeeded -- is a failure.  Metric mismatches must not
+			// excuse it: they can only mask a real divergence, never catch one.
 			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}

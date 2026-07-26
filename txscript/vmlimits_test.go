@@ -1036,32 +1036,9 @@ func TestVMlimitsAndBigInt2025Invalid(t *testing.T) {
 				// fatalf(t, err.Error(), test, i)
 			}
 
-			if testLimits[test[0].(string)] != nil {
-				densityControl := int64(testLimits[test[0].(string)].([]interface{})[0].(float64))
-				maximumOperationCost := int64(testLimits[test[0].(string)].([]interface{})[1].(float64))
-				operationCost := int64(testLimits[test[0].(string)].([]interface{})[2].(float64))
-
-				if vm.GetMetrics().GetCompositeOPCost(true) != operationCost {
-					continue
-					// fatalf(t, "operation cost did not match", test, i)
-				}
-
-				// See the hashing-density note in TestVMlimitsAndBigInt2025Standard.
-				hashIterBonus := int64(txscript.HashIterBonusForNonStandardTxns)
-				if flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly) {
-					hashIterBonus = 1
-				}
-
-				if vm.GetMetrics().GetMaxDigestIterationLimit() != (densityControl*hashIterBonus)/2 {
-					continue
-				}
-
-				if vm.GetMetrics().GetMaxOpCostLimit() != maximumOperationCost {
-					continue
-					// fatalf(t, "max operation cost limit did not match", test, i)
-				}
-			}
-
+			// The vector asserts this script is invalid, so reaching here --
+			// execution succeeded -- is a failure.  Metric mismatches must not
+			// excuse it: they can only mask a real divergence, never catch one.
 			t.Fatalf("Error! Test %d - %s executed without error! Test description: %s", i, test[0].(string), test[1].(string))
 		}
 	}
