@@ -1065,19 +1065,13 @@ func (sp *serverPeer) OnGetBlocks(_ *peer.Peer, msg *wire.MsgGetBlocks) {
 			sp.continueHash = &continueHash
 		}
 		sp.QueueMessage(invMsg, nil)
-	} else if sp.server.chain.PruneMode() {
-		// Typically nodes will just not respond to a GetBlocks message
-		// if they don't have any blocks. However, since we are implementing
-		// NodeNetworkLimited we need a better way to communicate to the remote
-		// peer that we don't have that portion of the chain than just letting
-		// the request timeout. So for this purpose we will respond with a
-		// not found message.
-		notFound := wire.NewMsgNotFound()
-		for _, inv := range invMsg.InvList {
-			_ = notFound.AddInvVect(inv)
-		}
-		sp.QueueMessage(notFound, nil)
 	}
+
+	// NOTE: Nothing is sent when there is nothing to send, which is what the
+	// reference implementation does.  Do not respond with a notfound here:
+	// notfound is defined as a response to getdata, peers do not associate it
+	// with a getblocks request, and an empty hash list is also the normal
+	// "peer is already at our tip" case rather than anything prune specific.
 }
 
 // OnGetHeaders is invoked when a peer receives a getheaders bitcoin
