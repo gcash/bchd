@@ -1948,6 +1948,7 @@ func (s *server) pushMerkleBlockMsg(sp *serverPeer, hash *chainhash.Hash,
 		dc = doneChan
 	}
 	sp.QueueMessage(merkle, dc)
+	doneChanQueued := dc != nil
 
 	// Finally, send any matched transactions.
 	blkTransactions := blk.MsgBlock().Transactions
@@ -1957,10 +1958,21 @@ func (s *server) pushMerkleBlockMsg(sp *serverPeer, hash *chainhash.Hash,
 		if i == len(matchedTxIndices)-1 {
 			dc = doneChan
 		}
-		if txIndex < uint32(len(blkTransactions)) {
-			sp.QueueMessageWithEncoding(blkTransactions[txIndex], dc,
-				encoding)
+		if txIndex >= uint32(len(blkTransactions)) {
+			continue
 		}
+		sp.QueueMessageWithEncoding(blkTransactions[txIndex], dc, encoding)
+		if dc != nil {
+			doneChanQueued = true
+		}
+	}
+
+	// The caller blocks until the done channel is signalled, so signal it here
+	// if the message that would have carried it was skipped by the bounds
+	// check above.  Leaving it unsignalled hangs the peer's input handler
+	// permanently while the connection stays open.
+	if doneChan != nil && !doneChanQueued {
+		doneChan <- struct{}{}
 	}
 
 	return nil
