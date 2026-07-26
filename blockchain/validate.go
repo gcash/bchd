@@ -475,17 +475,15 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 
 	upgrade9 := flags.HasFlag(BFUpgrade9)
 
-	// TODO: This is not a full set of ScriptFlags and only
-	// covers the Nov 2018 fork.
-	var scriptFlags txscript.ScriptFlags
-	if magneticAnomaly {
-		scriptFlags |= txscript.ScriptVerifySigPushOnly |
-			txscript.ScriptVerifyCleanStack |
-			txscript.ScriptVerifyCheckDataSig
-	}
-
 	// Do some preliminary checks on each transaction to ensure they are
 	// sane before continuing.
+	//
+	// NOTE: CheckTransactionSanity performs context-free structural checks
+	// only and never evaluates scripts, so it does not consult its script
+	// flags parameter.  No flags are passed rather than a partial set that
+	// would imply otherwise; script verification flags are built in full by
+	// the caller of checkBlockScripts.  The parameter is retained for API
+	// compatibility and should be dropped at the next major version.
 	var lastTxid *chainhash.Hash
 	for i, tx := range transactions {
 		// If MagneticAnomaly is active validate the CTOR consensus rule, skipping
@@ -494,7 +492,7 @@ func checkBlockSanity(block *bchutil.Block, powLimit *big.Int, timeSource Median
 			return ruleError(ErrInvalidTxOrder, "transactions are not in lexicographical order")
 		}
 		lastTxid = tx.Hash()
-		err := CheckTransactionSanity(tx, magneticAnomaly, upgrade9, scriptFlags)
+		err := CheckTransactionSanity(tx, magneticAnomaly, upgrade9, 0)
 		if err != nil {
 			return err
 		}
