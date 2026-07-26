@@ -2175,10 +2175,20 @@ func (s *server) handleBanPeerMsg(state *peerState, sp *serverPeer) {
 // handleRelayInvMsg deals with relaying inventory to peers that are not already
 // known to have it.  It is invoked from the peerHandler goroutine.
 func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
+	// Track the disposition of transaction relay so an operator can tell the
+	// difference between a transaction that propagated and one that was
+	// accepted into the local mempool but silently dropped by every peer's
+	// filters.  Without this the latter is invisible: the submitting client
+	// receives a txid, the transaction sits in the mempool, and it never
+	// reaches the network.
+	isTx := msg.invVect.Type == wire.InvTypeTx
+	var connected, relayed, relayDisabled, feeFiltered, bloomFiltered int
+
 	state.forAllPeers(func(sp *serverPeer) {
 		if !sp.Connected() {
 			return
 		}
+		connected++
 
 		// If the inventory is a block we'll check some flags set on the
 		// remote peer to see if we should do some special relaying or
@@ -2242,6 +2252,7 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			// Don't relay the transaction to the peer when it has
 			// transaction relaying disabled.
 			if sp.relayTxDisabled() {
+				relayDisabled++
 				return
 			}
 
@@ -2257,6 +2268,10 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			// is less than the peer's feefilter.
 			feeFilter := atomic.LoadInt64(&sp.feeFilter)
 			if feeFilter > 0 && txD.FeePerKB < feeFilter {
+				peerLog.Debugf("Not relaying transaction %v to peer %s: "+
+					"fee rate %d sat/kB is below the peer's fee filter of "+
+					"%d sat/kB", txD.Tx.Hash(), sp, txD.FeePerKB, feeFilter)
+				feeFiltered++
 				return
 			}
 
@@ -2264,6 +2279,7 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			// filter loaded and the transaction doesn't match it.
 			if sp.filter.IsLoaded() {
 				if !sp.filter.MatchTxAndUpdate(txD.Tx) {
+					bloomFiltered++
 					return
 				}
 			}
@@ -2273,7 +2289,24 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 		// It will be ignored if the peer is already known to
 		// have the inventory.
 		sp.QueueInventory(msg.invVect)
+		relayed++
 	})
+
+	// A transaction that was announced to no peer at all will not propagate,
+	// even though it was accepted into the mempool and the submitting client
+	// was handed a txid.  The most common cause is a fee rate below every
+	// peer's advertised fee filter.  Warn so this is diagnosable rather than
+	// silent.
+	if isTx && relayed == 0 {
+		if txD, ok := msg.data.(*mempool.TxDesc); ok {
+			srvrLog.Warnf("Transaction %v (%d sat/kB) was not relayed to any "+
+				"of %d connected peers (%d below peer fee filter, %d relay "+
+				"disabled, %d bloom filtered). It is in the local mempool but "+
+				"will not propagate unless a peer requests it.",
+				txD.Tx.Hash(), txD.FeePerKB, connected, feeFiltered,
+				relayDisabled, bloomFiltered)
+		}
+	}
 }
 
 // handleRelayCmpctBlock deals with direct relaying a compact block to
