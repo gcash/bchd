@@ -398,6 +398,32 @@ func (s *blockStore) writeData(data []byte, fieldName string) error {
 	return nil
 }
 
+// openCurFileIfNeeded opens the write cursor's current file when it is not
+// already open.  This will typically only be the case when moving to the next
+// file to write to or on initial database load.  However, it might also be the
+// case if rollbacks happened after file writes started during a transaction
+// commit.
+//
+// It must be called before any writeData call, since writeData dereferences the
+// current file unconditionally.
+//
+// NOTE: This function MUST be called with the write cursor current file lock
+// held.
+func (s *blockStore) openCurFileIfNeeded() error {
+	wc := s.writeCursor
+	if wc.curFile.file != nil {
+		return nil
+	}
+
+	file, err := s.openWriteFileFunc(wc.curFileNum)
+	if err != nil {
+		return err
+	}
+	wc.curFile.file = file
+
+	return nil
+}
+
 // writeBlock appends the specified raw block bytes to the store's write cursor
 // location and increments it accordingly.  When the block would exceed the max
 // file size for the current flat file, this function will close the current
@@ -430,11 +456,21 @@ func (s *blockStore) writeBlock(rawBlock []byte, height uint32) (blockLocation, 
 		// Before we load the new file write the height of the final block
 		// to the end of the file.
 		wc.curFile.Lock()
+
+		// The current file may not be open yet, such as on initial database
+		// load or after a rollback, and writeData requires it.  Opening it
+		// here rather than relying on the open below is what keeps this
+		// write from dereferencing a nil file.
+		if err := s.openCurFileIfNeeded(); err != nil {
+			wc.curFile.Unlock()
+			return blockLocation{}, err
+		}
+
 		heightBytes := make([]byte, 4)
 		byteOrder.PutUint32(heightBytes, height-1)
 		if err := s.writeData(heightBytes, "last block height"); err != nil {
 			wc.curFile.Unlock()
-			return blockLocation{}, nil
+			return blockLocation{}, err
 		}
 		// Put the block height into the map
 		s.fbhMutex.Lock()
@@ -468,16 +504,10 @@ func (s *blockStore) writeBlock(rawBlock []byte, height uint32) (blockLocation, 
 	wc.curFile.Lock()
 	defer wc.curFile.Unlock()
 
-	// Open the current file if needed.  This will typically only be the
-	// case when moving to the next file to write to or on initial database
-	// load.  However, it might also be the case if rollbacks happened after
-	// file writes started during a transaction commit.
-	if wc.curFile.file == nil {
-		file, err := s.openWriteFileFunc(wc.curFileNum)
-		if err != nil {
-			return blockLocation{}, err
-		}
-		wc.curFile.file = file
+	// Open the current file if needed.  When the block file was just rolled
+	// over above this opens the new one.
+	if err := s.openCurFileIfNeeded(); err != nil {
+		return blockLocation{}, err
 	}
 
 	// Bitcoin network.
