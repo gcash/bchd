@@ -324,7 +324,9 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 			)
 		}
 	}
-	AvailableMintingCategories = append(GenesisCategories[:], InputMintingCategories...)
+	// Use a fresh slice rather than appending onto GenesisCategories, which
+	// would share its backing array.
+	AvailableMintingCategories = slices.Concat(GenesisCategories, InputMintingCategories)
 
 	OutputSumsByCategory := make(map[[32]byte]uint64)
 	OutputMutableTokensByCategory := make(map[[32]byte]int64)
@@ -435,34 +437,29 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 
 out:
 	for _, outputImmutableToken := range OutputImmutableTokens {
-		existsInAvailableMintingCategories := false
-		for _, mintingCategory := range AvailableMintingCategories {
-			if mintingCategory == outputImmutableToken.category {
-				existsInAvailableMintingCategories = true
+		// A category the transaction is allowed to mint can create any
+		// immutable token of that category without consuming anything.
+		if slices.Contains(AvailableMintingCategories, outputImmutableToken.category) {
+			continue
+		}
+
+		// Otherwise consume an equivalent available immutable token if one
+		// exists.
+		for i, availableImmutableToken := range AvailableImmutableTokens {
+			if availableImmutableToken.category == outputImmutableToken.category &&
+				bytes.Equal(availableImmutableToken.commitment, outputImmutableToken.commitment) {
+				AvailableImmutableTokens = append(AvailableImmutableTokens[:i], AvailableImmutableTokens[i+1:]...)
 				continue out
 			}
 		}
 
-		if !existsInAvailableMintingCategories {
-			for i, availableImmutableToken := range AvailableImmutableTokens {
-				if availableImmutableToken.category == outputImmutableToken.category &&
-					bytes.Equal(availableImmutableToken.commitment, outputImmutableToken.commitment) {
-					AvailableImmutableTokens = append(AvailableImmutableTokens[:i], AvailableImmutableTokens[i+1:]...)
-					continue out
-				}
-			}
-			_, ok := AvailableMutableTokensByCategory[outputImmutableToken.category]
-			if !ok {
-				return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
-			}
-			if ok {
-				if AvailableMutableTokensByCategory[outputImmutableToken.category] <= 0 {
-					return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
-				}
-				AvailableMutableTokensByCategory[outputImmutableToken.category] -= 1
-				continue out
-			}
+		// Failing that, downgrade an available mutable token of the same
+		// category.  A missing category reads as zero, which correctly fails
+		// this check.
+		if AvailableMutableTokensByCategory[outputImmutableToken.category] <= 0 {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
+		AvailableMutableTokensByCategory[outputImmutableToken.category] -= 1
 	}
 
 	return true, nil
