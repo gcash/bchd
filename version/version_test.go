@@ -25,6 +25,10 @@ func TestString(t *testing.T) {
 			build:    "012-abc",
 			expected: base + "+012-abc",
 		}, {
+			name:     "with-dotted-build",
+			build:    "exp.sha.5114f85",
+			expected: base + "+exp.sha.5114f85",
+		}, {
 			name:     "with-out-of-spec-build",
 			build:    "012_abc",
 			expected: base,
