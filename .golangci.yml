@@ -37,7 +37,7 @@ linters:
       # apply here.
       - path: bchec/
         linters: [staticcheck]
-        text: 'SA1019.*(ScalarMult|ScalarBaseMult|IsOnCurve|Curve\.Add)'
+        text: 'SA1019.*(ScalarMult|ScalarBaseMult|IsOnCurve|Curve\)?\.Add)'
       # RIPEMD-160 is mandated by Bitcoin consensus (P2PKH/P2SH) and cannot
       # be replaced with a modern hash.
       - linters: [staticcheck]

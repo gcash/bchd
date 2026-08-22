@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -19,14 +20,17 @@ import (
 // proxy and TLS settings in the associated connection configuration.
 func newHTTPClient(cfg *config) (*http.Client, error) {
 	// Configure proxy if needed.
-	var dial func(network, addr string) (net.Conn, error)
+	//
+	// socks.Proxy has no context-aware dial, so the context is ignored, which
+	// matches how http.Transport invoked the old Dial field internally.
+	var dialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	if cfg.Proxy != "" {
 		proxy := &socks.Proxy{
 			Addr:     cfg.Proxy,
 			Username: cfg.ProxyUser,
 			Password: cfg.ProxyPass,
 		}
-		dial = func(network, addr string) (net.Conn, error) {
+		dialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
 			c, err := proxy.Dial(network, addr)
 			if err != nil {
 				return nil, err
@@ -55,7 +59,7 @@ func newHTTPClient(cfg *config) (*http.Client, error) {
 	// proxy and TLS.
 	client := http.Client{
 		Transport: &http.Transport{
-			Dial:            dial,
+			DialContext:     dialContext,
 			TLSClientConfig: tlsConfig,
 		},
 	}
