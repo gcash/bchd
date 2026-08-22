@@ -16,9 +16,9 @@ jobs:
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: 1.26
+          go-version: stable
       - name: Install golangci-lint
-        run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.4
+        run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.1
         env:
           GO111MODULE: on
       - name: Run goclean.sh
