@@ -183,7 +183,7 @@ type rpcEventSubscription struct {
 	unsubscribe chan struct{}    // close to unsubscribe
 }
 
-// Events returns the channel clients listen to to get new events.
+// Events returns the channel clients listen to for new events.
 func (s *rpcEventSubscription) Events() <-chan interface{} {
 	return s.out
 }
