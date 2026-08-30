@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"sort"
 )
@@ -22,7 +23,9 @@ func AggregatePublicKeys(keys ...*PublicKey) (*PublicKey, error) {
 // hash using the provided private keys.
 func SignMuSig(hash []byte, keys ...*PrivateKey) (*Signature, error) {
 	sessionID := make([]byte, 32)
-	rand.Read(sessionID)
+	if _, err := io.ReadFull(rand.Reader, sessionID); err != nil {
+		return nil, fmt.Errorf("generate MuSig session ID: %w", err)
+	}
 
 	// Sort the private keys by their corresponding public keys
 	sort.Slice(keys, func(i, j int) bool {
