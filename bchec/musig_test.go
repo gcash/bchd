@@ -3,10 +3,19 @@ package bchec
 import (
 	crand "crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"math/big"
 	"math/rand"
 	"testing"
 )
+
+var errTestRandomness = errors.New("randomness unavailable")
+
+type errorReader struct{}
+
+func (errorReader) Read([]byte) (int, error) {
+	return 0, errTestRandomness
+}
 
 func TestMuSession(t *testing.T) {
 	m := sha256.Sum256([]byte("hello world"))
@@ -104,6 +113,24 @@ func TestSignMuSig(t *testing.T) {
 		if !valid {
 			t.Fatal("invalid signature")
 		}
+	}
+}
+
+func TestSignMuSigRandomnessError(t *testing.T) {
+	priv, err := NewPrivateKey(S256())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalReader := crand.Reader
+	crand.Reader = errorReader{}
+	t.Cleanup(func() {
+		crand.Reader = originalReader
+	})
+
+	_, err = SignMuSig(make([]byte, 32), priv)
+	if !errors.Is(err, errTestRandomness) {
+		t.Fatalf("expected randomness error, got %v", err)
 	}
 }
 
