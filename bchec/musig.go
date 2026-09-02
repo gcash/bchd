@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"sort"
+	"slices"
 )
 
 // AggregatePublicKeys aggregates the given public keys using
@@ -28,8 +28,8 @@ func SignMuSig(hash []byte, keys ...*PrivateKey) (*Signature, error) {
 	}
 
 	// Sort the private keys by their corresponding public keys
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].PubKey().X.Cmp(keys[j].PubKey().X) < 0
+	slices.SortFunc(keys, func(a, b *PrivateKey) int {
+		return a.PubKey().X.Cmp(b.PubKey().X)
 	})
 
 	pubkeys := make([]*PublicKey, 0, len(keys))
@@ -268,7 +268,7 @@ func calculateAggregateSignature(aggregateNonce *PublicKey, svals ...*big.Int) *
 }
 
 func sortPubkeys(keys []*PublicKey) {
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].X.Cmp(keys[j].X) < 0
+	slices.SortFunc(keys, func(a, b *PublicKey) int {
+		return a.X.Cmp(b.X)
 	})
 }
