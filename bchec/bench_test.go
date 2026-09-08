@@ -153,3 +153,14 @@ func BenchmarkFieldNormalize(b *testing.B) {
 		f.Normalize()
 	}
 }
+
+// BenchmarkFieldNormalize2 requires the evaluation of more involved logic in
+// field.Normalize(). We should ensure the runtime is the same as in
+// BenchmarkFieldNormalize
+func BenchmarkFieldNormalize2(b *testing.B) {
+	f := new(fieldVal)
+	f.n = [10]uint32{0x148f6, 0x3ffffc0, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x000007}
+	for i := 0; i < b.N; i++ {
+		f.Normalize()
+	}
+}
