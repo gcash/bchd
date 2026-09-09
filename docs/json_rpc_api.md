@@ -26,7 +26,7 @@
 
 ### 1. Overview
 
-bchd provides a [JSON-RPC](http://json-rpc.org/wiki/specification) API that is
+bchd provides a [JSON-RPC](https://www.jsonrpc.org/specification_v1) API that is
 fully compatible with the original bitcoind/bitcoin-qt.  There are a few key
 differences between bchd and bitcoind as far as how RPCs are serviced:
 * Unlike bitcoind that has the wallet and chain intermingled in the same process
@@ -1074,7 +1074,7 @@ various languages.
 **9.1 Go**
 
 This section provides examples of using the RPC interface using Go and the
-[rpcclient](https://github.com/gcash/bchd/rpcclient) package.
+[rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) package.
 
 * [Using getblockcount to Retrieve the Current Block Height](#ExampleGetBlockCount)
 * [Using getblock to Retrieve the Genesis Block](#ExampleGetBlock)
@@ -1086,7 +1086,7 @@ This section provides examples of using the RPC interface using Go and the
 **9.1.1 Using getblockcount to Retrieve the Current Block Height**<br />
 
 The following is an example Go application which uses the
-[rpcclient](https://github.com/gcash/bchd/rpcclient) package to connect with
+[rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) package to connect with
 a bchd instance via Websockets, issues [getblockcount](#getblockcount) to
 retrieve the current block height, and displays it.
 
@@ -1147,7 +1147,7 @@ Block count: 276978
 **9.1.2 Using getblock to Retrieve the Genesis Block**<br />
 
 The following is an example Go application which uses the
-[rpcclient](https://github.com/gcash/bchd/rpcclient) package to connect with
+[rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) package to connect with
 a bchd instance via Websockets, issues [getblock](#getblock) to retrieve
 information about the Genesis block, and display a few details about it.
 
@@ -1237,7 +1237,7 @@ Num transactions: 1
 Notifications (Websocket-specific)**<br />
 
 The following is an example Go application which uses the
-[rpcclient](https://github.com/gcash/bchd/rpcclient) package to connect with
+[rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) package to connect with
 a bchd instance via Websockets and registers for
 [blockconnected](#blockconnected) and [blockdisconnected](#blockdisconnected)
 notifications with [notifyblocks](#notifyblocks).  It also sets up handlers for
