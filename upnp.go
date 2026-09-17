@@ -45,6 +45,8 @@ import (
 	"time"
 )
 
+var upnpHTTPClient = &http.Client{Timeout: 3 * time.Second}
+
 // NAT is an interface representing a NAT traversal options for example UPNP or
 // NAT-PMP. It provides methods to query and manipulate this traversal to allow
 // access to services.
@@ -223,7 +225,7 @@ func getOurIP() (ip string, err error) {
 // getServiceURL parses the xml description at the given root url to find the
 // url for the WANIPConnection service to be used for port forwarding.
 func getServiceURL(rootURL string) (url string, err error) {
-	r, err := http.Get(rootURL)
+	r, err := upnpHTTPClient.Get(rootURL)
 	if err != nil {
 		return
 	}
@@ -304,7 +306,7 @@ func soapRequest(url, function, message string) (replyXML []byte, err error) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Pragma", "no-cache")
 
-	r, err := http.DefaultClient.Do(req)
+	r, err := upnpHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
