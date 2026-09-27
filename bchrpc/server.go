@@ -2676,16 +2676,14 @@ func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, 
 	return txBytes, blockHeight, blockRegion.Hash, nil
 }
 
-// setInputMetadata will set the value, previous script, and address for each input in the transaction
-// by loading the previous transaction from the txindex and using its data.
-// fetchPrevOutScript returns the pkScript of the output referenced by the passed
-// outpoint, looking in the mempool first and then, when the transaction index is
-// enabled, on disk.  It returns nil when the script cannot be resolved, which is
-// the expected outcome for a pruned or unindexed node rather than an error.
+// fetchPrevOutScript returns the pkScript for the output referenced by op. It
+// searches the mempool first, then the transaction index when enabled. It
+// returns nil if the script cannot be resolved, which is expected for pruned or
+// unindexed nodes.
 //
-// It is used to match transaction subscriptions against the address that funded
-// an input, so that spending an output the subscription never watched arrive
-// still notifies.
+// Subscription filters use it to match inputs against their funding addresses,
+// allowing spends to trigger notifications even when the corresponding output
+// was not previously observed.
 func (s *GrpcServer) fetchPrevOutScript(op wire.OutPoint) []byte {
 	if tx, err := s.txMemPool.FetchTransaction(&op.Hash); err == nil {
 		if op.Index < uint32(len(tx.MsgTx().TxOut)) {
@@ -2724,6 +2722,9 @@ func (s *GrpcServer) fetchPrevOutScript(op wire.OutPoint) []byte {
 	return loadedTx.TxOut[op.Index].PkScript
 }
 
+// setInputMetadata sets the value, previous script, and address for each
+// transaction input by loading the previous transaction from the transaction
+// index.
 func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
 	inputTxMap := make(map[chainhash.Hash]*wire.MsgTx)
 	for i, in := range tx.Inputs {
