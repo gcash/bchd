@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"encoding/hex"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -1174,6 +1175,140 @@ func TestCheckMempoolAcceptanceMaxFee(t *testing.T) {
 		if ruleErr.Err != want {
 			t.Fatalf("max fee %d: got error %v, want %v",
 				test.maxFee, ruleErr.Err, want)
+		}
+	}
+}
+
+// TestDecodeCompressedBlockPrefilledIndexes ensures DecodeCompressedBlock
+// rejects compact blocks whose prefilled transaction indexes or transaction
+// counts do not describe a valid block layout, and that well-formed compact
+// blocks still reconstruct the original block.
+func TestDecodeCompressedBlockPrefilledIndexes(t *testing.T) {
+	t.Parallel()
+
+	harness, spendableOutputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	txs, err := harness.CreateTxChain(spendableOutputs[0], 6)
+	if err != nil {
+		t.Fatalf("unable to create test txs: %v", err)
+	}
+	originalBlock := wire.NewMsgBlock(&wire.BlockHeader{Version: 1, Bits: 1})
+	for _, tx := range txs {
+		originalBlock.Transactions = append(originalBlock.Transactions,
+			tx.MsgTx())
+		harness.txPool.pool[*tx.Hash()] = &TxDesc{
+			TxDesc: mining.TxDesc{Tx: tx},
+		}
+	}
+	targetHash := originalBlock.BlockHash()
+
+	// decode runs DecodeCompressedBlock and converts a panic into an error so
+	// that every case is reported.
+	decode := func(msg *wire.MsgCmpctBlock) (block *wire.MsgBlock, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("panic: %v", r)
+			}
+		}()
+		return harness.txPool.DecodeCompressedBlock(msg)
+	}
+
+	// Well-formed compact blocks built from the original block with
+	// different sets of prefilled transactions must decode to the same
+	// block.
+	validTests := []struct {
+		name      string
+		prefilled func(i int) bool
+	}{
+		{"all short ids", func(i int) bool { return false }},
+		{"all prefilled", func(i int) bool { return true }},
+		{"first prefilled", func(i int) bool { return i == 0 }},
+		{"last prefilled", func(i int) bool { return i == len(txs)-1 }},
+		{"alternating", func(i int) bool { return i%2 == 1 }},
+		{"middle run", func(i int) bool { return i >= 2 && i <= 3 }},
+	}
+	for _, test := range validTests {
+		knownInventory := make(map[chainhash.Hash]bool)
+		for i, tx := range originalBlock.Transactions {
+			if !test.prefilled(i) {
+				knownInventory[tx.TxHash()] = true
+			}
+		}
+		cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(originalBlock,
+			knownInventory)
+		if err != nil {
+			t.Fatalf("%s: unable to create cmpctblock: %v", test.name, err)
+		}
+		decoded, err := decode(cmpctBlock)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+			continue
+		}
+		if len(decoded.Transactions) != len(originalBlock.Transactions) {
+			t.Errorf("%s: decoded %d txs, want %d", test.name,
+				len(decoded.Transactions), len(originalBlock.Transactions))
+			continue
+		}
+		for i, tx := range decoded.Transactions {
+			want := originalBlock.Transactions[i].TxHash()
+			if tx == nil || tx.TxHash() != want {
+				t.Errorf("%s: decoded tx %d does not match the "+
+					"original", test.name, i)
+			}
+		}
+		if decodedHash := decoded.BlockHash(); decodedHash != targetHash {
+			t.Errorf("%s: decoded block hash %v, want %v", test.name,
+				decodedHash, targetHash)
+		}
+	}
+
+	// Compact blocks with inconsistent prefilled indexes or transaction
+	// counts must be rejected with an error.  Prefilled indexes are
+	// differentially encoded, so each index is relative to the position
+	// after the previous prefilled transaction.
+	tx := txs[0].MsgTx()
+	prefilled := func(indexes ...uint32) []*wire.PrefilledTx {
+		ptxs := make([]*wire.PrefilledTx, 0, len(indexes))
+		for _, index := range indexes {
+			ptxs = append(ptxs, &wire.PrefilledTx{Index: index, Tx: tx})
+		}
+		return ptxs
+	}
+	invalidTests := []struct {
+		name        string
+		prefilled   []*wire.PrefilledTx
+		numShortIDs int
+	}{
+		{"empty block", nil, 0},
+		{"first index past the end", prefilled(5), 0},
+		{"later index past the end", prefilled(0, 3), 1},
+		{"prefilled positions exceed tx count", prefilled(0, 1, 0), 0},
+		{"too few short ids before prefilled tx", prefilled(2), 1},
+		{"too few short ids between prefilled txs", prefilled(0, 2, 0), 1},
+		{"duplicate position after 32-bit wrap", prefilled(0, 0xffffffff), 1},
+		{"first index at 32-bit maximum", prefilled(0xffffffff), 1},
+		{"differential index overflows 32 bits",
+			prefilled(0xffffffff, 0xffffffff), 1},
+		{"nil prefilled tx", []*wire.PrefilledTx{{Index: 0}}, 1},
+		{"empty prefilled tx",
+			[]*wire.PrefilledTx{{Index: 0, Tx: wire.NewMsgTx(1)}}, 1},
+		{"tx count above limit", prefilled(0), int(maxCompactBlockTxs())},
+	}
+	for _, test := range invalidTests {
+		msg := &wire.MsgCmpctBlock{
+			Header:       wire.BlockHeader{Version: 1, Bits: 1},
+			PrefilledTxs: test.prefilled,
+		}
+		for i := 0; i < test.numShortIDs; i++ {
+			msg.ShortIDs = append(msg.ShortIDs, [wire.ShortIDSize]byte{
+				byte(i), byte(i >> 8), byte(i >> 16), 0xff, 0xff, 0xff,
+			})
+		}
+		_, err := decode(msg)
+		if err == nil || strings.HasPrefix(err.Error(), "panic") {
+			t.Errorf("%s: expected an error, got %v", test.name, err)
 		}
 	}
 }
