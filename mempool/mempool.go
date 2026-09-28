@@ -1399,6 +1399,69 @@ func (mp *TxPool) LastUpdated() time.Time {
 	return time.Unix(mp.lastUpdated.Load(), 0)
 }
 
+// maxCompactBlockTxs returns the maximum number of transactions a compact
+// block may describe.  It is the maximum block payload divided by the minimum
+// transaction size, which bounds the number of transactions any block can
+// hold.
+func maxCompactBlockTxs() uint64 {
+	return uint64(wire.MaxBlockPayload()) / blockchain.MinTransactionSize
+}
+
+// placePrefilledTxs validates the transaction count and the prefilled
+// transactions of the passed compact block.  It returns a transaction slice
+// sized to the block with each prefilled transaction at its position and nil
+// in every other position.  Those positions are left for the short IDs, in
+// order, and there is exactly one per short ID.
+//
+// The prefilled indexes are differentially encoded as described in BIP0152:
+// the first index is absolute and each following index counts the positions
+// between the previous prefilled transaction and this one.  An error is
+// returned when the block describes no transactions or more than
+// maxCompactBlockTxs, when a prefilled transaction is missing or empty, or
+// when a decoded index exceeds 32 bits or points past the positions that the
+// earlier prefilled transactions and the short IDs can fill.
+func placePrefilledTxs(block *wire.MsgCmpctBlock) ([]*wire.MsgTx, error) {
+	numShortIDs := uint64(len(block.ShortIDs))
+	numTxs := numShortIDs + uint64(len(block.PrefilledTxs))
+	if numTxs == 0 {
+		return nil, errors.New("cmpctblock has no transactions")
+	}
+	if maxTxs := maxCompactBlockTxs(); numTxs > maxTxs {
+		return nil, fmt.Errorf("cmpctblock has %d transactions which "+
+			"exceeds the max of %d", numTxs, maxTxs)
+	}
+
+	txs := make([]*wire.MsgTx, numTxs)
+	lastIndex := int64(-1)
+	for i, ptx := range block.PrefilledTxs {
+		if ptx == nil || ptx.Tx == nil ||
+			(len(ptx.Tx.TxIn) == 0 && len(ptx.Tx.TxOut) == 0) {
+
+			return nil, fmt.Errorf("cmpctblock prefilled tx %d is "+
+				"empty", i)
+		}
+
+		// The previous index is at most math.MaxUint32, so adding a
+		// uint32 plus one cannot overflow an int64.
+		lastIndex += int64(ptx.Index) + 1
+		if lastIndex > math.MaxUint32 {
+			return nil, fmt.Errorf("cmpctblock prefilled tx %d index "+
+				"overflows 32 bits", i)
+		}
+
+		// Each position before this one must be filled by one of the
+		// i previous prefilled transactions or by a short ID.  Since
+		// the decoded indexes strictly increase, this also keeps them
+		// unique and within the transaction count.
+		if uint64(lastIndex) > numShortIDs+uint64(i) {
+			return nil, fmt.Errorf("cmpctblock prefilled tx %d index "+
+				"%d is out of range", i, lastIndex)
+		}
+		txs[lastIndex] = ptx.Tx
+	}
+	return txs, nil
+}
+
 // DecodeCompressedBlock takes in a block interface and attempts to decode it
 // according to know block compressing algorithms. If successful it returns
 // the complete block.
@@ -1408,19 +1471,13 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 
 	switch block := iBlock.(type) {
 	case *wire.MsgCmpctBlock:
+		// First add all the prefilled txs.
+		txs, err := placePrefilledTxs(block)
+		if err != nil {
+			return nil, err
+		}
 		msgBlock := wire.NewMsgBlock(&block.Header)
-		msgBlock.Transactions = make([]*wire.MsgTx, block.TotalTransactions())
-
-		// First add all th prefilled txs
-		lastIndex := uint32(0)
-		if len(block.PrefilledTxs) > 0 {
-			lastIndex = block.PrefilledTxs[0].Index
-			msgBlock.Transactions[lastIndex] = block.PrefilledTxs[0].Tx
-		}
-		for _, ptx := range block.PrefilledTxs[1:] {
-			lastIndex += ptx.Index + 1
-			msgBlock.Transactions[lastIndex] = ptx.Tx
-		}
+		msgBlock.Transactions = txs
 
 		// Next we'll decode the short IDs.
 		shortIDMap := make(map[[wire.ShortIDSize]byte]int)
@@ -1479,6 +1536,12 @@ func (mp *TxPool) DecodeCompressedBlock(iBlock interface{}) (*wire.MsgBlock, err
 			// This was a prefilled tx so we can continue
 			if tx != nil {
 				continue
+			}
+			// placePrefilledTxs leaves exactly one empty slot per short
+			// ID, so this only guards that invariant.
+			if len(recoveredTxs) == 0 {
+				return nil, errors.New("cmpctblock has more empty " +
+					"slots than short ids")
 			}
 			// Pop the first item of the recoveredTxs list
 			pop, recoveredTxs = recoveredTxs[0], recoveredTxs[1:]
