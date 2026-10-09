@@ -87,7 +87,7 @@ func IsPayToScriptHash(script []byte) bool {
 }
 
 // IsPayToScriptHash32 returns true if the script is in the standard
-// pay-to-script-hash-32 (P2SH) format, false otherwise.
+// pay-to-script-hash-32 (P2SH32) format, false otherwise.
 func IsPayToScriptHash32(script []byte) bool {
 	pops, err := parseScript(script)
 	if err != nil {
