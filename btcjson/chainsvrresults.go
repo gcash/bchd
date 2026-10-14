@@ -55,6 +55,7 @@ type GetBlockVerboseResult struct {
 // whose tx field is an array of transaction hashes. When the verbose flag is set to 2,
 // getblock returns an object whose tx field is an array of raw transactions.
 // Use GetBlockVerboseResult to unmarshal data received from passing verbose=1 to getblock.
+// Verbosity 3 also returns this structure, with prevouts and fees.
 type GetBlockVerboseTxResult struct {
 	Hash          string        `json:"hash"`
 	Confirmations int64         `json:"confirmations"`
@@ -354,15 +355,34 @@ type ScriptSig struct {
 	Hex string `json:"hex"`
 }
 
+// PrevOutScriptPubKeyResult models the script of a getblock prevout.
+type PrevOutScriptPubKeyResult struct {
+	Asm     string `json:"asm"`
+	Hex     string `json:"hex"`
+	Type    string `json:"type"`
+	Address string `json:"address,omitempty"`
+}
+
+// GetBlockPrevOutResult models the output spent by an input in getblock
+// verbosity 3.
+type GetBlockPrevOutResult struct {
+	Generated    bool                      `json:"generated"`
+	Height       int32                     `json:"height"`
+	Value        float64                   `json:"value"`
+	ScriptPubKey PrevOutScriptPubKeyResult `json:"scriptPubKey"`
+	TokenData    *TokenDataResult          `json:"tokenData,omitempty"`
+}
+
 // Vin models parts of the tx data.  It is defined separately since
 // getrawtransaction, decoderawtransaction, and searchrawtransaction use the
 // same structure.
 type Vin struct {
-	Coinbase  string     `json:"coinbase"`
-	Txid      string     `json:"txid"`
-	Vout      uint32     `json:"vout"`
-	ScriptSig *ScriptSig `json:"scriptSig"`
-	Sequence  uint32     `json:"sequence"`
+	Coinbase  string                 `json:"coinbase"`
+	Txid      string                 `json:"txid"`
+	Vout      uint32                 `json:"vout"`
+	ScriptSig *ScriptSig             `json:"scriptSig"`
+	PrevOut   *GetBlockPrevOutResult `json:"prevout,omitempty"`
+	Sequence  uint32                 `json:"sequence"`
 }
 
 // IsCoinBase returns a bool to show if a Vin is a Coinbase one or not.
@@ -384,14 +404,16 @@ func (v *Vin) MarshalJSON() ([]byte, error) {
 	}
 
 	txStruct := struct {
-		Txid      string     `json:"txid"`
-		Vout      uint32     `json:"vout"`
-		ScriptSig *ScriptSig `json:"scriptSig"`
-		Sequence  uint32     `json:"sequence"`
+		Txid      string                 `json:"txid"`
+		Vout      uint32                 `json:"vout"`
+		ScriptSig *ScriptSig             `json:"scriptSig"`
+		PrevOut   *GetBlockPrevOutResult `json:"prevout,omitempty"`
+		Sequence  uint32                 `json:"sequence"`
 	}{
 		Txid:      v.Txid,
 		Vout:      v.Vout,
 		ScriptSig: v.ScriptSig,
+		PrevOut:   v.PrevOut,
 		Sequence:  v.Sequence,
 	}
 	return json.Marshal(txStruct)
@@ -496,18 +518,19 @@ type InfoChainResult struct {
 
 // TxRawResult models the data from the getrawtransaction command.
 type TxRawResult struct {
-	Hex           string `json:"hex,omitempty"`
-	Txid          string `json:"txid"`
-	Hash          string `json:"hash,omitempty"`
-	Size          int32  `json:"size,omitempty"`
-	Version       int32  `json:"version"`
-	LockTime      uint32 `json:"locktime"`
-	Vin           []Vin  `json:"vin"`
-	Vout          []Vout `json:"vout"`
-	BlockHash     string `json:"blockhash,omitempty"`
-	Confirmations uint64 `json:"confirmations,omitempty"`
-	Time          int64  `json:"time,omitempty"`
-	Blocktime     int64  `json:"blocktime,omitempty"`
+	Hex           string   `json:"hex,omitempty"`
+	Txid          string   `json:"txid"`
+	Hash          string   `json:"hash,omitempty"`
+	Size          int32    `json:"size,omitempty"`
+	Version       int32    `json:"version"`
+	LockTime      uint32   `json:"locktime"`
+	Vin           []Vin    `json:"vin"`
+	Vout          []Vout   `json:"vout"`
+	Fee           *float64 `json:"fee,omitempty"`
+	BlockHash     string   `json:"blockhash,omitempty"`
+	Confirmations uint64   `json:"confirmations,omitempty"`
+	Time          int64    `json:"time,omitempty"`
+	Blocktime     int64    `json:"blocktime,omitempty"`
 }
 
 // SearchRawTransactionsResult models the data from the searchrawtransaction

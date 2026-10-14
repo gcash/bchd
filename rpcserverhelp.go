@@ -86,7 +86,21 @@ var helpDescsEnUS = map[string]string{
 	"vin-vout":        "The index of the output being redeemed from the origin transaction (non-coinbase txns only)",
 	"vin-scriptSig":   "The signature script used to redeem the origin transaction as a JSON object (non-coinbase txns only)",
 	"vin-txinwitness": "The witness used to redeem the input encoded as a string array of its items",
+	"vin-prevout":     "The output spent by this input as a JSON object (non-coinbase txns only, only when getblock verbosity>=3)",
 	"vin-sequence":    "The script sequence number",
+
+	// GetBlockPrevOutResult help.
+	"getblockprevoutresult-generated":    "Whether the spent output was created by a coinbase transaction",
+	"getblockprevoutresult-height":       "The height of the block that contains the spent output",
+	"getblockprevoutresult-value":        "The value of the spent output in BCH",
+	"getblockprevoutresult-scriptPubKey": "The public key script of the spent output as a JSON object",
+	"getblockprevoutresult-tokenData":    "The CashTokens data of the spent output as a JSON object (only if the output carries a token)",
+
+	// PrevOutScriptPubKeyResult help.
+	"prevoutscriptpubkeyresult-asm":     "Disassembly of the script",
+	"prevoutscriptpubkeyresult-hex":     "Hex-encoded bytes of the script",
+	"prevoutscriptpubkeyresult-type":    "The type of the script (e.g. 'pubkeyhash')",
+	"prevoutscriptpubkeyresult-address": "The address the script pays to (only if it pays to a single address)",
 
 	// ScriptPubKeyResult help.
 	"scriptpubkeyresult-asm":       "Disassembly of the script",
@@ -179,13 +193,13 @@ var helpDescsEnUS = map[string]string{
 	// GetBlockCmd help.
 	"getblock--synopsis":   "Returns information about a block given its hash.",
 	"getblock-hash":        "The hash of the block",
-	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), or as parsed data with parsed transaction data (2) ",
+	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), as parsed data with parsed transaction data (2), or as parsed data with parsed transaction data that includes the output spent by each input and the fee of each transaction (3) ",
 	"getblock--condition0": "verbosity=0",
-	"getblock--condition1": "verbosity=1",
-	"getblock--condition2": "verbosity=2",
+	"getblock--condition1": "verbosity=1 or verbosity=2",
+	"getblock--condition2": "verbosity=3",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
 	"getblock--result1":    "JSON object with information about the block",
-	"getblock--result2":    "JSON object with information about the block and each transaction",
+	"getblock--result2":    "JSON object with information about the block and each transaction, including the output spent by each input and the fee",
 
 	// GetBlockChainInfoCmd help.
 	"getblockchaininfo--synopsis": "Returns information about the current blockchain state and the status of any active soft-fork deployments.",
@@ -221,6 +235,7 @@ var helpDescsEnUS = map[string]string{
 	"txrawresult-locktime":      "The transaction lock time",
 	"txrawresult-vin":           "The transaction inputs as JSON objects",
 	"txrawresult-vout":          "The transaction outputs as JSON objects",
+	"txrawresult-fee":           "The transaction fee in BCH (non-coinbase txns only, only when getblock verbosity>=3)",
 	"txrawresult-blockhash":     "Hash of the block the transaction is part of",
 	"txrawresult-confirmations": "Number of confirmations of the block",
 	"txrawresult-time":          "Transaction time in seconds since 1 Jan 1970 GMT",
@@ -261,6 +276,23 @@ var helpDescsEnUS = map[string]string{
 	"getblockverboseresult-previousblockhash": "The hash of the previous block",
 	"getblockverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
 	"getblockverboseresult-strippedsize":      "The size of the block without witness data",
+
+	// GetBlockVerboseTxResult help.
+	"getblockverbosetxresult-hash":              "The hash of the block (same as provided)",
+	"getblockverbosetxresult-confirmations":     "The number of confirmations",
+	"getblockverbosetxresult-strippedsize":      "The size of the block without witness data",
+	"getblockverbosetxresult-size":              "The size of the block",
+	"getblockverbosetxresult-height":            "The height of the block in the block chain",
+	"getblockverbosetxresult-version":           "The block version",
+	"getblockverbosetxresult-versionHex":        "The block version in hexadecimal",
+	"getblockverbosetxresult-merkleroot":        "Root hash of the merkle tree",
+	"getblockverbosetxresult-tx":                "The transactions as JSON objects, with the output spent by each input and the fee of each transaction",
+	"getblockverbosetxresult-time":              "The block time in seconds since 1 Jan 1970 GMT",
+	"getblockverbosetxresult-nonce":             "The block nonce",
+	"getblockverbosetxresult-bits":              "The bits which represent the block difficulty",
+	"getblockverbosetxresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
+	"getblockverbosetxresult-previousblockhash": "The hash of the previous block",
+	"getblockverbosetxresult-nextblockhash":     "The hash of the next block (only if there is one)",
 
 	// GetBlockCountCmd help.
 	"getblockcount--synopsis": "Returns the number of blocks in the longest block chain.",
@@ -747,7 +779,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getaddednodeinfo":      {(*[]string)(nil), (*[]btcjson.GetAddedNodeInfoResult)(nil)},
 	"getbestblock":          {(*btcjson.GetBestBlockResult)(nil)},
 	"getbestblockhash":      {(*string)(nil)},
-	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil)},
+	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil), (*btcjson.GetBlockVerboseTxResult)(nil)},
 	"getblockcount":         {(*int64)(nil)},
 	"getblockhash":          {(*string)(nil)},
 	"getblockheader":        {(*string)(nil), (*btcjson.GetBlockHeaderVerboseResult)(nil)},

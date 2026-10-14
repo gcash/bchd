@@ -44,6 +44,39 @@ func TestChainSvrCustomResults(t *testing.T) {
 			expected: `{"txid":"123","vout":1,"scriptSig":{"asm":"0","hex":"00"},"sequence":4294967295}`,
 		},
 		{
+			name: "custom vin marshal with prevout",
+			result: &btcjson.Vin{
+				Txid: "123",
+				Vout: 1,
+				ScriptSig: &btcjson.ScriptSig{
+					Asm: "0",
+					Hex: "00",
+				},
+				PrevOut: &btcjson.GetBlockPrevOutResult{
+					Generated: true,
+					Height:    100,
+					Value:     50,
+					ScriptPubKey: btcjson.PrevOutScriptPubKeyResult{
+						Asm:  "1",
+						Hex:  "51",
+						Type: "nonstandard",
+					},
+				},
+				Sequence: 4294967295,
+			},
+			expected: `{"txid":"123","vout":1,"scriptSig":{"asm":"0","hex":"00"},"prevout":{"generated":true,"height":100,"value":50,"scriptPubKey":{"asm":"1","hex":"51","type":"nonstandard"}},"sequence":4294967295}`,
+		},
+		{
+			name: "txrawresult marshal with zero fee",
+			result: &btcjson.TxRawResult{
+				Txid: "123",
+				Vin:  []btcjson.Vin{},
+				Vout: []btcjson.Vout{},
+				Fee:  new(float64),
+			},
+			expected: `{"txid":"123","version":0,"locktime":0,"vin":[],"vout":[],"fee":0}`,
+		},
+		{
 			name: "custom vinprevout marshal with coinbase",
 			result: &btcjson.VinPrevOut{
 				Coinbase: "021234",

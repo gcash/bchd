@@ -1333,21 +1333,152 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 
 		blockReply.Tx = txNames
 	} else {
-		txns := blk.Transactions()
-		rawTxns := make([]btcjson.TxRawResult, len(txns))
-		for i, tx := range txns {
-			rawTxn, err := createTxRawResult(params, tx.MsgTx(),
-				tx.Hash().String(), blockHeader, hash.String(),
-				blockHeight, best.Height)
-			if err != nil {
-				return nil, err
-			}
-			rawTxns[i] = *rawTxn
+		rawTxns, err := createBlockTxRawResults(params, blk,
+			hash.String(), best.Height)
+		if err != nil {
+			return nil, err
 		}
+
+		// The spent outputs come from the spend journal, so no
+		// txindex is needed.
+		if *c.Verbosity >= 3 {
+			stxos, err := s.cfg.Chain.FetchSpendJournal(blk)
+			if err == nil {
+				err = addBlockPrevOuts(params, rawTxns, blk, stxos)
+			}
+			if err != nil {
+				rpcsLog.Debugf("Omitting spent outputs and fees "+
+					"from block %v: %v", hash, err)
+			}
+
+			return btcjson.GetBlockVerboseTxResult{
+				Hash:          blockReply.Hash,
+				Confirmations: blockReply.Confirmations,
+				Size:          blockReply.Size,
+				Height:        blockReply.Height,
+				Version:       blockReply.Version,
+				VersionHex:    blockReply.VersionHex,
+				MerkleRoot:    blockReply.MerkleRoot,
+				Tx:            rawTxns,
+				Time:          blockReply.Time,
+				Nonce:         blockReply.Nonce,
+				Bits:          blockReply.Bits,
+				Difficulty:    blockReply.Difficulty,
+				PreviousHash:  blockReply.PreviousHash,
+				NextHash:      blockReply.NextHash,
+			}, nil
+		}
+
 		blockReply.RawTx = rawTxns
 	}
 
 	return blockReply, nil
+}
+
+// createBlockTxRawResults returns the raw transaction JSON objects for all of
+// the transactions in the passed block, which must have its height set.
+func createBlockTxRawResults(chainParams *chaincfg.Params, blk *bchutil.Block,
+	blkHash string, chainHeight int32) ([]btcjson.TxRawResult, error) {
+
+	blockHeader := &blk.MsgBlock().Header
+	txns := blk.Transactions()
+	rawTxns := make([]btcjson.TxRawResult, len(txns))
+	for i, tx := range txns {
+		rawTxn, err := createTxRawResult(chainParams, tx.MsgTx(),
+			tx.Hash().String(), blockHeader, blkHash, blk.Height(),
+			chainHeight)
+		if err != nil {
+			return nil, err
+		}
+		rawTxns[i] = *rawTxn
+	}
+
+	return rawTxns, nil
+}
+
+// createPrevOutResult returns the JSON object for the output a transaction
+// input spends.
+func createPrevOutResult(chainParams *chaincfg.Params,
+	stxo *blockchain.SpentTxOut) *btcjson.GetBlockPrevOutResult {
+
+	// The spend journal stores token data in front of the script.
+	var tokenData wire.TokenData
+	pkScript, err := tokenData.SeparateTokenDataFromPKScriptIfExists(
+		stxo.PkScript, 0)
+	if err != nil {
+		tokenData = wire.TokenData{}
+		pkScript = stxo.PkScript
+	}
+
+	// The disassembled string will contain [error] inline if the script
+	// doesn't fully parse, so ignore the error here.
+	disbuf, _ := txscript.DisasmString(pkScript)
+
+	// Pay-to-pubkey is reported as the address of its public key hash.
+	scriptClass, addrs, _, _ := txscript.ExtractPkScriptAddrs(pkScript,
+		chainParams)
+	var address string
+	if scriptClass != txscript.MultiSigTy && len(addrs) == 1 {
+		if pk, ok := addrs[0].(*bchutil.AddressPubKey); ok {
+			address = pk.AddressPubKeyHash().EncodeAddress()
+		} else {
+			address = addrs[0].EncodeAddress()
+		}
+	}
+
+	return &btcjson.GetBlockPrevOutResult{
+		Generated: stxo.IsCoinBase,
+		Height:    stxo.Height,
+		Value:     bchutil.Amount(stxo.Amount).ToBCH(),
+		ScriptPubKey: btcjson.PrevOutScriptPubKeyResult{
+			Asm:     disbuf,
+			Hex:     hex.EncodeToString(pkScript),
+			Type:    scriptClass.String(),
+			Address: address,
+		},
+		TokenData: createTokenDataResult(&tokenData),
+	}
+}
+
+// addBlockPrevOuts adds the spent outputs and fees from the spend journal of a
+// block to its raw transaction results.
+func addBlockPrevOuts(chainParams *chaincfg.Params,
+	rawTxns []btcjson.TxRawResult, blk *bchutil.Block,
+	stxos []blockchain.SpentTxOut) error {
+
+	txns := blk.Transactions()
+	var numInputs int
+	for _, tx := range txns[1:] {
+		numInputs += len(tx.MsgTx().TxIn)
+	}
+	if len(stxos) != numInputs {
+		return fmt.Errorf("got %d spent outputs for %d inputs",
+			len(stxos), numInputs)
+	}
+
+	var stxoIdx int
+	for i, tx := range txns[1:] {
+		msgTx := tx.MsgTx()
+		rawTxn := &rawTxns[i+1]
+		var totalIn int64
+		for j := range msgTx.TxIn {
+			stxo := &stxos[stxoIdx]
+			stxoIdx++
+
+			rawTxn.Vin[j].PrevOut = createPrevOutResult(chainParams,
+				stxo)
+			totalIn += stxo.Amount
+		}
+
+		var totalOut int64
+		for _, txOut := range msgTx.TxOut {
+			totalOut += txOut.Value
+		}
+		fee := bchutil.Amount(totalIn - totalOut).ToBCH()
+		rawTxn.Fee = &fee
+	}
+
+	return nil
 }
 
 // softForkStatus converts a ThresholdState state into a human readable string

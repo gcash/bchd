@@ -9,13 +9,18 @@ package integration
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime/debug"
 	"testing"
 
+	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/integration/rpctest"
+	"github.com/gcash/bchd/txscript"
+	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 func testGetBestBlock(r *rpctest.Harness, t *testing.T) {
@@ -94,10 +99,102 @@ func testGetBlockHash(r *rpctest.Harness, t *testing.T) {
 	}
 }
 
+func testGetBlockVerbosity3(r *rpctest.Harness, t *testing.T) {
+	// Mine a block that holds a transaction spending a coinbase output.
+	addr, err := r.NewAddress()
+	if err != nil {
+		t.Fatalf("Unable to generate address: %v", err)
+	}
+	pkScript, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		t.Fatalf("Unable to create script: %v", err)
+	}
+	output := wire.NewTxOut(bchutil.SatoshiPerBitcoin, pkScript,
+		wire.TokenData{})
+	txid, err := r.SendOutputs([]*wire.TxOut{output}, 10)
+	if err != nil {
+		t.Fatalf("Unable to send outputs: %v", err)
+	}
+	blockHashes, err := r.Node.Generate(1)
+	if err != nil {
+		t.Fatalf("Unable to generate block: %v", err)
+	}
+
+	// Verbosity 2 lists the transactions under "rawtx", without the
+	// prevout and fee fields.
+	raw, err := r.Node.RawRequest("getblock", []json.RawMessage{
+		json.RawMessage(`"` + blockHashes[0].String() + `"`),
+		json.RawMessage("2"),
+	})
+	if err != nil {
+		t.Fatalf("Call to `getblock` failed: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatalf("Unable to unmarshal block: %v", err)
+	}
+	_, hasRawTx := fields["rawtx"]
+	_, hasTx := fields["tx"]
+	if !hasRawTx || hasTx || bytes.Contains(raw, []byte(`"prevout"`)) ||
+		bytes.Contains(raw, []byte(`"fee"`)) {
+
+		t.Fatalf("Unexpected verbosity 2 block: %s", raw)
+	}
+
+	toAmount := func(value float64) bchutil.Amount {
+		amount, err := bchutil.NewAmount(value)
+		if err != nil {
+			t.Fatalf("Invalid amount %v: %v", value, err)
+		}
+		return amount
+	}
+
+	// Verbosity 4 is treated as 3.
+	for _, verbosity := range []string{"3", "4"} {
+		raw, err := r.Node.RawRequest("getblock", []json.RawMessage{
+			json.RawMessage(`"` + blockHashes[0].String() + `"`),
+			json.RawMessage(verbosity),
+		})
+		if err != nil {
+			t.Fatalf("Call to `getblock` failed: %v", err)
+		}
+		var block btcjson.GetBlockVerboseTxResult
+		if err := json.Unmarshal(raw, &block); err != nil {
+			t.Fatalf("Unable to unmarshal block: %v", err)
+		}
+		if len(block.Tx) != 2 || block.Tx[1].Txid != txid.String() ||
+			block.Tx[0].Fee != nil || block.Tx[1].Fee == nil {
+
+			t.Fatalf("Unexpected transactions in block: %s", raw)
+		}
+
+		// The fee is the value of the spent outputs minus the value of
+		// the outputs.
+		tx := block.Tx[1]
+		var fee bchutil.Amount
+		for _, vin := range tx.Vin {
+			if vin.PrevOut == nil {
+				t.Fatalf("Missing prevout: %s", raw)
+			}
+			if !vin.PrevOut.Generated || vin.PrevOut.Height <= 0 {
+				t.Fatalf("Unexpected prevout: %s", raw)
+			}
+			fee += toAmount(vin.PrevOut.Value)
+		}
+		for _, vout := range tx.Vout {
+			fee -= toAmount(vout.Value)
+		}
+		if toAmount(*tx.Fee) != fee {
+			t.Fatalf("Unexpected fee %v, want %v", *tx.Fee, fee)
+		}
+	}
+}
+
 var rpcTestCases = []rpctest.HarnessTestCase{
 	testGetBestBlock,
 	testGetBlockCount,
 	testGetBlockHash,
+	testGetBlockVerbosity3,
 }
 
 var primaryHarness *rpctest.Harness

@@ -9,15 +9,21 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // txHexWithTrailingBytes returns the hex encoding of a minimal but otherwise
@@ -271,5 +277,266 @@ func TestUtxoEntryTokenDataResult(t *testing.T) {
 		tokenData := entry.TokenData()
 		assertTokenDataResult(t, test.name+" (utxo set)",
 			createTokenDataResult(&tokenData), test.expected)
+	}
+}
+
+// getBlockTestBestHeight is the height of the best chain that holds the block
+// used by the getblock tests.
+const getBlockTestBestHeight = 305
+
+// mustDecodeHex returns the bytes of the passed hex string and fails the test
+// if it is not valid hex.
+func mustDecodeHex(t *testing.T, s string) []byte {
+	t.Helper()
+
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		t.Fatalf("unable to decode hex %q: %v", s, err)
+	}
+	return b
+}
+
+// getBlockTestBlock returns the block used by the getblock tests along with its
+// spend journal.
+func getBlockTestBlock(t *testing.T) (*bchutil.Block, []blockchain.SpentTxOut) {
+	t.Helper()
+
+	p2pkh := mustDecodeHex(t, "76a914123456789012345678901234567890123456789088ac")
+	coinbase := wire.NewMsgTx(1)
+	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{},
+		wire.MaxPrevOutIndex), mustDecodeHex(t, "022c0100")))
+	coinbase.AddTxOut(wire.NewTxOut(5000020200, p2pkh, wire.TokenData{}))
+
+	tx1 := wire.NewMsgTx(2)
+	tx1.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{0x01}, 0),
+		mustDecodeHex(t, "0151")))
+	tx1.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{0x02}, 1),
+		mustDecodeHex(t, "0152")))
+	tx1.AddTxOut(wire.NewTxOut(4999990000, p2pkh, wire.TokenData{}))
+	tx1.AddTxOut(decodeTokenTestTxOut(t, tokenDataTests[1].prefix))
+
+	tx2 := wire.NewMsgTx(2)
+	tx2.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, 0),
+		mustDecodeHex(t, "0153")))
+	tx2.TxIn[0].PreviousOutPoint.Hash = tx1.TxHash()
+	tx2.AddTxOut(wire.NewTxOut(4999980000,
+		mustDecodeHex(t, "a914b472a266d0bd89c13706a4132ccfb16f7c3b9fcb87"),
+		wire.TokenData{}))
+
+	prevHash, err := chainhash.NewHashFromStr(
+		"00000000000000000123456789abcdef0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("unable to decode previous block hash: %v", err)
+	}
+	msgBlock := wire.NewMsgBlock(&wire.BlockHeader{
+		Version:    0x20000000,
+		PrevBlock:  *prevHash,
+		MerkleRoot: coinbase.TxHash(),
+		Timestamp:  time.Unix(1700000000, 0),
+		Bits:       0x1d00ffff,
+		Nonce:      7,
+	})
+	msgBlock.Transactions = []*wire.MsgTx{coinbase, tx1, tx2}
+	blk := bchutil.NewBlock(msgBlock)
+	blk.SetHeight(300)
+
+	// The last entry is the first output of tx1, which tx2 spends.
+	tokenPrefix := tokenDataTests[5].prefix
+	stxos := []blockchain.SpentTxOut{{
+		Amount:     5000000000,
+		PkScript:   mustDecodeHex(t, tokenTestP2PKHScript),
+		Height:     100,
+		IsCoinBase: true,
+	}, {
+		Amount:   decodeTokenTestTxOut(t, tokenPrefix).Value,
+		PkScript: mustDecodeHex(t, tokenPrefix+tokenTestP2PKHScript),
+		Height:   200,
+	}, {
+		Amount:   4999990000,
+		PkScript: p2pkh,
+		Height:   300,
+	}}
+
+	return blk, stxos
+}
+
+// getBlockTestReply returns the getblock result for the passed block, with the
+// block fields set the same way handleGetBlock sets them.
+func getBlockTestReply(blk *bchutil.Block) btcjson.GetBlockVerboseResult {
+	blockHeader := &blk.MsgBlock().Header
+	return btcjson.GetBlockVerboseResult{
+		Hash:          blk.Hash().String(),
+		Version:       blockHeader.Version,
+		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
+		MerkleRoot:    blockHeader.MerkleRoot.String(),
+		PreviousHash:  blockHeader.PrevBlock.String(),
+		Nonce:         blockHeader.Nonce,
+		Time:          blockHeader.Timestamp.Unix(),
+		Confirmations: int64(1 + getBlockTestBestHeight - blk.Height()),
+		Height:        int64(blk.Height()),
+		Size:          int32(blk.MsgBlock().SerializeSize()),
+		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
+		Difficulty: getDifficultyRatio(blockHeader.Bits,
+			&chaincfg.MainNetParams),
+	}
+}
+
+// getBlockTestTxns returns the raw transaction results for the passed block.
+func getBlockTestTxns(t *testing.T, blk *bchutil.Block) []btcjson.TxRawResult {
+	t.Helper()
+
+	rawTxns, err := createBlockTxRawResults(&chaincfg.MainNetParams, blk,
+		blk.Hash().String(), getBlockTestBestHeight)
+	if err != nil {
+		t.Fatalf("unable to create transaction results: %v", err)
+	}
+	return rawTxns
+}
+
+// assertGolden ensures the passed result marshals to the JSON in the named
+// file in the testdata directory, byte for byte apart from indentation.
+func assertGolden(t *testing.T, name string, result interface{}) {
+	t.Helper()
+
+	marshalled, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("%s: unable to marshal result: %v", name, err)
+	}
+	var got bytes.Buffer
+	if err := json.Indent(&got, marshalled, "", "\t"); err != nil {
+		t.Fatalf("%s: unable to indent result: %v", name, err)
+	}
+	got.WriteByte('\n')
+
+	want, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("%s: unable to read golden file: %v", name, err)
+	}
+	if !bytes.Equal(got.Bytes(), want) {
+		t.Errorf("%s: result does not match golden file - got:\n%s",
+			name, got.Bytes())
+	}
+}
+
+// TestGetBlockVerbosity1And2Unchanged ensures the getblock results for
+// verbosity 1 and 2 are unchanged by the addition of verbosity 3.  The golden
+// files were generated from the results before verbosity 3 was added.
+func TestGetBlockVerbosity1And2Unchanged(t *testing.T) {
+	blk, _ := getBlockTestBlock(t)
+
+	reply := getBlockTestReply(blk)
+	for _, tx := range blk.Transactions() {
+		reply.Tx = append(reply.Tx, tx.Hash().String())
+	}
+	assertGolden(t, "getblock-verbosity-1.json", reply)
+
+	reply = getBlockTestReply(blk)
+	reply.RawTx = getBlockTestTxns(t, blk)
+	assertGolden(t, "getblock-verbosity-2.json", reply)
+}
+
+// TestGetBlockVerbosity3 ensures getblock with verbosity 3 reports the prevout
+// of each input and the fee of each transaction.
+func TestGetBlockVerbosity3(t *testing.T) {
+	blk, stxos := getBlockTestBlock(t)
+	rawTxns := getBlockTestTxns(t, blk)
+	err := addBlockPrevOuts(&chaincfg.MainNetParams, rawTxns, blk, stxos)
+	if err != nil {
+		t.Fatalf("unable to add prevouts: %v", err)
+	}
+
+	reply := getBlockTestReply(blk)
+	assertGolden(t, "getblock-verbosity-3.json", btcjson.GetBlockVerboseTxResult{
+		Hash:          reply.Hash,
+		Confirmations: reply.Confirmations,
+		Size:          reply.Size,
+		Height:        reply.Height,
+		Version:       reply.Version,
+		VersionHex:    reply.VersionHex,
+		MerkleRoot:    reply.MerkleRoot,
+		Tx:            rawTxns,
+		Time:          reply.Time,
+		Nonce:         reply.Nonce,
+		Bits:          reply.Bits,
+		Difficulty:    reply.Difficulty,
+		PreviousHash:  reply.PreviousHash,
+	})
+}
+
+// TestAddBlockPrevOutsJournalMismatch ensures the transaction results are left
+// unchanged, without prevouts or fees, when the spend journal does not hold
+// exactly one entry for each input of the block.
+func TestAddBlockPrevOutsJournalMismatch(t *testing.T) {
+	blk, stxos := getBlockTestBlock(t)
+	want, err := json.Marshal(getBlockTestTxns(t, blk))
+	if err != nil {
+		t.Fatalf("unable to marshal results: %v", err)
+	}
+
+	tests := map[string][]blockchain.SpentTxOut{
+		"empty journal": nil,
+		"missing entry": stxos[:len(stxos)-1],
+		"extra entry":   append(stxos[:len(stxos):len(stxos)], stxos[0]),
+	}
+	for name, journal := range tests {
+		rawTxns := getBlockTestTxns(t, blk)
+		err := addBlockPrevOuts(&chaincfg.MainNetParams, rawTxns, blk,
+			journal)
+		if err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+		got, err := json.Marshal(rawTxns)
+		if err != nil {
+			t.Fatalf("%s: unable to marshal results: %v", name, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s: results were changed: %s", name, got)
+		}
+	}
+}
+
+// TestCreatePrevOutResultScripts ensures the script and token data of a prevout
+// are reported correctly.
+func TestCreatePrevOutResultScripts(t *testing.T) {
+	multisig := "51" + "21" + strings.Repeat("02", 33) + "21" +
+		strings.Repeat("03", 33) + "52ae"
+	p2pk := "21" + "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959" +
+		"f2815b16f81798" + "ac"
+
+	tests := []struct {
+		name     string
+		pkScript string
+		wantHex  string
+		wantType string
+		wantAddr string
+	}{
+		{"p2pkh", tokenTestP2PKHScript, tokenTestP2PKHScript, "pubkeyhash",
+			"qr4pxg5xx2x0eqv527uaasuxcj6usna2tsd4366h8k"},
+		{"p2pk", p2pk, p2pk, "pubkey",
+			"qp63uahgrxged4z5jswyt5dn5v3lzsem6cy4spdc2h"},
+		{"bare multisig", multisig, multisig, "multisig", ""},
+		{"token", tokenDataTests[1].prefix + tokenTestP2PKHScript,
+			tokenTestP2PKHScript, "pubkeyhash",
+			"qr4pxg5xx2x0eqv527uaasuxcj6usna2tsd4366h8k"},
+	}
+
+	for _, test := range tests {
+		stxo := blockchain.SpentTxOut{
+			Amount:   1000,
+			PkScript: mustDecodeHex(t, test.pkScript),
+			Height:   10,
+		}
+		result := createPrevOutResult(&chaincfg.MainNetParams, &stxo)
+		script := result.ScriptPubKey
+		if script.Hex != test.wantHex || script.Type != test.wantType ||
+			script.Address != test.wantAddr {
+
+			t.Errorf("%s: unexpected script %+v", test.name, script)
+		}
+		wantToken := test.name == "token"
+		if (result.TokenData != nil) != wantToken {
+			t.Errorf("%s: unexpected token data %+v", test.name,
+				result.TokenData)
+		}
 	}
 }
