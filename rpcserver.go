@@ -525,6 +525,101 @@ func messageToHex(msg wire.Message) (string, error) {
 	return hex.EncodeToString(buf.Bytes()), nil
 }
 
+// createRawTxTokenData converts the token data requested for an output of a
+// createrawtransaction command to the wire representation.
+func createRawTxTokenData(ct *btcjson.TransactionOutputCashToken) (*wire.TokenData, error) {
+	// The category is shown in the same byte order as a transaction hash,
+	// so parse it the same way.  Require the full length since the hash
+	// parser would otherwise zero pad a short string.
+	if len(ct.Category) != chainhash.MaxHashStringSize {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCType,
+			Message: "Invalid token category",
+		}
+	}
+	category, err := chainhash.NewHashFromStr(ct.Category)
+	if err != nil {
+		return nil, rpcDecodeHexError(ct.Category)
+	}
+
+	if ct.Amount > wire.MAX_FT_AMOUNT {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCType,
+			Message: "Invalid token amount",
+		}
+	}
+
+	// An NFT is present only when a capability is given.
+	var capability byte
+	hasNFT := true
+	switch strings.ToLower(ct.Capability) {
+	case "":
+		hasNFT = false
+	case "none":
+		capability = wire.NONE
+	case "mutable":
+		capability = wire.MUTABLE
+	case "minting":
+		capability = wire.MINTING
+	default:
+		return nil, &btcjson.RPCError{
+			Code: btcjson.ErrRPCType,
+			Message: "Invalid token capability; must be one of: " +
+				"none, mutable, minting",
+		}
+	}
+
+	commitment, err := hex.DecodeString(ct.Commitment)
+	if err != nil {
+		return nil, rpcDecodeHexError(ct.Commitment)
+	}
+	if len(commitment) > wire.MAX_COMMITMENT_LENGTH {
+		return nil, &btcjson.RPCError{
+			Code: btcjson.ErrRPCType,
+			Message: fmt.Sprintf("Invalid token commitment; must "+
+				"not exceed %d bytes", wire.MAX_COMMITMENT_LENGTH),
+		}
+	}
+	if len(commitment) > 0 && !hasNFT {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCType,
+			Message: "Token commitment requires an NFT capability",
+		}
+	}
+	if ct.Amount == 0 && !hasNFT {
+		return nil, &btcjson.RPCError{
+			Code: btcjson.ErrRPCType,
+			Message: "Token amount must be greater than zero " +
+				"for fungible-only tokens",
+		}
+	}
+
+	// Only pass the parts that are present so the bitfield flags exactly
+	// the fungible amount, NFT and commitment the output carries.
+	var amount *uint64
+	if ct.Amount > 0 {
+		amount = &ct.Amount
+	}
+	var commitmentPtr *[]byte
+	if len(commitment) > 0 {
+		commitmentPtr = &commitment
+	}
+	var capabilityPtr *byte
+	if hasNFT {
+		capabilityPtr = &capability
+	}
+
+	tokenData, err := wire.NewTokenData([32]byte(*category), amount,
+		commitmentPtr, capabilityPtr)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCType,
+			Message: err.Error(),
+		}
+	}
+	return tokenData, nil
+}
+
 // handleCreateRawTransaction handles createrawtransaction commands.
 func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.CreateRawTransactionCmd)
@@ -555,9 +650,40 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 		mtx.AddTxIn(txIn)
 	}
 
+	// Parse the optional token entries, keyed by canonical address so the
+	// same address matches however it is written.
+	params := s.cfg.ChainParams
+	tokens := make(map[string]*wire.TokenData)
+	var tokenAddrs []string
+	if c.CashTokens != nil {
+		for _, ct := range *c.CashTokens {
+			addr, err := bchutil.DecodeAddress(ct.Address, params)
+			if err != nil {
+				return nil, &btcjson.RPCError{
+					Code:    btcjson.ErrRPCInvalidAddressOrKey,
+					Message: "Invalid address or key: " + err.Error(),
+				}
+			}
+			key := addr.EncodeAddress()
+			if _, ok := tokens[key]; ok {
+				return nil, &btcjson.RPCError{
+					Code: btcjson.ErrRPCInvalidParameter,
+					Message: "Invalid parameter, duplicated " +
+						"cashtokens address: " + ct.Address,
+				}
+			}
+
+			tokenData, err := createRawTxTokenData(&ct)
+			if err != nil {
+				return nil, err
+			}
+			tokens[key] = tokenData
+			tokenAddrs = append(tokenAddrs, key)
+		}
+	}
+
 	// Add all transaction outputs to the transaction after performing
 	// some validity checks.
-	params := s.cfg.ChainParams
 	for encodedAddr, amount := range c.Amounts {
 		// Ensure amount is in the valid range for monetary amounts.
 		if amount <= 0 || amount > bchutil.MaxSatoshi {
@@ -611,61 +737,27 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			return nil, internalRPCError(err.Error(), context)
 		}
 
-		tokenData := &wire.TokenData{}
-
-		for _, ct := range *c.CashTokens {
-			if ct.Address == encodedAddr {
-				if ct.Amount <= 0 || ct.Amount > wire.MAX_FT_AMOUNT {
-					return nil, &btcjson.RPCError{
-						Code:    btcjson.ErrRPCType,
-						Message: "Invalid token amount",
-					}
-				}
-
-				category, err := hex.DecodeString(ct.Category)
-				if err != nil {
-					return nil, rpcDecodeHexError(ct.Category)
-				}
-				if len(category) != 32 {
-					return nil, &btcjson.RPCError{
-						Code:    btcjson.ErrRPCType,
-						Message: "Invalid token category",
-					}
-				}
-				var categoryId [32]byte
-				copy(categoryId[:], category)
-
-				commitment, err := hex.DecodeString(ct.Category)
-				if err != nil {
-					return nil, rpcDecodeHexError(ct.Category)
-				}
-
-				var capability byte
-				if ct.Capability == "none" {
-					capability = wire.NONE
-				} else if ct.Capability == "mutable" {
-					capability = wire.MUTABLE
-				} else if ct.Capability == "minting" {
-					capability = wire.MINTING
-				} else {
-					return nil, &btcjson.RPCError{
-						Code:    btcjson.ErrRPCType,
-						Message: "Invalid token capability",
-					}
-				}
-
-				tokenData, err = wire.NewTokenData(categoryId, &ct.Amount, &commitment, &capability)
-				if err != nil {
-					return nil, &btcjson.RPCError{
-						Code:    btcjson.ErrRPCType,
-						Message: err.Error(),
-					}
-				}
-			}
+		// Attach the token data requested for this address, if any.
+		var tokenData wire.TokenData
+		if td, ok := tokens[addr.EncodeAddress()]; ok {
+			tokenData = *td
+			delete(tokens, addr.EncodeAddress())
 		}
 
-		txOut := wire.NewTxOut(int64(satoshi), pkScript, *tokenData)
+		txOut := wire.NewTxOut(int64(satoshi), pkScript, tokenData)
 		mtx.AddTxOut(txOut)
+	}
+
+	// Every token entry must belong to one of the outputs.  Reject any
+	// that do not rather than silently dropping the tokens.
+	for _, key := range tokenAddrs {
+		if _, ok := tokens[key]; ok {
+			return nil, &btcjson.RPCError{
+				Code: btcjson.ErrRPCInvalidParameter,
+				Message: "Invalid parameter, cashtokens address " +
+					key + " is not one of the output addresses",
+			}
+		}
 	}
 
 	// Set the Locktime, if given.
