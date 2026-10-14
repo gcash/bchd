@@ -86,3 +86,132 @@ func TestChainSvrCustomResults(t *testing.T) {
 		}
 	}
 }
+
+// TestTokenDataResults ensures the CashTokens data of transaction outputs
+// marshals in the format used by Bitcoin Cash Node, and that results for
+// outputs without a token marshal exactly as they did before the field was
+// added.
+func TestTokenDataResults(t *testing.T) {
+	t.Parallel()
+
+	const category = "1234567890000000000000000000000000000000000000000000000987654321"
+	scriptPubKey := btcjson.ScriptPubKeyResult{
+		Asm:       "OP_DUP OP_HASH160 ea132286328cfc819457b9dec386c4b5c84faa5c OP_EQUALVERIFY OP_CHECKSIG",
+		Hex:       "76a914ea132286328cfc819457b9dec386c4b5c84faa5c88ac",
+		ReqSigs:   1,
+		Type:      "pubkeyhash",
+		Addresses: []string{"addr1"},
+	}
+	const scriptPubKeyJSON = `{"asm":"OP_DUP OP_HASH160 ea132286328cfc819457b9dec386c4b5c84faa5c OP_EQUALVERIFY OP_CHECKSIG",` +
+		`"hex":"76a914ea132286328cfc819457b9dec386c4b5c84faa5c88ac","reqSigs":1,"type":"pubkeyhash",` +
+		`"addresses":["addr1"]}`
+
+	tests := []struct {
+		name     string
+		result   interface{}
+		expected string
+	}{
+		{
+			name: "vout without token",
+			result: &btcjson.Vout{
+				Value:        0.0001,
+				N:            1,
+				ScriptPubKey: scriptPubKey,
+			},
+			expected: `{"value":0.0001,"n":1,"scriptPubKey":` + scriptPubKeyJSON + `}`,
+		},
+		{
+			name: "vout with fungible tokens only",
+			result: &btcjson.Vout{
+				Value:        0.00001,
+				N:            0,
+				ScriptPubKey: scriptPubKey,
+				TokenData: &btcjson.TokenDataResult{
+					Category: category,
+					Amount:   "9223372036854775807",
+				},
+			},
+			expected: `{"value":0.00001,"n":0,"scriptPubKey":` + scriptPubKeyJSON +
+				`,"tokenData":{"category":"` + category + `","amount":"9223372036854775807"}}`,
+		},
+		{
+			name: "vout with non-fungible token only",
+			result: &btcjson.Vout{
+				Value:        0.00001,
+				N:            0,
+				ScriptPubKey: scriptPubKey,
+				TokenData: &btcjson.TokenDataResult{
+					Category: category,
+					Amount:   "0",
+					NFT: &btcjson.NFTResult{
+						Capability: "minting",
+						Commitment: "",
+					},
+				},
+			},
+			expected: `{"value":0.00001,"n":0,"scriptPubKey":` + scriptPubKeyJSON +
+				`,"tokenData":{"category":"` + category + `","amount":"0",` +
+				`"nft":{"capability":"minting","commitment":""}}}`,
+		},
+		{
+			name: "gettxout without token",
+			result: &btcjson.GetTxOutResult{
+				BestBlock:     "000000000000000000000000000000000000000000000000000000000000abcd",
+				Confirmations: 6,
+				Value:         0.0001,
+				ScriptPubKey:  scriptPubKey,
+				Coinbase:      false,
+			},
+			expected: `{"bestblock":"000000000000000000000000000000000000000000000000000000000000abcd",` +
+				`"confirmations":6,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
+				`,"coinbase":false}`,
+		},
+		{
+			name: "gettxout with fungible and non-fungible tokens",
+			result: &btcjson.GetTxOutResult{
+				BestBlock:     "000000000000000000000000000000000000000000000000000000000000abcd",
+				Confirmations: 6,
+				Value:         0.0001,
+				ScriptPubKey:  scriptPubKey,
+				TokenData: &btcjson.TokenDataResult{
+					Category: category,
+					Amount:   "252",
+					NFT: &btcjson.NFTResult{
+						Capability: "none",
+						Commitment: "cc",
+					},
+				},
+				Coinbase: false,
+			},
+			expected: `{"bestblock":"000000000000000000000000000000000000000000000000000000000000abcd",` +
+				`"confirmations":6,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
+				`,"tokenData":{"category":"` + category + `","amount":"252",` +
+				`"nft":{"capability":"none","commitment":"cc"}},"coinbase":false}`,
+		},
+		{
+			name: "prevout with token",
+			result: &btcjson.PrevOut{
+				Addresses: []string{"addr1"},
+				Value:     0.00001,
+				TokenData: &btcjson.TokenDataResult{
+					Category: category,
+					Amount:   "1",
+				},
+			},
+			expected: `{"addresses":["addr1"],"value":0.00001,"tokenData":` +
+				`{"category":"` + category + `","amount":"1"}}`,
+		},
+	}
+
+	for _, test := range tests {
+		marshalled, err := json.Marshal(test.result)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+			continue
+		}
+		if string(marshalled) != test.expected {
+			t.Errorf("%s: unexpected marshalled data - got %s, "+
+				"want %s", test.name, marshalled, test.expected)
+		}
+	}
+}

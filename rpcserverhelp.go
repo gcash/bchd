@@ -69,6 +69,7 @@ var helpDescsEnUS = map[string]string{
 	// PrevOut help.
 	"prevout-addresses": "previous output addresses",
 	"prevout-value":     "previous output value",
+	"prevout-tokenData": "previous output CashTokens data as a JSON object (only if the output carries a token)",
 
 	// VinPrevOut help.
 	"vinprevout-coinbase":    "The hex-encoded bytes of the signature script (coinbase txns only)",
@@ -94,10 +95,20 @@ var helpDescsEnUS = map[string]string{
 	"scriptpubkeyresult-type":      "The type of the script (e.g. 'pubkeyhash')",
 	"scriptpubkeyresult-addresses": "The bitcoin addresses associated with this script",
 
+	// TokenDataResult help.
+	"tokendataresult-category": "The token category ID, hex-encoded in the same byte order as a transaction hash",
+	"tokendataresult-amount":   "The fungible token amount as a decimal string, \"0\" if the output only carries a non-fungible token",
+	"tokendataresult-nft":      "The non-fungible token as a JSON object (only if the output carries one)",
+
+	// NFTResult help.
+	"nftresult-capability": "The capability of the non-fungible token: none, mutable or minting",
+	"nftresult-commitment": "Hex-encoded bytes of the non-fungible token commitment",
+
 	// Vout help.
 	"vout-value":        "The amount in BTC",
 	"vout-n":            "The index of this transaction output",
 	"vout-scriptPubKey": "The public key script used to pay coins as a JSON object",
+	"vout-tokenData":    "The CashTokens data as a JSON object (only if the output carries a token)",
 
 	// TxRawDecodeResult help.
 	"txrawdecoderesult-txid":     "The hash of the transaction",
@@ -529,6 +540,7 @@ var helpDescsEnUS = map[string]string{
 	"gettxoutresult-confirmations": "The number of confirmations",
 	"gettxoutresult-value":         "The transaction amount in BTC",
 	"gettxoutresult-scriptPubKey":  "The public key script used to pay coins as a JSON object",
+	"gettxoutresult-tokenData":     "The CashTokens data as a JSON object (only if the output carries a token)",
 	"gettxoutresult-version":       "The transaction version",
 	"gettxoutresult-coinbase":      "Whether or not the transaction is a coinbase",
 

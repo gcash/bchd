@@ -315,12 +315,27 @@ type ScriptPubKeyResult struct {
 	Addresses []string `json:"addresses,omitempty"`
 }
 
+// NFTResult models the non-fungible token data of a TokenDataResult.
+type NFTResult struct {
+	Capability string `json:"capability"`
+	Commitment string `json:"commitment"`
+}
+
+// TokenDataResult models the CashTokens data of a transaction output.  The
+// amount is a decimal string so values above 2^53 stay exact.
+type TokenDataResult struct {
+	Category string     `json:"category"`
+	Amount   string     `json:"amount"`
+	NFT      *NFTResult `json:"nft,omitempty"`
+}
+
 // GetTxOutResult models the data from the gettxout command.
 type GetTxOutResult struct {
 	BestBlock     string             `json:"bestblock"`
 	Confirmations int64              `json:"confirmations"`
 	Value         float64            `json:"value"`
 	ScriptPubKey  ScriptPubKeyResult `json:"scriptPubKey"`
+	TokenData     *TokenDataResult   `json:"tokenData,omitempty"`
 	Coinbase      bool               `json:"coinbase"`
 }
 
@@ -384,8 +399,9 @@ func (v *Vin) MarshalJSON() ([]byte, error) {
 
 // PrevOut represents previous output for an input Vin.
 type PrevOut struct {
-	Addresses []string `json:"addresses,omitempty"`
-	Value     float64  `json:"value"`
+	Addresses []string         `json:"addresses,omitempty"`
+	Value     float64          `json:"value"`
+	TokenData *TokenDataResult `json:"tokenData,omitempty"`
 }
 
 // VinPrevOut is like Vin except it includes PrevOut.  It is used by searchrawtransaction
@@ -438,6 +454,7 @@ type Vout struct {
 	Value        float64            `json:"value"`
 	N            uint32             `json:"n"`
 	ScriptPubKey ScriptPubKeyResult `json:"scriptPubKey"`
+	TokenData    *TokenDataResult   `json:"tokenData,omitempty"`
 }
 
 // GetMiningInfoResult models the data from the getmininginfo command.
