@@ -736,6 +736,37 @@ func createVinList(mtx *wire.MsgTx) []btcjson.Vin {
 	return vinList
 }
 
+// createTokenDataResult returns the JSON object for the CashTokens data of a
+// transaction output, or nil when the output carries no token.
+func createTokenDataResult(tokenData *wire.TokenData) *btcjson.TokenDataResult {
+	if tokenData.IsEmpty() {
+		return nil
+	}
+
+	// A category ID is a transaction hash, so it is displayed in the same
+	// reversed byte order as one.
+	result := &btcjson.TokenDataResult{
+		Category: chainhash.Hash(tokenData.CategoryID).String(),
+		Amount:   strconv.FormatUint(tokenData.Amount, 10),
+	}
+	if !tokenData.HasNFT() {
+		return result
+	}
+
+	capability := "none"
+	switch {
+	case tokenData.IsMutableNFT():
+		capability = "mutable"
+	case tokenData.IsMintingNFT():
+		capability = "minting"
+	}
+	result.NFT = &btcjson.NFTResult{
+		Capability: capability,
+		Commitment: hex.EncodeToString(tokenData.Commitment),
+	}
+	return result
+}
+
 // createVoutList returns a slice of JSON objects for the outputs of the passed
 // transaction.
 func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap map[string]struct{}) []btcjson.Vout {
@@ -781,6 +812,7 @@ func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap
 		vout.ScriptPubKey.Hex = hex.EncodeToString(v.PkScript)
 		vout.ScriptPubKey.Type = scriptClass.String()
 		vout.ScriptPubKey.ReqSigs = int32(reqSigs)
+		vout.TokenData = createTokenDataResult(&v.TokenData)
 
 		voutList = append(voutList, vout)
 	}
@@ -2822,6 +2854,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	var confirmations int32
 	var value int64
 	var pkScript []byte
+	var tokenData wire.TokenData
 	var isCoinbase bool
 	includeMempool := true
 	if c.IncludeMempool != nil {
@@ -2856,6 +2889,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		confirmations = 0
 		value = txOut.Value
 		pkScript = txOut.PkScript
+		tokenData = txOut.TokenData
 		isCoinbase = blockchain.IsCoinBaseTx(mtx)
 	} else {
 		out := wire.OutPoint{Hash: *txHash, Index: c.Vout}
@@ -2878,6 +2912,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		confirmations = 1 + best.Height - entry.BlockHeight()
 		value = entry.Amount()
 		pkScript = entry.PkScript()
+		tokenData = entry.TokenData()
 		isCoinbase = entry.IsCoinBase()
 	}
 
@@ -2907,7 +2942,8 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 			Type:      scriptClass.String(),
 			Addresses: addresses,
 		},
-		Coinbase: isCoinbase,
+		TokenData: createTokenDataResult(&tokenData),
+		Coinbase:  isCoinbase,
 	}
 	return txOutReply, nil
 }
@@ -3406,6 +3442,7 @@ func createVinListPrevOut(s *rpcServer, mtx *wire.MsgTx, chainParams *chaincfg.P
 			vinListEntry.PrevOut = &btcjson.PrevOut{
 				Addresses: encodedAddrs,
 				Value:     bchutil.Amount(originTxOut.Value).ToBCH(),
+				TokenData: createTokenDataResult(&originTxOut.TokenData),
 			}
 		}
 	}
