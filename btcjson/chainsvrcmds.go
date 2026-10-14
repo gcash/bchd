@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/gcash/bchd/wire"
 )
@@ -161,7 +162,13 @@ func (v *VerbosityLevel) UnmarshalJSON(dat []byte) error {
 	case "2":
 		*v = 2
 	default:
-		return errors.New("invalid VerbosityLevel value")
+		// Accept any level above 2.  The getblock command treats all
+		// of them as level 3.
+		level, err := strconv.ParseInt(string(dat), 10, 32)
+		if err != nil || level < 3 {
+			return errors.New("invalid VerbosityLevel value")
+		}
+		*v = VerbosityLevel(level)
 	}
 	return nil
 }

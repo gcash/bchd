@@ -1324,3 +1324,30 @@ func TestChainSvrCmdErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestVerbosityLevelUnmarshal ensures the getblock verbosity accepts a boolean
+// or a non-negative integer and passes any level above 3 through for the
+// command to treat as level 3.
+func TestVerbosityLevelUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	// A wanted level of -1 means the value must be rejected.
+	tests := []struct {
+		marshalled string
+		want       btcjson.VerbosityLevel
+	}{
+		{"false", 0}, {"true", 1}, {"0", 0}, {"1", 1}, {"2", 2},
+		{"3", 3}, {"4", 4}, {"-1", -1}, {"2.5", -1}, {`"3"`, -1},
+		{"4294967296", -1},
+	}
+	for _, test := range tests {
+		var level btcjson.VerbosityLevel
+		err := json.Unmarshal([]byte(test.marshalled), &level)
+		if (err != nil) != (test.want < 0) ||
+			(err == nil && level != test.want) {
+
+			t.Errorf("%s: unexpected result - got level %d, "+
+				"error %v", test.marshalled, level, err)
+		}
+	}
+}
