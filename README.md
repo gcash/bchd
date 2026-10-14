@@ -27,7 +27,7 @@ that communicates with your running bchd instance via the API.
 
 ## Requirements
 
-[Go](http://golang.org) 1.25.0 or newer.
+[Go](http://golang.org) 1.26.0 or newer.
 
 ## Install
 

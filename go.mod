@@ -1,6 +1,6 @@
 module github.com/gcash/bchd
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/bluele/gcache v0.0.2
@@ -24,8 +24,8 @@ require (
 	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
-	golang.org/x/crypto v0.55.0
-	golang.org/x/text v0.41.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/text v0.43.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 	lukechampine.com/uint128 v1.3.0
@@ -50,8 +50,8 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
