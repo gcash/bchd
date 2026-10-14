@@ -38,6 +38,12 @@ linters:
       - path: bchec/
         linters: [staticcheck]
         text: 'SA1019.*(ScalarMult|ScalarBaseMult|IsOnCurve|Curve\)?\.Add)'
+      # bchec's key types are built on crypto/ecdsa and read and set the raw
+      # secp256k1 coordinates and scalar directly.  The suggested Bytes and
+      # Parse replacements are NIST-curve-only and do not apply here.
+      - path: bchec/
+        linters: [staticcheck]
+        text: 'SA1019: \(crypto/ecdsa\.(PublicKey|PrivateKey)\)\.[XYD] '
       # RIPEMD-160 is mandated by Bitcoin consensus (P2PKH/P2SH) and cannot
       # be replaced with a modern hash.
       - linters: [staticcheck]
