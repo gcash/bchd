@@ -654,14 +654,15 @@ func (mp *TxPool) fetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, erro
 		return nil, err
 	}
 
-	_, existsInPool := mp.pool[tx.MsgTx().TxHash()]
+	txHash := tx.Hash()
+	_, existsInPool := mp.pool[*txHash]
 
 	// Check to see if any of the outputs are spent in the pool.
 	for i := range tx.MsgTx().TxOut {
 		if existsInPool {
 			utxoView.AddTxOut(tx, uint32(i), mining.UnminedHeight)
 		}
-		prevOut := wire.OutPoint{Hash: tx.MsgTx().TxHash(), Index: uint32(i)}
+		prevOut := wire.OutPoint{Hash: *txHash, Index: uint32(i)}
 		if _, outpointExists := mp.outpoints[prevOut]; outpointExists {
 			entry := utxoView.LookupEntry(prevOut)
 			if entry != nil {
