@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -69,6 +70,7 @@ const (
 	defaultSlpCacheMaxSize         = 100000
 	defaultSlpGraphSearch          = false
 	defaultUtxoCacheMaxSizeMiB     = 450
+	defaultGCPercent               = 10
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
 	defaultTargetOutboundPeers     = uint32(8)
@@ -169,6 +171,7 @@ type config struct {
 	DropCfIndex             bool          `long:"dropcfindex" description:"Deletes the index used for committed filtering (CF) support from the database on start up and then exits."`
 	SigCacheMaxSize         uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
 	UtxoCacheMaxSizeMiB     uint          `long:"utxocachemaxsize" description:"The maximum size in MiB of the UTXO cache"`
+	GCPercent               int           `long:"gcpercent" description:"Garbage collection target percentage -- Higher values use more memory and less CPU; a negative value disables the collector (use with GOMEMLIMIT). Ignored if GOGC is set"`
 	BlocksOnly              bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
 	TxIndex                 bool          `long:"txindex" description:"Maintain a full hash-based transaction index which makes all transactions available via the getrawtransaction RPC"`
 	DropTxIndex             bool          `long:"droptxindex" description:"Deletes the hash-based transaction index from the database on start up and then exits."`
@@ -450,6 +453,7 @@ func loadConfig() (*config, []string, error) {
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
 		SigCacheMaxSize:         defaultSigCacheMaxSize,
 		UtxoCacheMaxSizeMiB:     defaultUtxoCacheMaxSizeMiB,
+		GCPercent:               defaultGCPercent,
 		Generate:                defaultGenerate,
 		TxIndex:                 defaultTxIndex,
 		RPCAuthTimeout:          defaultRPCAuthTimeout,
@@ -861,6 +865,16 @@ func loadConfig() (*config, []string, error) {
 	if err != nil {
 		str := "%s: invalid minrelaytxfee: %v"
 		err := fmt.Errorf(str, funcName, err)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// The runtime stores the GC percent as an int32.
+	if cfg.GCPercent > math.MaxInt32 {
+		str := "%s: The gcpercent option may not be more than %d " +
+			"-- parsed [%d]"
+		err := fmt.Errorf(str, funcName, math.MaxInt32, cfg.GCPercent)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err

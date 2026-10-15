@@ -50,6 +50,13 @@ func bchdMain(serverChan chan<- *server) error {
 		return err
 	}
 	cfg = tcfg
+
+	// A low GC percent limits overallocation during bursty block and
+	// transaction processing, at the cost of CPU time.  GOGC takes precedence.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(cfg.GCPercent)
+	}
+
 	defer func() {
 		if logRotator != nil {
 			bchdLog.Infof("Closing: logRotator")
@@ -320,12 +327,6 @@ func loadBlockDB() (database.DB, error) {
 }
 
 func main() {
-	// Block and transaction processing can cause bursty allocations.  This
-	// limits the garbage collector from excessively overallocating during
-	// bursts.  This value was arrived at with the help of profiling live
-	// usage.
-	debug.SetGCPercent(10)
-
 	// Up some limits.
 	if err := limits.SetLimits(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to set limits: %v\n", err)
