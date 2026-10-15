@@ -182,13 +182,15 @@ func ComputePkScript(sigScript []byte) (PkScript, error) {
 		// a P2SH signature script.
 	case len(sigScript) > 0 && IsPushOnlyScript(sigScript):
 		// The redeem script will always be the last data push of the
-		// signature script, so we'll parse the script into opcodes to
-		// obtain it.
-		parsedOpcodes, err := parseScript(sigScript)
-		if err != nil {
+		// signature script.
+		var redeemScript []byte
+		tokenizer := MakeScriptTokenizer(sigScript)
+		for tokenizer.Next() {
+			redeemScript = tokenizer.Data()
+		}
+		if err := tokenizer.Err(); err != nil {
 			return pkScript, err
 		}
-		redeemScript := parsedOpcodes[len(parsedOpcodes)-1].data
 
 		scriptHash := hash160(redeemScript)
 		script, err := payToScriptHashScript(scriptHash)
