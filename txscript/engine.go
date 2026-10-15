@@ -1137,18 +1137,18 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 		vm.scriptIdx++
 	}
 
-	if vm.hasFlag(ScriptBip16) && isScriptHash(vm.scripts[1]) {
+	if vm.hasFlag(ScriptBip16) && IsPayToScriptHash(scriptPubKey) {
 		// Only accept input scripts that push data for P2SH.
-		if !isPushOnly(vm.scripts[0]) {
+		if !IsPushOnlyScript(scriptSig) {
 			return nil, scriptError(ErrNotPushOnly,
 				"pay to script hash is not push only")
 		}
 		vm.bip16 = true
 	}
 
-	if vm.hasFlag(ScriptBip16) && isScriptHash32(vm.scripts[1]) {
+	if vm.hasFlag(ScriptBip16) && IsPayToScriptHash32(scriptPubKey) {
 		// Only accept input scripts that push data for P2SH32.
-		if !isPushOnly(vm.scripts[0]) {
+		if !IsPushOnlyScript(scriptSig) {
 			return nil, scriptError(ErrNotPushOnly,
 				"pay to script hash is not push only")
 		}
