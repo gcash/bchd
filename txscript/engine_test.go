@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -184,6 +185,34 @@ func TestExecuteTraceLog(t *testing.T) {
 	}
 	if out := run(bchlog.LevelDebug); out != "" {
 		t.Fatalf("unexpected log output at debug level:\n%s", out)
+	}
+}
+
+// TestSetStack ensures SetStack and SetAltStack replace the stack contents.
+func TestSetStack(t *testing.T) {
+	t.Parallel()
+
+	pkScript := mustParseShortForm("1")
+	tx := createSpendingTx(nil, pkScript, 0)
+	vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, nil, 0)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	long := [][]byte{{1}, {2}, {3}}
+	short := [][]byte{{4}}
+	vm.SetStack(long)
+	vm.SetAltStack(long)
+	vm.SetStack(short)
+	vm.SetAltStack(nil)
+	if got := vm.GetStack(); !reflect.DeepEqual(got, short) {
+		t.Fatalf("got stack %v, want %v", got, short)
+	}
+	if got := vm.GetAltStack(); len(got) != 0 {
+		t.Fatalf("got alt stack %v, want empty", got)
+	}
+	if got := vm.dstack.stk[:3]; got[1] != nil || got[2] != nil {
+		t.Fatalf("freed stack slots still hold %v", got[1:])
 	}
 }
 
