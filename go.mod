@@ -10,6 +10,7 @@ require (
 	github.com/btcsuite/winsvc v1.0.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dchest/siphash v1.2.3
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
 	github.com/gcash/bchutil v0.0.0-20260423044137-a3c041e4cc77
 	github.com/golang/glog v1.2.5

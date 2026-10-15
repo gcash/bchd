@@ -24,6 +24,8 @@ import (
 	"math/big"
 	"slices"
 	"sync"
+
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 var (
@@ -110,12 +112,13 @@ func (curve *KoblitzCurve) fieldJacobianToBigAffine(x, y, z *fieldVal) (*big.Int
 // Part of the elliptic.Curve interface. This function differs from the
 // crypto/elliptic algorithm since a = 0 not -3.
 func (curve *KoblitzCurve) IsOnCurve(x, y *big.Int) bool {
-	// Convert big ints to field values for faster arithmetic.
-	fx, fy := curve.bigAffineToField(x, y)
+	var fx, fy secp.FieldVal
+	fx.SetByteSlice(x.Bytes())
+	fy.SetByteSlice(y.Bytes())
 
 	// Elliptic curve equation for secp256k1 is: y^2 = x^3 + 7
-	y2 := new(fieldVal).SquareVal(fy).Normalize()
-	result := new(fieldVal).SquareVal(fx).Mul(fx).AddInt(7).Normalize()
+	y2 := new(secp.FieldVal).SquareVal(&fy).Normalize()
+	result := new(secp.FieldVal).SquareVal(&fx).Mul(&fx).AddInt(7).Normalize()
 	return y2.Equals(result)
 }
 
