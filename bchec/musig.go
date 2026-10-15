@@ -9,6 +9,8 @@ import (
 	"io"
 	"math/big"
 	"slices"
+
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 // AggregatePublicKeys aggregates the given public keys using
@@ -73,15 +75,17 @@ func aggregatePubkeys(tweak []byte, keys ...*PublicKey) (*PublicKey, error) {
 
 	tweak0 := sha256.Sum256(append(tweak, k.SerializeCompressed()...))
 
-	x0, y0, z0 := S256().scalarMultJacobian(k.X, k.Y, tweak0[:])
+	var agg secp.JacobianPoint
+	S256().scalarMultJacobian(k.X, k.Y, tweak0[:], &agg)
 
 	for _, key := range keys[1:] {
 		tweaki := sha256.Sum256(append(tweak, key.SerializeCompressed()...))
-		x, y, z := S256().scalarMultJacobian(key.X, key.Y, tweaki[:])
-		S256().addJacobian(x, y, z, x0, y0, z0, x0, y0, z0)
+		var point secp.JacobianPoint
+		S256().scalarMultJacobian(key.X, key.Y, tweaki[:], &point)
+		secp.AddNonConst(&agg, &point, &agg)
 	}
 
-	x, y := S256().fieldJacobianToBigAffine(x0, y0, z0)
+	x, y := jacobianToBigAffine(&agg)
 
 	return &PublicKey{
 		X:     x,
