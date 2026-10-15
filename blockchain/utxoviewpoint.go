@@ -149,6 +149,9 @@ func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, 
 		txInFlight[*tx.Hash()] = i
 	}
 
+	// Each in-flight parent's outputs only need to be added once.
+	added := make([]bool, len(transactions))
+
 	// Loop through all of the transaction inputs (except for the coinbase
 	// which has no inputs).
 	for i, tx := range block.Transactions()[1:] {
@@ -156,8 +159,10 @@ func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, 
 			originHash := &txIn.PreviousOutPoint.Hash
 			if inFlightIndex, ok := txInFlight[*originHash]; ok &&
 				(i >= inFlightIndex || ignoreOutOfOrder) {
-				originTx := transactions[inFlightIndex]
-				view.AddTxOuts(originTx, block.Height())
+				if !added[inFlightIndex] {
+					added[inFlightIndex] = true
+					view.AddTxOuts(transactions[inFlightIndex], block.Height())
+				}
 				continue
 			}
 
