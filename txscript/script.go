@@ -79,21 +79,19 @@ func isScriptHash32(pops []parsedOpcode) bool {
 // IsPayToScriptHash returns true if the script is in the standard
 // pay-to-script-hash (P2SH) format, false otherwise.
 func IsPayToScriptHash(script []byte) bool {
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-	return isScriptHash(pops)
+	return len(script) == 23 &&
+		script[0] == OP_HASH160 &&
+		script[1] == OP_DATA_20 &&
+		script[22] == OP_EQUAL
 }
 
 // IsPayToScriptHash32 returns true if the script is in the standard
 // pay-to-script-hash-32 (P2SH32) format, false otherwise.
 func IsPayToScriptHash32(script []byte) bool {
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-	return isScriptHash32(pops)
+	return len(script) == 35 &&
+		script[0] == OP_HASH256 &&
+		script[1] == OP_DATA_32 &&
+		script[34] == OP_EQUAL
 }
 
 // isPushOnly returns true if the script only pushes data, false otherwise.
@@ -118,28 +116,32 @@ func isPushOnly(pops []parsedOpcode) bool {
 //
 // False will be returned when the script does not parse.
 func IsPushOnlyScript(script []byte) bool {
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
+	tokenizer := MakeScriptTokenizer(script)
+	for tokenizer.Next() {
+		// OP_RESERVED counts as a push, as in isPushOnly.
+		if tokenizer.Opcode() > OP_16 {
+			return false
+		}
 	}
-	return isPushOnly(pops)
+	return tokenizer.Err() == nil
 }
 
 // ExtractDataElements returns a slice of all the data elements in the
 // given script.
 func ExtractDataElements(script []byte) ([][]byte, error) {
 	var dataElements [][]byte
-	pops, err := parseScript(script)
-	if err != nil {
-		return nil, err
-	}
-	for _, pop := range pops {
+	tokenizer := MakeScriptTokenizer(script)
+	for tokenizer.Next() {
 		// The only opcodes which carry data are OP_DATA_1 to OP_PUSHDATA4.
 		// OP_0 and OP_1 - OP_16 are ignored for the purpose of this function
 		// even though they push data to the stack.
-		if pop.opcode.value > OP_0 && pop.opcode.value <= OP_PUSHDATA4 {
-			dataElements = append(dataElements, pop.data)
+		op := tokenizer.Opcode()
+		if op > OP_0 && op <= OP_PUSHDATA4 {
+			dataElements = append(dataElements, tokenizer.Data())
 		}
+	}
+	if err := tokenizer.Err(); err != nil {
+		return nil, err
 	}
 	return dataElements, nil
 }

@@ -460,18 +460,17 @@ func MultiSigScript(pubkeys []*bchutil.AddressPubKey, nrequired int) ([]byte, er
 // PushedData returns an array of byte slices containing any pushed data found
 // in the passed script.  This includes OP_0, but not OP_1 - OP_16.
 func PushedData(script []byte) ([][]byte, error) {
-	pops, err := parseScript(script)
-	if err != nil {
-		return nil, err
-	}
-
 	var data [][]byte
-	for _, pop := range pops {
-		if pop.data != nil {
-			data = append(data, pop.data)
-		} else if pop.opcode.value == OP_0 {
+	tokenizer := MakeScriptTokenizer(script)
+	for tokenizer.Next() {
+		if tokenizer.Data() != nil {
+			data = append(data, tokenizer.Data())
+		} else if tokenizer.Opcode() == OP_0 {
 			data = append(data, nil)
 		}
+	}
+	if err := tokenizer.Err(); err != nil {
+		return nil, err
 	}
 	return data, nil
 }
