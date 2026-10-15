@@ -224,6 +224,12 @@ func (s *stack) DropN(n int32) error {
 	return nil
 }
 
+// clear removes all items from the stack.
+func (s *stack) clear() {
+	clear(s.stk)
+	s.stk = s.stk[:0]
+}
+
 // DupN duplicates the top N items on the stack.
 //
 // Stack transformation:

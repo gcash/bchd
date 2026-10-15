@@ -525,7 +525,7 @@ func (vm *Engine) Step() (done bool, err error) {
 		}
 
 		// Alt stack doesn't persist.
-		_ = vm.astack.DropN(vm.astack.Depth())
+		vm.astack.clear()
 
 		vm.numOps = 0 // number of ops is per script.
 		vm.scriptOff = 0
@@ -937,8 +937,7 @@ func getStack(stack *stack) [][]byte {
 // setStack sets the stack to the contents of the array where the last item in
 // the array is the top item in the stack.
 func setStack(stack *stack, data [][]byte) {
-	// This can not error. Only errors are for invalid arguments.
-	_ = stack.DropN(stack.Depth())
+	stack.clear()
 
 	for i := range data {
 		stack.PushByteArray(data[i])
