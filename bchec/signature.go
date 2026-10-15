@@ -14,6 +14,9 @@ import (
 	"fmt"
 	"hash"
 	"math/big"
+
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	secpecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
 
 // Errors returned by canonicalPadding.
@@ -94,12 +97,39 @@ func (sig *Signature) Serialize() []byte {
 // signature is valid, false otherwise.
 func (sig *Signature) Verify(hash []byte, pubKey *PublicKey) bool {
 	if sig.sigType == SignatureTypeECDSA {
-		return ecdsa.Verify(pubKey.ToECDSA(), hash, sig.R, sig.S)
+		return verifyECDSA(pubKey, hash, sig.R, sig.S)
 	} else if sig.sigType == SignatureTypeSchnorr {
 		return verifySchnorr(pubKey, hash, sig.R, sig.S)
 	}
 	// unknown signature type
 	return false
+}
+
+// verifyECDSA verifies the ECDSA signature of the hash using the pubkey key
+// with the same rules as ecdsa.Verify, which is used for other curves.
+func verifyECDSA(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool {
+	curve, ok := pubKey.Curve.(*KoblitzCurve)
+	if !ok {
+		return ecdsa.Verify(pubKey.ToECDSA(), hash, r, s)
+	}
+
+	// Signature is invalid if r or s is not in [1, N-1] or the hash is empty.
+	n := curve.Params().N
+	if len(hash) == 0 || r.Sign() <= 0 || s.Sign() <= 0 ||
+		r.Cmp(n) >= 0 || s.Cmp(n) >= 0 {
+
+		return false
+	}
+
+	// The scalars reduce modulo N, so the range check above must come
+	// first.  The dcrd verification truncates the hash to 256 bits and
+	// accepts X.x mod N == r.
+	var sigR, sigS secp.ModNScalar
+	sigR.SetByteSlice(r.Bytes())
+	sigS.SetByteSlice(s.Bytes())
+	var p secp.JacobianPoint
+	bigAffineToJacobian(pubKey.X, pubKey.Y, &p)
+	return secpecdsa.NewSignature(&sigR, &sigS).Verify(hash, secp.NewPublicKey(&p.X, &p.Y))
 }
 
 // verifySchnorr verifies the schnorr signature of the hash using the pubkey key.
@@ -119,34 +149,36 @@ func verifySchnorr(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool 
 
 	// Compute scalar e = Hash(r || compressed(P) || m) mod N
 	eBytes := sha256.Sum256(append(append(padIntBytes(r), pubKey.SerializeCompressed()...), hash...))
-	e := new(big.Int).SetBytes(eBytes[:])
-	e.Mod(e, curve.Params().N)
+	var e, sigS secp.ModNScalar
+	e.SetBytes(&eBytes)
 
 	// Negate e
-	e.Neg(e).Mod(e, curve.Params().N)
+	e.Negate()
 
 	// Compute point R = s * G - e * P.
-	sgx, sgy, sgz := curve.scalarBaseMultJacobian(s.Bytes())
-	epx, epy, epz := curve.scalarMultJacobian(pubKey.X, pubKey.Y, e.Bytes())
-	rx, ry, rz := new(fieldVal), new(fieldVal), new(fieldVal)
-	curve.addJacobian(sgx, sgy, sgz, epx, epy, epz, rx, ry, rz)
+	sigS.SetByteSlice(s.Bytes())
+	var p, sG, eP, R secp.JacobianPoint
+	bigAffineToJacobian(pubKey.X, pubKey.Y, &p)
+	secp.ScalarBaseMultNonConst(&sigS, &sG)
+	secp.ScalarMultNonConst(&e, &p, &eP)
+	secp.AddNonConst(&sG, &eP, &R)
 
 	// Check that R is not infinity
-	if rz.Equals(new(fieldVal).SetInt(0)) {
+	if isInfinity(&R) {
 		return false
 	}
 
 	// Check if R.y is quadratic residue
-	yz := ry.Mul(rz).Normalize()
-	b := yz.Bytes()
-	if big.Jacobi(new(big.Int).SetBytes(b[:]), curve.P) != 1 {
+	yz := new(secp.FieldVal).Mul2(&R.Y, &R.Z).Normalize()
+	if big.Jacobi(new(big.Int).SetBytes(yz.Bytes()[:]), curve.P) != 1 {
 		return false
 	}
 
 	// Check R values match
 	// rx ≠ rz^2 * r mod p
-	fieldR := new(fieldVal).SetByteSlice(r.Bytes())
-	return rx.Normalize().Equals(rz.Square().Mul(fieldR).Normalize())
+	var fieldR secp.FieldVal
+	fieldR.SetByteSlice(r.Bytes())
+	return R.X.Equals(new(secp.FieldVal).SquareVal(&R.Z).Mul(&fieldR).Normalize())
 }
 
 // IsEqual compares this Signature instance to the one passed, returning true

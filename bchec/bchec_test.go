@@ -9,21 +9,38 @@ package bchec
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"testing"
+
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
+
+// hexToFieldVal converts the passed hex string into a field value.
+func hexToFieldVal(s string) *secp.FieldVal {
+	if len(s)%2 != 0 {
+		s = "0" + s
+	}
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic("invalid hex in test source: " + s)
+	}
+	var f secp.FieldVal
+	f.SetByteSlice(b)
+	return &f
+}
 
 // isJacobianOnS256Curve returns boolean if the point (x,y,z) is on the
 // secp256k1 curve.
-func isJacobianOnS256Curve(x, y, z *fieldVal) bool {
+func isJacobianOnS256Curve(x, y, z *secp.FieldVal) bool {
 	// Elliptic curve equation for secp256k1 is: y^2 = x^3 + 7
 	// In Jacobian coordinates, Y = y/z^3 and X = x/z^2
 	// Thus:
 	// (y/z^3)^2 = (x/z^2)^3 + 7
 	// y^2/z^6 = x^3/z^6 + 7
 	// y^2 = x^3 + 7*z^6
-	var y2, z2, x3, result fieldVal
+	var y2, z2, x3, result secp.FieldVal
 	y2.SquareVal(y).Normalize()
 	z2.SquareVal(z)
 	x3.SquareVal(x).Mul(x)
@@ -224,15 +241,15 @@ func TestAddJacobian(t *testing.T) {
 	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
 		// Convert hex to field values.
-		x1 := new(fieldVal).SetHex(test.x1)
-		y1 := new(fieldVal).SetHex(test.y1)
-		z1 := new(fieldVal).SetHex(test.z1)
-		x2 := new(fieldVal).SetHex(test.x2)
-		y2 := new(fieldVal).SetHex(test.y2)
-		z2 := new(fieldVal).SetHex(test.z2)
-		x3 := new(fieldVal).SetHex(test.x3)
-		y3 := new(fieldVal).SetHex(test.y3)
-		z3 := new(fieldVal).SetHex(test.z3)
+		x1 := hexToFieldVal(test.x1)
+		y1 := hexToFieldVal(test.y1)
+		z1 := hexToFieldVal(test.z1)
+		x2 := hexToFieldVal(test.x2)
+		y2 := hexToFieldVal(test.y2)
+		z2 := hexToFieldVal(test.z2)
+		x3 := hexToFieldVal(test.x3)
+		y3 := hexToFieldVal(test.y3)
+		z3 := hexToFieldVal(test.z3)
 
 		// Ensure the test data is using points that are actually on
 		// the curve (or the point at infinity).
@@ -253,8 +270,11 @@ func TestAddJacobian(t *testing.T) {
 		}
 
 		// Add the two points.
-		rx, ry, rz := new(fieldVal), new(fieldVal), new(fieldVal)
-		S256().addJacobian(x1, y1, z1, x2, y2, z2, rx, ry, rz)
+		p1 := secp.MakeJacobianPoint(x1, y1, z1)
+		p2 := secp.MakeJacobianPoint(x2, y2, z2)
+		var result secp.JacobianPoint
+		secp.AddNonConst(&p1, &p2, &result)
+		rx, ry, rz := &result.X, &result.Y, &result.Z
 
 		// Ensure result matches expected.
 		if !rx.Equals(x3) || !ry.Equals(y3) || !rz.Equals(z3) {
@@ -409,12 +429,12 @@ func TestDoubleJacobian(t *testing.T) {
 	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
 		// Convert hex to field values.
-		x1 := new(fieldVal).SetHex(test.x1)
-		y1 := new(fieldVal).SetHex(test.y1)
-		z1 := new(fieldVal).SetHex(test.z1)
-		x3 := new(fieldVal).SetHex(test.x3)
-		y3 := new(fieldVal).SetHex(test.y3)
-		z3 := new(fieldVal).SetHex(test.z3)
+		x1 := hexToFieldVal(test.x1)
+		y1 := hexToFieldVal(test.y1)
+		z1 := hexToFieldVal(test.z1)
+		x3 := hexToFieldVal(test.x3)
+		y3 := hexToFieldVal(test.y3)
+		z3 := hexToFieldVal(test.z3)
 
 		// Ensure the test data is using points that are actually on
 		// the curve (or the point at infinity).
@@ -430,8 +450,10 @@ func TestDoubleJacobian(t *testing.T) {
 		}
 
 		// Double the point.
-		rx, ry, rz := new(fieldVal), new(fieldVal), new(fieldVal)
-		S256().doubleJacobian(x1, y1, z1, rx, ry, rz)
+		p1 := secp.MakeJacobianPoint(x1, y1, z1)
+		var result secp.JacobianPoint
+		secp.DoubleNonConst(&p1, &result)
+		rx, ry, rz := &result.X, &result.Y, &result.Z
 
 		// Ensure result matches expected.
 		if !rx.Equals(x3) || !ry.Equals(y3) || !rz.Equals(z3) {
@@ -658,117 +680,6 @@ func TestScalarMultRand(t *testing.T) {
 		xWant, yWant := s256.ScalarBaseMult(exponent.Bytes())
 		if x.Cmp(xWant) != 0 || y.Cmp(yWant) != 0 {
 			t.Fatalf("%d: bad output for %X: got (%X, %X), want (%X, %X)", i, data, x, y, xWant, yWant)
-		}
-	}
-}
-
-func TestSplitK(t *testing.T) {
-	tests := []struct {
-		k      string
-		k1, k2 string
-		s1, s2 int
-	}{
-		{
-			"6df2b5d30854069ccdec40ae022f5c948936324a4e9ebed8eb82cfd5a6b6d766",
-			"00000000000000000000000000000000b776e53fb55f6b006a270d42d64ec2b1",
-			"00000000000000000000000000000000d6cc32c857f1174b604eefc544f0c7f7",
-			-1, -1,
-		},
-		{
-			"6ca00a8f10632170accc1b3baf2a118fa5725f41473f8959f34b8f860c47d88d",
-			"0000000000000000000000000000000007b21976c1795723c1bfbfa511e95b84",
-			"00000000000000000000000000000000d8d2d5f9d20fc64fd2cf9bda09a5bf90",
-			1, -1,
-		},
-		{
-			"b2eda8ab31b259032d39cbc2a234af17fcee89c863a8917b2740b67568166289",
-			"00000000000000000000000000000000507d930fecda7414fc4a523b95ef3c8c",
-			"00000000000000000000000000000000f65ffb179df189675338c6185cb839be",
-			-1, -1,
-		},
-		{
-			"f6f00e44f179936f2befc7442721b0633f6bafdf7161c167ffc6f7751980e3a0",
-			"0000000000000000000000000000000008d0264f10bcdcd97da3faa38f85308d",
-			"0000000000000000000000000000000065fed1506eb6605a899a54e155665f79",
-			-1, -1,
-		},
-		{
-			"8679085ab081dc92cdd23091ce3ee998f6b320e419c3475fae6b5b7d3081996e",
-			"0000000000000000000000000000000089fbf24fbaa5c3c137b4f1cedc51d975",
-			"00000000000000000000000000000000d38aa615bd6754d6f4d51ccdaf529fea",
-			-1, -1,
-		},
-		{
-			"6b1247bb7931dfcae5b5603c8b5ae22ce94d670138c51872225beae6bba8cdb3",
-			"000000000000000000000000000000008acc2a521b21b17cfb002c83be62f55d",
-			"0000000000000000000000000000000035f0eff4d7430950ecb2d94193dedc79",
-			-1, -1,
-		},
-		{
-			"a2e8ba2e8ba2e8ba2e8ba2e8ba2e8ba219b51835b55cc30ebfe2f6599bc56f58",
-			"0000000000000000000000000000000045c53aa1bb56fcd68c011e2dad6758e4",
-			"00000000000000000000000000000000a2e79d200f27f2360fba57619936159b",
-			-1, -1,
-		},
-	}
-
-	s256 := S256()
-	for i, test := range tests {
-		k, ok := new(big.Int).SetString(test.k, 16)
-		if !ok {
-			t.Errorf("%d: bad value for k: %s", i, test.k)
-		}
-		k1, k2, k1Sign, k2Sign := s256.splitK(k.Bytes())
-		k1str := fmt.Sprintf("%064x", k1)
-		if test.k1 != k1str {
-			t.Errorf("%d: bad k1: got %v, want %v", i, k1str, test.k1)
-		}
-		k2str := fmt.Sprintf("%064x", k2)
-		if test.k2 != k2str {
-			t.Errorf("%d: bad k2: got %v, want %v", i, k2str, test.k2)
-		}
-		if test.s1 != k1Sign {
-			t.Errorf("%d: bad k1 sign: got %d, want %d", i, k1Sign, test.s1)
-		}
-		if test.s2 != k2Sign {
-			t.Errorf("%d: bad k2 sign: got %d, want %d", i, k2Sign, test.s2)
-		}
-		k1Int := new(big.Int).SetBytes(k1)
-		k1SignInt := new(big.Int).SetInt64(int64(k1Sign))
-		k1Int.Mul(k1Int, k1SignInt)
-		k2Int := new(big.Int).SetBytes(k2)
-		k2SignInt := new(big.Int).SetInt64(int64(k2Sign))
-		k2Int.Mul(k2Int, k2SignInt)
-		gotK := new(big.Int).Mul(k2Int, s256.lambda)
-		gotK.Add(k1Int, gotK)
-		gotK.Mod(gotK, s256.N)
-		if k.Cmp(gotK) != 0 {
-			t.Errorf("%d: bad k: got %X, want %X", i, gotK.Bytes(), k.Bytes())
-		}
-	}
-}
-
-func TestSplitKRand(t *testing.T) {
-	s256 := S256()
-	for i := range 1024 {
-		bytesK := make([]byte, 32)
-		_, err := rand.Read(bytesK)
-		if err != nil {
-			t.Fatalf("failed to read random data at %d", i)
-		}
-		k := new(big.Int).SetBytes(bytesK)
-		k1, k2, k1Sign, k2Sign := s256.splitK(bytesK)
-		k1Int := new(big.Int).SetBytes(k1)
-		k1SignInt := new(big.Int).SetInt64(int64(k1Sign))
-		k1Int.Mul(k1Int, k1SignInt)
-		k2Int := new(big.Int).SetBytes(k2)
-		k2SignInt := new(big.Int).SetInt64(int64(k2Sign))
-		k2Int.Mul(k2Int, k2SignInt)
-		gotK := new(big.Int).Mul(k2Int, s256.lambda)
-		gotK.Add(k1Int, gotK)
-		gotK.Mod(gotK, s256.N)
-		if k.Cmp(gotK) != 0 {
-			t.Errorf("%d: bad k: got %X, want %X", i, gotK.Bytes(), k.Bytes())
 		}
 	}
 }
