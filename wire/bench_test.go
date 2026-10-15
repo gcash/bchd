@@ -630,3 +630,58 @@ func BenchmarkDoubleHashH(b *testing.B) {
 		_ = chainhash.DoubleHashH(txBytes)
 	}
 }
+
+// cmpctBenchBlock returns a 5000 tx block and a known inventory holding
+// every tx in it.
+func cmpctBenchBlock() (*MsgBlock, map[chainhash.Hash]bool) {
+	block := &MsgBlock{Header: blockOne.Header}
+	known := make(map[chainhash.Hash]bool)
+	for i := range 5000 {
+		tx := genesisCoinbaseTx.Copy()
+		tx.LockTime = uint32(i)
+		block.Transactions = append(block.Transactions, tx)
+		known[tx.TxHash()] = true
+	}
+	return block, known
+}
+
+// BenchmarkNewMsgCmpctBlockFromBlock performs a benchmark on how long it
+// takes to build a cmpctblock for a peer that knows every transaction.
+func BenchmarkNewMsgCmpctBlockFromBlock(b *testing.B) {
+	block, known := cmpctBenchBlock()
+	for b.Loop() {
+		_, _ = NewMsgCmpctBlockFromBlock(block, known)
+	}
+}
+
+// BenchmarkCmpctBlockRelayPerPeer performs a benchmark on how long it takes
+// to build cmpctblocks for 8 peers, hashing the block's txs for each peer.
+func BenchmarkCmpctBlockRelayPerPeer(b *testing.B) {
+	block, known := cmpctBenchBlock()
+	for b.Loop() {
+		for range 8 {
+			_, _ = NewMsgCmpctBlockFromBlock(block, known)
+		}
+	}
+}
+
+// BenchmarkBlockTxHashes performs a benchmark on how long it takes to hash
+// every tx of a block of 226 byte txs, as relaying a block did per peer.
+func BenchmarkBlockTxHashes(b *testing.B) {
+	for _, n := range []int{5000, 140000} {
+		block := &MsgBlock{Header: blockOne.Header}
+		for i := range n {
+			tx := NewMsgTx(1)
+			tx.AddTxIn(NewTxIn(&OutPoint{Index: uint32(i)}, make([]byte, 107)))
+			tx.AddTxOut(NewTxOut(int64(i), make([]byte, 25), TokenData{}))
+			tx.AddTxOut(NewTxOut(int64(i), make([]byte, 25), TokenData{}))
+			block.Transactions = append(block.Transactions, tx)
+		}
+		b.Run(fmt.Sprintf("%.0fMB", float64(block.SerializeSize())/1e6), func(b *testing.B) {
+			b.SetBytes(int64(block.SerializeSize()))
+			for b.Loop() {
+				_, _ = block.TxHashes()
+			}
+		})
+	}
+}

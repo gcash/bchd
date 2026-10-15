@@ -2219,6 +2219,9 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 	isTx := msg.invVect.Type == wire.InvTypeTx
 	var connected, relayed, relayDisabled, feeFiltered, bloomFiltered int
 
+	// The tx hashes of a relayed block are computed once for all peers.
+	var blockTxHashes []chainhash.Hash
+
 	state.forAllPeers(func(sp *serverPeer) {
 		if !sp.Connected() {
 			return
@@ -2244,7 +2247,11 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 				blockHash := block.BlockHash()
 				blockInv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 				if !sp.HasKnownInventory(blockInv) {
-					cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(block, sp.GetKnownTxInventory())
+					if blockTxHashes == nil {
+						blockTxHashes, _ = block.TxHashes()
+					}
+					cmpctBlock, err := wire.NewMsgCmpctBlockFromBlockHashes(block,
+						blockTxHashes, sp.GetKnownTxInventory())
 					if err != nil {
 						peerLog.Tracef("Unable to build requested cmpctblock hash "+
 							"%v: %v", block.BlockHash(), err)

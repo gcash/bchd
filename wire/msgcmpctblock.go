@@ -160,6 +160,24 @@ func (msg *MsgCmpctBlock) TotalTransactions() int {
 // known inventory map, we will append it as a PrefilledTx. Otherwise
 // we'll add the short ID of the transaction.
 func NewMsgCmpctBlockFromBlock(block *MsgBlock, knownInventory map[chainhash.Hash]bool) (*MsgCmpctBlock, error) {
+	txHashes, err := block.TxHashes()
+	if err != nil {
+		return nil, err
+	}
+	return NewMsgCmpctBlockFromBlockHashes(block, txHashes, knownInventory)
+}
+
+// NewMsgCmpctBlockFromBlockHashes is NewMsgCmpctBlockFromBlock with the
+// hashes of the block's transactions, in order, so they are not recomputed
+// for every peer.
+func NewMsgCmpctBlockFromBlockHashes(block *MsgBlock, txHashes []chainhash.Hash,
+	knownInventory map[chainhash.Hash]bool) (*MsgCmpctBlock, error) {
+
+	if len(txHashes) != len(block.Transactions) {
+		str := fmt.Sprintf("got %d tx hashes for %d transactions",
+			len(txHashes), len(block.Transactions))
+		return nil, messageError("NewMsgCmpctBlockFromBlockHashes", str)
+	}
 	nonce, err := RandomUint64()
 	if err != nil {
 		return nil, err
@@ -190,9 +208,8 @@ func NewMsgCmpctBlockFromBlock(block *MsgBlock, knownInventory map[chainhash.Has
 
 	lastIndex := 0
 	for i, tx := range block.Transactions {
-		if knownInventory[tx.TxHash()] { // The other peer knows the transaction so we can just send the short IDs.
-			txHash := tx.TxHash()
-			sum64 := siphash.Hash(key0, key1, txHash.CloneBytes())
+		if knownInventory[txHashes[i]] { // The other peer knows the transaction so we can just send the short IDs.
+			sum64 := siphash.Hash(key0, key1, txHashes[i][:])
 			shortIDBytes := make([]byte, 8)
 			binary.LittleEndian.PutUint64(shortIDBytes, sum64)
 			var shortID [ShortIDSize]byte
