@@ -107,16 +107,6 @@ func BenchmarkSchnorrSigVerify(b *testing.B) {
 	}
 }
 
-// BenchmarkFieldNormalize benchmarks how long it takes the internal field
-// to perform normalization (which includes modular reduction).
-func BenchmarkFieldNormalize(b *testing.B) {
-	// The normalize function is constant time so default value is fine.
-	f := new(fieldVal)
-	for b.Loop() {
-		f.Normalize()
-	}
-}
-
 // benchmarkParsePubKey benchmarks parsing the public key of the private key
 // used in the signature benchmarks in the given encoding.
 func benchmarkParsePubKey(b *testing.B, compressed bool) {

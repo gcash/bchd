@@ -36,9 +36,6 @@ type KoblitzCurve struct {
 	// byteSize is simply the bit size / 8 and is provided for convenience
 	// since it is calculated repeatedly.
 	byteSize int
-
-	// bytePoints
-	bytePoints *[32][256][3]fieldVal
 }
 
 // Params returns the parameters for the curve.
@@ -280,13 +277,6 @@ func initS256() {
 
 	// Provided for convenience since this gets computed repeatedly.
 	secp256k1.byteSize = secp256k1.BitSize / 8
-
-	// Deserialize and set the pre-computed table used to accelerate scalar
-	// base multiplication.  This is hard-coded data, so any errors are
-	// panics because it means something is wrong in the source code.
-	if err := loadS256BytePoints(); err != nil {
-		panic(err)
-	}
 }
 
 // S256 returns a Curve which implements secp256k1.
