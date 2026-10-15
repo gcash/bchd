@@ -2236,20 +2236,6 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 				return
 			}
 
-			// We'll give the peer a minute to request a compact block
-			// then we'll delete the known inventory in this block.
-			// Worst case scenario we will have to send the full txs to
-			// this guy later, but it's easier to do it this way than
-			// to try to delete the txs after he sends us an inv or a
-			// getdata.
-			time.AfterFunc(time.Minute, func() {
-				for _, tx := range block.Transactions[1:] {
-					txHash := tx.TxHash()
-					txiv := wire.NewInvVect(wire.InvTypeBlock, &txHash)
-					sp.DeleteKnownInventory(txiv)
-				}
-			})
-
 			// If the peer wants direct compact block relay we will set it to
 			// him right away rather than sending an inv message.
 			if sp.WantsDirectBlockRelay() {
