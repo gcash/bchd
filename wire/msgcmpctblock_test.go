@@ -2,10 +2,13 @@ package wire
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/dchest/siphash"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
@@ -287,5 +290,80 @@ func TestMsgCmpctBlock_TotalTransactions(t *testing.T) {
 	if total != 2 {
 		t.Errorf("MsgCmpctBlock: incorrect total transactions - got %v want %v",
 			total, 2)
+	}
+}
+
+// TestNewMsgCmpctBlockFromBlockHashes checks that a cmpctblock built from
+// precomputed tx hashes has the same short IDs and prefilled txs as one
+// built from the block alone, and that a mismatched hash list is rejected.
+func TestNewMsgCmpctBlockFromBlockHashes(t *testing.T) {
+	block := MsgBlock{Header: blockOne.Header}
+	for i := range 6 {
+		tx := NewMsgTx(1)
+		tx.LockTime = uint32(i)
+		block.Transactions = append(block.Transactions, tx)
+	}
+	txHashes, _ := block.TxHashes()
+	known := map[chainhash.Hash]bool{txHashes[1]: true, txHashes[2]: true,
+		txHashes[4]: true}
+
+	check := func(msg *MsgCmpctBlock) {
+		t.Helper()
+		var hdr bytes.Buffer
+		_ = block.Header.Serialize(&hdr)
+		_ = binary.Write(&hdr, binary.LittleEndian, msg.Nonce)
+		key := sha256.Sum256(hdr.Bytes())
+		key0 := binary.LittleEndian.Uint64(key[0:8])
+		key1 := binary.LittleEndian.Uint64(key[8:16])
+		var wantIDs [][ShortIDSize]byte
+		for _, i := range []int{1, 2, 4} {
+			txHash := block.Transactions[i].TxHash()
+			var id [8]byte
+			binary.LittleEndian.PutUint64(id[:], siphash.Hash(key0, key1, txHash[:]))
+			wantIDs = append(wantIDs, [ShortIDSize]byte(id[:ShortIDSize]))
+		}
+		if !reflect.DeepEqual(msg.ShortIDs, wantIDs) {
+			t.Fatalf("short IDs %x, want %x", msg.ShortIDs, wantIDs)
+		}
+		// Prefilled indexes are differentially encoded: txs 0, 3 and 5.
+		wantIdx := []uint32{0, 2, 1}
+		if len(msg.PrefilledTxs) != len(wantIdx) {
+			t.Fatalf("got %d prefilled txs, want %d", len(msg.PrefilledTxs),
+				len(wantIdx))
+		}
+		for j, i := range []int{0, 3, 5} {
+			ptx := msg.PrefilledTxs[j]
+			if ptx.Index != wantIdx[j] || ptx.Tx != block.Transactions[i] {
+				t.Fatalf("prefilled tx %d: index %d, want %d", j, ptx.Index,
+					wantIdx[j])
+			}
+		}
+	}
+
+	msg, err := NewMsgCmpctBlockFromBlockHashes(&block, txHashes, known)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(msg)
+	msg, err = NewMsgCmpctBlockFromBlock(&block, known)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(msg)
+
+	if _, err := NewMsgCmpctBlockFromBlockHashes(&block, txHashes[1:], known); err == nil {
+		t.Fatal("expected an error for a short hash list")
+	}
+}
+
+// BenchmarkCmpctBlockRelayPerBlock performs a benchmark on how long it takes
+// to build cmpctblocks for 8 peers, hashing the block's txs once.
+func BenchmarkCmpctBlockRelayPerBlock(b *testing.B) {
+	block, known := cmpctBenchBlock()
+	for b.Loop() {
+		txHashes, _ := block.TxHashes()
+		for range 8 {
+			_, _ = NewMsgCmpctBlockFromBlockHashes(block, txHashes, known)
+		}
 	}
 }
