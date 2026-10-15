@@ -33,6 +33,15 @@ func (msg *MsgBlockTxns) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 		return err
 	}
 
+	// Prevent more transactions than could possibly fit in a block.  The
+	// transactions are appended as they are read, so memory use grows with
+	// the data actually received rather than with this count.
+	if txCount > uint64(maxTxPerBlock()) {
+		str := fmt.Sprintf("too many transactions for message "+
+			"[count %d, max %d]", txCount, maxTxPerBlock())
+		return messageError("MsgBlockTxns.BchDecode", str)
+	}
+
 	for range txCount {
 		tx := MsgTx{}
 		err = tx.BchDecode(r, pver, enc)
