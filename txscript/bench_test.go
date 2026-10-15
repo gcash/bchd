@@ -348,3 +348,17 @@ func BenchmarkExecuteOpcodes(b *testing.B) {
 	pkScript = append(pkScript, OP_1)
 	benchExecute(b, createSpendingTx(sigScript, pkScript, 0), pkScript, 0, benchBlockFlags)
 }
+
+// BenchmarkStackRoll rolls the bottom item of a 1000-item stack to the top.
+func BenchmarkStackRoll(b *testing.B) {
+	var s stack
+	for i := range 1000 {
+		s.PushByteArray([]byte{byte(i)})
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := s.RollN(999); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
