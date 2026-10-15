@@ -554,3 +554,30 @@ func TestCreatePrevOutResultP2SH32Type(t *testing.T) {
 		t.Errorf("unexpected type %q", result.ScriptPubKey.Type)
 	}
 }
+
+// TestHandleDecodeScriptP2SH ensures decodescript doesn't wrap a script that is
+// already pay-to-script-hash in another pay-to-script-hash address.
+func TestHandleDecodeScriptP2SH(t *testing.T) {
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: &chaincfg.MainNetParams}}
+	tests := []struct {
+		name     string
+		script   string
+		wantP2sh bool
+	}{
+		{"p2pkh", tokenTestP2PKHScript, true},
+		{"p2sh", "a914" + strings.Repeat("ab", 20) + "87", false},
+		{"p2sh32", "aa20" + strings.Repeat("ab", 32) + "87", false},
+	}
+
+	for _, test := range tests {
+		cmd := &btcjson.DecodeScriptCmd{HexScript: test.script}
+		result, err := handleDecodeScript(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		reply := result.(btcjson.DecodeScriptResult)
+		if (reply.P2sh != "") != test.wantP2sh {
+			t.Errorf("%s: unexpected p2sh %q", test.name, reply.P2sh)
+		}
+	}
+}

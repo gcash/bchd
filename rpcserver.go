@@ -1030,7 +1030,9 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		Type:      scriptClass.String(),
 		Addresses: addresses,
 	}
-	if scriptClass != txscript.ScriptHashTy {
+	if scriptClass != txscript.ScriptHashTy &&
+		scriptClass != txscript.ScriptHash32Ty {
+
 		reply.P2sh = p2sh.EncodeAddress()
 	}
 	return reply, nil
