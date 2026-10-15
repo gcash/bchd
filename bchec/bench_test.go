@@ -153,3 +153,33 @@ func BenchmarkFieldNormalize(b *testing.B) {
 		f.Normalize()
 	}
 }
+
+// benchmarkParsePubKey benchmarks parsing the public key of the private key
+// used in the signature benchmarks in the given encoding.
+func benchmarkParsePubKey(b *testing.B, compressed bool) {
+	pubKey := PublicKey{
+		Curve: S256(),
+		X:     fromHex("d2e670a19c6d753d1a6d8b20bd045df8a08fb162cf508956c31268c6d81ffdab"),
+		Y:     fromHex("ab65528eefbb8057aa85d597258a3fbd481a24633bc9b47a9aa045c91371de52"),
+	}
+	serialized := pubKey.SerializeUncompressed()
+	if compressed {
+		serialized = pubKey.SerializeCompressed()
+	}
+	for b.Loop() {
+		if _, err := ParsePubKey(serialized, S256()); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkParsePubKeyCompressed benchmarks parsing a compressed public key.
+func BenchmarkParsePubKeyCompressed(b *testing.B) {
+	benchmarkParsePubKey(b, true)
+}
+
+// BenchmarkParsePubKeyUncompressed benchmarks parsing an uncompressed public
+// key.
+func BenchmarkParsePubKeyUncompressed(b *testing.B) {
+	benchmarkParsePubKey(b, false)
+}
