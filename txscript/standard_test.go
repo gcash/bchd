@@ -1041,6 +1041,11 @@ func TestStringifyClass(t *testing.T) {
 			class:    ScriptClass(255),
 			stringed: "Invalid",
 		},
+		{
+			name:     "one past the last class",
+			class:    NullDataTy + 1,
+			stringed: "Invalid",
+		},
 	}
 
 	for _, test := range tests {
