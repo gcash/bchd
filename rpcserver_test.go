@@ -540,3 +540,17 @@ func TestCreatePrevOutResultScripts(t *testing.T) {
 		}
 	}
 }
+
+// TestCreatePrevOutResultP2SH32Type ensures a P2SH32 prevout is reported with
+// the scripthash type.
+func TestCreatePrevOutResultP2SH32Type(t *testing.T) {
+	stxo := blockchain.SpentTxOut{
+		Amount:   1000,
+		PkScript: mustDecodeHex(t, "aa20"+strings.Repeat("ab", 32)+"87"),
+		Height:   10,
+	}
+	result := createPrevOutResult(&chaincfg.MainNetParams, &stxo)
+	if result.ScriptPubKey.Type != "scripthash" {
+		t.Errorf("unexpected type %q", result.ScriptPubKey.Type)
+	}
+}
