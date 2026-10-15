@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/dchest/siphash"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -53,6 +54,15 @@ func (msg *MsgCmpctBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodin
 		return err
 	}
 
+	// Prevent more transactions than could possibly fit in a block.  The
+	// entries are appended as they are read, so memory use grows with the
+	// data actually received rather than with the counts.
+	if shortIDCount > uint64(maxTxPerBlock()) {
+		str := fmt.Sprintf("too many short ids for message "+
+			"[count %d, max %d]", shortIDCount, maxTxPerBlock())
+		return messageError("MsgCmpctBlock.BchDecode", str)
+	}
+
 	for range shortIDCount {
 		shortIDBytes := make([]byte, ShortIDSize)
 		_, err = io.ReadFull(r, shortIDBytes)
@@ -69,11 +79,22 @@ func (msg *MsgCmpctBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodin
 	if err != nil {
 		return err
 	}
+	if prefilledTxCount > uint64(maxTxPerBlock())-shortIDCount {
+		str := fmt.Sprintf("too many transactions for message "+
+			"[count %d, max %d]", shortIDCount+prefilledTxCount,
+			maxTxPerBlock())
+		return messageError("MsgCmpctBlock.BchDecode", str)
+	}
 
 	for range prefilledTxCount {
 		index, err := ReadVarInt(r, pver)
 		if err != nil {
 			return err
+		}
+		if index > math.MaxUint32 {
+			str := fmt.Sprintf("prefilled transaction index %d "+
+				"overflows 32 bits", index)
+			return messageError("MsgCmpctBlock.BchDecode", str)
 		}
 		tx := MsgTx{}
 		err = tx.BchDecode(r, pver, enc)
