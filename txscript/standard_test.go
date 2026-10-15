@@ -1022,6 +1022,11 @@ func TestStringifyClass(t *testing.T) {
 			stringed: "scripthash",
 		},
 		{
+			name:     "scripthash32",
+			class:    ScriptHash32Ty,
+			stringed: "scripthash",
+		},
+		{
 			name:     "multisigty",
 			class:    MultiSigTy,
 			stringed: "multisig",

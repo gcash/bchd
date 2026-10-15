@@ -67,12 +67,13 @@ const (
 // scriptClassToName houses the human-readable strings which describe each
 // script class.
 var scriptClassToName = []string{
-	NonStandardTy: "nonstandard",
-	PubKeyTy:      "pubkey",
-	PubKeyHashTy:  "pubkeyhash",
-	ScriptHashTy:  "scripthash",
-	MultiSigTy:    "multisig",
-	NullDataTy:    "nulldata",
+	NonStandardTy:  "nonstandard",
+	PubKeyTy:       "pubkey",
+	PubKeyHashTy:   "pubkeyhash",
+	ScriptHashTy:   "scripthash",
+	ScriptHash32Ty: "scripthash",
+	MultiSigTy:     "multisig",
+	NullDataTy:     "nulldata",
 }
 
 // String implements the Stringer interface by returning the name of
