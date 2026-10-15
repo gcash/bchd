@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+
+	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 type signatureTest struct {
@@ -824,5 +826,30 @@ func TestDeterministicSchnorrSignatureGen(t *testing.T) {
 	if !bytes.Equal(sig.R.Bytes(), decodeHex("2c56731ac2f7a7e7f11518fc7722a166b02438924ca9d8b4d111347b81d07175")) ||
 		!bytes.Equal(sig.S.Bytes(), decodeHex("71846de67ad3d913a8fdf9d8f3f73161a4c48ae81cb183b214765feb86e255ce")) {
 		t.Error("Failed to generated deterministic schnorr signature")
+	}
+}
+
+// TestQuadraticResidue compares the residue check used by Schnorr
+// verification with big.Jacobi.
+func TestQuadraticResidue(t *testing.T) {
+	p := S256().P
+	vals := []*big.Int{new(big.Int).Sub(p, big.NewInt(1)),
+		new(big.Int).Sub(p, big.NewInt(2)), new(big.Int).Sub(p, big.NewInt(7))}
+	for i := range int64(256) {
+		vals = append(vals, big.NewInt(i))
+	}
+	b := make([]byte, 32)
+	for range 20000 {
+		if _, err := rand.Read(b); err != nil {
+			t.Fatal(err)
+		}
+		vals = append(vals, new(big.Int).Mod(new(big.Int).SetBytes(b), p))
+	}
+	for _, v := range vals {
+		var f secp.FieldVal
+		f.SetByteSlice(v.Bytes())
+		if got, want := isQuadraticResidue(&f), big.Jacobi(v, p) == 1; got != want {
+			t.Fatalf("isQuadraticResidue(%x) = %v, want %v", v, got, want)
+		}
 	}
 }
