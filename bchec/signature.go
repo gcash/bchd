@@ -170,7 +170,7 @@ func verifySchnorr(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool 
 
 	// Check if R.y is quadratic residue
 	yz := new(secp.FieldVal).Mul2(&R.Y, &R.Z).Normalize()
-	if big.Jacobi(new(big.Int).SetBytes(yz.Bytes()[:]), curve.P) != 1 {
+	if !isQuadraticResidue(yz) {
 		return false
 	}
 
@@ -179,6 +179,13 @@ func verifySchnorr(pubKey *PublicKey, hash []byte, r *big.Int, s *big.Int) bool 
 	var fieldR secp.FieldVal
 	fieldR.SetByteSlice(r.Bytes())
 	return R.X.Equals(new(secp.FieldVal).SquareVal(&R.Z).Mul(&fieldR).Normalize())
+}
+
+// isQuadraticResidue returns whether the normalized field value is a non-zero
+// quadratic residue, which matches a Jacobi symbol of 1.
+func isQuadraticResidue(f *secp.FieldVal) bool {
+	var root secp.FieldVal
+	return !f.IsZero() && root.SquareRootVal(f)
 }
 
 // IsEqual compares this Signature instance to the one passed, returning true
