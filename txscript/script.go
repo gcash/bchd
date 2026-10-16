@@ -143,7 +143,13 @@ func ExtractRedeemScript(script []byte) ([]byte, error) {
 // template list for testing purposes.  When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.
 func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, error) {
-	retScript := make([]parsedOpcode, 0, len(script))
+	return parseOpcodes(script, opcodes, len(script))
+}
+
+// parseOpcodes parses like parseScriptTemplate into a slice with the given
+// capacity.
+func parseOpcodes(script []byte, opcodes *[256]opcode, capacity int) ([]parsedOpcode, error) {
+	retScript := make([]parsedOpcode, 0, capacity)
 	for i := 0; i < len(script); {
 		instr := script[i]
 		op := &opcodes[instr]
@@ -226,10 +232,45 @@ func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, e
 	return retScript, nil
 }
 
+// maxCountedOpcodes is the number of opcodes parseScript counts to size its
+// result exactly.
+const maxCountedOpcodes = 128
+
 // parseScript preparses the script in bytes into a list of parsedOpcodes while
 // applying a number of sanity checks.
 func parseScript(script []byte) ([]parsedOpcode, error) {
-	return parseScriptTemplate(script, &opcodeArray)
+	// Note where the first opcodes end, so a script with few opcodes, such
+	// as one large push, gets a result of its exact size rather than one
+	// entry per byte.
+	var ends [maxCountedOpcodes]uint32
+	n := 0
+	t := MakeScriptTokenizer(script)
+	for n < len(ends) && t.Next() {
+		ends[n] = uint32(t.ByteIndex())
+		n++
+	}
+
+	// A longer script is parsed again in one pass.  Each opcode takes at
+	// least one byte, so the opcodes counted plus the bytes left is enough.
+	if !t.Done() {
+		return parseOpcodes(script, &opcodeArray,
+			n+len(script)-t.ByteIndex())
+	}
+
+	pops := make([]parsedOpcode, n)
+	start := 0
+	for i, end := range ends[:n] {
+		op := &opcodeArray[script[start]]
+		pops[i].opcode = op
+		switch {
+		case op.length > 1:
+			pops[i].data = script[start+1 : end]
+		case op.length < 0:
+			pops[i].data = script[start+1-op.length : end]
+		}
+		start = int(end)
+	}
+	return pops, t.Err()
 }
 
 // unparseScript reversed the action of parseScript and returns the
