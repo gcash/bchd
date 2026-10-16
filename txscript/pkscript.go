@@ -12,17 +12,22 @@ import (
 )
 
 const (
-	// pubKeyHashSigScriptLen is the length of a signature script attempting
-	// to spend a P2PKH script. The only other possible length value is 107
-	// bytes, due to the signature within it. This length is determined by
-	// the following:
-	//   0x47 or 0x48 (71 or 72 byte data push) | <71 or 72 byte sig> |
-	//   0x21 (33 byte data push) | <33 byte compressed pubkey>
-	pubKeyHashSigScriptLen = 106
+	// minECDSASigLen and maxECDSASigLen bound the length of a DER encoded
+	// ECDSA signature with its sighash byte.
+	minECDSASigLen = 9
+	maxECDSASigLen = 73
+
+	// schnorrSigLen is the length of a Schnorr signature with its sighash
+	// byte.
+	schnorrSigLen = 65
 
 	// compressedPubKeyLen is the length in bytes of a compressed public
 	// key.
 	compressedPubKeyLen = 33
+
+	// uncompressedPubKeyLen is the length in bytes of an uncompressed
+	// public key.
+	uncompressedPubKeyLen = 65
 
 	// pubKeyHashLen is the length of a P2PKH script.
 	pubKeyHashLen = 25
@@ -30,8 +35,11 @@ const (
 	// scriptHashLen is the length of a P2SH script.
 	scriptHashLen = 23
 
+	// scriptHash32Len is the length of a P2SH32 script.
+	scriptHash32Len = 35
+
 	// maxLen is the maximum script length supported by ParsePkScript.
-	maxLen = pubKeyHashSigScriptLen
+	maxLen = scriptHash32Len
 )
 
 var (
@@ -87,7 +95,7 @@ func ParsePkScript(pkScript []byte, chainParams *chaincfg.Params) (PkScript, err
 // PkScript struct.
 func isSupportedScriptType(class ScriptClass) bool {
 	switch class {
-	case PubKeyHashTy, ScriptHashTy:
+	case PubKeyHashTy, ScriptHashTy, ScriptHash32Ty:
 		return true
 	default:
 		return false
@@ -111,6 +119,10 @@ func (s PkScript) Script() []byte {
 	case ScriptHashTy:
 		script = make([]byte, scriptHashLen)
 		copy(script, s.script[:scriptHashLen])
+
+	case ScriptHash32Ty:
+		script = make([]byte, scriptHash32Len)
+		copy(script, s.script[:scriptHash32Len])
 
 	default:
 		// Unsupported script type.
@@ -139,71 +151,81 @@ func (s PkScript) String() string {
 // ComputePkScript computes the pkScript of an transaction output by looking at
 // the transaction input's signature script.
 //
-// NOTE: Only P2PKH, P2SH and P2SH32 redeem scripts are supported.
+// NOTE: Only P2PKH and P2SH (20-byte hash) outputs can be derived. P2SH32 is
+// not supported.
 func ComputePkScript(sigScript []byte) (PkScript, error) {
 	var pkScript PkScript
 
-	// Ensure that either an input's signature script was
-	// provided.
-	if len(sigScript) == 0 {
+	// Both P2PKH and P2SH signature scripts only push data.
+	if len(sigScript) == 0 || !IsPushOnlyScript(sigScript) {
 		return pkScript, ErrUnsupportedScriptType
 	}
 
-	// We'll start by checking the input's signature script, if provided.
+	// The redeem script, or the public key, is the last push.
+	var first, last []byte
+	var numPushes int
+	tokenizer := MakeScriptTokenizer(sigScript)
+	for tokenizer.Next() {
+		if numPushes == 0 {
+			first = tokenizer.Data()
+		}
+		last = tokenizer.Data()
+		numPushes++
+	}
+	if err := tokenizer.Err(); err != nil {
+		return pkScript, err
+	}
+
+	return computePkScript(numPushes == 2 && isPubKeyHashSigPushes(first, last), last)
+}
+
+// isPubKeyHashSigPushes returns whether the two pushes of a signature script
+// are a signature and a public key, as when spending a P2PKH output.
+//
+// A P2SH spend that pushes the same shapes can't be told apart from it.
+func isPubKeyHashSigPushes(sig, pubKey []byte) bool {
 	switch {
-	// If a signature script is provided with a length long enough to
-	// represent a P2PKH script, then we'll attempt to parse the compressed
-	// public key from it.
-	case len(sigScript) == pubKeyHashSigScriptLen ||
-		len(sigScript) == pubKeyHashSigScriptLen+1:
+	case len(sig) == schnorrSigLen:
+	case len(sig) >= minECDSASigLen && len(sig) <= maxECDSASigLen &&
+		sig[0] == 0x30 && int(sig[1]) == len(sig)-3:
+	default:
+		return false
+	}
 
-		// The public key should be found as the last part of the
-		// signature script. We'll attempt to parse it to ensure this is
-		// a P2PKH redeem script.
-		pubKey := sigScript[len(sigScript)-compressedPubKeyLen:]
-		if bchec.IsCompressedPubKey(pubKey) {
-			pubKeyHash := hash160(pubKey)
-			script, err := payToPubKeyHashScript(pubKeyHash)
-			if err != nil {
-				return pkScript, err
-			}
+	switch {
+	case len(pubKey) == compressedPubKeyLen && bchec.IsCompressedPubKey(pubKey):
+	case len(pubKey) == uncompressedPubKeyLen && pubKey[0] == 0x04:
+	default:
+		return false
+	}
+	_, err := bchec.ParsePubKey(pubKey, bchec.S256())
+	return err == nil
+}
 
-			pkScript.class = PubKeyHashTy
-			copy(pkScript.script[:], script)
-			return pkScript, nil
-		}
+// computePkScript returns the P2PKH script paying to the public key last, or
+// the P2SH script paying to the redeem script last.
+func computePkScript(isPubKeyHash bool, last []byte) (PkScript, error) {
+	var pkScript PkScript
 
-		// If it isn't, we'll assume it is a P2SH signature script.
-		fallthrough
-
-		// If we failed to parse a compressed public key from the script in the
-		// case above, or if the script length is not that of a P2PKH one, and
-		// our redeem script is only composed of data pushed, we can assume it's
-		// a P2SH signature script.
-	case len(sigScript) > 0 && IsPushOnlyScript(sigScript):
-		// The redeem script will always be the last data push of the
-		// signature script.
-		var redeemScript []byte
-		tokenizer := MakeScriptTokenizer(sigScript)
-		for tokenizer.Next() {
-			redeemScript = tokenizer.Data()
-		}
-		if err := tokenizer.Err(); err != nil {
-			return pkScript, err
-		}
-
-		scriptHash := hash160(redeemScript)
-		script, err := payToScriptHashScript(scriptHash)
+	if isPubKeyHash {
+		script, err := payToPubKeyHashScript(hash160(last))
 		if err != nil {
 			return pkScript, err
 		}
 
-		pkScript.class = ScriptHashTy
+		pkScript.class = PubKeyHashTy
 		copy(pkScript.script[:], script)
 		return pkScript, nil
 	}
 
-	return pkScript, ErrUnsupportedScriptType
+	script, err := payToScriptHashScript(hash160(last))
+	if err != nil {
+		return pkScript, err
+	}
+
+	pkScript.class = ScriptHashTy
+	copy(pkScript.script[:], script)
+	return pkScript, nil
 }
 
 // hash160 returns the RIPEMD160 hash of the SHA-256 HASH of the given data.

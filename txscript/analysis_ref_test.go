@@ -12,7 +12,6 @@ package txscript
 import (
 	"fmt"
 
-	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -537,69 +536,25 @@ func refExtractAtomicSwapDataPushes(version uint16, pkScript []byte) (*AtomicSwa
 // refComputePkScript computes the pkScript of an transaction output by looking at
 // the transaction input's signature script.
 //
-// NOTE: Only P2PKH, P2SH and P2SH32 redeem scripts are supported.
+// NOTE: Only P2PKH and P2SH (20-byte hash) outputs can be derived. P2SH32 is
+// not supported.
 func refComputePkScript(sigScript []byte) (PkScript, error) {
 	var pkScript PkScript
 
-	// Ensure that either an input's signature script was
-	// provided.
-	if len(sigScript) == 0 {
+	// Both P2PKH and P2SH signature scripts only push data.
+	if len(sigScript) == 0 || !refIsPushOnlyScript(sigScript) {
 		return pkScript, ErrUnsupportedScriptType
 	}
 
-	// We'll start by checking the input's signature script, if provided.
-	switch {
-	// If a signature script is provided with a length long enough to
-	// represent a P2PKH script, then we'll attempt to parse the compressed
-	// public key from it.
-	case len(sigScript) == pubKeyHashSigScriptLen ||
-		len(sigScript) == pubKeyHashSigScriptLen+1:
-
-		// The public key should be found as the last part of the
-		// signature script. We'll attempt to parse it to ensure this is
-		// a P2PKH redeem script.
-		pubKey := sigScript[len(sigScript)-compressedPubKeyLen:]
-		if bchec.IsCompressedPubKey(pubKey) {
-			pubKeyHash := hash160(pubKey)
-			script, err := payToPubKeyHashScript(pubKeyHash)
-			if err != nil {
-				return pkScript, err
-			}
-
-			pkScript.class = PubKeyHashTy
-			copy(pkScript.script[:], script)
-			return pkScript, nil
-		}
-
-		// If it isn't, we'll assume it is a P2SH signature script.
-		fallthrough
-
-		// If we failed to parse a compressed public key from the script in the
-		// case above, or if the script length is not that of a P2PKH one, and
-		// our redeem script is only composed of data pushed, we can assume it's
-		// a P2SH signature script.
-	case len(sigScript) > 0 && refIsPushOnlyScript(sigScript):
-		// The redeem script will always be the last data push of the
-		// signature script, so we'll parse the script into opcodes to
-		// obtain it.
-		parsedOpcodes, err := parseScript(sigScript)
-		if err != nil {
-			return pkScript, err
-		}
-		redeemScript := parsedOpcodes[len(parsedOpcodes)-1].data
-
-		scriptHash := hash160(redeemScript)
-		script, err := payToScriptHashScript(scriptHash)
-		if err != nil {
-			return pkScript, err
-		}
-
-		pkScript.class = ScriptHashTy
-		copy(pkScript.script[:], script)
-		return pkScript, nil
+	// The redeem script, or the public key, is the last push.
+	pops, err := parseScript(sigScript)
+	if err != nil {
+		return pkScript, err
 	}
+	last := pops[len(pops)-1].data
 
-	return pkScript, ErrUnsupportedScriptType
+	return computePkScript(len(pops) == 2 &&
+		isPubKeyHashSigPushes(pops[0].data, last), last)
 }
 
 // refNewEngineChecks returns the error, script index and bip16 state the

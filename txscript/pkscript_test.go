@@ -3,6 +3,10 @@ package txscript
 import (
 	"bytes"
 	"testing"
+
+	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchutil"
 )
 
 // TestParsePkScript ensures that the supported script types can be parsed
@@ -259,5 +263,120 @@ func TestComputePkScript(t *testing.T) {
 					test.pkScript, pkScript.Script())
 			}
 		})
+	}
+}
+
+// TestComputePkScriptSigShapes ensures P2PKH signature scripts are recognised
+// by their signature and public key pushes and anything else is taken as
+// P2SH.
+func TestComputePkScriptSigShapes(t *testing.T) {
+	t.Parallel()
+
+	priv, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{0x01}, 32))
+	pubKey := priv.PubKey().SerializeCompressed()
+	uncompressed := priv.PubKey().SerializeUncompressed()
+	notOnCurve := append([]byte{0x02}, bytes.Repeat([]byte{0xff}, 32)...)
+
+	// derSig returns a DER shaped signature of n bytes with sighash byte.
+	derSig := func(n int) []byte {
+		sig := bytes.Repeat([]byte{0x01}, n)
+		sig[0], sig[1] = 0x30, byte(n-3)
+		return sig
+	}
+	schnorrSig := bytes.Repeat([]byte{0x01}, 65)
+
+	pushes := func(data ...[]byte) []byte {
+		b := NewScriptBuilder()
+		for _, d := range data {
+			b.AddData(d)
+		}
+		script, err := b.Script()
+		if err != nil {
+			t.Fatalf("unable to build script: %v", err)
+		}
+		return script
+	}
+	p2pkh := func(pk []byte) []byte {
+		script, _ := payToPubKeyHashScript(hash160(pk))
+		return script
+	}
+	p2sh := func(redeem []byte) []byte {
+		script, _ := payToScriptHashScript(hash160(redeem))
+		return script
+	}
+
+	tests := []struct {
+		name      string
+		sigScript []byte
+		pkScript  []byte
+	}{
+		{"schnorr", pushes(schnorrSig, pubKey), p2pkh(pubKey)},
+		{"ecdsa 71", pushes(derSig(71), pubKey), p2pkh(pubKey)},
+		{"ecdsa 72", pushes(derSig(72), pubKey), p2pkh(pubKey)},
+		{"ecdsa 73", pushes(derSig(73), pubKey), p2pkh(pubKey)},
+		{"ecdsa 9", pushes(derSig(9), pubKey), p2pkh(pubKey)},
+		{"schnorr uncompressed", pushes(schnorrSig, uncompressed), p2pkh(uncompressed)},
+		{"ecdsa uncompressed", pushes(derSig(72), uncompressed), p2pkh(uncompressed)},
+		{"ecdsa 74", pushes(derSig(74), pubKey), p2sh(pubKey)},
+		{"ecdsa 8", pushes(derSig(8), pubKey), p2sh(pubKey)},
+		{"not der", pushes(bytes.Repeat([]byte{0x01}, 71), pubKey), p2sh(pubKey)},
+		{"not on curve", pushes(schnorrSig, notOnCurve), p2sh(notOnCurve)},
+		{"three pushes", pushes(nil, schnorrSig, pubKey), p2sh(pubKey)},
+		{"redeem script", pushes(schnorrSig, []byte{OP_TRUE}), p2sh([]byte{OP_TRUE})},
+		{"not push only", append(pushes(schnorrSig, pubKey), OP_NOP), nil},
+		{"bad push", []byte{OP_DATA_2, 0x01}, nil},
+	}
+
+	for _, test := range tests {
+		pkScript, err := ComputePkScript(test.sigScript)
+		if test.pkScript == nil {
+			if err == nil {
+				t.Errorf("%s: computed %x, want error", test.name,
+					pkScript.Script())
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: unable to compute pkScript: %v", test.name, err)
+			continue
+		}
+		if !bytes.Equal(pkScript.Script(), test.pkScript) {
+			t.Errorf("%s: got pkScript %x, want %x", test.name,
+				pkScript.Script(), test.pkScript)
+		}
+	}
+}
+
+// TestPkScriptScriptHash32 ensures a P2SH32 script round trips through
+// ParsePkScript and gives its address.
+func TestPkScriptScriptHash32(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.MainNetParams
+	addr, err := bchutil.NewAddressScriptHash32([]byte{OP_TRUE}, params)
+	if err != nil {
+		t.Fatalf("unable to create address: %v", err)
+	}
+	script, err := PayToAddrScript(addr)
+	if err != nil {
+		t.Fatalf("unable to create script: %v", err)
+	}
+
+	pkScript, err := ParsePkScript(script, params)
+	if err != nil {
+		t.Fatalf("unable to parse P2SH32 script: %v", err)
+	}
+	if pkScript.Class() != ScriptHash32Ty {
+		t.Fatalf("got class %v, want %v", pkScript.Class(), ScriptHash32Ty)
+	}
+	if !bytes.Equal(pkScript.Script(), script) {
+		t.Fatalf("got script %x, want %x", pkScript.Script(), script)
+	}
+	gotAddr, err := pkScript.Address(params)
+	if err != nil {
+		t.Fatalf("unable to get address: %v", err)
+	}
+	if gotAddr.String() != addr.String() {
+		t.Fatalf("got address %v, want %v", gotAddr, addr)
 	}
 }
