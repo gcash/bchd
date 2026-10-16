@@ -702,7 +702,14 @@ func (idx *AddrIndex) indexBlock(data writeIndexData, block *bchutil.Block,
 				// We'll access the slice of all the
 				// transactions spent in this block properly
 				// ordered to fetch the previous input script.
+				// The spend journal keeps any token data in
+				// front of the script.
 				pkScript := stxos[stxoIndex].PkScript
+				var tokenData wire.TokenData
+				script, err := tokenData.SeparateTokenDataFromPKScriptIfExists(pkScript, 0)
+				if err == nil {
+					pkScript = script
+				}
 				idx.indexPkScript(data, pkScript, txIdx)
 
 				// With an input indexed, we'll advance the

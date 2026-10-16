@@ -7,9 +7,17 @@ package indexers
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"testing"
 
+	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
+	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // addrIndexBucket provides a mock address index database bucket by implementing
@@ -273,4 +281,194 @@ nextTest:
 			}
 		}
 	}
+}
+
+// createTestAddrIndex returns a new database with an empty address index and
+// the buckets it needs from the transaction index.
+func createTestAddrIndex(t *testing.T) (database.DB, *AddrIndex) {
+	t.Helper()
+
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
+		wire.SimNet)
+	if err != nil {
+		t.Fatalf("unable to create database: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	idx := NewAddrIndex(db, &chaincfg.MainNetParams)
+	err = db.Update(func(dbTx database.Tx) error {
+		_, err := dbTx.Metadata().CreateBucket(indexTipsBucketName)
+		if err != nil {
+			return err
+		}
+		if err := NewTxIndex(db).Create(dbTx); err != nil {
+			return err
+		}
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		return dbPutIndexerTip(dbTx, addrIndexKey, &chainhash.Hash{}, -1)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, idx
+}
+
+// TestAddrIndexTokenSpends ensures spends of token outputs are indexed under
+// the address of the spent output and removed again on disconnect.
+func TestAddrIndexTokenSpends(t *testing.T) {
+	t.Parallel()
+
+	db, idx := createTestAddrIndex(t)
+	params := &chaincfg.MainNetParams
+
+	p2pkh, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{1}, 20),
+		params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh32, err := bchutil.NewAddressScriptHash32FromHash(
+		bytes.Repeat([]byte{2}, 32), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{3}, 20),
+		params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commitment := []byte{0xaa, 0xbb}
+	capability := byte(wire.NONE)
+	nft, err := wire.NewTokenData([32]byte{1}, nil, &commitment, &capability)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amount := uint64(1000)
+	ft, err := wire.NewTokenData([32]byte{2}, &amount, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		addr  bchutil.Address
+		token *wire.TokenData
+	}{
+		{p2pkh, nft},
+		{p2sh32, ft},
+		{plain, nil},
+	}
+
+	// The first block pays to each address and the second spends those
+	// outputs.  The spend journal keeps the token data in front of the
+	// spent script.
+	fund := wire.NewMsgTx(1)
+	fund.AddTxIn(&wire.TxIn{})
+	spend := wire.NewMsgTx(2)
+	var stxos []blockchain.SpentTxOut
+	for i, test := range tests {
+		pkScript, err := txscript.PayToAddrScript(test.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		txOut := &wire.TxOut{Value: 1000, PkScript: pkScript}
+		journalScript := pkScript
+		if test.token != nil {
+			txOut.TokenData = *test.token
+			buf := test.token.TokenDataBuffer()
+			buf.Write(pkScript)
+			journalScript = buf.Bytes()
+		}
+		fund.AddTxOut(txOut)
+
+		spend.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: fund.TxHash(),
+				Index: uint32(i)},
+		})
+		stxos = append(stxos, blockchain.SpentTxOut{
+			Amount:   1000,
+			PkScript: journalScript,
+		})
+	}
+	spend.AddTxOut(&wire.TxOut{Value: 1, PkScript: []byte{txscript.OP_TRUE}})
+	coinbase := wire.NewMsgTx(1)
+	coinbase.AddTxIn(&wire.TxIn{})
+	coinbase.AddTxOut(&wire.TxOut{Value: 1, PkScript: []byte{txscript.OP_TRUE}})
+
+	block1 := bchutil.NewBlock(&wire.MsgBlock{
+		Header:       wire.BlockHeader{Nonce: 1},
+		Transactions: []*wire.MsgTx{fund},
+	})
+	block2 := bchutil.NewBlock(&wire.MsgBlock{
+		Header:       wire.BlockHeader{Nonce: 2},
+		Transactions: []*wire.MsgTx{coinbase, spend},
+	})
+	locs1, err := block1.TxLoc()
+	if err != nil {
+		t.Fatal(err)
+	}
+	locs2, err := block2.TxLoc()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fundRegion := database.BlockRegion{Hash: block1.Hash(),
+		Offset: uint32(locs1[0].TxStart), Len: uint32(locs1[0].TxLen)}
+	spendRegion := database.BlockRegion{Hash: block2.Hash(),
+		Offset: uint32(locs2[1].TxStart), Len: uint32(locs2[1].TxLen)}
+
+	checkRegions := func(want ...database.BlockRegion) {
+		t.Helper()
+		err := db.View(func(dbTx database.Tx) error {
+			for _, test := range tests {
+				regions, _, err := idx.TxRegionsForAddress(dbTx,
+					test.addr, 0, 10, false)
+				if err != nil {
+					return err
+				}
+				if len(regions) != len(want) {
+					t.Errorf("%v: got %d entries, want %d",
+						test.addr, len(regions), len(want))
+					continue
+				}
+				for i := range want {
+					if !regions[i].Hash.IsEqual(want[i].Hash) ||
+						regions[i].Offset != want[i].Offset ||
+						regions[i].Len != want[i].Len {
+						t.Errorf("%v: entry %d is %v, want %v",
+							test.addr, i, regions[i], want[i])
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := dbPutBlockIDIndexEntry(dbTx, block1.Hash(), 1); err != nil {
+			return err
+		}
+		if err := dbPutBlockIDIndexEntry(dbTx, block2.Hash(), 2); err != nil {
+			return err
+		}
+		if err := idx.ConnectBlock(dbTx, block1, nil); err != nil {
+			return err
+		}
+		return idx.ConnectBlock(dbTx, block2, stxos)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkRegions(fundRegion, spendRegion)
+
+	err = db.Update(func(dbTx database.Tx) error {
+		return idx.DisconnectBlock(dbTx, block2, stxos)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkRegions(fundRegion)
 }
