@@ -169,12 +169,16 @@ func (b *BlockChain) findPreviousCheckpoint() (*blockNode, error) {
 }
 
 // isNonstandardTransaction determines whether a transaction contains any
-// scripts which are not one of the standard types.
-func isNonstandardTransaction(tx *bchutil.Tx) bool {
+// scripts which are not one of the standard types.  Once the May 2026 upgrade
+// is active, scripts of no recognized form up to txscript.MaxP2SScriptSize
+// bytes are standard too.
+func isNonstandardTransaction(tx *bchutil.Tx, upgrade12Active bool) bool {
 	// Check all of the output public key scripts for non-standard scripts.
 	for _, txOut := range tx.MsgTx().TxOut {
 		scriptClass := txscript.GetScriptClass(txOut.PkScript)
-		if scriptClass == txscript.NonStandardTy {
+		if scriptClass == txscript.NonStandardTy && (!upgrade12Active ||
+			len(txOut.PkScript) > txscript.MaxP2SScriptSize) {
+
 			return true
 		}
 	}
@@ -251,7 +255,11 @@ func (b *BlockChain) IsCheckpointCandidate(block *bchutil.Block) (bool, error) {
 
 	// A checkpoint must have transactions that only contain standard
 	// scripts.
-	if slices.ContainsFunc(block.Transactions(), isNonstandardTransaction) {
+	upgrade12Active := node.parent.CalcPastMedianTime().Unix() >=
+		int64(b.chainParams.Upgrade12ActivationTime)
+	if slices.ContainsFunc(block.Transactions(), func(tx *bchutil.Tx) bool {
+		return isNonstandardTransaction(tx, upgrade12Active)
+	}) {
 		return false, nil
 	}
 
