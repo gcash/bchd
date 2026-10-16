@@ -581,3 +581,58 @@ func TestHandleDecodeScriptP2SH(t *testing.T) {
 		}
 	}
 }
+
+// TestScriptTypeNames ensures the raw transaction, decodescript and getblock
+// results name pay to script outputs and long data carriers as Bitcoin Cash
+// Node does.
+func TestScriptTypeNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		script   string
+		wantType string
+	}{
+		{"p2pkh", tokenTestP2PKHScript, "pubkeyhash"},
+		{"bare script", "51935287", "script"},
+		{"does not parse", "0501", "script"},
+		{"long nulldata", "6a4d2c01" + strings.Repeat("00", 300),
+			"nulldata"},
+		{"long script", strings.Repeat("51", 202), "nonstandard"},
+	}
+
+	mtx := wire.NewMsgTx(2)
+	mtx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, 0), nil))
+	for _, test := range tests {
+		mtx.AddTxOut(wire.NewTxOut(1000, mustDecodeHex(t, test.script),
+			wire.TokenData{}))
+	}
+	vouts := createVoutList(mtx, &chaincfg.MainNetParams, nil)
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: &chaincfg.MainNetParams}}
+	for i, test := range tests {
+		if got := vouts[i].ScriptPubKey.Type; got != test.wantType {
+			t.Errorf("%s: vout type %q, want %q", test.name, got,
+				test.wantType)
+		}
+
+		cmd := &btcjson.DecodeScriptCmd{HexScript: test.script}
+		result, err := handleDecodeScript(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		if got := result.(btcjson.DecodeScriptResult).Type; got != test.wantType {
+			t.Errorf("%s: decodescript type %q, want %q", test.name,
+				got, test.wantType)
+		}
+
+		stxo := blockchain.SpentTxOut{
+			Amount:   1000,
+			PkScript: mustDecodeHex(t, test.script),
+			Height:   10,
+		}
+		prevOut := createPrevOutResult(&chaincfg.MainNetParams, &stxo)
+		if got := prevOut.ScriptPubKey.Type; got != test.wantType {
+			t.Errorf("%s: prevout type %q, want %q", test.name, got,
+				test.wantType)
+		}
+	}
+}

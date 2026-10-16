@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg"
@@ -1176,4 +1177,56 @@ func TestNullDataScript(t *testing.T) {
 			continue
 		}
 	}
+}
+
+// TestScriptTypeName ensures scripts are named by the rules of the RPC
+// results, including pay to script and data carriers of any length.
+func TestScriptTypeName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		script []byte
+		want   string
+	}{
+		{"p2pkh", mustParseShortForm("DUP HASH160 DATA_20 " +
+			"0x" + strings.Repeat("ab", 20) + " EQUALVERIFY CHECKSIG"),
+			"pubkeyhash"},
+		{"p2sh32", mustParseShortForm("HASH256 DATA_32 " +
+			"0x" + strings.Repeat("ab", 32) + " EQUAL"), "scripthash"},
+		{"nulldata", mustParseShortForm("RETURN DATA_4 0x01020304"),
+			"nulldata"},
+		{"nulldata max length", nullDataOfLength(MaxDataCarrierSize),
+			"nulldata"},
+		{"nulldata past max length",
+			nullDataOfLength(MaxDataCarrierSize + 1), "nulldata"},
+		{"long nulldata", nullDataOfLength(MaxScriptSize), "nulldata"},
+		{"return then non-push", mustParseShortForm("RETURN 1 ADD"),
+			"script"},
+		{"long return then non-push",
+			append(nullDataOfLength(300), OP_ADD), "nonstandard"},
+		{"empty", nil, "script"},
+		{"bare script", mustParseShortForm("1 ADD 2 EQUAL"), "script"},
+		{"does not parse", []byte{OP_DATA_5, 0x01}, "script"},
+		{"max length", bytes.Repeat([]byte{OP_1}, MaxP2SScriptSize),
+			"script"},
+		{"past max length",
+			bytes.Repeat([]byte{OP_1}, MaxP2SScriptSize+1),
+			"nonstandard"},
+		{"long and does not parse",
+			append(bytes.Repeat([]byte{OP_1}, MaxP2SScriptSize),
+				OP_DATA_5), "nonstandard"},
+	}
+
+	for _, test := range tests {
+		if got := ScriptTypeName(test.script); got != test.want {
+			t.Errorf("%s: got %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
+// nullDataOfLength returns a script of the given length of OP_RETURN and
+// pushes.
+func nullDataOfLength(length int) []byte {
+	return append([]byte{OP_RETURN}, bytes.Repeat([]byte{OP_0}, length-1)...)
 }

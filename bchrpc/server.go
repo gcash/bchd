@@ -3495,16 +3495,13 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			out.CashToken = getPbCashTokenDataFromTokenData(output.TokenData)
 		}
 
-		scriptClass, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
-		if err == nil {
-			if scriptClass == txscript.NullDataTy {
-				out.ScriptClass = "datacarrier"
-			} else {
-				out.ScriptClass = scriptClass.String()
-			}
-			if len(addrs) > 0 {
-				out.Address = addrs[0].String()
-			}
+		out.ScriptClass = txscript.ScriptTypeName(output.PkScript)
+		if out.ScriptClass == txscript.NullDataTy.String() {
+			out.ScriptClass = "datacarrier"
+		}
+		_, addrs, _, err := txscript.ExtractPkScriptAddrs(output.PkScript, params)
+		if err == nil && len(addrs) > 0 {
+			out.Address = addrs[0].String()
 		}
 		disassm, err := txscript.DisasmString(output.PkScript)
 		if err == nil {
