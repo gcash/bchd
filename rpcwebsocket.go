@@ -2291,10 +2291,81 @@ var ErrRescanReorg = btcjson.RPCError{
 	Message: "Reorganize",
 }
 
-// rescanBlock rescans all transactions in a single block.  This is a helper
-// function for handleRescan.
-func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block) {
-	for _, tx := range blk.Transactions() {
+// rescanSpentOutputs returns the outputs spent by the inputs of blk, in input
+// order and without the coinbase, or nil when no addresses are watched or the
+// spend journal can't be read.
+func rescanSpentOutputs(chain *blockchain.BlockChain, lookups *rescanKeys,
+	blk *bchutil.Block) []blockchain.SpentTxOut {
+
+	if len(lookups.addrs) == 0 {
+		return nil
+	}
+	stxos, err := chain.FetchSpendJournal(blk)
+	if err != nil {
+		rpcsLog.Debugf("Unable to load spent outputs of block %v: %v",
+			blk.Hash(), err)
+		return nil
+	}
+	return stxos
+}
+
+// spendsWatchedAddr returns whether txin spends an output paying one of the
+// watched addresses.  stxo is the spent output, or nil when it is not known
+// and has to be guessed from the signature script.
+func spendsWatchedAddr(addrs map[string]struct{}, txin *wire.TxIn,
+	stxo *blockchain.SpentTxOut, params *chaincfg.Params) bool {
+
+	if len(addrs) == 0 {
+		return false
+	}
+
+	if stxo == nil {
+		pkScript, err := txscript.ComputePkScript(txin.SignatureScript)
+		if err != nil {
+			return false
+		}
+		addr, err := pkScript.Address(params)
+		if err != nil {
+			return false
+		}
+		_, ok := addrs[addr.String()]
+		return ok
+	}
+
+	// The spend journal stores token data in front of the script.
+	var tokenData wire.TokenData
+	pkScript, err := tokenData.SeparateTokenDataFromPKScriptIfExists(
+		stxo.PkScript, 0)
+	if err != nil {
+		pkScript = stxo.PkScript
+	}
+	_, spentAddrs, _, _ := txscript.ExtractPkScriptAddrs(pkScript, params)
+	for _, addr := range spentAddrs {
+		if _, ok := addrs[addr.String()]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// rescanBlock rescans all transactions in a single block.  stxos are the
+// outputs spent by the block as returned by rescanSpentOutputs.  This is a
+// helper function for handleRescan.
+func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
+	stxos []blockchain.SpentTxOut) {
+
+	// Guess the spent outputs from the signature scripts if the spend
+	// journal doesn't line up with the block.
+	var numInputs int
+	for _, tx := range blk.MsgBlock().Transactions[1:] {
+		numInputs += len(tx.TxIn)
+	}
+	if len(stxos) != numInputs {
+		stxos = nil
+	}
+
+	var stxoIdx int
+	for txIdx, tx := range blk.Transactions() {
 		// Hexadecimal representation of this tx.  Only created if
 		// needed, and reused for later notifications if already made.
 		var txHex string
@@ -2326,6 +2397,12 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block) {
 		// We'll start by iterating over the transaction's inputs to
 		// determine if it spends an outpoint/script in our filter list.
 		for _, txin := range tx.MsgTx().TxIn {
+			var stxo *blockchain.SpentTxOut
+			if txIdx > 0 && stxos != nil {
+				stxo = &stxos[stxoIdx]
+				stxoIdx++
+			}
+
 			// If it spends an outpoint, we'll dispatch a spend
 			// notification for the transaction.
 			if _, ok := lookups.unspent[txin.PreviousOutPoint]; ok {
@@ -2352,24 +2429,17 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block) {
 				spentNotified = true
 			}
 
-			// We'll also recompute the pkScript the input is
-			// attempting to spend to determine whether it is
-			// relevant to us.
-			pkScript, err := txscript.ComputePkScript(txin.SignatureScript)
-			if err != nil {
-				continue
-			}
-			addr, err := pkScript.Address(wsc.server.cfg.ChainParams)
-			if err != nil {
+			// We'll also check the address of the output the input
+			// spends to determine whether it is relevant to us.  The
+			// coinbase spends no output.
+			if spentNotified || txIdx == 0 {
 				continue
 			}
 
 			// If it is, we'll also dispatch a spend notification
-			// for this transaction if we haven't already.
-			if _, ok := lookups.addrs[addr.String()]; ok {
-				if spentNotified {
-					continue
-				}
+			// for this transaction.
+			if spendsWatchedAddr(lookups.addrs, txin, stxo,
+				wsc.server.cfg.ChainParams) {
 
 				err := notifySpend()
 
@@ -2754,7 +2824,8 @@ fetchRange:
 					"for disconnected client", blk.Height())
 				return nil, nil, nil
 			default:
-				rescanBlock(wsc, lookups, blk)
+				stxos := rescanSpentOutputs(chain, lookups, blk)
+				rescanBlock(wsc, lookups, blk, stxos)
 				lastBlock = blk
 				lastBlockHash = blk.Hash()
 			}
