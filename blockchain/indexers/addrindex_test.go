@@ -472,3 +472,82 @@ func TestAddrIndexTokenSpends(t *testing.T) {
 	}
 	checkRegions(fundRegion)
 }
+
+// TestAddrIndexMigrate ensures an index from before the current version is
+// dropped for a rebuild and a current one is kept.
+func TestAddrIndexMigrate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		version bool
+		dropped bool
+	}{
+		{name: "no version", version: false, dropped: true},
+		{name: "current version", version: true, dropped: false},
+	}
+	for _, test := range tests {
+		db, idx := createTestAddrIndex(t)
+		entry := bytes.Repeat([]byte{1}, levelKeySize)
+		tipHash := &chainhash.Hash{1}
+		const tipHeight = 1000
+		err := db.Update(func(dbTx database.Tx) error {
+			bucket := dbTx.Metadata().Bucket(addrIndexKey)
+			if !test.version {
+				err := bucket.Delete(addrIndexVersionKey)
+				if err != nil {
+					return err
+				}
+			}
+			if err := bucket.Put(entry, entry); err != nil {
+				return err
+			}
+			return dbPutIndexerTip(dbTx, addrIndexKey, tipHash,
+				tipHeight)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// A second run must leave the index alone.
+		for i := 0; i < 2; i++ {
+			if err := idx.Migrate(db, nil); err != nil {
+				t.Fatalf("%s: Migrate: %v", test.name, err)
+			}
+		}
+
+		err = db.View(func(dbTx database.Tx) error {
+			version, err := dbFetchAddrIndexVersion(dbTx)
+			if err != nil {
+				return err
+			}
+			if version != addrIndexVersion {
+				t.Errorf("%s: version %d, want %d", test.name,
+					version, addrIndexVersion)
+			}
+			hash, height, err := dbFetchIndexerTip(dbTx, addrIndexKey)
+			if err != nil {
+				return err
+			}
+			bucket := dbTx.Metadata().Bucket(addrIndexKey)
+			kept := bucket.Get(entry) != nil
+			wantHash, wantHeight := tipHash, int32(tipHeight)
+			if test.dropped {
+				wantHash, wantHeight = &chainhash.Hash{}, -1
+			}
+			if kept == test.dropped {
+				t.Errorf("%s: entry kept %v, want %v", test.name,
+					kept, !test.dropped)
+			}
+			if !hash.IsEqual(wantHash) || height != wantHeight {
+				t.Errorf("%s: tip %v at %d, want %v at %d",
+					test.name, hash, height, wantHash,
+					wantHeight)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
