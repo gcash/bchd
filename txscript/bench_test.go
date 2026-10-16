@@ -5,6 +5,8 @@
 package txscript
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/gcash/bchd/bchec"
@@ -75,4 +77,125 @@ func BenchmarkP2PKHInputECDSA(b *testing.B) {
 // Schnorr.
 func BenchmarkP2PKHInputSchnorr(b *testing.B) {
 	benchmarkP2PKHInput(b, true)
+}
+
+// benchmarkTokenTxInput benchmarks validating the first input of a
+// transaction with the given number of inputs when tokens are enabled, using
+// sighashes that include the spent outputs like blockchain does.  The inputs
+// spend pay-to-pubkey-hash or 2-of-3 multisig outputs, and every fifth spent
+// output carries fungible tokens.
+func benchmarkTokenTxInput(b *testing.B, numInputs int, multisig, cached bool) {
+	keys := make([]*bchec.PrivateKey, 3)
+	pubKeys := make([][]byte, 3)
+	for i := range keys {
+		keys[i], _ = bchec.PrivKeyFromBytes(bchec.S256(),
+			bytes.Repeat([]byte{byte(i + 1)}, 32))
+		pubKeys[i] = keys[i].PubKey().SerializeCompressed()
+	}
+
+	builder := NewScriptBuilder()
+	if multisig {
+		builder.AddOp(OP_2).AddData(pubKeys[0]).AddData(pubKeys[1]).
+			AddData(pubKeys[2]).AddOp(OP_3).AddOp(OP_CHECKMULTISIG)
+	} else {
+		builder.AddOp(OP_DUP).AddOp(OP_HASH160).
+			AddData(bchutil.Hash160(pubKeys[0])).AddOp(OP_EQUALVERIFY).
+			AddOp(OP_CHECKSIG)
+	}
+	pkScript, err := builder.Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	const amount = 100000
+	tx := wire.NewMsgTx(2)
+	utxos := NewUtxoCache()
+	for i := range numInputs {
+		prevHash := chainhash.DoubleHashH([]byte{byte(i)})
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, 0), nil))
+		var tokenData wire.TokenData
+		if i%5 == 0 {
+			tokenData = wire.TokenData{
+				CategoryID: prevHash,
+				Amount:     1000,
+				BitField:   wire.HAS_AMOUNT,
+			}
+		}
+		utxos.AddEntry(i, *wire.NewTxOut(amount, pkScript, tokenData))
+	}
+	tx.AddTxOut(wire.NewTxOut(int64(numInputs)*amount-10000, pkScript,
+		wire.TokenData{}))
+
+	hashCache := NewTxSigHashes(tx)
+	hashCache.AddTxSigHashUtxoFromUtxoCache(tx, utxos)
+	hashType := SigHashAll | SigHashForkID
+	hash, _, err := CalcSignatureHash(pkScript, hashCache, hashType, tx, 0,
+		amount, true)
+	if err != nil {
+		b.Fatal(err)
+	}
+	builder = NewScriptBuilder()
+	signers := keys[:1]
+	if multisig {
+		builder.AddOp(OP_0)
+		signers = keys[:2]
+	}
+	for _, key := range signers {
+		sig, err := key.SignECDSA(hash)
+		if err != nil {
+			b.Fatal(err)
+		}
+		builder.AddData(append(sig.Serialize(), byte(hashType)))
+	}
+	if !multisig {
+		builder.AddData(pubKeys[0])
+	}
+	tx.TxIn[0].SignatureScript, err = builder.Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	flags := StandardVerifyFlags | ScriptAllowCashTokens
+	var sigCache *SigCache
+	if cached {
+		sigCache = NewSigCache(10)
+	}
+	validate := func() {
+		vm, err := NewEngine(pkScript, tx, 0, flags, sigCache, hashCache,
+			utxos, amount)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err := vm.Execute(); err != nil {
+			b.Fatal(err)
+		}
+	}
+	validate()
+	for b.Loop() {
+		validate()
+	}
+}
+
+// BenchmarkTokenTxP2PKHInput benchmarks validating a P2PKH input of a
+// transaction when tokens are enabled, with and without the signature in the
+// signature cache.
+func BenchmarkTokenTxP2PKHInput(b *testing.B) {
+	for _, numInputs := range []int{10, 50} {
+		for _, cached := range []bool{false, true} {
+			name := fmt.Sprintf("inputs=%d/sigcache=%v", numInputs, cached)
+			b.Run(name, func(b *testing.B) {
+				benchmarkTokenTxInput(b, numInputs, false, cached)
+			})
+		}
+	}
+}
+
+// BenchmarkTokenTxMultisigInput benchmarks validating a 2-of-3 multisig input
+// of a transaction when tokens are enabled.
+func BenchmarkTokenTxMultisigInput(b *testing.B) {
+	for _, numInputs := range []int{10, 50} {
+		b.Run(fmt.Sprintf("inputs=%d", numInputs), func(b *testing.B) {
+			benchmarkTokenTxInput(b, numInputs, true, false)
+		})
+	}
 }
