@@ -16,6 +16,11 @@ const (
 	// data to be considered a nulldata transaction
 	MaxDataCarrierSize = 223
 
+	// MaxP2SScriptSize is the maximum length of a public key script of no
+	// recognized form that is standard since the May 2026 upgrade (pay to
+	// script).
+	MaxP2SScriptSize = 201
+
 	// StandardVerifyFlags are the script flags which are used when
 	// executing transaction scripts to enforce additional checks which
 	// are required for the script to be considered standard.  These checks
@@ -151,9 +156,13 @@ func isMultiSigScript(script []byte) bool {
 // isNullDataScript returns whether the script is a null data script:
 // OP_RETURN followed only by pushes, and no longer than MaxDataCarrierSize.
 func isNullDataScript(script []byte) bool {
-	if len(script) < 1 || script[0] != OP_RETURN ||
-		len(script) > MaxDataCarrierSize {
+	return len(script) <= MaxDataCarrierSize && isDataCarrierScript(script)
+}
 
+// isDataCarrierScript returns whether the script is OP_RETURN followed only
+// by pushes, whatever its length.
+func isDataCarrierScript(script []byte) bool {
+	if len(script) < 1 || script[0] != OP_RETURN {
 		return false
 	}
 	tokenizer := MakeScriptTokenizer(script[1:])
@@ -198,6 +207,25 @@ func checkScriptParses(script []byte) error {
 // NonStandardTy will be returned when the script does not parse.
 func GetScriptClass(script []byte) ScriptClass {
 	return typeOfScript(script)
+}
+
+// ScriptTypeName returns the name RPC results give the type of a public key
+// script.  It differs from the name of its class in two ways: OP_RETURN
+// followed only by pushes is nulldata whatever its length, and any other
+// script of no recognized form is script (pay to script, standard since the
+// May 2026 upgrade) when it is no longer than MaxP2SScriptSize.
+func ScriptTypeName(script []byte) string {
+	class := typeOfScript(script)
+	if class != NonStandardTy {
+		return class.String()
+	}
+	switch {
+	case isDataCarrierScript(script):
+		return NullDataTy.String()
+	case len(script) <= MaxP2SScriptSize:
+		return "script"
+	}
+	return class.String()
 }
 
 // expectedInputs returns the number of arguments required by a script.

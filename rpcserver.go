@@ -871,7 +871,7 @@ func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap
 		// Ignore the error here since an error means the script
 		// couldn't parse and there is no additional information about
 		// it anyways.
-		scriptClass, addrs, reqSigs, _ := txscript.ExtractPkScriptAddrs(
+		_, addrs, reqSigs, _ := txscript.ExtractPkScriptAddrs(
 			v.PkScript, chainParams)
 
 		// Encode the addresses while checking if the address passes the
@@ -902,7 +902,7 @@ func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap
 		vout.ScriptPubKey.Addresses = encodedAddrs
 		vout.ScriptPubKey.Asm = disbuf
 		vout.ScriptPubKey.Hex = hex.EncodeToString(v.PkScript)
-		vout.ScriptPubKey.Type = scriptClass.String()
+		vout.ScriptPubKey.Type = txscript.ScriptTypeName(v.PkScript)
 		vout.ScriptPubKey.ReqSigs = int32(reqSigs)
 		vout.TokenData = createTokenDataResult(&v.TokenData)
 
@@ -1027,7 +1027,7 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 	reply := btcjson.DecodeScriptResult{
 		Asm:       disbuf,
 		ReqSigs:   int32(reqSigs),
-		Type:      scriptClass.String(),
+		Type:      txscript.ScriptTypeName(script),
 		Addresses: addresses,
 	}
 	if scriptClass != txscript.ScriptHashTy &&
@@ -1435,7 +1435,7 @@ func createPrevOutResult(chainParams *chaincfg.Params,
 		ScriptPubKey: btcjson.PrevOutScriptPubKeyResult{
 			Asm:     disbuf,
 			Hex:     hex.EncodeToString(pkScript),
-			Type:    scriptClass.String(),
+			Type:    txscript.ScriptTypeName(pkScript),
 			Address: address,
 		},
 		TokenData: createTokenDataResult(&tokenData),
@@ -3149,7 +3149,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	// Get further info about the script.
 	// Ignore the error here since an error means the script couldn't parse
 	// and there is no additional information about it anyways.
-	scriptClass, addrs, reqSigs, _ := txscript.ExtractPkScriptAddrs(pkScript,
+	_, addrs, reqSigs, _ := txscript.ExtractPkScriptAddrs(pkScript,
 		s.cfg.ChainParams)
 	addresses := make([]string, len(addrs))
 	for i, addr := range addrs {
@@ -3164,7 +3164,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 			Asm:       disbuf,
 			Hex:       hex.EncodeToString(pkScript),
 			ReqSigs:   int32(reqSigs),
-			Type:      scriptClass.String(),
+			Type:      txscript.ScriptTypeName(pkScript),
 			Addresses: addresses,
 		},
 		TokenData: createTokenDataResult(&tokenData),
