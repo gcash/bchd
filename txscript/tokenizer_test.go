@@ -348,9 +348,29 @@ func TestScriptTokenizerOpcodeLengths(t *testing.T) {
 }
 
 // checkTokenizerMatchesParse ensures the tokenizer yields the same opcodes,
-// data and error as parseScript for the script.
+// data and error as parseScript for the script, and that parseScript
+// matches parseScriptTemplate with a result no larger than needed.
 func checkTokenizerMatchesParse(t testing.TB, script []byte) {
 	pops, parseErr := parseScript(script)
+	ref, refErr := parseScriptTemplate(script, &opcodeArray)
+	if len(pops) != len(ref) || cap(pops) > max(len(script), len(pops)) ||
+		(len(pops) < maxCountedOpcodes && cap(pops) != len(pops)) {
+
+		t.Fatalf("%x: parseScript gave %d opcodes (cap %d), want %d",
+			script, len(pops), cap(pops), len(ref))
+	}
+	for i := range ref {
+		if pops[i].opcode != ref[i].opcode ||
+			!sameSlice(pops[i].data, ref[i].data) {
+
+			t.Fatalf("%x: opcode %d differs from parseScriptTemplate",
+				script, i)
+		}
+	}
+	if errString(parseErr) != errString(refErr) {
+		t.Fatalf("%x: parseScript error %v, parseScriptTemplate error %v",
+			script, parseErr, refErr)
+	}
 	tok := MakeScriptTokenizer(script)
 	i := 0
 	for tok.Next() {
@@ -377,6 +397,15 @@ func checkTokenizerMatchesParse(t testing.TB, script []byte) {
 	}
 }
 
+// sameSlice returns whether a and b are both nil or the same slice of the
+// same array.
+func sameSlice(a, b []byte) bool {
+	if (a == nil) != (b == nil) || len(a) != len(b) || cap(a) != cap(b) {
+		return false
+	}
+	return cap(a) == 0 || &a[:cap(a)][cap(a)-1] == &b[:cap(b)][cap(b)-1]
+}
+
 // errString returns the text of err, or "" for a nil error.
 func errString(err error) string {
 	if err == nil {
@@ -397,6 +426,26 @@ func TestScriptTokenizerMatchesParse(t *testing.T) {
 		for n := len(script) - 1; n >= 0 && n >= len(script)-6; n-- {
 			checkTokenizerMatchesParse(t, script[:n])
 		}
+	}
+}
+
+// TestParseScriptLong ensures parseScript matches parseScriptTemplate on
+// scripts with about as many opcodes as it counts to size its result,
+// ending with or without a truncated push.
+func TestParseScriptLong(t *testing.T) {
+	t.Parallel()
+
+	rng := rand.New(rand.NewSource(2))
+	for n := maxCountedOpcodes - 2; n <= maxCountedOpcodes+2; n++ {
+		ops := bytes.Repeat([]byte{OP_NOP}, n)
+		for _, tail := range [][]byte{nil, {OP_DATA_2, 1}, {OP_PUSHDATA1},
+			{OP_PUSHDATA2, 0x00, 0x01, 1, 2}, randomScript(rng)} {
+
+			checkTokenizerMatchesParse(t, append(ops, tail...))
+		}
+		pushes := bytes.Repeat([]byte{OP_DATA_3, 1, 2, 3}, n)
+		checkTokenizerMatchesParse(t, append(pushes, OP_DATA_2, 1))
+		checkTokenizerMatchesParse(t, append(pushes, randomScript(rng)...))
 	}
 }
 
@@ -437,12 +486,15 @@ func randomScript(rng *rand.Rand) []byte {
 	return script
 }
 
-// FuzzScriptTokenizer ensures the tokenizer agrees with parseScript.
+// FuzzScriptTokenizer ensures the tokenizer, parseScript and
+// parseScriptTemplate agree.
 func FuzzScriptTokenizer(f *testing.F) {
 	rng := rand.New(rand.NewSource(1))
 	for range 200 {
 		f.Add(randomScript(rng))
 	}
+	f.Add(bytes.Repeat([]byte{OP_NOP}, maxCountedOpcodes+1))
+	f.Add(append(bytes.Repeat([]byte{OP_NOP}, maxCountedOpcodes), OP_DATA_1))
 	f.Fuzz(func(t *testing.T, script []byte) {
 		checkTokenizerMatchesParse(t, script)
 	})
