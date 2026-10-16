@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
@@ -34,9 +35,6 @@ const (
 
 	// addrKeySize is the number of bytes an address key consumes in the
 	// index.  It consists of 1 byte address type + 32 bytes hash256.
-	// TODO: Since we updated the size, please note that we need to either:
-	// a) detect old indexes and force them to be rebuilt
-	// b) write a migration of the existing index
 	addrKeySize = 1 + 32
 
 	// levelKeySize is the number of bytes a level key in the address index
@@ -61,12 +59,20 @@ const (
 	// Size of a transaction entry.  It consists of 4 bytes block id + 4
 	// bytes offset + 4 bytes length.
 	txEntrySize = 4 + 4 + 4
+
+	// addrIndexVersion is the current version of the index.  Version 1
+	// indexes spends of token outputs.
+	addrIndexVersion = 1
 )
 
 var (
 	// addrIndexKey is the key of the address index and the db bucket used
 	// to house it.
 	addrIndexKey = []byte("txbyaddridx")
+
+	// addrIndexVersionKey is the key in the index bucket that holds the
+	// index version.  It is shorter than any level key.
+	addrIndexVersionKey = []byte("version")
 
 	// errUnsupportedAddressType is an error that is used to signal an
 	// unsupported address type has been used.
@@ -613,13 +619,60 @@ func (idx *AddrIndex) StartBlock() (*chainhash.Hash, int32) {
 	return nil, -1
 }
 
-// Migrate is only provided to satisfy the Indexer interface as there is nothing to
-// migrate this index.
+// dbFetchAddrIndexVersion returns the stored index version, or 0 for an index
+// built before versions were stored.
+func dbFetchAddrIndexVersion(dbTx database.Tx) (uint32, error) {
+	bucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if bucket == nil {
+		return 0, fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	versionBytes := bucket.Get(addrIndexVersionKey)
+	if len(versionBytes) != 4 {
+		return 0, nil
+	}
+	return binary.BigEndian.Uint32(versionBytes), nil
+}
+
+// dbPutAddrIndexVersion stores the current index version.
+func dbPutAddrIndexVersion(dbTx database.Tx) error {
+	bucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if bucket == nil {
+		return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	versionBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(versionBytes, addrIndexVersion)
+	return bucket.Put(addrIndexVersionKey, versionBytes)
+}
+
+// Migrate drops an index older than the current version.  The index manager
+// then rebuilds it from the blockchain as it continues its Init function.
 //
 // This is part of the Indexer interface.
 func (idx *AddrIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
-	// Nothing to do.
-	return nil
+	var version uint32
+	err := db.View(func(dbTx database.Tx) error {
+		var err error
+		version, err = dbFetchAddrIndexVersion(dbTx)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if version >= addrIndexVersion {
+		return nil
+	}
+
+	log.Infof("The %s is missing spends of token outputs and will be "+
+		"rebuilt from scratch", addrIndexName)
+	if err := dropIndex(db, addrIndexKey, addrIndexName, interrupt); err != nil {
+		return err
+	}
+	return db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		return dbPutIndexerTip(dbTx, addrIndexKey, &chainhash.Hash{}, -1)
+	})
 }
 
 // Key returns the database key to use for the index as a byte slice.
@@ -638,12 +691,15 @@ func (idx *AddrIndex) Name() string {
 
 // Create is invoked when the indexer manager determines the index needs
 // to be created for the first time.  It creates the bucket for the address
-// index.
+// index and stores the index version.
 //
 // This is part of the Indexer interface.
 func (idx *AddrIndex) Create(dbTx database.Tx) error {
 	_, err := dbTx.Metadata().CreateBucket(addrIndexKey)
-	return err
+	if err != nil {
+		return err
+	}
+	return dbPutAddrIndexVersion(dbTx)
 }
 
 // writeIndexData represents the address index data to be written for one block.
