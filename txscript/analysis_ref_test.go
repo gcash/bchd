@@ -537,7 +537,8 @@ func refExtractAtomicSwapDataPushes(version uint16, pkScript []byte) (*AtomicSwa
 // refComputePkScript computes the pkScript of an transaction output by looking at
 // the transaction input's signature script.
 //
-// NOTE: Only P2PKH, P2SH and P2SH32 redeem scripts are supported.
+// NOTE: Only P2PKH and P2SH (20-byte hash) outputs can be derived. P2SH32 is
+// not supported.
 func refComputePkScript(sigScript []byte) (PkScript, error) {
 	var pkScript PkScript
 
