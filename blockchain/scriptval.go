@@ -292,8 +292,9 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 			}
 			utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
 		}
+		// Add the spent outputs to a copy, leaving the cached entry as is.
 		if flags.HasFlag(txscript.ScriptAllowCashTokens) {
-			cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
+			cachedHashes = cachedHashes.WithUtxos(tx.MsgTx(), utxoCache)
 		}
 	}
 
@@ -384,8 +385,10 @@ func checkBlockScripts(block *bchutil.Block, utxoView *UtxoViewpoint,
 				}
 				utxoCache.AddEntry(i, *wire.NewTxOut(u.amount, u.pkScript, u.tokenData))
 			}
+			// Add the spent outputs to a copy, leaving the cached
+			// entry as is.
 			if scriptFlags.HasFlag(txscript.ScriptAllowCashTokens) {
-				cachedHashes.AddTxSigHashUtxoFromUtxoCache(tx.MsgTx(), utxoCache)
+				cachedHashes = cachedHashes.WithUtxos(tx.MsgTx(), utxoCache)
 			}
 		}
 

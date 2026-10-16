@@ -3101,18 +3101,7 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	// to sign itself.
 	subScript = removeOpcodeByData(subScript, fullSigBytes)
 
-	var sigHashes *TxSigHashes
-	if vm.hashCache != nil {
-		sigHashes = vm.hashCache
-	} else {
-		sigHashes = NewTxSigHashes(&vm.tx)
-	}
-
-	if vm.hasFlag(ScriptAllowCashTokens) {
-		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
-	}
-
-	hash, totalBytesHashedlength, err := calcSignatureHash(subScript, sigHashes, hashType, &vm.tx, vm.txIdx,
+	hash, totalBytesHashedlength, err := calcSignatureHash(subScript, vm.txSigHashes(), hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 	if err != nil {
 		vm.dstack.PushBool(false)
@@ -3301,14 +3290,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 
 	var sigHashes *TxSigHashes
 	if vm.hasFlag(ScriptVerifyBip143SigHash) {
-		if vm.hashCache != nil {
-			sigHashes = vm.hashCache
-		} else {
-			sigHashes = NewTxSigHashes(&vm.tx)
-		}
-	}
-	if vm.hasFlag(ScriptAllowCashTokens) {
-		sigHashes.AddTxSigHashUtxoFromUtxoCache(&vm.tx, vm.utxoCache)
+		sigHashes = vm.txSigHashes()
 	}
 	success := true
 

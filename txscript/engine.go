@@ -196,6 +196,7 @@ type Engine struct {
 	flags                ScriptFlags
 	sigCache             *SigCache
 	hashCache            *TxSigHashes
+	sigHashes            *TxSigHashes // sighashes used for signature checks
 	utxoCache            *UtxoCache
 	bip16                bool     // treat execution as pay-to-script-hash
 	savedFirstStack      [][]byte // stack from first script for bip16 scripts
@@ -614,6 +615,25 @@ func (vm *Engine) Execute() (err error) {
 	return vm.CheckErrorCondition(true)
 }
 
+// txSigHashes returns the signature hash fragments of the transaction,
+// including the spent outputs when tokens are enabled.  They are computed at
+// most once per engine, and the passed hash cache is not modified.
+func (vm *Engine) txSigHashes() *TxSigHashes {
+	if vm.sigHashes != nil {
+		return vm.sigHashes
+	}
+
+	sigHashes := vm.hashCache
+	if sigHashes == nil {
+		sigHashes = NewTxSigHashes(&vm.tx)
+	}
+	if vm.hasFlag(ScriptAllowCashTokens) && !sigHashes.hasUtxos {
+		sigHashes = sigHashes.WithUtxos(&vm.tx, vm.utxoCache)
+	}
+	vm.sigHashes = sigHashes
+	return sigHashes
+}
+
 // subScript returns the script since the last OP_CODESEPARATOR.
 func (vm *Engine) subScript() []parsedOpcode {
 	return vm.scripts[vm.scriptIdx][vm.lastCodeSep:]
@@ -989,6 +1009,7 @@ func (vm *Engine) Clone() *Engine {
 		sigChecks:            vm.sigChecks,
 		sigCache:             vm.sigCache,
 		hashCache:            vm.hashCache,
+		sigHashes:            vm.sigHashes,
 		utxoCache:            vm.utxoCache,
 		definedFunctionCount: vm.definedFunctionCount,
 	}
