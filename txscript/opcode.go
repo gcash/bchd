@@ -300,6 +300,16 @@ const (
 	OP_INVALIDOPCODE         = 0xff // 255 - bitcoin core internal
 )
 
+// Current names of opcodes whose constants above keep an earlier name.
+const (
+	OP_LSHIFTNUM = OP_2MUL       // 141
+	OP_RSHIFTNUM = OP_2DIV       // 142
+	OP_LSHIFTBIN = OP_LSHIFT     // 152
+	OP_RSHIFTBIN = OP_RSHIFT     // 153
+	OP_RESERVED3 = OP_UNKNOWN212 // 212
+	OP_RESERVED4 = OP_UNKNOWN213 // 213
+)
+
 // Conditional execution constants.
 const (
 	OpCondFalse = 0
@@ -489,8 +499,8 @@ var opcodeArray = [256]opcode{
 	// Numeric related opcodes.
 	OP_1ADD:               {OP_1ADD, "OP_1ADD", 1, opcode1Add},
 	OP_1SUB:               {OP_1SUB, "OP_1SUB", 1, opcode1Sub},
-	OP_2MUL:               {OP_2MUL, "OP_2MUL", 1, opcode2Mul},
-	OP_2DIV:               {OP_2DIV, "OP_2DIV", 1, opcode2Div},
+	OP_LSHIFTNUM:          {OP_LSHIFTNUM, "OP_LSHIFTNUM", 1, opcode2Mul},
+	OP_RSHIFTNUM:          {OP_RSHIFTNUM, "OP_RSHIFTNUM", 1, opcode2Div},
 	OP_NEGATE:             {OP_NEGATE, "OP_NEGATE", 1, opcodeNegate},
 	OP_ABS:                {OP_ABS, "OP_ABS", 1, opcodeAbs},
 	OP_NOT:                {OP_NOT, "OP_NOT", 1, opcodeNot},
@@ -500,8 +510,8 @@ var opcodeArray = [256]opcode{
 	OP_MUL:                {OP_MUL, "OP_MUL", 1, opcodeMul},
 	OP_DIV:                {OP_DIV, "OP_DIV", 1, opcodeDiv},
 	OP_MOD:                {OP_MOD, "OP_MOD", 1, opcodeMod},
-	OP_LSHIFT:             {OP_LSHIFT, "OP_LSHIFT", 1, opcodeLShift},
-	OP_RSHIFT:             {OP_RSHIFT, "OP_RSHIFT", 1, opcodeRShift},
+	OP_LSHIFTBIN:          {OP_LSHIFTBIN, "OP_LSHIFTBIN", 1, opcodeLShift},
+	OP_RSHIFTBIN:          {OP_RSHIFTBIN, "OP_RSHIFTBIN", 1, opcodeRShift},
 	OP_BOOLAND:            {OP_BOOLAND, "OP_BOOLAND", 1, opcodeBoolAnd},
 	OP_BOOLOR:             {OP_BOOLOR, "OP_BOOLOR", 1, opcodeBoolOr},
 	OP_NUMEQUAL:           {OP_NUMEQUAL, "OP_NUMEQUAL", 1, opcodeNumEqual},
@@ -567,8 +577,8 @@ var opcodeArray = [256]opcode{
 	OP_UNKNOWN189:        {OP_UNKNOWN189, "OP_UNKNOWN189", 1, opcodeInvalid},
 	OP_UNKNOWN190:        {OP_UNKNOWN190, "OP_UNKNOWN190", 1, opcodeInvalid},
 	OP_UNKNOWN191:        {OP_UNKNOWN191, "OP_UNKNOWN191", 1, opcodeInvalid},
-	OP_UNKNOWN212:        {OP_UNKNOWN212, "OP_UNKNOWN212", 1, opcodeInvalid},
-	OP_UNKNOWN213:        {OP_UNKNOWN213, "OP_UNKNOWN213", 1, opcodeInvalid},
+	OP_RESERVED3:         {OP_RESERVED3, "OP_RESERVED3", 1, opcodeInvalid},
+	OP_RESERVED4:         {OP_RESERVED4, "OP_RESERVED4", 1, opcodeInvalid},
 	OP_UNKNOWN214:        {OP_UNKNOWN214, "OP_UNKNOWN214", 1, opcodeInvalid},
 	OP_UNKNOWN215:        {OP_UNKNOWN215, "OP_UNKNOWN215", 1, opcodeInvalid},
 	OP_UNKNOWN216:        {OP_UNKNOWN216, "OP_UNKNOWN216", 1, opcodeInvalid},
@@ -4324,6 +4334,14 @@ func init() {
 	OpcodeByName["OP_TRUE"] = OP_TRUE
 	OpcodeByName["OP_NOP2"] = OP_CHECKLOCKTIMEVERIFY
 	OpcodeByName["OP_NOP3"] = OP_CHECKSEQUENCEVERIFY
+
+	// Earlier names of opcodes that have been renamed.
+	OpcodeByName["OP_2MUL"] = OP_LSHIFTNUM
+	OpcodeByName["OP_2DIV"] = OP_RSHIFTNUM
+	OpcodeByName["OP_LSHIFT"] = OP_LSHIFTBIN
+	OpcodeByName["OP_RSHIFT"] = OP_RSHIFTBIN
+	OpcodeByName["OP_UNKNOWN212"] = OP_RESERVED3
+	OpcodeByName["OP_UNKNOWN213"] = OP_RESERVED4
 
 	opcodeArray[OP_INVOKE].opfunc = opcodeInvoke
 }

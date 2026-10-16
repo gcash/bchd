@@ -64,10 +64,10 @@ func TestOpcodeDisasm(t *testing.T) {
 		0x84: "OP_AND", 0x85: "OP_OR", 0x86: "OP_XOR",
 		0x87: "OP_EQUAL", 0x88: "OP_EQUALVERIFY", 0x89: "OP_DEFINE",
 		0x8a: "OP_INVOKE", 0x8b: "OP_1ADD", 0x8c: "OP_1SUB",
-		0x8d: "OP_2MUL", 0x8e: "OP_2DIV", 0x8f: "OP_NEGATE",
+		0x8d: "OP_LSHIFTNUM", 0x8e: "OP_RSHIFTNUM", 0x8f: "OP_NEGATE",
 		0x90: "OP_ABS", 0x91: "OP_NOT", 0x92: "OP_0NOTEQUAL",
 		0x93: "OP_ADD", 0x94: "OP_SUB", 0x95: "OP_MUL", 0x96: "OP_DIV",
-		0x97: "OP_MOD", 0x98: "OP_LSHIFT", 0x99: "OP_RSHIFT",
+		0x97: "OP_MOD", 0x98: "OP_LSHIFTBIN", 0x99: "OP_RSHIFTBIN",
 		0x9a: "OP_BOOLAND", 0x9b: "OP_BOOLOR", 0x9c: "OP_NUMEQUAL",
 		0x9d: "OP_NUMEQUALVERIFY", 0x9e: "OP_NUMNOTEQUAL",
 		0x9f: "OP_LESSTHAN", 0xa0: "OP_GREATERTHAN",
@@ -91,6 +91,7 @@ func TestOpcodeDisasm(t *testing.T) {
 		0xce: "OP_UTXOTOKENCATEGORY", 0xcf: "OP_UTXOTOKENCOMMITMENT",
 		0xd0: "OP_UTXOTOKENAMOUNT", 0xd1: "OP_OUTPUTTOKENCATEGORY",
 		0xd2: "OP_OUTPUTTOKENCOMMITMENT", 0xd3: "OP_OUTPUTTOKENAMOUNT",
+		0xd4: "OP_RESERVED3", 0xd5: "OP_RESERVED4",
 		0xef: "SPECIAL_TOKEN_PREFIX",
 	}
 	for opcodeVal, expectedStr := range expectedStrings {
@@ -137,7 +138,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd4 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd6 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 
@@ -203,7 +204,7 @@ func TestOpcodeDisasm(t *testing.T) {
 			}
 
 		// OP_UNKNOWN#.
-		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd4 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
+		case (opcodeVal >= 0xbd && opcodeVal <= 0xbf) || (opcodeVal >= 0xd6 && opcodeVal <= 0xf9 && opcodeVal != 0xef) || opcodeVal == 0xfc:
 			expectedStr = "OP_UNKNOWN" + strconv.Itoa(opcodeVal)
 		}
 
@@ -959,6 +960,45 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 				}
 			}
 			tx.TxIn[test.index].SignatureScript = nil
+		}
+	}
+}
+
+// TestRenamedOpcodes ensures the earlier names of renamed opcodes still name
+// the same opcodes, while disassembly uses the current names.
+func TestRenamedOpcodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		oldName string
+		newName string
+		value   byte
+	}{
+		{"OP_2MUL", "OP_LSHIFTNUM", OP_LSHIFTNUM},
+		{"OP_2DIV", "OP_RSHIFTNUM", OP_RSHIFTNUM},
+		{"OP_LSHIFT", "OP_LSHIFTBIN", OP_LSHIFTBIN},
+		{"OP_RSHIFT", "OP_RSHIFTBIN", OP_RSHIFTBIN},
+		{"OP_UNKNOWN212", "OP_RESERVED3", OP_RESERVED3},
+		{"OP_UNKNOWN213", "OP_RESERVED4", OP_RESERVED4},
+	}
+	for _, test := range tests {
+		if OpcodeByName[test.oldName] != test.value ||
+			OpcodeByName[test.newName] != test.value {
+
+			t.Errorf("%s: unexpected values %#x and %#x", test.newName,
+				OpcodeByName[test.oldName], OpcodeByName[test.newName])
+		}
+		disasm, err := DisasmString([]byte{test.value})
+		if err != nil || disasm != test.newName {
+			t.Errorf("%s: unexpected disassembly %q (%v)", test.newName,
+				disasm, err)
+		}
+	}
+
+	// The short form used by the reference tests accepts both names.
+	for _, short := range []string{"LSHIFT", "LSHIFTBIN", "2MUL", "LSHIFTNUM"} {
+		if _, err := parseShortForm(short); err != nil {
+			t.Errorf("%s: %v", short, err)
 		}
 	}
 }
