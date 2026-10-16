@@ -5,11 +5,15 @@
 package txscript
 
 import (
+	"bytes"
 	crand "crypto/rand"
 	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 )
 
@@ -174,6 +178,154 @@ func TestHashCachePurge(t *testing.T) {
 		if ok := cache.ContainsHashes(&txid); ok {
 			t.Fatalf("tx %v found in cache but should have "+
 				"been purged: ", txid)
+		}
+	}
+}
+
+// TestTxSigHashesWithUtxos ensures WithUtxos returns the same sighashes as
+// AddTxSigHashUtxoFromUtxoCache without modifying the original ones.
+func TestTxSigHashesWithUtxos(t *testing.T) {
+	t.Parallel()
+
+	tx, utxos := spentOutputsTestTx(nil)
+	sigHashes := NewTxSigHashes(tx)
+	orig := *sigHashes
+
+	want := NewTxSigHashes(tx)
+	want.AddTxSigHashUtxoFromUtxoCache(tx, utxos)
+	got := sigHashes.WithUtxos(tx, utxos)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("WithUtxos: got %v, want %v", spew.Sdump(got),
+			spew.Sdump(want))
+	}
+	if !reflect.DeepEqual(*sigHashes, orig) {
+		t.Fatal("WithUtxos modified the original sighashes")
+	}
+}
+
+// spentOutputsTestTx returns a transaction spending one output for each of
+// the passed scripts, the first of them with fungible tokens, along with the
+// spent outputs.
+func spentOutputsTestTx(pkScripts [][]byte) (*wire.MsgTx, *UtxoCache) {
+	if pkScripts == nil {
+		pkScripts = [][]byte{{OP_TRUE}, {OP_TRUE}}
+	}
+	tx := wire.NewMsgTx(2)
+	utxos := NewUtxoCache()
+	for i, pkScript := range pkScripts {
+		prevHash := chainhash.DoubleHashH([]byte{byte(i)})
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, 1), nil))
+		var tokenData wire.TokenData
+		if i == 0 {
+			tokenData = wire.TokenData{
+				CategoryID: prevHash,
+				Amount:     1000,
+				BitField:   wire.HAS_AMOUNT,
+			}
+		}
+		utxos.AddEntry(i, *wire.NewTxOut(100000, pkScript, tokenData))
+	}
+	tx.AddTxOut(wire.NewTxOut(90000, []byte{OP_TRUE}, wire.TokenData{}))
+	tx.AddTxOut(wire.NewTxOut(90000, []byte{OP_TRUE}, wire.TokenData{}))
+	return tx, utxos
+}
+
+// TestCheckSigSpentOutputs ensures OP_CHECKSIG and OP_CHECKMULTISIG compute
+// the expected signature hash for every hash type, with tokens enabled
+// and disabled, whether or not the passed sighashes include the spent outputs,
+// and that the passed sighashes are not modified.
+func TestCheckSigSpentOutputs(t *testing.T) {
+	t.Parallel()
+
+	priv, pub := bchec.PrivKeyFromBytes(bchec.S256(),
+		bytes.Repeat([]byte{1}, 32))
+	pubKey := pub.SerializeCompressed()
+	checkSig, err := NewScriptBuilder().AddData(pubKey).AddOp(OP_CHECKSIG).
+		Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiSig, err := NewScriptBuilder().AddOp(OP_1).AddData(pubKey).
+		AddOp(OP_1).AddOp(OP_CHECKMULTISIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkScripts := [][]byte{checkSig, multiSig, checkSig}
+	tx, utxos := spentOutputsTestTx(pkScripts)
+
+	for _, tokens := range []bool{false, true} {
+		flags := StandardVerifyFlags
+		if tokens {
+			flags |= ScriptAllowCashTokens
+		}
+		for _, base := range []SigHashType{SigHashAll, SigHashNone, SigHashSingle} {
+			for _, extra := range []SigHashType{0, SigHashAnyOneCanPay, SigHashUTXO} {
+				if extra == SigHashUTXO && !tokens {
+					continue
+				}
+				hashType := base | extra | SigHashForkID
+
+				// Sign with sighashes computed from scratch, including
+				// the spent outputs when tokens are enabled.
+				signing := NewTxSigHashes(tx)
+				if tokens {
+					signing.AddTxSigHashUtxoFromUtxoCache(tx, utxos)
+				}
+				for i, pkScript := range pkScripts {
+					hash, _, err := CalcSignatureHash(pkScript, signing,
+						hashType, tx, i, 100000, true)
+					if err != nil {
+						t.Fatal(err)
+					}
+					builder := NewScriptBuilder()
+					var sig *bchec.Signature
+					if bytes.Equal(pkScript, multiSig) {
+						builder.AddOp(OP_0)
+						sig, err = priv.SignECDSA(hash)
+					} else {
+						sig, err = priv.SignSchnorr(hash)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					builder.AddData(append(sig.Serialize(), byte(hashType)))
+					tx.TxIn[i].SignatureScript, err = builder.Script()
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				passed := []*TxSigHashes{nil, NewTxSigHashes(tx)}
+				if tokens {
+					passed = append(passed,
+						NewTxSigHashes(tx).WithUtxos(tx, utxos))
+				}
+				for i, pkScript := range pkScripts {
+					for j, sigHashes := range passed {
+						var orig TxSigHashes
+						if sigHashes != nil {
+							orig = *sigHashes
+						}
+						vm, err := NewEngine(pkScript, tx, i, flags, nil,
+							sigHashes, utxos, 100000)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if err := vm.Execute(); err != nil {
+							t.Errorf("tokens %v, hash type %#x, input "+
+								"%d, sighashes %d: %v", tokens,
+								hashType, i, j, err)
+						}
+						if sigHashes != nil &&
+							!reflect.DeepEqual(*sigHashes, orig) {
+
+							t.Errorf("tokens %v, hash type %#x, input "+
+								"%d, sighashes %d: passed sighashes "+
+								"modified", tokens, hashType, i, j)
+						}
+					}
+				}
+			}
 		}
 	}
 }

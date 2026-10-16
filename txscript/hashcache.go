@@ -22,6 +22,7 @@ type TxSigHashes struct {
 	HashOutputs   chainhash.Hash
 	HashUTXOS     chainhash.Hash
 	tokenDataList [][]byte
+	hasUtxos      bool
 }
 
 // NewTxSigHashes computes, and returns the cached sighashes of the given
@@ -35,10 +36,21 @@ func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
 	}
 }
 
+// AddTxSigHashUtxoFromUtxoCache adds the hash of the outputs spent by the
+// transaction and their token data to the sighashes.
 func (txSighashes *TxSigHashes) AddTxSigHashUtxoFromUtxoCache(tx *wire.MsgTx, utxoCache *UtxoCache) {
 	hash := calcHashUtxos(tx, utxoCache)
 	txSighashes.HashUTXOS = hash
 	txSighashes.tokenDataList = calUtxoTokenData(tx, utxoCache)
+	txSighashes.hasUtxos = true
+}
+
+// WithUtxos returns a copy of the sighashes with the outputs spent by the
+// transaction added.
+func (txSighashes *TxSigHashes) WithUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) *TxSigHashes {
+	sigHashes := *txSighashes
+	sigHashes.AddTxSigHashUtxoFromUtxoCache(tx, utxoCache)
+	return &sigHashes
 }
 
 // HashCache houses a set of partial sighashes keyed by txid. The set of partial
