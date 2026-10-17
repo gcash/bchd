@@ -3435,6 +3435,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		pubKeyIdx := -1
 		signatureIdx := 0
 		allSignaturesAreNil := true
+		for _, sigInfo := range signatures {
+			if len(sigInfo.signature) > 0 {
+				allSignaturesAreNil = false
+				break
+			}
+		}
 		for numSignatures > 0 {
 			// When there are more signatures than public keys remaining,
 			// there is no way to succeed since too many signatures are
@@ -3458,7 +3464,6 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				// Skip to the next pubkey if signature is empty.
 				continue
 			}
-			allSignaturesAreNil = false
 
 			// Split the signature into hash type and signature components.
 			hashType := SigHashType(rawSig[len(rawSig)-1])
@@ -3545,9 +3550,10 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				numSignatures--
 			}
 		}
+		// Every public key counts as a signature check, unless all
+		// signatures are null.
 		if !allSignaturesAreNil {
-			vm.sigChecks += numPubKeys
-
+			vm.sigChecks += numPubKeysCopy
 			numSigChecks = numPubKeysCopy
 		}
 	}
