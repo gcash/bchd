@@ -96,7 +96,7 @@ func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 		if !ablaActive {
 			return uint64(b.excessiveBlockSize)
 		} else {
-			return b.ablaState.getBlockSizeLimit()
+			return max(uint64(b.excessiveBlockSize), b.ablaState.getBlockSizeLimit())
 		}
 	}
 	return LegacyMaxBlockSize
@@ -738,15 +738,15 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return err
 	}
 
-	uahfActive := block.Height() > b.chainParams.UahfForkHeight
-	ablaActive := block.Height() > b.chainParams.ABLAForkHeight
-
 	// A block must not have more transactions than the max block payload or
 	// else it is certainly over the size limit.
 	// We need to check the blocksize here rather than in checkBlockSanity
 	// because after the Uahf activation it is not longer context free as
 	// the max size depends on whether Uahf has activated or not.
-	maxBlockSize := b.MaxBlockSize(uahfActive, ablaActive)
+	maxBlockSize, err := b.blockSizeLimit(prevNode, prevNode.height+1)
+	if err != nil {
+		return err
+	}
 	numTx := len(block.MsgBlock().Transactions)
 	if uint64(numTx) > maxBlockSize {
 		str := fmt.Sprintf("block contains too many transactions - "+
@@ -1318,8 +1318,13 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// expensive ECDSA signature check scripts.  Doing this last helps
 	// prevent CPU exhaustion attacks.
 	if runScripts {
-		maxSigChecks := uint32(b.ablaState.getBlockSizeLimit()) / BlockMaxBytesMaxSigChecksRatio // TODO change this to uint64
-		err := checkBlockScripts(block, view, scriptFlags, b.sigCache,
+		maxBlockSize, err := b.blockSizeLimit(node.parent, node.height)
+		if err != nil {
+			return err
+		}
+		maxSigChecks := uint32(min(maxBlockSize/BlockMaxBytesMaxSigChecksRatio,
+			math.MaxUint32))
+		err = checkBlockScripts(block, view, scriptFlags, b.sigCache,
 			b.hashCache, maxSigChecks, b.chainParams.Upgrade9ForkHeight)
 		if err != nil {
 			return err
