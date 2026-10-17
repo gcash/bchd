@@ -133,6 +133,17 @@ connecting to the websocket.  Sending any other commands before authenticating,
 supplying invalid credentials, or attempting to authenticate again when already
 authenticated will cause the websocket to be closed immediately.
 
+Until it has authenticated, a websocket client must send the
+[authenticate](#authenticate) command within the time set by the
+`--rpcauthtimeout` option (10 seconds by default, 0 disables the timeout), and
+each message it sends may be at most 64 KiB.  A client that does not
+authenticate in time, sends a larger message, or sends a request that is not a
+valid JSON-RPC request is disconnected.  Clients that authenticate with the
+HTTP Authorization header when connecting are not affected.  Once
+authenticated, a single message may be up to 32 MiB plus eight times the
+`--excessiveblocksize` (about 276 MiB with the default), enough for a
+hex-encoded block of the largest accepted size.
+
 
 <a name="CLIUtil" />
 
@@ -739,7 +750,7 @@ user.  Click the method name for further details such as parameter and return in
 |---|---|
 |Method|authenticate|
 |Parameters|1. username (string, required)<br />2. passphrase (string, required)|
-|Description|Authenticate the connection against the username and password configured for the RPC server.<br />  Invoking any other method before authenticating with this command will close the connection.<br /><font color="orange">NOTE: This is only required if an HTTP Authorization header is not being used.</font>|
+|Description|Authenticate the connection against the username and password configured for the RPC server.<br />  Invoking any other method before authenticating with this command will close the connection.<br />  It must be sent within `--rpcauthtimeout` seconds of connecting (10 by default).<br /><font color="orange">NOTE: This is only required if an HTTP Authorization header is not being used.</font>|
 |Returns|Success: Nothing<br />Failure: Nothing (websocket disconnected)|
 [Return to Overview](#WSExtMethodOverview)<br />
 
