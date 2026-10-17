@@ -607,6 +607,29 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 	return serializedData[8 : n-4], nil
 }
 
+// closeBlockFile closes the read-only handle for the passed flat file number
+// and drops it from the open files cache if it is open.
+func (s *blockStore) closeBlockFile(fileNum uint32) {
+	s.obfMutex.Lock()
+	defer s.obfMutex.Unlock()
+	obf, ok := s.openBlockFiles[fileNum]
+	if !ok {
+		return
+	}
+	s.lruMutex.Lock()
+	if elem, ok := s.fileNumToLRUElem[fileNum]; ok {
+		s.openBlocksLRU.Remove(elem)
+		delete(s.fileNumToLRUElem, fileNum)
+	}
+	s.lruMutex.Unlock()
+
+	// Wait for any readers to finish before closing the file.
+	obf.Lock()
+	_ = obf.file.Close()
+	obf.Unlock()
+	delete(s.openBlockFiles, fileNum)
+}
+
 // deleteBlocks will delete all blocks in the blockstore where the height of the
 // last block in the file is less than the provided height.
 func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
@@ -625,12 +648,8 @@ func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
 
 	s.fbhMutex.Lock()
 	for _, n := range toDelete {
-		blockFile, err := s.blockFile(n)
-		if err != nil {
-			return err
-		}
-		blockFile.file.Close()
-		if err := s.deleteFile(n); err != nil {
+		s.closeBlockFile(n)
+		if err := s.deleteFileFunc(n); err != nil {
 			return err
 		}
 		delete(s.fileBlockHeights, n)
