@@ -625,13 +625,13 @@ var helpDescsEnUS = map[string]string{
 	// SendRawTransactionCmd help.
 	"sendrawtransaction--synopsis":     "Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.",
 	"sendrawtransaction-hextx":         "Serialized, hex-encoded signed transaction",
-	"sendrawtransaction-allowhighfees": "Whether or not to allow insanely high fees (bchd does not yet implement this parameter, so it has no effect)",
+	"sendrawtransaction-allowhighfees": "Allow a fee above the --maxtxfee option",
 	"sendrawtransaction--result0":      "The hash of the transaction",
 
 	// TestMempoolAcceptCmd help.
 	"testmempoolaccept--synopsis":     "Returns whether the raw transaction would be accepted by the mempool, without adding it.",
 	"testmempoolaccept-rawtxs":        "An array with exactly one serialized, hex-encoded transaction",
-	"testmempoolaccept-allowhighfees": "Allow a fee above the maximum transaction fee of 0.1 BCH",
+	"testmempoolaccept-allowhighfees": "Allow a fee above the --maxtxfee option",
 
 	// TestMempoolAcceptResult help.
 	"testmempoolacceptresult-txid":           "The hash of the transaction",
