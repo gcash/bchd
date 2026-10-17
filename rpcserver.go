@@ -2462,14 +2462,10 @@ func handleGetBlockTemplateProposal(s *rpcServer, request *btcjson.TemplateReque
 				"hexadecimal string (not %q)", hexData),
 		}
 	}
-	var msgBlock wire.MsgBlock
-	if err := msgBlock.Deserialize(bytes.NewReader(dataBytes)); err != nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCDeserialization,
-			Message: "Block decode failed: " + err.Error(),
-		}
+	block, rpcErr := decodeRPCBlock(dataBytes)
+	if rpcErr != nil {
+		return nil, rpcErr
 	}
-	block := bchutil.NewBlock(&msgBlock)
 
 	// Ensure the block is building from the expected previous block.
 	expectedPrevHash := s.cfg.Chain.BestSnapshot().Hash
@@ -4183,6 +4179,24 @@ func handleStop(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (i
 	return "bchd stopping.", nil
 }
 
+// decodeRPCBlock deserializes a block passed to an RPC and rejects any data
+// after it, which would otherwise be stored and served with the block.
+func decodeRPCBlock(serializedBlock []byte) (*bchutil.Block, *btcjson.RPCError) {
+	r := bytes.NewReader(serializedBlock)
+	var msgBlock wire.MsgBlock
+	err := msgBlock.Deserialize(r)
+	if err == nil && r.Len() != 0 {
+		err = fmt.Errorf("%d bytes of trailing data", r.Len())
+	}
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "Block decode failed: " + err.Error(),
+		}
+	}
+	return bchutil.NewBlock(&msgBlock), nil
+}
+
 // handleSubmitBlock implements the submitblock command.
 func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.SubmitBlockCmd)
@@ -4197,12 +4211,9 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 		return nil, rpcDecodeHexError(hexStr)
 	}
 
-	block, err := bchutil.NewBlockFromBytes(serializedBlock)
-	if err != nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCDeserialization,
-			Message: "Block decode failed: " + err.Error(),
-		}
+	block, rpcErr := decodeRPCBlock(serializedBlock)
+	if rpcErr != nil {
+		return nil, rpcErr
 	}
 
 	// Process this block using the same rules as blocks coming from other
