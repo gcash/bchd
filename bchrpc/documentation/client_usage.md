@@ -67,6 +67,23 @@ ctx := metadata.NewOutgoingContext(context.Background(), md)
 response, err := client.SomeRPC(ctx, someRequest)
 ```
 
+## Timeouts and Limits
+
+The server applies a few limits to connections and streams:
+
+- The TLS handshake must finish within 10 seconds. For grpc-web over HTTP/1.1,
+  the request headers must also arrive within 10 seconds.
+- A connection with no open calls or streams for 5 minutes gets an HTTP/2
+  GOAWAY and is closed. gRPC clients reconnect on their next call. An open
+  subscription keeps the connection open; keepalive pings don't count as
+  activity.
+- The server buffers at most 50000 events for each subscription. A client that
+  falls further behind than that has its subscription ended with
+  `ResourceExhausted` and needs to subscribe again.
+- When the node shuts down, open subscriptions end with `Unavailable`.
+- A call that fails because of an unexpected error in the server returns
+  `Internal`.
+
 ## Why Are Transaction IDs Backwards?
 Bitcoin was originally coded by Satoshi in a somewhat quirky way. When a transaction ID is in byte format in memory it is
 stored in little endian format (the bytes are in reverse order). When the ID is converted into a hex string the ID is reversed into
