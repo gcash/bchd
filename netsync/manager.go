@@ -6,6 +6,7 @@ package netsync
 
 import (
 	"container/list"
+	"errors"
 	"math/rand"
 	"net"
 	"slices"
@@ -846,6 +847,15 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// Process the block to include validation, best chain selection, orphan
 	// handling, etc.
 	_, isOrphan, err := sm.chain.ProcessBlock(bmsg.block, behaviorFlags)
+	var rerr blockchain.RuleError
+	if errors.As(err, &rerr) && rerr.ErrorCode == blockchain.ErrForkBeforeFinalized {
+		// The peer follows a chain that forks below the finalized
+		// block, so it can't serve the chain this node follows.
+		log.Warnf("Block %v from %s forks the chain below the "+
+			"finalized block -- disconnecting", blockHash, peer)
+		peer.Disconnect()
+		return
+	}
 	if err != nil {
 		// When the error is a rule error, it means the block was simply
 		// rejected as opposed to something actually going wrong, so log

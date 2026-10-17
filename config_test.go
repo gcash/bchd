@@ -117,3 +117,41 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 		t.Error("Could not find rpcpass in generated default config file.")
 	}
 }
+
+func TestFinalizationOptions(t *testing.T) {
+	defer func() { os.Args = []string{"bchd"} }()
+
+	tests := []struct {
+		args  []string
+		depth int32
+		delay int64
+		ok    bool
+	}{
+		{[]string{"bchd"}, 10, 7200, true},
+		{[]string{"bchd", "--maxreorgdepth=-1"}, -1, 7200, true},
+		{[]string{"bchd", "--maxreorgdepth=-5"}, -5, 7200, true},
+		{[]string{"bchd", "--maxreorgdepth=100", "--finalizationdelay=0"}, 100, 0, true},
+		{[]string{"bchd", "--finalizationdelay=-60"}, 10, -60, true},
+		{[]string{"bchd", "--maxreorgdepth=0"}, 0, 0, false},
+	}
+	for _, test := range tests {
+		os.Args = test.args
+		cfg, _, err := loadConfig()
+		if !test.ok {
+			if err == nil {
+				t.Errorf("%v: no error", test.args)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.MaxReorgDepth != test.depth ||
+			cfg.FinalizationDelay != test.delay {
+
+			t.Errorf("%v: depth %d delay %d, want %d %d", test.args,
+				cfg.MaxReorgDepth, cfg.FinalizationDelay, test.depth,
+				test.delay)
+		}
+	}
+}

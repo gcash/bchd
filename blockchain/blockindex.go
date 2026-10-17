@@ -99,6 +99,10 @@ type blockNode struct {
 	// only be accessed using the concurrent-safe NodeStatus method on
 	// blockIndex once the node has been added to the global index.
 	status blockStatus
+
+	// received is when the block was received, in unix seconds, or zero
+	// for blocks loaded from the database.  It fits in the padding.
+	received uint32
 }
 
 // initBlockNode initializes a block node from the given header and parent node,

@@ -5,6 +5,7 @@
         1. [Building From Source](#BuildingFromSource)
     2. [Configuration](#Configuration)
         1. [Checkpoints and Initial Block Download](#Checkpoints)
+        2. [Finalization and Deep Reorganizations](#Finalization)
     3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
     4. [Mining](#Mining)
 3. [Help](#Help)
@@ -82,6 +83,36 @@ consider itself synced until its tip is past the last checkpoint.
 ones, in which case every script is validated.  With `fastsync`, the UTXO set of
 the last checkpoint that has one (mainnet block 661648) is downloaded instead,
 and only the checkpoints up to that block are used.
+
+<a name="Finalization" />
+
+**2.2.2 Finalization and Deep Reorganizations**
+
+Once a main chain block is 10 blocks deep (`maxreorgdepth`) and has been known
+for two hours (`finalizationdelay`, in seconds), it is finalized: blocks that
+fork the chain below the finalized block are rejected, so the node will not
+reorganize its chain deeper than that.  Nothing is finalized until the node has
+been running for the finalization delay, and blocks loaded from disk at startup
+count as known since startup.  The finalized block is kept in memory only.  A
+negative `maxreorgdepth` disables finalization.
+
+```
+[Application Options]
+maxreorgdepth=10
+finalizationdelay=7200
+```
+
+If the network does reorganize below the finalized block, for example after a
+chain split, the node stays on its chain: blocks of the other chain are
+rejected without being stored, and peers that send them are disconnected.  To
+follow the other chain, call `invalidateblock` with the first block of the
+node's chain after the fork point.  This disconnects the node's chain down to
+the fork point and moves finalization back with it, after which the other chain
+is fetched from peers again.  `reconsiderblock` on a block the node stored
+earlier also moves finalization back to where its chain forks.
+Starting the node with `maxreorgdepth=-1` disables finalization, and
+restarting it clears the finalized block until the finalization delay has
+passed again.
 
 <a name="BchctlConfig" />
 
