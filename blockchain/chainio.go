@@ -51,6 +51,10 @@ var (
 	// the block height -> ablaState index.
 	ablaStateBucketName = []byte("ablaidx")
 
+	// ablaConfigKeyName is the name of the db key used to store the ABLA
+	// configuration the stored ABLA states were computed with.
+	ablaConfigKeyName = []byte("ablaconfig")
+
 	// chainStateKeyName is the name of the db key used to store the best
 	// chain state.
 	chainStateKeyName = []byte("chainstate")
@@ -1002,8 +1006,8 @@ func dbPutABLAStateIndex(dbTx database.Tx, ablaState ABLAState, height int32) er
 	byteOrder.PutUint32(serializedHeight[:], uint32(height))
 
 	var serializedAblaState [16]byte
-	byteOrder.PutUint64(serializedAblaState[:], ablaState.controlBlockSize)
-	byteOrder.PutUint64(serializedAblaState[:], ablaState.elasticBufferSize)
+	byteOrder.PutUint64(serializedAblaState[0:8], ablaState.controlBlockSize)
+	byteOrder.PutUint64(serializedAblaState[8:16], ablaState.elasticBufferSize)
 
 	// Add the block hash to height mapping to the index.
 	meta := dbTx.Metadata()
@@ -1040,19 +1044,25 @@ func dbFetchAblaStateByHeight(dbTx database.Tx, height int32) (*ABLAState, error
 		str := fmt.Sprintf("no ABLA state at height %d exists", height)
 		return nil, errNotInMainChain(str)
 	}
+	return deserializeABLAState(height, serializedData)
+}
 
+// deserializeABLAState decodes the ABLA state stored after the block at the
+// given height.
+func deserializeABLAState(height int32, serializedData []byte) (*ABLAState, error) {
 	// Ensure the serialized data has the right length.
-	if uint32(len(serializedData[:])) > 16 {
-		return &ABLAState{}, database.Error{
+	if len(serializedData) != 16 {
+		return nil, database.Error{
 			ErrorCode:   database.ErrCorruption,
 			Description: "corrupt ABLA state",
 		}
 	}
 
+	// The state after a block applies to the next block.
 	var ablaState ABLAState
-	ablaState.blockHeight = uint64(height)
+	ablaState.blockHeight = uint64(height) + 1
 	ablaState.controlBlockSize = byteOrder.Uint64(serializedData[0:8])
-	ablaState.elasticBufferSize = byteOrder.Uint64(serializedData[8:])
+	ablaState.elasticBufferSize = byteOrder.Uint64(serializedData[8:16])
 
 	return &ablaState, nil
 
@@ -1407,7 +1417,10 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 	if !initialized {
 		// At this point the database has not already been initialized, so
 		// initialize both it and the chain state to the genesis block.
-		return b.createChainState()
+		if err := b.createChainState(); err != nil {
+			return err
+		}
+		return b.initABLAState()
 	}
 
 	if !hasBlockIndex {
@@ -1492,17 +1505,6 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 		}
 		b.bestChain.SetTip(tip)
 
-		ablaState, err := dbFetchAblaStateByHeight(dbTx, tip.height)
-		if err == nil {
-			b.ablaState = *ablaState
-		} else {
-			// check if upgrade is active for block
-			if tip.height > b.chainParams.ABLAForkHeight {
-				return AssertError(fmt.Sprintf("initChainState: cannot find "+
-					"ABLA state index for block at height: %d", tip.height))
-			}
-		}
-
 		// Load the raw block bytes for the best block.
 		var block wire.MsgBlock
 		var blockBytes []byte
@@ -1552,7 +1554,11 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 	// As we might have updated the index after it was loaded, we'll
 	// attempt to flush the index to the DB. This will only result in a
 	// write if the elements are dirty, so it'll usually be a noop.
-	return b.index.flushToDB()
+	if err := b.index.flushToDB(); err != nil {
+		return err
+	}
+
+	return b.initABLAState()
 }
 
 // deserializeBlockRow parses a value in the block index bucket into a block

@@ -134,9 +134,12 @@ type BlockChain struct {
 	// fields in this struct below this point.
 	chainLock sync.RWMutex
 
-	// This is abla state.
-	ablaConfig ABLAConfig
-	ablaState  ABLAState
+	// ablaState is the ABLA state after the chain tip, which sets the size
+	// limit of the next block.  ablaSideCache holds the states after side
+	// chain blocks.
+	ablaConfig    ABLAConfig
+	ablaState     ABLAState
+	ablaSideCache map[chainhash.Hash]ABLAState
 
 	// These fields are related to the memory block index.  They both have
 	// their own locks, however they are often also protected by the chain
@@ -727,7 +730,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	state := newBestState(node, blockSize, numTxns,
 		curTotalTxns+numTxns, node.CalcPastMedianTime())
 
-	b.ablaState = b.ablaState.nextABLAState(&b.ablaConfig, blockSize)
+	ablaState := b.ablaNextState(b.ablaState, node.height, blockSize)
 
 	// Atomically insert info into the database.
 	err = b.db.Update(func(dbTx database.Tx) error {
@@ -737,10 +740,12 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 			return err
 		}
 
-		// Add ABLA state for block
-		err = dbPutABLAStateIndex(dbTx, b.ablaState, block.Height())
-		if err != nil {
-			return err
+		// Add the ABLA state after the block.
+		if node.height >= b.chainParams.ABLAForkHeight {
+			err = dbPutABLAStateIndex(dbTx, ablaState, node.height)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Add the block hash and height to the block index which tracks
@@ -783,6 +788,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
+	b.ablaState = ablaState
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -866,6 +872,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	state := newBestState(prevNode, blockSize, numTxns,
 		newTotalTxns, prevNode.CalcPastMedianTime())
 
+	var ablaState ABLAState
 	err = b.db.Update(func(dbTx database.Tx) error {
 		// Update best block state.
 		err := dbPutBestState(dbTx, state, node.workSum)
@@ -873,19 +880,17 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 			return err
 		}
 
-		// Add ABLA state for block
-		err = dbRemoveABLAStateIndex(dbTx, block.Height())
+		// Remove the ABLA state after the block and load the one
+		// after its parent.
+		err = dbRemoveABLAStateIndex(dbTx, node.height)
 		if err != nil {
 			return err
 		}
-		ablaState, err := dbFetchAblaStateByHeight(dbTx, prevBlock.Height())
-		if err == nil {
-			b.ablaState = *ablaState
-		} else {
-			// check if upgrade is active for block
-			if prevBlock.Height() > b.chainParams.ABLAForkHeight {
-				return AssertError(fmt.Sprintf("disconnectBlock: cannot find "+
-					"ABLA state index for block at height: %d", prevBlock.Height()))
+		ablaState = b.ablaBaseState(prevNode.height)
+		if prevNode.height >= b.chainParams.ABLAForkHeight {
+			ablaState, err = b.dbFetchValidABLAState(dbTx, prevNode.height)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -936,6 +941,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
+	b.ablaState = ablaState
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -2294,9 +2300,6 @@ func New(config *Config) (*BlockChain, error) {
 		thetaReciprocal: params.ABLAConfig.ThetaReciprocal,
 		delta:           params.ABLAConfig.Delta,
 		fixedSize:       params.ABLAConfig.FixedSize,
-	}
-	if uint64(config.ExcessiveBlockSize) > ablaConfig.beta0 && ablaConfig.beta0 > 0 {
-		ablaConfig.epsilon0 = uint64(config.ExcessiveBlockSize) - ablaConfig.beta0
 	}
 	ablaConfig.SetMax()
 	err := ablaConfig.IsValid()
