@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -298,5 +299,91 @@ func TestCheckMultiSigHashCost(t *testing.T) {
 	want := int64(2 * GetDigestIterationCount(bytesHashed, true))
 	if got := vm.metrics.GetHashDigestIterations(); got != want {
 		t.Fatalf("got %d hash digest iterations, want %d", got, want)
+	}
+}
+
+// TestSigCacheSignatureType ensures a cached valid ECDSA signature does not
+// make a Schnorr signature with the same R and S valid, and the reverse, so
+// the result of a signature check does not depend on the cache contents.
+func TestSigCacheSignatureType(t *testing.T) {
+	t.Parallel()
+
+	priv := sigOpTestKey(t, "sigcache type")
+	pkScript := buildScript(t, NewScriptBuilder().
+		AddData(priv.PubKey().SerializeCompressed()).
+		AddOp(OP_CHECKDATASIG))
+
+	// Pick a message whose Schnorr signature has a low S and an R below
+	// the curve order, so that its DER twin keeps the same R and S.
+	n := bchec.S256().N
+	halfN := new(big.Int).Rsh(n, 1)
+	var msg []byte
+	var digest [32]byte
+	var schnorrSig *bchec.Signature
+	for i := 0; ; i++ {
+		msg = fmt.Appendf(nil, "sigcache %d", i)
+		digest = sha256.Sum256(msg)
+		sig, err := priv.SignSchnorr(digest[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sig.S.Cmp(halfN) <= 0 && sig.R.Cmp(n) < 0 {
+			schnorrSig = sig
+			break
+		}
+	}
+
+	run := func(sig []byte, sigCache *SigCache) error {
+		sigScript := buildScript(t, NewScriptBuilder().AddData(sig).
+			AddData(msg))
+		_, err := runSigOpTest(t, sigScript, pkScript,
+			may2026TestFlags&^ScriptVerifyNullFail, sigCache)
+		return err
+	}
+	pad32 := func(v *big.Int) []byte {
+		b := make([]byte, 32)
+		v.FillBytes(b)
+		return b
+	}
+
+	// A valid ECDSA signature and the Schnorr encoding of its R and S.
+	ecdsaSig, err := priv.SignECDSA(digest[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaTwin := append(pad32(ecdsaSig.R), pad32(ecdsaSig.S)...)
+
+	// The DER encoding of the Schnorr signature's R and S.
+	schnorrTwin := (&bchec.Signature{R: schnorrSig.R, S: schnorrSig.S}).
+		Serialize()
+	parsedTwin, err := bchec.ParseDERSignature(schnorrTwin, bchec.S256())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsedTwin.R.Cmp(schnorrSig.R) != 0 ||
+		parsedTwin.S.Cmp(schnorrSig.S) != 0 {
+
+		t.Fatal("DER twin does not keep the Schnorr R and S")
+	}
+
+	tests := []struct {
+		name  string
+		valid []byte
+		twin  []byte
+	}{
+		{"ECDSA cached", ecdsaSig.Serialize(), ecdsaTwin},
+		{"Schnorr cached", schnorrSig.Serialize(), schnorrTwin},
+	}
+	for _, test := range tests {
+		if err := run(test.twin, nil); err == nil {
+			t.Fatalf("%s: twin accepted without a cache", test.name)
+		}
+		sigCache := NewSigCache(10)
+		if err := run(test.valid, sigCache); err != nil {
+			t.Fatalf("%s: unexpected error %v", test.name, err)
+		}
+		if err := run(test.twin, sigCache); err == nil {
+			t.Errorf("%s: twin accepted from the cache", test.name)
+		}
 	}
 }
