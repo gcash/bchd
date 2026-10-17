@@ -819,6 +819,7 @@ func TestVMlimitsAndBigInt2025NonStandard(t *testing.T) {
 
 			flags := txscript.StandardVerifyFlags | txscript.ScriptAllowCashTokens | txscript.ScriptAllowMay2025
 			flags ^= txscript.ScriptDiscourageUpgradableNops
+			flags &^= txscript.ScriptVerifyInputSigChecks
 
 			err = blockchain.CheckTransactionSanity(bchutilTx, true, true, flags)
 			if err != nil { // Failed TX, move to the next one

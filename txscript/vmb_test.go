@@ -89,6 +89,7 @@ func TestMay2026Standard(t *testing.T) {
 		"bch_2026_standard/core.signature-checking.multisig.m-of-3.vmb_tests.json",
 		"bch_2026_standard/core.signature-checking.multisig.pubkey-validation.vmb_tests.json",
 		"bch_2026_standard/core.signature-checking.multisig.signing-serialization.vmb_tests.json",
+		"bch_2026_standard/core.signing-serialization.vmb_tests.json",
 	}
 
 	for _, testFileName := range BCH2025Standard {
@@ -279,6 +280,7 @@ func TestMay2026NonStandard(t *testing.T) {
 		"bch_2026_nonstandard/core.nop.vmb_tests.json",
 		"bch_2026_nonstandard/core.push.data.vmb_tests.json",
 		"bch_2026_nonstandard/core.signature-checking.multisig.m-of-15.vmb_tests.json",
+		"bch_2026_nonstandard/core.signature-checking.multisig.m-of-20.vmb_tests.json",
 	}
 
 	for _, testFileName := range BCH2025NonStandard {
@@ -341,6 +343,7 @@ func TestMay2026NonStandard(t *testing.T) {
 
 			flags := txscript.StandardVerifyFlags | txscript.ScriptAllowCashTokens | txscript.ScriptAllowMay2025
 			flags &^= txscript.ScriptDiscourageUpgradableNops
+			flags &^= txscript.ScriptVerifyInputSigChecks
 			flags |= txscript.ScriptAllowMay2026
 
 			err = blockchain.CheckTransactionSanity(bchutilTx, true, true, flags)
