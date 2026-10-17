@@ -133,6 +133,21 @@ func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32) (uint64, 
 	return max(uint64(b.excessiveBlockSize), state.getBlockSizeLimit()), nil
 }
 
+// NextBlockSizeLimit returns the maximum serialized size of a block that
+// extends the block with the passed hash.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) NextBlockSizeLimit(prevHash *chainhash.Hash) (uint64, error) {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	prevNode := b.index.LookupNode(prevHash)
+	if prevNode == nil {
+		return 0, fmt.Errorf("block %v is not known", prevHash)
+	}
+	return b.blockSizeLimit(prevNode, prevNode.height+1)
+}
+
 // dbFetchValidABLAState fetches the stored ABLA state after the main chain
 // block at the given height and checks it against the configuration.
 func (b *BlockChain) dbFetchValidABLAState(dbTx database.Tx, height int32) (ABLAState, error) {

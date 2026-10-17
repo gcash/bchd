@@ -372,7 +372,7 @@ type gbtWorkState struct {
 	notifyMap     map[chainhash.Hash]map[int64]chan struct{}
 	timeSource    blockchain.MedianTimeSource
 	maxSigChecks  uint32
-	maxBlockSize  uint32
+	maxBlockSize  uint64
 }
 
 // newGbtWorkState returns a new instance of a gbtWorkState with all internal
