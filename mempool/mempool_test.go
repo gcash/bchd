@@ -990,3 +990,129 @@ func TestTxPool_DecodeCompressedBlock(t *testing.T) {
 		}
 	}
 }
+
+// poolState is a snapshot of the parts of a pool that adding a transaction
+// changes.
+type poolState struct {
+	pool, orphans, outpoints, observed int
+	pennyTotal                         float64
+	lastPennyUnix, lastUpdated         int64
+}
+
+// snapshotPool returns the current state of the harness pool.
+func snapshotPool(p *poolHarness) poolState {
+	mp := p.txPool
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	mp.cfg.FeeEstimator.mtx.RLock()
+	observed := len(mp.cfg.FeeEstimator.observed)
+	mp.cfg.FeeEstimator.mtx.RUnlock()
+
+	return poolState{
+		pool:          len(mp.pool),
+		orphans:       len(mp.orphans),
+		outpoints:     len(mp.outpoints),
+		observed:      observed,
+		pennyTotal:    mp.pennyTotal,
+		lastPennyUnix: mp.lastPennyUnix,
+		lastUpdated:   mp.lastUpdated.Load(),
+	}
+}
+
+// TestCheckMempoolAcceptance ensures that CheckMempoolAcceptance reports the
+// same outcome as adding a transaction, without changing the pool.
+func TestCheckMempoolAcceptance(t *testing.T) {
+	t.Parallel()
+
+	harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	tc := &testContext{t, harness}
+	feeEstimator := NewFeeEstimator(DefaultEstimateFeeMaxRollback,
+		DefaultEstimateFeeMinRegisteredBlocks)
+	feeEstimator.lastKnownHeight = harness.chain.BestHeight()
+	harness.txPool.cfg.FeeEstimator = feeEstimator
+	hashCache := txscript.NewHashCache(10)
+	harness.txPool.cfg.HashCache = hashCache
+
+	// The chain pays no fees, so adding the first one with rate limiting
+	// updates the free transaction rate limiter.
+	chainedTxns, err := harness.CreateTxChain(outputs[0], 2)
+	if err != nil {
+		t.Fatalf("unable to create transaction chain: %v", err)
+	}
+	parent, child := chainedTxns[0], chainedTxns[1]
+
+	check := func(tx *bchutil.Tx) (*MempoolAcceptResult, error) {
+		t.Helper()
+		cached := hashCache.ContainsHashes(tx.Hash())
+		before := snapshotPool(harness)
+		result, err := harness.txPool.CheckMempoolAcceptance(tx)
+		if after := snapshotPool(harness); after != before {
+			t.Fatalf("CheckMempoolAcceptance changed the pool: "+
+				"before %+v, after %+v", before, after)
+		}
+		if hashCache.ContainsHashes(tx.Hash()) != cached {
+			t.Fatalf("CheckMempoolAcceptance changed the hash cache")
+		}
+		return result, err
+	}
+
+	// A valid transaction passes and stays out of the pool.
+	result, err := check(parent)
+	if err != nil {
+		t.Fatalf("CheckMempoolAcceptance: unexpected error: %v", err)
+	}
+	if len(result.MissingParents) != 0 || result.Fee != 0 ||
+		result.SigChecks != 1 {
+
+		t.Fatalf("CheckMempoolAcceptance: unexpected result %+v", result)
+	}
+	testPoolMembership(tc, parent, false, false)
+
+	// A transaction with unknown inputs reports its missing parent and is
+	// not added to the orphan pool.
+	result, err = check(child)
+	if err != nil {
+		t.Fatalf("CheckMempoolAcceptance: unexpected error: %v", err)
+	}
+	if len(result.MissingParents) != 1 ||
+		*result.MissingParents[0] != *parent.Hash() {
+
+		t.Fatalf("CheckMempoolAcceptance: unexpected missing parents "+
+			"%v", result.MissingParents)
+	}
+	testPoolMembership(tc, child, false, false)
+
+	// Adding the parent changes the pool, which the snapshot detects.
+	before := snapshotPool(harness)
+	_, _, err = harness.txPool.MaybeAcceptTransaction(parent, true, true)
+	if err != nil {
+		t.Fatalf("MaybeAcceptTransaction: unexpected error: %v", err)
+	}
+	after := snapshotPool(harness)
+	if after.pool != before.pool+1 || after.outpoints != before.outpoints+1 ||
+		after.observed != before.observed+1 ||
+		after.pennyTotal == before.pennyTotal {
+
+		t.Fatalf("MaybeAcceptTransaction: unexpected pool change: "+
+			"before %+v, after %+v", before, after)
+	}
+
+	// A transaction already in the pool is rejected as a duplicate.
+	_, err = check(parent)
+	if code, _ := extractRejectCode(err); code != wire.RejectDuplicate {
+		t.Fatalf("CheckMempoolAcceptance: unexpected error for a "+
+			"transaction in the pool: %v", err)
+	}
+
+	// Its child now passes, without being added.
+	result, err = check(child)
+	if err != nil || len(result.MissingParents) != 0 {
+		t.Fatalf("CheckMempoolAcceptance: unexpected result %+v, "+
+			"error %v", result, err)
+	}
+	testPoolMembership(tc, child, false, false)
+}
