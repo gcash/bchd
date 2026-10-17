@@ -85,3 +85,35 @@ func TestValidateTransactionScriptsCachedSigHashes(t *testing.T) {
 		t.Fatal("validation modified the cached sighashes")
 	}
 }
+
+// TestIsPATFO ensures token-prefixed outputs created at or below the Upgrade9
+// fork height are unspendable and those created after it are not.
+func TestIsPATFO(t *testing.T) {
+	const forkHeight = 792772
+	token := wire.TokenData{CategoryID: [32]byte{1}, Amount: 1, BitField: wire.HAS_AMOUNT}
+	p2pkh := []byte{txscript.OP_DUP, txscript.OP_HASH160, txscript.OP_DATA_20,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		txscript.OP_EQUALVERIFY, txscript.OP_CHECKSIG}
+	unparsed := []byte{wire.PREFIX_BYTE, txscript.OP_TRUE}
+
+	tests := []struct {
+		name      string
+		tokenData wire.TokenData
+		pkScript  []byte
+		height    int32
+		want      bool
+	}{
+		{"token before fork height", token, p2pkh, forkHeight - 1, true},
+		{"token at fork height", token, p2pkh, forkHeight, true},
+		{"token after fork height", token, p2pkh, forkHeight + 1, false},
+		{"prefix byte at fork height", wire.TokenData{}, unparsed, forkHeight, true},
+		{"prefix byte after fork height", wire.TokenData{}, unparsed, forkHeight + 1, false},
+		{"no token at fork height", wire.TokenData{}, p2pkh, forkHeight, false},
+	}
+	for _, test := range tests {
+		got := IsPATFO(test.tokenData, test.pkScript, test.height, forkHeight)
+		if got != test.want {
+			t.Errorf("%s: got %v, want %v", test.name, got, test.want)
+		}
+	}
+}
