@@ -521,7 +521,7 @@ Example Return|`{`<br />&nbsp;&nbsp;`"bytes": 310768,`<br />&nbsp;&nbsp;`"size":
 |---|---|
 |Method|sendrawtransaction|
 |Parameters|1. signedhex (string, required) serialized, hex-encoded signed transaction<br />2. allowhighfees (boolean, optional, default=false) allow a fee above `--maxtxfee`|
-|Description|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.  A transaction already in the mempool is relayed again and its hash returned.|
+|Description|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.  A transaction already in the mempool is relayed again and its hash returned.<br />A transaction that pays a total fee above `--maxtxfee` (0.1 BCH by default) is rejected unless `allowhighfees` is true.<br />As in Bitcoin Cash Node, a transaction that cannot be decoded returns error -22, one with missing inputs -25, one already in the block chain -27, and any other rejected transaction -26.|
 |Returns|`"hash" (string) the hash of the transaction`|
 |Example Return|`"1697a19cede08694278f19584e8dcc87945f40c6b59a942dd8906f133ad3f9cc"`|
 [Return to Overview](#MethodOverview)<br />
