@@ -741,3 +741,110 @@ var Block100000 = wire.MsgBlock{
 		},
 	},
 }
+
+// TestCoinbaseTokenRule ensures a coinbase output with a token prefix is
+// accepted at the Upgrade9 fork height and rejected after it.
+func TestCoinbaseTokenRule(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	params.Upgrade9ForkHeight = 2
+	chain, teardownFunc, err := chainSetup("coinbasetokenrule", &params)
+	if err != nil {
+		t.Fatalf("Failed to setup chain instance: %v", err)
+	}
+	defer teardownFunc()
+
+	// Pad transactions above the minimum transaction size.
+	padding := wire.NewTxOut(0, append([]byte{txscript.OP_RETURN, 64},
+		make([]byte, 64)...), wire.TokenData{})
+
+	tip := params.GenesisBlock
+	newCoinbase := func(height int32, extra *wire.TxOut) *wire.MsgTx {
+		cb := wire.NewMsgTx(1)
+		cb.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Index: math.MaxUint32},
+			SignatureScript:  []byte{txscript.OP_DATA_2, byte(height), 0},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, &params),
+			[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+		cb.AddTxOut(padding)
+		if extra != nil {
+			cb.AddTxOut(extra)
+		}
+		return cb
+	}
+	newBlock := func(cb *wire.MsgTx) *bchutil.Block {
+		height := chain.BestSnapshot().Height + 1
+		ts := tip.Header.Timestamp.Add(10 * time.Minute)
+		bits, err := chain.CalcNextRequiredDifficulty(ts)
+		if err != nil {
+			t.Fatalf("CalcNextRequiredDifficulty: %v", err)
+		}
+		msgBlock := &wire.MsgBlock{
+			Header: wire.BlockHeader{
+				Version:    4,
+				PrevBlock:  tip.BlockHash(),
+				MerkleRoot: cb.TxHash(),
+				Timestamp:  ts,
+				Bits:       bits,
+			},
+			Transactions: []*wire.MsgTx{cb},
+		}
+		target := CompactToBig(bits)
+		for {
+			hash := msgBlock.Header.BlockHash()
+			if HashToBig(&hash).Cmp(target) <= 0 {
+				break
+			}
+			msgBlock.Header.Nonce++
+		}
+		block := bchutil.NewBlock(msgBlock)
+		block.SetHeight(height)
+		return block
+	}
+	process := func(block *bchutil.Block) error {
+		_, _, err := chain.ProcessBlock(block, BFNone)
+		if err == nil {
+			tip = block.MsgBlock()
+		}
+		return err
+	}
+	mustAccept := func(desc string, block *bchutil.Block) {
+		t.Helper()
+		if err := process(block); err != nil {
+			t.Fatalf("%s: block at height %d rejected: %v", desc,
+				block.Height(), err)
+		}
+	}
+	mustReject := func(desc string, block *bchutil.Block) {
+		t.Helper()
+		err := process(block)
+		rerr, ok := err.(RuleError)
+		if !ok || rerr.ErrorCode != ErrCoinbaseHasTokens {
+			t.Fatalf("%s: block at height %d: got %v, want %v",
+				desc, block.Height(), err, ErrCoinbaseHasTokens)
+		}
+	}
+
+	amount := uint64(1000)
+	tokenData, err := wire.NewTokenData([32]byte{1}, &amount, nil, nil)
+	if err != nil {
+		t.Fatalf("NewTokenData: %v", err)
+	}
+	tokenOutput := wire.NewTxOut(0, []byte{txscript.OP_TRUE}, *tokenData)
+	// A token prefix byte that does not start valid token data.
+	badPrefixOutput := wire.NewTxOut(0,
+		[]byte{wire.PREFIX_BYTE, txscript.OP_TRUE}, wire.TokenData{})
+
+	mustAccept("block 1", newBlock(newCoinbase(1, nil)))
+
+	// Block 2 is at the fork height, so the rule is not active yet.
+	mustAccept("token output before activation",
+		newBlock(newCoinbase(2, tokenOutput)))
+
+	// From block 3 the coinbase must not have a token prefix.
+	mustReject("token output", newBlock(newCoinbase(3, tokenOutput)))
+	mustReject("invalid token prefix",
+		newBlock(newCoinbase(3, badPrefixOutput)))
+	mustAccept("no token output", newBlock(newCoinbase(3, nil)))
+}
