@@ -431,8 +431,14 @@ func (cm *ConnManager) NewConnReq() {
 		return
 	}
 
-	resp := make(chan bool)
-	cm.requests <- checkDuplicate{c: c, addr: addr, resp: resp}
+	// The reply is buffered so the handler never blocks on it if this
+	// request is abandoned because the manager is shutting down.
+	resp := make(chan bool, 1)
+	select {
+	case cm.requests <- checkDuplicate{c: c, addr: addr, resp: resp}:
+	case <-cm.quit:
+		return
+	}
 	select {
 	case dup := <-resp:
 		if dup {

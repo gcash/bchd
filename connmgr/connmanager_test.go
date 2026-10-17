@@ -671,3 +671,42 @@ out:
 	cmgr.Stop()
 	cmgr.Wait()
 }
+
+// TestStopDuringNewConnReq ensures that stopping the connection manager while
+// new connection requests are being made does not leave the connection
+// handler blocked, which would make Wait hang.
+func TestStopDuringNewConnReq(t *testing.T) {
+	errDialer := func(_ net.Addr) (net.Conn, error) {
+		return nil, errors.New("network down")
+	}
+	for i := 0; i < 200; i++ {
+		cmgr, err := New(&Config{
+			TargetOutbound: 5,
+			RetryDuration:  time.Millisecond,
+			Dial:           errDialer,
+			GetNewAddress: func() (net.Addr, error) {
+				return &net.TCPAddr{
+					IP:   net.ParseIP("127.0.0.1"),
+					Port: 18555,
+				}, nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("New error: %v", err)
+		}
+		cmgr.Start()
+		time.Sleep(time.Duration(i%5) * time.Millisecond)
+		cmgr.Stop()
+
+		waited := make(chan struct{})
+		go func() {
+			cmgr.Wait()
+			close(waited)
+		}()
+		select {
+		case <-waited:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("iteration %d: Wait did not return after Stop", i)
+		}
+	}
+}
