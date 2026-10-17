@@ -802,6 +802,30 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "finalizeblock",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("finalizeblock", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewFinalizeBlockCmd("123")
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"finalizeblock","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.FinalizeBlockCmd{
+				BlockHash: "123",
+			},
+		},
+		{
+			name: "getfinalizedblockhash",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getfinalizedblockhash")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetFinalizedBlockHashCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"getfinalizedblockhash","params":[],"id":1}`,
+			unmarshalled: &btcjson.GetFinalizedBlockHashCmd{},
+		},
+		{
 			name: "invalidateblock",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("invalidateblock", "123")

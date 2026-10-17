@@ -172,34 +172,36 @@ the method name for further details such as parameter and return information.
 |2|[createrawtransaction](#createrawtransaction)|Y|Returns a new transaction spending the provided inputs and sending to the provided addresses.|
 |3|[decoderawtransaction](#decoderawtransaction)|Y|Returns a JSON object representing the provided serialized, hex-encoded transaction.|
 |4|[decodescript](#decodescript)|Y|Returns a JSON object with information about the provided hex-encoded script.|
-|5|[getaddednodeinfo](#getaddednodeinfo)|N|Returns information about manually added (persistent) peers.|
-|6|[getbestblockhash](#getbestblockhash)|Y|Returns the hash of the of the best (most recent) block in the longest block chain.|
-|7|[getblock](#getblock)|Y|Returns information about a block given its hash.|
-|8|[getblockcount](#getblockcount)|Y|Returns the number of blocks in the longest block chain.|
-|9|[getblockhash](#getblockhash)|Y|Returns hash of the block in best block chain at the given height.|
-|10|[getblockheader](#getblockheader)|Y|Returns the block header of the block.|
-|11|[getconnectioncount](#getconnectioncount)|N|Returns the number of active connections to other peers.|
-|12|[getdifficulty](#getdifficulty)|Y|Returns the proof-of-work difficulty as a multiple of the minimum difficulty.|
-|13|[getgenerate](#getgenerate)|N|Return if the server is set to generate coins (mine) or not.|
-|14|[gethashespersec](#gethashespersec)|N|Returns a recent hashes per second performance measurement while generating coins (mining).|
-|15|[getinfo](#getinfo)|Y|Returns a JSON object containing various state info.|
-|16|[getmempoolinfo](#getmempoolinfo)|N|Returns a JSON object containing mempool-related information.|
-|17|[getmininginfo](#getmininginfo)|N|Returns a JSON object containing mining-related information.|
-|18|[getnettotals](#getnettotals)|Y|Returns a JSON object containing network traffic statistics.|
-|19|[getnetworkhashps](#getnetworkhashps)|Y|Returns the estimated network hashes per second for the block heights provided by the parameters.|
-|20|[getpeerinfo](#getpeerinfo)|N|Returns information about each connected network peer as an array of json objects.|
-|21|[getrawmempool](#getrawmempool)|Y|Returns an array of hashes for all of the transactions currently in the memory pool.|
-|22|[getrawtransaction](#getrawtransaction)|Y|Returns information about a transaction given its hash.|
-|23|[gettxout](#gettxout)|Y|Returns information about an unspent transaction output.|
-|24|[help](#help)|Y|Returns a list of all commands or help for a specified command.|
-|25|[ping](#ping)|N|Queues a ping to be sent to each connected peer.|
-|26|[sendrawtransaction](#sendrawtransaction)|Y|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.|
-|27|[setgenerate](#setgenerate) |N|Set the server to generate coins (mine) or not.<br/>NOTE: Since bchd does not have the wallet integrated to provide payment addresses, bchd must be configured via the `--miningaddr` option to provide which payment addresses to pay created blocks to for this RPC to function.|
-|28|[stop](#stop)|N|Shutdown bchd.|
-|29|[submitblock](#submitblock)|Y|Attempts to submit a new serialized, hex-encoded block to the network.|
-|30|[testmempoolaccept](#testmempoolaccept)|Y|Returns whether the mempool would accept a serialized, hex-encoded transaction, without adding it.|
-|31|[validateaddress](#validateaddress)|Y|Verifies the given address is valid.  NOTE: Since bchd does not have a wallet integrated, bchd will only return whether the address is valid or not.|
-|32|[verifychain](#verifychain)|N|Verifies the block chain database.|
+|5|[finalizeblock](#finalizeblock)|N|Treats a block as final, so that the chain can't be reorganized below it.|
+|6|[getaddednodeinfo](#getaddednodeinfo)|N|Returns information about manually added (persistent) peers.|
+|7|[getbestblockhash](#getbestblockhash)|Y|Returns the hash of the of the best (most recent) block in the longest block chain.|
+|8|[getblock](#getblock)|Y|Returns information about a block given its hash.|
+|9|[getblockcount](#getblockcount)|Y|Returns the number of blocks in the longest block chain.|
+|10|[getblockhash](#getblockhash)|Y|Returns hash of the block in best block chain at the given height.|
+|11|[getblockheader](#getblockheader)|Y|Returns the block header of the block.|
+|12|[getconnectioncount](#getconnectioncount)|N|Returns the number of active connections to other peers.|
+|13|[getdifficulty](#getdifficulty)|Y|Returns the proof-of-work difficulty as a multiple of the minimum difficulty.|
+|14|[getfinalizedblockhash](#getfinalizedblockhash)|Y|Returns the hash of the finalized block.|
+|15|[getgenerate](#getgenerate)|N|Return if the server is set to generate coins (mine) or not.|
+|16|[gethashespersec](#gethashespersec)|N|Returns a recent hashes per second performance measurement while generating coins (mining).|
+|17|[getinfo](#getinfo)|Y|Returns a JSON object containing various state info.|
+|18|[getmempoolinfo](#getmempoolinfo)|N|Returns a JSON object containing mempool-related information.|
+|19|[getmininginfo](#getmininginfo)|N|Returns a JSON object containing mining-related information.|
+|20|[getnettotals](#getnettotals)|Y|Returns a JSON object containing network traffic statistics.|
+|21|[getnetworkhashps](#getnetworkhashps)|Y|Returns the estimated network hashes per second for the block heights provided by the parameters.|
+|22|[getpeerinfo](#getpeerinfo)|N|Returns information about each connected network peer as an array of json objects.|
+|23|[getrawmempool](#getrawmempool)|Y|Returns an array of hashes for all of the transactions currently in the memory pool.|
+|24|[getrawtransaction](#getrawtransaction)|Y|Returns information about a transaction given its hash.|
+|25|[gettxout](#gettxout)|Y|Returns information about an unspent transaction output.|
+|26|[help](#help)|Y|Returns a list of all commands or help for a specified command.|
+|27|[ping](#ping)|N|Queues a ping to be sent to each connected peer.|
+|28|[sendrawtransaction](#sendrawtransaction)|Y|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.|
+|29|[setgenerate](#setgenerate) |N|Set the server to generate coins (mine) or not.<br/>NOTE: Since bchd does not have the wallet integrated to provide payment addresses, bchd must be configured via the `--miningaddr` option to provide which payment addresses to pay created blocks to for this RPC to function.|
+|30|[stop](#stop)|N|Shutdown bchd.|
+|31|[submitblock](#submitblock)|Y|Attempts to submit a new serialized, hex-encoded block to the network.|
+|32|[testmempoolaccept](#testmempoolaccept)|Y|Returns whether the mempool would accept a serialized, hex-encoded transaction, without adding it.|
+|33|[validateaddress](#validateaddress)|Y|Verifies the given address is valid.  NOTE: Since bchd does not have a wallet integrated, bchd will only return whether the address is valid or not.|
+|34|[verifychain](#verifychain)|N|Verifies the block chain database.|
 
 <a name="MethodDetails" />
 
@@ -250,6 +252,17 @@ the method name for further details such as parameter and return information.
 |Description|Returns a JSON object with information about the provided hex-encoded script.<br />As in Bitcoin Cash Node, the type of a script is one of `pubkey`, `pubkeyhash`, `scripthash` (for both the 20 and the 32 byte hash forms), `multisig`, `nulldata` (OP_RETURN followed only by pushes, of any length), `script` (any other script of at most 201 bytes, standard since the May 2026 upgrade) or `nonstandard`.  The `type` of every scriptPubKey in the results of this API uses the same names.|
 |Returns|`{ (json object)`<br />&nbsp;&nbsp;`"asm": "asm",  (string) disassembly of the script`<br />&nbsp;&nbsp;`"reqSigs": n,  (numeric) the number of required signatures`<br />&nbsp;&nbsp;`"type": "scripttype",  (string) the type of the script (e.g. 'pubkeyhash')`<br />&nbsp;&nbsp;`"addresses": [ (json array of string) the bitcoin addresses associated with this script`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"bitcoinaddress",  (string) the bitcoin address`<br />&nbsp;&nbsp;&nbsp;&nbsp;`...`<br />&nbsp;&nbsp;`]`<br />&nbsp;&nbsp;`"p2sh": "address",  (string) the pay-to-script-hash address of the script, omitted if the script is already pay-to-script-hash`<br />`}`|
 |Example Return|`{`<br />&nbsp;&nbsp;`"asm": "OP_DUP OP_HASH160 b0a4d8a91981106e4ed85165a66748b19f7b7ad4 OP_EQUALVERIFY OP_CHECKSIG",`<br />&nbsp;&nbsp;`"reqSigs": 1,`<br />&nbsp;&nbsp;`"type": "pubkeyhash",`<br />&nbsp;&nbsp;`"addresses": [`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"qzc2fk9frxq3qmjwmpgktfn8fzce77m66sarmem7k5"`<br />&nbsp;&nbsp;`]`<br />&nbsp;&nbsp;`"p2sh": "pq6ehp8l0x05sgcejrls9xpqda2pz7cgkcnhqqawf4"`<br />`}`|
+[Return to Overview](#MethodOverview)<br />
+
+***
+<a name="finalizeblock"/>
+
+|   |   |
+|---|---|
+|Method|finalizeblock|
+|Parameters|1. block hash (string, required) - the hash of the block to finalize|
+|Description|Treats a block as final: blocks that fork the chain below it are rejected, so the chain can't be reorganized below it.  When the block is not in the main chain, the main chain is disconnected down to the fork point, its first block there is marked invalid and the block's chain is connected.  A block that conflicts with the finalized block is refused.  Used on a chain with less work, this takes the node out of consensus.  Blocks are also finalized automatically, see `maxreorgdepth` and `finalizationdelay`.|
+|Returns|Nothing|
 [Return to Overview](#MethodOverview)<br />
 
 ***
@@ -354,6 +367,18 @@ the method name for further details such as parameter and return information.
 |Description|Returns the proof-of-work difficulty as a multiple of the minimum difficulty.|
 |Returns|numeric|
 |Example Return|`1180923195.260000`|
+[Return to Overview](#MethodOverview)<br />
+
+***
+<a name="getfinalizedblockhash"/>
+
+|   |   |
+|---|---|
+|Method|getfinalizedblockhash|
+|Parameters|None|
+|Description|Returns the hash of the finalized block, below which the chain can't be reorganized, or an empty string if no block is finalized.|
+|Returns|string|
+|Example Return|`0000000000000001f356adc6b29ab42b59f913a396e170f80190dba615bd1e60`|
 [Return to Overview](#MethodOverview)<br />
 
 ***

@@ -139,6 +139,19 @@ func NewGetAddedNodeInfoCmd(dns bool, node *string) *GetAddedNodeInfoCmd {
 	}
 }
 
+// FinalizeBlockCmd defines the finalizeblock JSON-RPC command.
+type FinalizeBlockCmd struct {
+	BlockHash string
+}
+
+// NewFinalizeBlockCmd returns a new instance which can be used to issue a
+// finalizeblock JSON-RPC command.
+func NewFinalizeBlockCmd(blockHash string) *FinalizeBlockCmd {
+	return &FinalizeBlockCmd{
+		BlockHash: blockHash,
+	}
+}
+
 // GetBestBlockHashCmd defines the getbestblockhash JSON-RPC command.
 type GetBestBlockHashCmd struct{}
 
@@ -146,6 +159,15 @@ type GetBestBlockHashCmd struct{}
 // getbestblockhash JSON-RPC command.
 func NewGetBestBlockHashCmd() *GetBestBlockHashCmd {
 	return &GetBestBlockHashCmd{}
+}
+
+// GetFinalizedBlockHashCmd defines the getfinalizedblockhash JSON-RPC command.
+type GetFinalizedBlockHashCmd struct{}
+
+// NewGetFinalizedBlockHashCmd returns a new instance which can be used to
+// issue a getfinalizedblockhash JSON-RPC command.
+func NewGetFinalizedBlockHashCmd() *GetFinalizedBlockHashCmd {
+	return &GetFinalizedBlockHashCmd{}
 }
 
 // VerbosityLevel is a type that can unmarshal a bool or an int into an int field!
@@ -860,6 +882,7 @@ func init() {
 	MustRegisterCmd("createrawtransaction", (*CreateRawTransactionCmd)(nil), flags)
 	MustRegisterCmd("decoderawtransaction", (*DecodeRawTransactionCmd)(nil), flags)
 	MustRegisterCmd("decodescript", (*DecodeScriptCmd)(nil), flags)
+	MustRegisterCmd("finalizeblock", (*FinalizeBlockCmd)(nil), flags)
 	MustRegisterCmd("getaddednodeinfo", (*GetAddedNodeInfoCmd)(nil), flags)
 	MustRegisterCmd("getbestblockhash", (*GetBestBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getblock", (*GetBlockCmd)(nil), flags)
@@ -873,6 +896,7 @@ func init() {
 	MustRegisterCmd("getchaintips", (*GetChainTipsCmd)(nil), flags)
 	MustRegisterCmd("getconnectioncount", (*GetConnectionCountCmd)(nil), flags)
 	MustRegisterCmd("getdifficulty", (*GetDifficultyCmd)(nil), flags)
+	MustRegisterCmd("getfinalizedblockhash", (*GetFinalizedBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getgenerate", (*GetGenerateCmd)(nil), flags)
 	MustRegisterCmd("gethashespersec", (*GetHashesPerSecCmd)(nil), flags)
 	MustRegisterCmd("getinfo", (*GetInfoCmd)(nil), flags)

@@ -146,6 +146,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"decoderawtransaction":  handleDecodeRawTransaction,
 	"decodescript":          handleDecodeScript,
 	"estimatefee":           handleEstimateFee,
+	"finalizeblock":         handleFinalizeBlock,
 	"generate":              handleGenerate,
 	"getaddednodeinfo":      handleGetAddedNodeInfo,
 	"getbestblock":          handleGetBestBlock,
@@ -161,6 +162,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getconnectioncount":    handleGetConnectionCount,
 	"getcurrentnet":         handleGetCurrentNet,
 	"getdifficulty":         handleGetDifficulty,
+	"getfinalizedblockhash": handleGetFinalizedBlockHash,
 	"getgenerate":           handleGetGenerate,
 	"gethashespersec":       handleGetHashesPerSec,
 	"getheaders":            handleGetHeaders,
@@ -281,6 +283,7 @@ var rpcLimited = map[string]struct{}{
 	"getcfilterheader":      {},
 	"getcurrentnet":         {},
 	"getdifficulty":         {},
+	"getfinalizedblockhash": {},
 	"getheaders":            {},
 	"getinfo":               {},
 	"getnettotals":          {},
@@ -3435,6 +3438,38 @@ func handleInvalidateBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 	}
 
 	return nil, s.cfg.Chain.InvalidateBlock(hash)
+}
+
+// handleFinalizeBlock implements the finalizeblock command.
+func handleFinalizeBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.FinalizeBlockCmd)
+
+	hash, err := chainhash.NewHashFromStr(c.BlockHash)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.BlockHash)
+	}
+	if _, err := s.cfg.Chain.HeaderByHash(hash); err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Block not found",
+		}
+	}
+	if err := s.cfg.Chain.FinalizeBlock(hash); err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDatabase,
+			Message: err.Error(),
+		}
+	}
+	return nil, nil
+}
+
+// handleGetFinalizedBlockHash implements the getfinalizedblockhash command.
+func handleGetFinalizedBlockHash(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	hash := s.cfg.Chain.FinalizedBlockHash()
+	if hash == nil {
+		return "", nil
+	}
+	return hash.String(), nil
 }
 
 // handleReconsiderBlock implements the reconsiderblock command
