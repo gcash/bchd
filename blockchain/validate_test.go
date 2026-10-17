@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -229,6 +230,55 @@ func TestCheckBlockSanity(t *testing.T) {
 	err = CheckBlockSanity(block, powLimit, timeSource, true, false)
 	if err == nil {
 		t.Errorf("CheckBlockSanity: error is nil when it shouldn't be")
+	}
+}
+
+// TestCheckHeaderProofOfWork tests the CheckHeaderProofOfWork function to
+// ensure it accepts a valid header and rejects headers with a hash above the
+// target, a target above the proof of work limit, or a zero target.
+func TestCheckHeaderProofOfWork(t *testing.T) {
+	powLimit := chaincfg.MainNetParams.PowLimit
+	valid := Block100000.Header
+
+	tests := []struct {
+		name    string
+		mutate  func(h *wire.BlockHeader)
+		wantErr ErrorCode
+		valid   bool
+	}{{
+		name:   "valid header",
+		mutate: func(h *wire.BlockHeader) {},
+		valid:  true,
+	}, {
+		name:    "hash above target",
+		mutate:  func(h *wire.BlockHeader) { h.Nonce++ },
+		wantErr: ErrHighHash,
+	}, {
+		name:    "target above pow limit",
+		mutate:  func(h *wire.BlockHeader) { h.Bits = 0x207fffff },
+		wantErr: ErrUnexpectedDifficulty,
+	}, {
+		name:    "zero target",
+		mutate:  func(h *wire.BlockHeader) { h.Bits = 0 },
+		wantErr: ErrUnexpectedDifficulty,
+	}}
+
+	for _, test := range tests {
+		header := valid
+		test.mutate(&header)
+		err := CheckHeaderProofOfWork(&header, powLimit)
+		if test.valid {
+			if err != nil {
+				t.Errorf("%s: unexpected error: %v", test.name,
+					err)
+			}
+			continue
+		}
+		var rerr RuleError
+		if !errors.As(err, &rerr) || rerr.ErrorCode != test.wantErr {
+			t.Errorf("%s: got error %v, want error code %v",
+				test.name, err, test.wantErr)
+		}
 	}
 }
 

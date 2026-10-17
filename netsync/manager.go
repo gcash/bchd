@@ -966,26 +966,30 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	}
 
 	// This is headers-first mode and the block is a checkpoint.  When
-	// there is a next checkpoint, get the next round of headers by asking
-	// for headers starting from the block after this one up to the next
-	// checkpoint.
+	// there is a next checkpoint, get the next round of headers from the
+	// sync peer by asking for headers starting from the block after this
+	// one up to the next checkpoint.
 	prevHeight := sm.nextCheckpoint.Height
 	prevHash := sm.nextCheckpoint.Hash
 	sm.nextCheckpoint = sm.findNextHeaderCheckpoint(prevHeight)
 	if sm.nextCheckpoint != nil {
-		locator := blockchain.BlockLocator([]*chainhash.Hash{prevHash})
-		err := peer.PushGetHeadersMsg(locator, sm.nextCheckpoint.Hash)
-		if err != nil {
-			log.Warnf("Failed to send getheaders message to "+
-				"peer %s: %v", peer.Addr(), err)
+		// The next sync peer starts again from the best block.
+		if sm.syncPeer == nil {
 			return
 		}
 
-		if sm.syncPeer != nil {
-			log.Infof("Downloading headers for blocks %d to %d from "+
-				"peer %s", prevHeight+1, sm.nextCheckpoint.Height,
-				sm.syncPeer.Addr())
+		locator := blockchain.BlockLocator([]*chainhash.Hash{prevHash})
+		err := sm.syncPeer.PushGetHeadersMsg(locator,
+			sm.nextCheckpoint.Hash)
+		if err != nil {
+			log.Warnf("Failed to send getheaders message to "+
+				"peer %s: %v", sm.syncPeer.Addr(), err)
+			return
 		}
+
+		log.Infof("Downloading headers for blocks %d to %d from "+
+			"peer %s", prevHeight+1, sm.nextCheckpoint.Height,
+			sm.syncPeer.Addr())
 		return
 	}
 
@@ -1068,7 +1072,8 @@ func (sm *SyncManager) fetchHeaderBlocks() {
 }
 
 // handleHeadersMsg handles block header messages from all peers.  Headers are
-// requested when performing a headers-first sync.
+// requested from the sync peer when performing a headers-first sync, so
+// headers from any other peer are ignored in that mode.
 func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 	peer := hmsg.peer
 	_, exists := sm.peerStates[peer]
@@ -1087,14 +1092,18 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		return
 	}
 
+	// Headers are only requested from the sync peer.
+	if peer != sm.syncPeer {
+		log.Debugf("Ignoring %d headers from non-sync peer %s",
+			numHeaders, peer)
+		return
+	}
+
 	// Nothing to do for an empty headers message.
 	if numHeaders == 0 {
 		// If we are syncing and requesting headers, they
 		// should never be empty.
-		if peer == sm.syncPeer {
-			sm.updateSyncPeer()
-		}
-
+		sm.updateSyncPeer()
 		return
 	}
 
@@ -1111,6 +1120,17 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 		if prevNodeEl == nil {
 			log.Warnf("Header list does not contain a previous" +
 				"element as expected -- disconnecting peer")
+			peer.Disconnect()
+			return
+		}
+
+		// Ensure the header has valid proof of work.
+		err := blockchain.CheckHeaderProofOfWork(blockHeader,
+			sm.chainParams.PowLimit)
+		if err != nil {
+			log.Warnf("Received block header %s with invalid "+
+				"proof of work from peer %s: %v -- "+
+				"disconnecting", blockHash, peer.Addr(), err)
 			peer.Disconnect()
 			return
 		}
