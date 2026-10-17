@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -4584,7 +4585,24 @@ func (s *rpcServer) standardCmdResult(cmd *parsedRPCCmd, closeNotifier <-chan st
 	}
 	return nil, btcjson.ErrRPCMethodNotFound
 handled:
-	return handler(s, cmd.cmd, closeNotifier)
+	return runRPCHandler(cmd.method, func() (interface{}, error) {
+		return handler(s, cmd.cmd, closeNotifier)
+	})
+}
+
+// runRPCHandler runs an RPC handler and turns a panic into an internal error,
+// so a single request can't stop the process.
+func runRPCHandler(method string, f func() (interface{}, error)) (result interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rpcsLog.Errorf("Recovered from panic in RPC handler "+
+				"for <%s>: %v\n%s", method, r, debug.Stack())
+			result = nil
+			err = btcjson.NewRPCError(btcjson.ErrRPCInternal.Code,
+				"internal error")
+		}
+	}()
+	return f()
 }
 
 // parseCmd parses a JSON-RPC request object into known concrete command.  The

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -1310,6 +1311,18 @@ type wsClient struct {
 // inHandler handles all incoming messages for the websocket connection.  It
 // must be run as a goroutine.
 func (c *wsClient) inHandler() {
+	defer func() {
+		if r := recover(); r != nil {
+			rpcsLog.Errorf("Recovered from panic in websocket input "+
+				"handler for %s: %v\n%s", c.addr, r, debug.Stack())
+		}
+
+		// Ensure the connection is closed.
+		c.Disconnect()
+		c.wg.Done()
+		rpcsLog.Tracef("Websocket client input handler done for %s", c.addr)
+	}()
+
 out:
 	for {
 		// Break out of the loop once the quit channel has been closed.
@@ -1705,22 +1718,14 @@ out:
 							}
 						}
 
-						// Lookup the websocket extension for the command, if it doesn't
-						// exist fallback to handling the command as a standard command.
-						var resp interface{}
-						wsHandler, ok := wsHandlers[cmd.method]
-						if ok {
-							resp, err = wsHandler(c, cmd.cmd)
-						} else {
-							resp, err = c.server.standardCmdResult(cmd, nil)
-						}
+						resp, err := c.runCmd(cmd)
 
 						// Marshal request output.
 						reply, err := createMarshalledReply(cmd.jsonrpc, cmd.id, resp, err)
 						if err != nil {
 							rpcsLog.Errorf("Failed to marshal reply for <%s> "+
 								"command: %v", cmd.method, err)
-							return
+							continue
 						}
 
 						if reply != nil {
@@ -1761,11 +1766,18 @@ out:
 			c.serviceRequestSem.release()
 		}
 	}
+}
 
-	// Ensure the connection is closed.
-	c.Disconnect()
-	c.wg.Done()
-	rpcsLog.Tracef("Websocket client input handler done for %s", c.addr)
+// runCmd runs the websocket extension handler for the command, or the
+// standard handler when there is none.
+func (c *wsClient) runCmd(r *parsedRPCCmd) (interface{}, error) {
+	wsHandler, ok := wsHandlers[r.method]
+	if !ok {
+		return c.server.standardCmdResult(r, nil)
+	}
+	return runRPCHandler(r.method, func() (interface{}, error) {
+		return wsHandler(c, r.cmd)
+	})
 }
 
 // serviceRequest services a parsed RPC request by looking up and executing the
@@ -1777,14 +1789,7 @@ func (c *wsClient) serviceRequest(r *parsedRPCCmd) {
 		err    error
 	)
 
-	// Lookup the websocket extension for the command and if it doesn't
-	// exist fallback to handling the command as a standard command.
-	wsHandler, ok := wsHandlers[r.method]
-	if ok {
-		result, err = wsHandler(c, r.cmd)
-	} else {
-		result, err = c.server.standardCmdResult(r, nil)
-	}
+	result, err = c.runCmd(r)
 	reply, err := createMarshalledReply(r.jsonrpc, r.id, result, err)
 	if err != nil {
 		rpcsLog.Errorf("Failed to marshal reply for <%s> "+
