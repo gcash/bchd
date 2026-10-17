@@ -111,3 +111,22 @@ func TestSubmitBlockOrphanNotAccepted(t *testing.T) {
 		t.Fatalf("got %v, %v, want \"prev-blk-not-found\"", res, err)
 	}
 }
+
+// TestSubmitBlockUsesBIP22Reasons ensures rule violations are reported with
+// BIP22 reason strings and other errors as RPC errors.
+func TestSubmitBlockUsesBIP22Reasons(t *testing.T) {
+	res, err := submitBlock(t, &submitSyncMgr{err: blockchain.RuleError{
+		ErrorCode:   blockchain.ErrDuplicateBlock,
+		Description: "already have block",
+	}}, submitBlockHex(t, false))
+	if err != nil || res != "duplicate" {
+		t.Fatalf("got %v, %v, want \"duplicate\"", res, err)
+	}
+
+	_, err = submitBlock(t, &submitSyncMgr{err: errors.New("disk failure")},
+		submitBlockHex(t, false))
+	var rpcErr *btcjson.RPCError
+	if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCVerify {
+		t.Fatalf("expected a verify error, got %v", err)
+	}
+}
