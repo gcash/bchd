@@ -1094,3 +1094,166 @@ func TestLegacyCheckMultiSigInputSigChecks(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckSigForkIDScriptCode ensures a signature that uses SIGHASH_FORKID is
+// not removed from the script code it signs.  A function body comes from the
+// unlocking script, so it can contain the signature it checks.
+func TestCheckSigForkIDScriptCode(t *testing.T) {
+	t.Parallel()
+
+	may2026Flags := StandardVerifyFlags | ScriptAllowCashTokens |
+		ScriptAllowMay2025 | ScriptAllowMay2025StandardOnly |
+		ScriptAllowMay2026
+	priv := multiSigTestKeys(1)[0]
+	pubKey := priv.PubKey().SerializeCompressed()
+	hashType := SigHashAll | SigHashForkID
+	// OP_1 OP_DEFINE OP_1 OP_INVOKE
+	invokeScript := []byte{OP_1, OP_DEFINE, OP_1, OP_INVOKE}
+
+	mustScript := func(b *ScriptBuilder) []byte {
+		script, err := b.Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return script
+	}
+
+	// sign returns a Schnorr or ECDSA signature of the passed script code.
+	sign := func(tx *wire.MsgTx, scriptCode []byte, schnorr,
+		bip143 bool) []byte {
+
+		utxos := NewUtxoCache()
+		utxos.AddEntry(0, *wire.NewTxOut(1000, invokeScript,
+			wire.TokenData{}))
+		pops, err := parseScript(scriptCode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash, _, err := calcSignatureHash(pops,
+			NewTxSigHashes(tx).WithUtxos(tx, utxos), hashType, tx, 0,
+			1000, bip143)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sig *bchec.Signature
+		if schnorr {
+			sig, err = priv.SignSchnorr(hash)
+		} else {
+			sig, err = priv.SignECDSA(hash)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return append(sig.Serialize(), byte(hashType))
+	}
+
+	tests := []struct {
+		name    string
+		schnorr bool
+		// legacy runs without SIGHASH_FORKID enabled, with the body
+		// as the locking script instead of a function body.
+		legacy bool
+		// signed is the script code the signature covers and body
+		// returns the script that contains the signature.
+		signed  []byte
+		body    func(sig []byte) []byte
+		wantErr ErrorCode
+		valid   bool
+	}{{
+		name:    "checksig",
+		schnorr: true,
+		signed: mustScript(NewScriptBuilder().AddData(pubKey).
+			AddOp(OP_CHECKSIG)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddData(sig).
+				AddData(pubKey).AddOp(OP_CHECKSIG))
+		},
+		wantErr: ErrNullFail,
+	}, {
+		name:    "checksigverify",
+		schnorr: true,
+		signed: mustScript(NewScriptBuilder().AddData(pubKey).
+			AddOp(OP_CHECKSIGVERIFY).AddOp(OP_1)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddData(sig).
+				AddData(pubKey).AddOp(OP_CHECKSIGVERIFY).
+				AddOp(OP_1))
+		},
+		wantErr: ErrNullFail,
+	}, {
+		name: "ECDSA multisig",
+		signed: mustScript(NewScriptBuilder().AddOp(OP_0).AddOp(OP_1).
+			AddData(pubKey).AddOp(OP_1).AddOp(OP_CHECKMULTISIG)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddOp(OP_0).
+				AddData(sig).AddOp(OP_1).AddData(pubKey).
+				AddOp(OP_1).AddOp(OP_CHECKMULTISIG))
+		},
+		wantErr: ErrNullFail,
+	}, {
+		name:    "Schnorr multisig",
+		schnorr: true,
+		signed: mustScript(NewScriptBuilder().AddOp(OP_1).AddOp(OP_1).
+			AddData(pubKey).AddOp(OP_1).AddOp(OP_CHECKMULTISIG)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddOp(OP_1).
+				AddData(sig).AddOp(OP_1).AddData(pubKey).
+				AddOp(OP_1).AddOp(OP_CHECKMULTISIG))
+		},
+		wantErr: ErrNullFail,
+	}, {
+		// The signature is not in the script code after an
+		// OP_CODESEPARATOR, so it can sign it.
+		name:    "checksig after OP_CODESEPARATOR",
+		schnorr: true,
+		signed: mustScript(NewScriptBuilder().AddData(pubKey).
+			AddOp(OP_CHECKSIG)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddData(sig).
+				AddOp(OP_CODESEPARATOR).AddData(pubKey).
+				AddOp(OP_CHECKSIG))
+		},
+		valid: true,
+	}, {
+		// Without SIGHASH_FORKID enabled the fork bit does not select
+		// the fork id algorithm, so the signature is removed.
+		name:   "checksig without SIGHASH_FORKID enabled",
+		legacy: true,
+		signed: mustScript(NewScriptBuilder().AddData(pubKey).
+			AddOp(OP_CHECKSIG)),
+		body: func(sig []byte) []byte {
+			return mustScript(NewScriptBuilder().AddData(sig).
+				AddData(pubKey).AddOp(OP_CHECKSIG))
+		},
+		valid: true,
+	}}
+
+	for _, test := range tests {
+		flags := may2026Flags
+		tx := createSpendingTx(nil, invokeScript, 1000)
+		sig := sign(tx, test.signed, test.schnorr, !test.legacy)
+		pkScript := invokeScript
+		if test.legacy {
+			flags = ScriptVerifyDERSignatures
+			pkScript = test.body(sig)
+		} else {
+			tx.TxIn[0].SignatureScript = mustScript(
+				NewScriptBuilder().AddData(test.body(sig)))
+		}
+
+		utxos := NewUtxoCache()
+		utxos.AddEntry(0, *wire.NewTxOut(1000, pkScript, wire.TokenData{}))
+		vm, err := NewEngine(pkScript, tx, 0, flags, nil, nil, utxos, 1000)
+		if err != nil {
+			t.Fatalf("%s: NewEngine: %v", test.name, err)
+		}
+		err = vm.Execute()
+		switch {
+		case test.valid && err != nil:
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+		case !test.valid && !IsErrorCode(err, test.wantErr):
+			t.Errorf("%s: got error %v, want %v", test.name, err,
+				test.wantErr)
+		}
+	}
+}

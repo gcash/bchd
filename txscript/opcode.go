@@ -3100,15 +3100,9 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	}
 
 	// Get script starting from the most recent OP_CODESEPARATOR.
-	subScript := vm.subScript()
+	subScript := vm.cleanupScriptCode(vm.subScript(), fullSigBytes)
 
 	// Generate the signature hash based on the signature hash type.
-	var hash []byte
-
-	// Remove the signature since there is no way for a signature
-	// to sign itself.
-	subScript = removeOpcodeByData(subScript, fullSigBytes)
-
 	hash, totalBytesHashedlength, err := calcSignatureHash(subScript, vm.txSigHashes(), hashType, &vm.tx, vm.txIdx,
 		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
 	if err != nil {
@@ -3163,6 +3157,20 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 
 	vm.dstack.PushBool(valid)
 	return nil
+}
+
+// cleanupScriptCode removes the passed signature from the script code unless
+// the signature uses the fork id signature hash algorithm, which signs the
+// script code as is.
+func (vm *Engine) cleanupScriptCode(script []parsedOpcode,
+	fullSigBytes []byte) []parsedOpcode {
+
+	if vm.hasFlag(ScriptVerifyBip143SigHash) && len(fullSigBytes) > 0 &&
+		SigHashType(fullSigBytes[len(fullSigBytes)-1])&SigHashForkID != 0 {
+
+		return script
+	}
+	return removeOpcodeByData(script, fullSigBytes)
 }
 
 // opcodeCheckSigVerify is a combination of opcodeCheckSig and opcodeVerify.
@@ -3291,10 +3299,6 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 
 	// Get script starting from the most recent OP_CODESEPARATOR.
 	script := vm.subScript()
-
-	for _, sigInfo := range signatures {
-		script = removeOpcodeByData(script, sigInfo.signature)
-	}
 
 	var sigHashes *TxSigHashes
 	if vm.hasFlag(ScriptVerifyBip143SigHash) {
@@ -3438,6 +3442,10 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			return scriptError(ErrInvalidBitCount, str)
 		}
 	} else { // ECDSA multisig
+		for _, sigInfo := range signatures {
+			script = vm.cleanupScriptCode(script, sigInfo.signature)
+		}
+
 		numPubKeysCopy := numPubKeys
 		numPubKeys++
 		pubKeyIdx := -1
