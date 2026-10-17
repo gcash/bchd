@@ -267,3 +267,40 @@ func TestSendAddrV2AfterVerAck(t *testing.T) {
 		t.Fatal("peer not disconnected")
 	}
 }
+
+// TestOutboundOnionPeer checks that an outbound peer to a Tor v3 address gets
+// that address and sends zeros for it in its version message.
+func TestOutboundOnionPeer(t *testing.T) {
+	const onion = "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"
+	cfg := &peer.Config{
+		ChainParams:            &chaincfg.MainNetParams,
+		TstAllowSelfConnection: true,
+	}
+	p, err := peer.NewOutboundPeer(cfg, onion+":8333")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if na := p.NA(); na.Network != wire.NetworkTorV3 || na.Host() != onion {
+		t.Fatalf("NA is %v %s", na.Network, na.Host())
+	}
+
+	localConn, remoteConn := pipe(
+		&conn{laddr: "10.0.0.1:8333", raddr: "127.0.0.1:9050"},
+		&conn{laddr: "127.0.0.1:9050", raddr: "10.0.0.1:8333"},
+	)
+	p.AssociateConnection(localConn)
+	defer p.Disconnect()
+	msg, _, err := wire.ReadMessage(remoteConn, wire.ProtocolVersion,
+		wire.MainNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, ok := msg.(*wire.MsgVersion)
+	if !ok {
+		t.Fatalf("got %s, want version", msg.Command())
+	}
+	if !version.AddrYou.IP.Equal(net.IPv6zero) || version.AddrYou.Port != 8333 {
+		t.Fatalf("addr_recv is %v:%d", version.AddrYou.IP,
+			version.AddrYou.Port)
+	}
+}

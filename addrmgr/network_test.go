@@ -136,7 +136,7 @@ func TestIPTypes(t *testing.T) {
 			t.Errorf("IsValid %s\n got: %v want: %v", test.in.IP, rv, test.valid)
 		}
 
-		if rv := addrmgr.IsRoutable(&test.in); rv != test.routable {
+		if rv := addrmgr.IsRoutable(wire.NetAddressV2FromLegacy(&test.in)); rv != test.routable {
 			t.Errorf("IsRoutable %s\n got: %v want: %v", test.in.IP, rv, test.routable)
 		}
 	}
@@ -178,10 +178,8 @@ func TestGroupKey(t *testing.T) {
 		{name: "ipv6 rfc6052 well-known prefix with ipv4", ip: "64:ff9b::0c01:0203", expected: "12.1.0.0"},
 		{name: "ipv6 rfc6145 translated ipv4", ip: "::ffff:0:0c01:0203", expected: "12.1.0.0"},
 
-		// Tor.
-		{name: "ipv6 tor onioncat", ip: "fd87:d87e:eb43:1234::5678", expected: "tor:2"},
-		{name: "ipv6 tor onioncat 2", ip: "fd87:d87e:eb43:1245::6789", expected: "tor:2"},
-		{name: "ipv6 tor onioncat 3", ip: "fd87:d87e:eb43:1345::6789", expected: "tor:3"},
+		// Tor v2 in OnionCat encoding is no longer supported.
+		{name: "ipv6 tor onioncat", ip: "fd87:d87e:eb43:1234::5678", expected: "unroutable"},
 
 		// IPv6 normal.
 		{name: "ipv6 normal", ip: "2602:100::1", expected: "2602:100::"},
@@ -192,10 +190,36 @@ func TestGroupKey(t *testing.T) {
 
 	for i, test := range tests {
 		nip := net.ParseIP(test.ip)
-		na := *wire.NewNetAddressIPPort(nip, 8333, wire.SFNodeNetwork)
-		if key := addrmgr.GroupKey(&na); key != test.expected {
+		na := wire.NewNetAddressV2IPPort(nip, 8333, wire.SFNodeNetwork)
+		if key := addrmgr.GroupKey(na); key != test.expected {
 			t.Errorf("TestGroupKey #%d (%s): unexpected group key "+
 				"- got '%s', want '%s'", i, test.name,
+				key, test.expected)
+		}
+	}
+
+	// Tor, I2P and CJDNS addresses are grouped by the first 4 bits of
+	// the address.
+	addr := func(first byte, size int) []byte {
+		b := make([]byte, size)
+		b[0], b[1] = first, 0xff
+		return b
+	}
+	others := []struct {
+		na       *wire.NetAddressV2
+		expected string
+	}{
+		{wire.NewNetAddressV2(wire.NetworkTorV3, addr(0x12, 32), 8333, 0), "torv3:1"},
+		{wire.NewNetAddressV2(wire.NetworkTorV3, addr(0x1f, 32), 8333, 0), "torv3:1"},
+		{wire.NewNetAddressV2(wire.NetworkTorV3, addr(0xe1, 32), 8333, 0), "torv3:14"},
+		{wire.NewNetAddressV2(wire.NetworkI2P, addr(0x51, 32), 0, 0), "i2p:5"},
+		{wire.NewNetAddressV2(wire.NetworkCJDNS, addr(0xfc, 16), 8333, 0), "cjdns:15"},
+		{wire.NewNetAddressV2(wire.NetworkTorV3, addr(0x12, 16), 8333, 0), "unroutable"},
+		{wire.NewNetAddressV2(wire.NetworkTorV2, addr(0x12, 10), 8333, 0), "unroutable"},
+	}
+	for i, test := range others {
+		if key := addrmgr.GroupKey(test.na); key != test.expected {
+			t.Errorf("TestGroupKey other #%d: got '%s', want '%s'", i,
 				key, test.expected)
 		}
 	}
