@@ -2063,6 +2063,10 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 
 	incrementedVal := m.Add(&m, makeScriptNumFromInt(1)) // m + 1
 
+	if !vm.hasFlag(ScriptAllowMay2025) && incrementedVal.IsGreaterThanInt(maxInt64) {
+		return scriptError(ErrIntegerOverflow, "integer overflow")
+	}
+
 	resultBytes := incrementedVal.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
 		return scriptError(ErrElementTooBig, fmt.Sprintf(
