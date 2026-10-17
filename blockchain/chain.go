@@ -782,6 +782,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	if err != nil {
 		return err
 	}
+	b.utxoCache.setStaleJournal(*block.Hash(), false)
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
@@ -828,10 +829,11 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size. If we're in prune mode we have to flush whenever our last
 	// flush is at the tail end of the prune depth so that we can continue to
-	// recover from a hard shutdown.
+	// recover from a hard shutdown.  After a reorg the last flush can be on
+	// the removed branch, and recovering from it rolls back to the fork point.
 	flushMode := FlushIfNeeded
 	if b.pruneMode {
-		node := b.index.LookupNode(&b.utxoCache.lastFlushHash)
+		node := b.bestChain.FindFork(b.index.LookupNode(&b.utxoCache.lastFlushHash))
 		if node.height <= block.Height()-int32(b.pruneDepth) {
 			flushMode = FlushRequired
 		}
@@ -908,16 +910,9 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 			return err
 		}
 
-		// Before we delete the spend journal entry for this back,
-		// we'll fetch it as is so the indexers can utilize if needed.
+		// The spend journal entry for the block is removed once the
+		// utxo state has been flushed past its removal.
 		stxos, err := dbFetchSpendJournalEntry(dbTx, block)
-		if err != nil {
-			return err
-		}
-
-		// Update the transaction spend journal by removing the record
-		// that contains all txos spent by the block.
-		err = dbRemoveSpendJournalEntry(dbTx, block.Hash())
 		if err != nil {
 			return err
 		}
@@ -937,6 +932,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	if err != nil {
 		return err
 	}
+	b.utxoCache.setStaleJournal(*block.Hash(), true)
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
@@ -2370,7 +2366,7 @@ func New(config *Config) (*BlockChain, error) {
 
 	// Make sure the utxo state is caught up if it was left in an inconsistent
 	// state.
-	if err := b.utxoCache.InitConsistentState(bestNode, config.FastSync, config.Interrupt); err != nil {
+	if err := b.utxoCache.InitConsistentState(bestNode, b.index, config.FastSync, config.Interrupt); err != nil {
 		return nil, err
 	}
 
