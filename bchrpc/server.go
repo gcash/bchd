@@ -119,10 +119,13 @@ type GrpcServer struct {
 	cfIndex   *indexers.CfIndex
 	slpIndex  *indexers.SlpIndex
 
-	httpServer *http.Server
-	subscribe  chan *rpcEventSubscription
-	events     chan interface{}
-	quit       chan struct{}
+	httpServer  *http.Server
+	subscribe   chan *rpcEventSubscription
+	unsubscribe chan *rpcEventSubscription
+	events      chan interface{}
+	quit        chan struct{}
+
+	subscriptions atomic.Int32 // number held by the dispatcher
 
 	wg       sync.WaitGroup
 	ready    atomic.Uint32 // atomic
@@ -145,6 +148,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		slpIndex:    cfg.SlpIndex,
 		httpServer:  cfg.HTTPServer,
 		subscribe:   make(chan *rpcEventSubscription),
+		unsubscribe: make(chan *rpcEventSubscription),
 		events:      make(chan interface{}),
 		quit:        make(chan struct{}),
 		wg:          sync.WaitGroup{},
@@ -176,36 +180,77 @@ type rpcEventBlockDisconnected struct {
 	*bchutil.Block
 }
 
+// maxSubscriptionQueue is the number of events a subscription may have
+// waiting to be sent before the subscriber is considered too slow and the
+// subscription is ended.
+const maxSubscriptionQueue = 50000
+
 // rpcEventSubscription represents a subscription to events from the RPC server.
 type rpcEventSubscription struct {
+	server      *GrpcServer
 	in          chan interface{} // rpc events to be put by the dispatcher
 	out         chan interface{} // rpc events to be read by the client
-	unsubscribe chan struct{}    // close to unsubscribe
+	unsubscribe chan struct{}    // closed on unsubscribe
+	done        chan struct{}    // closed when the queue handler stops
+	overflowed  atomic.Bool      // set when the queue limit was hit
 }
 
-// Events returns the channel clients listen to for new events.
+// Events returns the channel clients listen to for new events.  It is closed
+// when the server shuts down or the subscriber falls too far behind.
 func (s *rpcEventSubscription) Events() <-chan interface{} {
 	return s.out
 }
 
-// Unsubscribe is to be called by the client to stop the subscription.
+// Overflowed returns whether the subscription ended because the subscriber
+// fell too far behind.
+func (s *rpcEventSubscription) Overflowed() bool {
+	return s.overflowed.Load()
+}
+
+// Unsubscribe is to be called by the client to stop the subscription.  It
+// must be called exactly once.
 func (s *rpcEventSubscription) Unsubscribe() {
 	close(s.unsubscribe)
+	select {
+	case s.server.unsubscribe <- s:
+	case <-s.server.quit:
+	}
+}
+
+// closedErr returns the error a stream returns once the events channel of the
+// subscription is closed.
+func (s *rpcEventSubscription) closedErr() error {
+	// The queue handler closes the events channel before it records an
+	// overflow, and closes done after.
+	<-s.done
+	if s.Overflowed() {
+		return status.Error(codes.ResourceExhausted,
+			"subscriber too slow, too many events queued")
+	}
+	return status.Error(codes.Unavailable, "server shutting down")
 }
 
 // subscribeEvents returns a new subscription to all the events the RPC server
-// receives.
-func (s *GrpcServer) subscribeEvents() *rpcEventSubscription {
+// receives.  The subscription ends once more than maxQueue events are waiting
+// to be read, or never when maxQueue is 0.
+func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
 	sub := &rpcEventSubscription{
+		server:      s,
 		in:          make(chan interface{}),
 		out:         make(chan interface{}),
 		unsubscribe: make(chan struct{}),
+		done:        make(chan struct{}),
 	}
 
 	// Start a queue handler for the subscription so that slow connections don't
 	// hold up faster ones.
 	s.wg.Go(func() {
-		queueHandler(sub.in, sub.out, s.quit)
+		defer close(sub.done)
+		if !queueHandler(sub.in, sub.out, s.quit, sub.unsubscribe,
+			maxQueue) {
+
+			sub.overflowed.Store(true)
+		}
 	})
 
 	select {
@@ -213,6 +258,11 @@ func (s *GrpcServer) subscribeEvents() *rpcEventSubscription {
 	case <-s.quit:
 	}
 	return sub
+}
+
+// numSubscriptions returns the number of subscriptions the dispatcher holds.
+func (s *GrpcServer) numSubscriptions() int {
+	return int(s.subscriptions.Load())
 }
 
 // runEventDispatcher runs a process that will forward new incoming events to
@@ -227,18 +277,26 @@ func (s *GrpcServer) runEventDispatcher() {
 		select {
 		case newSub := <-s.subscribe:
 			subscriptions[newSub] = struct{}{}
+			s.subscriptions.Store(int32(len(subscriptions)))
+
+		case sub := <-s.unsubscribe:
+			delete(subscriptions, sub)
+			s.subscriptions.Store(int32(len(subscriptions)))
 
 		case event := <-s.events:
-			// Dispatch to all clients.
+			// Dispatch to all clients.  The queue handlers never block
+			// for long while they run.
 			for sub := range subscriptions {
 				select {
 				case sub.in <- event:
 
-				case <-sub.unsubscribe:
-					// If client unsubscribed, just delete it.
+				case <-sub.done:
+					// The client unsubscribed or fell too far
+					// behind, so just delete it.
 					delete(subscriptions, sub)
 				}
 			}
+			s.subscriptions.Store(int32(len(subscriptions)))
 
 		case <-s.quit:
 			for sub := range subscriptions {
@@ -2161,7 +2219,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
-	subscription := s.subscribeEvents()
+	subscription := s.subscribeEvents(maxSubscriptionQueue)
 	defer subscription.Unsubscribe()
 
 	filter := newTxFilter()
@@ -2173,7 +2231,10 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 	serializeTx := req.SerializeTx
 	for {
 		select {
-		case event := <-subscription.Events():
+		case event, ok := <-subscription.Events():
+			if !ok {
+				return subscription.closedErr()
+			}
 
 			switch event := event.(type) {
 			case *rpcEventTxAccepted:
@@ -2306,7 +2367,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 		}
 	}()
 
-	subscription := s.subscribeEvents()
+	subscription := s.subscribeEvents(maxSubscriptionQueue)
 	defer subscription.Unsubscribe()
 
 	filter := newTxFilter()
@@ -2329,7 +2390,10 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				return err
 			}
 
-		case event := <-subscription.Events():
+		case event, ok := <-subscription.Events():
+			if !ok {
+				return subscription.closedErr()
+			}
 
 			switch event := event.(type) {
 			case *rpcEventTxAccepted:
@@ -2440,12 +2504,15 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 // SubscribeBlocks creates a subscription for notifications of new blocks being
 // connected to the blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
-	subscription := s.subscribeEvents()
+	subscription := s.subscribeEvents(maxSubscriptionQueue)
 	defer subscription.Unsubscribe()
 
 	for {
 		select {
-		case event := <-subscription.Events():
+		case event, ok := <-subscription.Events():
+			if !ok {
+				return subscription.closedErr()
+			}
 
 			switch event := event.(type) {
 			case *rpcEventBlockConnected:
@@ -3060,11 +3127,16 @@ func (s *GrpcServer) slpEventHandler() {
 	// any txns to the graph search db
 	initWg := sync.WaitGroup{}
 
-	subscription := s.subscribeEvents()
+	// This subscription is not bounded, since dropping it would stop SLP
+	// validation of mempool transactions.
+	subscription := s.subscribeEvents(0)
 	defer subscription.Unsubscribe()
 
 	for {
-		event := <-subscription.Events()
+		event, ok := <-subscription.Events()
+		if !ok {
+			return
+		}
 		switch event := event.(type) {
 		case *rpcEventTxAccepted:
 			txDesc := event
@@ -3638,20 +3710,23 @@ func getPbCashTokenDataFromTokenData(tokenData wire.TokenData) *pb.CashToken {
 
 // queueHandler manages a queue of empty interfaces, reading from in and
 // sending the oldest unsent to out.  This handler stops when either of the
-// in or quit channels are closed, and closes out before returning, without
-// waiting to send any variables still remaining in the queue.
-func queueHandler(in <-chan interface{}, out chan<- interface{}, quit <-chan struct{}) {
+// in, quit or unsubscribe channels are closed, or when more than maxQueue
+// items are waiting if maxQueue is not 0, and closes out before returning,
+// without waiting to send any variables still remaining in the queue.  It
+// returns false when it stopped because the queue was full.
+func queueHandler(in <-chan interface{}, out chan<- interface{}, quit, unsubscribe <-chan struct{}, maxQueue int) bool {
+	defer close(out)
+
 	var q []interface{}
 	var dequeue chan<- interface{}
 	skipQueue := out
 	var next interface{}
-out:
 	for {
 		select {
 		case n, ok := <-in:
 			if !ok {
 				// Sender closed input channel.
-				break out
+				return true
 			}
 
 			// Either send to out immediately if skipQueue is
@@ -3660,6 +3735,9 @@ out:
 			select {
 			case skipQueue <- n:
 			default:
+				if maxQueue > 0 && len(q) >= maxQueue {
+					return false
+				}
 				q = append(q, n)
 				dequeue = out
 				skipQueue = nil
@@ -3667,19 +3745,21 @@ out:
 			}
 
 		case dequeue <- next:
-			copy(q, q[1:])
-			q[len(q)-1] = nil // avoid leak
-			q = q[:len(q)-1]
+			q[0] = nil // avoid leak
+			q = q[1:]
 			if len(q) == 0 {
+				q = nil
 				dequeue = nil
 				skipQueue = out
 			} else {
 				next = q[0]
 			}
 
+		case <-unsubscribe:
+			return true
+
 		case <-quit:
-			break out
+			return true
 		}
 	}
-	close(out)
 }
