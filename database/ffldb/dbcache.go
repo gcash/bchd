@@ -437,6 +437,9 @@ func (c *dbCache) updateDB(fn func(ldbTx *leveldb.Transaction) error) error {
 
 	// Commit the leveldb transaction and convert any errors as needed.
 	if err := ldbTx.Commit(); err != nil {
+		// The transaction holds the leveldb write lock until it is
+		// committed or discarded.
+		ldbTx.Discard()
 		return convertErr("failed to commit leveldb transaction", err)
 	}
 	return nil
