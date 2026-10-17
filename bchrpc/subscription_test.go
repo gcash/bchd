@@ -1,0 +1,125 @@
+package bchrpc
+
+import (
+	"runtime"
+	"testing"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+// newDispatcherTestServer returns a server running only its event
+// dispatcher.
+func newDispatcherTestServer(t *testing.T) *GrpcServer {
+	t.Helper()
+	s := &GrpcServer{
+		subscribe:   make(chan *rpcEventSubscription),
+		unsubscribe: make(chan *rpcEventSubscription),
+		events:      make(chan interface{}),
+		quit:        make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.runEventDispatcher()
+	t.Cleanup(func() {
+		close(s.quit)
+		s.wg.Wait()
+	})
+	return s
+}
+
+// waitFor polls cond until it holds or a few seconds pass.
+func waitFor(cond func() bool) bool {
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return cond()
+}
+
+// TestSubscriptionTeardown ensures unsubscribing stops the subscription's
+// goroutine and removes it from the dispatcher, without waiting for an event.
+func TestSubscriptionTeardown(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	time.Sleep(50 * time.Millisecond)
+	base := runtime.NumGoroutine()
+
+	const n = 50
+	for i := 0; i < n; i++ {
+		s.subscribeEvents(maxSubscriptionQueue).Unsubscribe()
+	}
+	if !waitFor(func() bool { return runtime.NumGoroutine() <= base }) {
+		t.Errorf("%d goroutines left after %d unsubscribes",
+			runtime.NumGoroutine()-base, n)
+	}
+	if got := s.numSubscriptions(); got != 0 {
+		t.Errorf("%d subscriptions left in the dispatcher", got)
+	}
+}
+
+// TestSubscriptionQueueBounded ensures a subscriber that stops reading is
+// dropped once its queue is full, instead of buffering every event.
+func TestSubscriptionQueueBounded(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	slow := s.subscribeEvents(maxSubscriptionQueue)
+	defer slow.Unsubscribe()
+	fast := s.subscribeEvents(maxSubscriptionQueue)
+	defer fast.Unsubscribe()
+
+	received := make(chan int)
+	go func() {
+		n := 0
+		for range fast.Events() {
+			n++
+			if n == maxSubscriptionQueue+10 {
+				break
+			}
+		}
+		received <- n
+	}()
+	for i := 0; i < maxSubscriptionQueue+10; i++ {
+		s.dispatchEvent(i)
+	}
+	if n := <-received; n != maxSubscriptionQueue+10 {
+		t.Fatalf("reading subscriber got %d events", n)
+	}
+
+	select {
+	case _, ok := <-slow.Events():
+		if ok {
+			t.Fatal("subscriber that stopped reading still has queued events")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("events channel not closed")
+	}
+	if got := status.Code(slow.closedErr()); got != codes.ResourceExhausted {
+		t.Errorf("closed with %v, want ResourceExhausted", got)
+	}
+}
+
+// TestQueueHandlerUnbounded ensures a queue with no limit keeps every event
+// for a reader that is slow to start.
+func TestQueueHandlerUnbounded(t *testing.T) {
+	in := make(chan interface{})
+	out := make(chan interface{})
+	quit := make(chan struct{})
+	done := make(chan bool)
+	go func() { done <- queueHandler(in, out, quit, nil, 0) }()
+
+	const n = maxSubscriptionQueue + 10
+	for i := 0; i < n; i++ {
+		in <- i
+	}
+	for i := 0; i < n; i++ {
+		if got := <-out; got != i {
+			t.Fatalf("event %d: got %v", i, got)
+		}
+	}
+	close(in)
+	if !<-done {
+		t.Error("queue reported an overflow")
+	}
+}
