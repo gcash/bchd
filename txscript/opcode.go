@@ -3063,6 +3063,10 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	// least 1 byte is needed for the hash type below.  The full length is
 	// checked depending on the script flags and upon parsing the signature.
 	if len(fullSigBytes) < 1 {
+		// The public key encoding is checked even for an empty signature.
+		if err := vm.checkPubKeyEncoding(pkBytes); err != nil {
+			return err
+		}
 		vm.dstack.PushBool(false)
 		return nil
 	}
@@ -3461,7 +3465,11 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 
 			rawSig := sigInfo.signature
 			if len(rawSig) == 0 {
-				// Skip to the next pubkey if signature is empty.
+				// Skip to the next pubkey if the signature is empty,
+				// after checking the public key encoding.
+				if err := vm.checkPubKeyEncoding(pubKey); err != nil {
+					return err
+				}
 				continue
 			}
 
