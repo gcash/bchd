@@ -651,6 +651,16 @@ var helpDescsEnUS = map[string]string{
 	"reconsiderblock--synopsis": "Reconsider a block for validation.",
 	"reconsiderblock-blockhash": "Hash of the block you want to reconsider",
 
+	// FinalizeBlockCmd
+	"finalizeblock--synopsis": "Treats a block as final, so that the chain can't be reorganized below it.\n" +
+		"When the block is not in the main chain, the main chain is disconnected down to the fork point and the block's chain is connected.\n" +
+		"Used on a chain with less work, this takes the node out of consensus.",
+	"finalizeblock-blockhash": "Hash of the block to finalize",
+
+	// GetFinalizedBlockHashCmd
+	"getfinalizedblockhash--synopsis": "Returns the hash of the finalized block, below which the chain can't be reorganized, or an empty string if no block is finalized.",
+	"getfinalizedblockhash--result0":  "The hex-encoded block hash, or an empty string",
+
 	// InvalidateBlockCmd
 	"invalidateblock--synopsis": "Invalidate a block.",
 	"invalidateblock-blockhash": "Hash of the block you want to invalidate",
@@ -794,6 +804,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"decoderawtransaction":  {(*btcjson.TxRawDecodeResult)(nil)},
 	"decodescript":          {(*btcjson.DecodeScriptResult)(nil)},
 	"estimatefee":           {(*float64)(nil)},
+	"finalizeblock":         nil,
 	"generate":              {(*[]string)(nil)},
 	"getaddednodeinfo":      {(*[]string)(nil), (*[]btcjson.GetAddedNodeInfoResult)(nil)},
 	"getbestblock":          {(*btcjson.GetBestBlockResult)(nil)},
@@ -809,6 +820,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getconnectioncount":    {(*int32)(nil)},
 	"getcurrentnet":         {(*uint32)(nil)},
 	"getdifficulty":         {(*float64)(nil)},
+	"getfinalizedblockhash": {(*string)(nil)},
 	"getgenerate":           {(*bool)(nil)},
 	"gethashespersec":       {(*float64)(nil)},
 	"getheaders":            {(*[]string)(nil)},

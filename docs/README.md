@@ -102,6 +102,9 @@ maxreorgdepth=10
 finalizationdelay=7200
 ```
 
+The `getfinalizedblockhash` RPC returns the finalized block, and `finalizeblock`
+finalizes a block by hand.
+
 If the network does reorganize below the finalized block, for example after a
 chain split, the node stays on its chain: blocks of the other chain are
 rejected without being stored, and peers that send them are disconnected.  To
@@ -110,6 +113,9 @@ node's chain after the fork point.  This disconnects the node's chain down to
 the fork point and moves finalization back with it, after which the other chain
 is fetched from peers again.  `reconsiderblock` on a block the node stored
 earlier also moves finalization back to where its chain forks.
+A block of the other chain that the node has already stored can instead be
+passed to `finalizeblock`, which disconnects the node's chain down to the fork
+point, marks it invalid and switches to the other chain up to that block.
 Starting the node with `maxreorgdepth=-1` disables finalization, and
 restarting it clears the finalized block until the finalization delay has
 passed again.

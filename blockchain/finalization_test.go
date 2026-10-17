@@ -190,3 +190,89 @@ func TestFindBlockToFinalizeLongChain(t *testing.T) {
 		t.Fatal("finalized a block with finalization disabled")
 	}
 }
+
+// TestFinalizeBlock ensures blocks can be finalized by hand, also on a side
+// chain, which then becomes the main chain.
+func TestFinalizeBlock(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+	if hash := chain.FinalizedBlockHash(); hash != nil {
+		t.Fatalf("finalized %v before finalizing anything", hash)
+	}
+
+	// A side chain from block 2 with less work than the main chain.
+	prev := blocks[2]
+	var fork []*bchutil.Block
+	for h := int32(3); h <= 4; h++ {
+		block := procTestBlock(t, prev.MsgBlock(), h-1,
+			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatalf("fork block %d: %v", h, err)
+		}
+		fork = append(fork, block)
+		prev = block
+	}
+
+	if err := chain.FinalizeBlock(blocks[2].Hash()); err != nil {
+		t.Fatalf("finalize main chain block 2: %v", err)
+	}
+	if hash := chain.FinalizedBlockHash(); hash == nil || *hash != *blocks[2].Hash() {
+		t.Fatalf("finalized %v, want block 2", hash)
+	}
+
+	// Finalizing the side chain's tip switches to it and invalidates the
+	// main chain after the fork point.  Both happen before the first
+	// notification, while the chain lock is released.
+	var checked bool
+	chain.Subscribe(func(n *Notification) {
+		if n.Type != NTBlockDisconnected || checked {
+			return
+		}
+		checked = true
+		if hash := chain.FinalizedBlockHash(); hash == nil || *hash != *fork[1].Hash() {
+			t.Errorf("finalized %v during the reorganization, want the "+
+				"side chain block", hash)
+		}
+		node := chain.index.LookupNode(blocks[4].Hash())
+		if !chain.index.NodeStatus(node).KnownInvalid() {
+			t.Error("old main chain is not invalid during the " +
+				"reorganization")
+		}
+	})
+	if err := chain.FinalizeBlock(fork[1].Hash()); err != nil {
+		t.Fatalf("finalize side chain block: %v", err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *fork[1].Hash() {
+		t.Fatalf("tip %v, want the finalized side chain block", tip.hash)
+	}
+	if hash := chain.FinalizedBlockHash(); hash == nil || *hash != *fork[1].Hash() {
+		t.Fatalf("finalized %v, want the side chain block", hash)
+	}
+	if !checked {
+		t.Fatal("no block was disconnected")
+	}
+	node := chain.index.LookupNode(blocks[3].Hash())
+	if !chain.index.NodeStatus(node).KnownInvalid() {
+		t.Fatal("old main chain block after the fork point is not invalid")
+	}
+
+	// Blocks that conflict with the finalized block are refused, and
+	// ancestors of it are already final.
+	if err := chain.FinalizeBlock(blocks[5].Hash()); err == nil {
+		t.Fatal("finalized a block that conflicts with the finalized block")
+	}
+	if err := chain.FinalizeBlock(blocks[1].Hash()); err != nil {
+		t.Fatalf("finalize an ancestor of the finalized block: %v", err)
+	}
+	if hash := chain.FinalizedBlockHash(); *hash != *fork[1].Hash() {
+		t.Fatalf("finalized %v after finalizing an ancestor", hash)
+	}
+	child := procTestBlock(t, blocks[5].MsgBlock(), 5,
+		CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+	_, _, err := chain.ProcessBlock(child, BFNone)
+	var rerr RuleError
+	if !errors.As(err, &rerr) {
+		t.Fatalf("block on the old main chain: got %v, want a rule error",
+			err)
+	}
+}
