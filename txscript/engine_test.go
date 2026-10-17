@@ -864,3 +864,233 @@ func TestScriptVerifyInputSigChecks(t *testing.T) {
 		}
 	}
 }
+
+// multiSigTestKeys returns n deterministic private keys.
+func multiSigTestKeys(n int) []*bchec.PrivateKey {
+	keys := make([]*bchec.PrivateKey, n)
+	for i := range keys {
+		keys[i], _ = bchec.PrivKeyFromBytes(bchec.S256(),
+			chainhash.HashB([]byte{byte(i)}))
+	}
+	return keys
+}
+
+// runLegacyMultiSig spends pkScript with a null dummy, an ECDSA signature
+// over subScript by each signer or a null signature for each nil signer,
+// and redeemScript when it is not nil, and returns the executed engine.
+func runLegacyMultiSig(t *testing.T, pkScript, subScript, redeemScript []byte,
+	signers []*bchec.PrivateKey, flags ScriptFlags) (*Engine, error) {
+
+	t.Helper()
+
+	tx := createSpendingTx(nil, pkScript, 1000)
+	b := NewScriptBuilder().AddOp(OP_0)
+	for _, signer := range signers {
+		if signer == nil {
+			b.AddOp(OP_0)
+			continue
+		}
+		sig, err := RawTxInECDSASignature(tx, 0, subScript, SigHashAll,
+			signer, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.AddData(sig)
+	}
+	if redeemScript != nil {
+		b.AddData(redeemScript)
+	}
+	sigScript, err := b.Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.TxIn[0].SignatureScript = sigScript
+
+	utxos := NewUtxoCache()
+	utxos.AddEntry(0, *wire.NewTxOut(1000, pkScript, wire.TokenData{}))
+	vm, err := NewEngine(pkScript, tx, 0, flags, nil, nil, utxos, 1000)
+	if err != nil {
+		return nil, err
+	}
+	return vm, vm.Execute()
+}
+
+// TestLegacyCheckMultiSigSigChecks ensures a legacy (ECDSA) OP_CHECKMULTISIG
+// counts every public key as a signature check when any signature is not
+// null, and none when all signatures are null.
+func TestLegacyCheckMultiSigSigChecks(t *testing.T) {
+	t.Parallel()
+
+	// The signature density and operation cost limits would reject the
+	// short unlocking scripts used here.
+	flags := (StandardVerifyFlags | ScriptAllowCashTokens) &^
+		ScriptVerifyInputSigChecks
+	other := multiSigTestKeys(21)[20]
+
+	tests := []struct {
+		name     string
+		signers  func(keys []*bchec.PrivateKey) []*bchec.PrivateKey
+		result   bool
+		nullFail bool
+		nonNull  bool
+	}{{
+		name: "no signatures",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return nil
+		},
+		result:   true,
+		nullFail: true,
+	}, {
+		name: "one null signature",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return []*bchec.PrivateKey{nil}
+		},
+		nullFail: true,
+	}, {
+		name: "all null signatures",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return make([]*bchec.PrivateKey, len(keys))
+		},
+		nullFail: true,
+	}, {
+		name: "first key signs",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return keys[:1]
+		},
+		result:   true,
+		nullFail: true,
+		nonNull:  true,
+	}, {
+		name: "last key signs",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return keys[len(keys)-1:]
+		},
+		result:   true,
+		nullFail: true,
+		nonNull:  true,
+	}, {
+		name: "all keys sign",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return keys
+		},
+		result:   true,
+		nullFail: true,
+		nonNull:  true,
+	}, {
+		name: "other key signs",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return []*bchec.PrivateKey{other}
+		},
+		nonNull: true,
+	}, {
+		// The null signature is checked first and fails the
+		// multisig before the other signature is reached.
+		name: "other key signs before a null signature",
+		signers: func(keys []*bchec.PrivateKey) []*bchec.PrivateKey {
+			return []*bchec.PrivateKey{other, nil}
+		},
+		nonNull: true,
+	}}
+
+	for _, numKeys := range []int{1, 3, 15, 20} {
+		keys := multiSigTestKeys(numKeys)
+		for _, test := range tests {
+			signers := test.signers(keys)
+			if len(signers) > numKeys {
+				continue
+			}
+
+			b := NewScriptBuilder().AddInt64(int64(len(signers)))
+			for _, key := range keys {
+				b.AddData(key.PubKey().SerializeCompressed())
+			}
+			b.AddInt64(int64(numKeys)).AddOp(OP_CHECKMULTISIG)
+			if !test.result {
+				b.AddOp(OP_NOT)
+			}
+			pkScript, err := b.Script()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			testFlags := flags
+			if !test.nullFail {
+				testFlags &^= ScriptVerifyNullFail
+			}
+			vm, err := runLegacyMultiSig(t, pkScript, pkScript, nil,
+				signers, testFlags)
+			if err != nil {
+				t.Errorf("%d keys, %s: unexpected error: %v", numKeys,
+					test.name, err)
+				continue
+			}
+
+			want := 0
+			if test.nonNull {
+				want = numKeys
+			}
+			if vm.SigChecks() != want {
+				t.Errorf("%d keys, %s: got %d sig checks, want %d",
+					numKeys, test.name, vm.SigChecks(), want)
+			}
+		}
+	}
+}
+
+// TestLegacyCheckMultiSigInputSigChecks ensures the signature density limit
+// counts all 15 public keys of a P2SH 1-of-15 legacy multisig.  The keys
+// after the signing key are one-byte placeholders.
+func TestLegacyCheckMultiSigInputSigChecks(t *testing.T) {
+	t.Parallel()
+
+	flags := StandardVerifyFlags | ScriptAllowCashTokens |
+		ScriptAllowMay2025 | ScriptAllowMay2025StandardOnly |
+		ScriptAllowMay2026
+	keys := multiSigTestKeys(15)
+
+	tests := []struct {
+		numShort int
+		wantErr  bool
+	}{
+		{0, false},
+		{1, true},
+		{3, true},
+	}
+
+	for _, test := range tests {
+		// The signing key comes after numShort one byte public keys.
+		b := NewScriptBuilder().AddOp(OP_1)
+		for i, key := range keys {
+			if i < test.numShort {
+				b.AddOp(OP_0)
+				continue
+			}
+			b.AddData(key.PubKey().SerializeCompressed())
+		}
+		redeemScript, err := b.AddOp(OP_15).AddOp(OP_CHECKMULTISIG).Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr, err := bchutil.NewAddressScriptHash(redeemScript,
+			&chaincfg.MainNetParams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pkScript, err := PayToAddrScript(addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		signer := keys[test.numShort : test.numShort+1]
+		_, err = runLegacyMultiSig(t, pkScript, redeemScript, redeemScript,
+			signer, flags)
+		switch {
+		case test.wantErr && !IsErrorCode(err, ErrInputSigChecks):
+			t.Errorf("%d short keys: got error %v, want %v",
+				test.numShort, err, ErrInputSigChecks)
+		case !test.wantErr && err != nil:
+			t.Errorf("%d short keys: unexpected error: %v",
+				test.numShort, err)
+		}
+	}
+}
