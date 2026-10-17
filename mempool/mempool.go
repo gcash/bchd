@@ -716,7 +716,7 @@ func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
 // This function MUST be called with the mempool lock held (for writes).
 func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash, *TxDesc, error) {
 	result, err := mp.checkMempoolAcceptance(tx, isNew, rateLimit,
-		rejectDupOrphans)
+		rejectDupOrphans, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -753,11 +753,12 @@ type MempoolAcceptResult struct {
 
 // checkMempoolAcceptance runs the checks done before a transaction is added
 // to the memory pool.  Apart from the free transaction rate limiter, which is
-// only updated when rateLimit is set, it does not modify the pool.
+// only updated when rateLimit is set, it does not modify the pool.  A positive
+// maxFee rejects transactions that pay more fees than that.
 //
 // This function MUST be called with the mempool lock held (for reads), or
 // for writes when rateLimit is set.
-func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) (*MempoolAcceptResult, error) {
+func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount) (*MempoolAcceptResult, error) {
 	txHash := tx.Hash()
 
 	// Don't accept the transaction if it already exists in the pool.  This
@@ -991,6 +992,14 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 		}
 	}
 
+	// Reject fees above the maximum the caller allows, if any.
+	if maxFee > 0 && bchutil.Amount(txFee) > maxFee {
+		return nil, RuleError{Err: HighFeeError{
+			Fee:    txFee,
+			MaxFee: int64(maxFee),
+		}}
+	}
+
 	// Free-to-relay transactions are rate limited here to prevent
 	// penny-flooding with tiny transactions as a form of attack.
 	if rateLimit && txFee < minFee {
@@ -1056,10 +1065,11 @@ func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit bool) 
 
 // CheckMempoolAcceptance runs the checks that ProcessTransaction runs for a
 // transaction submitted without orphan handling, without adding the
-// transaction to the pool.
+// transaction to the pool.  A positive maxFee rejects transactions that pay
+// more fees than that.
 //
 // This function is safe for concurrent access.
-func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx) (*MempoolAcceptResult, error) {
+func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx, maxFee bchutil.Amount) (*MempoolAcceptResult, error) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -1068,7 +1078,7 @@ func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx) (*MempoolAcceptResult, 
 		defer hc.PurgeSigHashes(tx.Hash())
 	}
 
-	return mp.checkMempoolAcceptance(tx, true, false, false)
+	return mp.checkMempoolAcceptance(tx, true, false, false, maxFee)
 }
 
 // processOrphans is the internal function which implements the public

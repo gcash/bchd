@@ -55,6 +55,7 @@ const (
 	defaultMaxRPCConcurrentReqs    = 20
 	defaultDbType                  = "ffldb"
 	defaultFreeTxRelayLimit        = 0
+	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	defaultExcessiveBlockSize      = 32000000
 	defaultBlockMinSize            = 0

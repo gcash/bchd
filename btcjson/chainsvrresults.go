@@ -560,6 +560,25 @@ type TxRawDecodeResult struct {
 	Vout     []Vout `json:"vout"`
 }
 
+// TestMempoolAcceptFees models the fees of a transaction in the
+// testmempoolaccept command.
+type TestMempoolAcceptFees struct {
+	Base             float64 `json:"base"`
+	EffectiveFeeRate float64 `json:"effective-feerate"`
+}
+
+// TestMempoolAcceptResult models the data returned by the testmempoolaccept
+// command for each transaction.
+type TestMempoolAcceptResult struct {
+	Txid          string                 `json:"txid"`
+	Allowed       bool                   `json:"allowed"`
+	Size          int64                  `json:"size,omitempty"`
+	Vsize         int64                  `json:"vsize,omitempty"`
+	Fees          *TestMempoolAcceptFees `json:"fees,omitempty"`
+	RejectReason  string                 `json:"reject-reason,omitempty"`
+	RejectDetails string                 `json:"reject-details,omitempty"`
+}
+
 // ValidateAddressChainResult models the data returned by the chain server
 // validateaddress command.
 type ValidateAddressChainResult struct {
