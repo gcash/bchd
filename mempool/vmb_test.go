@@ -542,19 +542,6 @@ func runVMBVector(v *vmbVector, era vmbEra) *vmbResult {
 	return &res
 }
 
-// vmbFailures lists the vectors BCHD does not pass yet, by era and id, with
-// the reason.
-var vmbFailures = map[string]string{
-	"2022/nh0wv": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/g9z7m": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/razas": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/c63j3": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/l90x0": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/tqlte": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/m0apr": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-	"2022/pnre8": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
-}
-
 // TestVMBAcceptance runs every VMB vector through CheckMempoolAcceptance and
 // through the checks of block validation, under the rules of its upgrade.
 // Standard vectors must pass both, nonstandard vectors must fail the mempool
@@ -584,15 +571,7 @@ func TestVMBAcceptance(t *testing.T) {
 						key, v.class, v.file, res.mempoolErr,
 						res.blockErr, res.relayNonStdErr)
 				}
-				problem := res.mismatch(v.class)
-				if reason, ok := vmbFailures[key]; ok {
-					if problem == "" {
-						t.Errorf("%s: listed as failing (%s) "+
-							"but passes", key, reason)
-					}
-					continue
-				}
-				if problem != "" {
+				if problem := res.mismatch(v.class); problem != "" {
 					t.Errorf("%s (%s, %s): %s: %s", key,
 						v.class, v.file, v.desc, problem)
 				}
