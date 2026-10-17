@@ -455,8 +455,6 @@ func scriptTestKey(test []interface{}) string {
 // scriptTestFailures lists rows of script_tests.json that BCHD does not pass
 // yet, by scriptTestKey, with the reason.
 var scriptTestFailures = map[string]string{
-	"a351a5ab7e24": "P2SH32 is evaluated before tokens are enabled",
-	"affbb12d58ee": "P2SH32 is evaluated before tokens are enabled",
 	"006e48d9d6b6": "segwit recovery is allowed for P2SH32",
 	"67e5c956021f": "segwit recovery is allowed for P2SH32",
 	"45da3b15033e": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",

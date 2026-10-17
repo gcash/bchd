@@ -621,7 +621,9 @@ func refNewEngineChecks(scriptPubKey []byte, tx *wire.MsgTx, txIdx int,
 		bip16 = true
 	}
 
-	if flags.HasFlag(ScriptBip16) && refIsScriptHash32(parsed[1]) {
+	if flags.HasFlag(ScriptBip16) && flags.HasFlag(ScriptAllowCashTokens) &&
+		refIsScriptHash32(parsed[1]) {
+
 		if !refIsPushOnly(parsed[0]) {
 			return 0, false, scriptError(ErrNotPushOnly,
 				"pay to script hash is not push only")

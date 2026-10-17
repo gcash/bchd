@@ -1167,7 +1167,10 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 		vm.bip16 = true
 	}
 
-	if vm.hasFlag(ScriptBip16) && IsPayToScriptHash32(scriptPubKey) {
+	// P2SH32 was enabled together with tokens.
+	if vm.hasFlag(ScriptBip16) && vm.hasFlag(ScriptAllowCashTokens) &&
+		IsPayToScriptHash32(scriptPubKey) {
+
 		// Only accept input scripts that push data for P2SH32.
 		if !IsPushOnlyScript(scriptSig) {
 			return nil, scriptError(ErrNotPushOnly,
