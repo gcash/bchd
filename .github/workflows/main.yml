@@ -29,3 +29,16 @@ jobs:
         run: go build && go install . ./cmd/...
         env:
           GO111MODULE: on
+  test-386:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Test the consensus packages on 32-bit
+        run: go test ./txscript/... ./blockchain/... ./wire/... ./mempool/...
+        env:
+          GO111MODULE: on
+          GOARCH: "386"
