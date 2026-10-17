@@ -168,3 +168,24 @@ func TestCalcPriority(t *testing.T) {
 		}
 	}
 }
+
+// TestCalcPriorityLargeValueAge ensures the value times age of a large, old
+// input does not overflow.
+func TestCalcPriorityLargeValueAge(t *testing.T) {
+	sourceTx := wire.NewMsgTx(1)
+	sourceTx.AddTxOut(wire.NewTxOut(bchutil.MaxSatoshi, []byte{0x51},
+		wire.TokenData{}))
+	sourceHash := sourceTx.TxHash()
+	tx := wire.NewMsgTx(1)
+	tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&sourceHash, 0), nil))
+	tx.AddTxOut(wire.NewTxOut(bchutil.MaxSatoshi, []byte{0x51},
+		wire.TokenData{}))
+
+	view := newUtxoViewpoint([]*wire.MsgTx{sourceTx}, []int32{1})
+	got := CalcPriority(tx, view, 100001)
+	want := float64(bchutil.MaxSatoshi) * 100000 /
+		float64(tx.SerializeSize()-41)
+	if got != want {
+		t.Fatalf("CalcPriority = %v, want %v", got, want)
+	}
+}
