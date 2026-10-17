@@ -568,7 +568,7 @@ var helpDescsEnUS = map[string]string{
 	"getrawtransaction--result0":    "Hex-encoded bytes of the serialized transaction",
 
 	// GetTxOutResult help.
-	"gettxoutresult-bestblock":     "The block hash that contains the transaction output",
+	"gettxoutresult-bestblock":     "The hash of the best block",
 	"gettxoutresult-confirmations": "The number of confirmations",
 	"gettxoutresult-value":         "The transaction amount in BTC",
 	"gettxoutresult-scriptPubKey":  "The public key script used to pay coins as a JSON object",
@@ -577,7 +577,7 @@ var helpDescsEnUS = map[string]string{
 	"gettxoutresult-coinbase":      "Whether or not the transaction is a coinbase",
 
 	// GetTxOutCmd help.
-	"gettxout--synopsis":      "Returns information about an unspent transaction output..",
+	"gettxout--synopsis":      "Returns information about an unspent transaction output.",
 	"gettxout-txid":           "The hash of the transaction",
 	"gettxout-vout":           "The index of the output",
 	"gettxout-includemempool": "Include the mempool when true",
