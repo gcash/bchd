@@ -8,7 +8,6 @@ package addrmgr
 import (
 	"container/list"
 	crand "crypto/rand" // for seeding
-	"encoding/base32"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -52,6 +51,8 @@ type AddrManager struct {
 type serializedKnownAddress struct {
 	Addr        string
 	Src         string
+	Network     wire.NetworkID // since version 3
+	SrcNetwork  wire.NetworkID // since version 3
 	Attempts    int
 	TimeStamp   int64
 	LastAttempt int64
@@ -71,7 +72,7 @@ type serializedAddrManager struct {
 
 // LocalAddress holds a NetAddress with the addresses's priority.
 type LocalAddress struct {
-	NA    *wire.NetAddress
+	NA    *wire.NetAddressV2
 	Score AddressPriority
 }
 
@@ -159,12 +160,13 @@ const (
 	getAddrPercent = 23
 
 	// serialisationVersion is the current version of the on-disk format.
-	serialisationVersion = 2
+	// Version 3 added the networks of the addresses.
+	serialisationVersion = 3
 )
 
 // updateAddress is a helper function to either update an address already known
 // to the address manager, or to add the address if not already known.
-func (a *AddrManager) updateAddress(netAddr, srcAddr *wire.NetAddress) {
+func (a *AddrManager) updateAddress(netAddr, srcAddr *wire.NetAddressV2) {
 	// Filter out non-routable addresses. Note that non-routable
 	// also includes invalid and local addresses.
 	if !IsRoutable(netAddr) {
@@ -295,7 +297,7 @@ func (a *AddrManager) pickTried(bucket int) *list.Element {
 	return oldestElem
 }
 
-func (a *AddrManager) getNewBucket(netAddr, srcAddr *wire.NetAddress) int {
+func (a *AddrManager) getNewBucket(netAddr, srcAddr *wire.NetAddressV2) int {
 	// bitcoind:
 	// doublesha256(key + sourcegroup + int64(doublesha256(key + group + sourcegroup))%bucket_per_source_group) % num_new_buckets
 
@@ -317,7 +319,7 @@ func (a *AddrManager) getNewBucket(netAddr, srcAddr *wire.NetAddress) int {
 	return int(binary.LittleEndian.Uint64(hash2) % newBucketCount)
 }
 
-func (a *AddrManager) getTriedBucket(netAddr *wire.NetAddress) int {
+func (a *AddrManager) getTriedBucket(netAddr *wire.NetAddressV2) int {
 	// bitcoind hashes this as:
 	// doublesha256(key + group + truncate_to_64bits(doublesha256(key)) % buckets_per_group) % num_buckets
 	data1 := []byte{}
@@ -376,6 +378,8 @@ func (a *AddrManager) savePeers() {
 		ska.Addr = k
 		ska.TimeStamp = v.na.Timestamp.Unix()
 		ska.Src = NetAddressKey(v.srcAddr)
+		ska.Network = v.na.Network
+		ska.SrcNetwork = v.srcAddr.Network
 		ska.Attempts = v.attempts
 		ska.LastAttempt = v.lastattempt.Unix()
 		ska.LastSuccess = v.lastsuccess.Unix()
@@ -469,6 +473,9 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 
 	copy(a.key[:], sam.Key[:])
 
+	// Addresses that can't be parsed, such as Tor v2 addresses from older
+	// versions, are dropped along with their bucket entries.
+	dropped := make(map[string]struct{})
 	for _, v := range sam.Addresses {
 		ka := new(KnownAddress)
 
@@ -478,10 +485,11 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 		if sam.Version == 1 {
 			v.Services = wire.SFNodeNetwork
 		}
-		ka.na, err = a.DeserializeNetAddress(v.Addr, v.Services)
+		ka.na, err = deserializeAddr(v.Addr, v.Network, v.Services)
 		if err != nil {
-			return fmt.Errorf("failed to deserialize netaddress "+
-				"%s: %v", v.Addr, err)
+			log.Debugf("Dropping address %s: %v", v.Addr, err)
+			dropped[v.Addr] = struct{}{}
+			continue
 		}
 
 		// The first version of the serialized address manager was not
@@ -490,10 +498,12 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 		if sam.Version == 1 {
 			v.SrcServices = wire.SFNodeNetwork
 		}
-		ka.srcAddr, err = a.DeserializeNetAddress(v.Src, v.SrcServices)
+		ka.srcAddr, err = deserializeAddr(v.Src, v.SrcNetwork, v.SrcServices)
 		if err != nil {
-			return fmt.Errorf("failed to deserialize netaddress "+
-				"%s: %v", v.Src, err)
+			log.Debugf("Dropping address %s with source %s: %v",
+				v.Addr, v.Src, err)
+			dropped[v.Addr] = struct{}{}
+			continue
 		}
 
 		ka.attempts = v.Attempts
@@ -502,9 +512,17 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 		a.addrIndex[NetAddressKey(ka.na)] = ka
 	}
 
+	if len(dropped) > 0 {
+		log.Infof("Dropped %d unsupported addresses from %s",
+			len(dropped), filePath)
+	}
+
 	for i := range sam.NewBuckets {
 		for _, val := range sam.NewBuckets[i] {
 			ka, ok := a.addrIndex[val]
+			if _, isDropped := dropped[val]; !ok && isDropped {
+				continue
+			}
 			if !ok {
 				return fmt.Errorf("newbucket contains %s but "+
 					"none in address list", val)
@@ -520,6 +538,9 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 	for i := range sam.TriedBuckets {
 		for _, val := range sam.TriedBuckets[i] {
 			ka, ok := a.addrIndex[val]
+			if _, isDropped := dropped[val]; !ok && isDropped {
+				continue
+			}
 			if !ok {
 				return fmt.Errorf("newbucket contains %s but "+
 					"none in address list", val)
@@ -547,9 +568,64 @@ func (a *AddrManager) deserializePeers(filePath string) error {
 	return nil
 }
 
-// DeserializeNetAddress converts a given address string to a *wire.NetAddress.
+// deserializeAddr converts an address string from the peers file to a
+// *wire.NetAddressV2.  The network is zero in files before version 3, which
+// only hold IP addresses that can be used and Tor v2 addresses that can't.
+func deserializeAddr(addr string, network wire.NetworkID,
+	services wire.ServiceFlag) (*wire.NetAddressV2, error) {
+
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return nil, err
+	}
+
+	switch network {
+	case 0, wire.NetworkIPv4, wire.NetworkIPv6:
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return nil, fmt.Errorf("unsupported address %s", host)
+		}
+		na := wire.NewNetAddressV2IPPort(ip, uint16(port), services)
+		if network != 0 && na.Network != network {
+			return nil, fmt.Errorf("%s is not an %v address", host,
+				network)
+		}
+		return na, nil
+
+	case wire.NetworkTorV3:
+		pubKey, err := wire.DecodeTorV3(host)
+		if err != nil {
+			return nil, err
+		}
+		return wire.NewNetAddressV2(network, pubKey, uint16(port),
+			services), nil
+
+	case wire.NetworkI2P:
+		i2pAddr, err := wire.DecodeI2P(host)
+		if err != nil {
+			return nil, err
+		}
+		return wire.NewNetAddressV2(network, i2pAddr, uint16(port),
+			services), nil
+
+	case wire.NetworkCJDNS:
+		ip := net.ParseIP(host)
+		if ip == nil || ip.To4() != nil || ip[0] != 0xfc {
+			return nil, fmt.Errorf("invalid cjdns address %s", host)
+		}
+		return wire.NewNetAddressV2(network, ip.To16(), uint16(port),
+			services), nil
+	}
+	return nil, fmt.Errorf("unknown network %v", network)
+}
+
+// DeserializeNetAddress converts a given address string to a *wire.NetAddressV2.
 func (a *AddrManager) DeserializeNetAddress(addr string,
-	services wire.ServiceFlag) (*wire.NetAddress, error) {
+	services wire.ServiceFlag) (*wire.NetAddressV2, error) {
 
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -598,7 +674,7 @@ func (a *AddrManager) Stop() error {
 // AddAddresses adds new addresses to the address manager.  It enforces a max
 // number of addresses and silently ignores duplicate addresses.  It is
 // safe for concurrent access.
-func (a *AddrManager) AddAddresses(addrs []*wire.NetAddress, srcAddr *wire.NetAddress) {
+func (a *AddrManager) AddAddresses(addrs []*wire.NetAddressV2, srcAddr *wire.NetAddressV2) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -610,7 +686,7 @@ func (a *AddrManager) AddAddresses(addrs []*wire.NetAddress, srcAddr *wire.NetAd
 // AddAddress adds a new address to the address manager.  It enforces a max
 // number of addresses and silently ignores duplicate addresses.  It is
 // safe for concurrent access.
-func (a *AddrManager) AddAddress(addr, srcAddr *wire.NetAddress) {
+func (a *AddrManager) AddAddress(addr, srcAddr *wire.NetAddressV2) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -634,7 +710,7 @@ func (a *AddrManager) AddAddressByIP(addrIP string) error {
 	if err != nil {
 		return fmt.Errorf("invalid port %s: %v", portStr, err)
 	}
-	na := wire.NewNetAddressIPPort(ip, uint16(port), 0)
+	na := wire.NewNetAddressV2IPPort(ip, uint16(port), 0)
 	a.AddAddress(na, na) // XXX use correct src address
 	return nil
 }
@@ -663,7 +739,7 @@ func (a *AddrManager) NeedMoreAddresses() bool {
 
 // AddressCache returns the current address cache.  It must be treated as
 // read-only (but since it is a copy now, this is not as dangerous).
-func (a *AddrManager) AddressCache() []*wire.NetAddress {
+func (a *AddrManager) AddressCache() []*wire.NetAddressV2 {
 	allAddr := a.getAddresses()
 
 	numAddresses := min(len(allAddr)*getAddrPercent/100, getAddrMax)
@@ -682,7 +758,7 @@ func (a *AddrManager) AddressCache() []*wire.NetAddress {
 
 // getAddresses returns all of the addresses currently found within the
 // manager's address cache.
-func (a *AddrManager) getAddresses() []*wire.NetAddress {
+func (a *AddrManager) getAddresses() []*wire.NetAddressV2 {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -691,7 +767,7 @@ func (a *AddrManager) getAddresses() []*wire.NetAddress {
 		return nil
 	}
 
-	addrs := make([]*wire.NetAddress, 0, addrIndexLen)
+	addrs := make([]*wire.NetAddressV2, 0, addrIndexLen)
 	for _, v := range a.addrIndex {
 		addrs = append(addrs, v.na)
 	}
@@ -718,23 +794,20 @@ func (a *AddrManager) reset() {
 }
 
 // HostToNetAddress returns a netaddress given a host address.  If the address
-// is a Tor .onion address this will be taken care of.  Else if the host is
+// is a Tor v3 .onion address this will be taken care of.  Else if the host is
 // not an IP address it will be resolved (via Tor if required).
-func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.ServiceFlag) (*wire.NetAddress, error) {
-	// Tor address is 16 char base32 + ".onion"
-	var ip net.IP
-	if len(host) == 22 && host[16:] == ".onion" {
-		// go base32 encoding uses capitals (as does the rfc
-		// but Tor and bitcoind tend to user lowercase, so we switch
-		// case here.
-		data, err := base32.StdEncoding.DecodeString(
-			strings.ToUpper(host[:16]))
+func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.ServiceFlag) (*wire.NetAddressV2, error) {
+	if strings.HasSuffix(host, ".onion") {
+		pubKey, err := wire.DecodeTorV3(host)
 		if err != nil {
 			return nil, err
 		}
-		prefix := []byte{0xfd, 0x87, 0xd8, 0x7e, 0xeb, 0x43}
-		ip = net.IP(append(prefix, data...))
-	} else if ip = net.ParseIP(host); ip == nil {
+		return wire.NewNetAddressV2(wire.NetworkTorV3, pubKey, port,
+			services), nil
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
 		ips, err := a.lookupFunc(host)
 		if err != nil {
 			return nil, err
@@ -745,28 +818,15 @@ func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.S
 		ip = ips[0]
 	}
 
-	return wire.NewNetAddressIPPort(ip, port, services), nil
+	return wire.NewNetAddressV2IPPort(ip, port, services), nil
 }
 
-// ipString returns a string for the ip from the provided NetAddress. If the
-// ip is in the range used for Tor addresses then it will be transformed into
-// the relevant .onion address.
-func ipString(na *wire.NetAddress) string {
-	if IsOnionCatTor(na) {
-		// We know now that na.IP is long enough.
-		base32str := base32.StdEncoding.EncodeToString(na.IP[6:])
-		return strings.ToLower(base32str) + ".onion"
-	}
-
-	return na.IP.String()
-}
-
-// NetAddressKey returns a string key in the form of ip:port for IPv4 addresses
-// or [ip]:port for IPv6 addresses.
-func NetAddressKey(na *wire.NetAddress) string {
+// NetAddressKey returns a string key in the form of host:port for IPv4,
+// Tor and I2P addresses or [ip]:port for IPv6 and CJDNS addresses.
+func NetAddressKey(na *wire.NetAddressV2) string {
 	port := strconv.FormatUint(uint64(na.Port), 10)
 
-	return net.JoinHostPort(ipString(na), port)
+	return net.JoinHostPort(na.Host(), port)
 }
 
 // GetAddress returns a single address that should be routable.  It picks a
@@ -840,13 +900,13 @@ func (a *AddrManager) GetAddress() *KnownAddress {
 	}
 }
 
-func (a *AddrManager) find(addr *wire.NetAddress) *KnownAddress {
+func (a *AddrManager) find(addr *wire.NetAddressV2) *KnownAddress {
 	return a.addrIndex[NetAddressKey(addr)]
 }
 
 // Attempt increases the given address' attempt counter and updates
 // the last attempt time.
-func (a *AddrManager) Attempt(addr *wire.NetAddress) {
+func (a *AddrManager) Attempt(addr *wire.NetAddressV2) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -864,7 +924,7 @@ func (a *AddrManager) Attempt(addr *wire.NetAddress) {
 // Connected Marks the given address as currently connected and working at the
 // current time.  The address must already be known to AddrManager else it will
 // be ignored.
-func (a *AddrManager) Connected(addr *wire.NetAddress) {
+func (a *AddrManager) Connected(addr *wire.NetAddressV2) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -887,7 +947,7 @@ func (a *AddrManager) Connected(addr *wire.NetAddress) {
 // Good marks the given address as good.  To be called after a successful
 // connection and version exchange.  If the address is unknown to the address
 // manager it will be ignored.
-func (a *AddrManager) Good(addr *wire.NetAddress) {
+func (a *AddrManager) Good(addr *wire.NetAddressV2) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -974,7 +1034,7 @@ func (a *AddrManager) Good(addr *wire.NetAddress) {
 }
 
 // SetServices sets the services for the given address to the provided value.
-func (a *AddrManager) SetServices(addr *wire.NetAddress, services wire.ServiceFlag) {
+func (a *AddrManager) SetServices(addr *wire.NetAddressV2, services wire.ServiceFlag) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
@@ -994,9 +1054,9 @@ func (a *AddrManager) SetServices(addr *wire.NetAddress, services wire.ServiceFl
 
 // AddLocalAddress adds na to the list of known local addresses to advertise
 // with the given priority.
-func (a *AddrManager) AddLocalAddress(na *wire.NetAddress, priority AddressPriority) error {
+func (a *AddrManager) AddLocalAddress(na *wire.NetAddressV2, priority AddressPriority) error {
 	if !IsRoutable(na) {
-		return fmt.Errorf("address %s is not routable", na.IP)
+		return fmt.Errorf("address %s is not routable", na.Host())
 	}
 
 	a.lamtx.Lock()
@@ -1019,7 +1079,7 @@ func (a *AddrManager) AddLocalAddress(na *wire.NetAddress, priority AddressPrior
 
 // getReachabilityFrom returns the relative reachability of the provided local
 // address to the provided remote address.
-func getReachabilityFrom(localAddr, remoteAddr *wire.NetAddress) int {
+func getReachabilityFrom(localAddr, remoteAddr *wire.NetAddressV2) int {
 	const (
 		Unreachable = 0
 		Default     = iota
@@ -1034,61 +1094,59 @@ func getReachabilityFrom(localAddr, remoteAddr *wire.NetAddress) int {
 		return Unreachable
 	}
 
-	if IsOnionCatTor(remoteAddr) {
-		if IsOnionCatTor(localAddr) {
+	remote := remoteAddr.ToLegacy()
+	local := localAddr.ToLegacy()
+	if remote == nil {
+		// Tor, I2P or CJDNS.
+		if localAddr.Network == remoteAddr.Network {
 			return Private
 		}
 
-		if IsRoutable(localAddr) && IsIPv4(localAddr) {
+		if IsRoutable(localAddr) && local != nil && IsIPv4(local) {
 			return Ipv4
 		}
 
 		return Default
 	}
 
-	if IsRFC4380(remoteAddr) {
-		if !IsRoutable(localAddr) {
+	if IsRFC4380(remote) {
+		if !IsRoutable(localAddr) || local == nil {
 			return Default
 		}
 
-		if IsRFC4380(localAddr) {
+		if IsRFC4380(local) {
 			return Teredo
 		}
 
-		if IsIPv4(localAddr) {
+		if IsIPv4(local) {
 			return Ipv4
 		}
 
 		return Ipv6Weak
 	}
 
-	if IsIPv4(remoteAddr) {
-		if IsRoutable(localAddr) && IsIPv4(localAddr) {
+	if IsIPv4(remote) {
+		if IsRoutable(localAddr) && local != nil && IsIPv4(local) {
 			return Ipv4
 		}
 		return Unreachable
 	}
 
 	/* ipv6 */
-	var tunnelled bool
-	// Is our v6 is tunnelled?
-	if IsRFC3964(localAddr) || IsRFC6052(localAddr) || IsRFC6145(localAddr) {
-		tunnelled = true
-	}
-
-	if !IsRoutable(localAddr) {
+	if !IsRoutable(localAddr) || local == nil {
 		return Default
 	}
 
-	if IsRFC4380(localAddr) {
+	if IsRFC4380(local) {
 		return Teredo
 	}
 
-	if IsIPv4(localAddr) {
+	if IsIPv4(local) {
 		return Ipv4
 	}
 
-	if tunnelled {
+	// Is our v6 is tunnelled?
+	if IsRFC3964(local) || IsRFC6052(local) || IsRFC6145(local) {
 		// only prioritise ipv6 if we aren't tunnelling it.
 		return Ipv6Weak
 	}
@@ -1098,13 +1156,13 @@ func getReachabilityFrom(localAddr, remoteAddr *wire.NetAddress) int {
 
 // GetBestLocalAddress returns the most appropriate local address to use
 // for the given remote address.
-func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddress) *wire.NetAddress {
+func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddressV2) *wire.NetAddressV2 {
 	a.lamtx.Lock()
 	defer a.lamtx.Unlock()
 
 	bestreach := 0
 	var bestscore AddressPriority
-	var bestAddress *wire.NetAddress
+	var bestAddress *wire.NetAddressV2
 	for _, la := range a.localAddresses {
 		reach := getReachabilityFrom(la.NA, remoteAddr)
 		if reach > bestreach ||
@@ -1115,21 +1173,18 @@ func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddress) *wire.Net
 		}
 	}
 	if bestAddress != nil {
-		log.Debugf("Suggesting address %s:%d for %s:%d", bestAddress.IP,
-			bestAddress.Port, remoteAddr.IP, remoteAddr.Port)
+		log.Debugf("Suggesting address %s for %s",
+			NetAddressKey(bestAddress), NetAddressKey(remoteAddr))
 	} else {
-		log.Debugf("No worthy address for %s:%d", remoteAddr.IP,
-			remoteAddr.Port)
+		log.Debugf("No worthy address for %s", NetAddressKey(remoteAddr))
 
 		// Send something unroutable if nothing suitable.
-		var ip net.IP
-		if !IsIPv4(remoteAddr) && !IsOnionCatTor(remoteAddr) {
+		ip := net.IPv4zero
+		if remoteAddr.Network == wire.NetworkIPv6 {
 			ip = net.IPv6zero
-		} else {
-			ip = net.IPv4zero
 		}
 		services := wire.SFNodeNetwork | wire.SFNodeBloom
-		bestAddress = wire.NewNetAddressIPPort(ip, 0, services)
+		bestAddress = wire.NewNetAddressV2IPPort(ip, 0, services)
 	}
 
 	return bestAddress

@@ -19,7 +19,7 @@ import (
 // naTest is used to describe a test to be performed against the NetAddressKey
 // method.
 type naTest struct {
-	in   wire.NetAddress
+	in   *wire.NetAddressV2
 	want string
 }
 
@@ -89,11 +89,32 @@ func addNaTests() {
 	addNaTest("fed1::2:2", 8334, "[fed1::2:2]:8334")
 	addNaTest("fee2::3:3", 8335, "[fee2::3:3]:8335")
 	addNaTest("fef3::4:4", 8336, "[fef3::4:4]:8336")
+
+	// IPv4-mapped IPv6
+	addNaTest("::ffff:1.2.3.4", 8333, "1.2.3.4:8333")
+
+	// Tor v3, I2P and CJDNS
+	torV3, _ := wire.DecodeTorV3(torV3Host)
+	naTests = append(naTests, naTest{
+		wire.NewNetAddressV2(wire.NetworkTorV3, torV3, 8333, 0),
+		torV3Host + ":8333",
+	})
+	naTests = append(naTests, naTest{
+		wire.NewNetAddressV2(wire.NetworkI2P, make([]byte, 32), 0, 0),
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b32.i2p:0",
+	})
+	naTests = append(naTests, naTest{
+		wire.NewNetAddressV2(wire.NetworkCJDNS, net.ParseIP("fc00::1"), 8333, 0),
+		"[fc00::1]:8333",
+	})
 }
+
+// torV3Host is a valid Tor v3 onion name.
+const torV3Host = "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"
 
 func addNaTest(ip string, port uint16, want string) {
 	nip := net.ParseIP(ip)
-	na := *wire.NewNetAddressIPPort(nip, port, wire.SFNodeNetwork)
+	na := wire.NewNetAddressV2IPPort(nip, port, wire.SFNodeNetwork)
 	test := naTest{na, want}
 	naTests = append(naTests, test)
 }
@@ -157,54 +178,68 @@ func TestAddAddressByIP(t *testing.T) {
 
 func TestAddLocalAddress(t *testing.T) {
 	var tests = []struct {
-		address  wire.NetAddress
+		host     string
 		priority addrmgr.AddressPriority
 		valid    bool
 	}{
-		{
-			wire.NetAddress{IP: net.ParseIP("192.168.0.100")},
-			addrmgr.InterfacePrio,
-			false,
-		},
-		{
-			wire.NetAddress{IP: net.ParseIP("204.124.1.1")},
-			addrmgr.InterfacePrio,
-			true,
-		},
-		{
-			wire.NetAddress{IP: net.ParseIP("204.124.1.1")},
-			addrmgr.BoundPrio,
-			true,
-		},
-		{
-			wire.NetAddress{IP: net.ParseIP("::1")},
-			addrmgr.InterfacePrio,
-			false,
-		},
-		{
-			wire.NetAddress{IP: net.ParseIP("fe80::1")},
-			addrmgr.InterfacePrio,
-			false,
-		},
-		{
-			wire.NetAddress{IP: net.ParseIP("2620:100::1")},
-			addrmgr.InterfacePrio,
-			true,
-		},
+		{"192.168.0.100", addrmgr.InterfacePrio, false},
+		{"204.124.1.1", addrmgr.InterfacePrio, true},
+		{"204.124.1.1", addrmgr.BoundPrio, true},
+		{"::1", addrmgr.InterfacePrio, false},
+		{"fe80::1", addrmgr.InterfacePrio, false},
+		{"2620:100::1", addrmgr.InterfacePrio, true},
+		{"fd87:d87e:eb43::1", addrmgr.InterfacePrio, false},
+		{torV3Host, addrmgr.ManualPrio, true},
 	}
-	amgr := addrmgr.New("testaddlocaladdress", nil)
+	amgr := addrmgr.New("testaddlocaladdress", lookupFunc)
 	for x, test := range tests {
-		result := amgr.AddLocalAddress(&test.address, test.priority)
+		na, err := amgr.HostToNetAddress(test.host, 8333, 0)
+		if err != nil {
+			t.Fatalf("HostToNetAddress(%s): %v", test.host, err)
+		}
+		result := amgr.AddLocalAddress(na, test.priority)
 		if result == nil && !test.valid {
 			t.Errorf("TestAddLocalAddress test #%d failed: %s should have "+
-				"been accepted", x, test.address.IP)
+				"been accepted", x, test.host)
 			continue
 		}
 		if result != nil && test.valid {
 			t.Errorf("TestAddLocalAddress test #%d failed: %s should not have "+
-				"been accepted", x, test.address.IP)
+				"been accepted", x, test.host)
 			continue
 		}
+	}
+}
+
+// TestHostToNetAddress tests that onion names are parsed without a lookup and
+// that Tor v2 and malformed onion names are rejected.
+func TestHostToNetAddress(t *testing.T) {
+	amgr := addrmgr.New("testhosttonetaddress", lookupFunc)
+	na, err := amgr.HostToNetAddress(torV3Host, 8333, wire.SFNodeNetwork)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if na.Network != wire.NetworkTorV3 || addrmgr.NetAddressKey(na) !=
+		torV3Host+":8333" || na.Services != wire.SFNodeNetwork {
+
+		t.Fatalf("got %v %s", na.Network, addrmgr.NetAddressKey(na))
+	}
+
+	for _, host := range []string{
+		"aaaaaaaaaaaaaaaa.onion",
+		"pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscsad.onion",
+		"example.onion",
+	} {
+		_, err := amgr.HostToNetAddress(host, 8333, 0)
+		if err == nil || err.Error() == "not implemented" {
+			t.Errorf("HostToNetAddress(%s): got %v, want a parse error",
+				host, err)
+		}
+	}
+
+	na, err = amgr.HostToNetAddress("::ffff:1.2.3.4", 8333, 0)
+	if err != nil || na.Network != wire.NetworkIPv4 {
+		t.Fatalf("IPv4-mapped: %v %v", na, err)
 	}
 }
 
@@ -257,7 +292,7 @@ func TestNeedMoreAddresses(t *testing.T) {
 	if !b {
 		t.Errorf("Expected that we need more addresses")
 	}
-	addrs := make([]*wire.NetAddress, addrsToAdd)
+	addrs := make([]*wire.NetAddressV2, addrsToAdd)
 
 	var err error
 	for i := range addrsToAdd {
@@ -268,7 +303,7 @@ func TestNeedMoreAddresses(t *testing.T) {
 		}
 	}
 
-	srcAddr := wire.NewNetAddressIPPort(net.IPv4(173, 144, 173, 111), 8333, 0)
+	srcAddr := wire.NewNetAddressV2IPPort(net.IPv4(173, 144, 173, 111), 8333, 0)
 
 	n.AddAddresses(addrs, srcAddr)
 	numAddrs := n.NumAddresses()
@@ -285,7 +320,7 @@ func TestNeedMoreAddresses(t *testing.T) {
 func TestGood(t *testing.T) {
 	n := addrmgr.New("testgood", lookupFunc)
 	addrsToAdd := 64 * 64
-	addrs := make([]*wire.NetAddress, addrsToAdd)
+	addrs := make([]*wire.NetAddressV2, addrsToAdd)
 
 	var err error
 	for i := range addrsToAdd {
@@ -296,7 +331,7 @@ func TestGood(t *testing.T) {
 		}
 	}
 
-	srcAddr := wire.NewNetAddressIPPort(net.IPv4(173, 144, 173, 111), 8333, 0)
+	srcAddr := wire.NewNetAddressV2IPPort(net.IPv4(173, 144, 173, 111), 8333, 0)
 
 	n.AddAddresses(addrs, srcAddr)
 	for _, addr := range addrs {
@@ -331,8 +366,8 @@ func TestGetAddress(t *testing.T) {
 	if ka == nil {
 		t.Fatalf("Did not get an address where there is one in the pool")
 	}
-	if ka.NetAddress().IP.String() != someIP {
-		t.Errorf("Wrong IP: got %v, want %v", ka.NetAddress().IP.String(), someIP)
+	if ka.NetAddress().IP().String() != someIP {
+		t.Errorf("Wrong IP: got %v, want %v", ka.NetAddress().IP().String(), someIP)
 	}
 
 	// Mark this as a good address and get it
@@ -341,8 +376,8 @@ func TestGetAddress(t *testing.T) {
 	if ka == nil {
 		t.Fatalf("Did not get an address where there is one in the pool")
 	}
-	if ka.NetAddress().IP.String() != someIP {
-		t.Errorf("Wrong IP: got %v, want %v", ka.NetAddress().IP.String(), someIP)
+	if ka.NetAddress().IP().String() != someIP {
+		t.Errorf("Wrong IP: got %v, want %v", ka.NetAddress().IP().String(), someIP)
 	}
 
 	numAddrs := n.NumAddresses()
@@ -352,109 +387,88 @@ func TestGetAddress(t *testing.T) {
 }
 
 func TestGetBestLocalAddress(t *testing.T) {
-	localAddrs := []wire.NetAddress{
-		{IP: net.ParseIP("192.168.0.100")},
-		{IP: net.ParseIP("::1")},
-		{IP: net.ParseIP("fe80::1")},
-		{IP: net.ParseIP("2001:470::1")},
+	amgr := addrmgr.New("testgetbestlocaladdress", lookupFunc)
+	addr := func(host string) *wire.NetAddressV2 {
+		na, err := amgr.HostToNetAddress(host, 8333, 0)
+		if err != nil {
+			t.Fatalf("HostToNetAddress(%s): %v", host, err)
+		}
+		return na
 	}
+	const (
+		localTor  = "kpgvmscirrdqpekbqjsvw5teanhatztpp2gl6eee4zkowvwfxwenqaid.onion"
+		remoteTor = torV3Host
+	)
+	localAddrs := []string{"192.168.0.100", "::1", "fe80::1", "2001:470::1"}
 
 	var tests = []struct {
-		remoteAddr wire.NetAddress
-		want0      wire.NetAddress
-		want1      wire.NetAddress
-		want2      wire.NetAddress
-		want3      wire.NetAddress
+		remoteAddr string
+		want0      string
+		want1      string
+		want2      string
+		want3      string
 	}{
 		{
 			// Remote connection from public IPv4
-			wire.NetAddress{IP: net.ParseIP("204.124.8.1")},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.ParseIP("204.124.8.100")},
-			wire.NetAddress{IP: net.ParseIP("fd87:d87e:eb43:25::1")},
+			"204.124.8.1",
+			"0.0.0.0",
+			"0.0.0.0",
+			"204.124.8.100",
+			"204.124.8.100",
 		},
 		{
 			// Remote connection from private IPv4
-			wire.NetAddress{IP: net.ParseIP("172.16.0.254")},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.IPv4zero},
+			"172.16.0.254",
+			"0.0.0.0",
+			"0.0.0.0",
+			"0.0.0.0",
+			"0.0.0.0",
 		},
 		{
 			// Remote connection from public IPv6
-			wire.NetAddress{IP: net.ParseIP("2602:100:abcd::102")},
-			wire.NetAddress{IP: net.IPv6zero},
-			wire.NetAddress{IP: net.ParseIP("2001:470::1")},
-			wire.NetAddress{IP: net.ParseIP("2001:470::1")},
-			wire.NetAddress{IP: net.ParseIP("2001:470::1")},
+			"2602:100:abcd::102",
+			"::",
+			"2001:470::1",
+			"2001:470::1",
+			"2001:470::1",
 		},
-		/* XXX
 		{
 			// Remote connection from Tor
-			wire.NetAddress{IP: net.ParseIP("fd87:d87e:eb43::100")},
-			wire.NetAddress{IP: net.IPv4zero},
-			wire.NetAddress{IP: net.ParseIP("204.124.8.100")},
-			wire.NetAddress{IP: net.ParseIP("fd87:d87e:eb43:25::1")},
+			remoteTor,
+			"0.0.0.0",
+			"2001:470::1",
+			"204.124.8.100",
+			localTor,
 		},
-		*/
 	}
 
-	amgr := addrmgr.New("testgetbestlocaladdress", nil)
-
-	// Test against default when there's no address
-	for x, test := range tests {
-		got := amgr.GetBestLocalAddress(&test.remoteAddr)
-		if !test.want0.IP.Equal(got.IP) {
-			t.Errorf("TestGetBestLocalAddress test1 #%d failed for remote address %s: want %s got %s",
-				x, test.remoteAddr.IP, test.want1.IP, got.IP)
-			continue
-		}
-	}
-
-	for _, localAddr := range localAddrs {
-		_ = amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
-	}
-
-	// Test against want1
-	for x, test := range tests {
-		got := amgr.GetBestLocalAddress(&test.remoteAddr)
-		if !test.want1.IP.Equal(got.IP) {
-			t.Errorf("TestGetBestLocalAddress test1 #%d failed for remote address %s: want %s got %s",
-				x, test.remoteAddr.IP, test.want1.IP, got.IP)
-			continue
-		}
-	}
-
-	// Add a public IP to the list of local addresses.
-	localAddr := wire.NetAddress{IP: net.ParseIP("204.124.8.100")}
-	_ = amgr.AddLocalAddress(&localAddr, addrmgr.InterfacePrio)
-
-	// Test against want2
-	for x, test := range tests {
-		got := amgr.GetBestLocalAddress(&test.remoteAddr)
-		if !test.want2.IP.Equal(got.IP) {
-			t.Errorf("TestGetBestLocalAddress test2 #%d failed for remote address %s: want %s got %s",
-				x, test.remoteAddr.IP, test.want2.IP, got.IP)
-			continue
-		}
-	}
-	/*
-		// Add a Tor generated IP address
-		localAddr = wire.NetAddress{IP: net.ParseIP("fd87:d87e:eb43:25::1")}
-		amgr.AddLocalAddress(&localAddr, addrmgr.ManualPrio)
-
-		// Test against want3
+	check := func(step int, want func(int) string) {
+		t.Helper()
 		for x, test := range tests {
-			got := amgr.GetBestLocalAddress(&test.remoteAddr)
-			if !test.want3.IP.Equal(got.IP) {
-				t.Errorf("TestGetBestLocalAddress test3 #%d failed for remote address %s: want %s got %s",
-					x, test.remoteAddr.IP, test.want3.IP, got.IP)
-				continue
+			got := amgr.GetBestLocalAddress(addr(test.remoteAddr))
+			if got.Host() != want(x) {
+				t.Errorf("TestGetBestLocalAddress test%d #%d failed "+
+					"for remote address %s: want %s got %s", step,
+					x, test.remoteAddr, want(x), got.Host())
 			}
 		}
-	*/
+	}
+
+	// Test against default when there's no address
+	check(0, func(x int) string { return tests[x].want0 })
+
+	for _, localAddr := range localAddrs {
+		_ = amgr.AddLocalAddress(addr(localAddr), addrmgr.InterfacePrio)
+	}
+	check(1, func(x int) string { return tests[x].want1 })
+
+	// Add a public IP to the list of local addresses.
+	_ = amgr.AddLocalAddress(addr("204.124.8.100"), addrmgr.InterfacePrio)
+	check(2, func(x int) string { return tests[x].want2 })
+
+	// Add a Tor address.
+	_ = amgr.AddLocalAddress(addr(localTor), addrmgr.InterfacePrio)
+	check(3, func(x int) string { return tests[x].want3 })
 }
 
 func TestNetAddressKey(t *testing.T) {
@@ -462,7 +476,7 @@ func TestNetAddressKey(t *testing.T) {
 
 	t.Logf("Running %d tests", len(naTests))
 	for i, test := range naTests {
-		key := addrmgr.NetAddressKey(&test.in)
+		key := addrmgr.NetAddressKey(test.in)
 		if key != test.want {
 			t.Errorf("NetAddressKey #%d\n got: %s want: %s", i, key, test.want)
 			continue

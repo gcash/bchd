@@ -312,14 +312,14 @@ type Config struct {
 }
 
 // newNetAddress attempts to extract the IP address and port from the passed
-// net.Addr interface and create a bitcoin NetAddress structure using that
+// net.Addr interface and create a bitcoin NetAddressV2 structure using that
 // information.
-func newNetAddress(addr net.Addr, services wire.ServiceFlag) (*wire.NetAddress, error) {
+func newNetAddress(addr net.Addr, services wire.ServiceFlag) (*wire.NetAddressV2, error) {
 	// addr will be a net.TCPAddr when not using a proxy.
 	if tcpAddr, ok := addr.(*net.TCPAddr); ok {
 		ip := tcpAddr.IP
 		port := uint16(tcpAddr.Port)
-		na := wire.NewNetAddressIPPort(ip, port, services)
+		na := wire.NewNetAddressV2IPPort(ip, port, services)
 		return na, nil
 	}
 
@@ -330,7 +330,7 @@ func newNetAddress(addr net.Addr, services wire.ServiceFlag) (*wire.NetAddress, 
 			ip = net.ParseIP("0.0.0.0")
 		}
 		port := uint16(proxiedAddr.Port)
-		na := wire.NewNetAddressIPPort(ip, port, services)
+		na := wire.NewNetAddressV2IPPort(ip, port, services)
 		return na, nil
 	}
 
@@ -346,7 +346,7 @@ func newNetAddress(addr net.Addr, services wire.ServiceFlag) (*wire.NetAddress, 
 	if err != nil {
 		return nil, err
 	}
-	na := wire.NewNetAddressIPPort(ip, uint16(port), services)
+	na := wire.NewNetAddressV2IPPort(ip, uint16(port), services)
 	return na, nil
 }
 
@@ -417,7 +417,7 @@ type AddrFunc func(remoteAddr *wire.NetAddress) *wire.NetAddress
 // HostToNetAddrFunc is a func which takes a host, port, services and returns
 // the netaddress.
 type HostToNetAddrFunc func(host string, port uint16,
-	services wire.ServiceFlag) (*wire.NetAddress, error)
+	services wire.ServiceFlag) (*wire.NetAddressV2, error)
 
 // NOTE: The overall data flow of a peer is split into 3 goroutines.  Inbound
 // messages are read via the inHandler goroutine and generally dispatched to
@@ -463,7 +463,7 @@ type Peer struct {
 	inbound bool
 
 	flagsMtx             sync.Mutex // protects the peer flags below
-	na                   *wire.NetAddress
+	na                   *wire.NetAddressV2
 	id                   int32
 	userAgent            string
 	services             wire.ServiceFlag
@@ -665,7 +665,7 @@ func (p *Peer) SetSyncPeer(val bool) {
 // NA returns the peer network address.
 //
 // This function is safe for concurrent access.
-func (p *Peer) NA() *wire.NetAddress {
+func (p *Peer) NA() *wire.NetAddressV2 {
 	p.flagsMtx.Lock()
 	na := p.na
 	p.flagsMtx.Unlock()
@@ -2321,7 +2321,13 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 		}
 	}
 
-	theirNA := p.na
+	// Addresses that don't fit in a version message, such as Tor v3, are
+	// sent as all zeros.
+	theirNA := p.na.ToLegacy()
+	if theirNA == nil {
+		theirNA = wire.NewNetAddressIPPort(net.IPv6zero, p.na.Port,
+			p.na.Services)
+	}
 
 	// If we are behind a proxy and the connection comes from the proxy then
 	// we return an unroutable address as their address. This is to prevent
@@ -2329,7 +2335,7 @@ func (p *Peer) localVersionMsg() (*wire.MsgVersion, error) {
 	if p.cfg.Proxy != "" {
 		proxyaddress, _, err := net.SplitHostPort(p.cfg.Proxy)
 		// invalid proxy means poorly configured, be on the safe side.
-		if err != nil || p.na.IP.String() == proxyaddress {
+		if err != nil || p.na.Host() == proxyaddress {
 			theirNA = wire.NewNetAddressIPPort(net.IP([]byte{0, 0, 0, 0}), 0,
 				theirNA.Services)
 		}
@@ -2589,8 +2595,10 @@ func NewOutboundPeer(cfg *Config, addr string) (*Peer, error) {
 			return nil, err
 		}
 		p.na = na
+	} else if pubKey, err := wire.DecodeTorV3(host); err == nil {
+		p.na = wire.NewNetAddressV2(wire.NetworkTorV3, pubKey, uint16(port), 0)
 	} else {
-		p.na = wire.NewNetAddressIPPort(net.ParseIP(host), uint16(port), 0)
+		p.na = wire.NewNetAddressV2IPPort(net.ParseIP(host), uint16(port), 0)
 	}
 
 	return p, nil

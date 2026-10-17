@@ -2838,13 +2838,14 @@ func handleGetNetworkInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 	var ipv4Reachable, ipv6Reachable bool
 	for _, addr := range s.cfg.AddrMgr.LocalAddresses() {
 		localAddrs = append(localAddrs, btcjson.LocalAddressesResult{
-			Address: addr.NA.IP.String(),
+			Address: addr.NA.Host(),
 			Port:    addr.NA.Port,
 			Score:   int32(addr.Score),
 		})
-		if addr.NA.IP.To4() != nil {
+		switch addr.NA.Network {
+		case wire.NetworkIPv4:
 			ipv4Reachable = true
-		} else {
+		case wire.NetworkIPv6:
 			ipv6Reachable = true
 		}
 	}

@@ -375,7 +375,7 @@ func (sp *serverPeer) newestBlock() (*chainhash.Hash, int32, error) {
 
 // addKnownAddresses adds the given addresses to the set of known addresses to
 // the peer to prevent sending duplicate addresses.
-func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddress) {
+func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddressV2) {
 	sp.addrMtx.Lock()
 	defer sp.addrMtx.Unlock()
 	for _, na := range addresses {
@@ -385,7 +385,7 @@ func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddress) {
 
 // addressKnown true if the given address is already known to the peer.
 // It is safe for concurrent access.
-func (sp *serverPeer) addressKnown(na *wire.NetAddress) bool {
+func (sp *serverPeer) addressKnown(na *wire.NetAddressV2) bool {
 	sp.addrMtx.RLock()
 	defer sp.addrMtx.RUnlock()
 	_, exists := sp.knownAddresses[addrmgr.NetAddressKey(na)]
@@ -430,13 +430,13 @@ func (sp *serverPeer) relayTxDisabled() bool {
 }
 
 // pushAddrMsg sends an addr message to the connected peer using the provided
-// addresses.
-func (sp *serverPeer) pushAddrMsg(addresses []*wire.NetAddress) {
+// addresses.  Addresses that don't fit in an addr message are skipped.
+func (sp *serverPeer) pushAddrMsg(addresses []*wire.NetAddressV2) {
 	// Filter addresses already known to the peer.
 	addrs := make([]*wire.NetAddress, 0, len(addresses))
 	for _, addr := range addresses {
-		if !sp.addressKnown(addr) {
-			addrs = append(addrs, addr)
+		if lna := addr.ToLegacy(); lna != nil && !sp.addressKnown(addr) {
+			addrs = append(addrs, lna)
 		}
 	}
 	known, err := sp.PushAddrMsg(addrs)
@@ -445,7 +445,11 @@ func (sp *serverPeer) pushAddrMsg(addresses []*wire.NetAddress) {
 		sp.Disconnect()
 		return
 	}
-	sp.addKnownAddresses(known)
+	knownV2 := make([]*wire.NetAddressV2, 0, len(known))
+	for _, na := range known {
+		knownV2 = append(knownV2, wire.NetAddressV2FromLegacy(na))
+	}
+	sp.addKnownAddresses(knownV2)
 }
 
 // addBanScore increases the persistent and decaying ban score fields by the
@@ -1649,6 +1653,7 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 		return
 	}
 
+	addrs := make([]*wire.NetAddressV2, 0, len(msg.AddrList))
 	for _, na := range msg.AddrList {
 		// Don't add more address if we're disconnecting.
 		if !sp.Connected() {
@@ -1663,16 +1668,18 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 			na.Timestamp = now.Add(-1 * time.Hour * 24 * 5)
 		}
 
-		// Add address to known addresses for this peer.
-		sp.addKnownAddresses([]*wire.NetAddress{na})
+		addrs = append(addrs, wire.NetAddressV2FromLegacy(na))
 	}
+
+	// Add addresses to known addresses for this peer.
+	sp.addKnownAddresses(addrs)
 
 	// Add addresses to server address manager.  The address manager handles
 	// the details of things such as preventing duplicate addresses, max
 	// addresses, and last seen updates.
 	// XXX bitcoind gives a 2 hour time penalty here, do we want to do the
 	// same?
-	sp.server.addrManager.AddAddresses(msg.AddrList, sp.NA())
+	sp.server.addrManager.AddAddresses(addrs, sp.NA())
 }
 
 // OnReject logs all reject messages received from the remote peer.
@@ -2145,7 +2152,7 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 			lna := s.addrManager.GetBestLocalAddress(sp.NA())
 			if addrmgr.IsRoutable(lna) {
 				// Filter addresses the peer already knows about.
-				addresses := []*wire.NetAddress{lna}
+				addresses := []*wire.NetAddressV2{lna}
 				sp.pushAddrMsg(addresses)
 			}
 		}
@@ -2781,7 +2788,12 @@ func (s *server) peerHandler() {
 				// DNS seed lookups will vary quite a lot.
 				// to replicate this behaviour we put all addresses as
 				// having come from the first one.
-				s.addrManager.AddAddresses(addrs, addrs[0])
+				addrsV2 := make([]*wire.NetAddressV2, 0, len(addrs))
+				for _, na := range addrs {
+					addrsV2 = append(addrsV2,
+						wire.NetAddressV2FromLegacy(na))
+				}
+				s.addrManager.AddAddresses(addrsV2, addrsV2[0])
 			})
 	}
 	go s.connManager.Start()
@@ -3196,7 +3208,7 @@ out:
 					srvrLog.Warnf("UPnP can't get external address: %v", err)
 					continue out
 				}
-				na := wire.NewNetAddressIPPort(externalip, uint16(listenPort),
+				na := wire.NewNetAddressV2IPPort(externalip, uint16(listenPort),
 					s.services)
 				err = s.addrManager.AddLocalAddress(na, addrmgr.UpnpPrio)
 				if err != nil {
@@ -3742,7 +3754,7 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 			// so peers get the correct IP information. Since we can only
 			// advertise one IP, use the first seen.
 			if addrMe == nil {
-				addrMe = na
+				addrMe = na.ToLegacy()
 			}
 
 			err = amgr.AddLocalAddress(na, addrmgr.ManualPrio)
@@ -3768,7 +3780,7 @@ func initListeners(amgr *addrmgr.AddrManager, listenAddrs []string, services wir
 					na, err := amgr.HostToNetAddress(addr.String(), eport, services)
 					if err == nil {
 						if addrMe == nil {
-							addrMe = na
+							addrMe = na.ToLegacy()
 						}
 					}
 
@@ -3868,7 +3880,7 @@ func addLocalAddress(addrMgr *addrmgr.AddrManager, addr string, services wire.Se
 				continue
 			}
 
-			netAddr := wire.NewNetAddressIPPort(ifaceIP, uint16(port), services)
+			netAddr := wire.NewNetAddressV2IPPort(ifaceIP, uint16(port), services)
 			_ = addrMgr.AddLocalAddress(netAddr, addrmgr.BoundPrio)
 		}
 	} else {

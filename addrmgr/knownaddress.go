@@ -13,8 +13,8 @@ import (
 // KnownAddress tracks information about a known network address that is used
 // to determine how viable an address is.
 type KnownAddress struct {
-	na          *wire.NetAddress
-	srcAddr     *wire.NetAddress
+	na          *wire.NetAddressV2
+	srcAddr     *wire.NetAddressV2
 	attempts    int
 	lastattempt time.Time
 	lastsuccess time.Time
@@ -22,9 +22,9 @@ type KnownAddress struct {
 	refs        int // reference count of new buckets
 }
 
-// NetAddress returns the underlying wire.NetAddress associated with the
+// NetAddress returns the underlying wire.NetAddressV2 associated with the
 // known address.
-func (ka *KnownAddress) NetAddress() *wire.NetAddress {
+func (ka *KnownAddress) NetAddress() *wire.NetAddressV2 {
 	return ka.na
 }
 
