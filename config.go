@@ -55,6 +55,8 @@ const (
 	defaultMaxRPCConcurrentReqs    = 20
 	defaultDbType                  = "ffldb"
 	defaultFreeTxRelayLimit        = 0
+	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
+	highMaxTxFee                   = bchutil.Amount(bchutil.SatoshiPerBitcoin)
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	defaultExcessiveBlockSize      = 32000000
 	defaultBlockMinSize            = 0
@@ -155,6 +157,7 @@ type config struct {
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
 	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept. Cannot be less than 32000000."`
 	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum transaction fee in BCH/kB to be considered a non-zero fee."`
+	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Limit relay of transactions with no transaction fee to the given amount in thousands of bytes per minute"`
 	NoRelayPriority         bool          `long:"norelaypriority" description:"Do not require free or low-fee transactions to have high priority for relaying"`
 	TrickleInterval         time.Duration `long:"trickleinterval" description:"Minimum time between attempts to send new inventory to a connected peer"`
@@ -199,6 +202,7 @@ type config struct {
 	addCheckpoints          []chaincfg.Checkpoint
 	miningAddrs             []bchutil.Address
 	minRelayTxFee           bchutil.Amount
+	maxTxFee                bchutil.Amount
 	whitelists              []*net.IPNet
 }
 
@@ -444,6 +448,7 @@ func loadConfig() (*config, []string, error) {
 		RPCCert:                 defaultRPCCertFile,
 		ExcessiveBlockSize:      defaultExcessiveBlockSize,
 		MinRelayTxFee:           mempool.DefaultMinRelayTxFee.ToBCH(),
+		MaxTxFee:                defaultMaxTxFee.ToBCH(),
 		FreeTxRelayLimit:        defaultFreeTxRelayLimit,
 		TrickleInterval:         defaultTrickleInterval,
 		BlockMinSize:            defaultBlockMinSize,
@@ -868,6 +873,25 @@ func loadConfig() (*config, []string, error) {
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
+	}
+
+	// Validate the maxtxfee.  It may not be below the minimum relay fee
+	// of a 1000 byte transaction.
+	cfg.maxTxFee, err = bchutil.NewAmount(cfg.MaxTxFee)
+	if err == nil && cfg.maxTxFee < cfg.minRelayTxFee {
+		err = fmt.Errorf("must be at least the minrelaytxfee of %v",
+			cfg.minRelayTxFee)
+	}
+	if err != nil {
+		str := "%s: invalid maxtxfee: %v"
+		err := fmt.Errorf(str, funcName, err)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+	if cfg.maxTxFee > highMaxTxFee {
+		bchdLog.Warnf("%s: maxtxfee is set very high, a single "+
+			"transaction could pay fees this large", funcName)
 	}
 
 	// The runtime stores the GC percent as an int32.

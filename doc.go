@@ -95,6 +95,10 @@ Application Options:
 	    --upnp                Use UPnP to map our listening port outside of NAT
 	    --minrelaytxfee=      The minimum transaction fee in BCH/kB to be
 	                          considered a non-zero fee.
+	    --maxtxfee=           The maximum total fee in BCH of a transaction sent
+	                          with sendrawtransaction or checked with
+	                          testmempoolaccept, unless allowhighfees is set
+	                          (0.1)
 	    --limitfreerelay=     Limit relay of transactions with no transaction fee
 	                          to the given amount in thousands of bytes per
 	                          minute (15)

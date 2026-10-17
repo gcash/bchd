@@ -625,8 +625,26 @@ var helpDescsEnUS = map[string]string{
 	// SendRawTransactionCmd help.
 	"sendrawtransaction--synopsis":     "Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.",
 	"sendrawtransaction-hextx":         "Serialized, hex-encoded signed transaction",
-	"sendrawtransaction-allowhighfees": "Whether or not to allow insanely high fees (bchd does not yet implement this parameter, so it has no effect)",
+	"sendrawtransaction-allowhighfees": "Allow a fee above the --maxtxfee option",
 	"sendrawtransaction--result0":      "The hash of the transaction",
+
+	// TestMempoolAcceptCmd help.
+	"testmempoolaccept--synopsis":     "Returns whether the raw transaction would be accepted by the mempool, without adding it.",
+	"testmempoolaccept-rawtxs":        "An array with exactly one serialized, hex-encoded transaction",
+	"testmempoolaccept-allowhighfees": "Allow a fee above the --maxtxfee option",
+
+	// TestMempoolAcceptResult help.
+	"testmempoolacceptresult-txid":           "The hash of the transaction",
+	"testmempoolacceptresult-allowed":        "Whether the mempool would accept the transaction",
+	"testmempoolacceptresult-size":           "The serialized size of the transaction in bytes (only present when allowed)",
+	"testmempoolacceptresult-vsize":          "The size used for fee calculations, which is larger than the size for transactions with many signature checks (only present when allowed)",
+	"testmempoolacceptresult-fees":           "The fees of the transaction (only present when allowed)",
+	"testmempoolacceptresult-reject-reason":  "The reject code and reason (only present when not allowed)",
+	"testmempoolacceptresult-reject-details": "The full reject reason (only present when not allowed)",
+
+	// TestMempoolAcceptFees help.
+	"testmempoolacceptfees-base":              "The fee of the transaction in BCH",
+	"testmempoolacceptfees-effective-feerate": "The fee rate in BCH per kB of virtual size",
 
 	// ReconsiderBlockCmd
 	"reconsiderblock--synopsis": "Reconsider a block for validation.",
@@ -814,6 +832,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"setgenerate":           nil,
 	"stop":                  {(*string)(nil)},
 	"submitblock":           {nil, (*string)(nil)},
+	"testmempoolaccept":     {(*[]btcjson.TestMempoolAcceptResult)(nil)},
 	"uptime":                {(*int64)(nil)},
 	"validateaddress":       {(*btcjson.ValidateAddressChainResult)(nil)},
 	"verifychain":           {(*bool)(nil)},

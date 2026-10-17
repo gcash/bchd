@@ -101,6 +101,29 @@ func TestChainSvrCustomResults(t *testing.T) {
 			},
 			expected: `{"txid":"123","vout":1,"scriptSig":{"asm":"0","hex":"00"},"prevOut":{"addresses":["addr1"],"value":0},"sequence":4294967295}`,
 		},
+		{
+			name: "testmempoolaccept allowed",
+			result: &btcjson.TestMempoolAcceptResult{
+				Txid:    "123",
+				Allowed: true,
+				Size:    191,
+				Vsize:   191,
+				Fees: &btcjson.TestMempoolAcceptFees{
+					Base:             0.00000191,
+					EffectiveFeeRate: 0.00001,
+				},
+			},
+			expected: `{"txid":"123","allowed":true,"size":191,"vsize":191,"fees":{"base":0.00000191,"effective-feerate":0.00001}}`,
+		},
+		{
+			name: "testmempoolaccept rejected",
+			result: &btcjson.TestMempoolAcceptResult{
+				Txid:          "123",
+				RejectReason:  "256: absurdly-high-fee",
+				RejectDetails: "absurdly-high-fee, 20000000 > 10000000",
+			},
+			expected: `{"txid":"123","allowed":false,"reject-reason":"256: absurdly-high-fee","reject-details":"absurdly-high-fee, 20000000 \u003e 10000000"}`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

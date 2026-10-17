@@ -76,6 +76,14 @@ const (
 
 	// maxProtocolVersion is the max protocol version the server supports.
 	maxProtocolVersion = wire.ProtocolVersion
+
+	// bytesPerSigCheck is the size each signature check adds to the
+	// virtual size of a transaction.
+	bytesPerSigCheck = 50
+
+	// rejectHighFee is the reject code for a transaction that pays more
+	// than the maximum fee.  It does not fit in a wire.RejectCode.
+	rejectHighFee = 0x100
 )
 
 var (
@@ -176,6 +184,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"setgenerate":           handleSetGenerate,
 	"stop":                  handleStop,
 	"submitblock":           handleSubmitBlock,
+	"testmempoolaccept":     handleTestMempoolAccept,
 	"uptime":                handleUptime,
 	"validateaddress":       handleValidateAddress,
 	"verifychain":           handleVerifyChain,
@@ -282,6 +291,7 @@ var rpcLimited = map[string]struct{}{
 	"searchrawtransactions": {},
 	"sendrawtransaction":    {},
 	"submitblock":           {},
+	"testmempoolaccept":     {},
 	"uptime":                {},
 	"validateaddress":       {},
 	"verifymessage":         {},
@@ -3986,9 +3996,22 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 		}
 	}
 
-	// Use 0 for the tag to represent local node.
+	// A transaction already in the mempool is announced again and its hash
+	// returned.
 	tx := bchutil.NewTx(&msgTx)
-	acceptedTxs, err := s.cfg.TxMemPool.ProcessTransaction(tx, false, false, 0)
+	if txD, err := s.cfg.TxMemPool.FetchTxDesc(tx.Hash()); err == nil {
+		s.cfg.ConnMgr.RelayTransactions([]*mempool.TxDesc{txD})
+		return tx.Hash().String(), nil
+	}
+
+	maxFee := s.cfg.MaxTxFee
+	if c.AllowHighFees != nil && *c.AllowHighFees {
+		maxFee = 0
+	}
+
+	// Use 0 for the tag to represent local node.
+	acceptedTxs, err := s.cfg.TxMemPool.ProcessTransactionWithMaxFee(tx,
+		false, false, 0, maxFee)
 	if err != nil {
 		// When the error is a rule error, it means the transaction was
 		// simply rejected as opposed to something actually going wrong,
@@ -4009,7 +4032,7 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 
 		// We'll then map the rule error to the appropriate RPC error,
 		// matching bitcoind's behavior.
-		code := btcjson.ErrRPCTxError
+		code := btcjson.ErrRPCTxRejected
 		if txRuleErr, ok := ruleErr.Err.(mempool.TxRuleError); ok {
 			errDesc := txRuleErr.Description
 			switch {
@@ -4143,6 +4166,87 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 
 	rpcsLog.Infof("Accepted block %s via submitblock", block.Hash())
 	return nil, nil
+}
+
+// handleTestMempoolAccept implements the testmempoolaccept command.
+func handleTestMempoolAccept(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.TestMempoolAcceptCmd)
+	if len(c.RawTxs) != 1 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "Array must contain exactly one raw transaction for now",
+		}
+	}
+	serializedTx, err := hex.DecodeString(c.RawTxs[0])
+	if err != nil {
+		return nil, rpcDecodeHexError(c.RawTxs[0])
+	}
+	var msgTx wire.MsgTx
+	txReader := bytes.NewReader(serializedTx)
+	err = msgTx.Deserialize(txReader)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "TX decode failed: " + err.Error(),
+		}
+	}
+	if txReader.Len() != 0 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDeserialization,
+			Message: "TX decode failed: unexpected trailing bytes",
+		}
+	}
+	tx := bchutil.NewTx(&msgTx)
+
+	maxFee := s.cfg.MaxTxFee
+	if c.AllowHighFees != nil && *c.AllowHighFees {
+		maxFee = 0
+	}
+
+	result := btcjson.TestMempoolAcceptResult{Txid: tx.Hash().String()}
+	accept, err := s.cfg.TxMemPool.CheckMempoolAcceptance(tx, maxFee)
+	switch {
+	case err != nil:
+		result.RejectReason, result.RejectDetails = testAcceptRejectReason(err)
+
+	case len(accept.MissingParents) > 0:
+		result.RejectReason = "missing-inputs"
+
+	default:
+		size := int64(msgTx.SerializeSize())
+		vsize := virtualSize(size, accept.SigChecks)
+		result.Allowed = true
+		result.Size = size
+		result.Vsize = vsize
+		result.Fees = &btcjson.TestMempoolAcceptFees{
+			Base: bchutil.Amount(accept.Fee).ToBCH(),
+			EffectiveFeeRate: bchutil.Amount(accept.Fee * 1000 /
+				vsize).ToBCH(),
+		}
+	}
+
+	return []btcjson.TestMempoolAcceptResult{result}, nil
+}
+
+// testAcceptRejectReason returns the testmempoolaccept reject reason and
+// details for an error from the mempool acceptance checks.
+func testAcceptRejectReason(err error) (string, string) {
+	ruleErr, ok := err.(mempool.RuleError)
+	if !ok {
+		return err.Error(), err.Error()
+	}
+	if _, ok := ruleErr.Err.(mempool.HighFeeError); ok {
+		return fmt.Sprintf("%d: absurdly-high-fee", rejectHighFee),
+			err.Error()
+	}
+	code, _ := mempool.ErrToRejectErr(err)
+	return fmt.Sprintf("%d: %s", code, err.Error()), err.Error()
+}
+
+// virtualSize returns the larger of the size of a transaction and
+// bytesPerSigCheck bytes for each of its signature checks.
+func virtualSize(size int64, sigChecks uint32) int64 {
+	return max(size, int64(sigChecks)*bytesPerSigCheck)
 }
 
 // handleUptime implements the uptime command.
@@ -5011,6 +5115,10 @@ type rpcserverConfig struct {
 
 	// TxMemPool defines the transaction memory pool to interact with.
 	TxMemPool *mempool.TxPool
+
+	// MaxTxFee is the highest fee a raw transaction may pay unless the
+	// caller allows high fees.
+	MaxTxFee bchutil.Amount
 
 	// These fields allow the RPC server to interface with mining.
 	//
