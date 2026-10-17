@@ -12,15 +12,15 @@
   "testDescription": "Test vector for the lookahead function; using a sequence of 100% full blocks; using proposed configuration with the exception of n0 which will be determined from MTP activation.",
   "ABLAStateInitial": {
     "n": 1,
-    "epsilon": "",
-    "beta": ""
+    "epsilon": "16000000",
+    "beta": "16000000"
   },
-  "blocksizeLimitInitial": "",
+  "blocksizeLimitInitial": "32000000",
   "testVector": [
     {
       "lookahead": "100",
       "ABLAStateForLookaheadBlock": {
-        "n": 100,
+        "n": 101,
         "epsilon": "16000000",
         "beta": "16000000"
       },
