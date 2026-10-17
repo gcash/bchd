@@ -1035,3 +1035,198 @@ func TestTokenOpcodesBeforeTokens(t *testing.T) {
 		}
 	}
 }
+
+// num2binTestFlags returns the script flag sets used by the OP_NUM2BIN tests:
+// the rules before the May 2022 upgrade (32-bit integers), the May 2022 rules
+// (64-bit integers) and the current rules (big integers and larger stack
+// elements).
+func num2binTestFlags() map[string]ScriptFlags {
+	legacy := ScriptBip16 | ScriptVerifyDERSignatures |
+		ScriptVerifyCheckLockTimeVerify | ScriptVerifyCheckSequenceVerify |
+		ScriptVerifyStrictEncoding | ScriptVerifyBip143SigHash |
+		ScriptVerifyLowS | ScriptVerifyNullFail | ScriptVerifySigPushOnly |
+		ScriptVerifyCleanStack | ScriptVerifyCheckDataSig |
+		ScriptVerifySchnorr | ScriptVerifyAllowSegwitRecovery |
+		ScriptVerifyMinimalData | ScriptVerifySchnorrMultisig |
+		ScriptReportSigChecks | ScriptVerifyReverseBytes
+	may2022 := legacy | ScriptVerify64BitIntegers |
+		ScriptVerifyNativeIntrospection
+	current := may2022 | ScriptAllowCashTokens | ScriptAllowMay2025 |
+		ScriptAllowMay2026
+
+	return map[string]ScriptFlags{
+		"pre-May 2022": legacy,
+		"May 2022":     may2022,
+		"current":      current,
+	}
+}
+
+// runNum2binTestScript executes the given short form signature and public key
+// scripts with the passed flags.
+func runNum2binTestScript(t *testing.T, sigScript, pkScript string,
+	flags ScriptFlags) error {
+
+	t.Helper()
+
+	sig, err := parseShortForm(sigScript)
+	if err != nil {
+		t.Fatalf("parse %q: %v", sigScript, err)
+	}
+	pk, err := parseShortForm(pkScript)
+	if err != nil {
+		t.Fatalf("parse %q: %v", pkScript, err)
+	}
+
+	tx := createSpendingTx(sig, pk, 1000)
+	utxos := NewUtxoCache()
+	utxos.AddEntry(0, *wire.NewTxOut(1000, pk, wire.TokenData{}))
+	vm, err := NewEngine(pk, tx, 0, flags, nil, nil, utxos, 1000)
+	if err != nil {
+		return err
+	}
+	return vm.Execute()
+}
+
+// TestNum2binNonMinimalNegative ensures OP_NUM2BIN keeps the sign and value of
+// negative operands that are not minimally encoded, matching Bitcoin Cash
+// Node.  OP_BIN2NUM is checked against the same operands for comparison.
+func TestNum2binNonMinimalNegative(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		sigScript string
+		pkScript  string
+		err       ErrorCode
+		wantErr   bool
+	}{
+		// -255 with one padding byte.
+		{sigScript: "0x03 0xff0080 2", pkScript: "NUM2BIN 0x02 0xff80 EQUAL"},
+		{sigScript: "0x03 0xff0080 3", pkScript: "NUM2BIN 0x03 0xff0080 EQUAL"},
+		{sigScript: "0x03 0xff0080 4", pkScript: "NUM2BIN 0x04 0xff000080 EQUAL"},
+		{
+			sigScript: "0x03 0xff0080 1",
+			pkScript:  "NUM2BIN DROP 1",
+			err:       ErrNumberTooSmall,
+			wantErr:   true,
+		},
+		{sigScript: "0x03 0xff0080", pkScript: "BIN2NUM 0x02 0xff80 EQUAL"},
+
+		// -128 with two padding bytes.
+		{sigScript: "0x04 0x80000080 2", pkScript: "NUM2BIN 0x02 0x8080 EQUAL"},
+		{sigScript: "0x04 0x80000080 3", pkScript: "NUM2BIN 0x03 0x800080 EQUAL"},
+		{sigScript: "0x04 0x80000080", pkScript: "BIN2NUM 0x02 0x8080 EQUAL"},
+
+		// -32768 with one padding byte.
+		{sigScript: "0x04 0x00800080 3", pkScript: "NUM2BIN 0x03 0x008080 EQUAL"},
+
+		// Positive values whose most significant byte uses the sign bit.
+		{sigScript: "0x03 0xff0000 2", pkScript: "NUM2BIN 0x02 0xff00 EQUAL"},
+		{sigScript: "0x04 0x80000000 2", pkScript: "NUM2BIN 0x02 0x8000 EQUAL"},
+	}
+
+	for name, flags := range num2binTestFlags() {
+		for _, test := range tests {
+			err := runNum2binTestScript(t, test.sigScript, test.pkScript,
+				flags)
+			switch {
+			case test.wantErr && !IsErrorCode(err, test.err):
+				t.Errorf("%s: [%s] [%s]: got error %v, want %v", name,
+					test.sigScript, test.pkScript, err, test.err)
+			case !test.wantErr && err != nil:
+				t.Errorf("%s: [%s] [%s]: unexpected error %v", name,
+					test.sigScript, test.pkScript, err)
+			}
+		}
+	}
+}
+
+// TestNum2binSizeBounds ensures the size operand of OP_NUM2BIN is bounds
+// checked on its full 64-bit value, so that sizes which do not fit in a
+// 32-bit int are rejected the same way on every platform.
+func TestNum2binSizeBounds(t *testing.T) {
+	t.Parallel()
+
+	type num2binSizeTest struct {
+		name      string
+		sigScript string
+		err       ErrorCode
+		wantErr   bool
+	}
+
+	common := []num2binSizeTest{
+		{name: "negative", sigScript: "1 -3", err: ErrNumberTooSmall, wantErr: true},
+		{name: "max legacy element", sigScript: "1 520"},
+	}
+	wide := []num2binSizeTest{
+		{
+			name:      "2^31",
+			sigScript: "1 0x05 0x0000008000",
+			err:       ErrNumberTooBig,
+			wantErr:   true,
+		},
+		{
+			name:      "2^32+2",
+			sigScript: "1 0x05 0x0200000001",
+			err:       ErrNumberTooBig,
+			wantErr:   true,
+		},
+		{
+			name:      "-(2^32-3)",
+			sigScript: "1 0x05 0xfdffffff80",
+			err:       ErrNumberTooSmall,
+			wantErr:   true,
+		},
+		{
+			name:      "2^63-1",
+			sigScript: "1 0x08 0xffffffffffffff7f",
+			err:       ErrNumberTooBig,
+			wantErr:   true,
+		},
+	}
+
+	tests := map[string][]num2binSizeTest{
+		"pre-May 2022": append(common, num2binSizeTest{
+			name:      "max legacy element + 1",
+			sigScript: "1 521",
+			err:       ErrNumberTooBig,
+			wantErr:   true,
+		}),
+		"May 2022": append(append(common, wide...), num2binSizeTest{
+			name:      "max legacy element + 1",
+			sigScript: "1 521",
+			err:       ErrNumberTooBig,
+			wantErr:   true,
+		}),
+		"current": append(append(common, wide...),
+			num2binSizeTest{name: "max element", sigScript: "1 10000"},
+			num2binSizeTest{
+				name:      "max element + 1",
+				sigScript: "1 10001",
+				err:       ErrNumberTooBig,
+				wantErr:   true,
+			},
+			num2binSizeTest{
+				name:      "2^64+2",
+				sigScript: "1 0x09 0x020000000000000001",
+				err:       ErrNumberTooBig,
+				wantErr:   true,
+			},
+		),
+	}
+
+	flagSets := num2binTestFlags()
+	for name, flagTests := range tests {
+		for _, test := range flagTests {
+			err := runNum2binTestScript(t, test.sigScript,
+				"NUM2BIN DROP 1", flagSets[name])
+			switch {
+			case test.wantErr && !IsErrorCode(err, test.err):
+				t.Errorf("%s: %s: got error %v, want %v", name, test.name,
+					err, test.err)
+			case !test.wantErr && err != nil:
+				t.Errorf("%s: %s: unexpected error %v", name, test.name,
+					err)
+			}
+		}
+	}
+}

@@ -478,10 +478,11 @@ func minimallyEncode(data []byte) (ret []byte) {
 		// We found a non zero byte, time to encode.
 		if ret[i-1] != 0 {
 			if ret[i-1]&0x80 > 0 {
-				// We found a byte with it sign bit set so we need one more
-				// byte.
-				i++
+				// We found a byte with its sign bit set so we need one more
+				// byte.  The sign byte goes directly after it, at index i,
+				// and is kept.
 				ret[i] = last
+				i++
 			} else {
 				// the sign bit is clear, we can use it.
 				ret[i-1] |= last
