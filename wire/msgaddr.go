@@ -70,8 +70,10 @@ func (msg *MsgAddr) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) err
 		return messageError("MsgAddr.BchDecode", str)
 	}
 
-	addrList := make([]NetAddress, count)
-	msg.AddrList = make([]*NetAddress, 0, count)
+	// Bound the allocation by the payload.
+	n := allocCount(r, count, uint64(maxNetAddressPayload(pver)), count)
+	addrList := make([]NetAddress, n)
+	msg.AddrList = make([]*NetAddress, 0, n)
 	for i := range count {
 		na := &addrList[i]
 		err := readNetAddress(r, pver, na, true)

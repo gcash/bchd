@@ -68,9 +68,10 @@ func (msg *MsgGetBlocks) BchDecode(r io.Reader, pver uint32, enc MessageEncoding
 	}
 
 	// Create a contiguous slice of hashes to deserialize into in order to
-	// reduce the number of allocations.
-	locatorHashes := make([]chainhash.Hash, count)
-	msg.BlockLocatorHashes = make([]*chainhash.Hash, 0, count)
+	// reduce the number of allocations.  Its size is bounded by the payload.
+	n := allocCount(r, count, chainhash.HashSize, count)
+	locatorHashes := make([]chainhash.Hash, n)
+	msg.BlockLocatorHashes = make([]*chainhash.Hash, 0, n)
 	for i := range count {
 		hash := &locatorHashes[i]
 		err := readElement(r, hash)

@@ -75,16 +75,16 @@ func (msg *MsgCFCheckpt) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) 
 		return ErrInsaneCFHeaderCount
 	}
 
-	// Create a contiguous slice of hashes to deserialize into in order to
-	// reduce the number of allocations.
-	msg.FilterHeaders = make([]*chainhash.Hash, count)
-	for i := range count {
+	// Bound the allocation by the payload.
+	msg.FilterHeaders = make([]*chainhash.Hash, 0,
+		allocCount(r, count, chainhash.HashSize, count))
+	for range count {
 		var cfh chainhash.Hash
 		err := readElement(r, &cfh)
 		if err != nil {
 			return err
 		}
-		msg.FilterHeaders[i] = &cfh
+		msg.FilterHeaders = append(msg.FilterHeaders, &cfh)
 	}
 
 	return nil
