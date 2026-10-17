@@ -10,7 +10,9 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"runtime"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -374,6 +376,128 @@ func TestReadMessageWireErrors(t *testing.T) {
 					test.readErr, test.readErr)
 				continue
 			}
+		}
+	}
+}
+
+// TestReadMessageShortPayloadAlloc ensures that reading a message whose header
+// claims a large payload, but which only delivers a few bytes of it, fails
+// with the expected error and does not allocate memory for the full claimed
+// length.
+func TestReadMessageShortPayloadAlloc(t *testing.T) {
+	pver := ProtocolVersion
+	bchnet := MainNet
+
+	// The cmpctblock message accepts payloads up to the max overall message
+	// payload, so a header claiming that length passes the length checks and
+	// the payload read is attempted.
+	payloadLen := maxMessagePayload()
+	if mpl := (&MsgCmpctBlock{}).MaxPayloadLength(pver); payloadLen > mpl {
+		t.Fatalf("test payload length %d exceeds max payload length "+
+			"%d for cmpctblock", payloadLen, mpl)
+	}
+
+	tests := []struct {
+		name    string // Name of the test
+		sent    int    // Num payload bytes delivered before EOF
+		readErr error  // Expected read error
+	}{
+		{"no payload", 0, io.EOF},
+		{"a few bytes", 5, io.ErrUnexpectedEOF},
+		{"64 KiB", 64 * 1024, io.ErrUnexpectedEOF},
+	}
+
+	for _, test := range tests {
+		buf := makeHeader(bchnet, CmdCmpctBlock, payloadLen, 0)
+		buf = append(buf, make([]byte, test.sent)...)
+		r := bytes.NewReader(buf)
+
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		nr, msg, payload, err := ReadMessageN(r, pver, bchnet)
+		runtime.ReadMemStats(&after)
+
+		if err != test.readErr {
+			t.Errorf("%s: wrong error - got %v <%T>, want %v <%T>",
+				test.name, err, err, test.readErr, test.readErr)
+		}
+		if msg != nil || payload != nil {
+			t.Errorf("%s: unexpected message or payload returned",
+				test.name)
+		}
+		if want := MessageHeaderSize + test.sent; nr != want {
+			t.Errorf("%s: unexpected num bytes read - got %d, "+
+				"want %d", test.name, nr, want)
+		}
+
+		// The claimed length is hundreds of MiB, while the bytes that
+		// actually arrive are at most 64 KiB.  Reading them should only
+		// take a small multiple of that, so 1 MiB leaves plenty of room
+		// for incidental allocations while still being far below the
+		// claimed length.
+		const maxAlloc = 1024 * 1024
+		alloc := after.TotalAlloc - before.TotalAlloc
+		if alloc > maxAlloc {
+			t.Errorf("%s: allocated %d bytes for a header claiming "+
+				"%d bytes with %d delivered, want at most %d",
+				test.name, alloc, payloadLen, test.sent,
+				maxAlloc)
+		}
+	}
+}
+
+// TestReadMessageLargePayload ensures that large messages, whose payloads
+// span many reads and several increases of the payload buffer, still read
+// back identically to what was written.
+func TestReadMessageLargePayload(t *testing.T) {
+	pver := ProtocolVersion
+	bchnet := MainNet
+
+	// Build blocks of a few MiB by adding transactions with large output
+	// scripts.  The sizes are chosen so the payload lengths are not powers
+	// of two.
+	for _, size := range []int{3*1024*1024 + 12345, 9 * 1000 * 1000} {
+		block := NewMsgBlock(&blockOne.Header)
+		const scriptLen = 100000
+		for i := 0; i < size/scriptLen; i++ {
+			tx := blockOne.Transactions[0].Copy()
+			tx.TxOut[0].PkScript = bytes.Repeat([]byte{byte(i)},
+				scriptLen)
+			if err := block.AddTransaction(tx); err != nil {
+				t.Fatalf("AddTransaction: %v", err)
+			}
+		}
+
+		var buf bytes.Buffer
+		nw, err := WriteMessageN(&buf, block, pver, bchnet)
+		if err != nil {
+			t.Fatalf("WriteMessageN: %v", err)
+		}
+		encoded := buf.Bytes()
+
+		// Read through a reader that returns only part of what is
+		// requested to exercise short reads.
+		r := iotest.HalfReader(bytes.NewReader(encoded))
+		nr, msg, payload, err := ReadMessageN(r, pver, bchnet)
+		if err != nil {
+			t.Fatalf("ReadMessageN (size %d): %v", size, err)
+		}
+		if nr != nw {
+			t.Errorf("ReadMessageN (size %d): unexpected num bytes "+
+				"read - got %d, want %d", size, nr, nw)
+		}
+		if cap(payload) != len(payload) {
+			t.Errorf("ReadMessageN (size %d): payload capacity %d "+
+				"does not match its length %d", size,
+				cap(payload), len(payload))
+		}
+		if !bytes.Equal(payload, encoded[MessageHeaderSize:]) {
+			t.Errorf("ReadMessageN (size %d): payload does not "+
+				"match the written payload", size)
+		}
+		if !reflect.DeepEqual(msg, block) {
+			t.Errorf("ReadMessageN (size %d): message does not "+
+				"match the written block", size)
 		}
 	}
 }

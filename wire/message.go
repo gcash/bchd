@@ -366,6 +366,41 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	return totalBytes, err
 }
 
+// initialPayloadAlloc is the largest buffer allocated for a message payload
+// before any of its bytes have been read.  The buffer grows from there as the
+// payload arrives.
+const initialPayloadAlloc = 32 * 1024
+
+// readPayload reads exactly length bytes from r and returns them along with
+// the number of bytes read.  The length comes from the message header, which
+// the remote peer controls, so rather than allocating the full length up
+// front, the buffer starts at no more than initialPayloadAlloc bytes and
+// doubles in size each time it fills, up to length.  This way memory use
+// tracks the bytes actually received.  The errors match those of io.ReadFull
+// for a buffer of the full length: io.EOF if no bytes were read and
+// io.ErrUnexpectedEOF if only some were.
+func readPayload(r io.Reader, length uint32) ([]byte, int, error) {
+	payload := make([]byte, min(length, initialPayloadAlloc))
+	total := 0
+	for {
+		n, err := io.ReadFull(r, payload[total:])
+		total += n
+		if err != nil {
+			if err == io.EOF && total > 0 {
+				err = io.ErrUnexpectedEOF
+			}
+			return nil, total, err
+		}
+		if uint32(total) == length {
+			return payload, total, nil
+		}
+
+		grown := make([]byte, min(2*len(payload), int(length)))
+		copy(grown, payload)
+		payload = grown
+	}
+}
+
 // ReadMessageWithEncodingN reads, validates, and parses the next bitcoin Message
 // from r for the provided protocol version and bitcoin network.  It returns the
 // number of bytes read in addition to the parsed Message and raw bytes which
@@ -427,8 +462,7 @@ func ReadMessageWithEncodingN(r io.Reader, pver uint32, bchnet BitcoinNet,
 	}
 
 	// Read payload.
-	payload := make([]byte, hdr.length)
-	n, err = io.ReadFull(r, payload)
+	payload, n, err := readPayload(r, hdr.length)
 	totalBytes += n
 	if err != nil {
 		return totalBytes, nil, nil, err
