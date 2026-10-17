@@ -99,6 +99,13 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scr
 		entry := utxoView.LookupEntry(txIn.PreviousOutPoint)
 		originPkScript := entry.PkScript()
 		switch txscript.GetScriptClass(originPkScript) {
+		case txscript.ScriptHash32Ty:
+			// P2SH32 was enabled together with tokens.
+			if !scriptFlags.HasFlag(txscript.ScriptAllowCashTokens) {
+				str := fmt.Sprintf("transaction input #%d has a "+
+					"non-standard script form", i)
+				return txRuleError(wire.RejectNonstandard, str)
+			}
 		case txscript.NonStandardTy:
 			// After the May 2026 upgrade, any script that does not match any of the
 			// P2PK, P2PKH, P2SH20, P2SH32, OP_RETURN, or BMS types, is considered
