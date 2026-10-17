@@ -3060,99 +3060,48 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	// The signature actually needs needs to be longer than this, but at
-	// least 1 byte is needed for the hash type below.  The full length is
-	// checked depending on the script flags and upon parsing the signature.
-	if len(fullSigBytes) < 1 {
-		// The public key encoding is checked even for an empty signature.
-		if err := vm.checkPubKeyEncoding(pkBytes); err != nil {
-			return err
-		}
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	// Trim off hashtype from the signature string and check if the
-	// signature and pubkey conform to the strict encoding requirements
-	// depending on the flags.
+	// Check if the signature and pubkey conform to the strict encoding
+	// requirements depending on the flags.  An empty signature is allowed
+	// as a compact way to provide an invalid signature, but the pubkey
+	// encoding is checked regardless.
 	//
 	// NOTE: When the strict encoding flags are set, any errors in the
 	// signature or public encoding here result in an immediate script error
 	// (and thus no result bool is pushed to the data stack).  This differs
-	// from the logic below where any errors in parsing the signature is
-	// treated as the signature failure resulting in false being pushed to
-	// the data stack.  This is required because the more general script
-	// validation consensus rules do not have the new strict encoding
-	// requirements enabled by the flags.
-	hashType := SigHashType(fullSigBytes[len(fullSigBytes)-1])
-	sigBytes := fullSigBytes[:len(fullSigBytes)-1]
-	if err := vm.checkHashTypeEncoding(hashType); err != nil {
-		return err
-	}
-	if err := vm.checkSignatureEncoding(sigBytes); err != nil {
-		return err
+	// from the logic below where any errors in parsing the signature or
+	// pubkey are treated as a failed signature check.  This is required
+	// because the more general script validation consensus rules do not
+	// have the new strict encoding requirements enabled by the flags.
+	if len(fullSigBytes) > 0 {
+		hashType := SigHashType(fullSigBytes[len(fullSigBytes)-1])
+		sigBytes := fullSigBytes[:len(fullSigBytes)-1]
+		if err := vm.checkSignatureEncoding(sigBytes); err != nil {
+			return err
+		}
+		if err := vm.checkHashTypeEncoding(hashType); err != nil {
+			return err
+		}
 	}
 	if err := vm.checkPubKeyEncoding(pkBytes); err != nil {
 		return err
 	}
 
-	// Get script starting from the most recent OP_CODESEPARATOR.
-	subScript := vm.cleanupScriptCode(vm.subScript(), fullSigBytes)
-
-	// Generate the signature hash based on the signature hash type.
-	hash, totalBytesHashedlength, err := calcSignatureHash(subScript, vm.txSigHashes(), hashType, &vm.tx, vm.txIdx,
-		vm.inputAmount, vm.hasFlag(ScriptVerifyBip143SigHash))
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	var signature *bchec.Signature
-	if vm.hasFlag(ScriptVerifySchnorr) && len(sigBytes) == 64 {
-		signature, err = bchec.ParseSchnorrSignature(sigBytes)
-	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
-		vm.hasFlag(ScriptVerifyDERSignatures) {
-		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
-	} else {
-		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
-	}
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
 	var valid bool
-	if vm.sigCache != nil {
-		var sigHash chainhash.Hash
-		copy(sigHash[:], hash)
+	if len(fullSigBytes) > 0 {
+		// Get script starting from the most recent OP_CODESEPARATOR.
+		subScript := vm.cleanupScriptCode(vm.subScript(), fullSigBytes)
 
-		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.Verify(hash, pubKey) {
-			vm.sigCache.Add(sigHash, signature, pubKey)
-			valid = true
-		}
-	} else {
-		valid = signature.Verify(hash, pubKey)
-	}
-	if len(sigBytes) > 0 {
+		valid = vm.checkTxSig(fullSigBytes, pkBytes, subScript)
 		vm.sigChecks++
+		vm.metrics.AddNumSigChecks(1)
 		if !valid && vm.hasFlag(ScriptVerifyNullFail) {
 			str := "signature not empty on failed checksig"
 			return scriptError(ErrNullFail, str)
 		}
 	}
 
-	vm.metrics.AddHashCost(totalBytesHashedlength, true)
-	vm.metrics.AddNumSigChecks(1)
-	vm.metrics.AddOPCost(1)
-
 	vm.dstack.PushBool(valid)
+	vm.metrics.AddOPCost(len(fromBool(valid)))
 	return nil
 }
 
@@ -3168,6 +3117,87 @@ func (vm *Engine) cleanupScriptCode(script []parsedOpcode,
 		return script
 	}
 	return removeOpcodeByData(script, fullSigBytes)
+}
+
+// pubKeyHasValidLength returns whether the length of the passed public key
+// matches the length implied by its first byte.
+func pubKeyHasValidLength(pubKey []byte) bool {
+	if len(pubKey) == 0 {
+		return false
+	}
+	switch pubKey[0] {
+	case 0x02, 0x03:
+		return len(pubKey) == 33
+	case 0x04, 0x06, 0x07:
+		return len(pubKey) == 65
+	}
+	return false
+}
+
+// verifySignature returns whether the passed signature, without a hash type,
+// is a valid signature of the hash for the passed public key.  A signature or
+// public key that fails to parse is not valid.
+func (vm *Engine) verifySignature(sigBytes, pkBytes, hash []byte) bool {
+	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
+	if err != nil {
+		return false
+	}
+
+	var signature *bchec.Signature
+	if vm.hasFlag(ScriptVerifySchnorr) && len(sigBytes) == 64 {
+		signature, err = bchec.ParseSchnorrSignature(sigBytes)
+	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
+		vm.hasFlag(ScriptVerifyDERSignatures) {
+
+		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
+	} else {
+		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
+	}
+	if err != nil {
+		return false
+	}
+
+	if vm.sigCache == nil {
+		return signature.Verify(hash, pubKey)
+	}
+
+	var sigHash chainhash.Hash
+	copy(sigHash[:], hash)
+	if vm.sigCache.Exists(sigHash, signature, pubKey) {
+		return true
+	}
+	if !signature.Verify(hash, pubKey) {
+		return false
+	}
+	vm.sigCache.Add(sigHash, signature, pubKey)
+	return true
+}
+
+// checkTxSig returns whether the passed non-empty signature, which ends with
+// its hash type, is a valid transaction signature over the passed script code
+// for the passed public key.  The signature hash is only computed, and its
+// cost only charged, when the public key has a valid length.
+func (vm *Engine) checkTxSig(fullSigBytes, pkBytes []byte,
+	subScript []parsedOpcode) bool {
+
+	if !pubKeyHasValidLength(pkBytes) {
+		return false
+	}
+
+	hashType := SigHashType(fullSigBytes[len(fullSigBytes)-1])
+	sigBytes := fullSigBytes[:len(fullSigBytes)-1]
+
+	hash, bytesHashed, err := calcSignatureHash(subScript, vm.txSigHashes(),
+		hashType, &vm.tx, vm.txIdx, vm.inputAmount,
+		vm.hasFlag(ScriptVerifyBip143SigHash))
+	if err != nil {
+		return false
+	}
+	if bytesHashed > 0 {
+		vm.metrics.AddHashCost(bytesHashed, true)
+	}
+
+	return vm.verifySignature(sigBytes, pkBytes, hash)
 }
 
 // opcodeCheckSigVerify is a combination of opcodeCheckSig and opcodeVerify.
@@ -3632,8 +3662,6 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return err
 	}
-	messageHash := sha256.Sum256(messageBytes)
-
 	sigBytes, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
@@ -3649,54 +3677,24 @@ func opcodeCheckDataSig(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	var signature *bchec.Signature
-	if vm.hasFlag(ScriptVerifySchnorr) && len(sigBytes) == 64 {
-		signature, err = bchec.ParseSchnorrSignature(sigBytes)
-	} else if vm.hasFlag(ScriptVerifyStrictEncoding) ||
-		vm.hasFlag(ScriptVerifyDERSignatures) {
-
-		signature, err = bchec.ParseDERSignature(sigBytes, bchec.S256())
-	} else {
-		signature, err = bchec.ParseBERSignature(sigBytes, bchec.S256())
-	}
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
 	var valid bool
-	if vm.sigCache != nil {
-		var sigHash chainhash.Hash
-		copy(sigHash[:], messageHash[:])
-
-		valid = vm.sigCache.Exists(sigHash, signature, pubKey)
-		if !valid && signature.Verify(messageHash[:], pubKey) {
-			vm.sigCache.Add(sigHash, signature, pubKey)
-			valid = true
-		}
-	} else {
-		valid = signature.Verify(messageHash[:], pubKey)
-	}
 	if len(sigBytes) > 0 {
+		// As for OP_CHECKSIG, a key without a valid length never
+		// verifies, but the message is still hashed.
+		messageHash := sha256.Sum256(messageBytes)
+		valid = pubKeyHasValidLength(pkBytes) &&
+			vm.verifySignature(sigBytes, pkBytes, messageHash[:])
 		vm.sigChecks++
-
+		vm.metrics.AddNumSigChecks(1)
+		vm.metrics.AddHashCost(len(messageBytes), false)
 		if !valid && vm.hasFlag(ScriptVerifyNullFail) {
-			str := "signature not empty on failed checksig"
+			str := "signature not empty on failed checkdatasig"
 			return scriptError(ErrNullFail, str)
 		}
 	}
 
-	vm.metrics.AddNumSigChecks(1)
-	vm.metrics.AddHashCost(len(messageBytes), false)
-	vm.metrics.AddOPCost(1)
-
 	vm.dstack.PushBool(valid)
+	vm.metrics.AddOPCost(len(fromBool(valid)))
 	return nil
 }
 
