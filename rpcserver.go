@@ -4218,9 +4218,14 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 
 	// Process this block using the same rules as blocks coming from other
 	// nodes.  This will in turn relay it to the network like normal.
-	_, err = s.cfg.SyncMgr.SubmitBlock(block, blockchain.BFNone)
+	isOrphan, err := s.cfg.SyncMgr.SubmitBlock(block, blockchain.BFNone)
 	if err != nil {
 		return fmt.Sprintf("rejected: %s", err.Error()), nil
+	}
+	if isOrphan {
+		rpcsLog.Infof("Block %s submitted via submitblock has an "+
+			"unknown parent", block.Hash())
+		return "prev-blk-not-found", nil
 	}
 
 	rpcsLog.Infof("Accepted block %s via submitblock", block.Hash())

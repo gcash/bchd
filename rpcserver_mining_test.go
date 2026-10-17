@@ -101,3 +101,13 @@ func TestGetBlockTemplateProposalRejectsTrailingBytes(t *testing.T) {
 		t.Fatalf("expected a deserialization error, got %v", err)
 	}
 }
+
+// TestSubmitBlockOrphanNotAccepted ensures a block with an unknown parent is
+// not reported as accepted, which a null result means.
+func TestSubmitBlockOrphanNotAccepted(t *testing.T) {
+	res, err := submitBlock(t, &submitSyncMgr{isOrphan: true},
+		submitBlockHex(t, false))
+	if err != nil || res != "prev-blk-not-found" {
+		t.Fatalf("got %v, %v, want \"prev-blk-not-found\"", res, err)
+	}
+}
