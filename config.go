@@ -132,7 +132,7 @@ type config struct {
 	DisableRPC              bool          `long:"norpc" description:"Disable built-in RPC server -- NOTE: The RPC server is disabled by default if no rpcuser/rpcpass or rpclimituser/rpclimitpass is specified"`
 	DisableTLS              bool          `long:"notls" description:"Disable TLS for the RPC server -- NOTE: This is only allowed if the RPC server is bound to localhost"`
 	DisableDNSSeed          bool          `long:"nodnsseed" description:"Disable DNS seeding for peers"`
-	ExternalIPs             []string      `long:"externalip" description:"Add an ip to the list of local addresses we claim to listen on to peers"`
+	ExternalIPs             []string      `long:"externalip" description:"Add an ip or Tor v3 onion address to the list of local addresses we claim to listen on to peers"`
 	Proxy                   string        `long:"proxy" description:"Connect via SOCKS5 proxy (eg. 127.0.0.1:9050)"`
 	ProxyUser               string        `long:"proxyuser" description:"Username for proxy server"`
 	ProxyPass               string        `long:"proxypass" default-mask:"-" description:"Password for proxy server"`

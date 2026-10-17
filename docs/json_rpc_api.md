@@ -210,7 +210,7 @@ the method name for further details such as parameter and return information.
 |   |   |
 |---|---|
 |Method|addnode|
-|Parameters|1. peer (string, required) - ip address and port of the peer to operate on<br />2. command (string, required) - `add` to add a persistent peer, `remove` to remove a persistent peer, or `onetry` to try a single connection to a peer|
+|Parameters|1. peer (string, required) - ip address, host name or Tor v3 onion address and port of the peer to operate on.  An onion address needs the `--proxy` or `--onion` option<br />2. command (string, required) - `add` to add a persistent peer, `remove` to remove a persistent peer, or `onetry` to try a single connection to a peer|
 |Description|Attempts to add or remove a persistent peer.|
 |Returns|Nothing|
 [Return to Overview](#MethodOverview)<br />

@@ -31,7 +31,7 @@ var helpDescsEnUS = map[string]string{
 
 	// AddNodeCmd help.
 	"addnode--synopsis": "Attempts to add or remove a persistent peer.",
-	"addnode-addr":      "IP address and port of the peer to operate on",
+	"addnode-addr":      "IP address, host name or Tor v3 onion address and port of the peer to operate on",
 	"addnode-subcmd":    "'add' to add a persistent peer, 'remove' to remove a persistent peer, or 'onetry' to try a single connection to a peer",
 
 	// NodeCmd help.

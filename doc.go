@@ -97,8 +97,9 @@ Application Options:
 	                               is only allowed if the RPC server is bound to
 	                               localhost
 	    --nodnsseed                Disable DNS seeding for peers
-	    --externalip=              Add an ip to the list of local addresses we
-	                               claim to listen on to peers
+	    --externalip=              Add an ip or Tor v3 onion address to the list
+	                               of local addresses we claim to listen on to
+	                               peers
 	    --proxy=                   Connect via SOCKS5 proxy (eg. 127.0.0.1:9050)
 	    --proxyuser=               Username for proxy server
 	    --proxypass=               Password for proxy server
