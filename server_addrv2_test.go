@@ -151,3 +151,89 @@ func TestPushAddrMsgAddrV2(t *testing.T) {
 			s.addrManager.NumAddresses())
 	}
 }
+
+// TestOnionAddrString checks that addnode accepts Tor v3 onion addresses when
+// a proxy is set and returns an error otherwise.
+func TestOnionAddrString(t *testing.T) {
+	const onion = "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:8333"
+	tests := []struct {
+		cfg  config
+		addr string
+		ok   bool
+	}{
+		{config{Proxy: "127.0.0.1:9050"}, onion, true},
+		{config{OnionProxy: "127.0.0.1:9050"}, onion, true},
+		{config{}, onion, false},
+		{config{Proxy: "127.0.0.1:9050", NoOnion: true}, onion, false},
+		{config{Proxy: "127.0.0.1:9050"}, "aaaaaaaaaaaaaaaa.onion:8333", false},
+		{config{Proxy: "127.0.0.1:9050"},
+			"pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscsad.onion:8333",
+			false},
+	}
+	for i, test := range tests {
+		useTestConfig(t, &test.cfg)
+		netAddr, err := addrStringToNetAddr(test.addr)
+		if test.ok != (err == nil) {
+			t.Errorf("#%d: got err %v, want ok %v", i, err, test.ok)
+			continue
+		}
+		if test.ok && netAddr.String() != test.addr {
+			t.Errorf("#%d: got %s", i, netAddr)
+		}
+	}
+}
+
+// TestPermanentPeerAddrs checks that --connect and --addpeer skip onion
+// addresses that can't be connected to instead of failing, while --noonion
+// with an onion address still fails.
+func TestPermanentPeerAddrs(t *testing.T) {
+	const onion = "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:8333"
+	addrs := []string{
+		"1.2.3.4:8333",
+		"aaaaaaaaaaaaaaaa.onion:8333",
+		"pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscsad.onion:8333",
+		onion,
+	}
+
+	useTestConfig(t, &config{Proxy: "127.0.0.1:9050"})
+	got, err := permanentPeerAddrs(addrs)
+	if err != nil || len(got) != 2 || got[0].String() != "1.2.3.4:8333" ||
+		got[1].String() != onion {
+
+		t.Fatalf("with a proxy: got %v, %v", got, err)
+	}
+
+	useTestConfig(t, &config{})
+	got, err = permanentPeerAddrs(addrs)
+	if err != nil || len(got) != 1 || got[0].String() != "1.2.3.4:8333" {
+		t.Fatalf("without a proxy: got %v, %v", got, err)
+	}
+
+	useTestConfig(t, &config{Proxy: "127.0.0.1:9050", NoOnion: true})
+	if _, err := permanentPeerAddrs(addrs); err == nil {
+		t.Fatal("--noonion with an onion address did not fail")
+	}
+}
+
+// TestCanDial checks that outbound connections are only made to the networks
+// we can reach.
+func TestCanDial(t *testing.T) {
+	torV3 := wire.NewNetAddressV2(wire.NetworkTorV3, make([]byte, 32), 8333, 0)
+	i2p := wire.NewNetAddressV2(wire.NetworkI2P, make([]byte, 32), 0, 0)
+	cjdns := wire.NewNetAddressV2(wire.NetworkCJDNS, net.ParseIP("fc00::1"),
+		8333, 0)
+	ipv4 := wire.NewNetAddressV2IPPort(net.ParseIP("1.2.3.4"), 8333, 0)
+
+	useTestConfig(t, &config{})
+	if !canDial(ipv4) || canDial(torV3) || canDial(i2p) || canDial(cjdns) {
+		t.Fatal("without a proxy only IP addresses can be dialed")
+	}
+	useTestConfig(t, &config{OnionProxy: "127.0.0.1:9050"})
+	if !canDial(torV3) || canDial(i2p) || canDial(cjdns) {
+		t.Fatal("with an onion proxy Tor addresses can be dialed")
+	}
+	useTestConfig(t, &config{Proxy: "127.0.0.1:9050", NoOnion: true})
+	if canDial(torV3) {
+		t.Fatal("--noonion must stop Tor connections")
+	}
+}

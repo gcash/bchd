@@ -2895,7 +2895,7 @@ func handleGetNetworkInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 				ProxyRandomizeCredentials: cfg.TorIsolation,
 
 				Proxy:     onionProxy,
-				Reachable: cfg.Proxy != "" || cfg.OnionProxy != "",
+				Reachable: onionReachable(),
 			},
 		},
 		RelayFee:   cfg.MinRelayTxFee,
