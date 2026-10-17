@@ -647,6 +647,7 @@ func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
 	}
 
 	s.fbhMutex.Lock()
+	defer s.fbhMutex.Unlock()
 	for _, n := range toDelete {
 		s.closeBlockFile(n)
 		if err := s.deleteFileFunc(n); err != nil {
@@ -654,7 +655,6 @@ func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
 		}
 		delete(s.fileBlockHeights, n)
 	}
-	s.fbhMutex.Unlock()
 	return nil
 }
 
