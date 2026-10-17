@@ -1369,6 +1369,10 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 		return ruleError(ErrPrevBlockNotBest, str)
 	}
 
+	// The template extends the tip, so check it at that height even when
+	// the caller has not set one.
+	block.SetHeight(tip.height + 1)
+
 	// If MagneticAnomaly is active make sure the block sanity is checked using the
 	// new rule set.
 	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
