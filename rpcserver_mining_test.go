@@ -9,10 +9,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
@@ -128,5 +130,58 @@ func TestSubmitBlockUsesBIP22Reasons(t *testing.T) {
 	var rpcErr *btcjson.RPCError
 	if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCVerify {
 		t.Fatalf("expected a verify error, got %v", err)
+	}
+}
+
+// TestGBTDependsCoversLaterParents ensures a transaction's depends list
+// includes parents that sort after it in the block, as they can under the
+// canonical transaction order.
+func TestGBTDependsCoversLaterParents(t *testing.T) {
+	cb := wire.NewMsgTx(1)
+	cb.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: *wire.NewOutPoint(&chainhash.Hash{},
+			wire.MaxPrevOutIndex),
+		SignatureScript: []byte{0x51, 0x51},
+	})
+	cb.AddTxOut(wire.NewTxOut(0, []byte{0x51}, wire.TokenData{}))
+
+	// Find a parent and child where the child sorts first.
+	var parent, child *wire.MsgTx
+	for i := uint32(0); ; i++ {
+		parent = wire.NewMsgTx(1)
+		parent.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{1}, i), nil))
+		parent.AddTxOut(wire.NewTxOut(1000, []byte{0x51}, wire.TokenData{}))
+		child = wire.NewMsgTx(1)
+		ph := parent.TxHash()
+		child.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&ph, 0), nil))
+		child.AddTxOut(wire.NewTxOut(900, []byte{0x51}, wire.TokenData{}))
+		ch := child.TxHash()
+		if ch.Compare(&ph) < 0 {
+			break
+		}
+	}
+	var blk wire.MsgBlock
+	blk.Header.Timestamp = time.Unix(time.Now().Unix(), 0)
+	for _, tx := range []*wire.MsgTx{cb, child, parent} {
+		if err := blk.AddTransaction(tx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := newGbtWorkState(blockchain.NewMedianTime())
+	state.prevHash = &chainhash.Hash{}
+	state.template = &mining.BlockTemplate{
+		Block:     &blk,
+		Fees:      []int64{-200, 100, 100},
+		SigChecks: []int64{0, 0, 0},
+	}
+	res, err := state.blockTemplateResult(true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deps := res.Transactions[0].Depends; len(deps) != 1 || deps[0] != 2 {
+		t.Fatalf("child depends on %v, want its parent at index 2", deps)
+	}
+	if deps := res.Transactions[1].Depends; len(deps) != 0 {
+		t.Fatalf("parent depends on %v, want nothing", deps)
 	}
 }
