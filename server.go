@@ -3447,6 +3447,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	if !cfg.DisableCheckpoints {
 		checkpoints = mergeCheckpoints(s.chainParams.Checkpoints, cfg.addCheckpoints)
 	}
+	if cfg.FastSync {
+		checkpoints = fastSyncCheckpoints(checkpoints)
+	}
 
 	// Create a new block chain instance with the appropriate configuration.
 	var err error
@@ -4064,6 +4067,18 @@ func (s checkpointSorter) Swap(i, j int) {
 // checkpoint with index j.  It is part of the sort.Interface implementation.
 func (s checkpointSorter) Less(i, j int) bool {
 	return s[i].Height < s[j].Height
+}
+
+// fastSyncCheckpoints returns the checkpoints up to the last one that has a
+// UTXO set, since fast sync downloads the UTXO set of the last checkpoint.
+// The checkpoints are returned unchanged if none has a UTXO set.
+func fastSyncCheckpoints(checkpoints []chaincfg.Checkpoint) []chaincfg.Checkpoint {
+	for i := len(checkpoints) - 1; i >= 0; i-- {
+		if checkpoints[i].UtxoSetHash != nil {
+			return checkpoints[:i+1]
+		}
+	}
+	return checkpoints
 }
 
 // mergeCheckpoints returns two slices of checkpoints merged into one slice

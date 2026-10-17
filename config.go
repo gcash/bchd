@@ -190,7 +190,7 @@ type config struct {
 	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"Number of outbound connections to maintain"`
 	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
-	FastSync                bool          `long:"fastsync" description:"Sync full blocks from the last checkpoint to the tip rather than from genesis."`
+	FastSync                bool          `long:"fastsync" description:"Download the UTXO set of the last checkpoint that has one and sync full blocks from there to the tip rather than from genesis."`
 	GrpcListeners           []string      `long:"grpclisten" description:"Add an interface/port to listen for experimental gRPC connections (default port: 8335, testnet: 18335)"`
 	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
 	DBCacheSize             uint64        `long:"dbcachesize" description:"The maximum size in MiB of the database cache"`

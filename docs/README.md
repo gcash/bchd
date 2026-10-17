@@ -4,6 +4,7 @@
     1. [Installation](#Installation)
         1. [Building From Source](#BuildingFromSource)
     2. [Configuration](#Configuration)
+        1. [Checkpoints and Initial Block Download](#Checkpoints)
     3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
     4. [Mining](#Mining)
 3. [Help](#Help)
@@ -63,6 +64,24 @@ This will download and compile `bchd` and put it in your path.
 
 bchd has a number of [configuration](http://godoc.org/github.com/gcash/bchd)
 options, which can be viewed by running: `$ bchd --help`.
+
+<a name="Checkpoints" />
+
+**2.2.1 Checkpoints and Initial Block Download**
+
+bchd has built-in checkpoints for mainnet, testnet3, testnet4 and chipnet, the
+same as Bitcoin Cash Node's; the latest are mainnet block 970892, testnet3 block
+1730264, testnet4 block 325709 and chipnet block 325627.  Blocks at the height
+of a checkpoint must match it, and blocks that fork the chain before the last
+checkpoint are rejected.  The scripts of blocks at or below the last checkpoint
+are not validated, which makes the initial block download faster up to that
+block; everything else about these blocks is still checked.  The node does not
+consider itself synced until its tip is past the last checkpoint.
+
+`addcheckpoint` adds checkpoints and `nocheckpoints` disables the built-in
+ones, in which case every script is validated.  With `fastsync`, the UTXO set of
+the last checkpoint that has one (mainnet block 661648) is downloaded instead,
+and only the checkpoints up to that block are used.
 
 <a name="BchctlConfig" />
 
