@@ -1552,11 +1552,11 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 // GetSlpGraphSearch returns all transactions required for a client to validate locally
 func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphSearchRequest) (*pb.GetSlpGraphSearchResponse, error) {
 
-	if !s.slpIndex.GraphSearchEnabled() {
+	if s.slpIndex == nil || !s.slpIndex.GraphSearchEnabled() {
 		return nil, status.Error(codes.Unavailable, "slpgraphsearch must be enabled")
 	}
 
-	if s.slpIndex == nil || s.txIndex == nil {
+	if s.txIndex == nil {
 		return nil, status.Error(codes.Unavailable, "slpindex and txindex must be enabled")
 	}
 
