@@ -562,3 +562,79 @@ var baseVersionBIP0037Encoded = []byte{
 	0xfa, 0x92, 0x03, 0x00, // Last block
 	0x01, // Relay tx
 }
+
+// TestVersionUserAgentLengthLimit ensures the user agent length is checked
+// against MaxUserAgentLen before any memory is allocated for it, and that a
+// user agent of exactly MaxUserAgentLen bytes still decodes.
+func TestVersionUserAgentLengthLimit(t *testing.T) {
+	pver := ProtocolVersion
+
+	// versionPrefix returns the encoding of the fields that precede the
+	// user agent: protocol version, services, timestamp, remote address,
+	// local address and nonce, all zero.
+	versionPrefix := func() []byte {
+		return make([]byte, 4+8+8+26+26+8)
+	}
+
+	// withUA returns a version message encoding with the given user agent
+	// length and user agent bytes.
+	withUA := func(length uint64, ua []byte) []byte {
+		var buf bytes.Buffer
+		buf.Write(versionPrefix())
+		_ = WriteVarInt(&buf, pver, length)
+		buf.Write(ua)
+		return buf.Bytes()
+	}
+	atLimitUA := strings.Repeat("u", MaxUserAgentLen)
+
+	tests := []struct {
+		name   string // Test description
+		buf    []byte // Wire encoding
+		err    error  // Expected error
+		wantUA string // Expected user agent when no error
+	}{
+		{
+			name: "length far above limit with no data",
+			buf:  withUA(0x0fffffff, nil),
+			err:  &MessageError{},
+		},
+		{
+			name: "length one above limit with no data",
+			buf:  withUA(MaxUserAgentLen+1, nil),
+			err:  &MessageError{},
+		},
+		{
+			name: "length at limit with no data",
+			buf:  withUA(MaxUserAgentLen, nil),
+			err:  io.ErrUnexpectedEOF,
+		},
+		{
+			name:   "user agent at limit",
+			buf:    withUA(MaxUserAgentLen, []byte(atLimitUA)),
+			wantUA: atLimitUA,
+		},
+	}
+
+	t.Logf("Running %d tests", len(tests))
+	for _, test := range tests {
+		var msg MsgVersion
+		var err error
+		r := bytes.NewBuffer(test.buf)
+		alloc := decodeAlloc(func() {
+			err = msg.BchDecode(r, pver, BaseEncoding)
+		})
+		if alloc > maxBoundedDecodeAlloc {
+			t.Errorf("%s: allocated %d bytes, want at most %d",
+				test.name, alloc, maxBoundedDecodeAlloc)
+		}
+		if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+			t.Errorf("%s: wrong error got: %v, want: %v", test.name,
+				err, reflect.TypeOf(test.err))
+			continue
+		}
+		if err == nil && msg.UserAgent != test.wantUA {
+			t.Errorf("%s: wrong user agent got: %q, want: %q",
+				test.name, msg.UserAgent, test.wantUA)
+		}
+	}
+}
