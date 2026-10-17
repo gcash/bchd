@@ -34,6 +34,14 @@ network to run as both a client and a server so others may connect to you to as
 you are connecting to them.  We recommend you take the time to setup a Tor
 hidden service for this reason.
 
+bchd supports Tor v3 onion addresses, which are 56 characters long followed by
+`.onion`.  Tor v2 addresses (16 characters) are no longer supported since Tor
+removed v2 hidden services in 2021.  Onion addresses are exchanged with other
+nodes in `addrv2` messages ([BIP155](https://github.com/bitcoin/bips/blob/master/bip-0155.mediawiki)),
+so bchd learns about onion peers from the nodes it connects to.  bchd also
+stores and relays I2P and CJDNS addresses from these messages, but it can't
+connect to them.
+
 <a name="Client" />
 
 ### 2. Client-Only
@@ -57,6 +65,13 @@ specified proxy.
 NOTE: Specifying the `--proxy` flag disables listening by default since you will
 not be reachable for inbound connections unless you also configure a Tor
 [hidden service](#HiddenService).
+
+With a proxy, bchd also connects to the onion peers it learns about, and onion
+addresses can be given to `--connect`, `--addpeer` and the `addnode` RPC.
+Without `--proxy` or `--onion`, `--connect` and `--addpeer` skip onion
+addresses with a warning and `addnode` returns an error.  The same happens for
+Tor v2 and malformed onion addresses.  With `--noonion`, an onion address in
+`--connect` or `--addpeer` stops bchd at startup.
 
 <a name="ClientCLIExample" />
 
@@ -93,7 +108,9 @@ discuss since bchd will act as the server.
 In short, the instructions linked above entail modifying your `torrc` file to
 add something similar to the following, restarting Tor, and opening the
 `hostname` file in the `HiddenServiceDir` to obtain your hidden service .onion
-address.
+address.  Tor creates a v3 hidden service, whose address is 56 characters
+followed by `.onion`.  bchd doesn't create the hidden service through the Tor
+control port, so it has to be set up in `torrc`.
 
 ```text
 HiddenServiceDir /var/tor/bchd
@@ -109,12 +126,16 @@ three flags:
   disables listening by default
 * `--externalip` to set the .onion address that is advertised to other peers
 
+The examples below use an example address; replace it with the address from
+your `hostname` file.  Connections that come in through the hidden service
+reach bchd from 127.0.0.1.
+
 <a name="HiddenServiceCLIExample" />
 
 **3.2 Command Line Example**<br />
 
 ```bash
-$ ./bchd --proxy=127.0.0.1:9050 --listen=127.0.0.1 --externalip=fooanon.onion
+$ ./bchd --proxy=127.0.0.1:9050 --listen=127.0.0.1 --externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
 ```
 
 <a name="HiddenServiceConfigFileExample" />
@@ -126,7 +147,7 @@ $ ./bchd --proxy=127.0.0.1:9050 --listen=127.0.0.1 --externalip=fooanon.onion
 
 proxy=127.0.0.1:9050
 listen=127.0.0.1
-externalip=fooanon.onion
+externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
 ```
 
 <a name="Bridge" />
@@ -159,7 +180,7 @@ routed via Tor due to the `--onion` flag.
 **4.2 Command Line Example**<br />
 
 ```bash
-$ ./bchd --onion=127.0.0.1:9050 --externalip=fooanon.onion
+$ ./bchd --onion=127.0.0.1:9050 --externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
 ```
 
 <a name="BridgeConfigFileExample" />
@@ -170,7 +191,7 @@ $ ./bchd --onion=127.0.0.1:9050 --externalip=fooanon.onion
 [Application Options]
 
 onion=127.0.0.1:9050
-externalip=fooanon.onion
+externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
 ```
 
 <a name="TorStreamIsolation" />
