@@ -47,6 +47,8 @@ func TestVectorCountBoundedByPayload(t *testing.T) {
 		{"addr", MaxAddrPerMsg,
 			int(maxNetAddressPayload(ProtocolVersion)), nil,
 			func() Message { return &MsgAddr{} }},
+		{"addrv2", MaxV2AddrPerMsg, minNetAddressV2Payload, nil,
+			func() Message { return &MsgAddrV2{} }},
 		{"cfheaders", MaxCFHeadersPerMsg, chainhash.HashSize,
 			make([]byte, 1+2*chainhash.HashSize),
 			func() Message { return &MsgCFHeaders{} }},
@@ -134,6 +136,14 @@ func TestVectorCountRoundTrip(t *testing.T) {
 		na.Timestamp = time.Unix(int64(i)+1231006505, 0)
 		_ = addr.AddAddress(na)
 	}
+	addrV2 := NewMsgAddrV2()
+	for i := range MaxV2AddrPerMsg {
+		h := hash(i)
+		na := NewNetAddressV2(NetworkTorV3, h[:], uint16(i),
+			SFNodeNetwork)
+		na.Timestamp = time.Unix(int64(i)+1231006505, 0)
+		addrV2.AddrList = append(addrV2.AddrList, na)
+	}
 	cfHeaders := NewMsgCFHeaders()
 	cfHeaders.StopHash = hash(1)
 	cfHeaders.PrevFilterHeader = hash(2)
@@ -152,7 +162,8 @@ func TestVectorCountRoundTrip(t *testing.T) {
 	reject.Hash = hash(1)
 
 	for _, msg := range []Message{inv, getData, notFound, headers,
-		getHeaders, getBlocks, addr, cfHeaders, cfCheckpt, reject} {
+		getHeaders, getBlocks, addr, addrV2, cfHeaders, cfCheckpt,
+		reject} {
 
 		var buf bytes.Buffer
 		if err := WriteMessage(&buf, msg, ProtocolVersion,

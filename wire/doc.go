@@ -47,7 +47,8 @@ interactions in no particular order.
 
 	Peer A Sends                          Peer B Responds
 	----------------------------------------------------------------------------
-	getaddr message (MsgGetAddr)          addr message (MsgAddr)
+	getaddr message (MsgGetAddr)          addr message (MsgAddr) -or-
+	                                      addrv2 message (MsgAddrV2)**
 	getblocks message (MsgGetBlocks)      inv message (MsgInv)
 	inv message (MsgInv)                  getdata message (MsgGetData)
 	getdata message (MsgGetData)          block message (MsgBlock) -or-
@@ -61,6 +62,8 @@ interactions in no particular order.
 	* The pong message was not added until later protocol versions as defined
 	  in BIP0031.  The BIP0031Version constant can be used to detect a recent
 	  enough protocol version for this purpose (version > BIP0031Version).
+	** A peer that sent a sendaddrv2 message (MsgSendAddrV2) between version
+	  and verack receives addrv2 messages instead of addr messages (BIP0155).
 
 # Common Parameters
 
