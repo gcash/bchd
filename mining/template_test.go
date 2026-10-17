@@ -5,11 +5,13 @@
 package mining
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/txscript"
+	"github.com/gcash/bchutil"
 )
 
 // TestTemplateSkipsTxNotFinalAtMTP ensures a transaction whose lock time is
@@ -152,5 +154,34 @@ func TestTemplateSelectionCappedByLimit(t *testing.T) {
 			t.Errorf("BlockMaxSize %d: template size %d over %d",
 				pol.BlockMaxSize, size, floor-1000)
 		}
+	}
+}
+
+// TestCheckConnectBlockTemplateUsesTipHeight ensures a proposed block whose
+// height was never set, as for a getblocktemplate proposal, is checked with
+// the rules for the height after the tip, here the canonical order.
+func TestCheckConnectBlockTemplateUsesTipHeight(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+
+	h.src.add(spend(h.cbTxs[0], 1000), 1000)
+	h.src.add(spend(h.cbTxs[1], 1000), 1000)
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+
+	// Swap the two transactions out of order and fix the merkle root.
+	msg := tmpl.Block
+	msg.Transactions[1], msg.Transactions[2] = msg.Transactions[2],
+		msg.Transactions[1]
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(msg).Transactions())
+	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
+
+	err = h.chain.CheckConnectBlockTemplate(bchutil.NewBlock(msg))
+	var rerr blockchain.RuleError
+	if !errors.As(err, &rerr) || rerr.ErrorCode != blockchain.ErrInvalidTxOrder {
+		t.Fatalf("expected ErrInvalidTxOrder, got %v", err)
 	}
 }
