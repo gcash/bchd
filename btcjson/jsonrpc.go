@@ -86,11 +86,19 @@ func (request *Request) UnmarshalJSON(b []byte) error {
 	request.ID = data["id"]
 	methodValue, hasMethod := data["method"]
 	if hasMethod {
-		request.Method = methodValue.(string)
+		method, ok := methodValue.(string)
+		if !ok {
+			return makeError(ErrInvalidType, "method must be a string")
+		}
+		request.Method = method
 	}
 	jsonrpcValue, hasJsonrpc := data["jsonrpc"]
 	if hasJsonrpc {
-		request.Jsonrpc = jsonrpcValue.(string)
+		jsonrpc, ok := jsonrpcValue.(string)
+		if !ok {
+			return makeError(ErrInvalidType, "jsonrpc must be a string")
+		}
+		request.Jsonrpc = jsonrpc
 	}
 	paramsValue, hasParams := data["params"]
 	if !hasParams {
