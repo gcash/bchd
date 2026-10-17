@@ -6,8 +6,12 @@ package main
 
 import (
 	"context"
+	"io"
+	"net"
+	"net/http"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchlog"
 	"google.golang.org/grpc"
@@ -148,5 +152,40 @@ func TestGrpcHandlerPanicRecovered(t *testing.T) {
 	}()
 	if status.Code(err) != codes.Internal {
 		t.Errorf("stream: err %v, want Internal", err)
+	}
+}
+
+// TestGrpcHTTPServerTimeouts ensures the gRPC HTTP server closes connections
+// that stall while sending headers and keeps long-lived streams usable.
+func TestGrpcHTTPServerTimeouts(t *testing.T) {
+	savedHeader, savedIdle := grpcReadHeaderTimeout, grpcIdleTimeout
+	t.Cleanup(func() { grpcReadHeaderTimeout, grpcIdleTimeout = savedHeader, savedIdle })
+	grpcReadHeaderTimeout = 200 * time.Millisecond
+	grpcIdleTimeout = 200 * time.Millisecond
+
+	srv := newGrpcHTTPServer("127.0.0.1:0", http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {}))
+	if srv.ReadTimeout != 0 || srv.WriteTimeout != 0 {
+		t.Fatal("whole-request timeouts would cut off streams")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { srv.Close() })
+
+	for _, partial := range []string{"", "GET / HTTP/1.1\r\n"} {
+		conn, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = conn.Write([]byte(partial))
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, err = io.ReadAll(conn)
+		conn.Close()
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			t.Errorf("connection after %q still open", partial)
+		}
 	}
 }

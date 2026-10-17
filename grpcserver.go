@@ -31,6 +31,14 @@ const AuthenticationTokenKey = "AuthenticationToken"
 
 var prometheusEnabled = false
 
+// grpcReadHeaderTimeout and grpcIdleTimeout bound how long the gRPC HTTP
+// server waits for request headers and keeps idle connections.  There are no
+// whole-request read or write timeouts because streams are long-lived.
+var (
+	grpcReadHeaderTimeout = 10 * time.Second
+	grpcIdleTimeout       = 5 * time.Minute
+)
+
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	if len(netAddrs) == 0 {
 		return nil, nil
@@ -62,10 +70,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 		}
 	}
 
-	httpServer := &http.Server{
-		Addr:    addr.String(),
-		Handler: http.HandlerFunc(handler),
-	}
+	httpServer := newGrpcHTTPServer(addr.String(), http.HandlerFunc(handler))
 
 	rpcCfg.HTTPServer = httpServer
 
@@ -105,6 +110,16 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	}()
 
 	return gRPCServer, nil
+}
+
+// newGrpcHTTPServer returns the HTTP server for the gRPC listener.
+func newGrpcHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: grpcReadHeaderTimeout,
+		IdleTimeout:       grpcIdleTimeout,
+	}
 }
 
 // serviceName returns the package.service segment from the full gRPC method
