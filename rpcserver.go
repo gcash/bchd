@@ -2417,6 +2417,8 @@ func chainErrToGBTErrString(err error) string {
 		return "invalid-transaction-order"
 	case blockchain.ErrBadTxVersion:
 		return "bad-txns-version"
+	case blockchain.ErrCoinbaseHasTokens:
+		return "bad-txns-coinbase-has-tokens"
 	}
 
 	return "rejected: " + err.Error()

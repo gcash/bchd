@@ -767,12 +767,16 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	}
 
 	// Once Upgrade9 is active the version of every transaction, the
-	// coinbase included, must be within the allowed range.
+	// coinbase included, must be within the allowed range, and the
+	// coinbase must not have token outputs.
 	if prevNode.height+1 > b.chainParams.Upgrade9ForkHeight {
 		for _, tx := range block.Transactions() {
 			if err := checkTransactionVersion(tx); err != nil {
 				return err
 			}
+		}
+		if err := checkCoinbaseTokens(block.Transactions()[0]); err != nil {
+			return err
 		}
 	}
 
@@ -836,6 +840,21 @@ func checkTransactionVersion(tx *bchutil.Tx) error {
 			"not in the valid range of %d-%d", tx.Hash(), version,
 			txscript.MinTxVersion, txscript.MaxTxVersion)
 		return ruleError(ErrBadTxVersion, str)
+	}
+	return nil
+}
+
+// checkCoinbaseTokens ensures no output of the coinbase transaction has a
+// token prefix, whether or not the prefix is valid token data.
+func checkCoinbaseTokens(tx *bchutil.Tx) error {
+	for i, txOut := range tx.MsgTx().TxOut {
+		if txOut.TokenData.BitField != 0 || (len(txOut.PkScript) > 0 &&
+			txOut.PkScript[0] == wire.PREFIX_BYTE) {
+
+			str := fmt.Sprintf("coinbase transaction %v output %d "+
+				"has a token prefix", tx.Hash(), i)
+			return ruleError(ErrCoinbaseHasTokens, str)
+		}
 	}
 	return nil
 }
