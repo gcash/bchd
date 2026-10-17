@@ -413,6 +413,15 @@ func checkVMBBlock(c *vmbCase, era vmbEra) error {
 
 // runVMBInput evaluates one input of a transaction.
 func runVMBInput(c *vmbCase, idx int, flags txscript.ScriptFlags) error {
+	_, err := runVMBInputEngine(c, idx, flags)
+	return err
+}
+
+// runVMBInputEngine evaluates one input of a transaction and returns the
+// engine that ran it.
+func runVMBInputEngine(c *vmbCase, idx int,
+	flags txscript.ScriptFlags) (*txscript.Engine, error) {
+
 	msgTx := c.tx.MsgTx()
 	cache := txscript.NewUtxoCache()
 	for i, txIn := range msgTx.TxIn {
@@ -425,9 +434,9 @@ func runVMBInput(c *vmbCase, idx int, flags txscript.ScriptFlags) error {
 	vm, err := txscript.NewEngine(entry.PkScript(), msgTx, idx, flags, nil,
 		sigHashes, cache, entry.Amount())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return vm.Execute()
+	return vm, vm.Execute()
 }
 
 // checkVMBScriptOnly checks a script only vector.  The standard check is the
@@ -563,4 +572,113 @@ func TestVMBAcceptance(t *testing.T) {
 				counts[vmbNonStandard], counts[vmbInvalid], feeWaived)
 		})
 	}
+}
+
+// vmbMetrics are the metrics of one evaluated input, as BCHN records them in
+// libauth_expected_test_metrics.json.  A limit of -1 means none applies.
+type vmbMetrics [7]int64
+
+// loadVMBMetrics reads BCHN's expected metrics, keyed by era, id, the
+// vector's class and the evaluation mode (S for standard, N for
+// nonstandard).
+func loadVMBMetrics(t *testing.T) map[string][]vmbMetrics {
+	t.Helper()
+
+	data, err := readMaybeGzip(filepath.Join(vmbTestDir,
+		"libauth_expected_test_metrics.json.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows [][]any
+	if err := json.Unmarshal(data, &rows); err != nil {
+		t.Fatal(err)
+	}
+	metrics := make(map[string][]vmbMetrics, len(rows))
+	for _, row := range rows {
+		key := fmt.Sprintf("%s/%s/%s/%s", row[0], row[1], row[2], row[3])
+		for _, in := range row[4].([]any) {
+			var m vmbMetrics
+			for i, v := range in.([]any) {
+				m[i] = -1
+				if v != nil {
+					m[i] = int64(v.(float64))
+				}
+			}
+			metrics[key] = append(metrics[key], m)
+		}
+	}
+	return metrics
+}
+
+// TestVMBMetrics checks the op cost, hash iterations and signature checks of
+// every input BCHN records metrics for, in standard and nonstandard
+// evaluation, against BCHN's expected metrics.
+func TestVMBMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping VMB vectors in short mode")
+	}
+
+	expected := loadVMBMetrics(t)
+	classLetters := map[vmbClass]string{vmbStandard: "S",
+		vmbNonStandard: "N", vmbInvalid: "I"}
+	for _, era := range vmbEras() {
+		t.Run(era.name, func(t *testing.T) {
+			var checked int
+			for _, v := range loadVMBVectors(t, era.name) {
+				c, err := decodeVMBVector(&v)
+				if err != nil {
+					continue
+				}
+				c.chain.mtp = era.mtp
+				for _, eval := range []string{"S", "N"} {
+					key := fmt.Sprintf("%s/%s/%s/%s", era.name, v.id,
+						classLetters[v.class], eval)
+					want, ok := expected[key]
+					if !ok {
+						continue
+					}
+					flags := vmbBlockFlags(era)
+					if eval == "S" {
+						flags = vmbMempoolFlags(era)
+					}
+					got := make([]vmbMetrics, 0, len(want))
+					for _, w := range want {
+						got = append(got, vmbInputMetrics(c,
+							int(w[0]), flags))
+					}
+					checked++
+					if fmt.Sprint(got) != fmt.Sprint(want) {
+						t.Errorf("%s (%s): %s: got metrics %v, "+
+							"want %v", key, v.file, v.desc, got,
+							want)
+					}
+				}
+			}
+			t.Logf("%s: %d metrics checked", era.name, checked)
+		})
+	}
+}
+
+// vmbInputMetrics evaluates one input and returns its metrics.  The op cost
+// fields are -2 when the input fails.
+func vmbInputMetrics(c *vmbCase, idx int,
+	flags txscript.ScriptFlags) vmbMetrics {
+
+	vm, err := runVMBInputEngine(c, idx, flags)
+	if err != nil {
+		return vmbMetrics{int64(idx), -2, -2, -2, -2, -2, -2}
+	}
+	metrics := vm.GetMetrics()
+	standard := flags.HasFlag(txscript.ScriptAllowMay2025StandardOnly)
+	m := vmbMetrics{int64(idx), metrics.GetCompositeOPCost(standard), -1,
+		metrics.GetHashDigestIterations(), -1, int64(vm.SigChecks()), -1}
+	if flags.HasFlag(txscript.ScriptAllowMay2025) {
+		m[2] = metrics.GetMaxOpCostLimit()
+		m[4] = metrics.GetMaxDigestIterationLimit()
+	}
+	if flags.HasFlag(txscript.ScriptVerifyInputSigChecks) {
+		scriptSig := c.tx.MsgTx().TxIn[idx].SignatureScript
+		m[6] = int64(len(scriptSig)+60) / 43
+	}
+	return m
 }
