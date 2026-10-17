@@ -644,7 +644,7 @@ func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
 //
 // The flags modify the behavior of this function as follows:
 //   - BFFastAdd: All checks except those involving comparing the header against
-//     the checkpoints are not performed.
+//     the checkpoints and the finalized block are not performed.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode *blockNode, flags BehaviorFlags) error {
@@ -678,6 +678,14 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 			str = fmt.Sprintf(str, header.Timestamp, medianTime)
 			return ruleError(ErrTimeTooOld, str)
 		}
+	}
+
+	// Reject blocks that fork the chain below the finalized block.
+	if b.forksBeforeFinalized(prevNode) {
+		str := fmt.Sprintf("block at height %d forks the chain before "+
+			"the finalized block at height %d", blockHeight,
+			b.finalizedNode.height)
+		return ruleError(ErrForkBeforeFinalized, str)
 	}
 
 	// Ensure chain matches up to predetermined checkpoints.

@@ -176,6 +176,13 @@ type BlockChain struct {
 	nextCheckpoint *chaincfg.Checkpoint
 	checkpointNode *blockNode
 
+	// finalizedNode is the main chain block below which the chain can no
+	// longer be reorged.  It is protected by the chain lock.
+	finalizedNode     *blockNode
+	maxReorgDepth     int32
+	finalizationDelay time.Duration
+	startTime         int64
+
 	// The state is used as a fairly efficient way to cache information
 	// about the current best chain state that is returned to callers when
 	// requested.  It operates on the principle of MVCC such that any time a
@@ -828,6 +835,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
 	b.ablaState = ablaState
+	b.maybeFinalize(node)
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -978,6 +986,9 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
 	b.ablaState = ablaState
+	if b.finalizedNode == node {
+		b.finalizedNode = node.parent
+	}
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -1923,6 +1934,12 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
+	// A block before the finalized block can only be reconsidered once
+	// finalization moves back to where its chain forks.
+	b.chainLock.Lock()
+	b.unfinalizeTo(node)
+	b.chainLock.Unlock()
+
 	// No need to reconsider, it is already valid.
 	if node.status.KnownValid() {
 		err := fmt.Errorf("block %s is already valid", hash)
@@ -2288,6 +2305,17 @@ type Config struct {
 	// Proxy is ip:port of an optional socks5 proxy to use when downloading
 	// the UTXO set in fast sync mode.
 	Proxy string
+
+	// MaxReorgDepth is the depth below the tip at which main chain blocks
+	// are finalized, so that blocks forking the chain before them are
+	// rejected.  Zero selects DefaultMaxReorgDepth and a negative value
+	// disables finalization.
+	MaxReorgDepth int32
+
+	// FinalizationDelay is how long the node must have been running, and
+	// a block known, before the block is finalized.  Zero selects
+	// DefaultFinalizationDelay.
+	FinalizationDelay time.Duration
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -2382,6 +2410,15 @@ func New(config *Config) (*BlockChain, error) {
 		fastSyncDataDir:     config.FastSyncDataDir,
 		fastSyncDone:        make(chan struct{}),
 		shutdownRequest:     make(chan struct{}),
+		maxReorgDepth:       config.MaxReorgDepth,
+		finalizationDelay:   config.FinalizationDelay,
+		startTime:           time.Now().Unix(),
+	}
+	if b.maxReorgDepth == 0 {
+		b.maxReorgDepth = DefaultMaxReorgDepth
+	}
+	if b.finalizationDelay == 0 {
+		b.finalizationDelay = DefaultFinalizationDelay
 	}
 
 	// Initialize the chain state from the passed database.  When the db
@@ -2473,6 +2510,14 @@ func New(config *Config) (*BlockChain, error) {
 				log.Errorf("fast sync UTXO set failed: %v", err)
 			}
 		}()
+	}
+
+	if b.maxReorgDepth < 0 {
+		log.Info("Block finalization is disabled")
+	} else {
+		log.Infof("Blocks %d deep are finalized once known for %v, and "+
+			"blocks forking the chain below them are rejected",
+			b.maxReorgDepth, b.finalizationDelay)
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

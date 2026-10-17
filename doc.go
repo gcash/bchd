@@ -123,6 +123,13 @@ Application Options:
 	                               '<height>:<hash>'
 	    --nocheckpoints            Disable built-in checkpoints.  Don't do this
 	                               unless you know what you're doing.
+	    --maxreorgdepth=           Depth at which main chain blocks are
+	                               finalized, so that blocks forking the chain
+	                               below them are rejected (-1 to disable)
+	                               (default: 10)
+	    --finalizationdelay=       Time in seconds a block must have been known,
+	                               and the node running, before the block can be
+	                               finalized (default: 7200)
 	    --dbtype=                  Database backend to use for the Block Chain
 	                               (default: ffldb)
 	    --profile=                 Enable HTTP profiling on given port -- NOTE

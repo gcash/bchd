@@ -234,6 +234,10 @@ const (
 	// ErrCoinbaseHasTokens indicates the coinbase transaction has an output
 	// with a token prefix once Upgrade9 is active.
 	ErrCoinbaseHasTokens
+
+	// ErrForkBeforeFinalized indicates a block forks the chain below the
+	// finalized block.
+	ErrForkBeforeFinalized
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -284,6 +288,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrCashTokensValidation:  "ErrCashTokensValidation",
 	ErrBadTxVersion:          "ErrBadTxVersion",
 	ErrCoinbaseHasTokens:     "ErrCoinbaseHasTokens",
+	ErrForkBeforeFinalized:   "ErrForkBeforeFinalized",
 }
 
 // String returns the ErrorCode as a human-readable name.

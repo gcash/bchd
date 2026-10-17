@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
@@ -65,6 +66,7 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	blockHeader := &block.MsgBlock().Header
 	newNode := newBlockNode(blockHeader, prevNode)
 	newNode.status = statusDataStored
+	newNode.received = uint32(time.Now().Unix())
 
 	b.index.AddNode(newNode)
 	err = b.index.flushToDB()

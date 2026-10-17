@@ -3451,6 +3451,15 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		checkpoints = fastSyncCheckpoints(checkpoints)
 	}
 
+	// A finalization delay of zero or less finalizes blocks at once, but a
+	// zero duration selects the default in the chain configuration.
+	finalizationDelay := time.Nanosecond
+	if cfg.FinalizationDelay > 0 {
+		maxDelay := int64(math.MaxInt64 / time.Second)
+		finalizationDelay = time.Duration(min(cfg.FinalizationDelay,
+			maxDelay)) * time.Second
+	}
+
 	// Create a new block chain instance with the appropriate configuration.
 	var err error
 	s.chain, err = blockchain.New(&blockchain.Config{
@@ -3467,6 +3476,8 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		Prune:              cfg.Prune,
 		PruneDepth:         cfg.PruneDepth,
 		ReIndexChainState:  cfg.ReIndexChainState,
+		MaxReorgDepth:      cfg.MaxReorgDepth,
+		FinalizationDelay:  finalizationDelay,
 		FastSync:           cfg.FastSync,
 		FastSyncDataDir:    cfg.DataDir,
 		Proxy:              cfg.Proxy,

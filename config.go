@@ -26,6 +26,7 @@ import (
 	"github.com/gcash/bchd/mining"
 
 	"github.com/btcsuite/go-socks/socks"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/connmgr"
@@ -150,6 +151,8 @@ type config struct {
 	SimNet                  bool          `long:"simnet" description:"Use the simulation test network"`
 	AddCheckpoints          []string      `long:"addcheckpoint" description:"Add a custom checkpoint.  Format: '<height>:<hash>'"`
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
+	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
+	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
@@ -467,6 +470,8 @@ func loadConfig() (*config, []string, error) {
 		SlpCacheMaxSize:         defaultSlpCacheMaxSize,
 		SlpGraphSearch:          defaultSlpGraphSearch,
 		PruneDepth:              defaultPruneDepth,
+		MaxReorgDepth:           blockchain.DefaultMaxReorgDepth,
+		FinalizationDelay:       int64(blockchain.DefaultFinalizationDelay / time.Second),
 		TargetOutboundPeers:     defaultTargetOutboundPeers,
 		DBCacheSize:             defaultDBCacheSize,
 		DBFlushInterval:         defaultDBFlushSecs,
@@ -738,6 +743,17 @@ func loadConfig() (*config, []string, error) {
 	if cfg.BanDuration < time.Second {
 		str := "%s: The banduration option may not be less than 1s -- parsed [%v]"
 		err := fmt.Errorf(str, funcName, cfg.BanDuration)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Zero would finalize the tip itself and is the chain configuration's
+	// default, so it is refused.  Any negative depth disables finalization.
+	if cfg.MaxReorgDepth == 0 {
+		str := "%s: The maxreorgdepth option must be negative to " +
+			"disable finalization or at least 1 -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, cfg.MaxReorgDepth)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
