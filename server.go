@@ -996,9 +996,13 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 		case wire.InvTypeFilteredBlock:
 			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		default:
-			peerLog.Warnf("Unknown type in inventory request %d",
+			// Unknown types are ignored, but the channel still has
+			// to be signalled since it may be the one waited on.
+			peerLog.Debugf("Unknown type in inventory request %d",
 				iv.Type)
-			continue
+			if c != nil {
+				c <- struct{}{}
+			}
 		}
 		if err != nil {
 			_ = notFound.AddInvVect(iv)
