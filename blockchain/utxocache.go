@@ -555,13 +555,16 @@ func (s *utxoCache) flush(bestState *BestState) error {
 		return err
 	}
 
-	// Store all entries in batches.
-	flushBatch := func(dbTx database.Tx) error {
+	// Store all entries in batches.  Entries are only removed from the
+	// cache once the batch holding them has been committed, so a failed
+	// commit leaves them in the cache.
+	flushBatch := func(dbTx database.Tx) ([]wire.OutPoint, error) {
 		var (
 			// Form a batch by storing all entries to be put and deleted.
 			nbBatchEntries = 0
 			entriesPut     = make(map[wire.OutPoint]*UtxoEntry)
 			entriesDelete  = make([]wire.OutPoint, 0)
+			flushed        = make([]wire.OutPoint, 0)
 		)
 		for outpoint, entry := range s.cachedEntries {
 			// Nil entries or unmodified entries can just be pruned.
@@ -577,10 +580,8 @@ func (s *utxoCache) flush(bestState *BestState) error {
 			} else {
 				entriesPut[outpoint] = entry
 			}
+			flushed = append(flushed, outpoint)
 			nbBatchEntries++
-
-			s.totalEntryMemory -= entry.memoryUsage()
-			delete(s.cachedEntries, outpoint)
 
 			// End this batch when the maximum number of entries per batch has
 			// been reached.
@@ -591,20 +592,27 @@ func (s *utxoCache) flush(bestState *BestState) error {
 
 		// Apply the batched additions and deletions.
 		if err := dbPutUtxoEntries(dbTx, entriesPut); err != nil {
-			return err
+			return nil, err
 		}
 
-		return dbDeleteUtxoEntries(dbTx, entriesDelete)
+		return flushed, dbDeleteUtxoEntries(dbTx, entriesDelete)
 	}
 	s.flushInProgress = true
 	defer func() { s.flushInProgress = false }()
 	for len(s.cachedEntries) > 0 {
 		log.Tracef("Flushing %d more entries...", len(s.cachedEntries))
+		var flushed []wire.OutPoint
 		err := s.db.Update(func(dbTx database.Tx) error {
-			return flushBatch(dbTx)
+			var err error
+			flushed, err = flushBatch(dbTx)
+			return err
 		})
 		if err != nil {
 			return err
+		}
+		for _, outpoint := range flushed {
+			s.totalEntryMemory -= s.cachedEntries[outpoint].memoryUsage()
+			delete(s.cachedEntries, outpoint)
 		}
 	}
 

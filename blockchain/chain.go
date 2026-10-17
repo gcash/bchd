@@ -185,6 +185,11 @@ type BlockChain struct {
 	stateLock     sync.RWMutex
 	stateSnapshot *BestState
 
+	// shutdownRequest is closed, once, when a failure to write the chain
+	// state requires the process to shut down.
+	shutdownRequest     chan struct{}
+	shutdownRequestOnce sync.Once
+
 	// notificationLock is used to make sure notifications are sent
 	// serially and protect against double mutex unlock panics during reorg.
 	notificationLock sync.Mutex
@@ -781,10 +786,12 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
 	b.stateLock.Lock()
-	if err := b.utxoCache.Commit(view); err != nil {
-		log.Errorf("error committing block %s(%d) to utxo cache: %s", block.Hash(), block.Height(), err.Error())
-	}
+	err = b.utxoCache.Commit(view)
 	b.stateLock.Unlock()
+	if err != nil {
+		b.requestShutdown(err)
+		return err
+	}
 
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
@@ -829,7 +836,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 			flushMode = FlushRequired
 		}
 	}
-	return b.utxoCache.Flush(flushMode, state)
+	return b.flushUtxoCache(flushMode, state)
 }
 
 // disconnectBlock handles disconnecting the passed node/block from the end of
@@ -934,10 +941,12 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
 	b.stateLock.Lock()
-	if err := b.utxoCache.Commit(view); err != nil {
-		log.Errorf("error committing disconnected block %s(%d) to utxo cache: %s", block.Hash(), block.Height(), err.Error())
-	}
+	err = b.utxoCache.Commit(view)
 	b.stateLock.Unlock()
+	if err != nil {
+		b.requestShutdown(err)
+		return err
+	}
 
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
@@ -965,7 +974,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// maximum size.
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
-	return b.utxoCache.Flush(FlushIfNeeded, state)
+	return b.flushUtxoCache(FlushIfNeeded, state)
 }
 
 // countSpentOutputs returns the number of utxos the passed block spends.
@@ -997,7 +1006,9 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 
 	// The rest of the reorg depends on all STXOs already being in the database
 	// so we flush before reorg
-	b.utxoCache.Flush(FlushRequired, b.BestSnapshot())
+	if err := b.flushUtxoCache(FlushRequired, b.BestSnapshot()); err != nil {
+		return err
+	}
 
 	// Ensure the provided nodes match the current best chain.
 	tip := b.bestChain.Tip()
@@ -2343,6 +2354,7 @@ func New(config *Config) (*BlockChain, error) {
 		pruneDepth:          config.PruneDepth,
 		fastSyncDataDir:     config.FastSyncDataDir,
 		fastSyncDone:        make(chan struct{}),
+		shutdownRequest:     make(chan struct{}),
 	}
 
 	// Initialize the chain state from the passed database.  When the db
@@ -2443,6 +2455,32 @@ func New(config *Config) (*BlockChain, error) {
 	return &b, nil
 }
 
+// RequestedProcessShutdown returns a channel that is closed when the chain
+// state could not be written and the process should shut down.
+func (b *BlockChain) RequestedProcessShutdown() <-chan struct{} {
+	return b.shutdownRequest
+}
+
+// requestShutdown logs the failure to write the chain state and requests the
+// process to shut down, since the chain can't safely continue without it.
+func (b *BlockChain) requestShutdown(err error) {
+	log.Criticalf("Failed to write the chain state: %v", err)
+	b.shutdownRequestOnce.Do(func() {
+		log.Critical("Requesting shutdown")
+		close(b.shutdownRequest)
+	})
+}
+
+// flushUtxoCache flushes the utxo cache according to the mode and requests
+// a shutdown when that fails.
+func (b *BlockChain) flushUtxoCache(mode FlushMode, state *BestState) error {
+	err := b.utxoCache.Flush(mode, state)
+	if err != nil {
+		b.requestShutdown(err)
+	}
+	return err
+}
+
 // CachedStateSize returns the total size of the cached state of the blockchain
 // in bytes.
 func (b *BlockChain) CachedStateSize() uint64 {
@@ -2456,5 +2494,5 @@ func (b *BlockChain) CachedStateSize() uint64 {
 func (b *BlockChain) FlushCachedState(mode FlushMode) error {
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
-	return b.utxoCache.Flush(mode, b.stateSnapshot)
+	return b.flushUtxoCache(mode, b.stateSnapshot)
 }
