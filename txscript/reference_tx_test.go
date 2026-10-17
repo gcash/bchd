@@ -6,6 +6,7 @@
 package txscript_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -191,6 +192,79 @@ func TestTxInvalidTests(t *testing.T) {
 		}
 		if valid {
 			t.Errorf("%s: succeeded when it should fail", test.name)
+		}
+	}
+}
+
+// TestSignatureHashes runs the signature hash tests of sighash.json.  Rows are
+// [raw transaction, script, input index, hash type, signature hash with
+// SIGHASH_FORKID enabled, signature hash without it].
+func TestSignatureHashes(t *testing.T) {
+	data, err := os.ReadFile("data/sighash.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows [][]interface{}
+	if err := json.Unmarshal(data, &rows); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, row := range rows {
+		if len(row) == 1 {
+			continue
+		}
+		str, _ := json.Marshal(row)
+		name := fmt.Sprintf("sighash.json #%d %s", i, str)
+		if len(row) < 6 {
+			t.Errorf("%s: bad test", name)
+			continue
+		}
+		txHex, ok1 := row[0].(string)
+		scriptHex, ok2 := row[1].(string)
+		idx, ok3 := row[2].(float64)
+		hashType, ok4 := row[3].(float64)
+		forkIDHash, ok5 := row[4].(string)
+		legacyHash, ok6 := row[5].(string)
+		if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 {
+			t.Errorf("%s: bad test", name)
+			continue
+		}
+		txBytes, err1 := hex.DecodeString(txHex)
+		script, err2 := hex.DecodeString(scriptHex)
+		if err1 != nil || err2 != nil {
+			t.Errorf("%s: bad test", name)
+			continue
+		}
+		tx, err := bchutil.NewTxFromBytes(txBytes)
+		if err != nil {
+			t.Errorf("%s: bad transaction: %v", name, err)
+			continue
+		}
+		if err := checkRegularTx(tx); err != nil {
+			t.Errorf("%s: transaction checks failed: %v", name, err)
+		}
+
+		legacy, forkID, err := txscript.SignatureHashes(script,
+			txscript.SigHashType(uint32(int32(hashType))), tx.MsgTx(),
+			int(idx))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		for _, c := range []struct {
+			got  []byte
+			want string
+		}{{forkID, forkIDHash}, {legacy, legacyHash}} {
+			want, err := chainhash.NewHashFromStr(c.want)
+			if err != nil {
+				t.Errorf("%s: bad hash: %v", name, err)
+				break
+			}
+			if !bytes.Equal(c.got, want[:]) {
+				t.Errorf("%s: got hash %x, want %v", name, c.got,
+					c.want)
+				break
+			}
 		}
 	}
 }
