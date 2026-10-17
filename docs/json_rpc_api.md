@@ -181,12 +181,13 @@ the method name for further details such as parameter and return information.
 |22|[getrawtransaction](#getrawtransaction)|Y|Returns information about a transaction given its hash.|
 |23|[help](#help)|Y|Returns a list of all commands or help for a specified command.|
 |24|[ping](#ping)|N|Queues a ping to be sent to each connected peer.|
-|25|[sendrawtransaction](#sendrawtransaction)|Y|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.<br /><font color="orange">bchd does not yet implement the `allowhighfees` parameter, so it has no effect</font>|
+|25|[sendrawtransaction](#sendrawtransaction)|Y|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.|
 |26|[setgenerate](#setgenerate) |N|Set the server to generate coins (mine) or not.<br/>NOTE: Since bchd does not have the wallet integrated to provide payment addresses, bchd must be configured via the `--miningaddr` option to provide which payment addresses to pay created blocks to for this RPC to function.|
 |27|[stop](#stop)|N|Shutdown bchd.|
 |28|[submitblock](#submitblock)|Y|Attempts to submit a new serialized, hex-encoded block to the network.|
-|29|[validateaddress](#validateaddress)|Y|Verifies the given address is valid.  NOTE: Since bchd does not have a wallet integrated, bchd will only return whether the address is valid or not.|
-|30|[verifychain](#verifychain)|N|Verifies the block chain database.|
+|29|[testmempoolaccept](#testmempoolaccept)|Y|Returns whether the mempool would accept a serialized, hex-encoded transaction, without adding it.|
+|30|[validateaddress](#validateaddress)|Y|Verifies the given address is valid.  NOTE: Since bchd does not have a wallet integrated, bchd will only return whether the address is valid or not.|
+|31|[verifychain](#verifychain)|N|Verifies the block chain database.|
 
 <a name="MethodDetails" />
 
@@ -508,9 +509,8 @@ Example Return|`{`<br />&nbsp;&nbsp;`"bytes": 310768,`<br />&nbsp;&nbsp;`"size":
 |   |   |
 |---|---|
 |Method|sendrawtransaction|
-|Parameters|1. signedhex (string, required) serialized, hex-encoded signed transaction<br />2. allowhighfees (boolean, optional, default=false) whether or not to allow insanely high fees|
-|Description|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.|
-|Notes|<font color="orange">bchd does not yet implement the `allowhighfees` parameter, so it has no effect</font>|
+|Parameters|1. signedhex (string, required) serialized, hex-encoded signed transaction<br />2. allowhighfees (boolean, optional, default=false) allow a fee above `--maxtxfee`|
+|Description|Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.  A transaction already in the mempool is relayed again and its hash returned.|
 |Returns|`"hash" (string) the hash of the transaction`|
 |Example Return|`"1697a19cede08694278f19584e8dcc87945f40c6b59a942dd8906f133ad3f9cc"`|
 [Return to Overview](#MethodOverview)<br />
@@ -524,6 +524,18 @@ Example Return|`{`<br />&nbsp;&nbsp;`"bytes": 310768,`<br />&nbsp;&nbsp;`"size":
 |Parameters|1. data (string, required) serialized, hex-encoded block<br />2. params (json object, optional, default=nil) this parameter is currently ignored|
 |Description|Attempts to submit a new serialized, hex-encoded block to the network.|
 |Returns (success)|Success: Nothing<br />Failure: `"rejected: reason"` (string)|
+[Return to Overview](#MethodOverview)<br />
+
+***
+<a name="testmempoolaccept"/>
+
+|   |   |
+|---|---|
+|Method|testmempoolaccept|
+|Parameters|1. rawtxs (JSON array, required) an array with exactly one serialized, hex-encoded transaction<br />2. allowhighfees (boolean, optional, default=false) allow a fee above `--maxtxfee`|
+|Description|Returns whether the mempool would accept the transaction, without adding it.  It runs the same checks as `sendrawtransaction`.|
+|Returns|`[ (json array of objects)`<br />&nbsp;&nbsp;`{`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"txid": "hash", (string) the hash of the transaction`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"allowed": true/false, (boolean) whether the mempool would accept the transaction`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"size": n, (numeric) the serialized size in bytes, only when allowed`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"vsize": n, (numeric) the size used for fee calculations, only when allowed`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"fees": {"base": n, "effective-feerate": n}, (json object) the fee in BCH and the fee rate in BCH/kB, only when allowed`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"reject-reason": "code: reason", (string) only when not allowed`<br />&nbsp;&nbsp;&nbsp;&nbsp;`"reject-details": "reason", (string) only when not allowed`<br />&nbsp;&nbsp;`}`<br />`]`|
+|Example Return|`[{"txid": "1697a19cede08694278f19584e8dcc87945f40c6b59a942dd8906f133ad3f9cc", "allowed": true, "size": 191, "vsize": 191, "fees": {"base": 0.00000191, "effective-feerate": 0.00001}}]`|
 [Return to Overview](#MethodOverview)<br />
 
 ***

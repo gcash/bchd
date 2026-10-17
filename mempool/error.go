@@ -5,6 +5,8 @@
 package mempool
 
 import (
+	"fmt"
+
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/wire"
 )
@@ -40,6 +42,18 @@ type TxRuleError struct {
 // Error satisfies the error interface and prints human-readable errors.
 func (e TxRuleError) Error() string {
 	return e.Description
+}
+
+// HighFeeError identifies a transaction that pays more fees than the caller
+// allows.
+type HighFeeError struct {
+	Fee    int64 // The fee paid by the transaction in satoshis
+	MaxFee int64 // The maximum fee allowed in satoshis
+}
+
+// Error satisfies the error interface and prints human-readable errors.
+func (e HighFeeError) Error() string {
+	return fmt.Sprintf("absurdly-high-fee, %d > %d", e.Fee, e.MaxFee)
 }
 
 // txRuleError creates an underlying TxRuleError with the given a set of

@@ -1002,3 +1002,36 @@ func TestRenamedOpcodes(t *testing.T) {
 		}
 	}
 }
+
+// TestTokenOpcodesBeforeTokens ensures the token opcodes fail as reserved
+// opcodes when executed before tokens are enabled, and are skipped in
+// branches that are not executed.
+func TestTokenOpcodesBeforeTokens(t *testing.T) {
+	t.Parallel()
+
+	flags := ScriptVerifyNativeIntrospection
+	ops := []byte{OP_UTXOTOKENCATEGORY, OP_UTXOTOKENCOMMITMENT,
+		OP_UTXOTOKENAMOUNT, OP_OUTPUTTOKENCATEGORY,
+		OP_OUTPUTTOKENCOMMITMENT, OP_OUTPUTTOKENAMOUNT}
+	for _, op := range ops {
+		name := opcodeArray[op].name
+		for _, cond := range []byte{OP_0, OP_1} {
+			pkScript := []byte{OP_0, cond, OP_IF, op, OP_ENDIF,
+				OP_DROP, OP_1}
+			tx := createSpendingTx(nil, pkScript, 0)
+			vm, err := NewEngine(pkScript, tx, 0, flags, nil, nil,
+				nil, 0)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			err = vm.Execute()
+			if cond == OP_0 && err != nil {
+				t.Errorf("%s in an unexecuted branch: %v", name, err)
+			}
+			if cond == OP_1 && !IsErrorCode(err, ErrReservedOpcode) {
+				t.Errorf("%s: got %v, want %v", name, err,
+					ErrReservedOpcode)
+			}
+		}
+	}
+}

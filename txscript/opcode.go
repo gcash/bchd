@@ -2063,6 +2063,10 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 
 	incrementedVal := m.Add(&m, makeScriptNumFromInt(1)) // m + 1
 
+	if !vm.hasFlag(ScriptAllowMay2025) && incrementedVal.IsGreaterThanInt(maxInt64) {
+		return scriptError(ErrIntegerOverflow, "integer overflow")
+	}
+
 	resultBytes := incrementedVal.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
 		return scriptError(ErrElementTooBig, fmt.Sprintf(
@@ -3063,6 +3067,10 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	// least 1 byte is needed for the hash type below.  The full length is
 	// checked depending on the script flags and upon parsing the signature.
 	if len(fullSigBytes) < 1 {
+		// The public key encoding is checked even for an empty signature.
+		if err := vm.checkPubKeyEncoding(pkBytes); err != nil {
+			return err
+		}
 		vm.dstack.PushBool(false)
 		return nil
 	}
@@ -3435,6 +3443,12 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		pubKeyIdx := -1
 		signatureIdx := 0
 		allSignaturesAreNil := true
+		for _, sigInfo := range signatures {
+			if len(sigInfo.signature) > 0 {
+				allSignaturesAreNil = false
+				break
+			}
+		}
 		for numSignatures > 0 {
 			// When there are more signatures than public keys remaining,
 			// there is no way to succeed since too many signatures are
@@ -3455,10 +3469,13 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 
 			rawSig := sigInfo.signature
 			if len(rawSig) == 0 {
-				// Skip to the next pubkey if signature is empty.
+				// Skip to the next pubkey if the signature is empty,
+				// after checking the public key encoding.
+				if err := vm.checkPubKeyEncoding(pubKey); err != nil {
+					return err
+				}
 				continue
 			}
-			allSignaturesAreNil = false
 
 			// Split the signature into hash type and signature components.
 			hashType := SigHashType(rawSig[len(rawSig)-1])
@@ -3545,9 +3562,10 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				numSignatures--
 			}
 		}
+		// Every public key counts as a signature check, unless all
+		// signatures are null.
 		if !allSignaturesAreNil {
-			vm.sigChecks += numPubKeys
-
+			vm.sigChecks += numPubKeysCopy
 			numSigChecks = numPubKeysCopy
 		}
 	}
@@ -4084,6 +4102,22 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
+// checkTokenOpcode returns an error when the token opcodes are not enabled.
+// Before tokens are enabled they are unknown opcodes.
+func checkTokenOpcode(op *parsedOpcode, vm *Engine) error {
+	if !vm.hasFlag(ScriptVerifyNativeIntrospection) {
+		str := fmt.Sprintf("attempt to execute disabled opcode %s",
+			op.opcode.name)
+		return scriptError(ErrDisabledOpcode, str)
+	}
+	if !vm.hasFlag(ScriptAllowCashTokens) {
+		str := fmt.Sprintf("attempt to execute reserved opcode %s",
+			op.opcode.name)
+		return scriptError(ErrReservedOpcode, str)
+	}
+	return nil
+}
+
 // OP_UTXOTOKENCATEGORY Pop the top item from the stack as an input index (VM Number).
 // If the Unspent Transaction Output (UTXO) spent by that input includes no tokens, push
 // a 0 (VM Number) to the stack. If the UTXO does not include a non-fungible token with a
@@ -4091,10 +4125,8 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 // category and capability, where the mutable capability is represented by 1 (VM Number) and
 // the minting capability is represented by 2 (VM Number).
 func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()
@@ -4126,10 +4158,8 @@ func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
 // to the stack. If the UTXO does not include a non-fungible token, or if it includes a
 // non-fungible token with a zero-length commitment, push a 0 (VM Number).
 func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()
@@ -4155,10 +4185,8 @@ func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
 // Push the fungible token amount of the Unspent Transaction Output (UTXO) spent by
 // that input to the stack as a VM Number. If the UTXO includes no fungible tokens, push a 0 (VM Number).
 func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()
@@ -4189,10 +4217,8 @@ func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
 // where the mutable capability is represented by 1 (VM Number) and the minting capability
 // is represented by 2 (VM Number).
 func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()
@@ -4232,10 +4258,8 @@ func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
 // not include a non-fungible token, or if it includes a non-fungible token with a
 // zero-length commitment, push a 0 (VM Number).
 func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()
@@ -4267,10 +4291,8 @@ func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
 // Push the fungible token amount of the output at that index to the stack as a VM Number.
 // If the output includes no fungible tokens, push a 0 (VM Number).
 func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
-	if !vm.hasFlag(ScriptVerifyNativeIntrospection) || !vm.hasFlag(ScriptAllowCashTokens) {
-		str := fmt.Sprintf("attempt to execute disabled opcode %s",
-			op.opcode.name)
-		return scriptError(ErrDisabledOpcode, str)
+	if err := checkTokenOpcode(op, vm); err != nil {
+		return err
 	}
 
 	i, err := vm.dstack.PopInt()

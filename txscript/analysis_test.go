@@ -56,13 +56,17 @@ func (c *analysisCorpus) addPair(sigScript, pkScript []byte) {
 // addVectors adds the scripts of the script_tests, tx_valid and tx_invalid
 // test vectors.
 func (c *analysisCorpus) addVectors(t testing.TB) {
-	file, err := os.ReadFile("data/script_tests.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var scriptTests [][]interface{}
-	if err := json.Unmarshal(file, &scriptTests); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"script_tests.json", "script_tests_bchd.json"} {
+		file, err := os.ReadFile("data/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tests [][]interface{}
+		if err := json.Unmarshal(file, &tests); err != nil {
+			t.Fatal(err)
+		}
+		scriptTests = append(scriptTests, tests...)
 	}
 	for _, test := range scriptTests {
 		// Rows are [[amount]] sig, pk, flags, result[, comment].

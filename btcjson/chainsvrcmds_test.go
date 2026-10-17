@@ -1110,6 +1110,34 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "testmempoolaccept",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("testmempoolaccept", []string{"1122"})
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewTestMempoolAcceptCmd([]string{"1122"}, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"testmempoolaccept","params":[["1122"]],"id":1}`,
+			unmarshalled: &btcjson.TestMempoolAcceptCmd{
+				RawTxs:        []string{"1122"},
+				AllowHighFees: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "testmempoolaccept optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("testmempoolaccept", []string{"1122"}, true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewTestMempoolAcceptCmd([]string{"1122"}, btcjson.Bool(true))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"testmempoolaccept","params":[["1122"],true],"id":1}`,
+			unmarshalled: &btcjson.TestMempoolAcceptCmd{
+				RawTxs:        []string{"1122"},
+				AllowHighFees: btcjson.Bool(true),
+			},
+		},
+		{
 			name: "uptime",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("uptime")
