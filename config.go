@@ -61,7 +61,7 @@ const (
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	defaultExcessiveBlockSize      = 32000000
 	defaultBlockMinSize            = 0
-	defaultBlockMaxSize            = 31999000
+	defaultBlockMaxSize            = 0
 	blockMaxSizeMin                = 1000
 	defaultGenerate                = false
 	defaultMaxOrphanTransactions   = 100
@@ -168,7 +168,7 @@ type config struct {
 	Generate                bool          `long:"generate" description:"Generate (mine) bitcoins using the CPU"`
 	MiningAddrs             []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
 	BlockMinSize            uint32        `long:"blockminsize" description:"Minimum block size in bytes to be used when creating a block"`
-	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block"`
+	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block -- 0 follows the consensus limit less 1000 bytes"`
 	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Size in bytes for high-priority/low-fee transactions when creating a block"`
 	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
@@ -933,22 +933,22 @@ func loadConfig() (*config, []string, error) {
 	// Excessive blocksize cannot be set less than the default but it can be higher.
 	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
 
-	// Limit the max block size to a sane value.
-	blockMaxSizeMax := cfg.ExcessiveBlockSize - 1000
-	if cfg.BlockMaxSize < blockMaxSizeMin || cfg.BlockMaxSize >
-		blockMaxSizeMax {
-
-		str := "%s: The blockmaxsize option must be in between %d " +
-			"and %d -- parsed [%d]"
+	// Limit the max block size to a sane value.  Templates never exceed
+	// the consensus limit less 1000 bytes, so there is no upper bound.
+	if cfg.BlockMaxSize != 0 && cfg.BlockMaxSize < blockMaxSizeMin {
+		str := "%s: The blockmaxsize option must be 0 or at least %d " +
+			"-- parsed [%d]"
 		err := fmt.Errorf(str, funcName, blockMaxSizeMin,
-			blockMaxSizeMax, cfg.BlockMaxSize)
+			cfg.BlockMaxSize)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
 	}
 	// Limit the block priority and minimum block sizes to max block size.
-	cfg.BlockPrioritySize = min(cfg.BlockPrioritySize, cfg.BlockMaxSize)
-	cfg.BlockMinSize = min(cfg.BlockMinSize, cfg.BlockMaxSize)
+	if cfg.BlockMaxSize != 0 {
+		cfg.BlockPrioritySize = min(cfg.BlockPrioritySize, cfg.BlockMaxSize)
+		cfg.BlockMinSize = min(cfg.BlockMinSize, cfg.BlockMaxSize)
+	}
 
 	// Prepend ExcessiveBlockSize signaling to the UserAgentComments
 	cfg.UserAgentComments = append([]string{fmt.Sprintf("EB%.1f", float64(cfg.ExcessiveBlockSize)/1000000)}, cfg.UserAgentComments...)

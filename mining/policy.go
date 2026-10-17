@@ -26,7 +26,7 @@ type Policy struct {
 	BlockMinSize uint32
 
 	// BlockMaxSize is the maximum block size to be used when generating a
-	// block template.
+	// block template.  Zero means the block size limit less 1000 bytes.
 	BlockMaxSize uint32
 
 	// BlockPrioritySize is the size in bytes for high-priority / low-fee

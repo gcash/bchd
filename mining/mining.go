@@ -489,8 +489,11 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 
 	// Select transactions up to the configured size, but no further than
 	// the limit less room for the coinbase.
-	selectMaxSize := uint32(max(min(maxBlockSize-1000,
-		uint64(g.policy.BlockMaxSize)), 1000))
+	selectMaxSize := maxBlockSize - 1000
+	if g.policy.BlockMaxSize != 0 {
+		selectMaxSize = min(selectMaxSize, uint64(g.policy.BlockMaxSize))
+	}
+	selectMaxSize = min(max(selectMaxSize, 1000), math.MaxUint32)
 
 	// Create a standard coinbase transaction paying to the provided
 	// address.  NOTE: The coinbase value will be updated to include the
@@ -677,7 +680,7 @@ mempoolLoop:
 		txSize := uint32(tx.MsgTx().SerializeSize())
 		blockPlusTxSize := blockSize + txSize
 		if blockPlusTxSize < txSize ||
-			blockPlusTxSize >= selectMaxSize {
+			uint64(blockPlusTxSize) >= selectMaxSize {
 
 			log.Tracef("Skipping tx %s because it would exceed "+
 				"the max block size", tx.Hash())

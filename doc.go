@@ -170,7 +170,8 @@ Application Options:
 	    --blockminsize=            Minimum block size in bytes to be used when
 	                               creating a block
 	    --blockmaxsize=            Maximum block size in bytes to be used when
-	                               creating a block (default: 31999000)
+	                               creating a block -- 0 follows the consensus
+	                               limit less 1000 bytes
 	    --blockprioritysize=       Size in bytes for high-priority/low-fee
 	                               transactions when creating a block (default:
 	                               1600000)
