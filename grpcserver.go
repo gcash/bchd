@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -14,9 +17,11 @@ import (
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 // AuthenticationTokenKey is the key used in the context to authenticate clients.
@@ -66,14 +71,6 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 
 	gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
-	grpcLog.Infof("Experimental gRPC server listening on %s", addr)
-
-	go func() {
-		if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
-			grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
-		}
-	}()
-
 	if len(cfg.PrometheusListen) != 0 {
 		// init Prometheus metrics
 		grpc_prometheus.EnableHandlingTimeHistogram()
@@ -98,6 +95,15 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 		}()
 	}
 
+	// Serve only after metrics are set up, since the interceptors read
+	// prometheusEnabled.
+	grpcLog.Infof("Experimental gRPC server listening on %s", addr)
+	go func() {
+		if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
+			grpcLog.Tracef("Finished serving expimental gRPC: %v", err)
+		}
+	}()
+
 	return gRPCServer, nil
 }
 
@@ -110,13 +116,11 @@ func serviceName(method string) string {
 	return method[:strings.IndexRune(method, '/')]
 }
 
-func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	// collect prometheus metrics before auth
-	if prometheusEnabled {
-		if err := grpc_prometheus.StreamServerInterceptor(srv, ss, info, handler); err != nil {
-			return err
-		}
-	}
+// interceptStreaming runs a streaming call through panic recovery, then
+// authentication and the service readiness check, then metrics.  Metrics come
+// last so that the handler never runs for an unauthenticated caller.
+func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+	defer recoverGrpcPanic(info.FullMethod, &err)
 
 	p, ok := peer.FromContext(ss.Context())
 	if ok {
@@ -124,16 +128,15 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 			p.Addr.String())
 	}
 
-	err := validateAuthenticationToken(ss.Context())
-	if err != nil {
+	if err := authorizeGrpcCall(ss.Context(), info.FullMethod); err != nil {
 		return err
 	}
 
-	err = bchrpc.ServiceReady(serviceName(info.FullMethod))
-	if err != nil {
-		return err
+	if prometheusEnabled {
+		err = grpc_prometheus.StreamServerInterceptor(srv, ss, info, handler)
+	} else {
+		err = handler(srv, ss)
 	}
-	err = handler(srv, ss)
 	if err != nil && ok {
 		grpcLog.Errorf("Streaming method %s invoked by %s errored: %v",
 			info.FullMethod, p.Addr.String(), err)
@@ -141,13 +144,11 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 	return err
 }
 
+// interceptUnary runs a unary call through panic recovery, then
+// authentication and the service readiness check, then metrics.  Metrics come
+// last so that the handler never runs for an unauthenticated caller.
 func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-	if prometheusEnabled {
-		resp, err = grpc_prometheus.UnaryServerInterceptor(ctx, req, info, handler)
-		if err != nil {
-			return resp, err
-		}
-	}
+	defer recoverGrpcPanic(info.FullMethod, &err)
 
 	p, ok := peer.FromContext(ctx)
 	if ok {
@@ -155,16 +156,15 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 			p.Addr.String())
 	}
 
-	err = validateAuthenticationToken(ctx)
-	if err != nil {
+	if err := authorizeGrpcCall(ctx, info.FullMethod); err != nil {
 		return nil, err
 	}
 
-	err = bchrpc.ServiceReady(serviceName(info.FullMethod))
-	if err != nil {
-		return nil, err
+	if prometheusEnabled {
+		resp, err = grpc_prometheus.UnaryServerInterceptor(ctx, req, info, handler)
+	} else {
+		resp, err = handler(ctx, req)
 	}
-	resp, err = handler(ctx, req)
 	if err != nil && ok {
 		grpcLog.Errorf("Unary method %s invoked by %s errored: %v",
 			info.FullMethod, p.Addr.String(), err)
@@ -172,9 +172,41 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 	return resp, err
 }
 
+// recoverGrpcPanic turns a panic in a gRPC handler into an Internal error, so
+// a single call can't stop the process.  It must be deferred.
+func recoverGrpcPanic(method string, err *error) {
+	if r := recover(); r != nil {
+		grpcLog.Errorf("Recovered from panic in gRPC method %s: %v\n%s",
+			method, r, debug.Stack())
+		*err = status.Error(codes.Internal, "internal error")
+	}
+}
+
+// authorizeGrpcCall checks the auth token and that the called service is
+// ready.
+func authorizeGrpcCall(ctx context.Context, method string) error {
+	if err := validateAuthenticationToken(ctx); err != nil {
+		return err
+	}
+	return bchrpc.ServiceReady(serviceName(method))
+}
+
 func validateAuthenticationToken(ctx context.Context) error {
+	if cfg.GrpcAuthToken == "" {
+		return nil
+	}
 	md, ok := metadata.FromIncomingContext(ctx)
-	if cfg.GrpcAuthToken != "" && (!ok || len(md.Get(AuthenticationTokenKey)) == 0 || md.Get(AuthenticationTokenKey)[0] != cfg.GrpcAuthToken) {
+	if !ok {
+		return errors.New("invalid authentication token")
+	}
+	tokens := md.Get(AuthenticationTokenKey)
+	if len(tokens) == 0 {
+		return errors.New("invalid authentication token")
+	}
+	// Compare in constant time, over hashes so the lengths always match.
+	got := sha256.Sum256([]byte(tokens[0]))
+	want := sha256.Sum256([]byte(cfg.GrpcAuthToken))
+	if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 		return errors.New("invalid authentication token")
 	}
 	return nil
