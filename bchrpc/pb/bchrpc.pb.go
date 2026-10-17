@@ -5605,7 +5605,10 @@ type Transaction_Output struct {
 	PubkeyScript []byte `protobuf:"bytes,3,opt,name=pubkey_script,json=pubkeyScript,proto3" json:"pubkey_script,omitempty"`
 	// The bitcoin addresses associated with this output.
 	Address string `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
-	// The type of script.
+	// The type of script: pubkey, pubkeyhash, scripthash (for both the
+	// 20 and the 32 byte hash forms), multisig, datacarrier (OP_RETURN
+	// followed only by pushes), script (any other script of at most 201
+	// bytes) or nonstandard.
 	ScriptClass string `protobuf:"bytes,5,opt,name=script_class,json=scriptClass,proto3" json:"script_class,omitempty"`
 	// The script expressed in Bitcoin Cash Script.
 	DisassembledScript string     `protobuf:"bytes,6,opt,name=disassembled_script,json=disassembledScript,proto3" json:"disassembled_script,omitempty"`
