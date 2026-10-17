@@ -1,6 +1,7 @@
 package ffldb
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -112,6 +113,38 @@ func TestPruneManyFilesDoesNotDeadlock(t *testing.T) {
 	s.fbhMutex.RUnlock()
 	s.obfMutex.RUnlock()
 
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestPruneDeleteFailureReleasesLock ensures a failed block file removal
+// does not leave the file heights lock held.
+func TestPruneDeleteFailureReleasesLock(t *testing.T) {
+	pdb := createPruneTestDB(t, filepath.Join(t.TempDir(), "db"))
+	for i := 1; i <= 4; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(uint32(i), int32(i)))
+	}
+
+	s := pdb.store
+	deleteFile := s.deleteFileFunc
+	s.deleteFileFunc = func(uint32) error { return errors.New("delete failed") }
+	prune := func(h uint32) (err error) {
+		runWithTimeout(t, 5*time.Second, "DeleteBlocks", func() {
+			err = pdb.Update(func(tx database.Tx) error {
+				return tx.DeleteBlocks(h)
+			})
+		})
+		return err
+	}
+	if err := prune(3); err == nil {
+		t.Fatal("expected DeleteBlocks to fail")
+	}
+
+	s.deleteFileFunc = deleteFile
+	if err := prune(3); err != nil {
+		t.Fatalf("DeleteBlocks after a failed removal: %v", err)
+	}
 	if err := pdb.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
