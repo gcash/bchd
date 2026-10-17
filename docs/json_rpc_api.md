@@ -572,7 +572,7 @@ Example Return|`{`<br />&nbsp;&nbsp;`"bytes": 310768,`<br />&nbsp;&nbsp;`"size":
 |Method|submitblock|
 |Parameters|1. data (string, required) serialized, hex-encoded block<br />2. params (json object, optional, default=nil) this parameter is currently ignored|
 |Description|Attempts to submit a new serialized, hex-encoded block to the network.|
-|Returns (success)|Success: Nothing<br />Failure: `"rejected: reason"` (string)|
+|Returns (success)|Success: Nothing<br />Failure: `"rejected: reason"` (string), or `"prev-blk-not-found"` when the parent block is unknown|
 [Return to Overview](#MethodOverview)<br />
 
 ***
