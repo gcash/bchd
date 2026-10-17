@@ -507,6 +507,15 @@ func (vm *Engine) Step() (done bool, err error) {
 			if len(vm.frameStack) > 0 {
 				for vm.scriptOff >= len(vm.scripts[vm.scriptIdx]) && len(vm.frameStack) > 0 {
 					vm.returnFromInvoke()
+
+					// The restored frame may be at its end too, so it
+					// must not leave a conditional or loop open either.
+					if vm.scriptOff >= len(vm.scripts[vm.scriptIdx]) &&
+						len(vm.condStack) != 0 {
+
+						return false, scriptError(ErrUnbalancedConditional,
+							"end of script reached in conditional execution")
+					}
 				}
 				if !(vm.scriptOff >= len(vm.scripts[vm.scriptIdx])) {
 					return false, nil
