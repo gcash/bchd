@@ -199,6 +199,7 @@ type Engine struct {
 	sigHashes            *TxSigHashes // sighashes used for signature checks
 	utxoCache            *UtxoCache
 	bip16                bool     // treat execution as pay-to-script-hash
+	p2sh32               bool     // spent output is P2SH32
 	savedFirstStack      [][]byte // stack from first script for bip16 scripts
 	inputAmount          int64
 	sigChecks            int
@@ -959,10 +960,11 @@ func isSegwitScript(scriptSig []parsedOpcode) bool {
 }
 
 // isSegwitExemption returns true if ScriptVerifyAllowSegwitRecovery
-// is set and this is a bip16 (P2SH) input and the script passes the
-// isSegwitScript checks.
+// is set and this is a P2SH20 input and the script passes the
+// isSegwitScript checks.  It never applies to P2SH32.
 func (vm *Engine) isSegwitExemption() bool {
-	return vm.hasFlag(ScriptVerifyAllowSegwitRecovery) && vm.bip16 && isSegwitScript(vm.scripts[0])
+	return vm.hasFlag(ScriptVerifyAllowSegwitRecovery) && vm.bip16 && !vm.p2sh32 &&
+		isSegwitScript(vm.scripts[0])
 }
 
 // GetStack returns the contents of the primary stack as an array. where the
@@ -1003,6 +1005,7 @@ func (vm *Engine) Clone() *Engine {
 		lastCodeSep:          vm.lastCodeSep,
 		tx:                   vm.tx,
 		bip16:                vm.bip16,
+		p2sh32:               vm.p2sh32,
 		flags:                vm.flags,
 		maxScriptElementSize: vm.maxScriptElementSize,
 		inputAmount:          vm.inputAmount,
@@ -1177,6 +1180,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 				"pay to script hash is not push only")
 		}
 		vm.bip16 = true
+		vm.p2sh32 = true
 	}
 
 	if vm.hasFlag(ScriptVerifyMinimalData) {
