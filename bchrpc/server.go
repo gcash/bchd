@@ -3472,14 +3472,6 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	// loop through outputs
 	for i, output := range tx.MsgTx().TxOut {
 
-		pkScript, err := output.TokenData.SeparateTokenDataFromPKScriptIfExists(output.PkScript, 0)
-		if err != nil {
-			log.Debugf("could not parse token data for %v index: %v", txid, uint32(i))
-		}
-		if pkScript != nil {
-			output.PkScript = pkScript
-		}
-
 		outputToken, err := s.getSlpToken(tx.Hash(), uint32(i), output.PkScript)
 		if err != nil {
 			log.Debugf("no token stored for %v index: %v", txid, uint32(i))

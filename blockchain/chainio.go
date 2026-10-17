@@ -717,13 +717,15 @@ func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 			"utxo: %v", err))
 	}
 
+	// Token data is stored in front of the script.
+	tokenData, pkScript := wire.SplitPkScript(pkScript)
 	entry := &UtxoEntry{
 		amount:      int64(amount),
 		pkScript:    pkScript,
+		tokenData:   tokenData,
 		blockHeight: blockHeight,
 		packedFlags: 0,
 	}
-	entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(entry.pkScript, 0)
 
 	if isCoinBase {
 		entry.packedFlags |= tfCoinBase
@@ -759,7 +761,7 @@ func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEn
 		pkScript:    pkScript,
 		packedFlags: 0,
 	}
-	entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(entry.pkScript, 0)
+	entry.tokenData, entry.pkScript = wire.SplitPkScript(pkScript)
 	if coinbaseFlag > 0 {
 		entry.packedFlags |= tfCoinBase
 	}

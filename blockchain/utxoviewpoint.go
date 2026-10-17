@@ -82,14 +82,10 @@ func (view *UtxoViewpoint) addTxOut(outpoint wire.OutPoint, txOut *wire.TxOut, i
 	pkScript := make([]byte, len(txOut.PkScript))
 	copy(pkScript, txOut.PkScript)
 
-	if !txOut.TokenData.IsEmpty() {
-		entry.tokenData = txOut.TokenData
-	}
-
 	entry.amount = txOut.Value
 	entry.pkScript = pkScript
+	entry.tokenData = txOut.TokenData
 	entry.blockHeight = blockHeight
-	entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(pkScript, 0)
 	entry.packedFlags = tfModified
 	if isCoinBase {
 		entry.packedFlags |= tfCoinBase
@@ -195,7 +191,6 @@ func addTxOuts(view utxoView, tx *bchutil.Tx, blockHeight int32, overwrite bool)
 		// Create a new entry from the output.
 		pkScript := make([]byte, len(txOut.PkScript))
 		copy(pkScript, txOut.PkScript)
-		pkScript, _ = txOut.TokenData.SeparateTokenDataFromPKScriptIfExists(pkScript, 0)
 
 		entry := &UtxoEntry{
 			amount:      txOut.Value,
@@ -354,16 +349,19 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			stxo := &stxos[stxoIdx]
 			stxoIdx--
 
+			// The spend journal stores token data in front of the
+			// script.
 			pkScript := make([]byte, len(stxo.PkScript))
 			copy(pkScript, stxo.PkScript)
+			tokenData, pkScript := wire.SplitPkScript(pkScript)
 
 			entry := &UtxoEntry{
 				amount:      stxo.Amount,
 				pkScript:    pkScript,
+				tokenData:   tokenData,
 				blockHeight: stxo.Height,
 				packedFlags: tfModified,
 			}
-			entry.pkScript, _ = entry.tokenData.SeparateTokenDataFromPKScriptIfExists(entry.pkScript, 0)
 			if stxo.IsCoinBase {
 				entry.packedFlags |= tfCoinBase
 			}
@@ -405,7 +403,7 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 
 			pkScript := make([]byte, len(txOut.PkScript))
 			copy(pkScript, txOut.PkScript)
-			pkScript, _ = txOut.TokenData.SeparateTokenDataFromPKScriptIfExists(pkScript, 0)
+
 			// Mark the entry as spent.  To make sure the view has the entry,
 			// create one to pass along.
 			entry := &UtxoEntry{

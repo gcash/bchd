@@ -20,15 +20,12 @@ import (
 // tokenPrefixFailures lists the vectors BCHD does not pass, by file and
 // index, with the reason.
 var tokenPrefixFailures = map[string]string{
-	"invalid #1": "short prefixes are taken as plain scripts",
-	"invalid #2": "short prefixes are taken as plain scripts",
-	"invalid #3": "short prefixes are taken as plain scripts",
-	"valid #35":  "commitments longer than 128 bytes do not parse",
-	"valid #36":  "commitments longer than 128 bytes do not parse",
-	"valid #37":  "commitments longer than 128 bytes do not parse",
-	"valid #46":  "commitments longer than 128 bytes do not parse",
-	"valid #60":  "commitments longer than 128 bytes do not parse",
-	"valid #61":  "commitments longer than 128 bytes do not parse",
+	"valid #35": "commitments longer than 128 bytes do not parse",
+	"valid #36": "commitments longer than 128 bytes do not parse",
+	"valid #37": "commitments longer than 128 bytes do not parse",
+	"valid #46": "commitments longer than 128 bytes do not parse",
+	"valid #60": "commitments longer than 128 bytes do not parse",
+	"valid #61": "commitments longer than 128 bytes do not parse",
 }
 
 // TestTokenPrefixVectors runs Bitcoin Cash Node's token prefix test vectors.

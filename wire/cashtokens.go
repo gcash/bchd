@@ -80,78 +80,89 @@ func NewTokenData(categoryID [32]byte, amount *uint64, commitment *[]byte, compa
 	return &tokenData, nil
 }
 
+// SeparateTokenDataFromPKScriptIfExists splits a serialized output script into
+// its token data and locking script.  A script that does not start with
+// PREFIX_BYTE is returned unchanged with empty token data.  An error is
+// returned, and the token data is left empty, when the script starts with
+// PREFIX_BYTE but does not hold a valid token prefix.
 func (tokenData *TokenData) SeparateTokenDataFromPKScriptIfExists(buf []byte, pver uint32) ([]byte, error) {
-	if len(buf) < BASE_TOKEN_DATA_LENGTH || buf[0] != PREFIX_BYTE {
-		// There is no token data. Return the whole buffer as script
+	*tokenData = TokenData{}
+	if len(buf) == 0 || buf[0] != PREFIX_BYTE {
 		return buf, nil
 	}
 
-	r := bytes.NewReader(buf[1:])
-	if _, err := io.ReadFull(r, tokenData.CategoryID[:]); err != nil {
-		return nil, err
-	}
-	// tokenData.CategoryID = buf[1:33]
-	bitField, err := r.ReadByte()
+	parsed, prefixLen, err := parseTokenPrefix(buf, pver)
 	if err != nil {
 		return nil, err
 	}
-	tokenData.BitField = bitField
+	*tokenData = parsed
+	return buf[prefixLen:], nil
+}
 
-	var parseError error
+// SplitPkScript splits a serialized output script into its token data and
+// locking script.  A script without a valid token prefix is returned whole
+// with empty token data, the same way outputs are decoded.
+func SplitPkScript(buf []byte) (TokenData, []byte) {
+	if len(buf) > 0 && buf[0] == PREFIX_BYTE {
+		tokenData, prefixLen, err := parseTokenPrefix(buf, 0)
+		if err == nil {
+			return tokenData, buf[prefixLen:]
+		}
+	}
+	return TokenData{}, buf
+}
 
+// parseTokenPrefix parses the token prefix at the start of buf and returns the
+// token data along with the length of the prefix.
+func parseTokenPrefix(buf []byte, pver uint32) (TokenData, int, error) {
+	var tokenData TokenData
+	if len(buf) < BASE_TOKEN_DATA_LENGTH || buf[0] != PREFIX_BYTE {
+		return TokenData{}, 0, errors.New("token prefix too short")
+	}
+	copy(tokenData.CategoryID[:], buf[1:33])
+	tokenData.BitField = buf[33]
+	if !tokenData.IsValidBitfield() {
+		return TokenData{}, 0, errors.New("invalid bitfield")
+	}
+
+	r := bytes.NewReader(buf[BASE_TOKEN_DATA_LENGTH:])
 	if tokenData.HasCommitmentLength() {
 		commitmentLength, err := ReadVarInt(r, pver)
 		if err != nil {
-			return nil, err
+			return TokenData{}, 0, err
 		}
 
-		b := scriptPool.Borrow(commitmentLength)
-		_, err = io.ReadFull(r, b)
-		if err != nil {
-			scriptPool.Return(b)
-			return nil, err
+		// The commitment is copied so it doesn't keep buf alive or
+		// alias it, since buf may be returned to the script pool.
+		if commitmentLength < 1 || commitmentLength > MAX_COMMITMENT_LENGTH ||
+			commitmentLength > uint64(r.Len()) {
+			return TokenData{}, 0, errors.New("invalid commitment length")
 		}
-		tokenData.Commitment = b
-		// token commitment length has to be positive and limited to MAX_COMMITMENT_LENGTH
-		if !(commitmentLength >= 1 && commitmentLength <= MAX_COMMITMENT_LENGTH) {
-			parseError = errors.New("invalid commitment length")
-
+		start := len(buf) - r.Len()
+		end := start + int(commitmentLength)
+		tokenData.Commitment = slices.Clone(buf[start:end])
+		if _, err := r.Seek(int64(commitmentLength), io.SeekCurrent); err != nil {
+			return TokenData{}, 0, err
 		}
 	}
 	if tokenData.HasAmount() {
 		amount, err := ReadVarInt(r, pver)
 		if err != nil {
-			return nil, err
+			return TokenData{}, 0, err
 		}
-
+		if amount < 1 || amount > MAX_FT_AMOUNT {
+			return TokenData{}, 0, errors.New("invalid token amount")
+		}
 		tokenData.Amount = amount
-
-		if !(amount >= 1 && amount <= MAX_FT_AMOUNT) {
-			parseError = errors.New("invalid token amount")
-		}
-	}
-	if !tokenData.IsValidBitfield() {
-		parseError = errors.New("invalid bitfield")
-	}
-	if parseError != nil {
-		return nil, parseError
 	}
 
-	var pkScript []byte
-	b := scriptPool.Borrow(uint64(r.Len()))
-	_, err = io.ReadFull(r, b)
-	if err != nil {
-		scriptPool.Return(b)
-		return nil, err
-	}
-	pkScript = b
-
-	//fmt.Println("length of pkscript: ", len(pkScript), tokenData.Commitment)
-	return pkScript, nil
+	return tokenData, len(buf) - r.Len(), nil
 }
 
+// IsEmpty returns whether there is no token.  A parsed or constructed token
+// always has a valid, and therefore non-zero, bitfield.
 func (tokenData *TokenData) IsEmpty() bool {
-	return tokenData.CategoryID == TokenData{}.CategoryID // TODO maybe change this
+	return tokenData.BitField == 0
 }
 
 func (tokenData *TokenData) GetCapability() byte {
@@ -215,9 +226,6 @@ func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	}
 	if tokenData.HasAmount() {
 		_ = WriteVarInt(&buf, 0, tokenData.Amount)
-	} else {
-		var buf2 bytes.Buffer
-		buf2.Write(tokenData.CategoryID[:])
 	}
 	return buf
 }
@@ -249,6 +257,13 @@ func IsCoinBaseTx(msgTx *MsgTx) bool {
 	return true
 }
 
+// hasInvalidTokenPrefix returns whether the output script starts with the
+// token prefix byte without holding a valid token prefix.
+func hasInvalidTokenPrefix(txOut *TxOut) bool {
+	return txOut.TokenData.IsEmpty() && len(txOut.PkScript) > 0 &&
+		txOut.PkScript[0] == PREFIX_BYTE
+}
+
 // Token Validation Algorithm
 func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScriptAllowMay2026 bool) (bool, error) {
 	if IsCoinBaseTx(tx) {
@@ -272,6 +287,10 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 
 	for i, txIn := range tx.TxIn {
 		utxo, _ := cache.GetEntry(i)
+
+		if hasInvalidTokenPrefix(&utxo) {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
+		}
 
 		if txIn.PreviousOutPoint.Index == 0 {
 			GenesisCategories = append(GenesisCategories, txIn.PreviousOutPoint.Hash)
@@ -337,6 +356,9 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 	}
 
 	for _, txOut := range tx.TxOut {
+		if hasInvalidTokenPrefix(txOut) {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
+		}
 
 		if txOut.TokenData.IsEmpty() {
 			continue
