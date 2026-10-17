@@ -3420,6 +3420,12 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		return nil, err
 	}
 
+	// Signal process shutdown when the chain state can't be written.
+	go func() {
+		<-s.chain.RequestedProcessShutdown()
+		shutdownRequestChannel <- struct{}{}
+	}()
+
 	if s.chain.IsPruned() {
 		s.services &^= wire.SFNodeNetwork
 		s.services |= wire.SFNodeNetworkLimited
