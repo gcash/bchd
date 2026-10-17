@@ -13,6 +13,10 @@ on work from ThePiachu which is licensed under the same terms as Go, but it has
 significantly diverged since then.  The btcsuite developers original is licensed
 under the liberal ISC license.
 
+The field, scalar and point arithmetic and ECDSA verification use
+[github.com/decred/dcrd/dcrec/secp256k1/v4](https://github.com/decred/dcrd/tree/master/dcrec/secp256k1),
+the same package btcd's btcec/v2 is built on.
+
 Although this package was primarily written for bchd, it has intentionally been
 designed so it can be used as a standalone package for any projects needing to
 use secp256k1 elliptic curve cryptography.
