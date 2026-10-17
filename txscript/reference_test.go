@@ -455,8 +455,6 @@ func scriptTestKey(test []interface{}) string {
 // scriptTestFailures lists rows of script_tests.json that BCHD does not pass
 // yet, by scriptTestKey, with the reason.
 var scriptTestFailures = map[string]string{
-	"01605c2ae47c": "OP_1ADD does not detect 64-bit overflow",
-	"14cb06e505a2": "OP_1ADD does not detect 64-bit overflow",
 	"a351a5ab7e24": "P2SH32 is evaluated before tokens are enabled",
 	"affbb12d58ee": "P2SH32 is evaluated before tokens are enabled",
 	"006e48d9d6b6": "segwit recovery is allowed for P2SH32",
