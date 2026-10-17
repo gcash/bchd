@@ -6,9 +6,12 @@ package wire
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -665,6 +668,176 @@ func TestTxOverflowErrors(t *testing.T) {
 				i, err, reflect.TypeOf(test.err))
 			continue
 		}
+	}
+}
+
+// TestTxDecodeClaimedCountAllocs ensures that decoding truncated transactions
+// which claim large input, output, or script counts returns an error without
+// allocating memory for elements that have not been read yet.
+func TestTxDecodeClaimedCountAllocs(t *testing.T) {
+	// maxAllocBytes is the maximum number of bytes that decoding any of the
+	// truncated test inputs may allocate.  Decoding allocates space for at
+	// most maxTxInOutInitialAlloc inputs and outputs, or
+	// maxScriptInitialAlloc script bytes, before the data exists, which is
+	// on the order of 100 KiB.  The claimed counts would otherwise require
+	// hundreds of megabytes or more, so 1 MiB clearly separates the two
+	// while leaving room for incidental allocations.
+	const maxAllocBytes = 1 << 20
+
+	// varInt returns the canonical variable length integer encoding of
+	// the provided value.
+	varInt := func(val uint64) []byte {
+		var buf bytes.Buffer
+		if err := WriteVarInt(&buf, ProtocolVersion, val); err != nil {
+			t.Fatalf("WriteVarInt: unexpected error: %v", err)
+		}
+		return buf.Bytes()
+	}
+
+	// cat concatenates the provided byte slices.
+	cat := func(parts ...[]byte) []byte {
+		var buf []byte
+		for _, part := range parts {
+			buf = append(buf, part...)
+		}
+		return buf
+	}
+
+	version := []byte{0x02, 0x00, 0x00, 0x00}
+	outPoint := make([]byte, chainhash.HashSize+4)
+	sequence := []byte{0xff, 0xff, 0xff, 0xff}
+	value := make([]byte, 8)
+
+	// Truncated transactions that claim the largest counts that pass the
+	// sanity checks, encoded as 0xfe followed by a uint32.
+	txManyIns := cat(version, varInt(uint64(maxTxInPerMessage())))
+	txManyOuts := cat(version, varInt(0),
+		varInt(uint64(maxTxOutPerMessage())))
+	txLongSigScript := cat(version, varInt(1), outPoint,
+		varInt(uint64(maxTxInPerMessage())))
+	txLongPkScript := cat(version, varInt(1), outPoint, varInt(0),
+		sequence, varInt(1), value, varInt(uint64(maxMessagePayload())))
+
+	// Truncated transactions that encode the input count as 0xff followed
+	// by a uint64.  The first is non-canonical and the second is above
+	// the sanity check, so both are expected to be rejected before any
+	// inputs are allocated.
+	txNonCanonicalIns := cat(version, []byte{0xff},
+		binary.LittleEndian.AppendUint64(nil,
+			uint64(maxTxInPerMessage())))
+	txTooManyIns := cat(version, []byte{0xff},
+		binary.LittleEndian.AppendUint64(nil, 1<<40))
+
+	// block returns a truncated block message that contains the provided
+	// transaction.
+	header := make([]byte, MaxBlockHeaderPayload)
+	block := func(tx []byte) []byte {
+		return cat(header, varInt(1), tx)
+	}
+
+	tests := []struct {
+		name  string
+		buf   []byte // Wire encoding
+		block bool   // Whether buf is a block message
+	}{
+		{"tx many inputs", txManyIns, false},
+		{"tx many outputs", txManyOuts, false},
+		{"tx long signature script", txLongSigScript, false},
+		{"tx long public key script", txLongPkScript, false},
+		{"tx non-canonical input count", txNonCanonicalIns, false},
+		{"tx too many inputs", txTooManyIns, false},
+		{"block tx many inputs", block(txManyIns), true},
+		{"block tx many outputs", block(txManyOuts), true},
+		{"block tx long public key script", block(txLongPkScript),
+			true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			var err error
+			if test.block {
+				var msg MsgBlock
+				err = msg.BchDecode(bytes.NewReader(test.buf),
+					ProtocolVersion, BaseEncoding)
+			} else {
+				var msg MsgTx
+				err = msg.BchDecode(bytes.NewReader(test.buf),
+					ProtocolVersion, BaseEncoding)
+			}
+			runtime.ReadMemStats(&after)
+
+			if err == nil {
+				t.Fatal("BchDecode: expected error, got nil")
+			}
+			allocated := after.TotalAlloc - before.TotalAlloc
+			if allocated > maxAllocBytes {
+				t.Fatalf("BchDecode: allocated %d bytes "+
+					"decoding %d bytes of input, want at "+
+					"most %d", allocated, len(test.buf),
+					maxAllocBytes)
+			}
+		})
+	}
+}
+
+// TestTxDecodeLargeCounts ensures that transactions with more inputs and
+// outputs than maxTxInOutInitialAlloc, and scripts longer than
+// maxScriptInitialAlloc, decode to the same transaction and serialize back
+// to the same bytes.
+func TestTxDecodeLargeCounts(t *testing.T) {
+	tx := NewMsgTx(2)
+	for i := range 3*maxTxInOutInitialAlloc + 7 {
+		prevOut := NewOutPoint(&chainhash.Hash{byte(i), byte(i >> 8)},
+			uint32(i))
+		tx.AddTxIn(NewTxIn(prevOut, []byte{byte(i), 0x51}))
+	}
+	for i := range 5*maxTxInOutInitialAlloc + 3 {
+		tx.AddTxOut(NewTxOut(int64(i), []byte{0x51, byte(i)},
+			TokenData{}))
+	}
+
+	// Use scripts that require several increments of
+	// maxScriptInitialAlloc.
+	longScript := bytes.Repeat([]byte{0x6a, 0x51}, 3*maxScriptInitialAlloc)
+	tx.TxIn[1].SignatureScript = longScript
+	tx.TxOut[2].PkScript = longScript[:5*maxScriptInitialAlloc+1]
+
+	var buf bytes.Buffer
+	if err := tx.Serialize(&buf); err != nil {
+		t.Fatalf("Serialize: unexpected error: %v", err)
+	}
+
+	var decoded MsgTx
+	err := decoded.Deserialize(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("Deserialize: unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(&decoded, tx) {
+		t.Fatal("Deserialize: decoded transaction does not match")
+	}
+
+	var reencoded bytes.Buffer
+	if err := decoded.Serialize(&reencoded); err != nil {
+		t.Fatalf("Serialize: unexpected error: %v", err)
+	}
+	if !bytes.Equal(reencoded.Bytes(), buf.Bytes()) {
+		t.Fatal("Serialize: reencoded transaction does not match")
+	}
+
+	// Ensure a long script whose data ends exactly after its first
+	// maxScriptInitialAlloc bytes reports an unexpected EOF, as it would
+	// if the script were read in a single call.
+	sigScriptOffset := 4 + VarIntSerializeSize(uint64(len(tx.TxIn))) +
+		tx.TxIn[0].SerializeSize() + chainhash.HashSize + 4 +
+		VarIntSerializeSize(uint64(len(longScript)))
+	truncated := buf.Bytes()[:sigScriptOffset+maxScriptInitialAlloc]
+	err = decoded.Deserialize(bytes.NewReader(truncated))
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("Deserialize: got error %v, want %v", err,
+			io.ErrUnexpectedEOF)
 	}
 }
 

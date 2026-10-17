@@ -6,6 +6,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -86,7 +87,36 @@ const (
 	// peers.  Thus, the peak usage of the free list is 12,500 * 512 =
 	// 6,400,000 bytes.
 	freeListMaxItems = 12500
+
+	// maxTxInOutInitialAlloc is the maximum number of transaction inputs
+	// or outputs that are allocated before any of them have been read when
+	// decoding a transaction.  The counts are read from the wire, so they
+	// are only an upper bound on the number of elements that will actually
+	// be decoded.  Transactions with more inputs or outputs than this
+	// allocate additional space as the elements are decoded, which avoids
+	// allocating memory for elements that have not been read yet.  This
+	// value is large enough that nearly all transactions only require a
+	// single allocation.
+	maxTxInOutInitialAlloc = 1024
+
+	// maxScriptInitialAlloc is the maximum number of bytes that are
+	// allocated for a script before any of its bytes have been read.
+	// Longer scripts allocate additional space as their bytes are read,
+	// which avoids allocating memory for bytes that have not been read
+	// yet.  This value is larger than any script that is standard or
+	// valid for spending, so such scripts only require a single allocation.
+	maxScriptInitialAlloc = 64 * 1024
 )
+
+// txInOutAllocSize returns the number of transaction inputs or outputs to
+// allocate space for when decoding a transaction, given the number of elements
+// that remain to be decoded and the number that have already been decoded.
+// The allocation is capped by maxTxInOutInitialAlloc until elements have been
+// decoded and then grows geometrically, so the memory used remains
+// proportional to the number of elements actually read.
+func txInOutAllocSize(remaining, decoded uint64) uint64 {
+	return min(remaining, max(decoded, maxTxInOutInitialAlloc))
+}
 
 // maxTxInPerMessage returnsthe maximum number of transactions inputs that
 // a transaction which fits into a message could possibly have.
@@ -417,14 +447,28 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	}
 
 	// Deserialize the inputs.
+	//
+	// The inputs are decoded into contiguous backing arrays in order to
+	// reduce the number of allocations.  The count has not been verified
+	// against the data that follows it, so the backing arrays are
+	// allocated in bounded chunks as inputs are decoded in order to avoid
+	// allocating memory for elements that have not been read yet.
 	var totalScriptSize uint64
-	txIns := make([]TxIn, count)
-	msg.TxIn = make([]*TxIn, count)
+	allocSize := txInOutAllocSize(count, 0)
+	txIns := make([]TxIn, 0, allocSize)
+	msg.TxIn = make([]*TxIn, 0, allocSize)
 	for i := range count {
+		if len(txIns) == cap(txIns) {
+			allocSize = txInOutAllocSize(count-i, i)
+			txIns = make([]TxIn, 0, allocSize)
+			msg.TxIn = slices.Grow(msg.TxIn, int(allocSize))
+		}
+
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
-		ti := &txIns[i]
-		msg.TxIn[i] = ti
+		txIns = txIns[:len(txIns)+1]
+		ti := &txIns[len(txIns)-1]
+		msg.TxIn = append(msg.TxIn, ti)
 		err = readTxIn(r, pver, msg.Version, ti)
 		if err != nil {
 			returnScriptBuffers()
@@ -450,13 +494,25 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	}
 
 	// Deserialize the outputs.
-	txOuts := make([]TxOut, count)
-	msg.TxOut = make([]*TxOut, count)
+	//
+	// As with the inputs, the backing arrays are allocated in bounded
+	// chunks as outputs are decoded in order to avoid allocating memory for
+	// elements that have not been read yet.
+	allocSize = txInOutAllocSize(count, 0)
+	txOuts := make([]TxOut, 0, allocSize)
+	msg.TxOut = make([]*TxOut, 0, allocSize)
 	for i := range count {
+		if len(txOuts) == cap(txOuts) {
+			allocSize = txInOutAllocSize(count-i, i)
+			txOuts = make([]TxOut, 0, allocSize)
+			msg.TxOut = slices.Grow(msg.TxOut, int(allocSize))
+		}
+
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
-		to := &txOuts[i]
-		msg.TxOut[i] = to
+		txOuts = txOuts[:len(txOuts)+1]
+		to := &txOuts[len(txOuts)-1]
+		msg.TxOut = append(msg.TxOut, to)
 		pkScriptSize, err := readTxOut(r, pver, msg.Version, to)
 		if err != nil {
 			returnScriptBuffers()
@@ -728,11 +784,49 @@ func readScript(r io.Reader, pver uint32, maxAllowed uint32, fieldName string) (
 		return nil, messageError("readScript", str)
 	}
 
+	// The length has not been verified against the data that follows it,
+	// so scripts longer than maxScriptInitialAlloc are read in bounded
+	// chunks in order to avoid allocating memory for bytes that have not
+	// been read yet.
+	if count > maxScriptInitialAlloc {
+		return readScriptChunked(r, count)
+	}
+
 	b := scriptPool.Borrow(count)
 	_, err = io.ReadFull(r, b)
 	if err != nil {
 		scriptPool.Return(b)
 		return nil, err
+	}
+	return b, nil
+}
+
+// readScriptChunked reads a script of the provided length from r.  Space for
+// the script is allocated as its bytes are read, starting with
+// maxScriptInitialAlloc bytes and growing geometrically, so the memory used
+// remains proportional to the number of bytes actually read.
+//
+// The returned buffer is never obtained from the script free list, so it is
+// ignored if it is returned to the free list.
+func readScriptChunked(r io.Reader, count uint64) ([]byte, error) {
+	b := make([]byte, 0, maxScriptInitialAlloc)
+	for uint64(len(b)) < count {
+		if len(b) == cap(b) {
+			b = slices.Grow(b, int(min(count-uint64(len(b)),
+				uint64(len(b)))))
+		}
+		start := len(b)
+		n := min(count-uint64(start), uint64(cap(b)-start))
+		end := start + int(n)
+		b = b[:end]
+		if _, err := io.ReadFull(r, b[start:]); err != nil {
+			// Report a script that ends partway through the same
+			// way as reading it in a single call would.
+			if start > 0 && errors.Is(err, io.EOF) {
+				err = io.ErrUnexpectedEOF
+			}
+			return nil, err
+		}
 	}
 	return b, nil
 }
