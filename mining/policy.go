@@ -66,7 +66,7 @@ func calcInputValueAge(tx *wire.MsgTx, utxoView *blockchain.UtxoViewpoint, nextB
 
 			// Sum the input value times age.
 			inputValue := entry.Amount()
-			totalInputAge += float64(inputValue * int64(inputAge))
+			totalInputAge += float64(inputValue) * float64(inputAge)
 		}
 	}
 
