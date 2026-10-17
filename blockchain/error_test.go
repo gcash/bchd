@@ -59,6 +59,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrBadTxVersion, "ErrBadTxVersion"},
 		{ErrCoinbaseHasTokens, "ErrCoinbaseHasTokens"},
 		{ErrForkBeforeFinalized, "ErrForkBeforeFinalized"},
+		{ErrUnrequestedBlock, "ErrUnrequestedBlock"},
 		{0xffff, "Unknown ErrorCode (65535)"},
 	}
 

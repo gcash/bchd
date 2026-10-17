@@ -52,9 +52,10 @@ type BlockLocator []*chainhash.Hash
 // is a normal block plus an expiration time to prevent caching the orphan
 // forever.
 type orphanBlock struct {
-	block      *bchutil.Block
-	expiration time.Time
-	size       uint64
+	block       *bchutil.Block
+	expiration  time.Time
+	size        uint64
+	unrequested bool
 }
 
 // BestState houses information about the current best block and other info
@@ -443,7 +444,7 @@ func (b *BlockChain) orphanSizeLimit() uint64 {
 // orphan blocks and will remove the oldest received orphan blocks if a limit
 // is exceeded.  A block too large to be valid at any nearby height is
 // rejected.
-func (b *BlockChain) addOrphanBlock(block *bchutil.Block) error {
+func (b *BlockChain) addOrphanBlock(block *bchutil.Block, flags BehaviorFlags) error {
 	sizeLimit := b.orphanSizeLimit()
 	size := uint64(block.MsgBlock().SerializeSize())
 	if size > sizeLimit {
@@ -485,9 +486,10 @@ func (b *BlockChain) addOrphanBlock(block *bchutil.Block) error {
 	// 1 hour from now.
 	expiration := time.Now().Add(time.Hour)
 	oBlock := &orphanBlock{
-		block:      block,
-		expiration: expiration,
-		size:       size,
+		block:       block,
+		expiration:  expiration,
+		size:        size,
+		unrequested: flags.HasFlag(BFUnrequested),
 	}
 	b.orphans[*block.Hash()] = oBlock
 	b.orphanBytes += size

@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -36,6 +37,14 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 
 	blockHeight := prevNode.height + 1
 	block.SetHeight(blockHeight)
+
+	// Don't store an unrequested block unless it could extend the best
+	// chain, so peers can't fill the disk with low-work chains.
+	if flags.HasFlag(BFUnrequested) {
+		if err := b.checkUnrequestedBlock(block, prevNode); err != nil {
+			return false, err
+		}
+	}
 
 	// The block must pass all of the validation rules which depend on the
 	// position of the block within the block chain.
@@ -92,4 +101,37 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	b.notificationLock.Unlock()
 
 	return isMainChain, nil
+}
+
+// maxUnrequestedBlocksAhead is how far above the tip an unrequested block may
+// be.
+const maxUnrequestedBlocksAhead = 288
+
+// checkUnrequestedBlock returns an error when a block that was not requested
+// has less work than the tip or the minimum chain work, or is too far ahead
+// of the tip.
+//
+// This function MUST be called with the chain state lock held (for reads).
+func (b *BlockChain) checkUnrequestedBlock(block *bchutil.Block, prevNode *blockNode) error {
+	tip := b.bestChain.Tip()
+	height := prevNode.height + 1
+	workSum := new(big.Int).Add(prevNode.workSum,
+		CalcWork(block.MsgBlock().Header.Bits))
+	minWork := b.chainParams.MinimumChainWork
+	switch {
+	case workSum.Cmp(tip.workSum) < 0:
+		str := fmt.Sprintf("unrequested block %v has less work than "+
+			"the tip", block.Hash())
+		return ruleError(ErrUnrequestedBlock, str)
+	case height > tip.height+maxUnrequestedBlocksAhead:
+		str := fmt.Sprintf("unrequested block %v at height %d is too "+
+			"far ahead of the tip at height %d", block.Hash(), height,
+			tip.height)
+		return ruleError(ErrUnrequestedBlock, str)
+	case minWork != nil && workSum.Cmp(minWork) < 0:
+		str := fmt.Sprintf("unrequested block %v has less than the "+
+			"minimum chain work", block.Hash())
+		return ruleError(ErrUnrequestedBlock, str)
+	}
+	return nil
 }

@@ -83,7 +83,9 @@ Each of these networks also has a minimum chain work, again Bitcoin Cash Node's:
 the total proof of work its chain is known to have.  Until the best chain has
 at least that much work, the node does not consider itself synced either, so
 it does not relay blocks, answer `getheaders` or filter requests, or build
-block templates.
+block templates.  A block that a peer relays without being asked for it is only
+stored if its chain has at least the minimum chain work and the work of the
+current tip, and is at most 288 blocks ahead of the tip.
 
 `addcheckpoint` adds checkpoints and `nocheckpoints` disables the built-in
 ones, in which case every script is validated.  With `fastsync`, the UTXO set of

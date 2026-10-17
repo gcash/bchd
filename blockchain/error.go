@@ -238,6 +238,10 @@ const (
 	// ErrForkBeforeFinalized indicates a block forks the chain below the
 	// finalized block.
 	ErrForkBeforeFinalized
+
+	// ErrUnrequestedBlock indicates a block that was not requested was
+	// not stored because it can't extend the best chain soon.
+	ErrUnrequestedBlock
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -289,6 +293,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrBadTxVersion:          "ErrBadTxVersion",
 	ErrCoinbaseHasTokens:     "ErrCoinbaseHasTokens",
 	ErrForkBeforeFinalized:   "ErrForkBeforeFinalized",
+	ErrUnrequestedBlock:      "ErrUnrequestedBlock",
 }
 
 // String returns the ErrorCode as a human-readable name.
