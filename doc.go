@@ -218,8 +218,9 @@ Application Options:
 	                               (default: 8)
 	    --reindexchainstate        Rebuild the UTXO database from currently
 	                               indexed blocks on disk.
-	    --fastsync                 Sync full blocks from the last checkpoint to
-	                               the tip rather than from genesis.
+	    --fastsync                 Download the UTXO set of the last checkpoint
+	                               that has one and sync full blocks from there
+	                               to the tip rather than from genesis.
 	    --grpclisten=              Add an interface/port to listen for
 	                               experimental gRPC connections (default port:
 	                               8335, testnet: 18335)
