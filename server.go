@@ -3598,6 +3598,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 					break
 				}
 
+				// Skip networks we can't connect to.
+				if !canDial(addr.NetAddress()) {
+					continue
+				}
+
 				// Address will not be invalid, local or unroutable
 				// because addrmanager rejects those on addition.
 				// Just check that we don't already have an address
@@ -3656,12 +3661,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	if len(permanentPeers) == 0 {
 		permanentPeers = cfg.AddPeers
 	}
-	for _, addr := range permanentPeers {
-		netAddr, err := addrStringToNetAddr(addr)
-		if err != nil {
-			return nil, err
-		}
-
+	permanentAddrs, err := permanentPeerAddrs(permanentPeers)
+	if err != nil {
+		return nil, err
+	}
+	for _, netAddr := range permanentAddrs {
 		go s.connManager.Connect(&connmgr.ConnReq{
 			Addr:      netAddr,
 			Permanent: true,
@@ -3864,6 +3868,9 @@ func addrStringToNetAddr(addr string) (net.Addr, error) {
 		if cfg.NoOnion {
 			return nil, errors.New("tor has been disabled")
 		}
+		if err := checkOnionHost(host); err != nil {
+			return nil, err
+		}
 
 		return &onionAddr{addr: addr}, nil
 	}
@@ -3881,6 +3888,60 @@ func addrStringToNetAddr(addr string) (net.Addr, error) {
 		IP:   ips[0],
 		Port: port,
 	}, nil
+}
+
+// checkOnionHost returns an error for an onion address that can't be connected
+// to: a Tor v2 or malformed address, or any address without a proxy.
+func checkOnionHost(host string) error {
+	if _, err := wire.DecodeTorV3(host); err != nil {
+		return err
+	}
+	if !onionReachable() {
+		return fmt.Errorf("connecting to %s requires the --proxy or "+
+			"--onion option", host)
+	}
+	return nil
+}
+
+// permanentPeerAddrs returns the addresses of the --connect or --addpeer
+// peers.  Onion addresses that can't be connected to are skipped with a
+// warning.
+func permanentPeerAddrs(addrs []string) ([]net.Addr, error) {
+	netAddrs := make([]net.Addr, 0, len(addrs))
+	for _, addr := range addrs {
+		host, _, err := net.SplitHostPort(addr)
+		if err == nil && strings.HasSuffix(host, ".onion") && !cfg.NoOnion {
+			if err := checkOnionHost(host); err != nil {
+				srvrLog.Warnf("Skipping peer %s: %v", addr, err)
+				continue
+			}
+		}
+
+		netAddr, err := addrStringToNetAddr(addr)
+		if err != nil {
+			return nil, err
+		}
+		netAddrs = append(netAddrs, netAddr)
+	}
+	return netAddrs, nil
+}
+
+// onionReachable returns whether Tor onion addresses can be connected to,
+// which needs a proxy.
+func onionReachable() bool {
+	return !cfg.NoOnion && (cfg.Proxy != "" || cfg.OnionProxy != "")
+}
+
+// canDial returns whether an address is of a network we can connect to.
+// I2P and CJDNS addresses are only stored and relayed.
+func canDial(na *wire.NetAddressV2) bool {
+	switch na.Network {
+	case wire.NetworkIPv4, wire.NetworkIPv6:
+		return true
+	case wire.NetworkTorV3:
+		return onionReachable()
+	}
+	return false
 }
 
 // addLocalAddress adds an address that this node is listening on to the
