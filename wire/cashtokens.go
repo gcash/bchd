@@ -304,12 +304,13 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 
-		value, ok := AvailableSumsByCategory[utxo.TokenData.CategoryID]
-		if ok {
-			AvailableSumsByCategory[utxo.TokenData.CategoryID] = value + utxo.TokenData.Amount
-		} else {
-			AvailableSumsByCategory[utxo.TokenData.CategoryID] = utxo.TokenData.Amount
+		// Reject a sum above MAX_FT_AMOUNT rather than let it wrap.  Each
+		// amount is at most MAX_FT_AMOUNT, so the addition cannot overflow.
+		availableSum := AvailableSumsByCategory[utxo.TokenData.CategoryID] + utxo.TokenData.Amount
+		if availableSum > MAX_FT_AMOUNT {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
+		AvailableSumsByCategory[utxo.TokenData.CategoryID] = availableSum
 
 		if utxo.TokenData.IsMutableNFT() {
 			value, ok := AvailableMutableTokensByCategory[utxo.TokenData.CategoryID]
@@ -371,12 +372,13 @@ func RunCashTokensValidityAlgorithm(cache utxoCacheInterface, tx *MsgTx, hasScri
 			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
 
-		value, ok := OutputSumsByCategory[txOut.TokenData.CategoryID]
-		if ok {
-			OutputSumsByCategory[txOut.TokenData.CategoryID] = value + txOut.TokenData.Amount
-		} else {
-			OutputSumsByCategory[txOut.TokenData.CategoryID] = txOut.TokenData.Amount
+		// Reject a sum above MAX_FT_AMOUNT, which could otherwise wrap and
+		// pass the checks below.
+		outputSum := OutputSumsByCategory[txOut.TokenData.CategoryID] + txOut.TokenData.Amount
+		if outputSum > MAX_FT_AMOUNT {
+			return false, messageError("RunCashTokensValidityAlgorithm", "ErrCashTokensValidation")
 		}
+		OutputSumsByCategory[txOut.TokenData.CategoryID] = outputSum
 
 		if txOut.TokenData.IsMutableNFT() {
 			value, ok := OutputMutableTokensByCategory[txOut.TokenData.CategoryID]
