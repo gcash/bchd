@@ -452,25 +452,13 @@ func scriptTestKey(test []interface{}) string {
 	return hex.EncodeToString(h[:6])
 }
 
-// scriptTestFailures lists rows of script_tests.json that BCHD does not pass
-// yet, by scriptTestKey, with the reason.
-var scriptTestFailures = map[string]string{
-	"45da3b15033e": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"8e6aa1d185d6": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"c77caefd1ece": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"6a7cc5375163": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"34fe675e2d78": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"581b664b6bea": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-	"940228c8c493": "token opcodes before tokens are enabled fail as disabled opcodes, BCHN fails them as bad opcodes",
-}
-
 // testScripts ensures all of the passed script tests execute with the expected
 // results with or without using a signature cache, as specified by the
 // parameter.  Rows with BCHN's flag names are also run with random
 // restrictive flags removed from passing rows and added to failing rows, as
 // BCHN's script tests do.
 func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool,
-	legacyFlags bool, failures map[string]string) {
+	legacyFlags bool) {
 
 	// Create a signature cache to use only if requested.
 	var sigCache *SigCache
@@ -478,7 +466,6 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool,
 		sigCache = NewSigCache(10)
 	}
 
-	seen := make(map[string]bool)
 	for i, test := range tests {
 		// Format is: [[amount]?, scriptSig, scriptPubKey, flags,
 		// expected_scripterror, ... comments]
@@ -586,14 +573,6 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool,
 			}
 		}
 
-		if reason, listed := failures[key]; listed {
-			seen[key] = true
-			if ok {
-				t.Errorf("%s: listed as failing (%s) but passes",
-					name, reason)
-			}
-			continue
-		}
 		if !ok {
 			t.Errorf("%s: want %s, got %v", name, resultStr, err)
 			continue
@@ -623,12 +602,6 @@ func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool,
 			}
 		}
 	}
-
-	for key, reason := range failures {
-		if !seen[key] {
-			t.Errorf("listed failing row %s (%s) not found", key, reason)
-		}
-	}
 }
 
 // TestScripts ensures all of the tests in script_tests.json execute with the
@@ -646,8 +619,8 @@ func TestScripts(t *testing.T) {
 	}
 
 	// Run all script tests with and without the signature cache.
-	testScripts(t, tests, true, false, scriptTestFailures)
-	testScripts(t, tests, false, false, scriptTestFailures)
+	testScripts(t, tests, true, false)
+	testScripts(t, tests, false, false)
 }
 
 // TestScriptsBCHD runs the rows of script_tests_bchd.json, which check the
@@ -664,8 +637,8 @@ func TestScriptsBCHD(t *testing.T) {
 		t.Fatalf("TestScriptsBCHD couldn't Unmarshal: %v", err)
 	}
 
-	testScripts(t, tests, true, true, nil)
-	testScripts(t, tests, false, true, nil)
+	testScripts(t, tests, true, true)
+	testScripts(t, tests, false, true)
 }
 
 // testVecF64ToUint32 properly handles conversion of float64s read from the JSON
