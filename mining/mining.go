@@ -630,7 +630,7 @@ mempoolLoop:
 	// The starting block size is the size of the block header plus the max
 	// possible transaction count size, plus the size of the coinbase
 	// transaction.
-	blockSize := uint32(blockHeaderOverhead * coinbaseTx.MsgTx().SerializeSize())
+	blockSize := uint32(blockHeaderOverhead + coinbaseTx.MsgTx().SerializeSize())
 	blockSigChecks := int64(0)
 	totalFees := int64(0)
 

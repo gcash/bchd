@@ -55,3 +55,23 @@ func TestTemplateSkipsSequenceLockedTx(t *testing.T) {
 			"unlocked tx", len(tmpl.Block.Transactions))
 	}
 }
+
+// TestTemplateBlockSizeAccounting ensures the starting block size is the
+// header overhead plus the coinbase, so a small transaction fits in a small
+// block.
+func TestTemplateBlockSizeAccounting(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+
+	h.gen.policy = &Policy{BlockMaxSize: 5000}
+	h.src.add(spend(h.cbTxs[0], 1000), 1000)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	if n := len(tmpl.Block.Transactions); n != 2 {
+		t.Fatalf("a small tx did not fit in a 5000 byte block (%d txs, "+
+			"block size %d)", n, tmpl.Block.SerializeSize())
+	}
+}
