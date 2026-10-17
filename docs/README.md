@@ -79,6 +79,12 @@ are not validated, which makes the initial block download faster up to that
 block; everything else about these blocks is still checked.  The node does not
 consider itself synced until its tip is past the last checkpoint.
 
+Each of these networks also has a minimum chain work, again Bitcoin Cash Node's:
+the total proof of work its chain is known to have.  Until the best chain has
+at least that much work, the node does not consider itself synced either, so
+it does not relay blocks, answer `getheaders` or filter requests, or build
+block templates.
+
 `addcheckpoint` adds checkpoints and `nocheckpoints` disables the built-in
 ones, in which case every script is validated.  With `fastsync`, the UTXO set of
 the last checkpoint that has one (mainnet block 661648) is downloaded instead,
