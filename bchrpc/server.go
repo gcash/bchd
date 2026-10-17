@@ -1166,7 +1166,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		if err != nil {
 			return nil, status.Error(codes.NotFound, "utxo not found")
 		}
-		if req.Index > uint32(len(tx.MsgTx().TxOut)) {
+		if req.Index >= uint32(len(tx.MsgTx().TxOut)) {
 			return nil, status.Error(codes.InvalidArgument, "prev index greater than len outputs")
 		}
 		spendingTx := s.txMemPool.CheckSpend(*op)
