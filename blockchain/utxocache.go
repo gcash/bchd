@@ -240,6 +240,12 @@ type utxoCache struct {
 
 	// flushInProgress reports whether the cache is currently being flushed
 	flushInProgress bool
+
+	// staleJournals holds the blocks removed from the best chain since the
+	// last completed flush.  Their spend journal entries are kept until the
+	// next flush completes, since recovering from an interrupted flush may
+	// need to roll them back.
+	staleJournals map[chainhash.Hash]struct{}
 }
 
 // newUtxoCache initiates a new utxo cache instance with its memory usage limited
@@ -250,6 +256,7 @@ func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 		maxTotalMemoryUsage: maxTotalMemoryUsage,
 
 		cachedEntries: make(map[wire.OutPoint]*UtxoEntry),
+		staleJournals: make(map[chainhash.Hash]struct{}),
 	}
 }
 
@@ -619,14 +626,35 @@ func (s *utxoCache) flush(bestState *BestState) error {
 	// When done, store the best state hash in the database to indicate the state
 	// is consistent until that hash.
 	err = s.db.Update(func(dbTx database.Tx) error {
+		for hash := range s.staleJournals {
+			if err := dbRemoveSpendJournalEntry(dbTx, &hash); err != nil {
+				return err
+			}
+		}
 		return dbPutUtxoStateConsistency(dbTx, ucsConsistent, &bestState.Hash)
 	})
 	if err != nil {
 		return err
 	}
+	clear(s.staleJournals)
 	s.lastFlushHash = bestState.Hash
 	log.Debug("Done flushing UTXO cache to disk")
 	return nil
+}
+
+// setStaleJournal records whether the spend journal entry of the block is no
+// longer needed once the next flush completes, as for a block removed from the
+// best chain, or is needed again, as for a block added back to it.
+//
+// This function is safe for concurrent access.
+func (s *utxoCache) setStaleJournal(hash chainhash.Hash, stale bool) {
+	s.mtx.Lock()
+	if stale {
+		s.staleJournals[hash] = struct{}{}
+	} else {
+		delete(s.staleJournals, hash)
+	}
+	s.mtx.Unlock()
 }
 
 // Flush flushes the UTXO state to the database.
@@ -660,6 +688,18 @@ func (s *utxoCache) Flush(mode FlushMode, bestState *BestState) error {
 //
 // This method should be called with the state lock held.
 func (s *utxoCache) rollBackBlock(block *bchutil.Block, stxos []SpentTxOut) error {
+	// Load the outputs of the block into the cache first, since the
+	// database may hold them although the cache doesn't, and removing them
+	// must then remove them from the database too.
+	for _, tx := range block.Transactions() {
+		prevOut := wire.OutPoint{Hash: *tx.Hash()}
+		for txOutIdx := range tx.MsgTx().TxOut {
+			prevOut.Index = uint32(txOutIdx)
+			if _, err := s.getEntry(prevOut); err != nil {
+				return err
+			}
+		}
+	}
 	return disconnectTransactions(s, block, stxos)
 }
 
@@ -676,9 +716,13 @@ func (s *utxoCache) rollForwardBlock(block *bchutil.Block) error {
 // InitConsistentState checks the consistency status of the utxo state and
 // replays blocks if it lags behind the best state of the blockchain.
 //
+// The last flush may name a block a reorg has since removed from the best
+// chain.  The blocks from that block back to the best chain are then rolled
+// back too, using the spend journal entries kept for them.
+//
 // It needs to be ensured that the chainView passed to this method does not
 // get changed during the execution of this method.
-func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt <-chan struct{}) error {
+func (s *utxoCache) InitConsistentState(tip *blockNode, index *blockIndex, fastSync bool, interrupt <-chan struct{}) error {
 	// Load the consistency status from the database.
 	var statusCode byte
 	var statusHash *chainhash.Hash
@@ -750,44 +794,55 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 	log.Info("Reconstructing UTXO state after unclean shutdown. This may take " +
 		"a long time...")
 
-	// Even though this should always be true, make sure the fetched hash is in
-	// the best chain.
-	var statusNode *blockNode
-	var statusNodeNext *blockNode // the first one higher than the statusNode
-	attachNodes := list.New()
-	for node := tip; node.height >= 0; node = node.parent {
-		if node.hash == *statusHash {
-			statusNode = node
-			break
-		}
-		attachNodes.PushFront(node)
-		statusNodeNext = node
+	// Find the last flushed block and the blocks between it and the best
+	// chain, which a reorg removed.
+	flushNode := index.LookupNode(statusHash)
+	if flushNode == nil {
+		return AssertError(fmt.Sprintf("last utxo consistency status "+
+			"contains unknown hash %v", statusHash))
+	}
+	var detachedNodes []*blockNode
+	statusNode := flushNode
+	for statusNode != nil && tip.Ancestor(statusNode.height) != statusNode {
+		detachedNodes = append(detachedNodes, statusNode)
+		statusNode = statusNode.parent
+	}
+	if statusNode == nil {
+		return AssertError(fmt.Sprintf("last utxo consistency status "+
+			"contains hash %v that does not connect to the best chain",
+			statusHash))
 	}
 
-	if statusNode == nil {
-		return AssertError(fmt.Sprintf("last utxo consistency status contains "+
-			"hash that is not in best chain: %v", statusHash))
+	// Collect the blocks of the best chain after the fork point, which are
+	// replayed once the state is rolled back to it.
+	attachNodes := list.New()
+	for node := tip; node != statusNode; node = node.parent {
+		attachNodes.PushFront(node)
 	}
 
 	// If data was in the middle of a flush, we have to roll back all blocks from
 	// the last best block all the way back to the last consistent block.
-	log.Debugf("Rolling back %d blocks to rebuild the UTXO state...", tip.height-statusNode.height)
+	log.Debugf("Rolling back %d blocks to rebuild the UTXO state...",
+		int(tip.height-statusNode.height)+len(detachedNodes))
+
+	// rollBack rolls back the block of the node using its spend journal.
+	rollBack := func(dbTx database.Tx, node *blockNode) error {
+		block, err := dbFetchBlockByNode(dbTx, node)
+		if err != nil {
+			return err
+		}
+		stxos, err := dbFetchSpendJournalEntry(dbTx, block)
+		if err != nil {
+			return err
+		}
+		return s.rollBackBlock(block, stxos)
+	}
 
 	// Roll back blocks in batches.
 	rollbackBatch := func(dbTx database.Tx, node *blockNode) (*blockNode, error) {
 		nbBatchBlocks := 0
 		for ; node.height > statusNode.height; node = node.parent {
-			block, err := dbFetchBlockByNode(dbTx, node)
-			if err != nil {
-				return nil, err
-			}
-
-			stxos, err := dbFetchSpendJournalEntry(dbTx, block)
-			if err != nil {
-				return nil, err
-			}
-
-			if err := s.rollBackBlock(block, stxos); err != nil {
+			if err := rollBack(dbTx, node); err != nil {
 				return nil, err
 			}
 
@@ -804,7 +859,7 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 	for node := tip; node.height > statusNode.height; {
 		log.Tracef("Rolling back %d more blocks...",
 			node.height-statusNode.height)
-		err := s.db.Update(func(dbTx database.Tx) error {
+		err := s.db.View(func(dbTx database.Tx) error {
 			var err error
 			node, err = rollbackBatch(dbTx, node)
 
@@ -821,14 +876,34 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 		}
 	}
 
+	// Roll back the blocks removed from the best chain, after which their
+	// spend journal entries are no longer needed.
+	for _, node := range detachedNodes {
+		err := s.db.View(func(dbTx database.Tx) error {
+			return rollBack(dbTx, node)
+		})
+		if err != nil {
+			return err
+		}
+		s.staleJournals[node.hash] = struct{}{}
+	}
+
 	// Now we can flush and update the status to avoid redoing this work when
 	// interrupted.
-	if err := s.flush(&BestState{Hash: *statusHash}); err != nil {
+	if err := s.flush(&BestState{Hash: statusNode.hash}); err != nil {
 		return err
 	}
 
+	// Nothing is left to replay when the last flush was at the tip, so
+	// just mark the state as consistent.
+	if attachNodes.Len() == 0 {
+		return s.db.Update(func(dbTx database.Tx) error {
+			return dbPutUtxoStateConsistency(dbTx, ucsConsistent, &tip.hash)
+		})
+	}
+
 	log.Debugf("Replaying %d blocks to rebuild UTXO state...",
-		tip.height-statusNodeNext.height+1)
+		attachNodes.Len())
 
 	// Then we replay the blocks from the last consistent state up to the best
 	// state. Iterate forward from the consistent node to the tip of the best
@@ -862,7 +937,7 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, fastSync bool, interrupt
 		return node, nil
 	}
 
-	for node := statusNodeNext; node.height <= tip.height; {
+	for node := attachNodes.Front().Value.(*blockNode); node.height <= tip.height; {
 		log.Tracef("Replaying %d more blocks...", tip.height-node.height+1)
 		err := s.db.Update(func(dbTx database.Tx) error {
 			var err error

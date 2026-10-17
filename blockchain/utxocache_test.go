@@ -507,7 +507,7 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 		// Reset the utxo cache
 		chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
 
-		err := chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), false, nil)
+		err := chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), chain.index, false, nil)
 		if err != nil {
 			t.Fatalf("failed to init utxo cache: %v", err)
 		}
@@ -596,7 +596,7 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 		// Reset the utxo cache
 		chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
 
-		err = chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), false, nil)
+		err = chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), chain.index, false, nil)
 		if err != nil {
 			t.Fatalf("failed to init utxo cache: %v", err)
 		}
@@ -609,5 +609,30 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 
 		assertConsistencyState(t, chain, ucsConsistent, b4.Hash())
 		assertNbEntriesOnDisk(t, chain, len(spendableOuts4))
+	})
+
+	// A status hash that is not in the best chain must be reported as an
+	// error rather than walked past the genesis block.
+	t.Run("Status hash not in best chain", func(t *testing.T) {
+		chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_InitConsistentState")
+		defer tearDown()
+		tip := bchutil.NewBlock(params.GenesisBlock)
+
+		var emptySpendableOuts []*spendableOut
+		addBlock(chain, tip, emptySpendableOuts)
+
+		unknownHash := chainhash.Hash{0x01}
+		err := chain.db.Update(func(dbTx database.Tx) error {
+			return dbPutUtxoStateConsistency(dbTx, ucsConsistent, &unknownHash)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error while puting utxo state to db: %v", err)
+		}
+
+		chain.utxoCache = newUtxoCache(chain.db, 10*1024*1024)
+		err = chain.utxoCache.InitConsistentState(chain.bestChain.Tip(), chain.index, false, nil)
+		if _, ok := err.(AssertError); !ok {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 }
