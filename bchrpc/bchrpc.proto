@@ -751,7 +751,10 @@ message Transaction {
         bytes pubkey_script = 3;
         // The bitcoin addresses associated with this output.
         string address = 4;
-        // The type of script.
+        // The type of script: pubkey, pubkeyhash, scripthash (for both the
+        // 20 and the 32 byte hash forms), multisig, datacarrier (OP_RETURN
+        // followed only by pushes), script (any other script of at most 201
+        // bytes) or nonstandard.
         string script_class = 5;
         // The script expressed in Bitcoin Cash Script.
         string disassembled_script = 6;
