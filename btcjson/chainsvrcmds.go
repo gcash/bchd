@@ -765,6 +765,24 @@ func NewSubmitBlockCmd(hexBlock string, options *SubmitBlockOptions) *SubmitBloc
 	}
 }
 
+// TestMempoolAcceptCmd defines the testmempoolaccept JSON-RPC command.
+type TestMempoolAcceptCmd struct {
+	RawTxs        []string
+	AllowHighFees *bool `jsonrpcdefault:"false"`
+}
+
+// NewTestMempoolAcceptCmd returns a new instance which can be used to issue a
+// testmempoolaccept JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewTestMempoolAcceptCmd(rawTxs []string, allowHighFees *bool) *TestMempoolAcceptCmd {
+	return &TestMempoolAcceptCmd{
+		RawTxs:        rawTxs,
+		AllowHighFees: allowHighFees,
+	}
+}
+
 // UptimeCmd defines the uptime JSON-RPC command.
 type UptimeCmd struct{}
 
@@ -881,6 +899,7 @@ func init() {
 	MustRegisterCmd("setgenerate", (*SetGenerateCmd)(nil), flags)
 	MustRegisterCmd("stop", (*StopCmd)(nil), flags)
 	MustRegisterCmd("submitblock", (*SubmitBlockCmd)(nil), flags)
+	MustRegisterCmd("testmempoolaccept", (*TestMempoolAcceptCmd)(nil), flags)
 	MustRegisterCmd("uptime", (*UptimeCmd)(nil), flags)
 	MustRegisterCmd("validateaddress", (*ValidateAddressCmd)(nil), flags)
 	MustRegisterCmd("verifychain", (*VerifyChainCmd)(nil), flags)

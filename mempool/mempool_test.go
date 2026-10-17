@@ -1049,7 +1049,7 @@ func TestCheckMempoolAcceptance(t *testing.T) {
 		t.Helper()
 		cached := hashCache.ContainsHashes(tx.Hash())
 		before := snapshotPool(harness)
-		result, err := harness.txPool.CheckMempoolAcceptance(tx)
+		result, err := harness.txPool.CheckMempoolAcceptance(tx, 0)
 		if after := snapshotPool(harness); after != before {
 			t.Fatalf("CheckMempoolAcceptance changed the pool: "+
 				"before %+v, after %+v", before, after)
@@ -1115,4 +1115,65 @@ func TestCheckMempoolAcceptance(t *testing.T) {
 			"error %v", result, err)
 	}
 	testPoolMembership(tc, child, false, false)
+}
+
+// TestCheckMempoolAcceptanceMaxFee ensures that CheckMempoolAcceptance rejects
+// a transaction that pays more than the maximum fee passed to it.
+func TestCheckMempoolAcceptanceMaxFee(t *testing.T) {
+	t.Parallel()
+
+	harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+
+	// Spend the output with a fee of 1 BCH.
+	const fee = bchutil.SatoshiPerBitcoin
+	msgTx := wire.NewMsgTx(wire.TxVersion)
+	msgTx.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: outputs[0].outPoint,
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	msgTx.AddTxOut(&wire.TxOut{
+		PkScript: harness.payScript,
+		Value:    int64(outputs[0].amount) - fee,
+	})
+	sigScript, err := txscript.SignatureScript(msgTx, 0,
+		int64(outputs[0].amount), harness.payScript, txscript.SigHashAll,
+		harness.signKey, true)
+	if err != nil {
+		t.Fatalf("unable to sign transaction: %v", err)
+	}
+	msgTx.TxIn[0].SignatureScript = sigScript
+	tx := bchutil.NewTx(msgTx)
+
+	tests := []struct {
+		maxFee  bchutil.Amount
+		allowed bool
+	}{
+		{maxFee: 0, allowed: true},
+		{maxFee: fee, allowed: true},
+		{maxFee: fee - 1, allowed: false},
+	}
+	for _, test := range tests {
+		result, err := harness.txPool.CheckMempoolAcceptance(tx,
+			test.maxFee)
+		if test.allowed {
+			if err != nil || result.Fee != fee {
+				t.Fatalf("max fee %d: unexpected result %+v, "+
+					"error %v", test.maxFee, result, err)
+			}
+			continue
+		}
+		ruleErr, ok := err.(RuleError)
+		if !ok {
+			t.Fatalf("max fee %d: unexpected error %v", test.maxFee,
+				err)
+		}
+		want := HighFeeError{Fee: fee, MaxFee: int64(test.maxFee)}
+		if ruleErr.Err != want {
+			t.Fatalf("max fee %d: got error %v, want %v",
+				test.maxFee, ruleErr.Err, want)
+		}
+	}
 }
