@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2034,11 +2035,17 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 	// the adjustments to the various lengths and indices.
 	numTx := len(msgBlock.Transactions)
 	transactions := make([]btcjson.GetBlockTemplateResultTx, 0, numTx-1)
+	// Index the whole block first since, in canonical order, a parent can
+	// come after the transactions which spend it.
+	txHashes := make([]chainhash.Hash, numTx)
 	txIndex := make(map[chainhash.Hash]int64, numTx)
+	for i, tx := range msgBlock.Transactions {
+		txHashes[i] = tx.TxHash()
+		txIndex[txHashes[i]] = int64(i)
+	}
 	sigChecks := int64(0)
 	for i, tx := range msgBlock.Transactions {
-		txHash := tx.TxHash()
-		txIndex[txHash] = int64(i)
+		txHash := txHashes[i]
 		sigChecks += template.SigChecks[i]
 
 		// Skip the coinbase transaction.
@@ -2046,15 +2053,16 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 			continue
 		}
 
-		// Create an array of 1-based indices to transactions that come
-		// before this one in the transactions list which this one
-		// depends on.  This is necessary since the created block must
-		// ensure proper ordering of the dependencies.  A map is used
-		// before creating the final array to prevent duplicate entries
-		// when multiple inputs reference the same transaction.
+		// Create an array of 1-based indices to transactions in the
+		// transactions list which this one depends on, so a miner that
+		// drops a transaction knows which others to drop with it.  A
+		// map is used before creating the final array to prevent
+		// duplicate entries when multiple inputs reference the same
+		// transaction.
 		dependsMap := make(map[int64]struct{})
 		for _, txIn := range tx.TxIn {
-			if idx, ok := txIndex[txIn.PreviousOutPoint.Hash]; ok {
+			idx, ok := txIndex[txIn.PreviousOutPoint.Hash]
+			if ok && idx != 0 {
 				dependsMap[idx] = struct{}{}
 			}
 		}
@@ -2062,6 +2070,7 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		for idx := range dependsMap {
 			depends = append(depends, idx)
 		}
+		slices.Sort(depends)
 
 		// Serialize the transaction for later conversion to hex.
 		txBuf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))

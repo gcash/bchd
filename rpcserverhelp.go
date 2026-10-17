@@ -339,7 +339,7 @@ var helpDescsEnUS = map[string]string{
 	// GetBlockTemplateResultTx help.
 	"getblocktemplateresulttx-data":      "Hex-encoded transaction data (byte-for-byte)",
 	"getblocktemplateresulttx-hash":      "Hex-encoded transaction hash (little endian if treated as a 256-bit number)",
-	"getblocktemplateresulttx-depends":   "Other transactions before this one (by 1-based index in the 'transactions'  list) that must be present in the final block if this one is",
+	"getblocktemplateresulttx-depends":   "Other transactions (by 1-based index in the 'transactions' list) that must be present in the final block if this one is",
 	"getblocktemplateresulttx-fee":       "Difference in value between transaction inputs and outputs (in Satoshi)",
 	"getblocktemplateresulttx-sigops":    "Total number of signature operations as counted for purposes of block limits",
 	"getblocktemplateresulttx-sigchecks": "Total number of signature checks as counted for purposes of block limits",
