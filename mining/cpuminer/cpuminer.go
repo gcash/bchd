@@ -151,8 +151,9 @@ out:
 }
 
 // submitBlock submits the passed block to network after ensuring it passes all
-// of the consensus validation rules.
-func (m *CPUMiner) submitBlock(block *bchutil.Block) bool {
+// of the consensus validation rules.  It returns whether the block was
+// accepted, and an error when it was rejected rather than stale or an orphan.
+func (m *CPUMiner) submitBlock(block *bchutil.Block) (bool, error) {
 	m.submitBlockLock.Lock()
 	defer m.submitBlockLock.Unlock()
 
@@ -165,7 +166,7 @@ func (m *CPUMiner) submitBlock(block *bchutil.Block) bool {
 	if !msgBlock.Header.PrevBlock.IsEqual(&m.g.BestSnapshot().Hash) {
 		log.Debugf("Block submitted via CPU miner with previous "+
 			"block %s is stale", msgBlock.Header.PrevBlock)
-		return false
+		return false, nil
 	}
 
 	// Process this block using the same rules as blocks coming from other
@@ -177,22 +178,22 @@ func (m *CPUMiner) submitBlock(block *bchutil.Block) bool {
 		if _, ok := err.(blockchain.RuleError); !ok {
 			log.Errorf("Unexpected error while processing "+
 				"block submitted via CPU miner: %v", err)
-			return false
+			return false, err
 		}
 
 		log.Debugf("Block submitted via CPU miner rejected: %v", err)
-		return false
+		return false, err
 	}
 	if isOrphan {
 		log.Debugf("Block submitted via CPU miner is an orphan")
-		return false
+		return false, nil
 	}
 
 	// The block was accepted.
 	coinbaseTx := block.MsgBlock().Transactions[0].TxOut[0]
 	log.Infof("Block submitted via CPU miner accepted (hash %s, "+
 		"amount %v)", block.Hash(), bchutil.Amount(coinbaseTx.Value))
-	return true
+	return true, nil
 }
 
 // solveBlock attempts to find some combination of a nonce, extra nonce, and
@@ -346,6 +347,14 @@ out:
 			errStr := fmt.Sprintf("Failed to create new block "+
 				"template: %v", err)
 			log.Errorf("%s", errStr)
+
+			// Wait before retrying so a persistent error does not
+			// spin.
+			select {
+			case <-quit:
+				break out
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 
@@ -355,7 +364,7 @@ out:
 		// true a solution was found, so submit the solved block.
 		if m.solveBlock(template.Block, template.Height, ticker, quit) {
 			block := bchutil.NewBlock(template.Block)
-			m.submitBlock(block)
+			_, _ = m.submitBlock(block)
 		}
 	}
 
@@ -595,33 +604,48 @@ func (m *CPUMiner) GenerateNBlocks(n uint32) ([]*chainhash.Hash, error) {
 		template, err := m.g.NewBlockTemplate(payToAddr)
 		m.submitBlockLock.Unlock()
 		if err != nil {
-			errStr := fmt.Sprintf("Failed to create new block "+
-				"template: %v", err)
-			log.Errorf("%s", errStr)
-			continue
+			m.stopDiscreteMining()
+			return nil, fmt.Errorf("failed to create new block "+
+				"template: %w", err)
 		}
 
 		// Attempt to solve the block.  The function will exit early
 		// with false when conditions that trigger a stale block, so
 		// a new block template can be generated.  When the return is
 		// true a solution was found, so submit the solved block.
+		// Only an accepted block counts; a stale block or an orphan
+		// is retried and a rejected one ends the run.
 		if m.solveBlock(template.Block, template.Height, ticker, nil) {
 			block := bchutil.NewBlock(template.Block)
-			m.submitBlock(block)
+			accepted, err := m.submitBlock(block)
+			if err != nil {
+				m.stopDiscreteMining()
+				return nil, fmt.Errorf("block %v rejected: %w",
+					block.Hash(), err)
+			}
+			if !accepted {
+				continue
+			}
 			blockHashes[i] = block.Hash()
 			i++
 			if i == n {
 				log.Tracef("Generated %d blocks", i)
-				m.Lock()
-				close(m.speedMonitorQuit)
-				m.wg.Wait()
-				m.started = false
-				m.discreteMining = false
-				m.Unlock()
+				m.stopDiscreteMining()
 				return blockHashes, nil
 			}
 		}
 	}
+}
+
+// stopDiscreteMining stops the speed monitor started by GenerateNBlocks and
+// marks the miner as stopped.
+func (m *CPUMiner) stopDiscreteMining() {
+	m.Lock()
+	close(m.speedMonitorQuit)
+	m.wg.Wait()
+	m.started = false
+	m.discreteMining = false
+	m.Unlock()
 }
 
 // New returns a new instance of a CPU miner for the provided configuration.
