@@ -87,15 +87,21 @@ func (m *ruleTestMiner) solve(blk *wire.MsgBlock, height int32) *bchutil.Block {
 // build returns a solved block on the current tip with the given coinbase
 // and transactions, which are sorted in canonical order.
 func (m *ruleTestMiner) build(cb *wire.MsgTx, txs ...*wire.MsgTx) *bchutil.Block {
-	height := m.height + 1
-	if cb == nil {
-		cb = m.coinbase(height)
-	}
 	txs = slices.Clone(txs)
 	slices.SortFunc(txs, func(a, b *wire.MsgTx) int {
 		ha, hb := a.TxHash(), b.TxHash()
 		return ha.Compare(&hb)
 	})
+	return m.buildInOrder(cb, txs...)
+}
+
+// buildInOrder returns a solved block on the current tip with the given
+// coinbase and transactions in the given order.
+func (m *ruleTestMiner) buildInOrder(cb *wire.MsgTx, txs ...*wire.MsgTx) *bchutil.Block {
+	height := m.height + 1
+	if cb == nil {
+		cb = m.coinbase(height)
+	}
 	ts := m.tip.Header.Timestamp.Add(10 * time.Minute)
 	if ts.Before(time.Unix(1700000000, 0)) {
 		ts = time.Unix(1700000000, 0)
