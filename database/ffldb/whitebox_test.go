@@ -17,12 +17,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/btcsuite/goleveldb/leveldb"
-	ldberrors "github.com/btcsuite/goleveldb/leveldb/errors"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/syndtr/goleveldb/leveldb"
+	ldberrors "github.com/syndtr/goleveldb/leveldb/errors"
 )
 
 // fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases
