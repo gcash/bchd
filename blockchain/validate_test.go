@@ -297,6 +297,76 @@ func TestCheckSerializedHeight(t *testing.T) {
 	}
 }
 
+// TestCheckSerializedHeightMinimal ensures the coinbase signature script must
+// start with the minimal push of the block height.
+func TestCheckSerializedHeightMinimal(t *testing.T) {
+	type vector struct {
+		height  int32
+		minimal []byte
+		bad     [][]byte
+	}
+	vectors := []vector{
+		{0, []byte{0x00}, [][]byte{{0x01, 0x00}, {0x02, 0x00, 0x00}}},
+		{17, []byte{0x01, 0x11}, [][]byte{{0x02, 0x11, 0x00}}},
+		{127, []byte{0x01, 0x7f}, [][]byte{{0x02, 0x7f, 0x00}}},
+		{128, []byte{0x02, 0x80, 0x00}, [][]byte{{0x01, 0x80},
+			{0x04, 0x80, 0x00, 0x00, 0x00}}},
+		{255, []byte{0x02, 0xff, 0x00}, [][]byte{{0x01, 0xff},
+			{0x03, 0xff, 0x00, 0x00}}},
+		{256, []byte{0x02, 0x00, 0x01}, [][]byte{{0x03, 0x00, 0x01, 0x00}}},
+		{32767, []byte{0x02, 0xff, 0x7f}, [][]byte{{0x03, 0xff, 0x7f, 0x00}}},
+		{32768, []byte{0x03, 0x00, 0x80, 0x00}, [][]byte{{0x02, 0x00, 0x80},
+			{0x04, 0x00, 0x80, 0x00, 0x00}}},
+		{8388607, []byte{0x03, 0xff, 0xff, 0x7f}, [][]byte{
+			{0x04, 0xff, 0xff, 0x7f, 0x00}}},
+		{8388608, []byte{0x04, 0x00, 0x00, 0x80, 0x00}, [][]byte{
+			{0x03, 0x00, 0x00, 0x80}}},
+		{950000, []byte{0x03, 0xf0, 0x7e, 0x0e}, [][]byte{
+			{0x04, 0xf0, 0x7e, 0x0e, 0x00},
+			{0x08, 0xf0, 0x7e, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00},
+			{txscript.OP_PUSHDATA1, 0x03, 0xf0, 0x7e, 0x0e},
+		}},
+	}
+	// Heights 1 to 16 must use OP_1 to OP_16, not a data push.
+	for h := int32(1); h <= 16; h++ {
+		vectors = append(vectors, vector{h,
+			[]byte{byte(txscript.OP_1 - 1 + h)},
+			[][]byte{{0x01, byte(h)}, {0x02, byte(h), 0x00}}})
+	}
+
+	check := func(sigScript []byte, height int32) error {
+		msgTx := wire.NewMsgTx(1)
+		msgTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{},
+			math.MaxUint32), sigScript))
+		return checkSerializedHeight(bchutil.NewTx(msgTx), height)
+	}
+	for _, v := range vectors {
+		if err := check(v.minimal, v.height); err != nil {
+			t.Errorf("height %d: minimal %x rejected: %v", v.height,
+				v.minimal, err)
+		}
+		// Data after the height push is allowed.
+		extra := append(append([]byte{}, v.minimal...), 0x04, 1, 2, 3, 4)
+		if err := check(extra, v.height); err != nil {
+			t.Errorf("height %d: %x rejected: %v", v.height, extra, err)
+		}
+		if err := check(v.minimal, v.height+1); err == nil {
+			t.Errorf("height %d: %x accepted for height %d",
+				v.height, v.minimal, v.height+1)
+		}
+		for _, bad := range v.bad {
+			err := check(bad, v.height)
+			rerr, ok := err.(RuleError)
+			if !ok || (rerr.ErrorCode != ErrBadCoinbaseHeight &&
+				rerr.ErrorCode != ErrMissingCoinbaseHeight) {
+
+				t.Errorf("height %d: non-minimal %x: got %v, want "+
+					"%v", v.height, bad, err, ErrBadCoinbaseHeight)
+			}
+		}
+	}
+}
+
 // TestTxVersionRule ensures the transaction version range is enforced for
 // every transaction in a block, the coinbase included, from the first block
 // after the Upgrade9 fork height.
