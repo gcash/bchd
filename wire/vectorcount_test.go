@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"reflect"
 	"runtime"
 	"strings"
@@ -17,10 +18,10 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
-// TestVectorCountBoundedByPayload ensures vectors and strings that claim more elements
-// than their payload holds fail with the same error as before, whether or
-// not the reader reports its length, and that an in-memory payload only
-// allocates for the elements it can hold.
+// TestVectorCountBoundedByPayload ensures vectors and strings that claim more
+// elements than their payload holds fail with the same error as before,
+// whether or not the reader reports its length, and that an in-memory payload
+// only allocates for the elements it can hold.
 func TestVectorCountBoundedByPayload(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -37,6 +38,21 @@ func TestVectorCountBoundedByPayload(t *testing.T) {
 			func() Message { return &MsgNotFound{} }},
 		{"headers", MaxBlockHeadersPerMsg, blockHeaderLen + 1, nil,
 			func() Message { return &MsgHeaders{} }},
+		{"getheaders", MaxBlockLocatorsPerMsg, chainhash.HashSize,
+			make([]byte, 4),
+			func() Message { return &MsgGetHeaders{} }},
+		{"getblocks", MaxBlockLocatorsPerMsg, chainhash.HashSize,
+			make([]byte, 4),
+			func() Message { return &MsgGetBlocks{} }},
+		{"addr", MaxAddrPerMsg,
+			int(maxNetAddressPayload(ProtocolVersion)), nil,
+			func() Message { return &MsgAddr{} }},
+		{"cfheaders", MaxCFHeadersPerMsg, chainhash.HashSize,
+			make([]byte, 1+2*chainhash.HashSize),
+			func() Message { return &MsgCFHeaders{} }},
+		{"cfcheckpt", maxCFHeadersLen, chainhash.HashSize,
+			make([]byte, 1+chainhash.HashSize),
+			func() Message { return &MsgCFCheckpt{} }},
 		{"reject command", 1 << 20, 1, nil,
 			func() Message { return &MsgReject{} }},
 		{"reject reason", 1 << 20, 1, []byte{0x00, byte(RejectInvalid)},
@@ -103,12 +119,40 @@ func TestVectorCountRoundTrip(t *testing.T) {
 		bh.Timestamp = time.Unix(int64(i)+1231006505, 0)
 		_ = headers.AddBlockHeader(bh)
 	}
+	getHeaders := NewMsgGetHeaders()
+	getBlocks := NewMsgGetBlocks(&chainhash.Hash{0x01})
+	for i := range MaxBlockLocatorsPerMsg {
+		h := hash(i)
+		_ = getHeaders.AddBlockLocatorHash(&h)
+		_ = getBlocks.AddBlockLocatorHash(&h)
+	}
+	addr := NewMsgAddr()
+	for i := range MaxAddrPerMsg {
+		ip := net.IP{0x20, 0x01, 0x0d, 0xb8, 14: byte(i >> 8),
+			15: byte(i)}
+		na := NewNetAddressIPPort(ip, uint16(i), SFNodeNetwork)
+		na.Timestamp = time.Unix(int64(i)+1231006505, 0)
+		_ = addr.AddAddress(na)
+	}
+	cfHeaders := NewMsgCFHeaders()
+	cfHeaders.StopHash = hash(1)
+	cfHeaders.PrevFilterHeader = hash(2)
+	for i := range MaxCFHeadersPerMsg {
+		h := hash(i)
+		_ = cfHeaders.AddCFHash(&h)
+	}
+	stop := hash(3)
+	cfCheckpt := NewMsgCFCheckpt(GCSFilterRegular, &stop, maxCFHeadersLen)
+	for i := range maxCFHeadersLen {
+		h := hash(i)
+		_ = cfCheckpt.AddCFHeader(&h)
+	}
 	reason := strings.Repeat("r", 100*1024)
 	reject := NewMsgReject(CmdTx, RejectNonstandard, reason)
 	reject.Hash = hash(1)
 
 	for _, msg := range []Message{inv, getData, notFound, headers,
-		reject} {
+		getHeaders, getBlocks, addr, cfHeaders, cfCheckpt, reject} {
 
 		var buf bytes.Buffer
 		if err := WriteMessage(&buf, msg, ProtocolVersion,
