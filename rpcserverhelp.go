@@ -683,7 +683,7 @@ var helpDescsEnUS = map[string]string{
 	"submitblock-options":     "This parameter is currently ignored",
 	"submitblock--condition0": "Block successfully submitted",
 	"submitblock--condition1": "Block rejected",
-	"submitblock--result1":    "The reason the block was rejected",
+	"submitblock--result1":    "The BIP22 reason the block was rejected",
 
 	// ValidateAddressResult help.
 	"validateaddresschainresult-isvalid": "Whether or not the address is valid",

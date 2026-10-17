@@ -4220,7 +4220,18 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 	// nodes.  This will in turn relay it to the network like normal.
 	isOrphan, err := s.cfg.SyncMgr.SubmitBlock(block, blockchain.BFNone)
 	if err != nil {
-		return fmt.Sprintf("rejected: %s", err.Error()), nil
+		// Report rule violations with their BIP22 reason and anything
+		// else as a failure to check the block.
+		var ruleErr blockchain.RuleError
+		if !errors.As(err, &ruleErr) {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCVerify,
+				Message: "Failed to process block: " + err.Error(),
+			}
+		}
+		rpcsLog.Infof("Rejected block %s via submitblock: %v",
+			block.Hash(), err)
+		return chainErrToGBTErrString(ruleErr), nil
 	}
 	if isOrphan {
 		rpcsLog.Infof("Block %s submitted via submitblock has an "+
