@@ -56,6 +56,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrPrevBlockNotBest, "ErrPrevBlockNotBest"},
 		{ErrTooManySigChecks, "ErrTooManySigChecks"},
 		{ErrTxTooManySigChecks, "ErrTxTooManySigChecks"},
+		{ErrBadTxVersion, "ErrBadTxVersion"},
 		{0xffff, "Unknown ErrorCode (65535)"},
 	}
 

@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -294,6 +295,129 @@ func TestCheckSerializedHeight(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestTxVersionRule ensures the transaction version range is enforced for
+// every transaction in a block, the coinbase included, from the first block
+// after the Upgrade9 fork height.
+func TestTxVersionRule(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	params.Upgrade9ForkHeight = 2
+	chain, teardownFunc, err := chainSetup("txversionrule", &params)
+	if err != nil {
+		t.Fatalf("Failed to setup chain instance: %v", err)
+	}
+	defer teardownFunc()
+	chain.TstSetCoinbaseMaturity(1)
+
+	// Pad transactions above the minimum transaction size.
+	padding := wire.NewTxOut(0, append([]byte{txscript.OP_RETURN, 64},
+		make([]byte, 64)...), wire.TokenData{})
+
+	tip := params.GenesisBlock
+	newCoinbase := func(height int32, version int32) *wire.MsgTx {
+		cb := wire.NewMsgTx(version)
+		cb.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Index: math.MaxUint32},
+			SignatureScript:  []byte{txscript.OP_DATA_2, byte(height), 0},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, &params),
+			[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+		cb.AddTxOut(padding)
+		return cb
+	}
+	newBlock := func(txs ...*wire.MsgTx) *bchutil.Block {
+		height := chain.BestSnapshot().Height + 1
+		ts := tip.Header.Timestamp.Add(10 * time.Minute)
+		bits, err := chain.CalcNextRequiredDifficulty(ts)
+		if err != nil {
+			t.Fatalf("CalcNextRequiredDifficulty: %v", err)
+		}
+		msgBlock := &wire.MsgBlock{
+			Header: wire.BlockHeader{
+				Version:   4,
+				PrevBlock: tip.BlockHash(),
+				Timestamp: ts,
+				Bits:      bits,
+			},
+			Transactions: txs,
+		}
+		utxs := make([]*bchutil.Tx, 0, len(txs))
+		for _, tx := range txs {
+			utxs = append(utxs, bchutil.NewTx(tx))
+		}
+		merkles := BuildMerkleTreeStore(utxs)
+		msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+		target := CompactToBig(bits)
+		for {
+			hash := msgBlock.Header.BlockHash()
+			if HashToBig(&hash).Cmp(target) <= 0 {
+				break
+			}
+			msgBlock.Header.Nonce++
+		}
+		block := bchutil.NewBlock(msgBlock)
+		block.SetHeight(height)
+		return block
+	}
+	process := func(block *bchutil.Block) error {
+		_, _, err := chain.ProcessBlock(block, BFNone)
+		if err == nil {
+			tip = block.MsgBlock()
+		}
+		return err
+	}
+	mustAccept := func(desc string, block *bchutil.Block) {
+		t.Helper()
+		if err := process(block); err != nil {
+			t.Fatalf("%s: block at height %d rejected: %v", desc,
+				block.Height(), err)
+		}
+	}
+	mustReject := func(desc string, block *bchutil.Block) {
+		t.Helper()
+		err := process(block)
+		rerr, ok := err.(RuleError)
+		if !ok || rerr.ErrorCode != ErrBadTxVersion {
+			t.Fatalf("%s: block at height %d: got %v, want %v",
+				desc, block.Height(), err, ErrBadTxVersion)
+		}
+	}
+	spend := func(prev *wire.MsgTx, version int32) *wire.MsgTx {
+		tx := wire.NewMsgTx(version)
+		tx.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: prev.TxHash()},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		tx.AddTxOut(wire.NewTxOut(prev.TxOut[0].Value-1000,
+			[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+		tx.AddTxOut(padding)
+		return tx
+	}
+
+	badVersions := []int32{0, 3, -1, math.MaxInt32, math.MinInt32}
+
+	// Block 1 provides an output to spend.
+	cb1 := newCoinbase(1, 1)
+	mustAccept("block 1", newBlock(cb1))
+
+	// Block 2 is at the fork height, so the rule is not active yet.
+	cb2 := newCoinbase(2, 3)
+	mustAccept("coinbase version 3 before activation",
+		newBlock(cb2, spend(cb1, 3)))
+
+	// From block 3 every transaction must have version 1 or 2.
+	for _, version := range badVersions {
+		desc := fmt.Sprintf("coinbase version %d", version)
+		mustReject(desc, newBlock(newCoinbase(3, version)))
+
+		desc = fmt.Sprintf("transaction version %d", version)
+		mustReject(desc, newBlock(newCoinbase(3, 1), spend(cb2, version)))
+	}
+	mustAccept("coinbase version 2", newBlock(newCoinbase(3, 2),
+		spend(cb2, 1)))
+	mustAccept("coinbase version 1", newBlock(newCoinbase(4, 1)))
 }
 
 // Block100000 defines block 100,000 of the block chain.  It is used to

@@ -2405,6 +2405,8 @@ func chainErrToGBTErrString(err error) string {
 		return "inconclusive-not-best-prvblk"
 	case blockchain.ErrInvalidTxOrder:
 		return "invalid-transaction-order"
+	case blockchain.ErrBadTxVersion:
+		return "bad-txns-version"
 	}
 
 	return "rejected: " + err.Error()
