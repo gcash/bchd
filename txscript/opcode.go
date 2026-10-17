@@ -3143,6 +3143,16 @@ func pubKeyHasValidLength(pubKey []byte) bool {
 func (vm *Engine) verifySignature(sigBytes, pkBytes, hash []byte,
 	schnorr bool) bool {
 
+	// The cache is keyed on the serialized signature and pubkey, so it is
+	// checked before parsing them.
+	var sigHash chainhash.Hash
+	if vm.sigCache != nil {
+		copy(sigHash[:], hash)
+		if vm.sigCache.Exists(sigHash, sigBytes, pkBytes, schnorr) {
+			return true
+		}
+	}
+
 	pubKey, err := bchec.ParsePubKey(pkBytes, bchec.S256())
 	if err != nil {
 		return false
@@ -3162,19 +3172,12 @@ func (vm *Engine) verifySignature(sigBytes, pkBytes, hash []byte,
 		return false
 	}
 
-	if vm.sigCache == nil {
-		return signature.Verify(hash, pubKey)
-	}
-
-	var sigHash chainhash.Hash
-	copy(sigHash[:], hash)
-	if vm.sigCache.Exists(sigHash, signature, pubKey) {
-		return true
-	}
 	if !signature.Verify(hash, pubKey) {
 		return false
 	}
-	vm.sigCache.Add(sigHash, signature, pubKey)
+	if vm.sigCache != nil {
+		vm.sigCache.Add(sigHash, sigBytes, pkBytes, schnorr)
+	}
 	return true
 }
 
