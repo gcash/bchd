@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -587,17 +588,23 @@ func ExtractCoinbaseHeight(coinbaseTx *bchutil.Tx) (int32, error) {
 }
 
 // checkSerializedHeight checks if the signature script in the passed
-// transaction starts with the serialized block height of wantHeight.
+// transaction starts with the minimal serialized block height of wantHeight.
+// Heights 0 to 16 are pushed with OP_0 to OP_16.
 func checkSerializedHeight(coinbaseTx *bchutil.Tx, wantHeight int32) error {
 	serializedHeight, err := ExtractCoinbaseHeight(coinbaseTx)
 	if err != nil {
 		return err
 	}
 
-	if serializedHeight != wantHeight {
-		str := fmt.Sprintf("the coinbase signature script serialized "+
-			"block height is %d when %d was expected",
-			serializedHeight, wantHeight)
+	expected, err := txscript.NewScriptBuilder().AddInt64(int64(wantHeight)).Script()
+	if err != nil {
+		return err
+	}
+	sigScript := coinbaseTx.MsgTx().TxIn[0].SignatureScript
+	if !bytes.HasPrefix(sigScript, expected) {
+		str := fmt.Sprintf("the coinbase signature script does not "+
+			"start with the minimal serialized block height %d "+
+			"(found %d)", wantHeight, serializedHeight)
 		return ruleError(ErrBadCoinbaseHeight, str)
 	}
 	return nil
@@ -759,6 +766,16 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return ruleError(ErrBlockTooBig, str)
 	}
 
+	// Once Upgrade9 is active the version of every transaction, the
+	// coinbase included, must be within the allowed range.
+	if prevNode.height+1 > b.chainParams.Upgrade9ForkHeight {
+		for _, tx := range block.Transactions() {
+			if err := checkTransactionVersion(tx); err != nil {
+				return err
+			}
+		}
+	}
+
 	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Obtain the latest state of the deployed CSV soft-fork in
@@ -807,6 +824,19 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		}
 	}
 
+	return nil
+}
+
+// checkTransactionVersion ensures the version of the transaction is within
+// the range allowed once Upgrade9 is active.
+func checkTransactionVersion(tx *bchutil.Tx) error {
+	version := tx.MsgTx().Version
+	if version < txscript.MinTxVersion || version > txscript.MaxTxVersion {
+		str := fmt.Sprintf("transaction %v has version %d which is "+
+			"not in the valid range of %d-%d", tx.Hash(), version,
+			txscript.MinTxVersion, txscript.MaxTxVersion)
+		return ruleError(ErrBadTxVersion, str)
+	}
 	return nil
 }
 
