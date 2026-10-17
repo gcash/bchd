@@ -800,13 +800,19 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// If we didn't ask for this block then the peer is misbehaving.
 	blockHash := bmsg.block.Hash()
 
-	if _, exists = state.requestedBlocks[*blockHash]; !exists && !peer.AllowDirectBlockRelay() {
-		// The regression test intentionally sends some blocks twice
-		// to test duplicate block insertion fails.  Don't disconnect
-		// the peer or ignore the block when we're in regression test
-		// mode in this case so the chain code is actually fed the
-		// duplicate blocks.
-		if sm.chainParams != &chaincfg.RegressionNetParams {
+	behaviorFlags := blockchain.BFNone
+	if _, exists = state.requestedBlocks[*blockHash]; !exists {
+		// Peers we allow to relay blocks directly may send blocks we
+		// didn't request, but these are only stored if they could
+		// extend the best chain.
+		if peer.AllowDirectBlockRelay() {
+			behaviorFlags |= blockchain.BFUnrequested
+		} else if sm.chainParams != &chaincfg.RegressionNetParams {
+			// The regression test intentionally sends some blocks
+			// twice to test duplicate block insertion fails.  Don't
+			// disconnect the peer or ignore the block when we're in
+			// regression test mode in this case so the chain code is
+			// actually fed the duplicate blocks.
 			log.Warnf("Got unrequested block %v from %s -- "+
 				"disconnecting", blockHash, peer.Addr())
 			peer.Disconnect()
@@ -822,7 +828,6 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// since it is needed to verify the next round of headers links
 	// properly.
 	isCheckpointBlock := false
-	behaviorFlags := blockchain.BFNone
 	if sm.headersFirstMode {
 		firstNodeEl := sm.headerList.Front()
 		if firstNodeEl != nil {
@@ -848,6 +853,11 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// handling, etc.
 	_, isOrphan, err := sm.chain.ProcessBlock(bmsg.block, behaviorFlags)
 	var rerr blockchain.RuleError
+	if errors.As(err, &rerr) && rerr.ErrorCode == blockchain.ErrUnrequestedBlock {
+		log.Debugf("Ignoring block %v from %s: %v", blockHash, peer,
+			err)
+		return
+	}
 	if errors.As(err, &rerr) && rerr.ErrorCode == blockchain.ErrForkBeforeFinalized {
 		// The peer follows a chain that forks below the finalized
 		// block, so it can't serve the chain this node follows.

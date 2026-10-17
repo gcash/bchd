@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -41,6 +42,10 @@ const (
 	// BFNoDupBlockCheck signals if the block should skip existence
 	// checks.
 	BFNoDupBlockCheck
+
+	// BFUnrequested signals that the block was not requested from the
+	// peer, so it is only stored when it could extend the best chain.
+	BFUnrequested
 
 	// BFNone is a convenience value to specifically indicate no flags.
 	BFNone BehaviorFlags = 0
@@ -151,8 +156,14 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 
 			// The orphan was sanity checked before its height was
 			// known, so check it again with the rules for its height.
+			// BFUnrequested only describes the block it was passed
+			// with and is never inherited.
 			orphanFlags := b.heightFlags(orphan.block.Height(),
-				flags&^(BFFastAdd|BFMagneticAnomaly|BFUpgrade9))
+				flags&^(BFFastAdd|BFMagneticAnomaly|BFUpgrade9|
+					BFUnrequested))
+			if orphan.unrequested {
+				orphanFlags |= BFUnrequested
+			}
 			err := checkBlockSanity(orphan.block, b.chainParams.PowLimit,
 				b.timeSource, orphanFlags)
 			if err != nil {
@@ -161,6 +172,13 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 
 			_, err = b.maybeAcceptBlock(orphan.block, prevHash, prevNode,
 				orphanFlags)
+			var rerr RuleError
+			if errors.As(err, &rerr) && rerr.ErrorCode == ErrUnrequestedBlock {
+				// Not storing an unrequested orphan doesn't fail
+				// its parent.
+				log.Debugf("Dropped orphan block %v: %v", orphanHash, err)
+				continue
+			}
 			if err != nil {
 				return err
 			}
@@ -230,7 +248,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 		return false, false, err
 	}
 	if !prevHashExists {
-		if err := b.addOrphanBlock(block); err != nil {
+		if err := b.addOrphanBlock(block, flags); err != nil {
 			return false, false, err
 		}
 		log.Infof("Added orphan block %v with parent %v", blockHash, prevHash)
