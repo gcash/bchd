@@ -423,16 +423,13 @@ func deserializeUtxoEntryV0(serialized []byte) (map[uint32]*UtxoEntry, error) {
 		offset += bytesRead
 
 		// Create a new utxo entry with the details deserialized above.
+		tokenData, pkScript := wire.SplitPkScript(pkScript)
 		entries[outputIndex] = &UtxoEntry{
 			amount:      int64(amount),
 			pkScript:    pkScript,
+			tokenData:   tokenData,
 			blockHeight: int32(blockHeight),
 			packedFlags: packedFlags,
-		}
-		entries[outputIndex].pkScript, err = entries[outputIndex].tokenData.SeparateTokenDataFromPKScriptIfExists(entries[outputIndex].pkScript, 0)
-		if err != nil {
-			return nil, errDeserialize(fmt.Sprintf("unable to "+
-				"decode utxo at index %d: %v, Could not parse token data", i, err))
 		}
 	}
 

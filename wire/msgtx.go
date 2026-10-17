@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -350,7 +351,7 @@ func (msg *MsgTx) Copy() *MsgTx {
 		newTokenData := TokenData{
 			CategoryID: oldTxOut.TokenData.CategoryID,
 			BitField:   oldTxOut.TokenData.BitField,
-			Commitment: oldTxOut.TokenData.Commitment,
+			Commitment: slices.Clone(oldTxOut.TokenData.Commitment),
 			Amount:     oldTxOut.TokenData.Amount,
 		}
 
@@ -456,13 +457,12 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		// and needs to be returned to the pool on error.
 		to := &txOuts[i]
 		msg.TxOut[i] = to
-		pkScriptAndTokenDataSize, err := readTxOut(r, pver, msg.Version, to)
+		pkScriptSize, err := readTxOut(r, pver, msg.Version, to)
 		if err != nil {
 			returnScriptBuffers()
 			return err
 		}
-		//totalScriptSize += uint64(len(to.PkScript))
-		totalScriptSize += uint64(pkScriptAndTokenDataSize)
+		totalScriptSize += uint64(pkScriptSize)
 	}
 
 	msg.LockTime, err = binarySerializer.Uint32(r, littleEndian)
@@ -777,23 +777,19 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	var ScriptAndPossibleTokenData []byte
-	ScriptAndPossibleTokenData, err = readScript(r, pver, maxMessagePayload(),
+
+	script, err := readScript(r, pver, maxMessagePayload(),
 		"transaction output public key script and possible token data")
-
-	scriptAndTokendataSize := len(ScriptAndPossibleTokenData)
-
-	if scriptAndTokendataSize > 0 && ScriptAndPossibleTokenData[0] != PREFIX_BYTE { // Todo maybe change this
-		to.PkScript = ScriptAndPossibleTokenData
-		return scriptAndTokendataSize, err
+	if err != nil {
+		return 0, err
 	}
-	var tokenDataSeparationErr error
-	to.PkScript, tokenDataSeparationErr = to.TokenData.SeparateTokenDataFromPKScriptIfExists(ScriptAndPossibleTokenData, pver)
 
-	if tokenDataSeparationErr != nil {
-		to.PkScript = ScriptAndPossibleTokenData
-	}
-	return scriptAndTokendataSize, err
+	// The locking script is moved to the start of the buffer so it can
+	// still be returned to the script pool.
+	var pkScript []byte
+	to.TokenData, pkScript = SplitPkScript(script)
+	to.PkScript = script[:copy(script, pkScript)]
+	return len(to.PkScript), nil
 }
 
 func ReadTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
