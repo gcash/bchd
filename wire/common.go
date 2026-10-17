@@ -5,6 +5,7 @@
 package wire
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -472,6 +473,32 @@ func writeElements(w io.Writer, elements ...interface{}) error {
 	return nil
 }
 
+// readerRemaining returns the number of unread bytes of the in-memory readers
+// the wire decoders use.
+func readerRemaining(r io.Reader) (uint64, bool) {
+	switch r := r.(type) {
+	case *bytes.Reader:
+		return uint64(r.Len()), true
+	case *bytes.Buffer:
+		return uint64(r.Len()), true
+	}
+	return 0, false
+}
+
+// allocCount returns the number of elements to allocate for a vector that
+// claims count elements of at least minSize bytes each.  When r reports its
+// remaining length, the count is capped at one more element than fits, so a
+// short payload still fails while reading that element, but nothing is
+// allocated for the elements it cannot hold.  Otherwise it is capped at
+// unknownMax.
+func allocCount(r io.Reader, count, minSize, unknownMax uint64) uint64 {
+	remaining, ok := readerRemaining(r)
+	if !ok {
+		return min(count, unknownMax)
+	}
+	return min(count, remaining/minSize+1)
+}
+
 // ReadVarInt reads a variable length integer from r and returns it as a uint64.
 func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 	discriminant, err := binarySerializer.Uint8(r)
@@ -621,6 +648,15 @@ func readVarStringLimit(r io.Reader, pver uint32, maxAllowed uint32,
 		str := fmt.Sprintf("%s is too long [count %d, max %d]",
 			fieldName, count, maxAllowed)
 		return "", messageError("ReadVarString", str)
+	}
+
+	// A string longer than the rest of an in-memory payload fails the
+	// same way reading it would, without allocating for the missing bytes.
+	if remaining, ok := readerRemaining(r); ok && count > remaining {
+		if remaining == 0 {
+			return "", io.EOF
+		}
+		return "", io.ErrUnexpectedEOF
 	}
 
 	buf := make([]byte, count)

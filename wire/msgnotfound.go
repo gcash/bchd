@@ -47,9 +47,12 @@ func (msg *MsgNotFound) BchDecode(r io.Reader, pver uint32, enc MessageEncoding)
 	}
 
 	// Create a contiguous slice of inventory vectors to deserialize into in
-	// order to reduce the number of allocations.
-	invList := make([]InvVect, count)
-	msg.InvList = make([]*InvVect, 0, count)
+	// order to reduce the number of allocations.  Its size is bounded by
+	// the payload, and every vector is maxInvVectPayload bytes, so the
+	// decode fails before running past it.
+	n := allocCount(r, count, maxInvVectPayload, count)
+	invList := make([]InvVect, n)
+	msg.InvList = make([]*InvVect, 0, n)
 	for i := range count {
 		iv := &invList[i]
 		err := readInvVect(r, pver, iv)

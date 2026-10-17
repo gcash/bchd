@@ -50,9 +50,12 @@ func (msg *MsgHeaders) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) 
 	}
 
 	// Create a contiguous slice of headers to deserialize into in order to
-	// reduce the number of allocations.
-	headers := make([]BlockHeader, count)
-	msg.Headers = make([]*BlockHeader, 0, count)
+	// reduce the number of allocations.  Its size is bounded by the
+	// payload, and every header takes at least blockHeaderLen bytes and a
+	// transaction count, so the decode fails before running past it.
+	n := allocCount(r, count, blockHeaderLen+1, count)
+	headers := make([]BlockHeader, n)
+	msg.Headers = make([]*BlockHeader, 0, n)
 	for i := range count {
 		bh := &headers[i]
 		err := readBlockHeader(r, pver, bh)
