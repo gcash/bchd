@@ -7,11 +7,13 @@ package blockchain
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -224,5 +226,112 @@ func TestOrphanNoFastAddInheritance(t *testing.T) {
 	}
 	if chain.index.LookupNode(child.Hash()) != nil {
 		t.Fatal("invalid orphan was added to the block index")
+	}
+}
+
+// orphanTestBlock returns a solved regtest block of exactly size bytes whose
+// parent is unknown, padding the coinbase with an OP_RETURN output.
+func orphanTestBlock(t *testing.T, params *chaincfg.Params, nonce uint32,
+	size int, extra ...*wire.MsgTx) *bchutil.Block {
+
+	t.Helper()
+	cbScript, err := txscript.NewScriptBuilder().AddInt64(5).
+		AddInt64(int64(nonce)).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cb := wire.NewMsgTx(1)
+	cb.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: *wire.NewOutPoint(&chainhash.Hash{}, wire.MaxPrevOutIndex),
+		Sequence:         wire.MaxTxInSequenceNum,
+		SignatureScript:  cbScript,
+	})
+	cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(5, params), opTrueScript,
+		wire.TokenData{}))
+	pad := wire.NewTxOut(0, []byte{txscript.OP_RETURN}, wire.TokenData{})
+	cb.AddTxOut(pad)
+
+	msgBlock := &wire.MsgBlock{
+		Header: wire.BlockHeader{
+			Version:   1,
+			PrevBlock: chainhash.Hash{0x01, byte(nonce), byte(nonce >> 8)},
+			Timestamp: params.GenesisBlock.Header.Timestamp.Add(time.Hour),
+			Bits:      params.PowLimitBits,
+		},
+		Transactions: append([]*wire.MsgTx{cb}, extra...),
+	}
+	for i := 0; msgBlock.SerializeSize() != size; i++ {
+		diff := size - msgBlock.SerializeSize()
+		if i > 3 || len(pad.PkScript)+diff < 1 {
+			t.Fatalf("can't pad block to %d bytes", size)
+		}
+		pad.PkScript = append([]byte{txscript.OP_RETURN},
+			make([]byte, len(pad.PkScript)-1+diff)...)
+	}
+
+	utxs := make([]*bchutil.Tx, 0, len(msgBlock.Transactions))
+	for _, tx := range msgBlock.Transactions {
+		utxs = append(utxs, bchutil.NewTx(tx))
+	}
+	merkles := BuildMerkleTreeStore(utxs)
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	if !solveBlock(&msgBlock.Header) {
+		t.Fatal("unable to solve block")
+	}
+	return bchutil.NewBlock(msgBlock)
+}
+
+// TestOrphanPoolLimits ensures orphans too large for any nearby height are
+// rejected and that the orphan pool is limited by its total size.
+func TestOrphanPoolLimits(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	chain, err := New(&Config{
+		DB:                 db,
+		ChainParams:        &params,
+		TimeSource:         NewMedianTime(),
+		SigCache:           txscript.NewSigCache(1000),
+		ExcessiveBlockSize: LegacyMaxBlockSize,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	limit := chain.orphanSizeLimit()
+	if limit != LegacyMaxBlockSize {
+		t.Fatalf("orphan size limit %d, want %d", limit, LegacyMaxBlockSize)
+	}
+	spend := wire.NewMsgTx(2)
+	spend.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Index: 1},
+		Sequence: wire.MaxTxInSequenceNum})
+	spend.AddTxOut(wire.NewTxOut(0, append([]byte{txscript.OP_RETURN},
+		make([]byte, 200000)...), wire.TokenData{}))
+	oversized := orphanTestBlock(t, &params, 0, int(limit)+1, spend)
+	_, isOrphan, err := chain.ProcessBlock(oversized, BFNone)
+	var rerr RuleError
+	if isOrphan || !errors.As(err, &rerr) || rerr.ErrorCode != ErrBlockTooBig {
+		t.Fatalf("orphan over the size limit %d: orphan=%v err=%v", limit,
+			isOrphan, err)
+	}
+
+	const size = 999000
+	for i := uint32(1); i <= 70; i++ {
+		_, isOrphan, err := chain.ProcessBlock(orphanTestBlock(t, &params,
+			i, size), BFNone)
+		if err != nil || !isOrphan {
+			t.Fatalf("orphan %d: orphan=%v err=%v", i, isOrphan, err)
+		}
+	}
+	if n := len(chain.orphans); n != minOrphanBytesLimit/size {
+		t.Fatalf("%d orphans of %d bytes in the pool, want %d", n, size,
+			minOrphanBytesLimit/size)
+	}
+	if chain.orphanBytes != uint64(len(chain.orphans)*size) {
+		t.Fatalf("orphan bytes %d, want %d", chain.orphanBytes,
+			len(chain.orphans)*size)
 	}
 }

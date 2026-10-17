@@ -230,8 +230,10 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 		return false, false, err
 	}
 	if !prevHashExists {
-		log.Infof("Adding orphan block %v with parent %v", blockHash, prevHash)
-		b.addOrphanBlock(block)
+		if err := b.addOrphanBlock(block); err != nil {
+			return false, false, err
+		}
+		log.Infof("Added orphan block %v with parent %v", blockHash, prevHash)
 
 		return false, true, nil
 	}
