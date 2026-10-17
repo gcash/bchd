@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -47,6 +48,25 @@ const fixedExcessiveBlockSize uint32 = 42111000
 func init() {
 	// Wire package requires initialization
 	SetLimits(fixedExcessiveBlockSize)
+}
+
+// maxBoundedDecodeAlloc is the maximum number of bytes a decode of the
+// truncated inputs used by the length bound tests is allowed to allocate.
+// Those inputs claim lengths or counts that would require hundreds of
+// megabytes if memory were sized from them up front, while decoding them
+// correctly needs at most a few tens of kilobytes, so 1 MiB separates the two
+// cases with plenty of margin for unrelated runtime allocations.
+const maxBoundedDecodeAlloc = 1 << 20
+
+// decodeAlloc runs the passed function and returns the number of bytes that
+// were allocated on the heap while it ran.
+func decodeAlloc(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 // Read returns the fake reader error and the lesser of the fake reader value

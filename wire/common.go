@@ -592,18 +592,34 @@ func VarIntSerializeSize(val uint64) int {
 // string itself.  An error is returned if the length is greater than the
 // maximum block payload size since it helps protect against memory exhaustion
 // attacks and forced panics through malformed messages.
+//
+// Callers that know a tighter bound for the string should use
+// readVarStringLimit instead.
 func ReadVarString(r io.Reader, pver uint32) (string, error) {
+	return readVarStringLimit(r, pver, maxMessagePayload(),
+		"variable length string")
+}
+
+// readVarStringLimit reads a variable length string from r in the same manner
+// as ReadVarString, except the length is checked against the passed maxAllowed
+// parameter before any memory for the string is allocated.  This allows
+// callers to bound a string field by its own limit instead of the maximum
+// message payload size.  The fieldName parameter is only used for the error
+// message so it provides more context in the error.
+func readVarStringLimit(r io.Reader, pver uint32, maxAllowed uint32,
+	fieldName string) (string, error) {
+
 	count, err := ReadVarInt(r, pver)
 	if err != nil {
 		return "", err
 	}
 
 	// Prevent variable length strings that are larger than the maximum
-	// message size.  It would be possible to cause memory exhaustion and
-	// panics without a sane upper bound on this count.
-	if count > uint64(maxMessagePayload()) {
-		str := fmt.Sprintf("variable length string is too long "+
-			"[count %d, max %d]", count, maxMessagePayload())
+	// allowed size.  Without a sane upper bound on this count, a short
+	// message could allocate a large amount of memory.
+	if count > uint64(maxAllowed) {
+		str := fmt.Sprintf("%s is too long [count %d, max %d]",
+			fieldName, count, maxAllowed)
 		return "", messageError("ReadVarString", str)
 	}
 

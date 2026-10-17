@@ -72,12 +72,21 @@ func (msg *MsgMerkleBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncodi
 		return messageError("MsgMerkleBlock.BchDecode", str)
 	}
 
-	// Create a contiguous slice of hashes to deserialize into in order to
-	// reduce the number of allocations.
-	hashes := make([]chainhash.Hash, count)
-	msg.Hashes = make([]*chainhash.Hash, 0, count)
+	// Create contiguous slices of hashes to deserialize into in order to
+	// reduce the number of allocations.  The count has not been backed by
+	// any data yet, so the slices are allocated in chunks of at most
+	// defaultTransactionAlloc hashes as the hashes are read rather than
+	// all at once up front.
+	var hashes []chainhash.Hash
+	msg.Hashes = make([]*chainhash.Hash, 0,
+		min(count, uint64(defaultTransactionAlloc)))
 	for i := range count {
-		hash := &hashes[i]
+		if len(hashes) == 0 {
+			hashes = make([]chainhash.Hash,
+				min(count-i, uint64(defaultTransactionAlloc)))
+		}
+		hash := &hashes[0]
+		hashes = hashes[1:]
 		err := readElement(r, hash)
 		if err != nil {
 			return err

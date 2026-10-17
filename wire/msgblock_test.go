@@ -588,3 +588,74 @@ var blockOneBytes = []byte{
 var blockOneTxLocs = []TxLoc{
 	{TxStart: 81, TxLen: 134},
 }
+
+// TestBlockTxCountAlloc ensures the memory allocated while decoding a block
+// grows with the transactions actually read rather than with the transaction
+// count claimed by the block, for each of the block decoding functions.
+func TestBlockTxCountAlloc(t *testing.T) {
+	// withTxCount returns a block encoding with the given transaction count
+	// and no transactions after it.
+	withTxCount := func(count uint64) []byte {
+		var buf bytes.Buffer
+		_ = writeBlockHeader(&buf, 0, &blockOne.Header)
+		_ = WriteVarInt(&buf, 0, count)
+		return buf.Bytes()
+	}
+
+	tests := []struct {
+		name string // Test description
+		buf  []byte // Wire encoding
+		err  error  // Expected error
+	}{
+		{
+			name: "count at max with no transactions",
+			buf:  withTxCount(uint64(maxTxPerBlock())),
+			err:  io.EOF,
+		},
+		{
+			name: "count one above max",
+			buf:  withTxCount(uint64(maxTxPerBlock()) + 1),
+			err:  &MessageError{},
+		},
+	}
+
+	decoders := []struct {
+		name   string
+		decode func(buf []byte) error
+	}{
+		{"BchDecode", func(buf []byte) error {
+			var msg MsgBlock
+			return msg.BchDecode(bytes.NewReader(buf),
+				ProtocolVersion, BaseEncoding)
+		}},
+		{"Deserialize", func(buf []byte) error {
+			var msg MsgBlock
+			return msg.Deserialize(bytes.NewReader(buf))
+		}},
+		{"DeserializeTxLoc", func(buf []byte) error {
+			var msg MsgBlock
+			_, err := msg.DeserializeTxLoc(bytes.NewBuffer(buf))
+			return err
+		}},
+	}
+
+	t.Logf("Running %d tests", len(tests)*len(decoders))
+	for _, test := range tests {
+		for _, d := range decoders {
+			var err error
+			alloc := decodeAlloc(func() {
+				err = d.decode(test.buf)
+			})
+			if alloc > maxBoundedDecodeAlloc {
+				t.Errorf("%s %s: allocated %d bytes, want at "+
+					"most %d", d.name, test.name, alloc,
+					maxBoundedDecodeAlloc)
+			}
+			if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+				t.Errorf("%s %s: wrong error got: %v, want: %v",
+					d.name, test.name, err,
+					reflect.TypeOf(test.err))
+			}
+		}
+	}
+}

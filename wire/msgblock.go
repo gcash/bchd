@@ -84,7 +84,10 @@ func (msg *MsgBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 		return messageError("MsgBlock.BchDecode", str)
 	}
 
-	msg.Transactions = make([]*MsgTx, 0, txCount)
+	// The count has not been backed by any data yet, so limit the initial
+	// capacity and let the slice grow as transactions are decoded.
+	msg.Transactions = make([]*MsgTx, 0,
+		min(txCount, uint64(defaultTransactionAlloc)))
 	for range txCount {
 		tx := MsgTx{}
 		err := tx.BchDecode(r, pver, enc)
@@ -143,18 +146,24 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	}
 
 	// Deserialize each transaction while keeping track of its location
-	// within the byte stream.
-	msg.Transactions = make([]*MsgTx, 0, txCount)
-	txLocs := make([]TxLoc, txCount)
-	for i := range txCount {
-		txLocs[i].TxStart = fullLen - r.Len()
+	// within the byte stream.  The count has not been backed by any data
+	// yet, so limit the initial capacity and let the slices grow as
+	// transactions are decoded.
+	initialCap := min(txCount, uint64(defaultTransactionAlloc))
+	msg.Transactions = make([]*MsgTx, 0, initialCap)
+	txLocs := make([]TxLoc, 0, initialCap)
+	for range txCount {
+		txStart := fullLen - r.Len()
 		tx := MsgTx{}
 		err := tx.Deserialize(r)
 		if err != nil {
 			return nil, err
 		}
 		msg.Transactions = append(msg.Transactions, &tx)
-		txLocs[i].TxLen = (fullLen - r.Len()) - txLocs[i].TxStart
+		txLocs = append(txLocs, TxLoc{
+			TxStart: txStart,
+			TxLen:   (fullLen - r.Len()) - txStart,
+		})
 	}
 
 	return txLocs, nil
