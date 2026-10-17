@@ -289,6 +289,19 @@ type server struct {
 	// agentWhitelist is a list of whitelisted user agent substrings, no
 	// whitelisting will be applied if the list is empty or nil.
 	agentWhitelist []string
+
+	// The following fields apply connection limits and bans to inbound
+	// connections when they are accepted.  They count each admitted
+	// inbound connection until it disconnects, including connections
+	// still in the handshake, and are protected by inboundMtx.
+	inboundMtx   sync.Mutex
+	inboundHosts map[string]int
+	inboundTotal int
+
+	// inboundBans mirrors the banned map of the peerHandler's peerState
+	// so bans can be checked when a connection is accepted.  As there, an
+	// entry is only dropped when its host reconnects after the ban ends.
+	inboundBans map[string]time.Time
 }
 
 // spMsg represents a message over the wire from a specific peer.
@@ -324,6 +337,7 @@ type serverPeer struct {
 	cbMtx                 sync.RWMutex
 	sentAddrs             bool
 	isWhitelisted         bool
+	releaseInbound        func()
 	filter                *bloom.Filter
 	addrMtx               sync.RWMutex
 	knownAddresses        map[string]struct{}
@@ -2208,7 +2222,11 @@ func (s *server) handleBanPeerMsg(state *peerState, sp *serverPeer) {
 	direction := directionString(sp.Inbound())
 	srvrLog.Infof("Banned peer %s (%s) for %v", host, direction,
 		cfg.BanDuration)
-	state.banned[host] = time.Now().Add(cfg.BanDuration)
+	banEnd := time.Now().Add(cfg.BanDuration)
+	state.banned[host] = banEnd
+	s.inboundMtx.Lock()
+	s.inboundBans[host] = banEnd
+	s.inboundMtx.Unlock()
 }
 
 // handleRelayInvMsg deals with relaying inventory to peers that are not already
@@ -2593,12 +2611,85 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 // connection is established.  It initializes a new inbound server peer
 // instance, associates it with the connection, and starts a goroutine to wait
 // for disconnection.
+//
+// Connection limits and bans are applied before the handshake is started, so
+// connections that would not be kept are closed without doing any further
+// work.  The checks in handleAddPeerMsg still apply once the handshake
+// completes.
 func (s *server) inboundPeerConnected(conn net.Conn) {
+	remoteAddr := conn.RemoteAddr()
+	whitelisted := isWhitelisted(remoteAddr)
+	var release func()
+	if !whitelisted {
+		release = s.admitInbound(remoteAddr)
+		if release == nil {
+			conn.Close()
+			return
+		}
+	}
+
 	sp := newServerPeer(s, false)
-	sp.isWhitelisted = isWhitelisted(conn.RemoteAddr())
+	sp.isWhitelisted = whitelisted
+	sp.releaseInbound = release
 	sp.Peer = peer.NewInboundPeer(newPeerConfig(sp))
 	sp.AssociateConnection(conn)
 	go s.peerDoneHandler(sp)
+}
+
+// admitInbound applies connection limits and bans to a new inbound connection
+// from the provided address before its handshake is started.  It returns nil
+// when the connection must be refused.  Otherwise the connection is counted
+// until the returned function is called, which must happen once the peer has
+// disconnected.  Calling the returned function more than once has no effect.
+//
+// Refusals are logged at the debug level since a remote host may redial
+// repeatedly.  The checks in handleAddPeerMsg still apply once the handshake
+// completes.
+func (s *server) admitInbound(addr net.Addr) func() {
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		srvrLog.Debugf("can't split hostport %v", err)
+		return nil
+	}
+
+	s.inboundMtx.Lock()
+	defer s.inboundMtx.Unlock()
+
+	if banEnd, ok := s.inboundBans[host]; ok {
+		if time.Now().Before(banEnd) {
+			srvrLog.Debugf("Inbound connection from %s refused - "+
+				"banned for another %v", host,
+				time.Until(banEnd))
+			return nil
+		}
+		delete(s.inboundBans, host)
+	}
+	if s.inboundHosts[host] >= cfg.MaxPeersPerIP {
+		srvrLog.Debugf("Inbound connection from %s refused - max peers "+
+			"per IP reached [%d]", host, cfg.MaxPeersPerIP)
+		return nil
+	}
+	if s.inboundTotal >= cfg.MaxPeers {
+		srvrLog.Debugf("Inbound connection from %s refused - max peers "+
+			"reached [%d]", host, cfg.MaxPeers)
+		return nil
+	}
+
+	s.inboundHosts[host]++
+	s.inboundTotal++
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.inboundMtx.Lock()
+			s.inboundTotal--
+			s.inboundHosts[host]--
+			if s.inboundHosts[host] <= 0 {
+				delete(s.inboundHosts, host)
+			}
+			s.inboundMtx.Unlock()
+		})
+	}
 }
 
 // outboundPeerConnected is invoked by the connection manager when a new
@@ -2630,6 +2721,16 @@ func (s *server) outboundPeerConnected(c *connmgr.ConnReq, conn net.Conn) {
 // done along with other performing other desirable cleanup.
 func (s *server) peerDoneHandler(sp *serverPeer) {
 	sp.WaitForDisconnect()
+
+	// Release the slot held by inbound connections so a new connection
+	// may take its place.  This is done before notifying the peerHandler so
+	// a blocked send can't hold the slot.  As a result, a new connection
+	// from the same host may be admitted just before the peerHandler lowers
+	// its connection count, in which case the check in handleAddPeerMsg may
+	// still refuse it.
+	if sp.releaseInbound != nil {
+		sp.releaseInbound()
+	}
 	s.donePeers <- sp
 
 	// Only tell sync manager we are gone if we ever told it we existed.
@@ -3234,6 +3335,8 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
 		agentBlacklist:       agentBlacklist,
 		agentWhitelist:       agentWhitelist,
+		inboundHosts:         make(map[string]int),
+		inboundBans:          make(map[string]time.Time),
 	}
 
 	// Create the transaction and address indexes if needed.
