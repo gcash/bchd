@@ -156,3 +156,93 @@ func TestMinerCoinbaseHeightAfterTipMoves(t *testing.T) {
 		t.Fatal("no block mined")
 	}
 }
+
+// badAddress is an address type that has no payment script.
+type badAddress struct{}
+
+func (badAddress) String() string                 { return "bad" }
+func (badAddress) EncodeAddress() string          { return "bad" }
+func (badAddress) ScriptAddress() []byte          { return nil }
+func (badAddress) IsForNet(*chaincfg.Params) bool { return true }
+
+// generate runs GenerateNBlocks with a timeout.
+func generate(t *testing.T, miner *testMiner, n uint32) ([]*chainhash.Hash, error) {
+	t.Helper()
+	type result struct {
+		hashes []*chainhash.Hash
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		hashes, err := miner.GenerateNBlocks(n)
+		done <- result{hashes, err}
+	}()
+	select {
+	case r := <-done:
+		return r.hashes, r.err
+	case <-time.After(30 * time.Second):
+		t.Fatal("GenerateNBlocks did not return")
+		return nil, nil
+	}
+}
+
+func alwaysCurrent() bool { return true }
+
+// TestGenerateNBlocksSkipsOrphans ensures blocks that were not accepted are
+// not returned as generated.
+func TestGenerateNBlocksSkipsOrphans(t *testing.T) {
+	calls := 0
+	miner := newTestMiner(t, testAddress(t),
+		func(chain *blockchain.BlockChain, b *bchutil.Block) (bool, error) {
+			calls++
+			if calls == 1 {
+				return true, nil // reported as an orphan
+			}
+			_, isOrphan, err := chain.ProcessBlock(b, blockchain.BFNone)
+			return isOrphan, err
+		}, alwaysCurrent)
+
+	hashes, err := generate(t, miner, 2)
+	if err != nil {
+		t.Fatalf("GenerateNBlocks: %v", err)
+	}
+	for _, hash := range hashes {
+		if !miner.chain.MainChainHasBlock(hash) {
+			t.Fatalf("returned block %v is not in the chain", hash)
+		}
+	}
+}
+
+// TestGenerateNBlocksReportsRejection ensures a rejected block ends the run
+// with an error instead of being returned as generated.
+func TestGenerateNBlocksReportsRejection(t *testing.T) {
+	miner := newTestMiner(t, testAddress(t),
+		func(*blockchain.BlockChain, *bchutil.Block) (bool, error) {
+			return false, blockchain.RuleError{
+				ErrorCode:   blockchain.ErrBadMerkleRoot,
+				Description: "rejected",
+			}
+		}, alwaysCurrent)
+
+	hashes, err := generate(t, miner, 1)
+	if err == nil {
+		t.Fatalf("rejected blocks returned as generated: %v", hashes)
+	}
+
+	// The miner can be used again.
+	if _, err := generate(t, miner, 1); err == nil {
+		t.Fatal("expected the rejection again")
+	}
+}
+
+// TestGenerateNBlocksTemplateError ensures a template error is returned
+// instead of retried forever.
+func TestGenerateNBlocksTemplateError(t *testing.T) {
+	miner := newTestMiner(t, badAddress{},
+		func(*blockchain.BlockChain, *bchutil.Block) (bool, error) {
+			return false, nil
+		}, alwaysCurrent)
+	if _, err := generate(t, miner, 1); err == nil {
+		t.Fatal("expected a template error")
+	}
+}
