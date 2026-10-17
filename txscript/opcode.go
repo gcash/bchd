@@ -1653,24 +1653,21 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	var (
-		defaultScriptNumLen = defaultSmallScriptNumLen
-		size                int
-	)
-	if vm.hasFlag(ScriptAllowMay2025) {
-		size = int(n.Int64())
-		defaultScriptNumLen = defaultBigIntScriptNumLen
-	} else if vm.hasFlag(ScriptVerify64BitIntegers) {
-		size = int(n.Int64())
-		defaultScriptNumLen = defaultBigScriptNumLen
-	} else {
-		size = int(n.Int32())
-	}
-
-	if size > vm.maxScriptElementSize {
+	// Bounds check the requested size as an int64 before converting it to
+	// an int so the result does not depend on the width of int.  Int64
+	// saturates values that do not fit, so those are rejected as well.  A
+	// negative size is also rejected, matching BCHN, which reads the size as
+	// an unsigned 64-bit integer.
+	requestedSize := n.Int64()
+	if requestedSize > int64(vm.maxScriptElementSize) {
 		return scriptError(ErrNumberTooBig,
-			fmt.Sprintf("n is larger than the max of %d", defaultScriptNumLen))
+			fmt.Sprintf("n is larger than the max of %d",
+				vm.maxScriptElementSize))
 	}
+	if requestedSize < 0 {
+		return scriptError(ErrNumberTooSmall, "n is negative")
+	}
+	size := int(requestedSize)
 
 	b := minimallyEncode(a)
 	if len(b) > size {

@@ -388,9 +388,21 @@ func Test_minimallyEncode(t *testing.T) {
 			[]byte{0x01, 0x80},
 			[]byte{0x81},
 		},
+
+		// The sign byte must follow the most significant non-zero byte
+		// when that byte has its high bit set, as in Bitcoin Cash Node.
+		{[]byte{0xff, 0x00, 0x80}, []byte{0xff, 0x80}},
+		{[]byte{0xff, 0x00, 0x00, 0x80}, []byte{0xff, 0x80}},
+		{[]byte{0x80, 0x00, 0x00, 0x80}, []byte{0x80, 0x80}},
+		{[]byte{0x00, 0x80, 0x00, 0x80}, []byte{0x00, 0x80, 0x80}},
+		{[]byte{0xff, 0x00, 0x00}, []byte{0xff, 0x00}},
+		{[]byte{0x80, 0x00, 0x00, 0x00}, []byte{0x80, 0x00}},
+		{[]byte{0x7f, 0x00, 0x80}, []byte{0xff}},
+		{[]byte{0xff, 0x80}, []byte{0xff, 0x80}},
 	}
 
 	for i, test := range tests {
+		orig := append([]byte(nil), test.data...)
 		result := minimallyEncode(test.data)
 		if !bytes.Equal(result, test.expected) {
 			t.Errorf("Test %d: Expected %v, got %v", i, test.expected, result)
@@ -398,6 +410,90 @@ func Test_minimallyEncode(t *testing.T) {
 
 		if checkMinimalDataEncoding(result) != nil {
 			t.Errorf("Test %d: Result not minimally encoded", i)
+		}
+
+		if !bytes.Equal(test.data, orig) {
+			t.Errorf("Test %d: Input modified from %x to %x", i, orig,
+				test.data)
+		}
+
+		// The encoding must not change the numeric value.
+		want, err := makeScriptNum(orig, false, len(orig))
+		if err != nil {
+			t.Fatalf("Test %d: makeScriptNum(%x): %v", i, orig, err)
+		}
+		got, err := makeScriptNum(result, true, len(orig))
+		if err != nil {
+			t.Fatalf("Test %d: makeScriptNum(%x): %v", i, result, err)
+		}
+		if !got.IsEqualeTo(&want) {
+			t.Errorf("Test %d: Value changed from %v to %v", i, want, got)
+		}
+	}
+}
+
+// TestMinimallyEncodeBCHNVectors runs the minimize_encoding_test vectors from
+// src/test/scriptnum_tests.cpp in Bitcoin Cash Node against minimallyEncode
+// for both the legacy and the current maximum element size.
+func TestMinimallyEncodeBCHNVectors(t *testing.T) {
+	t.Parallel()
+
+	check := func(data, expected []byte) {
+		t.Helper()
+
+		result := minimallyEncode(data)
+		if !bytes.Equal(result, expected) {
+			t.Fatalf("minimallyEncode(%x) = %x, want %x", data, result,
+				expected)
+		}
+
+		// The input must only change when it is not minimally encoded.
+		minimal := checkMinimalDataEncoding(data) == nil
+		if minimal != bytes.Equal(result, data) {
+			t.Fatalf("minimallyEncode(%x): minimally encoded %v, but "+
+				"result %x", data, minimal, result)
+		}
+	}
+
+	check([]byte{}, []byte{})
+
+	for _, elemSize := range []int{MaxScriptElementSizeLegacy, MaxScriptElementSize} {
+		// Positive and negative zeros encode to nothing.
+		var zero, negZero []byte
+		for i := 0; i < elemSize; i++ {
+			zero = append(zero, 0x00)
+			check(zero, []byte{})
+
+			negZero = append(negZero, 0x80)
+			check(negZero, []byte{})
+
+			negZero[len(negZero)-1] = 0x00
+		}
+
+		// Keep one leading zero when the sign bit is used.
+		n, negn := []byte{0x80, 0x00}, []byte{0x80, 0x80}
+		npadded := append([]byte(nil), n...)
+		negnpadded := append([]byte(nil), negn...)
+		for i := 0; i < elemSize; i++ {
+			check(npadded, n)
+			npadded = append(npadded, 0x00)
+
+			check(negnpadded, negn)
+			negnpadded[len(negnpadded)-1] = 0x00
+			negnpadded = append(negnpadded, 0x80)
+		}
+
+		// Merge the sign into the leading byte when its sign bit is unused.
+		k, negk := []byte{0x7f}, []byte{0xff}
+		kpadded := append([]byte(nil), k...)
+		negkpadded := append([]byte(nil), negk...)
+		for i := 0; i < elemSize; i++ {
+			check(kpadded, k)
+			kpadded = append(kpadded, 0x00)
+
+			check(negkpadded, negk)
+			negkpadded[len(negkpadded)-1] &= 0x7f
+			negkpadded = append(negkpadded, 0x80)
 		}
 	}
 }
