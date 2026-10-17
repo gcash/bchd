@@ -4,7 +4,7 @@ This setup allows for additional tests into bchd's continuous integration pipeli
 
 ## CI
 
-These tests are configured to run in `.github/workflows/main.yml` with the docker service. See the workflow file for details.
+These tests are not currently run in CI.
 
 ## Run Tests
 
