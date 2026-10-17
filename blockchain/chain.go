@@ -25,6 +25,10 @@ const (
 	// maxOrphanBlocks is the maximum number of orphan blocks that can be
 	// queued.
 	maxOrphanBlocks = 100
+
+	// minOrphanBytesLimit is the minimum limit on the total serialized
+	// size of the orphan blocks.
+	minOrphanBytesLimit = 64000000
 )
 
 // BlockLocator is used to help locate a specific block.  The algorithm for
@@ -50,6 +54,7 @@ type BlockLocator []*chainhash.Hash
 type orphanBlock struct {
 	block      *bchutil.Block
 	expiration time.Time
+	size       uint64
 }
 
 // BestState houses information about the current best block and other info
@@ -161,10 +166,10 @@ type BlockChain struct {
 
 	// orphanLock protects the fields related to handling of orphan blocks.
 	// They are protected by a combination of the chain lock and the orphan lock.
-	orphanLock   sync.RWMutex
-	orphans      map[chainhash.Hash]*orphanBlock
-	prevOrphans  map[chainhash.Hash][]*orphanBlock
-	oldestOrphan *orphanBlock
+	orphanLock  sync.RWMutex
+	orphans     map[chainhash.Hash]*orphanBlock
+	prevOrphans map[chainhash.Hash][]*orphanBlock
+	orphanBytes uint64
 
 	// These fields are related to checkpoint handling.  They are protected
 	// by the chain lock.
@@ -386,7 +391,11 @@ func (b *BlockChain) removeOrphanBlock(orphan *orphanBlock) {
 
 	// Remove the orphan block from the orphan pool.
 	orphanHash := orphan.block.Hash()
+	if _, ok := b.orphans[*orphanHash]; !ok {
+		return
+	}
 	delete(b.orphans, *orphanHash)
+	b.orphanBytes -= orphan.size
 
 	// Remove the reference from the previous orphan index too.  An indexing
 	// for loop is intentionally used over a range here as range does not
@@ -412,32 +421,51 @@ func (b *BlockChain) removeOrphanBlock(orphan *orphanBlock) {
 	}
 }
 
+// orphanSizeLimit returns the largest size an orphan block may have.  Its
+// height is unknown, so the limit allows for the ABLA limit growing over the
+// next maxOrphanBlocks blocks.
+func (b *BlockChain) orphanSizeLimit() uint64 {
+	state := b.ablaState.lookaheadState(&b.ablaConfig, maxOrphanBlocks)
+	return max(uint64(b.excessiveBlockSize), state.getBlockSizeLimit())
+}
+
 // addOrphanBlock adds the passed block (which is already determined to be
 // an orphan prior calling this function) to the orphan pool.  It lazily cleans
 // up any expired blocks so a separate cleanup poller doesn't need to be run.
-// It also imposes a maximum limit on the number of outstanding orphan
-// blocks and will remove the oldest received orphan block if the limit is
-// exceeded.
-func (b *BlockChain) addOrphanBlock(block *bchutil.Block) {
+// It also imposes a maximum limit on the number and total size of outstanding
+// orphan blocks and will remove the oldest received orphan blocks if a limit
+// is exceeded.  A block too large to be valid at any nearby height is
+// rejected.
+func (b *BlockChain) addOrphanBlock(block *bchutil.Block) error {
+	sizeLimit := b.orphanSizeLimit()
+	size := uint64(block.MsgBlock().SerializeSize())
+	if size > sizeLimit {
+		str := fmt.Sprintf("orphan block is too big - got %d, max %d",
+			size, sizeLimit)
+		return ruleError(ErrBlockTooBig, str)
+	}
+
 	// Remove expired orphan blocks.
 	for _, oBlock := range b.orphans {
 		if time.Now().After(oBlock.expiration) {
 			b.removeOrphanBlock(oBlock)
-			continue
-		}
-
-		// Update the oldest orphan block pointer so it can be discarded
-		// in case the orphan pool fills up.
-		if b.oldestOrphan == nil || oBlock.expiration.Before(b.oldestOrphan.expiration) {
-			b.oldestOrphan = oBlock
 		}
 	}
 
-	// Limit orphan blocks to prevent memory exhaustion.
-	if len(b.orphans)+1 > maxOrphanBlocks {
+	// Limit orphan blocks to prevent memory exhaustion.  At least two of
+	// the largest blocks fit in the byte limit.
+	maxBytes := max(2*sizeLimit, minOrphanBytesLimit)
+	for len(b.orphans) > 0 && (len(b.orphans)+1 > maxOrphanBlocks ||
+		b.orphanBytes+size > maxBytes) {
+
 		// Remove the oldest orphan to make room for the new one.
-		b.removeOrphanBlock(b.oldestOrphan)
-		b.oldestOrphan = nil
+		var oldest *orphanBlock
+		for _, oBlock := range b.orphans {
+			if oldest == nil || oBlock.expiration.Before(oldest.expiration) {
+				oldest = oBlock
+			}
+		}
+		b.removeOrphanBlock(oldest)
 	}
 
 	// Protect concurrent access.  This is intentionally done here instead
@@ -452,12 +480,15 @@ func (b *BlockChain) addOrphanBlock(block *bchutil.Block) {
 	oBlock := &orphanBlock{
 		block:      block,
 		expiration: expiration,
+		size:       size,
 	}
 	b.orphans[*block.Hash()] = oBlock
+	b.orphanBytes += size
 
 	// Add to previous hash lookup index for faster dependency lookups.
 	prevHash := &block.MsgBlock().Header.PrevBlock
 	b.prevOrphans[*prevHash] = append(b.prevOrphans[*prevHash], oBlock)
+	return nil
 }
 
 // SequenceLock represents the converted relative lock-time in seconds, and
