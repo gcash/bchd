@@ -247,3 +247,56 @@ func TestCheckSigFailedSigChecks(t *testing.T) {
 		}
 	}
 }
+
+// signLegacyMultiSig returns a transaction that spends an output with the
+// passed m-of-n multisig locking script with an ECDSA signature by the passed
+// key, along with the number of bytes hashed for the signature hash.
+func signLegacyMultiSig(t *testing.T, priv *bchec.PrivateKey,
+	pkScript []byte) (*wire.MsgTx, int) {
+
+	t.Helper()
+
+	tx := createSpendingTx(nil, pkScript, 1000)
+	utxos := NewUtxoCache()
+	utxos.AddEntry(0, *wire.NewTxOut(1000, pkScript, wire.TokenData{}))
+	pops, err := parseScript(pkScript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashType := SigHashAll | SigHashForkID
+	hash, bytesHashed, err := calcSignatureHash(pops,
+		NewTxSigHashes(tx).WithUtxos(tx, utxos), hashType, tx, 0, 1000,
+		true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := priv.SignECDSA(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.TxIn[0].SignatureScript = buildScript(t, NewScriptBuilder().
+		AddOp(OP_0).AddData(append(sig.Serialize(), byte(hashType))))
+	return tx, bytesHashed
+}
+
+// TestCheckMultiSigHashCost ensures legacy OP_CHECKMULTISIG charges the
+// signature hash for every public key it evaluates against a non-null
+// signature, also when that public key is not a point on the curve.
+func TestCheckMultiSigHashCost(t *testing.T) {
+	t.Parallel()
+
+	signer := sigOpTestKey(t, "multisig signer")
+	pkScript := buildScript(t, NewScriptBuilder().AddOp(OP_1).
+		AddData(signer.PubKey().SerializeCompressed()).
+		AddData(offCurvePubKey(t)).AddOp(OP_2).AddOp(OP_CHECKMULTISIG))
+	tx, bytesHashed := signLegacyMultiSig(t, signer, pkScript)
+	vm, err := runSigOpTestTx(t, tx, pkScript, may2026TestFlags, nil)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	want := int64(2 * GetDigestIterationCount(bytesHashed, true))
+	if got := vm.metrics.GetHashDigestIterations(); got != want {
+		t.Fatalf("got %d hash digest iterations, want %d", got, want)
+	}
+}
