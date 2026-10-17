@@ -326,6 +326,13 @@ func internalRPCError(errStr, context string) *btcjson.RPCError {
 	return btcjson.NewRPCError(btcjson.ErrRPCInternal.Code, errStr)
 }
 
+// maxRPCRequestSize returns the largest request accepted from an
+// authenticated client.  It leaves room for a hex encoded block of the largest
+// size the node accepts.
+func maxRPCRequestSize() int64 {
+	return 32<<20 + 2*int64(wire.MaxBlockPayload())
+}
+
 // rpcInvalidError is a convenience function to convert an invalid parameter¶
 // error to an RPC error with the appropriate code set.¶
 func rpcInvalidError(fmtStr string, args ...interface{}) *btcjson.RPCError {

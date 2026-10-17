@@ -213,3 +213,69 @@ func TestWebsocketWellFormedRequests(t *testing.T) {
 		}
 	}
 }
+
+// expectWsClosed asserts the server closes the connection within a few
+// seconds without sending a reply.
+func expectWsClosed(t *testing.T, conn *websocket.Conn, what string) {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err == nil {
+		t.Fatalf("%s: connection still open, got reply %s", what, msg)
+	}
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatalf("%s: connection still open after 5s", what)
+	}
+}
+
+// TestWebsocketPreAuthTimeout ensures an unauthenticated websocket is closed
+// once the auth timeout passes.
+func TestWebsocketPreAuthTimeout(t *testing.T) {
+	_, addr := startTestRPCServer(t)
+	conn := dialTestWebsocket(t, addr, nil)
+	expectWsClosed(t, conn, "idle unauthenticated client")
+}
+
+// TestWebsocketPreAuthMalformed ensures malformed requests from an
+// unauthenticated client close the connection instead of being answered.
+func TestWebsocketPreAuthMalformed(t *testing.T) {
+	_, addr := startTestRPCServer(t)
+	for _, req := range []string{
+		`{"jsonrpc":"1.0","id":1,"method":"","params":[]}`,
+		`{"jsonrpc":"1.0","id":1,"method":"getblockcount","params":{}}`,
+		`[{"jsonrpc":"1.0","id":1,"method":"","params":[]}]`,
+	} {
+		conn := dialTestWebsocket(t, addr, nil)
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(req)); err != nil {
+			t.Fatal(err)
+		}
+		expectWsClosed(t, conn, req)
+	}
+}
+
+// TestWebsocketPreAuthReadLimit ensures an unauthenticated client can't send
+// large messages, while an authenticated one can.
+func TestWebsocketPreAuthReadLimit(t *testing.T) {
+	_, addr := startTestRPCServer(t)
+	auth := `{"jsonrpc":"1.0","id":1,"method":"authenticate","params":["admin","adminpass"]}`
+	padding := strings.Repeat(" ", 1<<20)
+
+	// The server may close the connection before the write completes.
+	conn := dialTestWebsocket(t, addr, nil)
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(auth+padding)); err == nil {
+		expectWsClosed(t, conn, "large unauthenticated message")
+	}
+
+	conn = dialTestWebsocket(t, addr, nil)
+	reply, err := wsRoundTrip(conn, auth)
+	if err != nil || !strings.Contains(reply, `"error":null`) {
+		t.Fatalf("authenticate: reply %s, err %v", reply, err)
+	}
+	// Past the auth timeout the authenticated client stays connected.
+	time.Sleep(1500 * time.Millisecond)
+	req := `{"jsonrpc":"1.0","id":2,"method":"getbestblockhash","params":["x"]}`
+	reply, err = wsRoundTrip(conn, req+padding)
+	if err != nil || !strings.Contains(reply, `"id":2`) {
+		t.Fatalf("large authenticated message: reply %s, err %v", reply, err)
+	}
+}

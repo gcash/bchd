@@ -52,6 +52,10 @@ func makeSemaphore(n int) semaphore {
 func (s semaphore) acquire() { s <- struct{}{} }
 func (s semaphore) release() { <-s }
 
+// wsPreAuthReadLimit is the largest message accepted from a websocket client
+// before it has authenticated.
+const wsPreAuthReadLimit = 64 * 1024
+
 // timeZeroVal is simply the zero value for a time.Time and is used to avoid
 // creating multiple instances.
 var timeZeroVal time.Time
@@ -88,9 +92,21 @@ var wsHandlersBeforeInit = map[string]wsCommandHandler{
 func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 	authenticated bool, isAdmin bool) {
 
-	// Clear the read deadline that was set before the websocket hijacked
-	// the connection.
-	_ = conn.SetReadDeadline(timeZeroVal)
+	// Clients that authenticated with the HTTP request get the full limits.
+	// Others must send a small authenticate request within the auth
+	// timeout.
+	if authenticated {
+		_ = conn.SetReadDeadline(timeZeroVal)
+		conn.SetReadLimit(maxRPCRequestSize())
+	} else {
+		if s.cfg.RPCAuthTimeout > 0 {
+			timeout := time.Duration(s.cfg.RPCAuthTimeout) * time.Second
+			_ = conn.SetReadDeadline(time.Now().Add(timeout))
+		} else {
+			_ = conn.SetReadDeadline(timeZeroVal)
+		}
+		conn.SetReadLimit(wsPreAuthReadLimit)
+	}
 
 	// Limit max number of websocket clients.
 	rpcsLog.Infof("New websocket client %s", remoteAddr)
@@ -1308,6 +1324,15 @@ type wsClient struct {
 	wg                sync.WaitGroup
 }
 
+// setAuthenticated marks the client as authenticated and lifts the limits
+// that apply before authentication.  It must only be called from inHandler.
+func (c *wsClient) setAuthenticated(isAdmin bool) {
+	c.authenticated = true
+	c.isAdmin = isAdmin
+	_ = c.conn.SetReadDeadline(timeZeroVal)
+	c.conn.SetReadLimit(maxRPCRequestSize())
+}
+
 // inHandler handles all incoming messages for the websocket connection.  It
 // must be run as a goroutine.
 func (c *wsClient) inHandler() {
@@ -1375,6 +1400,10 @@ out:
 			}
 
 			if req.Method == "" || req.Params == nil {
+				if !c.authenticated {
+					break out
+				}
+
 				jsonErr := &btcjson.RPCError{
 					Code:    btcjson.ErrRPCInvalidRequest.Code,
 					Message: "Invalid request: malformed",
@@ -1440,8 +1469,7 @@ out:
 					rpcsLog.Warnf("Auth failure.")
 					break out
 				}
-				c.authenticated = true
-				c.isAdmin = cmp == 1
+				c.setAuthenticated(cmp == 1)
 
 				// Marshal and send response.
 				reply, err = createMarshalledReply(cmd.jsonrpc, cmd.id, nil, nil)
@@ -1606,6 +1634,10 @@ out:
 						}
 
 						if req.Method == "" || req.Params == nil {
+							if !c.authenticated {
+								break out
+							}
+
 							jsonErr := &btcjson.RPCError{
 								Code:    btcjson.ErrRPCInvalidRequest.Code,
 								Message: "Invalid request: malformed",
@@ -1678,8 +1710,7 @@ out:
 								break out
 							}
 
-							c.authenticated = true
-							c.isAdmin = cmp == 1
+							c.setAuthenticated(cmp == 1)
 
 							// Marshal and send response.
 							reply, err = createMarshalledReply(cmd.jsonrpc, cmd.id, nil, nil)
