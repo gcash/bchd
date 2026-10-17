@@ -2,6 +2,8 @@ package wire
 
 import (
 	"bytes"
+	"io"
+	"math"
 	"reflect"
 	"testing"
 
@@ -297,6 +299,153 @@ func TestMsgGetBlockTxns_RequestedTransactions(t *testing.T) {
 			if !expected.IsEqual(&want) {
 				t.Errorf("Returned incorrect transaction for index %d. Expected %v got %v", i, expected, want)
 			}
+		}
+	}
+}
+
+// TestGetBlockTxnsIndexCountLimit ensures the number of indexes in a
+// getblocktxn message is limited to the max number of transactions in a block
+// before any of them are decoded, and that the index slice is not sized from
+// the claimed count.
+func TestGetBlockTxnsIndexCountLimit(t *testing.T) {
+	pver := ProtocolVersion
+
+	// withIndexes returns a getblocktxn encoding with the given index
+	// count followed by the given number of single byte zero indexes.
+	withIndexes := func(count uint64, n uint32) []byte {
+		var buf bytes.Buffer
+		buf.Write(make([]byte, chainhash.HashSize))
+		_ = WriteVarInt(&buf, pver, count)
+		buf.Write(make([]byte, n))
+		return buf.Bytes()
+	}
+
+	tests := []struct {
+		name string // Test description
+		buf  []byte // Wire encoding
+		err  error  // Expected error
+	}{
+		{
+			// Every claimed index is present, so without the
+			// limit this decodes successfully after allocating
+			// several times the payload size.
+			name: "count one above max with all indexes",
+			buf: withIndexes(uint64(maxTxPerBlock())+1,
+				maxTxPerBlock()+1),
+			err: &MessageError{},
+		},
+		{
+			name: "count at max with no indexes",
+			buf:  withIndexes(uint64(maxTxPerBlock()), 0),
+			err:  io.EOF,
+		},
+	}
+
+	t.Logf("Running %d tests", len(tests))
+	for _, test := range tests {
+		var msg MsgGetBlockTxns
+		var err error
+		r := bytes.NewReader(test.buf)
+		alloc := decodeAlloc(func() {
+			err = msg.BchDecode(r, pver, BaseEncoding)
+		})
+		if alloc > maxBoundedDecodeAlloc {
+			t.Errorf("%s: allocated %d bytes, want at most %d",
+				test.name, alloc, maxBoundedDecodeAlloc)
+		}
+		if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+			t.Errorf("%s: wrong error got: %v, want: %v", test.name,
+				err, reflect.TypeOf(test.err))
+		}
+	}
+}
+
+// TestGetBlockTxnsIndexOverflow ensures differential indexes whose absolute
+// index does not fit in 32 bits are rejected, and that those that fit decode
+// and encode back to the same bytes.
+func TestGetBlockTxnsIndexOverflow(t *testing.T) {
+	pver := ProtocolVersion
+
+	tests := []struct {
+		name    string   // Test description
+		indexes []uint64 // Differential indexes on the wire
+		valid   bool     // Whether the message decodes
+	}{
+		{"max index", []uint64{math.MaxUint32}, true},
+		{"index above 32 bits", []uint64{math.MaxUint32 + 1}, false},
+		{"index far above 32 bits", []uint64{math.MaxUint64}, false},
+		{"one past max index", []uint64{math.MaxUint32, 0}, false},
+		{"sum at max index", []uint64{1 << 31, 1<<31 - 2}, true},
+		{"sum past max index", []uint64{1 << 31, 1<<31 - 1}, false},
+		{"sum wraps 32 bits", []uint64{2, math.MaxUint32 - 2}, false},
+		{"consecutive", []uint64{0, 0, 0, 5, 0}, true},
+	}
+
+	t.Logf("Running %d tests", len(tests))
+	for _, test := range tests {
+		var buf bytes.Buffer
+		buf.Write(make([]byte, chainhash.HashSize))
+		_ = WriteVarInt(&buf, pver, uint64(len(test.indexes)))
+		for _, index := range test.indexes {
+			_ = WriteVarInt(&buf, pver, index)
+		}
+
+		var msg MsgGetBlockTxns
+		err := msg.BchDecode(bytes.NewReader(buf.Bytes()), pver,
+			BaseEncoding)
+		if !test.valid {
+			if _, ok := err.(*MessageError); !ok {
+				t.Errorf("%s: wrong error got: %v, want: %T",
+					test.name, err, &MessageError{})
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+			continue
+		}
+
+		var reencoded bytes.Buffer
+		if err := msg.BchEncode(&reencoded, pver,
+			BaseEncoding); err != nil {
+
+			t.Errorf("%s: BchEncode: %v", test.name, err)
+			continue
+		}
+		if !bytes.Equal(reencoded.Bytes(), buf.Bytes()) {
+			t.Errorf("%s: reencoded message does not match",
+				test.name)
+		}
+	}
+}
+
+// TestGetBlockTxnsRequestedOutOfRange ensures requested indexes past the end
+// of the block are rejected, including ones that wrap around in 32 bits.
+func TestGetBlockTxnsRequestedOutOfRange(t *testing.T) {
+	block := NewMsgBlock(&BlockHeader{})
+	for i := range 5 {
+		tx := *multiTx
+		tx.Version = int32(i)
+		block.Transactions = append(block.Transactions, &tx)
+	}
+
+	tests := []struct {
+		name    string    // Test description
+		block   *MsgBlock // Block to request from
+		indexes []uint32  // Differential indexes
+	}{
+		{"past end", block, []uint32{5}},
+		{"sum past end", block, []uint32{2, 2}},
+		{"sum wraps 32 bits", block, []uint32{2, math.MaxUint32 - 2}},
+		{"max index", block, []uint32{math.MaxUint32}},
+		{"empty block", NewMsgBlock(&BlockHeader{}), []uint32{0}},
+	}
+
+	t.Logf("Running %d tests", len(tests))
+	for _, test := range tests {
+		msg := NewMsgGetBlockTxns(test.block.BlockHash(), test.indexes)
+		if _, err := msg.RequestedTransactions(test.block); err == nil {
+			t.Errorf("%s: expected error", test.name)
 		}
 	}
 }

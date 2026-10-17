@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 )
@@ -34,12 +35,31 @@ func (msg *MsgGetBlockTxns) BchDecode(r io.Reader, pver uint32, enc MessageEncod
 		return err
 	}
 
+	// Prevent more indexes than there could possibly be transactions in a
+	// block.  The indexes are appended as they are read, so memory use
+	// grows with the data actually received rather than with this count.
+	if indexCount > uint64(maxTxPerBlock()) {
+		str := fmt.Sprintf("too many transaction indexes for message "+
+			"[count %d, max %d]", indexCount, maxTxPerBlock())
+		return messageError("MsgGetBlockTxns.BchDecode", str)
+	}
+
+	// The indexes are differentially encoded.  Reject any whose absolute
+	// index does not fit in 32 bits.
+	var next uint64
 	for range indexCount {
 		index, err := ReadVarInt(r, pver)
 		if err != nil {
 			return err
 		}
+		if index > math.MaxUint32 || next+index > math.MaxUint32 {
+			str := fmt.Sprintf("transaction index overflows 32 "+
+				"bits [differential index %d, previous end %d]",
+				index, next)
+			return messageError("MsgGetBlockTxns.BchDecode", str)
+		}
 		msg.Indexes = append(msg.Indexes, uint32(index))
+		next += index + 1
 	}
 	return nil
 }
@@ -87,13 +107,14 @@ func (msg *MsgGetBlockTxns) MaxPayloadLength(pver uint32) uint32 {
 // message from the given block and returns them.
 func (msg *MsgGetBlockTxns) RequestedTransactions(block *MsgBlock) ([]*MsgTx, error) {
 	var requestedTxs []*MsgTx
-	lastIndex := uint32(0)
+	var next uint64
 	for _, i := range msg.Indexes {
-		if i+lastIndex > uint32(len(block.Transactions)-1) {
+		index := next + uint64(i)
+		if index >= uint64(len(block.Transactions)) {
 			return nil, errors.New("transaction index out of range")
 		}
-		requestedTxs = append(requestedTxs, block.Transactions[i+lastIndex])
-		lastIndex += i + 1
+		requestedTxs = append(requestedTxs, block.Transactions[index])
+		next = index + 1
 	}
 	return requestedTxs, nil
 }
