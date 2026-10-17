@@ -102,6 +102,11 @@ type MessageListeners struct {
 	// OnAddr is invoked when a peer receives an addr bitcoin message.
 	OnAddr func(p *Peer, msg *wire.MsgAddr)
 
+	// OnAddrV2 is invoked when a peer receives an addrv2 message.  The
+	// peer only sends sendaddrv2 to ask for addrv2 messages when this is
+	// set.
+	OnAddrV2 func(p *Peer, msg *wire.MsgAddrV2)
+
 	// OnPing is invoked when a peer receives a ping bitcoin message.
 	OnPing func(p *Peer, msg *wire.MsgPing)
 
@@ -466,6 +471,7 @@ type Peer struct {
 	advertisedProtoVer   uint32 // protocol version advertised by remote
 	protocolVersion      uint32 // negotiated protocol version
 	sendHeadersPreferred bool   // peer sent a sendheaders message
+	sendAddrV2           bool   // peer sent a sendaddrv2 message
 	verAckReceived       bool
 	xVersionReceived     bool
 	syncPeer             bool
@@ -882,6 +888,18 @@ func (p *Peer) WantsHeaders() bool {
 	return sendHeadersPreferred
 }
 
+// WantsAddrV2 returns if the peer sent sendaddrv2 to receive addrv2 messages
+// instead of addr messages.
+//
+// This function is safe for concurrent access.
+func (p *Peer) WantsAddrV2() bool {
+	p.flagsMtx.Lock()
+	sendAddrV2 := p.sendAddrV2
+	p.flagsMtx.Unlock()
+
+	return sendAddrV2
+}
+
 // WantsCompactBlocks returns if the peer wants header cmpctblocks instead of
 // regular blocks.
 //
@@ -958,6 +976,35 @@ func (p *Peer) PushAddrMsg(addresses []*wire.NetAddress) ([]*wire.NetAddress, er
 
 		// Truncate it to the maximum size.
 		msg.AddrList = msg.AddrList[:wire.MaxAddrPerMsg]
+	}
+
+	p.QueueMessage(msg, nil)
+	return msg.AddrList, nil
+}
+
+// PushAddrV2Msg sends an addrv2 message to the connected peer using the
+// provided addresses.  It works like PushAddrMsg and should only be used for
+// peers that want addrv2 messages, see WantsAddrV2.
+//
+// This function is safe for concurrent access.
+func (p *Peer) PushAddrV2Msg(addresses []*wire.NetAddressV2) ([]*wire.NetAddressV2, error) {
+	addressCount := len(addresses)
+
+	// Nothing to send.
+	if addressCount == 0 {
+		return nil, nil
+	}
+
+	msg := wire.NewMsgAddrV2()
+	msg.AddrList = make([]*wire.NetAddressV2, addressCount)
+	copy(msg.AddrList, addresses)
+
+	// Randomize the addresses sent if there are more than the maximum allowed.
+	if addressCount > wire.MaxV2AddrPerMsg {
+		rand.Shuffle(addressCount, func(i, j int) {
+			msg.AddrList[i], msg.AddrList[j] = msg.AddrList[j], msg.AddrList[i]
+		})
+		msg.AddrList = msg.AddrList[:wire.MaxV2AddrPerMsg]
 	}
 
 	p.QueueMessage(msg, nil)
@@ -1570,6 +1617,17 @@ out:
 			if p.cfg.Listeners.OnAddr != nil {
 				p.cfg.Listeners.OnAddr(p, msg)
 			}
+
+		case *wire.MsgAddrV2:
+			if p.cfg.Listeners.OnAddrV2 != nil {
+				p.cfg.Listeners.OnAddrV2(p, msg)
+			}
+
+		case *wire.MsgSendAddrV2:
+			// sendaddrv2 is only allowed before verack.
+			log.Debugf("Received sendaddrv2 after verack from %s -- "+
+				"disconnecting", p)
+			break out
 
 		case *wire.MsgPing:
 			p.handlePingMsg(msg)
@@ -2200,48 +2258,55 @@ func (p *Peer) readRemoteVersionMsg() error {
 	return nil
 }
 
-// readRemoteVerAckMsg waits for the next message to arrive from the remote
-// peer. If this message is not a verack message, then an error is returned.
-// This method is to be used as part of the version negotiation upon a new
-// connection.
-func (p *Peer) readRemoteVerAckMsg() error {
-	// Read the next message from the wire.
-	remoteMsg, _, err := p.readMessage(wire.LatestEncoding)
-	if err != nil {
-		return err
-	}
+// waitForVerAck reads messages from the remote peer until its verack.  A
+// sendaddrv2 message records that the peer wants addrv2 messages.  Other
+// messages, including unknown ones, are ignored.  This method is to be used
+// as part of the version negotiation upon a new connection.
+func (p *Peer) waitForVerAck() error {
+	for {
+		remoteMsg, _, err := p.readMessage(wire.LatestEncoding)
+		if err != nil {
+			if strings.Contains(err.Error(), "unhandled command [") {
+				continue
+			}
+			return err
+		}
 
-	// We might see a sendaddrv2 message here, that is OKAY based on
-	// the spec!
-	_, ok := remoteMsg.(*wire.MsgSendAddrV2)
-	if ok {
-		remoteMsg, _, err = p.readMessage(wire.LatestEncoding)
+		switch msg := remoteMsg.(type) {
+		case *wire.MsgSendAddrV2:
+			p.flagsMtx.Lock()
+			p.sendAddrV2 = true
+			p.flagsMtx.Unlock()
+
+		case *wire.MsgVerAck:
+			p.flagsMtx.Lock()
+			p.verAckReceived = true
+			p.flagsMtx.Unlock()
+
+			if p.cfg.Listeners.OnVerAck != nil {
+				p.cfg.Listeners.OnVerAck(p, msg)
+			}
+			return nil
+
+		default:
+			log.Debugf("Ignoring %s from %s before verack",
+				remoteMsg.Command(), p)
+		}
+	}
+}
+
+// writeVerAck sends sendaddrv2 if the peer supports it and addrv2 messages
+// are handled, followed by our verack.
+func (p *Peer) writeVerAck() error {
+	if p.cfg.Listeners.OnAddrV2 != nil &&
+		p.ProtocolVersion() >= wire.AddrV2Version {
+
+		err := p.writeMessage(wire.NewMsgSendAddrV2(), wire.LatestEncoding)
 		if err != nil {
 			return err
 		}
 	}
-
-	// It should be a verack message, otherwise send a reject message to the
-	// peer explaining why.
-	msg, ok := remoteMsg.(*wire.MsgVerAck)
-	if !ok {
-		reason := "a verack message must follow version"
-		rejectMsg := wire.NewMsgReject(
-			msg.Command(), wire.RejectMalformed, reason,
-		)
-		_ = p.writeMessage(rejectMsg, wire.LatestEncoding)
-		return errors.New(reason)
-	}
-
-	p.flagsMtx.Lock()
-	p.verAckReceived = true
-	p.flagsMtx.Unlock()
-
-	if p.cfg.Listeners.OnVerAck != nil {
-		p.cfg.Listeners.OnVerAck(p, msg)
-	}
-
-	return nil
+	return p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
 }
 
 // localVersionMsg creates a version message that can be used to send to the
@@ -2327,8 +2392,9 @@ func (p *Peer) writeLocalVersionMsg() error {
 //
 //  1. Remote peer sends their version.
 //  2. We send our version.
-//  3. We send our verack.
-//  4. Remote peer sends their verack.
+//  3. We send sendaddrv2 if their version is 70016 or higher.
+//  4. We send our verack.
+//  5. Remote peer sends their verack, which may be preceded by sendaddrv2.
 func (p *Peer) negotiateInboundProtocol() error {
 	if err := p.readRemoteVersionMsg(); err != nil {
 		return err
@@ -2338,12 +2404,11 @@ func (p *Peer) negotiateInboundProtocol() error {
 		return err
 	}
 
-	err := p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
-	if err != nil {
+	if err := p.writeVerAck(); err != nil {
 		return err
 	}
 
-	return p.readRemoteVerAckMsg()
+	return p.waitForVerAck()
 }
 
 // negotiateOutboundProtocol performs the negotiation protocol for an outbound
@@ -2352,8 +2417,9 @@ func (p *Peer) negotiateInboundProtocol() error {
 //
 //  1. We send our version.
 //  2. Remote peer sends their version.
-//  3. Remote peer sends their verack.
-//  4. We send our verack.
+//  3. Remote peer sends their verack, which may be preceded by sendaddrv2.
+//  4. We send sendaddrv2 if their version is 70016 or higher.
+//  5. We send our verack.
 func (p *Peer) negotiateOutboundProtocol() error {
 	if err := p.writeLocalVersionMsg(); err != nil {
 		return err
@@ -2363,11 +2429,11 @@ func (p *Peer) negotiateOutboundProtocol() error {
 		return err
 	}
 
-	if err := p.readRemoteVerAckMsg(); err != nil {
+	if err := p.waitForVerAck(); err != nil {
 		return err
 	}
 
-	return p.writeMessage(wire.NewMsgVerAck(), wire.LatestEncoding)
+	return p.writeVerAck()
 }
 
 // start begins processing input and output messages.
