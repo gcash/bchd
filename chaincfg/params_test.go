@@ -119,3 +119,30 @@ func TestCheckpoints(t *testing.T) {
 		}
 	}
 }
+
+// TestMinimumChainWork ensures the minimum chain work of each network is the
+// reference implementation's.
+func TestMinimumChainWork(t *testing.T) {
+	tests := []struct {
+		params *Params
+		work   string
+	}{
+		{&MainNetParams, "30fd678912166474fe93f14"},
+		{&TestNet3Params, "11fdbbe582349040762"},
+		{&TestNet4Params, "bd5a1b5bda45b5da"},
+		{&ChipNetParams, "7a3195391c4408f2"},
+		{&RegressionNetParams, ""},
+		{&SimNetParams, ""},
+	}
+	for _, test := range tests {
+		work := test.params.MinimumChainWork
+		got := ""
+		if work != nil {
+			got = work.Text(16)
+		}
+		if got != test.work {
+			t.Errorf("%s: minimum chain work %q, want %q",
+				test.params.Name, got, test.work)
+		}
+	}
+}
