@@ -547,7 +547,7 @@ mempoolLoop:
 			continue
 		}
 		if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight,
-			g.timeSource.AdjustedTime()) {
+			best.MedianTime) {
 
 			log.Tracef("Skipping non-finalized tx %s", tx.Hash())
 			continue
@@ -724,6 +724,15 @@ mempoolLoop:
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"CheckTransactionInputs: %v", tx.Hash(), err)
+			logSkippedDeps(tx, deps)
+			continue
+		}
+		seqLock, err := g.chain.CalcSequenceLock(tx, blockUtxos, true)
+		if err != nil || !blockchain.SequenceLockActive(seqLock,
+			nextBlockHeight, best.MedianTime) {
+
+			log.Tracef("Skipping tx %s because its sequence locks "+
+				"are not met: %v", tx.Hash(), err)
 			logSkippedDeps(tx, deps)
 			continue
 		}
