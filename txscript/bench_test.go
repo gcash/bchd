@@ -199,3 +199,51 @@ func BenchmarkTokenTxMultisigInput(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkParseScript benchmarks parsing a P2PKH script, a token covenant
+// script, a P2SH input with a 9 KB redeem script of one-byte opcodes, that
+// redeem script and a single 9990-byte push.
+func BenchmarkParseScript(b *testing.B) {
+	hash := bytes.Repeat([]byte{0x11}, 20)
+	category := bytes.Repeat([]byte{0x22}, 32)
+	p2pkh := benchScript(b, NewScriptBuilder().AddOp(OP_DUP).AddOp(OP_HASH160).
+		AddData(hash).AddOp(OP_EQUALVERIFY).AddOp(OP_CHECKSIG))
+	covenant := benchScript(b, NewScriptBuilder().
+		AddOp(OP_INPUTINDEX).AddOp(OP_UTXOTOKENCATEGORY).AddData(category).
+		AddOp(OP_EQUALVERIFY).
+		AddOp(OP_INPUTINDEX).AddOp(OP_OUTPUTTOKENCATEGORY).AddData(category).
+		AddOp(OP_EQUALVERIFY).
+		AddOp(OP_INPUTINDEX).AddOp(OP_UTXOBYTECODE).
+		AddOp(OP_INPUTINDEX).AddOp(OP_OUTPUTBYTECODE).AddOp(OP_EQUALVERIFY).
+		AddOp(OP_INPUTINDEX).AddOp(OP_OUTPUTTOKENCOMMITMENT).AddOp(OP_BIN2NUM).
+		AddOp(OP_INPUTINDEX).AddOp(OP_UTXOTOKENCOMMITMENT).AddOp(OP_BIN2NUM).
+		AddOp(OP_1ADD).AddOp(OP_NUMEQUALVERIFY).
+		AddOp(OP_INPUTINDEX).AddOp(OP_OUTPUTVALUE).AddInt64(1000).
+		AddOp(OP_GREATERTHANOREQUAL).AddOp(OP_VERIFY).
+		AddOp(OP_TXOUTPUTCOUNT).AddOp(OP_2).AddOp(OP_NUMEQUALVERIFY).
+		AddData(benchPubKey(1)).AddOp(OP_CHECKSIG))
+	redeem := bytes.Repeat([]byte{OP_DUP, OP_DROP}, 4500)
+	p2sh := benchScript(b, NewScriptBuilder().AddOp(OP_1).AddData(redeem))
+	bigPush := append([]byte{OP_PUSHDATA2, 0x06, 0x27}, make([]byte, 9990)...)
+
+	benches := []struct {
+		name   string
+		script []byte
+	}{
+		{"p2pkh", p2pkh},
+		{"covenant", covenant},
+		{"p2sh-input", p2sh},
+		{"redeem-9k", redeem},
+		{"push-9990", bigPush},
+	}
+	for _, bench := range benches {
+		b.Run(bench.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, err := parseScript(bench.script); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
