@@ -704,6 +704,8 @@ func (a *AddrManager) getAddresses() []*wire.NetAddress {
 func (a *AddrManager) reset() {
 
 	a.addrIndex = make(map[string]*KnownAddress)
+	a.nNew = 0
+	a.nTried = 0
 
 	// fill key with bytes from a good random source.
 	_, _ = io.ReadFull(crand.Reader, a.key[:])
