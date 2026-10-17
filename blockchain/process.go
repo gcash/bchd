@@ -89,13 +89,26 @@ func (b *BlockChain) blockExists(hash *chainhash.Hash) (bool, error) {
 	return exists, err
 }
 
+// heightFlags returns flags with the upgrade flags added for the rules that
+// apply to a block at the given height.
+func (b *BlockChain) heightFlags(height int32, flags BehaviorFlags) BehaviorFlags {
+	if height > b.chainParams.MagneticAnonomalyForkHeight {
+		flags |= BFMagneticAnomaly
+	}
+	if height > b.chainParams.Upgrade9ForkHeight {
+		flags |= BFUpgrade9
+	}
+	return flags
+}
+
 // processOrphans determines if there are any orphans which depend on the passed
 // block hash (they are no longer orphans if true) and potentially accepts them.
 // It repeats the process for the newly accepted blocks (to detect further
 // orphans which may no longer be orphans) until there are no more.
 //
 // The flags do not modify the behavior of this function directly, however they
-// are needed to pass along to maybeAcceptBlock.
+// are needed to pass along to maybeAcceptBlock.  BFFastAdd only applies to the
+// block it was passed with, so it is not passed on to the orphans.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) error {
@@ -136,7 +149,18 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 				orphan.block.SetHeight(prevNode.height + 1)
 			}
 
-			_, err := b.maybeAcceptBlock(orphan.block, prevHash, prevNode, flags)
+			// The orphan was sanity checked before its height was
+			// known, so check it again with the rules for its height.
+			orphanFlags := b.heightFlags(orphan.block.Height(),
+				flags&^(BFFastAdd|BFMagneticAnomaly|BFUpgrade9))
+			err := checkBlockSanity(orphan.block, b.chainParams.PowLimit,
+				b.timeSource, orphanFlags)
+			if err != nil {
+				return err
+			}
+
+			_, err = b.maybeAcceptBlock(orphan.block, prevHash, prevNode,
+				orphanFlags)
 			if err != nil {
 				return err
 			}
@@ -192,13 +216,7 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 		block.SetHeight(prevNode.height + 1)
 	}
 
-	if block.Height() > b.chainParams.MagneticAnonomalyForkHeight {
-		flags |= BFMagneticAnomaly
-	}
-
-	if block.Height() > b.chainParams.Upgrade9ForkHeight {
-		flags |= BFUpgrade9
-	}
+	flags = b.heightFlags(block.Height(), flags)
 
 	// Perform preliminary sanity checks on the block and its transactions.
 	err := checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)
