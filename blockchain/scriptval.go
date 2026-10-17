@@ -331,10 +331,12 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 // PATFOs are provably unspendable so a better place to check for them might be inside
 // txscript.IsUnspendable() but since we need to check for block heights, to minimize
 // changes in the codebase, we handle it here. It might be a good idea to change this later.
+// Tokens are enabled from the block after upgrade9ForkHeight, so an output
+// created at or below that height is a PATFO.
 func IsPATFO(tokenData wire.TokenData, pkScript []byte, utxoBlockHeight int32, upgrade9ForkHeight int32) bool {
 	isPATFO := false
 	if !tokenData.IsEmpty() || (len(pkScript) > 0 && pkScript[0] == 0xef) {
-		if utxoBlockHeight < upgrade9ForkHeight {
+		if utxoBlockHeight <= upgrade9ForkHeight {
 			isPATFO = true
 		}
 	}
