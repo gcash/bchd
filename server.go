@@ -429,9 +429,29 @@ func (sp *serverPeer) relayTxDisabled() bool {
 	return isDisabled
 }
 
-// pushAddrMsg sends an addr message to the connected peer using the provided
-// addresses.  Addresses that don't fit in an addr message are skipped.
+// pushAddrMsg sends an addrv2 message to a peer that asked for one with
+// sendaddrv2 and an addr message to other peers, using the provided addresses.
+// Addresses that don't fit in an addr message are skipped.
 func (sp *serverPeer) pushAddrMsg(addresses []*wire.NetAddressV2) {
+	if sp.WantsAddrV2() {
+		// Filter addresses already known to the peer.
+		addrs := make([]*wire.NetAddressV2, 0, len(addresses))
+		for _, addr := range addresses {
+			if !sp.addressKnown(addr) {
+				addrs = append(addrs, addr)
+			}
+		}
+		known, err := sp.PushAddrV2Msg(addrs)
+		if err != nil {
+			peerLog.Errorf("Can't push address message to %s: %v",
+				sp.Peer, err)
+			sp.Disconnect()
+			return
+		}
+		sp.addKnownAddresses(known)
+		return
+	}
+
 	// Filter addresses already known to the peer.
 	addrs := make([]*wire.NetAddress, 0, len(addresses))
 	for _, addr := range addresses {
@@ -1655,6 +1675,27 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 
 	addrs := make([]*wire.NetAddressV2, 0, len(msg.AddrList))
 	for _, na := range msg.AddrList {
+		addrs = append(addrs, wire.NetAddressV2FromLegacy(na))
+	}
+	sp.addAddresses(addrs)
+}
+
+// OnAddrV2 is invoked when a peer receives an addrv2 message and is used to
+// notify the server about advertised addresses.  Addresses of unknown networks
+// were already skipped, so the list may be empty.
+func (sp *serverPeer) OnAddrV2(_ *peer.Peer, msg *wire.MsgAddrV2) {
+	// Ignore addresses on the simulation and regression test networks like
+	// OnAddr does.
+	if cfg.SimNet || cfg.RegressionTest {
+		return
+	}
+
+	sp.addAddresses(msg.AddrList)
+}
+
+// addAddresses adds the addresses a peer advertised to the address manager.
+func (sp *serverPeer) addAddresses(addrs []*wire.NetAddressV2) {
+	for _, na := range addrs {
 		// Don't add more address if we're disconnecting.
 		if !sp.Connected() {
 			return
@@ -1667,8 +1708,6 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 		if na.Timestamp.After(now.Add(time.Minute * 10)) {
 			na.Timestamp = now.Add(-1 * time.Hour * 24 * 5)
 		}
-
-		addrs = append(addrs, wire.NetAddressV2FromLegacy(na))
 	}
 
 	// Add addresses to known addresses for this peer.
@@ -2593,6 +2632,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnFilterLoad:   sp.OnFilterLoad,
 			OnGetAddr:      sp.OnGetAddr,
 			OnAddr:         sp.OnAddr,
+			OnAddrV2:       sp.OnAddrV2,
 			OnRead:         sp.OnRead,
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
