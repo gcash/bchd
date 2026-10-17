@@ -61,6 +61,10 @@ const (
 	// accept compact block relay but pledge not to ban nodes which
 	// relay blocks without validating them first.
 	NoValidationRelayVersion uint32 = 70015
+
+	// AddrV2Version is the protocol version from which peers send
+	// sendaddrv2 (BIP155) between version and verack.
+	AddrV2Version uint32 = 70016
 )
 
 // ServiceFlag identifies services supported by a bitcoin peer.
