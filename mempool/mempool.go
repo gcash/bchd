@@ -714,9 +714,9 @@ func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
 // more details.
 //
 // This function MUST be called with the mempool lock held (for writes).
-func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash, *TxDesc, error) {
+func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount) ([]*chainhash.Hash, *TxDesc, error) {
 	result, err := mp.checkMempoolAcceptance(tx, isNew, rateLimit,
-		rejectDupOrphans, 0)
+		rejectDupOrphans, maxFee)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1057,7 +1057,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit bool) ([]*chainhash.Hash, *TxDesc, error) {
 	// Protect concurrent access.
 	mp.mtx.Lock()
-	hashes, txD, err := mp.maybeAcceptTransaction(tx, isNew, rateLimit, true)
+	hashes, txD, err := mp.maybeAcceptTransaction(tx, isNew, rateLimit, true, 0)
 	mp.mtx.Unlock()
 
 	return hashes, txD, err
@@ -1118,7 +1118,7 @@ func (mp *TxPool) processOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 			// Potentially accept an orphan into the tx pool.
 			for _, tx := range orphans {
 				missing, txD, err := mp.maybeAcceptTransaction(
-					tx, true, true, false)
+					tx, true, true, false, 0)
 				if err != nil {
 					// The orphan is now invalid, so there
 					// is no way any other orphans which
@@ -1198,6 +1198,14 @@ func (mp *TxPool) ProcessOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag) ([]*TxDesc, error) {
+	return mp.ProcessTransactionWithMaxFee(tx, allowOrphan, rateLimit, tag, 0)
+}
+
+// ProcessTransactionWithMaxFee is like ProcessTransaction, but also rejects
+// the transaction when it pays more fees than a positive maxFee.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag, maxFee bchutil.Amount) ([]*TxDesc, error) {
 	log.Tracef("Processing transaction %v", tx.Hash())
 
 	// Protect concurrent access.
@@ -1218,7 +1226,7 @@ func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool
 	// reports, since its mempool acceptance has no visibility into the orphan
 	// map held by the P2P layer.
 	missingParents, txD, err := mp.maybeAcceptTransaction(tx, true, rateLimit,
-		allowOrphan)
+		allowOrphan, maxFee)
 	if err != nil {
 		return nil, err
 	}

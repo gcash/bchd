@@ -24,10 +24,30 @@ import (
 // mempoolTestOutputValue is the value of each output the test chain holds.
 const mempoolTestOutputValue = bchutil.SatoshiPerBitcoin
 
+// relayRecorder is a connection manager that records the transactions it
+// is asked to relay or rebroadcast.
+type relayRecorder struct {
+	rpcserverConnManager
+	relayed     []*mempool.TxDesc
+	rebroadcast []*wire.InvVect
+}
+
+// RelayTransactions records the relayed transactions.
+func (r *relayRecorder) RelayTransactions(txns []*mempool.TxDesc) {
+	r.relayed = append(r.relayed, txns...)
+}
+
+// AddRebroadcastInventory records the inventory to rebroadcast.
+func (r *relayRecorder) AddRebroadcastInventory(iv *wire.InvVect, _ interface{}) {
+	r.rebroadcast = append(r.rebroadcast, iv)
+}
+
 // mempoolTestHarness is an RPC server with a mempool on top of a chain that
 // holds outputs paying to a single key.
 type mempoolTestHarness struct {
 	server   *rpcServer
+	connMgr  *relayRecorder
+	funding  *wire.MsgTx
 	key      *bchec.PrivateKey
 	pkScript []byte
 	outputs  []wire.OutPoint
@@ -99,16 +119,24 @@ func newMempoolTestHarness(t *testing.T, numOutputs int) *mempoolTestHarness {
 		},
 	})
 
+	connMgr := &relayRecorder{}
 	s := &rpcServer{
 		cfg: rpcserverConfig{
+			ConnMgr:   connMgr,
 			TxMemPool: pool,
 			MaxTxFee:  defaultMaxTxFee,
 		},
 		gbtWorkState: newGbtWorkState(nil),
 	}
 
+	// Websocket notifications are dropped.
+	s.ntfnMgr = newWsNotificationManager(s)
+	close(s.ntfnMgr.quit)
+
 	return &mempoolTestHarness{
 		server:   s,
+		connMgr:  connMgr,
+		funding:  fundingTx,
 		key:      key,
 		pkScript: pkScript,
 		outputs:  outputs,
@@ -295,4 +323,87 @@ func TestHandleTestMempoolAcceptParams(t *testing.T) {
 				test.code)
 		}
 	}
+}
+
+// sendRawTransaction calls sendrawtransaction.
+func (h *mempoolTestHarness) sendRawTransaction(t *testing.T, tx *wire.MsgTx, allowHighFees bool) (string, error) {
+	t.Helper()
+
+	cmd := btcjson.NewSendRawTransactionCmd(txHex(t, tx), &allowHighFees)
+	reply, err := handleSendRawTransaction(h.server, cmd, nil)
+	if err != nil {
+		return "", err
+	}
+	return reply.(string), nil
+}
+
+// TestHandleSendRawTransaction ensures sendrawtransaction returns the hash of
+// a transaction already in the mempool, enforces the maximum fee and returns
+// the expected error codes.
+func TestHandleSendRawTransaction(t *testing.T) {
+	t.Parallel()
+
+	h := newMempoolTestHarness(t, 5)
+	pool := h.server.cfg.TxMemPool
+
+	assertCode := func(name string, err error, code btcjson.RPCErrorCode) {
+		t.Helper()
+		rpcErr, ok := err.(*btcjson.RPCError)
+		if !ok || rpcErr.Code != code {
+			t.Fatalf("%s: got error %v, want code %d", name, err, code)
+		}
+	}
+
+	// A new transaction is accepted, relayed and kept for rebroadcast.
+	tx := h.spend(t, h.outputs[0], 1000)
+	txid, err := h.sendRawTransaction(t, tx, false)
+	if err != nil || txid != tx.TxHash().String() {
+		t.Fatalf("new transaction: got %q, error %v", txid, err)
+	}
+	if len(h.connMgr.relayed) != 1 || len(h.connMgr.rebroadcast) != 1 {
+		t.Fatalf("new transaction: relayed %d, rebroadcast %d",
+			len(h.connMgr.relayed), len(h.connMgr.rebroadcast))
+	}
+
+	// Sending it again returns its hash and relays it again.
+	txid, err = h.sendRawTransaction(t, tx, false)
+	if err != nil || txid != tx.TxHash().String() {
+		t.Fatalf("resubmitted transaction: got %q, error %v", txid, err)
+	}
+	if len(h.connMgr.relayed) != 2 ||
+		*h.connMgr.relayed[1].Tx.Hash() != tx.TxHash() {
+
+		t.Fatalf("resubmitted transaction was not relayed")
+	}
+
+	// A fee above the maximum is rejected unless allowhighfees is set.
+	tx = h.spend(t, h.outputs[1], int64(defaultMaxTxFee)+1)
+	_, err = h.sendRawTransaction(t, tx, false)
+	assertCode("high fee", err, btcjson.ErrRPCTxRejected)
+	want := "TX rejected: absurdly-high-fee, 10000001 > 10000000"
+	if err.(*btcjson.RPCError).Message != want {
+		t.Fatalf("high fee: got message %q, want %q", err, want)
+	}
+	if pool.IsTransactionInPool(bchutil.NewTx(tx).Hash()) {
+		t.Fatalf("high fee: transaction added to the pool")
+	}
+	txid, err = h.sendRawTransaction(t, tx, true)
+	if err != nil || txid != tx.TxHash().String() {
+		t.Fatalf("high fee allowed: got %q, error %v", txid, err)
+	}
+
+	// A transaction failing a consensus rule is rejected.
+	tx = h.spend(t, h.outputs[2], 1000)
+	tx.TxOut[0].Value--
+	_, err = h.sendRawTransaction(t, tx, false)
+	assertCode("invalid signature", err, btcjson.ErrRPCTxRejected)
+
+	// A transaction with unknown inputs is a transaction error.
+	unknown := wire.OutPoint{Hash: h.outputs[0].Hash, Index: 100}
+	_, err = h.sendRawTransaction(t, h.spend(t, unknown, 1000), false)
+	assertCode("missing inputs", err, btcjson.ErrRPCTxError)
+
+	// A transaction with unspent outputs in the chain is already in it.
+	_, err = h.sendRawTransaction(t, h.funding, false)
+	assertCode("in chain", err, btcjson.ErrRPCTxAlreadyInChain)
 }

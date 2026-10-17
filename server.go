@@ -3531,7 +3531,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			ChainParams:    chainParams,
 			DB:             db,
 			TxMemPool:      s.txMemPool,
-			MaxTxFee:       defaultMaxTxFee,
+			MaxTxFee:       cfg.maxTxFee,
 			Generator:      blockTemplateGenerator,
 			CPUMiner:       s.cpuMiner,
 			TxIndex:        s.txIndex,

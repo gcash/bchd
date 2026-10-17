@@ -3996,9 +3996,22 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 		}
 	}
 
-	// Use 0 for the tag to represent local node.
+	// A transaction already in the mempool is announced again and its hash
+	// returned.
 	tx := bchutil.NewTx(&msgTx)
-	acceptedTxs, err := s.cfg.TxMemPool.ProcessTransaction(tx, false, false, 0)
+	if txD, err := s.cfg.TxMemPool.FetchTxDesc(tx.Hash()); err == nil {
+		s.cfg.ConnMgr.RelayTransactions([]*mempool.TxDesc{txD})
+		return tx.Hash().String(), nil
+	}
+
+	maxFee := s.cfg.MaxTxFee
+	if c.AllowHighFees != nil && *c.AllowHighFees {
+		maxFee = 0
+	}
+
+	// Use 0 for the tag to represent local node.
+	acceptedTxs, err := s.cfg.TxMemPool.ProcessTransactionWithMaxFee(tx,
+		false, false, 0, maxFee)
 	if err != nil {
 		// When the error is a rule error, it means the transaction was
 		// simply rejected as opposed to something actually going wrong,
@@ -4019,7 +4032,7 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 
 		// We'll then map the rule error to the appropriate RPC error,
 		// matching bitcoind's behavior.
-		code := btcjson.ErrRPCTxError
+		code := btcjson.ErrRPCTxRejected
 		if txRuleErr, ok := ruleErr.Err.(mempool.TxRuleError); ok {
 			errDesc := txRuleErr.Description
 			switch {
