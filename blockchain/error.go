@@ -226,6 +226,10 @@ const (
 
 	// ErrCashTokensValidation indicates the token data is invalid in some way
 	ErrCashTokensValidation
+
+	// ErrBadTxVersion indicates a transaction version is outside of the
+	// range allowed once Upgrade9 is active.
+	ErrBadTxVersion
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -274,6 +278,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrTooManySigChecks:      "ErrTooManySigChecks",
 	ErrTxTooManySigChecks:    "ErrTxTooManySigChecks",
 	ErrCashTokensValidation:  "ErrCashTokensValidation",
+	ErrBadTxVersion:          "ErrBadTxVersion",
 }
 
 // String returns the ErrorCode as a human-readable name.

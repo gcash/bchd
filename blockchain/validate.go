@@ -759,6 +759,16 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		return ruleError(ErrBlockTooBig, str)
 	}
 
+	// Once Upgrade9 is active the version of every transaction, the
+	// coinbase included, must be within the allowed range.
+	if prevNode.height+1 > b.chainParams.Upgrade9ForkHeight {
+		for _, tx := range block.Transactions() {
+			if err := checkTransactionVersion(tx); err != nil {
+				return err
+			}
+		}
+	}
+
 	fastAdd := flags.HasFlag(BFFastAdd)
 	if !fastAdd {
 		// Obtain the latest state of the deployed CSV soft-fork in
@@ -807,6 +817,19 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		}
 	}
 
+	return nil
+}
+
+// checkTransactionVersion ensures the version of the transaction is within
+// the range allowed once Upgrade9 is active.
+func checkTransactionVersion(tx *bchutil.Tx) error {
+	version := tx.MsgTx().Version
+	if version < txscript.MinTxVersion || version > txscript.MaxTxVersion {
+		str := fmt.Sprintf("transaction %v has version %d which is "+
+			"not in the valid range of %d-%d", tx.Hash(), version,
+			txscript.MinTxVersion, txscript.MaxTxVersion)
+		return ruleError(ErrBadTxVersion, str)
+	}
 	return nil
 }
 
