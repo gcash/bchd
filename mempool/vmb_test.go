@@ -69,27 +69,32 @@ type vmbEra struct {
 	// May 2026 upgrades.
 	mtp time.Time
 
+	// height is the height of the tip, which gates the May 2023 upgrade.
+	height int32
+
+	upgrade9  bool
 	upgrade11 bool
 	upgrade12 bool
 }
 
 // vmbEras returns the eras with vectors, oldest first.  All use mainnet
-// parameters at a height above the May 2023 upgrade.
+// parameters.  The source outputs are created in the tip block.
 func vmbEras() []vmbEra {
 	params := &chaincfg.MainNetParams
 	day := 24 * time.Hour
 	u11 := time.Unix(int64(params.Upgrade11ActivationTime), 0)
 	u12 := time.Unix(int64(params.Upgrade12ActivationTime), 0)
 	return []vmbEra{
-		{name: "2023", mtp: u11.Add(-day)},
-		{name: "2025", mtp: u11.Add(day), upgrade11: true},
-		{name: "2026", mtp: u12.Add(day), upgrade11: true, upgrade12: true},
+		{name: "2022", mtp: u11.Add(-365 * day),
+			height: params.Upgrade9ForkHeight - 1},
+		{name: "2023", mtp: u11.Add(-day), height: 900000,
+			upgrade9: true},
+		{name: "2025", mtp: u11.Add(day), height: 900000,
+			upgrade9: true, upgrade11: true},
+		{name: "2026", mtp: u12.Add(day), height: 900000,
+			upgrade9: true, upgrade11: true, upgrade12: true},
 	}
 }
-
-// vmbTipHeight is the height of the tip.  The source outputs are created in
-// the tip block.
-const vmbTipHeight = 900000
 
 // readMaybeGzip reads a file, decompressing it when it ends in .gz.
 func readMaybeGzip(path string) ([]byte, error) {
@@ -250,8 +255,10 @@ func vmbBlockFlags(era vmbEra) txscript.ScriptFlags {
 		txscript.ScriptReportSigChecks |
 		txscript.ScriptVerifyReverseBytes |
 		txscript.ScriptVerify64BitIntegers |
-		txscript.ScriptVerifyNativeIntrospection |
-		txscript.ScriptAllowCashTokens
+		txscript.ScriptVerifyNativeIntrospection
+	if era.upgrade9 {
+		flags |= txscript.ScriptAllowCashTokens
+	}
 	if era.upgrade11 {
 		flags |= txscript.ScriptAllowMay2025
 	}
@@ -263,7 +270,10 @@ func vmbBlockFlags(era vmbEra) txscript.ScriptFlags {
 
 // vmbMempoolFlags returns the script flags the mempool uses at the tip.
 func vmbMempoolFlags(era vmbEra) txscript.ScriptFlags {
-	flags := txscript.StandardVerifyFlags | txscript.ScriptAllowCashTokens
+	flags := txscript.StandardVerifyFlags
+	if era.upgrade9 {
+		flags |= txscript.ScriptAllowCashTokens
+	}
 	if era.upgrade11 {
 		flags |= txscript.ScriptAllowMay2025 |
 			txscript.ScriptAllowMay2025StandardOnly
@@ -282,7 +292,7 @@ type vmbCase struct {
 
 // decodeVMBVector decodes the transaction and its source outputs.  A
 // transaction that does not decode is rejected by every check.
-func decodeVMBVector(v *vmbVector) (*vmbCase, error) {
+func decodeVMBVector(v *vmbVector, height int32) (*vmbCase, error) {
 	var msgTx wire.MsgTx
 	if err := msgTx.Deserialize(bytes.NewReader(v.tx)); err != nil {
 		return nil, fmt.Errorf("decode: %v", err)
@@ -306,7 +316,7 @@ func decodeVMBVector(v *vmbVector) (*vmbCase, error) {
 		if _, err := wire.ReadTxOut(r, 0, 0, &txOut); err != nil {
 			return nil, fmt.Errorf("source outputs: %v", err)
 		}
-		entry := blockchain.NewUtxoEntry(&txOut, vmbTipHeight, false)
+		entry := blockchain.NewUtxoEntry(&txOut, height, false)
 		view.Entries()[txIn.PreviousOutPoint] = entry
 	}
 	if r.Len() != 0 {
@@ -315,7 +325,7 @@ func decodeVMBVector(v *vmbVector) (*vmbCase, error) {
 
 	return &vmbCase{
 		tx:    bchutil.NewTx(&msgTx),
-		chain: &vmbChain{utxos: view, height: vmbTipHeight},
+		chain: &vmbChain{utxos: view, height: height},
 	}, nil
 }
 
@@ -384,7 +394,7 @@ func checkVMBBlock(c *vmbCase, era vmbEra) error {
 	nextHeight := c.chain.height + 1
 	tx := c.tx
 
-	err := blockchain.CheckTransactionSanity(tx, true, true, flags)
+	err := blockchain.CheckTransactionSanity(tx, true, era.upgrade9, flags)
 	if err != nil {
 		return err
 	}
@@ -515,7 +525,7 @@ func (r *vmbResult) mismatch(class vmbClass) string {
 }
 
 func runVMBVector(v *vmbVector, era vmbEra) *vmbResult {
-	c, err := decodeVMBVector(v)
+	c, err := decodeVMBVector(v, era.height)
 	if err != nil {
 		return &vmbResult{mempoolErr: err, blockErr: err}
 	}
@@ -530,6 +540,19 @@ func runVMBVector(v *vmbVector, era vmbEra) *vmbResult {
 	res.relayNonStdRun = true
 	res.blockErr = checkVMBBlock(c, era)
 	return &res
+}
+
+// vmbFailures lists the vectors BCHD does not pass yet, by era and id, with
+// the reason.
+var vmbFailures = map[string]string{
+	"2022/nh0wv": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/g9z7m": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/razas": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/c63j3": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/l90x0": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/tqlte": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/m0apr": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
+	"2022/pnre8": "OP_OUTPUTBYTECODE excludes the token prefix before tokens are enabled",
 }
 
 // TestVMBAcceptance runs every VMB vector through CheckMempoolAcceptance and
@@ -561,7 +584,15 @@ func TestVMBAcceptance(t *testing.T) {
 						key, v.class, v.file, res.mempoolErr,
 						res.blockErr, res.relayNonStdErr)
 				}
-				if problem := res.mismatch(v.class); problem != "" {
+				problem := res.mismatch(v.class)
+				if reason, ok := vmbFailures[key]; ok {
+					if problem == "" {
+						t.Errorf("%s: listed as failing (%s) "+
+							"but passes", key, reason)
+					}
+					continue
+				}
+				if problem != "" {
 					t.Errorf("%s (%s, %s): %s: %s", key,
 						v.class, v.file, v.desc, problem)
 				}
@@ -625,7 +656,7 @@ func TestVMBMetrics(t *testing.T) {
 		t.Run(era.name, func(t *testing.T) {
 			var checked int
 			for _, v := range loadVMBVectors(t, era.name) {
-				c, err := decodeVMBVector(&v)
+				c, err := decodeVMBVector(&v, era.height)
 				if err != nil {
 					continue
 				}
