@@ -3888,18 +3888,30 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 	if err != nil {
 		return scriptError(ErrInvalidIndex, "index out of range")
 	}
-	if len(utxo.PkScript) > vm.maxScriptElementSize {
+	ret := vm.introspectionBytecode(&utxo)
+	if len(ret) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
-			len(utxo.PkScript), vm.maxScriptElementSize)
+			len(ret), vm.maxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
-	ret := make([]byte, len(utxo.PkScript))
-	copy(ret, utxo.PkScript)
 	vm.dstack.PushByteArray(ret)
 
 	vm.metrics.AddOPCost(len(ret))
 
 	return nil
+}
+
+// introspectionBytecode returns a copy of the bytecode OP_UTXOBYTECODE and
+// OP_OUTPUTBYTECODE push for out.  Before Upgrade9 an output with token data
+// pushes its whole serialized script, token prefix included, like BCHN.
+func (vm *Engine) introspectionBytecode(out *wire.TxOut) []byte {
+	if vm.hasFlag(ScriptAllowCashTokens) || out.TokenData.IsEmpty() {
+		return append([]byte{}, out.PkScript...)
+	}
+	prefix := out.TokenData.TokenDataBuffer()
+	ret := make([]byte, 0, prefix.Len()+len(out.PkScript))
+	ret = append(ret, prefix.Bytes()...)
+	return append(ret, out.PkScript...)
 }
 
 // opcodeOutpointTxHash pop the top item from the stack as an input index (Script Number).
@@ -4088,13 +4100,12 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 
 	index := i.Int32()
 
-	if len(vm.tx.TxOut[index].PkScript) > vm.maxScriptElementSize {
+	ret := vm.introspectionBytecode(vm.tx.TxOut[index])
+	if len(ret) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
-			len(vm.tx.TxOut[index].PkScript), vm.maxScriptElementSize)
+			len(ret), vm.maxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
 	}
-	ret := make([]byte, len(vm.tx.TxOut[index].PkScript))
-	copy(ret, vm.tx.TxOut[index].PkScript)
 	vm.dstack.PushByteArray(ret)
 
 	vm.metrics.AddOPCost(len(ret))
