@@ -1211,6 +1211,18 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// bounds.
 	transactions := block.Transactions()
 
+	// With canonical ordering a transaction may spend the outputs of any
+	// other transaction in the block, so all outputs are added first.  The
+	// inputs are then checked and spent one transaction at a time so that
+	// an output spent twice within the block is detected.
+	if magneticAnomalyActive {
+		for _, tx := range transactions {
+			if err := addTxOuts(view, tx, node.height, false); err != nil {
+				return err
+			}
+		}
+	}
+
 	var totalFees int64
 	for _, tx := range transactions {
 		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
@@ -1227,28 +1239,21 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 				"overflows accumulator")
 		}
 
-		// Add all of the outputs for this transaction which are not
-		// provably unspendable as available utxos.  Also, the passed
-		// spent txos slice is updated to contain an entry for each
-		// spent txout in the order each transaction spends them.
-		//
-		// If magneticAnomaly is not active we connect each transaction
-		// one at a time so that we can validate the topological order
-		// in the process.
-		if !magneticAnomalyActive {
-			err = connectTransaction(view, tx, node.height, stxos, false)
-			if err != nil {
-				return err
+		// Spend the inputs of this transaction and, without canonical
+		// ordering, add its outputs which are not provably unspendable
+		// as available utxos.  Connecting each transaction one at a time
+		// validates the topological order in the process.  Also, the
+		// passed spent txos slice is updated to contain an entry for
+		// each spent txout in the order each transaction spends them.
+		if magneticAnomalyActive {
+			if !IsCoinBase(tx) {
+				err = spendTransactionInputs(view, tx, stxos)
 			}
+		} else {
+			err = connectTransaction(view, tx, node.height, stxos, false)
 		}
-	}
-
-	// If magneticAnomaly is active we can use Outputs-then-inputs validation
-	// to validate the utxos.
-	if magneticAnomalyActive {
-		err := connectTransactions(view, block, stxos, false)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
