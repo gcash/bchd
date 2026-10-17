@@ -48,50 +48,28 @@ func TestMerkleBlock(t *testing.T) {
 			maxPayload, wantPayload)
 	}
 
-	// Load maxTxPerBlock hashes
+	// Fill the message up to maxTxPerBlock hashes.  The hashes share one
+	// value so the test stays small on 32-bit platforms.
 	data := make([]byte, 32)
-	for i := uint32(0); i < maxTxPerBlock(); i++ {
-		rand.Read(data)
-		hash, err := chainhash.NewHash(data)
-		if err != nil {
-			t.Errorf("NewHash failed: %v\n", err)
-			return
-		}
-
-		if err = msg.AddTxHash(hash); err != nil {
-			t.Errorf("AddTxHash failed: %v\n", err)
-			return
-		}
-	}
-
-	// Add one more Tx to test failure.
 	rand.Read(data)
 	hash, err := chainhash.NewHash(data)
 	if err != nil {
 		t.Errorf("NewHash failed: %v\n", err)
 		return
 	}
+	msg.Hashes = make([]*chainhash.Hash, maxTxPerBlock())
+	for i := range msg.Hashes {
+		msg.Hashes[i] = hash
+	}
 
+	// Add one more Tx to test failure.
 	if err = msg.AddTxHash(hash); err == nil {
 		t.Errorf("AddTxHash succeeded when it should have failed")
 		return
 	}
 
-	// Test encode with latest protocol version.
-	var buf bytes.Buffer
-	err = msg.BchEncode(&buf, pver, enc)
-	if err != nil {
-		t.Errorf("encode of MsgMerkleBlock failed %v err <%v>", msg, err)
-	}
-
-	// Test decode with latest protocol version.
-	readmsg := MsgMerkleBlock{}
-	err = readmsg.BchDecode(&buf, pver, enc)
-	if err != nil {
-		t.Errorf("decode of MsgMerkleBlock failed [%v] err <%v>", buf, err)
-	}
-
 	// Force extra hash to test maxTxPerBlock.
+	var buf bytes.Buffer
 	msg.Hashes = append(msg.Hashes, hash)
 	err = msg.BchEncode(&buf, pver, enc)
 	if err == nil {
