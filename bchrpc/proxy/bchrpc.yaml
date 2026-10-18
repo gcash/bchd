@@ -75,3 +75,15 @@ http:
   - selector: pb.bchrpc.SubscribeBlocks
     post: /v1/SubscribeBlocks
     body: "*"
+  - selector: pb.bchrpc.GetDoubleSpendProof
+    post: /v1/GetDoubleSpendProof
+    body: "*"
+  - selector: pb.bchrpc.GetDoubleSpendProofs
+    post: /v1/GetDoubleSpendProofs
+    body: "*"
+  - selector: pb.bchrpc.GetDoubleSpendProofScore
+    post: /v1/GetDoubleSpendProofScore
+    body: "*"
+  - selector: pb.bchrpc.SubscribeDoubleSpendProofs
+    post: /v1/SubscribeDoubleSpendProofs
+    body: "*"
