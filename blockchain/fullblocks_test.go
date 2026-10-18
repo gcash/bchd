@@ -134,11 +134,12 @@ func TestFullBlocks(t *testing.T) {
 		t.Fatalf("failed to generate tests: %v", err)
 	}
 
-	// The generated blocks follow the rules from before Magnetic Anomaly
-	// and Upgrade9, which regtest activates from the start.
+	// The generated blocks follow the rules from before Magnetic Anomaly,
+	// Upgrade9 and ABLA, which regtest activates from the start.
 	params := chaincfg.RegressionNetParams
 	params.MagneticAnonomalyForkHeight = 100000000
 	params.Upgrade9ForkHeight = 100000000
+	params.ABLAForkHeight = 100000000
 
 	// Create a new database and chain instance to run tests against.
 	chain, teardownFunc, err := chainSetup("fullblocktest",

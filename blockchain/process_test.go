@@ -412,7 +412,12 @@ func orphanTestBlock(t *testing.T, params *chaincfg.Params, nonce uint32,
 // TestOrphanPoolLimits ensures orphans too large for any nearby height are
 // rejected and that the orphan pool is limited by its total size.
 func TestOrphanPoolLimits(t *testing.T) {
+	// A fixed 1 MB ABLA limit keeps the size limit at the excessive block
+	// size.
 	params := chaincfg.RegressionNetParams
+	params.ABLAConfig.Epsilon0 = 500000
+	params.ABLAConfig.Beta0 = 500000
+	params.ABLAConfig.FixedSize = true
 	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
 	if err != nil {
 		t.Fatal(err)

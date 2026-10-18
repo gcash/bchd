@@ -119,6 +119,8 @@ func ablaParams() chaincfg.Params {
 	p.ABLAForkHeight = 0
 	p.ABLAConfig.FixedSize = false
 	p.ABLAConfig.N0 = 0
+	p.ABLAConfig.Epsilon0 = 500000
+	p.ABLAConfig.Beta0 = 500000
 	return p
 }
 
