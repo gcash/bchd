@@ -132,9 +132,11 @@ func (view *UtxoViewpoint) AddTxOuts(tx *bchutil.Tx, blockHeight int32) {
 }
 
 // addInputUtxos adds the unspent transaction outputs for the inputs referenced
-// by the transactions in the given block to the view.  In particular, referenced
-// entries that are earlier in the block are added to the view and entries that
-// are already in the view are not modified.
+// by the transactions in the given block to the view.  Entries from the source
+// that are already in the view are not modified.  With ignoreOutOfOrder, the
+// outputs of the transactions in the block that its inputs spend are added as
+// well.  Without it, the caller adds them as it connects each transaction, so
+// that a spend placed before the transaction it spends from fails.
 func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, ignoreOutOfOrder bool) error {
 	// Build a map of in-flight transactions because some of the inputs in
 	// this block could be referencing other transactions earlier in this
@@ -150,12 +152,14 @@ func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, 
 
 	// Loop through all of the transaction inputs (except for the coinbase
 	// which has no inputs).
-	for i, tx := range block.Transactions()[1:] {
+	for _, tx := range block.Transactions()[1:] {
 		for _, txIn := range tx.MsgTx().TxIn {
 			originHash := &txIn.PreviousOutPoint.Hash
-			if inFlightIndex, ok := txInFlight[*originHash]; ok &&
-				(i >= inFlightIndex || ignoreOutOfOrder) {
-				if !added[inFlightIndex] {
+			if inFlightIndex, ok := txInFlight[*originHash]; ok {
+				// Adding the outputs of a parent before it connects
+				// would also let a transaction placed before it spend
+				// them, so do it only when the order is ignored.
+				if ignoreOutOfOrder && !added[inFlightIndex] {
 					added[inFlightIndex] = true
 					view.AddTxOuts(transactions[inFlightIndex], block.Height())
 				}

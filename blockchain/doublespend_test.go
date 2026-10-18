@@ -96,6 +96,36 @@ func TestInBlockDoubleSpend(t *testing.T) {
 	}
 }
 
+// TestPreCanonicalSpendBeforeParent ensures that before canonical ordering a
+// transaction placed before the in-block transaction it spends from is
+// rejected, also when a transaction after the parent spends the same output,
+// which a view holding the parent's outputs up front accepted as a double
+// spend.
+func TestPreCanonicalSpendBeforeParent(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	params.MagneticAnonomalyForkHeight = 1000
+	m := newRuleTestMiner(t, &params)
+
+	b1 := m.buildInOrder(nil)
+	m.mustAccept(b1)
+	cb := b1.MsgBlock().Transactions[0]
+	prevOut := wire.OutPoint{Hash: cb.TxHash(), Index: 0}
+	value := cb.TxOut[0].Value - 1000
+
+	parent := ruleTestSpend(prevOut, value, 1)
+	parentOut := wire.OutPoint{Hash: parent.TxHash(), Index: 0}
+	child1 := ruleTestSpend(parentOut, value-1000, 2)
+	child2 := ruleTestSpend(parentOut, value-1000, 3)
+
+	err := m.accept(m.buildInOrder(nil, child1, parent, child2))
+	requireRuleError(t, err, ErrMissingTxOut)
+	err = m.accept(m.buildInOrder(nil, child1, parent))
+	requireRuleError(t, err, ErrMissingTxOut)
+
+	// In topological order the same transactions are accepted.
+	m.mustAccept(m.buildInOrder(nil, parent, child1))
+}
+
 // txBefore reports whether a sorts before b in canonical order.
 func txBefore(a, b *wire.MsgTx) bool {
 	ha, hb := a.TxHash(), b.TxHash()

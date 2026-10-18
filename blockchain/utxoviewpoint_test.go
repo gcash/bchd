@@ -14,18 +14,20 @@ import (
 )
 
 // addInputUtxosPerInput is a reference for addInputUtxos that adds the
-// outputs of an in-block parent for every input spending it.
+// outputs of an in-block parent for every input spending it when the order is
+// ignored, and leaves them out otherwise.
 func addInputUtxosPerInput(view *UtxoViewpoint, source utxoView, block *bchutil.Block, ignoreOutOfOrder bool) {
 	txInFlight := make(map[chainhash.Hash]int)
 	transactions := block.Transactions()
 	for i, tx := range transactions {
 		txInFlight[*tx.Hash()] = i
 	}
-	for i, tx := range transactions[1:] {
+	for _, tx := range transactions[1:] {
 		for _, txIn := range tx.MsgTx().TxIn {
-			if idx, ok := txInFlight[txIn.PreviousOutPoint.Hash]; ok &&
-				(i >= idx || ignoreOutOfOrder) {
-				view.AddTxOuts(transactions[idx], block.Height())
+			if idx, ok := txInFlight[txIn.PreviousOutPoint.Hash]; ok {
+				if ignoreOutOfOrder {
+					view.AddTxOuts(transactions[idx], block.Height())
+				}
 				continue
 			}
 			if _, ok := view.entries[txIn.PreviousOutPoint]; ok {
@@ -90,7 +92,9 @@ func inBlockParentsBlock(n int) (*bchutil.Block, wire.OutPoint) {
 }
 
 // TestAddInputUtxosInBlockParents checks that addInputUtxos gives the same
-// view as adding an in-block parent's outputs for every input spending it.
+// view as adding an in-block parent's outputs for every input spending it when
+// the order is ignored, and leaves the outputs of the block's transactions out
+// otherwise.
 func TestAddInputUtxosInBlockParents(t *testing.T) {
 	block, outside := inBlockParentsBlock(50)
 
@@ -113,13 +117,23 @@ func TestAddInputUtxosInBlockParents(t *testing.T) {
 		if !reflect.DeepEqual(got.entries, want.entries) {
 			t.Fatalf("ignoreOutOfOrder=%v: view differs from reference", ignoreOutOfOrder)
 		}
+		firstChild := wire.OutPoint{Hash: *block.Transactions()[3].Hash(), Index: 1}
+		if !ignoreOutOfOrder {
+			// The caller adds them as it connects each transaction.
+			if e := got.entries[stale]; !e.IsSpent() || e.amount != 1 {
+				t.Fatalf("existing entry modified: %+v", e)
+			}
+			if got.entries[firstChild] != nil {
+				t.Fatal("output of a transaction in the block added")
+			}
+			continue
+		}
 		if got.entries[wire.OutPoint{Hash: *parentHash, Index: 1}] != nil {
 			t.Fatal("unspendable output added")
 		}
 		if e := got.entries[stale]; e.IsSpent() || e.amount != 1003 {
 			t.Fatalf("existing entry not overwritten: %+v", e)
 		}
-		firstChild := wire.OutPoint{Hash: *block.Transactions()[3].Hash(), Index: 1}
 		if e := got.entries[firstChild]; e == nil || e.amount != 2 {
 			t.Fatalf("output of spent child not added: %+v", e)
 		}
