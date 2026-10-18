@@ -8,12 +8,15 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
@@ -70,10 +73,39 @@ func submitBlockHex(t *testing.T, trailing bool) string {
 	return hex.EncodeToString(b)
 }
 
+// newTestChain returns a fresh regtest chain.  The chain and mining loggers
+// are disabled for the test, since the log rotator is not set up.
+func newTestChain(t *testing.T) *blockchain.BlockChain {
+	t.Helper()
+	blockchain.UseLogger(bchlog.Disabled)
+	mining.UseLogger(bchlog.Disabled)
+	t.Cleanup(func() {
+		blockchain.UseLogger(chanLog)
+		mining.UseLogger(minrLog)
+	})
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
+		wire.TestNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	chain, err := blockchain.New(&blockchain.Config{
+		DB:                 db,
+		ChainParams:        &chaincfg.RegressionNetParams,
+		TimeSource:         blockchain.NewMedianTime(),
+		UtxoCacheMaxSize:   16 * 1024 * 1024,
+		ExcessiveBlockSize: 32000000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chain
+}
+
 func submitBlock(t *testing.T, sm *submitSyncMgr, hexBlock string) (interface{}, error) {
 	t.Helper()
 	quietRPCLog(t)
-	s := &rpcServer{cfg: rpcserverConfig{SyncMgr: sm}}
+	s := &rpcServer{cfg: rpcserverConfig{SyncMgr: sm, Chain: newTestChain(t)}}
 	return handleSubmitBlock(s, &btcjson.SubmitBlockCmd{HexBlock: hexBlock},
 		nil)
 }
@@ -96,7 +128,8 @@ func TestSubmitBlockRejectsTrailingBytes(t *testing.T) {
 // followed by extra data is rejected.
 func TestGetBlockTemplateProposalRejectsTrailingBytes(t *testing.T) {
 	quietRPCLog(t)
-	_, err := handleGetBlockTemplateProposal(&rpcServer{},
+	s := &rpcServer{cfg: rpcserverConfig{Chain: newTestChain(t)}}
+	_, err := handleGetBlockTemplateProposal(s,
 		&btcjson.TemplateRequest{Data: submitBlockHex(t, true)})
 	var rpcErr *btcjson.RPCError
 	if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCDeserialization {
