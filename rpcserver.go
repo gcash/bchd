@@ -4274,6 +4274,15 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 		return "prev-blk-not-found", nil
 	}
 
+	// A valid block that did not become part of the main chain, for example
+	// one that lost a race with a block from a peer, is reported as
+	// inconclusive, as Bitcoin Cash Node does, since null means accepted.
+	if !s.cfg.Chain.MainChainHasBlock(block.Hash()) {
+		rpcsLog.Infof("Block %s submitted via submitblock is stored on a "+
+			"side chain", block.Hash())
+		return "inconclusive", nil
+	}
+
 	rpcsLog.Infof("Accepted block %s via submitblock", block.Hash())
 	return nil, nil
 }

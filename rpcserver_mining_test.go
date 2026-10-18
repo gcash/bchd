@@ -47,6 +47,18 @@ func (s *submitSyncMgr) SubmitBlock(*bchutil.Block, blockchain.BehaviorFlags) (b
 	return s.isOrphan, s.err
 }
 
+// chainSyncMgr is an rpcserverSyncManager whose SubmitBlock processes the
+// block on a chain.
+type chainSyncMgr struct {
+	rpcserverSyncManager
+	chain *blockchain.BlockChain
+}
+
+func (s *chainSyncMgr) SubmitBlock(block *bchutil.Block, flags blockchain.BehaviorFlags) (bool, error) {
+	_, isOrphan, err := s.chain.ProcessBlock(block, flags)
+	return isOrphan, err
+}
+
 // submitBlockHex returns a hex encoded block with only a coinbase, optionally
 // followed by trailing bytes.
 func submitBlockHex(t *testing.T, trailing bool) string {
@@ -211,6 +223,35 @@ func TestSubmitBlockUsesBIP22Reasons(t *testing.T) {
 	var rpcErr *btcjson.RPCError
 	if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCVerify {
 		t.Fatalf("expected a verify error, got %v", err)
+	}
+}
+
+// TestSubmitBlockSideChainInconclusive ensures a valid block that ends up on a
+// side chain is reported as inconclusive, as Bitcoin Cash Node does, rather
+// than as accepted, while a block that becomes the tip is accepted.
+func TestSubmitBlockSideChainInconclusive(t *testing.T) {
+	quietRPCLog(t)
+	chain := newTestChain(t)
+	s := &rpcServer{cfg: rpcserverConfig{
+		SyncMgr: &chainSyncMgr{chain: chain},
+		Chain:   chain,
+	}}
+	submit := func(block *bchutil.Block) (interface{}, error) {
+		return handleSubmitBlock(s, &btcjson.SubmitBlockCmd{
+			HexBlock: blockHex(t, block),
+		}, nil)
+	}
+
+	tip := solvedBlock(t, chain, 0, nil)
+	if res, err := submit(tip); err != nil || res != nil {
+		t.Fatalf("block on the tip: got %v, %v, want nil", res, err)
+	}
+
+	// A second block on the same parent loses to the first one.
+	side := solvedBlock(t, chain, 0, chaincfg.RegressionNetParams.GenesisHash)
+	if res, err := submit(side); err != nil || res != "inconclusive" {
+		t.Fatalf("block on a side chain: got %v, %v, want \"inconclusive\"",
+			res, err)
 	}
 }
 
