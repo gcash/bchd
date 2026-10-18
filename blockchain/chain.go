@@ -290,6 +290,19 @@ func (b *BlockChain) IsKnownOrphan(hash *chainhash.Hash) bool {
 	return exists
 }
 
+// BlockValidity returns whether the block with the passed hash is in the block
+// index and, if so, whether it is known to be valid or invalid.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) BlockValidity(hash *chainhash.Hash) (known, valid, invalid bool) {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return false, false, false
+	}
+	status := b.index.NodeStatus(node)
+	return true, status.KnownValid(), status.KnownInvalid()
+}
+
 // UtxoCacheFlushInProgress returns whether or not we are currently flushing the
 // utxo cache to disk.
 func (b *BlockChain) UtxoCacheFlushInProgress() bool {

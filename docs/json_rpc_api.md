@@ -572,7 +572,7 @@ Example Return|`{`<br />&nbsp;&nbsp;`"bytes": 310768,`<br />&nbsp;&nbsp;`"size":
 |Method|submitblock|
 |Parameters|1. data (string, required) serialized, hex-encoded block<br />2. params (json object, optional, default=nil) this parameter is currently ignored|
 |Description|Attempts to submit a new serialized, hex-encoded block to the network.|
-|Returns (success)|Success: Nothing<br />Failure: the BIP22 reject reason, such as `"duplicate"`, `"bad-txnmrklroot"` or `"prev-blk-not-found"` when the parent block is unknown (string), or `"rejected: reason"` for a rule without a BIP22 reason|
+|Returns (success)|Success: Nothing<br />Failure: the BIP22 reject reason, such as `"duplicate"`, `"duplicate-invalid"` for a block already known to be invalid, `"bad-txnmrklroot"` or `"prev-blk-not-found"` when the parent block is unknown (string), or `"rejected: reason"` for a rule without a BIP22 reason|
 [Return to Overview](#MethodOverview)<br />
 
 ***

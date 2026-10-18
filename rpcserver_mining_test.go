@@ -18,6 +18,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/mining"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
@@ -73,6 +74,13 @@ func submitBlockHex(t *testing.T, trailing bool) string {
 	return hex.EncodeToString(b)
 }
 
+// noTxSource is a mining.TxSource without transactions.
+type noTxSource struct{}
+
+func (noTxSource) LastUpdated() time.Time               { return time.Time{} }
+func (noTxSource) MiningDescs() []*mining.TxDesc        { return nil }
+func (noTxSource) HaveTransaction(*chainhash.Hash) bool { return false }
+
 // newTestChain returns a fresh regtest chain.  The chain and mining loggers
 // are disabled for the test, since the log rotator is not set up.
 func newTestChain(t *testing.T) *blockchain.BlockChain {
@@ -100,6 +108,46 @@ func newTestChain(t *testing.T) *blockchain.BlockChain {
 		t.Fatal(err)
 	}
 	return chain
+}
+
+// solvedBlock returns a solved block on the chain's tip whose coinbase pays
+// delta satoshis more than allowed.  A non-nil prev replaces the parent.
+func solvedBlock(t *testing.T, chain *blockchain.BlockChain, delta int64, prev *chainhash.Hash) *bchutil.Block {
+	t.Helper()
+	timeSource := blockchain.NewMedianTime()
+	gen := mining.NewBlkTmplGenerator(&mining.Policy{BlockMaxSize: 1000000},
+		&chaincfg.RegressionNetParams, noTxSource{}, chain, timeSource,
+		txscript.NewSigCache(10), txscript.NewHashCache(10))
+	tmpl, err := gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := tmpl.Block
+	msg.Transactions[0].TxOut[0].Value += delta
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(msg).Transactions())
+	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
+	if prev != nil {
+		msg.Header.PrevBlock = *prev
+	}
+	target := blockchain.CompactToBig(msg.Header.Bits)
+	for {
+		hash := msg.Header.BlockHash()
+		if blockchain.HashToBig(&hash).Cmp(target) <= 0 {
+			break
+		}
+		msg.Header.Nonce++
+	}
+	return bchutil.NewBlock(msg)
+}
+
+func blockHex(t *testing.T, block *bchutil.Block) string {
+	t.Helper()
+	b, err := block.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(b)
 }
 
 func submitBlock(t *testing.T, sm *submitSyncMgr, hexBlock string) (interface{}, error) {
@@ -216,5 +264,62 @@ func TestGBTDependsCoversLaterParents(t *testing.T) {
 	}
 	if deps := res.Transactions[1].Depends; len(deps) != 0 {
 		t.Fatalf("parent depends on %v, want nothing", deps)
+	}
+}
+
+// TestKnownBlockReasons ensures blocks the chain already has are reported by
+// submitblock and proposals with the reasons Bitcoin Cash Node uses.
+func TestKnownBlockReasons(t *testing.T) {
+	quietRPCLog(t)
+	chain := newTestChain(t)
+	s := &rpcServer{cfg: rpcserverConfig{Chain: chain,
+		SyncMgr: &submitSyncMgr{err: blockchain.RuleError{
+			ErrorCode: blockchain.ErrDuplicateBlock,
+		}}}}
+
+	// Three blocks on genesis: one paying too much, one on the main
+	// chain and one on a side chain.
+	bad := solvedBlock(t, chain, 1, nil)
+	main := solvedBlock(t, chain, 0, nil)
+	side := solvedBlock(t, chain, -1, nil)
+	if _, _, err := chain.ProcessBlock(bad, blockchain.BFNone); err == nil {
+		t.Fatal("block paying too much was accepted")
+	}
+	for _, block := range []*bchutil.Block{main, side} {
+		_, _, err := chain.ProcessBlock(block, blockchain.BFFastAdd)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	orphan := solvedBlock(t, chain, 0, &chainhash.Hash{1})
+	_, isOrphan, err := chain.ProcessBlock(orphan, blockchain.BFNone)
+	if err != nil || !isOrphan {
+		t.Fatalf("orphan: orphan %v, err %v", isOrphan, err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		block    *bchutil.Block
+		submit   string
+		proposal string
+	}{
+		{"invalid", bad, "duplicate-invalid", "duplicate-invalid"},
+		{"main chain", main, "duplicate", "duplicate"},
+		{"side chain", side, "duplicate", "duplicate-inconclusive"},
+		{"orphan", orphan, "prev-blk-not-found", "bad-prevblk"},
+	} {
+		data := blockHex(t, test.block)
+		res, err := handleSubmitBlock(s,
+			&btcjson.SubmitBlockCmd{HexBlock: data}, nil)
+		if err != nil || res != test.submit {
+			t.Errorf("%s: submitblock: got %v, %v, want %q", test.name,
+				res, err, test.submit)
+		}
+		res, err = handleGetBlockTemplateProposal(s,
+			&btcjson.TemplateRequest{Data: data})
+		if err != nil || res != test.proposal {
+			t.Errorf("%s: proposal: got %v, %v, want %q", test.name,
+				res, err, test.proposal)
+		}
 	}
 }

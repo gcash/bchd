@@ -2444,6 +2444,26 @@ func chainErrToGBTErrString(err error) string {
 	return "rejected: " + err.Error()
 }
 
+// knownBlockReason returns the BIP22 reason for a block the chain already
+// has, or an empty string when the block still has to be checked.  Known
+// orphans only count for submitblock, and a block in the index whose validity
+// is not known yet is only conclusive for proposals.
+func knownBlockReason(chain *blockchain.BlockChain, hash *chainhash.Hash, proposal bool) string {
+	if !proposal && chain.IsKnownOrphan(hash) {
+		return "prev-blk-not-found"
+	}
+	known, valid, invalid := chain.BlockValidity(hash)
+	switch {
+	case invalid:
+		return "duplicate-invalid"
+	case valid:
+		return "duplicate"
+	case known && proposal:
+		return "duplicate-inconclusive"
+	}
+	return ""
+}
+
 // handleGetBlockTemplateProposal is a helper for handleGetBlockTemplate which
 // deals with block proposals.
 //
@@ -2474,6 +2494,9 @@ func handleGetBlockTemplateProposal(s *rpcServer, request *btcjson.TemplateReque
 	block, rpcErr := decodeRPCBlock(dataBytes)
 	if rpcErr != nil {
 		return nil, rpcErr
+	}
+	if reason := knownBlockReason(s.cfg.Chain, block.Hash(), true); reason != "" {
+		return reason, nil
 	}
 
 	// Ensure the block is building from the expected previous block.
@@ -4223,6 +4246,9 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 	block, rpcErr := decodeRPCBlock(serializedBlock)
 	if rpcErr != nil {
 		return nil, rpcErr
+	}
+	if reason := knownBlockReason(s.cfg.Chain, block.Hash(), false); reason != "" {
+		return reason, nil
 	}
 
 	// Process this block using the same rules as blocks coming from other
