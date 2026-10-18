@@ -283,7 +283,7 @@ func TestBIP0113Activation(t *testing.T) {
 		if err == nil && timeLockDelta >= 0 {
 			t.Fatal("block should be rejected due to non-final " +
 				"txn, but was accepted")
-		} else if err != nil && !strings.Contains(err.Error(), "unfinalized") {
+		} else if err != nil && !strings.Contains(err.Error(), "bad-txns-nonfinal") {
 			t.Fatalf("block should be rejected due to non-final "+
 				"tx, instead: %v", err)
 		}

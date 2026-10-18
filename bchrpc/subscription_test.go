@@ -1,7 +1,6 @@
 package bchrpc
 
 import (
-	"runtime"
 	"testing"
 	"time"
 
@@ -28,33 +27,24 @@ func newDispatcherTestServer(t *testing.T) *GrpcServer {
 	return s
 }
 
-// waitFor polls cond until it holds or a few seconds pass.
-func waitFor(cond func() bool) bool {
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return cond()
-}
-
 // TestSubscriptionTeardown ensures unsubscribing stops the subscription's
 // goroutine and removes it from the dispatcher, without waiting for an event.
 func TestSubscriptionTeardown(t *testing.T) {
 	s := newDispatcherTestServer(t)
-	time.Sleep(50 * time.Millisecond)
-	base := runtime.NumGoroutine()
 
 	const n = 50
-	for i := 0; i < n; i++ {
-		s.subscribeEvents(maxSubscriptionQueue).Unsubscribe()
+	for range n {
+		sub := s.subscribeEvents(maxSubscriptionQueue)
+		sub.Unsubscribe()
+
+		// The queue handler closes done as it returns.
+		<-sub.done
 	}
-	if !waitFor(func() bool { return runtime.NumGoroutine() <= base }) {
-		t.Errorf("%d goroutines left after %d unsubscribes",
-			runtime.NumGoroutine()-base, n)
-	}
+
+	// The dispatcher handles one message at a time, so once it has taken
+	// this unsubscribe of a subscription it does not hold, which changes
+	// nothing, it is done with the last real one.
+	s.unsubscribe <- &rpcEventSubscription{}
 	if got := s.numSubscriptions(); got != 0 {
 		t.Errorf("%d subscriptions left in the dispatcher", got)
 	}
