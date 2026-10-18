@@ -827,9 +827,10 @@ mempoolLoop:
 	}
 
 	// If MagneticAnomaly is enabled we need to sort transactions by txid to
-	// comply with the CTOR consensus rule.
+	// comply with the CTOR consensus rule.  Each transaction keeps its fee
+	// and signature check count, which follow the coinbase's entries.
 	if nextBlockHeight > g.chainParams.MagneticAnonomalyForkHeight {
-		sort.Sort(TxSorter(blockTxns))
+		sort.Sort(templateTxSorter{blockTxns, txFees[1:], txSigChecks[1:]})
 	}
 	blockTxns = append([]*bchutil.Tx{coinbaseTx}, blockTxns...)
 

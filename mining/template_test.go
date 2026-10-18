@@ -287,7 +287,8 @@ func TestTemplateSkipsImmatureCoinbaseSpend(t *testing.T) {
 }
 
 // TestTemplateCanonicalOrder ensures the transactions after the coinbase are
-// sorted by txid, with a parent and child among them.
+// sorted by txid, with a parent and child among them, and that each keeps its
+// own fee.
 func TestTemplateCanonicalOrder(t *testing.T) {
 	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
 	h.mineN(110)
@@ -322,5 +323,24 @@ func TestTemplateCanonicalOrder(t *testing.T) {
 			t.Fatalf("tx %d is %v, want %v", i+1, tx.TxHash(),
 				sorted[i].TxHash())
 		}
+	}
+
+	// The coinbase entry is minus the total of the fees.
+	numTxs := len(tmpl.Block.Transactions)
+	if len(tmpl.Fees) != numTxs || len(tmpl.SigChecks) != numTxs {
+		t.Fatalf("template has %d fees and %d sigchecks for %d txs",
+			len(tmpl.Fees), len(tmpl.SigChecks), numTxs)
+	}
+	total := int64(0)
+	for i := range got {
+		want := int64(1000 * (i + 1))
+		if tmpl.Fees[i+1] != want {
+			t.Errorf("tx %d has fee %d, want %d", i+1, tmpl.Fees[i+1],
+				want)
+		}
+		total += want
+	}
+	if tmpl.Fees[0] != -total {
+		t.Errorf("coinbase fee entry is %d, want %d", tmpl.Fees[0], -total)
 	}
 }

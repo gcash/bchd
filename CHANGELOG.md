@@ -42,7 +42,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 ### Mining
 - `getblocktemplate` no longer fails when the mempool holds a transaction that is not final yet, and template size limits follow ABLA. `blockmaxsize` now defaults to the block size limit less 1000 bytes.
-- Each `getblocktemplate` transaction's `depends` now includes parents that come later in canonical order.
+- Each `getblocktemplate` transaction's `depends` now includes parents that come later in canonical order, and each transaction is listed with its own `fee` and `sigchecks` rather than another transaction's.
 - `submitblock` returns BIP22 reasons such as `duplicate-invalid` or `prev-blk-not-found`, as BCHN does, and no longer reports a block with an unknown parent as accepted. Proposals are checked at the next block height.
 - `submitblock` and block proposals reject trailing data after the block.
 - `generate` writes the right coinbase height when the tip moves while mining, and only returns blocks that were accepted.
