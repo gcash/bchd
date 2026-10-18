@@ -99,6 +99,19 @@ type Config struct {
 	// FeeEstimatator provides a feeEstimator. If it is not nil, the mempool
 	// records all new transactions it observes into the feeEstimator.
 	FeeEstimator *FeeEstimator
+
+	// DisableDSProofs turns off the creation and handling of double spend
+	// proofs.
+	DisableDSProofs bool
+
+	// OnDSProof is called, without the mempool lock held, when a double
+	// spend proof becomes associated with the memory pool transaction tx.
+	OnDSProof func(proof *wire.MsgDSProof, tx *bchutil.Tx)
+
+	// OnBadDSProofs is called, without the mempool lock held, with the
+	// peers that sent orphan double spend proofs which turned out to be
+	// invalid.
+	OnBadDSProofs func(peers []Tag)
 }
 
 // Policy houses the policy (configuration parameters) which is used to
@@ -148,6 +161,10 @@ type TxDesc struct {
 	// StartingPriority is the priority of the transaction when it was added
 	// to the pool.
 	StartingPriority float64
+
+	// entrySeq orders the transactions by when they were added, with those
+	// added back from disconnected blocks first.
+	entrySeq int64
 }
 
 // orphanTx is normal transaction that references an ancestor transaction
@@ -172,6 +189,10 @@ type TxPool struct {
 	orphans       map[chainhash.Hash]*orphanTx
 	orphansByPrev map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx
 	outpoints     map[wire.OutPoint]*bchutil.Tx
+	dsProofs      *dsProofStorage
+	txDSProofs    map[chainhash.Hash]chainhash.Hash
+	nextEntrySeq  int64
+	nextReaddSeq  int64
 	pennyTotal    float64 // exponentially decaying total for penny spends.
 	lastPennyUnix int64   // unix time of last ``penny spend''
 
@@ -180,6 +201,12 @@ type TxPool struct {
 	// the scan will only run when an orphan is added to the pool as opposed
 	// to on an unconditional timer.
 	nextExpireScan time.Time
+
+	// Double spend proofs newly associated with transactions and peers that
+	// sent invalid orphan proofs, passed to the callbacks once the write
+	// lock is released.
+	dsProofAnnouncements []dsProofAnnouncement
+	badDSProofPeers      []Tag
 }
 
 // Ensure the TxPool type implements the mining.TxSource interface.
@@ -480,6 +507,7 @@ func (mp *TxPool) removeTransaction(tx *bchutil.Tx, removeRedeemers bool) {
 		for _, txIn := range txDesc.Tx.MsgTx().TxIn {
 			delete(mp.outpoints, txIn.PreviousOutPoint)
 		}
+		mp.removeTxDSProof(txHash)
 		delete(mp.pool, *txHash)
 		mp.lastUpdated.Store(time.Now().Unix())
 	}
@@ -523,7 +551,7 @@ func (mp *TxPool) RemoveDoubleSpends(tx *bchutil.Tx) {
 // helper for maybeAcceptTransaction.
 //
 // This function MUST be called with the mempool lock held (for writes).
-func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil.Tx, height int32, fee int64) *TxDesc {
+func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil.Tx, height int32, fee int64, isNew bool) *TxDesc {
 	// Add the transaction to the pool and mark the referenced outpoints
 	// as spent by the pool.
 	txD := &TxDesc{
@@ -535,6 +563,13 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil
 			FeePerKB: fee * 1000 / int64(tx.MsgTx().SerializeSize()),
 		},
 		StartingPriority: mining.CalcPriority(tx.MsgTx(), utxoView, height),
+	}
+	if isNew {
+		txD.entrySeq = mp.nextEntrySeq
+		mp.nextEntrySeq++
+	} else {
+		txD.entrySeq = mp.nextReaddSeq
+		mp.nextReaddSeq++
 	}
 
 	mp.pool[*tx.Hash()] = txD
@@ -717,7 +752,7 @@ func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
 // This function MUST be called with the mempool lock held (for writes).
 func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount) ([]*chainhash.Hash, *TxDesc, error) {
 	result, err := mp.checkMempoolAcceptance(tx, isNew, rateLimit,
-		rejectDupOrphans, maxFee)
+		rejectDupOrphans, maxFee, !mp.cfg.DisableDSProofs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -727,7 +762,14 @@ func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejec
 
 	// Add to transaction pool.
 	txD := mp.addTransaction(result.utxoView, tx, result.bestHeight,
-		result.Fee)
+		result.Fee, isNew)
+
+	// Check any orphan double spend proofs for the outputs it spends.
+	if !mp.cfg.DisableDSProofs {
+		if orphans := mp.dsProofOrphansFor(tx); len(orphans) > 0 {
+			mp.rescueDSProofOrphans(tx, orphans, result.scriptFlags)
+		}
+	}
 
 	log.Debugf("Accepted transaction %v (pool size: %v)", tx.Hash(),
 		len(mp.pool))
@@ -748,8 +790,9 @@ type MempoolAcceptResult struct {
 	// SigChecks is the number of signature checks done by its inputs.
 	SigChecks uint32
 
-	utxoView   *blockchain.UtxoViewpoint
-	bestHeight int32
+	utxoView    *blockchain.UtxoViewpoint
+	bestHeight  int32
+	scriptFlags txscript.ScriptFlags
 }
 
 // checkMempoolAcceptance runs the checks done before a transaction is added
@@ -757,9 +800,12 @@ type MempoolAcceptResult struct {
 // only updated when rateLimit is set, it does not modify the pool.  A positive
 // maxFee rejects transactions that pay more fees than that.
 //
+// When createDSProof is set and the transaction spends an output already
+// spent in the pool, a double spend proof is created.
+//
 // This function MUST be called with the mempool lock held (for reads), or
-// for writes when rateLimit is set.
-func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount) (*MempoolAcceptResult, error) {
+// for writes when rateLimit or createDSProof is set.
+func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount, createDSProof bool) (*MempoolAcceptResult, error) {
 	txHash := tx.Hash()
 
 	// Don't accept the transaction if it already exists in the pool.  This
@@ -790,30 +836,9 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 		upgrade9Active = true
 	}
 
-	upgrade11Active := medianTimePast.Unix() >= int64(mp.cfg.ChainParams.Upgrade11ActivationTime)
-
 	upgrade12Active := medianTimePast.Unix() >= int64(mp.cfg.ChainParams.Upgrade12ActivationTime)
 
-	scriptFlags := txscript.StandardVerifyFlags
-	if !mp.cfg.Policy.LimitSigChecks {
-		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
-	}
-
-	if upgrade9Active {
-		scriptFlags |= txscript.ScriptAllowCashTokens
-	}
-
-	if upgrade11Active {
-		scriptFlags |= txscript.ScriptAllowMay2025
-		if !mp.cfg.Policy.AcceptNonStd {
-			scriptFlags |= txscript.ScriptAllowMay2025StandardOnly
-		}
-
-	}
-
-	if upgrade12Active {
-		scriptFlags |= txscript.ScriptAllowMay2026
-	}
+	scriptFlags := mp.standardScriptFlags(nextBlockHeight, medianTimePast)
 
 	// Perform preliminary sanity checks on the transaction.  This makes
 	// use of blockchain which contains the invariant rules for what
@@ -871,6 +896,9 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 	// which examines the actual spend data and prevents double spends.
 	err = mp.checkPoolDoubleSpend(tx)
 	if err != nil {
+		if createDSProof {
+			mp.maybeCreateDSProof(tx, scriptFlags)
+		}
 		return nil, err
 	}
 
@@ -1045,11 +1073,37 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 	}
 
 	return &MempoolAcceptResult{
-		Fee:        txFee,
-		SigChecks:  sigChecks,
-		utxoView:   utxoView,
-		bestHeight: bestHeight,
+		Fee:         txFee,
+		SigChecks:   sigChecks,
+		utxoView:    utxoView,
+		bestHeight:  bestHeight,
+		scriptFlags: scriptFlags,
 	}, nil
+}
+
+// standardScriptFlags returns the script flags transactions must pass to be
+// accepted into the memory pool for the block at nextBlockHeight.
+func (mp *TxPool) standardScriptFlags(nextBlockHeight int32, medianTimePast time.Time) txscript.ScriptFlags {
+	scriptFlags := txscript.StandardVerifyFlags
+	if !mp.cfg.Policy.LimitSigChecks {
+		scriptFlags ^= txscript.ScriptVerifyInputSigChecks
+	}
+
+	if nextBlockHeight > mp.cfg.ChainParams.Upgrade9ForkHeight {
+		scriptFlags |= txscript.ScriptAllowCashTokens
+	}
+
+	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.Upgrade11ActivationTime) {
+		scriptFlags |= txscript.ScriptAllowMay2025
+		if !mp.cfg.Policy.AcceptNonStd {
+			scriptFlags |= txscript.ScriptAllowMay2025StandardOnly
+		}
+	}
+
+	if medianTimePast.Unix() >= int64(mp.cfg.ChainParams.Upgrade12ActivationTime) {
+		scriptFlags |= txscript.ScriptAllowMay2026
+	}
+	return scriptFlags
 }
 
 // MaybeAcceptTransaction is the main workhorse for handling insertion of new
@@ -1067,7 +1121,7 @@ func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit bool) 
 	// Protect concurrent access.
 	mp.mtx.Lock()
 	hashes, txD, err := mp.maybeAcceptTransaction(tx, isNew, rateLimit, true, 0)
-	mp.mtx.Unlock()
+	mp.unlockAndNotify()
 
 	return hashes, txD, err
 }
@@ -1087,7 +1141,7 @@ func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx, maxFee bchutil.Amount) 
 		defer hc.PurgeSigHashes(tx.Hash())
 	}
 
-	return mp.checkMempoolAcceptance(tx, true, false, false, maxFee)
+	return mp.checkMempoolAcceptance(tx, true, false, false, maxFee, false)
 }
 
 // processOrphans is the internal function which implements the public
@@ -1186,7 +1240,7 @@ func (mp *TxPool) processOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 func (mp *TxPool) ProcessOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 	mp.mtx.Lock()
 	acceptedTxns := mp.processOrphans(acceptedTx)
-	mp.mtx.Unlock()
+	mp.unlockAndNotify()
 
 	return acceptedTxns
 }
@@ -1219,7 +1273,7 @@ func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan, rate
 
 	// Protect concurrent access.
 	mp.mtx.Lock()
-	defer mp.mtx.Unlock()
+	defer mp.unlockAndNotify()
 
 	// Potentially accept the transaction to the memory pool.
 	//
@@ -1572,5 +1626,8 @@ func New(cfg *Config) *TxPool {
 		orphansByPrev:  make(map[wire.OutPoint]map[chainhash.Hash]*bchutil.Tx),
 		nextExpireScan: time.Now().Add(orphanExpireScanInterval),
 		outpoints:      make(map[wire.OutPoint]*bchutil.Tx),
+		dsProofs:       newDSProofStorage(),
+		txDSProofs:     make(map[chainhash.Hash]chainhash.Hash),
+		nextReaddSeq:   math.MinInt64,
 	}
 }
