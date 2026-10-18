@@ -604,6 +604,13 @@ func (m *CPUMiner) GenerateNBlocks(n uint32) ([]*chainhash.Hash, error) {
 		template, err := m.g.NewBlockTemplate(payToAddr)
 		m.submitBlockLock.Unlock()
 		if err != nil {
+			// Retry when the tip moved while the template was built.
+			var ruleErr blockchain.RuleError
+			if errors.As(err, &ruleErr) &&
+				ruleErr.ErrorCode == blockchain.ErrPrevBlockNotBest {
+
+				continue
+			}
 			m.stopDiscreteMining()
 			return nil, fmt.Errorf("failed to create new block "+
 				"template: %w", err)
