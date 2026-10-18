@@ -333,6 +333,11 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 		fmt.Sprintf("invalid double spend proof %v: %v", hash, err))
 }
 
+// DSProofsEnabled returns whether double spend proofs are enabled.
+func (mp *TxPool) DSProofsEnabled() bool {
+	return !mp.cfg.DisableDSProofs
+}
+
 // HaveDSProof returns whether the proof is known, as an orphan or not, or was
 // recently rejected.  It always returns true when proofs are disabled, so
 // they are never requested.

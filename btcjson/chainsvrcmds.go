@@ -8,10 +8,12 @@
 package btcjson
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gcash/bchd/wire"
 )
@@ -441,6 +443,147 @@ type GetConnectionCountCmd struct{}
 // getconnectioncount JSON-RPC command.
 func NewGetConnectionCountCmd() *GetConnectionCountCmd {
 	return &GetConnectionCountCmd{}
+}
+
+// DSProofVerbosity is the verbosity of the double spend proof commands.  It
+// unmarshals from a number, or from a bool where false is 0 and true is 2.
+type DSProofVerbosity int
+
+// UnmarshalJSON allows the DSProofVerbosity to unmarshal either bool or int.
+func (v *DSProofVerbosity) UnmarshalJSON(dat []byte) error {
+	switch string(dat) {
+	case "false":
+		*v = 0
+	case "true":
+		*v = 2
+	default:
+		level, err := strconv.ParseInt(string(dat), 10, 32)
+		if err != nil {
+			return errors.New("invalid DSProofVerbosity value")
+		}
+		*v = DSProofVerbosity(level)
+	}
+	return nil
+}
+
+// DSProofQuery is the first parameter of the getdsproof command: a proof id
+// or transaction id, or an outpoint object with "txid" and "vout" keys,
+// which is kept as its JSON text.
+type DSProofQuery string
+
+// DSProofQueryOutPoint is the outpoint form of a DSProofQuery.
+type DSProofQueryOutPoint struct {
+	TxID string `json:"txid"`
+	Vout int64  `json:"vout"`
+}
+
+// IsOutPoint returns whether the query is an outpoint object.
+func (q DSProofQuery) IsOutPoint() bool {
+	return strings.HasPrefix(strings.TrimSpace(string(q)), "{")
+}
+
+// OutPoint parses the outpoint form of the query.
+func (q DSProofQuery) OutPoint() (*DSProofQueryOutPoint, error) {
+	var op struct {
+		TxID *string      `json:"txid"`
+		Vout *json.Number `json:"vout"`
+	}
+	if err := json.Unmarshal([]byte(q), &op); err != nil {
+		return nil, err
+	}
+	if op.TxID == nil {
+		return nil, errors.New("missing txid in outpoint")
+	}
+	if op.Vout == nil {
+		return nil, errors.New("missing vout in outpoint")
+	}
+	vout, err := op.Vout.Int64()
+	if err != nil {
+		return nil, errors.New("vout must be an integer")
+	}
+	return &DSProofQueryOutPoint{TxID: *op.TxID, Vout: vout}, nil
+}
+
+// MarshalJSON marshals the query as a string or an outpoint object.
+func (q DSProofQuery) MarshalJSON() ([]byte, error) {
+	if q.IsOutPoint() {
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, []byte(q)); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
+	return json.Marshal(string(q))
+}
+
+// UnmarshalJSON unmarshals a string or an outpoint object.
+func (q *DSProofQuery) UnmarshalJSON(dat []byte) error {
+	trimmed := bytes.TrimSpace(dat)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, trimmed); err != nil {
+			return err
+		}
+		*q = DSProofQuery(buf.String())
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(trimmed, &str); err != nil {
+		return errors.New("expected a dspid, a txid or an outpoint object")
+	}
+	*q = DSProofQuery(str)
+	return nil
+}
+
+// DSProofVerbosityPtr returns a pointer to a DSProofVerbosity.
+func DSProofVerbosityPtr(v int) *DSProofVerbosity {
+	d := DSProofVerbosity(v)
+	return &d
+}
+
+// GetDSProofCmd defines the getdsproof JSON-RPC command.
+type GetDSProofCmd struct {
+	Query     DSProofQuery
+	Verbosity *DSProofVerbosity `jsonrpcdefault:"2"`
+	Recursive *bool             `jsonrpcdefault:"true"`
+}
+
+// NewGetDSProofCmd returns a new instance which can be used to issue a
+// getdsproof JSON-RPC command.
+func NewGetDSProofCmd(query DSProofQuery, verbosity *DSProofVerbosity, recursive *bool) *GetDSProofCmd {
+	return &GetDSProofCmd{
+		Query:     query,
+		Verbosity: verbosity,
+		Recursive: recursive,
+	}
+}
+
+// GetDSProofListCmd defines the getdsprooflist JSON-RPC command.
+type GetDSProofListCmd struct {
+	Verbosity      *DSProofVerbosity `jsonrpcdefault:"0"`
+	IncludeOrphans *bool             `jsonrpcdefault:"false"`
+}
+
+// NewGetDSProofListCmd returns a new instance which can be used to issue a
+// getdsprooflist JSON-RPC command.
+func NewGetDSProofListCmd(verbosity *DSProofVerbosity, includeOrphans *bool) *GetDSProofListCmd {
+	return &GetDSProofListCmd{
+		Verbosity:      verbosity,
+		IncludeOrphans: includeOrphans,
+	}
+}
+
+// GetDSProofScoreCmd defines the getdsproofscore JSON-RPC command.
+type GetDSProofScoreCmd struct {
+	TxID string
+}
+
+// NewGetDSProofScoreCmd returns a new instance which can be used to issue a
+// getdsproofscore JSON-RPC command.
+func NewGetDSProofScoreCmd(txID string) *GetDSProofScoreCmd {
+	return &GetDSProofScoreCmd{
+		TxID: txID,
+	}
 }
 
 // GetDifficultyCmd defines the getdifficulty JSON-RPC command.
@@ -926,6 +1069,9 @@ func init() {
 	MustRegisterCmd("getchaintips", (*GetChainTipsCmd)(nil), flags)
 	MustRegisterCmd("getconnectioncount", (*GetConnectionCountCmd)(nil), flags)
 	MustRegisterCmd("getdifficulty", (*GetDifficultyCmd)(nil), flags)
+	MustRegisterCmd("getdsproof", (*GetDSProofCmd)(nil), flags)
+	MustRegisterCmd("getdsprooflist", (*GetDSProofListCmd)(nil), flags)
+	MustRegisterCmd("getdsproofscore", (*GetDSProofScoreCmd)(nil), flags)
 	MustRegisterCmd("getfinalizedblockhash", (*GetFinalizedBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getgenerate", (*GetGenerateCmd)(nil), flags)
 	MustRegisterCmd("gethashespersec", (*GetHashesPerSecCmd)(nil), flags)

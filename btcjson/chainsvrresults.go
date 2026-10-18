@@ -224,6 +224,42 @@ type GetMempoolEntryResult struct {
 	Depends          []string `json:"depends"`
 }
 
+// DSProofOutPoint models the outpoint of a double spend proof.
+type DSProofOutPoint struct {
+	TxID string `json:"txid"`
+	Vout uint32 `json:"vout"`
+}
+
+// DSProofPushData models the data a double spend proof spender pushed.
+type DSProofPushData struct {
+	Asm string `json:"asm"`
+	Hex string `json:"hex"`
+}
+
+// DSProofSpender models one of the two spenders of a double spend proof.
+type DSProofSpender struct {
+	TxVersion       uint32          `json:"txversion"`
+	Sequence        uint32          `json:"sequence"`
+	LockTime        uint32          `json:"locktime"`
+	HashPrevOutputs string          `json:"hashprevoutputs"`
+	HashSequence    string          `json:"hashsequence"`
+	HashOutputs     string          `json:"hashoutputs"`
+	PushData        DSProofPushData `json:"pushdata"`
+}
+
+// GetDSProofResult models a double spend proof returned by the getdsproof
+// and getdsprooflist commands.  Which fields are set depends on the
+// verbosity.  TxID is null for orphan proofs.
+type GetDSProofResult struct {
+	Hex         string           `json:"hex,omitempty"`
+	DSPID       string           `json:"dspid,omitempty"`
+	TxID        *string          `json:"txid"`
+	OutPoint    *DSProofOutPoint `json:"outpoint,omitempty"`
+	Path        []string         `json:"path,omitempty"`
+	Descendants []string         `json:"descendants,omitempty"`
+	Spenders    []DSProofSpender `json:"spenders,omitempty"`
+}
+
 // GetMempoolInfoResult models the data returned from the getmempoolinfo
 // command.
 type GetMempoolInfoResult struct {
