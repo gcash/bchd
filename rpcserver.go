@@ -2432,7 +2432,7 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrInvalidAncestorBlock:
 		return "bad-prevblk"
 	case blockchain.ErrPrevBlockNotBest:
-		return "inconclusive-not-best-prvblk"
+		return "inconclusive-not-best-prevblk"
 	case blockchain.ErrInvalidTxOrder:
 		return "invalid-transaction-order"
 	case blockchain.ErrBadTxVersion:
@@ -2503,7 +2503,7 @@ func handleGetBlockTemplateProposal(s *rpcServer, request *btcjson.TemplateReque
 	expectedPrevHash := s.cfg.Chain.BestSnapshot().Hash
 	prevHash := &block.MsgBlock().Header.PrevBlock
 	if !expectedPrevHash.IsEqual(prevHash) {
-		return "bad-prevblk", nil
+		return "inconclusive-not-best-prevblk", nil
 	}
 
 	if err := s.cfg.Chain.CheckConnectBlockTemplate(block); err != nil {
