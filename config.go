@@ -890,10 +890,14 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Validate the maxtxfee.  It may not be below the minimum relay fee
-	// of a 1000 byte transaction.
+	// Validate the maxtxfee.  When it is set, it may not be below the
+	// minimum relay fee of a 1000 byte transaction.  As in Bitcoin Cash
+	// Node, the default is not checked against it.
 	cfg.maxTxFee, err = bchutil.NewAmount(cfg.MaxTxFee)
-	if err == nil && cfg.maxTxFee < cfg.minRelayTxFee {
+	maxTxFeeOpt := parser.FindOptionByLongName("maxtxfee")
+	if err == nil && maxTxFeeOpt != nil && maxTxFeeOpt.IsSet() &&
+		cfg.maxTxFee < cfg.minRelayTxFee {
+
 		err = fmt.Errorf("must be at least the minrelaytxfee of %v",
 			cfg.minRelayTxFee)
 	}

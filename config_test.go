@@ -77,6 +77,8 @@ func TestMaxTxFee(t *testing.T) {
 		{args: []string{"--maxtxfee=0.00001"}, want: 1000},
 		{args: []string{"--maxtxfee=0.000009"}, wantErr: true},
 		{args: []string{"--maxtxfee=0.01", "--minrelaytxfee=0.02"}, wantErr: true},
+		// The default is not checked against the minimum relay fee.
+		{args: []string{"--minrelaytxfee=0.2"}, want: 10000000},
 	}
 	for _, test := range tests {
 		os.Args = append([]string{"bchd"}, test.args...)
