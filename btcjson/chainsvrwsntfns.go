@@ -75,6 +75,11 @@ const (
 	// from the chain server that inform a client that a transaction that
 	// matches the loaded filter was accepted by the mempool.
 	RelevantTxAcceptedNtfnMethod = "relevanttxaccepted"
+
+	// DSProofNtfnMethod is the method used for notifications from the
+	// chain server that a double spend proof was associated with a
+	// mempool transaction.
+	DSProofNtfnMethod = "dsproof"
 )
 
 // BlockConnectedNtfn defines the blockconnected JSON-RPC notification.
@@ -260,6 +265,19 @@ func NewTxAcceptedNtfn(txHash string, amount float64) *TxAcceptedNtfn {
 	}
 }
 
+// DSProofNtfn defines the dsproof JSON-RPC notification.
+type DSProofNtfn struct {
+	Proof GetDSProofResult
+}
+
+// NewDSProofNtfn returns a new instance which can be used to issue a dsproof
+// JSON-RPC notification.
+func NewDSProofNtfn(proof GetDSProofResult) *DSProofNtfn {
+	return &DSProofNtfn{
+		Proof: proof,
+	}
+}
+
 // TxAcceptedVerboseNtfn defines the txacceptedverbose JSON-RPC notification.
 type TxAcceptedVerboseNtfn struct {
 	RawTx TxRawResult
@@ -301,4 +319,5 @@ func init() {
 	MustRegisterCmd(TxAcceptedNtfnMethod, (*TxAcceptedNtfn)(nil), flags)
 	MustRegisterCmd(TxAcceptedVerboseNtfnMethod, (*TxAcceptedVerboseNtfn)(nil), flags)
 	MustRegisterCmd(RelevantTxAcceptedNtfnMethod, (*RelevantTxAcceptedNtfn)(nil), flags)
+	MustRegisterCmd(DSProofNtfnMethod, (*DSProofNtfn)(nil), flags)
 }

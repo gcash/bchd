@@ -64,6 +64,30 @@ func TestChainSvrWsCmds(t *testing.T) {
 			unmarshalled: &btcjson.StopNotifyBlocksCmd{},
 		},
 		{
+			name: "notifydsproofs",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("notifydsproofs")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewNotifyDSProofsCmd(nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"notifydsproofs","params":[],"id":1}`,
+			unmarshalled: &btcjson.NotifyDSProofsCmd{
+				Verbosity: btcjson.DSProofVerbosityPtr(2),
+			},
+		},
+		{
+			name: "stopnotifydsproofs",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("stopnotifydsproofs")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewStopNotifyDSProofsCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"stopnotifydsproofs","params":[],"id":1}`,
+			unmarshalled: &btcjson.StopNotifyDSProofsCmd{},
+		},
+		{
 			name: "notifynewtransactions",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("notifynewtransactions")

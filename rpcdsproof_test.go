@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/mempool"
@@ -255,6 +257,98 @@ func signTestInput(t *testing.T, h *mempoolTestHarness, tx *wire.MsgTx, value in
 	tx.TxIn[0].SignatureScript = sigScript
 }
 
+// TestDSProofWebsocket checks the notifydsproofs subscription: the proofs
+// already in the memory pool are sent on subscribing, new ones as they come,
+// and none after stopnotifydsproofs.
+func TestDSProofWebsocket(t *testing.T) {
+	h := newDSProofTestHarness(t)
+	s := h.server
+	s.ntfnMgr = newWsNotificationManager(s)
+	s.ntfnMgr.Start()
+	defer func() {
+		s.ntfnMgr.Shutdown()
+		s.ntfnMgr.WaitForShutdown()
+	}()
+	wsc := &wsClient{
+		server:   s,
+		quit:     make(chan struct{}),
+		ntfnChan: make(chan []byte, 10),
+	}
+	read := func() string {
+		t.Helper()
+		select {
+		case msg := <-wsc.ntfnChan:
+			return string(msg)
+		case <-time.After(5 * time.Second):
+			t.Fatal("no notification")
+		}
+		return ""
+	}
+	expectNone := func() {
+		t.Helper()
+		select {
+		case msg := <-wsc.ntfnChan:
+			t.Fatalf("unexpected notification %s", msg)
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+
+	if _, err := handleNotifyDSProofs(wsc, btcjson.NewNotifyDSProofsCmd(nil)); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf(`{"jsonrpc":"1.0","method":"dsproof","params":[{"dspid":"%s","txid":"%s","outpoint":{"txid":"%s","vout":0}}],"id":null}`,
+		h.dspID, h.tx1.TxHash(), h.outputs[0].Hash)
+	if msg := read(); msg != want {
+		t.Fatalf("existing proof:\n got %s\nwant %s", msg, want)
+	}
+
+	// A new proof is sent as it comes.
+	pool := h.server.cfg.TxMemPool
+	tx3 := h.spend(t, h.outputs[1], 1000)
+	tx4 := h.spend(t, h.outputs[1], 2000)
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx4), false, false, 0)
+	desc, _, _, _ := pool.DSProofByTx(bchutil.NewTx(tx3).Hash(), false)
+	if desc == nil {
+		t.Fatal("no proof for the second double spend")
+	}
+	s.NotifyDSProof(desc.Proof, bchutil.NewTx(tx3))
+	if msg := read(); !strings.Contains(msg, `"dspid":"`+desc.Hash.String()+`"`) {
+		t.Fatalf("new proof notification: %s", msg)
+	}
+
+	// Nothing after stopping.
+	if _, err := handleStopNotifyDSProofs(wsc, btcjson.NewStopNotifyDSProofsCmd()); err != nil {
+		t.Fatal(err)
+	}
+	s.NotifyDSProof(desc.Proof, bchutil.NewTx(tx3))
+	expectNone()
+
+	// Verbosity 1 sends the serialized proofs.
+	v := btcjson.DSProofVerbosity(5)
+	if _, err := handleNotifyDSProofs(wsc, btcjson.NewNotifyDSProofsCmd(&v)); err == nil {
+		t.Fatal("verbosity 5 accepted")
+	}
+	v = 1
+	if _, err := handleNotifyDSProofs(wsc, btcjson.NewNotifyDSProofsCmd(&v)); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if msg := read(); !strings.Contains(msg, `"method":"dsproof","params":[{"hex":"`) {
+			t.Fatalf("verbosity 1 notification %s", msg)
+		}
+	}
+
+	// Limited users may subscribe and unsubscribe.
+	for _, method := range []string{"notifydsproofs", "stopnotifydsproofs"} {
+		if _, ok := rpcLimited[method]; !ok {
+			t.Errorf("%s not available to limited users", method)
+		}
+	}
+}
+
 // TestDSProofRPCDisabled checks that the commands fail with -90 when proofs
 // are disabled.
 func TestDSProofRPCDisabled(t *testing.T) {
@@ -278,5 +372,18 @@ func TestDSProofRPCDisabled(t *testing.T) {
 		if rerr, ok := err.(*btcjson.RPCError); !ok || rerr.Code != -90 {
 			t.Errorf("%T: got %v", cmd, err)
 		}
+	}
+}
+
+// TestDSProofWebsocketDisabled checks that notifydsproofs fails with -90
+// when proofs are disabled.
+func TestDSProofWebsocketDisabled(t *testing.T) {
+	s := &rpcServer{cfg: rpcserverConfig{
+		TxMemPool: mempool.New(&mempool.Config{DisableDSProofs: true}),
+	}}
+	wsc := &wsClient{server: s, quit: make(chan struct{})}
+	_, err := handleNotifyDSProofs(wsc, btcjson.NewNotifyDSProofsCmd(nil))
+	if rerr, ok := err.(*btcjson.RPCError); !ok || rerr.Code != -90 {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -262,6 +262,8 @@ var rpcLimited = map[string]struct{}{
 	// Websockets commands
 	"loadtxfilter":          {},
 	"notifyblocks":          {},
+	"notifydsproofs":        {},
+	"stopnotifydsproofs":    {},
 	"notifynewtransactions": {},
 	"notifyreceived":        {},
 	"notifyspent":           {},
@@ -4655,6 +4657,16 @@ func (s *rpcServer) NotifyNewTransactions(txns []*mempool.TxDesc) {
 		// about stale block templates due to the new transaction.
 		s.gbtWorkState.NotifyMempoolTx(s.cfg.TxMemPool.LastUpdated())
 	}
+}
+
+// NotifyDSProof notifies websocket clients of a double spend proof that
+// became associated with the memory pool transaction tx.
+func (s *rpcServer) NotifyDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
+	s.ntfnMgr.NotifyDSProof(&mempool.DSProofDesc{
+		Proof:  proof,
+		Hash:   proof.ProofHash(),
+		TxHash: tx.Hash(),
+	})
 }
 
 // limitConnections responds with a 503 service unavailable and returns true if
