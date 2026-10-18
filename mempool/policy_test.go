@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -199,6 +200,81 @@ func TestCheckPkScriptStandard(t *testing.T) {
 			t.Fatalf("TestCheckPkScriptStandard test '%s' failed",
 				test.name)
 			return
+		}
+	}
+}
+
+// TestCheckPkScriptStandardTemplates ensures that once the May 2026 upgrade
+// is active, only the multisig forms BCHN matches are held to the multisig
+// limits, and other forms, and spends of them, are checked as pay to script.
+func TestCheckPkScriptStandardTemplates(t *testing.T) {
+	compressed := append([]byte{0x02}, bytes.Repeat([]byte{0x11}, 32)...)
+	uncompressed := append([]byte{0x04}, bytes.Repeat([]byte{0x22}, 64)...)
+	push := func(key []byte) []byte {
+		return append([]byte{byte(len(key))}, key...)
+	}
+	pushData1 := func(key []byte) []byte {
+		return append([]byte{txscript.OP_PUSHDATA1, byte(len(key))}, key...)
+	}
+	multiSig := func(m, n byte, keys ...[]byte) []byte {
+		script := []byte{m}
+		for _, key := range keys {
+			script = append(script, key...)
+		}
+		return append(script, n, txscript.OP_CHECKMULTISIG)
+	}
+	c, u, u1 := push(compressed), push(uncompressed), pushData1(uncompressed)
+
+	tests := []struct {
+		name          string
+		script        []byte
+		isStandard    bool
+		spendStandard bool
+	}{
+		{"one of four",
+			multiSig(txscript.OP_1, txscript.OP_4, c, c, c, c),
+			false, true},
+		{"one of four with a non-minimal push",
+			multiSig(txscript.OP_1, txscript.OP_4, c, c, c,
+				pushData1(compressed)),
+			true, true},
+		{"three of two", multiSig(txscript.OP_3, txscript.OP_2, c, c),
+			true, true},
+		{"zero of two", multiSig(txscript.OP_0, txscript.OP_2, c, c),
+			true, true},
+		{"one of three uncompressed in 201 bytes",
+			multiSig(txscript.OP_1, txscript.OP_3, u, u, u),
+			true, true},
+		{"one of three uncompressed in 204 bytes of non-minimal pushes",
+			multiSig(txscript.OP_1, txscript.OP_3, u1, u1, u1),
+			false, false},
+	}
+
+	for _, test := range tests {
+		class := txscript.GetScriptClass(test.script)
+		err := checkPkScriptStandard(test.script, class, true)
+		if (err == nil) != test.isStandard {
+			t.Errorf("%s: output check returned %v, want standard %v",
+				test.name, err, test.isStandard)
+		}
+
+		prevTx := wire.NewMsgTx(1)
+		prevTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, 0),
+			nil))
+		prevTx.AddTxOut(wire.NewTxOut(1000, test.script, wire.TokenData{}))
+		prev := bchutil.NewTx(prevTx)
+		view := blockchain.NewUtxoViewpoint()
+		view.AddTxOut(prev, 0, 1)
+
+		spendTx := wire.NewMsgTx(1)
+		spendTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(prev.Hash(), 0), nil))
+		spendTx.AddTxOut(wire.NewTxOut(500, []byte{txscript.OP_TRUE},
+			wire.TokenData{}))
+		err = checkInputsStandard(bchutil.NewTx(spendTx), view,
+			txscript.ScriptAllowMay2026)
+		if (err == nil) != test.spendStandard {
+			t.Errorf("%s: input check returned %v, want standard %v",
+				test.name, err, test.spendStandard)
 		}
 	}
 }

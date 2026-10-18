@@ -103,12 +103,24 @@ func refExtractDataElements(script []byte) ([][]byte, error) {
 	return dataElements, nil
 }
 
+// refIsPubKeyPush returns whether pop is a direct push of a public key whose
+// length fits its first byte, as BCHN requires of the keys in the pubkey and
+// multisig templates.
+func refIsPubKeyPush(pop parsedOpcode) bool {
+	switch pop.opcode.value {
+	case OP_DATA_33:
+		return pop.data[0] == 0x02 || pop.data[0] == 0x03
+	case OP_DATA_65:
+		return pop.data[0] == 0x04 || pop.data[0] == 0x06 ||
+			pop.data[0] == 0x07
+	}
+	return false
+}
+
 // refIsPubkey returns true if the script passed is a pay-to-pubkey transaction,
 // false otherwise.
 func refIsPubkey(pops []parsedOpcode) bool {
-	// Valid pubkeys are either 33 or 65 bytes.
-	return len(pops) == 2 &&
-		(len(pops[0].data) == 33 || len(pops[0].data) == 65) &&
+	return len(pops) == 2 && refIsPubKeyPush(pops[0]) &&
 		pops[1].opcode.value == OP_CHECKSIG
 }
 
@@ -128,12 +140,12 @@ func refIsPubkeyHash(pops []parsedOpcode) bool {
 // otherwise.
 func refIsMultiSig(pops []parsedOpcode) bool {
 	// The absolute minimum is 1 pubkey:
-	// OP_0/OP_1-16 <pubkey> OP_1 OP_CHECKMULTISIG
+	// OP_1-16 <pubkey> OP_1 OP_CHECKMULTISIG
 	l := len(pops)
 	if l < 4 {
 		return false
 	}
-	if !isSmallInt(pops[0].opcode) {
+	if !isSmallInt(pops[0].opcode) || pops[0].opcode.value == OP_0 {
 		return false
 	}
 	if !isSmallInt(pops[l-2].opcode) {
@@ -144,14 +156,14 @@ func refIsMultiSig(pops []parsedOpcode) bool {
 	}
 
 	// Verify the number of pubkeys specified matches the actual number
-	// of pubkeys provided.
-	if l-2-1 != asSmallInt(pops[l-2].opcode) {
+	// of pubkeys provided, and is no less than the number of signatures.
+	numPubKeys := asSmallInt(pops[l-2].opcode)
+	if l-2-1 != numPubKeys || asSmallInt(pops[0].opcode) > numPubKeys {
 		return false
 	}
 
 	for _, pop := range pops[1 : l-2] {
-		// Valid pubkeys are either 33 or 65 bytes.
-		if len(pop.data) != 33 && len(pop.data) != 65 {
+		if !refIsPubKeyPush(pop) {
 			return false
 		}
 	}

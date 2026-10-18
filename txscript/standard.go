@@ -91,25 +91,30 @@ func (t ScriptClass) String() string {
 	return scriptClassToName[t]
 }
 
-// isPubKeyScript returns whether the script is a pay-to-pubkey script: a
-// push of 33 or 65 bytes, by any push opcode, followed by OP_CHECKSIG.
-func isPubKeyScript(script []byte) bool {
-	// The shortest form is OP_DATA_33 <pubkey> OP_CHECKSIG and the longest
-	// OP_PUSHDATA4 <length> <pubkey> OP_CHECKSIG.
-	if len(script) < 35 || len(script) > 71 ||
-		script[len(script)-1] != OP_CHECKSIG {
+// isValidPubKeySize returns whether the length of a public key fits its first
+// byte, as BCHN requires of the keys in the pubkey and multisig templates: 33
+// bytes after 0x02 or 0x03, and 65 bytes after 0x04, 0x06 or 0x07.
+func isValidPubKeySize(pubKey []byte) bool {
+	if len(pubKey) == 0 {
+		return false
+	}
+	switch pubKey[0] {
+	case 0x02, 0x03:
+		return len(pubKey) == 33
+	case 0x04, 0x06, 0x07:
+		return len(pubKey) == 65
+	}
+	return false
+}
 
-		return false
-	}
-	tokenizer := MakeScriptTokenizer(script)
-	if !tokenizer.Next() {
-		return false
-	}
-	if l := len(tokenizer.Data()); l != 33 && l != 65 {
-		return false
-	}
-	return tokenizer.Next() && tokenizer.Opcode() == OP_CHECKSIG &&
-		tokenizer.Done() && tokenizer.Err() == nil
+// isPubKeyScript returns whether the script is a pay-to-pubkey script, as
+// BCHN matches one: a direct push of a public key whose length fits its first
+// byte, followed by OP_CHECKSIG.
+func isPubKeyScript(script []byte) bool {
+	// The key must be pushed directly, so the opcode is its length.
+	n := len(script)
+	return n >= 2 && int(script[0]) == n-2 &&
+		isValidPubKeySize(script[1:n-1]) && script[n-1] == OP_CHECKSIG
 }
 
 // isPubKeyHashScript returns whether the script is a pay-to-pubkey-hash
@@ -123,34 +128,33 @@ func isPubKeyHashScript(script []byte) bool {
 		script[24] == OP_CHECKSIG
 }
 
-// isMultiSigScript returns whether the script is a multisig script: a small
-// int, one or more pushes of 33 or 65 bytes, a small int equal to the number
-// of pushes and OP_CHECKMULTISIG.
+// isMultiSigScript returns whether the script is a multisig script, as BCHN
+// matches one: OP_1 to OP_16 for the number of signatures, direct pushes of
+// one or more public keys whose lengths fit their first bytes, OP_1 to OP_16
+// for the number of keys, which may not be less than the number of
+// signatures, and OP_CHECKMULTISIG.
 func isMultiSigScript(script []byte) bool {
-	if len(script) < 4 || script[len(script)-1] != OP_CHECKMULTISIG {
-		return false
-	}
-	tokenizer := MakeScriptTokenizer(script)
-	if !tokenizer.Next() || !isSmallInt(tokenizer.op) {
-		return false
-	}
-	numPubKeys := 0
-	for {
-		if !tokenizer.Next() {
-			return false
-		}
-		if l := len(tokenizer.Data()); l != 33 && l != 65 {
-			break
-		}
-		numPubKeys++
-	}
-	if numPubKeys == 0 || !isSmallInt(tokenizer.op) ||
-		asSmallInt(tokenizer.op) != numPubKeys {
+	n := len(script)
+	if n < 4 || script[0] < OP_1 || script[0] > OP_16 ||
+		script[n-2] < OP_1 || script[n-2] > OP_16 ||
+		script[n-1] != OP_CHECKMULTISIG {
 
 		return false
 	}
-	return tokenizer.Next() && tokenizer.Opcode() == OP_CHECKMULTISIG &&
-		tokenizer.Done() && tokenizer.Err() == nil
+	numPubKeys := 0
+	for i := 1; i < n-2; {
+		// Keys must be pushed directly, so each opcode is the length of
+		// its key.
+		end := i + 1 + int(script[i])
+		if end > n-2 || !isValidPubKeySize(script[i+1:end]) {
+			return false
+		}
+		numPubKeys++
+		i = end
+	}
+	numSigs := asSmallInt(&opcodeArray[script[0]])
+	return asSmallInt(&opcodeArray[script[n-2]]) == numPubKeys &&
+		numSigs <= numPubKeys
 }
 
 // isNullDataScript returns whether the script is a null data script:

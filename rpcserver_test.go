@@ -583,20 +583,30 @@ func TestHandleDecodeScriptP2SH(t *testing.T) {
 }
 
 // TestScriptTypeNames ensures the raw transaction, decodescript and getblock
-// results name pay to script outputs and long data carriers as Bitcoin Cash
-// Node does.
+// results name scripts as Bitcoin Cash Node does, and that the raw
+// transaction and decodescript results only list addresses for the pubkey and
+// multisig forms it matches.
 func TestScriptTypeNames(t *testing.T) {
+	pubKey := "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959" +
+		"f2815b16f81798"
 	tests := []struct {
-		name     string
-		script   string
-		wantType string
+		name      string
+		script    string
+		wantType  string
+		wantAddrs int
 	}{
-		{"p2pkh", tokenTestP2PKHScript, "pubkeyhash"},
-		{"bare script", "51935287", "script"},
-		{"does not parse", "0501", "script"},
+		{"p2pkh", tokenTestP2PKHScript, "pubkeyhash", 1},
+		{"p2pk", "21" + pubKey + "ac", "pubkey", 1},
+		{"p2pk with a non-minimal push", "4c21" + pubKey + "ac", "script",
+			0},
+		{"multisig", "5121" + pubKey + "51ae", "multisig", 1},
+		{"multisig with a non-minimal push", "514c21" + pubKey + "51ae",
+			"script", 0},
+		{"bare script", "51935287", "script", 0},
+		{"does not parse", "0501", "script", 0},
 		{"long nulldata", "6a4d2c01" + strings.Repeat("00", 300),
-			"nulldata"},
-		{"long script", strings.Repeat("51", 202), "nonstandard"},
+			"nulldata", 0},
+		{"long script", strings.Repeat("51", 202), "nonstandard", 0},
 	}
 
 	mtx := wire.NewMsgTx(2)
@@ -613,13 +623,22 @@ func TestScriptTypeNames(t *testing.T) {
 			t.Errorf("%s: vout type %q, want %q", test.name, got,
 				test.wantType)
 		}
+		if got := len(vouts[i].ScriptPubKey.Addresses); got != test.wantAddrs {
+			t.Errorf("%s: vout lists %d addresses, want %d", test.name,
+				got, test.wantAddrs)
+		}
 
 		cmd := &btcjson.DecodeScriptCmd{HexScript: test.script}
 		result, err := handleDecodeScript(s, cmd, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", test.name, err)
 		}
-		if got := result.(btcjson.DecodeScriptResult).Type; got != test.wantType {
+		decoded := result.(btcjson.DecodeScriptResult)
+		if got := len(decoded.Addresses); got != test.wantAddrs {
+			t.Errorf("%s: decodescript lists %d addresses, want %d",
+				test.name, got, test.wantAddrs)
+		}
+		if got := decoded.Type; got != test.wantType {
 			t.Errorf("%s: decodescript type %q, want %q", test.name,
 				got, test.wantType)
 		}

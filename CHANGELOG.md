@@ -32,6 +32,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - On testnet4 and chipnet the block size limit starts at 2 MB, as in BCHN, instead of 32 MB. `--excessiveblocksize` now defaults to the network's default size, which is also its minimum.
 - Support Tor v3 onion addresses and BIP155 `addrv2`, as BCHN does. Tor v2 addresses, which Tor no longer supports, are dropped.
 - Match bloom filters and build merkle blocks as BCHN does (gcash/bchutil#50).
+- Match P2PK and bare multisig scripts to BCHN's templates for standardness. A key that isn't pushed directly, or doesn't start with a valid prefix, makes the script pay to script.
 - Fix several P2P message handling issues, and bound UPnP requests to five seconds.
 
 ### RPC & gRPC
@@ -77,6 +78,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 - Stricter cashaddr validation and the correct network for pay-to-pubkey addresses (gcash/bchutil#48, gcash/bchutil#49).
 - The exported `addrmgr` and `peer` APIs use the new `wire.NetAddressV2` type, as btcd did.
+- `txscript.GetScriptClass` and `ExtractPkScriptAddrs` recognize P2PK and multisig only in BCHN's forms, so the address index and address filters no longer match outputs written any other way.
 
 ### Upgrade notes
 
@@ -85,7 +87,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
 - **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it. The token amount may be a JSON integer or a string, as in BCHN.
 - **Integer parameters.** JSON-RPC parameters are now passed on exactly as sent, so integer parameters must be written as integers: `1.0` or `1e3` is rejected, as in BCHN, rather than read as `1` or `1000`.
-- **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32 and `script` for pay to script outputs. Data carriers over 223 bytes were `nonstandard`; they are now `nulldata` in `type` and `datacarrier` in `script_class`. Scripts that do not parse now have a `script_class` of `script` or `nonstandard` instead of an empty one.
+- **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32 and `script` for pay to script outputs. Data carriers over 223 bytes were `nonstandard`; they are now `nulldata` in `type` and `datacarrier` in `script_class`. Scripts that do not parse now have a `script_class` of `script` or `nonstandard` instead of an empty one. P2PK and multisig follow BCHN's templates too, so a key pushed with `OP_PUSHDATA1` or with a malformed first byte makes the output `script` or `nonstandard`, with no addresses.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
 - **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`, and `submitblock` and block proposals now use BCHN's reason strings, for example `bad-cb-amount` instead of `bad-cb-value`. Templates follow the network's block size limit as ABLA grows it; a larger `excessiveblocksize` no longer makes them bigger, except on regtest and simnet.
 - **Finalization.** Blocks 10 deep that have been known for two hours are final once the chain has the network's minimum chain work, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
