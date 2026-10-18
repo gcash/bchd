@@ -169,6 +169,25 @@ func TestChainSvrWsNtfns(t *testing.T) {
 			},
 		},
 		{
+			name: "dsproof",
+			newNtfn: func() (interface{}, error) {
+				return btcjson.NewCmd("dsproof", `{"dspid":"ab","txid":null,"outpoint":{"txid":"cd","vout":1}}`)
+			},
+			staticNtfn: func() interface{} {
+				return btcjson.NewDSProofNtfn(btcjson.GetDSProofResult{
+					DSPID:    "ab",
+					OutPoint: &btcjson.DSProofOutPoint{TxID: "cd", Vout: 1},
+				})
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"dsproof","params":[{"dspid":"ab","txid":null,"outpoint":{"txid":"cd","vout":1}}],"id":null}`,
+			unmarshalled: &btcjson.DSProofNtfn{
+				Proof: btcjson.GetDSProofResult{
+					DSPID:    "ab",
+					OutPoint: &btcjson.DSProofOutPoint{TxID: "cd", Vout: 1},
+				},
+			},
+		},
+		{
 			name: "txaccepted",
 			newNtfn: func() (interface{}, error) {
 				return btcjson.NewCmd("txaccepted", "123", 1.5)

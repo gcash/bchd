@@ -1899,7 +1899,8 @@ func (s *server) pushTxMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<-
 }
 
 // AnnounceDSProof relays the inventory of a double spend proof that became
-// associated with the memory pool transaction tx.
+// associated with the memory pool transaction tx and notifies the RPC
+// clients.
 func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
 	// The memory pool calls this from the sync manager and peer handlers,
 	// which must not wait for the peer handler, so the relay must not
@@ -1912,6 +1913,10 @@ func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
 		case <-s.quit:
 		}
 	}()
+
+	if s.rpcServer != nil {
+		s.rpcServer.NotifyDSProof(proof, tx)
+	}
 }
 
 // addDSProofBanScore increases the ban score of the connected peers with the

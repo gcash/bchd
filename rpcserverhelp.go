@@ -778,6 +778,14 @@ var helpDescsEnUS = map[string]string{
 	"notifynewtransactions-verbose":   "Specifies which type of notification to receive. If verbose is true, then the caller receives txacceptedverbose, otherwise the caller receives txaccepted",
 
 	// StopNotifyNewTransactionsCmd help.
+	// NotifyDSProofsCmd help.
+	"notifydsproofs--synopsis": "Send a dsproof notification when a double spend proof becomes associated with a memory pool transaction.\n" +
+		"The proofs already in the memory pool are sent right away.",
+	"notifydsproofs-verbosity": "1 sends the serialized proof and the txid, 2 (the default) the id, txid and outpoint, 3 adds the two spenders, as getdsproof does",
+
+	// StopNotifyDSProofsCmd help.
+	"stopnotifydsproofs--synopsis": "Stop sending dsproof notifications.",
+
 	"stopnotifynewtransactions--synopsis": "Stop sending either a txaccepted or a txacceptedverbose notification when a new transaction is accepted into the mempool.",
 
 	// NotifyReceivedCmd help.
@@ -913,6 +921,8 @@ var rpcResultTypes = map[string][]interface{}{
 	"notifyblocks":              nil,
 	"stopnotifyblocks":          nil,
 	"notifynewtransactions":     nil,
+	"notifydsproofs":            nil,
+	"stopnotifydsproofs":        nil,
 	"stopnotifynewtransactions": nil,
 	"notifyreceived":            nil,
 	"stopnotifyreceived":        nil,

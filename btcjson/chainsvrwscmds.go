@@ -57,6 +57,28 @@ func NewNotifyNewTransactionsCmd(verbose *bool) *NotifyNewTransactionsCmd {
 	}
 }
 
+// NotifyDSProofsCmd defines the notifydsproofs JSON-RPC command.
+type NotifyDSProofsCmd struct {
+	Verbosity *DSProofVerbosity `jsonrpcdefault:"2"`
+}
+
+// NewNotifyDSProofsCmd returns a new instance which can be used to issue a
+// notifydsproofs JSON-RPC command.
+func NewNotifyDSProofsCmd(verbosity *DSProofVerbosity) *NotifyDSProofsCmd {
+	return &NotifyDSProofsCmd{
+		Verbosity: verbosity,
+	}
+}
+
+// StopNotifyDSProofsCmd defines the stopnotifydsproofs JSON-RPC command.
+type StopNotifyDSProofsCmd struct{}
+
+// NewStopNotifyDSProofsCmd returns a new instance which can be used to issue
+// a stopnotifydsproofs JSON-RPC command.
+func NewStopNotifyDSProofsCmd() *StopNotifyDSProofsCmd {
+	return &StopNotifyDSProofsCmd{}
+}
+
 // SessionCmd defines the session JSON-RPC command.
 type SessionCmd struct{}
 
@@ -228,11 +250,13 @@ func init() {
 	MustRegisterCmd("authenticate", (*AuthenticateCmd)(nil), flags)
 	MustRegisterCmd("loadtxfilter", (*LoadTxFilterCmd)(nil), flags)
 	MustRegisterCmd("notifyblocks", (*NotifyBlocksCmd)(nil), flags)
+	MustRegisterCmd("notifydsproofs", (*NotifyDSProofsCmd)(nil), flags)
 	MustRegisterCmd("notifynewtransactions", (*NotifyNewTransactionsCmd)(nil), flags)
 	MustRegisterCmd("notifyreceived", (*NotifyReceivedCmd)(nil), flags)
 	MustRegisterCmd("notifyspent", (*NotifySpentCmd)(nil), flags)
 	MustRegisterCmd("session", (*SessionCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyblocks", (*StopNotifyBlocksCmd)(nil), flags)
+	MustRegisterCmd("stopnotifydsproofs", (*StopNotifyDSProofsCmd)(nil), flags)
 	MustRegisterCmd("stopnotifynewtransactions", (*StopNotifyNewTransactionsCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyspent", (*StopNotifySpentCmd)(nil), flags)
 	MustRegisterCmd("stopnotifyreceived", (*StopNotifyReceivedCmd)(nil), flags)

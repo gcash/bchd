@@ -29,6 +29,7 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
+	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -72,11 +73,13 @@ var wsHandlersBeforeInit = map[string]wsCommandHandler{
 	"loadtxfilter":              handleLoadTxFilter,
 	"help":                      handleWebsocketHelp,
 	"notifyblocks":              handleNotifyBlocks,
+	"notifydsproofs":            handleNotifyDSProofs,
 	"notifynewtransactions":     handleNotifyNewTransactions,
 	"notifyreceived":            handleNotifyReceived,
 	"notifyspent":               handleNotifySpent,
 	"session":                   handleSession,
 	"stopnotifyblocks":          handleStopNotifyBlocks,
+	"stopnotifydsproofs":        handleStopNotifyDSProofs,
 	"stopnotifynewtransactions": handleStopNotifyNewTransactions,
 	"stopnotifyspent":           handleStopNotifySpent,
 	"stopnotifyreceived":        handleStopNotifyReceived,
@@ -475,6 +478,7 @@ type notificationTxAcceptedByMempool struct {
 	isNew bool
 	tx    *bchutil.Tx
 }
+type notificationDSProof mempool.DSProofDesc
 
 // Notification control requests
 type notificationRegisterClient wsClient
@@ -483,6 +487,8 @@ type notificationRegisterBlocks wsClient
 type notificationUnregisterBlocks wsClient
 type notificationRegisterNewMempoolTxs wsClient
 type notificationUnregisterNewMempoolTxs wsClient
+type notificationRegisterDSProofs wsClient
+type notificationUnregisterDSProofs wsClient
 type notificationRegisterSpent struct {
 	wsc *wsClient
 	ops []*wire.OutPoint
@@ -515,6 +521,7 @@ func (m *wsNotificationManager) notificationHandler() {
 	// since it is quite a bit more efficient than using the entire struct.
 	blockNotifications := make(map[chan struct{}]*wsClient)
 	txNotifications := make(map[chan struct{}]*wsClient)
+	dsProofNotifications := make(map[chan struct{}]*wsClient)
 	watchedOutPoints := make(map[wire.OutPoint]map[chan struct{}]*wsClient)
 	watchedAddrs := make(map[string]map[chan struct{}]*wsClient)
 
@@ -563,6 +570,20 @@ out:
 				m.notifyForTx(watchedOutPoints, watchedAddrs, n.tx, nil)
 				m.notifyRelevantTxAccepted(n.tx, clients)
 
+			case *notificationDSProof:
+				if len(dsProofNotifications) != 0 {
+					m.notifyDSProof(dsProofNotifications,
+						(*mempool.DSProofDesc)(n))
+				}
+
+			case *notificationRegisterDSProofs:
+				wsc := (*wsClient)(n)
+				dsProofNotifications[wsc.quit] = wsc
+
+			case *notificationUnregisterDSProofs:
+				wsc := (*wsClient)(n)
+				delete(dsProofNotifications, wsc.quit)
+
 			case *notificationRegisterBlocks:
 				wsc := (*wsClient)(n)
 				blockNotifications[wsc.quit] = wsc
@@ -581,6 +602,7 @@ out:
 				// the client itself.
 				delete(blockNotifications, wsc.quit)
 				delete(txNotifications, wsc.quit)
+				delete(dsProofNotifications, wsc.quit)
 				for k := range wsc.spentRequests {
 					op := k
 					m.removeSpentRequest(watchedOutPoints, wsc, &op)
@@ -830,6 +852,54 @@ func (*wsNotificationManager) notifyFilteredBlockDisconnected(clients map[chan s
 	}
 	for _, wsc := range clients {
 		_ = wsc.QueueNotification(marshalledJSON)
+	}
+}
+
+// NotifyDSProof passes a double spend proof that became associated with a
+// memory pool transaction to the notification manager.
+func (m *wsNotificationManager) NotifyDSProof(desc *mempool.DSProofDesc) {
+	select {
+	case m.queueNotification <- (*notificationDSProof)(desc):
+	case <-m.quit:
+	}
+}
+
+// RegisterDSProofUpdates requests double spend proof notifications to the
+// passed websocket client.
+func (m *wsNotificationManager) RegisterDSProofUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationRegisterDSProofs)(wsc)
+}
+
+// UnregisterDSProofUpdates removes double spend proof notifications for the
+// passed websocket client.
+func (m *wsNotificationManager) UnregisterDSProofUpdates(wsc *wsClient) {
+	m.queueNotification <- (*notificationUnregisterDSProofs)(wsc)
+}
+
+// marshalDSProofNtfn returns the dsproof notification for a proof at the
+// given verbosity.
+func marshalDSProofNtfn(desc *mempool.DSProofDesc, verbosity int) ([]byte, error) {
+	ntfn := btcjson.NewDSProofNtfn(*dsProofResult(desc, verbosity, nil, nil))
+	return btcjson.MarshalCmd("1.0", nil, ntfn)
+}
+
+// notifyDSProof sends a dsproof notification to the websocket clients that
+// registered for them.
+func (m *wsNotificationManager) notifyDSProof(clients map[chan struct{}]*wsClient, desc *mempool.DSProofDesc) {
+	var marshalled [4][]byte
+	for _, wsc := range clients {
+		wsc.Lock()
+		v := wsc.dsProofVerbosity
+		wsc.Unlock()
+		if marshalled[v] == nil {
+			var err error
+			marshalled[v], err = marshalDSProofNtfn(desc, v)
+			if err != nil {
+				rpcsLog.Errorf("Failed to marshal dsproof notification: %v", err)
+				continue
+			}
+		}
+		_ = wsc.QueueNotification(marshalled[v])
 	}
 }
 
@@ -1300,6 +1370,10 @@ type wsClient struct {
 	// verboseTxUpdates specifies whether a client has requested verbose
 	// information about all new transactions.
 	verboseTxUpdates bool
+
+	// dsProofVerbosity is the verbosity of the dsproof notifications sent
+	// to the client.  It is protected by the embedded mutex.
+	dsProofVerbosity int
 
 	// addrRequests is a set of addresses the caller has requested to be
 	// notified about.  It is maintained here so all requests can be removed
@@ -2186,6 +2260,45 @@ func handleNotifySpent(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	}
 
 	wsc.server.ntfnMgr.RegisterSpentRequests(wsc, outpoints)
+	return nil, nil
+}
+
+// handleNotifyDSProofs implements the notifydsproofs command extension for
+// websocket connections.  The proofs already in the memory pool are sent
+// right away.
+func handleNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	cmd, ok := icmd.(*btcjson.NotifyDSProofsCmd)
+	if !ok {
+		return nil, btcjson.ErrRPCInternal
+	}
+	pool := wsc.server.cfg.TxMemPool
+	if !pool.DSProofsEnabled() {
+		return nil, errDSProofDisabled
+	}
+	verbosity, err := dsProofVerbosity(cmd.Verbosity, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	wsc.Lock()
+	wsc.dsProofVerbosity = max(verbosity, 1)
+	wsc.Unlock()
+	wsc.server.ntfnMgr.RegisterDSProofUpdates(wsc)
+
+	for _, desc := range pool.DSProofs(false) {
+		marshalled, err := marshalDSProofNtfn(desc, max(verbosity, 1))
+		if err != nil {
+			return nil, err
+		}
+		_ = wsc.QueueNotification(marshalled)
+	}
+	return nil, nil
+}
+
+// handleStopNotifyDSProofs implements the stopnotifydsproofs command
+// extension for websocket connections.
+func handleStopNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.server.ntfnMgr.UnregisterDSProofUpdates(wsc)
 	return nil, nil
 }
 
