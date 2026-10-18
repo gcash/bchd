@@ -121,7 +121,11 @@ out:
 				_, err := wire.RunCashTokensValidityAlgorithm(
 					utxoEntryCache, txVI.tx.MsgTx(), v.flags.HasFlag(txscript.ScriptAllowMay2026))
 				if err != nil {
-					v.sendResult(err)
+					str := fmt.Sprintf("transaction %s fails the "+
+						"token validity algorithm: %v",
+						txVI.tx.Hash(), err)
+					v.sendResult(ruleError(ErrCashTokensValidation, str))
+					break out
 				}
 			}
 

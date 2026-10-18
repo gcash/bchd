@@ -898,3 +898,36 @@ func TestCoinbaseTokenRule(t *testing.T) {
 		newBlock(newCoinbase(3, badPrefixOutput)))
 	mustAccept("no token output", newBlock(newCoinbase(3, nil)))
 }
+
+// TestTokenValidityFailureMarksBlockInvalid ensures a block with a transaction
+// that fails the token validity algorithm is rejected with
+// ErrCashTokensValidation and marked invalid, so it is known to be invalid
+// when it arrives again.
+func TestTokenValidityFailureMarksBlockInvalid(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	params.MagneticAnonomalyForkHeight = 0
+	params.Upgrade9ForkHeight = 0
+	m := newRuleTestMiner(t, &params)
+
+	b1 := m.build(nil)
+	m.mustAccept(b1)
+	cb := b1.MsgBlock().Transactions[0]
+	prevOut := wire.OutPoint{Hash: cb.TxHash(), Index: 0}
+
+	// An NFT of a category that no input creates or carries.
+	capability := byte(wire.NONE)
+	nft, err := wire.NewTokenData([32]byte{1}, nil, nil, &capability)
+	if err != nil {
+		t.Fatalf("NewTokenData: %v", err)
+	}
+	tx := ruleTestSpend(prevOut, cb.TxOut[0].Value-1000, 1)
+	tx.TxOut[0].TokenData = *nft
+
+	block := m.build(nil, tx)
+	err = m.accept(block)
+	requireRuleError(t, err, ErrCashTokensValidation)
+	known, _, invalid := m.chain.BlockValidity(block.Hash())
+	if !known || !invalid {
+		t.Fatalf("block known %v, invalid %v, want both", known, invalid)
+	}
+}
