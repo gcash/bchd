@@ -779,3 +779,108 @@ func createSpendingTx(prevTx *bchutil.Tx, index uint32, scriptSig []byte, addres
 	}
 	return bchutil.NewTx(spendTx), nil
 }
+
+// TestDSProofInv checks that announced double spend proofs are requested
+// once the chain is current, at most 5000 of them per inv message.
+func TestDSProofInv(t *testing.T) {
+	const maxDSProofRequests = 5000
+	chainParams := chaincfg.RegressionNetParams
+
+	var ctx testContext
+	err := ctx.Setup(&testConfig{
+		dbName:      "TestDSProofInv",
+		chainParams: &chainParams,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Teardown()
+
+	syncMgr := ctx.syncManager
+	syncMgr.Start()
+
+	remoteMessages := newMessageChans()
+	remotePeerCfg := peer.Config{
+		Listeners: peer.MessageListeners{
+			OnGetBlocks: func(p *peer.Peer, msg *wire.MsgGetBlocks) {
+				remoteMessages.getBlocksChan <- msg
+			},
+			OnGetData: func(p *peer.Peer, msg *wire.MsgGetData) {
+				remoteMessages.getDataChan <- msg
+			},
+		},
+		UserAgentName:    "btcdtest",
+		UserAgentVersion: "1.0",
+		ChainParams:      &chainParams,
+		Services:         wire.SFNodeNetwork,
+	}
+	localPeerCfg := peer.Config{
+		UserAgentName:    "btcdtest",
+		UserAgentVersion: "1.0",
+		ChainParams:      &chainParams,
+		Services:         wire.SFNodeNetwork,
+	}
+	_, localNode, err := MakeConnectedPeers(remotePeerCfg, localPeerCfg, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncMgr.NewPeer(localNode, nil)
+	select {
+	case <-remoteMessages.getBlocksChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for remote node to receive getblocks message")
+	}
+
+	invMsg := wire.NewMsgInv()
+	for i := range maxDSProofRequests + 1 {
+		hash := chainhash.Hash{byte(i), byte(i >> 8), 1}
+		_ = invMsg.AddInvVect(wire.NewInvVect(wire.InvTypeDSProof, &hash))
+	}
+
+	// While the chain is not current, even the sync peer's proofs are
+	// ignored.
+	syncMgr.QueueInv(invMsg, localNode)
+	select {
+	case msg := <-remoteMessages.getDataChan:
+		t.Fatalf("Proofs requested before the chain is current: %d", len(msg.InvList))
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// A recent block makes the chain current.
+	address, _, err := GenerateAnyoneCanSpendAddress(&chainParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := rpctest.CreateBlock(bchutil.NewBlock(chainParams.GenesisBlock), nil, 2,
+		time.Now().Truncate(time.Second), address, []wire.TxOut{}, &chainParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := syncMgr.ProcessBlock(block, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+	if !syncMgr.IsCurrent() {
+		t.Fatal("chain not current")
+	}
+	syncMgr.QueueInv(invMsg, localNode)
+
+	select {
+	case msg := <-remoteMessages.getDataChan:
+		if len(msg.InvList) != maxDSProofRequests {
+			t.Fatalf("Expected %d proofs in getdata message, got %d",
+				maxDSProofRequests, len(msg.InvList))
+		}
+		for i, iv := range msg.InvList {
+			if iv.Type != wire.InvTypeDSProof || iv.Hash != invMsg.InvList[i].Hash {
+				t.Fatalf("Unexpected getdata entry %d: %v", i, iv)
+			}
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for remote node to receive getdata message")
+	}
+
+	err = syncMgr.Stop()
+	if err != nil {
+		t.Fatalf("failed to stop SyncManager: %v", err)
+	}
+}

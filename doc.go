@@ -196,6 +196,8 @@ Application Options:
 	                               with GOMEMLIMIT). Ignored if GOGC is set
 	                               (default: 10)
 	    --blocksonly               Do not accept transactions from remote peers.
+	    --nodoublespendproof       Do not create, relay or answer queries for
+	                               double spend proofs
 	    --txindex                  Maintain a full hash-based transaction index
 	                               which makes all transactions available via the
 	                               getrawtransaction RPC

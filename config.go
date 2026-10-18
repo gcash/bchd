@@ -179,6 +179,7 @@ type config struct {
 	UtxoCacheMaxSizeMiB     uint          `long:"utxocachemaxsize" description:"The maximum size in MiB of the UTXO cache"`
 	GCPercent               int           `long:"gcpercent" description:"Garbage collection target percentage -- Higher values use more memory and less CPU; a negative value disables the collector (use with GOMEMLIMIT). Ignored if GOGC is set"`
 	BlocksOnly              bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
+	NoDoubleSpendProof      bool          `long:"nodoublespendproof" description:"Do not create, relay or answer queries for double spend proofs"`
 	TxIndex                 bool          `long:"txindex" description:"Maintain a full hash-based transaction index which makes all transactions available via the getrawtransaction RPC"`
 	DropTxIndex             bool          `long:"droptxindex" description:"Deletes the hash-based transaction index from the database on start up and then exits."`
 	AddrIndex               bool          `long:"addrindex" description:"Maintain a full address-based transaction index which makes the searchrawtransactions RPC available"`
