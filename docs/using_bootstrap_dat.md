@@ -1,4 +1,5 @@
 ### Table of Contents
+
 1. [What is bootstrap.dat?](#What)<br />
 2. [What are the pros and cons of using bootstrap.dat?](#ProsCons)
 3. [Where do I get bootstrap.dat?](#Obtaining)
@@ -16,7 +17,7 @@ on the last time it was updated.
 See [this](https://bitcointalk.org/index.php?topic=145386.0) thread on
 bitcointalk for more details.
 
-**NOTE:** Using bootstrap.dat is entirely optional.  Bchd will download the
+**NOTE:** Using bootstrap.dat is entirely optional. Bchd will download the
 block chain from other peers through the Bitcoin protocol with no extra
 configuration needed.
 
@@ -25,6 +26,7 @@ configuration needed.
 ### 2. What are the pros and cons of using bootstrap.dat?
 
 Pros:
+
 - Typically accelerates the initial process of bringing up a new node as it
   downloads from public P2P nodes and generally is able to achieve faster
   download speeds
@@ -32,6 +34,7 @@ Pros:
   to download the data once
 
 Cons:
+
 - Requires you to setup and configure a torrent client if you don't already have
   one available
 - Requires roughly twice as much disk space since you'll need the flat file as
@@ -41,7 +44,7 @@ Cons:
 
 ### 3. Where do I get bootstrap.dat?
 
-The bootstrap.dat file is made available via a torrent.  See
+The bootstrap.dat file is made available via a torrent. See
 [this](https://bitcointalk.org/index.php?topic=145386.0) thread on bitcointalk
 for the torrent download details.
 
@@ -51,8 +54,8 @@ for the torrent download details.
 
 You don't need to trust the file as the `addblock` utility verifies every block
 using the same rules that are used when downloading the block chain normally
-through the Bitcoin protocol.  Additionally, the chain rules contain hard-coded
-checkpoints for the known-good block chain at periodic intervals.  This ensures
+through the Bitcoin protocol. Additionally, the chain rules contain hard-coded
+checkpoints for the known-good block chain at periodic intervals. This ensures
 that not only is it a valid chain, but it is the same chain that everyone else
 is using.
 
@@ -61,19 +64,22 @@ is using.
 ### 5. How do I use bootstrap.dat with bchd?
 
 bchd comes with a separate utility named `addblock` which can be used to import
-`bootstrap.dat`.  This approach is used since the import is a one-time operation
+`bootstrap.dat`. This approach is used since the import is a one-time operation
 and we prefer to keep the daemon itself as lightweight as possible.
 
-1. Stop bchd if it is already running.  This is required since addblock needs to
+1. Stop bchd if it is already running. This is required since addblock needs to
    access the database used by bchd and it will be locked if bchd is using it.
 2. Note the path to the downloaded bootstrap.dat file.
 3. Run the addblock utility with the `-i` argument pointing to the location of
    boostrap.dat:<br /><br />
-**Windows:**
+   **Windows:**
+
 ```bat
 C:\> "%PROGRAMFILES%\gcash\bchd\addblock" -i C:\Path\To\bootstrap.dat
 ```
+
 **Linux/Unix/BSD/POSIX:**
+
 ```bash
 $ $GOPATH/bin/addblock -i /path/to/bootstrap.dat
 ```

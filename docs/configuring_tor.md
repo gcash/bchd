@@ -1,21 +1,22 @@
 ### Table of Contents
+
 1. [Overview](#Overview)<br />
 2. [Client-Only](#Client)<br />
-2.1 [Description](#ClientDescription)<br />
-2.2 [Command Line Example](#ClientCLIExample)<br />
-2.3 [Config File Example](#ClientConfigFileExample)<br />
+   2.1 [Description](#ClientDescription)<br />
+   2.2 [Command Line Example](#ClientCLIExample)<br />
+   2.3 [Config File Example](#ClientConfigFileExample)<br />
 3. [Client-Server via Tor Hidden Service](#HiddenService)<br />
-3.1 [Description](#HiddenServiceDescription)<br />
-3.2 [Command Line Example](#HiddenServiceCLIExample)<br />
-3.3 [Config File Example](#HiddenServiceConfigFileExample)<br />
+   3.1 [Description](#HiddenServiceDescription)<br />
+   3.2 [Command Line Example](#HiddenServiceCLIExample)<br />
+   3.3 [Config File Example](#HiddenServiceConfigFileExample)<br />
 4. [Bridge Mode (Not Anonymous)](#Bridge)<br />
-4.1 [Description](#BridgeDescription)<br />
-4.2 [Command Line Example](#BridgeCLIExample)<br />
-4.3 [Config File Example](#BridgeConfigFileExample)<br />
+   4.1 [Description](#BridgeDescription)<br />
+   4.2 [Command Line Example](#BridgeCLIExample)<br />
+   4.3 [Config File Example](#BridgeConfigFileExample)<br />
 5. [Tor Stream Isolation](#TorStreamIsolation)<br />
-5.1 [Description](#TorStreamIsolationDescription)<br />
-5.2 [Command Line Example](#TorStreamIsolationCLIExample)<br />
-5.3 [Config File Example](#TorStreamIsolationFileExample)<br />
+   5.1 [Description](#TorStreamIsolationDescription)<br />
+   5.2 [Command Line Example](#TorStreamIsolationCLIExample)<br />
+   5.3 [Config File Example](#TorStreamIsolationFileExample)<br />
 
 <a name="Overview" />
 
@@ -24,21 +25,21 @@
 bchd provides full support for anonymous networking via the
 [Tor Project](https://www.torproject.org/), including [client-only](#Client)
 and [hidden service](#HiddenService) configurations along with
-[stream isolation](#TorStreamIsolation).  In addition, bchd supports a hybrid,
+[stream isolation](#TorStreamIsolation). In addition, bchd supports a hybrid,
 [bridge mode](#Bridge) which is not anonymous, but allows it to operate as a
 bridge between regular nodes and hidden service nodes without routing the
 regular connections through Tor.
 
 While it is easier to only run as a client, it is more beneficial to the Bitcoin
 network to run as both a client and a server so others may connect to you to as
-you are connecting to them.  We recommend you take the time to setup a Tor
+you are connecting to them. We recommend you take the time to setup a Tor
 hidden service for this reason.
 
 bchd supports Tor v3 onion addresses, which are 56 characters long followed by
-`.onion`.  Tor v2 addresses (16 characters) are no longer supported since Tor
-removed v2 hidden services in 2021.  Onion addresses are exchanged with other
+`.onion`. Tor v2 addresses (16 characters) are no longer supported since Tor
+removed v2 hidden services in 2021. Onion addresses are exchanged with other
 nodes in `addrv2` messages ([BIP155](https://github.com/bitcoin/bips/blob/master/bip-0155.mediawiki)),
-so bchd learns about onion peers from the nodes it connects to.  bchd also
+so bchd learns about onion peers from the nodes it connects to. bchd also
 stores and relays I2P and CJDNS addresses from these messages, but it can't
 connect to them.
 
@@ -50,12 +51,12 @@ connect to them.
 
 **2.1 Description**<br />
 
-Configuring bchd as a Tor client is straightforward.  The first step is
+Configuring bchd as a Tor client is straightforward. The first step is
 obviously to install Tor and ensure it is working. Once that is done, all that
 typically needs to be done is to specify the `--proxy` flag via the bchd command
-line or in the bchd configuration file.  Typically the Tor proxy address will be
+line or in the bchd configuration file. Typically the Tor proxy address will be
 127.0.0.1:9050 (if using standalone Tor) or 127.0.0.1:9150 (if using the Tor
-Browser Bundle).  If you have Tor configured to require a username and password,
+Browser Bundle). If you have Tor configured to require a username and password,
 you may specify them with the `--proxyuser` and `--proxypass` flags.
 
 By default, bchd assumes the proxy specified with `--proxy` is a Tor proxy and
@@ -69,8 +70,8 @@ not be reachable for inbound connections unless you also configure a Tor
 With a proxy, bchd also connects to the onion peers it learns about, and onion
 addresses can be given to `--connect`, `--addpeer` and the `addnode` RPC.
 Without `--proxy` or `--onion`, `--connect` and `--addpeer` skip onion
-addresses with a warning and `addnode` returns an error.  The same happens for
-Tor v2 and malformed onion addresses.  With `--noonion`, an onion address in
+addresses with a warning and `addnode` returns an error. The same happens for
+Tor v2 and malformed onion addresses. With `--noonion`, an onion address in
 `--connect` or `--addpeer` stops bchd at startup.
 
 <a name="ClientCLIExample" />
@@ -99,17 +100,17 @@ proxy=127.0.0.1:9050
 
 **3.1 Description**<br />
 
-The first step is to configure Tor to provide a hidden service.  Documentation
+The first step is to configure Tor to provide a hidden service. Documentation
 for this can be found on the Tor project website
-[here](https://www.torproject.org/docs/tor-hidden-service.html.en).  However,
+[here](https://www.torproject.org/docs/tor-hidden-service.html.en). However,
 there is no need to install a web server locally as the linked instructions
 discuss since bchd will act as the server.
 
 In short, the instructions linked above entail modifying your `torrc` file to
 add something similar to the following, restarting Tor, and opening the
 `hostname` file in the `HiddenServiceDir` to obtain your hidden service .onion
-address.  Tor creates a v3 hidden service, whose address is 56 characters
-followed by `.onion`.  bchd doesn't create the hidden service through the Tor
+address. Tor creates a v3 hidden service, whose address is 56 characters
+followed by `.onion`. bchd doesn't create the hidden service through the Tor
 control port, so it has to be set up in `torrc`.
 
 ```text
@@ -120,14 +121,15 @@ HiddenServicePort 8333 127.0.0.1:8333
 Once Tor is configured to provide the hidden service and you have obtained your
 generated .onion address, configuring bchd as a Tor hidden service requires
 three flags:
-* `--proxy` to identify the Tor (SOCKS 5) proxy to use for outgoing traffic.
+
+- `--proxy` to identify the Tor (SOCKS 5) proxy to use for outgoing traffic.
   This is typically 127.0.0.1:9050.
-* `--listen` to enable listening for inbound connections since `--proxy`
+- `--listen` to enable listening for inbound connections since `--proxy`
   disables listening by default
-* `--externalip` to set the .onion address that is advertised to other peers
+- `--externalip` to set the .onion address that is advertised to other peers
 
 The examples below use an example address; replace it with the address from
-your `hostname` file.  Connections that come in through the hidden service
+your `hostname` file. Connections that come in through the hidden service
 reach bchd from 127.0.0.1.
 
 <a name="HiddenServiceCLIExample" />
@@ -159,18 +161,18 @@ externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
 **4.1 Description**<br />
 
 bchd provides support for operating as a bridge between regular nodes and hidden
-service nodes.  In particular this means only traffic which is directed to or
+service nodes. In particular this means only traffic which is directed to or
 from a .onion address is sent through Tor while other traffic is sent normally.
 _As a result, this mode is **NOT** anonymous._
 
 This mode works by specifying an onion-specific proxy, which is pointed at Tor,
 by using the `--onion` flag via the bchd command line or in the bchd
-configuration file.  If you have Tor configured to require a username and
+configuration file. If you have Tor configured to require a username and
 password, you may specify them with the `--onionuser` and `--onionpass` flags.
 
 NOTE: This mode will also work in conjunction with a hidden service which means
 you could accept inbound connections both via the normal network and to your
-hidden service through the Tor network.  To enable your hidden service in bridge
+hidden service through the Tor network. To enable your hidden service in bridge
 mode, you only need to specify your hidden service's .onion address via the
 `--externalip` flag since traffic to and from .onion addresses are already
 routed via Tor due to the `--onion` flag.
@@ -206,7 +208,7 @@ Tor stream isolation forces Tor to build a new circuit for each connection
 making it harder to correlate connections.
 
 bchd provides support for Tor stream isolation by using the `--torisolation`
-flag.  This option requires --proxy or --onionproxy to be set.
+flag. This option requires --proxy or --onionproxy to be set.
 
 <a name="TorStreamIsolationCLIExample" />
 
