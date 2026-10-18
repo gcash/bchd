@@ -6,11 +6,13 @@ package mining
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/txscript"
+	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
 
@@ -211,5 +213,114 @@ func TestCheckConnectBlockTemplateUsesTipHeight(t *testing.T) {
 	var rerr blockchain.RuleError
 	if !errors.As(err, &rerr) || rerr.ErrorCode != blockchain.ErrInvalidTxOrder {
 		t.Fatalf("expected ErrInvalidTxOrder, got %v", err)
+	}
+}
+
+// templateHas returns whether the template contains tx.
+func templateHas(tmpl *BlockTemplate, tx *wire.MsgTx) bool {
+	hash := tx.TxHash()
+	for _, blockTx := range tmpl.Block.Transactions {
+		if blockTx.TxHash() == hash {
+			return true
+		}
+	}
+	return false
+}
+
+// TestTemplateIncludesChildAfterParent ensures a transaction spending another
+// pool transaction is added once its parent is, and left out when the parent
+// cannot be selected.
+func TestTemplateIncludesChildAfterParent(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+
+	parent := spend(h.cbTxs[0], 1000)
+	child := spend(parent, 1000)
+	h.src.add(child, 1000)
+	h.src.add(parent, 1000)
+
+	// A parent that is not final yet, and its child.
+	lockedParent := spend(h.cbTxs[1], 1000)
+	lockedParent.TxIn[0].Sequence = 0
+	lockedParent.LockTime = uint32(h.chain.BestSnapshot().Height + 10)
+	lockedChild := spend(lockedParent, 1000)
+	h.src.add(lockedChild, 1000)
+	h.src.add(lockedParent, 1000)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	if !templateHas(tmpl, parent) || !templateHas(tmpl, child) {
+		t.Error("parent and child were not both included")
+	}
+	if templateHas(tmpl, lockedParent) || templateHas(tmpl, lockedChild) {
+		t.Error("non-final parent or its child was included")
+	}
+	if n := len(tmpl.Block.Transactions); n != 3 {
+		t.Errorf("template has %d txs, want the coinbase and 2", n)
+	}
+}
+
+// TestTemplateSkipsImmatureCoinbaseSpend ensures a transaction spending an
+// immature coinbase is left out and the template stays valid.
+func TestTemplateSkipsImmatureCoinbaseSpend(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+
+	good := spend(h.cbTxs[0], 1000)
+	immature := spend(h.cbTxs[99], 1000) // coinbase of block 100
+	h.src.add(immature, 1000)
+	h.src.add(good, 1000)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	if templateHas(tmpl, immature) {
+		t.Error("immature coinbase spend was included")
+	}
+	if !templateHas(tmpl, good) || len(tmpl.Block.Transactions) != 2 {
+		t.Errorf("template has %d txs, want the coinbase and the "+
+			"mature spend", len(tmpl.Block.Transactions))
+	}
+}
+
+// TestTemplateCanonicalOrder ensures the transactions after the coinbase are
+// sorted by txid, with a parent and child among them.
+func TestTemplateCanonicalOrder(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(110)
+
+	var txs []*wire.MsgTx
+	for i := range 5 {
+		txs = append(txs, spend(h.cbTxs[i], 10000))
+	}
+	txs = append(txs, spend(txs[0], 10000))
+
+	// Pay the highest declared fee to the highest txid so selection order
+	// is the reverse of the canonical order.
+	sorted := slices.Clone(txs)
+	slices.SortFunc(sorted, func(a, b *wire.MsgTx) int {
+		ha, hb := a.TxHash(), b.TxHash()
+		return ha.Compare(&hb)
+	})
+	for i, tx := range sorted {
+		h.src.add(tx, int64(1000*(i+1)))
+	}
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	got := tmpl.Block.Transactions[1:]
+	if len(got) != len(sorted) {
+		t.Fatalf("template has %d txs, want %d", len(got), len(sorted))
+	}
+	for i, tx := range got {
+		if tx.TxHash() != sorted[i].TxHash() {
+			t.Fatalf("tx %d is %v, want %v", i+1, tx.TxHash(),
+				sorted[i].TxHash())
+		}
 	}
 }
