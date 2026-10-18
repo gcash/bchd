@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/bchec"
@@ -245,6 +246,26 @@ func TestRescanBlockSpentOutputs(t *testing.T) {
 				t.Errorf("%s: notification %d is not for tx %v",
 					test.name, i, tx.TxHash())
 			}
+		}
+	}
+}
+
+// TestLimitedUserStopNotify checks that limited users can stop every
+// notification they are allowed to start.
+func TestLimitedUserStopNotify(t *testing.T) {
+	for method := range wsHandlers {
+		if !strings.HasPrefix(method, "notify") {
+			continue
+		}
+		if _, ok := rpcLimited[method]; !ok {
+			continue
+		}
+		stop := "stop" + method
+		if _, ok := wsHandlers[stop]; !ok {
+			t.Errorf("%s has no %s handler", method, stop)
+		}
+		if _, ok := rpcLimited[stop]; !ok {
+			t.Errorf("%s is limited but %s is not", method, stop)
 		}
 	}
 }
