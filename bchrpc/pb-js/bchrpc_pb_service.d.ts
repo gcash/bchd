@@ -220,6 +220,42 @@ type bchrpcSubscribeBlocks = {
   readonly responseType: typeof bchrpc_pb.BlockNotification;
 };
 
+type bchrpcGetDoubleSpendProof = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetDoubleSpendProofRequest;
+  readonly responseType: typeof bchrpc_pb.GetDoubleSpendProofResponse;
+};
+
+type bchrpcGetDoubleSpendProofs = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetDoubleSpendProofsRequest;
+  readonly responseType: typeof bchrpc_pb.GetDoubleSpendProofsResponse;
+};
+
+type bchrpcGetDoubleSpendProofScore = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetDoubleSpendProofScoreRequest;
+  readonly responseType: typeof bchrpc_pb.GetDoubleSpendProofScoreResponse;
+};
+
+type bchrpcSubscribeDoubleSpendProofs = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: true;
+  readonly requestType: typeof bchrpc_pb.SubscribeDoubleSpendProofsRequest;
+  readonly responseType: typeof bchrpc_pb.DoubleSpendProofNotification;
+};
+
 export class bchrpc {
   static readonly serviceName: string;
   static readonly GetMempoolInfo: bchrpcGetMempoolInfo;
@@ -246,6 +282,10 @@ export class bchrpc {
   static readonly SubscribeTransactions: bchrpcSubscribeTransactions;
   static readonly SubscribeTransactionStream: bchrpcSubscribeTransactionStream;
   static readonly SubscribeBlocks: bchrpcSubscribeBlocks;
+  static readonly GetDoubleSpendProof: bchrpcGetDoubleSpendProof;
+  static readonly GetDoubleSpendProofs: bchrpcGetDoubleSpendProofs;
+  static readonly GetDoubleSpendProofScore: bchrpcGetDoubleSpendProofScore;
+  static readonly SubscribeDoubleSpendProofs: bchrpcSubscribeDoubleSpendProofs;
 }
 
 export type ServiceError = { message: string, code: number; metadata: grpc.Metadata }
@@ -472,5 +512,33 @@ export class bchrpcClient {
   subscribeTransactions(requestMessage: bchrpc_pb.SubscribeTransactionsRequest, metadata?: grpc.Metadata): ResponseStream<bchrpc_pb.TransactionNotification>;
   subscribeTransactionStream(metadata?: grpc.Metadata): BidirectionalStream<bchrpc_pb.SubscribeTransactionsRequest, bchrpc_pb.TransactionNotification>;
   subscribeBlocks(requestMessage: bchrpc_pb.SubscribeBlocksRequest, metadata?: grpc.Metadata): ResponseStream<bchrpc_pb.BlockNotification>;
+  getDoubleSpendProof(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofResponse|null) => void
+  ): UnaryResponse;
+  getDoubleSpendProof(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofResponse|null) => void
+  ): UnaryResponse;
+  getDoubleSpendProofs(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofsRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofsResponse|null) => void
+  ): UnaryResponse;
+  getDoubleSpendProofs(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofsRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofsResponse|null) => void
+  ): UnaryResponse;
+  getDoubleSpendProofScore(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofScoreRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofScoreResponse|null) => void
+  ): UnaryResponse;
+  getDoubleSpendProofScore(
+    requestMessage: bchrpc_pb.GetDoubleSpendProofScoreRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetDoubleSpendProofScoreResponse|null) => void
+  ): UnaryResponse;
+  subscribeDoubleSpendProofs(requestMessage: bchrpc_pb.SubscribeDoubleSpendProofsRequest, metadata?: grpc.Metadata): ResponseStream<bchrpc_pb.DoubleSpendProofNotification>;
 }
 
