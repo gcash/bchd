@@ -41,7 +41,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - A gRPC subscription that falls more than 50000 events behind now ends with `ResourceExhausted`.
 
 ### Mining
-- `getblocktemplate` no longer fails when the mempool holds a transaction that is not final yet, and template size limits follow ABLA. `blockmaxsize` now defaults to the block size limit less 1000 bytes.
+- `getblocktemplate` no longer fails when the mempool holds a transaction that is not final yet, and template size limits follow ABLA. `blockmaxsize` now defaults to the network's block size limit less 1000 bytes.
 - Each `getblocktemplate` transaction's `depends` now includes parents that come later in canonical order, and each transaction is listed with its own `fee` and `sigchecks` rather than another transaction's.
 - `submitblock` returns BIP22 reasons such as `duplicate-invalid` or `prev-blk-not-found`, as BCHN does, and no longer reports a block with an unknown parent as accepted. Proposals are checked at the next block height.
 - `submitblock` and block proposals reject trailing data after the block.
@@ -76,7 +76,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - **Integer parameters.** JSON-RPC parameters are now passed on exactly as sent, so integer parameters must be written as integers: `1.0` or `1e3` is rejected, as in BCHN, rather than read as `1` or `1000`.
 - **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32, `script` for pay to script outputs and `nulldata` for long data carriers.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
-- **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. With `excessiveblocksize` above 32 MB and no `blockmaxsize`, templates can now grow to that size.
+- **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. Templates follow the network's block size limit as ABLA grows it; a larger `excessiveblocksize` no longer makes them bigger, except on regtest and simnet.
 - **Finalization.** Blocks 10 deep that have been known for two hours are final once the chain has the network's minimum chain work, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
 - **`peers.json`** moves to a new format; downgrading discards it and the address list refills from seeds.
 

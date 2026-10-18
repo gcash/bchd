@@ -577,3 +577,35 @@ func TestABLARebuildBlockReadError(t *testing.T) {
 		t.Fatalf("start with a corrupt block: got %v, want ErrCorruption", err)
 	}
 }
+
+// TestNetworkSizeFloor ensures block templates are built to the network's
+// default block size rather than a larger excessive block size, except on
+// regtest and simnet and for chain parameters without a default, and never to
+// more than the excessive block size.
+func TestNetworkSizeFloor(t *testing.T) {
+	noDefault := chaincfg.MainNetParams
+	noDefault.DefaultConsensusBlockSize = 0
+
+	tests := []struct {
+		name   string
+		params *chaincfg.Params
+		eb     uint32
+		want   uint64
+	}{
+		{"mainnet", &chaincfg.MainNetParams, 32000000, 32000000},
+		{"mainnet, raised", &chaincfg.MainNetParams, 64000000, 32000000},
+		{"mainnet, below default", &chaincfg.MainNetParams, 1000000, 1000000},
+		{"testnet4, raised", &chaincfg.TestNet4Params, 32000000, 2000000},
+		{"chipnet", &chaincfg.ChipNetParams, 2000000, 2000000},
+		{"regtest, raised", &chaincfg.RegressionNetParams, 64000000, 64000000},
+		{"simnet, raised", &chaincfg.SimNetParams, 64000000, 64000000},
+		{"no default", &noDefault, 64000000, 64000000},
+	}
+	for _, test := range tests {
+		chain := newFakeChain(test.params)
+		chain.excessiveBlockSize = test.eb
+		if got := chain.networkSizeFloor(); got != test.want {
+			t.Errorf("%s: got %d, want %d", test.name, got, test.want)
+		}
+	}
+}

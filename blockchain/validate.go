@@ -751,7 +751,8 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	// We need to check the blocksize here rather than in checkBlockSanity
 	// because after the Uahf activation it is not longer context free as
 	// the max size depends on whether Uahf has activated or not.
-	maxBlockSize, err := b.blockSizeLimit(prevNode, prevNode.height+1)
+	maxBlockSize, err := b.blockSizeLimit(prevNode, prevNode.height+1,
+		uint64(b.excessiveBlockSize))
 	if err != nil {
 		return err
 	}
@@ -1331,7 +1332,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// expensive ECDSA signature check scripts.  Doing this last helps
 	// prevent CPU exhaustion attacks.
 	if runScripts {
-		maxBlockSize, err := b.blockSizeLimit(node.parent, node.height)
+		maxBlockSize, err := b.blockSizeLimit(node.parent, node.height,
+			uint64(b.excessiveBlockSize))
 		if err != nil {
 			return err
 		}

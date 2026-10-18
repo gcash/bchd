@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
+	"github.com/gcash/bchd/wire"
 )
 
 const (
@@ -115,26 +116,46 @@ func (b *BlockChain) cacheSideABLAState(hash chainhash.Hash, state ABLAState) {
 }
 
 // blockSizeLimit returns the maximum serialized size of a block at the given
-// height whose parent is prevNode.
+// height whose parent is prevNode, with floor as the limit before ABLA and
+// the floor of the ABLA limit after.
 //
 // This function MUST be called with the chain state lock held (for writes).
-func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32) (uint64, error) {
+func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32, floor uint64) (uint64, error) {
 	if height <= b.chainParams.UahfForkHeight {
 		return LegacyMaxBlockSize, nil
 	}
 	if height <= b.chainParams.ABLAForkHeight {
-		return uint64(b.excessiveBlockSize), nil
+		return floor, nil
 	}
 	state, err := b.ablaStateAfter(prevNode)
 	if err != nil {
 		return 0, err
 	}
-	// The excessive block size is a floor, as in Bitcoin Cash Node.
-	return max(uint64(b.excessiveBlockSize), state.getBlockSizeLimit()), nil
+	// The floor is a minimum, as in Bitcoin Cash Node.
+	return max(floor, state.getBlockSizeLimit()), nil
 }
 
-// NextBlockSizeLimit returns the maximum serialized size of a block that
-// extends the block with the passed hash.
+// networkSizeFloor returns the floor of the block size limit that the network
+// enforces: its default block size, as in Bitcoin Cash Node.  A larger
+// excessive block size only raises the size of the blocks this node accepts.
+// On regtest and simnet, which have no network to agree with, and for chain
+// parameters without a default block size, it is the excessive block size.
+func (b *BlockChain) networkSizeFloor() uint64 {
+	floor := uint64(b.excessiveBlockSize)
+	switch b.chainParams.Net {
+	case wire.TestNet, wire.SimNet:
+		return floor
+	}
+	if size := b.chainParams.DefaultConsensusBlockSize; size != 0 {
+		floor = min(floor, uint64(size))
+	}
+	return floor
+}
+
+// NextBlockSizeLimit returns the maximum serialized size the network allows a
+// block that extends the block with the passed hash: the larger of its default
+// block size and the ABLA limit.  Block templates are built to it.  See
+// networkSizeFloor for when the excessive block size counts instead.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) NextBlockSizeLimit(prevHash *chainhash.Hash) (uint64, error) {
@@ -145,7 +166,7 @@ func (b *BlockChain) NextBlockSizeLimit(prevHash *chainhash.Hash) (uint64, error
 	if prevNode == nil {
 		return 0, fmt.Errorf("block %v is not known", prevHash)
 	}
-	return b.blockSizeLimit(prevNode, prevNode.height+1)
+	return b.blockSizeLimit(prevNode, prevNode.height+1, b.networkSizeFloor())
 }
 
 // dbFetchValidABLAState fetches the stored ABLA state after the main chain
