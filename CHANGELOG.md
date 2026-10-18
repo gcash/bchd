@@ -71,6 +71,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 - Go 1.26 is required to build, and 1.26.9 or 1.27.2 or newer for the gRPC server's HTTP/2 fixes. Release binaries should use Go 1.27.2 or newer.
 - Publish the Docker image for `linux/riscv64` too, and update dependencies.
+- Stop building plan9 release binaries.
 
 ### Other
 
@@ -135,7 +136,6 @@ This release makes validation, initial sync and block relay considerably faster,
 - Assert the CHIP-2021-05 hashing density limit in the VM limits tests, which previously carried a check that could never execute.
 - Fail rather than skip in the invalid VMB vector tests when a vector executes without error.
 - Fix flaky address manager tests by generating only routable addresses.
-- Removed support for plan9.
 
 ## 0.22.1 (2026-06-30)
 
