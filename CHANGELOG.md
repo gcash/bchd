@@ -4,6 +4,80 @@ All notable user-visible changes to [bchd](https://github.com/gcash/bchd), a ful
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
+## 0.22.3 (2026-10-17)
+
+This release makes validation, initial sync and block relay considerably faster, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, adds block finalization and Tor v3 support, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node runs with `--addrindex` or serves `sendrawtransaction`.
+
+### Performance
+- Hash the spent outputs once per transaction and size parsed scripts to their opcode count. Together, a full chipnet sync takes about 23% less wall time and 24% less CPU.
+- Use the dcrd secp256k1 package in `bchec`, as btcd does. Script validation is 26% faster and mempool acceptance 18% faster.
+- Analyse scripts without parsing them first, cutting memory allocated during validation and mempool acceptance by 16-31%.
+- Add the outputs of an in-block parent to the UTXO view once instead of once per spending input (a 2000×2000 block goes from 142 ms to 0.38 ms).
+- Hash a relayed block's transactions once for all compact block peers. With 125 peers this saves about 10 s of CPU per 32 MB block.
+- Refresh the checkpoints from BCHN (mainnet now 970892). Scripts at or below the last checkpoint are not validated, so initial sync is much faster; `--nocheckpoints` validates every script.
+
+### New options
+- `--gcpercent` (default 10) sets the garbage collector target; higher values trade memory for CPU. `GOGC` and `GOMAXPROCS` are no longer overridden.
+- `--maxtxfee` (default 0.1 BCH, as in BCHN) is the highest fee `sendrawtransaction` and `testmempoolaccept` accept without `allowhighfees`.
+- `--maxreorgdepth` (default 10) and `--finalizationdelay` (default 7200 seconds), as in BCHN.
+- `--rpcauthtimeout` now also applies to websocket clients.
+
+### Consensus & Network
+- Bring consensus validation in line with BCHN in several edge cases, including double spends within a block, failed signature checks and the signature cache, CashTokens prefix parsing and the coinbase rules, the BIP34 height push, `OP_NUM2BIN`, and orphan blocks. No block on mainnet, testnet3, testnet4 or chipnet is affected.
+- Finalize blocks 10 deep and reject forks below them, and require BCHN's minimum chain work before the node considers itself synced.
+- Fix the stored ABLA state, which after a restart or a block disconnect could drop the next block's size limit to 16 MB.
+- Support Tor v3 onion addresses and BIP155 `addrv2`, as BCHN does. Tor v2 addresses, which Tor no longer supports, are dropped.
+- Match bloom filters and build merkle blocks as BCHN does (gcash/bchutil#50).
+- Fix several P2P message handling issues, and bound UPnP requests to five seconds.
+
+### RPC & gRPC
+- Include CashTokens data (`tokenData`) in transaction outputs, in BCHN's format, and fix CashTokens outputs in `createrawtransaction`.
+- Add `testmempoolaccept`, `getblock` verbosity 3 (input `prevout` and transaction `fee`), `finalizeblock` and `getfinalizedblockhash`, as in BCHN.
+- `sendrawtransaction` honours `allowhighfees`, relays a transaction already in the mempool again, and returns -26 for rejected transactions, as BCHN does.
+- Report P2SH32 outputs as `scripthash` with the correct address (gcash/bchutil#47), pay to script outputs as `script`, and renamed opcodes by their current names.
+- Index spends of token outputs in the address index, and match websocket `rescan` spends on the outputs they spend.
+- Return errors instead of crashing on malformed JSON-RPC requests and bad gRPC input. gRPC subscriptions are torn down properly, and idle gRPC connections close after 5 minutes.
+- A gRPC subscription that falls more than 50000 events behind now ends with `ResourceExhausted`.
+
+### Mining
+- `getblocktemplate` no longer fails when the mempool holds a transaction that is not final yet, and template size limits follow ABLA. `blockmaxsize` now defaults to the block size limit less 1000 bytes.
+- Each `getblocktemplate` transaction's `depends` now includes parents that come later in canonical order.
+- `submitblock` returns BIP22 reasons such as `duplicate-invalid` or `prev-blk-not-found`, as BCHN does, and no longer reports a block with an unknown parent as accepted. Proposals are checked at the next block height.
+- `submitblock` and block proposals reject trailing data after the block.
+- `generate` writes the right coinbase height when the tip moves while mining, and only returns blocks that were accepted.
+
+### Database
+- Fix hangs when pruning, after a failed database commit, and when `peers.json` is rejected.
+- Keep UTXO cache entries until their flush commits, and recover at startup from a flush interrupted after a reorg.
+- A failed UTXO flush now shuts the node down cleanly instead of carrying on.
+- Move to `syndtr/goleveldb`, which brings upstream fixes since 2018. The on-disk format is unchanged.
+
+### Security
+- Fix a CashTokens consensus bug allowing fungible token inflation. Per-category amount sums could overflow and wrap around, so BCHD accepted transactions that BCHN rejects.
+- Fix remotely triggerable crashes on a bloom filter with no data (gcash/bchutil#50) and on compact blocks with invalid prefilled transaction indexes.
+- Fix gRPC authentication with `--prometheus`, where every handler ran before the `--grpcauthtoken` check.
+- Fix many consensus, P2P, RPC and gRPC robustness issues in addition to the items above. P2P messages are now allocated by the bytes actually received, and the ban list and peer limits apply as soon as a connection is accepted, as in BCHN.
+- Update `golang.org/x/net` for five reachable HTTP/2 fixes.
+
+### Build & Packaging
+- Go 1.26 is required to build; release binaries should use Go 1.27.2 or newer.
+- Publish the Docker image for `linux/riscv64` too, and update dependencies.
+
+### Other
+- Stricter cashaddr validation and the correct network for pay-to-pubkey addresses (gcash/bchutil#48, gcash/bchutil#49).
+- The exported `addrmgr` and `peer` APIs use the new `wire.NetAddressV2` type, as btcd did.
+
+### Upgrade notes
+- **Address index.** Nodes with `--addrindex` rebuild the address index on first start, which can take hours on mainnet.
+- **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
+- **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
+- **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it.
+- **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32, `script` for pay to script outputs and `nulldata` for long data carriers.
+- **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
+- **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. With `excessiveblocksize` above 32 MB and no `blockmaxsize`, templates can now grow to that size.
+- **Finalization.** Blocks 10 deep that have been known for two hours are final, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
+- **`peers.json`** moves to a new format; downgrading discards it and the address list refills from seeds.
+
 ## 0.22.2 (2026-07-25)
 
 ### Consensus & Network
