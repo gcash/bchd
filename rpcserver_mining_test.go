@@ -306,7 +306,8 @@ func TestKnownBlockReasons(t *testing.T) {
 		{"invalid", bad, "duplicate-invalid", "duplicate-invalid"},
 		{"main chain", main, "duplicate", "duplicate"},
 		{"side chain", side, "duplicate", "duplicate-inconclusive"},
-		{"orphan", orphan, "prev-blk-not-found", "bad-prevblk"},
+		{"orphan", orphan, "prev-blk-not-found",
+			"inconclusive-not-best-prevblk"},
 	} {
 		data := blockHex(t, test.block)
 		res, err := handleSubmitBlock(s,
@@ -321,5 +322,14 @@ func TestKnownBlockReasons(t *testing.T) {
 			t.Errorf("%s: proposal: got %v, %v, want %q", test.name,
 				res, err, test.proposal)
 		}
+	}
+}
+
+// TestGBTReasonPrevBlockNotBest ensures the reason for a template that does
+// not build on the tip uses the BIP22 spelling.
+func TestGBTReasonPrevBlockNotBest(t *testing.T) {
+	err := blockchain.RuleError{ErrorCode: blockchain.ErrPrevBlockNotBest}
+	if got := chainErrToGBTErrString(err); got != "inconclusive-not-best-prevblk" {
+		t.Fatalf("got %q", got)
 	}
 }
