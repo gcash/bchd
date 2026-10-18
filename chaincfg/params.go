@@ -517,7 +517,7 @@ var RegressionNetParams = Params{
 
 	UahfForkHeight:              0, // Always active on regtest
 	DaaForkHeight:               0, // Always active on regtest
-	MagneticAnonomalyForkHeight: 1000,
+	MagneticAnonomalyForkHeight: 0, // Always active on regtest
 	PhononForkHeight:            1000,
 	AxionActivationHeight:       0, // Always active on regtest
 
