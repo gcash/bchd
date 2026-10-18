@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math/big"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -211,6 +212,44 @@ func TestFindBlockToFinalizeLongChain(t *testing.T) {
 	chain.maybeFinalize(tip, now)
 	if chain.finalizedNode != nil {
 		t.Fatal("finalized a block with finalization disabled")
+	}
+}
+
+// TestForksBeforeFinalized ensures the check agrees with walking back from the
+// parent to the height of the finalized block, for parents on the best chain
+// and on side chains, with the finalized block on and off the best chain.
+func TestForksBeforeFinalized(t *testing.T) {
+	chain := newFakeChain(&chaincfg.RegressionNetParams)
+	branch := func(parent *blockNode, n int, salt int64) []*blockNode {
+		nodes := make([]*blockNode, 0, n)
+		for i := range n {
+			parent = newFakeNode(parent, 1, 0, time.Unix(salt+int64(i), 0))
+			chain.index.AddNode(parent)
+			nodes = append(nodes, parent)
+		}
+		return nodes
+	}
+	genesis := chain.bestChain.Genesis()
+	main := append([]*blockNode{genesis}, branch(genesis, 20, 1)...)
+	chain.bestChain.SetTip(main[len(main)-1])
+	nodes := slices.Concat(main, branch(main[5], 6, 1000),
+		branch(main[15], 8, 2000))
+
+	for _, fin := range nodes {
+		chain.finalizedNode = fin
+		for _, prev := range nodes {
+			want := prev.Ancestor(fin.height) != fin
+			if got := chain.forksBeforeFinalized(prev); got != want {
+				t.Errorf("finalized height %d, parent height %d: "+
+					"got %v, want %v", fin.height, prev.height,
+					got, want)
+			}
+		}
+	}
+
+	chain.finalizedNode = nil
+	if chain.forksBeforeFinalized(main[len(main)-1]) {
+		t.Error("forks before the finalized block when none is")
 	}
 }
 
