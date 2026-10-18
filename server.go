@@ -1917,6 +1917,9 @@ func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
 	if s.rpcServer != nil {
 		s.rpcServer.NotifyDSProof(proof, tx)
 	}
+	if s.gRPCServer != nil {
+		s.gRPCServer.NotifyDSProof(proof, tx)
+	}
 }
 
 // addDSProofBanScore increases the ban score of the connected peers with the

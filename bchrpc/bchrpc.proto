@@ -135,6 +135,25 @@ service bchrpc {
     // SubscribeBlocks creates a subscription for notifications of new blocks being
     // connected to the blockchain or blocks being disconnected.
     rpc SubscribeBlocks(SubscribeBlocksRequest) returns (stream BlockNotification) {}
+
+    // GetDoubleSpendProof returns a double spend proof, looked up by its hash, by the
+    // double spent output, or by a mempool transaction, in which case the transaction's
+    // unconfirmed ancestors are searched as well.
+    //
+    // A double spend proof shows that a pay-to-pubkey-hash output spent by a mempool
+    // transaction was also spent by another, differently signed transaction.
+    rpc GetDoubleSpendProof(GetDoubleSpendProofRequest) returns (GetDoubleSpendProofResponse) {}
+
+    // GetDoubleSpendProofs returns the double spend proofs for mempool transactions.
+    rpc GetDoubleSpendProofs(GetDoubleSpendProofsRequest) returns (GetDoubleSpendProofsResponse) {}
+
+    // GetDoubleSpendProofScore returns how far a mempool transaction can be trusted not
+    // to be double spent.
+    rpc GetDoubleSpendProofScore(GetDoubleSpendProofScoreRequest) returns (GetDoubleSpendProofScoreResponse) {}
+
+    // SubscribeDoubleSpendProofs creates a subscription for notifications of double spend
+    // proofs as they become associated with mempool transactions.
+    rpc SubscribeDoubleSpendProofs(SubscribeDoubleSpendProofsRequest) returns (stream DoubleSpendProofNotification) {}
 }
 
 
@@ -552,6 +571,60 @@ message SubscribeBlocksRequest {
     bool serialize_block = 3;
 }
 
+message GetDoubleSpendProofRequest {
+    oneof query {
+        // The hash of the proof, little-endian.
+        bytes proof_hash = 1;
+        // The hash of a mempool transaction, little-endian.
+        bytes transaction_hash = 2;
+        // The double spent output.
+        Transaction.Input.Outpoint outpoint = 3;
+    }
+
+    // When looking up by transaction_hash, only return a proof for that transaction,
+    // without searching its unconfirmed ancestors. Default is false.
+    bool exclude_ancestors = 4;
+}
+
+message GetDoubleSpendProofResponse {
+    DoubleSpendProof proof = 1;
+    // When looking up by transaction_hash, the transactions from the one looked up
+    // to the one the proof is for, little-endian.
+    repeated bytes path = 2;
+    // The transaction the proof is for and all its mempool descendants, little-endian.
+    // Empty for an orphan proof.
+    repeated bytes descendants = 3;
+}
+
+message GetDoubleSpendProofsRequest {
+    // When include_orphans is true, proofs whose transaction is not in the mempool are
+    // included. Default is false.
+    bool include_orphans = 1;
+}
+
+message GetDoubleSpendProofsResponse {
+    repeated DoubleSpendProof proofs = 1;
+}
+
+message GetDoubleSpendProofScoreRequest {
+    // The hash of a mempool transaction, little-endian.
+    bytes transaction_hash = 1;
+}
+
+message GetDoubleSpendProofScoreResponse {
+    // 1 when neither the transaction nor an unconfirmed ancestor has a proof and a
+    // proof is possible for all of them, 0 when one of them has a proof or spends an
+    // output no proof is possible for (not pay-to-pubkey-hash), and 0.25 when an input
+    // of one of them does not sign all inputs and outputs or there are too many
+    // unconfirmed ancestors to check.
+    double score = 1;
+}
+
+message SubscribeDoubleSpendProofsRequest {
+    // When include_mempool is true, the proofs already in the mempool are sent first.
+    bool include_mempool = 1;
+}
+
 message GetSlpTokenMetadataRequest {
     repeated bytes token_ids = 1;
 }
@@ -657,8 +730,49 @@ message TransactionNotification {
     }
 }
 
+message DoubleSpendProofNotification {
+    DoubleSpendProof proof = 1;
+}
+
 
 // DATA MESSAGES
+
+// A proof that two differently signed inputs spend the same pay-to-pubkey-hash
+// output, as relayed in dsproof-beta messages.
+message DoubleSpendProof {
+    // The parts of the signature preimage of one of the two inputs.
+    message Spender {
+        // The transaction version.
+        uint32 version = 1;
+        // The input sequence number.
+        uint32 sequence = 2;
+        // The transaction lock time.
+        uint32 lock_time = 3;
+        // The hash of the outpoints spent by the transaction, or zero when the
+        // signature does not commit to them.
+        bytes hash_prev_outputs = 4;
+        // The hash of the input sequence numbers, or zero when the signature
+        // does not commit to them.
+        bytes hash_sequence = 5;
+        // The hash of the outputs the signature commits to, or zero.
+        bytes hash_outputs = 6;
+        // The data the input pushed: its signature.
+        repeated bytes push_data = 7;
+    }
+
+    // The hash of the serialized proof, little-endian.
+    bytes hash = 1;
+    // The mempool transaction spending the double spent output, little-endian,
+    // or empty when no mempool transaction spends it. Orphan proofs, those
+    // returned by GetDoubleSpendProofs with include_orphans, always have it empty.
+    bytes transaction_hash = 2;
+    // The double spent output.
+    Transaction.Input.Outpoint outpoint = 3;
+    Spender first_spender = 4;
+    Spender double_spender = 5;
+    // The proof serialized as in the dsproof-beta message.
+    bytes serialized_proof = 6;
+}
 
 // Metadata for identifying and validating a block
 message BlockInfo {
