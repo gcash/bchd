@@ -24,13 +24,23 @@ const (
 // findBlockToFinalize returns the block to finalize now that tip is the main
 // chain tip, or nil.  This is the newest block that is at least maxReorgDepth
 // below the tip and has been known for the finalization delay.  Blocks loaded
-// from disk count as known since startup.
+// from disk count as known since startup.  Nothing is finalized while the tip
+// has less than the minimum chain work.
 //
 // This function MUST be called with the chain state lock held (for reads).
 func (b *BlockChain) findBlockToFinalize(tip *blockNode) *blockNode {
 	if b.maxReorgDepth < 0 {
 		return nil
 	}
+
+	// Bitcoin Cash Node never downloads a chain with less than the minimum
+	// chain work, but a sync peer can feed this node one.  Finalizing such a
+	// chain would keep the node on it, so wait until the chain has that work.
+	minWork := b.chainParams.MinimumChainWork
+	if minWork != nil && tip.workSum.Cmp(minWork) < 0 {
+		return nil
+	}
+
 	now := time.Now().Unix()
 	delay := int64(b.finalizationDelay / time.Second)
 	if now < b.startTime+delay {

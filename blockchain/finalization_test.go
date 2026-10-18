@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"errors"
+	"math/big"
 	"path/filepath"
 	"testing"
 	"time"
@@ -114,6 +115,28 @@ func TestFinalizationDelay(t *testing.T) {
 	chain.maybeFinalize(tip)
 	if chain.finalizedNode != nil {
 		t.Fatal("finalized a block with finalization disabled")
+	}
+}
+
+// TestFinalizationMinimumChainWork ensures nothing is finalized while the
+// chain has less than the minimum chain work.
+func TestFinalizationMinimumChainWork(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, 2, time.Nanosecond)
+	tip := chain.bestChain.Tip()
+
+	chain.finalizedNode = nil
+	chain.chainParams.MinimumChainWork = new(big.Int).Add(tip.workSum,
+		big.NewInt(1))
+	chain.maybeFinalize(tip)
+	if chain.finalizedNode != nil {
+		t.Fatalf("finalized %v below the minimum chain work",
+			chain.finalizedNode)
+	}
+
+	chain.chainParams.MinimumChainWork = new(big.Int).Set(tip.workSum)
+	chain.maybeFinalize(tip)
+	if fin := chain.finalizedNode; fin == nil || fin.hash != *blocks[3].Hash() {
+		t.Fatalf("finalized %v, want block 3", fin)
 	}
 }
 

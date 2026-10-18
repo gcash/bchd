@@ -76,7 +76,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32, `script` for pay to script outputs and `nulldata` for long data carriers.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
 - **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. With `excessiveblocksize` above 32 MB and no `blockmaxsize`, templates can now grow to that size.
-- **Finalization.** Blocks 10 deep that have been known for two hours are final, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
+- **Finalization.** Blocks 10 deep that have been known for two hours are final once the chain has the network's minimum chain work, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
 - **`peers.json`** moves to a new format; downgrading discards it and the address list refills from seeds.
 
 ## 0.22.2 (2026-07-25)
