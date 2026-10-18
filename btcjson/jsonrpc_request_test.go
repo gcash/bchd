@@ -74,3 +74,40 @@ func TestRequestUnmarshalValid(t *testing.T) {
 		}
 	}
 }
+
+// TestRequestUnmarshalKeepsParams ensures parameters are kept exactly as sent,
+// so integers above 2^53 are not rounded, and that params which are not an
+// array still decode to nil.
+func TestRequestUnmarshalKeepsParams(t *testing.T) {
+	t.Parallel()
+	want := []string{`9007199254740993`, `9223372036854775807`,
+		`{"amount":9007199254740993}`, `"x"`, `1.0`}
+	raw := `{"method":"m","params":[` + strings.Join(want, ", ") + `],"id":1}`
+	req, err := unmarshalRequest(raw)
+	if err != nil {
+		t.Fatalf("%s: %v", raw, err)
+	}
+	if len(req.Params) != len(want) {
+		t.Fatalf("got %d params, want %d", len(req.Params), len(want))
+	}
+	for i, param := range req.Params {
+		if string(param) != want[i] {
+			t.Errorf("param %d: got %s, want %s", i, param, want[i])
+		}
+	}
+
+	for _, raw := range []string{
+		`{"method":"m","params":null,"id":1}`,
+		`{"method":"m","params":{},"id":1}`,
+		`{"method":"m","params":"x","id":1}`,
+	} {
+		req, err := unmarshalRequest(raw)
+		if err != nil {
+			t.Errorf("%s: %v", raw, err)
+			continue
+		}
+		if req.Params != nil {
+			t.Errorf("%s: got params %v, want nil", raw, req.Params)
+		}
+	}
+}

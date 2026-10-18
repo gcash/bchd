@@ -1403,3 +1403,53 @@ func TestVerbosityLevelUnmarshal(t *testing.T) {
 		}
 	}
 }
+
+// TestCreateRawTransactionTokenAmount ensures a token amount is kept exact
+// from the request to the command, whether it is sent as a JSON integer or a
+// string, and that amounts that are not whole non-negative numbers are
+// rejected.
+func TestCreateRawTransactionTokenAmount(t *testing.T) {
+	t.Parallel()
+
+	// A wanted amount of -1 means the value must be rejected.
+	tests := []struct {
+		amount string
+		want   int64
+	}{
+		{`9007199254740993`, 9007199254740993},
+		{`"9007199254740993"`, 9007199254740993},
+		{`9223372036854775807`, 9223372036854775807},
+		{`"9223372036854775807"`, 9223372036854775807},
+		{`0`, 0},
+		{`1.5`, -1},
+		{`-1`, -1},
+		{`"abc"`, -1},
+	}
+	for _, test := range tests {
+		raw := `{"jsonrpc":"1.0","method":"createrawtransaction","params":` +
+			`[[],{},[{"address":"a","category":"00","amount":` +
+			test.amount + `}]],"id":1}`
+		var req btcjson.Request
+		if err := json.Unmarshal([]byte(raw), &req); err != nil {
+			t.Errorf("%s: %v", test.amount, err)
+			continue
+		}
+		cmd, err := btcjson.UnmarshalCmd(&req)
+		if test.want < 0 {
+			if err == nil {
+				t.Errorf("%s: expected an error", test.amount)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: %v", test.amount, err)
+			continue
+		}
+		tokens := *cmd.(*btcjson.CreateRawTransactionCmd).CashTokens
+		if len(tokens) != 1 || tokens[0].Amount != uint64(test.want) ||
+			tokens[0].Address != "a" || tokens[0].Category != "00" {
+
+			t.Errorf("%s: got %+v", test.amount, tokens)
+		}
+	}
+}

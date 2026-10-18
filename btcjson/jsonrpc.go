@@ -75,16 +75,33 @@ type Request struct {
 
 // UnmarshalJSON is a custom unmarshal func for the Request struct. The param
 // field defaults to an empty json.RawMessage array it is omitted by the request
-// or nil if the supplied value is invalid.
+// or nil if the supplied value is invalid.  Each parameter is kept exactly as
+// sent.
 func (request *Request) UnmarshalJSON(b []byte) error {
-	var data map[string]interface{}
+	var data map[string]json.RawMessage
 	err := json.Unmarshal(b, &data)
 	if err != nil {
 		return err
 	}
 
-	request.ID = data["id"]
-	methodValue, hasMethod := data["method"]
+	// The members other than params are decoded into generic values, so the
+	// id keeps its Go type and method and jsonrpc can be checked to be
+	// strings.
+	values := make(map[string]interface{}, 3)
+	for _, name := range []string{"id", "method", "jsonrpc"} {
+		raw, ok := data[name]
+		if !ok {
+			continue
+		}
+		var value interface{}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return err
+		}
+		values[name] = value
+	}
+
+	request.ID = values["id"]
+	methodValue, hasMethod := values["method"]
 	if hasMethod {
 		method, ok := methodValue.(string)
 		if !ok {
@@ -92,7 +109,7 @@ func (request *Request) UnmarshalJSON(b []byte) error {
 		}
 		request.Method = method
 	}
-	jsonrpcValue, hasJsonrpc := data["jsonrpc"]
+	jsonrpcValue, hasJsonrpc := values["jsonrpc"]
 	if hasJsonrpc {
 		jsonrpc, ok := jsonrpcValue.(string)
 		if !ok {
@@ -106,20 +123,12 @@ func (request *Request) UnmarshalJSON(b []byte) error {
 		request.Params = []json.RawMessage{}
 	}
 	if hasParams {
-		// assert the request params is an array of data
-		params, paramsOk := paramsValue.([]interface{})
-		if paramsOk {
-			rawParams := make([]json.RawMessage, 0, len(params))
-			for _, param := range params {
-				marshalledParam, err := json.Marshal(param)
-				if err != nil {
-					return err
-				}
-				rawMessage := json.RawMessage(marshalledParam)
-				rawParams = append(rawParams, rawMessage)
-			}
-
-			request.Params = rawParams
+		// Keep each parameter of an array as sent.  Decoding it into a
+		// generic value first would turn numbers into float64, which
+		// rounds integers above 2^53.
+		var params []json.RawMessage
+		if json.Unmarshal(paramsValue, &params) == nil {
+			request.Params = params
 		}
 	}
 

@@ -72,7 +72,8 @@ This release makes validation, initial sync and block relay considerably faster,
 - **Address index.** Nodes with `--addrindex` rebuild the address index on first start, which can take hours on mainnet.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
-- **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it.
+- **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it. The token amount may be a JSON integer or a string, as in BCHN.
+- **Integer parameters.** JSON-RPC parameters are now passed on exactly as sent, so integer parameters must be written as integers: `1.0` or `1e3` is rejected, as in BCHN, rather than read as `1` or `1000`.
 - **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32, `script` for pay to script outputs and `nulldata` for long data carriers.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
 - **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. With `excessiveblocksize` above 32 MB and no `blockmaxsize`, templates can now grow to that size.

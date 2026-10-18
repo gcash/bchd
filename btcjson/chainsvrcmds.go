@@ -63,6 +63,36 @@ type TransactionOutputCashToken struct {
 	Commitment string // hex
 }
 
+// UnmarshalJSON reads the token amount from a JSON integer or a string of
+// decimal digits, as Bitcoin Cash Node does, so clients that can't hold an
+// integer above 2^53 in a JSON number can still pass any amount exactly.
+func (t *TransactionOutputCashToken) UnmarshalJSON(b []byte) error {
+	type tokenOutput TransactionOutputCashToken
+	aux := struct {
+		*tokenOutput
+		Amount json.RawMessage
+	}{tokenOutput: (*tokenOutput)(t)}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+
+	amount := string(aux.Amount)
+	if amount == "" || amount == "null" {
+		return nil
+	}
+	if amount[0] == '"' {
+		if err := json.Unmarshal(aux.Amount, &amount); err != nil {
+			return err
+		}
+	}
+	value, err := strconv.ParseUint(amount, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid token amount %s", aux.Amount)
+	}
+	t.Amount = value
+	return nil
+}
+
 // CreateRawTransactionCmd defines the createrawtransaction JSON-RPC command.
 type CreateRawTransactionCmd struct {
 	Inputs     []TransactionInput
