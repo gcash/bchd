@@ -1344,3 +1344,44 @@ func TestExecuteAllocs(t *testing.T) {
 		t.Fatalf("executing 300 opcodes allocates %v times", allocs)
 	}
 }
+
+// TestExportedEncodingChecks ensures the exported signature and public key
+// encoding checks apply the hash type, signature and key rules of the flags.
+func TestExportedEncodingChecks(t *testing.T) {
+	t.Parallel()
+
+	der := hexToBytes("304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd41022018152" +
+		"2ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d09")
+	schnorr := make([]byte, 64)
+	flags := StandardVerifyFlags | ScriptAllowCashTokens
+	tests := []struct {
+		name    string
+		sig     []byte
+		flags   ScriptFlags
+		isValid bool
+	}{
+		{"empty", nil, flags, true},
+		{"der all forkid", append(der, 0x41), flags, true},
+		{"schnorr all forkid", append(schnorr, 0x41), flags, true},
+		{"no forkid", append(der, 0x01), flags, false},
+		{"undefined base type", append(der, 0x44), flags, false},
+		{"utxos with tokens", append(der, 0x61), flags, true},
+		{"utxos without tokens", append(der, 0x61), StandardVerifyFlags, false},
+		{"utxos with anyonecanpay", append(der, 0xe1), flags, false},
+		{"bad der", append(append([]byte{0x31}, der[1:]...), 0x41), flags, false},
+	}
+	for _, test := range tests {
+		err := CheckTransactionSignatureEncoding(test.sig, test.flags)
+		if (err == nil) != test.isValid {
+			t.Errorf("%s: got %v, want valid %v", test.name, err, test.isValid)
+		}
+	}
+
+	compressed := hexToBytes("02ce0b14fb842b1ba549fdd675c98075f12e9c510f8ef52bd021a9a1f4809d3b4d")
+	if err := CheckPubKeyEncoding(compressed, flags); err != nil {
+		t.Errorf("compressed key: %v", err)
+	}
+	if err := CheckPubKeyEncoding(compressed[:32], flags); err == nil {
+		t.Error("short key accepted")
+	}
+}

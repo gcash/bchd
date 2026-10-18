@@ -747,6 +747,27 @@ func (vm *Engine) checkPubKeyEncoding(pubKey []byte) error {
 	return nil
 }
 
+// CheckTransactionSignatureEncoding returns an error if the passed signature,
+// which ends with its hash type byte, does not adhere to the encoding rules
+// the flags enable.  An empty signature passes.
+func CheckTransactionSignatureEncoding(sig []byte, flags ScriptFlags) error {
+	if len(sig) == 0 {
+		return nil
+	}
+	vm := Engine{flags: flags}
+	if err := vm.checkHashTypeEncoding(SigHashType(sig[len(sig)-1])); err != nil {
+		return err
+	}
+	return vm.checkSignatureEncoding(sig[:len(sig)-1])
+}
+
+// CheckPubKeyEncoding returns an error if the passed public key does not
+// adhere to the encoding rules the flags enable.
+func CheckPubKeyEncoding(pubKey []byte, flags ScriptFlags) error {
+	vm := Engine{flags: flags}
+	return vm.checkPubKeyEncoding(pubKey)
+}
+
 // checkSignatureEncoding returns whether or not the passed signature adheres to
 // the strict encoding requirements if enabled.
 func (vm *Engine) checkSignatureEncoding(sig []byte) error {
