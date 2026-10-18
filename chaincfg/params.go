@@ -153,8 +153,8 @@ type Params struct {
 	BIP0065Height int32
 	BIP0066Height int32
 
-	// Only testnet4 and chipnet uses CSV activation by height. All the others use the
-	// deployment schedule. If this value is set to anything other than zero
+	// Only testnet4, chipnet and regtest use CSV activation by height. All the others
+	// use the deployment schedule. If this value is set to anything other than zero
 	// then it will activate at this height.
 	CSVHeight int32
 
@@ -514,6 +514,7 @@ var RegressionNetParams = Params{
 	BIP0034Height:    100000000, // Not active - Permit ver 1 blocks
 	BIP0065Height:    1351,      // Used by regression tests
 	BIP0066Height:    1251,      // Used by regression tests
+	CSVHeight:        576,       // Used by regression tests
 
 	UahfForkHeight:              0, // Always active on regtest
 	DaaForkHeight:               0, // Always active on regtest
@@ -570,8 +571,8 @@ var RegressionNetParams = Params{
 		},
 		DeploymentCSV: {
 			BitNumber:  0,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires
+			StartTime:  0,
+			ExpireTime: 0, // Activated by CSVHeight instead
 		},
 	},
 
