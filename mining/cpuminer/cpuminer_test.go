@@ -22,18 +22,27 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// emptyTxSource is a mining.TxSource without transactions.
-type emptyTxSource struct{}
+// emptyTxSource is a mining.TxSource without transactions.  It calls
+// onDescs, when set, each time a template asks for transactions.
+type emptyTxSource struct {
+	onDescs func()
+}
 
-func (emptyTxSource) LastUpdated() time.Time               { return time.Time{} }
-func (emptyTxSource) MiningDescs() []*mining.TxDesc        { return nil }
-func (emptyTxSource) HaveTransaction(*chainhash.Hash) bool { return false }
+func (*emptyTxSource) LastUpdated() time.Time               { return time.Time{} }
+func (*emptyTxSource) HaveTransaction(*chainhash.Hash) bool { return false }
+func (s *emptyTxSource) MiningDescs() []*mining.TxDesc {
+	if s.onDescs != nil {
+		s.onDescs()
+	}
+	return nil
+}
 
 // testMiner is a CPU miner on a fresh regtest chain with BIP34 active.
 type testMiner struct {
 	*CPUMiner
 	chain *blockchain.BlockChain
 	gen   *mining.BlkTmplGenerator
+	src   *emptyTxSource
 }
 
 // newTestMiner returns a test miner that submits blocks through
@@ -63,8 +72,9 @@ func newTestMiner(t *testing.T, addr bchutil.Address,
 	if err != nil {
 		t.Fatal(err)
 	}
+	src := &emptyTxSource{}
 	gen := mining.NewBlkTmplGenerator(&mining.Policy{BlockMaxSize: 1000000},
-		&params, emptyTxSource{}, chain, timeSource,
+		&params, src, chain, timeSource,
 		txscript.NewSigCache(10), txscript.NewHashCache(10))
 	miner := New(&Config{
 		ChainParams:            &params,
@@ -76,7 +86,7 @@ func newTestMiner(t *testing.T, addr bchutil.Address,
 		ConnectedCount: func() int32 { return 1 },
 		IsCurrent:      isCurrent,
 	})
-	return &testMiner{CPUMiner: miner, chain: chain, gen: gen}
+	return &testMiner{CPUMiner: miner, chain: chain, gen: gen, src: src}
 }
 
 // mineBlock builds, solves and connects a block on the tip without the CPU
@@ -244,5 +254,38 @@ func TestGenerateNBlocksTemplateError(t *testing.T) {
 		}, alwaysCurrent)
 	if _, err := generate(t, miner, 1); err == nil {
 		t.Fatal("expected a template error")
+	}
+}
+
+// TestGenerateNBlocksRetriesStaleTemplate ensures a template that fails
+// because the tip moved while it was built is retried.
+func TestGenerateNBlocksRetriesStaleTemplate(t *testing.T) {
+	addr := testAddress(t)
+	miner := newTestMiner(t, addr,
+		func(chain *blockchain.BlockChain, b *bchutil.Block) (bool, error) {
+			_, isOrphan, err := chain.ProcessBlock(b, blockchain.BFNone)
+			return isOrphan, err
+		}, alwaysCurrent)
+
+	// Connect a block from elsewhere while the first template is built.
+	var moved atomic.Bool
+	miner.src.onDescs = func() {
+		if !moved.Swap(true) {
+			if err := miner.mineBlock(addr); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	hashes, err := generate(t, miner, 1)
+	if err != nil {
+		t.Fatalf("GenerateNBlocks: %v", err)
+	}
+	if !moved.Load() || miner.chain.BestSnapshot().Height != 2 {
+		t.Fatalf("tip did not move: height %d",
+			miner.chain.BestSnapshot().Height)
+	}
+	if !miner.chain.MainChainHasBlock(hashes[0]) {
+		t.Fatalf("returned block %v is not in the chain", hashes[0])
 	}
 }
