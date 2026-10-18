@@ -134,13 +134,13 @@ func (u *UtxoCache) AddEntry(i int, output wire.TxOut) {
 	u.Unlock()
 }
 
-// GetEntry adds a utxo entry for the given input index.
+// GetEntry returns the utxo entry for the given input index.
 func (u *UtxoCache) GetEntry(i int) (wire.TxOut, error) {
 	u.RLock()
 	utxo, ok := u.utxos[i]
+	u.RUnlock()
 	if !ok {
 		return wire.TxOut{}, errors.New("not found")
 	}
-	u.RUnlock()
 	return utxo, nil
 }
