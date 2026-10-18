@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gcash/bchd/bchec"
@@ -327,5 +328,29 @@ func TestCheckSigSpentOutputs(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestUtxoCacheMissingEntry ensures looking up a missing entry releases the
+// cache lock, so the cache can still be written to afterwards.
+func TestUtxoCacheMissingEntry(t *testing.T) {
+	t.Parallel()
+
+	cache := NewUtxoCache()
+	if _, err := cache.GetEntry(3); err == nil {
+		t.Fatal("missing entry found")
+	}
+	done := make(chan struct{})
+	go func() {
+		cache.AddEntry(3, wire.TxOut{Value: 5})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("AddEntry blocked after a missing GetEntry")
+	}
+	if out, err := cache.GetEntry(3); err != nil || out.Value != 5 {
+		t.Fatalf("GetEntry: %v %v", out, err)
 	}
 }
