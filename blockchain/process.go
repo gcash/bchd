@@ -166,17 +166,27 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 			}
 			err := checkBlockSanity(orphan.block, b.chainParams.PowLimit,
 				b.timeSource, orphanFlags)
-			if err != nil {
-				return err
+			if err == nil {
+				_, err = b.maybeAcceptBlock(orphan.block, prevHash,
+					prevNode, orphanFlags)
 			}
 
-			_, err = b.maybeAcceptBlock(orphan.block, prevHash, prevNode,
-				orphanFlags)
+			// An orphan rejected by its own checks, before it is
+			// stored, is dropped without failing its parent, which has
+			// already been accepted.  Once it is stored, connecting it
+			// can fail on any block of its chain, the parent included,
+			// so those errors are still returned.
 			var rerr RuleError
-			if errors.As(err, &rerr) && rerr.ErrorCode == ErrUnrequestedBlock {
-				// Not storing an unrequested orphan doesn't fail
-				// its parent.
-				log.Debugf("Dropped orphan block %v: %v", orphanHash, err)
+			if errors.As(err, &rerr) &&
+				b.index.LookupNode(orphanHash) == nil {
+
+				if rerr.ErrorCode == ErrUnrequestedBlock {
+					log.Debugf("Dropped orphan block %v: %v",
+						orphanHash, err)
+				} else {
+					log.Infof("Rejected orphan block %v: %v",
+						orphanHash, err)
+				}
 				continue
 			}
 			if err != nil {

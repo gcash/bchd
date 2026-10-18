@@ -126,22 +126,33 @@ func TestOrphanContextChecks(t *testing.T) {
 			txs: undersized, valid: true},
 	}
 
+	modes := []struct {
+		name     string
+		asOrphan bool
+		flags    BehaviorFlags
+	}{
+		{"in order", false, BFNone},
+		{"orphan", true, BFNone},
+		{"unrequested orphan", true, BFUnrequested},
+	}
 	for _, test := range tests {
-		for _, asOrphan := range []bool{false, true} {
-			name := fmt.Sprintf("%s/orphan=%v", test.name, asOrphan)
+		for _, mode := range modes {
+			name := fmt.Sprintf("%s/%s", test.name, mode.name)
 			t.Run(name, func(t *testing.T) {
 				testOrphanContext(t, test.forkHeight, test.txs,
-					asOrphan, test.valid, test.wantErr)
+					mode.asOrphan, mode.flags, test.valid,
+					test.wantErr)
 			})
 		}
 	}
 }
 
 // testOrphanContext connects a block spending two coinbases with the given
-// transactions at height 3, before or after its parent.
+// transactions at height 3, before or after its parent, processing it with
+// the given flags.
 func testOrphanContext(t *testing.T, forkHeight int32,
-	txs func(o1, o2 wire.OutPoint, v int64) []*wire.MsgTx, asOrphan,
-	valid bool, wantErr ErrorCode) {
+	txs func(o1, o2 wire.OutPoint, v int64) []*wire.MsgTx, asOrphan bool,
+	flags BehaviorFlags, valid bool, wantErr ErrorCode) {
 
 	params := chaincfg.RegressionNetParams
 	params.MagneticAnonomalyForkHeight = forkHeight
@@ -165,15 +176,23 @@ func testOrphanContext(t *testing.T, forkHeight int32,
 	b3 := procTestBlock(t, b2.MsgBlock(), 2, subsidy, bits,
 		txs(o1, o2, subsidy-1000))
 
-	first, second := b2, b3
 	if asOrphan {
-		first, second = b3, b2
+		_, isOrphan, err := chain.ProcessBlock(b3, flags)
+		if err != nil || !isOrphan {
+			t.Fatalf("orphan: orphan=%v err=%v", isOrphan, err)
+		}
 	}
-	_, isOrphan, err := chain.ProcessBlock(first, BFNone)
-	if err != nil || isOrphan != asOrphan {
-		t.Fatalf("first block: orphan=%v err=%v", isOrphan, err)
+
+	// The parent is accepted even when its orphan breaks a rule.
+	if _, _, err := chain.ProcessBlock(b2, BFNone); err != nil {
+		t.Fatalf("parent: %v", err)
 	}
-	_, _, err = chain.ProcessBlock(second, BFNone)
+
+	// A block that breaks a rule is rejected when it arrives in order, and
+	// when it is submitted again after being dropped as an orphan.
+	if !asOrphan || !valid {
+		_, _, err = chain.ProcessBlock(b3, flags)
+	}
 	wantHeight := int32(3)
 	if valid {
 		if err != nil {
@@ -214,10 +233,9 @@ func TestOrphanNoFastAddInheritance(t *testing.T) {
 	if err != nil || !isOrphan {
 		t.Fatalf("child not held as orphan: orphan=%v err=%v", isOrphan, err)
 	}
-	_, _, err = chain.ProcessBlock(parent, BFFastAdd)
-	var rerr RuleError
-	if !errors.As(err, &rerr) {
-		t.Fatalf("child not rejected: %v", err)
+	// The child is dropped without failing the parent.
+	if _, _, err := chain.ProcessBlock(parent, BFFastAdd); err != nil {
+		t.Fatalf("parent: %v", err)
 	}
 	best := chain.BestSnapshot()
 	if best.Hash != *parent.Hash() {
@@ -226,6 +244,13 @@ func TestOrphanNoFastAddInheritance(t *testing.T) {
 	}
 	if chain.index.LookupNode(child.Hash()) != nil {
 		t.Fatal("invalid orphan was added to the block index")
+	}
+
+	// Submitted again, the child is rejected.
+	_, _, err = chain.ProcessBlock(child, BFNone)
+	var rerr RuleError
+	if !errors.As(err, &rerr) {
+		t.Fatalf("child not rejected: %v", err)
 	}
 }
 
