@@ -540,6 +540,24 @@ func (b *BlockChain) CalcSequenceLock(tx *bchutil.Tx, utxoView *UtxoViewpoint, m
 	return b.calcSequenceLock(b.bestChain.Tip(), tx, utxoView, mempool)
 }
 
+// NextBlockSequenceLock computes the relative lock-time SequenceLock of the
+// passed transaction for a block that extends the block with the passed hash,
+// rather than the tip.  As in the mempool, inputs that are not in a block yet
+// are taken to be in that block.  A block template uses it so its locks match
+// the parent it is built on, also when the tip has moved since.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) NextBlockSequenceLock(prevHash *chainhash.Hash, tx *bchutil.Tx, utxoView *UtxoViewpoint) (*SequenceLock, error) {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	prevNode := b.index.LookupNode(prevHash)
+	if prevNode == nil {
+		return nil, fmt.Errorf("block %v is not known", prevHash)
+	}
+	return b.calcSequenceLock(prevNode, tx, utxoView, true)
+}
+
 // calcSequenceLock computes the relative lock-times for the passed
 // transaction. See the exported version, CalcSequenceLock for further details.
 //
@@ -622,6 +640,15 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 			// the one which included this referenced output.
 			prevInputHeight := max(inputHeight-1, 0)
 			blockNode := node.Ancestor(prevInputHeight)
+			if blockNode == nil {
+				// The view was built for a different chain,
+				// for example before a reorganization.
+				return sequenceLock, fmt.Errorf("input %d of "+
+					"transaction %v is at height %d, above "+
+					"block %v at height %d", txInIndex,
+					tx.Hash(), inputHeight, node.hash,
+					node.height)
+			}
 			medianTime := blockNode.CalcPastMedianTime()
 
 			// Time based relative time-locks as defined by BIP 68
@@ -850,7 +877,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
 	b.ablaState = ablaState
-	b.maybeFinalize(node)
+	b.maybeFinalize(node, time.Now().Unix())
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively

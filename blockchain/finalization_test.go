@@ -98,13 +98,13 @@ func TestFinalizationDelay(t *testing.T) {
 	// loaded from disk, here only genesis, have no receive time.
 	chain.startTime -= 2 * 3600
 	tip := chain.bestChain.Tip()
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, time.Now().Unix())
 	if fin := chain.finalizedNode; fin == nil || fin.height != 0 {
 		t.Fatalf("finalized %v, want genesis", fin)
 	}
 	chain.index.LookupNode(blocks[1].Hash()).received = 0
 	chain.index.LookupNode(blocks[2].Hash()).received = 0
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, time.Now().Unix())
 	if fin := chain.finalizedNode; fin == nil || fin.hash != *blocks[2].Hash() {
 		t.Fatalf("finalized %v, want block 2", fin)
 	}
@@ -112,7 +112,7 @@ func TestFinalizationDelay(t *testing.T) {
 	// A negative depth disables finalization.
 	chain.finalizedNode = nil
 	chain.maxReorgDepth = -1
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, time.Now().Unix())
 	if chain.finalizedNode != nil {
 		t.Fatal("finalized a block with finalization disabled")
 	}
@@ -127,14 +127,14 @@ func TestFinalizationMinimumChainWork(t *testing.T) {
 	chain.finalizedNode = nil
 	chain.chainParams.MinimumChainWork = new(big.Int).Add(tip.workSum,
 		big.NewInt(1))
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, time.Now().Unix())
 	if chain.finalizedNode != nil {
 		t.Fatalf("finalized %v below the minimum chain work",
 			chain.finalizedNode)
 	}
 
 	chain.chainParams.MinimumChainWork = new(big.Int).Set(tip.workSum)
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, time.Now().Unix())
 	if fin := chain.finalizedNode; fin == nil || fin.hash != *blocks[3].Hash() {
 		t.Fatalf("finalized %v, want block 3", fin)
 	}
@@ -198,7 +198,7 @@ func TestFindBlockToFinalizeLongChain(t *testing.T) {
 		want = want.parent
 	}
 	for i := 0; i < 2; i++ {
-		chain.maybeFinalize(tip)
+		chain.maybeFinalize(tip, now)
 		if chain.finalizedNode != want {
 			t.Fatalf("finalized %v, want height %d", chain.finalizedNode,
 				want.height)
@@ -208,7 +208,7 @@ func TestFindBlockToFinalizeLongChain(t *testing.T) {
 	// Nothing is finalized while disabled.
 	chain.finalizedNode = nil
 	chain.maxReorgDepth = -1
-	chain.maybeFinalize(tip)
+	chain.maybeFinalize(tip, now)
 	if chain.finalizedNode != nil {
 		t.Fatal("finalized a block with finalization disabled")
 	}

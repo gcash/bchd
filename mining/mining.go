@@ -744,7 +744,8 @@ mempoolLoop:
 			logSkippedDeps(tx, deps)
 			continue
 		}
-		seqLock, err := g.chain.CalcSequenceLock(tx, blockUtxos, true)
+		seqLock, err := g.chain.NextBlockSequenceLock(&best.Hash, tx,
+			blockUtxos)
 		if err != nil || !blockchain.SequenceLockActive(seqLock,
 			nextBlockHeight, best.MedianTime) {
 

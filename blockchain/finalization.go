@@ -21,14 +21,14 @@ const (
 	DefaultFinalizationDelay = 2 * time.Hour
 )
 
-// findBlockToFinalize returns the block to finalize now that tip is the main
-// chain tip, or nil.  This is the newest block that is at least maxReorgDepth
-// below the tip and has been known for the finalization delay.  Blocks loaded
-// from disk count as known since startup.  Nothing is finalized while the tip
-// has less than the minimum chain work.
+// findBlockToFinalize returns the block to finalize at time now, in Unix
+// seconds, with tip as the main chain tip, or nil.  This is the newest block
+// that is at least maxReorgDepth below the tip and has been known for the
+// finalization delay.  Blocks loaded from disk count as known since startup.
+// Nothing is finalized while the tip has less than the minimum chain work.
 //
 // This function MUST be called with the chain state lock held (for reads).
-func (b *BlockChain) findBlockToFinalize(tip *blockNode) *blockNode {
+func (b *BlockChain) findBlockToFinalize(tip *blockNode, now int64) *blockNode {
 	if b.maxReorgDepth < 0 {
 		return nil
 	}
@@ -41,7 +41,6 @@ func (b *BlockChain) findBlockToFinalize(tip *blockNode) *blockNode {
 		return nil
 	}
 
-	now := time.Now().Unix()
 	delay := int64(b.finalizationDelay / time.Second)
 	if now < b.startTime+delay {
 		return nil
@@ -77,11 +76,11 @@ func (b *BlockChain) findBlockToFinalize(tip *blockNode) *blockNode {
 }
 
 // maybeFinalize finalizes the block found by findBlockToFinalize for the new
-// tip, if any.
+// tip at time now, in Unix seconds, if any.
 //
 // This function MUST be called with the chain state lock held (for writes).
-func (b *BlockChain) maybeFinalize(tip *blockNode) {
-	node := b.findBlockToFinalize(tip)
+func (b *BlockChain) maybeFinalize(tip *blockNode, now int64) {
+	node := b.findBlockToFinalize(tip, now)
 	if node == nil {
 		return
 	}

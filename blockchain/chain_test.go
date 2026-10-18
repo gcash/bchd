@@ -445,6 +445,53 @@ func TestCalcSequenceLock(t *testing.T) {
 	}
 }
 
+// TestNextBlockSequenceLock ensures the sequence locks of a block template are
+// computed from the block it extends, also when the tip has moved back below
+// that block, and that computing them from a tip below an input fails rather
+// than panics.
+func TestNextBlockSequenceLock(t *testing.T) {
+	chain := newFakeChain(&chaincfg.SimNetParams)
+	node := chain.bestChain.Tip()
+	blockTime := node.Header().Timestamp
+	for range 10 {
+		blockTime = blockTime.Add(time.Second)
+		node = newFakeNode(node, 1, 0, blockTime)
+		chain.index.AddNode(node)
+		chain.bestChain.SetTip(node)
+	}
+	parent := node
+
+	// An output created in a template on the parent, spent by a version 2
+	// transaction with a relative time lock.
+	parentTx := bchutil.NewTx(&wire.MsgTx{
+		TxOut: []*wire.TxOut{{Value: 10}},
+	})
+	view := NewUtxoViewpoint()
+	view.AddTxOuts(parentTx, parent.height+1)
+	tx := bchutil.NewTx(&wire.MsgTx{
+		Version: 2,
+		TxIn: []*wire.TxIn{{
+			PreviousOutPoint: wire.OutPoint{Hash: *parentTx.Hash()},
+			Sequence:         LockTimeToSequence(true, 512),
+		}},
+	})
+	wantSeconds := parent.CalcPastMedianTime().Unix() + 511
+
+	// The tip moves back below the parent.
+	chain.bestChain.SetTip(parent.parent)
+	if _, err := chain.CalcSequenceLock(tx, view, true); err == nil {
+		t.Fatal("no error for an input above the tip")
+	}
+	lock, err := chain.NextBlockSequenceLock(&parent.hash, tx, view)
+	if err != nil {
+		t.Fatalf("unable to calc sequence lock: %v", err)
+	}
+	if lock.Seconds != wantSeconds || lock.BlockHeight != -1 {
+		t.Fatalf("got %d seconds and height %d, want %d seconds and "+
+			"height -1", lock.Seconds, lock.BlockHeight, wantSeconds)
+	}
+}
+
 // nodeHashes is a convenience function that returns the hashes for all of the
 // passed indexes of the provided nodes.  It is used to construct expected hash
 // slices in the tests.
