@@ -226,6 +226,44 @@ func TestSubmitBlockUsesBIP22Reasons(t *testing.T) {
 	}
 }
 
+// TestChainErrToGBTErrString ensures rule errors are reported with Bitcoin
+// Cash Node's reason strings where it has one for the same check.
+func TestChainErrToGBTErrString(t *testing.T) {
+	tests := []struct {
+		code blockchain.ErrorCode
+		want string
+	}{
+		{blockchain.ErrNoTransactions, "bad-cb-missing"},
+		{blockchain.ErrFirstTxNotCoinbase, "bad-cb-missing"},
+		{blockchain.ErrMultipleCoinbases, "bad-tx-coinbase"},
+		{blockchain.ErrNoTxInputs, "bad-txns-vin-empty"},
+		{blockchain.ErrNoTxOutputs, "bad-txns-vout-empty"},
+		{blockchain.ErrTxTooBig, "bad-txns-oversize"},
+		{blockchain.ErrTxTooSmall, "bad-txns-undersize"},
+		{blockchain.ErrDuplicateTxInputs, "bad-txns-inputs-duplicate"},
+		{blockchain.ErrBadTxInput, "bad-txns-prevout-null"},
+		{blockchain.ErrMissingTxOut, "bad-txns-inputs-missingorspent"},
+		{blockchain.ErrSpentTxOut, "bad-txns-inputs-missingorspent"},
+		{blockchain.ErrUnfinalizedTx, "bad-txns-nonfinal"},
+		{blockchain.ErrOverwriteTx, "bad-txns-BIP30"},
+		{blockchain.ErrImmatureSpend, "bad-txns-premature-spend-of-coinbase"},
+		{blockchain.ErrSpendTooHigh, "bad-txns-in-belowout"},
+		{blockchain.ErrBadCoinbaseValue, "bad-cb-amount"},
+		{blockchain.ErrScriptMalformed, "blk-bad-inputs"},
+		{blockchain.ErrScriptValidation, "blk-bad-inputs"},
+		{blockchain.ErrInvalidTxOrder, "tx-ordering"},
+		{blockchain.ErrBadCheckpoint, "checkpoint mismatch"},
+		{blockchain.ErrForkTooOld, "bad-fork-prior-to-checkpoint"},
+		{blockchain.ErrForkBeforeFinalized, "bad-fork-prior-finalized"},
+	}
+	for _, test := range tests {
+		err := blockchain.RuleError{ErrorCode: test.code, Description: "x"}
+		if got := chainErrToGBTErrString(err); got != test.want {
+			t.Errorf("%v: got %q, want %q", test.code, got, test.want)
+		}
+	}
+}
+
 // TestSubmitBlockSideChainInconclusive ensures a valid block that ends up on a
 // side chain is reported as inconclusive, as Bitcoin Cash Node does, rather
 // than as accepted, while a block that becomes the tip is accepted.

@@ -86,7 +86,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - **Integer parameters.** JSON-RPC parameters are now passed on exactly as sent, so integer parameters must be written as integers: `1.0` or `1e3` is rejected, as in BCHN, rather than read as `1` or `1000`.
 - **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32, `script` for pay to script outputs and `nulldata` for long data carriers.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
-- **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`. Templates follow the network's block size limit as ABLA grows it; a larger `excessiveblocksize` no longer makes them bigger, except on regtest and simnet.
+- **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`, and `submitblock` and block proposals now use BCHN's reason strings, for example `bad-cb-amount` instead of `bad-cb-value`. Templates follow the network's block size limit as ABLA grows it; a larger `excessiveblocksize` no longer makes them bigger, except on regtest and simnet.
 - **Finalization.** Blocks 10 deep that have been known for two hours are final once the chain has the network's minimum chain work, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
 - **`peers.json`** moves to a new format; downgrading discards it and the address list refills from seeds.
 

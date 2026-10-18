@@ -2339,7 +2339,8 @@ func handleGetBlockTemplateRequest(s *rpcServer, request *btcjson.TemplateReques
 
 // chainErrToGBTErrString converts an error returned from btcchain to a string
 // which matches the reasons and format described in BIP0022 for rejection
-// reasons.
+// reasons.  Where Bitcoin Cash Node rejects a block for the same reason, its
+// reason string is used.
 func chainErrToGBTErrString(err error) string {
 	// When the passed error is not a RuleError, just return a generic
 	// rejected string with the error text.
@@ -2370,63 +2371,65 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrBadMerkleRoot:
 		return "bad-txnmrklroot"
 	case blockchain.ErrBadCheckpoint:
-		return "bad-checkpoint"
+		return "checkpoint mismatch"
 	case blockchain.ErrForkTooOld:
-		return "fork-too-old"
+		return "bad-fork-prior-to-checkpoint"
+	case blockchain.ErrForkBeforeFinalized:
+		return "bad-fork-prior-finalized"
 	case blockchain.ErrCheckpointTimeTooOld:
 		return "checkpoint-time-too-old"
 	case blockchain.ErrNoTransactions:
-		return "bad-txns-none"
+		return "bad-cb-missing"
 	case blockchain.ErrNoTxInputs:
-		return "bad-txns-noinputs"
+		return "bad-txns-vin-empty"
 	case blockchain.ErrNoTxOutputs:
-		return "bad-txns-nooutputs"
+		return "bad-txns-vout-empty"
 	case blockchain.ErrTxTooBig:
-		return "bad-txns-size-too-large"
+		return "bad-txns-oversize"
 	case blockchain.ErrTxTooSmall:
-		return "bad-txns-size-too-small"
+		return "bad-txns-undersize"
 	case blockchain.ErrTxTooManySigChecks:
 		return "bad-txns-too-many-sigchecks"
 	case blockchain.ErrBadTxOutValue:
 		return "bad-txns-outputvalue"
 	case blockchain.ErrDuplicateTxInputs:
-		return "bad-txns-dupinputs"
+		return "bad-txns-inputs-duplicate"
 	case blockchain.ErrBadTxInput:
-		return "bad-txns-badinput"
+		return "bad-txns-prevout-null"
 	case blockchain.ErrMissingTxOut:
-		return "bad-txns-missinginput"
+		return "bad-txns-inputs-missingorspent"
 	case blockchain.ErrSpentTxOut:
-		return "bad-txns-spentinput"
+		return "bad-txns-inputs-missingorspent"
 	case blockchain.ErrUnfinalizedTx:
-		return "bad-txns-unfinalizedtx"
+		return "bad-txns-nonfinal"
 	case blockchain.ErrDuplicateTx:
 		return "bad-txns-duplicate"
 	case blockchain.ErrOverwriteTx:
-		return "bad-txns-overwrite"
+		return "bad-txns-BIP30"
 	case blockchain.ErrImmatureSpend:
-		return "bad-txns-maturity"
+		return "bad-txns-premature-spend-of-coinbase"
 	case blockchain.ErrSpendTooHigh:
-		return "bad-txns-highspend"
+		return "bad-txns-in-belowout"
 	case blockchain.ErrBadFees:
 		return "bad-txns-fees"
 	case blockchain.ErrTooManySigChecks:
 		return "high-sigchecks"
 	case blockchain.ErrFirstTxNotCoinbase:
-		return "bad-txns-nocoinbase"
+		return "bad-cb-missing"
 	case blockchain.ErrMultipleCoinbases:
-		return "bad-txns-multicoinbase"
+		return "bad-tx-coinbase"
 	case blockchain.ErrBadCoinbaseScriptLen:
 		return "bad-cb-length"
 	case blockchain.ErrBadCoinbaseValue:
-		return "bad-cb-value"
+		return "bad-cb-amount"
 	case blockchain.ErrMissingCoinbaseHeight:
 		return "bad-cb-height"
 	case blockchain.ErrBadCoinbaseHeight:
 		return "bad-cb-height"
 	case blockchain.ErrScriptMalformed:
-		return "bad-script-malformed"
+		return "blk-bad-inputs"
 	case blockchain.ErrScriptValidation:
-		return "bad-script-validate"
+		return "blk-bad-inputs"
 	case blockchain.ErrPreviousBlockUnknown:
 		return "prev-blk-not-found"
 	case blockchain.ErrInvalidAncestorBlock:
@@ -2434,7 +2437,7 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrPrevBlockNotBest:
 		return "inconclusive-not-best-prevblk"
 	case blockchain.ErrInvalidTxOrder:
-		return "invalid-transaction-order"
+		return "tx-ordering"
 	case blockchain.ErrBadTxVersion:
 		return "bad-txns-version"
 	case blockchain.ErrCoinbaseHasTokens:
