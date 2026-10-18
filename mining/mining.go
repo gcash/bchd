@@ -298,9 +298,9 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 // must reach for a block at the provided height.  Upgrade9 lowered the minimum,
 // so until it activates the larger Magnetic Anomaly minimum still applies.
 //
-// This matters well beyond the historical fork window: regtest and simnet set
-// Upgrade9ForkHeight far in the future, so on those networks the larger minimum
-// applies to every block mined above the Magnetic Anomaly height.
+// This matters well beyond the historical fork window: simnet sets
+// Upgrade9ForkHeight far in the future, so there the larger minimum applies to
+// every block mined above the Magnetic Anomaly height.
 func minCoinbaseSize(params *chaincfg.Params, nextBlockHeight int32) int {
 	if nextBlockHeight > params.Upgrade9ForkHeight {
 		return blockchain.MinTransactionSize

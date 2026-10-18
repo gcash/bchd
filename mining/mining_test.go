@@ -144,11 +144,17 @@ func Test_createCoinbaseTx(t *testing.T) {
 			addr:   miningAddr,
 		},
 		{
-			// Regtest never activates Upgrade9, so every block mined above
+			// Simnet never activates Upgrade9, so every block mined above
 			// the Magnetic Anomaly height must still reach 100 bytes.
-			name:   "regtest above magnetic anomaly",
+			name:   "simnet above magnetic anomaly",
+			params: &chaincfg.SimNetParams,
+			height: chaincfg.SimNetParams.MagneticAnonomalyForkHeight + 1,
+			addr:   nil,
+		},
+		{
+			name:   "regtest",
 			params: &chaincfg.RegressionNetParams,
-			height: chaincfg.RegressionNetParams.MagneticAnonomalyForkHeight + 1,
+			height: 1,
 			addr:   nil,
 		},
 	}
