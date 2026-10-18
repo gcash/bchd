@@ -99,6 +99,8 @@ func invSummary(invList []*wire.InvVect) string {
 			return fmt.Sprintf("filteredblock %s", iv.Hash)
 		case wire.InvTypeTx:
 			return fmt.Sprintf("tx %s", iv.Hash)
+		case wire.InvTypeDSProof:
+			return fmt.Sprintf("dsproof %s", iv.Hash)
 		}
 
 		return fmt.Sprintf("unknown (%d) %s", uint32(iv.Type), iv.Hash)

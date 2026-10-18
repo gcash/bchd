@@ -51,6 +51,10 @@ const (
 	// hashes to store in memory.
 	maxRequestedTxns = wire.MaxInvPerMsg
 
+	// maxDSProofRequestsPerInv is the maximum number of double spend
+	// proofs requested for a single inv message.
+	maxDSProofRequestsPerInv = 5000
+
 	// maxLastBlockTime is the longest time in seconds that we will
 	// stay with a sync peer while below the current blockchain height.
 	// Set to 3 minutes.
@@ -1299,6 +1303,11 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 		}
 
 		return false, nil
+
+	case wire.InvTypeDSProof:
+		// Ask the transaction memory pool if the proof is known or was
+		// rejected.
+		return sm.txMemPool.HaveDSProof(&invVect.Hash), nil
 	}
 
 	// The requested inventory is is an unsupported type, so just claim
@@ -1355,11 +1364,20 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 	// request parent blocks of orphans if we receive one we already have.
 	// Finally, attempt to detect potential stalls due to long side chains
 	// we already have and request more blocks to prevent them.
+	numDSProofs := 0
+	current := sm.current()
 	for i, iv := range invVects {
 		// Ignore unsupported inventory types.
 		switch iv.Type {
 		case wire.InvTypeBlock:
 		case wire.InvTypeTx:
+		case wire.InvTypeDSProof:
+			// Proofs are only useful once the chain is current, even
+			// from the sync peer.
+			if !current || numDSProofs >= maxDSProofRequestsPerInv {
+				continue
+			}
+			numDSProofs++
 		default:
 			continue
 		}
@@ -1474,6 +1492,12 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 				_ = gdmsg.AddInvVect(iv)
 				numRequested++
 			}
+
+		case wire.InvTypeDSProof:
+			// Proofs are small and rare, so they are requested from
+			// every peer announcing one that is not known yet.
+			_ = gdmsg.AddInvVect(iv)
+			numRequested++
 		}
 
 		if numRequested >= wire.MaxInvPerMsg {

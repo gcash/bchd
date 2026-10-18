@@ -270,6 +270,17 @@ const (
 	DSProofIgnored
 )
 
+// String returns the result in human-readable form.
+func (r DSProofResult) String() string {
+	switch r {
+	case DSProofAccepted:
+		return "accepted"
+	case DSProofOrphan:
+		return "orphan"
+	}
+	return "ignored"
+}
+
 // ProcessDSProof checks a double spend proof received from peer and stores
 // it when it is valid or cannot be checked yet.  An error means the proof is
 // invalid; its id is then remembered as rejected.
@@ -323,10 +334,14 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 }
 
 // HaveDSProof returns whether the proof is known, as an orphan or not, or was
-// recently rejected.
+// recently rejected.  It always returns true when proofs are disabled, so
+// they are never requested.
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) HaveDSProof(hash *chainhash.Hash) bool {
+	if mp.cfg.DisableDSProofs {
+		return true
+	}
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 	return mp.dsProofs.lookup(*hash) != nil || mp.dsProofs.isRejected(*hash)

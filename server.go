@@ -745,6 +745,30 @@ func (sp *serverPeer) OnTx(_ *peer.Peer, msg *wire.MsgTx) {
 	<-sp.txProcessed
 }
 
+// OnDSProof is invoked when a peer receives a dsproof-beta bitcoin message.
+// Valid proofs are relayed through the memory pool's OnDSProof callback and
+// invalid ones increase the peer's ban score.
+func (sp *serverPeer) OnDSProof(_ *peer.Peer, msg *wire.MsgDSProof) {
+	if cfg.BlocksOnly || cfg.NoDoubleSpendProof {
+		return
+	}
+
+	hash := msg.ProofHash()
+	sp.AddKnownInventory(wire.NewInvVect(wire.InvTypeDSProof, &hash))
+
+	// Like a ban, blame for an orphan that expires or turns out invalid
+	// does not apply to whitelisted peers.
+	result, err := sp.server.txMemPool.ProcessDSProof(msg, mempool.Tag(sp.ID()),
+		!sp.isWhitelisted)
+	if err != nil {
+		peerLog.Debugf("Rejected double spend proof %v from %s: %v", hash, sp, err)
+		sp.addBanScore(10, 0, "bad-dsproof")
+		return
+	}
+	peerLog.Debugf("Double spend proof %v (outpoint %v) from %s: %v", hash,
+		msg.PrevOut, sp, result)
+}
+
 // OnBlock is invoked when a peer receives a block bitcoin message.  It
 // blocks until the bitcoin block has been fully processed.
 func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
@@ -960,6 +984,9 @@ func (sp *serverPeer) OnInv(_ *peer.Peer, msg *wire.MsgInv) {
 
 	newInv := wire.NewMsgInvSizeHint(uint(len(msg.InvList)))
 	for _, invVect := range msg.InvList {
+		if invVect.Type == wire.InvTypeDSProof {
+			continue
+		}
 		if invVect.Type == wire.InvTypeTx {
 			peerLog.Tracef("Ignoring tx %v in inv from %v -- "+
 				"blocksonly enabled", invVect.Hash, sp)
@@ -1031,6 +1058,8 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		case wire.InvTypeFilteredBlock:
 			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+		case wire.InvTypeDSProof:
+			err = sp.server.pushDSProofMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
 		default:
 			// Unknown types are ignored, but the channel still has
 			// to be signalled since it may be the one waited on.
@@ -1869,6 +1898,97 @@ func (s *server) pushTxMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<-
 	return nil
 }
 
+// AnnounceDSProof relays the inventory of a double spend proof that became
+// associated with the memory pool transaction tx.
+func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
+	// The memory pool calls this from the sync manager and peer handlers,
+	// which must not wait for the peer handler, so the relay must not
+	// block.
+	hash := proof.ProofHash()
+	iv := wire.NewInvVect(wire.InvTypeDSProof, &hash)
+	go func() {
+		select {
+		case s.relayInv <- relayMsg{invVect: iv, data: tx}:
+		case <-s.quit:
+		}
+	}()
+}
+
+// addDSProofBanScore increases the ban score of the connected peers with the
+// passed ids.
+func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason string) {
+	go func() {
+		reply := make(chan []*serverPeer)
+		select {
+		case s.query <- getPeersMsg{reply: reply}:
+		case <-s.quit:
+			return
+		}
+		var connected []*serverPeer
+		select {
+		case connected = <-reply:
+		case <-s.quit:
+			return
+		}
+		for _, sp := range connected {
+			for _, id := range peers {
+				if mempool.Tag(sp.ID()) == id {
+					sp.addBanScore(score, 0, reason)
+				}
+			}
+		}
+	}()
+}
+
+// dsProofCleanupHandler expires orphan double spend proofs every minute and
+// increases the ban score of the peers that sent them.
+//
+// It must be run as a goroutine.
+func (s *server) dsProofCleanupHandler() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+out:
+	for {
+		select {
+		case <-ticker.C:
+			if peers := s.txMemPool.ExpireDSProofOrphans(); len(peers) > 0 {
+				s.addDSProofBanScore(peers, 1, "dsproof-orphan-expired")
+			}
+		case <-s.quit:
+			break out
+		}
+	}
+	s.wg.Done()
+}
+
+// pushDSProofMsg sends a dsproof-beta message for the provided proof hash to
+// the connected peer.  An error is returned if the proof is not known.
+func (s *server) pushDSProofMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
+	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	var proof *wire.MsgDSProof
+	err := errors.New("double spend proofs are disabled")
+	if !cfg.NoDoubleSpendProof {
+		proof, err = s.txMemPool.FetchDSProof(hash)
+	}
+	if err != nil {
+		peerLog.Tracef("Unable to fetch double spend proof %v: %v", hash, err)
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
+
+	// Once we have fetched data wait for any previous operation to finish.
+	if waitChan != nil {
+		<-waitChan
+	}
+
+	sp.QueueMessageWithEncoding(proof, doneChan, encoding)
+
+	return nil
+}
+
 // pushBlockMsg sends a block message for the provided block hash to the
 // connected peer.  An error is returned if the block hash is not known.
 func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
@@ -2379,6 +2499,24 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			}
 		}
 
+		if msg.invVect.Type == wire.InvTypeDSProof {
+			if sp.relayTxDisabled() {
+				return
+			}
+			tx, ok := msg.data.(*bchutil.Tx)
+			if !ok {
+				peerLog.Warnf("Underlying data for dsproof inv "+
+					"relay is not a *bchutil.Tx: %T", msg.data)
+				return
+			}
+
+			// Only peers with a bloom filter matching the double
+			// spent transaction are told about the proof.
+			if sp.filter.IsLoaded() && !sp.filter.MatchTxAndUpdate(tx) {
+				return
+			}
+		}
+
 		// Queue the inventory to be relayed with the next batch.
 		// It will be ignored if the peer is already known to
 		// have the inventory.
@@ -2635,6 +2773,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnWrite:        sp.OnWrite,
 			OnReject:       sp.OnReject,
 			OnNotFound:     sp.OnNotFound,
+			OnDSProof:      sp.OnDSProof,
 		},
 		AddrMe:            addrMe,
 		NewestBlock:       sp.newestBlock,
@@ -3059,6 +3198,11 @@ func (s *server) Start() {
 	// managers.
 	s.wg.Add(1)
 	go s.peerHandler()
+
+	if !cfg.NoDoubleSpendProof {
+		s.wg.Add(1)
+		go s.dsProofCleanupHandler()
+	}
 
 	if s.nat != nil {
 		s.wg.Add(1)
@@ -3552,6 +3696,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		HashCache:          s.hashCache,
 		AddrIndex:          s.addrIndex,
 		FeeEstimator:       s.feeEstimator,
+		DisableDSProofs:    cfg.NoDoubleSpendProof,
+		OnDSProof:          s.AnnounceDSProof,
+		OnBadDSProofs: func(peers []mempool.Tag) {
+			s.addDSProofBanScore(peers, 10, "bad-dsproof")
+		},
 	}
 	s.txMemPool = mempool.New(&txC)
 
