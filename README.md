@@ -27,7 +27,7 @@ that communicates with your running bchd instance via the API.
 
 ## Requirements
 
-[Go](http://golang.org) 1.26.0 or newer.
+[Go](http://golang.org) 1.26.0 or newer; use 1.26.9 or 1.27.2 or newer for the gRPC server's HTTP/2 security fixes.
 
 ## Install
 

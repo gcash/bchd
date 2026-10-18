@@ -58,10 +58,10 @@ This release makes validation, initial sync and block relay considerably faster,
 - Fix remotely triggerable crashes on a bloom filter with no data (gcash/bchutil#50) and on compact blocks with invalid prefilled transaction indexes.
 - Fix gRPC authentication with `--prometheus`, where every handler ran before the `--grpcauthtoken` check.
 - Fix many consensus, P2P, RPC and gRPC robustness issues in addition to the items above. P2P messages are now allocated by the bytes actually received, and the ban list and peer limits apply as soon as a connection is accepted, as in BCHN.
-- Update `golang.org/x/net` for five reachable HTTP/2 fixes.
+- Build with Go 1.26.9 or newer, or 1.27.2 or newer: the gRPC server's HTTP/2 comes from the Go standard library, and those releases carry its HTTP/2 fixes. The `golang.org/x/net` update brings five HTTP/2 fixes to the gRPC client in `bchrpc/proxy`.
 
 ### Build & Packaging
-- Go 1.26 is required to build; release binaries should use Go 1.27.2 or newer.
+- Go 1.26 is required to build, and 1.26.9 or 1.27.2 or newer for the gRPC server's HTTP/2 fixes. Release binaries should use Go 1.27.2 or newer.
 - Publish the Docker image for `linux/riscv64` too, and update dependencies.
 
 ### Other
