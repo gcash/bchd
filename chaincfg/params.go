@@ -524,19 +524,19 @@ var RegressionNetParams = Params{
 	CosmicInflationActivationTime: 1652616000,
 
 	Upgrade9ForkHeight:      0, // Always active on regtest
-	ABLAForkHeight:          100000000,
+	ABLAForkHeight:          0, // Always active on regtest
 	Upgrade11ActivationTime: 0, // Always active on regtest
 	Upgrade12ActivationTime: 0,
 
 	ABLAConfig: ABLAConstants{
-		Epsilon0:        500000,
-		Beta0:           500000,
-		N0:              845890,
+		Epsilon0:        16000000,
+		Beta0:           16000000,
+		N0:              0,
 		GammaReciprocal: 37938,
 		ZetaXB7:         192,
 		ThetaReciprocal: 37938,
 		Delta:           10,
-		FixedSize:       true,
+		FixedSize:       false,
 	},
 	DefaultConsensusBlockSize: 32000000,
 
