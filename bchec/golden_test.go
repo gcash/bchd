@@ -241,11 +241,12 @@ func TestGoldenVectors(t *testing.T) {
 }
 
 // FuzzSignVerifyRoundTrip checks that signatures made with a key derived from
-// the input verify, and that keys and signatures survive a serialize and
-// parse round trip.
+// the input verify, except ECDSA signatures over an empty hash, and that keys
+// and signatures survive a serialize and parse round trip.
 func FuzzSignVerifyRoundTrip(f *testing.F) {
 	f.Add([]byte{1}, []byte("hash"), uint8(0))
 	f.Add(bytes.Repeat([]byte{0xff}, 32), make([]byte, 32), uint8(1))
+	f.Add([]byte{1}, []byte{}, uint8(0))
 	f.Fuzz(func(t *testing.T, key, hash []byte, flip uint8) {
 		curve := S256()
 		k := new(big.Int).SetBytes(key)
@@ -270,7 +271,13 @@ func FuzzSignVerifyRoundTrip(f *testing.F) {
 			if err != nil || !bytes.Equal(parsed.Serialize(), der) {
 				t.Fatalf("signature %x round trip failed: %v", der, err)
 			}
-			if len(hash) > 0 && !parsed.Verify(hash, pub) {
+			// An empty hash makes e zero, for which signatures can be
+			// made without the private key, so it never verifies.
+			verified := parsed.Verify(hash, pub)
+			if len(hash) == 0 && verified {
+				t.Fatal("ECDSA signature over an empty hash accepted")
+			}
+			if len(hash) > 0 && !verified {
 				t.Fatal("ECDSA signature rejected")
 			}
 		}

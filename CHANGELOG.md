@@ -79,6 +79,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - Stricter cashaddr validation and the correct network for pay-to-pubkey addresses (gcash/bchutil#48, gcash/bchutil#49).
 - The exported `addrmgr` and `peer` APIs use the new `wire.NetAddressV2` type, as btcd did.
 - `txscript.GetScriptClass` and `ExtractPkScriptAddrs` recognize P2PK and multisig only in BCHN's forms, so the address index and address filters no longer match outputs written any other way.
+- `bchec` no longer verifies ECDSA signatures over an empty hash, as Go 1.27's `crypto/ecdsa` does.
 
 ### Upgrade notes
 
