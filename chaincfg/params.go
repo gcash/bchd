@@ -521,7 +521,7 @@ var RegressionNetParams = Params{
 	PhononForkHeight:            0, // Always active on regtest
 	AxionActivationHeight:       0, // Always active on regtest
 
-	CosmicInflationActivationTime: 1652616000,
+	CosmicInflationActivationTime: 0, // Always active on regtest
 
 	Upgrade9ForkHeight:      0, // Always active on regtest
 	ABLAForkHeight:          0, // Always active on regtest
