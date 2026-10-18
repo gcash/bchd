@@ -1129,7 +1129,12 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// "standard" type.  The rules for this BIP only apply to transactions
 	// after the timestamp defined by txscript.Bip16Activation.  See
 	// https://en.bitcoin.it/wiki/BIP_0016 for more details.
-	enforceBIP0016 := node.timestamp >= txscript.Bip16Activation.Unix()
+	//
+	// The clean stack rule needs it, so it also applies to every block
+	// after Magnetic Anomaly.  That only changes anything on regtest, where
+	// a block may carry a timestamp from before the activation time.
+	enforceBIP0016 := node.timestamp >= txscript.Bip16Activation.Unix() ||
+		magneticAnomalyActive
 
 	// Blocks created after the BIP0016 activation time need to have the
 	// pay-to-script-hash checks enabled.

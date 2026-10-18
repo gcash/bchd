@@ -60,13 +60,21 @@ func newMempoolWithTx(t *testing.T,
 		},
 	})
 
+	// The outputs pay to a pay-to-pubkey-hash script so that the
+	// transaction reaches the minimum transaction size.
+	payScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_DUP).
+		AddOp(txscript.OP_HASH160).AddData(make([]byte, 20)).
+		AddOp(txscript.OP_EQUALVERIFY).AddOp(txscript.OP_CHECKSIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
 	msgTx := wire.NewMsgTx(wire.TxVersion)
 	msgTx.AddTxIn(&wire.TxIn{
 		PreviousOutPoint: wire.OutPoint{Hash: *fundingTx.Hash(), Index: 0},
 		Sequence:         wire.MaxTxInSequenceNum,
 	})
 	for range numOutputs {
-		msgTx.AddTxOut(&wire.TxOut{Value: 10000000, PkScript: opTrue})
+		msgTx.AddTxOut(&wire.TxOut{Value: 10000000, PkScript: payScript})
 	}
 	tx := bchutil.NewTx(msgTx)
 

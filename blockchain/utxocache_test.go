@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,14 +29,15 @@ var (
 )
 
 // uniqueOpReturnScript returns a standard provably-pruneable OP_RETURN script
-// with a random uint64 encoded as the data.
+// with a random uint64 encoded as the data.  The data is padded so that the
+// spending transactions built by addBlock reach the minimum transaction size.
 func uniqueOpReturnScript() []byte {
 	rand, err := wire.RandomUint64()
 	if err != nil {
 		panic(err)
 	}
 
-	data := make([]byte, 8)
+	data := make([]byte, 28)
 	binary.LittleEndian.PutUint64(data[0:8], rand)
 
 	builder := txscript.NewScriptBuilder()
@@ -153,6 +155,10 @@ func addBlock(chain *BlockChain, prev *bchutil.Block, spends []*spendableOut) (*
 		Value:    CalcBlockSubsidy(blockHeight, chain.chainParams),
 		PkScript: opTrueScript,
 	})
+	if size := cb.SerializeSize(); size < MagneticAnomalyMinTransactionSize {
+		cb.TxIn[0].SignatureScript = append(cb.TxIn[0].SignatureScript,
+			make([]byte, MagneticAnomalyMinTransactionSize-size)...)
+	}
 	txns = append(txns, cb)
 
 	// Spend all txs to be spent.
@@ -171,6 +177,12 @@ func addBlock(chain *BlockChain, prev *bchutil.Block, spends []*spendableOut) (*
 		cb.TxOut[0].Value += int64(lowFee)
 		txns = append(txns, spendTx)
 	}
+
+	// Put the spends in canonical order.
+	slices.SortFunc(txns[1:], func(a, b *wire.MsgTx) int {
+		ha, hb := a.TxHash(), b.TxHash()
+		return ha.Compare(&hb)
+	})
 
 	// Create spendable outs to return at the end.
 	outs := make([]*spendableOut, len(txns))

@@ -767,5 +767,15 @@ func createSpendingTx(prevTx *bchutil.Tx, index uint32, scriptSig []byte, addres
 	spendTx := wire.NewMsgTx(1)
 	spendTx.AddTxIn(wire.NewTxIn(prevOutPoint, scriptSig))
 	spendTx.AddTxOut(wire.NewTxOut(prevOut.Value, scriptPubKey, wire.TokenData{}))
+
+	// Pad the transaction to the minimum size with an OP_RETURN output.
+	if size := spendTx.SerializeSize(); size < blockchain.MagneticAnomalyMinTransactionSize {
+		pad := blockchain.MagneticAnomalyMinTransactionSize - size - 11
+		nullData, err := txscript.NullDataScript(make([]byte, max(pad, 0)))
+		if err != nil {
+			return nil, err
+		}
+		spendTx.AddTxOut(wire.NewTxOut(0, nullData, wire.TokenData{}))
+	}
 	return bchutil.NewTx(spendTx), nil
 }
