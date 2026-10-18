@@ -82,6 +82,34 @@ func TestTemplateBlockSizeAccounting(t *testing.T) {
 	}
 }
 
+// TestTemplateReservesCoinbaseRoom ensures at least 1000 bytes are kept for
+// the header and coinbase, so a miner extending the coinbase stays within
+// the configured size.
+func TestTemplateReservesCoinbaseRoom(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+
+	tx := spend(h.cbTxs[0], 1000)
+	h.src.add(tx, 1000)
+	for _, test := range []struct {
+		maxSize uint32
+		want    int
+	}{
+		{1000 + uint32(tx.SerializeSize()), 1},
+		{1001 + uint32(tx.SerializeSize()), 2},
+	} {
+		h.gen.policy = &Policy{BlockMaxSize: test.maxSize}
+		tmpl, err := h.gen.NewBlockTemplate(nil)
+		if err != nil {
+			t.Fatalf("NewBlockTemplate: %v", err)
+		}
+		if n := len(tmpl.Block.Transactions); n != test.want {
+			t.Errorf("BlockMaxSize %d: template has %d txs, want %d",
+				test.maxSize, n, test.want)
+		}
+	}
+}
+
 // ablaParams returns templateParams with the ABLA algorithm running from the
 // first block above a 1 MB floor.
 func ablaParams() chaincfg.Params {
