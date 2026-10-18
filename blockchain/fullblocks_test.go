@@ -134,10 +134,11 @@ func TestFullBlocks(t *testing.T) {
 		t.Fatalf("failed to generate tests: %v", err)
 	}
 
-	// The generated blocks follow the rules from before Magnetic Anomaly,
-	// which regtest activates from the start.
+	// The generated blocks follow the rules from before Magnetic Anomaly
+	// and Upgrade9, which regtest activates from the start.
 	params := chaincfg.RegressionNetParams
 	params.MagneticAnonomalyForkHeight = 100000000
+	params.Upgrade9ForkHeight = 100000000
 
 	// Create a new database and chain instance to run tests against.
 	chain, teardownFunc, err := chainSetup("fullblocktest",
@@ -316,11 +317,14 @@ func TestCTORActivation(t *testing.T) {
 		t.Fatalf("failed to generate tests: %v", err)
 	}
 
-	// Create a new database and chain instance to run tests against.
-	params := &chaincfg.RegressionNetParams
+	// Create a new database and chain instance to run tests against.  The
+	// tests check the 100 byte minimum transaction size, which applied
+	// until Upgrade9.
+	params := chaincfg.RegressionNetParams
 	params.MagneticAnonomalyForkHeight = 0
+	params.Upgrade9ForkHeight = 100000000
 	chain, teardownFunc, err := chainSetup("fullblocktest",
-		params, 1000000)
+		&params, 1000000)
 	if err != nil {
 		t.Errorf("Failed to setup chain instance: %v", err)
 		return

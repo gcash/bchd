@@ -523,7 +523,7 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 1652616000,
 
-	Upgrade9ForkHeight:      100000000,
+	Upgrade9ForkHeight:      0, // Always active on regtest
 	ABLAForkHeight:          100000000,
 	Upgrade11ActivationTime: 0, // Always active on regtest
 	Upgrade12ActivationTime: 0,
