@@ -931,3 +931,61 @@ func TestTokenValidityFailureMarksBlockInvalid(t *testing.T) {
 		t.Fatalf("block known %v, invalid %v, want both", known, invalid)
 	}
 }
+
+// TestRegtestP2SHBeforeActivationTime ensures that on regtest, where the
+// Magnetic Anomaly rules apply from the first block, the pay-to-script-hash
+// rules are enforced in blocks timestamped before txscript.Bip16Activation,
+// so a redeem script that evaluates to false is rejected while one that
+// evaluates to true is accepted.
+func TestRegtestP2SHBeforeActivationTime(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	m := newRuleTestMiner(t, &params)
+
+	// build returns a block like the miner's with a timestamp ten minutes
+	// after the tip, which on regtest is before the activation time.
+	build := func(txs ...*wire.MsgTx) *bchutil.Block {
+		blk := m.build(nil, txs...).MsgBlock()
+		blk.Header.Timestamp = m.tip.Header.Timestamp.Add(10 * time.Minute)
+		if !blk.Header.Timestamp.Before(txscript.Bip16Activation) {
+			t.Fatalf("block timestamp %v is not before %v",
+				blk.Header.Timestamp, txscript.Bip16Activation)
+		}
+		return m.solve(blk, m.height+1)
+	}
+
+	b1 := build()
+	m.mustAccept(b1)
+	cb := b1.MsgBlock().Transactions[0]
+	value := cb.TxOut[0].Value - 1000
+
+	// Pay to two script hashes, one of a redeem script that leaves false
+	// on the stack and one of a redeem script that leaves true.
+	falseRedeem := []byte{txscript.OP_FALSE}
+	trueRedeem := []byte{txscript.OP_TRUE}
+	p2sh := func(redeem []byte) []byte {
+		script, err := txscript.NewScriptBuilder().AddOp(txscript.OP_HASH160).
+			AddData(bchutil.Hash160(redeem)).AddOp(txscript.OP_EQUAL).Script()
+		if err != nil {
+			t.Fatalf("failed to build script: %v", err)
+		}
+		return script
+	}
+	fund := ruleTestSpend(wire.OutPoint{Hash: cb.TxHash(), Index: 0}, value/2, 1)
+	fund.TxOut[0].PkScript = p2sh(falseRedeem)
+	fund.AddTxOut(wire.NewTxOut(value/2, p2sh(trueRedeem), wire.TokenData{}))
+	m.mustAccept(build(fund))
+
+	spend := func(index uint32, redeem []byte, tag byte) *wire.MsgTx {
+		sigScript, err := txscript.NewScriptBuilder().AddData(redeem).Script()
+		if err != nil {
+			t.Fatalf("failed to build script: %v", err)
+		}
+		prevOut := wire.OutPoint{Hash: fund.TxHash(), Index: index}
+		tx := ruleTestSpend(prevOut, value/2-1000, tag)
+		tx.TxIn[0].SignatureScript = sigScript
+		return tx
+	}
+	err := m.accept(build(spend(0, falseRedeem, 2)))
+	requireRuleError(t, err, ErrScriptValidation)
+	m.mustAccept(build(spend(2, trueRedeem, 3)))
+}
