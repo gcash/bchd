@@ -146,3 +146,32 @@ func TestMinimumChainWork(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultConsensusBlockSize checks the default block size of each network
+// and, where Bitcoin Cash Node asserts the same, that ABLA starts at it.
+func TestDefaultConsensusBlockSize(t *testing.T) {
+	tests := []struct {
+		params      *Params
+		size        uint32
+		matchesABLA bool
+	}{
+		{&MainNetParams, 32000000, true},
+		{&TestNet3Params, 32000000, true},
+		{&TestNet4Params, 2000000, true},
+		{&ChipNetParams, 2000000, true},
+		{&RegressionNetParams, 32000000, false},
+		{&SimNetParams, 32000000, true},
+	}
+	for _, test := range tests {
+		size := test.params.DefaultConsensusBlockSize
+		if size != test.size {
+			t.Errorf("%s: default block size %d, want %d",
+				test.params.Name, size, test.size)
+		}
+		abla := test.params.ABLAConfig.Epsilon0 + test.params.ABLAConfig.Beta0
+		if test.matchesABLA && abla != uint64(size) {
+			t.Errorf("%s: ABLA starts at %d, not at the default block "+
+				"size %d", test.params.Name, abla, size)
+		}
+	}
+}

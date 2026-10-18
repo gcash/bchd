@@ -176,6 +176,11 @@ type Params struct {
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
 
+	// DefaultConsensusBlockSize is the network's default maximum block
+	// size: the limit before ABLA activates and the floor of the ABLA limit
+	// after.  It matches Bitcoin Cash Node's nDefaultConsensusBlockSize.
+	DefaultConsensusBlockSize uint32
+
 	// CoinbaseMaturity is the number of blocks required before newly mined
 	// coins (coinbase transactions) can be spent.
 	CoinbaseMaturity uint16
@@ -327,6 +332,7 @@ var MainNetParams = Params{
 		Delta:           10,
 		FixedSize:       false,
 	},
+	DefaultConsensusBlockSize: 32000000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -532,6 +538,7 @@ var RegressionNetParams = Params{
 		Delta:           10,
 		FixedSize:       true,
 	},
+	DefaultConsensusBlockSize: 32000000,
 
 	SubsidyReductionInterval:             150,
 	TargetTimespan:                       time.Hour * 24 * 14, // 14 days
@@ -642,6 +649,7 @@ var TestNet3Params = Params{
 		Delta:           10,
 		FixedSize:       true,
 	},
+	DefaultConsensusBlockSize: 32000000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -785,6 +793,7 @@ var ChipNetParams = Params{
 		Delta:           10,
 		FixedSize:       false,
 	},
+	DefaultConsensusBlockSize: 2000000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -920,6 +929,7 @@ var TestNet4Params = Params{
 		Delta:           10,
 		FixedSize:       true,
 	},
+	DefaultConsensusBlockSize: 2000000,
 
 	CoinbaseMaturity:                     100,
 	SubsidyReductionInterval:             210000,
@@ -1058,6 +1068,7 @@ var SimNetParams = Params{
 		Delta:           10,
 		FixedSize:       true,
 	},
+	DefaultConsensusBlockSize: 32000000,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,

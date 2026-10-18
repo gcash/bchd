@@ -15,40 +15,54 @@ var (
 )
 
 func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
-	// Wipe test args.
-	os.Args = []string{"bchd"}
-
-	cfg, _, err := loadConfig()
+	// Keep the config file, data and logs of the networks used here out of
+	// the home directory.
+	tmpDir, err := os.MkdirTemp("", "bchd")
 	if err != nil {
-		t.Fatal("Failed to load configuration")
+		t.Fatalf("Failed creating a temporary directory: %v", err)
 	}
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Args = []string{"bchd"}
+		activeNetParams = &mainNetParams
+	}()
 
-	if len(cfg.UserAgentComments) != 1 {
-		t.Fatal("Expected EB UserAgentComment")
+	tests := []struct {
+		args []string
+		want uint32
+		uac  string
+	}{
+		{nil, 32000000, "EB32.0"},
+		{[]string{"--excessiveblocksize=64000000"}, 64000000, "EB64.0"},
+		{[]string{"--excessiveblocksize=1000000"}, 32000000, "EB32.0"},
+		{[]string{"--testnet"}, 32000000, "EB32.0"},
+		{[]string{"--testnet4"}, 2000000, "EB2.0"},
+		{[]string{"--chipnet"}, 2000000, "EB2.0"},
+		{[]string{"--chipnet", "--excessiveblocksize=1000000"}, 2000000, "EB2.0"},
+		{[]string{"--testnet4", "--excessiveblocksize=8000000"}, 8000000, "EB8.0"},
 	}
+	for _, test := range tests {
+		// loadConfig only sets the network params when a network is
+		// chosen, so start every case on mainnet.
+		activeNetParams = &mainNetParams
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if err != nil {
+			t.Errorf("%v: unexpected error: %v", test.args, err)
+			continue
+		}
+		if cfg.ExcessiveBlockSize != test.want {
+			t.Errorf("%v: got excessive block size %d, want %d",
+				test.args, cfg.ExcessiveBlockSize, test.want)
+		}
+		if len(cfg.UserAgentComments) != 1 ||
+			cfg.UserAgentComments[0] != test.uac {
 
-	uac := cfg.UserAgentComments[0]
-	uacExpected := "EB32.0"
-	if uac != uacExpected {
-		t.Fatalf("Expected UserAgentComments to contain %s but got %s", uacExpected, uac)
-	}
-
-	// Custom excessive block size.
-	os.Args = []string{"bchd", "--excessiveblocksize=64000000"}
-
-	cfg, _, err = loadConfig()
-	if err != nil {
-		t.Fatal("Failed to load configuration")
-	}
-
-	if len(cfg.UserAgentComments) != 1 {
-		t.Fatal("Expected EB UserAgentComment")
-	}
-
-	uac = cfg.UserAgentComments[0]
-	uacExpected = "EB64.0"
-	if uac != uacExpected {
-		t.Fatalf("Expected UserAgentComments to contain %s but got %s", uacExpected, uac)
+			t.Errorf("%v: got user agent comments %v, want [%s]",
+				test.args, cfg.UserAgentComments, test.uac)
+		}
 	}
 }
 

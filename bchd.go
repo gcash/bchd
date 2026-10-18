@@ -65,8 +65,10 @@ func bchdMain(serverChan chan<- *server) error {
 		}
 	}()
 
-	// Do required one-time initialization on wire
-	wire.SetLimits(cfg.ExcessiveBlockSize)
+	// Do required one-time initialization on wire.  The message limits
+	// allow for blocks of at least 32 MB on every network, since ABLA can
+	// raise the limit of a network with a smaller default block size.
+	wire.SetLimits(max(cfg.ExcessiveBlockSize, minMessageLimitsBlockSize))
 
 	// Get a channel that will be closed when a shutdown signal has been
 	// triggered either from an OS signal such as SIGINT (Ctrl+C) or from

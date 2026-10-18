@@ -141,8 +141,8 @@ authenticate in time, sends a larger message, or sends a request that is not a
 valid JSON-RPC request is disconnected.  Clients that authenticate with the
 HTTP Authorization header when connecting are not affected.  Once
 authenticated, a single message may be up to 32 MiB plus eight times the
-`--excessiveblocksize` (about 276 MiB with the default), enough for a
-hex-encoded block of the largest accepted size.
+larger of `--excessiveblocksize` and 32 MB (about 276 MiB with the default),
+enough for a hex-encoded block of the largest accepted size.
 
 
 <a name="CLIUtil" />

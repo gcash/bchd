@@ -2650,7 +2650,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 		DisableRelayTx:    cfg.BlocksOnly,
 		ProtocolVersion:   peer.MaxProtocolVersion,
 		TrickleInterval:   cfg.TrickleInterval,
-		MaxKnownInventory: uint((cfg.ExcessiveBlockSize / 1000000) * peer.DefaultMaxKnownInventory),
+		MaxKnownInventory: uint((max(cfg.ExcessiveBlockSize, minMessageLimitsBlockSize) / 1000000) * peer.DefaultMaxKnownInventory),
 	}
 }
 

@@ -145,8 +145,9 @@ Application Options:
 	    --upnp                     Use UPnP to map our listening port outside of
 	                               NAT
 	    --excessiveblocksize=      The maximum size block (in bytes) this node
-	                               will accept. Cannot be less than 32000000.
-	                               (default: 32000000)
+	                               will accept -- 0 uses the network's default,
+	                               which is also the minimum: 2000000 on testnet4
+	                               and chipnet, otherwise 32000000
 	    --minrelaytxfee=           The minimum transaction fee in BCH/kB to be
 	                               considered a non-zero fee. (default: 1e-05)
 	    --maxtxfee=                The maximum total fee in BCH of a transaction

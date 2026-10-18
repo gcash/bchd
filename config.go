@@ -59,7 +59,7 @@ const (
 	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
 	highMaxTxFee                   = bchutil.Amount(bchutil.SatoshiPerBitcoin)
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
-	defaultExcessiveBlockSize      = 32000000
+	minMessageLimitsBlockSize      = 32000000
 	defaultBlockMinSize            = 0
 	defaultBlockMaxSize            = 0
 	blockMaxSizeMin                = 1000
@@ -158,7 +158,7 @@ type config struct {
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept. Cannot be less than 32000000."`
+	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
 	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum transaction fee in BCH/kB to be considered a non-zero fee."`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Limit relay of transactions with no transaction fee to the given amount in thousands of bytes per minute"`
@@ -449,7 +449,6 @@ func loadConfig() (*config, []string, error) {
 		DbType:                  defaultDbType,
 		RPCKey:                  defaultRPCKeyFile,
 		RPCCert:                 defaultRPCCertFile,
-		ExcessiveBlockSize:      defaultExcessiveBlockSize,
 		MinRelayTxFee:           mempool.DefaultMinRelayTxFee.ToBCH(),
 		MaxTxFee:                defaultMaxTxFee.ToBCH(),
 		FreeTxRelayLimit:        defaultFreeTxRelayLimit,
@@ -930,8 +929,10 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Excessive blocksize cannot be set less than the default but it can be higher.
-	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize, defaultExcessiveBlockSize)
+	// The excessive block size cannot be set less than the network's default
+	// block size, which is also used when it isn't set, but it can be higher.
+	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize,
+		activeNetParams.DefaultConsensusBlockSize)
 
 	// Limit the max block size to a sane value.  Templates never exceed
 	// the consensus limit less 1000 bytes, so there is no upper bound.
