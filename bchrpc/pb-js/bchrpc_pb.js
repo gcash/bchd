@@ -19,6 +19,9 @@ goog.exportSymbol('proto.pb.BlockNotification.Type', null, global);
 goog.exportSymbol('proto.pb.CashToken', null, global);
 goog.exportSymbol('proto.pb.CheckSlpTransactionRequest', null, global);
 goog.exportSymbol('proto.pb.CheckSlpTransactionResponse', null, global);
+goog.exportSymbol('proto.pb.DoubleSpendProof', null, global);
+goog.exportSymbol('proto.pb.DoubleSpendProof.Spender', null, global);
+goog.exportSymbol('proto.pb.DoubleSpendProofNotification', null, global);
 goog.exportSymbol('proto.pb.GetAddressTransactionsRequest', null, global);
 goog.exportSymbol('proto.pb.GetAddressTransactionsResponse', null, global);
 goog.exportSymbol('proto.pb.GetAddressUnspentOutputsRequest', null, global);
@@ -32,6 +35,12 @@ goog.exportSymbol('proto.pb.GetBlockResponse', null, global);
 goog.exportSymbol('proto.pb.GetBlockchainInfoRequest', null, global);
 goog.exportSymbol('proto.pb.GetBlockchainInfoResponse', null, global);
 goog.exportSymbol('proto.pb.GetBlockchainInfoResponse.BitcoinNet', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofRequest', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofResponse', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofScoreRequest', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofScoreResponse', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofsRequest', null, global);
+goog.exportSymbol('proto.pb.GetDoubleSpendProofsResponse', null, global);
 goog.exportSymbol('proto.pb.GetHeadersRequest', null, global);
 goog.exportSymbol('proto.pb.GetHeadersResponse', null, global);
 goog.exportSymbol('proto.pb.GetMempoolInfoRequest', null, global);
@@ -81,6 +90,7 @@ goog.exportSymbol('proto.pb.SlpV1SendMetadata', null, global);
 goog.exportSymbol('proto.pb.SubmitTransactionRequest', null, global);
 goog.exportSymbol('proto.pb.SubmitTransactionResponse', null, global);
 goog.exportSymbol('proto.pb.SubscribeBlocksRequest', null, global);
+goog.exportSymbol('proto.pb.SubscribeDoubleSpendProofsRequest', null, global);
 goog.exportSymbol('proto.pb.SubscribeTransactionsRequest', null, global);
 goog.exportSymbol('proto.pb.Transaction', null, global);
 goog.exportSymbol('proto.pb.Transaction.Input', null, global);
@@ -1283,7 +1293,9 @@ proto.pb.GetBlockchainInfoResponse.BitcoinNet = {
   MAINNET: 0,
   REGTEST: 1,
   TESTNET3: 2,
-  SIMNET: 3
+  SIMNET: 3,
+  TESTNET4: 4,
+  CHIPNET: 5
 };
 
 /**
@@ -8279,6 +8291,1411 @@ proto.pb.SubscribeBlocksRequest.prototype.setSerializeBlock = function(value) {
  * @extends {jspb.Message}
  * @constructor
  */
+proto.pb.GetDoubleSpendProofRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, proto.pb.GetDoubleSpendProofRequest.oneofGroups_);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofRequest.displayName = 'proto.pb.GetDoubleSpendProofRequest';
+}
+/**
+ * Oneof group definitions for this message. Each group defines the field
+ * numbers belonging to that group. When of these fields' value is set, all
+ * other fields in the group are cleared. During deserialization, if multiple
+ * fields are encountered for a group, only the last value seen will be kept.
+ * @private {!Array<!Array<number>>}
+ * @const
+ */
+proto.pb.GetDoubleSpendProofRequest.oneofGroups_ = [[1,2,3]];
+
+/**
+ * @enum {number}
+ */
+proto.pb.GetDoubleSpendProofRequest.QueryCase = {
+  QUERY_NOT_SET: 0,
+  PROOF_HASH: 1,
+  TRANSACTION_HASH: 2,
+  OUTPOINT: 3
+};
+
+/**
+ * @return {proto.pb.GetDoubleSpendProofRequest.QueryCase}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getQueryCase = function() {
+  return /** @type {proto.pb.GetDoubleSpendProofRequest.QueryCase} */(jspb.Message.computeOneofCase(this, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0]));
+};
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    proofHash: msg.getProofHash_asB64(),
+    transactionHash: msg.getTransactionHash_asB64(),
+    outpoint: (f = msg.getOutpoint()) && proto.pb.Transaction.Input.Outpoint.toObject(includeInstance, f),
+    excludeAncestors: jspb.Message.getFieldWithDefault(msg, 4, false)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofRequest}
+ */
+proto.pb.GetDoubleSpendProofRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofRequest;
+  return proto.pb.GetDoubleSpendProofRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofRequest}
+ */
+proto.pb.GetDoubleSpendProofRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setProofHash(value);
+      break;
+    case 2:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setTransactionHash(value);
+      break;
+    case 3:
+      var value = new proto.pb.Transaction.Input.Outpoint;
+      reader.readMessage(value,proto.pb.Transaction.Input.Outpoint.deserializeBinaryFromReader);
+      msg.setOutpoint(value);
+      break;
+    case 4:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setExcludeAncestors(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = /** @type {!(string|Uint8Array)} */ (jspb.Message.getField(message, 1));
+  if (f != null) {
+    writer.writeBytes(
+      1,
+      f
+    );
+  }
+  f = /** @type {!(string|Uint8Array)} */ (jspb.Message.getField(message, 2));
+  if (f != null) {
+    writer.writeBytes(
+      2,
+      f
+    );
+  }
+  f = message.getOutpoint();
+  if (f != null) {
+    writer.writeMessage(
+      3,
+      f,
+      proto.pb.Transaction.Input.Outpoint.serializeBinaryToWriter
+    );
+  }
+  f = message.getExcludeAncestors();
+  if (f) {
+    writer.writeBool(
+      4,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional bytes proof_hash = 1;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getProofHash = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * optional bytes proof_hash = 1;
+ * This is a type-conversion wrapper around `getProofHash()`
+ * @return {string}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getProofHash_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getProofHash()));
+};
+
+
+/**
+ * optional bytes proof_hash = 1;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getProofHash()`
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getProofHash_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getProofHash()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.GetDoubleSpendProofRequest.prototype.setProofHash = function(value) {
+  jspb.Message.setOneofField(this, 1, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0], value);
+};
+
+
+proto.pb.GetDoubleSpendProofRequest.prototype.clearProofHash = function() {
+  jspb.Message.setOneofField(this, 1, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0], undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.hasProofHash = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getTransactionHash = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {string}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getTransactionHash_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getTransactionHash()));
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getTransactionHash_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getTransactionHash()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.GetDoubleSpendProofRequest.prototype.setTransactionHash = function(value) {
+  jspb.Message.setOneofField(this, 2, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0], value);
+};
+
+
+proto.pb.GetDoubleSpendProofRequest.prototype.clearTransactionHash = function() {
+  jspb.Message.setOneofField(this, 2, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0], undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.hasTransactionHash = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * optional Transaction.Input.Outpoint outpoint = 3;
+ * @return {?proto.pb.Transaction.Input.Outpoint}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getOutpoint = function() {
+  return /** @type{?proto.pb.Transaction.Input.Outpoint} */ (
+    jspb.Message.getWrapperField(this, proto.pb.Transaction.Input.Outpoint, 3));
+};
+
+
+/** @param {?proto.pb.Transaction.Input.Outpoint|undefined} value */
+proto.pb.GetDoubleSpendProofRequest.prototype.setOutpoint = function(value) {
+  jspb.Message.setOneofWrapperField(this, 3, proto.pb.GetDoubleSpendProofRequest.oneofGroups_[0], value);
+};
+
+
+proto.pb.GetDoubleSpendProofRequest.prototype.clearOutpoint = function() {
+  this.setOutpoint(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.hasOutpoint = function() {
+  return jspb.Message.getField(this, 3) != null;
+};
+
+
+/**
+ * optional bool exclude_ancestors = 4;
+ * Note that Boolean fields may be set to 0/1 when serialized from a Java server.
+ * You should avoid comparisons like {@code val === true/false} in those cases.
+ * @return {boolean}
+ */
+proto.pb.GetDoubleSpendProofRequest.prototype.getExcludeAncestors = function() {
+  return /** @type {boolean} */ (jspb.Message.getFieldWithDefault(this, 4, false));
+};
+
+
+/** @param {boolean} value */
+proto.pb.GetDoubleSpendProofRequest.prototype.setExcludeAncestors = function(value) {
+  jspb.Message.setProto3BooleanField(this, 4, value);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.GetDoubleSpendProofResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pb.GetDoubleSpendProofResponse.repeatedFields_, null);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofResponse.displayName = 'proto.pb.GetDoubleSpendProofResponse';
+}
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pb.GetDoubleSpendProofResponse.repeatedFields_ = [2,3];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    proof: (f = msg.getProof()) && proto.pb.DoubleSpendProof.toObject(includeInstance, f),
+    pathList: msg.getPathList_asB64(),
+    descendantsList: msg.getDescendantsList_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofResponse}
+ */
+proto.pb.GetDoubleSpendProofResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofResponse;
+  return proto.pb.GetDoubleSpendProofResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofResponse}
+ */
+proto.pb.GetDoubleSpendProofResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new proto.pb.DoubleSpendProof;
+      reader.readMessage(value,proto.pb.DoubleSpendProof.deserializeBinaryFromReader);
+      msg.setProof(value);
+      break;
+    case 2:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.addPath(value);
+      break;
+    case 3:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.addDescendants(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProof();
+  if (f != null) {
+    writer.writeMessage(
+      1,
+      f,
+      proto.pb.DoubleSpendProof.serializeBinaryToWriter
+    );
+  }
+  f = message.getPathList_asU8();
+  if (f.length > 0) {
+    writer.writeRepeatedBytes(
+      2,
+      f
+    );
+  }
+  f = message.getDescendantsList_asU8();
+  if (f.length > 0) {
+    writer.writeRepeatedBytes(
+      3,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional DoubleSpendProof proof = 1;
+ * @return {?proto.pb.DoubleSpendProof}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getProof = function() {
+  return /** @type{?proto.pb.DoubleSpendProof} */ (
+    jspb.Message.getWrapperField(this, proto.pb.DoubleSpendProof, 1));
+};
+
+
+/** @param {?proto.pb.DoubleSpendProof|undefined} value */
+proto.pb.GetDoubleSpendProofResponse.prototype.setProof = function(value) {
+  jspb.Message.setWrapperField(this, 1, value);
+};
+
+
+proto.pb.GetDoubleSpendProofResponse.prototype.clearProof = function() {
+  this.setProof(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.hasProof = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * repeated bytes path = 2;
+ * @return {!(Array<!Uint8Array>|Array<string>)}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getPathList = function() {
+  return /** @type {!(Array<!Uint8Array>|Array<string>)} */ (jspb.Message.getRepeatedField(this, 2));
+};
+
+
+/**
+ * repeated bytes path = 2;
+ * This is a type-conversion wrapper around `getPathList()`
+ * @return {!Array<string>}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getPathList_asB64 = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.bytesListAsB64(
+      this.getPathList()));
+};
+
+
+/**
+ * repeated bytes path = 2;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getPathList()`
+ * @return {!Array<!Uint8Array>}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getPathList_asU8 = function() {
+  return /** @type {!Array<!Uint8Array>} */ (jspb.Message.bytesListAsU8(
+      this.getPathList()));
+};
+
+
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
+proto.pb.GetDoubleSpendProofResponse.prototype.setPathList = function(value) {
+  jspb.Message.setField(this, 2, value || []);
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @param {number=} opt_index
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.addPath = function(value, opt_index) {
+  jspb.Message.addToRepeatedField(this, 2, value, opt_index);
+};
+
+
+proto.pb.GetDoubleSpendProofResponse.prototype.clearPathList = function() {
+  this.setPathList([]);
+};
+
+
+/**
+ * repeated bytes descendants = 3;
+ * @return {!(Array<!Uint8Array>|Array<string>)}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getDescendantsList = function() {
+  return /** @type {!(Array<!Uint8Array>|Array<string>)} */ (jspb.Message.getRepeatedField(this, 3));
+};
+
+
+/**
+ * repeated bytes descendants = 3;
+ * This is a type-conversion wrapper around `getDescendantsList()`
+ * @return {!Array<string>}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getDescendantsList_asB64 = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.bytesListAsB64(
+      this.getDescendantsList()));
+};
+
+
+/**
+ * repeated bytes descendants = 3;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getDescendantsList()`
+ * @return {!Array<!Uint8Array>}
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.getDescendantsList_asU8 = function() {
+  return /** @type {!Array<!Uint8Array>} */ (jspb.Message.bytesListAsU8(
+      this.getDescendantsList()));
+};
+
+
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
+proto.pb.GetDoubleSpendProofResponse.prototype.setDescendantsList = function(value) {
+  jspb.Message.setField(this, 3, value || []);
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @param {number=} opt_index
+ */
+proto.pb.GetDoubleSpendProofResponse.prototype.addDescendants = function(value, opt_index) {
+  jspb.Message.addToRepeatedField(this, 3, value, opt_index);
+};
+
+
+proto.pb.GetDoubleSpendProofResponse.prototype.clearDescendantsList = function() {
+  this.setDescendantsList([]);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.GetDoubleSpendProofsRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofsRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofsRequest.displayName = 'proto.pb.GetDoubleSpendProofsRequest';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofsRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofsRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofsRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofsRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    includeOrphans: jspb.Message.getFieldWithDefault(msg, 1, false)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofsRequest}
+ */
+proto.pb.GetDoubleSpendProofsRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofsRequest;
+  return proto.pb.GetDoubleSpendProofsRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofsRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofsRequest}
+ */
+proto.pb.GetDoubleSpendProofsRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setIncludeOrphans(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofsRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofsRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofsRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofsRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getIncludeOrphans();
+  if (f) {
+    writer.writeBool(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional bool include_orphans = 1;
+ * Note that Boolean fields may be set to 0/1 when serialized from a Java server.
+ * You should avoid comparisons like {@code val === true/false} in those cases.
+ * @return {boolean}
+ */
+proto.pb.GetDoubleSpendProofsRequest.prototype.getIncludeOrphans = function() {
+  return /** @type {boolean} */ (jspb.Message.getFieldWithDefault(this, 1, false));
+};
+
+
+/** @param {boolean} value */
+proto.pb.GetDoubleSpendProofsRequest.prototype.setIncludeOrphans = function(value) {
+  jspb.Message.setProto3BooleanField(this, 1, value);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.GetDoubleSpendProofsResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pb.GetDoubleSpendProofsResponse.repeatedFields_, null);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofsResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofsResponse.displayName = 'proto.pb.GetDoubleSpendProofsResponse';
+}
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pb.GetDoubleSpendProofsResponse.repeatedFields_ = [1];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofsResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofsResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofsResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofsResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    proofsList: jspb.Message.toObjectList(msg.getProofsList(),
+    proto.pb.DoubleSpendProof.toObject, includeInstance)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofsResponse}
+ */
+proto.pb.GetDoubleSpendProofsResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofsResponse;
+  return proto.pb.GetDoubleSpendProofsResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofsResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofsResponse}
+ */
+proto.pb.GetDoubleSpendProofsResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new proto.pb.DoubleSpendProof;
+      reader.readMessage(value,proto.pb.DoubleSpendProof.deserializeBinaryFromReader);
+      msg.addProofs(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofsResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofsResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofsResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofsResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProofsList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      1,
+      f,
+      proto.pb.DoubleSpendProof.serializeBinaryToWriter
+    );
+  }
+};
+
+
+/**
+ * repeated DoubleSpendProof proofs = 1;
+ * @return {!Array<!proto.pb.DoubleSpendProof>}
+ */
+proto.pb.GetDoubleSpendProofsResponse.prototype.getProofsList = function() {
+  return /** @type{!Array<!proto.pb.DoubleSpendProof>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.pb.DoubleSpendProof, 1));
+};
+
+
+/** @param {!Array<!proto.pb.DoubleSpendProof>} value */
+proto.pb.GetDoubleSpendProofsResponse.prototype.setProofsList = function(value) {
+  jspb.Message.setRepeatedWrapperField(this, 1, value);
+};
+
+
+/**
+ * @param {!proto.pb.DoubleSpendProof=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pb.DoubleSpendProof}
+ */
+proto.pb.GetDoubleSpendProofsResponse.prototype.addProofs = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 1, opt_value, proto.pb.DoubleSpendProof, opt_index);
+};
+
+
+proto.pb.GetDoubleSpendProofsResponse.prototype.clearProofsList = function() {
+  this.setProofsList([]);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.GetDoubleSpendProofScoreRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofScoreRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofScoreRequest.displayName = 'proto.pb.GetDoubleSpendProofScoreRequest';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofScoreRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofScoreRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    transactionHash: msg.getTransactionHash_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofScoreRequest}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofScoreRequest;
+  return proto.pb.GetDoubleSpendProofScoreRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofScoreRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofScoreRequest}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setTransactionHash(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofScoreRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofScoreRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getTransactionHash_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional bytes transaction_hash = 1;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.getTransactionHash = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * optional bytes transaction_hash = 1;
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {string}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.getTransactionHash_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getTransactionHash()));
+};
+
+
+/**
+ * optional bytes transaction_hash = 1;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.getTransactionHash_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getTransactionHash()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.GetDoubleSpendProofScoreRequest.prototype.setTransactionHash = function(value) {
+  jspb.Message.setProto3BytesField(this, 1, value);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.GetDoubleSpendProofScoreResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.GetDoubleSpendProofScoreResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.GetDoubleSpendProofScoreResponse.displayName = 'proto.pb.GetDoubleSpendProofScoreResponse';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.GetDoubleSpendProofScoreResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.GetDoubleSpendProofScoreResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    score: +jspb.Message.getFieldWithDefault(msg, 1, 0.0)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.GetDoubleSpendProofScoreResponse}
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.GetDoubleSpendProofScoreResponse;
+  return proto.pb.GetDoubleSpendProofScoreResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.GetDoubleSpendProofScoreResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.GetDoubleSpendProofScoreResponse}
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {number} */ (reader.readDouble());
+      msg.setScore(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.GetDoubleSpendProofScoreResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.GetDoubleSpendProofScoreResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getScore();
+  if (f !== 0.0) {
+    writer.writeDouble(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional double score = 1;
+ * @return {number}
+ */
+proto.pb.GetDoubleSpendProofScoreResponse.prototype.getScore = function() {
+  return /** @type {number} */ (+jspb.Message.getFieldWithDefault(this, 1, 0.0));
+};
+
+
+/** @param {number} value */
+proto.pb.GetDoubleSpendProofScoreResponse.prototype.setScore = function(value) {
+  jspb.Message.setProto3FloatField(this, 1, value);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.SubscribeDoubleSpendProofsRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.SubscribeDoubleSpendProofsRequest.displayName = 'proto.pb.SubscribeDoubleSpendProofsRequest';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.SubscribeDoubleSpendProofsRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.SubscribeDoubleSpendProofsRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    includeMempool: jspb.Message.getFieldWithDefault(msg, 1, false)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.SubscribeDoubleSpendProofsRequest}
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.SubscribeDoubleSpendProofsRequest;
+  return proto.pb.SubscribeDoubleSpendProofsRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.SubscribeDoubleSpendProofsRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.SubscribeDoubleSpendProofsRequest}
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setIncludeMempool(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.SubscribeDoubleSpendProofsRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.SubscribeDoubleSpendProofsRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getIncludeMempool();
+  if (f) {
+    writer.writeBool(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional bool include_mempool = 1;
+ * Note that Boolean fields may be set to 0/1 when serialized from a Java server.
+ * You should avoid comparisons like {@code val === true/false} in those cases.
+ * @return {boolean}
+ */
+proto.pb.SubscribeDoubleSpendProofsRequest.prototype.getIncludeMempool = function() {
+  return /** @type {boolean} */ (jspb.Message.getFieldWithDefault(this, 1, false));
+};
+
+
+/** @param {boolean} value */
+proto.pb.SubscribeDoubleSpendProofsRequest.prototype.setIncludeMempool = function(value) {
+  jspb.Message.setProto3BooleanField(this, 1, value);
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
 proto.pb.GetSlpTokenMetadataRequest = function(opt_data) {
   jspb.Message.initialize(this, opt_data, 0, -1, proto.pb.GetSlpTokenMetadataRequest.repeatedFields_, null);
 };
@@ -11483,6 +12900,986 @@ proto.pb.TransactionNotification.prototype.clearSerializedTransaction = function
  */
 proto.pb.TransactionNotification.prototype.hasSerializedTransaction = function() {
   return jspb.Message.getField(this, 4) != null;
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.DoubleSpendProofNotification = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.DoubleSpendProofNotification, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.DoubleSpendProofNotification.displayName = 'proto.pb.DoubleSpendProofNotification';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.DoubleSpendProofNotification.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.DoubleSpendProofNotification.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.DoubleSpendProofNotification} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProofNotification.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    proof: (f = msg.getProof()) && proto.pb.DoubleSpendProof.toObject(includeInstance, f)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.DoubleSpendProofNotification}
+ */
+proto.pb.DoubleSpendProofNotification.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.DoubleSpendProofNotification;
+  return proto.pb.DoubleSpendProofNotification.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.DoubleSpendProofNotification} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.DoubleSpendProofNotification}
+ */
+proto.pb.DoubleSpendProofNotification.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new proto.pb.DoubleSpendProof;
+      reader.readMessage(value,proto.pb.DoubleSpendProof.deserializeBinaryFromReader);
+      msg.setProof(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProofNotification.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.DoubleSpendProofNotification.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.DoubleSpendProofNotification} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProofNotification.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProof();
+  if (f != null) {
+    writer.writeMessage(
+      1,
+      f,
+      proto.pb.DoubleSpendProof.serializeBinaryToWriter
+    );
+  }
+};
+
+
+/**
+ * optional DoubleSpendProof proof = 1;
+ * @return {?proto.pb.DoubleSpendProof}
+ */
+proto.pb.DoubleSpendProofNotification.prototype.getProof = function() {
+  return /** @type{?proto.pb.DoubleSpendProof} */ (
+    jspb.Message.getWrapperField(this, proto.pb.DoubleSpendProof, 1));
+};
+
+
+/** @param {?proto.pb.DoubleSpendProof|undefined} value */
+proto.pb.DoubleSpendProofNotification.prototype.setProof = function(value) {
+  jspb.Message.setWrapperField(this, 1, value);
+};
+
+
+proto.pb.DoubleSpendProofNotification.prototype.clearProof = function() {
+  this.setProof(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.DoubleSpendProofNotification.prototype.hasProof = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.DoubleSpendProof = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pb.DoubleSpendProof, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.DoubleSpendProof.displayName = 'proto.pb.DoubleSpendProof';
+}
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.DoubleSpendProof.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.DoubleSpendProof.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.DoubleSpendProof} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProof.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    hash: msg.getHash_asB64(),
+    transactionHash: msg.getTransactionHash_asB64(),
+    outpoint: (f = msg.getOutpoint()) && proto.pb.Transaction.Input.Outpoint.toObject(includeInstance, f),
+    firstSpender: (f = msg.getFirstSpender()) && proto.pb.DoubleSpendProof.Spender.toObject(includeInstance, f),
+    doubleSpender: (f = msg.getDoubleSpender()) && proto.pb.DoubleSpendProof.Spender.toObject(includeInstance, f),
+    serializedProof: msg.getSerializedProof_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.DoubleSpendProof}
+ */
+proto.pb.DoubleSpendProof.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.DoubleSpendProof;
+  return proto.pb.DoubleSpendProof.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.DoubleSpendProof} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.DoubleSpendProof}
+ */
+proto.pb.DoubleSpendProof.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setHash(value);
+      break;
+    case 2:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setTransactionHash(value);
+      break;
+    case 3:
+      var value = new proto.pb.Transaction.Input.Outpoint;
+      reader.readMessage(value,proto.pb.Transaction.Input.Outpoint.deserializeBinaryFromReader);
+      msg.setOutpoint(value);
+      break;
+    case 4:
+      var value = new proto.pb.DoubleSpendProof.Spender;
+      reader.readMessage(value,proto.pb.DoubleSpendProof.Spender.deserializeBinaryFromReader);
+      msg.setFirstSpender(value);
+      break;
+    case 5:
+      var value = new proto.pb.DoubleSpendProof.Spender;
+      reader.readMessage(value,proto.pb.DoubleSpendProof.Spender.deserializeBinaryFromReader);
+      msg.setDoubleSpender(value);
+      break;
+    case 6:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setSerializedProof(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.DoubleSpendProof.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.DoubleSpendProof} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProof.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getHash_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      1,
+      f
+    );
+  }
+  f = message.getTransactionHash_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      2,
+      f
+    );
+  }
+  f = message.getOutpoint();
+  if (f != null) {
+    writer.writeMessage(
+      3,
+      f,
+      proto.pb.Transaction.Input.Outpoint.serializeBinaryToWriter
+    );
+  }
+  f = message.getFirstSpender();
+  if (f != null) {
+    writer.writeMessage(
+      4,
+      f,
+      proto.pb.DoubleSpendProof.Spender.serializeBinaryToWriter
+    );
+  }
+  f = message.getDoubleSpender();
+  if (f != null) {
+    writer.writeMessage(
+      5,
+      f,
+      proto.pb.DoubleSpendProof.Spender.serializeBinaryToWriter
+    );
+  }
+  f = message.getSerializedProof_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      6,
+      f
+    );
+  }
+};
+
+
+
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pb.DoubleSpendProof.Spender = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pb.DoubleSpendProof.Spender.repeatedFields_, null);
+};
+goog.inherits(proto.pb.DoubleSpendProof.Spender, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  proto.pb.DoubleSpendProof.Spender.displayName = 'proto.pb.DoubleSpendProof.Spender';
+}
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pb.DoubleSpendProof.Spender.repeatedFields_ = [7];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto suitable for use in Soy templates.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     com.google.apps.jspb.JsClassTemplate.JS_RESERVED_WORDS.
+ * @param {boolean=} opt_includeInstance Whether to include the JSPB instance
+ *     for transitional soy proto support: http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.toObject = function(opt_includeInstance) {
+  return proto.pb.DoubleSpendProof.Spender.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Whether to include the JSPB
+ *     instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pb.DoubleSpendProof.Spender} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProof.Spender.toObject = function(includeInstance, msg) {
+  var f, obj = {
+    version: jspb.Message.getFieldWithDefault(msg, 1, 0),
+    sequence: jspb.Message.getFieldWithDefault(msg, 2, 0),
+    lockTime: jspb.Message.getFieldWithDefault(msg, 3, 0),
+    hashPrevOutputs: msg.getHashPrevOutputs_asB64(),
+    hashSequence: msg.getHashSequence_asB64(),
+    hashOutputs: msg.getHashOutputs_asB64(),
+    pushDataList: msg.getPushDataList_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pb.DoubleSpendProof.Spender}
+ */
+proto.pb.DoubleSpendProof.Spender.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pb.DoubleSpendProof.Spender;
+  return proto.pb.DoubleSpendProof.Spender.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pb.DoubleSpendProof.Spender} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pb.DoubleSpendProof.Spender}
+ */
+proto.pb.DoubleSpendProof.Spender.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setVersion(value);
+      break;
+    case 2:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setSequence(value);
+      break;
+    case 3:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setLockTime(value);
+      break;
+    case 4:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setHashPrevOutputs(value);
+      break;
+    case 5:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setHashSequence(value);
+      break;
+    case 6:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setHashOutputs(value);
+      break;
+    case 7:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.addPushData(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pb.DoubleSpendProof.Spender.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pb.DoubleSpendProof.Spender} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pb.DoubleSpendProof.Spender.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getVersion();
+  if (f !== 0) {
+    writer.writeUint32(
+      1,
+      f
+    );
+  }
+  f = message.getSequence();
+  if (f !== 0) {
+    writer.writeUint32(
+      2,
+      f
+    );
+  }
+  f = message.getLockTime();
+  if (f !== 0) {
+    writer.writeUint32(
+      3,
+      f
+    );
+  }
+  f = message.getHashPrevOutputs_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      4,
+      f
+    );
+  }
+  f = message.getHashSequence_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      5,
+      f
+    );
+  }
+  f = message.getHashOutputs_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      6,
+      f
+    );
+  }
+  f = message.getPushDataList_asU8();
+  if (f.length > 0) {
+    writer.writeRepeatedBytes(
+      7,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional uint32 version = 1;
+ * @return {number}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getVersion = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 1, 0));
+};
+
+
+/** @param {number} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setVersion = function(value) {
+  jspb.Message.setProto3IntField(this, 1, value);
+};
+
+
+/**
+ * optional uint32 sequence = 2;
+ * @return {number}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getSequence = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 2, 0));
+};
+
+
+/** @param {number} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setSequence = function(value) {
+  jspb.Message.setProto3IntField(this, 2, value);
+};
+
+
+/**
+ * optional uint32 lock_time = 3;
+ * @return {number}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getLockTime = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 3, 0));
+};
+
+
+/** @param {number} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setLockTime = function(value) {
+  jspb.Message.setProto3IntField(this, 3, value);
+};
+
+
+/**
+ * optional bytes hash_prev_outputs = 4;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashPrevOutputs = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+};
+
+
+/**
+ * optional bytes hash_prev_outputs = 4;
+ * This is a type-conversion wrapper around `getHashPrevOutputs()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashPrevOutputs_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getHashPrevOutputs()));
+};
+
+
+/**
+ * optional bytes hash_prev_outputs = 4;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getHashPrevOutputs()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashPrevOutputs_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getHashPrevOutputs()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setHashPrevOutputs = function(value) {
+  jspb.Message.setProto3BytesField(this, 4, value);
+};
+
+
+/**
+ * optional bytes hash_sequence = 5;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashSequence = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * optional bytes hash_sequence = 5;
+ * This is a type-conversion wrapper around `getHashSequence()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashSequence_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getHashSequence()));
+};
+
+
+/**
+ * optional bytes hash_sequence = 5;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getHashSequence()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashSequence_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getHashSequence()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setHashSequence = function(value) {
+  jspb.Message.setProto3BytesField(this, 5, value);
+};
+
+
+/**
+ * optional bytes hash_outputs = 6;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashOutputs = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * optional bytes hash_outputs = 6;
+ * This is a type-conversion wrapper around `getHashOutputs()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashOutputs_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getHashOutputs()));
+};
+
+
+/**
+ * optional bytes hash_outputs = 6;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getHashOutputs()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getHashOutputs_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getHashOutputs()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setHashOutputs = function(value) {
+  jspb.Message.setProto3BytesField(this, 6, value);
+};
+
+
+/**
+ * repeated bytes push_data = 7;
+ * @return {!(Array<!Uint8Array>|Array<string>)}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getPushDataList = function() {
+  return /** @type {!(Array<!Uint8Array>|Array<string>)} */ (jspb.Message.getRepeatedField(this, 7));
+};
+
+
+/**
+ * repeated bytes push_data = 7;
+ * This is a type-conversion wrapper around `getPushDataList()`
+ * @return {!Array<string>}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getPushDataList_asB64 = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.bytesListAsB64(
+      this.getPushDataList()));
+};
+
+
+/**
+ * repeated bytes push_data = 7;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getPushDataList()`
+ * @return {!Array<!Uint8Array>}
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.getPushDataList_asU8 = function() {
+  return /** @type {!Array<!Uint8Array>} */ (jspb.Message.bytesListAsU8(
+      this.getPushDataList()));
+};
+
+
+/** @param {!(Array<!Uint8Array>|Array<string>)} value */
+proto.pb.DoubleSpendProof.Spender.prototype.setPushDataList = function(value) {
+  jspb.Message.setField(this, 7, value || []);
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @param {number=} opt_index
+ */
+proto.pb.DoubleSpendProof.Spender.prototype.addPushData = function(value, opt_index) {
+  jspb.Message.addToRepeatedField(this, 7, value, opt_index);
+};
+
+
+proto.pb.DoubleSpendProof.Spender.prototype.clearPushDataList = function() {
+  this.setPushDataList([]);
+};
+
+
+/**
+ * optional bytes hash = 1;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.prototype.getHash = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * optional bytes hash = 1;
+ * This is a type-conversion wrapper around `getHash()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.prototype.getHash_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getHash()));
+};
+
+
+/**
+ * optional bytes hash = 1;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getHash()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.prototype.getHash_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getHash()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.prototype.setHash = function(value) {
+  jspb.Message.setProto3BytesField(this, 1, value);
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.prototype.getTransactionHash = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.prototype.getTransactionHash_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getTransactionHash()));
+};
+
+
+/**
+ * optional bytes transaction_hash = 2;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getTransactionHash()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.prototype.getTransactionHash_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getTransactionHash()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.prototype.setTransactionHash = function(value) {
+  jspb.Message.setProto3BytesField(this, 2, value);
+};
+
+
+/**
+ * optional Transaction.Input.Outpoint outpoint = 3;
+ * @return {?proto.pb.Transaction.Input.Outpoint}
+ */
+proto.pb.DoubleSpendProof.prototype.getOutpoint = function() {
+  return /** @type{?proto.pb.Transaction.Input.Outpoint} */ (
+    jspb.Message.getWrapperField(this, proto.pb.Transaction.Input.Outpoint, 3));
+};
+
+
+/** @param {?proto.pb.Transaction.Input.Outpoint|undefined} value */
+proto.pb.DoubleSpendProof.prototype.setOutpoint = function(value) {
+  jspb.Message.setWrapperField(this, 3, value);
+};
+
+
+proto.pb.DoubleSpendProof.prototype.clearOutpoint = function() {
+  this.setOutpoint(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.DoubleSpendProof.prototype.hasOutpoint = function() {
+  return jspb.Message.getField(this, 3) != null;
+};
+
+
+/**
+ * optional Spender first_spender = 4;
+ * @return {?proto.pb.DoubleSpendProof.Spender}
+ */
+proto.pb.DoubleSpendProof.prototype.getFirstSpender = function() {
+  return /** @type{?proto.pb.DoubleSpendProof.Spender} */ (
+    jspb.Message.getWrapperField(this, proto.pb.DoubleSpendProof.Spender, 4));
+};
+
+
+/** @param {?proto.pb.DoubleSpendProof.Spender|undefined} value */
+proto.pb.DoubleSpendProof.prototype.setFirstSpender = function(value) {
+  jspb.Message.setWrapperField(this, 4, value);
+};
+
+
+proto.pb.DoubleSpendProof.prototype.clearFirstSpender = function() {
+  this.setFirstSpender(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.DoubleSpendProof.prototype.hasFirstSpender = function() {
+  return jspb.Message.getField(this, 4) != null;
+};
+
+
+/**
+ * optional Spender double_spender = 5;
+ * @return {?proto.pb.DoubleSpendProof.Spender}
+ */
+proto.pb.DoubleSpendProof.prototype.getDoubleSpender = function() {
+  return /** @type{?proto.pb.DoubleSpendProof.Spender} */ (
+    jspb.Message.getWrapperField(this, proto.pb.DoubleSpendProof.Spender, 5));
+};
+
+
+/** @param {?proto.pb.DoubleSpendProof.Spender|undefined} value */
+proto.pb.DoubleSpendProof.prototype.setDoubleSpender = function(value) {
+  jspb.Message.setWrapperField(this, 5, value);
+};
+
+
+proto.pb.DoubleSpendProof.prototype.clearDoubleSpender = function() {
+  this.setDoubleSpender(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.pb.DoubleSpendProof.prototype.hasDoubleSpender = function() {
+  return jspb.Message.getField(this, 5) != null;
+};
+
+
+/**
+ * optional bytes serialized_proof = 6;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pb.DoubleSpendProof.prototype.getSerializedProof = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * optional bytes serialized_proof = 6;
+ * This is a type-conversion wrapper around `getSerializedProof()`
+ * @return {string}
+ */
+proto.pb.DoubleSpendProof.prototype.getSerializedProof_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getSerializedProof()));
+};
+
+
+/**
+ * optional bytes serialized_proof = 6;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getSerializedProof()`
+ * @return {!Uint8Array}
+ */
+proto.pb.DoubleSpendProof.prototype.getSerializedProof_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getSerializedProof()));
+};
+
+
+/** @param {!(string|Uint8Array)} value */
+proto.pb.DoubleSpendProof.prototype.setSerializedProof = function(value) {
+  jspb.Message.setProto3BytesField(this, 6, value);
 };
 
 

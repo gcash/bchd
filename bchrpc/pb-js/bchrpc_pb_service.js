@@ -226,6 +226,42 @@ bchrpc.SubscribeBlocks = {
   responseType: bchrpc_pb.BlockNotification
 };
 
+bchrpc.GetDoubleSpendProof = {
+  methodName: "GetDoubleSpendProof",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetDoubleSpendProofRequest,
+  responseType: bchrpc_pb.GetDoubleSpendProofResponse
+};
+
+bchrpc.GetDoubleSpendProofs = {
+  methodName: "GetDoubleSpendProofs",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetDoubleSpendProofsRequest,
+  responseType: bchrpc_pb.GetDoubleSpendProofsResponse
+};
+
+bchrpc.GetDoubleSpendProofScore = {
+  methodName: "GetDoubleSpendProofScore",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetDoubleSpendProofScoreRequest,
+  responseType: bchrpc_pb.GetDoubleSpendProofScoreResponse
+};
+
+bchrpc.SubscribeDoubleSpendProofs = {
+  methodName: "SubscribeDoubleSpendProofs",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: true,
+  requestType: bchrpc_pb.SubscribeDoubleSpendProofsRequest,
+  responseType: bchrpc_pb.DoubleSpendProofNotification
+};
+
 exports.bchrpc = bchrpc;
 
 function bchrpcClient(serviceHost, options) {
@@ -975,6 +1011,138 @@ bchrpcClient.prototype.subscribeBlocks = function subscribeBlocks(requestMessage
     status: []
   };
   var client = grpc.invoke(bchrpc.SubscribeBlocks, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onMessage: function (responseMessage) {
+      listeners.data.forEach(function (handler) {
+        handler(responseMessage);
+      });
+    },
+    onEnd: function (status, statusMessage, trailers) {
+      listeners.status.forEach(function (handler) {
+        handler({ code: status, details: statusMessage, metadata: trailers });
+      });
+      listeners.end.forEach(function (handler) {
+        handler({ code: status, details: statusMessage, metadata: trailers });
+      });
+      listeners = null;
+    }
+  });
+  return {
+    on: function (type, handler) {
+      listeners[type].push(handler);
+      return this;
+    },
+    cancel: function () {
+      listeners = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getDoubleSpendProof = function getDoubleSpendProof(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetDoubleSpendProof, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getDoubleSpendProofs = function getDoubleSpendProofs(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetDoubleSpendProofs, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getDoubleSpendProofScore = function getDoubleSpendProofScore(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetDoubleSpendProofScore, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.subscribeDoubleSpendProofs = function subscribeDoubleSpendProofs(requestMessage, metadata) {
+  var listeners = {
+    data: [],
+    end: [],
+    status: []
+  };
+  var client = grpc.invoke(bchrpc.SubscribeDoubleSpendProofs, {
     request: requestMessage,
     host: this.serviceHost,
     metadata: metadata,

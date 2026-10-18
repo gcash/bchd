@@ -283,6 +283,106 @@
         ]
       }
     },
+    "/v1/GetDoubleSpendProof": {
+      "post": {
+        "summary": "GetDoubleSpendProof returns a double spend proof, looked up by its hash, by the\ndouble spent output, or by a mempool transaction, in which case the transaction's\nunconfirmed ancestors are searched as well.",
+        "description": "A double spend proof shows that a pay-to-pubkey-hash output spent by a mempool\ntransaction was also spent by another, differently signed transaction.",
+        "operationId": "bchrpc_GetDoubleSpendProof",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetDoubleSpendProofScore": {
+      "post": {
+        "summary": "GetDoubleSpendProofScore returns how far a mempool transaction can be trusted not\nto be double spent.",
+        "operationId": "bchrpc_GetDoubleSpendProofScore",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofScoreResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofScoreRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetDoubleSpendProofs": {
+      "post": {
+        "summary": "GetDoubleSpendProofs returns the double spend proofs for mempool transactions.",
+        "operationId": "bchrpc_GetDoubleSpendProofs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetDoubleSpendProofsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/GetMempool": {
       "post": {
         "summary": "GetMempool returns information about all transactions currently in the memory pool.\nOffers an option to return full transactions or just transactions hashes.",
@@ -385,7 +485,7 @@
     },
     "/v1/GetRawAddressTransactions": {
       "post": {
-        "summary": "GetRawAddressTransactions the serialized raw transactions for\nthe given address. Offers offset, limit, and from block options.",
+        "summary": "GetRawAddressTransactions returns the serialized raw transactions for\nthe given address. Offers offset, limit, and from block options.",
         "description": "**Requires AddressIndex**",
         "operationId": "bchrpc_GetRawAddressTransactions",
         "responses": {
@@ -762,6 +862,48 @@
         ]
       }
     },
+    "/v1/SubscribeDoubleSpendProofs": {
+      "post": {
+        "summary": "SubscribeDoubleSpendProofs creates a subscription for notifications of double spend\nproofs as they become associated with mempool transactions.",
+        "operationId": "bchrpc_SubscribeDoubleSpendProofs",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/pbDoubleSpendProofNotification"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of pbDoubleSpendProofNotification"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbSubscribeDoubleSpendProofsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
     "/v1/SubscribeTransactionStream": {
       "post": {
         "summary": "SubscribeTransactionStream subscribes to relevant transactions based on\nthe subscription requests. The parameters to filter transactions on can\nbe updated by sending new SubscribeTransactionsRequest objects on the stream.",
@@ -851,16 +993,62 @@
     }
   },
   "definitions": {
+    "DoubleSpendProofSpender": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The transaction version."
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The input sequence number."
+        },
+        "lock_time": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The transaction lock time."
+        },
+        "hash_prev_outputs": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the outpoints spent by the transaction, or zero when the\nsignature does not commit to them."
+        },
+        "hash_sequence": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the input sequence numbers, or zero when the signature\ndoes not commit to them."
+        },
+        "hash_outputs": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the outputs the signature commits to, or zero."
+        },
+        "push_data": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "The data the input pushed: its signature."
+        }
+      },
+      "description": "The parts of the signature preimage of one of the two inputs."
+    },
     "GetBlockchainInfoResponseBitcoinNet": {
       "type": "string",
       "enum": [
         "MAINNET",
         "REGTEST",
         "TESTNET3",
-        "SIMNET"
+        "SIMNET",
+        "TESTNET4",
+        "CHIPNET"
       ],
       "default": "MAINNET",
-      "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.",
+      "description": "- MAINNET: Live public network with monetary value.\n - REGTEST: An isolated environment for automated testing.\n - TESTNET3: A public environment where monetary value is agreed to be zero,\nand some checks for transaction conformity are disabled.\n - SIMNET: Private testnets for large scale simulations (or stress testing),\nwhere a specified list of nodes is used, rather than node discovery.\n - TESTNET4: Latest Testnet.\n - CHIPNET: The public network for testing upcoming upgrades.",
       "title": "Bitcoin network types"
     },
     "GetSlpTrustedValidationRequestQuery": {
@@ -1078,6 +1266,9 @@
         },
         "slp_token": {
           "$ref": "#/definitions/pbSlpToken"
+        },
+        "cash_token": {
+          "$ref": "#/definitions/pbCashToken"
         }
       }
     },
@@ -1105,7 +1296,7 @@
         },
         "script_class": {
           "type": "string",
-          "description": "The type of script."
+          "description": "The type of script: pubkey, pubkeyhash, scripthash (for both the\n20 and the 32 byte hash forms), multisig, datacarrier (OP_RETURN\nfollowed only by pushes), script (any other script of at most 201\nbytes) or nonstandard."
         },
         "disassembled_script": {
           "type": "string",
@@ -1113,6 +1304,9 @@
         },
         "slp_token": {
           "$ref": "#/definitions/pbSlpToken"
+        },
+        "cash_token": {
+          "$ref": "#/definitions/pbCashToken"
         }
       }
     },
@@ -1248,6 +1442,29 @@
         }
       }
     },
+    "pbCashToken": {
+      "type": "object",
+      "properties": {
+        "category_id": {
+          "type": "string",
+          "format": "byte"
+        },
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "commitment": {
+          "type": "string",
+          "format": "byte"
+        },
+        "bitfield": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the amount field instead of casting uint64 to the JS 'number'\ntype. Other languages may require similar treatment.",
+      "title": "CashToken info used in transaction inputs / outputs"
+    },
     "pbCheckSlpTransactionRequest": {
       "type": "object",
       "properties": {
@@ -1279,6 +1496,45 @@
         "best_height": {
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "pbDoubleSpendProof": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the serialized proof, little-endian."
+        },
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The mempool transaction spending the double spent output, little-endian,\nor empty when no mempool transaction spends it. Orphan proofs, those\nreturned by GetDoubleSpendProofs with include_orphans, always have it empty."
+        },
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "The double spent output."
+        },
+        "first_spender": {
+          "$ref": "#/definitions/DoubleSpendProofSpender"
+        },
+        "double_spender": {
+          "$ref": "#/definitions/DoubleSpendProofSpender"
+        },
+        "serialized_proof": {
+          "type": "string",
+          "format": "byte",
+          "description": "The proof serialized as in the dsproof-beta message."
+        }
+      },
+      "description": "A proof that two differently signed inputs spend the same pay-to-pubkey-hash\noutput, as relayed in dsproof-beta messages."
+    },
+    "pbDoubleSpendProofNotification": {
+      "type": "object",
+      "properties": {
+        "proof": {
+          "$ref": "#/definitions/pbDoubleSpendProof"
         }
       }
     },
@@ -1487,6 +1743,93 @@
         "slp_graphsearch": {
           "type": "boolean",
           "title": "When `slp_graphsearch` is true, the node is able to handle calls to slp graph search"
+        }
+      }
+    },
+    "pbGetDoubleSpendProofRequest": {
+      "type": "object",
+      "properties": {
+        "proof_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the proof, little-endian."
+        },
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of a mempool transaction, little-endian."
+        },
+        "outpoint": {
+          "$ref": "#/definitions/InputOutpoint",
+          "description": "The double spent output."
+        },
+        "exclude_ancestors": {
+          "type": "boolean",
+          "description": "When looking up by transaction_hash, only return a proof for that transaction,\nwithout searching its unconfirmed ancestors. Default is false."
+        }
+      }
+    },
+    "pbGetDoubleSpendProofResponse": {
+      "type": "object",
+      "properties": {
+        "proof": {
+          "$ref": "#/definitions/pbDoubleSpendProof"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "When looking up by transaction_hash, the transactions from the one looked up\nto the one the proof is for, little-endian."
+        },
+        "descendants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "The transaction the proof is for and all its mempool descendants, little-endian.\nEmpty for an orphan proof."
+        }
+      }
+    },
+    "pbGetDoubleSpendProofScoreRequest": {
+      "type": "object",
+      "properties": {
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of a mempool transaction, little-endian."
+        }
+      }
+    },
+    "pbGetDoubleSpendProofScoreResponse": {
+      "type": "object",
+      "properties": {
+        "score": {
+          "type": "number",
+          "format": "double",
+          "description": "1 when neither the transaction nor an unconfirmed ancestor has a proof and a\nproof is possible for all of them, 0 when one of them has a proof or spends an\noutput no proof is possible for (not pay-to-pubkey-hash), and 0.25 when an input\nof one of them does not sign all inputs and outputs or there are too many\nunconfirmed ancestors to check."
+        }
+      }
+    },
+    "pbGetDoubleSpendProofsRequest": {
+      "type": "object",
+      "properties": {
+        "include_orphans": {
+          "type": "boolean",
+          "description": "When include_orphans is true, proofs whose transaction is not in the mempool are\nincluded. Default is false."
+        }
+      }
+    },
+    "pbGetDoubleSpendProofsResponse": {
+      "type": "object",
+      "properties": {
+        "proofs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pbDoubleSpendProof"
+          }
         }
       }
     },
@@ -1900,6 +2243,9 @@
         },
         "token_metadata": {
           "$ref": "#/definitions/pbSlpTokenMetadata"
+        },
+        "cash_token": {
+          "$ref": "#/definitions/pbCashToken"
         }
       }
     },
@@ -2231,6 +2577,15 @@
       "description": "- BlockInfo (block metadata): `BlockInfo`\n     - SubscribeBlocksRequest {}\n\n - Marshaled Block (with transaction hashes): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n       }\n - Marshaled Block (with full transaction data): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n           full_transactions = true\n       }\n - Serialized Block acccording to bitcoin protocol encoding: `bytes`\n     - SubscribeBlocksRequest {\n           serialize_block = true\n       }",
       "title": "Options to define data structure to be sent by SubscribeBlock stream:"
     },
+    "pbSubscribeDoubleSpendProofsRequest": {
+      "type": "object",
+      "properties": {
+        "include_mempool": {
+          "type": "boolean",
+          "description": "When include_mempool is true, the proofs already in the mempool are sent first."
+        }
+      }
+    },
     "pbSubscribeTransactionsRequest": {
       "type": "object",
       "properties": {
@@ -2421,6 +2776,9 @@
         },
         "slp_token": {
           "$ref": "#/definitions/pbSlpToken"
+        },
+        "cash_token": {
+          "$ref": "#/definitions/pbCashToken"
         }
       }
     },

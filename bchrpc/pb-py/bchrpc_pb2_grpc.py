@@ -157,6 +157,26 @@ class bchrpcStub(object):
                 request_serializer=bchrpc__pb2.SubscribeBlocksRequest.SerializeToString,
                 response_deserializer=bchrpc__pb2.BlockNotification.FromString,
                 _registered_method=True)
+        self.GetDoubleSpendProof = channel.unary_unary(
+                '/pb.bchrpc/GetDoubleSpendProof',
+                request_serializer=bchrpc__pb2.GetDoubleSpendProofRequest.SerializeToString,
+                response_deserializer=bchrpc__pb2.GetDoubleSpendProofResponse.FromString,
+                _registered_method=True)
+        self.GetDoubleSpendProofs = channel.unary_unary(
+                '/pb.bchrpc/GetDoubleSpendProofs',
+                request_serializer=bchrpc__pb2.GetDoubleSpendProofsRequest.SerializeToString,
+                response_deserializer=bchrpc__pb2.GetDoubleSpendProofsResponse.FromString,
+                _registered_method=True)
+        self.GetDoubleSpendProofScore = channel.unary_unary(
+                '/pb.bchrpc/GetDoubleSpendProofScore',
+                request_serializer=bchrpc__pb2.GetDoubleSpendProofScoreRequest.SerializeToString,
+                response_deserializer=bchrpc__pb2.GetDoubleSpendProofScoreResponse.FromString,
+                _registered_method=True)
+        self.SubscribeDoubleSpendProofs = channel.unary_stream(
+                '/pb.bchrpc/SubscribeDoubleSpendProofs',
+                request_serializer=bchrpc__pb2.SubscribeDoubleSpendProofsRequest.SerializeToString,
+                response_deserializer=bchrpc__pb2.DoubleSpendProofNotification.FromString,
+                _registered_method=True)
 
 
 class bchrpcServicer(object):
@@ -388,6 +408,41 @@ class bchrpcServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetDoubleSpendProof(self, request, context):
+        """GetDoubleSpendProof returns a double spend proof, looked up by its hash, by the
+        double spent output, or by a mempool transaction, in which case the transaction's
+        unconfirmed ancestors are searched as well.
+
+        A double spend proof shows that a pay-to-pubkey-hash output spent by a mempool
+        transaction was also spent by another, differently signed transaction.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDoubleSpendProofs(self, request, context):
+        """GetDoubleSpendProofs returns the double spend proofs for mempool transactions.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDoubleSpendProofScore(self, request, context):
+        """GetDoubleSpendProofScore returns how far a mempool transaction can be trusted not
+        to be double spent.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SubscribeDoubleSpendProofs(self, request, context):
+        """SubscribeDoubleSpendProofs creates a subscription for notifications of double spend
+        proofs as they become associated with mempool transactions.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_bchrpcServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -510,6 +565,26 @@ def add_bchrpcServicer_to_server(servicer, server):
                     servicer.SubscribeBlocks,
                     request_deserializer=bchrpc__pb2.SubscribeBlocksRequest.FromString,
                     response_serializer=bchrpc__pb2.BlockNotification.SerializeToString,
+            ),
+            'GetDoubleSpendProof': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDoubleSpendProof,
+                    request_deserializer=bchrpc__pb2.GetDoubleSpendProofRequest.FromString,
+                    response_serializer=bchrpc__pb2.GetDoubleSpendProofResponse.SerializeToString,
+            ),
+            'GetDoubleSpendProofs': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDoubleSpendProofs,
+                    request_deserializer=bchrpc__pb2.GetDoubleSpendProofsRequest.FromString,
+                    response_serializer=bchrpc__pb2.GetDoubleSpendProofsResponse.SerializeToString,
+            ),
+            'GetDoubleSpendProofScore': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDoubleSpendProofScore,
+                    request_deserializer=bchrpc__pb2.GetDoubleSpendProofScoreRequest.FromString,
+                    response_serializer=bchrpc__pb2.GetDoubleSpendProofScoreResponse.SerializeToString,
+            ),
+            'SubscribeDoubleSpendProofs': grpc.unary_stream_rpc_method_handler(
+                    servicer.SubscribeDoubleSpendProofs,
+                    request_deserializer=bchrpc__pb2.SubscribeDoubleSpendProofsRequest.FromString,
+                    response_serializer=bchrpc__pb2.DoubleSpendProofNotification.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1163,6 +1238,114 @@ class bchrpc(object):
             '/pb.bchrpc/SubscribeBlocks',
             bchrpc__pb2.SubscribeBlocksRequest.SerializeToString,
             bchrpc__pb2.BlockNotification.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDoubleSpendProof(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pb.bchrpc/GetDoubleSpendProof',
+            bchrpc__pb2.GetDoubleSpendProofRequest.SerializeToString,
+            bchrpc__pb2.GetDoubleSpendProofResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDoubleSpendProofs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pb.bchrpc/GetDoubleSpendProofs',
+            bchrpc__pb2.GetDoubleSpendProofsRequest.SerializeToString,
+            bchrpc__pb2.GetDoubleSpendProofsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDoubleSpendProofScore(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pb.bchrpc/GetDoubleSpendProofScore',
+            bchrpc__pb2.GetDoubleSpendProofScoreRequest.SerializeToString,
+            bchrpc__pb2.GetDoubleSpendProofScoreResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SubscribeDoubleSpendProofs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/pb.bchrpc/SubscribeDoubleSpendProofs',
+            bchrpc__pb2.SubscribeDoubleSpendProofsRequest.SerializeToString,
+            bchrpc__pb2.DoubleSpendProofNotification.FromString,
             options,
             channel_credentials,
             insecure,
