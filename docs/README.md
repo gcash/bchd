@@ -1,22 +1,23 @@
 ### Table of Contents
+
 1. [About](#About)
 2. [Getting Started](#GettingStarted)
-    1. [Installation](#Installation)
-        1. [Building From Source](#BuildingFromSource)
-    2. [Configuration](#Configuration)
-        1. [Checkpoints and Initial Block Download](#Checkpoints)
-        2. [Finalization and Deep Reorganizations](#Finalization)
-    3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
-    4. [Mining](#Mining)
+   1. [Installation](#Installation)
+      1. [Building From Source](#BuildingFromSource)
+   2. [Configuration](#Configuration)
+      1. [Checkpoints and Initial Block Download](#Checkpoints)
+      2. [Finalization and Deep Reorganizations](#Finalization)
+   3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
+   4. [Mining](#Mining)
 3. [Help](#Help)
-    1. [Startup](#Startup)
-        1. [Using bootstrap.dat](#BootstrapDat)
-    2. [Network Configuration](#NetworkConfig)
-    3. [Wallet](#Wallet)
+   1. [Startup](#Startup)
+      1. [Using bootstrap.dat](#BootstrapDat)
+   2. [Network Configuration](#NetworkConfig)
+   3. [Wallet](#Wallet)
 4. [Developer Resources](#DeveloperResources)
-    1. [Code Contribution Guidelines](#ContributionGuidelines)
-    2. [JSON-RPC Reference](#JSONRPCReference)
-    3. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
+   1. [Code Contribution Guidelines](#ContributionGuidelines)
+   2. [JSON-RPC Reference](#JSONRPCReference)
+   3. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
 
 <a name="About" />
 
@@ -28,8 +29,8 @@ This project is a port of the [btcd](https://github.com/btcsuite/btcd) codebase 
 and reliable blockchain server which makes it a suitable backend to serve blockchain data to lite clients and block explorers
 or to power your local wallet.
 
-bchd does not include any wallet functionality by design as it makes the codebase more modular and easy to maintain. 
-The [bchwallet](https://github.com/gcash/bchwallet) is a separate application that provides a secure Bitcoin Cash wallet 
+bchd does not include any wallet functionality by design as it makes the codebase more modular and easy to maintain.
+The [bchwallet](https://github.com/gcash/bchwallet) is a separate application that provides a secure Bitcoin Cash wallet
 that communicates with your running bchd instance via the API.
 
 <a name="GettingStarted" />
@@ -72,23 +73,30 @@ options, which can be viewed by running: `$ bchd --help`.
 
 bchd has built-in checkpoints for mainnet, testnet3, testnet4 and chipnet, the
 same as Bitcoin Cash Node's; the latest are mainnet block 970892, testnet3 block
-1730264, testnet4 block 325709 and chipnet block 325627.  Blocks at the height
+1730264, testnet4 block 325709 and chipnet block 325627. Blocks at the height
 of a checkpoint must match it, and blocks that fork the chain before the last
-checkpoint are rejected.  The scripts of blocks at or below the last checkpoint
-are not validated, which makes the initial block download faster up to that
-block; everything else about these blocks is still checked.  The node does not
-consider itself synced until its tip is past the last checkpoint.
+checkpoint are rejected.
+
+During the initial block download, bchd first fetches the headers up to the
+last checkpoint and then adds the blocks up to it with only the checks that
+don't depend on the chain state, such as proof of work, the merkle root, the
+block size and the transaction format. Their spends, fees, coinbase value and
+scripts are not checked, which makes the download much faster. Blocks at or
+below the last checkpoint that arrive any other way get every check except
+scripts. `--nocheckpoints` turns this off and validates every block in full.
+The node does not consider itself synced until its tip is past the last
+checkpoint.
 
 Each of these networks also has a minimum chain work, again Bitcoin Cash Node's:
-the total proof of work its chain is known to have.  Until the best chain has
+the total proof of work its chain is known to have. Until the best chain has
 at least that much work, the node does not consider itself synced either, so
 it does not relay blocks, answer `getheaders` or filter requests, or build
-block templates.  A block that a peer relays without being asked for it is only
+block templates. A block that a peer relays without being asked for it is only
 stored if its chain has at least the minimum chain work and the work of the
 current tip, and is at most 288 blocks ahead of the tip.
 
 `addcheckpoint` adds checkpoints and `nocheckpoints` disables the built-in
-ones, in which case every script is validated.  With `fastsync`, the UTXO set of
+ones, in which case every script is validated. With `fastsync`, the UTXO set of
 the last checkpoint that has one (mainnet block 661648) is downloaded instead,
 and only the checkpoints up to that block are used.
 
@@ -99,9 +107,9 @@ and only the checkpoints up to that block are used.
 Once a main chain block is 10 blocks deep (`maxreorgdepth`) and has been known
 for two hours (`finalizationdelay`, in seconds), it is finalized: blocks that
 fork the chain below the finalized block are rejected, so the node will not
-reorganize its chain deeper than that.  Nothing is finalized until the node has
+reorganize its chain deeper than that. Nothing is finalized until the node has
 been running for the finalization delay, and blocks loaded from disk at startup
-count as known since startup.  The finalized block is kept in memory only.  A
+count as known since startup. The finalized block is kept in memory only. A
 negative `maxreorgdepth` disables finalization.
 
 ```
@@ -115,11 +123,11 @@ finalizes a block by hand.
 
 If the network does reorganize below the finalized block, for example after a
 chain split, the node stays on its chain: blocks of the other chain are
-rejected without being stored, and peers that send them are disconnected.  To
+rejected without being stored, and peers that send them are disconnected. To
 follow the other chain, call `invalidateblock` with the first block of the
-node's chain after the fork point.  This disconnects the node's chain down to
+node's chain after the fork point. This disconnects the node's chain down to
 the fork point and moves finalization back with it, after which the other chain
-is fetched from peers again.  `reconsiderblock` on a block the node stored
+is fetched from peers again. `reconsiderblock` on a block the node stored
 earlier also moves finalization back to where its chain forks.
 A block of the other chain that the node has already stored can instead be
 passed to `finalizeblock`, which disconnects the node's chain down to the fork
@@ -133,11 +141,12 @@ passed again.
 **2.3 Controlling and Querying bchd via bchctl**
 
 bchctl is a command line utility that can be used to both control and query bchd
-via [RPC](http://www.wikipedia.org/wiki/Remote_procedure_call).  bchd does
-**not** enable its RPC server by default;  You must configure at minimum both an
+via [RPC](http://www.wikipedia.org/wiki/Remote_procedure_call). bchd does
+**not** enable its RPC server by default; You must configure at minimum both an
 RPC username and password or both an RPC limited username and password:
 
-* bchd.conf configuration file
+- bchd.conf configuration file
+
 ```
 [Application Options]
 rpcuser=myuser
@@ -145,18 +154,23 @@ rpcpass=SomeDecentp4ssw0rd
 rpclimituser=mylimituser
 rpclimitpass=Limitedp4ssw0rd
 ```
-* bchctl.conf configuration file
+
+- bchctl.conf configuration file
+
 ```
 [Application Options]
 rpcuser=myuser
 rpcpass=SomeDecentp4ssw0rd
 ```
+
 OR
+
 ```
 [Application Options]
 rpclimituser=mylimituser
 rpclimitpass=Limitedp4ssw0rd
 ```
+
 For a list of available options, run: `$ bchctl --help`
 
 <a name="Mining" />
@@ -165,7 +179,6 @@ For a list of available options, run: `$ bchctl --help`
 
 bchd supports the `getblocktemplate` RPC.
 The limited user cannot access this RPC.
-
 
 **1. Add the payment addresses with the `miningaddr` option.**
 
@@ -210,24 +223,24 @@ configuration necessary, however, there is an optional method to use a
 
 **3.1.1 bootstrap.dat**
 
-* [Using bootstrap.dat](https://github.com/gcash/bchd/tree/master/docs/using_bootstrap_dat.md)
+- [Using bootstrap.dat](https://github.com/gcash/bchd/tree/master/docs/using_bootstrap_dat.md)
 
 <a name="NetworkConfig" />
 
 **3.1.2 Network Configuration**
 
-* [What Ports Are Used by Default?](https://github.com/gcash/bchd/tree/master/docs/default_ports.md)
-* [How To Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_peer_server_listen_interfaces.md)
-* [How To Configure RPC Server to Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_rpc_server_listen_interfaces.md)
-* [Configuring bchd with Tor](https://github.com/gcash/bchd/tree/master/docs/configuring_tor.md)
-* [Configuring bchd with CIFS](https://github.com/gcash/bchd/tree/master/docs/cifs.md)
+- [What Ports Are Used by Default?](https://github.com/gcash/bchd/tree/master/docs/default_ports.md)
+- [How To Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_peer_server_listen_interfaces.md)
+- [How To Configure RPC Server to Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_rpc_server_listen_interfaces.md)
+- [Configuring bchd with Tor](https://github.com/gcash/bchd/tree/master/docs/configuring_tor.md)
+- [Configuring bchd with CIFS](https://github.com/gcash/bchd/tree/master/docs/cifs.md)
 
 <a name="Wallet" />
 
 **3.1 Wallet**
 
 bchd was intentionally developed without an integrated wallet for security
-reasons.  Please see [bchwallet](https://github.com/gcash/bchwallet) for more
+reasons. Please see [bchwallet](https://github.com/gcash/bchwallet) for more
 information.
 
 <a name="DeveloperResources" />
@@ -236,42 +249,42 @@ information.
 
 <a name="ContributionGuidelines" />
 
-* [Code Contribution Guidelines](https://github.com/gcash/bchd/tree/master/docs/code_contribution_guidelines.md)
+- [Code Contribution Guidelines](https://github.com/gcash/bchd/tree/master/docs/code_contribution_guidelines.md)
 
 <a name="JSONRPCReference" />
 
-* [JSON-RPC Reference](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md)
-    * [RPC Examples](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md#ExampleCode)
+- [JSON-RPC Reference](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md)
+  - [RPC Examples](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md#ExampleCode)
 
 <a name="GoPackages" />
 
-* The gcash Bitcoin Cash-related Go Packages:
-    * [rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) - Implements a
-      robust and easy to use Websocket-enabled Bitcoin JSON-RPC client
-    * [btcjson](https://github.com/gcash/bchd/tree/master/btcjson) - Provides an extensive API
-      for the underlying JSON-RPC command and return values
-    * [wire](https://github.com/gcash/bchd/tree/master/wire) - Implements the
-      Bitcoin wire protocol
-    * [peer](https://github.com/gcash/bchd/tree/master/peer) -
-      Provides a common base for creating and managing Bitcoin network peers.
-    * [blockchain](https://github.com/gcash/bchd/tree/master/blockchain) -
-      Implements Bitcoin block handling and chain selection rules
-    * [blockchain/fullblocktests](https://github.com/gcash/bchd/tree/master/blockchain/fullblocktests) -
-      Provides a set of block tests for testing the consensus validation rules
-    * [txscript](https://github.com/gcash/bchd/tree/master/txscript) -
-      Implements the Bitcoin transaction scripting language
-    * [bchec](https://github.com/gcash/bchd/tree/master/bchec) - Implements
-      support for the elliptic curve cryptographic functions needed for the
-      Bitcoin scripts
-    * [database](https://github.com/gcash/bchd/tree/master/database) -
-      Provides a database interface for the Bitcoin block chain
-    * [mempool](https://github.com/gcash/bchd/tree/master/mempool) -
-      Package mempool provides a policy-enforced pool of unmined bitcoin
-      transactions.
-    * [bchutil](https://github.com/gcash/bchutil) - Provides Bitcoin-specific
-      convenience functions and types
-    * [chainhash](https://github.com/gcash/bchd/tree/master/chaincfg/chainhash) -
-      Provides a generic hash type and associated functions that allows the
-      specific hash algorithm to be abstracted.
-    * [connmgr](https://github.com/gcash/bchd/tree/master/connmgr) -
-      Package connmgr implements a generic Bitcoin network connection manager.
+- The gcash Bitcoin Cash-related Go Packages:
+  - [rpcclient](https://github.com/gcash/bchd/tree/master/rpcclient) - Implements a
+    robust and easy to use Websocket-enabled Bitcoin JSON-RPC client
+  - [btcjson](https://github.com/gcash/bchd/tree/master/btcjson) - Provides an extensive API
+    for the underlying JSON-RPC command and return values
+  - [wire](https://github.com/gcash/bchd/tree/master/wire) - Implements the
+    Bitcoin wire protocol
+  - [peer](https://github.com/gcash/bchd/tree/master/peer) -
+    Provides a common base for creating and managing Bitcoin network peers.
+  - [blockchain](https://github.com/gcash/bchd/tree/master/blockchain) -
+    Implements Bitcoin block handling and chain selection rules
+  - [blockchain/fullblocktests](https://github.com/gcash/bchd/tree/master/blockchain/fullblocktests) -
+    Provides a set of block tests for testing the consensus validation rules
+  - [txscript](https://github.com/gcash/bchd/tree/master/txscript) -
+    Implements the Bitcoin transaction scripting language
+  - [bchec](https://github.com/gcash/bchd/tree/master/bchec) - Implements
+    support for the elliptic curve cryptographic functions needed for the
+    Bitcoin scripts
+  - [database](https://github.com/gcash/bchd/tree/master/database) -
+    Provides a database interface for the Bitcoin block chain
+  - [mempool](https://github.com/gcash/bchd/tree/master/mempool) -
+    Package mempool provides a policy-enforced pool of unmined bitcoin
+    transactions.
+  - [bchutil](https://github.com/gcash/bchutil) - Provides Bitcoin-specific
+    convenience functions and types
+  - [chainhash](https://github.com/gcash/bchd/tree/master/chaincfg/chainhash) -
+    Provides a generic hash type and associated functions that allows the
+    specific hash algorithm to be abstracted.
+  - [connmgr](https://github.com/gcash/bchd/tree/master/connmgr) -
+    Package connmgr implements a generic Bitcoin network connection manager.
