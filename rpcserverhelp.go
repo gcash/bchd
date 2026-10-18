@@ -409,6 +409,56 @@ var helpDescsEnUS = map[string]string{
 	"getdifficulty--synopsis": "Returns the proof-of-work difficulty as a multiple of the minimum difficulty.",
 	"getdifficulty--result0":  "The difficulty",
 
+	// GetDSProofCmd help.
+	"getdsproof--synopsis": "Returns a double spend proof, looked up by its id, by the transaction it is for (or one of its unconfirmed descendants), or by the double spent output.\n" +
+		"Returns null when no proof is found.",
+	"getdsproof-query":     "The proof id, a transaction id, or an outpoint object with the keys txid (string) and vout (numeric)",
+	"getdsproof-verbosity": "0 or 1 returns the serialized proof and the txid, 2 (or true) returns the id, txid and outpoint, 3 adds the two spenders",
+	"getdsproof-recursive": "When looking up by txid, also search the transaction's unconfirmed ancestors",
+	"getdsproof--result0":  "The proof",
+
+	// GetDSProofListCmd help.
+	"getdsprooflist--synopsis":      "Lists the double spend proofs for memory pool transactions.",
+	"getdsprooflist-verbosity":      "0 (or false) returns the proof ids, 1 to 3 return objects as getdsproof does",
+	"getdsprooflist-includeorphans": "Also list the proofs whose transaction is not in the memory pool",
+	"getdsprooflist--condition0":    "verbosity=0",
+	"getdsprooflist--condition1":    "verbosity>0",
+	"getdsprooflist--result0":       "The proof ids",
+
+	// GetDSProofScoreCmd help.
+	"getdsproofscore--synopsis": "Returns how far a memory pool transaction can be trusted not to be double spent.\n" +
+		"1.0 means neither it nor an unconfirmed ancestor has a double spend proof and one is possible for all of them.\n" +
+		"0.0 means one of them has a proof, or one of them spends an output a proof is not possible for (not pay-to-pubkey-hash).\n" +
+		"0.25 means an input of one of them does not sign all inputs and outputs, or there are too many unconfirmed ancestors to check.",
+	"getdsproofscore-txid":     "The hash of the memory pool transaction",
+	"getdsproofscore--result0": "The score",
+
+	// GetDSProofResult help.
+	"getdsproofresult-hex":         "The serialized proof (verbosity 1)",
+	"getdsproofresult-dspid":       "The proof id (verbosity 2 and 3)",
+	"getdsproofresult-txid":        "The memory pool transaction spending the double spent output, or null for an orphan proof",
+	"getdsproofresult-outpoint":    "The double spent output (verbosity 2 and 3)",
+	"getdsproofresult-path":        "When looking up by txid, the transactions from the one looked up to the one with the proof",
+	"getdsproofresult-descendants": "The transaction with the proof and all its memory pool descendants (getdsproof at verbosity 1 and above only)",
+	"getdsproofresult-spenders":    "The two spenders (verbosity 3)",
+
+	// DSProofOutPoint help.
+	"dsproofoutpoint-txid": "The hash of the transaction",
+	"dsproofoutpoint-vout": "The index of the output",
+
+	// DSProofSpender help.
+	"dsproofspender-txversion":       "The transaction version",
+	"dsproofspender-sequence":        "The input sequence number",
+	"dsproofspender-locktime":        "The transaction lock time",
+	"dsproofspender-hashprevoutputs": "The hash of the outpoints spent by the transaction",
+	"dsproofspender-hashsequence":    "The hash of the input sequence numbers",
+	"dsproofspender-hashoutputs":     "The hash of the outputs",
+	"dsproofspender-pushdata":        "The data the input pushed",
+
+	// DSProofPushData help.
+	"dsproofpushdata-asm": "Disassembly of the pushes",
+	"dsproofpushdata-hex": "Hex-encoded pushes",
+
 	// GetGenerateCmd help.
 	"getgenerate--synopsis": "Returns if the server is set to generate coins (mine) or not.",
 	"getgenerate--result0":  "True if mining, false if not",
@@ -821,6 +871,9 @@ var rpcResultTypes = map[string][]interface{}{
 	"getconnectioncount":    {(*int32)(nil)},
 	"getcurrentnet":         {(*uint32)(nil)},
 	"getdifficulty":         {(*float64)(nil)},
+	"getdsproof":            {(*btcjson.GetDSProofResult)(nil)},
+	"getdsprooflist":        {(*[]string)(nil), (*[]btcjson.GetDSProofResult)(nil)},
+	"getdsproofscore":       {(*float64)(nil)},
 	"getfinalizedblockhash": {(*string)(nil)},
 	"getgenerate":           {(*bool)(nil)},
 	"gethashespersec":       {(*float64)(nil)},

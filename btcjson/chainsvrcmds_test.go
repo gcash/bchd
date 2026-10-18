@@ -468,6 +468,76 @@ func TestChainSvrCmds(t *testing.T) {
 			unmarshalled: &btcjson.GetDifficultyCmd{},
 		},
 		{
+			name: "getdsproof",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getdsproof", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetDSProofCmd(btcjson.DSProofQuery("123"), nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getdsproof","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.GetDSProofCmd{
+				Query:     btcjson.DSProofQuery("123"),
+				Verbosity: btcjson.DSProofVerbosityPtr(2),
+				Recursive: btcjson.Bool(true),
+			},
+		},
+		{
+			name: "getdsproof outpoint",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getdsproof", `{"txid":"123","vout":1}`, 2, false)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetDSProofCmd(btcjson.DSProofQuery(`{"txid":"123","vout":1}`),
+					btcjson.DSProofVerbosityPtr(2), btcjson.Bool(false))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getdsproof","params":[{"txid":"123","vout":1},2,false],"id":1}`,
+			unmarshalled: &btcjson.GetDSProofCmd{
+				Query:     btcjson.DSProofQuery(`{"txid":"123","vout":1}`),
+				Verbosity: btcjson.DSProofVerbosityPtr(2),
+				Recursive: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "getdsprooflist",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getdsprooflist", 1, true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetDSProofListCmd(btcjson.DSProofVerbosityPtr(1), btcjson.Bool(true))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getdsprooflist","params":[1,true],"id":1}`,
+			unmarshalled: &btcjson.GetDSProofListCmd{
+				Verbosity:      btcjson.DSProofVerbosityPtr(1),
+				IncludeOrphans: btcjson.Bool(true),
+			},
+		},
+		{
+			name: "getdsprooflist defaults",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getdsprooflist")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetDSProofListCmd(nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getdsprooflist","params":[],"id":1}`,
+			unmarshalled: &btcjson.GetDSProofListCmd{
+				Verbosity:      btcjson.DSProofVerbosityPtr(0),
+				IncludeOrphans: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "getdsproofscore",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getdsproofscore", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetDSProofScoreCmd("123")
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"getdsproofscore","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.GetDSProofScoreCmd{TxID: "123"},
+		},
+		{
 			name: "getgenerate",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getgenerate")
@@ -1450,6 +1520,63 @@ func TestCreateRawTransactionTokenAmount(t *testing.T) {
 			tokens[0].Address != "a" || tokens[0].Category != "00" {
 
 			t.Errorf("%s: got %+v", test.amount, tokens)
+		}
+	}
+}
+
+// TestGetDSProofParams checks the bool form of the verbosity, which maps
+// true to 2, and the outpoint form of the query.
+func TestGetDSProofParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		params    string
+		outPoint  *btcjson.DSProofQueryOutPoint
+		hash      string
+		verbosity int
+		wantErr   bool
+	}{
+		{`["ab", true]`, nil, "ab", 2, false},
+		{`["ab", false]`, nil, "ab", 0, false},
+		{`["ab", 3]`, nil, "ab", 3, false},
+		{`[{"txid": "ab", "vout": 7}]`, &btcjson.DSProofQueryOutPoint{TxID: "ab", Vout: 7}, "", 2, false},
+		{`[{"txid": "ab", "vout": -1}]`, &btcjson.DSProofQueryOutPoint{TxID: "ab", Vout: -1}, "", 2, false},
+		{`[{"txid": "ab"}]`, nil, "", 2, true},
+		{`[{"vout": 1}]`, nil, "", 2, true},
+		{`[{"txid": "ab", "vout": 1.5}]`, nil, "", 2, true},
+		{`[5]`, nil, "", 0, true},
+		{`["ab", "x"]`, nil, "", 0, true},
+	}
+	for i, test := range tests {
+		var params []json.RawMessage
+		if err := json.Unmarshal([]byte(test.params), &params); err != nil {
+			t.Fatal(err)
+		}
+		req := &btcjson.Request{Jsonrpc: "1.0", Method: "getdsproof", ID: 1, Params: params}
+		cmd, err := btcjson.UnmarshalCmd(req)
+		if err != nil {
+			if !test.wantErr {
+				t.Errorf("#%d: error %v", i, err)
+			}
+			continue
+		}
+		c := cmd.(*btcjson.GetDSProofCmd)
+		if int(*c.Verbosity) != test.verbosity {
+			t.Errorf("#%d: verbosity %d", i, *c.Verbosity)
+		}
+		if !c.Query.IsOutPoint() {
+			if test.wantErr || string(c.Query) != test.hash {
+				t.Errorf("#%d: query %q", i, c.Query)
+			}
+			continue
+		}
+		op, err := c.Query.OutPoint()
+		if (err != nil) != test.wantErr {
+			t.Errorf("#%d: outpoint error %v", i, err)
+			continue
+		}
+		if err == nil && !reflect.DeepEqual(op, test.outPoint) {
+			t.Errorf("#%d: outpoint %+v", i, op)
 		}
 	}
 }
