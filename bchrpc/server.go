@@ -1073,25 +1073,25 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
-	checkTxOutputs := func(tx *wire.MsgTx) ([]*pb.UnspentOutput, error) {
-		txHash := tx.TxHash()
+	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
+		txHash := *tx.Hash()
 		var (
 			utxoView *blockchain.UtxoViewpoint
 			utxos    []*pb.UnspentOutput
 		)
 		if req.IncludeMempool {
-			utxoView, err = s.txMemPool.FetchUtxoView(bchutil.NewTx(tx))
+			utxoView, err = s.txMemPool.FetchUtxoView(tx)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			utxoView, err = s.chain.FetchUtxoView(bchutil.NewTx(tx))
+			utxoView, err = s.chain.FetchUtxoView(tx)
 			if err != nil {
 				return nil, err
 			}
 		}
 		entries := utxoView.Entries()
-		for i, out := range tx.TxOut {
+		for i, out := range tx.MsgTx().TxOut {
 			op := wire.NewOutPoint(&txHash, uint32(i))
 			entry := entries[*op]
 			if entry == nil || entry.IsSpent() {
@@ -1169,7 +1169,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			break
 		}
 		for _, ret := range confirmedTxs {
-			u, err := checkTxOutputs(&ret.tx)
+			u, err := checkTxOutputs(bchutil.NewTx(&ret.tx))
 			if err != nil {
 				return nil, err
 			}
@@ -1182,7 +1182,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if req.IncludeMempool {
 		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 		for _, tx := range unconfirmedTxs {
-			u, err := checkTxOutputs(tx.MsgTx())
+			u, err := checkTxOutputs(tx)
 			if err != nil {
 				return nil, err
 			}
