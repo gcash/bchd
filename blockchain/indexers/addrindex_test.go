@@ -6,6 +6,7 @@ package indexers
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -480,11 +481,13 @@ func TestAddrIndexMigrate(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		version bool
+		version uint32
 		dropped bool
 	}{
-		{name: "no version", version: false, dropped: true},
-		{name: "current version", version: true, dropped: false},
+		{name: "no version", version: 0, dropped: true},
+		{name: "version 1", version: 1, dropped: true},
+		{name: "current version", version: addrIndexVersion,
+			dropped: false},
 	}
 	for _, test := range tests {
 		db, idx := createTestAddrIndex(t)
@@ -493,11 +496,18 @@ func TestAddrIndexMigrate(t *testing.T) {
 		const tipHeight = 1000
 		err := db.Update(func(dbTx database.Tx) error {
 			bucket := dbTx.Metadata().Bucket(addrIndexKey)
-			if !test.version {
-				err := bucket.Delete(addrIndexVersionKey)
-				if err != nil {
-					return err
-				}
+			var err error
+			if test.version == 0 {
+				err = bucket.Delete(addrIndexVersionKey)
+			} else {
+				versionBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(versionBytes,
+					test.version)
+				err = bucket.Put(addrIndexVersionKey,
+					versionBytes)
+			}
+			if err != nil {
+				return err
 			}
 			if err := bucket.Put(entry, entry); err != nil {
 				return err
@@ -548,6 +558,112 @@ func TestAddrIndexMigrate(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// TestAddrIndexP2SH32Key ensures a P2SH32 output whose hash ends in 12 zero
+// bytes is indexed under its own address only and not under the P2SH address
+// with the first 20 bytes of that hash.
+func TestAddrIndexP2SH32Key(t *testing.T) {
+	t.Parallel()
+
+	db, idx := createTestAddrIndex(t)
+	params := &chaincfg.MainNetParams
+
+	hash := make([]byte, 32)
+	copy(hash, bytes.Repeat([]byte{4}, 20))
+	p2sh, err := bchutil.NewAddressScriptHashFromHash(hash[:20], params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh32, err := bchutil.NewAddressScriptHash32FromHash(hash, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The coinbase pays to the P2SH address and the second transaction to
+	// the P2SH32 address.
+	var txns []*wire.MsgTx
+	for i, addr := range []bchutil.Address{p2sh, p2sh32} {
+		pkScript, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Index: uint32(i)},
+		})
+		tx.AddTxOut(&wire.TxOut{Value: 1000, PkScript: pkScript})
+		txns = append(txns, tx)
+	}
+	block := bchutil.NewBlock(&wire.MsgBlock{
+		Header:       wire.BlockHeader{Nonce: 1},
+		Transactions: txns,
+	})
+	locs, err := block.TxLoc()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := dbPutBlockIDIndexEntry(dbTx, block.Hash(), 1); err != nil {
+			return err
+		}
+		stxos := []blockchain.SpentTxOut{
+			{Amount: 1000, PkScript: []byte{txscript.OP_TRUE}},
+		}
+		return idx.ConnectBlock(dbTx, block, stxos)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		addr bchutil.Address
+		tx   int
+	}{
+		{p2sh, 0},
+		{p2sh32, 1},
+	}
+	err = db.View(func(dbTx database.Tx) error {
+		for _, test := range tests {
+			regions, _, err := idx.TxRegionsForAddress(dbTx,
+				test.addr, 0, 10, false)
+			if err != nil {
+				return err
+			}
+			want := locs[test.tx]
+			if len(regions) != 1 {
+				t.Errorf("%v: got %d entries, want 1", test.addr,
+					len(regions))
+				continue
+			}
+			if !regions[0].Hash.IsEqual(block.Hash()) ||
+				regions[0].Offset != uint32(want.TxStart) ||
+				regions[0].Len != uint32(want.TxLen) {
+				t.Errorf("%v: entry is %v, want tx %d", test.addr,
+					regions[0], test.tx)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The unconfirmed index must keep the addresses apart too.
+	for _, tx := range txns {
+		idx.AddUnconfirmedTx(bchutil.NewTx(tx),
+			blockchain.NewUtxoViewpoint())
+	}
+	for _, test := range tests {
+		unconfirmed := idx.UnconfirmedTxnsForAddress(test.addr)
+		wantHash := txns[test.tx].TxHash()
+		if len(unconfirmed) != 1 ||
+			!unconfirmed[0].Hash().IsEqual(&wantHash) {
+			t.Errorf("%v: got %d unconfirmed transactions, want "+
+				"only tx %d", test.addr, len(unconfirmed), test.tx)
 		}
 	}
 }
