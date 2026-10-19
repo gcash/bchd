@@ -6,10 +6,14 @@ package blockchain
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -116,4 +120,260 @@ func TestIsPATFO(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", test.name, got, test.want)
 		}
 	}
+}
+
+// manyInputsTestFlags are the script flags of the many input tests.
+const manyInputsTestFlags = txscript.StandardVerifyFlags |
+	txscript.ScriptAllowCashTokens
+
+// manyInputsTestCategory is the token category spent by manyInputsTestTx.
+var manyInputsTestCategory = [32]byte{0xca}
+
+// manyInputsTestTx returns a transaction spending numInputs outputs added to
+// view, each holding one fungible token.  The script of each spent output
+// checks the value and token amount of the output spent by the next input.
+// The transaction creates tokenAmount tokens.
+func manyInputsTestTx(view *UtxoViewpoint, numInputs int, tag byte,
+	tokenAmount uint64) *wire.MsgTx {
+
+	prevTx := wire.NewMsgTx(2)
+	prevTx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+		Hash: chainhash.Hash{tag}}})
+	for i := range numInputs {
+		next := int64((i + 1) % numInputs)
+		script, err := txscript.NewScriptBuilder().
+			AddInt64(next).AddOp(txscript.OP_UTXOVALUE).
+			AddInt64(1000 + next).AddOp(txscript.OP_NUMEQUALVERIFY).
+			AddInt64(next).AddOp(txscript.OP_UTXOTOKENAMOUNT).
+			AddInt64(1).AddOp(txscript.OP_NUMEQUAL).Script()
+		if err != nil {
+			panic(err)
+		}
+		prevTx.AddTxOut(wire.NewTxOut(1000+int64(i), script,
+			wire.TokenData{CategoryID: manyInputsTestCategory,
+				BitField: wire.HAS_AMOUNT, Amount: 1}))
+	}
+	view.AddTxOuts(bchutil.NewTx(prevTx), 10)
+
+	tx := wire.NewMsgTx(2)
+	prevHash := prevTx.TxHash()
+	for i := range numInputs {
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, uint32(i)), nil))
+	}
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE},
+		wire.TokenData{CategoryID: manyInputsTestCategory,
+			BitField: wire.HAS_AMOUNT, Amount: tokenAmount}))
+	return tx
+}
+
+// scriptValTestBlock returns a block holding a coinbase and txs.
+func scriptValTestBlock(txs ...*wire.MsgTx) *bchutil.Block {
+	cb := wire.NewMsgTx(1)
+	cb.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Index: math.MaxUint32},
+		SignatureScript:  []byte{0x01, 0x01},
+	})
+	cb.AddTxOut(wire.NewTxOut(1e8, []byte{txscript.OP_TRUE},
+		wire.TokenData{}))
+	return bchutil.NewBlock(&wire.MsgBlock{
+		Transactions: append([]*wire.MsgTx{cb}, txs...),
+	})
+}
+
+// TestTxValidateItemsShareSpentOutputs ensures the inputs of a transaction
+// share the outputs it spends instead of each looking them up again.
+func TestTxValidateItemsShareSpentOutputs(t *testing.T) {
+	const numInputs = 50
+	view := NewUtxoViewpoint()
+	tx := bchutil.NewTx(manyInputsTestTx(view, numInputs, 1, numInputs))
+	for _, hashCache := range []*txscript.HashCache{nil,
+		txscript.NewHashCache(10)} {
+
+		items := txValidateItems(tx, view, manyInputsTestFlags, hashCache,
+			new(uint32))
+		if len(items) != numInputs {
+			t.Fatalf("%d items, want %d", len(items), numInputs)
+		}
+		spent := items[0].spent
+		for i, item := range items {
+			if item.spent != spent {
+				t.Fatalf("input %d has its own spent outputs", i)
+			}
+			if item.sigHashes != items[0].sigHashes {
+				t.Fatalf("input %d has its own sighashes", i)
+			}
+		}
+		if spent.missing != -1 {
+			t.Fatalf("missing input %d", spent.missing)
+		}
+		for i, txIn := range tx.MsgTx().TxIn {
+			utxo, err := spent.utxos.GetEntry(i)
+			entry := view.LookupEntry(txIn.PreviousOutPoint)
+			want := wire.NewTxOut(entry.Amount(), entry.PkScript(),
+				entry.TokenData())
+			if err != nil || !reflect.DeepEqual(&utxo, want) {
+				t.Fatalf("spent output of input %d is %v, %v", i,
+					utxo, err)
+			}
+		}
+	}
+}
+
+// TestValidateManyInputs ensures the script of each input of a transaction
+// with many inputs sees the outputs spent by the other inputs, and that the
+// token validity algorithm checks the tokens of all of them.
+func TestValidateManyInputs(t *testing.T) {
+	const numInputs = 60
+	for _, tokenAmount := range []uint64{numInputs, numInputs + 1} {
+		view := NewUtxoViewpoint()
+		msgTx := manyInputsTestTx(view, numInputs, 1, tokenAmount)
+		tx := bchutil.NewTx(msgTx)
+		check := func(name string, err error) {
+			t.Helper()
+			if tokenAmount == numInputs {
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				return
+			}
+			requireRuleError(t, err, ErrCashTokensValidation)
+			want := fmt.Sprintf("transaction %s fails the token "+
+				"validity algorithm", tx.Hash())
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Fatalf("%s: got %v, want %s", name, err, want)
+			}
+		}
+		for _, hashCache := range []*txscript.HashCache{nil,
+			txscript.NewHashCache(10)} {
+
+			_, err := ValidateTransactionScripts(tx, view,
+				manyInputsTestFlags, nil, hashCache, 0)
+			check("ValidateTransactionScripts", err)
+		}
+		err := checkBlockScripts(scriptValTestBlock(msgTx), view,
+			manyInputsTestFlags, nil, txscript.NewHashCache(10), 0, 0)
+		check("checkBlockScripts", err)
+	}
+}
+
+// TestValidateMissingInput ensures a transaction spending an output missing
+// from the view is rejected with ErrMissingTxOut naming that input.
+func TestValidateMissingInput(t *testing.T) {
+	view := NewUtxoViewpoint()
+	msgTx := manyInputsTestTx(view, 3, 1, 3)
+	missing := msgTx.TxIn[1].PreviousOutPoint
+	view.RemoveEntry(missing)
+	tx := bchutil.NewTx(msgTx)
+	want := ruleError(ErrMissingTxOut, fmt.Sprintf("unable to find "+
+		"unspent output %v referenced from transaction %s:1", missing,
+		tx.Hash()))
+
+	_, err := ValidateTransactionScripts(tx, view, manyInputsTestFlags, nil,
+		nil, 0)
+	if !reflect.DeepEqual(err, want) {
+		t.Fatalf("ValidateTransactionScripts: got %v, want %v", err, want)
+	}
+	err = checkBlockScripts(scriptValTestBlock(msgTx), view,
+		manyInputsTestFlags, nil, nil, 0, 0)
+	if !reflect.DeepEqual(err, want) {
+		t.Fatalf("checkBlockScripts: got %v, want %v", err, want)
+	}
+}
+
+// TestCheckBlockScriptsFailingTx ensures a block in which one transaction
+// fails is rejected with the error of that transaction, whatever its
+// position in the block.
+func TestCheckBlockScriptsFailingTx(t *testing.T) {
+	const numInputs = 40
+	view := NewUtxoViewpoint()
+	good := manyInputsTestTx(view, numInputs, 1, numInputs)
+	badTokens := manyInputsTestTx(view, numInputs, 2, numInputs+1)
+
+	// A transaction whose only input fails its script.
+	prevTx := wire.NewMsgTx(2)
+	prevTx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+		Hash: chainhash.Hash{3}}})
+	prevTx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_FALSE},
+		wire.TokenData{}))
+	view.AddTxOuts(bchutil.NewTx(prevTx), 10)
+	badScript := wire.NewMsgTx(2)
+	prevHash := prevTx.TxHash()
+	badScript.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, 0), nil))
+	badScript.AddTxOut(wire.NewTxOut(900, []byte{txscript.OP_TRUE},
+		wire.TokenData{}))
+
+	tests := []struct {
+		bad  *wire.MsgTx
+		code ErrorCode
+	}{
+		{badTokens, ErrCashTokensValidation},
+		{badScript, ErrScriptValidation},
+	}
+	for _, test := range tests {
+		badHash := test.bad.TxHash()
+		for _, txs := range [][]*wire.MsgTx{{good, test.bad},
+			{test.bad, good}} {
+
+			err := checkBlockScripts(scriptValTestBlock(txs...), view,
+				manyInputsTestFlags, nil, txscript.NewHashCache(10),
+				0, 0)
+			requireRuleError(t, err, test.code)
+			if !strings.Contains(err.Error(), badHash.String()) {
+				t.Fatalf("error %v doesn't name %v", err, badHash)
+			}
+		}
+	}
+}
+
+// TestTokenValidityFailureManyInputs ensures a block whose transaction
+// spends several token outputs and creates more tokens than they hold is
+// rejected and marked invalid, while spending the same amount is accepted.
+func TestTokenValidityFailureManyInputs(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	params.MagneticAnonomalyForkHeight = 0
+	params.Upgrade9ForkHeight = 0
+	m := newRuleTestMiner(t, &params)
+
+	b1 := m.build(nil)
+	m.mustAccept(b1)
+	cb := b1.MsgBlock().Transactions[0]
+
+	// Create a category from the coinbase and split it over outputs.
+	const numOutputs = 8
+	category := cb.TxHash()
+	split := ruleTestSpend(wire.OutPoint{Hash: category}, 1000, 1)
+	split.TxOut = split.TxOut[1:]
+	for range numOutputs {
+		split.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE},
+			wire.TokenData{CategoryID: category,
+				BitField: wire.HAS_AMOUNT, Amount: 10}))
+	}
+	m.mustAccept(m.build(nil, split))
+
+	spend := func(amount uint64) *wire.MsgTx {
+		tx := wire.NewMsgTx(2)
+		splitHash := split.TxHash()
+		for i := range numOutputs {
+			tx.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: wire.OutPoint{Hash: splitHash,
+					Index: uint32(i + 1)},
+				Sequence: math.MaxUint32,
+			})
+		}
+		tx.AddTxOut(wire.NewTxOut(numOutputs*1000-1000,
+			[]byte{txscript.OP_TRUE}, wire.TokenData{
+				CategoryID: category, BitField: wire.HAS_AMOUNT,
+				Amount: amount}))
+		tx.AddTxOut(ruleTestPadding(2))
+		return tx
+	}
+
+	block := m.build(nil, spend(numOutputs*10+1))
+	err := m.accept(block)
+	requireRuleError(t, err, ErrCashTokensValidation)
+	known, _, invalid := m.chain.BlockValidity(block.Hash())
+	if !known || !invalid {
+		t.Fatalf("block known %v, invalid %v, want both", known, invalid)
+	}
+	m.mustAccept(m.build(nil, spend(numOutputs*10)))
 }
