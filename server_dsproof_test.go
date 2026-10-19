@@ -168,3 +168,102 @@ func TestPushDSProofMsg(t *testing.T) {
 		t.Fatal("getdata handler did not return")
 	}
 }
+
+// TestWantsDSProof checks which peers are told about a proof: not those with
+// transaction relay disabled, nor those whose bloom filter does not match
+// the double spent transaction.
+func TestWantsDSProof(t *testing.T) {
+	useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
+	h := newMempoolTestHarness(t, 1)
+	tx := bchutil.NewTx(h.spend(t, h.outputs[0], 1000))
+	txHash := tx.Hash()
+
+	sp := newBloomTestPeer()
+	if !sp.wantsDSProof(tx) {
+		t.Fatal("peer without a filter not told")
+	}
+	sp.setDisableRelayTx(true)
+	if sp.wantsDSProof(tx) {
+		t.Fatal("peer with transaction relay disabled told")
+	}
+	sp.setDisableRelayTx(false)
+
+	other := bloom.NewFilter(10, 0, 0.0001, wire.BloomUpdateNone)
+	other.Add([]byte{1, 2, 3})
+	sp.filter = other
+	if sp.wantsDSProof(tx) {
+		t.Fatal("peer with a filter not matching told")
+	}
+	match := bloom.NewFilter(10, 0, 0.0001, wire.BloomUpdateNone)
+	match.AddHash(txHash)
+	sp.filter = match
+	if !sp.wantsDSProof(tx) {
+		t.Fatal("peer with a matching filter not told")
+	}
+}
+
+// TestDSProofBadOrphanBanScore checks that the sender of an orphan proof
+// that turns out invalid once its transaction arrives gets a ban score of
+// 10, unless it is whitelisted.
+func TestDSProofBadOrphanBanScore(t *testing.T) {
+	for _, whitelisted := range []bool{false, true} {
+		useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
+		s := &server{quit: make(chan struct{})}
+		h := newMempoolTestHarness(t, 2, func(c *mempool.Config) {
+			c.OnBadDSProofs = s.onBadDSProofs
+		})
+		pool := h.server.cfg.TxMemPool
+		s.txMemPool = pool
+		sp := &serverPeer{
+			Peer:          peer.NewInboundPeer(&peer.Config{}),
+			server:        s,
+			filter:        bloom.LoadFilter(nil),
+			isWhitelisted: whitelisted,
+		}
+		servePeers(t, s, sp)
+
+		tx1 := h.spend(t, h.outputs[0], 1000)
+		tx2 := h.spend(t, h.outputs[0], 2000)
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, false, 0); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = pool.ProcessTransaction(bchutil.NewTx(tx2), false, false, 0)
+		descs := pool.DSProofs(false)
+		if len(descs) != 1 {
+			t.Fatalf("%d proofs", len(descs))
+		}
+
+		// The signatures are for the first output, so the proof is
+		// an orphan for the second until a transaction spends it.
+		proof := descs[0].Proof
+		bad := wire.NewMsgDSProof(h.outputs[1], proof.FirstSpender, proof.DoubleSpender)
+		sp.OnDSProof(nil, bad)
+		if hash := bad.ProofHash(); !pool.HaveDSProof(&hash) || sp.banScore.Int() != 0 {
+			t.Fatal("orphan not stored")
+		}
+		tx3 := h.spend(t, h.outputs[1], 1000)
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, false, 0); err != nil {
+			t.Fatal(err)
+		}
+		if whitelisted {
+			time.Sleep(100 * time.Millisecond)
+			if sp.banScore.Int() != 0 {
+				t.Fatal("whitelisted peer scored")
+			}
+			continue
+		}
+		waitBanScore(t, sp, 10)
+	}
+}
+
+// TestOnDSProofBlocksOnly checks that proofs are dropped in blocks only
+// mode without touching the memory pool.
+func TestOnDSProofBlocksOnly(t *testing.T) {
+	sp, proof := newDSProofServerPeer(t)
+	cfg.BlocksOnly = true
+	sp.server.txMemPool = nil
+	sp.OnDSProof(nil, invalidCopy(proof))
+	if sp.banScore.Int() != 0 {
+		t.Fatal("proof processed in blocks only mode")
+	}
+}

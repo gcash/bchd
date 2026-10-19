@@ -1922,6 +1922,22 @@ func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
 	}
 }
 
+// wantsDSProof returns whether the peer is told about a double spend proof
+// for the memory pool transaction tx: it must accept transactions and, with
+// a bloom filter loaded, the filter must match tx.
+func (sp *serverPeer) wantsDSProof(tx *bchutil.Tx) bool {
+	if sp.relayTxDisabled() {
+		return false
+	}
+	return !sp.filter.IsLoaded() || sp.filter.MatchTxAndUpdate(tx)
+}
+
+// onBadDSProofs increases the ban score of the peers that sent orphan double
+// spend proofs that turned out invalid.
+func (s *server) onBadDSProofs(peers []mempool.Tag) {
+	s.addDSProofBanScore(peers, 10, "bad-dsproof")
+}
+
 // addDSProofBanScore increases the ban score of the connected peers with the
 // passed ids by score times the number of times their id is passed, with one
 // increase per peer.
@@ -2511,19 +2527,13 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 		}
 
 		if msg.invVect.Type == wire.InvTypeDSProof {
-			if sp.relayTxDisabled() {
-				return
-			}
 			tx, ok := msg.data.(*bchutil.Tx)
 			if !ok {
 				peerLog.Warnf("Underlying data for dsproof inv "+
 					"relay is not a *bchutil.Tx: %T", msg.data)
 				return
 			}
-
-			// Only peers with a bloom filter matching the double
-			// spent transaction are told about the proof.
-			if sp.filter.IsLoaded() && !sp.filter.MatchTxAndUpdate(tx) {
+			if !sp.wantsDSProof(tx) {
 				return
 			}
 		}
@@ -3709,9 +3719,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		FeeEstimator:       s.feeEstimator,
 		DisableDSProofs:    cfg.NoDoubleSpendProof,
 		OnDSProof:          s.AnnounceDSProof,
-		OnBadDSProofs: func(peers []mempool.Tag) {
-			s.addDSProofBanScore(peers, 10, "bad-dsproof")
-		},
+		OnBadDSProofs:      s.onBadDSProofs,
 	}
 	s.txMemPool = mempool.New(&txC)
 

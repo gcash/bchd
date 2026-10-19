@@ -54,8 +54,8 @@ type mempoolTestHarness struct {
 }
 
 // newMempoolTestHarness returns a harness whose chain holds numOutputs
-// outputs of mempoolTestOutputValue.
-func newMempoolTestHarness(t *testing.T, numOutputs int) *mempoolTestHarness {
+// outputs of mempoolTestOutputValue.  opts can change the mempool config.
+func newMempoolTestHarness(t *testing.T, numOutputs int, opts ...func(*mempool.Config)) *mempoolTestHarness {
 	t.Helper()
 
 	params := &chaincfg.MainNetParams
@@ -101,7 +101,7 @@ func newMempoolTestHarness(t *testing.T, numOutputs int) *mempoolTestHarness {
 		}
 		return view, nil
 	}
-	pool := mempool.New(&mempool.Config{
+	poolCfg := &mempool.Config{
 		Policy: mempool.Policy{
 			DisableRelayPriority: true,
 			MaxOrphanTxs:         5,
@@ -117,7 +117,11 @@ func newMempoolTestHarness(t *testing.T, numOutputs int) *mempoolTestHarness {
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
 		},
-	})
+	}
+	for _, opt := range opts {
+		opt(poolCfg)
+	}
+	pool := mempool.New(poolCfg)
 
 	connMgr := &relayRecorder{}
 	s := &rpcServer{
