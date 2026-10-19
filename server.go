@@ -1923,8 +1923,13 @@ func (s *server) AnnounceDSProof(proof *wire.MsgDSProof, tx *bchutil.Tx) {
 }
 
 // addDSProofBanScore increases the ban score of the connected peers with the
-// passed ids.
+// passed ids by score times the number of times their id is passed, with one
+// increase per peer.
 func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason string) {
+	scores := make(map[mempool.Tag]uint32, len(peers))
+	for _, id := range peers {
+		scores[id] += score
+	}
 	go func() {
 		reply := make(chan []*serverPeer)
 		select {
@@ -1939,10 +1944,8 @@ func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason st
 			return
 		}
 		for _, sp := range connected {
-			for _, id := range peers {
-				if mempool.Tag(sp.ID()) == id {
-					sp.addBanScore(score, 0, reason)
-				}
+			if total, ok := scores[mempool.Tag(sp.ID())]; ok {
+				sp.addBanScore(total, 0, reason)
 			}
 		}
 	}()
