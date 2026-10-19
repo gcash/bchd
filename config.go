@@ -457,7 +457,6 @@ func loadConfig() (*config, []string, error) {
 		BlockMinSize:            defaultBlockMinSize,
 		BlockMaxSize:            defaultBlockMaxSize,
 		CoinbaseFlags:           mining.CoinbaseFlags,
-		BlockPrioritySize:       mempool.DefaultBlockPrioritySize,
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
 		SigCacheMaxSize:         defaultSigCacheMaxSize,
 		UtxoCacheMaxSizeMiB:     defaultUtxoCacheMaxSizeMiB,

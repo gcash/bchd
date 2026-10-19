@@ -16,24 +16,15 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// TestTxFeePrioHeap ensures the priority queue for transaction fees and
-// priorities works as expected.
+// TestTxFeePrioHeap ensures the priority queue pops transactions by fee per
+// kilobyte, highest first.
 func TestTxFeePrioHeap(t *testing.T) {
-	// Create some fake priority items that exercise the expected sort
-	// edge conditions.
 	testItems := []*txPrioItem{
-		{feePerKB: 5678, priority: 3},
-		{feePerKB: 5678, priority: 1},
-		{feePerKB: 5678, priority: 1}, // Duplicate fee and prio
-		{feePerKB: 5678, priority: 5},
-		{feePerKB: 5678, priority: 2},
-		{feePerKB: 1234, priority: 3},
-		{feePerKB: 1234, priority: 1},
-		{feePerKB: 1234, priority: 5},
-		{feePerKB: 1234, priority: 5}, // Duplicate fee and prio
-		{feePerKB: 1234, priority: 2},
-		{feePerKB: 10000, priority: 0}, // Higher fee, smaller prio
-		{feePerKB: 0, priority: 10000}, // Higher prio, lower fee
+		{feePerKB: 5678},
+		{feePerKB: 5678}, // Duplicate fee
+		{feePerKB: 1234},
+		{feePerKB: 10000},
+		{feePerKB: 0},
 	}
 
 	// Add random data in addition to the edge conditions already manually
@@ -48,68 +39,21 @@ func TestTxFeePrioHeap(t *testing.T) {
 	for range 1000 {
 		testItems = append(testItems, &txPrioItem{
 			feePerKB: int64(prng.Float64() * bchutil.SatoshiPerBitcoin),
-			priority: prng.Float64() * 100,
 		})
 	}
 
-	// Test sorting by fee per KB then priority.
-	var highest *txPrioItem
-	priorityQueue := newTxPriorityQueue(len(testItems), true)
-	for i := range testItems {
-		prioItem := testItems[i]
-		if highest == nil {
-			highest = prioItem
-		}
-		if prioItem.feePerKB >= highest.feePerKB &&
-			prioItem.priority > highest.priority {
-
-			highest = prioItem
-		}
+	priorityQueue := newTxPriorityQueue(len(testItems))
+	for _, prioItem := range testItems {
 		heap.Push(priorityQueue, prioItem)
 	}
-
-	for range testItems {
+	prev := heap.Pop(priorityQueue).(*txPrioItem)
+	for priorityQueue.Len() > 0 {
 		prioItem := heap.Pop(priorityQueue).(*txPrioItem)
-		if prioItem.feePerKB >= highest.feePerKB &&
-			prioItem.priority > highest.priority {
-
-			t.Fatalf("fee sort: item (fee per KB: %v, "+
-				"priority: %v) higher than than prev "+
-				"(fee per KB: %v, priority %v)",
-				prioItem.feePerKB, prioItem.priority,
-				highest.feePerKB, highest.priority)
+		if prioItem.feePerKB > prev.feePerKB {
+			t.Fatalf("fee sort: item with fee per KB %v popped "+
+				"after %v", prioItem.feePerKB, prev.feePerKB)
 		}
-		highest = prioItem
-	}
-
-	// Test sorting by priority then fee per KB.
-	highest = nil
-	priorityQueue = newTxPriorityQueue(len(testItems), false)
-	for i := range testItems {
-		prioItem := testItems[i]
-		if highest == nil {
-			highest = prioItem
-		}
-		if prioItem.priority >= highest.priority &&
-			prioItem.feePerKB > highest.feePerKB {
-
-			highest = prioItem
-		}
-		heap.Push(priorityQueue, prioItem)
-	}
-
-	for range testItems {
-		prioItem := heap.Pop(priorityQueue).(*txPrioItem)
-		if prioItem.priority >= highest.priority &&
-			prioItem.feePerKB > highest.feePerKB {
-
-			t.Fatalf("priority sort: item (fee per KB: %v, "+
-				"priority: %v) higher than than prev "+
-				"(fee per KB: %v, priority %v)",
-				prioItem.feePerKB, prioItem.priority,
-				highest.feePerKB, highest.priority)
-		}
-		highest = prioItem
+		prev = prioItem
 	}
 }
 
