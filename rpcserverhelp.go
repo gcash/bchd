@@ -476,7 +476,7 @@ var helpDescsEnUS = map[string]string{
 	"infochainresult-proxy":           "The proxy used by the server",
 	"infochainresult-difficulty":      "The current target difficulty",
 	"infochainresult-testnet":         "Whether or not server is on a public test network (testnet3, testnet4 or chipnet)",
-	"infochainresult-relayfee":        "The minimum relay fee for non-free transactions in BTC/KB",
+	"infochainresult-relayfee":        "The minimum relay fee for transactions in BTC/KB",
 	"infochainresult-errors":          "Any current errors",
 
 	// InfoWalletResult help.
@@ -494,7 +494,7 @@ var helpDescsEnUS = map[string]string{
 	"infowalletresult-keypoolsize":     "The number of new keys that are pre-generated",
 	"infowalletresult-unlocked_until":  "The timestamp in seconds since 1 Jan 1970 GMT that the wallet is unlocked for transfers, or 0 if the wallet is locked",
 	"infowalletresult-paytxfee":        "The transaction fee set in BTC/KB",
-	"infowalletresult-relayfee":        "The minimum relay fee for non-free transactions in BTC/KB",
+	"infowalletresult-relayfee":        "The minimum relay fee for transactions in BTC/KB",
 	"infowalletresult-errors":          "Any current errors",
 
 	// GetHeadersCmd help.
