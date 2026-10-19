@@ -262,7 +262,8 @@ func dbFetchAddrIndexEntries(bucket internalBucket, addrKey [addrKeySize]byte, n
 	// the requested amount are needed.
 	var level uint8
 	var serialized []byte
-	for !reverse || len(serialized) < int(numToSkip+numRequested)*txEntrySize {
+	for !reverse || uint64(len(serialized)) <
+		(uint64(numToSkip)+uint64(numRequested))*txEntrySize {
 		curLevelKey := keyForLevel(addrKey, level)
 		levelData := bucket.Get(curLevelKey[:])
 		if levelData == nil {
