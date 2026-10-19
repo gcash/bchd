@@ -645,6 +645,46 @@ func createRawTxTokenData(ct *btcjson.TransactionOutputCashToken) (*wire.TokenDa
 	return tokenData, nil
 }
 
+// createRawTxOutputScript decodes a createrawtransaction output address and
+// returns the script that pays to it.
+func createRawTxOutputScript(encodedAddr string, params *chaincfg.Params) ([]byte, error) {
+	addr, err := bchutil.DecodeAddress(encodedAddr, params)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Invalid address or key: " + err.Error(),
+		}
+	}
+
+	// Ensure the address is one of the supported types and that the
+	// network encoded with the address matches the network the server is
+	// currently on.
+	switch addr.(type) {
+	case *bchutil.AddressPubKeyHash:
+	case *bchutil.AddressScriptHash:
+	case *bchutil.AddressScriptHash32:
+	default:
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Invalid address or key",
+		}
+	}
+	if !addr.IsForNet(params) {
+		return nil, &btcjson.RPCError{
+			Code: btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Invalid address: " + encodedAddr +
+				" is for the wrong network",
+		}
+	}
+
+	pkScript, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		context := "Failed to generate pay-to-address script"
+		return nil, internalRPCError(err.Error(), context)
+	}
+	return pkScript, nil
+}
+
 // handleCreateRawTransaction handles createrawtransaction commands.
 func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.CreateRawTransactionCmd)
@@ -675,21 +715,19 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 		mtx.AddTxIn(txIn)
 	}
 
-	// Parse the optional token entries, keyed by canonical address so the
-	// same address matches however it is written.
+	// Parse the optional token entries, keyed by output script so the
+	// same destination matches however its address is written.
 	params := s.cfg.ChainParams
 	tokens := make(map[string]*wire.TokenData)
-	var tokenAddrs []string
+	var tokenScripts, tokenAddrs []string
 	if c.CashTokens != nil {
 		for _, ct := range *c.CashTokens {
-			addr, err := bchutil.DecodeAddress(ct.Address, params)
+			pkScript, err := createRawTxOutputScript(ct.Address,
+				params)
 			if err != nil {
-				return nil, &btcjson.RPCError{
-					Code:    btcjson.ErrRPCInvalidAddressOrKey,
-					Message: "Invalid address or key: " + err.Error(),
-				}
+				return nil, err
 			}
-			key := addr.EncodeAddress()
+			key := string(pkScript)
 			if _, ok := tokens[key]; ok {
 				return nil, &btcjson.RPCError{
 					Code: btcjson.ErrRPCInvalidParameter,
@@ -703,12 +741,14 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 				return nil, err
 			}
 			tokens[key] = tokenData
-			tokenAddrs = append(tokenAddrs, key)
+			tokenScripts = append(tokenScripts, key)
+			tokenAddrs = append(tokenAddrs, ct.Address)
 		}
 	}
 
 	// Add all transaction outputs to the transaction after performing
 	// some validity checks.
+	outputs := make(map[string]struct{}, len(c.Amounts))
 	for encodedAddr, amount := range c.Amounts {
 		// Ensure amount is in the valid range for monetary amounts.
 		if amount <= 0 || amount > bchutil.MaxSatoshi {
@@ -718,42 +758,20 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			}
 		}
 
-		// Decode the provided address.
-		addr, err := bchutil.DecodeAddress(encodedAddr, params)
+		pkScript, err := createRawTxOutputScript(encodedAddr, params)
 		if err != nil {
-			return nil, &btcjson.RPCError{
-				Code:    btcjson.ErrRPCInvalidAddressOrKey,
-				Message: "Invalid address or key: " + err.Error(),
-			}
+			return nil, err
 		}
 
-		// Ensure the address is one of the supported types and that
-		// the network encoded with the address matches the network the
-		// server is currently on.
-		switch addr.(type) {
-		case *bchutil.AddressPubKeyHash:
-		case *bchutil.AddressScriptHash:
-		case *bchutil.AddressScriptHash32:
-		default:
+		// Reject a destination given twice, even in different forms.
+		if _, ok := outputs[string(pkScript)]; ok {
 			return nil, &btcjson.RPCError{
-				Code:    btcjson.ErrRPCInvalidAddressOrKey,
-				Message: "Invalid address or key",
+				Code: btcjson.ErrRPCInvalidParameter,
+				Message: "Invalid parameter, duplicated address: " +
+					encodedAddr,
 			}
 		}
-		if !addr.IsForNet(params) {
-			return nil, &btcjson.RPCError{
-				Code: btcjson.ErrRPCInvalidAddressOrKey,
-				Message: "Invalid address: " + encodedAddr +
-					" is for the wrong network",
-			}
-		}
-
-		// Create a new script which pays to the provided address.
-		pkScript, err := txscript.PayToAddrScript(addr)
-		if err != nil {
-			context := "Failed to generate pay-to-address script"
-			return nil, internalRPCError(err.Error(), context)
-		}
+		outputs[string(pkScript)] = struct{}{}
 
 		// Convert the amount to satoshi.
 		satoshi, err := bchutil.NewAmount(amount)
@@ -764,9 +782,9 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 
 		// Attach the token data requested for this address, if any.
 		var tokenData wire.TokenData
-		if td, ok := tokens[addr.EncodeAddress()]; ok {
+		if td, ok := tokens[string(pkScript)]; ok {
 			tokenData = *td
-			delete(tokens, addr.EncodeAddress())
+			delete(tokens, string(pkScript))
 		}
 
 		txOut := wire.NewTxOut(int64(satoshi), pkScript, tokenData)
@@ -775,12 +793,12 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 
 	// Every token entry must belong to one of the outputs.  Reject any
 	// that do not rather than silently dropping the tokens.
-	for _, key := range tokenAddrs {
+	for i, key := range tokenScripts {
 		if _, ok := tokens[key]; ok {
 			return nil, &btcjson.RPCError{
 				Code: btcjson.ErrRPCInvalidParameter,
 				Message: "Invalid parameter, cashtokens address " +
-					key + " is not one of the output addresses",
+					tokenAddrs[i] + " is not one of the output addresses",
 			}
 		}
 	}
