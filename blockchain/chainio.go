@@ -84,6 +84,10 @@ var (
 	// version of the utxo set currently in the database.
 	utxoSetVersionKeyName = []byte("utxosetversion")
 
+	// chainStateReIndexKeyName is the name of the db key that marks a
+	// re-index of the chain state as started and not yet finished.
+	chainStateReIndexKeyName = []byte("chainstatereindex")
+
 	// utxoSetBucketName is the name of the db bucket used to house the
 	// unspent transaction output set.
 	utxoSetBucketName = []byte("utxosetv2")

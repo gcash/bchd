@@ -2155,52 +2155,112 @@ func (b *BlockChain) prune() error {
 func (b *BlockChain) ReIndexChainState() error {
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
+	return b.reIndexChainState(false, nil)
+}
 
-	// Delete the UTXO bucket and create a new one
-	log.Info("Deleting UTXO database bucket...")
-	err := b.db.Update(func(tx database.Tx) error {
-		if err := tx.Metadata().DeleteBucket(utxoSetBucketName); err != nil {
-			return err
-		}
-		if _, err := tx.Metadata().CreateBucket(utxoSetBucketName); err != nil {
-			return err
-		}
-		return nil
+// reIndexResumeNode returns the block an interrupted re-index of the chain
+// state can continue after: the block of its last completed flush, or genesis
+// when the re-index has to start over.
+func (b *BlockChain) reIndexResumeNode() (*blockNode, error) {
+	var code byte
+	var hash *chainhash.Hash
+	err := b.db.View(func(dbTx database.Tx) error {
+		var err error
+		code, hash, err = dbFetchUtxoStateConsistency(dbTx)
+		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.Info("Deletion complete. Re-indexing UTXO set...")
+
+	// A flush that was interrupted may have written part of the outputs of
+	// later blocks.
+	genesis := b.bestChain.Genesis()
+	if code != ucsConsistent {
+		return genesis, nil
+	}
+	node := b.index.LookupNode(hash)
+	if node == nil || !b.bestChain.Contains(node) {
+		return genesis, nil
+	}
+	return node, nil
+}
+
+// reIndexChainState rebuilds the utxo set from the blocks on disk.  When resume
+// is set, an interrupted re-index continues after its last completed flush.
+// An interrupt flushes the utxo set, so the re-index can be resumed from
+// there.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) error {
+	startNode := b.bestChain.Genesis()
+	if resume {
+		var err error
+		if startNode, err = b.reIndexResumeNode(); err != nil {
+			return err
+		}
+	}
+
+	if startNode.height == 0 {
+		// Delete the UTXO bucket and create a new one.  The utxo state
+		// is marked as being flushed from genesis and the re-index as
+		// unfinished, so an interrupted re-index is resumed on the next
+		// start.
+		log.Info("Deleting UTXO database bucket...")
+		err := b.db.Update(func(tx database.Tx) error {
+			meta := tx.Metadata()
+			if err := meta.DeleteBucket(utxoSetBucketName); err != nil {
+				return err
+			}
+			if _, err := meta.CreateBucket(utxoSetBucketName); err != nil {
+				return err
+			}
+			if err := meta.Put(chainStateReIndexKeyName, []byte{1}); err != nil {
+				return err
+			}
+			return dbPutUtxoStateConsistency(tx, ucsFlushOngoing,
+				&startNode.hash)
+		})
+		if err != nil {
+			return err
+		}
+		log.Info("Deletion complete. Re-indexing UTXO set...")
+	} else {
+		log.Infof("Resuming the UTXO set re-index after height %d...",
+			startNode.height)
+	}
+	b.utxoCache.mtx.Lock()
+	b.utxoCache.cachedEntries = make(map[wire.OutPoint]*UtxoEntry)
+	b.utxoCache.totalEntryMemory = 0
+	b.utxoCache.lastFlushHash = startNode.hash
+	b.utxoCache.mtx.Unlock()
 
 	var (
-		blk           *bchutil.Block
-		currentHeight int32 = 1
-		view          *UtxoViewpoint
-		state         *BestState
+		blk   *bchutil.Block
+		view  *UtxoViewpoint
+		state *BestState
 	)
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
-
-	var heightStr string
-	progress := float64(0.0)
-	go func() {
-		for range ticker.C {
-			progress = math.Min(float64(currentHeight)/float64(len(b.bestChain.nodes)), 1.0) * 100
-			heightStr = fmt.Sprintf("%d/%d (%.2f%%)", currentHeight, len(b.bestChain.nodes), progress)
-			log.Infof("Re-index progress: processed %s", heightStr)
+	for _, node := range b.bestChain.nodes[startNode.height+1:] {
+		select {
+		case <-ticker.C:
+			progress := math.Min(float64(node.height)/float64(len(b.bestChain.nodes)), 1.0) * 100
+			log.Infof("Re-index progress: processed %d/%d (%.2f%%)",
+				node.height, len(b.bestChain.nodes), progress)
+		default:
 		}
-	}()
-	for _, node := range b.bestChain.nodes[1:] {
+
 		view = NewUtxoViewpoint()
-		currentHeight = node.height
 		err := b.db.View(func(tx database.Tx) error {
+			var err error
 			blk, err = dbFetchBlockByNode(tx, node)
 			return err
 		})
 		if err != nil {
 			return err
 		}
-		if err = view.addInputUtxos(b.utxoCache, blk, blk.Height() < b.chainParams.MagneticAnonomalyForkHeight); err != nil {
+		if err = view.addInputUtxos(b.utxoCache, blk, true); err != nil {
 			return err
 		}
 		if err = connectTransactions(view, blk, nil, false); err != nil {
@@ -2210,10 +2270,41 @@ func (b *BlockChain) ReIndexChainState() error {
 			return err
 		}
 		state = newBestState(node, 0, 0, 0, time.Time{})
+		if interruptRequested(interrupt) {
+			if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
+				return err
+			}
+			log.Warnf("UTXO set re-index interrupted at height %d",
+				node.height)
+			return errInterruptRequested
+		}
 		if err = b.utxoCache.Flush(FlushIfNeeded, state); err != nil {
 			return err
 		}
 	}
+	tip := b.bestChain.Tip()
+	if state == nil {
+		state = newBestState(tip, 0, 0, 0, time.Time{})
+	}
+	if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
+		return err
+	}
+
+	// The flush is skipped when there is nothing to write, as for a chain
+	// of only the genesis block, so mark the state as consistent here.
+	err := b.db.Update(func(tx database.Tx) error {
+		if err := dbPutUtxoStateConsistency(tx, ucsConsistent,
+			&tip.hash); err != nil {
+			return err
+		}
+		return tx.Metadata().Delete(chainStateReIndexKeyName)
+	})
+	if err != nil {
+		return err
+	}
+	b.utxoCache.mtx.Lock()
+	b.utxoCache.lastFlushHash = tip.hash
+	b.utxoCache.mtx.Unlock()
 	return nil
 }
 
@@ -2483,10 +2574,37 @@ func New(config *Config) (*BlockChain, error) {
 	lastCheckpoint := b.LatestCheckpoint()
 	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height <= lastCheckpoint.Height
 
-	// Make sure the utxo state is caught up if it was left in an inconsistent
-	// state.
-	if err := b.utxoCache.InitConsistentState(bestNode, b.index, config.FastSync, config.Interrupt); err != nil {
+	// A re-index of the chain state that was interrupted is resumed below.
+	// A re-index needs all blocks, which pruning and fast sync remove.
+	var resumeReIndex, wasPruned bool
+	if err := b.db.View(func(dbTx database.Tx) error {
+		resumeReIndex = dbTx.Metadata().Get(chainStateReIndexKeyName) != nil
+		wasPruned = bytes.Equal(dbFetchBlockchainType(dbTx),
+			prunedBlockchainEntryValue)
+		return nil
+	}); err != nil {
 		return nil, err
+	}
+	if config.ReIndexChainState || resumeReIndex {
+		if wasPruned {
+			return nil, fmt.Errorf("the UTXO set can't be re-indexed " +
+				"because the database was pruned or fast synced " +
+				"and is missing blocks, a full resync is needed")
+		}
+		if config.Prune || config.FastSync {
+			return nil, fmt.Errorf("the UTXO set re-index needs all " +
+				"blocks, restart without pruning or fast sync")
+		}
+	}
+
+	// Make sure the utxo state is caught up if it was left in an inconsistent
+	// state, unless it is rebuilt below anyway.
+	if !config.ReIndexChainState && !resumeReIndex {
+		err := b.utxoCache.InitConsistentState(bestNode, b.index,
+			config.FastSync, config.Interrupt)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Perform any upgrades to the various chain-specific buckets as needed.
@@ -2543,9 +2661,11 @@ func New(config *Config) (*BlockChain, error) {
 		}
 	}
 
-	if config.ReIndexChainState {
+	if config.ReIndexChainState || resumeReIndex {
 		log.Info("Re-indexing UTXO set from disk. This will take a while...")
-		if err := b.ReIndexChainState(); err != nil {
+		err := b.reIndexChainState(!config.ReIndexChainState,
+			config.Interrupt)
+		if err != nil {
 			return nil, err
 		}
 		log.Info("Re-indexing complete")
