@@ -335,6 +335,27 @@ func (s *utxoCache) FetchEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 	return entry.Clone(), err
 }
 
+// FetchEntryUncached is like FetchEntry, but an entry read from the database,
+// or the miss, is not added to the cache.
+//
+// This method is safe for concurrent access.
+func (s *utxoCache) FetchEntryUncached(outpoint wire.OutPoint) (*UtxoEntry, error) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	if entry, found := s.cachedEntries[outpoint]; found {
+		return entry.Clone(), nil
+	}
+
+	var entry *UtxoEntry
+	err := s.db.View(func(dbTx database.Tx) error {
+		var err error
+		entry, err = dbFetchUtxoEntry(dbTx, outpoint)
+		return err
+	})
+	return entry, err
+}
+
 // FetchUtxoEntry returns the requested unspent transaction output from the point
 // of view of the end of the main chain.
 //
@@ -348,6 +369,19 @@ func (b *BlockChain) FetchUtxoEntry(outpoint wire.OutPoint) (*UtxoEntry, error) 
 	b.chainLock.RLock()
 	defer b.chainLock.RUnlock()
 	return b.utxoCache.FetchEntry(outpoint)
+}
+
+// FetchUtxoEntryUncached returns the requested unspent transaction output like
+// FetchUtxoEntry, but does not add what it reads from the database to the UTXO
+// cache.  It suits lookups that are not part of validating blocks or
+// transactions, such as scans of the outputs of many transactions.  As with
+// FetchUtxoEntry, an output without data returns a nil entry and a nil error.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) FetchUtxoEntryUncached(outpoint wire.OutPoint) (*UtxoEntry, error) {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+	return b.utxoCache.FetchEntryUncached(outpoint)
 }
 
 // spendEntry marks the output as spent.  Spending an output that is already
