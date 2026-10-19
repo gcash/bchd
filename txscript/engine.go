@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 )
 
 // ScriptFlags is a bitmask defining additional operations or tests that will be
@@ -593,33 +594,40 @@ func (vm *Engine) returnFromInvoke() bool {
 // Execute will execute all scripts in the script engine and return either nil
 // for successful validation or an error if one occurred.
 func (vm *Engine) Execute() (err error) {
+	// The trace closures allocate on every step, so only build them when
+	// trace logging is on.
+	trace := log.Level() <= bchlog.LevelTrace
 	done := false
 	for !done {
-		log.Tracef("%v", newLogClosure(func() string {
-			dis, err := vm.DisasmPC()
-			if err != nil {
-				return fmt.Sprintf("stepping (%v)", err)
-			}
-			return fmt.Sprintf("stepping %v", dis)
-		}))
+		if trace {
+			log.Tracef("%v", newLogClosure(func() string {
+				dis, err := vm.DisasmPC()
+				if err != nil {
+					return fmt.Sprintf("stepping (%v)", err)
+				}
+				return fmt.Sprintf("stepping %v", dis)
+			}))
+		}
 
 		done, err = vm.Step()
 		if err != nil {
 			return err
 		}
-		log.Tracef("%v", newLogClosure(func() string {
-			var dstr, astr string
+		if trace {
+			log.Tracef("%v", newLogClosure(func() string {
+				var dstr, astr string
 
-			// if we're tracing, dump the stacks.
-			if vm.dstack.Depth() != 0 {
-				dstr = "Stack:\n" + vm.dstack.String()
-			}
-			if vm.astack.Depth() != 0 {
-				astr = "AltStack:\n" + vm.astack.String()
-			}
+				// if we're tracing, dump the stacks.
+				if vm.dstack.Depth() != 0 {
+					dstr = "Stack:\n" + vm.dstack.String()
+				}
+				if vm.astack.Depth() != 0 {
+					astr = "AltStack:\n" + vm.astack.String()
+				}
 
-			return dstr + astr
-		}))
+				return dstr + astr
+			}))
+		}
 	}
 
 	return vm.CheckErrorCondition(true)

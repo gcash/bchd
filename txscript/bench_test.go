@@ -247,3 +247,104 @@ func BenchmarkParseScript(b *testing.B) {
 		})
 	}
 }
+
+// benchBlockFlags approximates the script flags of block validation after the
+// May 2026 upgrade.
+const benchBlockFlags = (StandardVerifyFlags | ScriptAllowCashTokens |
+	ScriptAllowMay2025 | ScriptAllowMay2026) &^
+	(ScriptDiscourageUpgradableNops | ScriptVerifyInputSigChecks)
+
+// benchExecute validates input 0 of tx spending pkScript with amt.
+func benchExecute(b *testing.B, tx *wire.MsgTx, pkScript []byte, amt int64, flags ScriptFlags) {
+	hashes := NewTxSigHashes(tx)
+	run := func() error {
+		vm, err := NewEngine(pkScript, tx, 0, flags, nil, hashes, nil, amt)
+		if err != nil {
+			return err
+		}
+		return vm.Execute()
+	}
+	if err := run(); err != nil {
+		b.Fatalf("script fails: %v", err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = run()
+	}
+}
+
+// benchKey returns a fixed private key derived from seed.
+func benchKey(seed byte) *bchec.PrivateKey {
+	key, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{seed}, 32))
+	return key
+}
+
+// benchSign returns an ECDSA SIGHASH_ALL|FORKID signature for input 0.
+func benchSign(b *testing.B, tx *wire.MsgTx, script []byte, amt int64, key *bchec.PrivateKey) []byte {
+	sig, err := RawTxInECDSASignature(tx, 0, script, SigHashAll|SigHashForkID, key, amt)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return sig
+}
+
+// BenchmarkExecuteP2PKH validates a P2PKH input with an ECDSA signature.
+func BenchmarkExecuteP2PKH(b *testing.B) {
+	const amt = 100000
+	key := benchKey(1)
+	pubKey := key.PubKey().SerializeCompressed()
+	pkScript, err := NewScriptBuilder().AddOp(OP_DUP).AddOp(OP_HASH160).
+		AddData(bchutil.Hash160(pubKey)).AddOp(OP_EQUALVERIFY).
+		AddOp(OP_CHECKSIG).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	tx := createSpendingTx(nil, pkScript, amt)
+	sig := benchSign(b, tx, pkScript, amt, key)
+	tx.TxIn[0].SignatureScript, err = NewScriptBuilder().AddData(sig).
+		AddData(pubKey).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchExecute(b, tx, pkScript, amt, benchBlockFlags)
+}
+
+// BenchmarkExecuteP2SHMultisig validates a 2-of-3 P2SH multisig input with
+// ECDSA signatures.
+func BenchmarkExecuteP2SHMultisig(b *testing.B) {
+	const amt = 100000
+	keys := []*bchec.PrivateKey{benchKey(1), benchKey(2), benchKey(3)}
+	builder := NewScriptBuilder().AddOp(OP_2)
+	for _, key := range keys {
+		builder.AddData(key.PubKey().SerializeCompressed())
+	}
+	redeemScript, err := builder.AddOp(OP_3).AddOp(OP_CHECKMULTISIG).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	pkScript, err := NewScriptBuilder().AddOp(OP_HASH160).
+		AddData(bchutil.Hash160(redeemScript)).AddOp(OP_EQUAL).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	tx := createSpendingTx(nil, pkScript, amt)
+	tx.TxIn[0].SignatureScript, err = NewScriptBuilder().AddOp(OP_0).
+		AddData(benchSign(b, tx, redeemScript, amt, keys[0])).
+		AddData(benchSign(b, tx, redeemScript, amt, keys[1])).
+		AddData(redeemScript).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchExecute(b, tx, pkScript, amt, benchBlockFlags)
+}
+
+// BenchmarkExecuteOpcodes runs a script of 3000 cheap opcodes.
+func BenchmarkExecuteOpcodes(b *testing.B) {
+	sigScript, err := NewScriptBuilder().AddData(bytes.Repeat([]byte{1}, 1000)).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	pkScript := append([]byte{OP_DROP}, bytes.Repeat([]byte{OP_NOP}, 3000)...)
+	pkScript = append(pkScript, OP_1)
+	benchExecute(b, createSpendingTx(sigScript, pkScript, 0), pkScript, 0, benchBlockFlags)
+}
