@@ -170,6 +170,31 @@ const (
 	MaxFunctionIdentifierLength = 7
 )
 
+// definedFunction is a function body stored by OP_DEFINE.  The body is parsed
+// the first time the function is invoked and the result is reused by later
+// invocations.
+type definedFunction struct {
+	body     []byte
+	ops      []parsedOpcode
+	parseErr error
+	parsed   bool
+}
+
+// parse returns the parsed opcodes of the function body.
+func (f *definedFunction) parse() ([]parsedOpcode, error) {
+	if !f.parsed {
+		ops, err := parseScript(f.body)
+		if err == nil {
+			// Drop the spare capacity parseScript reserves.
+			f.ops = make([]parsedOpcode, len(ops))
+			copy(f.ops, ops)
+		}
+		f.parseErr = err
+		f.parsed = true
+	}
+	return f.ops, f.parseErr
+}
+
 type stackFrame struct {
 	script       []parsedOpcode
 	scriptOff    int
@@ -204,7 +229,7 @@ type Engine struct {
 	savedFirstStack      [][]byte // stack from first script for bip16 scripts
 	inputAmount          int64
 	sigChecks            int
-	functionTable        map[string][]byte
+	functionTable        map[string]*definedFunction
 	definedFunctionCount int
 	frameStack           []stackFrame
 }
@@ -561,7 +586,7 @@ func (vm *Engine) Step() (done bool, err error) {
 		}
 		vm.lastCodeSep = 0
 		if vm.hasFlag(ScriptAllowMay2026) {
-			vm.functionTable = make(map[string][]byte)
+			vm.functionTable = make(map[string]*definedFunction)
 			vm.definedFunctionCount = 0
 		}
 		if vm.scriptIdx >= len(vm.scripts) {
@@ -1007,8 +1032,9 @@ func (vm *Engine) SetAltStack(data [][]byte) {
 	setStack(&vm.astack, data)
 }
 
-// Clone deep copies the state of the vm into a new instance
-// and returns it.
+// Clone copies the state of the vm into a new instance and returns it.
+// Defined function bodies and their parsed opcodes are never modified, so
+// they are shared with the copy.
 func (vm *Engine) Clone() *Engine {
 	if vm == nil {
 		return nil
@@ -1067,11 +1093,13 @@ func (vm *Engine) Clone() *Engine {
 		copy(newVM.dstack.stk[i], data)
 	}
 
-	newVM.functionTable = make(map[string][]byte, len(vm.functionTable))
+	// Function bodies and their parsed opcodes are never modified, so
+	// they are shared.
+	newVM.functionTable = make(map[string]*definedFunction,
+		len(vm.functionTable))
 	for k, v := range vm.functionTable {
-		b := make([]byte, len(v))
-		copy(b, v)
-		newVM.functionTable[k] = b
+		f := *v
+		newVM.functionTable[k] = &f
 	}
 
 	newVM.frameStack = make([]stackFrame, len(vm.frameStack))
@@ -1221,7 +1249,7 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	}
 
 	if vm.hasFlag(ScriptAllowMay2026) {
-		vm.functionTable = make(map[string][]byte)
+		vm.functionTable = make(map[string]*definedFunction)
 		vm.definedFunctionCount = 0
 		vm.frameStack = nil
 	}

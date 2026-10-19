@@ -1981,7 +1981,7 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 
 	bodyCopy := make([]byte, len(body))
 	copy(bodyCopy, body)
-	vm.functionTable[key] = bodyCopy
+	vm.functionTable[key] = &definedFunction{body: bodyCopy}
 	vm.definedFunctionCount++
 
 	vm.metrics.AddOPCost(len(body))
@@ -2008,7 +2008,7 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	body, exists := vm.functionTable[string(identifier)]
+	function, exists := vm.functionTable[string(identifier)]
 	if !exists {
 		return scriptError(ErrUndefinedFunction,
 			fmt.Sprintf(
@@ -2024,11 +2024,11 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 	}
 
 	// empty function body: no operations
-	if len(body) == 0 {
+	if len(function.body) == 0 {
 		return nil
 	}
 
-	parsedBody, err := parseScript(body)
+	parsedBody, err := function.parse()
 	if err != nil {
 		return err
 	}
