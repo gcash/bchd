@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -695,5 +696,60 @@ func TestUtxoCache_FlushReleasesMap(t *testing.T) {
 	if mapKept > int64(grown/10) {
 		t.Fatalf("emptied map still held %d KiB after a full flush",
 			mapKept/1024)
+	}
+}
+
+// TestUtxoCache_FetchEntryUncached ensures FetchUtxoEntryUncached returns
+// the same entries as FetchUtxoEntry without adding to the cache.
+func TestUtxoCache_FetchEntryUncached(t *testing.T) {
+	chain, params, tearDown := utxoCacheTestChain("TestUtxoCache_FetchEntryUncached")
+	defer tearDown()
+	cache := chain.utxoCache
+	tip := bchutil.NewBlock(params.GenesisBlock)
+
+	tip, flushedOuts := addBlock(chain, tip, nil)
+	if err := chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatalf("FlushCachedState: %v", err)
+	}
+	_, cachedOuts := addBlock(chain, tip, nil)
+	if len(cache.cachedEntries) != 1 {
+		t.Fatalf("got %d cached entries, want 1", len(cache.cachedEntries))
+	}
+
+	missing := wire.OutPoint{Hash: chainhash.Hash{1}}
+	outpoints := []wire.OutPoint{
+		flushedOuts[0].prevOut,
+		cachedOuts[0].prevOut,
+		missing,
+	}
+	entries := make([]*UtxoEntry, len(outpoints))
+	for i, op := range outpoints {
+		entry, err := chain.FetchUtxoEntryUncached(op)
+		if err != nil {
+			t.Fatalf("FetchUtxoEntryUncached(%v): %v", op, err)
+		}
+		entries[i] = entry
+	}
+	if len(cache.cachedEntries) != 1 {
+		t.Fatalf("got %d cached entries after FetchUtxoEntryUncached, "+
+			"want 1", len(cache.cachedEntries))
+	}
+
+	for i, op := range outpoints {
+		entry := entries[i]
+		want, err := chain.FetchUtxoEntry(op)
+		if err != nil {
+			t.Fatalf("FetchUtxoEntry(%v): %v", op, err)
+		}
+		if (entry == nil) != (op == missing) || (want == nil) != (op == missing) {
+			t.Fatalf("%v: got %v, want %v", op, entry, want)
+		}
+		if entry != nil && (entry.Amount() != want.Amount() ||
+			entry.BlockHeight() != want.BlockHeight() ||
+			entry.IsCoinBase() != want.IsCoinBase() ||
+			!bytes.Equal(entry.PkScript(), want.PkScript())) {
+
+			t.Fatalf("%v: got %+v, want %+v", op, entry, want)
+		}
 	}
 }
