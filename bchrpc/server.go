@@ -900,7 +900,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	// use cash address format
-	addr, err = bchutil.ConvertSlpToCashAddress(addr, s.chainParams)
+	addr, err = toCashAddress(addr, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
 	}
@@ -1051,7 +1051,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 
 	// use cash address format
-	addr, err = bchutil.ConvertSlpToCashAddress(addr, s.chainParams)
+	addr, err = toCashAddress(addr, s.chainParams)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
 	}
@@ -3091,11 +3091,14 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 	if scriptPubKey != nil {
 		_, addrs, _, err := txscript.ExtractPkScriptAddrs(scriptPubKey, s.chainParams)
 		if err == nil && len(addrs) == 1 {
+			// An address with no slp form, such as P2SH32 or a bare
+			// pubkey, is left out.
 			slpAddr, err := bchutil.ConvertCashToSlpAddress(addrs[0], s.chainParams)
 			if err != nil {
-				log.Critical(err)
+				log.Debugf("could not convert address %s: %v", addrs[0].String(), err)
+			} else {
+				address = slpAddr.String()
 			}
-			address = slpAddr.String()
 		}
 	}
 
@@ -3650,6 +3653,16 @@ func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rp
 			}
 		}
 	}
+}
+
+// toCashAddress returns the passed address in cash address format.  A P2SH32
+// address is rebuilt from its hash since the slp converter does not handle
+// it.
+func toCashAddress(addr bchutil.Address, params *chaincfg.Params) (bchutil.Address, error) {
+	if a, ok := addr.(*bchutil.AddressScriptHash32); ok {
+		return bchutil.NewAddressScriptHash32FromHash(a.Hash256()[:], params)
+	}
+	return bchutil.ConvertSlpToCashAddress(addr, params)
 }
 
 // setInputSlpTokenAddress is used to apply the SlpToken.Aaddress to a transaction input
