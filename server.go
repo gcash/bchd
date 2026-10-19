@@ -1771,9 +1771,11 @@ func (sp *serverPeer) OnReject(p *peer.Peer, msg *wire.MsgReject) {
 	peerLog.Warnf("Received reject message from peer %s, code: %s, reason: %s", p, msg.Code.String(), msg.Reason)
 }
 
-// OnNotFound logs all not found messages received from the remote peer.
+// OnNotFound logs all not found messages received from the remote peer and
+// passes them to the sync manager.
 func (sp *serverPeer) OnNotFound(p *peer.Peer, msg *wire.MsgNotFound) {
 	peerLog.Warnf("Received not found message from peer %s, %d not found invs", p, len(msg.InvList))
+	sp.server.syncManager.QueueNotFound(msg, sp.Peer)
 }
 
 // OnRead is invoked when a peer receives a message and it is used to update
