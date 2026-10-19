@@ -773,3 +773,22 @@ func TestIsTestNet(t *testing.T) {
 		}
 	}
 }
+
+// TestEstimatePriorityMethodNotFound ensures estimatepriority, which has no
+// use without transaction priority, is reported as an unknown method rather
+// than one that is not implemented yet.
+func TestEstimatePriorityMethodNotFound(t *testing.T) {
+	cmd := parseCmd(&btcjson.Request{
+		Jsonrpc: "1.0",
+		Method:  "estimatepriority",
+		Params:  []json.RawMessage{json.RawMessage("6")},
+		ID:      1,
+	})
+	if cmd.err != nil {
+		t.Fatalf("parseCmd: %v", cmd.err)
+	}
+	_, err := (&rpcServer{}).standardCmdResult(cmd, nil)
+	if err != btcjson.ErrRPCMethodNotFound {
+		t.Fatalf("got %v, want %v", err, btcjson.ErrRPCMethodNotFound)
+	}
+}
