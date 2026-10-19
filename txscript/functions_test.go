@@ -103,3 +103,71 @@ func TestInvokeUnbalancedControlStack(t *testing.T) {
 		t.Errorf("balanced script: unexpected error %v", err)
 	}
 }
+
+// TestInvokeParsesBodyOnce ensures a function body is parsed only once, no
+// matter how often the function is invoked.
+func TestInvokeParsesBodyOnce(t *testing.T) {
+	t.Parallel()
+
+	// <OP_1 OP_DROP> <1> OP_DEFINE 3 OP_BEGIN <1> OP_INVOKE OP_1SUB OP_DUP
+	// OP_NOT OP_UNTIL OP_DROP OP_1
+	pkScript, err := hex.DecodeString("025175" + "51" + "89" + "53" + "65" +
+		"51" + "8a" + "8c" + "76" + "91" + "66" + "75" + "51")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: chainhash.Hash{1}, Index: 1},
+		Sequence:         0xffffffff,
+	})
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{OP_1}, wire.TokenData{}))
+	utxos := NewUtxoCache()
+	utxos.AddEntry(0, *wire.NewTxOut(2000, pkScript, wire.TokenData{}))
+	vm, err := NewEngine(pkScript, tx, 0, may2026TestFlags, nil,
+		NewTxSigHashes(tx), utxos, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var bodies []*parsedOpcode
+	for done := false; !done; {
+		done, err = vm.Step()
+		if err != nil {
+			t.Fatalf("unexpected error %v", err)
+		}
+		if !done && len(vm.frameStack) == 1 && vm.scriptOff == 0 {
+			bodies = append(bodies, &vm.scripts[vm.scriptIdx][0])
+		}
+	}
+	if err := vm.CheckErrorCondition(true); err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(bodies) != 3 {
+		t.Fatalf("got %d invocations, want 3", len(bodies))
+	}
+	for i := 1; i < len(bodies); i++ {
+		if bodies[i] != bodies[0] {
+			t.Fatalf("invocation %d parsed the body again", i)
+		}
+	}
+}
+
+// TestInvokeMalformedBody ensures a malformed function body can be defined
+// and only fails the script when the function is invoked.
+func TestInvokeMalformedBody(t *testing.T) {
+	t.Parallel()
+
+	// <0x4c> <1> OP_DEFINE OP_1
+	if _, err := runFunctionsTestScript(t, nil, "014c"+"51"+"89"+"51",
+		may2026TestFlags); err != nil {
+		t.Errorf("defined only: unexpected error %v", err)
+	}
+
+	// <0x4c> <1> OP_DEFINE <1> OP_INVOKE OP_1
+	_, err := runFunctionsTestScript(t, nil, "014c"+"51"+"89"+"51"+"8a"+"51",
+		may2026TestFlags)
+	if !IsErrorCode(err, ErrMalformedPush) {
+		t.Errorf("invoked: got error %v, want %v", err, ErrMalformedPush)
+	}
+}
