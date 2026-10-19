@@ -597,8 +597,8 @@ var helpDescsEnUS = map[string]string{
 	"getrawmempoolverboseresult-fee":              "Transaction fee in bitcoins",
 	"getrawmempoolverboseresult-time":             "Local time transaction entered pool in seconds since 1 Jan 1970 GMT",
 	"getrawmempoolverboseresult-height":           "Block height when transaction entered the pool",
-	"getrawmempoolverboseresult-startingpriority": "Priority when transaction entered the pool",
-	"getrawmempoolverboseresult-currentpriority":  "Current priority",
+	"getrawmempoolverboseresult-startingpriority": "Deprecated, always 0",
+	"getrawmempoolverboseresult-currentpriority":  "Deprecated, always 0",
 	"getrawmempoolverboseresult-depends":          "Unconfirmed transactions used as inputs for this transaction",
 	"getrawmempoolverboseresult-vsize":            "The virtual size of a transaction",
 

@@ -2278,7 +2278,7 @@
         "starting_priority": {
           "type": "number",
           "format": "double",
-          "description": "The priority of the transaction when it was added to the pool."
+          "description": "Deprecated, always 0."
         }
       }
     },
