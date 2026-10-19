@@ -13,6 +13,7 @@ import (
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -237,12 +238,36 @@ func TestHandleCreateRawTransactionTokenErrors(t *testing.T) {
 	// as a duplicate of the address without it.
 	prefixedAddr := chaincfg.MainNetParams.CashAddressPrefix + ":" + addr
 
+	// The same destination as addr in other forms and on another network.
+	hash := bytes.Repeat([]byte{0x04}, 20)
+	params := &chaincfg.MainNetParams
+	tokenAwareAddr, err := bchutil.NewAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create address: %v", err)
+	}
+	legacyAddr, err := bchutil.NewLegacyAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create legacy address: %v", err)
+	}
+	testnetAddr, err := bchutil.NewLegacyAddressPubKeyHash(hash,
+		&chaincfg.TestNet3Params)
+	if err != nil {
+		t.Fatalf("unable to create testnet address: %v", err)
+	}
+	slpAddr, err := bchutil.NewSlpAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create slp address: %v", err)
+	}
+	pubKey := "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959" +
+		"f2815b16f81798"
+
 	// Entries without an address or category use addr and
 	// testTokenCategory so each case only lists the fields under test.
 	tests := []struct {
 		name       string
 		cashTokens []btcjson.TransactionOutputCashToken
 		wantCode   btcjson.RPCErrorCode
+		wantMsg    string
 	}{
 		{
 			name: "invalid capability",
@@ -324,6 +349,50 @@ func TestHandleCreateRawTransactionTokenErrors(t *testing.T) {
 			wantCode: btcjson.ErrRPCInvalidParameter,
 		},
 		{
+			name: "duplicate address in token-aware form",
+			cashTokens: []btcjson.TransactionOutputCashToken{{
+				Amount: 1,
+			}, {
+				Address: tokenAwareAddr.EncodeCashAddress(true),
+				Amount:  2,
+			}},
+			wantCode: btcjson.ErrRPCInvalidParameter,
+			wantMsg:  "Invalid parameter, duplicated cashtokens address",
+		},
+		{
+			name: "legacy address",
+			cashTokens: []btcjson.TransactionOutputCashToken{{
+				Address: legacyAddr.EncodeAddress(),
+				Amount:  1,
+			}},
+			wantCode: btcjson.ErrRPCInvalidAddressOrKey,
+		},
+		{
+			name: "address for another network",
+			cashTokens: []btcjson.TransactionOutputCashToken{{
+				Address: testnetAddr.EncodeAddress(),
+				Amount:  1,
+			}},
+			wantCode: btcjson.ErrRPCInvalidAddressOrKey,
+		},
+		{
+			name: "slp address",
+			cashTokens: []btcjson.TransactionOutputCashToken{{
+				Address: params.SlpAddressPrefix + ":" +
+					slpAddr.EncodeAddress(),
+				Amount: 1,
+			}},
+			wantCode: btcjson.ErrRPCInvalidAddressOrKey,
+		},
+		{
+			name: "public key",
+			cashTokens: []btcjson.TransactionOutputCashToken{{
+				Address: pubKey,
+				Amount:  1,
+			}},
+			wantCode: btcjson.ErrRPCInvalidAddressOrKey,
+		},
+		{
 			name: "address without output",
 			cashTokens: []btcjson.TransactionOutputCashToken{{
 				Address: otherAddr,
@@ -366,6 +435,163 @@ func TestHandleCreateRawTransactionTokenErrors(t *testing.T) {
 		if rpcErr.Code != test.wantCode {
 			t.Errorf("%s: error code %v, want %v (%v)", test.name,
 				rpcErr.Code, test.wantCode, rpcErr.Message)
+		}
+		if !strings.HasPrefix(rpcErr.Message, test.wantMsg) {
+			t.Errorf("%s: error message %q, want prefix %q",
+				test.name, rpcErr.Message, test.wantMsg)
+		}
+	}
+}
+
+// TestHandleCreateRawTransactionDuplicateDestination ensures
+// createrawtransaction rejects two outputs to the same destination, also
+// when its address is given in different forms.
+func TestHandleCreateRawTransactionDuplicateDestination(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	hash := bytes.Repeat([]byte{0x06}, 20)
+	p2pkh, err := bchutil.NewAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create p2pkh address: %v", err)
+	}
+	p2sh, err := bchutil.NewAddressScriptHashFromHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create p2sh address: %v", err)
+	}
+	p2sh32, err := bchutil.NewAddressScriptHash32FromHash(
+		bytes.Repeat([]byte{0x06}, 32), params)
+	if err != nil {
+		t.Fatalf("unable to create p2sh32 address: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		addrs []string
+	}{
+		{"p2pkh plain and token-aware", []string{
+			p2pkh.EncodeCashAddress(false),
+			p2pkh.EncodeCashAddress(true),
+		}},
+		{"p2sh plain and token-aware", []string{
+			p2sh.EncodeCashAddress(false),
+			p2sh.EncodeCashAddress(true),
+		}},
+		{"p2sh32 plain and token-aware", []string{
+			p2sh32.EncodeCashAddress(false),
+			p2sh32.EncodeCashAddress(true),
+		}},
+		{"with and without prefix", []string{
+			p2pkh.EncodeCashAddress(true),
+			params.CashAddressPrefix + ":" + p2pkh.EncodeCashAddress(true),
+		}},
+	}
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
+	for _, test := range tests {
+		amounts := make(map[string]float64)
+		for _, addr := range test.addrs {
+			amounts[addr] = 0.0001
+		}
+		cmd := &btcjson.CreateRawTransactionCmd{
+			Inputs: []btcjson.TransactionInput{{
+				Txid: testTokenCategory,
+				Vout: 0,
+			}},
+			Amounts: amounts,
+		}
+
+		_, err := handleCreateRawTransaction(s, cmd, nil)
+		rpcErr, ok := err.(*btcjson.RPCError)
+		if !ok {
+			t.Errorf("%s: expected *btcjson.RPCError, got %T: %v",
+				test.name, err, err)
+			continue
+		}
+		const wantMsg = "Invalid parameter, duplicated address: "
+		if rpcErr.Code != btcjson.ErrRPCInvalidParameter ||
+			!strings.HasPrefix(rpcErr.Message, wantMsg) {
+
+			t.Errorf("%s: unexpected error %v", test.name, rpcErr)
+		}
+	}
+}
+
+// TestHandleCreateRawTransactionTokenAddressForms ensures a cashtokens entry
+// attaches to the output paying to the same destination whichever form
+// either address is given in.
+func TestHandleCreateRawTransactionTokenAddressForms(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	p2pkh, err := bchutil.NewAddressPubKeyHash(
+		bytes.Repeat([]byte{0x08}, 20), params)
+	if err != nil {
+		t.Fatalf("unable to create p2pkh address: %v", err)
+	}
+	otherAddr := createRawTxTestAddr(t, 0x09)
+	wantScript, err := txscript.PayToAddrScript(p2pkh)
+	if err != nil {
+		t.Fatalf("unable to create script: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		output    string
+		tokenAddr string
+	}{
+		{"plain output, token-aware entry", p2pkh.EncodeCashAddress(false),
+			p2pkh.EncodeCashAddress(true)},
+		{"token-aware output, plain entry", p2pkh.EncodeCashAddress(true),
+			p2pkh.EncodeCashAddress(false)},
+		{"token-aware output and entry", p2pkh.EncodeCashAddress(true),
+			p2pkh.EncodeCashAddress(true)},
+	}
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
+	for _, test := range tests {
+		cmd := &btcjson.CreateRawTransactionCmd{
+			Inputs: []btcjson.TransactionInput{{
+				Txid: testTokenCategory,
+				Vout: 0,
+			}},
+			Amounts: map[string]float64{
+				test.output: 0.0001,
+				otherAddr:   0.0001,
+			},
+			CashTokens: &[]btcjson.TransactionOutputCashToken{{
+				Address:  test.tokenAddr,
+				Category: testTokenCategory,
+				Amount:   7,
+			}},
+		}
+
+		result, err := handleCreateRawTransaction(s, cmd, nil)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+			continue
+		}
+		serialized, err := hex.DecodeString(result.(string))
+		if err != nil {
+			t.Fatalf("%s: unable to decode result hex: %v",
+				test.name, err)
+		}
+		var mtx wire.MsgTx
+		err = mtx.BchDecode(bytes.NewReader(serialized),
+			maxProtocolVersion, wire.BaseEncoding)
+		if err != nil {
+			t.Fatalf("%s: unable to decode result: %v", test.name, err)
+		}
+		if len(mtx.TxOut) != 2 {
+			t.Fatalf("%s: expected 2 outputs, got %d", test.name,
+				len(mtx.TxOut))
+		}
+		for i, txOut := range mtx.TxOut {
+			wantAmount := uint64(0)
+			if bytes.Equal(txOut.PkScript, wantScript) {
+				wantAmount = 7
+			}
+			if txOut.TokenData.Amount != wantAmount {
+				t.Errorf("%s: output %d token amount %d, want %d",
+					test.name, i, txOut.TokenData.Amount,
+					wantAmount)
+			}
 		}
 	}
 }
