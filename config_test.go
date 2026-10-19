@@ -171,3 +171,51 @@ func TestFinalizationOptions(t *testing.T) {
 		}
 	}
 }
+
+// TestProfileListenAddr ensures a bare --profile port only listens on
+// localhost and that IP:port is accepted.
+func TestProfileListenAddr(t *testing.T) {
+	tmpDir := t.TempDir()
+	defer func() {
+		os.Args = []string{"bchd"}
+		activeNetParams = &mainNetParams
+	}()
+
+	tests := []struct {
+		profile string
+		want    string
+	}{
+		{"6060", "127.0.0.1:6060"},
+		{"127.0.0.1:6060", "127.0.0.1:6060"},
+		{"[::1]:6060", "[::1]:6060"},
+		{"0.0.0.0:6060", "0.0.0.0:6060"},
+		{":6060", ":6060"},
+		{"80", ""},
+		{"65536", ""},
+		{"localhost", ""},
+		{"localhost:6060", ""},
+		{"127.0.0.1:x", ""},
+	}
+	for _, test := range tests {
+		activeNetParams = &mainNetParams
+		os.Args = []string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir,
+			"--profile=" + test.profile}
+		cfg, _, err := loadConfig()
+		if test.want == "" {
+			if err == nil {
+				t.Errorf("%q: accepted", test.profile)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: %v", test.profile, err)
+			continue
+		}
+		if cfg.Profile != test.want {
+			t.Errorf("%q: got %q, want %q", test.profile, cfg.Profile,
+				test.want)
+		}
+	}
+}

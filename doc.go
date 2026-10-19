@@ -132,8 +132,9 @@ Application Options:
 	                               finalized (default: 7200)
 	    --dbtype=                  Database backend to use for the Block Chain
 	                               (default: ffldb)
-	    --profile=                 Enable HTTP profiling on given port -- NOTE
-	                               port must be between 1024 and 65536
+	    --profile=                 Enable HTTP profiling on the given port on
+	                               localhost, or on IP:port -- NOTE port must be
+	                               between 1024 and 65535
 	    --cpuprofile=              Write CPU profile to the specified file
 	-d, --debuglevel=              Logging level for all subsystems {trace,
 	                               debug, info, warn, error, critical} -- You may
