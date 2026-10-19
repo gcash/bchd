@@ -4400,8 +4400,24 @@ func handleValidateAddress(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 		return result, nil
 	}
 
-	result.Address = addr.EncodeAddress()
+	// A legacy address can be for another network.
+	switch addr.(type) {
+	case *bchutil.LegacyAddressPubKeyHash, *bchutil.LegacyAddressScriptHash:
+		if !addr.IsForNet(s.cfg.ChainParams) {
+			return result, nil
+		}
+	}
+
+	// Keep the token-aware form of a cashaddr.
+	tokenAware := false
+	if t, ok := addr.(bchutil.TokenAwareAddress); ok {
+		result.Address = t.CashAddress()
+		tokenAware = t.IsTokenAware()
+	} else {
+		result.Address = addr.EncodeAddress()
+	}
 	result.IsValid = true
+	result.IsTokenAware = &tokenAware
 
 	return result, nil
 }
