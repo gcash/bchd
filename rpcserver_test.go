@@ -655,3 +655,100 @@ func TestScriptTypeNames(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleValidateAddressTokenAware ensures validateaddress returns a
+// cashaddr in the form it was given and reports whether it is token-aware.
+func TestHandleValidateAddressTokenAware(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	hash := bytes.Repeat([]byte{0x07}, 20)
+	p2pkh, err := bchutil.NewAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create p2pkh address: %v", err)
+	}
+	p2sh, err := bchutil.NewAddressScriptHashFromHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create p2sh address: %v", err)
+	}
+	p2sh32, err := bchutil.NewAddressScriptHash32FromHash(
+		bytes.Repeat([]byte{0x07}, 32), params)
+	if err != nil {
+		t.Fatalf("unable to create p2sh32 address: %v", err)
+	}
+	legacy, err := bchutil.NewLegacyAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create legacy address: %v", err)
+	}
+	slp, err := bchutil.NewSlpAddressPubKeyHash(hash, params)
+	if err != nil {
+		t.Fatalf("unable to create slp address: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		address        string
+		wantAddress    string
+		wantTokenAware bool
+	}{
+		{"p2pkh", p2pkh.EncodeCashAddress(false),
+			p2pkh.EncodeCashAddress(false), false},
+		{"token-aware p2pkh", p2pkh.EncodeCashAddress(true),
+			p2pkh.EncodeCashAddress(true), true},
+		{"token-aware p2pkh with prefix",
+			params.CashAddressPrefix + ":" + p2pkh.EncodeCashAddress(true),
+			p2pkh.EncodeCashAddress(true), true},
+		{"p2sh", p2sh.EncodeCashAddress(false),
+			p2sh.EncodeCashAddress(false), false},
+		{"token-aware p2sh", p2sh.EncodeCashAddress(true),
+			p2sh.EncodeCashAddress(true), true},
+		{"token-aware p2sh32", p2sh32.EncodeCashAddress(true),
+			p2sh32.EncodeCashAddress(true), true},
+		{"legacy", legacy.EncodeAddress(), legacy.EncodeAddress(), false},
+		{"slp", params.SlpAddressPrefix + ":" + slp.EncodeAddress(),
+			slp.EncodeAddress(), false},
+	}
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
+	for _, test := range tests {
+		cmd := &btcjson.ValidateAddressCmd{Address: test.address}
+		result, err := handleValidateAddress(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		reply := result.(btcjson.ValidateAddressChainResult)
+		if !reply.IsValid {
+			t.Errorf("%s: address is not valid", test.name)
+			continue
+		}
+		if reply.Address != test.wantAddress {
+			t.Errorf("%s: address %s, want %s", test.name,
+				reply.Address, test.wantAddress)
+		}
+		if reply.IsTokenAware == nil ||
+			*reply.IsTokenAware != test.wantTokenAware {
+			t.Errorf("%s: istokenaware %v, want %v", test.name,
+				reply.IsTokenAware, test.wantTokenAware)
+		}
+	}
+
+	// An invalid address, or a legacy address for another network, only
+	// reports that it is not valid.
+	testnetLegacy, err := bchutil.NewLegacyAddressPubKeyHash(hash,
+		&chaincfg.TestNet3Params)
+	if err != nil {
+		t.Fatalf("unable to create testnet address: %v", err)
+	}
+	invalid := []string{"notanaddress", testnetLegacy.EncodeAddress()}
+	for _, address := range invalid {
+		cmd := &btcjson.ValidateAddressCmd{Address: address}
+		result, err := handleValidateAddress(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", address, err)
+		}
+		reply := result.(btcjson.ValidateAddressChainResult)
+		if reply.IsValid || reply.Address != "" ||
+			reply.IsTokenAware != nil {
+
+			t.Errorf("%s: unexpected result %+v", address, reply)
+		}
+	}
+}

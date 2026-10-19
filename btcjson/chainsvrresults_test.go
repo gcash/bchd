@@ -124,6 +124,29 @@ func TestChainSvrCustomResults(t *testing.T) {
 			},
 			expected: `{"txid":"123","allowed":false,"reject-reason":"256: absurdly-high-fee","reject-details":"absurdly-high-fee, 20000000 \u003e 10000000"}`,
 		},
+		{
+			name: "validateaddress token-aware",
+			result: &btcjson.ValidateAddressChainResult{
+				IsValid:      true,
+				Address:      "zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v",
+				IsTokenAware: btcjson.Bool(true),
+			},
+			expected: `{"isvalid":true,"address":"zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v","istokenaware":true}`,
+		},
+		{
+			name: "validateaddress not token-aware",
+			result: &btcjson.ValidateAddressChainResult{
+				IsValid:      true,
+				Address:      "qr7fzmep8g7h7ymfxy74lgc0v950j3r2959lhtxxsl",
+				IsTokenAware: btcjson.Bool(false),
+			},
+			expected: `{"isvalid":true,"address":"qr7fzmep8g7h7ymfxy74lgc0v950j3r2959lhtxxsl","istokenaware":false}`,
+		},
+		{
+			name:     "validateaddress invalid",
+			result:   &btcjson.ValidateAddressChainResult{},
+			expected: `{"isvalid":false}`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

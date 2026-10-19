@@ -686,8 +686,9 @@ var helpDescsEnUS = map[string]string{
 	"submitblock--result1":    "The BIP22 reason the block was rejected",
 
 	// ValidateAddressResult help.
-	"validateaddresschainresult-isvalid": "Whether or not the address is valid",
-	"validateaddresschainresult-address": "The bitcoin address (only when isvalid is true)",
+	"validateaddresschainresult-isvalid":      "Whether or not the address is valid",
+	"validateaddresschainresult-address":      "The address validated, in its token-aware form for a token-aware cashaddr (only when isvalid is true)",
+	"validateaddresschainresult-istokenaware": "Whether the address is a token-aware cashaddr, which signals that it can receive CashTokens (only when isvalid is true)",
 
 	// ValidateAddressCmd help.
 	"validateaddress--synopsis": "Verify an address is valid.",

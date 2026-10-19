@@ -582,6 +582,7 @@ type TestMempoolAcceptResult struct {
 // ValidateAddressChainResult models the data returned by the chain server
 // validateaddress command.
 type ValidateAddressChainResult struct {
-	IsValid bool   `json:"isvalid"`
-	Address string `json:"address,omitempty"`
+	IsValid      bool   `json:"isvalid"`
+	Address      string `json:"address,omitempty"`
+	IsTokenAware *bool  `json:"istokenaware,omitempty"`
 }
