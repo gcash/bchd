@@ -1981,6 +1981,9 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 
 	bodyCopy := make([]byte, len(body))
 	copy(bodyCopy, body)
+	if vm.functionTable == nil {
+		vm.functionTable = make(map[string]*definedFunction)
+	}
 	vm.functionTable[key] = &definedFunction{body: bodyCopy}
 	vm.definedFunctionCount++
 
