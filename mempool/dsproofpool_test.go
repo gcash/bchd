@@ -1072,3 +1072,29 @@ func TestDSProofRecheckAfterRelock(t *testing.T) {
 		t.Fatal("proof announced for a transaction that left")
 	}
 }
+
+// TestDSProofConstants pins the limits shared with other nodes or chosen for
+// cost, so a change to one is deliberate.
+func TestDSProofConstants(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		got, want int64
+	}{
+		{"DefaultMaxDSProofOrphans", DefaultMaxDSProofOrphans, 65535},
+		{"DefaultDSProofOrphanTTL", int64(DefaultDSProofOrphanTTL), int64(90 * time.Second)},
+		{"maxRejectedDSProofs", maxRejectedDSProofs, 120000},
+		{"maxDSProofOrphansPerOutPoint", maxDSProofOrphansPerOutPoint, 32},
+		{"maxDSProofOrphansPerPeerOutPoint", maxDSProofOrphansPerPeerOutPoint, 2},
+		{"dsProofOrphanPeerShare", dsProofOrphanPeerShare, 8},
+		{"dsProofSearchMaxDepth", dsProofSearchMaxDepth, 1000},
+		{"dsProofSearchMaxTxs", dsProofSearchMaxTxs, 20000},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s is %d, want %d", c.name, c.got, c.want)
+		}
+	}
+	s := newDSProofStorage()
+	if s.maxOrphans != DefaultMaxDSProofOrphans || s.orphanTTL != DefaultDSProofOrphanTTL {
+		t.Error("storage defaults")
+	}
+}
