@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
@@ -130,7 +131,14 @@ func TestHandleSearchRawTransactionsSkipRange(t *testing.T) {
 	addMempoolTxnsForAddress(t, s, addr, 2)
 	verbose := btcjson.VerboseLevel(0)
 	count := 10
-	for _, skip := range []int{2, math.MaxUint32, 1 << 32, 1<<32 + 1, math.MaxInt} {
+	// Skips past the 32-bit range only fit in an int on 64-bit platforms.
+	skips := []int{2, math.MaxInt}
+	if strconv.IntSize == 64 {
+		for _, skip := range []uint64{math.MaxUint32, 1 << 32, 1<<32 + 1} {
+			skips = append(skips, int(skip))
+		}
+	}
+	for _, skip := range skips {
 		for _, reverse := range []bool{false, true} {
 			cmd := btcjson.NewSearchRawTransactionsCmd(
 				addr.EncodeAddress(), &verbose, &skip, &count, nil,
