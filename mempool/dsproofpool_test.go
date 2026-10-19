@@ -938,3 +938,88 @@ func TestDSProofRejectedNotRechecked(t *testing.T) {
 		t.Fatal("rejected proof stored")
 	}
 }
+
+// checkPeerOrphans checks the per peer orphan counts against the entries.
+func checkPeerOrphans(t *testing.T, s *dsProofStorage) {
+	t.Helper()
+	want := make(map[Tag]int)
+	for _, e := range s.proofs {
+		if e.orphan && e.hasPeer {
+			want[e.peer]++
+		}
+	}
+	if len(want) != len(s.peerOrphans) {
+		t.Fatalf("peer orphan counts %v, want %v", s.peerOrphans, want)
+	}
+	for p, n := range want {
+		if s.peerOrphans[p] != n {
+			t.Fatalf("peer orphan counts %v, want %v", s.peerOrphans, want)
+		}
+	}
+}
+
+// TestDSProofStoragePeerShare checks that one peer's orphans cannot take more
+// than their share of the orphan limit, and that the share frees up as its
+// orphans are claimed, removed or expire.
+func TestDSProofStoragePeerShare(t *testing.T) {
+	s := newDSProofStorage()
+	s.maxOrphans = 40
+	share := s.maxOrphans / dsProofOrphanPeerShare
+	now := time.Unix(2000000, 0)
+	s.now = func() time.Time { return now }
+
+	other := makeDupeProofs(t, 1, 5000)[0]
+	if !s.addOrphan(other, other.ProofHash(), 1, true) {
+		t.Fatal("orphan of another peer refused")
+	}
+	var proofs []*wire.MsgDSProof
+	for i := range 3 * share {
+		p := makeDupeProofs(t, 1, uint64(i+1))[0]
+		proofs = append(proofs, p)
+		if got := s.addOrphan(p, p.ProofHash(), 2, true); got != (i < share) {
+			t.Fatalf("orphan %d: added %v", i, got)
+		}
+		checkPeerOrphans(t, s)
+	}
+	if s.numOrphans != share+1 || s.lookup(other.ProofHash()) == nil {
+		t.Fatalf("%d orphans", s.numOrphans)
+	}
+
+	// Orphans without a peer and a known proof are not limited.
+	extra := proofs[share]
+	if !s.addOrphan(extra, extra.ProofHash(), 0, false) {
+		t.Fatal("orphan without a peer refused")
+	}
+	if !s.addOrphan(proofs[0], proofs[0].ProofHash(), 2, true) {
+		t.Fatal("known orphan refused")
+	}
+	checkPeerOrphans(t, s)
+
+	// A claimed orphan and a removed one free two places.
+	s.add(proofs[0], proofs[0].ProofHash())
+	s.remove(proofs[1].ProofHash())
+	checkPeerOrphans(t, s)
+	for i := share + 1; i < share+4; i++ {
+		got := s.addOrphan(proofs[i], proofs[i].ProofHash(), 2, true)
+		if got != (i < share+3) {
+			t.Fatalf("orphan %d: added %v", i, got)
+		}
+	}
+	checkPeerOrphans(t, s)
+
+	// Expired orphans free the share.
+	now = now.Add(time.Hour)
+	s.expireOrphans()
+	checkPeerOrphans(t, s)
+	if len(s.peerOrphans) != 0 {
+		t.Fatalf("counts left: %v", s.peerOrphans)
+	}
+	p := proofs[len(proofs)-1]
+	if !s.addOrphan(p, p.ProofHash(), 2, true) {
+		t.Fatal("orphan refused after expiry")
+	}
+	if s.orphanExisting(proofs[0].ProofHash()); s.peerOrphans[2] != 1 {
+		t.Fatalf("counts %v", s.peerOrphans)
+	}
+	checkPeerOrphans(t, s)
+}
