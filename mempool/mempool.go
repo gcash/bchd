@@ -852,6 +852,14 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 		}
 	}
 
+	// Only accept transactions that can be mined in the next block, even
+	// when non-standard transactions are accepted.
+	if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight, medianTimePast) {
+		str := fmt.Sprintf("transaction %v is not finalized in the "+
+			"next block (bad-txns-nonfinal)", txHash)
+		return nil, txRuleError(wire.RejectNonstandard, str)
+	}
+
 	// The transaction may not use any of the same outputs as other
 	// transactions already in the pool as that would ultimately result in a
 	// double spend.  This check is intended to be quick and therefore only
