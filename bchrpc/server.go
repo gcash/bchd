@@ -1072,6 +1072,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return nil, status.Errorf(codes.InvalidArgument, "invalid address: %v", err)
 	}
 
+	encodedAddr := addr.EncodeAddress()
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
 		txHash := *tx.Hash()
@@ -1080,6 +1081,28 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		// Outputs of a mempool transaction are unconfirmed.
 		var poolView *blockchain.UtxoViewpoint
 		for i, out := range tx.MsgTx().TxOut {
+			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+			if err != nil || len(addrs) == 0 {
+				continue
+			}
+
+			matchAddr := ""
+
+			switch typedAddr := addrs[0].(type) {
+			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
+				matchAddr = addrs[0].EncodeAddress()
+
+			case *bchutil.AddressPubKey:
+				matchAddr = typedAddr.AddressPubKeyHash().EncodeAddress()
+			}
+
+			// Outputs paying to other addresses are only looked up for
+			// their token metadata.
+			isMatch := matchAddr == encodedAddr
+			if !isMatch && (s.slpIndex == nil || !req.IncludeTokenMetadata) {
+				continue
+			}
+
 			op := wire.NewOutPoint(&txHash, uint32(i))
 			// The mempool is checked first, as a spend leaves it only
 			// after its block is connected.
@@ -1097,7 +1120,6 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				entry = poolView.LookupEntry(*op)
 			}
 			if entry == nil {
-				var err error
 				entry, err = s.chain.FetchUtxoEntry(*op)
 				if err != nil {
 					return nil, err
@@ -1115,11 +1137,6 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				cashToken = getPbCashTokenDataFromTokenData(tokenData)
 			}
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, s.chainParams)
-			if err != nil || len(addrs) == 0 {
-				continue
-			}
-
 			var slpToken *pb.SlpToken
 			if s.slpIndex != nil {
 				slpToken, _ = s.getSlpToken(&txHash, uint32(i), out.PkScript)
@@ -1132,17 +1149,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				}
 			}
 
-			matchAddr := ""
-
-			switch typedAddr := addrs[0].(type) {
-			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
-				matchAddr = addrs[0].EncodeAddress()
-
-			case *bchutil.AddressPubKey:
-				matchAddr = typedAddr.AddressPubKeyHash().EncodeAddress()
-			}
-
-			if matchAddr == addr.EncodeAddress() {
+			if isMatch {
 				utxo := &pb.UnspentOutput{
 					Outpoint: &pb.Transaction_Input_Outpoint{
 						Hash:  txHash.CloneBytes(),
