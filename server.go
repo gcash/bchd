@@ -304,20 +304,6 @@ type server struct {
 	inboundBans map[string]time.Time
 }
 
-// spMsg represents a message over the wire from a specific peer.
-type spMsg struct {
-	sp  *serverPeer
-	msg wire.Message
-}
-
-// spMsgSubscription sends all messages from a peer over a channel, allowing
-// pluggable filtering of the messages.
-type spMsgSubscription struct {
-	command  string
-	msgChan  chan<- spMsg
-	quitChan <-chan struct{}
-}
-
 // serverPeer extends the peer to maintain state shared by the server and
 // the blockmanager.
 type serverPeer struct {
@@ -347,22 +333,25 @@ type serverPeer struct {
 	txProcessed    chan struct{}
 	blockProcessed chan struct{}
 
-	recvSubscribers map[spMsgSubscription]struct{}
-	mtxSubscribers  sync.RWMutex
+	// cmpctWaiters maps the hash of each compact block waiting for
+	// missing transactions from the peer to the channel its reply is
+	// sent on.
+	cmpctWaiters    map[chainhash.Hash]chan *wire.MsgBlockTxns
+	cmpctWaitersMtx sync.Mutex
 }
 
 // newServerPeer returns a new serverPeer instance. The peer needs to be set by
 // the caller.
 func newServerPeer(s *server, isPersistent bool) *serverPeer {
 	return &serverPeer{
-		server:          s,
-		persistent:      isPersistent,
-		filter:          bloom.LoadFilter(nil),
-		knownAddresses:  make(map[string]struct{}),
-		quit:            make(chan struct{}),
-		txProcessed:     make(chan struct{}, 1),
-		blockProcessed:  make(chan struct{}, 1),
-		recvSubscribers: make(map[spMsgSubscription]struct{}),
+		server:         s,
+		persistent:     isPersistent,
+		filter:         bloom.LoadFilter(nil),
+		knownAddresses: make(map[string]struct{}),
+		quit:           make(chan struct{}),
+		txProcessed:    make(chan struct{}, 1),
+		blockProcessed: make(chan struct{}, 1),
+		cmpctWaiters:   make(map[chainhash.Hash]chan *wire.MsgBlockTxns),
 	}
 }
 
@@ -511,19 +500,41 @@ func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 	}
 }
 
-// subscribeRecvMsg handles adding OnRead subscriptions to the server peer.
-func (sp *serverPeer) subscribeRecvMsg(subscription spMsgSubscription) {
-	sp.mtxSubscribers.Lock()
-	defer sp.mtxSubscribers.Unlock()
-	sp.recvSubscribers[subscription] = struct{}{}
+// addCmpctWaiter registers a compact block waiting for missing transactions
+// from the peer and returns the channel its reply is sent on.  It returns
+// false when the block is already waiting.
+func (sp *serverPeer) addCmpctWaiter(hash chainhash.Hash) (chan *wire.MsgBlockTxns, bool) {
+	sp.cmpctWaitersMtx.Lock()
+	defer sp.cmpctWaitersMtx.Unlock()
+	if _, ok := sp.cmpctWaiters[hash]; ok {
+		return nil, false
+	}
+	ch := make(chan *wire.MsgBlockTxns, 1)
+	sp.cmpctWaiters[hash] = ch
+	return ch, true
 }
 
-// unsubscribeRecvMsgs handles removing OnRead subscriptions from the server
-// peer.
-func (sp *serverPeer) unsubscribeRecvMsgs(subscription spMsgSubscription) {
-	sp.mtxSubscribers.Lock()
-	defer sp.mtxSubscribers.Unlock()
-	delete(sp.recvSubscribers, subscription)
+// removeCmpctWaiter stops the wait that addCmpctWaiter returned ch for, unless
+// it already ended.
+func (sp *serverPeer) removeCmpctWaiter(hash chainhash.Hash, ch chan *wire.MsgBlockTxns) {
+	sp.cmpctWaitersMtx.Lock()
+	defer sp.cmpctWaitersMtx.Unlock()
+	if sp.cmpctWaiters[hash] == ch {
+		delete(sp.cmpctWaiters, hash)
+	}
+}
+
+// deliverCmpctReply sends msg to the compact block with the given hash if it
+// is waiting for a reply from the peer, and returns whether it was.
+func (sp *serverPeer) deliverCmpctReply(hash chainhash.Hash, msg *wire.MsgBlockTxns) bool {
+	sp.cmpctWaitersMtx.Lock()
+	defer sp.cmpctWaitersMtx.Unlock()
+	ch, ok := sp.cmpctWaiters[hash]
+	if ok {
+		delete(sp.cmpctWaiters, hash)
+		ch <- msg
+	}
+	return ok
 }
 
 // hasServices returns whether or not the provided advertised service flags have
@@ -829,39 +840,26 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	msgGetBlockTxns := wire.NewMsgGetBlockTxnsFromBlock(msgBlock)
 
 	if len(msgGetBlockTxns.Indexes) > 0 {
-		quitChan := make(chan struct{})
-		msgChan := make(chan spMsg)
-		subscription := spMsgSubscription{
-			command:  wire.CmdBlockTxns,
-			quitChan: quitChan,
-			msgChan:  msgChan,
+		replyChan, ok := sp.addCmpctWaiter(targetHash)
+		if !ok {
+			peerLog.Debugf("Ignoring cmpctblock %v from %v -- already "+
+				"waiting for its transactions", targetHash, sp)
+			return
 		}
-		sp.subscribeRecvMsg(subscription)
 		sp.QueueMessage(msgGetBlockTxns, nil)
 		timeout := time.After(time.Second * 30)
 		select {
 		case <-timeout:
-			sp.unsubscribeRecvMsgs(subscription)
-			close(quitChan)
+			sp.removeCmpctWaiter(targetHash, replyChan)
 			peerLog.Debugf("Peer %v timed out waiting for blocktxns for cmpctblock %v",
 				sp, msg.Header.BlockHash())
 			sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 			return
-		case resp := <-msgChan:
-			sp.unsubscribeRecvMsgs(subscription)
-			blockTxns, ok := resp.msg.(*wire.MsgBlockTxns)
-			if !ok {
-				peerLog.Debugf("Unable to decode blocktxns for cmpctblock %v from peer %v",
-					msg.Header.BlockHash(), sp)
-				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
-				return
-			}
-			if !blockTxns.BlockHash.IsEqual(&targetHash) {
-				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
-					"contained incorrect hash", msg.Header.BlockHash(), sp)
-				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
-				return
-			}
+		case <-sp.quit:
+			// The sync manager already forgot the peer's requests.
+			sp.removeCmpctWaiter(targetHash, replyChan)
+			return
+		case blockTxns := <-replyChan:
 			indexMap, err := blockTxns.AbsoluteIndexes(msgGetBlockTxns.Indexes)
 			if err != nil {
 				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+
@@ -920,6 +918,15 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	sp.server.syncManager.QueueBlock(block, sp.Peer, sp.blockProcessed)
 	<-sp.blockProcessed
 	sp.processBlockMtx.Unlock()
+}
+
+// OnBlockTxns is invoked when a peer receives a blocktxns bitcoin message.
+// The reply goes to the compact block it is for.
+func (sp *serverPeer) OnBlockTxns(_ *peer.Peer, msg *wire.MsgBlockTxns) {
+	if !sp.deliverCmpctReply(msg.BlockHash, msg) {
+		peerLog.Debugf("Ignoring blocktxns for block %v from %v -- not "+
+			"waiting for it", msg.BlockHash, sp)
+	}
 }
 
 // OnGetBlockTxns is invoked when a peer receives a getblocktxns bitcoin message.
@@ -1762,23 +1769,6 @@ func (sp *serverPeer) OnNotFound(p *peer.Peer, msg *wire.MsgNotFound) {
 // the bytes received by the server.
 func (sp *serverPeer) OnRead(_ *peer.Peer, bytesRead int, msg wire.Message, err error) {
 	sp.server.AddBytesReceived(uint64(bytesRead))
-	// Send a message to each subscriber. Each message gets its own
-	// goroutine to prevent blocking on the mutex lock.
-	sp.mtxSubscribers.RLock()
-	defer sp.mtxSubscribers.RUnlock()
-	for subscription := range sp.recvSubscribers {
-		go func(subscription spMsgSubscription) {
-			if err == nil && msg.Command() == subscription.command {
-				select {
-				case <-subscription.quitChan:
-				case subscription.msgChan <- spMsg{
-					msg: msg,
-					sp:  sp,
-				}:
-				}
-			}
-		}(subscription)
-	}
 }
 
 // OnWrite is invoked when a peer sends a message and it is used to update
@@ -2779,6 +2769,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnTx:           sp.OnTx,
 			OnBlock:        sp.OnBlock,
 			OnCmpctBlock:   sp.OnCmpctBlock,
+			OnBlockTxns:    sp.OnBlockTxns,
 			OnGetBlockTxns: sp.OnGetBlockTxns,
 			OnInv:          sp.OnInv,
 			OnHeaders:      sp.OnHeaders,
