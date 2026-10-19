@@ -36,6 +36,10 @@ const (
 	// peer can have for one outpoint, so a single peer cannot fill the
 	// outpoint's slots.
 	maxDSProofOrphansPerPeerOutPoint = 2
+
+	// One peer's orphans may take at most 1/dsProofOrphanPeerShare of the
+	// orphan limit.
+	dsProofOrphanPeerShare = 8
 )
 
 // dsProofEntry is a double spend proof known to the memory pool.  Orphans
@@ -69,6 +73,9 @@ type dsProofStorage struct {
 	orphanTTL  time.Duration
 	nextSeq    uint64
 
+	// peerOrphans counts the orphans of each peer.
+	peerOrphans map[Tag]int
+
 	// The rejected ids are kept in two generations so the oldest half can
 	// be dropped at once.
 	rejected, rejectedOld map[chainhash.Hash]struct{}
@@ -79,12 +86,13 @@ type dsProofStorage struct {
 // newDSProofStorage returns an empty proof storage.
 func newDSProofStorage() *dsProofStorage {
 	return &dsProofStorage{
-		proofs:     make(map[chainhash.Hash]*dsProofEntry),
-		byOutPoint: make(map[wire.OutPoint]map[chainhash.Hash]*dsProofEntry),
-		maxOrphans: DefaultMaxDSProofOrphans,
-		orphanTTL:  DefaultDSProofOrphanTTL,
-		rejected:   make(map[chainhash.Hash]struct{}),
-		now:        time.Now,
+		proofs:      make(map[chainhash.Hash]*dsProofEntry),
+		byOutPoint:  make(map[wire.OutPoint]map[chainhash.Hash]*dsProofEntry),
+		maxOrphans:  DefaultMaxDSProofOrphans,
+		peerOrphans: make(map[Tag]int),
+		orphanTTL:   DefaultDSProofOrphanTTL,
+		rejected:    make(map[chainhash.Hash]struct{}),
+		now:         time.Now,
 	}
 }
 
@@ -93,6 +101,7 @@ func newDSProofStorage() *dsProofStorage {
 func (s *dsProofStorage) add(proof *wire.MsgDSProof, hash chainhash.Hash) bool {
 	if e, ok := s.proofs[hash]; ok {
 		if e.orphan {
+			s.uncountPeer(e)
 			e.orphan = false
 			e.hasPeer = false
 			s.numOrphans--
@@ -114,10 +123,16 @@ func (s *dsProofStorage) add(proof *wire.MsgDSProof, hash chainhash.Hash) bool {
 // addOrphan stores a proof as an orphan received from peer, if hasPeer is
 // set.  An existing proof becomes an orphan.  It returns false when a new
 // proof is dropped because the peer already has the most orphans it may
-// have for the outpoint, or the outpoint is full of proofs without a peer.
+// have for the outpoint or in total, or the outpoint is full of proofs
+// without a peer.
 func (s *dsProofStorage) addOrphan(proof *wire.MsgDSProof, hash chainhash.Hash, peer Tag, hasPeer bool) bool {
-	if _, ok := s.proofs[hash]; !ok && !s.makeOrphanRoom(proof.PrevOut, peer, hasPeer) {
-		return false
+	if _, ok := s.proofs[hash]; !ok {
+		if hasPeer && s.peerOrphans[peer] >= s.maxOrphans/dsProofOrphanPeerShare {
+			return false
+		}
+		if !s.makeOrphanRoom(proof.PrevOut, peer, hasPeer) {
+			return false
+		}
 	}
 	s.add(proof, hash)
 	e := s.proofs[hash]
@@ -130,9 +145,22 @@ func (s *dsProofStorage) addOrphan(proof *wire.MsgDSProof, hash chainhash.Hash, 
 	if !e.orphan {
 		e.orphan = true
 		s.numOrphans++
-		s.limitOrphans(hash)
 	}
+	if e.hasPeer {
+		s.peerOrphans[e.peer]++
+	}
+	s.limitOrphans(hash)
 	return true
+}
+
+// uncountPeer removes an orphan from the count of its peer.
+func (s *dsProofStorage) uncountPeer(e *dsProofEntry) {
+	if !e.orphan || !e.hasPeer {
+		return
+	}
+	if s.peerOrphans[e.peer]--; s.peerOrphans[e.peer] <= 0 {
+		delete(s.peerOrphans, e.peer)
+	}
 }
 
 // makeOrphanRoom checks whether a new orphan from peer fits the per outpoint
@@ -197,6 +225,7 @@ func (s *dsProofStorage) remove(hash chainhash.Hash) bool {
 		return false
 	}
 	if e.orphan {
+		s.uncountPeer(e)
 		s.numOrphans--
 	}
 	delete(s.proofs, hash)
