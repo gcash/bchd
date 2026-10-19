@@ -4474,27 +4474,34 @@ func handleVerifyMessage(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 	// Decode the provided address.
 	params := s.cfg.ChainParams
 	addr, err := bchutil.DecodeAddress(c.Address, params)
-	if err != nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCInvalidAddressOrKey,
-			Message: "Invalid address or key: " + err.Error(),
-		}
-	}
-
-	// Only P2PKH addresses are valid for signing.
-	if _, ok := addr.(*bchutil.AddressPubKeyHash); !ok {
+	_, isPubKey := addr.(*bchutil.AddressPubKey)
+	if err != nil || isPubKey || !addr.IsForNet(params) {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCType,
-			Message: "Address is not a pay-to-pubkey-hash address",
+			Message: "Invalid address",
 		}
 	}
 
-	// Decode base64 signature.
-	sig, err := base64.StdEncoding.DecodeString(c.Signature)
-	if err != nil {
+	// Only P2PKH addresses, cashaddr or legacy, are valid for signing.
+	var keyHash []byte
+	switch a := addr.(type) {
+	case *bchutil.AddressPubKeyHash:
+		keyHash = a.Hash160()[:]
+	case *bchutil.LegacyAddressPubKeyHash:
+		keyHash = a.Hash160()[:]
+	default:
 		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCParse.Code,
-			Message: "Malformed base64 encoding: " + err.Error(),
+			Code:    btcjson.ErrRPCType,
+			Message: "Address does not refer to key",
+		}
+	}
+
+	// Decode base64 signature.  Strict decoding still skips line breaks.
+	sig, err := base64.StdEncoding.Strict().DecodeString(c.Signature)
+	if err != nil || strings.ContainsAny(c.Signature, "\r\n") {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Malformed base64 encoding",
 		}
 	}
 
@@ -4512,22 +4519,14 @@ func handleVerifyMessage(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		return false, nil
 	}
 
-	// Reconstruct the pubkey hash.
+	// Compare the hash of the recovered key with the address hash.
 	var serializedPK []byte
 	if wasCompressed {
 		serializedPK = pk.SerializeCompressed()
 	} else {
 		serializedPK = pk.SerializeUncompressed()
 	}
-	address, err := bchutil.NewAddressPubKey(serializedPK, params)
-	if err != nil {
-		// Again mirror Bitcoin Core behavior, which treats error in public key
-		// reconstruction as invalid signature.
-		return false, nil
-	}
-
-	// Return boolean if addresses match.
-	return address.EncodeAddress() == c.Address, nil
+	return bytes.Equal(bchutil.Hash160(serializedPK), keyHash), nil
 }
 
 // handleVersion implements the version command.
