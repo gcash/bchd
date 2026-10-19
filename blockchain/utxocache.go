@@ -623,6 +623,10 @@ func (s *utxoCache) flush(bestState *BestState) error {
 		}
 	}
 
+	// A map keeps its memory after its entries are deleted, so replace the
+	// emptied map to release what it grew to.
+	s.cachedEntries = make(map[wire.OutPoint]*UtxoEntry)
+
 	// When done, store the best state hash in the database to indicate the state
 	// is consistent until that hash.
 	err = s.db.Update(func(dbTx database.Tx) error {
