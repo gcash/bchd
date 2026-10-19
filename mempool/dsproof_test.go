@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"math"
 	"math/big"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -139,7 +140,7 @@ func TestDSProofCreateAndValidate(t *testing.T) {
 	for _, hashType := range hashTypes {
 		for _, schnorr := range []bool{false, true} {
 			op, coin, tx1, tx2 := doubleSpendPair(t, harness, hashType, schnorr)
-			proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+			proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 			if err != nil {
 				t.Fatalf("hash type %v schnorr %v: %v", hashType, schnorr, err)
 			}
@@ -153,7 +154,7 @@ func TestDSProofCreateAndValidate(t *testing.T) {
 			if compareDSProofSpenders(&proof.FirstSpender, &proof.DoubleSpender) > 0 {
 				t.Fatal("spenders not sorted")
 			}
-			other, err := newDSProof(tx2.MsgTx(), tx1.MsgTx(), op, coin, testFlags)
+			other, err := newDSProof(tx2.MsgTx(), tx1.MsgTx(), op, coin, testFlags, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -201,17 +202,17 @@ func TestDSProofCreateRejects(t *testing.T) {
 	harness := newTestHarness(t)
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
 
-	if _, err := newDSProof(tx1.MsgTx(), tx1.MsgTx(), op, coin, testFlags); err == nil {
+	if _, err := newDSProof(tx1.MsgTx(), tx1.MsgTx(), op, coin, testFlags, nil, nil); err == nil {
 		t.Fatal("proof for a transaction with itself")
 	}
-	if _, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), wire.OutPoint{Index: 5}, coin, testFlags); err == nil {
+	if _, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), wire.OutPoint{Index: 5}, coin, testFlags, nil, nil); err == nil {
 		t.Fatal("proof for an outpoint neither spends")
 	}
 
 	// A badly signed double spend.
 	bad := tx2.MsgTx().Copy()
 	bad.TxOut[0].Value--
-	if _, err := newDSProof(tx1.MsgTx(), bad, op, coin, testFlags); err == nil ||
+	if _, err := newDSProof(tx1.MsgTx(), bad, op, coin, testFlags, nil, nil); err == nil ||
 		!strings.Contains(err.Error(), "not properly signed") {
 		t.Fatalf("badly signed double spend: %v", err)
 	}
@@ -224,14 +225,14 @@ func TestDSProofCreateRejects(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := &wire.TxOut{Value: coin.Value, PkScript: p2pk}
-	if _, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, other, testFlags); err == nil {
+	if _, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, other, testFlags, nil, nil); err == nil {
 		t.Fatal("proof for a pay-to-pubkey coin")
 	}
 
 	// A signature with an extra push in the signature script.
 	extra := tx2.MsgTx().Copy()
 	extra.TxIn[0].SignatureScript = append(append([]byte{}, extra.TxIn[0].SignatureScript...), txscript.OP_1)
-	if _, err := newDSProof(tx1.MsgTx(), extra, op, coin, testFlags); err == nil {
+	if _, err := newDSProof(tx1.MsgTx(), extra, op, coin, testFlags, nil, nil); err == nil {
 		t.Fatal("proof for a signature script with an extra push")
 	}
 }
@@ -250,12 +251,12 @@ func mutateProof(proof *wire.MsgDSProof, f func(*wire.MsgDSProof)) *wire.MsgDSPr
 func TestDSProofValidationRules(t *testing.T) {
 	harness := newTestHarness(t)
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, false)
-	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	acpOp, acpCoin, acp1, acp2 := doubleSpendPair(t, harness, txscript.SigHashAll|txscript.SigHashAnyOneCanPay, true)
-	acpProof, err := newDSProof(acp1.MsgTx(), acp2.MsgTx(), acpOp, acpCoin, testFlags)
+	acpProof, err := newDSProof(acp1.MsgTx(), acp2.MsgTx(), acpOp, acpCoin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +381,7 @@ func FuzzDSProofValidate(f *testing.F) {
 		return tx
 	}
 	tx1, tx2 := mk(1000), mk(2000)
-	proof, err := newDSProof(tx1, tx2, op, coin, testFlags)
+	proof, err := newDSProof(tx1, tx2, op, coin, testFlags, nil, nil)
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -434,5 +435,216 @@ func TestSignatureHashType(t *testing.T) {
 		if _, ok := signatureHashType(test.script); ok != test.ok {
 			t.Errorf("#%d: got %v", i, ok)
 		}
+	}
+}
+
+// sigCached returns whether the signature of input idx of tx, which spends
+// coin, is in the signature cache.
+func sigCached(t *testing.T, cache *txscript.SigCache, tx *wire.MsgTx, idx int, coin *wire.TxOut) bool {
+	t.Helper()
+	pushes, err := txscript.PushedData(tx.TxIn[idx].SignatureScript)
+	if err != nil || len(pushes) != 2 {
+		t.Fatalf("pushes: %v", err)
+	}
+	sig, pub := pushes[0], pushes[1]
+	hashType := txscript.SigHashType(sig[len(sig)-1])
+	hash, _, err := txscript.CalcSignatureHash(coin.PkScript, txscript.NewTxSigHashes(tx),
+		hashType, tx, idx, coin.Value, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sigHash chainhash.Hash
+	copy(sigHash[:], hash)
+	return cache.Exists(sigHash, sig[:len(sig)-1], pub, len(sig) == 65)
+}
+
+// TestDSProofCreateCaches checks that proofs made with the signature and
+// hash caches are identical to those made without, and that the caches are
+// only used for the first transaction.
+func TestDSProofCreateCaches(t *testing.T) {
+	harness := newTestHarness(t)
+	for _, hashType := range []txscript.SigHashType{
+		txscript.SigHashAll,
+		txscript.SigHashNone,
+		txscript.SigHashSingle | txscript.SigHashAnyOneCanPay,
+	} {
+		for _, schnorr := range []bool{false, true} {
+			op, coin, tx1, tx2 := doubleSpendPair(t, harness, hashType, schnorr)
+			want, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sigCache := txscript.NewSigCache(10)
+			hashCache := txscript.NewHashCache(10)
+			hashCache.AddSigHashes(tx1.MsgTx())
+			for range 2 {
+				got, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags,
+					sigCache, hashCache)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.ProofHash() != want.ProofHash() || !reflect.DeepEqual(got, want) {
+					t.Fatalf("hash type %v schnorr %v: proofs differ", hashType, schnorr)
+				}
+			}
+			if !sigCached(t, sigCache, tx1.MsgTx(), 0, coin) {
+				t.Fatal("first signature not cached")
+			}
+			if sigCached(t, sigCache, tx2.MsgTx(), 0, coin) {
+				t.Fatal("double spend signature cached")
+			}
+		}
+	}
+}
+
+// TestDSProofCreateChecksDoubleSpendFirst checks that a double spend no
+// proof can be made for is refused before the first transaction's script
+// is run.
+func TestDSProofCreateChecksDoubleSpendFirst(t *testing.T) {
+	harness := newTestHarness(t)
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+
+	badSig := tx2.MsgTx().Copy()
+	badSig.TxOut[0].Value--
+	extraPush := tx2.MsgTx().Copy()
+	extraPush.TxIn[0].SignatureScript, _ = txscript.NewScriptBuilder().
+		AddData([]byte{1}).AddData([]byte{2}).AddData([]byte{3}).Script()
+	noForkID := tx2.MsgTx().Copy()
+	signP2PKH(t, noForkID, 0, coin, harness.signKey, txscript.SigHashAll, true)
+	pushes, _ := txscript.PushedData(noForkID.TxIn[0].SignatureScript)
+	pushes[0][len(pushes[0])-1] &^= byte(txscript.SigHashForkID)
+	noForkID.TxIn[0].SignatureScript, _ = txscript.NewScriptBuilder().
+		AddData(pushes[0]).AddData(pushes[1]).Script()
+	utxos := tx2.MsgTx().Copy()
+	signP2PKH(t, utxos, 0, coin, harness.signKey, txscript.SigHashAll|txscript.SigHashUTXO, true)
+
+	for name, tx := range map[string]*wire.MsgTx{
+		"bad signature": badSig,
+		"extra push":    extraPush,
+		"no fork id":    noForkID,
+		"utxos":         utxos,
+	} {
+		sigCache := txscript.NewSigCache(10)
+		if _, err := newDSProof(tx1.MsgTx(), tx, op, coin, testFlags, sigCache, nil); err == nil {
+			t.Fatalf("%s: proof created", name)
+		}
+		if sigCached(t, sigCache, tx1.MsgTx(), 0, coin) {
+			t.Fatalf("%s: first transaction checked", name)
+		}
+	}
+
+	// A coin that is not pay-to-pubkey-hash fails before any script.
+	other := &wire.TxOut{Value: coin.Value, PkScript: []byte{txscript.OP_TRUE}}
+	sigCache := txscript.NewSigCache(10)
+	if _, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, other, testFlags, sigCache, nil); err == nil {
+		t.Fatal("proof for a coin that is not pay-to-pubkey-hash")
+	}
+}
+
+// TestDSProofMempoolCaches checks that the memory pool creates the same
+// proof with its signature and hash caches as without.
+func TestDSProofMempoolCaches(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	pool.cfg.SigCache = txscript.NewSigCache(100)
+	pool.cfg.HashCache = txscript.NewHashCache(100)
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, false)
+	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	if !sigCached(t, pool.cfg.SigCache, tx1.MsgTx(), 0, coin) {
+		t.Fatal("signature not cached on acceptance")
+	}
+	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err == nil {
+		t.Fatal("double spend accepted")
+	}
+	proofs, _ := rec.take()
+	if len(proofs) != 1 {
+		t.Fatalf("%d proofs", len(proofs))
+	}
+	want, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(proofs[0].proof, want) {
+		t.Fatal("proofs differ")
+	}
+}
+
+// multiInputSpend returns a transaction spending ops, which hold coins, to
+// nOut outputs, each input signed with the matching hash type.
+func multiInputSpend(t *testing.T, p *poolHarness, ops []wire.OutPoint, coins []*wire.TxOut,
+	nOut int, fee int64, hashTypes []txscript.SigHashType) *bchutil.Tx {
+
+	t.Helper()
+	tx := wire.NewMsgTx(1)
+	var total int64
+	for i, op := range ops {
+		tx.AddTxIn(&wire.TxIn{PreviousOutPoint: op, Sequence: wire.MaxTxInSequenceNum})
+		total += coins[i].Value
+	}
+	for range nOut {
+		tx.AddTxOut(&wire.TxOut{Value: (total - fee) / int64(nOut), PkScript: p.payScript})
+	}
+	for i := range ops {
+		signP2PKH(t, tx, i, coins[i], p.signKey, hashTypes[i], true)
+	}
+	return bchutil.NewTx(tx)
+}
+
+// TestDSProofLaterInput checks proofs for a double spend of an input other
+// than the first, including one signed with SIGHASH_SINGLE that has no
+// output at its index, whose hashOutputs is then zero.
+func TestDSProofLaterInput(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	coins := []*wire.TxOut{
+		{Value: 100000000, PkScript: harness.payScript},
+		{Value: 100000000, PkScript: harness.payScript},
+		{Value: 100000000, PkScript: harness.payScript},
+	}
+	ops := addCoins(harness, coins...)
+	all, single := txscript.SigHashAll, txscript.SigHashSingle
+
+	// tx1 spends the second coin at index 1 with SIGHASH_SINGLE and has
+	// one output; tx2 spends it at index 1 too.
+	tx1 := multiInputSpend(t, harness, ops[:2], coins[:2], 1, 1000,
+		[]txscript.SigHashType{all, single})
+	tx2 := multiInputSpend(t, harness, []wire.OutPoint{ops[2], ops[1]},
+		[]*wire.TxOut{coins[2], coins[1]}, 2, 2000, []txscript.SigHashType{all, all})
+	op, coin := ops[1], coins[1]
+
+	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := proof.ProofHash()
+	for _, spender := range []*bchutil.Tx{tx1, tx2} {
+		if v, err := validateDSProof(proof, &hash, coin, spender.MsgTx(), testFlags); v != dsProofValid {
+			t.Fatalf("%v %v", v, err)
+		}
+	}
+	var zero chainhash.Hash
+	singleSpender := proof.FirstSpender
+	if txscript.SigHashType(singleSpender.PushData[0][len(singleSpender.PushData[0])-1])&0x1f != single {
+		singleSpender = proof.DoubleSpender
+	}
+	if singleSpender.HashOutputs != zero || singleSpender.HashSequence != zero {
+		t.Fatal("SIGHASH_SINGLE without an output commits to outputs")
+	}
+
+	// The memory pool creates the same proof.
+	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err == nil {
+		t.Fatal("double spend accepted")
+	}
+	proofs, _ := rec.take()
+	if len(proofs) != 1 || proofs[0].proof.ProofHash() != hash {
+		t.Fatalf("%d proofs", len(proofs))
+	}
+	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofIgnored || err != nil {
+		t.Fatalf("%v %v", r, err)
 	}
 }

@@ -417,7 +417,7 @@ func TestDSProofMempoolDoubleSpend(t *testing.T) {
 	}
 	proof := proofs[0].proof
 	hash := proof.ProofHash()
-	want, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	want, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if err != nil || want.ProofHash() != hash {
 		t.Fatalf("stored proof differs: %v", err)
 	}
@@ -458,7 +458,7 @@ func TestDSProofMempoolDoubleSpend(t *testing.T) {
 	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofIgnored || err != nil {
 		t.Fatalf("resent proof: %v %v", r, err)
 	}
-	other, err := newDSProof(tx1.MsgTx(), tx3.MsgTx(), op, coin, testFlags)
+	other, err := newDSProof(tx1.MsgTx(), tx3.MsgTx(), op, coin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,7 +478,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 
 	// Received after the transaction.
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +494,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 
 	// Received before the transaction.
 	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, false)
-	proof, _ = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	proof, _ = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if r, err := pool.ProcessDSProof(proof, 7, true); r != DSProofOrphan || err != nil {
 		t.Fatalf("%v %v", r, err)
 	}
@@ -528,7 +528,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	pCoin := parent.MsgTx().TxOut[0]
 	c1 := spend(t, harness, pOp, pCoin, 1, 1000, txscript.SigHashAll, true)
 	c2 := spend(t, harness, pOp, pCoin, 1, 2000, txscript.SigHashAll, true)
-	cProof, err := newDSProof(c1.MsgTx(), c2.MsgTx(), pOp, pCoin, testFlags)
+	cProof, err := newDSProof(c1.MsgTx(), c2.MsgTx(), pOp, pCoin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +547,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 
 	// An invalid proof is rejected and remembered.
 	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	bad, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	bad, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	bad.FirstSpender.LockTime = 5
 	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
 		t.Fatal(err)
@@ -565,9 +565,9 @@ func TestDSProofMempoolReceived(t *testing.T) {
 
 	// An invalid orphan blames its peer once the transaction arrives.
 	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	badOrphan, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	badOrphan, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	badOrphan.DoubleSpender.Sequence = 1
-	good, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	good, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if r, _ := pool.ProcessDSProof(badOrphan, 10, true); r != DSProofOrphan {
 		t.Fatal("orphan not stored")
 	}
@@ -595,7 +595,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = pool.ProcessTransaction(tx2, true, false, 0)
-	proof, _ = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	proof, _ = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofIgnored || err != nil {
 		t.Fatal("disabled pool handled a proof")
 	}
@@ -771,7 +771,7 @@ func TestDSProofMempoolOrphanFlood(t *testing.T) {
 	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
 	pool := harness.txPool
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	good, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags)
+	good, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
