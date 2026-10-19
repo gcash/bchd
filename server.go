@@ -1978,14 +1978,20 @@ out:
 	for {
 		select {
 		case <-ticker.C:
-			if peers := s.txMemPool.ExpireDSProofOrphans(); len(peers) > 0 {
-				s.addDSProofBanScore(peers, 1, "dsproof-orphan-expired")
-			}
+			s.expireDSProofOrphansOnce(s.txMemPool.ExpireDSProofOrphans)
 		case <-s.quit:
 			break out
 		}
 	}
 	s.wg.Done()
+}
+
+// expireDSProofOrphansOnce expires orphan double spend proofs with expire and
+// increases the ban score of the peers that sent them by one per orphan.
+func (s *server) expireDSProofOrphansOnce(expire func() []mempool.Tag) {
+	if peers := expire(); len(peers) > 0 {
+		s.addDSProofBanScore(peers, 1, "dsproof-orphan-expired")
+	}
 }
 
 // pushDSProofMsg sends a dsproof-beta message for the provided proof hash to
