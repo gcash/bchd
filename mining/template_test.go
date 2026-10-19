@@ -11,6 +11,7 @@ import (
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -344,5 +345,96 @@ func TestTemplateCanonicalOrder(t *testing.T) {
 	}
 	if tmpl.Fees[0] != -total {
 		t.Errorf("coinbase fee entry is %d, want %d", tmpl.Fees[0], -total)
+	}
+}
+
+// TestTemplateSelectsByFeeRate ensures transactions are selected by fee rate,
+// highest first, and those paying less than TxMinFreeFee are left out.
+func TestTemplateSelectsByFeeRate(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(110)
+
+	// The oldest coin has the highest coin-age priority.
+	add := func(prev *wire.MsgTx, fee int64) *wire.MsgTx {
+		tx := spend(prev, fee)
+		h.src.add(tx, fee)
+		return tx
+	}
+	oldLowFee := add(h.cbTxs[0], 200)
+	high := add(h.cbTxs[1], 5000)
+	mid := add(h.cbTxs[2], 3000)
+	add(h.cbTxs[3], 50)
+	if fpk := h.src.descs[3].FeePerKB; fpk >= 1000 {
+		t.Fatalf("test transaction pays %d per kB, want below 1000", fpk)
+	}
+
+	size := uint32(high.SerializeSize())
+	for _, test := range []struct {
+		maxSize uint32
+		want    []*wire.MsgTx
+	}{
+		// Room for two transactions.
+		{1001 + 2*size, []*wire.MsgTx{high, mid}},
+		// Room for all of them.
+		{31999000, []*wire.MsgTx{oldLowFee, high, mid}},
+	} {
+		h.gen.policy = &Policy{BlockMaxSize: test.maxSize,
+			TxMinFreeFee: 1000}
+		tmpl, err := h.gen.NewBlockTemplate(nil)
+		if err != nil {
+			t.Fatalf("NewBlockTemplate: %v", err)
+		}
+		got := make(map[chainhash.Hash]bool)
+		for _, tx := range tmpl.Block.Transactions[1:] {
+			got[tx.TxHash()] = true
+		}
+		if len(got) != len(test.want) {
+			t.Errorf("BlockMaxSize %d: template has %d txs, want %d",
+				test.maxSize, len(got), len(test.want))
+		}
+		for _, tx := range test.want {
+			if !got[tx.TxHash()] {
+				t.Errorf("BlockMaxSize %d: template misses %v",
+					test.maxSize, tx.TxHash())
+			}
+		}
+	}
+}
+
+// TestTemplateMinFeeRounding ensures a transaction paying exactly the minimum
+// fee for its size is included when the fee rate is not a whole number of
+// satoshis per byte, and one paying a satoshi less is left out.
+func TestTemplateMinFeeRounding(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(105)
+	h.gen.policy = &Policy{BlockMaxSize: 31999000, TxMinFreeFee: 1500}
+
+	// spendSized pads the spend to 201 bytes, so the minimum fee at 1500
+	// satoshis per kB is 301 rather than 301.5.
+	spendSized := func(prev *wire.MsgTx, fee int64) *wire.MsgTx {
+		tx := spend(prev, fee)
+		for n := 20; tx.SerializeSize() < 201; n++ {
+			tx.TxOut[1].PkScript, _ = txscript.NullDataScript(
+				make([]byte, n))
+		}
+		if tx.SerializeSize() != 201 {
+			t.Fatalf("transaction is %d bytes, want 201",
+				tx.SerializeSize())
+		}
+		h.src.add(tx, fee)
+		return tx
+	}
+	exact := spendSized(h.cbTxs[0], 301)
+	short := spendSized(h.cbTxs[1], 300)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	if n := len(tmpl.Block.Transactions); n != 2 ||
+		tmpl.Block.Transactions[1].TxHash() != exact.TxHash() {
+
+		t.Fatalf("template has %d txs, want the coinbase and %v, not %v",
+			n, exact.TxHash(), short.TxHash())
 	}
 }

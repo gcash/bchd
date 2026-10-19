@@ -3784,10 +3784,8 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	// NOTE: The CPU miner relies on the mempool, so the mempool has to be
 	// created before calling the function to create the CPU miner.
 	policy := mining.Policy{
-		BlockMinSize:      cfg.BlockMinSize,
-		BlockMaxSize:      cfg.BlockMaxSize,
-		BlockPrioritySize: cfg.BlockPrioritySize,
-		TxMinFreeFee:      cfg.minRelayTxFee,
+		BlockMaxSize: cfg.BlockMaxSize,
+		TxMinFreeFee: cfg.minRelayTxFee,
 	}
 	blockTemplateGenerator := mining.NewBlkTmplGenerator(&policy,
 		s.chainParams, s.txMemPool, s.chain, s.timeSource,

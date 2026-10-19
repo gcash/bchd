@@ -30,10 +30,6 @@ import (
 )
 
 const (
-	// DefaultBlockPrioritySize is the default size in bytes for high-
-	// priority / low-fee transactions in block templates.
-	DefaultBlockPrioritySize = 1600000
-
 	// orphanTTL is the maximum amount of time an orphan is allowed to
 	// stay in the orphan pool before it expires and is evicted during the
 	// next scan.
