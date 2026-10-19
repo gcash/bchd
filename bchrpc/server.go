@@ -1120,7 +1120,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				entry = poolView.LookupEntry(*op)
 			}
 			if entry == nil {
-				entry, err = s.chain.FetchUtxoEntry(*op)
+				entry, err = s.chain.FetchUtxoEntryUncached(*op)
 				if err != nil {
 					return nil, err
 				}
