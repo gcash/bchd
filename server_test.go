@@ -147,3 +147,30 @@ func TestHandleBanPeerMsgMirrorsBan(t *testing.T) {
 		t.Fatal("inbound connection from banned host was admitted")
 	}
 }
+
+// TestDonePeerFreesDirectRelaySlot ensures a peer holding one of the
+// maxDirectRelayPeers direct relay slots frees it when it disconnects.  The
+// slot was freed only for a peer missing from its list, so once that many
+// such peers had disconnected, no peer was asked to relay blocks directly
+// again.
+func TestDonePeerFreesDirectRelaySlot(t *testing.T) {
+	useTestConfig(t, &config{})
+	s := &server{}
+	sp := newServerPeer(s, false)
+	sp.Peer = peer.NewInboundPeer(&peer.Config{})
+	state := &peerState{
+		inboundPeers:     map[int32]*serverPeer{sp.ID(): sp},
+		outboundPeers:    make(map[int32]*serverPeer),
+		persistentPeers:  make(map[int32]*serverPeer),
+		directRelayPeers: map[int32]*serverPeer{sp.ID(): sp},
+		connectionCount:  make(map[string]int),
+	}
+
+	s.handleDonePeerMsg(state, sp)
+	if _, ok := state.inboundPeers[sp.ID()]; ok {
+		t.Fatal("disconnected peer is still an inbound peer")
+	}
+	if _, ok := state.directRelayPeers[sp.ID()]; ok {
+		t.Fatal("disconnected peer still holds a direct relay slot")
+	}
+}

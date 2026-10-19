@@ -2401,6 +2401,10 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		}
 	}
 
+	// If this peer was one of the peers we sent the sendcmpct announce
+	// message to then delete it, which frees its direct relay slot.
+	delete(state.directRelayPeers, sp.ID())
+
 	if _, ok := list[sp.ID()]; ok {
 		if !sp.Inbound() && sp.VersionKnown() {
 			state.outboundGroups[addrmgr.GroupKey(sp.NA())]--
@@ -2414,12 +2418,7 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		}
 
 		srvrLog.Debugf("Removed peer %s", sp)
-		return
 	}
-
-	// If this peer was one of the peers we sent the sendcmpct announce
-	// message to then delete it.
-	delete(state.directRelayPeers, sp.ID())
 }
 
 // handleBanPeerMsg deals with banning peers.  It is invoked from the
