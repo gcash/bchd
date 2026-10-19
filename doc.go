@@ -149,17 +149,18 @@ Application Options:
 	                               will accept -- 0 uses the network's default,
 	                               which is also the minimum: 2000000 on testnet4
 	                               and chipnet, otherwise 32000000
-	    --minrelaytxfee=           The minimum transaction fee in BCH/kB to be
-	                               considered a non-zero fee. (default: 1e-05)
+	    --minrelaytxfee=           The minimum fee rate in BCH/kB a transaction
+	                               must pay to be relayed, accepted into the
+	                               mempool and mined -- Must be above 0 (default:
+	                               1e-05)
 	    --maxtxfee=                The maximum total fee in BCH of a transaction
 	                               sent with sendrawtransaction or checked with
 	                               testmempoolaccept, unless allowhighfees is set
 	                               (default: 0.1)
-	    --limitfreerelay=          Limit relay of transactions with no
-	                               transaction fee to the given amount in
-	                               thousands of bytes per minute
-	    --norelaypriority          Do not require free or low-fee transactions to
-	                               have high priority for relaying
+	    --limitfreerelay=          Deprecated, has no effect: free transactions
+	                               are no longer relayed
+	    --norelaypriority          Deprecated, has no effect: transaction
+	                               priority is no longer used
 	    --trickleinterval=         Minimum time between attempts to send new
 	                               inventory to a connected peer (default: 50ms)
 	    --maxorphantx=             Max number of orphan transactions to keep in
@@ -169,14 +170,14 @@ Application Options:
 	                               of addresses to use for generated blocks -- At
 	                               least one address is required if the generate
 	                               option is set
-	    --blockminsize=            Minimum block size in bytes to be used when
-	                               creating a block
+	    --blockminsize=            Deprecated, has no effect: blocks no longer
+	                               include transactions below the minimum relay
+	                               fee
 	    --blockmaxsize=            Maximum block size in bytes to be used when
 	                               creating a block -- 0 follows the consensus
 	                               limit less 1000 bytes
-	    --blockprioritysize=       Size in bytes for high-priority/low-fee
-	                               transactions when creating a block (default:
-	                               1600000)
+	    --blockprioritysize=       Deprecated, has no effect: blocks no longer
+	                               have a high-priority area
 	    --cbflags=                 Comment to append to the coinbase input when
 	                               generating a block template. (default: /bchd/)
 	    --uacomment=               Comment to add to the user agent -- See BIP 14

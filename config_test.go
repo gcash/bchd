@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
 )
 
@@ -217,5 +220,110 @@ func TestProfileListenAddr(t *testing.T) {
 			t.Errorf("%q: got %q, want %q", test.profile, cfg.Profile,
 				test.want)
 		}
+	}
+}
+
+// TestMinRelayTxFee ensures --minrelaytxfee must be above 0.
+func TestMinRelayTxFee(t *testing.T) {
+	defer func() { os.Args = []string{"bchd"} }()
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "bchd.conf")
+	if err := os.WriteFile(configFile, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		args    []string
+		want    bchutil.Amount
+		wantErr bool
+	}{
+		{args: nil, want: 1000},
+		{args: []string{"--minrelaytxfee=0.00002"}, want: 2000},
+		{args: []string{"--minrelaytxfee=0.00000001"}, want: 1},
+		{args: []string{"--minrelaytxfee=0"}, wantErr: true},
+		{args: []string{"--minrelaytxfee=-0.00001"}, wantErr: true},
+		// Rounds to 0 satoshis.
+		{args: []string{"--minrelaytxfee=0.000000001"}, wantErr: true},
+	}
+	for _, test := range tests {
+		os.Args = append([]string{"bchd", "--configfile=" + configFile,
+			"--logdir=" + dir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.wantErr {
+			if err == nil || !strings.Contains(err.Error(),
+				"invalid minrelaytxfee") {
+
+				t.Errorf("%v: expected an invalid minrelaytxfee "+
+					"error, got %v", test.args, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%v: unexpected error: %v", test.args, err)
+			continue
+		}
+		if cfg.minRelayTxFee != test.want {
+			t.Errorf("%v: got minrelaytxfee %v, want %v", test.args,
+				cfg.minRelayTxFee, test.want)
+		}
+	}
+}
+
+// TestDeprecatedOptions ensures the options of the removed free and priority
+// relay are still accepted, from the command line or the config file, and
+// log a warning.
+func TestDeprecatedOptions(t *testing.T) {
+	defer func() { os.Args = []string{"bchd"} }()
+	var logged bytes.Buffer
+	savedLog := bchdLog
+	bchdLog = bchlog.NewBackend(&logged).Logger("BCHD")
+	defer func() { bchdLog = savedLog }()
+
+	dir := t.TempDir()
+	emptyConfig := filepath.Join(dir, "empty.conf")
+	if err := os.WriteFile(emptyConfig, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, opt := range []struct{ name, arg, line string }{
+		{"limitfreerelay", "--limitfreerelay=15", "limitfreerelay=15"},
+		{"norelaypriority", "--norelaypriority", "norelaypriority=1"},
+		{"blockminsize", "--blockminsize=1000000", "blockminsize=1000000"},
+		{"blockprioritysize", "--blockprioritysize=50000",
+			"blockprioritysize=50000"},
+	} {
+		want := "The --" + opt.name + " option is deprecated and has " +
+			"no effect"
+		fileConfig := filepath.Join(dir, opt.name+".conf")
+		err := os.WriteFile(fileConfig, []byte(opt.line+"\n"), 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{
+			{"--configfile=" + emptyConfig, opt.arg},
+			{"--configfile=" + fileConfig},
+		} {
+			logged.Reset()
+			os.Args = append([]string{"bchd", "--logdir=" + dir},
+				args...)
+			if _, _, err := loadConfig(); err != nil {
+				t.Errorf("%v: unexpected error: %v", args, err)
+				continue
+			}
+			if !strings.Contains(logged.String(), want) {
+				t.Errorf("%v: no deprecation warning, logged %q",
+					args, logged.String())
+			}
+		}
+	}
+
+	// Nothing is logged when none of them is set.
+	logged.Reset()
+	os.Args = []string{"bchd", "--logdir=" + dir,
+		"--configfile=" + emptyConfig}
+	if _, _, err := loadConfig(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(logged.String(), "deprecated") {
+		t.Errorf("unexpected warning: %q", logged.String())
 	}
 }
