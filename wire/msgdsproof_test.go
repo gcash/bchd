@@ -261,3 +261,16 @@ func FuzzDSProofDecode(f *testing.F) {
 		}
 	})
 }
+
+// TestDSProofLimits pins the dsproof-beta message limits.
+func TestDSProofLimits(t *testing.T) {
+	if MaxDSProofPayload != 2*1024*1024 {
+		t.Errorf("MaxDSProofPayload is %d", MaxDSProofPayload)
+	}
+	if maxDSProofPushes != 1000 {
+		t.Errorf("maxDSProofPushes is %d", maxDSProofPushes)
+	}
+	if got := (&MsgDSProof{}).MaxPayloadLength(ProtocolVersion); got != MaxDSProofPayload {
+		t.Errorf("MaxPayloadLength is %d", got)
+	}
+}
