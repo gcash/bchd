@@ -9,10 +9,13 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestMarshalTransactionScriptClass ensures the script class of the outputs
@@ -52,5 +55,44 @@ func TestMarshalTransactionScriptClass(t *testing.T) {
 		if got := tx.Outputs[i].ScriptClass; got != test.want {
 			t.Errorf("%s: got %q, want %q", test.name, got, test.want)
 		}
+	}
+}
+
+// TestBitcoinNet ensures GetBlockchainInfo reports a distinct network type
+// for each network in chaincfg.
+func TestBitcoinNet(t *testing.T) {
+	tests := []struct {
+		params *chaincfg.Params
+		want   pb.GetBlockchainInfoResponse_BitcoinNet
+	}{
+		{&chaincfg.MainNetParams, pb.GetBlockchainInfoResponse_MAINNET},
+		{&chaincfg.RegressionNetParams, pb.GetBlockchainInfoResponse_REGTEST},
+		{&chaincfg.TestNet3Params, pb.GetBlockchainInfoResponse_TESTNET3},
+		{&chaincfg.SimNetParams, pb.GetBlockchainInfoResponse_SIMNET},
+		{&chaincfg.TestNet4Params, pb.GetBlockchainInfoResponse_TESTNET4},
+		{&chaincfg.ChipNetParams, pb.GetBlockchainInfoResponse_CHIPNET},
+	}
+	wants := make(map[pb.GetBlockchainInfoResponse_BitcoinNet]struct{})
+	for _, test := range tests {
+		wants[test.want] = struct{}{}
+	}
+	if len(wants) != len(pb.GetBlockchainInfoResponse_BitcoinNet_name) {
+		t.Fatalf("%d network types tested, %d defined", len(wants),
+			len(pb.GetBlockchainInfoResponse_BitcoinNet_name))
+	}
+	for _, test := range tests {
+		got, err := bitcoinNet(test.params)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.params.Name, err)
+			continue
+		}
+		if got != test.want {
+			t.Errorf("%s: got %v, want %v", test.params.Name, got, test.want)
+		}
+	}
+
+	unknown := chaincfg.MainNetParams
+	if _, err := bitcoinNet(&unknown); status.Code(err) != codes.Internal {
+		t.Errorf("unknown params: got %v, want an Internal error", err)
 	}
 }
