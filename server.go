@@ -336,7 +336,7 @@ type serverPeer struct {
 	// cmpctWaiters maps the hash of each compact block waiting for
 	// missing transactions from the peer to the channel its reply is
 	// sent on.
-	cmpctWaiters    map[chainhash.Hash]chan *wire.MsgBlockTxns
+	cmpctWaiters    map[chainhash.Hash]chan wire.Message
 	cmpctWaitersMtx sync.Mutex
 }
 
@@ -351,7 +351,7 @@ func newServerPeer(s *server, isPersistent bool) *serverPeer {
 		quit:           make(chan struct{}),
 		txProcessed:    make(chan struct{}, 1),
 		blockProcessed: make(chan struct{}, 1),
-		cmpctWaiters:   make(map[chainhash.Hash]chan *wire.MsgBlockTxns),
+		cmpctWaiters:   make(map[chainhash.Hash]chan wire.Message),
 	}
 }
 
@@ -503,20 +503,20 @@ func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 // addCmpctWaiter registers a compact block waiting for missing transactions
 // from the peer and returns the channel its reply is sent on.  It returns
 // false when the block is already waiting.
-func (sp *serverPeer) addCmpctWaiter(hash chainhash.Hash) (chan *wire.MsgBlockTxns, bool) {
+func (sp *serverPeer) addCmpctWaiter(hash chainhash.Hash) (chan wire.Message, bool) {
 	sp.cmpctWaitersMtx.Lock()
 	defer sp.cmpctWaitersMtx.Unlock()
 	if _, ok := sp.cmpctWaiters[hash]; ok {
 		return nil, false
 	}
-	ch := make(chan *wire.MsgBlockTxns, 1)
+	ch := make(chan wire.Message, 1)
 	sp.cmpctWaiters[hash] = ch
 	return ch, true
 }
 
 // removeCmpctWaiter stops the wait that addCmpctWaiter returned ch for, unless
 // it already ended.
-func (sp *serverPeer) removeCmpctWaiter(hash chainhash.Hash, ch chan *wire.MsgBlockTxns) {
+func (sp *serverPeer) removeCmpctWaiter(hash chainhash.Hash, ch chan wire.Message) {
 	sp.cmpctWaitersMtx.Lock()
 	defer sp.cmpctWaitersMtx.Unlock()
 	if sp.cmpctWaiters[hash] == ch {
@@ -526,7 +526,7 @@ func (sp *serverPeer) removeCmpctWaiter(hash chainhash.Hash, ch chan *wire.MsgBl
 
 // deliverCmpctReply sends msg to the compact block with the given hash if it
 // is waiting for a reply from the peer, and returns whether it was.
-func (sp *serverPeer) deliverCmpctReply(hash chainhash.Hash, msg *wire.MsgBlockTxns) bool {
+func (sp *serverPeer) deliverCmpctReply(hash chainhash.Hash, msg wire.Message) bool {
 	sp.cmpctWaitersMtx.Lock()
 	defer sp.cmpctWaitersMtx.Unlock()
 	ch, ok := sp.cmpctWaiters[hash]
@@ -791,6 +791,10 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 	iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
 	sp.AddKnownInventory(iv)
 
+	// A peer may answer getblocktxns with the full block, which ends the
+	// wait of the compact block.
+	sp.deliverCmpctReply(*block.Hash(), msg)
+
 	// Queue the block up to be handled by the block
 	// manager and intentionally block further receives
 	// until the bitcoin block is fully processed and known
@@ -859,7 +863,14 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 			// The sync manager already forgot the peer's requests.
 			sp.removeCmpctWaiter(targetHash, replyChan)
 			return
-		case blockTxns := <-replyChan:
+		case reply := <-replyChan:
+			blockTxns, ok := reply.(*wire.MsgBlockTxns)
+			if !ok {
+				// The full block is processed as it arrives.
+				peerLog.Debugf("Peer %v sent block %v in full in "+
+					"reply to getblocktxns", sp, targetHash)
+				return
+			}
 			indexMap, err := blockTxns.AbsoluteIndexes(msgGetBlockTxns.Indexes)
 			if err != nil {
 				peerLog.Debugf("blocktxns response for cmpctblock %v from peer %v "+

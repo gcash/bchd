@@ -83,3 +83,31 @@ func TestGetDataAnsweredByDSProof(t *testing.T) {
 		t.Fatalf("deadlines left after a dsproof-beta answer: %v", pending)
 	}
 }
+
+// TestGetBlockTxnsAnsweredByBlock verifies that a block answers a
+// getblocktxns, since a peer may send the full block instead of the
+// transactions.
+func TestGetBlockTxnsAnsweredByBlock(t *testing.T) {
+	t.Parallel()
+
+	p := &Peer{}
+	pending := make(map[string]time.Time)
+	p.maybeAddDeadline(pending, wire.NewMsgGetBlockTxns(chainhash.Hash{}, nil))
+	removeExpectedResponse(pending, wire.CmdBlock)
+	if len(pending) != 0 {
+		t.Fatalf("deadlines left after a block answer: %v", pending)
+	}
+
+	// Other answers to a getdata don't answer a getblocktxns.
+	for _, cmd := range []string{wire.CmdCmpctBlock, wire.CmdTx,
+		wire.CmdNotFound} {
+
+		pending := make(map[string]time.Time)
+		p.maybeAddDeadline(pending,
+			wire.NewMsgGetBlockTxns(chainhash.Hash{}, nil))
+		removeExpectedResponse(pending, cmd)
+		if _, ok := pending[wire.CmdBlockTxns]; !ok {
+			t.Fatalf("%s removed the blocktxns deadline", cmd)
+		}
+	}
+}
