@@ -55,12 +55,10 @@ const (
 	defaultMaxRPCWebsockets        = 25
 	defaultMaxRPCConcurrentReqs    = 20
 	defaultDbType                  = "ffldb"
-	defaultFreeTxRelayLimit        = 0
 	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
 	highMaxTxFee                   = bchutil.Amount(bchutil.SatoshiPerBitcoin)
 	defaultTrickleInterval         = peer.DefaultTrickleInterval
 	minMessageLimitsBlockSize      = 32000000
-	defaultBlockMinSize            = 0
 	defaultBlockMaxSize            = 0
 	blockMaxSizeMin                = 1000
 	defaultGenerate                = false
@@ -92,6 +90,10 @@ var (
 	defaultRPCCertFile = filepath.Join(defaultHomeDir, "rpc.cert")
 	defaultLogDir      = filepath.Join(defaultHomeDir, defaultLogDirname)
 )
+
+// deprecatedOptions are options that are still accepted but have no effect.
+var deprecatedOptions = []string{"limitfreerelay", "norelaypriority",
+	"blockminsize", "blockprioritysize"}
 
 // runServiceCommand is only set to a real function on Windows.  It is used
 // to parse and execute service commands specified via the -s flag.
@@ -159,17 +161,17 @@ type config struct {
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
 	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
-	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum transaction fee in BCH/kB to be considered a non-zero fee."`
+	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0"`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
-	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Limit relay of transactions with no transaction fee to the given amount in thousands of bytes per minute"`
-	NoRelayPriority         bool          `long:"norelaypriority" description:"Do not require free or low-fee transactions to have high priority for relaying"`
+	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Deprecated, has no effect: free transactions are no longer relayed"`
+	NoRelayPriority         bool          `long:"norelaypriority" description:"Deprecated, has no effect: transaction priority is no longer used"`
 	TrickleInterval         time.Duration `long:"trickleinterval" description:"Minimum time between attempts to send new inventory to a connected peer"`
 	MaxOrphanTxs            int           `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
 	Generate                bool          `long:"generate" description:"Generate (mine) bitcoins using the CPU"`
 	MiningAddrs             []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
-	BlockMinSize            uint32        `long:"blockminsize" description:"Minimum block size in bytes to be used when creating a block"`
+	BlockMinSize            uint32        `long:"blockminsize" description:"Deprecated, has no effect: blocks no longer include transactions below the minimum relay fee"`
 	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block -- 0 follows the consensus limit less 1000 bytes"`
-	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Size in bytes for high-priority/low-fee transactions when creating a block"`
+	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Deprecated, has no effect: blocks no longer have a high-priority area"`
 	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
 	NoPeerBloomFilters      bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
@@ -452,9 +454,7 @@ func loadConfig() (*config, []string, error) {
 		RPCCert:                 defaultRPCCertFile,
 		MinRelayTxFee:           mempool.DefaultMinRelayTxFee.ToBCH(),
 		MaxTxFee:                defaultMaxTxFee.ToBCH(),
-		FreeTxRelayLimit:        defaultFreeTxRelayLimit,
 		TrickleInterval:         defaultTrickleInterval,
-		BlockMinSize:            defaultBlockMinSize,
 		BlockMaxSize:            defaultBlockMaxSize,
 		CoinbaseFlags:           mining.CoinbaseFlags,
 		MaxOrphanTxs:            defaultMaxOrphanTransactions,
@@ -891,8 +891,11 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Validate the minrelaytxfee.
+	// Validate the minrelaytxfee, which must be above 0.
 	cfg.minRelayTxFee, err = bchutil.NewAmount(cfg.MinRelayTxFee)
+	if err == nil && cfg.minRelayTxFee <= 0 {
+		err = errors.New("must be above 0")
+	}
 	if err != nil {
 		str := "%s: invalid minrelaytxfee: %v"
 		err := fmt.Errorf(str, funcName, err)
@@ -960,12 +963,6 @@ func loadConfig() (*config, []string, error) {
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
 	}
-	// Limit the block priority and minimum block sizes to max block size.
-	if cfg.BlockMaxSize != 0 {
-		cfg.BlockPrioritySize = min(cfg.BlockPrioritySize, cfg.BlockMaxSize)
-		cfg.BlockMinSize = min(cfg.BlockMinSize, cfg.BlockMaxSize)
-	}
-
 	// Prepend ExcessiveBlockSize signaling to the UserAgentComments
 	cfg.UserAgentComments = append([]string{fmt.Sprintf("EB%.1f", float64(cfg.ExcessiveBlockSize)/1000000)}, cfg.UserAgentComments...)
 
@@ -1251,6 +1248,16 @@ func loadConfig() (*config, []string, error) {
 	if cfg.NoOnion {
 		cfg.oniondial = func(a, b string, t time.Duration) (net.Conn, error) {
 			return nil, errors.New("tor has been disabled")
+		}
+	}
+
+	// The options of the removed free and priority relay are still
+	// accepted so existing configurations keep working.
+	for _, name := range deprecatedOptions {
+		opt := parser.FindOptionByLongName(name)
+		if opt != nil && opt.IsSet() {
+			bchdLog.Warnf("The --%s option is deprecated and has "+
+				"no effect", name)
 		}
 	}
 
