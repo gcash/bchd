@@ -648,3 +648,52 @@ func TestUtxoCache_InitConsistentState(t *testing.T) {
 		}
 	})
 }
+
+// TestUtxoCache_FlushReleasesMap checks that a full flush does not keep the
+// memory of the cache's map once the map is empty.
+func TestUtxoCache_FlushReleasesMap(t *testing.T) {
+	chain, _, tearDown := utxoCacheTestChain("TestUtxoCache_FlushReleasesMap")
+	defer tearDown()
+	cache := chain.utxoCache
+
+	heapAlloc := func() uint64 {
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		return ms.HeapAlloc
+	}
+	before := heapAlloc()
+
+	const n = 200000
+	pkScript := []byte{0x51}
+	for i := range n {
+		var op wire.OutPoint
+		binary.LittleEndian.PutUint64(op.Hash[:], uint64(i))
+		entry := NewUtxoEntry(&wire.TxOut{Value: 1, PkScript: pkScript}, 1, false)
+		if err := cache.addEntry(op, entry, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filled := heapAlloc()
+
+	// Any hash other than the last flushed one makes flush run.
+	if err := cache.flush(&BestState{Hash: chainhash.Hash{1}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(cache.cachedEntries) != 0 {
+		t.Fatalf("expected empty cache, got %d entries", len(cache.cachedEntries))
+	}
+	after := heapAlloc()
+
+	// The flushed entries stay in the database write cache until it is
+	// flushed, so measure only what dropping the cache's map would free.
+	cache.cachedEntries = make(map[wire.OutPoint]*UtxoEntry)
+	mapKept := int64(after) - int64(heapAlloc())
+	grown := filled - before
+	t.Logf("cache grew by %d KiB, its emptied map still held %d KiB",
+		grown/1024, mapKept/1024)
+	if mapKept > int64(grown/10) {
+		t.Fatalf("emptied map still held %d KiB after a full flush",
+			mapKept/1024)
+	}
+}
