@@ -381,7 +381,30 @@ func TestRemoveCmpctWaiter(t *testing.T) {
 	if !sp.deliverCmpctReply(hash, reply) {
 		t.Fatal("removing the ended wait removed the new one")
 	}
-	if got := <-second; got != reply {
+	if got := <-second; got != wire.Message(reply) {
 		t.Fatal("new wait got the wrong reply")
+	}
+}
+
+// TestCompactBlockFullBlockReply ensures a full block sent in reply to
+// getblocktxns ends the wait of the compact block and is processed as the
+// block requested from the peer.
+func TestCompactBlockFullBlockReply(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	h.send(t, block.MsgBlock())
+	waitDone(t, done)
+	h.expectHaveBlock(t, block.Hash())
+
+	// The compact block itself is not relayed, as it was not
+	// reconstructed.
+	select {
+	case msg := <-h.s.relayCmpctBlock:
+		t.Fatalf("compact block %v relayed", msg.BlockHash())
+	default:
 	}
 }

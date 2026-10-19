@@ -1346,7 +1346,7 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time,
 		pendingResponses[wire.CmdCFilter] = deadline
 
 	case wire.CmdGetBlockTxns:
-		// Expects a blocktxns message.
+		// Expects a blocktxns or block message.
 		pendingResponses[wire.CmdBlockTxns] = deadline
 
 	case wire.CmdGetData:
@@ -1369,12 +1369,15 @@ func (p *Peer) maybeAddDeadline(pendingResponses map[string]time.Time,
 
 // removeExpectedResponse removes the deadlines a received command answers.
 // A getdata expects one of a group of responses, so any of them removes the
-// whole group.
+// whole group.  A block also answers a getblocktxns.
 func removeExpectedResponse(pendingResponses map[string]time.Time, msgCmd string) {
 	switch msgCmd {
 	case wire.CmdBlock, wire.CmdCmpctBlock, wire.CmdMerkleBlock, wire.CmdTx,
 		wire.CmdDSProof, wire.CmdNotFound:
 
+		if msgCmd == wire.CmdBlock {
+			delete(pendingResponses, wire.CmdBlockTxns)
+		}
 		delete(pendingResponses, wire.CmdBlock)
 		delete(pendingResponses, wire.CmdCmpctBlock)
 		delete(pendingResponses, wire.CmdMerkleBlock)
