@@ -1062,7 +1062,6 @@ func (sp *serverPeer) OnHeaders(_ *peer.Peer, msg *wire.MsgHeaders) {
 // OnGetData is invoked when a peer receives a getdata bitcoin message and
 // is used to deliver block and transaction information.
 func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
-	numAdded := 0
 	notFound := wire.NewMsgNotFound()
 
 	length := len(msg.InvList)
@@ -1075,60 +1074,46 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 	// This incremental score decays each minute to half of its value.
 	sp.addBanScore(0, uint32(length)*99/wire.MaxInvPerMsg, "getdata")
 
-	// We wait on this wait channel periodically to prevent queuing
-	// far more data than we can send in a reasonable time, wasting memory.
-	// The waiting occurs after the database fetch for the next one to
-	// provide a little pipelining.
-	var waitChan chan struct{}
-	doneChan := make(chan struct{}, 1)
-
+	// Every third item, queue a barrier, which the peer signals once
+	// everything queued before it has been sent, and wait on it once the
+	// next item is queued, so that item's database fetch overlaps the
+	// sending.  This bounds what is queued at a time.  The items' own done
+	// channels could not: an item with nothing to send, being unknown or
+	// not found, signals its channel at once.
+	var barrier chan struct{}
 	for i, iv := range msg.InvList {
-		var c chan struct{}
-		// If this will be the last message we send.
-		if i == length-1 && len(notFound.InvList) == 0 {
-			c = doneChan
-		} else if (i+1)%3 == 0 {
-			// Buffered so as to not make the send goroutine block.
-			c = make(chan struct{}, 1)
-		}
 		var err error
 		switch iv.Type {
 		case wire.InvTypeTx:
-			err = sp.server.pushTxMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+			err = sp.server.pushTxMsg(sp, &iv.Hash, nil, nil, wire.BaseEncoding)
 		case wire.InvTypeBlock:
-			err = sp.server.pushBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+			err = sp.server.pushBlockMsg(sp, &iv.Hash, nil, nil, wire.BaseEncoding)
 		case wire.InvTypeCmpctBlock:
-			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+			err = sp.server.pushCmpctBlockMsg(sp, &iv.Hash, nil, nil, wire.BaseEncoding)
 		case wire.InvTypeFilteredBlock:
-			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+			err = sp.server.pushMerkleBlockMsg(sp, &iv.Hash, nil, nil, wire.BaseEncoding)
 		case wire.InvTypeDSProof:
-			err = sp.server.pushDSProofMsg(sp, &iv.Hash, c, waitChan, wire.BaseEncoding)
+			err = sp.server.pushDSProofMsg(sp, &iv.Hash, nil, nil, wire.BaseEncoding)
 		default:
-			// Unknown types are ignored, but the channel still has
-			// to be signalled since it may be the one waited on.
 			peerLog.Debugf("Unknown type in inventory request %d",
 				iv.Type)
-			if c != nil {
-				c <- struct{}{}
-			}
 		}
 		if err != nil {
 			_ = notFound.AddInvVect(iv)
-
-			// When there is a failure fetching the final entry
-			// and the done channel was sent in due to there
-			// being no outstanding not found inventory, consume
-			// it here because there is now not found inventory
-			// that will use the channel momentarily.
-			if i == len(msg.InvList)-1 && c != nil {
-				<-c
-			}
 		}
-		numAdded++
-		waitChan = c
+
+		if barrier != nil {
+			<-barrier
+			barrier = nil
+		}
+		if (i+1)%3 == 0 {
+			// Buffered so as to not make the send goroutine block.
+			barrier = make(chan struct{}, 1)
+			sp.QueueBarrier(barrier)
+		}
 	}
 	if len(notFound.InvList) != 0 {
-		sp.QueueMessage(notFound, doneChan)
+		sp.QueueMessage(notFound, nil)
 	}
 
 	// Wait for messages to be sent. We can send quite a lot of data at this
@@ -1136,8 +1121,10 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 	// We don't process anything else by them in this time so that we
 	// have an idea of when we should hear back from them - else the idle
 	// timeout could fire when we were only half done sending the blocks.
-	if numAdded > 0 {
-		<-doneChan
+	if length > 0 {
+		done := make(chan struct{}, 1)
+		sp.QueueBarrier(done)
+		<-done
 	}
 }
 

@@ -2007,6 +2007,16 @@ out:
 	for {
 		select {
 		case msg := <-p.sendQueue:
+			// A barrier has nothing to send.  It only marks that every
+			// message queued before it has been sent.
+			if msg.msg == nil {
+				if msg.doneChan != nil {
+					msg.doneChan <- struct{}{}
+				}
+				p.sendDoneQueue <- struct{}{}
+				continue
+			}
+
 			switch m := msg.msg.(type) {
 			case *wire.MsgPing:
 				// Only expects a pong message in later protocol
@@ -2136,6 +2146,15 @@ func (p *Peer) QueueMessageWithEncoding(msg wire.Message, doneChan chan<- struct
 			}()
 		}
 	}
+}
+
+// QueueBarrier queues a barrier, which sends nothing but signals doneChan once
+// every message queued before it has been sent, or the peer has disconnected.
+// Waiting on one bounds how much is queued for the peer at a time.
+//
+// This function is safe for concurrent access.
+func (p *Peer) QueueBarrier(doneChan chan<- struct{}) {
+	p.QueueMessageWithEncoding(nil, doneChan, wire.BaseEncoding)
 }
 
 // QueueInventory adds the passed inventory to the inventory send queue which
