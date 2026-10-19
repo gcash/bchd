@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -1073,6 +1074,30 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 
 	encodedAddr := addr.EncodeAddress()
+
+	// An output address with the queried hash matches by type alone, so
+	// it is encoded once per type.
+	var addrHash []byte
+	switch addr.(type) {
+	case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
+		addrHash = addr.ScriptAddress()
+	}
+	typeMatches := make(map[reflect.Type]bool)
+	matches := func(a bchutil.Address) bool {
+		if addrHash == nil {
+			return a.EncodeAddress() == encodedAddr
+		}
+		if !bytes.Equal(a.ScriptAddress(), addrHash) {
+			return false
+		}
+		t := reflect.TypeOf(a)
+		match, ok := typeMatches[t]
+		if !ok {
+			match = a.EncodeAddress() == encodedAddr
+			typeMatches[t] = match
+		}
+		return match
+	}
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 
 	// Each output is returned once, even when the history lists its
@@ -1091,19 +1116,18 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				continue
 			}
 
-			matchAddr := ""
+			isMatch := false
 
 			switch typedAddr := addrs[0].(type) {
 			case *bchutil.AddressPubKeyHash, *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
-				matchAddr = addrs[0].EncodeAddress()
+				isMatch = matches(addrs[0])
 
 			case *bchutil.AddressPubKey:
-				matchAddr = typedAddr.AddressPubKeyHash().EncodeAddress()
+				isMatch = matches(typedAddr.AddressPubKeyHash())
 			}
 
 			// Outputs paying to other addresses are only looked up for
 			// their token metadata.
-			isMatch := matchAddr == encodedAddr
 			if !isMatch && (s.slpIndex == nil || !req.IncludeTokenMetadata) {
 				continue
 			}
