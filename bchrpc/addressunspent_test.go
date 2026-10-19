@@ -133,8 +133,18 @@ func (h *addrUnspentHarness) mineBlock(cbOuts []*wire.TxOut,
 
 	h.tb.Helper()
 
-	h.height++
-	sigScript, err := txscript.NewScriptBuilder().AddInt64(int64(h.height)).
+	coinbase := h.coinbaseTx(h.height+1, cbOuts)
+	h.mineBlockWithCoinbase(coinbase, txs)
+	return coinbase
+}
+
+// coinbaseTx returns a coinbase for the height with the passed outputs.
+func (h *addrUnspentHarness) coinbaseTx(height int32,
+	cbOuts []*wire.TxOut) *wire.MsgTx {
+
+	h.tb.Helper()
+
+	sigScript, err := txscript.NewScriptBuilder().AddInt64(int64(height)).
 		AddData(make([]byte, 40)).Script()
 	if err != nil {
 		h.tb.Fatalf("coinbase script: %v", err)
@@ -148,7 +158,17 @@ func (h *addrUnspentHarness) mineBlock(cbOuts []*wire.TxOut,
 	for _, out := range cbOuts {
 		coinbase.AddTxOut(out)
 	}
+	return coinbase
+}
 
+// mineBlockWithCoinbase connects a block holding the coinbase and the passed
+// transactions.
+func (h *addrUnspentHarness) mineBlockWithCoinbase(coinbase *wire.MsgTx,
+	txs []*wire.MsgTx) {
+
+	h.tb.Helper()
+
+	h.height++
 	sorted := append([]*wire.MsgTx(nil), txs...)
 	sort.Slice(sorted, func(i, j int) bool {
 		a, b := sorted[i].TxHash(), sorted[j].TxHash()
@@ -176,7 +196,6 @@ func (h *addrUnspentHarness) mineBlock(cbOuts []*wire.TxOut,
 		h.tb.Fatalf("ProcessBlock: orphan %v, %v", isOrphan, err)
 	}
 	h.prevHash = block.BlockHash()
-	return coinbase
 }
 
 // acceptTx adds the transaction to the mempool.
@@ -417,5 +436,52 @@ func TestGetAddressUnspentOutputsOrder(t *testing.T) {
 		if !bytes.Equal(u.Outpoint.Hash, want[:]) {
 			t.Errorf("output %d: got %x, want %v", i, u.Outpoint.Hash, want)
 		}
+	}
+}
+
+// TestGetAddressUnspentOutputsDuplicate ensures an output is returned once
+// when the history of the address lists its transaction more than once, as
+// for a coinbase repeated in a later block.  BFFastAdd skips the BIP30
+// check, which allows the repeated coinbase as in two early mainnet blocks.
+func TestGetAddressUnspentOutputsDuplicate(t *testing.T) {
+	h := newAddrUnspentHarness(t)
+	addrScript := p2shScript(t, addrRedeem)
+
+	coinbase := h.coinbaseTx(1, []*wire.TxOut{
+		wire.NewTxOut(50e8, addrScript, wire.TokenData{}),
+	})
+	h.mineBlockWithCoinbase(coinbase, nil)
+	h.mineBlockWithCoinbase(coinbase, nil)
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+	txResp, err := h.s.GetAddressTransactions(context.Background(),
+		&pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatalf("GetAddressTransactions: %v", err)
+	}
+	if len(txResp.ConfirmedTransactions) != 2 {
+		t.Fatalf("got %d confirmed transactions, want 2",
+			len(txResp.ConfirmedTransactions))
+	}
+
+	resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+		&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatalf("GetAddressUnspentOutputs: %v", err)
+	}
+	want := coinbase.TxHash()
+	if len(resp.Outputs) != 1 || !bytes.Equal(resp.Outputs[0].Outpoint.Hash,
+		want[:]) {
+
+		got := make([]string, len(resp.Outputs))
+		for i, u := range resp.Outputs {
+			var hash chainhash.Hash
+			copy(hash[:], u.Outpoint.Hash)
+			got[i] = fmt.Sprintf("%v:%d", hash, u.Outpoint.Index)
+		}
+		t.Fatalf("got %v, want only %v:0", got, want)
 	}
 }
