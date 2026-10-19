@@ -27,6 +27,11 @@ const (
 	// version bits scheme.
 	vbNumBits = 29
 
+	// vbVersionRollingMask holds the bits 13 to 28 that BIP320 leaves to
+	// miners for version rolling, as ASICBoost does.  Most blocks set some
+	// of them, so they say nothing about new rules.
+	vbVersionRollingMask = 0x1fffe000
+
 	// unknownVerNumToCheck is the number of previous blocks to consider
 	// when checking for a threshold of unknown block versions for the
 	// purposes of warning the user.
@@ -283,7 +288,7 @@ func (b *BlockChain) warnUnknownVersions(node *blockNode) error {
 			return err
 		}
 		if expectedVersion > vbLegacyBlockVersion &&
-			(node.version & ^expectedVersion) != 0 {
+			node.version&^expectedVersion&^vbVersionRollingMask != 0 {
 
 			numUpgraded++
 		}
