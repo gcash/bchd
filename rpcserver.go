@@ -330,9 +330,9 @@ func internalRPCError(errStr, context string) *btcjson.RPCError {
 	return btcjson.NewRPCError(btcjson.ErrRPCInternal.Code, errStr)
 }
 
-// maxRPCRequestSize returns the largest request accepted from an
-// authenticated client.  It leaves room for a hex encoded block of the largest
-// size the node accepts.
+// maxRPCRequestSize returns the largest HTTP request body or websocket message
+// accepted from an authenticated client.  It leaves room for a hex encoded
+// block of the largest size the node accepts.
 func maxRPCRequestSize() int64 {
 	return 32<<20 + 2*int64(wire.MaxBlockPayload())
 }
@@ -4831,10 +4831,19 @@ func (s *rpcServer) jsonRPCRead(w http.ResponseWriter, r *http.Request, isAdmin 
 	// Setup a close notifier to stop any long polling routines.
 	closeNotifier := r.Context().Done()
 
-	// Read and close the JSON-RPC request body from the caller.
-	body, err := io.ReadAll(r.Body)
+	// Read and close the JSON-RPC request body from the caller.  The body
+	// is limited to the same size as a websocket message.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body,
+		maxRPCRequestSize()))
 	r.Body.Close()
 
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		errCode := http.StatusRequestEntityTooLarge
+		http.Error(w, fmt.Sprintf("%d request body exceeds %d bytes",
+			errCode, maxBytesErr.Limit), errCode)
+		return
+	}
 	if err != nil {
 		errCode := http.StatusBadRequest
 		http.Error(w, fmt.Sprintf("%d error reading JSON message: %v",

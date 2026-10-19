@@ -10,12 +10,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/btcsuite/websocket"
+	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 )
 
@@ -144,6 +146,49 @@ func TestHTTPHandlerPanicRecovered(t *testing.T) {
 	if !strings.Contains(string(reply), `"code":-32603`) {
 		t.Errorf("unexpected reply %s", reply)
 	}
+}
+
+// TestHTTPRequestBodyLimit ensures an HTTP request body larger than
+// maxRPCRequestSize is refused with 413 instead of being read in full, and
+// that a body of exactly that size is still answered.
+func TestHTTPRequestBodyLimit(t *testing.T) {
+	// Use a small excessive block size to keep the limit low.
+	wire.SetLimits(1000000)
+	t.Cleanup(func() { wire.SetLimits(32000000) })
+
+	s := &rpcServer{}
+	req := `{"jsonrpc":"1.0","id":1,"method":"uptime","params":[]}`
+	paddedRequest := func(size int64) *http.Request {
+		body := io.MultiReader(strings.NewReader(req),
+			io.LimitReader(spaceReader{}, size-int64(len(req))))
+		return httptest.NewRequest("POST", "/", body)
+	}
+
+	w := httptest.NewRecorder()
+	s.jsonRPCRead(w, paddedRequest(maxRPCRequestSize()), true)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"id":1`) {
+		t.Errorf("size at the limit: got status %d, reply %s", w.Code,
+			w.Body.String())
+	}
+
+	for _, size := range []int64{maxRPCRequestSize() + 1, 2 * maxRPCRequestSize()} {
+		w := httptest.NewRecorder()
+		s.jsonRPCRead(w, paddedRequest(size), true)
+		if w.Code != http.StatusRequestEntityTooLarge {
+			t.Errorf("size %d: got status %d, want %d", size, w.Code,
+				http.StatusRequestEntityTooLarge)
+		}
+	}
+}
+
+// spaceReader is an endless source of spaces.
+type spaceReader struct{}
+
+func (spaceReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = ' '
+	}
+	return len(p), nil
 }
 
 // TestWebsocketWellFormedRequests ensures valid requests from admin and
