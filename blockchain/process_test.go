@@ -254,6 +254,109 @@ func TestOrphanNoFastAddInheritance(t *testing.T) {
 	}
 }
 
+// TestOrphanSiblingAfterFailedOrphan ensures an orphan that fails to connect
+// neither fails its parent nor stops the parent's other orphans from
+// connecting.
+func TestOrphanSiblingAfterFailedOrphan(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	chain, teardown, err := chainSetup("orphansibling", &params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer teardown()
+
+	bits := params.PowLimitBits
+	subsidy := CalcBlockSubsidy(1, &params)
+	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
+	if _, _, err := chain.ProcessBlock(b1, BFNone); err != nil {
+		t.Fatalf("block 1: %v", err)
+	}
+	parent := procTestBlock(t, b1.MsgBlock(), 1, subsidy, bits, nil)
+
+	// The first child pays too much in its coinbase, which is only found
+	// when it is connected, and has a child of its own.  The second child
+	// is valid.  The orphans of a block are processed in the order they
+	// were added, so the invalid child is connected first.
+	bad := procTestBlock(t, parent.MsgBlock(), 2, subsidy*1000, bits, nil)
+	badChild := procTestBlock(t, bad.MsgBlock(), 3, subsidy, bits, nil)
+	good := procTestBlock(t, parent.MsgBlock(), 2, subsidy-1, bits, nil)
+	for _, block := range []*bchutil.Block{bad, badChild, good} {
+		_, isOrphan, err := chain.ProcessBlock(block, BFNone)
+		if err != nil || !isOrphan {
+			t.Fatalf("block %v: orphan=%v err=%v", block.Hash(),
+				isOrphan, err)
+		}
+	}
+
+	if _, _, err := chain.ProcessBlock(parent, BFNone); err != nil {
+		t.Fatalf("parent: %v", err)
+	}
+	best := chain.BestSnapshot()
+	if best.Hash != *good.Hash() {
+		t.Fatalf("tip is %v at height %d, want the valid child %v",
+			best.Hash, best.Height, good.Hash())
+	}
+	for _, block := range []*bchutil.Block{bad, badChild, good} {
+		if chain.IsKnownOrphan(block.Hash()) {
+			t.Fatalf("block %v left in the orphan pool", block.Hash())
+		}
+	}
+	if !chain.knownInvalid(bad.Hash()) {
+		t.Fatal("invalid child not marked invalid")
+	}
+	if chain.index.LookupNode(badChild.Hash()) != nil {
+		t.Fatal("child of the invalid block was added to the block index")
+	}
+}
+
+// TestOrphanFailsSideChainParent ensures a parent accepted to a side chain is
+// still rejected when the orphan that makes its chain the best one shows it
+// to be invalid.
+func TestOrphanFailsSideChainParent(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	chain, teardown, err := chainSetup("orphansideparent", &params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer teardown()
+
+	bits := params.PowLimitBits
+	subsidy := CalcBlockSubsidy(1, &params)
+	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
+	b2 := procTestBlock(t, b1.MsgBlock(), 1, subsidy, bits, nil)
+	for _, block := range []*bchutil.Block{b1, b2} {
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatalf("block %v: %v", block.Hash(), err)
+		}
+	}
+
+	// The parent forks from b1 and pays too much in its coinbase, which
+	// is only found when its chain becomes the best one.  Its child makes
+	// it so.
+	parent := procTestBlock(t, b1.MsgBlock(), 1, subsidy*1000, bits, nil)
+	child := procTestBlock(t, parent.MsgBlock(), 2, subsidy, bits, nil)
+	_, isOrphan, err := chain.ProcessBlock(child, BFNone)
+	if err != nil || !isOrphan {
+		t.Fatalf("child not held as orphan: orphan=%v err=%v", isOrphan, err)
+	}
+
+	_, _, err = chain.ProcessBlock(parent, BFNone)
+	var rerr RuleError
+	if !errors.As(err, &rerr) || rerr.ErrorCode != ErrBadCoinbaseValue {
+		t.Fatalf("parent: got error %v, want %v", err, ErrBadCoinbaseValue)
+	}
+	if !chain.knownInvalid(parent.Hash()) {
+		t.Fatal("parent not marked invalid")
+	}
+	if chain.IsKnownOrphan(child.Hash()) {
+		t.Fatal("child left in the orphan pool")
+	}
+	if best := chain.BestSnapshot(); best.Hash != *b2.Hash() {
+		t.Fatalf("tip is %v at height %d, want b2 %v", best.Hash,
+			best.Height, b2.Hash())
+	}
+}
+
 // orphanTestBlock returns a solved regtest block of exactly size bytes whose
 // parent is unknown, padding the coinbase with an OP_RETURN output.
 func orphanTestBlock(t *testing.T, params *chaincfg.Params, nonce uint32,
