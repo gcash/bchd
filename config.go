@@ -154,7 +154,7 @@ type config struct {
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
-	Profile                 string        `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
+	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
@@ -726,16 +726,27 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Validate profile port number
+	// Validate the profile address.  A bare port only listens on localhost
+	// since the profiler is unauthenticated.
 	if cfg.Profile != "" {
-		profilePort, err := strconv.Atoi(cfg.Profile)
-		if err != nil || profilePort < 1024 || profilePort > 65535 {
-			str := "%s: The profile port must be between 1024 and 65535"
+		host, port := "127.0.0.1", cfg.Profile
+		var splitErr error
+		if strings.Contains(cfg.Profile, ":") {
+			host, port, splitErr = net.SplitHostPort(cfg.Profile)
+		}
+		profilePort, portErr := strconv.Atoi(port)
+		if splitErr != nil || portErr != nil || profilePort < 1024 ||
+			profilePort > 65535 ||
+			(host != "" && net.ParseIP(host) == nil) {
+
+			str := "%s: The profile option must be a port or " +
+				"IP:port with a port between 1024 and 65535"
 			err := fmt.Errorf(str, funcName)
 			fmt.Fprintln(os.Stderr, err)
 			fmt.Fprintln(os.Stderr, usageMessage)
 			return nil, nil, err
 		}
+		cfg.Profile = net.JoinHostPort(host, port)
 	}
 
 	// Don't allow ban durations that are too short.
