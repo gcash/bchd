@@ -326,7 +326,7 @@ type serverPeer struct {
 	releaseInbound        func()
 	filter                *bloom.Filter
 	addrMtx               sync.RWMutex
-	knownAddresses        map[string]struct{}
+	knownAddresses        *knownAddrSet
 	banScore              connmgr.DynamicBanScore
 	quit                  chan struct{}
 	// The following chans are used to sync blockmanager and server.
@@ -347,7 +347,7 @@ func newServerPeer(s *server, isPersistent bool) *serverPeer {
 		server:         s,
 		persistent:     isPersistent,
 		filter:         bloom.LoadFilter(nil),
-		knownAddresses: make(map[string]struct{}),
+		knownAddresses: newKnownAddrSet(maxKnownAddrsPerPeer),
 		quit:           make(chan struct{}),
 		txProcessed:    make(chan struct{}, 1),
 		blockProcessed: make(chan struct{}, 1),
@@ -368,7 +368,7 @@ func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddressV2) {
 	sp.addrMtx.Lock()
 	defer sp.addrMtx.Unlock()
 	for _, na := range addresses {
-		sp.knownAddresses[addrmgr.NetAddressKey(na)] = struct{}{}
+		sp.knownAddresses.add(addrmgr.NetAddressKey(na))
 	}
 }
 
@@ -377,8 +377,7 @@ func (sp *serverPeer) addKnownAddresses(addresses []*wire.NetAddressV2) {
 func (sp *serverPeer) addressKnown(na *wire.NetAddressV2) bool {
 	sp.addrMtx.RLock()
 	defer sp.addrMtx.RUnlock()
-	_, exists := sp.knownAddresses[addrmgr.NetAddressKey(na)]
-	return exists
+	return sp.knownAddresses.has(addrmgr.NetAddressKey(na))
 }
 
 // setDisableRelayTx toggles relaying of transactions for the given peer.
