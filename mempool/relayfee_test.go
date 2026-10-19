@@ -98,3 +98,31 @@ func TestMinRelayFeeRequired(t *testing.T) {
 	}
 	testPoolMembership(tc, readded, false, true)
 }
+
+// TestRawMempoolVerbosePriority ensures the deprecated priority fields of
+// RawMempoolVerbose are 0, even for a transaction spending old coins.
+func TestRawMempoolVerbosePriority(t *testing.T) {
+	t.Parallel()
+
+	harness, _, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	harness.chain.SetHeight(100000)
+	coin := &wire.TxOut{Value: 1000 * bchutil.SatoshiPerBitcoin,
+		PkScript: harness.payScript}
+	tx := spend(t, harness, addCoins(harness, coin)[0], coin, 1, 1000,
+		txscript.SigHashAll, true)
+	if _, err := harness.txPool.ProcessTransaction(tx, false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+
+	entry := harness.txPool.RawMempoolVerbose()[tx.Hash().String()]
+	if entry == nil {
+		t.Fatal("transaction missing from RawMempoolVerbose")
+	}
+	if entry.StartingPriority != 0 || entry.CurrentPriority != 0 {
+		t.Fatalf("priorities %v and %v, want 0", entry.StartingPriority,
+			entry.CurrentPriority)
+	}
+}

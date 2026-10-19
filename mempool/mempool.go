@@ -148,10 +148,6 @@ type Policy struct {
 type TxDesc struct {
 	mining.TxDesc
 
-	// StartingPriority is the priority of the transaction when it was added
-	// to the pool.
-	StartingPriority float64
-
 	// entrySeq orders the transactions by when they were added, with those
 	// added back from disconnected blocks first.
 	entrySeq int64
@@ -550,7 +546,6 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil
 			Fee:      fee,
 			FeePerKB: fee * 1000 / int64(tx.MsgTx().SerializeSize()),
 		},
-		StartingPriority: mining.CalcPriority(tx.MsgTx(), utxoView, height),
 	}
 	if isNew {
 		txD.entrySeq = mp.nextEntrySeq
@@ -1357,28 +1352,16 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 
 	result := make(map[string]*btcjson.GetRawMempoolVerboseResult,
 		len(mp.pool))
-	bestHeight := mp.cfg.BestHeight()
 
 	for _, desc := range mp.pool {
-		// Calculate the current priority based on the inputs to
-		// the transaction.  Use zero if one or more of the
-		// input transactions can't be found for some reason.
+		// The priority fields are deprecated and left at 0.
 		tx := desc.Tx
-		var currentPriority float64
-		utxos, err := mp.fetchInputUtxos(tx)
-		if err == nil {
-			currentPriority = mining.CalcPriority(tx.MsgTx(), utxos,
-				bestHeight+1)
-		}
-
 		mpd := &btcjson.GetRawMempoolVerboseResult{
-			Size:             int32(tx.MsgTx().SerializeSize()),
-			Fee:              bchutil.Amount(desc.Fee).ToBCH(),
-			Time:             desc.Added.Unix(),
-			Height:           int64(desc.Height),
-			StartingPriority: desc.StartingPriority,
-			CurrentPriority:  currentPriority,
-			Depends:          make([]string, 0),
+			Size:    int32(tx.MsgTx().SerializeSize()),
+			Fee:     bchutil.Amount(desc.Fee).ToBCH(),
+			Time:    desc.Added.Unix(),
+			Height:  int64(desc.Height),
+			Depends: make([]string, 0),
 		}
 		for _, txIn := range tx.MsgTx().TxIn {
 			hash := &txIn.PreviousOutPoint.Hash

@@ -980,7 +980,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			AddedTime:        txDesc.Added.Unix(),
 			AddedHeight:      txDesc.Height,
 			FeePerKb:         txDesc.Fee / int64(uTx.MsgTx().SerializeSize()),
-			StartingPriority: txDesc.StartingPriority,
+			StartingPriority: 0, // deprecated
 		}
 		resp.UnconfirmedTransactions = append(resp.UnconfirmedTransactions, mempoolTx)
 	}
@@ -2341,7 +2341,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 							Fee:              txDesc.Fee,
 							FeePerKb:         txDesc.FeePerKB,
 							AddedHeight:      txDesc.Height,
-							StartingPriority: txDesc.StartingPriority,
+							StartingPriority: 0, // deprecated
 						},
 					}
 				}
@@ -2500,7 +2500,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 							Fee:              txDesc.Fee,
 							FeePerKb:         txDesc.FeePerKB,
 							AddedHeight:      txDesc.Height,
-							StartingPriority: txDesc.StartingPriority,
+							StartingPriority: 0, // deprecated
 						},
 					}
 				}

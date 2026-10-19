@@ -919,7 +919,7 @@ message MempoolTransaction {
     int64 fee = 4;
     // The fee in satoshi per kilobyte the transaction pays.
     int64 fee_per_kb = 5;
-    // The priority of the transaction when it was added to the pool.
+    // Deprecated, always 0.
     double starting_priority = 6;
 }
 

@@ -4498,7 +4498,7 @@ type MempoolTransaction struct {
 	Fee int64 `protobuf:"varint,4,opt,name=fee,proto3" json:"fee,omitempty"`
 	// The fee in satoshi per kilobyte the transaction pays.
 	FeePerKb int64 `protobuf:"varint,5,opt,name=fee_per_kb,json=feePerKb,proto3" json:"fee_per_kb,omitempty"`
-	// The priority of the transaction when it was added to the pool.
+	// Deprecated, always 0.
 	StartingPriority float64 `protobuf:"fixed64,6,opt,name=starting_priority,json=startingPriority,proto3" json:"starting_priority,omitempty"`
 }
 

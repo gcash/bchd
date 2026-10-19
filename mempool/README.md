@@ -65,7 +65,6 @@ be an exhaustive list.
   - Timestamp when the transaction was added to the pool
   - Most recent block height when the transaction was added to the pool
   - The fee the transaction pays
-  - The starting priority for the transaction
 - Manual control of transaction removal
   - Recursive removal of all dependent transactions
 
