@@ -5,6 +5,7 @@
 package main
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -266,4 +267,110 @@ func TestOnDSProofBlocksOnly(t *testing.T) {
 	if sp.banScore.Int() != 0 {
 		t.Fatal("proof processed in blocks only mode")
 	}
+}
+
+// readDSProofInv reads messages from remote until it times out and returns
+// whether an inv for hash was among them.
+func readDSProofInv(t *testing.T, remote net.Conn, hash *chainhash.Hash) bool {
+	t.Helper()
+	_ = remote.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	for {
+		msg, _, err := wire.ReadMessage(remote, wire.ProtocolVersion, wire.MainNet)
+		if err != nil {
+			return false
+		}
+		if inv, ok := msg.(*wire.MsgInv); ok {
+			for _, iv := range inv.InvList {
+				if iv.Type == wire.InvTypeDSProof && iv.Hash == *hash {
+					return true
+				}
+			}
+		}
+	}
+}
+
+// TestRelayDSProofInv checks that a proof is announced only to peers that
+// want it: not to those with transaction relay disabled or a bloom filter
+// not matching the double spent transaction.
+func TestRelayDSProofInv(t *testing.T) {
+	useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
+	h := newMempoolTestHarness(t, 1)
+	tx := bchutil.NewTx(h.spend(t, h.outputs[0], 1000))
+	s := &server{}
+
+	full, fullRemote := connectAddrV2Peer(t, s, false)
+	noRelay, noRelayRemote := connectAddrV2Peer(t, s, false)
+	noRelay.setDisableRelayTx(true)
+	filtered, filteredRemote := connectAddrV2Peer(t, s, false)
+	other := bloom.NewFilter(10, 0, 0.0001, wire.BloomUpdateNone)
+	other.Add([]byte{1, 2, 3})
+	filtered.filter = other
+
+	state := &peerState{inboundPeers: map[int32]*serverPeer{
+		1: full, 2: noRelay, 3: filtered,
+	}}
+	hash := chainhash.Hash{7}
+	s.handleRelayInvMsg(state, relayMsg{
+		invVect: wire.NewInvVect(wire.InvTypeDSProof, &hash),
+		data:    tx,
+	})
+	if !readDSProofInv(t, fullRemote, &hash) {
+		t.Fatal("full relay peer not told")
+	}
+	if readDSProofInv(t, noRelayRemote, &hash) {
+		t.Fatal("peer with transaction relay disabled told")
+	}
+	if readDSProofInv(t, filteredRemote, &hash) {
+		t.Fatal("peer with a filter not matching told")
+	}
+}
+
+// TestExpireDSProofOrphansOnce checks that each expired orphan adds 1 to the
+// ban score of the peer that sent it.
+func TestExpireDSProofOrphansOnce(t *testing.T) {
+	sp, _ := newDSProofServerPeer(t)
+	s := sp.server
+	servePeers(t, s, sp)
+	s.expireDSProofOrphansOnce(func() []mempool.Tag { return nil })
+	s.expireDSProofOrphansOnce(func() []mempool.Tag {
+		return []mempool.Tag{mempool.Tag(sp.ID())}
+	})
+	waitBanScore(t, sp, 1)
+	time.Sleep(100 * time.Millisecond)
+	if score := sp.banScore.Int(); score != 1 {
+		t.Fatalf("ban score %d", score)
+	}
+}
+
+// TestDSProofDisabledServer checks that getdata for a proof is refused with
+// a completion signal when proofs are disabled.
+func TestDSProofDisabledServer(t *testing.T) {
+	sp, proof := newDSProofServerPeer(t)
+	cfg.NoDoubleSpendProof = true
+	hash := proof.ProofHash()
+	done := make(chan struct{}, 1)
+	if err := sp.server.pushDSProofMsg(sp, &hash, done, nil, wire.BaseEncoding); err == nil {
+		t.Fatal("proof sent while disabled")
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no completion signal")
+	}
+}
+
+// TestOnInvBlocksOnlyDSProof checks that proof invs are dropped in blocks
+// only mode without reaching the sync manager.
+func TestOnInvBlocksOnlyDSProof(t *testing.T) {
+	sp, _ := newDSProofServerPeer(t)
+	cfg.BlocksOnly = true
+	msg := wire.NewMsgInv()
+	_ = msg.AddInvVect(wire.NewInvVect(wire.InvTypeDSProof, &chainhash.Hash{1}))
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("proof inv reached the sync manager: %v", r)
+		}
+	}()
+	// The server has no sync manager, so queueing anything panics.
+	sp.OnInv(nil, msg)
 }
