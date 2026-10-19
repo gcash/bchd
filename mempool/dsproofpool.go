@@ -284,7 +284,8 @@ func (r DSProofResult) String() string {
 
 // ProcessDSProof checks a double spend proof received from peer and stores
 // it when it is valid or cannot be checked yet.  An error means the proof is
-// invalid; its id is then remembered as rejected.
+// invalid; its id is then remembered as rejected, and the proof is not
+// checked again while it is.
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool) (DSProofResult, error) {
@@ -301,6 +302,11 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 	if mp.hasDSProofForOutPoint(proof.PrevOut) {
 		mp.mtx.RUnlock()
 		return DSProofIgnored, nil
+	}
+	if mp.dsProofs.isRejected(hash) {
+		mp.mtx.RUnlock()
+		return DSProofIgnored, txRuleError(wire.RejectInvalid,
+			fmt.Sprintf("double spend proof %v was already rejected", hash))
 	}
 	spender := mp.outpoints[proof.PrevOut]
 	validity, err := mp.validateDSProofInPool(proof, &hash, spender, flags)

@@ -903,3 +903,38 @@ func TestDSProofSearchOrderReorg(t *testing.T) {
 		t.Fatalf("found %v: %v", d, err)
 	}
 }
+
+// TestDSProofRejectedNotRechecked checks that a proof whose id was rejected
+// is refused with the same error without being checked again, even once
+// it could no longer be checked.
+func TestDSProofRejectedNotRechecked(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	good, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	bad := mutateProof(good, func(p *wire.MsgDSProof) { p.FirstSpender.LockTime ^= 1 })
+	hash := bad.ProofHash()
+	if r, err := pool.ProcessDSProof(bad, 7, true); r != DSProofIgnored || err == nil {
+		t.Fatalf("bad proof: %v %v", r, err)
+	}
+	if !pool.HaveDSProof(&hash) {
+		t.Fatal("not remembered as rejected")
+	}
+
+	// Without the transaction a new check would make it an orphan.
+	pool.RemoveTransaction(tx1, true)
+	for range 2 {
+		if r, err := pool.ProcessDSProof(bad, 7, true); r != DSProofIgnored || err == nil {
+			t.Fatalf("rejected proof: %v %v", r, err)
+		}
+	}
+	if len(pool.DSProofs(true)) != 0 {
+		t.Fatal("rejected proof stored")
+	}
+}
