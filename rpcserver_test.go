@@ -752,3 +752,24 @@ func TestHandleValidateAddressTokenAware(t *testing.T) {
 		}
 	}
 }
+
+// TestIsTestNet ensures getinfo and getmininginfo report testnet on the public
+// test networks only.
+func TestIsTestNet(t *testing.T) {
+	tests := []struct {
+		params *chaincfg.Params
+		want   bool
+	}{
+		{&chaincfg.MainNetParams, false},
+		{&chaincfg.RegressionNetParams, false},
+		{&chaincfg.TestNet3Params, true},
+		{&chaincfg.TestNet4Params, true},
+		{&chaincfg.ChipNetParams, true},
+		{&chaincfg.SimNetParams, false},
+	}
+	for _, test := range tests {
+		if got := isTestNet(test.params); got != test.want {
+			t.Errorf("%s: got %v, want %v", test.params.Name, got, test.want)
+		}
+	}
+}

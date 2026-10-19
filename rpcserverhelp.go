@@ -425,7 +425,7 @@ var helpDescsEnUS = map[string]string{
 	"infochainresult-connections":     "The number of connected peers",
 	"infochainresult-proxy":           "The proxy used by the server",
 	"infochainresult-difficulty":      "The current target difficulty",
-	"infochainresult-testnet":         "Whether or not server is using testnet",
+	"infochainresult-testnet":         "Whether or not server is on a public test network (testnet3, testnet4 or chipnet)",
 	"infochainresult-relayfee":        "The minimum relay fee for non-free transactions in BTC/KB",
 	"infochainresult-errors":          "Any current errors",
 
@@ -474,7 +474,7 @@ var helpDescsEnUS = map[string]string{
 	"getmininginforesult-hashespersec":     "Recent hashes per second performance measurement while generating coins",
 	"getmininginforesult-networkhashps":    "Estimated network hashes per second for the most recent blocks",
 	"getmininginforesult-pooledtx":         "Number of transactions in the memory pool",
-	"getmininginforesult-testnet":          "Whether or not server is using testnet",
+	"getmininginforesult-testnet":          "Whether or not server is on a public test network (testnet3, testnet4 or chipnet)",
 
 	// GetMiningInfoCmd help.
 	"getmininginfo--synopsis": "Returns a JSON object containing mining-related information.",
