@@ -72,46 +72,54 @@ options, which can be viewed by running: `$ bchd --help`.
 
 **2.2.1 Checkpoints and Initial Block Download**
 
-bchd has built-in checkpoints for mainnet, testnet3, testnet4 and chipnet, the
-same as Bitcoin Cash Node's; the latest are mainnet block 970892, testnet3 block
-1730264, testnet4 block 325709 and chipnet block 325627. Blocks at the height
-of a checkpoint must match it, and blocks that fork the chain before the last
-checkpoint are rejected.
+Checkpoints are known-good blocks built into bchd. They protect a new node
+from being fed a fake chain while it syncs, and they let it skip the most
+expensive checks on old blocks, which makes the first sync much faster. bchd
+uses the same checkpoints as Bitcoin Cash Node for mainnet, testnet3, testnet4
+and chipnet; the latest mainnet checkpoint is block 970892. A block at the
+height of a checkpoint must match it, and a block that forks the chain before
+the last checkpoint is rejected.
 
-During the initial block download, bchd first fetches the headers up to the
-last checkpoint and then adds the blocks up to it with only the checks that
-don't depend on the chain state, such as proof of work, the merkle root, the
-block size and the transaction format. Their spends, fees, coinbase value and
-scripts are not checked, which makes the download much faster. Blocks at or
-below the last checkpoint that arrive any other way get every check except
-scripts. `--nocheckpoints` turns this off and validates every block in full.
-The node does not consider itself synced until its tip is past the last
-checkpoint.
+While syncing, bchd downloads the block headers from one checkpoint to the next
+and then the blocks for them, until it reaches the last checkpoint. These
+blocks get only the checks that don't need the chain state, such as proof of
+work, the merkle root, the block size and the transaction format. Spends, fees,
+the coinbase value and scripts are not checked. Blocks at or below the last
+checkpoint that arrive any other way get every check except scripts.
 
-Each of these networks also has a minimum chain work, again Bitcoin Cash Node's:
-the total proof of work its chain is known to have. Until the best chain has
-at least that much work, the node does not consider itself synced either, so
-it does not relay blocks, answer `getheaders` or filter requests, or build
-block templates. A block that a peer relays without being asked for it is only
-stored if its chain has at least the minimum chain work and the work of the
-current tip, and is at most 288 blocks ahead of the tip.
+bchd only considers itself synced once its tip is at or past the last
+checkpoint, its chain has at least the network's minimum chain work (the total
+proof of work the real chain is known to have, also taken from Bitcoin Cash
+Node), and its tip is less than a day old. Until then it does not relay blocks,
+answer other nodes' requests for headers or compact filters, or build block
+templates.
 
-`addcheckpoint` adds checkpoints and `nocheckpoints` disables the built-in
-ones, in which case every script is validated. With `fastsync`, the UTXO set of
-the last checkpoint that has one (mainnet block 661648) is downloaded instead,
-and only the checkpoints up to that block are used.
+At any time, a block that a peer sends without being asked for it is only
+stored if its chain has at least as much work as the current tip and the
+minimum chain work, and it is at most 288 blocks ahead of the tip.
+
+To check every block in full, start bchd with `--nocheckpoints`; this also
+ignores `--addcheckpoint`, which adds a checkpoint of your own. With
+`--fastsync`, bchd downloads the UTXO set at the last checkpoint that has one,
+mainnet block 661648, instead of the blocks before it, and only uses the
+checkpoints up to that block. `--fastsync` can't be combined with
+`--nocheckpoints`.
 
 <a name="Finalization" />
 
 **2.2.2 Finalization and Deep Reorganizations**
 
-Once a main chain block is 10 blocks deep (`maxreorgdepth`) and has been known
-for two hours (`finalizationdelay`, in seconds), it is finalized: blocks that
-fork the chain below the finalized block are rejected, so the node will not
-reorganize its chain deeper than that. Nothing is finalized until the node has
-been running for the finalization delay, and blocks loaded from disk at startup
-count as known since startup. The finalized block is kept in memory only. A
-negative `maxreorgdepth` disables finalization.
+Finalization stops the node from following a very deep reorganization of the
+chain. Once a main chain block is 10 blocks deep and the node has known it for
+two hours (the defaults), the block is finalized: the node rejects any block
+that forks the chain below it.
+
+Nothing is finalized until the node has been running for the finalization
+delay, two hours by default, and blocks loaded from disk at startup count as
+first seen at startup. Nothing is finalized while the chain has less than the
+minimum chain work either. The finalized block is kept in memory only, so a
+restart clears it until the finalization delay has passed again. Both values
+can be changed, and a negative `--maxreorgdepth` turns finalization off:
 
 ```
 [Application Options]
@@ -119,23 +127,28 @@ maxreorgdepth=10
 finalizationdelay=7200
 ```
 
-The `getfinalizedblockhash` RPC returns the finalized block, and `finalizeblock`
-finalizes a block by hand.
+The `getfinalizedblockhash` RPC returns the finalized block, and
+`finalizeblock` finalizes a block by hand.
 
-If the network does reorganize below the finalized block, for example after a
-chain split, the node stays on its chain: blocks of the other chain are
-rejected without being stored, and peers that send them are disconnected. To
-follow the other chain, call `invalidateblock` with the first block of the
-node's chain after the fork point. This disconnects the node's chain down to
-the fork point and moves finalization back with it, after which the other chain
-is fetched from peers again. `reconsiderblock` on a block the node stored
-earlier also moves finalization back to where its chain forks.
-A block of the other chain that the node has already stored can instead be
-passed to `finalizeblock`, which disconnects the node's chain down to the fork
-point, marks it invalid and switches to the other chain up to that block.
-Starting the node with `maxreorgdepth=-1` disables finalization, and
-restarting it clears the finalized block until the finalization delay has
-passed again.
+If the network reorganizes below the finalized block, for example after a chain
+split, the node stays on its own chain: it rejects the other chain's blocks
+without storing them and disconnects the peers that send them. To switch to
+the other chain, do one of the following:
+
+1. Call `invalidateblock` with the first block of the node's chain after the
+   fork point. The node disconnects its chain back to the fork point, moves
+   finalization back with it, and fetches the other chain from peers that
+   have it.
+2. Restart the node. This clears the finalized block until the finalization
+   delay has passed again, so the node can switch to the other chain if it
+   has more work. To turn finalization off entirely, start it with
+   `--maxreorgdepth=-1`.
+
+`finalizeblock` refuses a block that conflicts with the finalized block, so
+it can only be used to switch to the other chain once finalization has moved
+back, for example after step 1 or a restart. Calling `reconsiderblock` on a
+block that was invalidated earlier also moves finalization back to the point
+where that block's chain forks.
 
 <a name="BchctlConfig" />
 
