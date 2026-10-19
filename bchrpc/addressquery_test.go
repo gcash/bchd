@@ -7,9 +7,11 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -19,6 +21,8 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // newAddrIndexServer returns a server with an address index over a regtest
@@ -146,5 +150,127 @@ func TestAddressQueriesP2SH32(t *testing.T) {
 	}
 	if len(utxoResp.Outputs) != 1 || utxoResp.Outputs[0].Outpoint.Index != 0 {
 		t.Fatalf("got %v, want only output 0", utxoResp.Outputs)
+	}
+}
+
+// TestAddressQueriesLegacy ensures a legacy address gets the same results as
+// its cash address, and a legacy address for another network is rejected.
+func TestAddressQueriesLegacy(t *testing.T) {
+	hash := bytes.Repeat([]byte{0xcd}, 20)
+	p2pkhScript := append(append([]byte{txscript.OP_DUP, txscript.OP_HASH160,
+		txscript.OP_DATA_20}, hash...), txscript.OP_EQUALVERIFY,
+		txscript.OP_CHECKSIG)
+	p2shScript := append(append([]byte{txscript.OP_HASH160, txscript.OP_DATA_20},
+		hash...), txscript.OP_EQUAL)
+	s := newAddrIndexServer(t, [][]byte{p2pkhScript, p2shScript})
+	ctx := context.Background()
+
+	newAddrs := []func([]byte, *chaincfg.Params) (bchutil.Address, error){
+		func(h []byte, p *chaincfg.Params) (bchutil.Address, error) {
+			return bchutil.NewAddressPubKeyHash(h, p)
+		},
+		func(h []byte, p *chaincfg.Params) (bchutil.Address, error) {
+			return bchutil.NewLegacyAddressPubKeyHash(h, p)
+		},
+		func(h []byte, p *chaincfg.Params) (bchutil.Address, error) {
+			return bchutil.NewAddressScriptHashFromHash(h, p)
+		},
+		func(h []byte, p *chaincfg.Params) (bchutil.Address, error) {
+			return bchutil.NewLegacyAddressScriptHashFromHash(h, p)
+		},
+	}
+	for i, newAddr := range newAddrs {
+		addr, err := newAddr(hash, s.chainParams)
+		if err != nil {
+			t.Fatalf("%d: new address: %v", i, err)
+		}
+		address := addr.EncodeAddress()
+		wantIndex := uint32(i / 2)
+
+		txResp, err := s.GetAddressTransactions(ctx,
+			&pb.GetAddressTransactionsRequest{Address: address})
+		if err != nil {
+			t.Fatalf("%s: GetAddressTransactions: %v", address, err)
+		}
+		if len(txResp.ConfirmedTransactions) != 1 {
+			t.Fatalf("%s: got %d confirmed transactions, want 1", address,
+				len(txResp.ConfirmedTransactions))
+		}
+
+		rawResp, err := s.GetRawAddressTransactions(ctx,
+			&pb.GetRawAddressTransactionsRequest{Address: address})
+		if err != nil {
+			t.Fatalf("%s: GetRawAddressTransactions: %v", address, err)
+		}
+		if len(rawResp.ConfirmedTransactions) != 1 {
+			t.Fatalf("%s: got %d raw confirmed transactions, want 1",
+				address, len(rawResp.ConfirmedTransactions))
+		}
+
+		utxoResp, err := s.GetAddressUnspentOutputs(ctx,
+			&pb.GetAddressUnspentOutputsRequest{Address: address})
+		if err != nil {
+			t.Fatalf("%s: GetAddressUnspentOutputs: %v", address, err)
+		}
+		if len(utxoResp.Outputs) != 1 ||
+			utxoResp.Outputs[0].Outpoint.Index != wantIndex {
+
+			t.Fatalf("%s: got %v, want only output %d", address,
+				utxoResp.Outputs, wantIndex)
+		}
+	}
+
+	mainnetAddr, err := bchutil.NewLegacyAddressPubKeyHash(hash,
+		&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("NewLegacyAddressPubKeyHash: %v", err)
+	}
+	_, err = s.GetAddressUnspentOutputs(ctx, &pb.GetAddressUnspentOutputsRequest{
+		Address: mainnetAddr.EncodeAddress(),
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("mainnet address: got %v, want InvalidArgument", err)
+	}
+}
+
+// TestAddressQueriesPubKey ensures a hex pubkey gets the history and unspent
+// outputs of the P2PKH address of the key, which the address index files pay
+// to pubkey outputs under.
+func TestAddressQueriesPubKey(t *testing.T) {
+	_, pubKey := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{0x01}, 32))
+	serialized := pubKey.SerializeCompressed()
+	p2pkScript := append(append([]byte{txscript.OP_DATA_33}, serialized...),
+		txscript.OP_CHECKSIG)
+	s := newAddrIndexServer(t, [][]byte{p2pkScript})
+	ctx := context.Background()
+	address := hex.EncodeToString(serialized)
+
+	rawResp, err := s.GetRawAddressTransactions(ctx,
+		&pb.GetRawAddressTransactionsRequest{Address: address})
+	if err != nil {
+		t.Fatalf("GetRawAddressTransactions: %v", err)
+	}
+	if len(rawResp.ConfirmedTransactions) != 1 {
+		t.Fatalf("got %d raw confirmed transactions, want 1",
+			len(rawResp.ConfirmedTransactions))
+	}
+
+	txResp, err := s.GetAddressTransactions(ctx,
+		&pb.GetAddressTransactionsRequest{Address: address})
+	if err != nil {
+		t.Fatalf("GetAddressTransactions: %v", err)
+	}
+	if len(txResp.ConfirmedTransactions) != 1 {
+		t.Fatalf("got %d confirmed transactions, want 1",
+			len(txResp.ConfirmedTransactions))
+	}
+
+	utxoResp, err := s.GetAddressUnspentOutputs(ctx,
+		&pb.GetAddressUnspentOutputsRequest{Address: address})
+	if err != nil {
+		t.Fatalf("GetAddressUnspentOutputs: %v", err)
+	}
+	if len(utxoResp.Outputs) != 1 {
+		t.Fatalf("got %d unspent outputs, want 1", len(utxoResp.Outputs))
 	}
 }

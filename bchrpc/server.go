@@ -902,7 +902,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	// use cash address format
 	addr, err = toCashAddress(addr, s.chainParams)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
+		return nil, status.Errorf(codes.InvalidArgument, "invalid address: %v", err)
 	}
 
 	startHeight := int32(0)
@@ -996,6 +996,12 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		return nil, status.Error(codes.InvalidArgument, "invalid address")
 	}
 
+	// use cash address format
+	addr, err = toCashAddress(addr, s.chainParams)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid address: %v", err)
+	}
+
 	startHeight := int32(0)
 	if len(req.GetHash()) == 0 {
 		startHeight = req.GetHeight()
@@ -1053,7 +1059,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	// use cash address format
 	addr, err = toCashAddress(addr, s.chainParams)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "couldn't convert address to cash address format")
+		return nil, status.Errorf(codes.InvalidArgument, "invalid address: %v", err)
 	}
 
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
@@ -3655,12 +3661,31 @@ func (s *GrpcServer) setInputMetadataFromView(respTx *pb.Transaction, txDesc *rp
 	}
 }
 
-// toCashAddress returns the passed address in cash address format.  A P2SH32
-// address is rebuilt from its hash since the slp converter does not handle
-// it.
+// toCashAddress returns the passed address in the cash address format that
+// the address index lookups and output matching expect.  Legacy, P2SH32 and
+// pubkey addresses are rebuilt from their hash since the slp converter does
+// not handle them.
 func toCashAddress(addr bchutil.Address, params *chaincfg.Params) (bchutil.Address, error) {
-	if a, ok := addr.(*bchutil.AddressScriptHash32); ok {
+	switch a := addr.(type) {
+	case *bchutil.LegacyAddressPubKeyHash:
+		if !a.IsForNet(params) {
+			return nil, errors.New("address is for another network")
+		}
+		return bchutil.NewAddressPubKeyHash(a.Hash160()[:], params)
+
+	case *bchutil.LegacyAddressScriptHash:
+		if !a.IsForNet(params) {
+			return nil, errors.New("address is for another network")
+		}
+		return bchutil.NewAddressScriptHashFromHash(a.Hash160()[:], params)
+
+	case *bchutil.AddressScriptHash32:
 		return bchutil.NewAddressScriptHash32FromHash(a.Hash256()[:], params)
+
+	case *bchutil.AddressPubKey:
+		// The address index files pay to pubkey outputs under the
+		// P2PKH address of the key.
+		return bchutil.NewAddressPubKeyHash(a.AddressPubKeyHash().Hash160()[:], params)
 	}
 	return bchutil.ConvertSlpToCashAddress(addr, params)
 }
