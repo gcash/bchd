@@ -360,3 +360,92 @@ func TestOrphanPoolLimits(t *testing.T) {
 			len(chain.orphans)*size)
 	}
 }
+
+// TestUtxoReadErrorNotInvalid ensures a corrupt utxo entry read while
+// connecting a block is returned as a database corruption error without
+// marking the block invalid, so the block connects once the entry is fixed.
+func TestUtxoReadErrorNotInvalid(t *testing.T) {
+	tests := []struct {
+		name    string
+		corrupt []byte
+	}{
+		{name: "undecodable entry", corrupt: []byte{0x02}},
+		{name: "zero-length entry", corrupt: []byte{}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testUtxoReadError(t, test.corrupt)
+		})
+	}
+}
+
+// testUtxoReadError connects a block spending an output whose stored entry
+// is replaced with corrupt, then restores the entry and connects a child.
+func testUtxoReadError(t *testing.T, corrupt []byte) {
+	params := chaincfg.RegressionNetParams
+	chain, teardown, err := chainSetup("utxoreaderr", &params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer teardown()
+	chain.TstSetCoinbaseMaturity(1)
+
+	bits := params.PowLimitBits
+	subsidy := CalcBlockSubsidy(1, &params)
+	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
+	b2 := procTestBlock(t, b1.MsgBlock(), 1, subsidy, bits, nil)
+	for _, b := range []*bchutil.Block{b1, b2} {
+		if _, _, err := chain.ProcessBlock(b, BFNone); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Flush the cache so the spent output is read from the database, then
+	// corrupt its stored entry.
+	if err := chain.utxoCache.Flush(FlushRequired, chain.BestSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+	prevOut := wire.OutPoint{Hash: b1.MsgBlock().Transactions[0].TxHash()}
+	key := outpointKey(prevOut)
+	defer recycleOutpointKey(key)
+	var stored []byte
+	setEntry := func(serialized []byte) {
+		err := chain.db.Update(func(dbTx database.Tx) error {
+			bucket := dbTx.Metadata().Bucket(utxoSetBucketName)
+			if stored == nil {
+				stored = append([]byte(nil), bucket.Get(*key)...)
+			}
+			return bucket.Put(*key, serialized)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	setEntry(corrupt)
+	if len(stored) == 0 {
+		t.Fatal("spent output was not flushed to the database")
+	}
+
+	// The error is checked with a type assertion, as netsync does.
+	b3 := procTestBlock(t, b2.MsgBlock(), 2, subsidy, bits,
+		[]*wire.MsgTx{procTestSpend(prevOut, subsidy-1000, 1)})
+	_, _, err = chain.ProcessBlock(b3, BFNone)
+	dbErr, ok := err.(database.Error)
+	if !ok || dbErr.ErrorCode != database.ErrCorruption {
+		t.Fatalf("got error %v, want a database corruption error", err)
+	}
+	if chain.index.NodeStatus(chain.index.LookupNode(b3.Hash())).KnownInvalid() {
+		t.Fatal("block marked invalid after a failed utxo read")
+	}
+
+	// With the entry restored, the block connects along with its child.
+	setEntry(stored)
+	b4 := procTestBlock(t, b3.MsgBlock(), 3, subsidy, bits, nil)
+	if _, _, err := chain.ProcessBlock(b4, BFNone); err != nil {
+		t.Fatal(err)
+	}
+	if best := chain.BestSnapshot(); best.Hash != *b4.Hash() {
+		t.Fatalf("tip is %v at height %d, want %v", best.Hash,
+			best.Height, b4.Hash())
+	}
+}

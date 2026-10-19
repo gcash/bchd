@@ -170,9 +170,13 @@ func (view *UtxoViewpoint) addInputUtxos(source utxoView, block *bchutil.Block, 
 			if _, ok := view.entries[txIn.PreviousOutPoint]; ok {
 				continue
 			}
-			// Add the entry from the source.
+			// Add the entry from the source.  A failed read is
+			// returned instead of being treated as a missing input.
 			entry, err := source.getEntry(txIn.PreviousOutPoint)
-			if err == nil && entry != nil {
+			if err != nil {
+				return err
+			}
+			if entry != nil {
 				view.entries[txIn.PreviousOutPoint] = entry.Clone()
 			}
 		}
