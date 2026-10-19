@@ -187,6 +187,8 @@ message GetBlockchainInfoResponse {
         SIMNET   = 3;
         // Latest Testnet.
         TESTNET4 = 4;
+        // The public network for testing upcoming upgrades.
+        CHIPNET  = 5;
     }
 
     // Which network the node is operating on.

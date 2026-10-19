@@ -441,25 +441,35 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 	return resp, nil
 }
 
+// bitcoinNet returns the GetBlockchainInfo network type for the given
+// chain parameters.  It compares the params themselves because testnet4 and
+// chipnet share the same network magic.
+func bitcoinNet(params *chaincfg.Params) (pb.GetBlockchainInfoResponse_BitcoinNet, error) {
+	switch params {
+	case &chaincfg.MainNetParams:
+		return pb.GetBlockchainInfoResponse_MAINNET, nil
+	case &chaincfg.TestNet3Params:
+		return pb.GetBlockchainInfoResponse_TESTNET3, nil
+	case &chaincfg.TestNet4Params:
+		return pb.GetBlockchainInfoResponse_TESTNET4, nil
+	case &chaincfg.ChipNetParams:
+		return pb.GetBlockchainInfoResponse_CHIPNET, nil
+	case &chaincfg.RegressionNetParams:
+		return pb.GetBlockchainInfoResponse_REGTEST, nil
+	case &chaincfg.SimNetParams:
+		return pb.GetBlockchainInfoResponse_SIMNET, nil
+	}
+	return 0, status.Error(codes.Internal, "unknown network parameters")
+}
+
 // GetBlockchainInfo returns info about the blockchain including the most recent
 // block hash and height.
 func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchainInfoRequest) (*pb.GetBlockchainInfoResponse, error) {
 	bestSnapShot := s.chain.BestSnapshot()
 
-	var net pb.GetBlockchainInfoResponse_BitcoinNet
-	switch s.chainParams {
-	case &chaincfg.MainNetParams:
-		net = pb.GetBlockchainInfoResponse_MAINNET
-	case &chaincfg.TestNet3Params:
-		net = pb.GetBlockchainInfoResponse_TESTNET3
-	case &chaincfg.TestNet4Params:
-		net = pb.GetBlockchainInfoResponse_TESTNET4
-	case &chaincfg.RegressionNetParams:
-		net = pb.GetBlockchainInfoResponse_REGTEST
-	case &chaincfg.SimNetParams:
-		net = pb.GetBlockchainInfoResponse_SIMNET
-	default:
-		return nil, status.Error(codes.Internal, "unknown network parameters")
+	net, err := bitcoinNet(s.chainParams)
+	if err != nil {
+		return nil, err
 	}
 
 	gsEnabled := false
