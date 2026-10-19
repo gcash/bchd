@@ -1,8 +1,12 @@
 package bchrpc
 
 import (
+	"bytes"
+	"encoding/hex"
 	"testing"
 
+	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -95,5 +99,67 @@ func TestFilterSkipsPrevOutLookupWithoutAddresses(t *testing.T) {
 	}
 	if called {
 		t.Fatal("previous output was resolved with no addresses watched")
+	}
+}
+
+// TestFilterMatchesAddressFormats ensures a filter given a legacy address, an
+// slp P2SH32 address or a pubkey matches outputs paying to them, and that
+// removing the same address stops the match.
+func TestFilterMatchesAddressFormats(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	hash := bytes.Repeat([]byte{0xab}, 32)
+	_, pubKey := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{0x01}, 32))
+	serialized := pubKey.SerializeCompressed()
+
+	legacy, err := bchutil.NewLegacyAddressPubKeyHash(hash[:20], params)
+	if err != nil {
+		t.Fatalf("NewLegacyAddressPubKeyHash: %v", err)
+	}
+	slp32, err := bchutil.NewSlpAddressScriptHash32FromHash(hash, params)
+	if err != nil {
+		t.Fatalf("NewSlpAddressScriptHash32FromHash: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		address  string
+		pkScript []byte
+	}{
+		{"legacy p2pkh", legacy.EncodeAddress(), append(append([]byte{
+			txscript.OP_DUP, txscript.OP_HASH160, txscript.OP_DATA_20},
+			hash[:20]...), txscript.OP_EQUALVERIFY, txscript.OP_CHECKSIG)},
+		{"slp p2sh32", slp32.EncodeAddress(), append(append([]byte{
+			txscript.OP_HASH256, txscript.OP_DATA_32}, hash...),
+			txscript.OP_EQUAL)},
+		{"pubkey", hex.EncodeToString(serialized), append(append([]byte{
+			txscript.OP_DATA_33}, serialized...), txscript.OP_CHECKSIG)},
+	}
+	for _, test := range tests {
+		tx := wire.NewMsgTx(wire.TxVersion)
+		tx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+			Hash: chainhash.Hash{0xaa}}})
+		tx.AddTxOut(&wire.TxOut{Value: 1000, PkScript: test.pkScript})
+
+		rpcFilter := &pb.TransactionFilter{Addresses: []string{test.address}}
+		f := newTxFilter()
+		if err := f.AddRPCFilter(rpcFilter, params); err != nil {
+			t.Fatalf("%s: AddRPCFilter: %v", test.name, err)
+		}
+		if !f.MatchAndUpdate(bchutil.NewTx(tx), params, nil) {
+			t.Errorf("%s: filter did not match an output paying to %s",
+				test.name, test.address)
+		}
+
+		f = newTxFilter()
+		if err := f.AddRPCFilter(rpcFilter, params); err != nil {
+			t.Fatalf("%s: AddRPCFilter: %v", test.name, err)
+		}
+		if err := f.RemoveRPCFilter(rpcFilter, params); err != nil {
+			t.Fatalf("%s: RemoveRPCFilter: %v", test.name, err)
+		}
+		if f.MatchAndUpdate(bchutil.NewTx(tx), params, nil) {
+			t.Errorf("%s: filter matched after the address was removed",
+				test.name)
+		}
 	}
 }
