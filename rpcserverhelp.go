@@ -434,7 +434,7 @@ var helpDescsEnUS = map[string]string{
 	"getdsproofscore--result0": "The score",
 
 	// GetDSProofResult help.
-	"getdsproofresult-hex":         "The serialized proof (verbosity 1)",
+	"getdsproofresult-hex":         "The serialized proof (verbosity 0 and 1)",
 	"getdsproofresult-dspid":       "The proof id (verbosity 2 and 3)",
 	"getdsproofresult-txid":        "The memory pool transaction spending the double spent output, or null for an orphan proof",
 	"getdsproofresult-outpoint":    "The double spent output (verbosity 2 and 3)",
@@ -778,15 +778,15 @@ var helpDescsEnUS = map[string]string{
 	"notifynewtransactions-verbose":   "Specifies which type of notification to receive. If verbose is true, then the caller receives txacceptedverbose, otherwise the caller receives txaccepted",
 
 	// StopNotifyNewTransactionsCmd help.
+	"stopnotifynewtransactions--synopsis": "Stop sending either a txaccepted or a txacceptedverbose notification when a new transaction is accepted into the mempool.",
+
 	// NotifyDSProofsCmd help.
 	"notifydsproofs--synopsis": "Send a dsproof notification when a double spend proof becomes associated with a memory pool transaction.\n" +
-		"The proofs already in the memory pool are sent right away.",
-	"notifydsproofs-verbosity": "1 sends the serialized proof and the txid, 2 (the default) the id, txid and outpoint, 3 adds the two spenders, as getdsproof does",
+		"The proofs already in the memory pool are sent right away, so a proof that arrives while subscribing can be sent twice.",
+	"notifydsproofs-verbosity": "0 or 1 sends the serialized proof and the txid, 2 (the default) the id, txid and outpoint, 3 adds the two spenders, as getdsproof does",
 
 	// StopNotifyDSProofsCmd help.
 	"stopnotifydsproofs--synopsis": "Stop sending dsproof notifications.",
-
-	"stopnotifynewtransactions--synopsis": "Stop sending either a txaccepted or a txacceptedverbose notification when a new transaction is accepted into the mempool.",
 
 	// NotifyReceivedCmd help.
 	"notifyreceived--synopsis": "Send a recvtx notification when a transaction added to mempool or appears in a newly-attached block contains a txout pkScript sending to any of the passed addresses.\n" +

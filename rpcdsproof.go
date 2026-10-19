@@ -20,7 +20,7 @@ import (
 // errDSProofDisabled is returned by the double spend proof commands when
 // proofs are disabled.
 var errDSProofDisabled = &btcjson.RPCError{
-	Code:    -90,
+	Code:    btcjson.ErrRPCMethodDisabled,
 	Message: "Double spend proofs are disabled. Restart without --nodoublespendproof to enable them.",
 }
 
