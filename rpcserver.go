@@ -2703,6 +2703,18 @@ func handleGetHeaders(s *rpcServer, cmd interface{}, closeNotifier <-chan struct
 	return hexBlockHeaders, nil
 }
 
+// isTestNet returns whether the params are for a public test network, as
+// reported by the testnet field of getinfo and getmininginfo.  Regtest and
+// simnet are not public test networks.
+func isTestNet(params *chaincfg.Params) bool {
+	switch params {
+	case &chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
+		&chaincfg.ChipNetParams:
+		return true
+	}
+	return false
+}
+
 // handleGetInfo implements the getinfo command. We only return the fields
 // that are not related to wallet functionality.
 func handleGetInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
@@ -2715,7 +2727,7 @@ func handleGetInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{})
 		Connections:     s.cfg.ConnMgr.ConnectedCount(),
 		Proxy:           cfg.Proxy,
 		Difficulty:      getDifficultyRatio(best.Bits, s.cfg.ChainParams),
-		TestNet:         cfg.TestNet3,
+		TestNet:         isTestNet(s.cfg.ChainParams),
 		RelayFee:        cfg.minRelayTxFee.ToBCH(),
 	}
 
@@ -2769,7 +2781,7 @@ func handleGetMiningInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		HashesPerSec:     int64(s.cfg.CPUMiner.HashesPerSecond()),
 		NetworkHashPS:    networkHashesPerSec,
 		PooledTx:         uint64(s.cfg.TxMemPool.Count()),
-		TestNet:          cfg.TestNet3,
+		TestNet:          isTestNet(s.cfg.ChainParams),
 	}
 	return &result, nil
 }
