@@ -887,19 +887,25 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 				}
 				msgBlock.Transactions[i] = tx
 			}
-			newBlockHash := msgBlock.BlockHash()
-			if !newBlockHash.IsEqual(&targetHash) {
-				peerLog.Debugf("decoded cmpctblock hash %v doesn't match original message"+
-					" from peer %v ", msg.Header.BlockHash(), sp)
-				sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
-				return
-			}
 		}
 	}
 
 	// Convert the raw MsgBlock to a bchutil.Block which provides some
 	// convenience methods and things such as hash caching.
 	block := bchutil.NewBlock(msgBlock)
+
+	// The block hash covers only the header, so check the transactions
+	// before relaying.  When a short ID matched the wrong transaction or
+	// the peer sent wrong ones, the full block is requested instead.
+	if !cmpctTxsMatch(block) {
+		peerLog.Debugf("Reconstructed cmpctblock %v from %v does not "+
+			"match its merkle root -- requesting the full block",
+			targetHash, sp)
+		gdmsg := wire.NewMsgGetDataSizeHint(1)
+		_ = gdmsg.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &targetHash))
+		sp.QueueMessage(gdmsg, nil)
+		return
+	}
 
 	// Add the block to the known inventory for the peer.
 	iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
@@ -929,6 +935,25 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	sp.server.syncManager.QueueBlock(block, sp.Peer, sp.blockProcessed)
 	<-sp.blockProcessed
 	sp.processBlockMtx.Unlock()
+}
+
+// cmpctTxsMatch returns whether the transactions of a reconstructed compact
+// block match the merkle root of its header.  A repeated transaction can leave
+// the root unchanged, so it is a mismatch too.
+func cmpctTxsMatch(block *bchutil.Block) bool {
+	txs := block.Transactions()
+	merkles := blockchain.BuildMerkleTreeStore(txs)
+	if !block.MsgBlock().Header.MerkleRoot.IsEqual(merkles[len(merkles)-1]) {
+		return false
+	}
+	seen := make(map[chainhash.Hash]struct{}, len(txs))
+	for _, tx := range txs {
+		if _, ok := seen[*tx.Hash()]; ok {
+			return false
+		}
+		seen[*tx.Hash()] = struct{}{}
+	}
+	return true
 }
 
 // OnBlockTxns is invoked when a peer receives a blocktxns bitcoin message.

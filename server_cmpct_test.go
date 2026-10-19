@@ -207,6 +207,31 @@ func (h *cmpctHarness) expectGetTxns(t *testing.T, hash chainhash.Hash) {
 	}
 }
 
+// expectFullBlockRequest waits for a getdata for the full block.
+func (h *cmpctHarness) expectFullBlockRequest(t *testing.T,
+	hash chainhash.Hash) {
+
+	t.Helper()
+	select {
+	case iv := <-h.getData:
+		if iv.Type != wire.InvTypeBlock || iv.Hash != hash {
+			t.Fatalf("getdata for %v, want block %v", iv, hash)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("block %v was not requested in full", hash)
+	}
+}
+
+// expectNotRelayed ensures no compact block has been relayed.
+func (h *cmpctHarness) expectNotRelayed(t *testing.T) {
+	t.Helper()
+	select {
+	case msg := <-h.s.relayCmpctBlock:
+		t.Fatalf("compact block %v relayed", msg.BlockHash())
+	default:
+	}
+}
+
 // expectRelayed waits for the compact blocks to be relayed, in any order.
 func (h *cmpctHarness) expectRelayed(t *testing.T, hashes ...chainhash.Hash) {
 	t.Helper()
@@ -403,11 +428,7 @@ func TestCompactBlockFullBlockReply(t *testing.T) {
 
 	// The compact block itself is not relayed, as it was not
 	// reconstructed.
-	select {
-	case msg := <-h.s.relayCmpctBlock:
-		t.Fatalf("compact block %v relayed", msg.BlockHash())
-	default:
-	}
+	h.expectNotRelayed(t)
 }
 
 // TestBlockNotFoundForgotten ensures a block the peer reports as not found
@@ -425,4 +446,75 @@ func TestBlockNotFoundForgotten(t *testing.T) {
 	}
 	h.send(t, notFound)
 	h.request(t, *block.Hash())
+}
+
+// TestCompactBlockWrongTransactions ensures a compact block whose
+// reconstructed transactions don't match the merkle root is not relayed,
+// and that the full block is requested and processed instead.  This covers
+// wrong transactions from the compact block itself and from blocktxns.
+func TestCompactBlockWrongTransactions(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	other := solvedBlock(t, h.s.chain, -1, nil)
+	wrongTx := other.MsgBlock().Transactions[0]
+	h.request(t, *block.Hash())
+
+	// A prefilled transaction that is not the block's.
+	prefilled := &wire.MsgCmpctBlock{
+		Header:       block.MsgBlock().Header,
+		PrefilledTxs: []*wire.PrefilledTx{{Index: 0, Tx: wrongTx}},
+	}
+	waitDone(t, h.process(prefilled))
+	h.expectFullBlockRequest(t, *block.Hash())
+
+	// A blocktxns with a transaction that is not the block's.
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	h.send(t, wire.NewMsgBlockTxns(*block.Hash(), []*wire.MsgTx{wrongTx}))
+	waitDone(t, done)
+	h.expectFullBlockRequest(t, *block.Hash())
+	h.expectNotRelayed(t)
+
+	// The full block is accepted as the block requested from the peer.
+	h.send(t, block.MsgBlock())
+	h.expectHaveBlock(t, block.Hash())
+}
+
+// TestCompactBlockRepeatedTransaction ensures a reconstructed compact block
+// that repeats its last transaction, which leaves the merkle root
+// unchanged, is not relayed and the full block is requested instead.
+func TestCompactBlockRepeatedTransaction(t *testing.T) {
+	h := newCmpctHarness(t)
+	msgBlock := *solvedBlock(t, h.s.chain, 0, nil).MsgBlock()
+	var txs []*wire.MsgTx
+	for i := byte(1); i <= 2; i++ {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{i}, 0),
+			nil))
+		tx.AddTxOut(wire.NewTxOut(1, []byte{0x51}, wire.TokenData{}))
+		txs = append(txs, tx)
+	}
+
+	// Three transactions have the same merkle root as the same three
+	// with the last one repeated.
+	msgBlock.Transactions = append(msgBlock.Transactions[:1], txs...)
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(&msgBlock).Transactions())
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	for blockchain.CheckHeaderProofOfWork(&msgBlock.Header,
+		h.s.chainParams.PowLimit) != nil {
+
+		msgBlock.Header.Nonce++
+	}
+	hash := msgBlock.BlockHash()
+	repeated := append(txs, txs[1])
+	msgBlock.Transactions = append(msgBlock.Transactions[:1], repeated...)
+	h.request(t, hash)
+
+	done := h.process(shortIDsOnly(t, bchutil.NewBlock(&msgBlock)))
+	h.expectGetTxns(t, hash)
+	h.send(t, wire.NewMsgBlockTxns(hash, msgBlock.Transactions))
+	waitDone(t, done)
+	h.expectFullBlockRequest(t, hash)
+	h.expectNotRelayed(t)
 }
