@@ -353,6 +353,7 @@ func TestGetAddressUnspentOutputsSpends(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			cacheSize := h.chain.CachedStateSize()
 			resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
 				&pb.GetAddressUnspentOutputsRequest{
 					Address:        addr.EncodeAddress(),
@@ -360,6 +361,10 @@ func TestGetAddressUnspentOutputsSpends(t *testing.T) {
 				})
 			if err != nil {
 				t.Fatalf("GetAddressUnspentOutputs: %v", err)
+			}
+			if got := h.chain.CachedStateSize(); got != cacheSize {
+				t.Errorf("UTXO cache grew from %d to %d bytes", cacheSize,
+					got)
 			}
 			got := make([]string, len(resp.Outputs))
 			for i, u := range resp.Outputs {
