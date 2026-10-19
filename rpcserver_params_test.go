@@ -5,6 +5,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/hex"
 	"math"
 	"testing"
 
@@ -12,8 +14,10 @@ import (
 	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
@@ -183,4 +187,261 @@ func TestFetchMempoolTxnsForAddressSkipOverflow(t *testing.T) {
 				test.skip, test.count, len(txns), test.want)
 		}
 	}
+}
+
+// newRPCTestChain returns a regtest chain holding only the genesis block and
+// the database backing it.
+func newRPCTestChain(t *testing.T) (*blockchain.BlockChain, database.DB) {
+	t.Helper()
+	db := newRPCTestDB(t)
+	blockchain.UseLogger(bchlog.Disabled)
+	t.Cleanup(func() { blockchain.UseLogger(chanLog) })
+	chain, err := blockchain.New(&blockchain.Config{
+		DB:                 db,
+		ChainParams:        &chaincfg.RegressionNetParams,
+		TimeSource:         blockchain.NewMedianTime(),
+		UtxoCacheMaxSize:   1 << 20,
+		ExcessiveBlockSize: 32000000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chain, db
+}
+
+// callTxOutProofHandler runs a gettxoutproof or verifytxoutproof handler and
+// turns a panic into a test failure.
+func callTxOutProofHandler(t *testing.T, handler commandHandler, s *rpcServer, cmd interface{}) (result interface{}, err error) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic: %v", r)
+		}
+	}()
+	return handler(s, cmd, nil)
+}
+
+// assertRPCError fails the test unless err is an RPC error with the given
+// code and message.
+func assertRPCError(t *testing.T, what string, err error, code btcjson.RPCErrorCode, msg string) {
+	t.Helper()
+	rpcErr, ok := err.(*btcjson.RPCError)
+	if !ok || rpcErr.Code != code || rpcErr.Message != msg {
+		t.Errorf("%s: got error %v, want %d: %s", what, err, code, msg)
+	}
+}
+
+// TestHandleGetTxOutProofErrors ensures an empty txid list without a block
+// hash and a transaction missing from the index are answered with errors,
+// and that an empty txid list with a block hash gets a proof.
+func TestHandleGetTxOutProofErrors(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	txIndex := indexers.NewTxIndex(db)
+	if err := db.Update(txIndex.Create); err != nil {
+		t.Fatal(err)
+	}
+	for _, txIndex := range []*indexers.TxIndex{nil, txIndex} {
+		s := &rpcServer{cfg: rpcserverConfig{
+			ChainParams: &chaincfg.RegressionNetParams,
+			Chain:       chain,
+			DB:          db,
+			TxIndex:     txIndex,
+		}}
+		cmd := btcjson.NewGetTxOutProofCmd([]string{}, nil)
+		_, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+		assertRPCError(t, "no block hash", err,
+			btcjson.ErrRPCInvalidAddressOrKey, "Transaction not yet in block")
+
+		genesisHash := chaincfg.RegressionNetParams.GenesisHash.String()
+		cmd = btcjson.NewGetTxOutProofCmd([]string{}, &genesisHash)
+		if _, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd); err != nil {
+			t.Errorf("genesis block hash: %v", err)
+		}
+	}
+
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       chain,
+		DB:          db,
+		TxIndex:     txIndex,
+	}}
+	unknown := chainhash.Hash{1}
+	cmd := btcjson.NewGetTxOutProofCmd([]string{unknown.String()}, nil)
+	_, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+	assertRPCError(t, "unknown txid", err, btcjson.ErrRPCNoTxInfo,
+		"Transaction not yet in block")
+
+	genesisHash := chaincfg.RegressionNetParams.GenesisHash.String()
+	cmd = btcjson.NewGetTxOutProofCmd([]string{unknown.String()},
+		&genesisHash)
+	_, err = callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+	assertRPCError(t, "txid not in block", err,
+		btcjson.ErrRPCInvalidAddressOrKey,
+		"Not all transactions found in specified or retrieved block")
+}
+
+// mineTestBlock solves a block holding txns on prev, or on the chain's tip
+// when prev is nil, and processes it.
+func mineTestBlock(t *testing.T, chain *blockchain.BlockChain, prev *chainhash.Hash, txns ...*wire.MsgTx) *bchutil.Block {
+	t.Helper()
+	gen := mining.NewBlkTmplGenerator(&mining.Policy{BlockMaxSize: 1000000},
+		&chaincfg.RegressionNetParams, noTxSource{}, chain,
+		blockchain.NewMedianTime(), txscript.NewSigCache(10),
+		txscript.NewHashCache(10))
+	tmpl, err := gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := tmpl.Block
+	msg.Transactions = append(msg.Transactions, txns...)
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(msg).Transactions())
+	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
+	if prev != nil {
+		msg.Header.PrevBlock = *prev
+	}
+	target := blockchain.CompactToBig(msg.Header.Bits)
+	for {
+		hash := msg.Header.BlockHash()
+		if blockchain.HashToBig(&hash).Cmp(target) <= 0 {
+			break
+		}
+		msg.Header.Nonce++
+	}
+	block := bchutil.NewBlock(msg)
+	if _, _, err := chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+		t.Fatalf("process block: %v", err)
+	}
+	return block
+}
+
+// decodeTestProof decodes a hex encoded merkle block.
+func decodeTestProof(t *testing.T, proof string) *wire.MsgMerkleBlock {
+	t.Helper()
+	var msg wire.MsgMerkleBlock
+	err := msg.BchDecode(bytes.NewReader(mustDecodeHex(t, proof)),
+		wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &msg
+}
+
+// encodeTestProof hex encodes a merkle block.
+func encodeTestProof(t *testing.T, msg *wire.MsgMerkleBlock) string {
+	t.Helper()
+	var buf bytes.Buffer
+	err := msg.BchEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(buf.Bytes())
+}
+
+// TestHandleVerifyTxOutProof ensures verifytxoutproof works without the
+// transaction index, and that it only returns matches for a proof whose
+// header is in the main chain, whose merkle root matches the header and
+// whose transaction count matches the block.
+func TestHandleVerifyTxOutProof(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	mining.UseLogger(bchlog.Disabled)
+	t.Cleanup(func() { mining.UseLogger(minrLog) })
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       chain,
+		DB:          db,
+	}}
+	getProof := func(blockHash *chainhash.Hash, txHash *chainhash.Hash) string {
+		t.Helper()
+		blockStr := blockHash.String()
+		result, err := callTxOutProofHandler(t, handleGetTxOutProof, s,
+			btcjson.NewGetTxOutProofCmd([]string{txHash.String()},
+				&blockStr))
+		if err != nil {
+			t.Fatalf("gettxoutproof: %v", err)
+		}
+		return result.(string)
+	}
+	verifyProof := func(proof string) (interface{}, error) {
+		t.Helper()
+		return callTxOutProofHandler(t, handleVerifyTxOutProof, s,
+			btcjson.NewVerifyTxOutProofCmd(proof))
+	}
+	assertMatches := func(what string, result interface{}, err error, want ...string) {
+		t.Helper()
+		txids, ok := result.([]string)
+		if err != nil || !ok || len(txids) != len(want) {
+			t.Errorf("%s: got %v, %v, want %v", what, result, err, want)
+			return
+		}
+		for i := range want {
+			if txids[i] != want[i] {
+				t.Errorf("%s: got %v, want %v", what, txids, want)
+			}
+		}
+	}
+
+	// A block with two transactions, spending the anyone can spend
+	// coinbase of the first block once it has matured.
+	first := mineTestBlock(t, chain, nil)
+	for i := 0; i < 100; i++ {
+		mineTestBlock(t, chain, nil)
+	}
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(wire.NewOutPoint(first.Transactions()[0].Hash(), 0),
+		nil))
+	spend.AddTxOut(wire.NewTxOut(first.MsgBlock().Transactions[0].TxOut[0].Value-1000,
+		[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+	padding, err := txscript.NullDataScript(make([]byte, 40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spend.AddTxOut(wire.NewTxOut(0, padding, wire.TokenData{}))
+	block := mineTestBlock(t, chain, nil, spend)
+	spendHash := spend.TxHash()
+	proof := getProof(block.Hash(), &spendHash)
+	result, err := verifyProof(proof)
+	assertMatches("two transaction block", result, err, spendHash.String())
+
+	// The genesis block, whose only transaction is the coinbase.
+	genesis := chaincfg.RegressionNetParams.GenesisBlock
+	coinbaseHash := genesis.Transactions[0].TxHash()
+	genesisProof := getProof(chaincfg.RegressionNetParams.GenesisHash,
+		&coinbaseHash)
+	result, err = verifyProof(genesisProof)
+	assertMatches("genesis block", result, err, coinbaseHash.String())
+
+	// A header that isn't in the chain.
+	msg := decodeTestProof(t, genesisProof)
+	msg.Header.Nonce++
+	_, err = verifyProof(encodeTestProof(t, msg))
+	assertRPCError(t, "changed header", err,
+		btcjson.ErrRPCInvalidAddressOrKey, "Block not found in chain")
+
+	// A header of a side chain block.
+	side := mineTestBlock(t, chain, chaincfg.RegressionNetParams.GenesisHash)
+	if chain.MainChainHasBlock(side.Hash()) {
+		t.Fatal("side chain block is in the main chain")
+	}
+	sideProof := getProof(side.Hash(), side.Transactions()[0].Hash())
+	_, err = verifyProof(sideProof)
+	assertRPCError(t, "side chain header", err,
+		btcjson.ErrRPCInvalidAddressOrKey, "Block not found in chain")
+
+	// A merkle root that doesn't match the header.
+	msg = decodeTestProof(t, genesisProof)
+	msg.Hashes[0] = &chainhash.Hash{1}
+	_, err = verifyProof(encodeTestProof(t, msg))
+	assertRPCError(t, "changed hash", err,
+		btcjson.ErrRPCInvalidAddressOrKey,
+		"Merkle root block header check failed")
+
+	// A proof of the two transaction block claiming a single transaction,
+	// the merkle root, has the right root but the wrong count.
+	msg = decodeTestProof(t, proof)
+	msg.Transactions = 1
+	msg.Hashes = []*chainhash.Hash{&msg.Header.MerkleRoot}
+	msg.Flags = []byte{1}
+	result, err = verifyProof(encodeTestProof(t, msg))
+	assertMatches("wrong transaction count", result, err)
 }

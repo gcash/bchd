@@ -3295,6 +3295,13 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		}
 
 	} else {
+		// There is no transaction to look up the block with.
+		if len(txnSet) == 0 {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidAddressOrKey,
+				Message: "Transaction not yet in block",
+			}
+		}
 		if s.cfg.TxIndex == nil {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCInvalidParameter,
@@ -3311,7 +3318,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		if err != nil || blockRegion == nil {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCNoTxInfo,
-				Message: "Unable to find block for given transaction",
+				Message: "Transaction not yet in block",
 			}
 		}
 
@@ -3352,7 +3359,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 	if found != len(txnSet) {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidAddressOrKey,
-			Message: "Not all transactions found in the specified or retrieved block",
+			Message: "Not all transactions found in specified or retrieved block",
 		}
 	}
 
@@ -3410,46 +3417,43 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 		}
 	}
 
-	// lookup the block using the merkleroot to see if it really exists
-	// use the first transaction to get the block and then compare merkleRoot
-	blockRegion, err := s.cfg.TxIndex.TxBlockRegion(mBlock.GetMatches()[0])
-
-	if err != nil || blockRegion == nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCNoTxInfo,
-			Message: "Unable to find block using matched transaction",
-		}
-	}
-
-	// load block from database
-	var blkBytes []byte
-	err = s.cfg.DB.View(func(dbTx database.Tx) error {
-		var err error
-		blkBytes, err = dbTx.FetchBlock(blockRegion.Hash)
-		return err
-	})
-	if err != nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCBlockNotFound,
-			Message: "Can't read block from disk",
-		}
-	}
-
-	block, err := bchutil.NewBlockFromBytes(blkBytes)
-	if err != nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCDeserialization,
-			Message: "Failed to deserialize block",
-		}
-	}
-
-	// compare merkle root from loaded block and that returned from our tree
-	// traversal
-	if !block.MsgBlock().Header.MerkleRoot.IsEqual(merkleRoot) {
+	// The proof must be for a block in the main chain.  Its header commits
+	// to the merkle root, so the block itself doesn't need to be loaded.
+	blkHash := msg.Header.BlockHash()
+	if !s.cfg.Chain.MainChainHasBlock(&blkHash) {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidAddressOrKey,
-			Message: "Merkle root clock header check failed",
+			Message: "Block not found in chain",
 		}
+	}
+
+	// compare merkle root from the block header and that returned from our
+	// tree traversal
+	if !msg.Header.MerkleRoot.IsEqual(merkleRoot) {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Merkle root block header check failed",
+		}
+	}
+
+	// The matches only count when the proof has as many transactions as
+	// the block.  The count follows the header in the stored block, and
+	// the check is skipped when the block data can't be read.
+	var numTx uint64
+	err = s.cfg.DB.View(func(dbTx database.Tx) error {
+		countBytes, err := dbTx.FetchBlockRegion(&database.BlockRegion{
+			Hash:   &blkHash,
+			Offset: wire.MaxBlockHeaderPayload,
+			Len:    wire.MaxVarIntPayload,
+		})
+		if err != nil {
+			return err
+		}
+		numTx, err = wire.ReadVarInt(bytes.NewReader(countBytes), 0)
+		return err
+	})
+	if err == nil && numTx != uint64(msg.Transactions) {
+		return []string{}, nil
 	}
 
 	// return transaction matches list
