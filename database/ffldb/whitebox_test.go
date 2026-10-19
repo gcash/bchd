@@ -21,8 +21,8 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/syndtr/goleveldb/leveldb"
-	ldberrors "github.com/syndtr/goleveldb/leveldb/errors"
+	"github.com/gcash/goleveldb/leveldb"
+	ldberrors "github.com/gcash/goleveldb/leveldb/errors"
 )
 
 // fixedExcessiveBlockSize should not be the default -we want to ensure it will work in all cases

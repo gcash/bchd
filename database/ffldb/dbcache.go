@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/database/internal/treap"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/gcash/goleveldb/leveldb"
+	"github.com/gcash/goleveldb/leveldb/iterator"
+	"github.com/gcash/goleveldb/leveldb/util"
 )
 
 const (

@@ -58,7 +58,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - Fix hangs when pruning, after a failed database commit, and when `peers.json` is rejected.
 - Keep UTXO cache entries until their flush commits, and recover at startup from a flush interrupted after a reorg.
 - A failed UTXO flush now shuts the node down cleanly instead of carrying on.
-- Move to `syndtr/goleveldb`, which brings upstream fixes since 2018. The on-disk format is unchanged.
+- Move to `gcash/goleveldb` v1.1.0, a maintained fork of `syndtr/goleveldb` that brings upstream fixes since 2018 and fixes data loss during crash recovery, hangs after failed writes, and several panics. After a failed disk write it takes no more writes until the node restarts, and a corrupted MANIFEST fails the open instead of silently dropping tables. The on-disk format is unchanged.
 
 ### Security
 

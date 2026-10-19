@@ -19,13 +19,13 @@ import (
 	"github.com/gcash/bchd/database/internal/treap"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/comparer"
-	ldberrors "github.com/syndtr/goleveldb/leveldb/errors"
-	"github.com/syndtr/goleveldb/leveldb/filter"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/syndtr/goleveldb/leveldb/opt"
-	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/gcash/goleveldb/leveldb"
+	"github.com/gcash/goleveldb/leveldb/comparer"
+	ldberrors "github.com/gcash/goleveldb/leveldb/errors"
+	"github.com/gcash/goleveldb/leveldb/filter"
+	"github.com/gcash/goleveldb/leveldb/iterator"
+	"github.com/gcash/goleveldb/leveldb/opt"
+	"github.com/gcash/goleveldb/leveldb/util"
 )
 
 const (
