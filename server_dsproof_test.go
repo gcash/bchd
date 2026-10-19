@@ -70,33 +70,66 @@ func TestOnDSProofBanScore(t *testing.T) {
 	}
 }
 
-// TestAddDSProofBanScore checks that the ban score of orphan senders, such as
-// expired orphans, is raised by peer id.
-func TestAddDSProofBanScore(t *testing.T) {
-	sp, _ := newDSProofServerPeer(t)
-	s := sp.server
+// servePeers answers the server's peer queries with peers until the test
+// ends.
+func servePeers(t *testing.T, s *server, peers ...*serverPeer) {
 	s.query = make(chan interface{})
 	go func() {
 		for {
 			select {
 			case q := <-s.query:
 				if m, ok := q.(getPeersMsg); ok {
-					m.reply <- []*serverPeer{sp}
+					m.reply <- peers
 				}
 			case <-s.quit:
 				return
 			}
 		}
 	}()
-	defer close(s.quit)
+	t.Cleanup(func() { close(s.quit) })
+}
 
-	s.addDSProofBanScore([]mempool.Tag{mempool.Tag(sp.ID())}, 1, "dsproof-orphan-expired")
+// waitBanScore waits for the ban score of sp to reach want.
+func waitBanScore(t *testing.T, sp *serverPeer, want uint32) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for sp.banScore.Int() != 1 {
+	for sp.banScore.Int() != want {
 		if time.Now().After(deadline) {
-			t.Fatalf("ban score %d", sp.banScore.Int())
+			t.Fatalf("ban score %d, want %d", sp.banScore.Int(), want)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestAddDSProofBanScore checks that the ban score of orphan senders, such as
+// expired orphans, is raised by peer id, summed over their orphans and
+// applied once per peer, so a peer passing the threshold is banned once.
+func TestAddDSProofBanScore(t *testing.T) {
+	sp, _ := newDSProofServerPeer(t)
+	// The first sum stays at the warning level, half the threshold.
+	cfg.BanThreshold = 5
+	s := sp.server
+	s.banPeers = make(chan *serverPeer, 10)
+	servePeers(t, s, sp)
+
+	id := mempool.Tag(sp.ID())
+	s.addDSProofBanScore([]mempool.Tag{id, id + 1, id}, 1, "dsproof-orphan-expired")
+	waitBanScore(t, sp, 2)
+
+	// A sum passing the threshold bans the peer once.
+	s.addDSProofBanScore([]mempool.Tag{id, id, id, id, id}, 1, "dsproof-orphan-expired")
+	select {
+	case <-s.banPeers:
+	case <-time.After(5 * time.Second):
+		t.Fatal("peer not banned")
+	}
+	select {
+	case <-s.banPeers:
+		t.Fatal("peer banned twice")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if score := sp.banScore.Int(); score != 7 {
+		t.Fatalf("ban score %d", score)
 	}
 }
 
