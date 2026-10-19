@@ -198,14 +198,14 @@ func (t *Mutable) Delete(key []byte) {
 	var isLeft bool
 	var child *treapNode
 	for node.left != nil || node.right != nil {
-		// Choose the child with the higher priority.
+		// Choose the child with the lower priority.
 		if node.left == nil {
 			child = node.right
 			isLeft = false
 		} else if node.right == nil {
 			child = node.left
 			isLeft = true
-		} else if node.left.priority >= node.right.priority {
+		} else if node.left.priority <= node.right.priority {
 			child = node.left
 			isLeft = true
 		} else {

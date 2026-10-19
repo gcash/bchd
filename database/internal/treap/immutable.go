@@ -273,14 +273,14 @@ func (t *Immutable) Delete(key []byte) *Immutable {
 	var child *treapNode
 	newRoot := newParents.At(newParents.Len() - 1)
 	for delNode.left != nil || delNode.right != nil {
-		// Choose the child with the higher priority.
+		// Choose the child with the lower priority.
 		var isLeft bool
 		if delNode.left == nil {
 			child = delNode.right
 		} else if delNode.right == nil {
 			child = delNode.left
 			isLeft = true
-		} else if delNode.left.priority >= delNode.right.priority {
+		} else if delNode.left.priority <= delNode.right.priority {
 			child = delNode.left
 			isLeft = true
 		} else {
