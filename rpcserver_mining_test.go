@@ -97,6 +97,13 @@ func (noTxSource) HaveTransaction(*chainhash.Hash) bool { return false }
 // are disabled for the test, since the log rotator is not set up.
 func newTestChain(t *testing.T) *blockchain.BlockChain {
 	t.Helper()
+	chain, _ := newTestChainDB(t)
+	return chain
+}
+
+// newTestChainDB returns a fresh regtest chain along with its database.
+func newTestChainDB(t *testing.T) (*blockchain.BlockChain, database.DB) {
+	t.Helper()
 	blockchain.UseLogger(bchlog.Disabled)
 	mining.UseLogger(bchlog.Disabled)
 	t.Cleanup(func() {
@@ -119,7 +126,7 @@ func newTestChain(t *testing.T) *blockchain.BlockChain {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return chain
+	return chain, db
 }
 
 // solvedBlock returns a solved block on the chain's tip whose coinbase pays

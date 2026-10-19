@@ -899,8 +899,7 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 }
 
 // OnGetBlockTxns is invoked when a peer receives a getblocktxns bitcoin message.
-// We block need to acquire lock to make sure the block is process first before
-// continuing.
+// It first waits for any compact block this peer is processing to finish.
 func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 	// We aren't interested in protecting concurrent access to this function
 	// only making sure we aren't currently processing the block that is
@@ -910,12 +909,6 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 	// release the mutex, then releases it immediately.
 	sp.processBlockMtx.Lock()
 	sp.processBlockMtx.Unlock() //nolint:staticcheck // SA2001: intentional barrier
-
-	// A decaying ban score increase is applied to prevent flooding.
-	// The ban score accumulates and passes the ban threshold if a burst of
-	// mempool messages comes from a peer. The score decays each minute to
-	// half of its value.
-	sp.addBanScore(0, 33, "getblocktxns")
 
 	// Fetch the raw block bytes from the database.
 	hash := msg.BlockHash
@@ -945,7 +938,12 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 		return
 	}
 	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestdTxs)
-	sp.QueueMessage(msgBlockTxns, nil)
+
+	// Wait for the reply to be sent before handling anything else from
+	// the peer, so that each peer has at most one reply queued.
+	doneChan := make(chan struct{}, 1)
+	sp.QueueMessage(msgBlockTxns, doneChan)
+	<-doneChan
 }
 
 // OnInv is invoked when a peer receives an inv bitcoin message and is
