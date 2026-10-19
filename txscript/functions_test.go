@@ -171,3 +171,28 @@ func TestInvokeMalformedBody(t *testing.T) {
 		t.Errorf("invoked: got error %v, want %v", err, ErrMalformedPush)
 	}
 }
+
+// TestFunctionTablePerScript ensures functions defined by the unlocking script
+// are gone in the locking script, and that a script can still define the
+// same identifier again.
+func TestFunctionTablePerScript(t *testing.T) {
+	t.Parallel()
+
+	// Without SIGPUSHONLY the unlocking script may define functions.
+	flags := may2026TestFlags &^ (ScriptVerifySigPushOnly | ScriptVerifyCleanStack)
+
+	// <0x51> <1> OP_DEFINE
+	sigScript := []byte{0x01, 0x51, OP_1, OP_DEFINE}
+
+	// <1> OP_INVOKE
+	_, err := runFunctionsTestScript(t, sigScript, "518a", flags)
+	if !IsErrorCode(err, ErrUndefinedFunction) {
+		t.Fatalf("invoke in the locking script: got %v, want %v", err,
+			ErrUndefinedFunction)
+	}
+
+	// <0x51> <1> OP_DEFINE <1> OP_INVOKE
+	if _, err := runFunctionsTestScript(t, sigScript, "01515189518a", flags); err != nil {
+		t.Fatalf("redefine in the locking script: %v", err)
+	}
+}

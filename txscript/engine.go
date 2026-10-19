@@ -229,7 +229,7 @@ type Engine struct {
 	savedFirstStack      [][]byte // stack from first script for bip16 scripts
 	inputAmount          int64
 	sigChecks            int
-	functionTable        map[string]*definedFunction
+	functionTable        map[string]*definedFunction // made by the first OP_DEFINE
 	definedFunctionCount int
 	frameStack           []stackFrame
 }
@@ -586,7 +586,7 @@ func (vm *Engine) Step() (done bool, err error) {
 		}
 		vm.lastCodeSep = 0
 		if vm.hasFlag(ScriptAllowMay2026) {
-			vm.functionTable = make(map[string]*definedFunction)
+			vm.functionTable = nil
 			vm.definedFunctionCount = 0
 		}
 		if vm.scriptIdx >= len(vm.scripts) {
@@ -1246,12 +1246,6 @@ func NewEngine(scriptPubKey []byte, tx *wire.MsgTx, txIdx int, flags ScriptFlags
 	} else {
 		vm.dstack.defaultScriptNumLen = defaultSmallScriptNumLen
 		vm.astack.defaultScriptNumLen = defaultSmallScriptNumLen
-	}
-
-	if vm.hasFlag(ScriptAllowMay2026) {
-		vm.functionTable = make(map[string]*definedFunction)
-		vm.definedFunctionCount = 0
-		vm.frameStack = nil
 	}
 
 	vm.tx = *tx
