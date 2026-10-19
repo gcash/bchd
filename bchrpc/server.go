@@ -1074,6 +1074,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	encodedAddr := addr.EncodeAddress()
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
+
+	// Each output is returned once, even when the history lists its
+	// transaction twice: a block connected during the scan shifts the
+	// pages, and a repeated coinbase has two entries.
+	found := make(map[wire.OutPoint]struct{})
 	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
 		txHash := *tx.Hash()
 		var utxos []*pb.UnspentOutput
@@ -1149,7 +1154,8 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				}
 			}
 
-			if isMatch {
+			if _, dup := found[*op]; isMatch && !dup {
+				found[*op] = struct{}{}
 				utxo := &pb.UnspentOutput{
 					Outpoint: &pb.Transaction_Input_Outpoint{
 						Hash:  txHash.CloneBytes(),
