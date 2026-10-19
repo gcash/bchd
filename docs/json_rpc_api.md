@@ -147,6 +147,9 @@ authenticated, a single message may be up to 32 MiB plus eight times the
 larger of `--excessiveblocksize` and 32 MB (about 276 MiB with the default),
 enough for a hex-encoded block of the largest accepted size.
 
+The body of an HTTP POST request has the same size limit. A larger body is
+refused with HTTP status 413 (Request Entity Too Large).
+
 <a name="CLIUtil" />
 
 ### 4. Command-line Utility
