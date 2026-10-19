@@ -96,6 +96,8 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 		Listeners: peer.MessageListeners{
 			OnBlock:     listeners.OnBlock,
 			OnBlockTxns: listeners.OnBlockTxns,
+			OnInv:       listeners.OnInv,
+			OnNotFound:  listeners.OnNotFound,
 			OnRead:      listeners.OnRead,
 		},
 	})
@@ -161,9 +163,8 @@ func (h *cmpctHarness) send(t *testing.T, msg wire.Message) {
 	}
 }
 
-// request announces the block to the sync manager as the peer and waits for
-// the compact block to be requested, so the block is requested from the
-// peer.
+// request announces the block from the remote side and waits for the
+// compact block to be requested, so the block is requested from the peer.
 func (h *cmpctHarness) request(t *testing.T, hash chainhash.Hash) {
 	t.Helper()
 	inv := wire.NewMsgInv()
@@ -171,7 +172,7 @@ func (h *cmpctHarness) request(t *testing.T, hash chainhash.Hash) {
 		&hash)); err != nil {
 		t.Fatal(err)
 	}
-	h.s.syncManager.QueueInv(inv, h.sp.Peer)
+	h.send(t, inv)
 	select {
 	case iv := <-h.getData:
 		if iv.Type != wire.InvTypeCmpctBlock || iv.Hash != hash {
@@ -407,4 +408,21 @@ func TestCompactBlockFullBlockReply(t *testing.T) {
 		t.Fatalf("compact block %v relayed", msg.BlockHash())
 	default:
 	}
+}
+
+// TestBlockNotFoundForgotten ensures a block the peer reports as not found
+// is no longer requested from it, so a later announcement requests it
+// again.
+func TestBlockNotFoundForgotten(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+
+	notFound := wire.NewMsgNotFound()
+	if err := notFound.AddInvVect(wire.NewInvVect(wire.InvTypeCmpctBlock,
+		block.Hash())); err != nil {
+		t.Fatal(err)
+	}
+	h.send(t, notFound)
+	h.request(t, *block.Hash())
 }

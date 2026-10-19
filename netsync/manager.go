@@ -89,6 +89,12 @@ type blockErrorMsg struct {
 	peer *peerpkg.Peer
 }
 
+// notFoundMsg packages a notfound message and the peer it came from.
+type notFoundMsg struct {
+	notFound *wire.MsgNotFound
+	peer     *peerpkg.Peer
+}
+
 // invMsg packages a bitcoin inv message and the peer it came from together
 // so the block handler has access to that information.
 type invMsg struct {
@@ -1042,6 +1048,24 @@ func (sm *SyncManager) handleBlockError(msg *blockErrorMsg) {
 	delete(sm.requestedBlocks, *msg.hash)
 }
 
+// handleNotFoundMsg forgets the blocks a peer reports it doesn't have, if
+// they were requested from it, so they can be requested again.
+func (sm *SyncManager) handleNotFoundMsg(msg *notFoundMsg) {
+	state, exists := sm.peerStates[msg.peer]
+	if !exists {
+		return
+	}
+	for _, iv := range msg.notFound.InvList {
+		switch iv.Type {
+		case wire.InvTypeBlock, wire.InvTypeCmpctBlock:
+			if _, ok := state.requestedBlocks[iv.Hash]; ok {
+				delete(state.requestedBlocks, iv.Hash)
+				delete(sm.requestedBlocks, iv.Hash)
+			}
+		}
+	}
+}
+
 // fetchHeaderBlocks creates and sends a request to the syncPeer for the next
 // list of blocks to be downloaded based on the current list of headers.
 func (sm *SyncManager) fetchHeaderBlocks() {
@@ -1566,6 +1590,9 @@ out:
 			case *blockErrorMsg:
 				sm.handleBlockError(msg)
 
+			case *notFoundMsg:
+				sm.handleNotFoundMsg(msg)
+
 			case *invMsg:
 				sm.handleInvMsg(msg)
 
@@ -1773,6 +1800,15 @@ func (sm *SyncManager) QueueBlockError(hash *chainhash.Hash, peer *peerpkg.Peer)
 		return
 	}
 	sm.msgChan <- &blockErrorMsg{hash: hash, peer: peer}
+}
+
+// QueueNotFound adds the passed notfound message and peer to the block
+// handling queue.
+func (sm *SyncManager) QueueNotFound(notFound *wire.MsgNotFound, peer *peerpkg.Peer) {
+	if sm.shutdown.Load() != 0 {
+		return
+	}
+	sm.msgChan <- &notFoundMsg{notFound: notFound, peer: peer}
 }
 
 // QueueInv adds the passed inv message and peer to the block handling queue.
