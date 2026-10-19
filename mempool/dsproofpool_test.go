@@ -1023,3 +1023,52 @@ func TestDSProofStoragePeerShare(t *testing.T) {
 	}
 	checkPeerOrphans(t, s)
 }
+
+// TestDSProofRecheckAfterRelock checks that a proof is checked again when
+// the transaction spending its outpoint changes between the read and the
+// write lock, so it is neither stored as an orphan for a transaction that
+// arrived nor associated with one that left.
+func TestDSProofRecheckAfterRelock(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	t.Cleanup(func() { dsProofRelockHook = nil })
+
+	// The transaction arrives in between.
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	proof, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsProofRelockHook = func() {
+		dsProofRelockHook = nil
+		if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+			t.Error(err)
+		}
+	}
+	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofAccepted || err != nil {
+		t.Fatalf("arrived: %v %v", r, err)
+	}
+	if proofs, _ := rec.take(); len(proofs) != 1 || *proofs[0].tx.Hash() != *tx1.Hash() {
+		t.Fatalf("%d announcements", len(proofs))
+	}
+
+	// The transaction leaves in between.
+	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	proof, err = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	dsProofRelockHook = func() {
+		dsProofRelockHook = nil
+		pool.RemoveTransaction(tx1, true)
+	}
+	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofOrphan || err != nil {
+		t.Fatalf("left: %v %v", r, err)
+	}
+	if proofs, _ := rec.take(); len(proofs) != 0 {
+		t.Fatal("proof announced for a transaction that left")
+	}
+}

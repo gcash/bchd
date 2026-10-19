@@ -22,6 +22,11 @@ const (
 	dsProofSearchMaxTxs   = 20000
 )
 
+// dsProofRelockHook is called by ProcessDSProof between releasing the read
+// lock and taking the write lock, when set by tests.  It must only be set
+// from tests that do not run in parallel.
+var dsProofRelockHook func()
+
 // ErrDSProofSearchLimit is returned when the search of a transaction's
 // unconfirmed ancestors stops at its depth or size limit.
 var ErrDSProofSearchLimit = errors.New("double spend proof search limit reached")
@@ -312,6 +317,9 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 	validity, err := mp.validateDSProofInPool(proof, &hash, spender, flags)
 	mp.mtx.RUnlock()
 
+	if dsProofRelockHook != nil {
+		dsProofRelockHook()
+	}
 	mp.mtx.Lock()
 	defer mp.unlockAndNotify()
 
