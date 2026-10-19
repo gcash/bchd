@@ -549,13 +549,13 @@ func TestDSProofMempoolCaches(t *testing.T) {
 	pool.cfg.SigCache = txscript.NewSigCache(100)
 	pool.cfg.HashCache = txscript.NewHashCache(100)
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, false)
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if !sigCached(t, pool.cfg.SigCache, tx1.MsgTx(), 0, coin) {
 		t.Fatal("signature not cached on acceptance")
 	}
-	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(tx2, true, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	proofs, _ := rec.take()
@@ -634,10 +634,10 @@ func TestDSProofLaterInput(t *testing.T) {
 	}
 
 	// The memory pool creates the same proof.
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(tx2, true, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	proofs, _ := rec.take()

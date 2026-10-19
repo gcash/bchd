@@ -41,9 +41,8 @@ func newMempoolWithTx(t *testing.T,
 
 	pool := mempool.New(&mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: true,
-			AcceptNonStd:         true,
-			MaxTxVersion:         2,
+			AcceptNonStd: true,
+			MaxTxVersion: 2,
 		},
 		ChainParams: params,
 		FetchUtxoView: func(*bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
@@ -78,7 +77,7 @@ func newMempoolWithTx(t *testing.T,
 	}
 	tx := bchutil.NewTx(msgTx)
 
-	if _, _, err := pool.MaybeAcceptTransaction(tx, true, false); err != nil {
+	if _, _, err := pool.MaybeAcceptTransaction(tx, true); err != nil {
 		t.Fatalf("MaybeAcceptTransaction: %v", err)
 	}
 	if !pool.HaveTransaction(tx.Hash()) {

@@ -91,9 +91,8 @@ func newAddrUnspentHarness(tb testing.TB) *addrUnspentHarness {
 
 	pool := mempool.New(&mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: true,
-			AcceptNonStd:         true,
-			MaxTxVersion:         2,
+			AcceptNonStd: true,
+			MaxTxVersion: 2,
 		},
 		ChainParams:    &params,
 		FetchUtxoView:  chain.FetchUtxoView,
@@ -202,7 +201,7 @@ func (h *addrUnspentHarness) mineBlockWithCoinbase(coinbase *wire.MsgTx,
 func (h *addrUnspentHarness) acceptTx(tx *wire.MsgTx) {
 	h.tb.Helper()
 
-	_, _, err := h.pool.MaybeAcceptTransaction(bchutil.NewTx(tx), true, false)
+	_, _, err := h.pool.MaybeAcceptTransaction(bchutil.NewTx(tx), true)
 	if err != nil {
 		h.tb.Fatalf("MaybeAcceptTransaction: %v", err)
 	}

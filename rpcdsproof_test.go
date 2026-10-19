@@ -35,10 +35,10 @@ func newDSProofTestHarness(t *testing.T) *dsProofTestHarness {
 	pool := h.server.cfg.TxMemPool
 	tx1 := h.spend(t, h.outputs[0], 1000)
 	tx2 := h.spend(t, h.outputs[0], 2000)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx2), false, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx2), false, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	child := wire.NewMsgTx(wire.TxVersion)
@@ -46,7 +46,7 @@ func newDSProofTestHarness(t *testing.T) *dsProofTestHarness {
 		Sequence: wire.MaxTxInSequenceNum})
 	child.AddTxOut(wire.NewTxOut(tx1.TxOut[0].Value-1000, h.pkScript, wire.TokenData{}))
 	signTestInput(t, h, child, tx1.TxOut[0].Value)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), false, 0); err != nil {
 		t.Fatal(err)
 	}
 	list := pool.DSProofs(false)
@@ -306,10 +306,10 @@ func TestDSProofWebsocket(t *testing.T) {
 	pool := h.server.cfg.TxMemPool
 	tx3 := h.spend(t, h.outputs[1], 1000)
 	tx4 := h.spend(t, h.outputs[1], 2000)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, 0); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx4), false, false, 0)
+	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx4), false, 0)
 	desc, _, _, _ := pool.DSProofByTx(bchutil.NewTx(tx3).Hash(), false)
 	if desc == nil {
 		t.Fatal("no proof for the second double spend")

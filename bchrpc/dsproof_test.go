@@ -51,10 +51,9 @@ func newDSProofPool(t *testing.T) (pool *mempool.TxPool, tx1, tx2 *wire.MsgTx, s
 
 	pool = mempool.New(&mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: true,
-			LimitSigChecks:       true,
-			MinRelayTxFee:        mempool.DefaultMinRelayTxFee,
-			MaxTxVersion:         2,
+			LimitSigChecks: true,
+			MinRelayTxFee:  mempool.DefaultMinRelayTxFee,
+			MaxTxVersion:   2,
 		},
 		ChainParams: params,
 		FetchUtxoView: func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
@@ -83,10 +82,10 @@ func newDSProofPool(t *testing.T) (pool *mempool.TxPool, tx1, tx2 *wire.MsgTx, s
 	}
 	op := wire.OutPoint{Hash: funding.TxHash()}
 	tx1, tx2 = spend(op, 100000000, 1000), spend(op, 100000000, 2000)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx2), false, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx2), false, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	return pool, tx1, tx2, spend, funding
@@ -210,10 +209,10 @@ func TestSubscribeDoubleSpendProofs(t *testing.T) {
 	// A second double spend.
 	op := wire.OutPoint{Hash: funding.TxHash(), Index: 1}
 	tx3, tx4 := spend(op, 100000000, 1000), spend(op, 100000000, 2000)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, 0); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx4), false, false, 0)
+	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx4), false, 0)
 	desc, _, _, _ := pool.DSProofByTx(bchutil.NewTx(tx3).Hash(), false)
 	if desc == nil {
 		t.Fatal("no proof for the second double spend")
@@ -265,12 +264,13 @@ func TestDoubleSpendProofRPCLimits(t *testing.T) {
 	value := int64(100000000)
 	var last chainhash.Hash
 	for range 1001 {
-		tx := spend(op, value, 0)
-		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, false, 0); err != nil {
+		tx := spend(op, value, 1000)
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0); err != nil {
 			t.Fatal(err)
 		}
 		last = tx.TxHash()
 		op = wire.OutPoint{Hash: last}
+		value -= 1000
 	}
 	_, err = s.GetDoubleSpendProof(ctx, &pb.GetDoubleSpendProofRequest{
 		Query: &pb.GetDoubleSpendProofRequest_TransactionHash{TransactionHash: last[:]}})

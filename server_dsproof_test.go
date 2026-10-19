@@ -26,10 +26,10 @@ func newDSProofServerPeer(t *testing.T) (*serverPeer, *wire.MsgDSProof) {
 	pool := h.server.cfg.TxMemPool
 	tx1 := h.spend(t, h.outputs[0], 1000)
 	tx2 := h.spend(t, h.outputs[0], 2000)
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, 0); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx2), false, false, 0)
+	_, _ = pool.ProcessTransaction(bchutil.NewTx(tx2), false, 0)
 	descs := pool.DSProofs(false)
 	if len(descs) != 1 {
 		t.Fatalf("%d proofs", len(descs))
@@ -225,10 +225,10 @@ func TestDSProofBadOrphanBanScore(t *testing.T) {
 
 		tx1 := h.spend(t, h.outputs[0], 1000)
 		tx2 := h.spend(t, h.outputs[0], 2000)
-		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, false, 0); err != nil {
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx1), false, 0); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = pool.ProcessTransaction(bchutil.NewTx(tx2), false, false, 0)
+		_, _ = pool.ProcessTransaction(bchutil.NewTx(tx2), false, 0)
 		descs := pool.DSProofs(false)
 		if len(descs) != 1 {
 			t.Fatalf("%d proofs", len(descs))
@@ -243,7 +243,7 @@ func TestDSProofBadOrphanBanScore(t *testing.T) {
 			t.Fatal("orphan not stored")
 		}
 		tx3 := h.spend(t, h.outputs[1], 1000)
-		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, false, 0); err != nil {
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx3), false, 0); err != nil {
 			t.Fatal(err)
 		}
 		if whitelisted {

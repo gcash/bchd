@@ -4145,7 +4145,7 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 
 	// Use 0 for the tag to represent local node.
 	acceptedTxs, err := s.cfg.TxMemPool.ProcessTransactionWithMaxFee(tx,
-		false, false, 0, maxFee)
+		false, 0, maxFee)
 	if err != nil {
 		// When the error is a rule error, it means the transaction was
 		// simply rejected as opposed to something actually going wrong,
