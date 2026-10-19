@@ -56,13 +56,19 @@ const (
 	// hash.
 	addrKeyTypeScriptHash = 1
 
+	// addrKeyTypeScriptHash32 is the address type in an address key which
+	// represents a pay-to-script-hash32 address.  This keeps a 32-byte hash
+	// ending in zeros apart from the padded hash of a script hash address.
+	addrKeyTypeScriptHash32 = 2
+
 	// Size of a transaction entry.  It consists of 4 bytes block id + 4
 	// bytes offset + 4 bytes length.
 	txEntrySize = 4 + 4 + 4
 
 	// addrIndexVersion is the current version of the index.  Version 1
-	// indexes spends of token outputs.
-	addrIndexVersion = 1
+	// indexes spends of token outputs.  Version 2 keys P2SH32 addresses by
+	// their own type.
+	addrIndexVersion = 2
 )
 
 var (
@@ -541,9 +547,10 @@ func addrToKey(addr bchutil.Address) ([addrKeySize]byte, error) {
 
 	case *bchutil.AddressScriptHash32:
 		var result [addrKeySize]byte
-		result[0] = addrKeyTypeScriptHash
+		result[0] = addrKeyTypeScriptHash32
 		copy(result[1:], addr.Hash256()[:])
 		return result, nil
+
 	case *bchutil.AddressPubKey:
 		var result [addrKeySize]byte
 		result[0] = addrKeyTypePubKeyHash
@@ -662,7 +669,7 @@ func (idx *AddrIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
 		return nil
 	}
 
-	log.Infof("The %s is missing spends of token outputs and will be "+
+	log.Infof("The %s was built by an older version and will be "+
 		"rebuilt from scratch", addrIndexName)
 	if err := dropIndex(db, addrIndexKey, addrIndexName, interrupt); err != nil {
 		return err
