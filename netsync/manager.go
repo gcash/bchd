@@ -339,6 +339,7 @@ func (sm *SyncManager) startSync() {
 	best := sm.chain.BestSnapshot()
 	bestPeers := []*peerpkg.Peer{}
 	okPeers := []*peerpkg.Peer{}
+	behindPeers := []*peerpkg.Peer{}
 	for peer, state := range sm.peerStates {
 		if !state.syncCandidate {
 			continue
@@ -356,8 +357,10 @@ func (sm *SyncManager) startSync() {
 			continue
 		}
 
-		// Don't pick a peer that is behind us.
+		// Don't pick a peer that is behind us, except as a last resort
+		// below the minimum chain work.
 		if peer.LastBlock() < best.Height {
+			behindPeers = append(behindPeers, peer)
 			continue
 		}
 
@@ -369,11 +372,15 @@ func (sm *SyncManager) startSync() {
 
 	// Try to select a random peer that is at a higher block height,
 	// if that is not available then use a random peer at the same
-	// height and hope they find blocks.
+	// height and hope they find blocks.  Below the minimum chain work this
+	// node may be on a low-work fork longer than the real chain, which puts
+	// every honest peer behind it, so then fall back to a peer behind us.
 	if len(bestPeers) > 0 {
 		bestPeer = bestPeers[rand.Intn(len(bestPeers))]
 	} else if len(okPeers) > 0 {
 		bestPeer = okPeers[rand.Intn(len(okPeers))]
+	} else if len(behindPeers) > 0 && !sm.chain.HasMinimumChainWork() {
+		bestPeer = behindPeers[rand.Intn(len(behindPeers))]
 	}
 
 	// Start syncing from the best peer if one was selected.
@@ -562,11 +569,14 @@ func (sm *SyncManager) handleCheckSyncPeer() {
 		return
 	}
 
-	// Don't update sync peers if you have all the available
-	// blocks.
+	// Don't update sync peers if you have all the available blocks, unless
+	// they make up a chain with less than the minimum chain work.  Then the
+	// sync peer can't bring this node to that work, and may be holding it on
+	// a low-work fork while it ignores other peers' block announcements.
 	best := sm.chain.BestSnapshot()
+	haveAll := sm.topBlock() == best.Height && sm.chain.HasMinimumChainWork()
 
-	if sm.topBlock() == best.Height || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
+	if haveAll || sm.chain.UtxoCacheFlushInProgress() || (sm.fastSyncMode && best.Height == sm.lastCheckpoint().Height) {
 		// Update the time and violations to prevent disconnects.
 		sm.syncPeerState.lastBlockTime = time.Now()
 		sm.syncPeerState.violations = 0

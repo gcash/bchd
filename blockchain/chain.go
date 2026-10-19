@@ -1532,6 +1532,19 @@ func (b *BlockChain) IsCurrent() bool {
 	return b.isCurrent()
 }
 
+// HasMinimumChainWork returns whether the best chain has at least the
+// network's minimum chain work.  A chain with less is still syncing, or is a
+// low-work fork that a peer fed this node.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) HasMinimumChainWork() bool {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+
+	minWork := b.chainParams.MinimumChainWork
+	return minWork == nil || b.bestChain.Tip().workSum.Cmp(minWork) >= 0
+}
+
 // BestSnapshot returns information about the current best chain block and
 // related state as of the current point in time.  The returned instance must be
 // treated as immutable since it is shared by all callers.

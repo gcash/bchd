@@ -27,7 +27,7 @@ This release makes validation, initial sync and block relay considerably faster,
 ### Consensus & Network
 
 - Bring consensus validation in line with BCHN in several edge cases, including double spends within a block, failed signature checks and the signature cache, CashTokens prefix parsing and the coinbase rules, the BIP34 height push, `OP_NUM2BIN`, and orphan blocks. No block on mainnet, testnet3, testnet4 or chipnet is affected.
-- Finalize blocks 10 deep and reject forks below them, and require BCHN's minimum chain work before the node considers itself synced.
+- Finalize blocks 10 deep and reject forks below them, and require BCHN's minimum chain work before the node considers itself synced. A sync peer that leaves the node below that work is replaced, so it can't hold the node on a low-work fork.
 - Fix the stored ABLA state, which after a restart or a block disconnect could drop the next block's size limit to 16 MB.
 - On testnet4 and chipnet the block size limit starts at 2 MB, as in BCHN, instead of 32 MB. `--excessiveblocksize` now defaults to the network's default size, which is also its minimum.
 - Support Tor v3 onion addresses and BIP155 `addrv2`, as BCHN does. Tor v2 addresses, which Tor no longer supports, are dropped.
