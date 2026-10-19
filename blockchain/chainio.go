@@ -1429,7 +1429,7 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 	if !hasBlockIndex {
 		err := migrateBlockIndex(b.db)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
