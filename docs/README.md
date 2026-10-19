@@ -13,7 +13,8 @@
    1. [Startup](#Startup)
       1. [Using bootstrap.dat](#BootstrapDat)
    2. [Network Configuration](#NetworkConfig)
-   3. [Wallet](#Wallet)
+   3. [Memory Use](#MemoryUse)
+   4. [Wallet](#Wallet)
 4. [Developer Resources](#DeveloperResources)
    1. [Code Contribution Guidelines](#ContributionGuidelines)
    2. [JSON-RPC Reference](#JSONRPCReference)
@@ -227,7 +228,7 @@ configuration necessary, however, there is an optional method to use a
 
 <a name="NetworkConfig" />
 
-**3.1.2 Network Configuration**
+**3.2 Network Configuration**
 
 - [What Ports Are Used by Default?](https://github.com/gcash/bchd/tree/master/docs/default_ports.md)
 - [How To Listen on Specific Interfaces](https://github.com/gcash/bchd/tree/master/docs/configure_peer_server_listen_interfaces.md)
@@ -235,9 +236,40 @@ configuration necessary, however, there is an optional method to use a
 - [Configuring bchd with Tor](https://github.com/gcash/bchd/tree/master/docs/configuring_tor.md)
 - [Configuring bchd with CIFS](https://github.com/gcash/bchd/tree/master/docs/cifs.md)
 
+<a name="MemoryUse" />
+
+**3.3 Memory Use**
+
+bchd keeps recently used unspent outputs (the UTXO cache) and pending database
+writes in memory to speed up syncing. With the default cache sizes of 450 MiB
+and 500 MiB it can use a gigabyte or more. Right after the first sync its
+memory use can stay high for half an hour or so, until the database cache is
+written to disk. To use less memory, lower the cache sizes (in MiB); smaller
+caches make the first sync slower:
+
+```
+[Application Options]
+utxocachemaxsize=250
+dbcachesize=250
+```
+
+On Linux, the memory reported for bchd can also keep growing after sync even
+though bchd is not using it. This comes from a kernel setting called
+transparent huge pages. If `cat /sys/kernel/mm/transparent_hugepage/enabled`
+shows `[always]`, do one of the following:
+
+- Change it to `madvise`, which most distributions use by default. This lasts
+  until the next reboot:
+
+  ```
+  echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+  ```
+
+- Turn it off for bchd only by starting it with `GODEBUG=disablethp=1 bchd`.
+
 <a name="Wallet" />
 
-**3.1 Wallet**
+**3.4 Wallet**
 
 bchd was intentionally developed without an integrated wallet for security
 reasons. Please see [bchwallet](https://github.com/gcash/bchwallet) for more
