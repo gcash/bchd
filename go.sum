@@ -109,6 +109,8 @@ github.com/gcash/bchutil v0.0.0-20261015073927-a3a101cdf30e h1:gyUolYTqgwoubHhxY
 github.com/gcash/bchutil v0.0.0-20261015073927-a3a101cdf30e/go.mod h1:7mzjNjRv6gwyi5htlWewNe6pUvh32/Daj+T62ur0fFA=
 github.com/gcash/bchutil v0.0.0-20261017211521-b98f84172fdc h1:fo/Ymybh9HaPJQfKYZZ4qevQbUwz28EB+ptzEvnuSKo=
 github.com/gcash/bchutil v0.0.0-20261017211521-b98f84172fdc/go.mod h1:7mzjNjRv6gwyi5htlWewNe6pUvh32/Daj+T62ur0fFA=
+github.com/gcash/bchutil v0.0.0-20261019095139-ecc8506ec3af h1:tTmHMsDrsgjascXHtFwd13m3tO8xuOsBH3pQjYhfwqk=
+github.com/gcash/bchutil v0.0.0-20261019095139-ecc8506ec3af/go.mod h1:7mzjNjRv6gwyi5htlWewNe6pUvh32/Daj+T62ur0fFA=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=
 github.com/gin-gonic/gin v1.6.3/go.mod h1:75u5sXoLsGZoRN5Sgbi1eraJ4GU3++wFwWzhwvtwp4M=

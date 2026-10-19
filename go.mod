@@ -11,7 +11,7 @@ require (
 	github.com/dchest/siphash v1.2.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
-	github.com/gcash/bchutil v0.0.0-20261017211521-b98f84172fdc
+	github.com/gcash/bchutil v0.0.0-20261019095139-ecc8506ec3af
 	github.com/golang/glog v1.2.5
 	github.com/golang/protobuf v1.5.4
 	github.com/gorilla/mux v1.8.1
