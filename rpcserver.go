@@ -330,6 +330,9 @@ func internalRPCError(errStr, context string) *btcjson.RPCError {
 	return btcjson.NewRPCError(btcjson.ErrRPCInternal.Code, errStr)
 }
 
+// maxSearchRawTxCount is the largest count searchrawtransactions accepts.
+const maxSearchRawTxCount = 10000
+
 // maxRPCRequestSize returns the largest HTTP request body or websocket message
 // accepted from an authenticated client.  It leaves room for a hex encoded
 // block of the largest size the node accepts.
@@ -3777,8 +3780,9 @@ func fetchMempoolTxnsForAddress(s *rpcServer, addr bchutil.Address, numToSkip, n
 	}
 
 	// Filter the available entries based on the number to skip and number
-	// requested.
-	rangeEnd := min(numToSkip+numRequested, numAvailable)
+	// requested.  The sum is computed in 64 bits so it can't wrap.
+	rangeEnd := uint32(min(uint64(numToSkip)+uint64(numRequested),
+		uint64(numAvailable)))
 	return mpTxns[numToSkip:rangeEnd], numToSkip
 }
 
@@ -3835,11 +3839,16 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 	if numRequested == 0 {
 		return nil, nil
 	}
+	if numRequested > maxSearchRawTxCount {
+		return nil, rpcInvalidError("Count must be at most %d",
+			maxSearchRawTxCount)
+	}
 
-	// Override the default number of entries to skip if needed.
-	var numToSkip int
-	if c.Skip != nil {
-		numToSkip = max(*c.Skip, 0)
+	// Override the default number of entries to skip if needed.  Skips
+	// past the 32-bit range used by the indexes are clamped.
+	var numToSkip uint32
+	if c.Skip != nil && *c.Skip > 0 {
+		numToSkip = uint32(min(uint64(*c.Skip), math.MaxUint32))
 	}
 
 	// Override the reverse flag if needed.
@@ -3862,7 +3871,7 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 		// so the block header field in the retrieved transaction struct
 		// is left nil.
 		mpTxns, mpSkipped := fetchMempoolTxnsForAddress(s, addr,
-			uint32(numToSkip), uint32(numRequested))
+			numToSkip, uint32(numRequested))
 		numSkipped += mpSkipped
 		for _, tx := range mpTxns {
 			addressTxns = append(addressTxns, retrievedTx{tx: tx})
@@ -3874,7 +3883,7 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 	if len(addressTxns) < numRequested {
 		err = s.cfg.DB.View(func(dbTx database.Tx) error {
 			regions, dbSkipped, err := addrIndex.TxRegionsForAddress(
-				dbTx, addr, uint32(numToSkip)-numSkipped,
+				dbTx, addr, numToSkip-numSkipped,
 				uint32(numRequested-len(addressTxns)), reverse)
 			if err != nil {
 				return err
@@ -3916,7 +3925,7 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 		// so the block header field in the retrieved transaction struct
 		// is left nil.
 		mpTxns, mpSkipped := fetchMempoolTxnsForAddress(s, addr,
-			uint32(numToSkip)-numSkipped, uint32(numRequested-
+			numToSkip-numSkipped, uint32(numRequested-
 				len(addressTxns)))
 		numSkipped += mpSkipped
 		for _, tx := range mpTxns {
