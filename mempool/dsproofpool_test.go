@@ -78,10 +78,10 @@ func TestDSProofCashTokens(t *testing.T) {
 	tx1, tx2 := mk(1000), mk(2000)
 	harness.txPool.cfg.Policy.MaxTxVersion = 2
 
-	if _, err := harness.txPool.ProcessTransaction(tx1, false, false, 0); err != nil {
+	if _, err := harness.txPool.ProcessTransaction(tx1, false, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := harness.txPool.ProcessTransaction(tx2, false, false, 0); err == nil {
+	if _, err := harness.txPool.ProcessTransaction(tx2, false, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	proofs, _ := rec.take()
@@ -402,13 +402,13 @@ func TestDSProofMempoolDoubleSpend(t *testing.T) {
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
 	tx3 := spend(t, harness, op, coin, 2, 3000, txscript.SigHashAll, false)
 
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if score, err := pool.DSProofScore(tx1.Hash()); err != nil || score != 1 {
 		t.Fatalf("score %v %v", score, err)
 	}
-	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(tx2, true, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	proofs, _ := rec.take()
@@ -423,7 +423,7 @@ func TestDSProofMempoolDoubleSpend(t *testing.T) {
 	}
 
 	// One proof per transaction: another double spend adds nothing.
-	if _, err := pool.ProcessTransaction(tx3, true, false, 0); err == nil {
+	if _, err := pool.ProcessTransaction(tx3, true, 0); err == nil {
 		t.Fatal("double spend accepted")
 	}
 	if p, _ := rec.take(); len(p) != 0 {
@@ -482,7 +482,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if r, err := pool.ProcessDSProof(proof, 7, true); r != DSProofAccepted || err != nil {
@@ -508,7 +508,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	if len(pool.DSProofs(false)) != 1 || len(pool.DSProofs(true)) != 2 {
 		t.Fatal("orphan listed wrong")
 	}
-	if _, err := pool.ProcessTransaction(tx2, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx2, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ := rec.take(); len(p) != 1 || *p[0].tx.Hash() != *tx2.Hash() {
@@ -535,10 +535,10 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	if r, err := pool.ProcessDSProof(cProof, 8, true); r != DSProofOrphan || err != nil {
 		t.Fatalf("%v %v", r, err)
 	}
-	if _, err := pool.ProcessTransaction(parent, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(parent, true, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(c1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(c1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ := rec.take(); len(p) != 1 || *p[0].tx.Hash() != *c1.Hash() {
@@ -549,7 +549,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, true)
 	bad, _ := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	bad.FirstSpender.LockTime = 5
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	badHash := bad.ProofHash()
@@ -574,7 +574,7 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	if r, _ := pool.ProcessDSProof(good, 11, true); r != DSProofOrphan {
 		t.Fatal("orphan not stored")
 	}
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	p, bad2 := rec.take()
@@ -591,10 +591,10 @@ func TestDSProofMempoolReceived(t *testing.T) {
 	// Disabled, nothing is created or stored.
 	pool.cfg.DisableDSProofs = true
 	op, coin, tx1, tx2 = doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = pool.ProcessTransaction(tx2, true, false, 0)
+	_, _ = pool.ProcessTransaction(tx2, true, 0)
 	proof, _ = newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
 	if r, err := pool.ProcessDSProof(proof, 1, true); r != DSProofIgnored || err != nil {
 		t.Fatal("disabled pool handled a proof")
@@ -613,10 +613,10 @@ func TestDSProofMempoolRemoval(t *testing.T) {
 	now := time.Now()
 	pool.dsProofs.now = func() time.Time { return now }
 	_, _, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = pool.ProcessTransaction(tx2, true, false, 0)
+	_, _ = pool.ProcessTransaction(tx2, true, 0)
 	p, _ := rec.take()
 	if len(p) != 1 {
 		t.Fatal("no proof")
@@ -633,7 +633,7 @@ func TestDSProofMempoolRemoval(t *testing.T) {
 	}
 
 	// Back after a reorg: associated again and announced.
-	if _, _, err := pool.MaybeAcceptTransaction(tx1, false, false); err != nil {
+	if _, _, err := pool.MaybeAcceptTransaction(tx1, false); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ := rec.take(); len(p) != 1 || p[0].proof.ProofHash() != hash {
@@ -665,7 +665,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
 	pool := harness.txPool
 	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -676,7 +676,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 		out := parent.MsgTx().TxOut[0]
 		child := spend(t, harness, wire.OutPoint{Hash: *parent.Hash()}, out, 1, 1000,
 			txscript.SigHashAll, true)
-		if _, err := pool.ProcessTransaction(child, true, false, 0); err != nil {
+		if _, err := pool.ProcessTransaction(child, true, 0); err != nil {
 			t.Fatal(err)
 		}
 		chain = append(chain, child)
@@ -689,7 +689,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 		t.Fatal("proof found before the double spend")
 	}
 
-	_, _ = pool.ProcessTransaction(tx2, true, false, 0)
+	_, _ = pool.ProcessTransaction(tx2, true, 0)
 	if p, _ := rec.take(); len(p) != 1 {
 		t.Fatal("no proof")
 	}
@@ -728,7 +728,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 	op2 := addCoins(harness, &wire.TxOut{Value: 100000000, PkScript: harness.payScript})[0]
 	acp := spend(t, harness, op2, &wire.TxOut{Value: 100000000, PkScript: harness.payScript}, 1, 1000,
 		txscript.SigHashAll|txscript.SigHashAnyOneCanPay, true)
-	if _, err := pool.ProcessTransaction(acp, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(acp, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if score, _ := pool.DSProofScore(acp.Hash()); score != 0.25 {
@@ -736,7 +736,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 	}
 	acpChild := spend(t, harness, wire.OutPoint{Hash: *acp.Hash()}, acp.MsgTx().TxOut[0], 1, 1000,
 		txscript.SigHashAll, false)
-	if _, err := pool.ProcessTransaction(acpChild, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(acpChild, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if score, _ := pool.DSProofScore(acpChild.Hash()); score != 0.25 {
@@ -756,7 +756,7 @@ func TestDSProofMempoolSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	pkTx.TxIn[0].SignatureScript, _ = txscript.NewScriptBuilder().AddData(sig).Script()
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(pkTx), true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(pkTx), true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if score, _ := pool.DSProofScore(bchutil.NewTx(pkTx).Hash()); score != 0 {
@@ -787,7 +787,7 @@ func TestDSProofMempoolOrphanFlood(t *testing.T) {
 	if n := len(pool.dsProofs.findOrphans(op)); n != maxDSProofOrphansPerOutPoint {
 		t.Fatalf("%d orphans for the outpoint", n)
 	}
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	p, bad := rec.take()
@@ -812,10 +812,10 @@ func TestDSProofSearchOrder(t *testing.T) {
 	var parents []*bchutil.Tx
 	for range 2 {
 		_, _, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
-		if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = pool.ProcessTransaction(tx2, true, false, 0)
+		_, _ = pool.ProcessTransaction(tx2, true, 0)
 		parents = append(parents, tx1)
 	}
 
@@ -831,7 +831,7 @@ func TestDSProofSearchOrder(t *testing.T) {
 	for i, p := range []*bchutil.Tx{parents[1], parents[0]} {
 		signP2PKH(t, child, i, p.MsgTx().TxOut[0], harness.signKey, txscript.SigHashAll, true)
 	}
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), true, 0); err != nil {
 		t.Fatal(err)
 	}
 	d, _, path, err := pool.DSProofByTx(bchutil.NewTx(child).Hash(), true)
@@ -849,8 +849,8 @@ func TestDSProofSearchLimit(t *testing.T) {
 	op := addCoins(harness, coin)[0]
 	var last *bchutil.Tx
 	for range dsProofSearchMaxDepth + 1 {
-		tx := spend(t, harness, op, coin, 1, 0, txscript.SigHashAll, true)
-		if _, err := pool.ProcessTransaction(tx, true, false, 0); err != nil {
+		tx := spend(t, harness, op, coin, 1, 1000, txscript.SigHashAll, true)
+		if _, err := pool.ProcessTransaction(tx, true, 0); err != nil {
 			t.Fatal(err)
 		}
 		last = tx
@@ -877,10 +877,10 @@ func TestDSProofSearchOrderReorg(t *testing.T) {
 	for i := range 2 {
 		_, _, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
 		// The second parent comes back from a disconnected block.
-		if _, _, err := pool.MaybeAcceptTransaction(tx1, i == 0, false); err != nil {
+		if _, _, err := pool.MaybeAcceptTransaction(tx1, i == 0); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = pool.ProcessTransaction(tx2, true, false, 0)
+		_, _ = pool.ProcessTransaction(tx2, true, 0)
 		parents = append(parents, tx1)
 	}
 
@@ -895,7 +895,7 @@ func TestDSProofSearchOrderReorg(t *testing.T) {
 	for i, p := range parents {
 		signP2PKH(t, child, i, p.MsgTx().TxOut[0], harness.signKey, txscript.SigHashAll, true)
 	}
-	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), true, 0); err != nil {
 		t.Fatal(err)
 	}
 	d, _, _, err := pool.DSProofByTx(bchutil.NewTx(child).Hash(), true)
@@ -915,7 +915,7 @@ func TestDSProofRejectedNotRechecked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	bad := mutateProof(good, func(p *wire.MsgDSProof) { p.FirstSpender.LockTime ^= 1 })
@@ -1091,7 +1091,7 @@ func TestDSProofRecheckAfterRelock(t *testing.T) {
 	}
 	dsProofRelockHook = func() {
 		dsProofRelockHook = nil
-		if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+		if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -1108,7 +1108,7 @@ func TestDSProofRecheckAfterRelock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.ProcessTransaction(tx1, true, false, 0); err != nil {
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	dsProofRelockHook = func() {

@@ -3731,14 +3731,12 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 
 	txC := mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: cfg.NoRelayPriority,
-			AcceptNonStd:         cfg.RelayNonStd,
-			FreeTxRelayLimit:     cfg.FreeTxRelayLimit,
-			MaxOrphanTxs:         cfg.MaxOrphanTxs,
-			MaxOrphanTxSize:      defaultMaxOrphanTxSize,
-			LimitSigChecks:       true,
-			MinRelayTxFee:        cfg.minRelayTxFee,
-			MaxTxVersion:         2,
+			AcceptNonStd:    cfg.RelayNonStd,
+			MaxOrphanTxs:    cfg.MaxOrphanTxs,
+			MaxOrphanTxSize: defaultMaxOrphanTxSize,
+			LimitSigChecks:  true,
+			MinRelayTxFee:   cfg.minRelayTxFee,
+			MaxTxVersion:    2,
 		},
 		ChainParams:    chainParams,
 		FetchUtxoView:  s.chain.FetchUtxoView,

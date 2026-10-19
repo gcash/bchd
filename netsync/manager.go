@@ -748,7 +748,7 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	// Process the transaction to include validation, insertion in the
 	// memory pool, orphan handling, etc.
 	acceptedTxs, err := sm.txMemPool.ProcessTransaction(tmsg.tx,
-		true, true, mempool.Tag(peer.ID()))
+		true, mempool.Tag(peer.ID()))
 
 	// Remove transaction from request maps. Either the mempool/chain
 	// already knows about it and as such we shouldn't have any more
@@ -1743,10 +1743,11 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 		}
 
 		// Reinsert all of the transactions (except the coinbase) into
-		// the transaction pool.
+		// the transaction pool.  They are not new, which exempts them
+		// from the minimum relay fee.
 		for _, tx := range block.Transactions()[1:] {
 			_, _, err := sm.txMemPool.MaybeAcceptTransaction(tx,
-				false, false)
+				false)
 			if err != nil {
 				// Remove the transaction and all transactions
 				// that depend on it if it wasn't accepted into

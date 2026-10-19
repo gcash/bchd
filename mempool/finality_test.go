@@ -98,7 +98,7 @@ func TestAcceptRejectsNonFinal(t *testing.T) {
 			tx.TxIn[0].SignatureScript = sigScript
 
 			_, err = harness.txPool.ProcessTransaction(bchutil.NewTx(tx),
-				false, false, 0)
+				false, 0)
 			if test.final {
 				if err != nil {
 					t.Errorf("%s (acceptNonStd=%v): final tx "+

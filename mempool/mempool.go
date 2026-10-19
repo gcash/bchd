@@ -31,9 +31,7 @@ import (
 
 const (
 	// DefaultBlockPrioritySize is the default size in bytes for high-
-	// priority / low-fee transactions.  It is used to help determine which
-	// are allowed into the mempool and consequently affects their relay and
-	// inclusion when generating block templates.
+	// priority / low-fee transactions in block templates.
 	DefaultBlockPrioritySize = 1600000
 
 	// orphanTTL is the maximum amount of time an orphan is allowed to
@@ -122,18 +120,10 @@ type Policy struct {
 	// non-standard.
 	MaxTxVersion int32
 
-	// DisableRelayPriority defines whether to relay free or low-fee
-	// transactions that do not have enough priority to be relayed.
-	DisableRelayPriority bool
-
 	// AcceptNonStd defines whether to accept non-standard transactions. If
 	// true, non-standard transactions will be accepted into the mempool.
 	// Otherwise, all non-standard transactions will be rejected.
 	AcceptNonStd bool
-
-	// FreeTxRelayLimit defines the given amount in thousands of bytes
-	// per minute that transactions with no fee are rate limited to.
-	FreeTxRelayLimit float64
 
 	// MaxOrphanTxs is the maximum number of orphan transactions
 	// that can be queued.
@@ -148,8 +138,8 @@ type Policy struct {
 	// of signature checks in each transaction.
 	LimitSigChecks bool
 
-	// MinRelayTxFee defines the minimum transaction fee in BCH/kB to be
-	// considered a non-zero fee.
+	// MinRelayTxFee defines the minimum fee rate in Satoshi/kB a new
+	// transaction must pay to be accepted.
 	MinRelayTxFee bchutil.Amount
 }
 
@@ -193,8 +183,6 @@ type TxPool struct {
 	txDSProofs    map[chainhash.Hash]chainhash.Hash
 	nextEntrySeq  int64
 	nextReaddSeq  int64
-	pennyTotal    float64 // exponentially decaying total for penny spends.
-	lastPennyUnix int64   // unix time of last ``penny spend''
 
 	// nextExpireScan is the time after which the orphan pool will be
 	// scanned in order to evict orphans.  This is NOT a hard deadline as
@@ -750,9 +738,9 @@ func (mp *TxPool) FetchTxDesc(txHash *chainhash.Hash) (*TxDesc, error) {
 // more details.
 //
 // This function MUST be called with the mempool lock held (for writes).
-func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount) ([]*chainhash.Hash, *TxDesc, error) {
-	result, err := mp.checkMempoolAcceptance(tx, isNew, rateLimit,
-		rejectDupOrphans, maxFee, !mp.cfg.DisableDSProofs)
+func (mp *TxPool) maybeAcceptTransaction(tx *bchutil.Tx, isNew, rejectDupOrphans bool, maxFee bchutil.Amount) ([]*chainhash.Hash, *TxDesc, error) {
+	result, err := mp.checkMempoolAcceptance(tx, isNew, rejectDupOrphans,
+		maxFee, !mp.cfg.DisableDSProofs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -796,16 +784,15 @@ type MempoolAcceptResult struct {
 }
 
 // checkMempoolAcceptance runs the checks done before a transaction is added
-// to the memory pool.  Apart from the free transaction rate limiter, which is
-// only updated when rateLimit is set, it does not modify the pool.  A positive
-// maxFee rejects transactions that pay more fees than that.
+// to the memory pool.  It does not modify the pool.  A positive maxFee rejects
+// transactions that pay more fees than that.
 //
 // When createDSProof is set and the transaction spends an output already
 // spent in the pool, a double spend proof is created.
 //
 // This function MUST be called with the mempool lock held (for reads), or
-// for writes when rateLimit or createDSProof is set.
-func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejectDupOrphans bool, maxFee bchutil.Amount, createDSProof bool) (*MempoolAcceptResult, error) {
+// for writes when createDSProof is set.
+func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans bool, maxFee bchutil.Amount, createDSProof bool) (*MempoolAcceptResult, error) {
 	txHash := tx.Hash()
 
 	// Don't accept the transaction if it already exists in the pool.  This
@@ -993,40 +980,17 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 		}
 	}
 
-	// Don't allow transactions with fees too low to get into a mined block.
-	//
-	// Most miners allow a free transaction area in blocks they mine to go
-	// alongside the area used for high-priority transactions as well as
-	// transactions with fees.  A transaction size of up to 1000 bytes is
-	// considered safe to go into this section.  Further, the minimum fee
-	// calculated below on its own would encourage several small
-	// transactions to avoid fees rather than one single larger transaction
-	// which is more desirable.  Therefore, as long as the size of the
-	// transaction does not exceed 1000 less than the reserved space for
-	// high-priority transactions, don't require a fee for it.
+	// Don't allow transactions which pay less than the minimum relay fee.
+	// Transactions which are being added back to the memory pool from
+	// blocks that have been disconnected during a reorg are exempted.
 	serializedSize := int64(tx.MsgTx().SerializeSize())
 	minFee := calcMinRequiredTxRelayFee(serializedSize,
 		mp.cfg.Policy.MinRelayTxFee)
-	if serializedSize >= (DefaultBlockPrioritySize-1000) && txFee < minFee {
+	if isNew && txFee < minFee {
 		str := fmt.Sprintf("transaction %v has %d fees which is under "+
 			"the required amount of %d", txHash, txFee,
 			minFee)
 		return nil, txRuleError(wire.RejectInsufficientFee, str)
-	}
-
-	// Require that free transactions have sufficient priority to be mined
-	// in the next block.  Transactions which are being added back to the
-	// memory pool from blocks that have been disconnected during a reorg
-	// are exempted.
-	if isNew && !mp.cfg.Policy.DisableRelayPriority && txFee < minFee {
-		currentPriority := mining.CalcPriority(tx.MsgTx(), utxoView,
-			nextBlockHeight)
-		if currentPriority <= mining.MinHighPriority {
-			str := fmt.Sprintf("transaction %v has insufficient "+
-				"priority (%g <= %g)", txHash,
-				currentPriority, mining.MinHighPriority)
-			return nil, txRuleError(wire.RejectInsufficientFee, str)
-		}
 	}
 
 	// Reject fees above the maximum the caller allows, if any.
@@ -1035,30 +999,6 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rateLimit, rejec
 			Fee:    txFee,
 			MaxFee: int64(maxFee),
 		}}
-	}
-
-	// Free-to-relay transactions are rate limited here to prevent
-	// penny-flooding with tiny transactions as a form of attack.
-	if rateLimit && txFee < minFee {
-		nowUnix := time.Now().Unix()
-		// Decay passed data with an exponentially decaying ~10 minute
-		// window - matches bitcoind handling.
-		mp.pennyTotal *= math.Pow(1.0-1.0/600.0,
-			float64(nowUnix-mp.lastPennyUnix))
-		mp.lastPennyUnix = nowUnix
-
-		// Are we still over the limit?
-		if mp.pennyTotal >= mp.cfg.Policy.FreeTxRelayLimit*10*1000 {
-			str := fmt.Sprintf("transaction %v has been rejected "+
-				"by the rate limiter due to low fees", txHash)
-			return nil, txRuleError(wire.RejectInsufficientFee, str)
-		}
-		oldTotal := mp.pennyTotal
-
-		mp.pennyTotal += float64(serializedSize)
-		log.Tracef("rate limit: curTotal %v, nextTotal: %v, "+
-			"limit %v", oldTotal, mp.pennyTotal,
-			mp.cfg.Policy.FreeTxRelayLimit*10*1000)
 	}
 
 	// Verify crypto signatures for each input and reject the transaction if
@@ -1117,10 +1057,10 @@ func (mp *TxPool) standardScriptFlags(nextBlockHeight int32, medianTimePast time
 // be added to the orphan pool.
 //
 // This function is safe for concurrent access.
-func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew, rateLimit bool) ([]*chainhash.Hash, *TxDesc, error) {
+func (mp *TxPool) MaybeAcceptTransaction(tx *bchutil.Tx, isNew bool) ([]*chainhash.Hash, *TxDesc, error) {
 	// Protect concurrent access.
 	mp.mtx.Lock()
-	hashes, txD, err := mp.maybeAcceptTransaction(tx, isNew, rateLimit, true, 0)
+	hashes, txD, err := mp.maybeAcceptTransaction(tx, isNew, true, 0)
 	mp.unlockAndNotify()
 
 	return hashes, txD, err
@@ -1141,7 +1081,7 @@ func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx, maxFee bchutil.Amount) 
 		defer hc.PurgeSigHashes(tx.Hash())
 	}
 
-	return mp.checkMempoolAcceptance(tx, true, false, false, maxFee, false)
+	return mp.checkMempoolAcceptance(tx, true, false, maxFee, false)
 }
 
 // processOrphans is the internal function which implements the public
@@ -1181,7 +1121,7 @@ func (mp *TxPool) processOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 			// Potentially accept an orphan into the tx pool.
 			for _, tx := range orphans {
 				missing, txD, err := mp.maybeAcceptTransaction(
-					tx, true, true, false, 0)
+					tx, true, false, 0)
 				if err != nil {
 					// The orphan is now invalid, so there
 					// is no way any other orphans which
@@ -1260,15 +1200,15 @@ func (mp *TxPool) ProcessOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 // maybeAcceptTransaction call below.
 //
 // This function is safe for concurrent access.
-func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag) ([]*TxDesc, error) {
-	return mp.ProcessTransactionWithMaxFee(tx, allowOrphan, rateLimit, tag, 0)
+func (mp *TxPool) ProcessTransaction(tx *bchutil.Tx, allowOrphan bool, tag Tag) ([]*TxDesc, error) {
+	return mp.ProcessTransactionWithMaxFee(tx, allowOrphan, tag, 0)
 }
 
 // ProcessTransactionWithMaxFee is like ProcessTransaction, but also rejects
 // the transaction when it pays more fees than a positive maxFee.
 //
 // This function is safe for concurrent access.
-func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan, rateLimit bool, tag Tag, maxFee bchutil.Amount) ([]*TxDesc, error) {
+func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan bool, tag Tag, maxFee bchutil.Amount) ([]*TxDesc, error) {
 	log.Tracef("Processing transaction %v", tx.Hash())
 
 	// Protect concurrent access.
@@ -1288,7 +1228,7 @@ func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan, rate
 	// missing parent error below, which is both accurate and what BCHN
 	// reports, since its mempool acceptance has no visibility into the orphan
 	// map held by the P2P layer.
-	missingParents, txD, err := mp.maybeAcceptTransaction(tx, true, rateLimit,
+	missingParents, txD, err := mp.maybeAcceptTransaction(tx, true,
 		allowOrphan, maxFee)
 	if err != nil {
 		return nil, err

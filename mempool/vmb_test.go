@@ -330,8 +330,7 @@ func decodeVMBVector(v *vmbVector, height int32) (*vmbCase, error) {
 }
 
 // vmbPolicy is the mempool policy of a default node, with these changes so
-// that fees and priority do not decide the result:
-//   - DisableRelayPriority is set, so free transactions need no priority.
+// that fees do not decide the result:
 //   - No maximum fee is passed to CheckMempoolAcceptance.
 //   - A transaction rejected only for paying less than the minimum relay fee
 //     is run again with a zero minimum relay fee.  The dust and other
@@ -341,14 +340,12 @@ func decodeVMBVector(v *vmbVector, height int32) (*vmbCase, error) {
 // The other limits match the defaults in server.go, including MaxTxVersion.
 func vmbPolicy(minRelayTxFee bchutil.Amount, acceptNonStd bool) Policy {
 	return Policy{
-		AcceptNonStd:         acceptNonStd,
-		DisableRelayPriority: true,
-		FreeTxRelayLimit:     15.0,
-		MaxOrphanTxs:         100,
-		MaxOrphanTxSize:      100000,
-		LimitSigChecks:       true,
-		MinRelayTxFee:        minRelayTxFee,
-		MaxTxVersion:         2,
+		AcceptNonStd:    acceptNonStd,
+		MaxOrphanTxs:    100,
+		MaxOrphanTxSize: 100000,
+		LimitSigChecks:  true,
+		MinRelayTxFee:   minRelayTxFee,
+		MaxTxVersion:    2,
 	}
 }
 

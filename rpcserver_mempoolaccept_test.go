@@ -103,12 +103,11 @@ func newMempoolTestHarness(t *testing.T, numOutputs int, opts ...func(*mempool.C
 	}
 	poolCfg := &mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: true,
-			MaxOrphanTxs:         5,
-			MaxOrphanTxSize:      1000,
-			LimitSigChecks:       true,
-			MinRelayTxFee:        mempool.DefaultMinRelayTxFee,
-			MaxTxVersion:         2,
+			MaxOrphanTxs:    5,
+			MaxOrphanTxSize: 1000,
+			LimitSigChecks:  true,
+			MinRelayTxFee:   mempool.DefaultMinRelayTxFee,
+			MaxTxVersion:    2,
 		},
 		ChainParams:    params,
 		FetchUtxoView:  fetchUtxoView,
@@ -229,7 +228,7 @@ func TestHandleTestMempoolAccept(t *testing.T) {
 	}
 
 	// Once the transaction is in the pool, it is rejected as a duplicate.
-	_, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, false, 0)
+	_, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0)
 	if err != nil {
 		t.Fatalf("ProcessTransaction: unexpected error: %v", err)
 	}

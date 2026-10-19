@@ -50,9 +50,7 @@ be an exhaustive list.
   - Individual orphan transaction query support
   - Configurable transaction acceptance policy
   - Option to accept or reject standard transactions
-  - Option to accept or reject transactions based on priority calculations
-  - Rate limiting of low-fee and free transactions
-  - Non-zero fee threshold
+  - Minimum relay fee required from every new transaction
   - Max signature operations per transaction
   - Max orphan transaction size
   - Max number of orphan transactions allowed
