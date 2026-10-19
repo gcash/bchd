@@ -5,6 +5,8 @@
 package txscript
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/bchec"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 )
 
 // TestBadPC sets the pc to a deliberately bad result then confirms that Step()
@@ -146,6 +149,41 @@ func TestCheckErrorCondition(t *testing.T) {
 	err = vm.CheckErrorCondition(false)
 	if err != nil {
 		t.Errorf("unexpected error %v on final check", err)
+	}
+}
+
+// TestExecuteTraceLog ensures Execute logs every step at the trace level and
+// nothing at a higher level.  It must not run in parallel since it replaces
+// the package logger.
+func TestExecuteTraceLog(t *testing.T) {
+	defer DisableLog()
+
+	pkScript := mustParseShortForm("1 DUP DROP")
+	tx := createSpendingTx(nil, pkScript, 0)
+	run := func(level bchlog.Level) string {
+		var buf bytes.Buffer
+		logger := bchlog.NewBackend(&buf).Logger("SCRP")
+		logger.SetLevel(level)
+		UseLogger(logger)
+		vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, nil, 0)
+		if err != nil {
+			t.Fatalf("NewEngine: %v", err)
+		}
+		if err := vm.Execute(); err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		return buf.String()
+	}
+
+	out := run(bchlog.LevelTrace)
+	if n := strings.Count(out, "stepping"); n != 3 {
+		t.Fatalf("got %d stepping lines, want 3:\n%s", n, out)
+	}
+	if !strings.Contains(out, "Stack:") {
+		t.Fatalf("trace log has no stack dump:\n%s", out)
+	}
+	if out := run(bchlog.LevelDebug); out != "" {
+		t.Fatalf("unexpected log output at debug level:\n%s", out)
 	}
 }
 
@@ -1255,5 +1293,25 @@ func TestCheckSigForkIDScriptCode(t *testing.T) {
 			t.Errorf("%s: got error %v, want %v", test.name, err,
 				test.wantErr)
 		}
+	}
+}
+
+// TestExecuteAllocs ensures Execute does not allocate per opcode when trace
+// logging is off.  AllocsPerRun does not allow it to run in parallel.
+func TestExecuteAllocs(t *testing.T) {
+	pkScript := append(bytes.Repeat([]byte{OP_NOP}, 300), OP_1)
+	tx := createSpendingTx(nil, pkScript, 0)
+	flags := ScriptAllowMay2025 | ScriptAllowMay2026
+	allocs := testing.AllocsPerRun(10, func() {
+		vm, err := NewEngine(pkScript, tx, 0, flags, nil, nil, nil, 0)
+		if err != nil {
+			t.Fatalf("NewEngine: %v", err)
+		}
+		if err := vm.Execute(); err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+	})
+	if allocs > 100 {
+		t.Fatalf("executing 300 opcodes allocates %v times", allocs)
 	}
 }
