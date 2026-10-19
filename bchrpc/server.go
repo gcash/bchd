@@ -1075,25 +1075,34 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
 		txHash := *tx.Hash()
-		var (
-			utxoView *blockchain.UtxoViewpoint
-			utxos    []*pb.UnspentOutput
-		)
-		if req.IncludeMempool {
-			utxoView, err = s.txMemPool.FetchUtxoView(tx)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			utxoView, err = s.chain.FetchUtxoView(tx)
-			if err != nil {
-				return nil, err
-			}
-		}
-		entries := utxoView.Entries()
+		var utxos []*pb.UnspentOutput
+
+		// Outputs of a mempool transaction are unconfirmed.
+		var poolView *blockchain.UtxoViewpoint
 		for i, out := range tx.MsgTx().TxOut {
 			op := wire.NewOutPoint(&txHash, uint32(i))
-			entry := entries[*op]
+			// The mempool is checked first, as a spend leaves it only
+			// after its block is connected.
+			if req.IncludeMempool && s.txMemPool.CheckSpend(*op) != nil {
+				continue
+			}
+			// The transaction is checked after the spend, as a block's
+			// transactions leave the mempool in block order.
+			var entry *blockchain.UtxoEntry
+			if req.IncludeMempool && s.txMemPool.IsTransactionInPool(&txHash) {
+				if poolView == nil {
+					poolView = blockchain.NewUtxoViewpoint()
+					poolView.AddTxOuts(tx, mining.UnminedHeight)
+				}
+				entry = poolView.LookupEntry(*op)
+			}
+			if entry == nil {
+				var err error
+				entry, err = s.chain.FetchUtxoEntry(*op)
+				if err != nil {
+					return nil, err
+				}
+			}
 			if entry == nil || entry.IsSpent() {
 				continue
 			}
