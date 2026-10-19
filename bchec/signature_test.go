@@ -593,6 +593,70 @@ func TestRecoverCompact(t *testing.T) {
 	}
 }
 
+// TestRecoverCompactRange ensures RecoverCompact rejects R and S values that
+// are zero or not below the curve order.
+func TestRecoverCompactRange(t *testing.T) {
+	curve := S256()
+	key, _ := PrivKeyFromBytes(curve, []byte{0x01})
+	hash := sha256.Sum256([]byte("compact range"))
+	valid, err := SignCompact(curve, key, hash[:], true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RecoverCompact(curve, valid, hash[:]); err != nil {
+		t.Fatalf("valid signature: %v", err)
+	}
+
+	n := curve.Params().N
+	tests := []struct {
+		name string
+		r, s *big.Int
+	}{
+		{"r zero", big.NewInt(0), big.NewInt(1)},
+		{"r is n", n, big.NewInt(1)},
+		{"r is n+1", new(big.Int).Add(n, big.NewInt(1)), big.NewInt(1)},
+		{"r is n+2", new(big.Int).Add(n, big.NewInt(2)), big.NewInt(1)},
+		{"s zero", big.NewInt(44), big.NewInt(0)},
+		{"s is n", big.NewInt(44), n},
+		{"s is n+4", big.NewInt(44), new(big.Int).Add(n, big.NewInt(4))},
+	}
+	for _, test := range tests {
+		sig := make([]byte, 65)
+		sig[0] = 27
+		test.r.FillBytes(sig[1:33])
+		test.s.FillBytes(sig[33:])
+		if _, _, err := RecoverCompact(curve, sig, hash[:]); err == nil {
+			t.Errorf("%s: recovered a key", test.name)
+		}
+	}
+}
+
+// TestRecoverCompactHeader ensures RecoverCompact only uses the low three bits
+// of the header byte, as libsecp256k1 users do.
+func TestRecoverCompactHeader(t *testing.T) {
+	curve := S256()
+	key, _ := PrivKeyFromBytes(curve, []byte{0x01})
+	hash := sha256.Sum256([]byte("compact header"))
+	for _, compressed := range []bool{false, true} {
+		sig, err := SignCompact(curve, key, hash[:], compressed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, delta := range []int{0, 8, -8, 16, -24, 224} {
+			variant := append([]byte(nil), sig...)
+			variant[0] = byte(int(sig[0]) + delta)
+			pub, comp, err := RecoverCompact(curve, variant, hash[:])
+			if err != nil {
+				t.Errorf("header %d: %v", variant[0], err)
+				continue
+			}
+			if !pub.IsEqual(key.PubKey()) || comp != compressed {
+				t.Errorf("header %d: recovered the wrong key", variant[0])
+			}
+		}
+	}
+}
+
 func TestRFC6979(t *testing.T) {
 	// Test vectors matching Trezor and CoreBitcoin implementations.
 	// - https://github.com/trezor/trezor-crypto/blob/9fea8f8ab377dc514e40c6fd1f7c89a74c1d8dc6/tests.c#L432-L453
