@@ -218,6 +218,21 @@ func (f *txFilter) RemoveAddress(addr bchutil.Address) {
 	}
 }
 
+// decodeFilterAddress decodes the passed address for a filter.  A legacy or
+// slp address is converted to cash address format, which is how the addresses
+// of outputs are extracted, while a pubkey is kept so bare pubkey outputs
+// still match.
+func decodeFilterAddress(addrStr string, params *chaincfg.Params) (bchutil.Address, error) {
+	addr, err := bchutil.DecodeAddress(addrStr, params)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := addr.(*bchutil.AddressPubKey); ok {
+		return addr, nil
+	}
+	return toCashAddress(addr, params)
+}
+
 // AddRPCFilter adds all filter properties from the pb.TransactionFilter
 // to the filter.
 func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincfg.Params) error {
@@ -235,7 +250,7 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 
 	// Interpret and add addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := bchutil.DecodeAddress(addrStr, params)
+		addr, err := decodeFilterAddress(addrStr, params)
 		if err != nil {
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
@@ -279,7 +294,7 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 
 	// Interpret and remove addresses.
 	for _, addrStr := range rpcFilter.GetAddresses() {
-		addr, err := bchutil.DecodeAddress(addrStr, params)
+		addr, err := decodeFilterAddress(addrStr, params)
 		if err != nil {
 			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
 		}
