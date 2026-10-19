@@ -34,11 +34,10 @@ const (
 	// (1 + 15*74 + 3) + (15*34 + 3) + 23 = 1650
 	maxStandardSigScriptSize = 1650
 
-	// DefaultMinRelayTxFee is the minimum fee in satoshi that is required
-	// for a transaction to be treated as free for relay and mining
-	// purposes.  It is also used to help determine if a transaction is
-	// considered dust and as a base for calculating minimum required fees
-	// for larger transactions.  This value is in Satoshi/1000 bytes.
+	// DefaultMinRelayTxFee is the minimum fee rate a transaction must pay
+	// to be relayed and mined.  It is also used to help determine if a
+	// transaction output is considered dust.  This value is in
+	// Satoshi/1000 bytes.
 	DefaultMinRelayTxFee = bchutil.Amount(1000)
 
 	// maxStandardMultiSigKeys is the maximum number of public keys allowed
@@ -60,7 +59,7 @@ const (
 func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amount) int64 {
 	// Calculate the minimum fee for a transaction to be allowed into the
 	// mempool and relayed by scaling the base fee (which is the minimum
-	// free transaction relay fee).  minRelayTxFee is in Satoshi/kB so
+	// relay fee rate).  minRelayTxFee is in Satoshi/kB so
 	// multiply by serializedSize (which is in bytes) and divide by 1000 to
 	// get minimum Satoshis.
 	minFee := (serializedSize * int64(minRelayTxFee)) / 1000
@@ -231,14 +230,12 @@ func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
 	totalSize := txOut.SerializeSize() + 41 + 107
 
 	// The output is considered dust if the cost to the network to spend the
-	// coins is more than 1/3 of the minimum free transaction relay fee.
-	// minFreeTxRelayFee is in Satoshi/KB, so multiply by 1000 to
-	// convert to bytes.
+	// coins is more than 1/3 of the minimum relay fee.  minRelayTxFee is in
+	// Satoshi/KB, so multiply by 1000 to convert to bytes.
 	//
 	// Using the typical values for a pay-to-pubkey-hash transaction from
-	// the breakdown above and the default minimum free transaction relay
-	// fee of 1000, this equates to values less than 546 satoshi being
-	// considered dust.
+	// the breakdown above and the default minimum relay fee of 1000, this
+	// equates to values less than 546 satoshi being considered dust.
 	//
 	// The following is equivalent to (value/totalSize) * (1/3) * 1000
 	// without needing to do floating point math.
