@@ -1013,7 +1013,9 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	rejected(blockchain.ErrBadCoinbaseValue)
 
 	// Create a fork that ends with block that generates too much coinbase
-	// as before, but with a valid fork first.
+	// as before, but with a valid fork first.  The invalid orphan doesn't
+	// fail b12, which is accepted to a side chain before its orphans make
+	// the fork the main chain.
 	//
 	//   ... -> b1(0) -> b2(1) -> b5(2) -> b6(3)
 	//              |                  \-> b12(3) -> b13(4) -> b14(5)
@@ -1026,7 +1028,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	tests = append(tests, []TestInstance{
 		acceptBlock("b13", b13, false, true),
 		acceptBlock("b14", b14, false, true),
-		rejectBlock("b12", b12, blockchain.ErrBadCoinbaseValue),
+		acceptBlock("b12", b12, false, false),
 		expectTipBlock("b13", b13),
 	})
 

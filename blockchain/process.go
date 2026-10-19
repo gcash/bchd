@@ -117,6 +117,10 @@ func (b *BlockChain) heightFlags(height int32, flags BehaviorFlags) BehaviorFlag
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) error {
+	// parentErr is the error that showed the passed block or one of its
+	// ancestors to be invalid while connecting an orphan.
+	var parentErr error
+
 	// Start with processing at least the passed hash.
 	var processHashes []*chainhash.Hash
 	processHashes = append(processHashes, hash)
@@ -171,15 +175,16 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 					prevNode, orphanFlags)
 			}
 
-			// An orphan rejected by its own checks, before it is
-			// stored, is dropped without failing its parent, which has
-			// already been accepted.  Once it is stored, connecting it
-			// can fail on any block of its chain, the parent included,
-			// so those errors are still returned.
+			// An orphan's own failure doesn't fail its parent, which
+			// has already been accepted, nor its siblings, as when the
+			// blocks arrive in order.  One rejected before it is
+			// stored is dropped.  One stored but failing to connect
+			// still has its own orphans processed, so they are handled
+			// as they would be in order.  Connecting a stored orphan
+			// can also show the parent or an ancestor to be invalid,
+			// and that error is returned once the orphans are done.
 			var rerr RuleError
-			if errors.As(err, &rerr) &&
-				b.index.LookupNode(orphanHash) == nil {
-
+			if errors.As(err, &rerr) {
 				if rerr.ErrorCode == ErrUnrequestedBlock {
 					log.Debugf("Dropped orphan block %v: %v",
 						orphanHash, err)
@@ -187,9 +192,13 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 					log.Infof("Rejected orphan block %v: %v",
 						orphanHash, err)
 				}
-				continue
-			}
-			if err != nil {
+				if parentErr == nil && b.knownInvalid(hash) {
+					parentErr = err
+				}
+				if b.index.LookupNode(orphanHash) == nil {
+					continue
+				}
+			} else if err != nil {
 				return err
 			}
 
@@ -199,7 +208,14 @@ func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) e
 			processHashes = append(processHashes, orphanHash)
 		}
 	}
-	return nil
+	return parentErr
+}
+
+// knownInvalid returns whether the block with the given hash is in the block
+// index and known to be invalid.
+func (b *BlockChain) knownInvalid(hash *chainhash.Hash) bool {
+	node := b.index.LookupNode(hash)
+	return node != nil && b.index.NodeStatus(node).KnownInvalid()
 }
 
 // ProcessBlock is the main workhorse for handling insertion of new blocks into
