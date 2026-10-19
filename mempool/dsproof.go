@@ -239,23 +239,15 @@ func validateDSProof(proof *wire.MsgDSProof, hash *chainhash.Hash, coin *wire.Tx
 
 // p2pkhSignature verifies input idx of tx, which spends the pay-to-pubkey-hash
 // output coin, and returns the signature it pushes.  sigHashes are the
-// signature hashes of tx.
+// signature hashes of tx and sigCache may be nil.
 func p2pkhSignature(tx *wire.MsgTx, idx int, coin *wire.TxOut, flags txscript.ScriptFlags,
-	sigHashes *txscript.TxSigHashes) ([]byte, error) {
+	sigCache *txscript.SigCache, sigHashes *txscript.TxSigHashes) ([]byte, error) {
 
 	if !isPayToPubKeyHash(coin.PkScript) {
 		return nil, errors.New("output is not pay-to-pubkey-hash")
 	}
-	utxos := txscript.NewUtxoCache()
-	utxos.AddEntry(idx, *coin)
-	vm, err := txscript.NewEngine(coin.PkScript, tx, idx, flags, nil,
-		sigHashes, utxos, coin.Value)
-	if err != nil {
-		return nil, err
-	}
-	if err := vm.Execute(); err != nil {
-		return nil, fmt.Errorf("input is not properly signed: %v", err)
-	}
+
+	// The shape and hash type are checked before running the script.
 	pushes, err := txscript.PushedData(tx.TxIn[idx].SignatureScript)
 	if err != nil || len(pushes) != 2 {
 		return nil, errors.New("not a pay-to-pubkey-hash signature")
@@ -270,6 +262,17 @@ func p2pkhSignature(tx *wire.MsgTx, idx int, coin *wire.TxOut, flags txscript.Sc
 	}
 	if hashType&txscript.SigHashUTXO != 0 {
 		return nil, errors.New("signature uses SIGHASH_UTXOS")
+	}
+
+	utxos := txscript.NewUtxoCache()
+	utxos.AddEntry(idx, *coin)
+	vm, err := txscript.NewEngine(coin.PkScript, tx, idx, flags, sigCache,
+		sigHashes, utxos, coin.Value)
+	if err != nil {
+		return nil, err
+	}
+	if err := vm.Execute(); err != nil {
+		return nil, fmt.Errorf("input is not properly signed: %v", err)
 	}
 	return sig, nil
 }
@@ -308,28 +311,43 @@ func inputIndex(tx *wire.MsgTx, op wire.OutPoint) int {
 
 // newDSProof creates a proof that tx1 and tx2 both spend prevOut, the output
 // coin.  Both inputs must be properly signed pay-to-pubkey-hash spends.
+// tx2 is checked first.  sigCache and hashCache, which may be nil, are only
+// used for tx1, so the work done when it was accepted is reused.
 func newDSProof(tx1, tx2 *wire.MsgTx, prevOut wire.OutPoint, coin *wire.TxOut,
-	flags txscript.ScriptFlags) (*wire.MsgDSProof, error) {
+	flags txscript.ScriptFlags, sigCache *txscript.SigCache,
+	hashCache *txscript.HashCache) (*wire.MsgDSProof, error) {
 
-	if tx1.TxHash() == tx2.TxHash() {
-		return nil, errors.New("transactions are the same")
-	}
 	idx1, idx2 := inputIndex(tx1, prevOut), inputIndex(tx2, prevOut)
 	if idx1 < 0 || idx2 < 0 {
 		return nil, errors.New("transactions do not both spend the outpoint")
 	}
 
 	spenders := make([]wire.DSProofSpender, 2)
-	for i, side := range []struct {
-		tx  *wire.MsgTx
-		idx int
-	}{{tx1, idx1}, {tx2, idx2}} {
-		sigHashes := txscript.NewTxSigHashes(side.tx)
-		sig, err := p2pkhSignature(side.tx, side.idx, coin, flags, sigHashes)
+	for _, side := range []struct {
+		i        int
+		tx       *wire.MsgTx
+		idx      int
+		sigCache *txscript.SigCache
+	}{{1, tx2, idx2, nil}, {0, tx1, idx1, sigCache}} {
+		var sigHashes *txscript.TxSigHashes
+		if side.i == 0 {
+			// Hash tx1 only once tx2 has passed.
+			hash1 := tx1.TxHash()
+			if hash1 == tx2.TxHash() {
+				return nil, errors.New("transactions are the same")
+			}
+			if hashCache != nil {
+				sigHashes, _ = hashCache.GetSigHashes(&hash1)
+			}
+		}
+		if sigHashes == nil {
+			sigHashes = txscript.NewTxSigHashes(side.tx)
+		}
+		sig, err := p2pkhSignature(side.tx, side.idx, coin, flags, side.sigCache, sigHashes)
 		if err != nil {
 			return nil, err
 		}
-		s := &spenders[i]
+		s := &spenders[side.i]
 		s.Version = uint32(side.tx.Version)
 		s.Sequence = side.tx.TxIn[side.idx].Sequence
 		s.LockTime = side.tx.LockTime

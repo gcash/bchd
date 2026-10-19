@@ -177,7 +177,8 @@ func (mp *TxPool) createDSProof(first, tx *bchutil.Tx, op wire.OutPoint, flags t
 	if coin == nil {
 		return fmt.Errorf("output %v not found", op)
 	}
-	proof, err := newDSProof(first.MsgTx(), tx.MsgTx(), op, coin, flags)
+	proof, err := newDSProof(first.MsgTx(), tx.MsgTx(), op, coin, flags,
+		mp.cfg.SigCache, mp.cfg.HashCache)
 	if err != nil {
 		return err
 	}
