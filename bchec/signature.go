@@ -539,20 +539,31 @@ func RecoverCompact(curve *KoblitzCurve, signature,
 		return nil, false, errors.New("invalid compact signature size")
 	}
 
-	iteration := int((signature[0] - 27) & ^byte(4))
+	// Only the low three bits of the header count, as in libsecp256k1
+	// users: two for the recovery id and one for compression.
+	header := signature[0] - 27
+	iteration := int(header & 3)
 
 	// format is <header byte><bitlen R><bitlen S>
 	sig := &Signature{
 		R: new(big.Int).SetBytes(signature[1 : bitlen+1]),
 		S: new(big.Int).SetBytes(signature[bitlen+1:]),
 	}
+	N := curve.Params().N
+	if sig.R.Sign() == 0 || sig.R.Cmp(N) >= 0 {
+		return nil, false, errors.New("signature R is out of range")
+	}
+	if sig.S.Sign() == 0 || sig.S.Cmp(N) >= 0 {
+		return nil, false, errors.New("signature S is out of range")
+	}
+
 	// The iteration used here was encoded
 	key, err := recoverKeyFromSignature(curve, sig, hash, iteration, false)
 	if err != nil {
 		return nil, false, err
 	}
 
-	return key, ((signature[0] - 27) & 4) == 4, nil
+	return key, header&4 == 4, nil
 }
 
 // signRFC6979 generates a deterministic ECDSA signature according to RFC 6979 and BIP 62.
