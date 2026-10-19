@@ -1024,6 +1024,56 @@ func TestDSProofStoragePeerShare(t *testing.T) {
 	checkPeerOrphans(t, s)
 }
 
+// TestDSProofStorageOrphanResent checks that an orphan sent again by another
+// peer is blamed on the latest sender, keeps its orphan time and is counted
+// once.
+func TestDSProofStorageOrphanResent(t *testing.T) {
+	s := newDSProofStorage()
+	start := time.Unix(2000000, 0)
+	now := start
+	s.now = func() time.Time { return now }
+	p := makeDupeProofs(t, 1, 1)[0]
+	hash := p.ProofHash()
+	s.addOrphan(p, hash, 1, true)
+	now = now.Add(time.Minute)
+	if !s.addOrphan(p, hash, 2, true) {
+		t.Fatal("known orphan refused")
+	}
+	checkPeerOrphans(t, s)
+	if e := s.lookup(hash); e.peer != 2 || !e.orphaned.Equal(start) {
+		t.Fatalf("peer %d, orphaned %v", e.peer, e.orphaned)
+	}
+	if s.numOrphans != 1 || len(s.peerOrphans) != 1 {
+		t.Fatalf("%d orphans, counts %v", s.numOrphans, s.peerOrphans)
+	}
+
+	// Sent again without a peer, it is no longer blamed on anyone.
+	s.addOrphan(p, hash, 0, false)
+	checkPeerOrphans(t, s)
+	if len(s.peerOrphans) != 0 {
+		t.Fatalf("counts %v", s.peerOrphans)
+	}
+	s.addOrphan(p, hash, 3, true)
+	checkPeerOrphans(t, s)
+
+	now = start.Add(s.orphanTTL)
+	if peers := s.expireOrphans(); len(peers) != 1 || peers[0] != 3 {
+		t.Fatalf("blamed %v", peers)
+	}
+	checkPeerOrphans(t, s)
+}
+
+// TestDSProofDisabledHave checks that every proof is reported as known when
+// proofs are disabled, so none is requested.
+func TestDSProofDisabledHave(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	harness.txPool.cfg.DisableDSProofs = true
+	hash := chainhash.Hash{1}
+	if !harness.txPool.HaveDSProof(&hash) {
+		t.Fatal("unknown proof reported as missing")
+	}
+}
+
 // TestDSProofRecheckAfterRelock checks that a proof is checked again when
 // the transaction spending its outpoint changes between the read and the
 // write lock, so it is neither stored as an orphan for a transaction that

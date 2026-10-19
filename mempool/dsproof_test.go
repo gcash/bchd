@@ -648,3 +648,31 @@ func TestDSProofLaterInput(t *testing.T) {
 		t.Fatalf("%v %v", r, err)
 	}
 }
+
+// TestIsPayToPubKeyHash checks that only an exact pay-to-pubkey-hash script
+// is accepted.
+func TestIsPayToPubKeyHash(t *testing.T) {
+	valid := make([]byte, 25)
+	valid[0], valid[1], valid[2] = txscript.OP_DUP, txscript.OP_HASH160, txscript.OP_DATA_20
+	valid[23], valid[24] = txscript.OP_EQUALVERIFY, txscript.OP_CHECKSIG
+	with := func(i int, op byte) []byte {
+		s := bytes.Clone(valid)
+		s[i] = op
+		return s
+	}
+	for _, test := range []struct {
+		name   string
+		script []byte
+		want   bool
+	}{
+		{"p2pkh", valid, true},
+		{"checksigverify", with(24, txscript.OP_CHECKSIGVERIFY), false},
+		{"equal", with(23, txscript.OP_EQUAL), false},
+		{"short", valid[:24], false},
+		{"long", append(bytes.Clone(valid), txscript.OP_NOP), false},
+	} {
+		if got := isPayToPubKeyHash(test.script); got != test.want {
+			t.Errorf("%s: got %v", test.name, got)
+		}
+	}
+}
