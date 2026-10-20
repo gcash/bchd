@@ -214,8 +214,23 @@ func (tokenData *TokenData) IsValidBitfield() bool {
 	return true
 }
 
+// serializeSize returns the number of bytes the serialized token prefix takes.
+func (tokenData *TokenData) serializeSize() int {
+	size := BASE_TOKEN_DATA_LENGTH
+	if tokenData.HasCommitmentLength() {
+		size += VarIntSerializeSize(uint64(len(tokenData.Commitment))) +
+			len(tokenData.Commitment)
+	}
+	if tokenData.HasAmount() {
+		size += VarIntSerializeSize(tokenData.Amount)
+	}
+	return size
+}
+
+// TokenDataBuffer returns the serialized token prefix.
 func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	var buf bytes.Buffer
+	buf.Grow(tokenData.serializeSize())
 	buf.WriteByte(0xef)
 	buf.Write(tokenData.CategoryID[:])
 	buf.WriteByte(tokenData.BitField)
