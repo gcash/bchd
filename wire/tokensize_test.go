@@ -58,3 +58,54 @@ func TestTxOutSerializeSizeToken(t *testing.T) {
 		t.Fatalf("SerializeSize allocated %v times", allocs)
 	}
 }
+
+// TestWriteTokenPrefixMatchesBuffer ensures outputs write the same token
+// prefix as TokenDataBuffer for every kind of token, with scratch buffers
+// that hold the prefix varints and ones that don't.
+func TestWriteTokenPrefixMatchesBuffer(t *testing.T) {
+	commitments := [][]byte{nil, {}, {0x01}, bytes.Repeat([]byte{0xab}, 128),
+		bytes.Repeat([]byte{0xcd}, 300)}
+	amounts := []uint64{0, 1, 0xfc, 0xfd, 0x10000, MAX_FT_AMOUNT}
+	for _, size := range []int{scratchSize, 9, 0} {
+		checkTokenPrefix(t, commitments, amounts, make([]byte, size))
+	}
+
+	scratch := make([]byte, scratchSize)
+	txOut := benchTokenTxOut()
+	allocs := testing.AllocsPerRun(100, func() {
+		_ = writeTxOutBuf(io.Discard, 0, txOut, scratch)
+	})
+	if allocs != 0 {
+		t.Fatalf("writing a token output allocates %v times", allocs)
+	}
+}
+
+// checkTokenPrefix compares writeTokenPrefixBuf with TokenDataBuffer for
+// every bitfield, commitment and amount, using the given scratch buffer.
+func checkTokenPrefix(t *testing.T, commitments [][]byte, amounts []uint64,
+	scratch []byte) {
+
+	t.Helper()
+	for bitField := range 0x100 {
+		for _, commitment := range commitments {
+			for _, amount := range amounts {
+				td := TokenData{
+					CategoryID: [32]byte{1, 2, 3},
+					BitField:   byte(bitField),
+					Commitment: commitment,
+					Amount:     amount,
+				}
+				want := td.TokenDataBuffer()
+				var got bytes.Buffer
+				err := writeTokenPrefixBuf(&got, &td, scratch)
+				if err != nil {
+					t.Fatalf("writeTokenPrefixBuf: %v", err)
+				}
+				if !bytes.Equal(got.Bytes(), want.Bytes()) {
+					t.Fatalf("scratch %d bitfield %02x: got %x, want %x",
+						len(scratch), bitField, got.Bytes(), want.Bytes())
+				}
+			}
+		}
+	}
+}

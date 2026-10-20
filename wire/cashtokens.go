@@ -227,6 +227,37 @@ func (tokenData *TokenData) serializeSize() int {
 	return size
 }
 
+// writeTokenPrefixBuf writes the token prefix of tokenData to w, like
+// TokenDataBuffer, using the provided scratch buffer.
+func writeTokenPrefixBuf(w io.Writer, tokenData *TokenData, buf []byte) error {
+	b := append(buf[:0], PREFIX_BYTE)
+	if _, err := w.Write(b); err != nil {
+		return err
+	}
+	if _, err := w.Write(tokenData.CategoryID[:]); err != nil {
+		return err
+	}
+	b = append(b[:0], tokenData.BitField)
+	if tokenData.HasCommitmentLength() {
+		b = AppendVarInt(b, uint64(len(tokenData.Commitment)))
+		if _, err := w.Write(b); err != nil {
+			return err
+		}
+		if _, err := w.Write(tokenData.Commitment); err != nil {
+			return err
+		}
+		b = b[:0]
+	}
+	if tokenData.HasAmount() {
+		b = AppendVarInt(b, tokenData.Amount)
+	}
+	if len(b) == 0 {
+		return nil
+	}
+	_, err := w.Write(b)
+	return err
+}
+
 // TokenDataBuffer returns the serialized token prefix.
 func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	var buf bytes.Buffer
