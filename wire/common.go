@@ -23,6 +23,10 @@ const (
 	// binaryFreeListMaxItems is the number of buffers to keep in the free
 	// list to use for binary serialization and deserialization.
 	binaryFreeListMaxItems = 1024
+
+	// scratchSize is the size of the buffers in the binary free list.  It
+	// fits any varint and the 12 bytes that end a block header.
+	scratchSize = 16
 )
 
 var (
@@ -37,10 +41,10 @@ var (
 
 // binaryFreeList defines a concurrent safe free list of byte slices (up to the
 // maximum number defined by the binaryFreeListMaxItems constant) that have a
-// cap of 8 (thus it supports up to a uint64).  It is used to provide temporary
-// buffers for serializing and deserializing primitive numbers to and from their
-// binary encoding in order to greatly reduce the number of allocations
-// required.
+// cap of scratchSize (thus it supports up to a uint64).  It is used to provide
+// temporary buffers for serializing and deserializing primitive numbers to and
+// from their binary encoding in order to greatly reduce the number of
+// allocations required.
 //
 // For convenience, functions are provided for each of the primitive unsigned
 // integers that automatically obtain a buffer from the free list, perform the
@@ -48,20 +52,22 @@ var (
 // io.Writer, and return the buffer to the free list.
 type binaryFreeList chan []byte
 
-// Borrow returns a byte slice from the free list with a length of 8.  A new
-// buffer is allocated if there are not any available on the free list.
+// Borrow returns a byte slice from the free list with a length of
+// scratchSize.  A new buffer is allocated if there are not any available on
+// the free list.
 func (l binaryFreeList) Borrow() []byte {
 	var buf []byte
 	select {
 	case buf = <-l:
 	default:
-		buf = make([]byte, 8)
+		buf = make([]byte, scratchSize)
 	}
-	return buf[:8]
+	return buf[:scratchSize]
 }
 
 // Return puts the provided byte slice back on the free list.  The buffer MUST
-// have been obtained via the Borrow function and therefore have a cap of 8.
+// have been obtained via the Borrow function and therefore have a cap of
+// scratchSize.
 func (l binaryFreeList) Return(buf []byte) {
 	select {
 	case l <- buf:
@@ -74,13 +80,12 @@ func (l binaryFreeList) Return(buf []byte) {
 // free list and returns it as a uint8.
 func (l binaryFreeList) Uint8(r io.Reader) (uint8, error) {
 	buf := l.Borrow()[:1]
+	defer l.Return(buf)
+
 	if _, err := io.ReadFull(r, buf); err != nil {
-		l.Return(buf)
 		return 0, err
 	}
-	rv := buf[0]
-	l.Return(buf)
-	return rv, nil
+	return buf[0], nil
 }
 
 // Uint16 reads two bytes from the provided reader using a buffer from the
@@ -88,13 +93,12 @@ func (l binaryFreeList) Uint8(r io.Reader) (uint8, error) {
 // the resulting uint16.
 func (l binaryFreeList) Uint16(r io.Reader, byteOrder binary.ByteOrder) (uint16, error) {
 	buf := l.Borrow()[:2]
+	defer l.Return(buf)
+
 	if _, err := io.ReadFull(r, buf); err != nil {
-		l.Return(buf)
 		return 0, err
 	}
-	rv := byteOrder.Uint16(buf)
-	l.Return(buf)
-	return rv, nil
+	return byteOrder.Uint16(buf), nil
 }
 
 // Uint32 reads four bytes from the provided reader using a buffer from the
@@ -102,13 +106,12 @@ func (l binaryFreeList) Uint16(r io.Reader, byteOrder binary.ByteOrder) (uint16,
 // the resulting uint32.
 func (l binaryFreeList) Uint32(r io.Reader, byteOrder binary.ByteOrder) (uint32, error) {
 	buf := l.Borrow()[:4]
+	defer l.Return(buf)
+
 	if _, err := io.ReadFull(r, buf); err != nil {
-		l.Return(buf)
 		return 0, err
 	}
-	rv := byteOrder.Uint32(buf)
-	l.Return(buf)
-	return rv, nil
+	return byteOrder.Uint32(buf), nil
 }
 
 // Uint64 reads eight bytes from the provided reader using a buffer from the
@@ -116,22 +119,22 @@ func (l binaryFreeList) Uint32(r io.Reader, byteOrder binary.ByteOrder) (uint32,
 // the resulting uint64.
 func (l binaryFreeList) Uint64(r io.Reader, byteOrder binary.ByteOrder) (uint64, error) {
 	buf := l.Borrow()[:8]
+	defer l.Return(buf)
+
 	if _, err := io.ReadFull(r, buf); err != nil {
-		l.Return(buf)
 		return 0, err
 	}
-	rv := byteOrder.Uint64(buf)
-	l.Return(buf)
-	return rv, nil
+	return byteOrder.Uint64(buf), nil
 }
 
 // PutUint8 copies the provided uint8 into a buffer from the free list and
 // writes the resulting byte to the given writer.
 func (l binaryFreeList) PutUint8(w io.Writer, val uint8) error {
 	buf := l.Borrow()[:1]
+	defer l.Return(buf)
+
 	buf[0] = val
 	_, err := w.Write(buf)
-	l.Return(buf)
 	return err
 }
 
@@ -140,9 +143,10 @@ func (l binaryFreeList) PutUint8(w io.Writer, val uint8) error {
 // writer.
 func (l binaryFreeList) PutUint16(w io.Writer, byteOrder binary.ByteOrder, val uint16) error {
 	buf := l.Borrow()[:2]
+	defer l.Return(buf)
+
 	byteOrder.PutUint16(buf, val)
 	_, err := w.Write(buf)
-	l.Return(buf)
 	return err
 }
 
@@ -151,9 +155,10 @@ func (l binaryFreeList) PutUint16(w io.Writer, byteOrder binary.ByteOrder, val u
 // writer.
 func (l binaryFreeList) PutUint32(w io.Writer, byteOrder binary.ByteOrder, val uint32) error {
 	buf := l.Borrow()[:4]
+	defer l.Return(buf)
+
 	byteOrder.PutUint32(buf, val)
 	_, err := w.Write(buf)
-	l.Return(buf)
 	return err
 }
 
@@ -162,9 +167,10 @@ func (l binaryFreeList) PutUint32(w io.Writer, byteOrder binary.ByteOrder, val u
 // writer.
 func (l binaryFreeList) PutUint64(w io.Writer, byteOrder binary.ByteOrder, val uint64) error {
 	buf := l.Borrow()[:8]
+	defer l.Return(buf)
+
 	byteOrder.PutUint64(buf, val)
 	_, err := w.Write(buf)
-	l.Return(buf)
 	return err
 }
 
@@ -501,93 +507,91 @@ func allocCount(r io.Reader, count, minSize, unknownMax uint64) uint64 {
 
 // ReadVarInt reads a variable length integer from r and returns it as a uint64.
 func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
-	discriminant, err := binarySerializer.Uint8(r)
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return ReadVarIntBuf(r, pver, buf)
+}
+
+// ReadVarIntBuf reads a variable length integer from r using a caller
+// provided scratch buffer with a capacity of at least 8 bytes and returns it
+// as a uint64.
+func ReadVarIntBuf(r io.Reader, pver uint32, buf []byte) (uint64, error) {
+	if _, err := io.ReadFull(r, buf[:1]); err != nil {
 		return 0, err
 	}
+	discriminant := buf[0]
 
-	var rv uint64
+	var rv, min uint64
 	switch discriminant {
 	case 0xff:
-		sv, err := binarySerializer.Uint64(r, littleEndian)
-		if err != nil {
+		if _, err := io.ReadFull(r, buf[:8]); err != nil {
 			return 0, err
 		}
-		rv = sv
-
-		// The encoding is not canonical if the value could have been
-		// encoded using fewer bytes.
-		min := uint64(0x100000000)
-		if rv < min {
-			return 0, messageError("ReadVarInt", fmt.Sprintf(
-				errNonCanonicalVarInt, rv, discriminant, min))
-		}
+		rv = littleEndian.Uint64(buf[:8])
+		min = 0x100000000
 
 	case 0xfe:
-		sv, err := binarySerializer.Uint32(r, littleEndian)
-		if err != nil {
+		if _, err := io.ReadFull(r, buf[:4]); err != nil {
 			return 0, err
 		}
-		rv = uint64(sv)
-
-		// The encoding is not canonical if the value could have been
-		// encoded using fewer bytes.
-		min := uint64(0x10000)
-		if rv < min {
-			return 0, messageError("ReadVarInt", fmt.Sprintf(
-				errNonCanonicalVarInt, rv, discriminant, min))
-		}
+		rv = uint64(littleEndian.Uint32(buf[:4]))
+		min = 0x10000
 
 	case 0xfd:
-		sv, err := binarySerializer.Uint16(r, littleEndian)
-		if err != nil {
+		if _, err := io.ReadFull(r, buf[:2]); err != nil {
 			return 0, err
 		}
-		rv = uint64(sv)
-
-		// The encoding is not canonical if the value could have been
-		// encoded using fewer bytes.
-		min := uint64(0xfd)
-		if rv < min {
-			return 0, messageError("ReadVarInt", fmt.Sprintf(
-				errNonCanonicalVarInt, rv, discriminant, min))
-		}
+		rv = uint64(littleEndian.Uint16(buf[:2]))
+		min = 0xfd
 
 	default:
-		rv = uint64(discriminant)
+		return uint64(discriminant), nil
 	}
 
+	// The encoding is not canonical if the value could have been encoded
+	// using fewer bytes.
+	if rv < min {
+		return 0, messageError("ReadVarInt", fmt.Sprintf(
+			errNonCanonicalVarInt, rv, discriminant, min))
+	}
 	return rv, nil
 }
 
 // WriteVarInt serializes val to w using a variable number of bytes depending
 // on its value.
 func WriteVarInt(w io.Writer, pver uint32, val uint64) error {
-	if val < 0xfd {
-		return binarySerializer.PutUint8(w, uint8(val))
-	}
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return WriteVarIntBuf(w, pver, val, buf)
+}
 
-	if val <= math.MaxUint16 {
-		err := binarySerializer.PutUint8(w, 0xfd)
-		if err != nil {
-			return err
-		}
-		return binarySerializer.PutUint16(w, littleEndian, uint16(val))
-	}
+// WriteVarIntBuf serializes val to w in the same way as WriteVarInt using a
+// caller provided scratch buffer, which avoids an allocation when its
+// capacity is at least 9 bytes.
+func WriteVarIntBuf(w io.Writer, pver uint32, val uint64, buf []byte) error {
+	_, err := w.Write(putVarInt(buf, val))
+	return err
+}
 
-	if val <= math.MaxUint32 {
-		err := binarySerializer.PutUint8(w, 0xfe)
-		if err != nil {
-			return err
-		}
-		return binarySerializer.PutUint32(w, littleEndian, uint32(val))
-	}
+// putVarInt encodes val as a variable length integer into buf and returns
+// the encoded bytes.  It only allocates when buf has a capacity of less than
+// 9 bytes.
+func putVarInt(buf []byte, val uint64) []byte {
+	return AppendVarInt(buf[:0], val)
+}
 
-	err := binarySerializer.PutUint8(w, 0xff)
-	if err != nil {
-		return err
+// AppendVarInt appends val to dst as WriteVarInt encodes it.
+func AppendVarInt(dst []byte, val uint64) []byte {
+	switch {
+	case val < 0xfd:
+		return append(dst, uint8(val))
+	case val <= math.MaxUint16:
+		return littleEndian.AppendUint16(append(dst, 0xfd), uint16(val))
+	case val <= math.MaxUint32:
+		return littleEndian.AppendUint32(append(dst, 0xfe), uint32(val))
+	default:
+		return littleEndian.AppendUint64(append(dst, 0xff), val)
 	}
-	return binarySerializer.PutUint64(w, littleEndian, val)
 }
 
 // VarIntSerializeSize returns the number of bytes it would take to serialize
@@ -725,6 +729,19 @@ func ReadVarBytes(r io.Reader, pver uint32, maxAllowed uint32,
 func WriteVarBytes(w io.Writer, pver uint32, bytes []byte) error {
 	slen := uint64(len(bytes))
 	err := WriteVarInt(w, pver, slen)
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(bytes)
+	return err
+}
+
+// WriteVarBytesBuf serializes a variable length byte array to w in the same
+// way as WriteVarBytes using a caller provided scratch buffer, which avoids an
+// allocation when its capacity is at least 9 bytes.
+func WriteVarBytesBuf(w io.Writer, pver uint32, bytes, buf []byte) error {
+	err := WriteVarIntBuf(w, pver, uint64(len(bytes)), buf)
 	if err != nil {
 		return err
 	}

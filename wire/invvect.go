@@ -74,7 +74,27 @@ func readInvVect(r io.Reader, pver uint32, iv *InvVect) error {
 	return readElements(r, &iv.Type, &iv.Hash)
 }
 
+// readInvVectBuf reads an InvVect from r using the provided scratch buffer.
+func readInvVectBuf(r io.Reader, iv *InvVect, buf []byte) error {
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	iv.Type = InvType(littleEndian.Uint32(buf[:4]))
+	_, err := io.ReadFull(r, iv.Hash[:])
+	return err
+}
+
 // writeInvVect serializes an InvVect to w depending on the protocol version.
 func writeInvVect(w io.Writer, pver uint32, iv *InvVect) error {
 	return writeElements(w, iv.Type, &iv.Hash)
+}
+
+// writeInvVectBuf writes iv to w using the provided scratch buffer.
+func writeInvVectBuf(w io.Writer, iv *InvVect, buf []byte) error {
+	littleEndian.PutUint32(buf[:4], uint32(iv.Type))
+	if _, err := w.Write(buf[:4]); err != nil {
+		return err
+	}
+	_, err := w.Write(iv.Hash[:])
+	return err
 }

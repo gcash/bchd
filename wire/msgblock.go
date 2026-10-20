@@ -67,12 +67,20 @@ func (msg *MsgBlock) ClearTransactions() {
 // See Deserialize for decoding blocks stored to disk, such as in a database, as
 // opposed to decoding blocks from the wire.
 func (msg *MsgBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	err := readBlockHeader(r, pver, &msg.Header)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return msg.bchDecode(r, pver, buf)
+}
+
+// bchDecode decodes r into the receiver like BchDecode using the provided
+// scratch buffer for the header and every transaction.
+func (msg *MsgBlock) bchDecode(r io.Reader, pver uint32, buf []byte) error {
+	err := readBlockHeaderBuf(r, &msg.Header, buf)
 	if err != nil {
 		return err
 	}
 
-	txCount, err := ReadVarInt(r, pver)
+	txCount, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		return err
 	}
@@ -92,7 +100,7 @@ func (msg *MsgBlock) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) er
 		min(txCount, uint64(defaultTransactionAlloc)))
 	for range txCount {
 		tx := MsgTx{}
-		err := tx.BchDecode(r, pver, enc)
+		err := tx.bchDecode(r, pver, buf)
 		if err != nil {
 			return err
 		}
@@ -128,12 +136,15 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
 	// a result, make use of existing wire protocol functions.
-	err := readBlockHeader(r, 0, &msg.Header)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+
+	err := readBlockHeaderBuf(r, &msg.Header, buf)
 	if err != nil {
 		return nil, err
 	}
 
-	txCount, err := ReadVarInt(r, 0)
+	txCount, err := ReadVarIntBuf(r, 0, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +168,7 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	for range txCount {
 		txStart := fullLen - r.Len()
 		tx := MsgTx{}
-		err := tx.Deserialize(r)
+		err := tx.bchDecode(r, 0, buf)
 		if err != nil {
 			return nil, err
 		}
@@ -292,18 +303,21 @@ func BlockTxLocs(serialized []byte) ([]TxLoc, error) {
 // See Serialize for encoding blocks to be stored to disk, such as in a
 // database, as opposed to encoding blocks for the wire.
 func (msg *MsgBlock) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	err := writeBlockHeader(w, pver, &msg.Header)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+
+	err := writeBlockHeaderBuf(w, &msg.Header, buf)
 	if err != nil {
 		return err
 	}
 
-	err = WriteVarInt(w, pver, uint64(len(msg.Transactions)))
+	err = WriteVarIntBuf(w, pver, uint64(len(msg.Transactions)), buf)
 	if err != nil {
 		return err
 	}
 
 	for _, tx := range msg.Transactions {
-		err = tx.BchEncode(w, pver, enc)
+		err = tx.bchEncode(w, pver, buf)
 		if err != nil {
 			return err
 		}

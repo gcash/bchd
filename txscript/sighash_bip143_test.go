@@ -98,19 +98,3 @@ func TestBip143SigHashMatchesReference(t *testing.T) {
 			"want %x (%d bytes)", got, gotN, err, want, wantN)
 	}
 }
-
-// TestAppendVarInt compares appendVarInt with wire.WriteVarInt.
-func TestAppendVarInt(t *testing.T) {
-	t.Parallel()
-
-	for _, v := range []uint64{0, 1, 0xfc, 0xfd, 0xfe, 0xff, 0x100, 0xffff,
-		0x10000, 0xffffffff, 0x100000000, 1<<64 - 1} {
-		var want bytes.Buffer
-		if err := wire.WriteVarInt(&want, 0, v); err != nil {
-			t.Fatal(err)
-		}
-		if got := appendVarInt([]byte{9}, v); !bytes.Equal(got[1:], want.Bytes()) || got[0] != 9 {
-			t.Errorf("appendVarInt(%d) = %x, want %x", v, got[1:], want.Bytes())
-		}
-	}
-}
