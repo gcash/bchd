@@ -816,15 +816,21 @@ func (pop *parsedOpcode) print(oneline bool) string {
 // bytes returns any data associated with the opcode encoded as it would be in
 // a script.  This is used for unparsing scripts from parsed opcodes.
 func (pop *parsedOpcode) bytes() ([]byte, error) {
-	var retbytes []byte
-	if pop.opcode.length > 0 {
-		retbytes = make([]byte, 1, pop.opcode.length)
-	} else {
-		retbytes = make([]byte, 1, 1+len(pop.data)-
-			pop.opcode.length)
-	}
+	return pop.appendBytes(make([]byte, 0, pop.serializeSize()))
+}
 
-	retbytes[0] = pop.opcode.value
+// serializeSize returns the length of the opcode encoded in a script.
+func (pop *parsedOpcode) serializeSize() int {
+	if pop.opcode.length > 0 {
+		return pop.opcode.length
+	}
+	return 1 - pop.opcode.length + len(pop.data)
+}
+
+// appendBytes appends the opcode encoded as it would be in a script to dst.
+func (pop *parsedOpcode) appendBytes(dst []byte) ([]byte, error) {
+	start := len(dst)
+	dst = append(dst, pop.opcode.value)
 	if pop.opcode.length == 1 {
 		if len(pop.data) != 0 {
 			str := fmt.Sprintf("internal consistency error - "+
@@ -833,40 +839,34 @@ func (pop *parsedOpcode) bytes() ([]byte, error) {
 				0)
 			return nil, scriptError(ErrInternal, str)
 		}
-		return retbytes, nil
+		return dst, nil
 	}
 	nbytes := pop.opcode.length
 	if pop.opcode.length < 0 {
 		l := len(pop.data)
-		// tempting just to hardcode to avoid the complexity here.
 		switch pop.opcode.length {
 		case -1:
-			retbytes = append(retbytes, byte(l))
-			nbytes = int(retbytes[1]) + len(retbytes)
+			dst = append(dst, byte(l))
+			nbytes = int(uint8(l)) + 2
 		case -2:
-			retbytes = append(retbytes, byte(l&0xff),
-				byte(l>>8&0xff))
-			nbytes = int(binary.LittleEndian.Uint16(retbytes[1:])) +
-				len(retbytes)
+			dst = append(dst, byte(l), byte(l>>8))
+			nbytes = int(uint16(l)) + 3
 		case -4:
-			retbytes = append(retbytes, byte(l&0xff),
-				byte((l>>8)&0xff), byte((l>>16)&0xff),
-				byte((l>>24)&0xff))
-			nbytes = int(binary.LittleEndian.Uint32(retbytes[1:])) +
-				len(retbytes)
+			dst = append(dst, byte(l), byte(l>>8), byte(l>>16),
+				byte(l>>24))
+			nbytes = int(uint32(l)) + 5
 		}
 	}
 
-	retbytes = append(retbytes, pop.data...)
+	dst = append(dst, pop.data...)
 
-	if len(retbytes) != nbytes {
+	if len(dst)-start != nbytes {
 		str := fmt.Sprintf("internal consistency error - "+
 			"parsed opcode %s has data length %d when %d was "+
-			"expected", pop.opcode.name, len(retbytes), nbytes)
+			"expected", pop.opcode.name, len(dst)-start, nbytes)
 		return nil, scriptError(ErrInternal, str)
 	}
-
-	return retbytes, nil
+	return dst, nil
 }
 
 // *******************************************

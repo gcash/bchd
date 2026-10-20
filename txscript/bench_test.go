@@ -399,3 +399,18 @@ func BenchmarkExecuteArithmetic(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkUnparseScript serializes a parsed multisig script, as the sighash
+// does with the script code.
+func BenchmarkUnparseScript(b *testing.B) {
+	pops, err := parseScript(newBenchScripts(b).multisig)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := unparseScript(pops); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
