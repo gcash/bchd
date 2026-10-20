@@ -279,6 +279,12 @@ utxocachemaxsize=250
 dbcachesize=250
 ```
 
+The UTXO cache size limits the live heap memory of the cache itself, to within
+a few percent, counting each entry and map slot at the size Go allocates for
+it. A given size holds about 30% fewer entries than in 0.22.4 and earlier, so
+a tuned `utxocachemaxsize` can be raised by about 40% to keep the same number
+of entries.
+
 The garbage collector's target, `--gcpercent`, defaults to 50. Lower values
 use less memory and more CPU: `gcpercent=10` is what 0.22.2 used. Go's
 `GOMEMLIMIT` environment variable sets a soft limit on the memory bchd's heap

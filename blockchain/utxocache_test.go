@@ -974,3 +974,61 @@ func TestUtxoCacheReaddedOutputSpent(t *testing.T) {
 		})
 	}
 }
+
+// TestUtxoCacheMemoryAccounting checks the cache's memory usage against the
+// heap it really uses: it must not count less, nor much more.  The entry
+// count is a little after the map grows, where it takes about 103 bytes per
+// entry, so a map counted much lower fails.
+func TestUtxoCacheMemoryAccounting(t *testing.T) {
+	const n = 232000
+	var category [32]byte
+	category[0] = 1
+	token := wire.TokenData{CategoryID: category, BitField: wire.HAS_NFT |
+		wire.HAS_COMMITMENT_LENGTH | wire.HAS_AMOUNT, Amount: 1 << 40}
+
+	// Entries the cache creates from transaction outputs.
+	t.Run("created", func(t *testing.T) {
+		checkUtxoCacheMemory(t, n, func(i int) *UtxoEntry {
+			txOut := wire.NewTxOut(int64(i), make([]byte, 25), wire.TokenData{})
+			if i%10 == 0 {
+				txOut.TokenData = token
+				txOut.TokenData.Commitment = make([]byte, 40)
+			}
+			return NewUtxoEntry(txOut, 1, false)
+		})
+	})
+}
+
+// checkUtxoCacheMemory adds n entries to a cache and checks its memory usage
+// against the heap growth.
+func checkUtxoCacheMemory(t *testing.T, n int, newEntry func(i int) *UtxoEntry) {
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	cache := newUtxoCache(nil, math.MaxUint64)
+	for i := range n {
+		op := wire.OutPoint{Hash: chainhash.Hash{byte(i), byte(i >> 8), byte(i >> 16)}}
+		if err := cache.addEntry(op, newEntry(i), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	heap := after.HeapAlloc - before.HeapAlloc
+	counted := cache.totalMemoryUsage()
+	if counted < heap || counted > heap*5/4 {
+		t.Fatalf("cache counts %d bytes, heap grew %d", counted, heap)
+	}
+	runtime.KeepAlive(cache)
+}
+
+// TestAllocSize checks allocSize against some of Go's size classes.
+func TestAllocSize(t *testing.T) {
+	for n, want := range map[int]uint64{0: 0, 1: 8, 25: 32, 120: 128,
+		1025: 1152, 4097: 4864, 8193: 9472, 10000: 10240, 32768: 32768,
+		32769: 40960} {
+		if got := allocSize(n); got != want {
+			t.Errorf("allocSize(%d) = %d, want %d", n, got, want)
+		}
+	}
+}
