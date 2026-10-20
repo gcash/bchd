@@ -16,8 +16,8 @@ import (
 	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"github.com/simpleledgerinc/goslp"
-	"github.com/simpleledgerinc/goslp/v1parser"
+	"github.com/gcash/goslp"
+	"github.com/gcash/goslp/v1parser"
 )
 
 // TestSlpInputUnitTests downloads slp input unit tests and checks the input conditions for each test are met

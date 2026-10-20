@@ -27,8 +27,8 @@ import (
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/merkleblock"
-	"github.com/simpleledgerinc/goslp"
-	"github.com/simpleledgerinc/goslp/v1parser"
+	"github.com/gcash/goslp"
+	"github.com/gcash/goslp/v1parser"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -3410,14 +3410,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		var err error
 		slpMsg, err = v1parser.ParseSLP(tx.MsgTx().TxOut[0].PkScript)
 		if err != nil {
-			if err.Error() == v1parser.ErrUnsupportedSlpVersion.Error() {
+			if errors.Is(err, v1parser.ErrUnsupportedSlpVersion) {
 				slpInfo.SlpAction = pb.SlpAction_SLP_UNSUPPORTED_VERSION
 			} else {
 				slpInfo.ParseError = err.Error()
 				slpInfo.SlpAction = pb.SlpAction_SLP_PARSE_ERROR
 			}
 		} else {
-			tokenID, err := goslp.GetSlpTokenID(tx.MsgTx())
+			tokenID, err := goslp.GetSlpTokenIDFromMsg(tx.MsgTx(), slpMsg)
 			if err != nil {
 				log.Criticalf("failed to parse token ID for transaction %v", txid)
 			}

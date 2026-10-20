@@ -13,6 +13,7 @@ require (
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
 	github.com/gcash/bchutil v0.0.0-20261019095139-ecc8506ec3af
 	github.com/gcash/goleveldb v1.1.0
+	github.com/gcash/goslp v1.0.0
 	github.com/golang/glog v1.2.5
 	github.com/golang/protobuf v1.5.4
 	github.com/gorilla/mux v1.8.1
@@ -22,7 +23,6 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/jrick/logrotate v1.1.2
 	github.com/prometheus/client_golang v1.23.2
-	github.com/simpleledgerinc/goslp v0.0.0-20210423125905-3c2e5f2ef33f
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.58.0

@@ -6,7 +6,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 ## 0.22.3 (2026-10-17)
 
-This release makes validation, initial sync and block relay considerably faster, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, adds block finalization and Tor v3 support, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node runs with `--addrindex` or serves `sendrawtransaction`.
+This release makes validation, initial sync and block relay considerably faster, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, adds block finalization and Tor v3 support, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node runs with `--addrindex`, or with `--slpindex` on a 32-bit platform, or serves `sendrawtransaction`.
 
 ### Performance
 
@@ -44,6 +44,8 @@ This release makes validation, initial sync and block relay considerably faster,
 - Index spends of token outputs in the address index, and match websocket `rescan` spends on the outputs they spend.
 - Return errors instead of crashing on malformed JSON-RPC requests and bad gRPC input. gRPC subscriptions are torn down properly, and idle gRPC connections close after 5 minutes.
 - A gRPC subscription that falls more than 50000 events behind now ends with `ResourceExhausted`.
+- Move SLP parsing to `gcash/goslp` v1.0.0, a maintained copy of `simpleledgerinc/goslp`, whose repository was deleted. 32-bit builds now read SLP amounts of 2^31 base units or more correctly.
+- When a MINT confirms, the SLP index now drops the token's cached metadata, as it was meant to. gRPC could otherwise report the mint baton where a double-spent MINT had put it, until a restart.
 
 ### Mining
 
@@ -64,6 +66,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 - Fix a CashTokens consensus bug allowing fungible token inflation. Per-category amount sums could overflow and wrap around, so BCHD accepted transactions that BCHN rejects.
 - Fix remotely triggerable crashes on a bloom filter with no data (gcash/bchutil#50) and on compact blocks with invalid prefilled transaction indexes.
+- Fix a remotely triggerable crash in 32-bit builds on an SLP script with a malformed push length, reachable through the SLP index and the gRPC SLP calls.
 - Fix gRPC authentication with `--prometheus`, where every handler ran before the `--grpcauthtoken` check.
 - Fix many consensus, P2P, RPC and gRPC robustness issues in addition to the items above. P2P messages are now allocated by the bytes actually received, and the ban list and peer limits apply as soon as a connection is accepted, as in BCHN.
 - Build with Go 1.26.9 or newer, or 1.27.2 or newer: the gRPC server's HTTP/2 comes from the Go standard library, and those releases carry its HTTP/2 fixes. The `golang.org/x/net` update brings five HTTP/2 fixes to the gRPC client in `bchrpc/proxy`.
@@ -84,6 +87,7 @@ This release makes validation, initial sync and block relay considerably faster,
 ### Upgrade notes
 
 - **Address index.** Nodes with `--addrindex` rebuild the address index on first start, which can take hours on mainnet.
+- **SLP index on 32-bit builds.** Earlier releases misread SLP amounts of 2^31 base units or more on 32-bit platforms, so the SLP index there can hold wrong token validity. Start once with `--dropslpindex`, which exits when done, then with `--slpindex` to rebuild it.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
 - **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it. The token amount may be a JSON integer or a string, as in BCHN.

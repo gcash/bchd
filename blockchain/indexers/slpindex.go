@@ -21,8 +21,8 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
-	"github.com/simpleledgerinc/goslp"
-	"github.com/simpleledgerinc/goslp/v1parser"
+	"github.com/gcash/goslp"
+	"github.com/gcash/goslp/v1parser"
 )
 
 const (
@@ -559,7 +559,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		//
 		// Since the mint baton outpoint location is the only stateful property of token metadata there are no other
 		// similar situations with slp v1/nft1.
-		if msg, ok := slpMsg.(v1parser.SlpMint); ok {
+		if msg, ok := slpMsg.(*v1parser.SlpMint); ok {
 			hash, err := chainhash.NewHash(msg.TokenID())
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
@@ -842,7 +842,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 
 	burnedInputs := make([]*BurnedInput, 0)
 
-	tokenID, err := goslp.GetSlpTokenID(tx)
+	tokenID, err := goslp.GetSlpTokenIDFromMsg(tx, txSlpMsg)
 	if err != nil {
 		return false, nil, err
 	}

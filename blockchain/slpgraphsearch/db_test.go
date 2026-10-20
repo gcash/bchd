@@ -10,7 +10,7 @@ import (
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
-	"github.com/simpleledgerinc/goslp"
+	"github.com/gcash/goslp"
 )
 
 func TestSlpGraphSearch(t *testing.T) {
