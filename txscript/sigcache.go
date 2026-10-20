@@ -19,7 +19,10 @@ import (
 func sigCacheKey(sigHash chainhash.Hash, sig, pubKey []byte,
 	schnorr bool) chainhash.Hash {
 
-	buf := make([]byte, 0, chainhash.HashSize+5+len(sig)+len(pubKey))
+	// Standard signatures and keys fit the stack buffer; append moves
+	// larger ones to the heap.
+	var stack [256]byte
+	buf := stack[:0]
 	buf = append(buf, sigHash[:]...)
 	if schnorr {
 		buf = append(buf, 1)
