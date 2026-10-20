@@ -11,6 +11,7 @@
             "program": "${workspaceRoot}/bchrpc/regtest/node_modules/mocha/bin/_mocha",
             "args": ["--timeout", "1000000", "--exit", "--require", "mocha-steps"],
             "cwd": "${workspaceRoot}/bchrpc/regtest",
+            "env": { "NODE_PATH": "${workspaceRoot}/bchrpc/regtest/node_modules" },
             "outFiles": []
         }
     ]

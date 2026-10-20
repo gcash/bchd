@@ -1,6 +1,6 @@
 import { step } from 'mocha-steps';
 import * as assert from "assert";
-import { GetAddressUnspentOutputsResponse, GetBlockchainInfoResponse, SlpAction, SlpTransactionInfo } from "grpc-bchrpc-node";
+import { GetAddressUnspentOutputsResponse, GetBlockchainInfoResponse, SlpAction, SlpTransactionInfo } from "../lib/grpc";
 import { PrivateKey, Networks, Transaction, Script, Address } from "bitcore-lib-cash";
 import * as bchaddrjs from "bchaddrjs-slp";
 import * as mdm from "slp-mdm";

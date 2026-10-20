@@ -11,6 +11,84 @@ export interface BitcoinRpcClient {
     generate: (nblocks: number) => Promise<string[]>;
 }
 
+// BitcoinRpc is a JSON-RPC client for bchd.  call sends any method; the
+// BitcoinRpcClient methods send theirs by lowercase name, with the arguments
+// given as positional params.
+export class BitcoinRpc implements BitcoinRpcClient {
+    private readonly url: string;
+    private readonly authorization: string;
+    private id = 0;
+
+    // url may carry the user and password, as in http://user:pass@host:port.
+    constructor(url: string) {
+        const u = new URL(url);
+        const credentials = `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}`;
+        this.authorization = `Basic ${Buffer.from(credentials).toString("base64")}`;
+        u.username = "";
+        u.password = "";
+        this.url = u.toString();
+    }
+
+    async call<T>(method: string, ...params: unknown[]): Promise<T> {
+        const res = await fetch(this.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": this.authorization },
+            body: JSON.stringify({ jsonrpc: "2.0", id: ++this.id, method, params }),
+        });
+        const text = await res.text();
+        let body: { result?: T; error?: { message: string } | null };
+        try {
+            body = JSON.parse(text);
+        } catch {
+            throw new Error(`${method}: HTTP ${res.status}: ${text}`);
+        }
+        if (body.error) {
+            throw new Error(body.error.message);
+        }
+        return body.result as T;
+    }
+
+    getBlockchainInfo(): Promise<RpcBlockchainInfoRes> {
+        return this.call("getblockchaininfo");
+    }
+
+    addNode(node: string, command: string): Promise<void> {
+        return this.call("addnode", node, command);
+    }
+
+    getPeerInfo(): Promise<RpcPeerInfoRes[]> {
+        return this.call("getpeerinfo");
+    }
+
+    getNewAddress(...params: Parameters<BitcoinRpcClient["getNewAddress"]>): Promise<string> {
+        return this.call("getnewaddress", ...params);
+    }
+
+    dumpPrivKey(address: string): Promise<string> {
+        return this.call("dumpprivkey", address);
+    }
+
+    listUnspent(...params: Parameters<BitcoinRpcClient["listUnspent"]>): Promise<RpcListUnspentRes[]> {
+        return this.call("listunspent", ...params);
+    }
+
+    getRawTransaction(...params: Parameters<BitcoinRpcClient["getRawTransaction"]>): ReturnType<BitcoinRpcClient["getRawTransaction"]> {
+        return this.call("getrawtransaction", ...params);
+    }
+
+    sendRawTransaction(...params: Parameters<BitcoinRpcClient["sendRawTransaction"]>): Promise<string> {
+        return this.call("sendrawtransaction", ...params);
+    }
+
+    generateToAddress(...params: Parameters<BitcoinRpcClient["generateToAddress"]>): Promise<string[]> {
+        return this.call("generatetoaddress", ...params);
+    }
+
+    generate(nblocks: number): Promise<string[]> {
+        return this.call("generate", nblocks);
+    }
+}
+
 export interface RpcBlockchainInfoRes {
     chain: string;                  // "chain": "xxxx",              (string) current network name as defined in BIP70 (main, test, regtest)
     blocks: number;                 // "blocks": xxxxxx,             (numeric) the current number of blocks processed in the server

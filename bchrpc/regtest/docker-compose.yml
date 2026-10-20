@@ -1,4 +1,3 @@
-version: "3.3"
 services:
   bchd1: # a bchd full node for gs++ to connect to
     image: "bchd_regtest"

@@ -1,6 +1,6 @@
-# Start from a Debian image with the latest version of Go installed
-# and a workspace (GOPATH) configured at /go.
-FROM node:16.20.2-slim
+# Start from a Debian image with Node.js 22.  None of the test dependencies
+# is a native module, so the slim image needs no build tools.
+FROM node:22-slim
 
 # Copy the local package files to the container's workspace.
 ADD . /go/src/github.com/gcash/bchd
