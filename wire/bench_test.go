@@ -601,6 +601,62 @@ func BenchmarkTxHash(b *testing.B) {
 	}
 }
 
+// benchHashTx returns a tx with the given number of p2pkh-sized inputs and
+// outputs, with token data on the outputs when tokens is set.
+func benchHashTx(n int, tokens bool) *MsgTx {
+	tx := NewMsgTx(2)
+	for i := range n {
+		tx.AddTxIn(&TxIn{
+			PreviousOutPoint: OutPoint{Hash: chainhash.Hash{byte(i)}, Index: uint32(i)},
+			SignatureScript:  bytes.Repeat([]byte{0x30}, 107),
+			Sequence:         0xffffffff,
+		})
+		out := &TxOut{Value: int64(i) * 1000, PkScript: bytes.Repeat([]byte{0x76}, 25)}
+		if tokens {
+			out.TokenData = TokenData{
+				CategoryID: [32]byte{byte(i)},
+				Commitment: []byte{1, 2, 3},
+				Amount:     1000,
+				BitField:   HAS_AMOUNT | HAS_NFT | HAS_COMMITMENT_LENGTH,
+			}
+		}
+		tx.AddTxOut(out)
+	}
+	return tx
+}
+
+// BenchmarkTxHashSizes measures hashing txs of several sizes.
+func BenchmarkTxHashSizes(b *testing.B) {
+	for _, c := range []struct {
+		name   string
+		n      int
+		tokens bool
+	}{
+		{"1in1out", 1, false},
+		{"20in20out", 20, false},
+		{"20in20out-tokens", 20, true},
+		{"1000in1000out", 1000, false},
+	} {
+		b.Run(c.name, func(b *testing.B) {
+			tx := benchHashTx(c.n, c.tokens)
+			b.SetBytes(int64(tx.SerializeSize()))
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = tx.TxHash()
+			}
+		})
+	}
+}
+
+// BenchmarkBlockHash measures hashing a block header.
+func BenchmarkBlockHash(b *testing.B) {
+	header := blockOne.Header
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = header.BlockHash()
+	}
+}
+
 // BenchmarkDoubleHashB performs a benchmark on how long it takes to perform a
 // double hash returning a byte slice.
 func BenchmarkDoubleHashB(b *testing.B) {
