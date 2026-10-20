@@ -414,3 +414,19 @@ func BenchmarkUnparseScript(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkBip143SigHash computes the signature hash of a P2SH multisig
+// input.
+func BenchmarkBip143SigHash(b *testing.B) {
+	pops, err := parseScript(newBenchScripts(b).multisig)
+	if err != nil {
+		b.Fatal(err)
+	}
+	tx := createSpendingTx(nil, nil, 0)
+	sigHashes := NewTxSigHashes(tx)
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _, _ = calcBip143SignatureHash(pops, sigHashes,
+			SigHashAll|SigHashForkID|SigHashUTXO, tx, 0, 1000, true)
+	}
+}

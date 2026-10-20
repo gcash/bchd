@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -651,11 +652,31 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 			"inputs but %d txins", len(sigHashes.tokenDataList), len(tx.TxIn))
 	}
 
-	// We'll stream the preimage straight into sha256.
-	d := chainhash.NewDoubleHasher()
+	hashUtxos := scriptAllowCashTokens && hashType&SigHashUTXO > 0
+	var tokenData []byte
+	if len(sigHashes.tokenDataList) > 0 {
+		tokenData = sigHashes.tokenDataList[idx]
+	}
+	scriptLen := 0
+	for i := range subScript {
+		scriptLen += subScript[i].serializeSize()
+	}
+
+	// The preimage is built in one buffer, on the stack when it fits.
+	size := 4 + 32 + 32 + 32 + 4 + len(tokenData) +
+		wire.VarIntSerializeSize(uint64(scriptLen)) + scriptLen +
+		8 + 4 + 32 + 4 + 4
+	if hashUtxos {
+		size += 32
+	}
+	var buf [512]byte
+	sigHash := buf[:0]
+	if size > len(buf) {
+		sigHash = make([]byte, 0, size)
+	}
 
 	// First write out, then encode the transaction's version number.
-	d.WriteUint32(uint32(tx.Version))
+	sigHash = binary.LittleEndian.AppendUint32(sigHash, uint32(tx.Version))
 
 	// Next write out the possibly pre-calculated hashes for the sequence
 	// numbers of all inputs, and the hashes of the previous outs for all
@@ -665,16 +686,16 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	// If anyone can pay isn't active, then we can use the cached
 	// hashPrevOuts, otherwise we just write zeroes for the prev outs.
 	if hashType&SigHashAnyOneCanPay == 0 {
-		_, _ = d.Write(sigHashes.HashPrevOuts[:])
+		sigHash = append(sigHash, sigHashes.HashPrevOuts[:]...)
 	} else {
-		_, _ = d.Write(zeroHash[:])
+		sigHash = append(sigHash, zeroHash[:]...)
 	}
 
 	// add CashTokens data here hashUtxos is a 32-byte double SHA256
 	// of the serialization of all UTXOs spent by the transaction's inputs,
 	// concatenated in input order, excluding output count.
-	if scriptAllowCashTokens && hashType&SigHashUTXO > 0 {
-		_, _ = d.Write(sigHashes.HashUTXOS[:])
+	if hashUtxos {
+		sigHash = append(sigHash, sigHashes.HashUTXOS[:]...)
 	}
 
 	// If the sighash isn't anyone can pay, single, or none, the use the
@@ -683,27 +704,33 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	if hashType&SigHashAnyOneCanPay == 0 &&
 		hashType&sigHashMask != SigHashSingle &&
 		hashType&sigHashMask != SigHashNone {
-		_, _ = d.Write(sigHashes.HashSequence[:])
+		sigHash = append(sigHash, sigHashes.HashSequence[:]...)
 	} else {
-		_, _ = d.Write(zeroHash[:])
+		sigHash = append(sigHash, zeroHash[:]...)
 	}
 
 	// Next, write the outpoint being spent.
-	_, _ = d.Write(tx.TxIn[idx].PreviousOutPoint.Hash[:])
-	d.WriteUint32(tx.TxIn[idx].PreviousOutPoint.Index)
+	sigHash = append(sigHash, tx.TxIn[idx].PreviousOutPoint.Hash[:]...)
+	sigHash = binary.LittleEndian.AppendUint32(sigHash, tx.TxIn[idx].PreviousOutPoint.Index)
 
-	if len(sigHashes.tokenDataList) > 0 && len(sigHashes.tokenDataList[idx]) > 0 {
-		_, _ = d.Write(sigHashes.tokenDataList[idx])
+	sigHash = append(sigHash, tokenData...)
+
+	// An opcode that fails to serialize leaves the script code empty.
+	scriptStart := len(sigHash)
+	sigHash = appendVarInt(sigHash, uint64(scriptLen))
+	for i := range subScript {
+		b, err := subScript[i].appendBytes(sigHash)
+		if err != nil {
+			sigHash = append(sigHash[:scriptStart], 0)
+			break
+		}
+		sigHash = b
 	}
-
-	scriptBytes, _ := unparseScript(subScript)
-
-	wire.WriteVarBytesToHasher(d, scriptBytes)
 
 	// Next, add the input amount, and sequence number of the input being
 	// signed.
-	d.WriteUint64(uint64(amt))
-	d.WriteUint32(tx.TxIn[idx].Sequence)
+	sigHash = binary.LittleEndian.AppendUint64(sigHash, uint64(amt))
+	sigHash = binary.LittleEndian.AppendUint32(sigHash, tx.TxIn[idx].Sequence)
 
 	// If the current signature mode isn't single, or none, then we can
 	// re-use the pre-generated hashoutputs sighash fragment. Otherwise,
@@ -711,25 +738,37 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	// pre-image.
 	if hashType&sigHashMask != SigHashSingle &&
 		hashType&sigHashMask != SigHashNone {
-		_, _ = d.Write(sigHashes.HashOutputs[:])
+		sigHash = append(sigHash, sigHashes.HashOutputs[:]...)
 	} else if hashType&sigHashMask == SigHashSingle && idx < len(tx.TxOut) {
-		od := chainhash.NewDoubleHasher()
-		tx.TxOut[idx].SerializeToHasher(od)
-		outHash := od.Sum()
-		_, _ = d.Write(outHash[:])
+		d := chainhash.NewDoubleHasher()
+		tx.TxOut[idx].SerializeToHasher(d)
+		outHash := d.Sum()
+		sigHash = append(sigHash, outHash[:]...)
 	} else {
-		_, _ = d.Write(zeroHash[:])
+		sigHash = append(sigHash, zeroHash[:]...)
 	}
 
 	// Finally, write out the transaction's locktime, and the sig hash
 	// type.
-	d.WriteUint32(tx.LockTime)
-	d.WriteUint32(uint32(hashType))
+	sigHash = binary.LittleEndian.AppendUint32(sigHash, tx.LockTime)
+	sigHash = binary.LittleEndian.AppendUint32(sigHash, uint32(hashType))
 
-	totalBytesHashedlength += d.Len()
-	hash := d.Sum()
+	totalBytesHashedlength += len(sigHash)
 
-	return hash[:], totalBytesHashedlength, nil
+	return chainhash.DoubleHashB(sigHash), totalBytesHashedlength, nil
+}
+
+// appendVarInt appends val to dst as a bitcoin variable length integer.
+func appendVarInt(dst []byte, val uint64) []byte {
+	switch {
+	case val < 0xfd:
+		return append(dst, byte(val))
+	case val <= 0xffff:
+		return binary.LittleEndian.AppendUint16(append(dst, 0xfd), uint16(val))
+	case val <= 0xffffffff:
+		return binary.LittleEndian.AppendUint32(append(dst, 0xfe), uint32(val))
+	}
+	return binary.LittleEndian.AppendUint64(append(dst, 0xff), val)
 }
 
 // asSmallInt returns the passed opcode, which must be true according to
