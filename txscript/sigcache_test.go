@@ -163,3 +163,39 @@ func TestSigCacheAddMaxEntriesZeroOrNegative(t *testing.T) {
 			"been added", len(sigCache.validSigs))
 	}
 }
+
+// TestSigCacheLongEntry ensures entries larger than the key's stack buffer
+// are found, and only with their full bytes.
+func TestSigCacheLongEntry(t *testing.T) {
+	sigCache := NewSigCache(10)
+	var msg chainhash.Hash
+	sig := make([]byte, 300)
+	key := make([]byte, 65)
+	for i := range sig {
+		sig[i] = byte(i)
+	}
+	sigCache.Add(msg, sig, key, false)
+	if !sigCache.Exists(msg, sig, key, false) {
+		t.Fatal("long entry not found")
+	}
+	if sigCache.Exists(msg, sig[:299], key, false) {
+		t.Fatal("truncated signature found")
+	}
+}
+
+// BenchmarkSigCacheExists benchmarks a signature cache hit, the path a block
+// takes for transactions the mempool already checked.
+func BenchmarkSigCacheExists(b *testing.B) {
+	sigCache := NewSigCache(10)
+	msg, sig, key, err := genRandomSig()
+	if err != nil {
+		b.Fatal(err)
+	}
+	sigCache.Add(*msg, sig, key, false)
+	b.ReportAllocs()
+	for b.Loop() {
+		if !sigCache.Exists(*msg, sig, key, false) {
+			b.Fatal("entry not found")
+		}
+	}
+}
