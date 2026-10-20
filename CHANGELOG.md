@@ -89,6 +89,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 - Go 1.26 is required to build, and 1.26.9 or 1.27.2 or newer for the gRPC server's HTTP/2 fixes. Release binaries should use Go 1.27.2 or newer.
 - Publish the Docker image for `linux/riscv64` too, and update dependencies.
+- Build release binaries for `linux/arm64` and `darwin/arm64` too.
 - Stop building plan9 release binaries.
 
 ### Other
