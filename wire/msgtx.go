@@ -281,13 +281,11 @@ func (t *TxOut) SerializeSize() int {
 	// Value 8 bytes + serialized varint size for the length of PkScript +
 	// PkScript bytes. Including token data if present.
 
-	if t.TokenData.IsEmpty() {
-		return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
-	} else {
-		b := t.TokenData.TokenDataBuffer()
-		PkScriptAndTDataSize := len(b.Bytes()) + len(t.PkScript)
-		return 8 + VarIntSerializeSize(uint64(PkScriptAndTDataSize)) + PkScriptAndTDataSize
+	size := len(t.PkScript)
+	if !t.TokenData.IsEmpty() {
+		size += t.TokenData.serializeSize()
 	}
+	return 8 + VarIntSerializeSize(uint64(size)) + size
 }
 
 // NewTxOut returns a new bitcoin transaction output with the provided
@@ -909,9 +907,15 @@ func WriteTxOut(w io.Writer, pver uint32, version int32, to *TxOut) error {
 	}
 	if !to.TokenData.IsEmpty() {
 		buf := to.TokenData.TokenDataBuffer()
-
-		buf.Write(to.PkScript)
-		return WriteVarBytes(w, pver, buf.Bytes())
+		err := WriteVarInt(w, pver, uint64(buf.Len()+len(to.PkScript)))
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(buf.Bytes()); err != nil {
+			return err
+		}
+		_, err = w.Write(to.PkScript)
+		return err
 	}
 
 	return WriteVarBytes(w, pver, to.PkScript)
