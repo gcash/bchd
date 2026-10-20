@@ -9,6 +9,7 @@ import (
 	"container/list"
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/gcash/bchd/txscript"
 
@@ -36,14 +37,41 @@ const (
 )
 
 const (
-	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(UtxoEntry{}) before adding tokenData
-	baseUtxoEntrySizeWithoutTokenData = 40
-
-	// This value is calculated by running the following on a 64-bit system:
-	//   unsafe.Sizeof(wire.TokenData{}) assuming commitment of length 40
-	baseUtxoEntryTokenDataSize = 88
+	// utxoMapEntrySize is the cache map's memory per entry.  On 64-bit
+	// platforms a slot holds the outpoint (36 bytes, padded to 40), the
+	// entry pointer and a control byte, 49 bytes.  The map is counted at
+	// about its lowest load, just after growing, where it measured up to
+	// 122 bytes per entry, or 125 with fewer than 16,000 entries.  The
+	// 41-byte slots of 32-bit platforms are counted as 100 bytes, where
+	// they measured up to 109.
+	utxoMapEntrySize = uint64(120 - 5*(8-unsafe.Sizeof(uintptr(0))))
 )
+
+// utxoEntrySize is the allocation of a UtxoEntry, which holds its token
+// data: 120 bytes on 64-bit platforms, rounded up to its size class.
+var utxoEntrySize = allocSize(int(unsafe.Sizeof(UtxoEntry{})))
+
+// sizeClasses are the Go allocator's size classes for small objects.
+var sizeClasses = [...]uint64{8, 16, 24, 32, 48, 64, 80, 96, 112, 128, 144,
+	160, 176, 192, 208, 224, 240, 256, 288, 320, 352, 384, 416, 448, 480,
+	512, 576, 640, 704, 768, 896, 1024, 1152, 1280, 1408, 1536, 1792, 2048,
+	2304, 2688, 3072, 3200, 3456, 4096, 4864, 5376, 6144, 6528, 6784, 6912,
+	8192, 9472, 9728, 10240, 10880, 12288, 13568, 14336, 16384, 18432, 19072,
+	20480, 21760, 24576, 27264, 28672, 32768}
+
+// allocSize returns the heap memory used by an allocation of n bytes.
+func allocSize(n int) uint64 {
+	if n == 0 {
+		return 0
+	}
+	for _, class := range sizeClasses {
+		if uint64(n) <= class {
+			return class
+		}
+	}
+	// Larger objects take whole 8 KiB pages.
+	return (uint64(n) + 8191) &^ 8191
+}
 
 // txoFlags is a bitmask defining additional information and state for a
 // transaction output in a utxo view.
@@ -159,9 +187,8 @@ func (entry *UtxoEntry) memoryUsage() uint64 {
 		return 0
 	}
 
-	baseEntrySize := uint64(baseUtxoEntrySizeWithoutTokenData + baseUtxoEntryTokenDataSize)
-
-	return baseEntrySize + uint64(len(entry.pkScript))
+	return utxoEntrySize + allocSize(cap(entry.pkScript)) +
+		allocSize(cap(entry.tokenData.Commitment))
 }
 
 // Spend marks the output as spent.  Spending an output that is already spent
@@ -265,16 +292,9 @@ func newUtxoCache(db database.DB, maxTotalMemoryUsage uint64) *utxoCache {
 //
 // This method should be called with the state lock held.
 func (s *utxoCache) totalMemoryUsage() uint64 {
-	// This value is calculated by running the following on a 64-bit system:
-	// unsafe.Sizeof(wire.OutPoint{})
-	outpointSize := uint64(36)
-
-	// Total memory is all the keys plus the total memory of all the entries.
-	nbEntries := uint64(len(s.cachedEntries))
-
-	// Total size is total size of the keys + total size of the pointers in the
-	// map + total size of the elements held in the pointers.
-	return nbEntries*outpointSize + nbEntries*8 + s.totalEntryMemory
+	// Total size is the map, which holds the keys and the pointers, plus
+	// the entries they point to.
+	return uint64(len(s.cachedEntries))*utxoMapEntrySize + s.totalEntryMemory
 }
 
 // TotalMemoryUsage returns the total memory usage in bytes of the UTXO cache.
