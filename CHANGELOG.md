@@ -88,7 +88,7 @@ This release makes validation, initial sync and block relay considerably faster,
 ### Upgrade notes
 
 - **UTXO set.** On first start, nodes upgrading from an earlier release run a one-time precautionary check of the UTXO set against the blocks. It takes about three minutes on mainnet and is expected to repair nothing. Pruned and fast synced nodes skip it.
-- **Address index.** Nodes with `--addrindex` rebuild the address index on first start, which can take hours on mainnet.
+- **Address index.** Nodes with `--addrindex` rebuild the address index on first start. After downgrading to an earlier release with `--addrindex` and upgrading again, start once with `--dropaddrindex`, which exits when done, then with `--addrindex` to rebuild it; this release cannot tell which blocks the earlier one indexed.
 - **SLP index on 32-bit builds.** Earlier releases misread SLP amounts of 2^31 base units or more on 32-bit platforms, so the SLP index there can hold wrong token validity. Start once with `--dropslpindex`, which exits when done, then with `--slpindex` to rebuild it.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
