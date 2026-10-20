@@ -73,7 +73,6 @@ This release makes validation, initial sync and block relay considerably faster,
 - A failed UTXO flush now shuts the node down cleanly instead of carrying on.
 - An interrupted `--reindexchainstate` resumes on the next start instead of leaving an incomplete UTXO set.
 - Move to `gcash/goleveldb` v1.1.0, a maintained fork of `syndtr/goleveldb` that brings upstream fixes since 2018 and fixes data loss during crash recovery, hangs after failed writes, and several panics. After a failed disk write it takes no more writes until the node restarts, and a corrupted MANIFEST fails the open instead of silently dropping tables. The on-disk format is unchanged.
-- Check the UTXO set once on first start, as a precaution against entries that 0.20.0 through 0.22.2 could have stored incorrectly for outputs whose locking script starts with the token prefix byte. No such outputs are known on mainnet, testnet4 or chipnet, so the check is expected to repair nothing. Pruned and fast synced nodes, which no longer have the blocks it reads, skip it.
 
 ### Security
 
@@ -102,7 +101,6 @@ This release makes validation, initial sync and block relay considerably faster,
 
 ### Upgrade notes
 
-- **UTXO set.** On first start, nodes upgrading from an earlier release run a one-time precautionary check of the UTXO set against the blocks. It takes about three minutes on mainnet and is expected to repair nothing. Pruned and fast synced nodes skip it.
 - **Address index.** Nodes with `--addrindex` rebuild the address index on first start. After downgrading to an earlier release with `--addrindex` and upgrading again, start once with `--dropaddrindex`, which exits when done, then with `--addrindex` to rebuild it; this release cannot tell which blocks the earlier one indexed.
 - **SLP index on 32-bit builds.** Earlier releases misread SLP amounts of 2^31 base units or more on 32-bit platforms, so the SLP index there can hold wrong token validity. Start once with `--dropslpindex`, which exits when done, then with `--slpindex` to rebuild it.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.

@@ -25,10 +25,8 @@ const (
 	blockHdrSize = wire.MaxBlockHeaderPayload
 
 	// latestUtxoSetBucketVersion is the current version of the utxo set
-	// bucket that is used to track all unspent outputs.  Version 3 has the
-	// token prefixes that bchd 0.20.0 through 0.22.2 stored wrongly
-	// repaired.
-	latestUtxoSetBucketVersion = 3
+	// bucket that is used to track all unspent outputs.
+	latestUtxoSetBucketVersion = 2
 
 	// latestSpendJournalBucketVersion is the current version of the spend
 	// journal bucket that is used to track all spent transactions for use
