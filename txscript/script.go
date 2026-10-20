@@ -282,13 +282,17 @@ func parseScript(script []byte) ([]parsedOpcode, error) {
 // unparseScript reversed the action of parseScript and returns the
 // parsedOpcodes as a list of bytes
 func unparseScript(pops []parsedOpcode) ([]byte, error) {
-	script := make([]byte, 0, len(pops))
-	for _, pop := range pops {
-		b, err := pop.bytes()
+	size := 0
+	for i := range pops {
+		size += pops[i].serializeSize()
+	}
+	script := make([]byte, 0, size)
+	for i := range pops {
+		var err error
+		script, err = pops[i].appendBytes(script)
 		if err != nil {
 			return nil, err
 		}
-		script = append(script, b...)
 	}
 	return script, nil
 }

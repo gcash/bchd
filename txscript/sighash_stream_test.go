@@ -199,3 +199,34 @@ func BenchmarkNewTxSigHashes(b *testing.B) {
 		_ = NewTxSigHashes(tx)
 	}
 }
+
+// TestUnparseScriptRoundTrip checks that unparsing a parsed script returns
+// its bytes, for every push encoding.
+func TestUnparseScriptRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(3))
+	scripts := [][]byte{nil, {OP_0}, {OP_DATA_1, 7},
+		{OP_PUSHDATA1, 2, 1, 2}, {OP_PUSHDATA2, 1, 0, 9},
+		{OP_PUSHDATA4, 1, 0, 0, 0, 9}, {OP_PUSHDATA1, 0}}
+	for range 200 {
+		scripts = append(scripts, randSighashScript(rng))
+	}
+	for i, script := range scripts {
+		pops, err := parseScript(script)
+		if err != nil {
+			t.Fatalf("script %d: %v", i, err)
+		}
+		got, err := unparseScript(pops)
+		if err != nil {
+			t.Fatalf("script %d: %v", i, err)
+		}
+		if !bytes.Equal(got, script) {
+			t.Fatalf("script %d: got %x, want %x", i, got, script)
+		}
+		for j := range pops {
+			b, err := pops[j].bytes()
+			if err != nil || len(b) != pops[j].serializeSize() {
+				t.Fatalf("script %d op %d: %x %v", i, j, b, err)
+			}
+		}
+	}
+}
