@@ -9,11 +9,13 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 const (
@@ -576,6 +578,178 @@ func upgradeUtxoSetToV2(db database.DB, interrupt <-chan struct{}) error {
 	return nil
 }
 
+// repairUtxoTokenPrefixes repairs the utxo entries that bchd 0.20.0 through
+// 0.22.2 stored wrongly, and then sets the utxo set version to 3.  Those
+// versions split the token prefix off a locking script that had already been
+// split, so an output whose locking script starts with the token prefix
+// byte, after a valid token prefix or without one, was stored with token
+// data taken from its script, with part of a prefix and no script, or with
+// no script at all.  No such output can ever be spent, but some of the
+// damaged entries hold scripts anyone can spend.  None of these outputs are
+// known to exist on mainnet, testnet4 or chipnet, so the repair is a
+// precaution.
+//
+// Every damaged entry holds token data, an empty script, or a script that
+// starts with the token prefix byte, and so does every token output.  Each
+// such entry is rebuilt from its output in the main chain block at its
+// height, which blockAtHeight returns.
+//
+// The repair is idempotent, so an interrupted one starts over.
+func repairUtxoTokenPrefixes(db database.DB,
+	blockAtHeight func(dbTx database.Tx, height int32) (*bchutil.Block, error),
+	interrupt <-chan struct{}) error {
+
+	// Hardcoded bucket name so updates to the global value do not affect
+	// this upgrade.
+	bucketName := []byte("utxosetv2")
+
+	log.Infof("Running a one-time precautionary check of the UTXO set.  " +
+		"No repairs are expected.")
+	start := time.Now()
+
+	// Find the entries that may be damaged.
+	type candidate struct {
+		outpoint wire.OutPoint
+		height   int32
+	}
+	var (
+		candidates []candidate
+		totalUtxos uint64
+	)
+	err := db.View(func(dbTx database.Tx) error {
+		cursor := dbTx.Metadata().Bucket(bucketName).Cursor()
+		for ok := cursor.First(); ok; ok = cursor.Next() {
+			totalUtxos++
+			if totalUtxos%1000000 == 0 && interruptRequested(interrupt) {
+				return errInterruptRequested
+			}
+
+			entry, err := DeserializeUtxoEntry(cursor.Value())
+			if err != nil {
+				return err
+			}
+			pkScript := entry.PkScript()
+			if entry.tokenData.IsEmpty() && len(pkScript) > 0 &&
+				pkScript[0] != wire.PREFIX_BYTE {
+
+				continue
+			}
+			candidates = append(candidates, candidate{
+				outpoint: *DeserializeOutpointKey(cursor.Key()),
+				height:   entry.BlockHeight(),
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	log.Infof("Checking %d of %d UTXOs against their blocks",
+		len(candidates), totalUtxos)
+
+	// Rebuild the candidates block by block, in batches of whole blocks
+	// to bound the memory a database transaction uses.
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].height < candidates[j].height
+	})
+	const maxUtxos = 200000
+	var next, repaired int
+	for next < len(candidates) {
+		err := db.Update(func(dbTx database.Tx) error {
+			bucket := dbTx.Metadata().Bucket(bucketName)
+			for numUtxos := 0; next < len(candidates) && numUtxos < maxUtxos; {
+				height := candidates[next].height
+				block, err := blockAtHeight(dbTx, height)
+				if err != nil {
+					return err
+				}
+				txns := make(map[chainhash.Hash]*bchutil.Tx,
+					len(block.Transactions()))
+				for _, tx := range block.Transactions() {
+					txns[*tx.Hash()] = tx
+				}
+
+				for ; next < len(candidates) &&
+					candidates[next].height == height; next++ {
+
+					outpoint := candidates[next].outpoint
+					tx := txns[outpoint.Hash]
+					if tx == nil || outpoint.Index >= uint32(len(tx.MsgTx().TxOut)) {
+						return AssertError(fmt.Sprintf("utxo %v is not "+
+							"in block %v at height %d", outpoint,
+							block.Hash(), height))
+					}
+					txOut := tx.MsgTx().TxOut[outpoint.Index]
+
+					key := outpointKey(outpoint)
+					stored := bucket.Get(*key)
+					entry, err := DeserializeUtxoEntry(stored)
+					if err != nil {
+						return err
+					}
+					if entry.Amount() != txOut.Value ||
+						entry.IsCoinBase() != IsCoinBase(tx) {
+
+						return AssertError(fmt.Sprintf("utxo %v does "+
+							"not match its output in block %v",
+							outpoint, block.Hash()))
+					}
+
+					entry.pkScript = txOut.PkScript
+					entry.tokenData = txOut.TokenData
+					serialized, err := serializeUtxoEntry(entry)
+					if err != nil {
+						return err
+					}
+					if bytes.Equal(serialized, stored) {
+						recycleOutpointKey(key)
+						numUtxos++
+						continue
+					}
+
+					// NOTE: The key is intentionally not recycled
+					// here since the database interface contract
+					// prohibits modifications.
+					if err := bucket.Put(*key, serialized); err != nil {
+						return err
+					}
+					repaired++
+					numUtxos++
+					log.Infof("Repaired UTXO %v", outpoint)
+				}
+
+				if interruptRequested(interrupt) {
+					// No error here so the database transaction
+					// is not cancelled.
+					break
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		if interruptRequested(interrupt) {
+			return errInterruptRequested
+		}
+		log.Infof("Checked %d of %d UTXOs (%d repaired)", next,
+			len(candidates), repaired)
+	}
+
+	err = db.Update(func(dbTx database.Tx) error {
+		return dbPutVersion(dbTx, utxoSetVersionKeyName, 3)
+	})
+	if err != nil {
+		return err
+	}
+
+	seconds := int64(time.Since(start) / time.Second)
+	log.Infof("Done checking the UTXO set.  Repaired %d of %d UTXOs in %d "+
+		"seconds", repaired, len(candidates), seconds)
+	return nil
+}
+
 // maybeUpgradeDbBuckets checks the database version of the buckets used by this
 // package and performs any needed upgrades to bring them to the latest version.
 //
@@ -600,6 +774,45 @@ func (b *BlockChain) maybeUpgradeDbBuckets(interrupt <-chan struct{}) error {
 	if utxoSetVersion < 2 {
 		if err := upgradeUtxoSetToV2(b.db, interrupt); err != nil {
 			return err
+		}
+	}
+
+	// Check the token entries of the utxo set against their blocks to bring
+	// it to v3 if needed.  The check is a precaution that reads the blocks
+	// a pruned or fast synced node no longer has, so those nodes skip it.
+	if utxoSetVersion < 3 {
+		var pruned bool
+		err := b.db.View(func(dbTx database.Tx) error {
+			pruned = bytes.Equal(dbFetchBlockchainType(dbTx),
+				prunedBlockchainEntryValue)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if pruned {
+			log.Infof("Skipping the one-time precautionary check of the " +
+				"UTXO set, which needs blocks this pruned or fast synced " +
+				"node no longer has")
+			err = b.db.Update(func(dbTx database.Tx) error {
+				return dbPutVersion(dbTx, utxoSetVersionKeyName, 3)
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			blockAtHeight := func(dbTx database.Tx, height int32) (*bchutil.Block, error) {
+				node := b.bestChain.NodeByHeight(height)
+				if node == nil {
+					return nil, AssertError(fmt.Sprintf("no main "+
+						"chain block at utxo height %d", height))
+				}
+				return dbFetchBlockByNode(dbTx, node)
+			}
+			err := repairUtxoTokenPrefixes(b.db, blockAtHeight, interrupt)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
