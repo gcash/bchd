@@ -404,13 +404,20 @@ func (msg *MsgTx) Copy() *MsgTx {
 // See Deserialize for decoding transactions stored to disk, such as in a
 // database, as opposed to decoding transactions from the wire.
 func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	version, err := binarySerializer.Uint32(r, littleEndian)
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return msg.bchDecode(r, pver, buf)
+}
+
+// bchDecode decodes r into the receiver like BchDecode using the provided
+// scratch buffer.
+func (msg *MsgTx) bchDecode(r io.Reader, pver uint32, buf []byte) error {
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
 		return err
 	}
-	msg.Version = int32(version)
+	msg.Version = int32(littleEndian.Uint32(buf[:4]))
 
-	count, err := ReadVarInt(r, pver)
+	count, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		return err
 	}
@@ -470,7 +477,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		txIns = txIns[:len(txIns)+1]
 		ti := &txIns[len(txIns)-1]
 		msg.TxIn = append(msg.TxIn, ti)
-		err = readTxIn(r, pver, msg.Version, ti)
+		err = readTxInBuf(r, pver, ti, buf)
 		if err != nil {
 			returnScriptBuffers()
 			return err
@@ -478,7 +485,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		totalScriptSize += uint64(len(ti.SignatureScript))
 	}
 
-	count, err = ReadVarInt(r, pver)
+	count, err = ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		returnScriptBuffers()
 		return err
@@ -514,7 +521,7 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		txOuts = txOuts[:len(txOuts)+1]
 		to := &txOuts[len(txOuts)-1]
 		msg.TxOut = append(msg.TxOut, to)
-		pkScriptSize, err := readTxOut(r, pver, msg.Version, to)
+		pkScriptSize, err := readTxOutBuf(r, pver, to, buf)
 		if err != nil {
 			returnScriptBuffers()
 			return err
@@ -522,11 +529,11 @@ func (msg *MsgTx) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		totalScriptSize += uint64(pkScriptSize)
 	}
 
-	msg.LockTime, err = binarySerializer.Uint32(r, littleEndian)
-	if err != nil {
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
 		returnScriptBuffers()
 		return err
 	}
+	msg.LockTime = littleEndian.Uint32(buf[:4])
 
 	// Create a single allocation to house all of the scripts and set each
 	// input signature script and output public key script to the
@@ -602,38 +609,46 @@ func (msg *MsgTx) Deserialize(r io.Reader) error {
 // See Serialize for encoding transactions to be stored to disk, such as in a
 // database, as opposed to encoding transactions for the wire.
 func (msg *MsgTx) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	err := binarySerializer.PutUint32(w, littleEndian, uint32(msg.Version))
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return msg.bchEncode(w, pver, buf)
+}
+
+// bchEncode encodes the receiver to w like BchEncode using the provided
+// scratch buffer.
+func (msg *MsgTx) bchEncode(w io.Writer, pver uint32, buf []byte) error {
+	littleEndian.PutUint32(buf[:4], uint32(msg.Version))
+	if _, err := w.Write(buf[:4]); err != nil {
 		return err
 	}
 
-	count := uint64(len(msg.TxIn))
-	err = WriteVarInt(w, pver, count)
+	err := WriteVarIntBuf(w, pver, uint64(len(msg.TxIn)), buf)
 	if err != nil {
 		return err
 	}
 
 	for _, ti := range msg.TxIn {
-		err = writeTxIn(w, pver, msg.Version, ti)
+		err = writeTxInBuf(w, pver, ti, buf)
 		if err != nil {
 			return err
 		}
 	}
 
-	count = uint64(len(msg.TxOut))
-	err = WriteVarInt(w, pver, count)
+	err = WriteVarIntBuf(w, pver, uint64(len(msg.TxOut)), buf)
 	if err != nil {
 		return err
 	}
 
 	for _, to := range msg.TxOut {
-		err = WriteTxOut(w, pver, msg.Version, to)
+		err = writeTxOutBuf(w, pver, to, buf)
 		if err != nil {
 			return err
 		}
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, msg.LockTime)
+	littleEndian.PutUint32(buf[:4], msg.LockTime)
+	_, err = w.Write(buf[:4])
+	return err
 }
 
 // Serialize encodes the transaction to w using a format that suitable for
@@ -743,35 +758,54 @@ func NewMsgTx(version int32) *MsgTx {
 
 // readOutPoint reads the next sequence of bytes from r as an OutPoint.
 func readOutPoint(r io.Reader, pver uint32, version int32, op *OutPoint) error {
-	_, err := io.ReadFull(r, op.Hash[:])
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return readOutPointBuf(r, op, buf)
+}
+
+// readOutPointBuf reads an OutPoint from r using the provided scratch buffer.
+func readOutPointBuf(r io.Reader, op *OutPoint, buf []byte) error {
+	if _, err := io.ReadFull(r, op.Hash[:]); err != nil {
 		return err
 	}
-
-	op.Index, err = binarySerializer.Uint32(r, littleEndian)
-	return err
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	op.Index = littleEndian.Uint32(buf[:4])
+	return nil
 }
 
 // writeOutPoint encodes op to the bitcoin protocol encoding for an OutPoint
 // to w.
 func writeOutPoint(w io.Writer, pver uint32, version int32, op *OutPoint) error {
-	_, err := w.Write(op.Hash[:])
-	if err != nil {
-		return err
-	}
-
-	return binarySerializer.PutUint32(w, littleEndian, op.Index)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return writeOutPointBuf(w, op, buf)
 }
 
-// readScript reads a variable length byte array that represents a transaction
-// script.  It is encoded as a varInt containing the length of the array
-// followed by the bytes themselves.  An error is returned if the length is
+// writeOutPointBuf writes op to w using the provided scratch buffer.
+func writeOutPointBuf(w io.Writer, op *OutPoint, buf []byte) error {
+	if _, err := w.Write(op.Hash[:]); err != nil {
+		return err
+	}
+	littleEndian.PutUint32(buf[:4], op.Index)
+	_, err := w.Write(buf[:4])
+	return err
+}
+
+// readScriptBuf reads a variable length byte array that represents a
+// transaction script.  It is encoded as a varInt containing the length of the
+// array followed by the bytes themselves.  An error is returned if the length is
 // greater than the passed maxAllowed parameter which helps protect against
 // memory exhaustion attacks and forced panics through malformed messages.  The
 // fieldName parameter is only used for the error message so it provides more
 // context in the error.
-func readScript(r io.Reader, pver uint32, maxAllowed uint32, fieldName string) ([]byte, error) {
-	count, err := ReadVarInt(r, pver)
+//
+// The provided scratch buffer is used to read the length.
+func readScriptBuf(r io.Reader, pver uint32, buf []byte, maxAllowed uint32,
+	fieldName string) ([]byte, error) {
+
+	count, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -835,45 +869,72 @@ func readScriptChunked(r io.Reader, count uint64) ([]byte, error) {
 // readTxIn reads the next sequence of bytes from r as a transaction input
 // (TxIn).
 func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
-	err := readOutPoint(r, pver, version, &ti.PreviousOutPoint)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return readTxInBuf(r, pver, ti, buf)
+}
+
+// readTxInBuf reads a TxIn from r using the provided scratch buffer.
+func readTxInBuf(r io.Reader, pver uint32, ti *TxIn, buf []byte) error {
+	err := readOutPointBuf(r, &ti.PreviousOutPoint, buf)
 	if err != nil {
 		return err
 	}
 
-	ti.SignatureScript, err = readScript(r, pver, maxTxInPerMessage(),
-		"transaction input signature script")
+	ti.SignatureScript, err = readScriptBuf(r, pver, buf,
+		maxTxInPerMessage(), "transaction input signature script")
 	if err != nil {
 		return err
 	}
 
-	return readElement(r, &ti.Sequence)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	ti.Sequence = littleEndian.Uint32(buf[:4])
+	return nil
 }
 
 // writeTxIn encodes ti to the bitcoin protocol encoding for a transaction
 // input (TxIn) to w.
 func writeTxIn(w io.Writer, pver uint32, version int32, ti *TxIn) error {
-	err := writeOutPoint(w, pver, version, &ti.PreviousOutPoint)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return writeTxInBuf(w, pver, ti, buf)
+}
+
+// writeTxInBuf writes ti to w using the provided scratch buffer.
+func writeTxInBuf(w io.Writer, pver uint32, ti *TxIn, buf []byte) error {
+	err := writeOutPointBuf(w, &ti.PreviousOutPoint, buf)
 	if err != nil {
 		return err
 	}
 
-	err = WriteVarBytes(w, pver, ti.SignatureScript)
+	err = WriteVarBytesBuf(w, pver, ti.SignatureScript, buf)
 	if err != nil {
 		return err
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, ti.Sequence)
+	littleEndian.PutUint32(buf[:4], ti.Sequence)
+	_, err = w.Write(buf[:4])
+	return err
 }
 
 // readTxOut reads the next sequence of bytes from r as a transaction output
 // (TxOut).
 func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) {
-	err := readElement(r, &to.Value)
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return readTxOutBuf(r, pver, to, buf)
+}
+
+// readTxOutBuf reads a TxOut from r using the provided scratch buffer.
+func readTxOutBuf(r io.Reader, pver uint32, to *TxOut, buf []byte) (int, error) {
+	if _, err := io.ReadFull(r, buf[:8]); err != nil {
 		return 0, err
 	}
+	to.Value = int64(littleEndian.Uint64(buf[:8]))
 
-	script, err := readScript(r, pver, maxMessagePayload(),
+	script, err := readScriptBuf(r, pver, buf, maxMessagePayload(),
 		"transaction output public key script and possible token data")
 	if err != nil {
 		return 0, err
@@ -897,22 +958,29 @@ func ReadTxOut(r io.Reader, pver uint32, version int32, to *TxOut) (int, error) 
 // NOTE: This function is exported in order to allow txscript to compute the
 // new sighashes for witness transactions (BIP0143).
 func WriteTxOut(w io.Writer, pver uint32, version int32, to *TxOut) error {
-	err := binarySerializer.PutUint64(w, littleEndian, uint64(to.Value))
-	if err != nil {
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return writeTxOutBuf(w, pver, to, buf)
+}
+
+// writeTxOutBuf writes to to w using the provided scratch buffer.
+func writeTxOutBuf(w io.Writer, pver uint32, to *TxOut, buf []byte) error {
+	littleEndian.PutUint64(buf[:8], uint64(to.Value))
+	if _, err := w.Write(buf[:8]); err != nil {
 		return err
 	}
 	if !to.TokenData.IsEmpty() {
-		buf := to.TokenData.TokenDataBuffer()
-		err := WriteVarInt(w, pver, uint64(buf.Len()+len(to.PkScript)))
+		prefix := to.TokenData.TokenDataBuffer()
+		err := WriteVarIntBuf(w, pver, uint64(prefix.Len()+len(to.PkScript)), buf)
 		if err != nil {
 			return err
 		}
-		if _, err := w.Write(buf.Bytes()); err != nil {
+		if _, err := w.Write(prefix.Bytes()); err != nil {
 			return err
 		}
 		_, err = w.Write(to.PkScript)
 		return err
 	}
 
-	return WriteVarBytes(w, pver, to.PkScript)
+	return WriteVarBytesBuf(w, pver, to.PkScript, buf)
 }

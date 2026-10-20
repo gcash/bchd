@@ -46,7 +46,10 @@ func (msg *MsgInv) AddInvVect(iv *InvVect) error {
 // BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgInv) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	count, err := ReadVarInt(r, pver)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+
+	count, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		return err
 	}
@@ -66,7 +69,7 @@ func (msg *MsgInv) BchDecode(r io.Reader, pver uint32, enc MessageEncoding) erro
 	msg.InvList = make([]*InvVect, 0, n)
 	for i := range count {
 		iv := &invList[i]
-		err := readInvVect(r, pver, iv)
+		err := readInvVectBuf(r, iv, buf)
 		if err != nil {
 			return err
 		}
@@ -86,13 +89,16 @@ func (msg *MsgInv) BchEncode(w io.Writer, pver uint32, enc MessageEncoding) erro
 		return messageError("MsgInv.BchEncode", str)
 	}
 
-	err := WriteVarInt(w, pver, uint64(count))
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+
+	err := WriteVarIntBuf(w, pver, uint64(count), buf)
 	if err != nil {
 		return err
 	}
 
 	for _, iv := range msg.InvList {
-		err := writeInvVect(w, pver, iv)
+		err := writeInvVectBuf(w, iv, buf)
 		if err != nil {
 			return err
 		}

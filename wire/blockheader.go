@@ -45,15 +45,9 @@ const blockHeaderLen = 80
 
 // BlockHash computes the block identifier hash for the given block header.
 func (h *BlockHeader) BlockHash() chainhash.Hash {
-	// Encode the header into a fixed buffer, as writeBlockHeader does, and
-	// double sha256 it.
+	// Encode the header into a fixed buffer and double sha256 it.
 	var buf [blockHeaderLen]byte
-	littleEndian.PutUint32(buf[0:4], uint32(h.Version))
-	copy(buf[4:36], h.PrevBlock[:])
-	copy(buf[36:68], h.MerkleRoot[:])
-	littleEndian.PutUint32(buf[68:72], uint32(h.Timestamp.Unix()))
-	littleEndian.PutUint32(buf[72:76], h.Bits)
-	littleEndian.PutUint32(buf[76:80], h.Nonce)
+	putBlockHeader(buf[:], h)
 	return chainhash.DoubleHashH(buf[:])
 }
 
@@ -115,15 +109,75 @@ func NewBlockHeader(version int32, prevHash, merkleRootHash *chainhash.Hash,
 // decoding block headers stored to disk, such as in a database, as opposed to
 // decoding from the wire.
 func readBlockHeader(r io.Reader, _ uint32, bh *BlockHeader) error {
-	return readElements(r, &bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		(*uint32Time)(&bh.Timestamp), &bh.Bits, &bh.Nonce)
+	buf := binarySerializer.Borrow()
+	err := readBlockHeaderBuf(r, bh, buf)
+	binarySerializer.Return(buf)
+	return err
+}
+
+// readBlockHeaderBuf reads a block header from r using the provided scratch
+// buffer.
+func readBlockHeaderBuf(r io.Reader, bh *BlockHeader, buf []byte) error {
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	bh.Version = int32(littleEndian.Uint32(buf[:4]))
+	if _, err := io.ReadFull(r, bh.PrevBlock[:]); err != nil {
+		return err
+	}
+	if _, err := io.ReadFull(r, bh.MerkleRoot[:]); err != nil {
+		return err
+	}
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	bh.Timestamp = time.Unix(int64(littleEndian.Uint32(buf[:4])), 0)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	bh.Bits = littleEndian.Uint32(buf[:4])
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return err
+	}
+	bh.Nonce = littleEndian.Uint32(buf[:4])
+	return nil
 }
 
 // writeBlockHeader writes a bitcoin block header to w.  See Serialize for
 // encoding block headers to be stored to disk, such as in a database, as
 // opposed to encoding for the wire.
 func writeBlockHeader(w io.Writer, _ uint32, bh *BlockHeader) error {
-	sec := uint32(bh.Timestamp.Unix())
-	return writeElements(w, bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		sec, bh.Bits, bh.Nonce)
+	buf := binarySerializer.Borrow()
+	err := writeBlockHeaderBuf(w, bh, buf)
+	binarySerializer.Return(buf)
+	return err
+}
+
+// writeBlockHeaderBuf writes bh to w using the provided scratch buffer.
+func writeBlockHeaderBuf(w io.Writer, bh *BlockHeader, buf []byte) error {
+	littleEndian.PutUint32(buf[:4], uint32(bh.Version))
+	if _, err := w.Write(buf[:4]); err != nil {
+		return err
+	}
+	if _, err := w.Write(bh.PrevBlock[:]); err != nil {
+		return err
+	}
+	if _, err := w.Write(bh.MerkleRoot[:]); err != nil {
+		return err
+	}
+	littleEndian.PutUint32(buf[0:4], uint32(bh.Timestamp.Unix()))
+	littleEndian.PutUint32(buf[4:8], bh.Bits)
+	littleEndian.PutUint32(buf[8:12], bh.Nonce)
+	_, err := w.Write(buf[:12])
+	return err
+}
+
+// putBlockHeader encodes bh into the first blockHeaderLen bytes of buf.
+func putBlockHeader(buf []byte, bh *BlockHeader) {
+	littleEndian.PutUint32(buf[0:4], uint32(bh.Version))
+	copy(buf[4:36], bh.PrevBlock[:])
+	copy(buf[36:68], bh.MerkleRoot[:])
+	littleEndian.PutUint32(buf[68:72], uint32(bh.Timestamp.Unix()))
+	littleEndian.PutUint32(buf[72:76], bh.Bits)
+	littleEndian.PutUint32(buf[76:80], bh.Nonce)
 }

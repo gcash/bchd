@@ -717,7 +717,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 
 	// An opcode that fails to serialize leaves the script code empty.
 	scriptStart := len(sigHash)
-	sigHash = appendVarInt(sigHash, uint64(scriptLen))
+	sigHash = wire.AppendVarInt(sigHash, uint64(scriptLen))
 	for i := range subScript {
 		b, err := subScript[i].appendBytes(sigHash)
 		if err != nil {
@@ -756,19 +756,6 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	totalBytesHashedlength += len(sigHash)
 
 	return chainhash.DoubleHashB(sigHash), totalBytesHashedlength, nil
-}
-
-// appendVarInt appends val to dst as a bitcoin variable length integer.
-func appendVarInt(dst []byte, val uint64) []byte {
-	switch {
-	case val < 0xfd:
-		return append(dst, byte(val))
-	case val <= 0xffff:
-		return binary.LittleEndian.AppendUint16(append(dst, 0xfd), uint16(val))
-	case val <= 0xffffffff:
-		return binary.LittleEndian.AppendUint32(append(dst, 0xfe), uint32(val))
-	}
-	return binary.LittleEndian.AppendUint64(append(dst, 0xff), val)
 }
 
 // asSmallInt returns the passed opcode, which must be true according to

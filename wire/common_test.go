@@ -782,3 +782,54 @@ func TestRandomUint64Errors(t *testing.T) {
 		t.Errorf("Nonce is not 0 [%v]", nonce)
 	}
 }
+
+// TestVarIntBufReuse checks that the scratch buffer variants encode like
+// WriteVarInt and decode their own output when one buffer is reused.
+func TestVarIntBufReuse(t *testing.T) {
+	vals := []uint64{0, 0xfc, 0xfd, 0xffff, 0x10000, 0xffffffff,
+		0x100000000, 0xffffffffffffffff}
+	buf := make([]byte, scratchSize)
+	for _, val := range vals {
+		var want, got bytes.Buffer
+		if err := WriteVarInt(&want, 0, val); err != nil {
+			t.Fatalf("WriteVarInt %d: %v", val, err)
+		}
+		if err := WriteVarIntBuf(&got, 0, val, buf); err != nil {
+			t.Fatalf("WriteVarIntBuf %d: %v", val, err)
+		}
+		if !bytes.Equal(got.Bytes(), want.Bytes()) {
+			t.Fatalf("WriteVarIntBuf %d: got %x, want %x", val,
+				got.Bytes(), want.Bytes())
+		}
+		rv, err := ReadVarIntBuf(&got, 0, buf)
+		if err != nil || rv != val {
+			t.Fatalf("ReadVarIntBuf %d: got %d, err %v", val, rv, err)
+		}
+	}
+}
+
+// TestAppendVarInt compares AppendVarInt, putVarInt and WriteVarIntToHasher
+// with WriteVarInt.
+func TestAppendVarInt(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []uint64{0, 1, 0xfc, 0xfd, 0xfe, 0xff, 0x100, 0xffff,
+		0x10000, 0xffffffff, 0x100000000, 1<<64 - 1} {
+		var want bytes.Buffer
+		if err := WriteVarInt(&want, 0, v); err != nil {
+			t.Fatal(err)
+		}
+		if got := AppendVarInt([]byte{9}, v); !bytes.Equal(got[1:], want.Bytes()) || got[0] != 9 {
+			t.Errorf("AppendVarInt(%d) = %x, want %x", v, got[1:], want.Bytes())
+		}
+		var buf [9]byte
+		if got := putVarInt(buf[:], v); !bytes.Equal(got, want.Bytes()) {
+			t.Errorf("putVarInt(%d) = %x, want %x", v, got, want.Bytes())
+		}
+		d := chainhash.NewDoubleHasher()
+		WriteVarIntToHasher(d, v)
+		if got, wantHash := d.Sum(), chainhash.DoubleHashH(want.Bytes()); got != wantHash {
+			t.Errorf("WriteVarIntToHasher(%d) hashes to %v, want %v", v, got, wantHash)
+		}
+	}
+}
