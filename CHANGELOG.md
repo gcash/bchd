@@ -4,9 +4,9 @@ All notable user-visible changes to [bchd](https://github.com/gcash/bchd), a ful
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
-## 0.22.3 (2026-10-17)
+## 0.22.3 (2026-10-19)
 
-This release makes validation, initial sync and block relay considerably faster, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, adds block finalization and Tor v3 support, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node runs with `--addrindex`, or with `--slpindex` on a 32-bit platform, or serves `sendrawtransaction`.
+This release makes validation, initial sync and block relay considerably faster, adds double spend proofs, block finalization and Tor v3 support, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also drops free transactions, as BCHN did, and fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node sets `--minrelaytxfee` to 0 or uses `--profile`, runs with `--addrindex`, or with `--slpindex` on a 32-bit platform, or serves `sendrawtransaction`.
 
 ### Performance
 
@@ -23,6 +23,9 @@ This release makes validation, initial sync and block relay considerably faster,
 - `--maxtxfee` (default 0.1 BCH, as in BCHN) is the highest fee `sendrawtransaction` and `testmempoolaccept` accept without `allowhighfees`.
 - `--maxreorgdepth` (default 10) and `--finalizationdelay` (default 7200 seconds), as in BCHN.
 - `--rpcauthtimeout` now also applies to websocket clients.
+- `--nodoublespendproof` turns off double spend proofs.
+- `--minrelaytxfee` must be above 0. `--limitfreerelay`, `--norelaypriority`, `--blockminsize` and `--blockprioritysize` are deprecated and do nothing.
+- `--profile` with a bare port listens on localhost only.
 
 ### Consensus & Network
 
@@ -33,7 +36,10 @@ This release makes validation, initial sync and block relay considerably faster,
 - Support Tor v3 onion addresses and BIP155 `addrv2`, as BCHN does. Tor v2 addresses, which Tor no longer supports, are dropped.
 - Match bloom filters and build merkle blocks as BCHN does (gcash/bchutil#50).
 - Match P2PK and bare multisig scripts to BCHN's templates for standardness. A key that isn't pushed directly, or doesn't start with a valid prefix, makes the script pay to script.
-- Fix several P2P message handling issues, and bound UPnP requests to five seconds.
+- Create, check and relay double spend proofs (`dsproof-beta`), as BCHN does.
+- Every new transaction must pay `--minrelaytxfee`, as in BCHN. Free relay and coin-age priority are gone.
+- Regtest applies every upgrade from the first block, CashTokens included, and activates CSV at height 576, as BCHN does.
+- Fix several P2P message and compact block relay issues, and bound UPnP requests to five seconds.
 
 ### RPC & gRPC
 
@@ -46,6 +52,10 @@ This release makes validation, initial sync and block relay considerably faster,
 - A gRPC subscription that falls more than 50000 events behind now ends with `ResourceExhausted`.
 - Move SLP parsing to `gcash/goslp` v1.0.0, a maintained copy of `simpleledgerinc/goslp`, whose repository was deleted. 32-bit builds now read SLP amounts of 2^31 base units or more correctly.
 - When a MINT confirms, the SLP index now drops the token's cached metadata, as it was meant to. gRPC could otherwise report the mint baton where a double-spent MINT had put it, until a restart.
+- Add `getdsproof`, `getdsprooflist` and `getdsproofscore` as in BCHN, the `notifydsproofs` websocket command, and the gRPC calls `GetDoubleSpendProof`, `GetDoubleSpendProofs`, `GetDoubleSpendProofScore` and `SubscribeDoubleSpendProofs`.
+- `verifymessage` accepts cashaddr addresses. `validateaddress` keeps the token-aware form and adds `istokenaware`. `createrawtransaction` rejects a repeated destination. `getinfo` and `getmininginfo` report `testnet` on testnet4 and chipnet. Limited users can stop the notifications they can start.
+- gRPC address queries accept legacy and P2SH32 addresses, and transaction filters match them. `GetAddressUnspentOutputs` no longer returns an output twice, and `GetBlockchainInfo` works on chipnet.
+- `getrawmempool`'s `startingpriority` and `currentpriority`, and gRPC's `starting_priority`, are deprecated and always 0. `estimatepriority` is now an unknown method.
 
 ### Mining
 
@@ -54,12 +64,14 @@ This release makes validation, initial sync and block relay considerably faster,
 - `submitblock` returns BIP22 reasons such as `duplicate-invalid` or `prev-blk-not-found`, as BCHN does, and no longer reports a block with an unknown parent, or one that ends up on a side chain, as accepted. Proposals are checked at the next block height.
 - `submitblock` and block proposals reject trailing data after the block.
 - `generate` writes the right coinbase height when the tip moves while mining, and only returns blocks that were accepted.
+- Templates select transactions by fee rate only, as in BCHN. The priority area and `--blockminsize` filling are gone.
 
 ### Database
 
 - Fix hangs when pruning, after a failed database commit, and when `peers.json` is rejected.
 - Keep UTXO cache entries until their flush commits, and recover at startup from a flush interrupted after a reorg.
 - A failed UTXO flush now shuts the node down cleanly instead of carrying on.
+- An interrupted `--reindexchainstate` resumes on the next start instead of leaving an incomplete UTXO set.
 - Move to `gcash/goleveldb` v1.1.0, a maintained fork of `syndtr/goleveldb` that brings upstream fixes since 2018 and fixes data loss during crash recovery, hangs after failed writes, and several panics. After a failed disk write it takes no more writes until the node restarts, and a corrupted MANIFEST fails the open instead of silently dropping tables. The on-disk format is unchanged.
 - Check the UTXO set once on first start, as a precaution against entries that 0.20.0 through 0.22.2 could have stored incorrectly for outputs whose locking script starts with the token prefix byte. No such outputs are known on mainnet, testnet4 or chipnet, so the check is expected to repair nothing. Pruned and fast synced nodes, which no longer have the blocks it reads, skip it.
 
@@ -69,6 +81,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - Fix remotely triggerable crashes on a bloom filter with no data (gcash/bchutil#50) and on compact blocks with invalid prefilled transaction indexes.
 - Fix a remotely triggerable crash in 32-bit builds on an SLP script with a malformed push length, reachable through the SLP index and the gRPC SLP calls.
 - Fix gRPC authentication with `--prometheus`, where every handler ran before the `--grpcauthtoken` check.
+- `--profile` with a bare port served its unauthenticated pages on every interface, and they show the command line, which can hold the RPC password. It now listens on localhost.
 - Fix many consensus, P2P, RPC and gRPC robustness issues in addition to the items above. P2P messages are now allocated by the bytes actually received, and the ban list and peer limits apply as soon as a connection is accepted, as in BCHN.
 - Build with Go 1.26.9 or newer, or 1.27.2 or newer: the gRPC server's HTTP/2 comes from the Go standard library, and those releases carry its HTTP/2 fixes. The `golang.org/x/net` update brings five HTTP/2 fixes to the gRPC client in `bchrpc/proxy`.
 
@@ -84,6 +97,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - The exported `addrmgr` and `peer` APIs use the new `wire.NetAddressV2` type, as btcd did.
 - `txscript.GetScriptClass` and `ExtractPkScriptAddrs` recognize P2PK and multisig only in BCHN's forms, so the address index and address filters no longer match outputs written any other way.
 - `bchec` no longer verifies ECDSA signatures over an empty hash, as Go 1.27's `crypto/ecdsa` does.
+- The unknown block version warning ignores the BIP320 version-rolling bits, so ASICBoost blocks no longer trigger it.
 
 ### Upgrade notes
 
@@ -91,11 +105,13 @@ This release makes validation, initial sync and block relay considerably faster,
 - **Address index.** Nodes with `--addrindex` rebuild the address index on first start. After downgrading to an earlier release with `--addrindex` and upgrading again, start once with `--dropaddrindex`, which exits when done, then with `--addrindex` to rebuild it; this release cannot tell which blocks the earlier one indexed.
 - **SLP index on 32-bit builds.** Earlier releases misread SLP amounts of 2^31 base units or more on 32-bit platforms, so the SLP index there can hold wrong token validity. Start once with `--dropslpindex`, which exits when done, then with `--slpindex` to rebuild it.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
+- **Fees.** Free transactions are no longer relayed or mined. Every new transaction must pay `--minrelaytxfee`, and a node set to 0 refuses to start. The four deprecated options still parse, with a warning, for this release.
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
 - **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it. The token amount may be a JSON integer or a string, as in BCHN.
 - **Integer parameters.** JSON-RPC parameters are now passed on exactly as sent, so integer parameters must be written as integers: `1.0` or `1e3` is rejected, as in BCHN, rather than read as `1` or `1000`.
 - **Script type names.** Clients parsing `type` or `script_class` will see `scripthash` for P2SH32 and `script` for pay to script outputs. Data carriers over 223 bytes were `nonstandard`; they are now `nulldata` in `type` and `datacarrier` in `script_class`. Scripts that do not parse now have a `script_class` of `script` or `nonstandard` instead of an empty one. P2PK and multisig follow BCHN's templates too, so a key pushed with `OP_PUSHDATA1` or with a malformed first byte makes the output `script` or `nonstandard`, with no addresses.
 - **Connections.** Websocket clients using `authenticate` must send it within `--rpcauthtimeout`, and inbound connections still in the handshake count toward the peer limits.
+- **`--profile`.** A bare port now listens on 127.0.0.1. Use `0.0.0.0:port` or `:port` to listen on every interface as before.
 - **Mining.** `submitblock` failures return a BIP22 reason instead of `rejected: <error>`, and `submitblock` and block proposals now use BCHN's reason strings, for example `bad-cb-amount` instead of `bad-cb-value`. Templates follow the network's block size limit as ABLA grows it; a larger `excessiveblocksize` no longer makes them bigger, except on regtest and simnet.
 - **Finalization.** Blocks 10 deep that have been known for two hours are final once the chain has the network's minimum chain work, so reorgs deeper than that are refused. Recover with `invalidateblock` on the node's own chain, or start with `--maxreorgdepth=-1`.
 - **`peers.json`** moves to a new format; downgrading discards it and the address list refills from seeds.
