@@ -970,12 +970,13 @@ func writeTxOutBuf(w io.Writer, pver uint32, to *TxOut, buf []byte) error {
 		return err
 	}
 	if !to.TokenData.IsEmpty() {
-		prefix := to.TokenData.TokenDataBuffer()
-		err := WriteVarIntBuf(w, pver, uint64(prefix.Len()+len(to.PkScript)), buf)
+		td := &to.TokenData
+		size := td.serializeSize() + len(to.PkScript)
+		err := WriteVarIntBuf(w, pver, uint64(size), buf)
 		if err != nil {
 			return err
 		}
-		if _, err := w.Write(prefix.Bytes()); err != nil {
+		if err := writeTokenPrefixBuf(w, td, buf); err != nil {
 			return err
 		}
 		_, err = w.Write(to.PkScript)
