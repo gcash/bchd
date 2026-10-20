@@ -3061,8 +3061,13 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 		log.Criticalf("Failed to parse slp message for %v, with error: %v", tokenIDRev, err)
 		return -1, err
 	}
-	decimals := genSlpMsg.(*v1parser.SlpGenesis).Decimals
-	return decimals, nil
+	// A SEND of zero tokens is valid whatever token ID it names, so the
+	// token ID need not be a GENESIS.
+	genesis, ok := genSlpMsg.(*v1parser.SlpGenesis)
+	if !ok {
+		return -1, fmt.Errorf("token ID %v is not a GENESIS transaction", tokenIDRev)
+	}
+	return genesis.Decimals, nil
 }
 
 // getSlpToken fetches an SlpToken object leveraging a cache of SlpIndexEntry items
