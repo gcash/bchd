@@ -1628,6 +1628,19 @@ func (tx *transaction) FetchBlockRegions(regions []database.BlockRegion) ([][]by
 	return blockRegions, nil
 }
 
+// readError returns the first error the transaction had reading from the
+// database.  A read that failed returned nothing, as for a missing key, so
+// the transaction must fail with it rather than act on what it read.
+func (tx *transaction) readError() error {
+	if tx.snapshot == nil {
+		return nil
+	}
+	if err := tx.snapshot.readError(); err != nil {
+		return convertErr("failed to read from the database", err)
+	}
+	return nil
+}
+
 // close marks the transaction closed then releases any pending data, the
 // underlying snapshot, the transaction read lock, and the write lock when the
 // transaction is writable.
@@ -1754,6 +1767,11 @@ func (tx *transaction) Commit() error {
 	if !tx.writable {
 		str := "Commit requires a writable database transaction"
 		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	// Do not commit changes made after a read that failed.
+	if err := tx.readError(); err != nil {
+		return err
 	}
 
 	// Write pending data.  The function will rollback if any errors occur.
@@ -1931,6 +1949,13 @@ func (db *db) View(fn func(database.Tx) error) error {
 		// The error is ignored here because nothing was written yet
 		// and regardless of a rollback failure, the tx is closed now
 		// anyways.
+		_ = tx.Rollback()
+		return err
+	}
+
+	// A read that failed returned nothing, as for a missing key, so the
+	// caller gets its error instead.
+	if err := tx.readError(); err != nil {
 		_ = tx.Rollback()
 		return err
 	}

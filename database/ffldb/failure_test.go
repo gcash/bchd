@@ -18,11 +18,20 @@ var errInjected = errors.New("injected storage failure")
 // failingStorage wraps a goleveldb storage and fails the creation of new
 // table files while fail is set, which is what a full disk looks like to a
 // leveldb transaction commit. While failSync is set, it fails syncing the
-// MANIFEST, as a disk that reports a write error does.
+// MANIFEST, as a disk that reports a write error does.  While failOpen is
+// set, it fails opening table files, as an unreadable disk does.
 type failingStorage struct {
 	storage.Storage
 	fail     int32
 	failSync int32
+	failOpen int32
+}
+
+func (s *failingStorage) Open(fd storage.FileDesc) (storage.Reader, error) {
+	if atomic.LoadInt32(&s.failOpen) != 0 && fd.Type == storage.TypeTable {
+		return nil, errInjected
+	}
+	return s.Storage.Open(fd)
 }
 
 func (s *failingStorage) Create(fd storage.FileDesc) (storage.Writer, error) {
@@ -54,6 +63,13 @@ func (w *failingManifest) Sync() error {
 func writesStopped(err error) bool {
 	var dbErr database.Error
 	return errors.As(err, &dbErr) && errors.Is(dbErr.Err, leveldb.ErrWritesStopped)
+}
+
+// readFailed reports whether err is a database error for the injected
+// storage failure.
+func readFailed(err error) bool {
+	var dbErr database.Error
+	return errors.As(err, &dbErr) && errors.Is(dbErr.Err, errInjected)
 }
 
 // createTestDB creates a new database in a temp dir.
@@ -209,5 +225,75 @@ func TestFlushRetriedAfterFailure(t *testing.T) {
 	}
 	if _, err := pdb.cache.ldb.Get(bucketizedKey(metadataBucketID, []byte("x")), nil); err != nil {
 		t.Fatalf("the cache was not flushed after the failure: %v", err)
+	}
+}
+
+// TestReadErrorFailsTransaction ensures a key that cannot be read from disk
+// fails its transaction rather than reading as missing: View returns the
+// error, and Update does not commit.  Otherwise a utxo that cannot be read
+// looks spent, and the valid block spending it is marked invalid.
+func TestReadErrorFailsTransaction(t *testing.T) {
+	pdb, dir := createTestDB(t)
+	key := []byte("k")
+	block := pruneTestBlock(1, 1)
+	if err := pdb.Update(func(tx database.Tx) error {
+		if err := tx.StoreBlock(block); err != nil {
+			return err
+		}
+		return tx.Metadata().Put(key, []byte("v"))
+	}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := pdb.cache.flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	// Reopening leveldb moves the key from its journal to a table file.
+	fs := swapFailingLdb(t, pdb, dir)
+	defer pdb.cache.ldb.Close()
+	atomic.StoreInt32(&fs.failOpen, 1)
+
+	err := pdb.View(func(tx database.Tx) error {
+		if v := tx.Metadata().Get(key); v != nil {
+			t.Errorf("read %q through a failing disk", v)
+		}
+		return nil
+	})
+	if !readFailed(err) {
+		t.Fatalf("View: got %v, want the read error", err)
+	}
+	err = pdb.View(func(tx database.Tx) error {
+		if has, _ := tx.HasBlock(block.Hash()); has {
+			t.Error("found a block through a failing disk")
+		}
+		return nil
+	})
+	if !readFailed(err) {
+		t.Fatalf("View with HasBlock: got %v, want the read error", err)
+	}
+
+	written := []byte("w")
+	err = pdb.Update(func(tx database.Tx) error {
+		tx.Metadata().Get(key)
+		return tx.Metadata().Put(written, []byte("v"))
+	})
+	if !readFailed(err) {
+		t.Fatalf("Update: got %v, want the read error", err)
+	}
+
+	atomic.StoreInt32(&fs.failOpen, 0)
+	if err := pdb.View(func(tx database.Tx) error {
+		if tx.Metadata().Get(key) == nil {
+			t.Error("key missing once readable")
+		}
+		if tx.Metadata().Get(written) != nil {
+			t.Error("Update with a failed read committed")
+		}
+		if has, _ := tx.HasBlock(block.Hash()); !has {
+			t.Error("block missing once readable")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("View once readable: %v", err)
 	}
 }

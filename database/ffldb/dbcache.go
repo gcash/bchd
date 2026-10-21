@@ -293,6 +293,32 @@ type dbCacheSnapshot struct {
 	dbSnapshot    *leveldb.Snapshot
 	pendingKeys   *treap.Immutable
 	pendingRemove *treap.Immutable
+
+	// readErr is the first error reading from the database, which fails
+	// the transaction using the snapshot.  A read that fails returns
+	// nothing, as for a missing key.
+	readErrMtx sync.Mutex
+	readErr    error
+}
+
+// noteReadErr records err, from reading the database, unless it only says
+// the key is missing.
+func (snap *dbCacheSnapshot) noteReadErr(err error) {
+	if err == leveldb.ErrNotFound {
+		return
+	}
+	snap.readErrMtx.Lock()
+	if snap.readErr == nil {
+		snap.readErr = err
+	}
+	snap.readErrMtx.Unlock()
+}
+
+// readError returns the first error reading from the database, if any.
+func (snap *dbCacheSnapshot) readError() error {
+	snap.readErrMtx.Lock()
+	defer snap.readErrMtx.Unlock()
+	return snap.readErr
 }
 
 // Has returns whether or not the passed key exists.
@@ -306,7 +332,10 @@ func (snap *dbCacheSnapshot) Has(key []byte) bool {
 	}
 
 	// Consult the database.
-	hasKey, _ := snap.dbSnapshot.Has(key, nil)
+	hasKey, err := snap.dbSnapshot.Has(key, nil)
+	if err != nil {
+		snap.noteReadErr(err)
+	}
 	return hasKey
 }
 
@@ -324,6 +353,7 @@ func (snap *dbCacheSnapshot) Get(key []byte) []byte {
 	// Consult the database.
 	value, err := snap.dbSnapshot.Get(key, nil)
 	if err != nil {
+		snap.noteReadErr(err)
 		return nil
 	}
 	return value
