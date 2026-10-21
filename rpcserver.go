@@ -2449,9 +2449,11 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrSpendTooHigh:
 		return "bad-txns-in-belowout"
 	case blockchain.ErrBadFees:
-		return "bad-txns-fees"
+		return "bad-txns-accumulated-fee-outofrange"
 	case blockchain.ErrTooManySigChecks:
-		return "high-sigchecks"
+		// BCHN gives the block's sigchecks limit the reason of its
+		// parallel script checks.
+		return "blk-bad-inputs"
 	case blockchain.ErrFirstTxNotCoinbase:
 		return "bad-cb-missing"
 	case blockchain.ErrMultipleCoinbases:
