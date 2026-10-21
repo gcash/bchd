@@ -244,6 +244,9 @@ func TestMinRelayTxFee(t *testing.T) {
 		{args: []string{"--minrelaytxfee=-0.00001"}, wantErr: true},
 		// Rounds to 0 satoshis.
 		{args: []string{"--minrelaytxfee=0.000000001"}, wantErr: true},
+		// At most every coin there is per kilobyte.
+		{args: []string{"--minrelaytxfee=21000000"}, want: bchutil.MaxSatoshi},
+		{args: []string{"--minrelaytxfee=21000000.00000001"}, wantErr: true},
 	}
 	for _, test := range tests {
 		os.Args = append([]string{"bchd", "--configfile=" + configFile,

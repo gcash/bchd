@@ -42,6 +42,13 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 			1,
 		},
 		{
+			// The product overflows int64 into a small positive fee.
+			"9000 bytes with max satoshi relay fee",
+			9000,
+			bchutil.MaxSatoshi,
+			bchutil.MaxSatoshi,
+		},
+		{
 			"100 bytes with default minimum relay fee",
 			100,
 			DefaultMinRelayTxFee,

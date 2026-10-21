@@ -891,10 +891,14 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Validate the minrelaytxfee, which must be above 0.
+	// Validate the minrelaytxfee, which must be above 0 and at most every
+	// coin there is.
 	cfg.minRelayTxFee, err = bchutil.NewAmount(cfg.MinRelayTxFee)
 	if err == nil && cfg.minRelayTxFee <= 0 {
 		err = errors.New("must be above 0")
+	}
+	if err == nil && cfg.minRelayTxFee > bchutil.MaxSatoshi {
+		err = errors.New("must be at most 21000000")
 	}
 	if err != nil {
 		str := "%s: invalid minrelaytxfee: %v"

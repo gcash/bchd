@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/gcash/bchd/blockchain"
@@ -61,7 +62,11 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amoun
 	// mempool and relayed by scaling the base fee (which is the minimum
 	// relay fee rate).  minRelayTxFee is in Satoshi/kB so
 	// multiply by serializedSize (which is in bytes) and divide by 1000 to
-	// get minimum Satoshis.
+	// get minimum Satoshis.  A product that overflows is far above the
+	// valid range.
+	if minRelayTxFee > 0 && serializedSize > math.MaxInt64/int64(minRelayTxFee) {
+		return bchutil.MaxSatoshi
+	}
 	minFee := (serializedSize * int64(minRelayTxFee)) / 1000
 
 	// A fee that rounds down to zero at a nonzero rate is one satoshi, as
