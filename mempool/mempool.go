@@ -38,6 +38,10 @@ const (
 	// orphanExpireScanInterval is the minimum amount of time in between
 	// scans of the orphan pool to evict expired transactions.
 	orphanExpireScanInterval = time.Minute * 5
+
+	// mempoolExpiry is how long a transaction can stay in the pool: BCHN's
+	// default -mempoolexpiry of two weeks.
+	mempoolExpiry = time.Hour * 336
 )
 
 // Tag represents an identifier to use for tagging orphan transactions.  The
@@ -517,6 +521,26 @@ func (mp *TxPool) RemoveTransaction(tx *bchutil.Tx, removeRedeemers bool) {
 	mp.mtx.Lock()
 	mp.removeTransaction(tx, removeRedeemers)
 	mp.mtx.Unlock()
+}
+
+// Expire removes the transactions that entered the pool longer ago than BCHN's
+// default -mempoolexpiry of two weeks, with the transactions that spend them,
+// and returns how many it removed.  Transactions a reorg put back below the
+// minimum relay fee are never mined, so this is what removes them.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) Expire() int {
+	cutoff := time.Now().Add(-mempoolExpiry)
+
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+	n := len(mp.pool)
+	for _, txDesc := range mp.pool {
+		if txDesc.Added.Before(cutoff) {
+			mp.removeTransaction(txDesc.Tx, true)
+		}
+	}
+	return n - len(mp.pool)
 }
 
 // RemoveDoubleSpends removes all transactions which spend outputs spent by the

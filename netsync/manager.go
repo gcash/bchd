@@ -1723,6 +1723,11 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 			sm.peerNotifier.AnnounceNewTransactions(acceptedTxs)
 		}
 
+		// Remove the transactions that have been in the pool too long.
+		if n := sm.txMemPool.Expire(); n > 0 {
+			log.Debugf("Expired %d transactions from the mempool", n)
+		}
+
 		// Register block with the fee estimator, if it exists.
 		if sm.feeEstimator != nil {
 			err := sm.feeEstimator.RegisterBlock(block)

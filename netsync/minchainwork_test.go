@@ -15,6 +15,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/mempool"
 	peerpkg "github.com/gcash/bchd/peer"
 )
 
@@ -47,7 +48,12 @@ func minWorkTestManager(t *testing.T) (*SyncManager, *chaincfg.Params) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sm, err := New(&Config{Chain: chain, ChainParams: &params, MaxPeers: 8})
+	sm, err := New(&Config{
+		Chain:       chain,
+		ChainParams: &params,
+		TxMemPool:   mempool.New(&mempool.Config{ChainParams: &params}),
+		MaxPeers:    8,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
