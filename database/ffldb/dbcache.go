@@ -6,10 +6,12 @@ package ffldb
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/database/internal/treap"
 	"github.com/gcash/goleveldb/leveldb"
 	"github.com/gcash/goleveldb/leveldb/iterator"
@@ -377,11 +379,17 @@ type dbCache struct {
 	// lastFlush is the time the cache was last flushed.  It is used in
 	// conjunction with the current time and the flush interval.
 	//
+	// writesStopped is the error of the write after which leveldb stopped
+	// taking writes, which it does until it is reopened.  Every later
+	// commit fails with it rather than going to the cache, which could
+	// then never be written.
+	//
 	// NOTE: These flush related fields are protected by the database write
 	// lock.
 	maxSize       uint64
 	flushInterval time.Duration
 	lastFlush     time.Time
+	writesStopped error
 
 	// The following fields hold the keys that need to be stored or deleted
 	// from the underlying database once the cache is full, enough time has
@@ -492,7 +500,9 @@ func (c *dbCache) commitTreaps(pendingKeys, pendingRemove TreapForEacher) error 
 //
 // This function MUST be called with the database write lock held.
 func (c *dbCache) flush() error {
-	c.lastFlush = time.Now()
+	if c.writesStopped != nil {
+		return c.writesStopped
+	}
 
 	// Sync the current write file associated with the block store.  This is
 	// necessary before writing the metadata to prevent the case where the
@@ -512,11 +522,15 @@ func (c *dbCache) flush() error {
 
 	// Nothing to do if there is no data to flush.
 	if cachedKeys.Len() == 0 && cachedRemove.Len() == 0 {
+		c.lastFlush = time.Now()
 		return nil
 	}
 
-	// Perform all leveldb updates using an atomic transaction.
+	// Perform all leveldb updates using an atomic transaction.  The flush
+	// time is only updated once it succeeds, so a failed flush is retried
+	// by the next commit.
 	if err := c.commitTreaps(cachedKeys, cachedRemove); err != nil {
+		c.noteWriteError(err)
 		return err
 	}
 
@@ -526,7 +540,21 @@ func (c *dbCache) flush() error {
 	c.cachedRemove = treap.NewImmutable()
 	c.cacheLock.Unlock()
 
+	c.lastFlush = time.Now()
 	return nil
+}
+
+// noteWriteError records err if it is leveldb's error for writes it stopped
+// taking, after which every commit fails with it.
+//
+// This function MUST be called with the database write lock held.
+func (c *dbCache) noteWriteError(err error) {
+	var dbErr database.Error
+	if errors.Is(err, leveldb.ErrWritesStopped) ||
+		(errors.As(err, &dbErr) && errors.Is(dbErr.Err, leveldb.ErrWritesStopped)) {
+
+		c.writesStopped = err
+	}
 }
 
 // needsFlush returns whether or not the database cache needs to be flushed to
@@ -571,6 +599,10 @@ func (c *dbCache) needsFlush(tx *transaction) bool {
 // This function MUST be called during a database write transaction which in
 // turn implies the database write lock will be held.
 func (c *dbCache) commitTx(tx *transaction) error {
+	if c.writesStopped != nil {
+		return c.writesStopped
+	}
+
 	// Flush the cache and write the current transaction directly to the
 	// database if a flush is needed.
 	if c.needsFlush(tx) {
@@ -581,6 +613,7 @@ func (c *dbCache) commitTx(tx *transaction) error {
 		// Perform all leveldb updates using an atomic transaction.
 		err := c.commitTreaps(tx.pendingKeys, tx.pendingRemove)
 		if err != nil {
+			c.noteWriteError(err)
 			return err
 		}
 

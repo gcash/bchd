@@ -150,3 +150,64 @@ func TestLdbManifestFailureDoesNotWedgeDB(t *testing.T) {
 		t.Fatalf("Close after writes stopped = %v, want writes stopped", err)
 	}
 }
+
+// TestCommitFailsAfterWritesStopped ensures that once leveldb stops taking
+// writes, every later commit fails, including one that would not flush,
+// rather than going to the cache, which could then never be written.
+func TestCommitFailsAfterWritesStopped(t *testing.T) {
+	pdb, dir := createTestDB(t)
+	fs := swapFailingLdb(t, pdb, dir)
+	defer pdb.cache.ldb.Close()
+
+	put := func(k string) error {
+		return pdb.Update(func(tx database.Tx) error {
+			return tx.Metadata().Put([]byte(k), []byte("v"))
+		})
+	}
+
+	// The commit flushes, and its MANIFEST sync fails.
+	pdb.cache.flushInterval = 0
+	atomic.StoreInt32(&fs.failSync, 1)
+	if err := put("a"); !writesStopped(err) {
+		t.Fatalf("commit whose MANIFEST sync fails = %v, want writes stopped", err)
+	}
+	atomic.StoreInt32(&fs.failSync, 0)
+
+	pdb.cache.flushInterval = time.Hour
+	if err := put("b"); !writesStopped(err) {
+		t.Fatalf("commit after writes stopped = %v, want writes stopped", err)
+	}
+}
+
+// TestFlushRetriedAfterFailure ensures a commit after a failed flush flushes
+// again, rather than waiting a whole flush interval with the cache unwritten.
+func TestFlushRetriedAfterFailure(t *testing.T) {
+	pdb, dir := createTestDB(t)
+	fs := swapFailingLdb(t, pdb, dir)
+	defer pdb.cache.ldb.Close()
+
+	put := func(k string) error {
+		return pdb.Update(func(tx database.Tx) error {
+			return tx.Metadata().Put([]byte(k), []byte("v"))
+		})
+	}
+	pdb.cache.flushInterval = time.Hour
+	if err := put("x"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A flush is due, and it fails.
+	pdb.cache.lastFlush = time.Now().Add(-2 * time.Hour)
+	atomic.StoreInt32(&fs.fail, 1)
+	if err := put("y"); err == nil {
+		t.Fatal("expected the injected flush failure")
+	}
+	atomic.StoreInt32(&fs.fail, 0)
+
+	if err := put("z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pdb.cache.ldb.Get(bucketizedKey(metadataBucketID, []byte("x")), nil); err != nil {
+		t.Fatalf("the cache was not flushed after the failure: %v", err)
+	}
+}
