@@ -608,3 +608,104 @@ func TestDirectRelaySlotNotForGonePeer(t *testing.T) {
 		t.Fatal("a connected peer got no direct relay slot")
 	}
 }
+
+// TestCompactBlockTooManyTxs ensures a compact block describing more
+// transactions than fit in the next block's size limit is dropped before it
+// is decoded, and its request is forgotten so the block can be requested
+// again.
+func TestCompactBlockTooManyTxs(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+	header := block.MsgBlock().Header
+	limit, err := h.s.chain.NextBlockSizeLimit(&header.PrevBlock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := &wire.MsgCmpctBlock{
+		Header:   header,
+		ShortIDs: make([][wire.ShortIDSize]byte, limit/blockchain.MinTransactionSize+1),
+	}
+
+	waitDone(t, h.process(msg))
+	select {
+	case <-h.getTxns:
+		t.Fatal("transactions requested for an oversized compact block")
+	case <-time.After(100 * time.Millisecond):
+	}
+	h.request(t, *block.Hash())
+}
+
+// TestCompactBlockAlreadyKnown ensures a compact block for a block the chain
+// already has is not reconstructed.
+func TestCompactBlockAlreadyKnown(t *testing.T) {
+	h := newCmpctHarness(t)
+	best := h.s.chain.BestSnapshot()
+	tip, err := h.s.chain.BlockByHash(&best.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, h.process(shortIDsOnly(t, tip)))
+	select {
+	case <-h.getTxns:
+		t.Fatal("transactions requested for a known block")
+	case <-time.After(100 * time.Millisecond):
+	}
+	h.expectNotRelayed(t)
+}
+
+// TestCompactBlocksInFlightLimit ensures at most two compact blocks from a
+// peer are reconstructed at a time, which bounds the memory a peer can make
+// waiting compact blocks hold.
+func TestCompactBlocksInFlightLimit(t *testing.T) {
+	h := newCmpctHarness(t)
+	blocks := make(map[chainhash.Hash]*bchutil.Block)
+	var msgs []*wire.MsgCmpctBlock
+	for i := range 3 {
+		block := solvedBlock(t, h.s.chain, -int64(i), nil)
+		blocks[*block.Hash()] = block
+		h.request(t, *block.Hash())
+		msgs = append(msgs, shortIDsOnly(t, block))
+	}
+	for _, msg := range msgs {
+		h.sp.OnCmpctBlock(nil, msg)
+	}
+
+	var waiting []chainhash.Hash
+	for done := false; !done; {
+		select {
+		case msg := <-h.getTxns:
+			waiting = append(waiting, msg.BlockHash)
+		case <-time.After(500 * time.Millisecond):
+			done = true
+		}
+	}
+	for _, hash := range waiting {
+		h.send(t, blockTxnsFor(blocks[hash]))
+	}
+	if len(waiting) != 2 {
+		t.Fatalf("%d compact blocks waited for transactions at once, "+
+			"want 2", len(waiting))
+	}
+
+	// The dropped block's request was forgotten, so it is requested again,
+	// and once the others are done its compact block is reconstructed.
+	for _, hash := range waiting {
+		h.expectHaveBlock(t, &hash)
+		delete(blocks, hash)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(h.sp.cmpctInFlight) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("compact blocks still in flight")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for hash, block := range blocks {
+		h.request(t, hash)
+		h.sp.OnCmpctBlock(nil, shortIDsOnly(t, block))
+		h.expectGetTxns(t, hash)
+		h.send(t, blockTxnsFor(block))
+		h.expectHaveBlock(t, &hash)
+	}
+}

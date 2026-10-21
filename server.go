@@ -68,6 +68,11 @@ const (
 	// than necessary. For this reason we cap the number of peers we
 	// allow to send us blocks directly at three.
 	maxDirectRelayPeers = 3
+
+	// maxCmpctBlocksInFlight is the number of compact blocks from one peer
+	// that are reconstructed at a time.  It bounds the memory a peer can
+	// make the compact blocks waiting for its transactions hold.
+	maxCmpctBlocksInFlight = 2
 )
 
 var (
@@ -344,6 +349,10 @@ type serverPeer struct {
 	// sent on.
 	cmpctWaiters    map[chainhash.Hash]chan wire.Message
 	cmpctWaitersMtx sync.Mutex
+
+	// cmpctInFlight holds a token for each compact block from the peer
+	// being reconstructed.
+	cmpctInFlight chan struct{}
 }
 
 // newServerPeer returns a new serverPeer instance. The peer needs to be set by
@@ -358,6 +367,7 @@ func newServerPeer(s *server, isPersistent bool) *serverPeer {
 		txProcessed:    make(chan struct{}, 1),
 		blockProcessed: make(chan struct{}, 1),
 		cmpctWaiters:   make(map[chainhash.Hash]chan wire.Message),
+		cmpctInFlight:  make(chan struct{}, maxCmpctBlocksInFlight),
 	}
 }
 
@@ -517,6 +527,15 @@ func (sp *serverPeer) addCmpctWaiter(hash chainhash.Hash) (chan wire.Message, bo
 	ch := make(chan wire.Message, 1)
 	sp.cmpctWaiters[hash] = ch
 	return ch, true
+}
+
+// cmpctWaiting returns whether a compact block for hash is waiting for missing
+// transactions from the peer.
+func (sp *serverPeer) cmpctWaiting(hash chainhash.Hash) bool {
+	sp.cmpctWaitersMtx.Lock()
+	defer sp.cmpctWaitersMtx.Unlock()
+	_, ok := sp.cmpctWaiters[hash]
+	return ok
 }
 
 // removeCmpctWaiter stops the wait that addCmpctWaiter returned ch for, unless
@@ -816,8 +835,23 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 }
 
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
+// A compact block arriving while maxCmpctBlocksInFlight from the peer are
+// being reconstructed is dropped, and its request forgotten.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
-	go sp.processCompactBlock(msg)
+	select {
+	case sp.cmpctInFlight <- struct{}{}:
+	default:
+		hash := msg.BlockHash()
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- %d of its "+
+			"compact blocks are already being reconstructed", hash, sp,
+			maxCmpctBlocksInFlight)
+		sp.server.syncManager.QueueBlockError(&hash, sp.Peer)
+		return
+	}
+	go func() {
+		defer func() { <-sp.cmpctInFlight }()
+		sp.processCompactBlock(msg)
+	}()
 }
 
 // processCompactBlock attempts to reconstruct a full wire.MsgBlock from
@@ -848,6 +882,36 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- "+
 			"invalid header: %v", msg.Header.BlockHash(), sp, err)
 		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+		return
+	}
+
+	// Check what is cheap to check before decoding, which takes memory
+	// for every transaction the block describes and a pass over the
+	// memory pool.
+	if have, err := sp.server.chain.HaveBlock(&targetHash); err != nil || have {
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- already known",
+			targetHash, sp)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+		return
+	}
+	limit, err := sp.server.chain.NextBlockSizeLimit(&msg.Header.PrevBlock)
+	if err != nil {
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- %v", targetHash,
+			sp, err)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+		return
+	}
+	numTxs := uint64(len(msg.ShortIDs) + len(msg.PrefilledTxs))
+	if maxTxs := limit / blockchain.MinTransactionSize; numTxs > maxTxs {
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- %d transactions "+
+			"exceed the %d that fit in the block size limit", targetHash,
+			sp, numTxs, maxTxs)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+		return
+	}
+	if sp.cmpctWaiting(targetHash) {
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- already "+
+			"waiting for its transactions", targetHash, sp)
 		return
 	}
 
