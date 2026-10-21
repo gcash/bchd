@@ -14,22 +14,28 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 )
 
-// gatedConn is a connection whose writes of blocktxns messages wait until
-// the gate is opened.
+// gatedConn is a connection whose writes of messages with the gated command,
+// blocktxns unless set, wait until the gate is opened.
 type gatedConn struct {
 	net.Conn
 	started chan struct{}
 	gate    chan struct{}
+	cmd     atomic.Value
 }
 
-// Write signals started and waits for the gate before writing a blocktxns
-// message header.
+// Write signals started and waits for the gate before writing the header of a
+// message with the gated command.
 func (c *gatedConn) Write(b []byte) (int, error) {
-	cmd := []byte(wire.CmdBlockTxns + "\x00")
+	gated, _ := c.cmd.Load().(string)
+	if gated == "" {
+		gated = wire.CmdBlockTxns
+	}
+	cmd := []byte(gated + "\x00")
 	if len(b) >= wire.MessageHeaderSize && bytes.HasPrefix(b[4:], cmd) {
 		select {
 		case c.started <- struct{}{}:
@@ -50,6 +56,7 @@ type blockTxnsHarness struct {
 	handled  atomic.Int32
 	replies  chan *wire.MsgBlockTxns
 	blocks   chan *wire.MsgBlock
+	getData  chan struct{}
 	tipHash  *chainhash.Hash
 	openGate func()
 }
@@ -70,6 +77,7 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 		chain:   chain,
 		replies: make(chan *wire.MsgBlockTxns, 16),
 		blocks:  make(chan *wire.MsgBlock, 16),
+		getData: make(chan struct{}, 1),
 		tipHash: block.Hash(),
 	}
 	h.sp = &serverPeer{
@@ -89,6 +97,10 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 			OnGetBlockTxns: func(p *peer.Peer, msg *wire.MsgGetBlockTxns) {
 				h.handled.Add(1)
 				h.sp.OnGetBlockTxns(p, msg)
+			},
+			OnGetData: func(p *peer.Peer, msg *wire.MsgGetData) {
+				h.sp.OnGetData(p, msg)
+				h.getData <- struct{}{}
 			},
 		},
 	})
@@ -287,5 +299,53 @@ func TestRelayedBlockIsRecent(t *testing.T) {
 	})
 	if s.recentBlockByHash(&hash) != block {
 		t.Fatal("the announced block is not the recent block")
+	}
+}
+
+// countingDB counts the read transactions of a database.
+type countingDB struct {
+	database.DB
+	views atomic.Int32
+}
+
+// View counts the transaction and runs it on the database.
+func (db *countingDB) View(fn func(tx database.Tx) error) error {
+	db.views.Add(1)
+	return db.DB.View(fn)
+}
+
+// TestGetDataStopsAfterDisconnect ensures a getdata stops fetching blocks once
+// the peer has disconnected, rather than reading and decoding every block it
+// asked for.
+func TestGetDataStopsAfterDisconnect(t *testing.T) {
+	h := newBlockTxnsHarness(t, true)
+	h.conn.cmd.Store(wire.CmdBlock)
+	db := &countingDB{DB: h.sp.server.db}
+	h.sp.server.db = db
+
+	const numBlocks = 50
+	getData := wire.NewMsgGetData()
+	for range numBlocks {
+		if err := getData.AddInvVect(wire.NewInvVect(wire.InvTypeBlock,
+			h.tipHash)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.remote.QueueMessage(getData, nil)
+	select {
+	case <-h.conn.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no block was sent")
+	}
+	h.sp.Disconnect()
+	select {
+	case <-h.getData:
+	case <-time.After(5 * time.Second):
+		t.Fatal("getdata was not handled")
+	}
+	h.openGate()
+	if n := db.views.Load(); n > 4 {
+		t.Fatalf("%d of %d blocks read for a disconnected peer, want "+
+			"at most 4", n, numBlocks)
 	}
 }

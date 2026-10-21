@@ -1119,6 +1119,12 @@ func (sp *serverPeer) OnGetData(_ *peer.Peer, msg *wire.MsgGetData) {
 	// not found, signals its channel at once.
 	var barrier chan struct{}
 	for i, iv := range msg.InvList {
+		// Nothing more can be sent to a peer that is gone, and queueing
+		// for it signals at once, so stop rather than read the rest.
+		if !sp.Connected() {
+			return
+		}
+
 		var err error
 		switch iv.Type {
 		case wire.InvTypeTx:
