@@ -1048,6 +1048,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	return resp, nil
 }
 
+// addressUnspentScanHook, when set, is called by GetAddressUnspentOutputs once
+// it has read the address's confirmed history.  It is for tests.
+var addressUnspentScanHook func()
+
 // GetAddressUnspentOutputs returns all the unspent transaction outputs
 // for the given address.
 //
@@ -1198,6 +1202,13 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return utxos, nil
 	}
 
+	// The memory pool transactions are listed before the confirmed history
+	// is read, as a block connected meanwhile takes its transactions out of
+	// the memory pool and its entries can land on a page already read.
+	// They are checked afterwards, so one confirmed in between is found in
+	// the utxo set, whether or not the memory pool is included.
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+
 	var (
 		utxos []*pb.UnspentOutput
 		skip  = 0
@@ -1225,16 +1236,16 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		}
 		skip += len(confirmedTxs)
 	}
-	if req.IncludeMempool {
-		unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
-		for _, tx := range unconfirmedTxs {
-			u, err := checkTxOutputs(tx)
-			if err != nil {
-				return nil, err
-			}
-			if len(u) > 0 {
-				utxos = append(utxos, u...)
-			}
+	if addressUnspentScanHook != nil {
+		addressUnspentScanHook()
+	}
+	for _, tx := range unconfirmedTxs {
+		u, err := checkTxOutputs(tx)
+		if err != nil {
+			return nil, err
+		}
+		if len(u) > 0 {
+			utxos = append(utxos, u...)
 		}
 	}
 

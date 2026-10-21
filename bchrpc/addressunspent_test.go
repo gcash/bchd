@@ -484,3 +484,57 @@ func TestGetAddressUnspentOutputsDuplicate(t *testing.T) {
 		t.Fatalf("got %v, want only %v:0", got, want)
 	}
 }
+
+// TestGetAddressUnspentOutputsConfirmedDuringScan ensures an output of a
+// memory pool transaction that is confirmed while the address's history is
+// being read is still returned, with or without the memory pool.
+func TestGetAddressUnspentOutputsConfirmedDuringScan(t *testing.T) {
+	for _, includeMempool := range []bool{true, false} {
+		h := newAddrUnspentHarness(t)
+		addrScript := p2shScript(t, addrRedeem)
+		otherScript := p2shScript(t, otherRedeem)
+		pay := func(value int64, script []byte) *wire.TxOut {
+			return wire.NewTxOut(value, script, wire.TokenData{})
+		}
+		cb := h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, nil)
+		funding := spendTx(t, outPoint(cb, 0), otherRedeem, pay(49e8, otherScript))
+		h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+			[]*wire.MsgTx{funding})
+		tx := spendTx(t, outPoint(funding, 0), otherRedeem,
+			pay(48e8, addrScript))
+		h.acceptTx(tx)
+
+		// The transaction is confirmed once the history has been read,
+		// leaving the memory pool as it does when its block connects.
+		addressUnspentScanHook = func() {
+			addressUnspentScanHook = nil
+			h.pool.RemoveTransaction(bchutil.NewTx(tx), false)
+			h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+				[]*wire.MsgTx{tx})
+		}
+		t.Cleanup(func() { addressUnspentScanHook = nil })
+
+		addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+			&pb.GetAddressUnspentOutputsRequest{
+				Address:        addr.EncodeAddress(),
+				IncludeMempool: includeMempool,
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, u := range resp.Outputs {
+			var hash chainhash.Hash
+			copy(hash[:], u.Outpoint.Hash)
+			found = found || hash == tx.TxHash()
+		}
+		if !found {
+			t.Errorf("mempool %v: the output confirmed during the scan "+
+				"was not returned", includeMempool)
+		}
+	}
+}
