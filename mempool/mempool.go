@@ -889,7 +889,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	// forbid their acceptance.
 	if !mp.cfg.Policy.AcceptNonStd {
 		err = checkTransactionStandard(tx, nextBlockHeight,
-			medianTimePast, mp.cfg.Policy.MinRelayTxFee,
+			medianTimePast, DefaultDustRelayFee,
 			mp.cfg.Policy.MaxTxVersion, upgrade9Active, upgrade12Active)
 		if err != nil {
 			// Attempt to extract a reject code from the error so

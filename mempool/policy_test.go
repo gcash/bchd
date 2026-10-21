@@ -735,7 +735,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 	for _, test := range tests {
 		// Ensure standardness is as expected.
 		err := checkTransactionStandard(bchutil.NewTx(&test.tx),
-			test.height, pastMedianTime, DefaultMinRelayTxFee, 1, false, false)
+			test.height, pastMedianTime, DefaultDustRelayFee, 1, false, false)
 		if err == nil && test.isStandard {
 			// Test passes since function returned standard for a
 			// transaction which is intended to be standard.
@@ -785,7 +785,7 @@ func TestNonFinalStandardReason(t *testing.T) {
 	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
 	tx.LockTime = 300001
 	err := checkTransactionStandard(bchutil.NewTx(tx), 300000, time.Now(),
-		DefaultMinRelayTxFee, 2, true, true)
+		DefaultDustRelayFee, 2, true, true)
 	if err == nil || !strings.Contains(err.Error(), "bad-txns-nonfinal") {
 		t.Fatalf("got %v, want a rejection with bad-txns-nonfinal", err)
 	}

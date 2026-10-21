@@ -452,7 +452,7 @@ func runVMBInputEngine(c *vmbCase, idx int,
 // part of standardness here, so it is passed with a far height and time.
 func checkVMBScriptOnly(c *vmbCase, v *vmbVector, era vmbEra) (error, error) {
 	stdErr := checkTransactionStandard(c.tx, math.MaxInt32,
-		time.Unix(math.MaxUint32+1, 0), DefaultMinRelayTxFee, 2, true,
+		time.Unix(math.MaxUint32+1, 0), DefaultDustRelayFee, 2, true,
 		era.upgrade12)
 	if stdErr == nil {
 		stdErr = checkInputsStandard(c.tx, c.chain.utxos,

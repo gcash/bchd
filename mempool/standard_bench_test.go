@@ -101,7 +101,7 @@ func BenchmarkStandardness(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				err := CheckTransactionStandard(tx, 1000, time.Unix(0, 0),
-					DefaultMinRelayTxFee, 2, true, true)
+					DefaultDustRelayFee, 2, true, true)
 				if err != nil {
 					b.Fatal(err)
 				}

@@ -36,10 +36,14 @@ const (
 	maxStandardSigScriptSize = 1650
 
 	// DefaultMinRelayTxFee is the minimum fee rate a transaction must pay
-	// to be relayed and mined.  It is also used to help determine if a
-	// transaction output is considered dust.  This value is in
-	// Satoshi/1000 bytes.
+	// to be relayed and mined.  This value is in Satoshi/1000 bytes.
 	DefaultMinRelayTxFee = bchutil.Amount(1000)
+
+	// DefaultDustRelayFee is the fee rate, in Satoshi/1000 bytes, that
+	// outputs are judged dust by: BCHN's default -dustrelayfee.  It does
+	// not follow the minimum relay fee, so raising that does not refuse
+	// outputs BCHN relays.
+	DefaultDustRelayFee = bchutil.Amount(1000)
 
 	// maxStandardMultiSigKeys is the maximum number of public keys allowed
 	// in a multi-signature transaction output script for it to be
@@ -183,11 +187,10 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass, up
 }
 
 // isDust returns whether or not the passed transaction output amount is
-// considered dust or not based on the passed minimum transaction relay fee.
-// Dust is defined in terms of the minimum transaction relay fee.  In
-// particular, if the cost to the network to spend coins is more than 1/3 of the
-// minimum transaction relay fee, it is considered dust.
-func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
+// considered dust or not based on the passed dust relay fee.  In particular,
+// if the cost to the network to spend coins is more than 1/3 of the dust
+// relay fee, it is considered dust.
+func isDust(txOut *wire.TxOut, dustRelayFee bchutil.Amount) bool {
 	// The total serialized size consists of the output and the associated
 	// input script to redeem it.  Since there is no input script
 	// to redeem it yet, use the minimum size of a typical input script.
@@ -237,16 +240,16 @@ func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
 	totalSize := txOut.SerializeSize() + 41 + 107
 
 	// The output is considered dust if the cost to the network to spend the
-	// coins is more than 1/3 of the minimum relay fee.  minRelayTxFee is in
+	// coins is more than 1/3 of the dust relay fee.  dustRelayFee is in
 	// Satoshi/KB, so multiply by 1000 to convert to bytes.
 	//
 	// Using the typical values for a pay-to-pubkey-hash transaction from
-	// the breakdown above and the default minimum relay fee of 1000, this
+	// the breakdown above and the default dust relay fee of 1000, this
 	// equates to values less than 546 satoshi being considered dust.
 	//
 	// The following is equivalent to (value/totalSize) * (1/3) * 1000
 	// without needing to do floating point math.
-	return txOut.Value*1000/(3*int64(totalSize)) < int64(minRelayTxFee)
+	return txOut.Value*1000/(3*int64(totalSize)) < int64(dustRelayFee)
 }
 
 // checkTransactionStandard performs a series of checks on a transaction to
@@ -255,9 +258,10 @@ func isDust(txOut *wire.TxOut, minRelayTxFee bchutil.Amount) bool {
 // "sane" transaction such as having a version in the supported range, being
 // finalized, conforming to more stringent size constraints, having scripts
 // of recognized forms, and not containing "dust" outputs (those that are
-// so small it costs more to process them than they are worth).
+// so small it costs more to process them than they are worth, judged at
+// dustRelayFee).
 func checkTransactionStandard(tx *bchutil.Tx, height int32,
-	medianTimePast time.Time, minRelayTxFee bchutil.Amount,
+	medianTimePast time.Time, dustRelayFee bchutil.Amount,
 	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
 
 	// The transaction must be a currently supported version.
@@ -348,7 +352,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		// "dust".
 		if scriptClass == txscript.NullDataTy {
 			dataCarrierSize += len(txOut.PkScript)
-		} else if txscript.IsUnspendable(txOut.PkScript) || isDust(txOut, minRelayTxFee) {
+		} else if txscript.IsUnspendable(txOut.PkScript) || isDust(txOut, dustRelayFee) {
 			str := fmt.Sprintf("transaction output %d: payment "+
 				"of %d is dust", i, txOut.Value)
 			return txRuleError(wire.RejectDust, str)
@@ -364,9 +368,9 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	return nil
 }
 
-func CheckTransactionStandard(tx *bchutil.Tx, height int32, medianTimePast time.Time, minRelayTxFee bchutil.Amount,
+func CheckTransactionStandard(tx *bchutil.Tx, height int32, medianTimePast time.Time, dustRelayFee bchutil.Amount,
 	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
-	return checkTransactionStandard(tx, height, medianTimePast, minRelayTxFee, maxTxVersion, upgrade9Active, upgrade12Active)
+	return checkTransactionStandard(tx, height, medianTimePast, dustRelayFee, maxTxVersion, upgrade9Active, upgrade12Active)
 }
 
 func CheckInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {

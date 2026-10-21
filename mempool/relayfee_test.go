@@ -131,3 +131,38 @@ func TestRawMempoolVerbosePriority(t *testing.T) {
 			entry.CurrentPriority)
 	}
 }
+
+// TestDustNotFromMinRelayFee ensures dust is judged at BCHN's default dust
+// relay fee whatever the minimum relay fee, so raising that does not refuse
+// outputs BCHN relays: 600 satoshis to a P2PKH is above BCHN's 546 even with
+// a minimum relay fee of 2000 satoshis per kilobyte, and 545 is still dust.
+func TestDustNotFromMinRelayFee(t *testing.T) {
+	t.Parallel()
+
+	harness, _, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	pool := harness.txPool
+	pool.cfg.Policy.MinRelayTxFee = 2000
+	coin := &wire.TxOut{Value: 100000, PkScript: harness.payScript}
+	op := addCoins(harness, coin)[0]
+
+	spend := func(value int64) error {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(&wire.TxIn{PreviousOutPoint: op, Sequence: wire.MaxTxInSequenceNum})
+		tx.AddTxOut(&wire.TxOut{Value: value, PkScript: harness.payScript})
+		tx.AddTxOut(&wire.TxOut{Value: 100000 - value - 2000, PkScript: harness.payScript})
+		signP2PKH(t, tx, 0, coin, harness.signKey,
+			txscript.SigHashAll|txscript.SigHashForkID, true)
+		_, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0)
+		return err
+	}
+	err = spend(545)
+	if code, _ := extractRejectCode(err); code != wire.RejectDust {
+		t.Fatalf("545 satoshi output: got %v, want dust", err)
+	}
+	if err := spend(600); err != nil {
+		t.Fatalf("600 satoshi output refused: %v", err)
+	}
+}
