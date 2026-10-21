@@ -7,6 +7,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/websocket"
+	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 )
@@ -323,4 +325,72 @@ func TestWebsocketPreAuthReadLimit(t *testing.T) {
 	if err != nil || !strings.Contains(reply, `"id":2`) {
 		t.Fatalf("large authenticated message: reply %s, err %v", reply, err)
 	}
+}
+
+// withIndexEchoHandler makes getblockhash answer with the index it was
+// passed, for the rest of the test.
+func withIndexEchoHandler(t *testing.T) {
+	t.Helper()
+	saved := rpcHandlers["getblockhash"]
+	rpcHandlers["getblockhash"] = func(_ *rpcServer, cmd interface{}, _ <-chan struct{}) (interface{}, error) {
+		return cmd.(*btcjson.GetBlockHashCmd).Index, nil
+	}
+	t.Cleanup(func() { rpcHandlers["getblockhash"] = saved })
+}
+
+// TestBatchedRequestParams ensures the params of a batched request reach the
+// command as sent, over HTTP and the websocket, as those of a single request
+// do: an integer above 2^53 keeps its value, and 0.0 is refused where an
+// integer is expected.
+func TestBatchedRequestParams(t *testing.T) {
+	withIndexEchoHandler(t)
+	_, addr := startTestRPCServer(t)
+	batch := `[{"jsonrpc":"2.0","id":1,"method":"getblockhash","params":[9007199254740993]},` +
+		`{"jsonrpc":"2.0","id":2,"method":"getblockhash","params":[0.0]}]`
+	check := func(path string, reply []byte) {
+		t.Helper()
+		var replies []struct {
+			ID     int
+			Result json.RawMessage
+			Error  *btcjson.RPCError
+		}
+		if err := json.Unmarshal(reply, &replies); err != nil || len(replies) != 2 {
+			t.Fatalf("%s: unexpected reply %s", path, reply)
+		}
+		for _, r := range replies {
+			switch r.ID {
+			case 1:
+				if string(r.Result) != "9007199254740993" || r.Error != nil {
+					t.Errorf("%s: big integer came through as %s, error %v",
+						path, r.Result, r.Error)
+				}
+			case 2:
+				if r.Error == nil {
+					t.Errorf("%s: 0.0 was taken as an integer: %s", path,
+						r.Result)
+				}
+			}
+		}
+	}
+
+	req, err := http.NewRequest("POST", "http://"+addr+"/", strings.NewReader(batch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", basicAuth(testRPCAdminLogin))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	reply, _ := io.ReadAll(resp.Body)
+	check("http", reply)
+
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	conn := dialTestWebsocket(t, addr, hdr)
+	wsReply, err := wsRoundTrip(conn, batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("websocket", []byte(wsReply))
 }

@@ -4967,7 +4967,10 @@ func (s *rpcServer) jsonRPCRead(w http.ResponseWriter, r *http.Request, isAdmin 
 
 	// Process a batched request
 	if batchedRequest {
-		var batchedRequests []interface{}
+		// Each request is kept as sent, so its params are decoded only by
+		// the command they are for, as for a single request.  Decoding them
+		// into generic values first would turn numbers into float64.
+		var batchedRequests []json.RawMessage
 		var resp json.RawMessage
 		err = json.Unmarshal(body, &batchedRequests)
 		if err != nil {
