@@ -969,7 +969,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 			Fee:              txDesc.Fee,
 			AddedTime:        txDesc.Added.Unix(),
 			AddedHeight:      txDesc.Height,
-			FeePerKb:         txDesc.Fee / int64(uTx.MsgTx().SerializeSize()),
+			FeePerKb:         txDesc.FeePerKB,
 			StartingPriority: 0, // deprecated
 		}
 		resp.UnconfirmedTransactions = append(resp.UnconfirmedTransactions, mempoolTx)

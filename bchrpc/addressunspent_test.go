@@ -538,3 +538,38 @@ func TestGetAddressUnspentOutputsConfirmedDuringScan(t *testing.T) {
 		}
 	}
 }
+
+// TestGetAddressTransactionsFeePerKb ensures an unconfirmed transaction's
+// fee_per_kb is its fee per kilobyte, as in the subscriptions, not per byte.
+func TestGetAddressTransactionsFeePerKb(t *testing.T) {
+	h := newAddrUnspentHarness(t)
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	cb := h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, nil)
+	funding := spendTx(t, outPoint(cb, 0), otherRedeem, pay(49e8, otherScript))
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, []*wire.MsgTx{funding})
+	const fee = 100000
+	tx := spendTx(t, outPoint(funding, 0), otherRedeem, pay(49e8-fee, addrScript))
+	h.acceptTx(tx)
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.s.GetAddressTransactions(context.Background(),
+		&pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.UnconfirmedTransactions) != 1 {
+		t.Fatalf("%d unconfirmed transactions, want 1",
+			len(resp.UnconfirmedTransactions))
+	}
+	want := int64(fee * 1000 / tx.SerializeSize())
+	if got := resp.UnconfirmedTransactions[0].FeePerKb; got != want {
+		t.Fatalf("fee_per_kb %d, want %d", got, want)
+	}
+}
