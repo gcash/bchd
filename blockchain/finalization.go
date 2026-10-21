@@ -92,26 +92,14 @@ func (b *BlockChain) maybeFinalize(tip *blockNode, now int64) {
 }
 
 // forksBeforeFinalized returns whether a block whose parent is prevNode would
-// fork the chain below the finalized block.
+// fork the chain below the finalized block, checked as BCHN does.  Ancestor
+// follows skip pointers, so this takes a logarithmic number of steps however
+// long a side branch is.
 //
 // This function MUST be called with the chain state lock held (for reads).
 func (b *BlockChain) forksBeforeFinalized(prevNode *blockNode) bool {
 	fin := b.finalizedNode
-	if fin == nil {
-		return false
-	}
-
-	// When the finalized block is on the best chain, as it normally is,
-	// prevNode descends from it exactly when its chain joins the best chain
-	// at or above it.  Finding where it joins only walks back over a side
-	// branch, rather than over every block above the finalized one, which
-	// during a sync can be many.  The finalized block can be off the best
-	// chain while finalizeblock reorganizes to it.
-	if b.bestChain.Contains(fin) {
-		fork := b.bestChain.FindFork(prevNode)
-		return fork == nil || fork.height < fin.height
-	}
-	return prevNode.Ancestor(fin.height) != fin
+	return fin != nil && prevNode.Ancestor(fin.height) != fin
 }
 
 // lastCommonAncestor returns the last block that a and b both descend from.
