@@ -794,12 +794,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 			}
-			tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
-			if err != nil {
-				msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
-				log.Criticalf("%s", msg)
-				return nil, status.Error(codes.Internal, msg)
-			}
+			tokenMetadata = s.tokenMetadataOrNil(*tokenID)
 		}
 
 		resp := &pb.GetTransactionResponse{
@@ -839,12 +834,7 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 		}
-		tokenMetadata, err = s.marshalTokenMetadata(*tokenID)
-		if err != nil {
-			msg := fmt.Sprintf("an unknown problem occurred when building token metadata for token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
-			log.Criticalf("%s", msg)
-			return nil, status.Error(codes.Internal, msg)
-		}
+		tokenMetadata = s.tokenMetadataOrNil(*tokenID)
 	}
 
 	resp := &pb.GetTransactionResponse{
@@ -1358,10 +1348,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
 		}
-		tm, err = s.marshalTokenMetadata(*tokenID)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot build token metadata for token id: %s", hex.EncodeToString(slpToken.TokenId))
-		}
+		tm = s.tokenMetadataOrNil(*tokenID)
 	}
 
 	ret := &pb.GetUnspentOutputResponse{
@@ -3276,6 +3263,18 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	return true
 }
 
+// tokenMetadataOrNil returns the metadata of the token, or nil when it cannot
+// be built.  A valid SEND of zero tokens may name a token ID that is no
+// GENESIS, so the metadata of a transaction or output is then just missing.
+func (s *GrpcServer) tokenMetadataOrNil(tokenID chainhash.Hash) *pb.SlpTokenMetadata {
+	tm, err := s.marshalTokenMetadata(tokenID)
+	if err != nil {
+		log.Debugf("No token metadata for token ID %v: %v", tokenID, err)
+		return nil
+	}
+	return tm
+}
+
 // marshalTokenMetadata returns marshalled token metadata for the provided tokenID hash
 func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenMetadata, error) {
 
@@ -3294,7 +3293,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 	}
 	entry, err := s.getSlpIndexEntry(tokenIDRev)
 	if err != nil {
-		log.Criticalf("Failed to parse token ID: %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
+		log.Debugf("No slp transaction for token ID %s: %v", hex.EncodeToString(tokenIDHash), err)
 		return nil, err
 	}
 

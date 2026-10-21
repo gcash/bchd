@@ -10,6 +10,7 @@ import (
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
 	"github.com/gcash/bchd/txscript"
@@ -126,5 +127,43 @@ func TestGetSlpTokenIDNotGenesis(t *testing.T) {
 	hashB := sendB.TxHash()
 	if _, err := s.getSlpToken(&hashB, 1, nil); err == nil {
 		t.Fatal("getSlpToken returned a token whose token ID is not a GENESIS, want an error")
+	}
+}
+
+// TestTokenMetadataNotGenesis ensures metadata asked for a token ID that names
+// no GENESIS, as a valid SEND of zero tokens may, is reported as missing
+// rather than as an error of the node.
+func TestTokenMetadataNotGenesis(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	s := &GrpcServer{db: db, slpIndex: idx}
+
+	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x01}, 32),
+		[]uint64{0})
+	if err != nil {
+		t.Fatalf("TokenType1Send: %v", err)
+	}
+	send := wire.NewMsgTx(1)
+	send.AddTxOut(&wire.TxOut{PkScript: script})
+	send.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = db.View(func(dbTx database.Tx) error {
+		_, err := idx.AddPotentialSlpEntries(dbTx, send)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("AddPotentialSlpEntries: %v", err)
+	}
+
+	// The SEND's own hash is a token ID naming no GENESIS.
+	if tm := s.tokenMetadataOrNil(send.TxHash()); tm != nil {
+		t.Fatalf("got metadata %v for a token ID naming no GENESIS", tm)
+	}
+	// One naming no transaction at all.
+	if tm := s.tokenMetadataOrNil(chainhash.Hash{0x09}); tm != nil {
+		t.Fatalf("got metadata %v for an unknown token ID", tm)
 	}
 }
