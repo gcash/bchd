@@ -49,6 +49,7 @@ type blockTxnsHarness struct {
 	conn     *gatedConn
 	handled  atomic.Int32
 	replies  chan *wire.MsgBlockTxns
+	blocks   chan *wire.MsgBlock
 	tipHash  *chainhash.Hash
 	openGate func()
 }
@@ -68,6 +69,7 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 	h := &blockTxnsHarness{
 		chain:   chain,
 		replies: make(chan *wire.MsgBlockTxns, 16),
+		blocks:  make(chan *wire.MsgBlock, 16),
 		tipHash: block.Hash(),
 	}
 	h.sp = &serverPeer{
@@ -78,6 +80,8 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 		},
 		quit: make(chan struct{}),
 	}
+	// The tip is the most recent block, as when it was just announced.
+	h.sp.server.setRecentBlock(block.MsgBlock())
 	h.sp.Peer = peer.NewInboundPeer(&peer.Config{
 		ChainParams:            &chaincfg.RegressionNetParams,
 		TstAllowSelfConnection: true,
@@ -100,6 +104,9 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 			},
 			OnBlockTxns: func(_ *peer.Peer, msg *wire.MsgBlockTxns) {
 				h.replies <- msg
+			},
+			OnBlock: func(_ *peer.Peer, msg *wire.MsgBlock, _ []byte) {
+				h.blocks <- msg
 			},
 		},
 	}, "127.0.0.1:18444")
@@ -210,5 +217,75 @@ func TestGetBlockTxnsOneReplyInFlight(t *testing.T) {
 	h.reply(t)
 	if n := h.handled.Load(); n != 2 {
 		t.Fatalf("%d requests handled, want 2", n)
+	}
+}
+
+// TestGetBlockTxnsSentInFull ensures a getblocktxns for a block other than the
+// most recent one is answered with the full block, as BCHN does, so it costs
+// the peer the whole block rather than a read and decode on this node.
+func TestGetBlockTxnsSentInFull(t *testing.T) {
+	h := newBlockTxnsHarness(t, false)
+	h.sp.server.setRecentBlock(solvedBlock(t, h.chain, -1, nil).MsgBlock())
+	h.request()
+	select {
+	case msg := <-h.blocks:
+		if msg.BlockHash() != *h.tipHash {
+			t.Fatalf("got block %v, want %v", msg.BlockHash(), h.tipHash)
+		}
+	case msg := <-h.replies:
+		t.Fatalf("got blocktxns for %v, want the full block", msg.BlockHash)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reply to getblocktxns")
+	}
+}
+
+// TestGetBlockTxnsNoIndexes ensures a peer asking for no transactions is
+// disconnected, as BCHN does.
+func TestGetBlockTxnsNoIndexes(t *testing.T) {
+	h := newBlockTxnsHarness(t, false)
+	h.remote.QueueMessage(wire.NewMsgGetBlockTxns(*h.tipHash, nil), nil)
+	disconnected := make(chan struct{})
+	go func() {
+		h.sp.WaitForDisconnect()
+		close(disconnected)
+	}()
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("peer asking for no transactions was not disconnected")
+	}
+}
+
+// TestGetBlockTxnsRecentBlockNotStored ensures the most recent block, which is
+// relayed early as a compact block before it is stored, answers getblocktxns.
+func TestGetBlockTxnsRecentBlockNotStored(t *testing.T) {
+	h := newBlockTxnsHarness(t, false)
+	block := solvedBlock(t, h.chain, -1, nil)
+	h.sp.server.setRecentBlock(block.MsgBlock())
+	h.remote.QueueMessage(wire.NewMsgGetBlockTxns(*block.Hash(), []uint32{0}),
+		nil)
+	select {
+	case msg := <-h.replies:
+		if msg.BlockHash != *block.Hash() || len(msg.Txs) != 1 {
+			t.Fatalf("got blocktxns for %v with %d txs, want %v with 1",
+				msg.BlockHash, len(msg.Txs), block.Hash())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reply to getblocktxns")
+	}
+}
+
+// TestRelayedBlockIsRecent ensures announcing a block makes it the block that
+// answers getblocktxns.
+func TestRelayedBlockIsRecent(t *testing.T) {
+	s := &server{}
+	block := &wire.MsgBlock{Header: wire.BlockHeader{Nonce: 7}}
+	hash := block.BlockHash()
+	s.handleRelayInvMsg(&peerState{}, relayMsg{
+		invVect: wire.NewInvVect(wire.InvTypeBlock, &hash),
+		data:    block,
+	})
+	if s.recentBlockByHash(&hash) != block {
+		t.Fatal("the announced block is not the recent block")
 	}
 }

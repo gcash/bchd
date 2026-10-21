@@ -367,6 +367,11 @@ func TestCompactBlockWaitingTwice(t *testing.T) {
 	h.expectRelayed(t, *block.Hash())
 	waitDone(t, done)
 	h.expectHaveBlock(t, block.Hash())
+
+	// The relayed block answers getblocktxns from the peers it went to.
+	if h.s.recentBlockByHash(block.Hash()) == nil {
+		t.Fatal("the relayed block is not the recent block")
+	}
 }
 
 // TestCompactBlockWaitEndsOnDisconnect ensures a compact block stops waiting

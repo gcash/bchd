@@ -264,6 +264,12 @@ type server struct {
 	timeSource              blockchain.MedianTimeSource
 	services                wire.ServiceFlag
 
+	// recentBlock is the block announced most recently, from which
+	// getblocktxns requests are answered.
+	recentBlockMtx  sync.Mutex
+	recentBlock     *wire.MsgBlock
+	recentBlockHash chainhash.Hash
+
 	// The following fields are used for optional indexes.  They will be nil
 	// if the associated index is not enabled.  These fields are set during
 	// initial creation of the server and never changed afterwards, so they
@@ -923,8 +929,10 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	sp.AddKnownInventory(iv)
 
 	// Relay the block to peers which want direct relay if it extends the
-	// best chain, as BCHN does.
+	// best chain, as BCHN does.  Those peers may ask for its transactions
+	// before it is stored.
 	if msg.Header.PrevBlock == sp.server.chain.BestSnapshot().Hash {
+		sp.server.setRecentBlock(msgBlock)
 		sp.server.relayCmpctBlock <- msg
 	}
 
@@ -991,40 +999,55 @@ func (sp *serverPeer) OnGetBlockTxns(_ *peer.Peer, msg *wire.MsgGetBlockTxns) {
 	sp.processBlockMtx.Lock()
 	sp.processBlockMtx.Unlock() //nolint:staticcheck // SA2001: intentional barrier
 
-	// Fetch the raw block bytes from the database.
-	hash := msg.BlockHash
-	var blockBytes []byte
-	err := sp.server.db.View(func(dbTx database.Tx) error {
-		var err error
-		blockBytes, err = dbTx.FetchBlock(&hash)
-		return err
-	})
-	if err != nil {
-		peerLog.Tracef("Unable to fetch requested block hash %v: %v",
-			hash, err)
+	// There is no reason to ask for no transactions.
+	if len(msg.Indexes) == 0 {
+		peerLog.Debugf("Peer %v sent getblocktxns for no transactions "+
+			"-- disconnecting", sp)
+		sp.Disconnect()
 		return
 	}
 
-	// Deserialize the block.
-	var msgBlock wire.MsgBlock
-	err = msgBlock.Deserialize(bytes.NewReader(blockBytes))
-	if err != nil {
-		peerLog.Tracef("Unable to deserialize requested block hash "+
-			"%v: %v", hash, err)
+	// Only the most recent block is answered with its transactions, as in
+	// BCHN, so a request costs no disk read.  Any other block is sent in
+	// full, which BIP 152 allows.
+	hash := msg.BlockHash
+	doneChan := make(chan struct{}, 1)
+	if block := sp.server.recentBlockByHash(&hash); block != nil {
+		requestedTxs, err := msg.RequestedTransactions(block)
+		if err != nil {
+			peerLog.Tracef("Unable to extract requested transactions: %v", err)
+			return
+		}
+		sp.QueueMessage(wire.NewMsgBlockTxns(hash, requestedTxs), doneChan)
+	} else if err := sp.server.pushBlockMsg(sp, &hash, doneChan, nil,
+		wire.BaseEncoding); err != nil {
+
 		return
 	}
-	requestdTxs, err := msg.RequestedTransactions(&msgBlock)
-	if err != nil {
-		peerLog.Tracef("Unable to extract requested transactions: %v", err)
-		return
-	}
-	msgBlockTxns := wire.NewMsgBlockTxns(hash, requestdTxs)
 
 	// Wait for the reply to be sent before handling anything else from
 	// the peer, so that each peer has at most one reply queued.
-	doneChan := make(chan struct{}, 1)
-	sp.QueueMessage(msgBlockTxns, doneChan)
 	<-doneChan
+}
+
+// setRecentBlock records the block announced most recently, which answers
+// getblocktxns requests.
+func (s *server) setRecentBlock(block *wire.MsgBlock) {
+	hash := block.BlockHash()
+	s.recentBlockMtx.Lock()
+	s.recentBlock, s.recentBlockHash = block, hash
+	s.recentBlockMtx.Unlock()
+}
+
+// recentBlockByHash returns the block announced most recently if it has the
+// passed hash, or nil.
+func (s *server) recentBlockByHash(hash *chainhash.Hash) *wire.MsgBlock {
+	s.recentBlockMtx.Lock()
+	defer s.recentBlockMtx.Unlock()
+	if s.recentBlock == nil || s.recentBlockHash != *hash {
+		return nil
+	}
+	return s.recentBlock
 }
 
 // OnInv is invoked when a peer receives an inv bitcoin message and is
@@ -2468,6 +2491,11 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 
 	// The tx hashes of a relayed block are computed once for all peers.
 	var blockTxHashes []chainhash.Hash
+	if block, ok := msg.data.(*wire.MsgBlock); ok &&
+		msg.invVect.Type == wire.InvTypeBlock {
+
+		s.setRecentBlock(block)
+	}
 
 	state.forAllPeers(func(sp *serverPeer) {
 		if !sp.Connected() {
