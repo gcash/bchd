@@ -993,11 +993,16 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	sp.AddKnownInventory(iv)
 
 	// Relay the block to peers which want direct relay if it extends the
-	// best chain, as BCHN does.  Those peers may ask for its transactions
-	// before it is stored.
+	// best chain and passes the checks that need no inputs, as BCHN does.
+	// Those peers may ask for its transactions before it is stored.
 	if msg.Header.PrevBlock == sp.server.chain.BestSnapshot().Hash {
-		sp.server.setRecentBlock(msgBlock)
-		sp.server.relayCmpctBlock <- msg
+		if err := sp.server.chain.CheckBlockForRelay(block); err != nil {
+			peerLog.Debugf("Not relaying cmpctblock %v from %v -- %v",
+				targetHash, sp, err)
+		} else {
+			sp.server.setRecentBlock(msgBlock)
+			sp.server.relayCmpctBlock <- msg
+		}
 	}
 
 	// Queue the block up to be handled by the block

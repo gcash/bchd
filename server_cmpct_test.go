@@ -709,3 +709,30 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 		h.expectHaveBlock(t, &hash)
 	}
 }
+
+// TestCompactBlockInvalidNotRelayed ensures a compact block that fails the
+// checks needing no inputs, here for holding two coinbases, is not relayed,
+// as BCHN would count that against this node.
+func TestCompactBlockInvalidNotRelayed(t *testing.T) {
+	h := newCmpctHarness(t)
+	msgBlock := *solvedBlock(t, h.s.chain, 0, nil).MsgBlock()
+	second := msgBlock.Transactions[0].Copy()
+	second.TxOut[0].Value--
+	msgBlock.Transactions = append(msgBlock.Transactions, second)
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(&msgBlock).Transactions())
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	for blockchain.CheckHeaderProofOfWork(&msgBlock.Header,
+		h.s.chainParams.PowLimit) != nil {
+
+		msgBlock.Header.Nonce++
+	}
+	block := bchutil.NewBlock(&msgBlock)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	h.send(t, blockTxnsFor(block))
+	waitDone(t, done)
+	h.expectNotRelayed(t)
+}

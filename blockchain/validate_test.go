@@ -1028,3 +1028,63 @@ func TestCheckBlockHeaderContextParent(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckBlockForRelay ensures the checks a compact block passes before it
+// is relayed need its parent and include the sanity checks.
+func TestCheckBlockForRelay(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	chain := newFakeChain(params)
+
+	// A block holding no transactions fails the sanity checks.
+	header := wire.BlockHeader{
+		PrevBlock: *params.GenesisHash,
+		Bits:      params.PowLimitBits,
+		Timestamp: time.Unix(time.Now().Unix(), 0),
+	}
+	for CheckHeaderProofOfWork(&header, params.PowLimit) != nil {
+		header.Nonce++
+	}
+	block := bchutil.NewBlock(&wire.MsgBlock{Header: header})
+	var rerr RuleError
+	if err := chain.CheckBlockForRelay(block); !errors.As(err, &rerr) ||
+		rerr.ErrorCode != ErrNoTransactions {
+
+		t.Errorf("block without transactions: got %v, want %v", err,
+			ErrNoTransactions)
+	}
+
+	// A block that passes the sanity checks but is timed no later than
+	// its parent's median time fails the context checks.
+	coinbase := wire.NewMsgTx(1)
+	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{},
+		math.MaxUint32), make([]byte, 60)))
+	coinbase.AddTxOut(wire.NewTxOut(1, make([]byte, 25), wire.TokenData{}))
+	msgBlock := wire.MsgBlock{
+		Header: wire.BlockHeader{
+			PrevBlock: *params.GenesisHash,
+			Bits:      params.PowLimitBits,
+			Timestamp: params.GenesisBlock.Header.Timestamp,
+		},
+		Transactions: []*wire.MsgTx{coinbase},
+	}
+	merkles := BuildMerkleTreeStore(bchutil.NewBlock(&msgBlock).Transactions())
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	for CheckHeaderProofOfWork(&msgBlock.Header, params.PowLimit) != nil {
+		msgBlock.Header.Nonce++
+	}
+	if err := chain.CheckBlockForRelay(bchutil.NewBlock(&msgBlock)); !errors.As(err, &rerr) ||
+		rerr.ErrorCode != ErrTimeTooOld {
+
+		t.Errorf("block timed too early: got %v, want %v", err, ErrTimeTooOld)
+	}
+
+	orphan := bchutil.NewBlock(&wire.MsgBlock{Header: wire.BlockHeader{
+		PrevBlock: chainhash.Hash{1},
+	}})
+	if err := chain.CheckBlockForRelay(orphan); !errors.As(err, &rerr) ||
+		rerr.ErrorCode != ErrPreviousBlockUnknown {
+
+		t.Errorf("unknown parent: got %v, want %v", err,
+			ErrPreviousBlockUnknown)
+	}
+}

@@ -648,6 +648,38 @@ func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
 	return b.checkBlockHeaderContext(header, prevNode, flags)
 }
 
+// CheckBlockForRelay runs the checks of a block that need neither its inputs
+// nor its scripts: those of checkBlockSanity, and those of checkBlockContext
+// against its parent, which must be known.  BCHN relays a compact block only
+// once it passes the same checks.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) CheckBlockForRelay(block *bchutil.Block) error {
+	header := &block.MsgBlock().Header
+	b.chainLock.Lock()
+	prevNode := b.index.LookupNode(&header.PrevBlock)
+	var flags BehaviorFlags
+	if prevNode != nil {
+		flags = b.heightFlags(prevNode.height+1, BFNone)
+	}
+	b.chainLock.Unlock()
+	if prevNode == nil {
+		str := fmt.Sprintf("previous block %s is unknown", header.PrevBlock)
+		return ruleError(ErrPreviousBlockUnknown, str)
+	}
+	block.SetHeight(prevNode.height + 1)
+
+	// The sanity checks need no chain state, so they run without the lock.
+	err := checkBlockSanity(block, b.chainParams.PowLimit, b.timeSource, flags)
+	if err != nil {
+		return err
+	}
+
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+	return b.checkBlockContext(block, prevNode, flags)
+}
+
 // checkBlockHeaderContext performs several validation checks on the block header
 // which depend on its position within the block chain.
 //
