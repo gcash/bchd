@@ -1345,3 +1345,61 @@ func TestDSProofOrphansRemovedWithPeer(t *testing.T) {
 	}
 	checkPeerOrphans(t, pool.dsProofs)
 }
+
+// TestDSProofCoinUncached ensures the coin a proof names is looked up without
+// adding it, or its absence, to the utxo cache, as proofs name outpoints of
+// their sender's choosing, and that a memory pool coin needs no lookup.
+func TestDSProofCoinUncached(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	coin := &wire.TxOut{Value: 100000000, PkScript: harness.payScript}
+	confirmed := addCoins(harness, coin)[0]
+	tx := spend(t, harness, confirmed, coin, 1, 1000, txscript.SigHashAll, true)
+	if _, err := pool.ProcessTransaction(tx, true, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	fetch := pool.cfg.FetchUtxoView
+	var views, entries int
+	pool.cfg.FetchUtxoView = func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+		views++
+		return fetch(tx)
+	}
+	pool.cfg.FetchUtxoEntryUncached = func(op wire.OutPoint) (*blockchain.UtxoEntry, error) {
+		entries++
+		view, err := fetch(bchutil.NewTx(&wire.MsgTx{TxIn: []*wire.TxIn{{PreviousOutPoint: op}}}))
+		if err != nil {
+			return nil, err
+		}
+		return view.LookupEntry(op), nil
+	}
+
+	if got := pool.dsProofCoin(confirmed); got == nil || got.Value != coin.Value {
+		t.Fatalf("confirmed coin %v, want %v", got, coin)
+	}
+	if got := pool.dsProofCoin(wire.OutPoint{Hash: chainhash.Hash{9}}); got != nil {
+		t.Fatalf("unknown coin %v, want none", got)
+	}
+	if views != 0 || entries != 2 {
+		t.Fatalf("%d cached and %d uncached lookups, want 0 and 2", views,
+			entries)
+	}
+	if got := pool.dsProofCoin(wire.OutPoint{Hash: *tx.Hash()}); got == nil ||
+		got.Value != tx.MsgTx().TxOut[0].Value {
+
+		t.Fatalf("memory pool coin %v, want %v", got, tx.MsgTx().TxOut[0])
+	}
+	if entries != 2 {
+		t.Fatalf("%d uncached lookups after a memory pool coin, want 2", entries)
+	}
+
+	// A coin spent in the utxo cache is no coin.
+	pool.cfg.FetchUtxoEntryUncached = func(wire.OutPoint) (*blockchain.UtxoEntry, error) {
+		entry := blockchain.NewUtxoEntry(coin, 1, false)
+		entry.Spend()
+		return entry, nil
+	}
+	if got := pool.dsProofCoin(confirmed); got != nil {
+		t.Fatalf("spent coin %v, want none", got)
+	}
+}

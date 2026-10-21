@@ -72,10 +72,30 @@ func (mp *TxPool) currentScriptFlags() txscript.ScriptFlags {
 }
 
 // dsProofCoin returns the unspent output op in the utxo set or the memory
-// pool, regardless of whether a memory pool transaction spends it.
+// pool, regardless of whether a memory pool transaction spends it.  As a
+// proof names an outpoint of its sender's choosing, the utxo set is read
+// without the cache keeping what is found, or that nothing is.
 //
 // This function MUST be called with the mempool lock held (for reads).
 func (mp *TxPool) dsProofCoin(op wire.OutPoint) *wire.TxOut {
+	if txD, ok := mp.pool[op.Hash]; ok {
+		outs := txD.Tx.MsgTx().TxOut
+		if op.Index >= uint32(len(outs)) {
+			return nil
+		}
+		return outs[op.Index]
+	}
+	if mp.cfg.FetchUtxoEntryUncached != nil {
+		entry, err := mp.cfg.FetchUtxoEntryUncached(op)
+		if err != nil || entry == nil || entry.IsSpent() {
+			return nil
+		}
+		return &wire.TxOut{
+			Value:     entry.Amount(),
+			PkScript:  entry.PkScript(),
+			TokenData: entry.TokenData(),
+		}
+	}
 	tx := bchutil.NewTx(&wire.MsgTx{TxIn: []*wire.TxIn{{PreviousOutPoint: op}}})
 	view, err := mp.fetchInputUtxos(tx)
 	if err != nil {

@@ -59,6 +59,12 @@ type Config struct {
 	// transaction output information.
 	FetchUtxoView func(*bchutil.Tx) (*blockchain.UtxoViewpoint, error)
 
+	// FetchUtxoEntryUncached looks up an output in the utxo set without
+	// adding it, or its absence, to the utxo cache.  The coins named by
+	// double spend proofs are looked up with it.  When it is nil,
+	// FetchUtxoView is used.
+	FetchUtxoEntryUncached func(wire.OutPoint) (*blockchain.UtxoEntry, error)
+
 	// BestHeight defines the function to use to access the block height of
 	// the current best chain.
 	BestHeight func() int32
