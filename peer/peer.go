@@ -512,6 +512,13 @@ type Peer struct {
 	outQuit       chan struct{}
 	quit          chan struct{}
 
+	// queueClosed is set by the queue handler before its final drain of
+	// outputQueue, under the write lock of queueMtx.  Senders hold the read
+	// lock, so each message is either queued in time to be drained or
+	// refused.
+	queueMtx    sync.RWMutex
+	queueClosed bool
+
 	// CompactBlocks
 	compactBlocksPreferred    bool
 	directBlockRelayPreferred bool
@@ -1961,6 +1968,12 @@ out:
 			msg.doneChan <- struct{}{}
 		}
 	}
+
+	// Refuse further messages, so that each message queued so far is
+	// drained below and its done channel signaled.
+	p.queueMtx.Lock()
+	p.queueClosed = true
+	p.queueMtx.Unlock()
 cleanup:
 	for {
 		select {
@@ -2123,7 +2136,12 @@ func (p *Peer) QueueMessageWithEncoding(msg wire.Message, doneChan chan<- struct
 	// Avoid risk of deadlock if goroutine already exited.  The goroutine
 	// we will be sending to hangs around until it knows for a fact that
 	// it is marked as disconnected and *then* it drains the channels.
-	if !p.Connected() {
+	// Once it closes the queue for its final drain, a message sent to the
+	// buffer would never be drained, so it is refused like one for a peer
+	// that is no longer connected.
+	p.queueMtx.RLock()
+	defer p.queueMtx.RUnlock()
+	if p.queueClosed || !p.Connected() {
 		if doneChan != nil {
 			go func() {
 				doneChan <- struct{}{}
@@ -2132,11 +2150,12 @@ func (p *Peer) QueueMessageWithEncoding(msg wire.Message, doneChan chan<- struct
 		return
 	}
 
-	// The check above races with the peer disconnecting, and the queue handler
-	// only drains what is buffered at the moment it exits, so a send that
-	// arrives afterwards would block forever.  Give up on the peer quitting
-	// instead, still signalling the done channel so callers waiting on it are
-	// not left blocked either.
+	// The check above races with the peer disconnecting, so a send to a full
+	// buffer that is no longer read would block forever.  Give up on the peer
+	// quitting instead, still signalling the done channel so callers waiting
+	// on it are not left blocked either.  The read lock is held while this
+	// waits only until quit is closed, before the queue handler closes the
+	// queue.
 	select {
 	case p.outputQueue <- outMsg{msg: msg, encoding: encoding, doneChan: doneChan}:
 	case <-p.quit:

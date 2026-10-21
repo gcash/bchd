@@ -95,3 +95,42 @@ func TestQueueMessageDoesNotBlockAfterQuit(t *testing.T) {
 		t.Fatal("done channel was not signaled after the peer quit")
 	}
 }
+
+// TestQueueMessageDoneAfterQueueHandlerExit ensures a message queued after the
+// queue handler has drained and exited still has its done channel signaled.
+// The peer then still reports connected, as it does for a sender that passed
+// that check just before the peer disconnected, and the output queue has
+// room, so without the handler closing the queue such a message would sit in
+// the buffer and its sender would wait forever.
+func TestQueueMessageDoneAfterQueueHandlerExit(t *testing.T) {
+	t.Parallel()
+
+	p := &Peer{
+		outputQueue:    make(chan outMsg, outputBufferSize),
+		outputInvChan:  make(chan *wire.InvVect, outputBufferSize),
+		sendQueue:      make(chan outMsg, 1),
+		sendDoneQueue:  make(chan struct{}, 1),
+		quit:           make(chan struct{}),
+		queueQuit:      make(chan struct{}),
+		knownInventory: newMruInventoryMap(10),
+	}
+	p.connected.Store(1)
+	close(p.quit)
+	go p.queueHandler()
+	select {
+	case <-p.queueQuit:
+	case <-time.After(5 * time.Second):
+		t.Fatal("queue handler did not exit")
+	}
+
+	for i := range 2 * outputBufferSize {
+		done := make(chan struct{}, 1)
+		p.QueueMessage(wire.NewMsgPing(uint64(i)), done)
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatalf("message %d, queued after the queue handler "+
+				"exited, was never signaled", i)
+		}
+	}
+}
