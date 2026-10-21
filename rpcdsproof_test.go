@@ -444,7 +444,7 @@ func TestDSProofWebsocketReplayOnce(t *testing.T) {
 // good.
 func TestDSProofBanScoreReplyAfterQuit(t *testing.T) {
 	s := &server{query: make(chan interface{}), quit: make(chan struct{})}
-	s.addDSProofBanScore([]mempool.Tag{1}, 10, "test")
+	s.addDSProofBanScore([]mempool.Tag{1}, 10, 0, "test")
 	msg := (<-s.query).(getPeersMsg)
 	close(s.quit)
 	time.Sleep(50 * time.Millisecond)
@@ -459,4 +459,45 @@ func TestDSProofBanScoreReplyAfterQuit(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("the answer to a query given up on shutdown blocked")
 	}
+}
+
+// TestDSProofOrphanExpiryScoreDecays ensures the score a peer gets for an
+// orphan proof of its that expired decays, as an honest peer's proofs can
+// expire on a node with a stricter policy, while the score for an invalid
+// proof stays.
+func TestDSProofOrphanExpiryScoreDecays(t *testing.T) {
+	h := newCmpctHarness(t)
+	h.s.query = make(chan interface{})
+	h.s.quit = make(chan struct{})
+	defer close(h.s.quit)
+	answer := func() {
+		t.Helper()
+		select {
+		case msg := <-h.s.query:
+			msg.(getPeersMsg).reply <- []*serverPeer{h.sp}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no peer query")
+		}
+	}
+	// The score decays by the second, so its parts are compared rather
+	// than its value.
+	waitScore := func(want, what string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !strings.HasPrefix(h.sp.banScore.String(), want) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s scored %s, want %s", what, h.sp.banScore.String(), want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	tag := mempool.Tag(h.sp.ID())
+
+	h.s.expireDSProofOrphansOnce(func() []mempool.Tag { return []mempool.Tag{tag} })
+	answer()
+	waitScore("persistent 0 + transient 1 at ", "expired orphan")
+
+	h.s.onBadDSProofs([]mempool.Tag{tag})
+	answer()
+	waitScore("persistent 10 + transient 1 at ", "invalid proof")
 }

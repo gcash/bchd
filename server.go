@@ -2074,16 +2074,16 @@ func (sp *serverPeer) wantsDSProof(tx *bchutil.Tx) bool {
 // onBadDSProofs increases the ban score of the peers that sent orphan double
 // spend proofs that turned out invalid.
 func (s *server) onBadDSProofs(peers []mempool.Tag) {
-	s.addDSProofBanScore(peers, 10, "bad-dsproof")
+	s.addDSProofBanScore(peers, 10, 0, "bad-dsproof")
 }
 
 // addDSProofBanScore increases the ban score of the connected peers with the
-// passed ids by score times the number of times their id is passed, with one
-// increase per peer.
-func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason string) {
-	scores := make(map[mempool.Tag]uint32, len(peers))
+// passed ids by the persistent and transient scores times the number of times
+// their id is passed, with one increase per peer.
+func (s *server) addDSProofBanScore(peers []mempool.Tag, persistent, transient uint32, reason string) {
+	counts := make(map[mempool.Tag]uint32, len(peers))
 	for _, id := range peers {
-		scores[id] += score
+		counts[id]++
 	}
 	go func() {
 		// Buffered, so the peer handler's answer cannot block when this
@@ -2101,8 +2101,8 @@ func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason st
 			return
 		}
 		for _, sp := range connected {
-			if total, ok := scores[mempool.Tag(sp.ID())]; ok {
-				sp.addBanScore(total, 0, reason)
+			if n, ok := counts[mempool.Tag(sp.ID())]; ok {
+				sp.addBanScore(n*persistent, n*transient, reason)
 			}
 		}
 	}()
@@ -2128,10 +2128,12 @@ out:
 }
 
 // expireDSProofOrphansOnce expires orphan double spend proofs with expire and
-// increases the ban score of the peers that sent them by one per orphan.
+// increases the ban score of the peers that sent them by one per orphan.  The
+// score decays, as an honest peer's proofs can expire here when this node's
+// policy is stricter than the peer's.
 func (s *server) expireDSProofOrphansOnce(expire func() []mempool.Tag) {
 	if peers := expire(); len(peers) > 0 {
-		s.addDSProofBanScore(peers, 1, "dsproof-orphan-expired")
+		s.addDSProofBanScore(peers, 0, 1, "dsproof-orphan-expired")
 	}
 }
 
@@ -3113,6 +3115,15 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 			txmpLog.Debugf("Evicted %d %s from peer %v (id %d)",
 				numEvicted, pickNoun(numEvicted, "orphan",
 					"orphans"), sp, sp.ID())
+		}
+
+		// And its orphan double spend proofs, so that a peer cannot
+		// renew its limits for them by reconnecting.
+		numEvicted = s.txMemPool.RemoveDSProofOrphansByTag(mempool.Tag(sp.ID()))
+		if numEvicted > 0 {
+			txmpLog.Debugf("Evicted %d orphan double spend %s from "+
+				"peer %v (id %d)", numEvicted, pickNoun(numEvicted,
+				"proof", "proofs"), sp, sp.ID())
 		}
 	}
 	close(sp.quit)

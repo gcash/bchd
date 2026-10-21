@@ -406,6 +406,16 @@ func (mp *TxPool) FetchDSProof(hash *chainhash.Hash) (*wire.MsgDSProof, error) {
 	return nil, fmt.Errorf("double spend proof %v is not known", hash)
 }
 
+// RemoveDSProofOrphansByTag removes the orphan double spend proofs sent by the
+// peer with the passed tag, which has disconnected, and returns how many.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) RemoveDSProofOrphansByTag(tag Tag) uint64 {
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+	return mp.dsProofs.removePeerOrphans(tag)
+}
+
 // ExpireDSProofOrphans removes the orphan proofs that have been waiting for
 // longer than the orphan TTL and returns the peers that sent them.
 //

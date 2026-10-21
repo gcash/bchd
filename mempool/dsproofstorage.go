@@ -237,6 +237,21 @@ func (s *dsProofStorage) remove(hash chainhash.Hash) bool {
 	return true
 }
 
+// removePeerOrphans removes the orphans sent by peer and returns how many.
+func (s *dsProofStorage) removePeerOrphans(peer Tag) uint64 {
+	if s.peerOrphans[peer] == 0 {
+		return 0
+	}
+	var n uint64
+	for hash, e := range s.proofs {
+		if e.orphan && e.hasPeer && e.peer == peer {
+			s.remove(hash)
+			n++
+		}
+	}
+	return n
+}
+
 // lookup returns the entry with the given id, or nil.
 func (s *dsProofStorage) lookup(hash chainhash.Hash) *dsProofEntry {
 	return s.proofs[hash]

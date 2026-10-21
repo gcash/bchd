@@ -6,6 +6,7 @@ package main
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,11 +115,11 @@ func TestAddDSProofBanScore(t *testing.T) {
 	servePeers(t, s, sp)
 
 	id := mempool.Tag(sp.ID())
-	s.addDSProofBanScore([]mempool.Tag{id, id + 1, id}, 1, "dsproof-orphan-expired")
+	s.addDSProofBanScore([]mempool.Tag{id, id + 1, id}, 1, 0, "dsproof-orphan-expired")
 	waitBanScore(t, sp, 2)
 
 	// A sum passing the threshold bans the peer once.
-	s.addDSProofBanScore([]mempool.Tag{id, id, id, id, id}, 1, "dsproof-orphan-expired")
+	s.addDSProofBanScore([]mempool.Tag{id, id, id, id, id}, 1, 0, "dsproof-orphan-expired")
 	select {
 	case <-s.banPeers:
 	case <-time.After(5 * time.Second):
@@ -326,7 +327,8 @@ func TestRelayDSProofInv(t *testing.T) {
 }
 
 // TestExpireDSProofOrphansOnce checks that each expired orphan adds 1 to the
-// ban score of the peer that sent it.
+// decaying ban score of the peer that sent it.  The score decays by the
+// second, so its parts are compared rather than its value.
 func TestExpireDSProofOrphansOnce(t *testing.T) {
 	sp, _ := newDSProofServerPeer(t)
 	s := sp.server
@@ -335,10 +337,17 @@ func TestExpireDSProofOrphansOnce(t *testing.T) {
 	s.expireDSProofOrphansOnce(func() []mempool.Tag {
 		return []mempool.Tag{mempool.Tag(sp.ID())}
 	})
-	waitBanScore(t, sp, 1)
+	const want = "persistent 0 + transient 1 at "
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.HasPrefix(sp.banScore.String(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("ban score %v", sp.banScore.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	time.Sleep(100 * time.Millisecond)
-	if score := sp.banScore.Int(); score != 1 {
-		t.Fatalf("ban score %d", score)
+	if score := sp.banScore.String(); !strings.HasPrefix(score, want) {
+		t.Fatalf("ban score %v", score)
 	}
 }
 

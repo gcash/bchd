@@ -1316,3 +1316,32 @@ func TestDSProofScoreNoLookups(t *testing.T) {
 		t.Fatalf("%d coin lookups to score the transaction, want none", lookups)
 	}
 }
+
+// TestDSProofOrphansRemovedWithPeer ensures the orphan proofs of a peer that
+// disconnected are removed, so a peer cannot renew its limits by reconnecting
+// and keep the orphan pool full, while those of other peers stay.
+func TestDSProofOrphansRemovedWithPeer(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	op1, _, junk1 := junkOrphanSpend(t, harness, maxDSProofOrphansPerPeerOutPoint)
+	op2, _, junk2 := junkOrphanSpend(t, harness, 1)
+	for _, proof := range junk1 {
+		if r, _ := pool.ProcessDSProof(proof, 1, true); r != DSProofOrphan {
+			t.Fatalf("orphan from peer 1: %v", r)
+		}
+	}
+	if r, _ := pool.ProcessDSProof(junk2[0], 2, true); r != DSProofOrphan {
+		t.Fatalf("orphan from peer 2: %v", r)
+	}
+
+	if n := pool.RemoveDSProofOrphansByTag(1); n != uint64(len(junk1)) {
+		t.Fatalf("removed %d orphans of peer 1, want %d", n, len(junk1))
+	}
+	if n := len(pool.dsProofs.findOrphans(op1)); n != 0 {
+		t.Fatalf("%d orphans of peer 1 left", n)
+	}
+	if n := len(pool.dsProofs.findOrphans(op2)); n != 1 {
+		t.Fatalf("%d orphans of peer 2 left, want 1", n)
+	}
+	checkPeerOrphans(t, pool.dsProofs)
+}
