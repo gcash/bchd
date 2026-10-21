@@ -2086,7 +2086,9 @@ func (s *server) addDSProofBanScore(peers []mempool.Tag, score uint32, reason st
 		scores[id] += score
 	}
 	go func() {
-		reply := make(chan []*serverPeer)
+		// Buffered, so the peer handler's answer cannot block when this
+		// gives up on shutdown.
+		reply := make(chan []*serverPeer, 1)
 		select {
 		case s.query <- getPeersMsg{reply: reply}:
 		case <-s.quit:

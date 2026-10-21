@@ -437,3 +437,26 @@ func TestDSProofWebsocketReplayOnce(t *testing.T) {
 		t.Fatal("the existing proof was not sent on registering again")
 	}
 }
+
+// TestDSProofBanScoreReplyAfterQuit ensures the peer handler can still answer
+// the peer query of a ban score update whose goroutine gave up on shutdown.
+// Otherwise the answer blocks the peer handler, and with it shutdown, for
+// good.
+func TestDSProofBanScoreReplyAfterQuit(t *testing.T) {
+	s := &server{query: make(chan interface{}), quit: make(chan struct{})}
+	s.addDSProofBanScore([]mempool.Tag{1}, 10, "test")
+	msg := (<-s.query).(getPeersMsg)
+	close(s.quit)
+	time.Sleep(50 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		msg.reply <- nil
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("the answer to a query given up on shutdown blocked")
+	}
+}
