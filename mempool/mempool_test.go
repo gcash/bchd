@@ -1303,3 +1303,49 @@ func TestDecodeCompressedBlockPrefilledIndexes(t *testing.T) {
 		}
 	}
 }
+
+// TestOrphanAfterInvalidOrphan ensures an orphan is accepted when its parent
+// arrives even if another orphan spending the same output turns out invalid,
+// so a junk orphan cannot hold back a valid one until it expires.  Orphans
+// spending an output are tried in no fixed order, so this repeats.
+func TestOrphanAfterInvalidOrphan(t *testing.T) {
+	t.Parallel()
+
+	for range 20 {
+		harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+		if err != nil {
+			t.Fatalf("unable to create test pool: %v", err)
+		}
+		chainedTxns, err := harness.CreateTxChain(outputs[0], 2)
+		if err != nil {
+			t.Fatalf("unable to create transaction chain: %v", err)
+		}
+		parent, child := chainedTxns[0], chainedTxns[1]
+
+		// A spend of the same output whose signature cannot verify.
+		junk, err := harness.CreateSignedTx([]spendableOutput{
+			txOutToSpendableOut(parent, 0),
+		}, 1)
+		if err != nil {
+			t.Fatalf("unable to create signed tx: %v", err)
+		}
+		junk.MsgTx().TxIn[0].SignatureScript, err = txscript.NewScriptBuilder().
+			AddData(make([]byte, 72)).AddData(make([]byte, 33)).Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+		junk = bchutil.NewTx(junk.MsgTx())
+
+		for _, tx := range []*bchutil.Tx{junk, child} {
+			if _, err := harness.txPool.ProcessTransaction(tx, true, 0); err != nil {
+				t.Fatalf("orphan not accepted: %v", err)
+			}
+		}
+		if _, err := harness.txPool.ProcessTransaction(parent, true, 0); err != nil {
+			t.Fatalf("parent not accepted: %v", err)
+		}
+		if !harness.txPool.IsTransactionInPool(child.Hash()) {
+			t.Fatal("the valid orphan was not accepted with its parent")
+		}
+	}
+}

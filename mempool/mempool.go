@@ -1166,9 +1166,11 @@ func (mp *TxPool) processOrphans(acceptedTx *bchutil.Tx) []*TxDesc {
 					// The orphan is now invalid, so there
 					// is no way any other orphans which
 					// redeem any of its outputs can be
-					// accepted.  Remove them.
+					// accepted.  Remove them, and try the
+					// other orphans redeeming this output,
+					// which may still be valid.
 					mp.removeOrphan(tx, true)
-					break
+					continue
 				}
 
 				// Transaction is still an orphan.  Try the next
