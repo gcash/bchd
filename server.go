@@ -2645,6 +2645,19 @@ func (s *server) handleRelayCmpctBlock(state *peerState, msg *wire.MsgCmpctBlock
 	})
 }
 
+// handleMaybeAddDirectRelayPeer gives the peer a direct relay slot if one is
+// free and the peer is still connected.  A peer turned away at the peer limit
+// can ask after its disconnect was handled, and its slot would then never be
+// freed.  It is invoked from the peerHandler goroutine.
+func (s *server) handleMaybeAddDirectRelayPeer(state *peerState, amsg *maybeAddDirectRelayPeerMsg) {
+	if amsg.peer.Connected() && len(state.directRelayPeers) < maxDirectRelayPeers {
+		state.directRelayPeers[amsg.peer.ID()] = amsg.peer
+		amsg.response <- true
+	} else {
+		amsg.response <- false
+	}
+}
+
 // handleBroadcastMsg deals with broadcasting messages to peers.  It is invoked
 // from the peerHandler goroutine.
 func (s *server) handleBroadcastMsg(state *peerState, bmsg *broadcastMsg) {
@@ -3102,12 +3115,7 @@ out:
 			s.handleQuery(state, qmsg)
 
 		case amsg := <-s.maybeAddDirectRelayPeer:
-			if len(state.directRelayPeers) < maxDirectRelayPeers {
-				state.directRelayPeers[amsg.peer.ID()] = amsg.peer
-				amsg.response <- true
-			} else {
-				amsg.response <- false
-			}
+			s.handleMaybeAddDirectRelayPeer(state, amsg)
 
 		case <-s.quit:
 			// Disconnect all peers on server shutdown.

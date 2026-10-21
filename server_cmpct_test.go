@@ -581,3 +581,30 @@ func TestCompactBlockUnknownParent(t *testing.T) {
 	h.expectFullBlockRequest(t, *block.Hash())
 	h.expectNotRelayed(t)
 }
+
+// TestDirectRelaySlotNotForGonePeer ensures a direct relay slot is not given
+// to a peer that is already gone, as one turned away at the peer limit can
+// ask for it after its disconnect was handled, and the slot would then never
+// be freed.
+func TestDirectRelaySlotNotForGonePeer(t *testing.T) {
+	h := newCmpctHarness(t)
+	s := &server{}
+	state := &peerState{directRelayPeers: make(map[int32]*serverPeer)}
+	resp := make(chan bool, 1)
+
+	gone := newServerPeer(s, false)
+	gone.Peer = peer.NewInboundPeer(&peer.Config{
+		ChainParams: &chaincfg.RegressionNetParams,
+	})
+	s.handleMaybeAddDirectRelayPeer(state,
+		&maybeAddDirectRelayPeerMsg{peer: gone, response: resp})
+	if <-resp || len(state.directRelayPeers) != 0 {
+		t.Fatal("a peer that is gone got a direct relay slot")
+	}
+
+	s.handleMaybeAddDirectRelayPeer(state,
+		&maybeAddDirectRelayPeerMsg{peer: h.sp, response: resp})
+	if !<-resp || len(state.directRelayPeers) != 1 {
+		t.Fatal("a connected peer got no direct relay slot")
+	}
+}
