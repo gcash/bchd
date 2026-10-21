@@ -24,7 +24,7 @@ This release makes validation, initial sync and block relay considerably faster,
 - `--maxreorgdepth` (default 10) and `--finalizationdelay` (default 7200 seconds), as in BCHN.
 - `--rpcauthtimeout` now also applies to websocket clients.
 - `--nodoublespendproof` turns off double spend proofs.
-- `--minrelaytxfee` must be above 0. `--limitfreerelay`, `--norelaypriority`, `--blockminsize` and `--blockprioritysize` are deprecated and do nothing.
+- `--minrelaytxfee` must be above 0 and at most 21000000. `--limitfreerelay`, `--norelaypriority`, `--blockminsize` and `--blockprioritysize` are deprecated and do nothing.
 - `--profile` with a bare port listens on localhost only.
 
 ### Consensus & Network
@@ -38,6 +38,8 @@ This release makes validation, initial sync and block relay considerably faster,
 - Match P2PK and bare multisig scripts to BCHN's templates for standardness. A key that isn't pushed directly, or doesn't start with a valid prefix, makes the script pay to script.
 - Create, check and relay double spend proofs (`dsproof-beta`), as BCHN does.
 - Every new transaction must pay `--minrelaytxfee`, as in BCHN. Free relay and coin-age priority are gone.
+- Dust is judged at BCHN's default `-dustrelayfee` of 1000 satoshis per kB, whatever `--minrelaytxfee` is, so raising that no longer refuses outputs BCHN relays.
+- Transactions leave the mempool two weeks after entering it, with the transactions that spend them, as with BCHN's default `-mempoolexpiry`. A transaction a reorg put back below the minimum fee is never mined, and no longer stays until a restart.
 - Regtest applies every upgrade from the first block, CashTokens included, and activates CSV at height 576, as BCHN does.
 - Fix several P2P message and compact block relay issues, and bound UPnP requests to five seconds.
 
@@ -53,8 +55,9 @@ This release makes validation, initial sync and block relay considerably faster,
 - Move SLP parsing to `gcash/goslp` v1.0.0, a maintained copy of `simpleledgerinc/goslp`, whose repository was deleted. 32-bit builds now read SLP amounts of 2^31 base units or more correctly.
 - When a MINT confirms, the SLP index now drops the token's cached metadata, as it was meant to. gRPC could otherwise report the mint baton where a double-spent MINT had put it, until a restart.
 - Add `getdsproof`, `getdsprooflist` and `getdsproofscore` as in BCHN, the `notifydsproofs` websocket command, and the gRPC calls `GetDoubleSpendProof`, `GetDoubleSpendProofs`, `GetDoubleSpendProofScore` and `SubscribeDoubleSpendProofs`.
-- `verifymessage` accepts cashaddr addresses. `validateaddress` keeps the token-aware form and adds `istokenaware`. `createrawtransaction` rejects a repeated destination. `getinfo` and `getmininginfo` report `testnet` on testnet4 and chipnet. Limited users can stop the notifications they can start.
-- gRPC address queries accept legacy and P2SH32 addresses, and transaction filters match them. `GetAddressUnspentOutputs` no longer returns an output twice, and `GetBlockchainInfo` works on chipnet.
+- `verifymessage` accepts cashaddr addresses. `validateaddress` keeps the token-aware form and adds `istokenaware`, `scriptPubKey` and `isscript`. `createrawtransaction` rejects a repeated destination and accepts legacy addresses. `getinfo` and `getmininginfo` report `testnet` on testnet4 and chipnet. Limited users can stop the notifications they can start.
+- `gettxoutproof` without a block hash no longer needs `--txindex`: it finds the block from an unspent output of the first transaction, as BCHN does. `verifytxoutproof` returns an empty list for a proof that proves nothing, such as one whose merkle root does not match its header, as BCHN does.
+- gRPC address queries accept legacy and P2SH32 addresses, and transaction filters match them. `GetAddressUnspentOutputs` no longer returns an output twice, misses one confirmed while it runs, or lists a bare multisig output under its first key's address, and `GetBlockchainInfo` works on chipnet.
 - `getrawmempool`'s `startingpriority` and `currentpriority`, and gRPC's `starting_priority`, are deprecated and always 0. `estimatepriority` is now an unknown method.
 
 ### Mining
@@ -64,14 +67,16 @@ This release makes validation, initial sync and block relay considerably faster,
 - `submitblock` returns BIP22 reasons such as `duplicate-invalid` or `prev-blk-not-found`, as BCHN does, and no longer reports a block with an unknown parent, or one that ends up on a side chain, as accepted. Proposals are checked at the next block height.
 - `submitblock` and block proposals reject trailing data after the block.
 - `generate` writes the right coinbase height when the tip moves while mining, and only returns blocks that were accepted.
-- Templates select transactions by fee rate only, as in BCHN. The priority area and `--blockminsize` filling are gone.
+- Templates select transactions by fee rate only. The priority area and `--blockminsize` filling are gone.
 
 ### Database
 
 - Fix hangs when pruning, after a failed database commit, and when `peers.json` is rejected.
 - Keep UTXO cache entries until their flush commits, and recover at startup from a flush interrupted after a reorg.
 - A failed UTXO flush now shuts the node down cleanly instead of carrying on.
-- An interrupted `--reindexchainstate` resumes on the next start instead of leaving an incomplete UTXO set.
+- An interrupted `--reindexchainstate` resumes on the next start instead of leaving an incomplete UTXO set, and it deletes the old UTXO set in batches rather than holding every deletion in memory.
+- A database read that fails now fails the operation instead of reading as missing data, so a disk error can no longer get a valid block marked invalid.
+- Dropping an index, with `--dropaddrindex`, `--droptxindex`, `--dropcfindex` or `--dropslpindex` or when the address index is rebuilt, no longer slows down as it goes, and it can be interrupted between batches; it resumes on the next start.
 - Move to `gcash/goleveldb` v1.1.0, a maintained fork of `syndtr/goleveldb` that brings upstream fixes since 2018 and fixes data loss during crash recovery, hangs after failed writes, and several panics. After a failed disk write it takes no more writes until the node restarts, and a corrupted MANIFEST fails the open instead of silently dropping tables. The on-disk format is unchanged.
 
 ### Security
@@ -101,9 +106,10 @@ This release makes validation, initial sync and block relay considerably faster,
 
 ### Upgrade notes
 
-- **Address index.** Nodes with `--addrindex` rebuild the address index on first start. After downgrading to an earlier release with `--addrindex` and upgrading again, start once with `--dropaddrindex`, which exits when done, then with `--addrindex` to rebuild it; this release cannot tell which blocks the earlier one indexed.
+- **Address index.** Nodes with `--addrindex` rebuild the address index on first start. This is very slow: every block is read and indexed again, and the node does not sync or serve RPC or gRPC until it is done. After downgrading to an earlier release with `--addrindex` and upgrading again, start once with `--dropaddrindex`, which exits when done, then with `--addrindex` to rebuild it; this release cannot tell which blocks the earlier one indexed.
 - **SLP index on 32-bit builds.** Earlier releases misread SLP amounts of 2^31 base units or more on 32-bit platforms, so the SLP index there can hold wrong token validity. Start once with `--dropslpindex`, which exits when done, then with `--slpindex` to rebuild it.
 - **ABLA state.** The stored ABLA states are rebuilt once on first start, without a reindex.
+- **Regtest.** Regtest chains made by earlier releases follow the old rules and can fail on a reorg or reindex; start regtest nodes from an empty data directory.
 - **Fees.** Free transactions are no longer relayed or mined. Every new transaction must pay `--minrelaytxfee`, and a node set to 0 refuses to start. The four deprecated options still parse, with a warning, for this release.
 - **`sendrawtransaction`.** Fees above 0.1 BCH need `allowhighfees` or a higher `--maxtxfee`. Transactions that break a blockchain rule, such as a failed script, now return -26 instead of -25; missing inputs still return -25.
 - **`createrawtransaction`.** The token category is now read in txid byte order, as `tokenData` reports it. The token amount may be a JSON integer or a string, as in BCHN.
