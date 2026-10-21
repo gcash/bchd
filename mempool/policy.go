@@ -64,8 +64,10 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee bchutil.Amoun
 	// get minimum Satoshis.
 	minFee := (serializedSize * int64(minRelayTxFee)) / 1000
 
+	// A fee that rounds down to zero at a nonzero rate is one satoshi, as
+	// BCHN's GetFee makes it.
 	if minFee == 0 && minRelayTxFee > 0 {
-		minFee = int64(minRelayTxFee)
+		minFee = 1
 	}
 
 	// Set the minimum fee to the maximum possible value if the calculated

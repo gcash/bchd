@@ -28,11 +28,17 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 	}{
 		{
 			// Ensure combination of size and fee that are less than 1000
-			// produce a non-zero fee.
+			// produce a fee of one satoshi, as in BCHN.
 			"250 bytes with relay fee of 3",
 			250,
 			3,
-			3,
+			1,
+		},
+		{
+			"99 bytes with relay fee of 10",
+			99,
+			10,
+			1,
 		},
 		{
 			"100 bytes with default minimum relay fee",

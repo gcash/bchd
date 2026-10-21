@@ -131,7 +131,8 @@ func (pq *txPriorityQueue) Pop() interface{} {
 }
 
 // minTxFee returns the fee a transaction of the given size must pay at the
-// given fee rate per 1000 bytes, rounded down as the mempool does.
+// given fee rate per 1000 bytes, rounded down.  The mempool rounds down too,
+// but asks for at least one satoshi, so every transaction it takes passes.
 func minTxFee(size int64, feePerKB bchutil.Amount) int64 {
 	if feePerKB > 0 && size > math.MaxInt64/int64(feePerKB) {
 		return math.MaxInt64
