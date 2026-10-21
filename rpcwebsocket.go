@@ -1036,7 +1036,9 @@ func (*wsNotificationManager) removeSpentRequest(ops map[wire.OutPoint]map[chan 
 	// Remove the client from the list to notify.
 	notifyMap, ok := ops[*op]
 	if !ok {
-		rpcsLog.Warnf("Attempt to remove nonexistent spent request "+
+		// A client may ask to stop any number of notifications it never
+		// asked for, so this is not worth more than a debug line.
+		rpcsLog.Debugf("Attempt to remove nonexistent spent request "+
 			"for websocket client %s", wsc.addr)
 		return
 	}
@@ -1260,7 +1262,9 @@ func (*wsNotificationManager) removeAddrRequest(addrs map[string]map[chan struct
 	// Remove the client from the list to notify.
 	cmap, ok := addrs[addr]
 	if !ok {
-		rpcsLog.Warnf("Attempt to remove nonexistent addr request "+
+		// A client may ask to stop any number of notifications it never
+		// asked for, so this is not worth more than a debug line.
+		rpcsLog.Debugf("Attempt to remove nonexistent addr request "+
 			"<%s> for websocket client %s", addr, wsc.addr)
 		return
 	}
