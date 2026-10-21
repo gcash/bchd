@@ -1048,14 +1048,17 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	}
 }
 
-// handleBlockError removes the request block from the queues so it can be request
-// again if necessary.
+// handleBlockError forgets the peer's request for the block, so it can be
+// requested again.  A peer can only make the node forget its own request.
 func (sm *SyncManager) handleBlockError(msg *blockErrorMsg) {
 	state, exists := sm.peerStates[msg.peer]
-	if exists {
-		delete(state.requestedBlocks, *msg.hash)
+	if !exists {
+		return
 	}
-	delete(sm.requestedBlocks, *msg.hash)
+	if _, ok := state.requestedBlocks[*msg.hash]; ok {
+		delete(state.requestedBlocks, *msg.hash)
+		delete(sm.requestedBlocks, *msg.hash)
+	}
 }
 
 // handleNotFoundMsg forgets the blocks a peer reports it doesn't have, if

@@ -76,6 +76,10 @@ const (
 )
 
 var (
+	// cmpctTxnsTimeout is how long a compact block waits for the missing
+	// transactions it asked the peer for.
+	cmpctTxnsTimeout = 30 * time.Second
+
 	// userAgentName is the user agent name and is used to help identify
 	// ourselves to other bitcoin peers.
 	userAgentName = "/bchd"
@@ -932,13 +936,17 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 			return
 		}
 		sp.QueueMessage(msgGetBlockTxns, nil)
-		timeout := time.After(time.Second * 30)
+		timeout := time.After(cmpctTxnsTimeout)
 		select {
 		case <-timeout:
+			// The request is kept, as the peer may still send the
+			// full block, which BCHN does for any block that is not
+			// its most recent one.  If it sends nothing, the stall
+			// handler disconnects it, and a late blocktxns forgets
+			// the request.
 			sp.removeCmpctWaiter(targetHash, replyChan)
 			peerLog.Debugf("Peer %v timed out waiting for blocktxns for cmpctblock %v",
 				sp, msg.Header.BlockHash())
-			sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 			return
 		case <-sp.quit:
 			// The sync manager already forgot the peer's requests.
@@ -1048,11 +1056,15 @@ func cmpctTxsMatch(block *bchutil.Block) bool {
 }
 
 // OnBlockTxns is invoked when a peer receives a blocktxns bitcoin message.
-// The reply goes to the compact block it is for.
+// The reply goes to the compact block it is for.  One that comes after the
+// compact block stopped waiting forgets the block's request, so the block can
+// be requested again.
 func (sp *serverPeer) OnBlockTxns(_ *peer.Peer, msg *wire.MsgBlockTxns) {
 	if !sp.deliverCmpctReply(msg.BlockHash, msg) {
 		peerLog.Debugf("Ignoring blocktxns for block %v from %v -- not "+
 			"waiting for it", msg.BlockHash, sp)
+		hash := msg.BlockHash
+		sp.server.syncManager.QueueBlockError(&hash, sp.Peer)
 	}
 }
 

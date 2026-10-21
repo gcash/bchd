@@ -736,3 +736,47 @@ func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 	waitDone(t, done)
 	h.expectNotRelayed(t)
 }
+
+// shortenCmpctTxnsTimeout makes compact blocks wait briefly for missing
+// transactions for the rest of the test.
+func shortenCmpctTxnsTimeout(t *testing.T) {
+	old := cmpctTxnsTimeout
+	cmpctTxnsTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { cmpctTxnsTimeout = old })
+}
+
+// TestCompactBlockLateFullBlock ensures a full block that answers a
+// getblocktxns after the compact block stopped waiting, as BCHN sends for a
+// block that is not its most recent one, is still taken as requested, so the
+// peer is not disconnected for it.
+func TestCompactBlockLateFullBlock(t *testing.T) {
+	shortenCmpctTxnsTimeout(t)
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	waitDone(t, done)
+	h.send(t, block.MsgBlock())
+	h.expectHaveBlock(t, block.Hash())
+	if !h.sp.Connected() {
+		t.Fatal("peer was disconnected for the late block")
+	}
+}
+
+// TestCompactBlockLateBlockTxns ensures a blocktxns arriving after the
+// compact block stopped waiting forgets the block's request, so the block
+// can be requested again.
+func TestCompactBlockLateBlockTxns(t *testing.T) {
+	shortenCmpctTxnsTimeout(t)
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	waitDone(t, done)
+	h.send(t, blockTxnsFor(block))
+	h.request(t, *block.Hash())
+}
