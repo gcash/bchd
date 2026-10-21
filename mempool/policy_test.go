@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -765,5 +766,20 @@ func TestCheckTransactionStandard(t *testing.T) {
 				txrerr.RejectCode, test.code)
 			continue
 		}
+	}
+}
+
+// TestNonFinalStandardReason ensures a transaction that is not final is
+// refused as nonstandard with BCHN's reason, which the mempool's own finality
+// check gives when nonstandard transactions are accepted.
+func TestNonFinalStandardReason(t *testing.T) {
+	tx := wire.NewMsgTx(1)
+	tx.AddTxIn(&wire.TxIn{Sequence: 0})
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	tx.LockTime = 300001
+	err := checkTransactionStandard(bchutil.NewTx(tx), 300000, time.Now(),
+		DefaultMinRelayTxFee, 2, true, true)
+	if err == nil || !strings.Contains(err.Error(), "bad-txns-nonfinal") {
+		t.Fatalf("got %v, want a rejection with bad-txns-nonfinal", err)
 	}
 }

@@ -5,6 +5,7 @@
 package mempool
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg"
@@ -20,6 +21,10 @@ func requireInsufficientFee(t *testing.T, what string, err error) {
 	if code, _ := extractRejectCode(err); code != wire.RejectInsufficientFee {
 		t.Fatalf("%s: expected an insufficient fee rejection, got %v",
 			what, err)
+	}
+	// BCHN's reason, which clients look for.
+	if !strings.Contains(err.Error(), "min relay fee not met") {
+		t.Fatalf("%s: rejection %q lacks BCHN's reason", what, err)
 	}
 }
 

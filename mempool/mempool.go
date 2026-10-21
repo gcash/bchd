@@ -1004,8 +1004,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		mp.cfg.Policy.MinRelayTxFee)
 	if isNew && txFee < minFee {
 		str := fmt.Sprintf("transaction %v has %d fees which is under "+
-			"the required amount of %d", txHash, txFee,
-			minFee)
+			"the required amount of %d (min relay fee not met)", txHash,
+			txFee, minFee)
 		return nil, txRuleError(wire.RejectInsufficientFee, str)
 	}
 

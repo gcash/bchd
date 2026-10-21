@@ -268,7 +268,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	// considered for inclusion in a block.
 	if !blockchain.IsFinalizedTransaction(tx, height, medianTimePast) {
 		return txRuleError(wire.RejectNonstandard,
-			"transaction is not finalized")
+			"transaction is not finalized (bad-txns-nonfinal)")
 	}
 
 	// Since extremely large transactions with a lot of inputs can cost
