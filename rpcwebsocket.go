@@ -888,8 +888,11 @@ func marshalDSProofNtfn(desc *mempool.DSProofDesc, verbosity int) ([]byte, error
 func (m *wsNotificationManager) notifyDSProof(clients map[chan struct{}]*wsClient, desc *mempool.DSProofDesc) {
 	var marshalled [4][]byte
 	for _, wsc := range clients {
+		// A client stopping its notifications has its verbosity reset
+		// before it is unregistered, so this uses at least 1 as
+		// registering does.
 		wsc.Lock()
-		v := wsc.dsProofVerbosity
+		v := max(wsc.dsProofVerbosity, 1)
 		wsc.Unlock()
 		if marshalled[v] == nil {
 			var err error
@@ -2289,10 +2292,17 @@ func handleNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) 
 	}
 
 	wsc.Lock()
+	registered := wsc.dsProofVerbosity > 0
 	wsc.dsProofVerbosity = max(verbosity, 1)
 	wsc.Unlock()
 	wsc.server.ntfnMgr.RegisterDSProofUpdates(wsc)
 
+	// The proofs already in the memory pool are sent when the client
+	// registers, not each time it asks again, which would queue them all
+	// once more.
+	if registered {
+		return nil, nil
+	}
 	for _, desc := range pool.DSProofs(false) {
 		marshalled, err := marshalDSProofNtfn(desc, max(verbosity, 1))
 		if err != nil {
@@ -2306,6 +2316,9 @@ func handleNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) 
 // handleStopNotifyDSProofs implements the stopnotifydsproofs command
 // extension for websocket connections.
 func handleStopNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) {
+	wsc.Lock()
+	wsc.dsProofVerbosity = 0
+	wsc.Unlock()
 	wsc.server.ntfnMgr.UnregisterDSProofUpdates(wsc)
 	return nil, nil
 }

@@ -387,3 +387,53 @@ func TestDSProofWebsocketDisabled(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// TestDSProofWebsocketReplayOnce ensures notifydsproofs sends the proofs
+// already in the memory pool only when the client registers, not every time
+// it asks again, which would queue them all once more each time.
+func TestDSProofWebsocketReplayOnce(t *testing.T) {
+	h := newDSProofTestHarness(t)
+	s := h.server
+	s.ntfnMgr = newWsNotificationManager(s)
+	s.ntfnMgr.Start()
+	defer func() {
+		s.ntfnMgr.Shutdown()
+		s.ntfnMgr.WaitForShutdown()
+	}()
+	wsc := &wsClient{
+		server:   s,
+		quit:     make(chan struct{}),
+		ntfnChan: make(chan []byte, 10),
+	}
+	replayed := func() bool {
+		t.Helper()
+		select {
+		case <-wsc.ntfnChan:
+			return true
+		case <-time.After(200 * time.Millisecond):
+			return false
+		}
+	}
+	notify := func() {
+		t.Helper()
+		if _, err := handleNotifyDSProofs(wsc, btcjson.NewNotifyDSProofsCmd(nil)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	notify()
+	if !replayed() {
+		t.Fatal("the existing proof was not sent on registering")
+	}
+	notify()
+	if replayed() {
+		t.Fatal("the existing proof was sent again on asking again")
+	}
+	if _, err := handleStopNotifyDSProofs(wsc, btcjson.NewStopNotifyDSProofsCmd()); err != nil {
+		t.Fatal(err)
+	}
+	notify()
+	if !replayed() {
+		t.Fatal("the existing proof was not sent on registering again")
+	}
+}
