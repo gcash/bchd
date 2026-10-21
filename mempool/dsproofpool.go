@@ -7,6 +7,7 @@ package mempool
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -211,13 +212,38 @@ func (mp *TxPool) dsProofOrphansFor(tx *bchutil.Tx) []*dsProofEntry {
 	return orphans
 }
 
+// maxDSProofOrphanChecks is the number of orphan proofs checked for a
+// transaction entering the memory pool, which bounds the work done under the
+// pool lock for a transaction with many inputs.
+const maxDSProofOrphanChecks = 32
+
 // rescueDSProofOrphans checks the orphan proofs for the outpoints spent by
 // tx, which was just added to the memory pool.  The first valid one is
-// associated with tx and the rest are removed.
+// associated with tx and the rest are removed.  Proofs without a peer and
+// older ones are checked first.  The proofs beyond maxDSProofOrphanChecks,
+// and those of a peer one of whose proofs failed, are removed unchecked.
 //
 // This function MUST be called with the mempool lock held (for writes).
 func (mp *TxPool) rescueDSProofOrphans(tx *bchutil.Tx, orphans []*dsProofEntry, flags txscript.ScriptFlags) {
+	slices.SortStableFunc(orphans, func(a, b *dsProofEntry) int {
+		if a.hasPeer != b.hasPeer {
+			if !a.hasPeer {
+				return -1
+			}
+			return 1
+		}
+		return a.orphaned.Compare(b.orphaned)
+	})
+	failed := make(map[Tag]struct{})
+	checks := 0
 	for i, e := range orphans {
+		if _, ok := failed[e.peer]; checks == maxDSProofOrphanChecks ||
+			(e.hasPeer && ok) {
+
+			mp.dsProofs.remove(e.hash)
+			continue
+		}
+		checks++
 		validity, err := mp.validateDSProofInPool(e.proof, &e.hash, nil, flags)
 		switch validity {
 		case dsProofValid:
@@ -238,6 +264,7 @@ func (mp *TxPool) rescueDSProofOrphans(tx *bchutil.Tx, orphans []*dsProofEntry, 
 			mp.dsProofs.remove(e.hash)
 			if e.hasPeer {
 				mp.badDSProofPeers = append(mp.badDSProofPeers, e.peer)
+				failed[e.peer] = struct{}{}
 			}
 
 		default:

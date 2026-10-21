@@ -1148,3 +1148,135 @@ func TestDSProofConstants(t *testing.T) {
 		t.Error("storage defaults")
 	}
 }
+
+// junkOrphanSpend adds a coin with a double spend proof for it, and returns
+// the coin, its outpoint, and num proofs for the outpoint that fail
+// validation.
+func junkOrphanSpend(t *testing.T, harness *poolHarness, num int) (wire.OutPoint,
+	*wire.TxOut, []*wire.MsgDSProof) {
+
+	t.Helper()
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	good, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var junk []*wire.MsgDSProof
+	for i := range num {
+		junk = append(junk, mutateProof(good, func(p *wire.MsgDSProof) {
+			p.FirstSpender.LockTime = uint32(i + 1)
+		}))
+	}
+	return op, coin, junk
+}
+
+// TestDSProofOrphanRescueBudget ensures a transaction entering the pool checks
+// at most 32 orphan proofs for the outpoints it spends, and drops the rest
+// unchecked, so a transaction with many inputs and junk orphans for each
+// costs a bounded amount of work under the pool lock.
+func TestDSProofOrphanRescueBudget(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	const numInputs = 10
+	var ops []wire.OutPoint
+	var coins []*wire.TxOut
+	var hashTypes []txscript.SigHashType
+	for i := range numInputs {
+		op, coin, junk := junkOrphanSpend(t, harness, maxDSProofOrphansPerOutPoint)
+		for j, proof := range junk {
+			peer := Tag(i*maxDSProofOrphansPerOutPoint + j)
+			if r, _ := pool.ProcessDSProof(proof, peer, true); r != DSProofOrphan {
+				t.Fatalf("junk proof %d: %v", j, r)
+			}
+		}
+		ops = append(ops, op)
+		coins = append(coins, coin)
+		hashTypes = append(hashTypes, txscript.SigHashAll|txscript.SigHashForkID)
+	}
+
+	tx := multiInputSpend(t, harness, ops, coins, 1, 10000, hashTypes)
+	if _, err := pool.ProcessTransaction(tx, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, bad := rec.take(); len(bad) > 32 {
+		t.Fatalf("%d orphans checked, want at most 32", len(bad))
+	}
+	for _, op := range ops {
+		if n := len(pool.dsProofs.findOrphans(op)); n != 0 {
+			t.Fatalf("%d orphans left for %v", n, op)
+		}
+	}
+}
+
+// TestDSProofOrphanRescueSkipsFailedPeer ensures that once an orphan proof
+// from a peer fails, its other orphans for the transaction's outpoints are
+// dropped unchecked.
+func TestDSProofOrphanRescueSkipsFailedPeer(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	var ops []wire.OutPoint
+	var coins []*wire.TxOut
+	var hashTypes []txscript.SigHashType
+	for range 5 {
+		op, coin, junk := junkOrphanSpend(t, harness, maxDSProofOrphansPerPeerOutPoint)
+		for _, proof := range junk {
+			if r, _ := pool.ProcessDSProof(proof, 7, true); r != DSProofOrphan {
+				t.Fatalf("junk proof: %v", r)
+			}
+		}
+		ops = append(ops, op)
+		coins = append(coins, coin)
+		hashTypes = append(hashTypes, txscript.SigHashAll|txscript.SigHashForkID)
+	}
+
+	tx := multiInputSpend(t, harness, ops, coins, 1, 10000, hashTypes)
+	if _, err := pool.ProcessTransaction(tx, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, bad := rec.take(); len(bad) != 1 {
+		t.Fatalf("peer blamed %d times, want once", len(bad))
+	}
+}
+
+// TestDSProofOrphanRescuePrefersNoPeer ensures an orphan proof without a peer
+// is checked before those from peers, even older ones, so junk from peers
+// cannot use up the checks before it.
+func TestDSProofOrphanRescuePrefersNoPeer(t *testing.T) {
+	harness, rec := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	var ops []wire.OutPoint
+	var coins []*wire.TxOut
+	var hashTypes []txscript.SigHashType
+	for i := range 20 {
+		op, coin, junk := junkOrphanSpend(t, harness, maxDSProofOrphansPerPeerOutPoint)
+		for j, proof := range junk {
+			if r, _ := pool.ProcessDSProof(proof, Tag(2*i+j), true); r != DSProofOrphan {
+				t.Fatalf("junk proof: %v", r)
+			}
+		}
+		ops = append(ops, op)
+		coins = append(coins, coin)
+		hashTypes = append(hashTypes, txscript.SigHashAll|txscript.SigHashForkID)
+	}
+
+	// A valid proof for a last input, without a peer and the newest.
+	op, coin, tx1, tx2 := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	good, err := newDSProof(tx1.MsgTx(), tx2.MsgTx(), op, coin, testFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := pool.ProcessDSProof(good, 0, false); r != DSProofOrphan {
+		t.Fatalf("valid orphan %v", r)
+	}
+	ops = append(ops, op)
+	coins = append(coins, coin)
+	hashTypes = append(hashTypes, txscript.SigHashAll|txscript.SigHashForkID)
+
+	tx := multiInputSpend(t, harness, ops, coins, 1, 10000, hashTypes)
+	if _, err := pool.ProcessTransaction(tx, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if proofs, _ := rec.take(); len(proofs) != 1 {
+		t.Fatalf("%d proofs rescued, want the one without a peer", len(proofs))
+	}
+}
