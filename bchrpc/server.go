@@ -1105,7 +1105,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		// Outputs of a mempool transaction are unconfirmed.
 		var poolView *blockchain.UtxoViewpoint
 		for i, out := range tx.MsgTx().TxOut {
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+			class, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
 			if err != nil || len(addrs) == 0 {
 				continue
 			}
@@ -1117,7 +1117,10 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				isMatch = matches(addrs[0])
 
 			case *bchutil.AddressPubKey:
-				isMatch = matches(typedAddr.AddressPubKeyHash())
+				// A bare multisig output names its keys too, but no
+				// one key's address can spend it alone.
+				isMatch = class == txscript.PubKeyTy &&
+					matches(typedAddr.AddressPubKeyHash())
 			}
 
 			// Outputs paying to other addresses are only looked up for

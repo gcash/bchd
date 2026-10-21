@@ -274,3 +274,31 @@ func TestAddressQueriesPubKey(t *testing.T) {
 		t.Fatalf("got %d unspent outputs, want 1", len(utxoResp.Outputs))
 	}
 }
+
+// TestAddressUnspentNotBareMultisig ensures a bare multisig output is not one
+// of the unspent outputs of the address of its first key, which cannot spend
+// it alone, while a pay-to-pubkey output of the key is.
+func TestAddressUnspentNotBareMultisig(t *testing.T) {
+	_, pubKey := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{0x01}, 32))
+	_, otherKey := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{0x02}, 32))
+	serialized := pubKey.SerializeCompressed()
+	p2pkScript := append(append([]byte{txscript.OP_DATA_33}, serialized...),
+		txscript.OP_CHECKSIG)
+	multisig, err := txscript.NewScriptBuilder().AddOp(txscript.OP_2).
+		AddData(serialized).AddData(otherKey.SerializeCompressed()).
+		AddOp(txscript.OP_2).AddOp(txscript.OP_CHECKMULTISIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newAddrIndexServer(t, [][]byte{p2pkScript, multisig})
+
+	resp, err := s.GetAddressUnspentOutputs(context.Background(),
+		&pb.GetAddressUnspentOutputsRequest{Address: hex.EncodeToString(serialized)})
+	if err != nil {
+		t.Fatalf("GetAddressUnspentOutputs: %v", err)
+	}
+	if len(resp.Outputs) != 1 || !bytes.Equal(resp.Outputs[0].PubkeyScript, p2pkScript) {
+		t.Fatalf("got %d unspent outputs, want only the pay-to-pubkey one",
+			len(resp.Outputs))
+	}
+}
