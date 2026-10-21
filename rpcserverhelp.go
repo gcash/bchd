@@ -54,7 +54,7 @@ var helpDescsEnUS = map[string]string{
 	"createrawtransaction-amounts--value":   "n.nnn",
 	"createrawtransaction-amounts--desc":    "The destination address as the key and the amount in BTC as the value",
 	"createrawtransaction-cashtokens":       "Optional list of CashTokens to add to the outputs, at most one entry per output address",
-	"transactionoutputcashtoken-address":    "The output address, which must pay to the same destination as a key of the amounts object, in any cashaddr form",
+	"transactionoutputcashtoken-address":    "The output address, which must pay to the same destination as a key of the amounts object, in any form, cashaddr or legacy",
 	"transactionoutputcashtoken-category":   "The token category, in the byte order used to display transaction hashes, like a txid",
 	"transactionoutputcashtoken-amount":     "The fungible token amount; 0 or omitted for no fungible tokens",
 	"transactionoutputcashtoken-capability": "The NFT capability: none, mutable or minting; omit for no NFT",

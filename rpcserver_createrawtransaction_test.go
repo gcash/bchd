@@ -245,10 +245,6 @@ func TestHandleCreateRawTransactionTokenErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create address: %v", err)
 	}
-	legacyAddr, err := bchutil.NewLegacyAddressPubKeyHash(hash, params)
-	if err != nil {
-		t.Fatalf("unable to create legacy address: %v", err)
-	}
 	testnetAddr, err := bchutil.NewLegacyAddressPubKeyHash(hash,
 		&chaincfg.TestNet3Params)
 	if err != nil {
@@ -358,14 +354,6 @@ func TestHandleCreateRawTransactionTokenErrors(t *testing.T) {
 			}},
 			wantCode: btcjson.ErrRPCInvalidParameter,
 			wantMsg:  "Invalid parameter, duplicated cashtokens address",
-		},
-		{
-			name: "legacy address",
-			cashTokens: []btcjson.TransactionOutputCashToken{{
-				Address: legacyAddr.EncodeAddress(),
-				Amount:  1,
-			}},
-			wantCode: btcjson.ErrRPCInvalidAddressOrKey,
 		},
 		{
 			name: "address for another network",
@@ -525,6 +513,11 @@ func TestHandleCreateRawTransactionTokenAddressForms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create p2pkh address: %v", err)
 	}
+	legacy, err := bchutil.NewLegacyAddressPubKeyHash(
+		bytes.Repeat([]byte{0x08}, 20), params)
+	if err != nil {
+		t.Fatalf("unable to create legacy address: %v", err)
+	}
 	otherAddr := createRawTxTestAddr(t, 0x09)
 	wantScript, err := txscript.PayToAddrScript(p2pkh)
 	if err != nil {
@@ -542,6 +535,10 @@ func TestHandleCreateRawTransactionTokenAddressForms(t *testing.T) {
 			p2pkh.EncodeCashAddress(false)},
 		{"token-aware output and entry", p2pkh.EncodeCashAddress(true),
 			p2pkh.EncodeCashAddress(true)},
+		{"legacy output, token-aware entry", legacy.EncodeAddress(),
+			p2pkh.EncodeCashAddress(true)},
+		{"token-aware output, legacy entry", p2pkh.EncodeCashAddress(true),
+			legacy.EncodeAddress()},
 	}
 
 	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
@@ -593,5 +590,42 @@ func TestHandleCreateRawTransactionTokenAddressForms(t *testing.T) {
 					wantAmount)
 			}
 		}
+	}
+}
+
+// TestHandleCreateRawTransactionLegacyAddress ensures createrawtransaction
+// pays to legacy addresses, as BCHN does, and refuses one for another
+// network.
+func TestHandleCreateRawTransactionLegacyAddress(t *testing.T) {
+	hash := bytes.Repeat([]byte{0x01}, 20)
+	p2pkh, err := bchutil.NewLegacyAddressPubKeyHash(hash, &chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh, err := bchutil.NewLegacyAddressScriptHashFromHash(hash, &chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, addr := range []bchutil.Address{p2pkh, p2sh} {
+		mtx, err := runCreateRawTx(t, addr.EncodeAddress(), nil)
+		if err != nil {
+			t.Errorf("%v: %v", addr, err)
+			continue
+		}
+		want, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(mtx.TxOut[0].PkScript, want) {
+			t.Errorf("%v: script %x, want %x", addr, mtx.TxOut[0].PkScript, want)
+		}
+	}
+
+	testnet, err := bchutil.NewLegacyAddressPubKeyHash(hash, &chaincfg.TestNet3Params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCreateRawTx(t, testnet.EncodeAddress(), nil); err == nil {
+		t.Error("testnet legacy address accepted on mainnet")
 	}
 }

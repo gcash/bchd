@@ -675,11 +675,13 @@ func createRawTxOutputScript(encodedAddr string, params *chaincfg.Params) ([]byt
 
 	// Ensure the address is one of the supported types and that the
 	// network encoded with the address matches the network the server is
-	// currently on.
+	// currently on.  Legacy addresses are accepted, as in BCHN.
 	switch addr.(type) {
 	case *bchutil.AddressPubKeyHash:
 	case *bchutil.AddressScriptHash:
 	case *bchutil.AddressScriptHash32:
+	case *bchutil.LegacyAddressPubKeyHash:
+	case *bchutil.LegacyAddressScriptHash:
 	default:
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidAddressOrKey,
