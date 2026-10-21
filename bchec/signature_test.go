@@ -917,3 +917,29 @@ func TestQuadraticResidue(t *testing.T) {
 		}
 	}
 }
+
+// TestRecoverCompactInfinity ensures a signature from which the point at
+// infinity would be recovered is refused, as libsecp256k1 refuses it, rather
+// than giving a key with zero coordinates.  With s = e/k for R = kG, sR is eG,
+// so r^-1(sR - eG) is the point at infinity.
+func TestRecoverCompactInfinity(t *testing.T) {
+	curve := S256()
+	hash := sha256.Sum256([]byte("message"))
+	k := big.NewInt(12345)
+	Rx, Ry := curve.ScalarBaseMult(k.Bytes())
+	if Rx.Cmp(curve.N) >= 0 {
+		t.Fatal("R needs another k")
+	}
+	e := hashToInt(hash[:], curve)
+	s := new(big.Int).Mul(e, new(big.Int).ModInverse(k, curve.N))
+	s.Mod(s, curve.N)
+
+	sig := make([]byte, 65)
+	sig[0] = 27 + byte(Ry.Bit(0))
+	Rx.FillBytes(sig[1:33])
+	s.FillBytes(sig[33:65])
+	if key, _, err := RecoverCompact(curve, sig, hash[:]); err == nil {
+		t.Fatalf("recovered key %x for the point at infinity",
+			key.SerializeCompressed())
+	}
+}

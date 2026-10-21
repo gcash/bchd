@@ -471,6 +471,12 @@ func recoverKeyFromSignature(curve *KoblitzCurve, sig *Signature, msg []byte,
 	// step to prevent the jacobian conversion back and forth.
 	Qx, Qy := curve.Add(sRx, sRy, minuseGx, minuseGy)
 
+	// The point at infinity is no public key, and libsecp256k1 fails the
+	// recovery of it.
+	if Qx.Sign() == 0 && Qy.Sign() == 0 {
+		return nil, errors.New("recovered public key is the point at infinity")
+	}
+
 	return &PublicKey{
 		Curve: curve,
 		X:     Qx,
