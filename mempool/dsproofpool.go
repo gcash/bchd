@@ -606,7 +606,7 @@ func (mp *TxPool) searchDSProofs(txHash chainhash.Hash, scoring bool) ([]chainha
 			return nil
 		}
 		if scoring {
-			possible, protected := proofPossibleForTx(txD.Tx.MsgTx(), mp.dsProofCoin)
+			possible, protected := txD.dsProofPossible, txD.dsProofProtected
 			if !possible {
 				score = 0
 				return nil

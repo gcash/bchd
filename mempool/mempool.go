@@ -147,6 +147,13 @@ type TxDesc struct {
 	// entrySeq orders the transactions by when they were added, with those
 	// added back from disconnected blocks first.
 	entrySeq int64
+
+	// dsProofPossible and dsProofProtected are whether a double spend proof
+	// is possible for the transaction and whether all of its signatures
+	// cover all of it.  They depend only on the transaction and the coins
+	// it spends, so they are found once, when it is added.
+	dsProofPossible  bool
+	dsProofProtected bool
 }
 
 // orphanTx is normal transaction that references an ancestor transaction
@@ -550,6 +557,18 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil
 		txD.entrySeq = mp.nextReaddSeq
 		mp.nextReaddSeq++
 	}
+	txD.dsProofPossible, txD.dsProofProtected = proofPossibleForTx(tx.MsgTx(),
+		func(op wire.OutPoint) *wire.TxOut {
+			entry := utxoView.LookupEntry(op)
+			if entry == nil {
+				return nil
+			}
+			return &wire.TxOut{
+				Value:     entry.Amount(),
+				PkScript:  entry.PkScript(),
+				TokenData: entry.TokenData(),
+			}
+		})
 
 	mp.pool[*tx.Hash()] = txD
 	for _, txIn := range tx.MsgTx().TxIn {

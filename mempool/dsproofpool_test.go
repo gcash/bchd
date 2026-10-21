@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/bchec"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -1278,5 +1279,40 @@ func TestDSProofOrphanRescuePrefersNoPeer(t *testing.T) {
 	}
 	if proofs, _ := rec.take(); len(proofs) != 1 {
 		t.Fatalf("%d proofs rescued, want the one without a peer", len(proofs))
+	}
+}
+
+// TestDSProofScoreNoLookups ensures scoring a transaction looks up no coins,
+// as whether its ancestors can have a proof was found when they were added,
+// so the search under the pool lock stays cheap.
+func TestDSProofScoreNoLookups(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	_, _, tx1, _ := doubleSpendPair(t, harness, txscript.SigHashAll, true)
+	if _, err := pool.ProcessTransaction(tx1, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	leaf := tx1
+	for range 5 {
+		out := leaf.MsgTx().TxOut[0]
+		child := spend(t, harness, wire.OutPoint{Hash: *leaf.Hash()}, out, 1,
+			1000, txscript.SigHashAll, true)
+		if _, err := pool.ProcessTransaction(child, true, 0); err != nil {
+			t.Fatal(err)
+		}
+		leaf = child
+	}
+
+	fetch := pool.cfg.FetchUtxoView
+	var lookups int
+	pool.cfg.FetchUtxoView = func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+		lookups++
+		return fetch(tx)
+	}
+	if score, _ := pool.DSProofScore(leaf.Hash()); score != 1 {
+		t.Fatalf("score %v, want 1", score)
+	}
+	if lookups != 0 {
+		t.Fatalf("%d coin lookups to score the transaction, want none", lookups)
 	}
 }
