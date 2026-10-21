@@ -767,11 +767,11 @@ var ChipNetParams = Params{
 	BIP0066Height:    4,
 	CSVHeight:        5,
 
-	UahfForkHeight:              5,
+	UahfForkHeight:              6,
 	DaaForkHeight:               3000,
-	MagneticAnonomalyForkHeight: 3999,
+	MagneticAnonomalyForkHeight: 4000,
 	GreatWallForkHeight:         0,
-	GravitonForkHeight:          4999,
+	GravitonForkHeight:          5000,
 	PhononForkHeight:            0,
 	AxionActivationHeight:       16844,
 
@@ -904,11 +904,11 @@ var TestNet4Params = Params{
 	BIP0066Height:    4,
 	CSVHeight:        5,
 
-	UahfForkHeight:              5,
+	UahfForkHeight:              6,
 	DaaForkHeight:               3000,
-	MagneticAnonomalyForkHeight: 3999,
+	MagneticAnonomalyForkHeight: 4000,
 	GreatWallForkHeight:         0,
-	GravitonForkHeight:          4999,
+	GravitonForkHeight:          5000,
 	PhononForkHeight:            0,
 	AxionActivationHeight:       16844,
 
