@@ -4479,7 +4479,28 @@ func handleValidateAddress(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 	} else {
 		result.Address = addr.EncodeAddress()
 	}
+
+	// Report the script the address pays to, as BCHN does.  A public key
+	// is shown as its pay-to-pubkey-hash address, so it gets that script.
+	payTo := addr
+	if pubKey, ok := addr.(*bchutil.AddressPubKey); ok {
+		payTo = pubKey.AddressPubKeyHash()
+	}
+	script, err := txscript.PayToAddrScript(payTo)
+	if err != nil {
+		context := "Failed to generate pay-to-address script"
+		return nil, internalRPCError(err.Error(), context)
+	}
+	isScript := false
+	switch payTo.(type) {
+	case *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32,
+		*bchutil.LegacyAddressScriptHash:
+		isScript = true
+	}
+
 	result.IsValid = true
+	result.ScriptPubKey = hex.EncodeToString(script)
+	result.IsScript = &isScript
 	result.IsTokenAware = &tokenAware
 
 	return result, nil

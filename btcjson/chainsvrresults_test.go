@@ -129,9 +129,11 @@ func TestChainSvrCustomResults(t *testing.T) {
 			result: &btcjson.ValidateAddressChainResult{
 				IsValid:      true,
 				Address:      "zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v",
+				ScriptPubKey: "76a914fc916f213a3d7f1369313d5fa30f6168f9446a2d88ac",
+				IsScript:     btcjson.Bool(false),
 				IsTokenAware: btcjson.Bool(true),
 			},
-			expected: `{"isvalid":true,"address":"zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v","istokenaware":true}`,
+			expected: `{"isvalid":true,"address":"zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v","scriptPubKey":"76a914fc916f213a3d7f1369313d5fa30f6168f9446a2d88ac","isscript":false,"istokenaware":true}`,
 		},
 		{
 			name: "validateaddress not token-aware",

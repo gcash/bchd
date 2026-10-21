@@ -738,6 +738,8 @@ var helpDescsEnUS = map[string]string{
 	// ValidateAddressResult help.
 	"validateaddresschainresult-isvalid":      "Whether or not the address is valid",
 	"validateaddresschainresult-address":      "The address validated, in its token-aware form for a token-aware cashaddr (only when isvalid is true)",
+	"validateaddresschainresult-scriptPubKey": "The hex-encoded script the address pays to (only when isvalid is true)",
+	"validateaddresschainresult-isscript":     "Whether the address pays to a script (only when isvalid is true)",
 	"validateaddresschainresult-istokenaware": "Whether the address is a token-aware cashaddr, which signals that it can receive CashTokens (only when isvalid is true)",
 
 	// ValidateAddressCmd help.
