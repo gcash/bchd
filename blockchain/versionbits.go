@@ -242,8 +242,12 @@ func (b *BlockChain) CalcNextBlockVersion() (int32, error) {
 // This function MUST be called with the chain state lock held (for writes)
 func (b *BlockChain) warnUnknownRuleActivations(node *blockNode) error {
 	// Warn if any unknown new rules are either about to activate or have
-	// already been activated.
+	// already been activated.  The bits left to version rolling say
+	// nothing about new rules.
 	for bit := range uint32(vbNumBits) {
+		if vbVersionRollingMask&(1<<bit) != 0 {
+			continue
+		}
 		checker := bitConditionChecker{bit: bit, chain: b}
 		cache := &b.warningCaches[bit]
 		state, err := b.thresholdState(node.parent, checker, cache)

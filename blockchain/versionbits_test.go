@@ -45,3 +45,35 @@ func TestWarnUnknownVersionsIgnoresVersionRolling(t *testing.T) {
 		})
 	}
 }
+
+// TestUnknownRuleWarningIgnoresVersionRolling ensures a bit BIP320 leaves to
+// version rolling does not count as new rules activating, however many blocks
+// set it, while another unknown bit still does.
+func TestUnknownRuleWarningIgnoresVersionRolling(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	for _, test := range []struct {
+		bit    uint32
+		warned bool
+	}{
+		{bit: 13, warned: false},
+		{bit: 20, warned: false},
+		{bit: 12, warned: true},
+	} {
+		chain := newFakeChain(&params)
+		tip := chain.bestChain.Tip()
+		version := int32(vbTopBits | 1<<test.bit)
+		for range 4 * params.MinerConfirmationWindow {
+			tip = newFakeNode(tip, version, params.PowLimitBits,
+				time.Unix(tip.timestamp+600, 0))
+			chain.index.AddNode(tip)
+		}
+		chain.bestChain.SetTip(tip)
+		if err := chain.warnUnknownRuleActivations(tip); err != nil {
+			t.Fatal(err)
+		}
+		if chain.unknownRulesWarned != test.warned {
+			t.Errorf("bit %d: warned %v, want %v", test.bit,
+				chain.unknownRulesWarned, test.warned)
+		}
+	}
+}

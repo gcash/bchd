@@ -325,6 +325,9 @@ func (b *BlockChain) initThresholdCaches() error {
 	// definition changes is done now.
 	prevNode := b.bestChain.Tip().parent
 	for bit := range uint32(vbNumBits) {
+		if vbVersionRollingMask&(1<<bit) != 0 {
+			continue
+		}
 		checker := bitConditionChecker{bit: bit, chain: b}
 		cache := &b.warningCaches[bit]
 		_, err := b.thresholdState(prevNode, checker, cache)
