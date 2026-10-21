@@ -635,7 +635,7 @@ var helpDescsEnUS = map[string]string{
 	// GetTxOutProofCmd help.
 	"gettxoutproof--synopsis": "Returns hex encoded merkle proof for a given transaction set",
 	"gettxoutproof-txids":     "A list of transaction hashes to generate proof for",
-	"gettxoutproof-blockhash": "The block hash the transactions are in",
+	"gettxoutproof-blockhash": "The block hash the transactions are in; without it the block is found with the transaction index, or else from an unspent output of the first transaction",
 	"gettxoutproof--result0":  "Hex encoded merkle proof",
 
 	// VerifyTxOutProofCmd help.

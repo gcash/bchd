@@ -468,3 +468,70 @@ func TestHandleVerifyTxOutProof(t *testing.T) {
 	result, err = verifyProof(encodeTestProof(t, msg))
 	assertMatches("wrong transaction count", result, err)
 }
+
+// TestGetTxOutProofFromUtxoSet ensures gettxoutproof without a block hash or
+// the transaction index finds the block from an unspent output of the
+// transaction, whatever its index, as BCHN does.
+func TestGetTxOutProofFromUtxoSet(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       chain,
+		DB:          db,
+	}}
+
+	// A transaction whose first output is spent in its own block, by the
+	// other transaction there, funded by a mature coinbase.
+	first := mineTestBlock(t, chain, nil)
+	for range chaincfg.RegressionNetParams.CoinbaseMaturity {
+		mineTestBlock(t, chain, nil)
+	}
+	tx := wire.NewMsgTx(1)
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: *first.Transactions()[0].Hash()}, nil))
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: tx.TxHash()}, nil))
+	spend.AddTxOut(wire.NewTxOut(400, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	spend.AddTxOut(wire.NewTxOut(400, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	txns := []*wire.MsgTx{tx, spend}
+	if txHash, spendHash := tx.TxHash(), spend.TxHash(); spendHash.Compare(&txHash) < 0 {
+		txns = []*wire.MsgTx{spend, tx}
+	}
+	block := mineTestBlock(t, chain, nil, txns...)
+	mineTestBlock(t, chain, nil)
+
+	for _, txid := range []chainhash.Hash{tx.TxHash(), spend.TxHash()} {
+		cmd := btcjson.NewGetTxOutProofCmd([]string{txid.String()}, nil)
+		result, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+		if err != nil {
+			t.Errorf("%v: %v", txid, err)
+			continue
+		}
+		proof := decodeTestProof(t, result.(string))
+		if hash := proof.Header.BlockHash(); hash != *block.Hash() {
+			t.Errorf("%v: proof for block %v, want %v", txid, hash, block.Hash())
+		}
+	}
+
+	unknown := chainhash.Hash{1}
+	cmd := btcjson.NewGetTxOutProofCmd([]string{unknown.String()}, nil)
+	_, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+	assertRPCError(t, "unknown txid", err, btcjson.ErrRPCNoTxInfo,
+		"Transaction not yet in block")
+
+	// Once all its outputs are spent the transaction is not found, though
+	// the cache still holds the output spent after the flush.
+	if err := chain.FlushCachedState(blockchain.FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+	spendRest := wire.NewMsgTx(1)
+	spendRest.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: tx.TxHash(), Index: 1}, nil))
+	spendRest.AddTxOut(wire.NewTxOut(400, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	spendRest.AddTxOut(wire.NewTxOut(400, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	mineTestBlock(t, chain, nil, spendRest)
+	cmd = btcjson.NewGetTxOutProofCmd([]string{tx.TxHash().String()}, nil)
+	_, err = callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+	assertRPCError(t, "spent txid", err, btcjson.ErrRPCNoTxInfo,
+		"Transaction not yet in block")
+}

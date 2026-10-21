@@ -3282,6 +3282,27 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	return txOutReply, nil
 }
 
+// blockOfUnspentOutput returns the hash of the main chain block holding the
+// transaction, found from one of its outputs in the utxo set, or nil when it
+// has none there.  As in BCHN, it looks at every index a transaction can
+// have: the smallest output is 9 bytes, an 8 byte value and an empty script.
+func blockOfUnspentOutput(chain *blockchain.BlockChain, txid *chainhash.Hash) *chainhash.Hash {
+	for i := uint32(0); i < blockchain.MaxTransactionSize/9; i++ {
+		entry, err := chain.FetchUtxoEntryUncached(wire.OutPoint{Hash: *txid, Index: i})
+		if err != nil {
+			return nil
+		}
+		if entry != nil && !entry.IsSpent() {
+			hash, err := chain.BlockHashByHeight(entry.BlockHeight())
+			if err != nil {
+				return nil
+			}
+			return hash
+		}
+	}
+	return nil
+}
+
 // handleGetTxOutProof implements the gettxoutproof command.
 func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.GetTxOutProofCmd)
@@ -3351,27 +3372,26 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 				Message: "Transaction not yet in block",
 			}
 		}
-		if s.cfg.TxIndex == nil {
-			return nil, &btcjson.RPCError{
-				Code:    btcjson.ErrRPCInvalidParameter,
-				Message: "Block hash must be set when not using txindex",
-			}
-		}
 		// no block hash was passed so use the first txn to lookup the block
 		// it appears in.  all transaction must be in the same block so which
 		// transaction is used for the lookup does not matter.
-
-		// lookup location of the transaction
-		blockRegion, err := s.cfg.TxIndex.TxBlockRegion(txnSet[0])
-
-		if err != nil || blockRegion == nil {
+		if s.cfg.TxIndex != nil {
+			// lookup location of the transaction
+			blockRegion, err := s.cfg.TxIndex.TxBlockRegion(txnSet[0])
+			if err == nil && blockRegion != nil {
+				blkHash = blockRegion.Hash
+			}
+		} else {
+			// Without the index, find the block from an unspent output
+			// of the transaction, as BCHN does.
+			blkHash = blockOfUnspentOutput(s.cfg.Chain, txnSet[0])
+		}
+		if blkHash == nil {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCNoTxInfo,
 				Message: "Transaction not yet in block",
 			}
 		}
-
-		blkHash = blockRegion.Hash
 	}
 
 	// load block and check that all transactions passed in the set exist in
