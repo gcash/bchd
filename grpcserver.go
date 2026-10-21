@@ -153,8 +153,7 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 		err = handler(srv, ss)
 	}
 	if err != nil && ok {
-		grpcLog.Errorf("Streaming method %s invoked by %s errored: %v",
-			info.FullMethod, p.Addr.String(), err)
+		logGrpcError("Streaming", info.FullMethod, p.Addr.String(), err)
 	}
 	return err
 }
@@ -181,10 +180,29 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 		resp, err = handler(ctx, req)
 	}
 	if err != nil && ok {
-		grpcLog.Errorf("Unary method %s invoked by %s errored: %v",
-			info.FullMethod, p.Addr.String(), err)
+		logGrpcError("Unary", info.FullMethod, p.Addr.String(), err)
 	}
 	return resp, err
+}
+
+// logGrpcError logs the error a call failed with.  An error that answers the
+// caller, such as an unknown transaction, a bad argument, or the end of a
+// subscription it canceled, is logged at debug, so that a client polling for
+// something cannot flood the log with errors.
+func logGrpcError(kind, method, addr string, err error) {
+	format := "%s method %s invoked by %s errored: %v"
+	switch status.Code(err) {
+	case codes.NotFound, codes.InvalidArgument, codes.OutOfRange,
+		codes.AlreadyExists, codes.FailedPrecondition, codes.Canceled:
+
+		grpcLog.Debugf(format, kind, method, addr, err)
+		return
+	}
+	if errors.Is(err, context.Canceled) {
+		grpcLog.Debugf(format, kind, method, addr, err)
+		return
+	}
+	grpcLog.Errorf(format, kind, method, addr, err)
 }
 
 // recoverGrpcPanic turns a panic in a gRPC handler into an Internal error, so

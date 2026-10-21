@@ -5,10 +5,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -186,6 +189,57 @@ func TestGrpcHTTPServerTimeouts(t *testing.T) {
 		conn.Close()
 		if ne, ok := err.(net.Error); ok && ne.Timeout() {
 			t.Errorf("connection after %q still open", partial)
+		}
+	}
+}
+
+// TestGrpcErrorLogLevel ensures a call that fails with an answer for the
+// caller, such as NotFound for a proof a client polls for or a subscription
+// the client ended, logs at debug rather than as an error, so a client cannot
+// flood the log, while other failures still log errors.
+func TestGrpcErrorLogLevel(t *testing.T) {
+	setGrpcTestConfig(t, "tok", false)
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	logger.SetLevel(bchlog.LevelDebug)
+	grpcLog = logger
+	ctx := peer.NewContext(tokenContext("tok"), &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1},
+	})
+
+	for _, test := range []struct {
+		err   error
+		level string
+	}{
+		{status.Error(codes.NotFound, "x"), "[DBG]"},
+		{status.Error(codes.InvalidArgument, "x"), "[DBG]"},
+		{status.Error(codes.Canceled, "x"), "[DBG]"},
+		{context.Canceled, "[DBG]"},
+		{status.Error(codes.Internal, "x"), "[ERR]"},
+	} {
+		buf.Reset()
+		unary := func(context.Context, interface{}) (interface{}, error) {
+			return nil, test.err
+		}
+		info := &grpc.UnaryServerInfo{FullMethod: readyGrpcMethod}
+		_, _ = interceptUnary(ctx, nil, info, unary)
+		want := test.level + " GRPC: Unary method " + readyGrpcMethod +
+			" invoked by 127.0.0.1:1 errored"
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("%v: log %q, want a line with %q", test.err,
+				buf.String(), want)
+		}
+
+		buf.Reset()
+		stream := func(interface{}, grpc.ServerStream) error { return test.err }
+		sinfo := &grpc.StreamServerInfo{FullMethod: readyGrpcMethod,
+			IsServerStream: true}
+		_ = interceptStreaming(nil, &grpcTestStream{ctx: ctx}, sinfo, stream)
+		want = test.level + " GRPC: Streaming method " + readyGrpcMethod +
+			" invoked by 127.0.0.1:1 errored"
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("%v: stream log %q, want a line with %q", test.err,
+				buf.String(), want)
 		}
 	}
 }
