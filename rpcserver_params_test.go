@@ -436,13 +436,28 @@ func TestHandleVerifyTxOutProof(t *testing.T) {
 	assertRPCError(t, "side chain header", err,
 		btcjson.ErrRPCInvalidAddressOrKey, "Block not found in chain")
 
-	// A merkle root that doesn't match the header.
+	// A merkle root that doesn't match the header proves nothing, so, as
+	// in BCHN, no transactions are returned, before the block is looked
+	// for.
 	msg = decodeTestProof(t, genesisProof)
 	msg.Hashes[0] = &chainhash.Hash{1}
-	_, err = verifyProof(encodeTestProof(t, msg))
-	assertRPCError(t, "changed hash", err,
-		btcjson.ErrRPCInvalidAddressOrKey,
-		"Merkle root block header check failed")
+	result, err = verifyProof(encodeTestProof(t, msg))
+	assertMatches("changed hash", result, err)
+	msg.Header.Nonce++
+	result, err = verifyProof(encodeTestProof(t, msg))
+	assertMatches("changed hash and header", result, err)
+
+	// Nor does a tree that can't be traversed.
+	msg = decodeTestProof(t, genesisProof)
+	msg.Flags = nil
+	result, err = verifyProof(encodeTestProof(t, msg))
+	assertMatches("bad tree", result, err)
+
+	// A proof that matches no transaction returns none.
+	msg = decodeTestProof(t, genesisProof)
+	msg.Flags = []byte{0}
+	result, err = verifyProof(encodeTestProof(t, msg))
+	assertMatches("no match", result, err)
 
 	// A proof of the two transaction block claiming a single transaction,
 	// the merkle root, has the right root but the wrong count.

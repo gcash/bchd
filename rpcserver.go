@@ -3458,12 +3458,13 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 	mBlock := merkleblock.NewMerkleBlockFromMsg(msg)
 	merkleRoot := mBlock.ExtractMatches()
 
-	// check if tree traversal was bad or extraction failed
-	if merkleRoot == nil || mBlock.BadTree() || len(mBlock.GetMatches()) == 0 {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCDeserialization,
-			Message: "Error extracting txn matches from merkle tree traversal",
-		}
+	// A tree that can't be traversed, or that doesn't hash to the merkle
+	// root of its header, proves nothing, so, as in BCHN, no transactions
+	// are returned.
+	if merkleRoot == nil || mBlock.BadTree() ||
+		!msg.Header.MerkleRoot.IsEqual(merkleRoot) {
+
+		return []string{}, nil
 	}
 
 	// The proof must be for a block in the main chain.  Its header commits
@@ -3473,15 +3474,6 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidAddressOrKey,
 			Message: "Block not found in chain",
-		}
-	}
-
-	// compare merkle root from the block header and that returned from our
-	// tree traversal
-	if !msg.Header.MerkleRoot.IsEqual(merkleRoot) {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCInvalidAddressOrKey,
-			Message: "Merkle root block header check failed",
 		}
 	}
 
