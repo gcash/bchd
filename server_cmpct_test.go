@@ -334,9 +334,11 @@ func testCompactBlocksWaitingTogether(t *testing.T, reverse bool) {
 	for _, block := range replies {
 		h.send(t, blockTxnsFor(block))
 	}
-	h.expectRelayed(t, *first.Hash(), *second.Hash())
 	waitDone(t, firstDone)
 	waitDone(t, secondDone)
+	// Both blocks are reconstructed and processed.  Only one is sure to be
+	// relayed, as the other no longer extends the best chain once the
+	// first is connected.
 	h.expectHaveBlock(t, first.Hash())
 	h.expectHaveBlock(t, second.Hash())
 }
@@ -516,5 +518,61 @@ func TestCompactBlockRepeatedTransaction(t *testing.T) {
 	h.send(t, wire.NewMsgBlockTxns(hash, msgBlock.Transactions))
 	waitDone(t, done)
 	h.expectFullBlockRequest(t, hash)
+	h.expectNotRelayed(t)
+}
+
+// TestCompactBlockSideChain ensures a compact block for a block on a side
+// chain has its header checked against its own parent, not the tip, and is
+// processed but not relayed.  Its timestamp is after its parent's median
+// time but not the tip's, so a check against the tip would refuse it.
+func TestCompactBlockSideChain(t *testing.T) {
+	h := newCmpctHarness(t)
+	best := h.s.chain.BestSnapshot()
+	tip, err := h.s.chain.BlockByHash(&best.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A sibling of the tip, paying one satoshi less.
+	coinbase := tip.MsgBlock().Transactions[0].Copy()
+	coinbase.TxOut[0].Value--
+	msgBlock := wire.MsgBlock{
+		Header:       tip.MsgBlock().Header,
+		Transactions: []*wire.MsgTx{coinbase},
+	}
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(&msgBlock).Transactions())
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	msgBlock.Header.Timestamp = best.MedianTime.Add(-time.Minute)
+	for blockchain.CheckHeaderProofOfWork(&msgBlock.Header,
+		h.s.chainParams.PowLimit) != nil {
+
+		msgBlock.Header.Nonce++
+	}
+	block := bchutil.NewBlock(&msgBlock)
+	h.request(t, *block.Hash())
+
+	msg, err := wire.NewMsgCmpctBlockFromBlock(&msgBlock, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, h.process(msg))
+	h.expectHaveBlock(t, block.Hash())
+	h.expectNotRelayed(t)
+}
+
+// TestCompactBlockUnknownParent ensures a compact block whose parent is not
+// known is fetched in full, so it is processed as an orphan and its parents
+// are requested, and is not relayed.
+func TestCompactBlockUnknownParent(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, &chainhash.Hash{0x55})
+	h.request(t, *block.Hash())
+
+	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, h.process(msg))
+	h.expectFullBlockRequest(t, *block.Hash())
 	h.expectNotRelayed(t)
 }

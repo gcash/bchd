@@ -989,3 +989,42 @@ func TestRegtestP2SHBeforeActivationTime(t *testing.T) {
 	requireRuleError(t, err, ErrScriptValidation)
 	m.mustAccept(build(spend(2, trueRedeem, 3)))
 }
+
+// TestCheckBlockHeaderContextParent ensures a header is checked against its
+// own parent, which must be known and not known to be invalid.
+func TestCheckBlockHeaderContextParent(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	chain := newFakeChain(params)
+	invalid := newFakeNode(chain.bestChain.Tip(), 1, params.PowLimitBits,
+		time.Now())
+	chain.index.AddNode(invalid)
+	chain.index.SetStatusFlags(invalid, statusValidateFailed)
+
+	header := func(prev chainhash.Hash) *wire.BlockHeader {
+		header := &wire.BlockHeader{
+			Version:   1,
+			PrevBlock: prev,
+			Bits:      params.PowLimitBits,
+			Timestamp: time.Unix(time.Now().Unix(), 0),
+		}
+		for CheckHeaderProofOfWork(header, params.PowLimit) != nil {
+			header.Nonce++
+		}
+		return header
+	}
+	tests := []struct {
+		name string
+		prev chainhash.Hash
+		want ErrorCode
+	}{
+		{"unknown parent", chainhash.Hash{1}, ErrPreviousBlockUnknown},
+		{"invalid parent", invalid.hash, ErrInvalidAncestorBlock},
+	}
+	for _, test := range tests {
+		err := chain.CheckBlockHeaderContext(header(test.prev))
+		var rerr RuleError
+		if !errors.As(err, &rerr) || rerr.ErrorCode != test.want {
+			t.Errorf("%s: got %v, want %v", test.name, err, test.want)
+		}
+	}
+}

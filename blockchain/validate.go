@@ -618,9 +618,10 @@ func checkSerializedHeight(coinbaseTx *bchutil.Tx, wantHeight int32) error {
 	return nil
 }
 
-// CheckBlockHeaderContext checks the passed block header against the best chain.
-// In other words it checks if the header would be considered valid if processed
-// along with the next block.
+// CheckBlockHeaderContext checks the passed block header against its parent,
+// as it would be checked when the block is processed.  ErrPreviousBlockUnknown
+// is returned when the parent is not known, and ErrInvalidAncestorBlock when it
+// is known to be invalid.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
@@ -629,14 +630,22 @@ func (b *BlockChain) CheckBlockHeaderContext(header *wire.BlockHeader) error {
 
 	flags := BFNone
 
-	tip := b.bestChain.Tip()
-
 	err := checkBlockHeaderSanity(header, b.chainParams.PowLimit, b.timeSource, flags)
 	if err != nil {
 		return err
 	}
 
-	return b.checkBlockHeaderContext(header, tip, flags)
+	prevNode := b.index.LookupNode(&header.PrevBlock)
+	if prevNode == nil {
+		str := fmt.Sprintf("previous block %s is unknown", header.PrevBlock)
+		return ruleError(ErrPreviousBlockUnknown, str)
+	} else if b.index.NodeStatus(prevNode).KnownInvalid() {
+		str := fmt.Sprintf("previous block %s is known to be invalid",
+			header.PrevBlock)
+		return ruleError(ErrInvalidAncestorBlock, str)
+	}
+
+	return b.checkBlockHeaderContext(header, prevNode, flags)
 }
 
 // checkBlockHeaderContext performs several validation checks on the block header

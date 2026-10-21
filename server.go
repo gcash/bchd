@@ -825,8 +825,20 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	// We check the header here before proceeding. For one we end up wasting
 	// round trips if it turns out to be invalid. And two we might want to
 	// relay immediately to other peers without validating the block but
-	// only if the header is valid.
+	// only if the header is valid.  A block whose parent is not known is
+	// fetched in full instead, so it is processed as an orphan and its
+	// parents are requested.
 	if err := sp.server.chain.CheckBlockHeaderContext(&msg.Header); err != nil {
+		if rerr, ok := err.(blockchain.RuleError); ok &&
+			rerr.ErrorCode == blockchain.ErrPreviousBlockUnknown {
+
+			peerLog.Debugf("Parent of cmpctblock %v from %v is unknown "+
+				"-- requesting the full block", targetHash, sp)
+			gdmsg := wire.NewMsgGetDataSizeHint(1)
+			_ = gdmsg.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &targetHash))
+			sp.QueueMessage(gdmsg, nil)
+			return
+		}
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- "+
 			"invalid header: %v", msg.Header.BlockHash(), sp, err)
 		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
@@ -910,8 +922,11 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
 	sp.AddKnownInventory(iv)
 
-	// Relay the block to peers which want direct relay.
-	sp.server.relayCmpctBlock <- msg
+	// Relay the block to peers which want direct relay if it extends the
+	// best chain, as BCHN does.
+	if msg.Header.PrevBlock == sp.server.chain.BestSnapshot().Hash {
+		sp.server.relayCmpctBlock <- msg
+	}
 
 	// Queue the block up to be handled by the block
 	// manager and intentionally block further receives
