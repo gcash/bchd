@@ -1743,9 +1743,10 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 		}
 
 		// Reinsert all of the transactions (except the coinbase) into
-		// the transaction pool.  They are not new, which exempts them
-		// from the minimum relay fee.
-		for _, tx := range block.Transactions()[1:] {
+		// the transaction pool, parents first, as a child can come
+		// before its parent in canonical order.  They are not new, which
+		// exempts them from the minimum relay fee.
+		for _, tx := range parentsFirst(block.Transactions()[1:]) {
 			_, _, err := sm.txMemPool.MaybeAcceptTransaction(tx,
 				false)
 			if err != nil {
@@ -1761,6 +1762,34 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 			_ = sm.feeEstimator.Rollback(block.Hash())
 		}
 	}
+}
+
+// parentsFirst returns the transactions with each one after those it spends,
+// keeping their order otherwise.
+func parentsFirst(txs []*bchutil.Tx) []*bchutil.Tx {
+	index := make(map[chainhash.Hash]int, len(txs))
+	for i, tx := range txs {
+		index[*tx.Hash()] = i
+	}
+	added := make([]bool, len(txs))
+	sorted := make([]*bchutil.Tx, 0, len(txs))
+	var add func(i int)
+	add = func(i int) {
+		if added[i] {
+			return
+		}
+		added[i] = true
+		for _, in := range txs[i].MsgTx().TxIn {
+			if parent, ok := index[in.PreviousOutPoint.Hash]; ok {
+				add(parent)
+			}
+		}
+		sorted = append(sorted, txs[i])
+	}
+	for i := range txs {
+		add(i)
+	}
+	return sorted
 }
 
 // NewPeer informs the sync manager of a newly active peer.
