@@ -563,7 +563,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			hash, err := chainhash.NewHash(msg.TokenID())
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
-			} else if _, ok := idx.cache.GetTokenMetadata(hash); ok {
+			} else {
 				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
 				idx.cache.RemoveTokenMetadata(*hash)
 			}
@@ -1017,7 +1017,13 @@ func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*
 
 // GetTokenMetadata fetches token metadata properties from an SlpIndexEntry
 func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*TokenMetadata, error) {
-	if tm, ok := idx.cache.GetTokenMetadata(&entry.TokenIDHash); ok {
+	// Metadata cached from a snapshot with another index tip may be out of
+	// date for this one.
+	var tip *chainhash.Hash
+	if hash, _, err := dbFetchIndexerTip(dbTx, idx.Key()); err == nil {
+		tip = hash
+	}
+	if tm, ok := idx.cache.GetTokenMetadata(&entry.TokenIDHash, tip); ok {
 		log.Debugf("using token metadata cache for %s", hex.EncodeToString(entry.TokenIDHash[:]))
 		return &tm, nil
 	}
@@ -1037,9 +1043,11 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*Tok
 		return nil, err
 	}
 
-	err = idx.cache.AddTempTokenMetadata(*tm)
-	if err != nil {
-		log.Criticalf("AddTempTokenMetadata in GetTokenMetadata failed: %v", err)
+	if tip != nil {
+		err = idx.cache.AddTokenMetadataAt(*tm, *tip)
+		if err != nil {
+			log.Criticalf("AddTokenMetadataAt in GetTokenMetadata failed: %v", err)
+		}
 	}
 	return tm, nil
 }

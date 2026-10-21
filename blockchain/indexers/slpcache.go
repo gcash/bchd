@@ -70,16 +70,38 @@ func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 	return SlpTxEntry{}, false
 }
 
-// AddTempTokenMetadata puts token metadata into cache with a limited size
-func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) error {
-	return s.tokenMetadata.Set(*item.TokenID, &item)
+// cachedTokenMetadata is token metadata in the cache.  Metadata read from the
+// database holds the slp index tip of the snapshot it was read from, and is
+// only served to readers of a snapshot with the same tip, as a block that
+// moved a mint baton may have committed since.  Metadata from transactions in
+// the memory pool holds none.
+type cachedTokenMetadata struct {
+	tm  TokenMetadata
+	tip *chainhash.Hash
 }
 
-// GetTokenMetadata gets token metadata from the cache
-func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash) (TokenMetadata, bool) {
+// AddTempTokenMetadata puts token metadata from the memory pool into cache
+// with a limited size
+func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) error {
+	return s.tokenMetadata.Set(*item.TokenID, &cachedTokenMetadata{tm: item})
+}
+
+// AddTokenMetadataAt puts token metadata read from a database snapshot whose
+// slp index tip is tip into the cache.
+func (s *SlpCache) AddTokenMetadataAt(item TokenMetadata, tip chainhash.Hash) error {
+	return s.tokenMetadata.Set(*item.TokenID,
+		&cachedTokenMetadata{tm: item, tip: &tip})
+}
+
+// GetTokenMetadata gets token metadata from the cache for a reader of a
+// database snapshot whose slp index tip is tip, or nil if not known.  Metadata
+// read from a snapshot with another tip is not returned.
+func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash, tip *chainhash.Hash) (TokenMetadata, bool) {
 	if entry, err := s.tokenMetadata.Get(*hash); err == nil {
-		if val, ok := entry.(*TokenMetadata); ok {
-			return *val, true
+		if val, ok := entry.(*cachedTokenMetadata); ok &&
+			(val.tip == nil || (tip != nil && *val.tip == *tip)) {
+
+			return val.tm, true
 		}
 	}
 	return TokenMetadata{}, false
