@@ -248,6 +248,12 @@ var rpcAskWallet = map[string]struct{}{
 	"walletpassphrasechange": {},
 }
 
+// rpcRemoved is the set of commands btcjson knows that the server no longer
+// has, which are answered as unknown methods.
+var rpcRemoved = map[string]struct{}{
+	"estimatepriority": {},
+}
+
 // Commands that are currently unimplemented, but should ultimately be.
 var rpcUnimplemented = map[string]struct{}{
 	"getchaintips":    {},
@@ -4810,6 +4816,13 @@ func parseCmd(request *btcjson.Request) *parsedRPCCmd {
 		jsonrpc: request.Jsonrpc,
 		id:      request.ID,
 		method:  request.Method,
+	}
+
+	// A method that was removed is not found whatever its parameters, as
+	// in BCHN, although btcjson still knows it.
+	if _, ok := rpcRemoved[request.Method]; ok {
+		parsedCmd.err = btcjson.ErrRPCMethodNotFound
+		return &parsedCmd
 	}
 
 	cmd, err := btcjson.UnmarshalCmd(request)
