@@ -1132,8 +1132,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if req.IncludeMempool && s.txMemPool.CheckSpend(*op) != nil {
 				continue
 			}
-			// The transaction is checked after the spend, as a block's
-			// transactions leave the mempool in block order.
+			// The transaction is checked after the spend.  A block's
+			// transactions leave the mempool one at a time in block
+			// order, which is canonical order, so a child can leave
+			// before its parent.  For that moment an output the block
+			// spends is reported unspent at UnminedHeight.
 			var entry *blockchain.UtxoEntry
 			if req.IncludeMempool && s.txMemPool.IsTransactionInPool(&txHash) {
 				if poolView == nil {
