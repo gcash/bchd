@@ -2171,6 +2171,42 @@ func (b *BlockChain) ReIndexChainState() error {
 	return b.reIndexChainState(false, nil)
 }
 
+// reIndexDeleteBatch is the number of entries of the old utxo set a re-index
+// deletes per database transaction.
+var reIndexDeleteBatch = 100000
+
+// deleteBucketKeys deletes the keys of the metadata bucket, batch keys per
+// database transaction, until the bucket is empty.  Each batch continues
+// after the last key the previous one deleted.  The deleted keys stay in the
+// database until it compacts them, and a cursor started from the first key
+// would step over all of them again, which makes the deletion quadratic.
+func deleteBucketKeys(db database.DB, bucketName []byte, batch int) error {
+	var last []byte
+	for {
+		var deleted int
+		err := db.Update(func(dbTx database.Tx) error {
+			cursor := dbTx.Metadata().Bucket(bucketName).Cursor()
+			var ok bool
+			if last == nil {
+				ok = cursor.First()
+			} else {
+				ok = cursor.Seek(last)
+			}
+			for ; ok && deleted < batch; ok = cursor.Next() {
+				last = append(last[:0], cursor.Key()...)
+				if err := cursor.Delete(); err != nil {
+					return err
+				}
+				deleted++
+			}
+			return nil
+		})
+		if err != nil || deleted < batch {
+			return err
+		}
+	}
+}
+
 // reIndexResumeNode returns the block an interrupted re-index of the chain
 // state can continue after: the block of its last completed flush, or genesis
 // when the re-index has to start over.
@@ -2215,25 +2251,26 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 	}
 
 	if startNode.height == 0 {
-		// Delete the UTXO bucket and create a new one.  The utxo state
-		// is marked as being flushed from genesis and the re-index as
-		// unfinished, so an interrupted re-index is resumed on the next
-		// start.
-		log.Info("Deleting UTXO database bucket...")
+		// Mark the re-index as unfinished and the utxo state as being
+		// flushed from genesis, so an interrupted re-index is resumed on
+		// the next start, which also finishes deleting the old set.
 		err := b.db.Update(func(tx database.Tx) error {
-			meta := tx.Metadata()
-			if err := meta.DeleteBucket(utxoSetBucketName); err != nil {
-				return err
-			}
-			if _, err := meta.CreateBucket(utxoSetBucketName); err != nil {
-				return err
-			}
-			if err := meta.Put(chainStateReIndexKeyName, []byte{1}); err != nil {
+			err := tx.Metadata().Put(chainStateReIndexKeyName, []byte{1})
+			if err != nil {
 				return err
 			}
 			return dbPutUtxoStateConsistency(tx, ucsFlushOngoing,
 				&startNode.hash)
 		})
+		if err != nil {
+			return err
+		}
+
+		// Delete the old utxo set in batches, as deleting the bucket in
+		// one transaction holds a deletion for every entry in memory
+		// until it commits.  Like that deletion, it is not interrupted.
+		log.Info("Deleting the UTXO set...")
+		err = deleteBucketKeys(b.db, utxoSetBucketName, reIndexDeleteBatch)
 		if err != nil {
 			return err
 		}

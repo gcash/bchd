@@ -802,3 +802,158 @@ func TestReIndexChainStateNeedsAllBlocks(t *testing.T) {
 		})
 	}
 }
+
+// countingUpdateDB counts the read-write transactions of a database.
+type countingUpdateDB struct {
+	database.DB
+	updates int
+}
+
+// Update counts the transaction and runs it on the database.
+func (db *countingUpdateDB) Update(fn func(tx database.Tx) error) error {
+	db.updates++
+	return db.DB.Update(fn)
+}
+
+// TestDeleteBucketKeysBatches ensures the keys of a bucket are deleted in
+// transactions of at most the batch size, until the bucket is empty.
+func TestDeleteBucketKeysBatches(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), wire.TestNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	name := []byte("test")
+	err = db.Update(func(tx database.Tx) error {
+		bucket, err := tx.Metadata().CreateBucket(name)
+		if err != nil {
+			return err
+		}
+		for i := range 10 {
+			if err := bucket.Put([]byte{byte(i)}, []byte{1}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	counting := &countingUpdateDB{DB: db}
+	if err := deleteBucketKeys(counting, name, 3); err != nil {
+		t.Fatal(err)
+	}
+	if counting.updates != 4 {
+		t.Errorf("deleted 10 keys in %d transactions of 3, want 4",
+			counting.updates)
+	}
+	err = db.View(func(tx database.Tx) error {
+		if tx.Metadata().Bucket(name).Cursor().First() {
+			t.Error("keys left in the bucket")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// trapDB puts key in bucket once its first read-write transaction commits.
+type trapDB struct {
+	database.DB
+	bucket, key []byte
+	put         bool
+}
+
+// Update runs the transaction on the database, and then puts the key the
+// first time.
+func (db *trapDB) Update(fn func(tx database.Tx) error) error {
+	if err := db.DB.Update(fn); err != nil || db.put {
+		return err
+	}
+	db.put = true
+	return db.DB.Update(func(tx database.Tx) error {
+		return tx.Metadata().Bucket(db.bucket).Put(db.key, []byte{1})
+	})
+}
+
+// TestDeleteBucketKeysResumes ensures each batch continues after the last key
+// the previous batch deleted instead of starting from the first key, which
+// would step over every key deleted so far that the database has not yet
+// compacted away.  So a key put before that point after the first batch is
+// left alone.
+func TestDeleteBucketKeysResumes(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), wire.TestNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	name := []byte("test")
+	err = db.Update(func(tx database.Tx) error {
+		bucket, err := tx.Metadata().CreateBucket(name)
+		if err != nil {
+			return err
+		}
+		for _, k := range []byte{0, 2, 4, 6, 8} {
+			if err := bucket.Put([]byte{k}, []byte{1}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The first batch deletes 0 and 2, then 1 is put.
+	trap := &trapDB{DB: db, bucket: name, key: []byte{1}}
+	if err := deleteBucketKeys(trap, name, 2); err != nil {
+		t.Fatal(err)
+	}
+	err = db.View(func(tx database.Tx) error {
+		bucket := tx.Metadata().Bucket(name)
+		if bucket.Get([]byte{1}) == nil {
+			t.Error("a later batch started from the first key")
+		}
+		for _, k := range []byte{0, 2, 4, 6, 8} {
+			if bucket.Get([]byte{k}) != nil {
+				t.Errorf("key %d left in the bucket", k)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestReIndexChainStateStoppedDuringDelete ensures a re-index that stopped
+// while it deleted the old utxo set, here in batches of one, is resumed on
+// the next start and rebuilds the set.
+func TestReIndexChainStateStoppedDuringDelete(t *testing.T) {
+	saved := reIndexDeleteBatch
+	reIndexDeleteBatch = 1
+	t.Cleanup(func() { reIndexDeleteBatch = saved })
+
+	params := chaincfg.RegressionNetParams
+	dir := filepath.Join(t.TempDir(), "db")
+	r := newReorgTest(t, dir, &params)
+
+	// The marker and one entry's deletion commit, then the next fails.
+	r.chain.db = &failingCommitDB{DB: r.db, failOn: 2}
+	if err := r.chain.ReIndexChainState(); err != errTestCommit {
+		t.Fatalf("got %v, want %v", err, errTestCommit)
+	}
+	requireReIndexMarker(t, r.db, true)
+	r.db.Close()
+
+	chain, db, err := openTestChain(t, dir, &params)
+	if err != nil {
+		t.Fatalf("failed to restart: %v", err)
+	}
+	defer db.Close()
+	r.requireUtxoSet(t, chain)
+	requireConsistentAtTip(t, chain)
+	requireReIndexMarker(t, db, false)
+}
