@@ -585,6 +585,10 @@ func NewManager(db database.DB, enabledIndexes []Indexer) *Manager {
 	}
 }
 
+// dropIndexBatch is the number of entries dropIndex deletes per database
+// transaction.
+var dropIndexBatch = 2000000
+
 // dropIndex drops the passed index from the database.  Since indexes can be
 // massive, it deletes the index in multiple database transactions in order to
 // keep memory usage to reasonable levels.  It also marks the drop in progress
@@ -627,7 +631,7 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 	// to avoid this, use a cursor to delete a maximum number of entries out
 	// of the bucket at a time. Recurse buckets depth-first to delete any
 	// sub-buckets.
-	const maxDeletions = 2000000
+	maxDeletions := dropIndexBatch
 	var totalDeleted uint64
 
 	// Recurse through all buckets in the index, cataloging each for
@@ -660,14 +664,19 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		return subBucketClosure(dbTx, idxKey, nil)
 	})
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Iterate through each sub-bucket in reverse, deepest-first, deleting
 	// all keys inside them and then dropping the buckets themselves.
 	for i := range subBuckets {
 		bucketName := subBuckets[len(subBuckets)-1-i]
-		// Delete maxDeletions key/value pairs at a time.
+		// Delete maxDeletions key/value pairs at a time.  Each batch
+		// continues after the last key the previous one deleted.  The
+		// deleted keys stay in the database until it compacts them, and a
+		// cursor started from the first key would step over all of them
+		// again, which makes the drop quadratic.
+		var last []byte
 		for numDeleted := maxDeletions; numDeleted == maxDeletions; {
 			numDeleted = 0
 			err := db.Update(func(dbTx database.Tx) error {
@@ -676,9 +685,14 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 					subBucket = subBucket.Bucket(subBucketName)
 				}
 				cursor := subBucket.Cursor()
-				for ok := cursor.First(); ok; ok = cursor.Next() &&
-					numDeleted < maxDeletions {
-
+				var ok bool
+				if last == nil {
+					ok = cursor.First()
+				} else {
+					ok = cursor.Seek(last)
+				}
+				for ; ok && numDeleted < maxDeletions; ok = cursor.Next() {
+					last = append(last[:0], cursor.Key()...)
 					if err := cursor.Delete(); err != nil {
 						return err
 					}
@@ -695,10 +709,12 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 				log.Infof("Deleted %d keys (%d total) from %s",
 					numDeleted, totalDeleted, idxName)
 			}
-		}
 
-		if interruptRequested(interrupt) {
-			return errInterruptRequested
+			// The drop is resumed on the next start, so it can stop
+			// between batches.
+			if interruptRequested(interrupt) {
+				return errInterruptRequested
+			}
 		}
 
 		// Drop the bucket itself.
