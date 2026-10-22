@@ -134,3 +134,17 @@ func blockTxLocs(block *bchutil.Block) ([]wire.TxLoc, error) {
 	}
 	return wire.BlockTxLocs(serialized)
 }
+
+// deleteBucketsIfExist deletes those of the passed buckets that exist in the
+// parent bucket.
+func deleteBucketsIfExist(parent database.Bucket, names ...[]byte) error {
+	for _, name := range names {
+		if parent.Bucket(name) == nil {
+			continue
+		}
+		if err := parent.DeleteBucket(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}

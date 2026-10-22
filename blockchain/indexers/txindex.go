@@ -488,16 +488,12 @@ func NewTxIndex(db database.DB) *TxIndex {
 	return &TxIndex{db: db}
 }
 
-// dropBlockIDIndex drops the internal block id index.
+// dropBlockIDIndex drops the internal block id index.  A drop resumed after
+// this ran has no buckets left to delete.
 func dropBlockIDIndex(db database.DB) error {
 	return db.Update(func(dbTx database.Tx) error {
-		meta := dbTx.Metadata()
-		err := meta.DeleteBucket(idByHashIndexBucketName)
-		if err != nil {
-			return err
-		}
-
-		return meta.DeleteBucket(hashByIDIndexBucketName)
+		return deleteBucketsIfExist(dbTx.Metadata(),
+			idByHashIndexBucketName, hashByIDIndexBucketName)
 	})
 }
 

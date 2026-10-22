@@ -1255,16 +1255,12 @@ func NewSlpIndex(db database.DB, cfg *SlpConfig) *SlpIndex {
 	return idx
 }
 
-// dropTokenIndexes drops the internal token id index.
+// dropTokenIndexes drops the internal token id index.  A drop resumed after
+// this ran has no buckets left to delete.
 func dropTokenIndexes(db database.DB) error {
 	return db.Update(func(dbTx database.Tx) error {
-		meta := dbTx.Metadata()
-		err := meta.DeleteBucket(tokenIDByHashIndexBucketName)
-		if err != nil {
-			return err
-		}
-
-		return meta.DeleteBucket(tokenMetadataByIDIndexBucketName)
+		return deleteBucketsIfExist(dbTx.Metadata(),
+			tokenIDByHashIndexBucketName, tokenMetadataByIDIndexBucketName)
 	})
 }
 

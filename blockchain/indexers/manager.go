@@ -659,8 +659,12 @@ func dropIndex(db database.DB, idxKey []byte, idxName string, interrupt <-chan s
 		})
 	}
 
-	// Call subBucketClosure with top-level bucket.
+	// Call subBucketClosure with top-level bucket.  A drop resumed after
+	// the top-level bucket was deleted has no entries left to delete.
 	err = db.View(func(dbTx database.Tx) error {
+		if dbTx.Metadata().Bucket(idxKey) == nil {
+			return nil
+		}
 		return subBucketClosure(dbTx, idxKey, nil)
 	})
 	if err != nil {
