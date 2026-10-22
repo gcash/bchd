@@ -148,6 +148,9 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 
 	byteOrder.PutUint16(tokenMetadata[32:], uint16(metadata.SlpVersion))
 
+	// An NFT1 child token's GENESIS records its group.  A token the index
+	// has only seen in a SEND of zero tokens has neither a group nor a
+	// mint baton.
 	if metadata.NftGroupID != nil {
 		copy(tokenMetadata[34:], metadata.NftGroupID[:])
 		tokenMetadata = tokenMetadata[:66]
@@ -156,10 +159,6 @@ func dbPutTokenIDIndexEntry(dbTx database.Tx, id uint32, metadata *TokenMetadata
 		byteOrder.PutUint32(tokenMetadata[66:], metadata.MintBatonVout)
 	} else {
 		tokenMetadata = tokenMetadata[:34]
-	}
-
-	if metadata.NftGroupID == nil && metadata.SlpVersion == v1parser.TokenTypeNft1Child41 {
-		return fmt.Errorf("missing nft group id for NFT child %v", id)
 	}
 
 	return tmIndex.Put(serializedID[:], tokenMetadata)
@@ -257,14 +256,20 @@ type dbSlpIndexEntry struct {
 func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEntry) error {
 	txHash := entryInfo.tx.TxHash()
 
-	// get current tokenID uint32 for the tokenID hash, add new if needed
+	// A token takes the next internal token ID when the index first sees
+	// its token ID, with its GENESIS or with a SEND of zero tokens, which is
+	// valid whatever token ID it names.  Its metadata records the ID at
+	// once, so no later token takes it, and a GENESIS connected again after
+	// a reorg keeps it.
 	tokenID, err := dbFetchTokenIDByHash(dbTx, entryInfo.tokenIDHash)
-	if err != nil {
-		tokenID = idx.curTokenID + 1
+	newToken := err != nil
+	if newToken {
+		idx.curTokenID++
+		tokenID = idx.curTokenID
 	}
 
 	var (
-		tokenMetadataNeedsUpdated = false
+		tokenMetadataNeedsUpdated = newToken
 		mintBatonVout             uint32
 		mintBatonHash             *chainhash.Hash
 		nft1GroupID               *chainhash.Hash
@@ -272,7 +277,6 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 
 	switch entry := entryInfo.slpMsg.(type) {
 	case *v1parser.SlpGenesis:
-		idx.curTokenID++
 		tokenMetadataNeedsUpdated = true
 		if entry.MintBatonVout > 1 {
 			mintBatonVout = uint32(entry.MintBatonVout)
@@ -445,29 +449,27 @@ var _ Indexer = (*SlpIndex)(nil)
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Init() error {
-	// Find the latest known token id field for the internal token id
-	// index and initialize it.  This is done because it's a lot more
-	// efficient to do a single search at initialize time than it is to
-	// write another value to the database on every update.
+	// Find the highest internal token id in use and initialize the counter
+	// to it.  This is done because it's a lot more efficient to do a single
+	// search at initialize time than it is to write another value to the
+	// database on every update.  The search reads every id, as an index
+	// where an earlier version connected a GENESIS again after a reorg has
+	// ids below the highest that no token uses.
 	err := idx.db.View(func(dbTx database.Tx) error {
-		var highestKnown, nextUnknown uint32
-		testTokenID := uint32(1)
-		increment := uint32(1)
-		for {
-			md, err := dbFetchTokenMetadataByID(dbTx, testTokenID)
-			if err != nil {
-				if md != nil {
-					return fmt.Errorf("could not init slp index: %v", err)
+		var highestKnown uint32
+		idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
+		if idIndex != nil {
+			err := idIndex.ForEach(func(k, _ []byte) error {
+				if len(k) == 4 {
+					highestKnown = max(highestKnown, byteOrder.Uint32(k))
 				}
-				nextUnknown = testTokenID
-				break
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("could not init slp index: %v", err)
 			}
-
-			highestKnown = testTokenID
-			testTokenID += increment
 		}
-		log.Tracef("Forward scan (highest known %d, next unknown %d)",
-			highestKnown, nextUnknown)
+		log.Tracef("Highest token id in use %d", highestKnown)
 
 		idx.curTokenID = highestKnown
 		return nil
