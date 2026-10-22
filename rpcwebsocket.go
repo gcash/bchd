@@ -17,13 +17,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/ripemd160"
 
-	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
@@ -33,6 +33,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -56,6 +57,13 @@ func (s semaphore) release() { <-s }
 // wsPreAuthReadLimit is the largest message accepted from a websocket client
 // before it has authenticated.
 const wsPreAuthReadLimit = 64 * 1024
+
+// wsUpgrader upgrades RPC connections to websockets.  It accepts any origin,
+// as the server always has, and leaves the error response to the caller.
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin: func(*http.Request) bool { return true },
+	Error:       func(http.ResponseWriter, *http.Request, int, error) {},
+}
 
 // timeZeroVal is simply the zero value for a time.Time and is used to avoid
 // creating multiple instances.
@@ -1414,6 +1422,13 @@ func (c *wsClient) setAuthenticated(isAdmin bool) {
 	c.conn.SetReadLimit(maxRPCRequestSize())
 }
 
+// isNormalWebsocketClose returns whether err is the error a websocket read
+// returns when the peer closes the connection normally with a close frame.
+func isNormalWebsocketClose(err error) bool {
+	return websocket.IsCloseError(err, websocket.CloseNormalClosure,
+		websocket.CloseGoingAway)
+}
+
 // inHandler handles all incoming messages for the websocket connection.  It
 // must be run as a goroutine.
 func (c *wsClient) inHandler() {
@@ -1442,7 +1457,7 @@ out:
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			// Log the error if it's not due to disconnecting.
-			if err != io.EOF {
+			if err != io.EOF && !isNormalWebsocketClose(err) {
 				rpcsLog.Errorf("Websocket receive error from "+
 					"%s: %v", c.addr, err)
 			}
