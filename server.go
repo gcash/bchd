@@ -73,6 +73,13 @@ const (
 	// that are reconstructed at a time.  It bounds the memory a peer can
 	// make the compact blocks waiting for its transactions hold.
 	maxCmpctBlocksInFlight = 2
+
+	// maxCmpctBlockDepth is how far below the tip a block may be for a
+	// getdata for its compact block to be answered with one.  A peer asking
+	// for an older block gets the full block, as it is almost certain to
+	// have no memory pool to match a compact block against.  It is BCHN's
+	// MAX_CMPCTBLOCK_DEPTH.
+	maxCmpctBlockDepth = 5
 )
 
 var (
@@ -2236,9 +2243,19 @@ func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan cha
 func (s *server) pushCmpctBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
 	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
 
+	// A block more than maxCmpctBlockDepth below the tip is sent in full,
+	// as in BCHN, which also spares building a compact block for it.  A
+	// block that is not in the main chain counts as one.
+	height, err := sp.server.chain.BlockHeightByHash(hash)
+	if err != nil ||
+		height < sp.server.chain.BestSnapshot().Height-maxCmpctBlockDepth {
+
+		return s.pushBlockMsg(sp, hash, doneChan, waitChan, encoding)
+	}
+
 	// Fetch the raw block bytes from the database.
 	var blockBytes []byte
-	err := sp.server.db.View(func(dbTx database.Tx) error {
+	err = sp.server.db.View(func(dbTx database.Tx) error {
 		var err error
 		blockBytes, err = dbTx.FetchBlock(hash)
 		return err
@@ -2266,7 +2283,14 @@ func (s *server) pushCmpctBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneCha
 		return err
 	}
 
-	cmpctBlock, err := wire.NewMsgCmpctBlockFromBlock(&msgBlock, sp.GetKnownTxInventory())
+	// Only the block's transactions are looked up in the peer's known
+	// inventory, so the cost is bounded by the block.
+	txHashes, err := msgBlock.TxHashes()
+	var cmpctBlock *wire.MsgCmpctBlock
+	if err == nil {
+		cmpctBlock, err = wire.NewMsgCmpctBlockFromBlockHashes(&msgBlock,
+			txHashes, sp.KnownTxs(txHashes))
+	}
 	if err != nil {
 		peerLog.Tracef("Unable to build requested cmpctblock hash "+
 			"%v: %v", hash, err)
@@ -2626,7 +2650,7 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 						blockTxHashes, _ = block.TxHashes()
 					}
 					cmpctBlock, err := wire.NewMsgCmpctBlockFromBlockHashes(block,
-						blockTxHashes, sp.GetKnownTxInventory())
+						blockTxHashes, sp.KnownTxs(blockTxHashes))
 					if err != nil {
 						peerLog.Tracef("Unable to build requested cmpctblock hash "+
 							"%v: %v", block.BlockHash(), err)

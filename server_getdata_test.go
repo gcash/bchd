@@ -16,6 +16,7 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // fetchCountingDB counts the blocks fetched through it.
@@ -42,7 +43,9 @@ func (tx *fetchCountingTx) FetchBlock(hash *chainhash.Hash) ([]byte, error) {
 }
 
 // getDataHarness is a server peer that serves two blocks from a regtest
-// chain, whose remote side the test reads at its own pace.
+// chain, whose remote side the test reads at its own pace.  The two blocks
+// are the first of seven, so the first is more than maxCmpctBlockDepth below
+// the tip and the second is not.
 type getDataHarness struct {
 	sp     *serverPeer
 	db     *fetchCountingDB
@@ -58,12 +61,14 @@ func newGetDataHarness(t *testing.T) *getDataHarness {
 	params := &chaincfg.RegressionNetParams
 	chain, db := newTestChainDB(t)
 	h := &getDataHarness{db: &fetchCountingDB{DB: db}}
-	for i := range h.blocks {
+	for i := range maxCmpctBlockDepth + 2 {
 		block := solvedBlock(t, chain, 0, nil)
 		if _, _, err := chain.ProcessBlock(block, blockchain.BFNone); err != nil {
 			t.Fatal(err)
 		}
-		h.blocks[i] = *block.Hash()
+		if i < len(h.blocks) {
+			h.blocks[i] = *block.Hash()
+		}
 	}
 
 	s := &server{chainParams: params, chain: chain, db: h.db}
@@ -72,6 +77,7 @@ func newGetDataHarness(t *testing.T) *getDataHarness {
 		ChainParams:            params,
 		ProtocolVersion:        peer.MaxProtocolVersion,
 		TstAllowSelfConnection: true,
+		MaxKnownInventory:      64000,
 	})
 	local, remote := net.Pipe()
 	h.remote = remote
@@ -227,5 +233,161 @@ func TestOnGetDataQueuesFewBlocks(t *testing.T) {
 	h.readAll(t, blocks, true)
 	if !returnedWithin(done, 10*time.Second) {
 		t.Fatal("getdata handler did not return once its blocks were sent")
+	}
+}
+
+// readMessage reads the next message from the remote side.
+func (h *getDataHarness) readMessage(t *testing.T) wire.Message {
+	t.Helper()
+	if err := h.remote.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	msg, _, err := wire.ReadMessage(h.remote, wire.ProtocolVersion,
+		chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msg
+}
+
+// sideBlock stores a sibling of the chain's tip, on a side chain, and returns
+// its hash.
+func sideBlock(t *testing.T, chain *blockchain.BlockChain) chainhash.Hash {
+	t.Helper()
+	best := chain.BestSnapshot()
+	tip, err := chain.BlockByHash(&best.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A sibling of the tip, paying one satoshi less.
+	coinbase := tip.MsgBlock().Transactions[0].Copy()
+	coinbase.TxOut[0].Value--
+	msgBlock := wire.MsgBlock{
+		Header:       tip.MsgBlock().Header,
+		Transactions: []*wire.MsgTx{coinbase},
+	}
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(&msgBlock).Transactions())
+	msgBlock.Header.MerkleRoot = *merkles[len(merkles)-1]
+	for blockchain.CheckHeaderProofOfWork(&msgBlock.Header,
+		chaincfg.RegressionNetParams.PowLimit) != nil {
+
+		msgBlock.Header.Nonce++
+	}
+	block := bchutil.NewBlock(&msgBlock)
+	if _, _, err := chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+	if chain.MainChainHasBlock(block.Hash()) {
+		t.Fatal("the sibling of the tip is in the main chain")
+	}
+	return *block.Hash()
+}
+
+// TestGetDataOldCmpctBlockSentInFull ensures a getdata for the compact block
+// of a block more than maxCmpctBlockDepth below the tip, or not in the main
+// chain, is answered with the full block, as in BCHN, and one for a block at
+// that depth with its compact block, which sends the transactions the peer
+// knows as short IDs.
+func TestGetDataOldCmpctBlockSentInFull(t *testing.T) {
+	h := newGetDataHarness(t)
+	old, recent := h.blocks[0], h.blocks[1]
+	side := sideBlock(t, h.sp.server.chain)
+	block, err := h.sp.server.chain.BlockByHash(&recent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.sp.AddKnownInventory(wire.NewInvVect(wire.InvTypeTx,
+		block.Transactions()[0].Hash()))
+
+	msg := wire.NewMsgGetData()
+	_ = msg.AddInvVect(wire.NewInvVect(wire.InvTypeCmpctBlock, &old))
+	_ = msg.AddInvVect(wire.NewInvVect(wire.InvTypeCmpctBlock, &side))
+	_ = msg.AddInvVect(wire.NewInvVect(wire.InvTypeCmpctBlock, &recent))
+	done := h.serve(msg)
+	full, ok := h.readMessage(t).(*wire.MsgBlock)
+	if !ok || full.BlockHash() != old {
+		t.Fatalf("the block %d below the tip was not sent in full",
+			maxCmpctBlockDepth+1)
+	}
+	full, ok = h.readMessage(t).(*wire.MsgBlock)
+	if !ok || full.BlockHash() != side {
+		t.Fatal("the block on a side chain was not sent in full")
+	}
+	cmpct, ok := h.readMessage(t).(*wire.MsgCmpctBlock)
+	if !ok || cmpct.BlockHash() != recent {
+		t.Fatalf("the block %d below the tip was not sent as a compact "+
+			"block", maxCmpctBlockDepth)
+	}
+	if len(cmpct.ShortIDs) != 1 || len(cmpct.PrefilledTxs) != 0 {
+		t.Fatalf("compact block with %d short IDs and %d prefilled "+
+			"transactions, want the known coinbase as a short ID",
+			len(cmpct.ShortIDs), len(cmpct.PrefilledTxs))
+	}
+	if !returnedWithin(done, 10*time.Second) {
+		t.Fatal("getdata handler did not return")
+	}
+}
+
+// TestCmpctBlockCostBoundedByBlock ensures building a peer's compact block,
+// for a getdata or for direct relay, costs in proportion to the block rather
+// than to the peer's known inventory.  Both used to copy every transaction of
+// the known inventory, up to 64,000, under its lock.
+func TestCmpctBlockCostBoundedByBlock(t *testing.T) {
+	h := newGetDataHarness(t)
+	s := h.sp.server
+	hash := h.blocks[1]
+	block, err := s.chain.BlockByHash(&hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The remote side asks for direct relay.  The pong to the ping after
+	// it shows the request was handled.
+	for _, msg := range []wire.Message{wire.NewMsgSendCmpct(true,
+		wire.CompactBlocksProtocolVersion), wire.NewMsgPing(1)} {
+
+		err = wire.WriteMessage(h.remote, msg, wire.ProtocolVersion,
+			chaincfg.RegressionNetParams.Net)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for {
+		if _, ok := h.readMessage(t).(*wire.MsgPong); ok {
+			break
+		}
+	}
+	if !h.sp.WantsDirectBlockRelay() {
+		t.Fatal("the peer did not ask for direct relay")
+	}
+	state := newTestPeerState()
+	state.inboundPeers[h.sp.ID()] = h.sp
+	relay := relayMsg{invVect: wire.NewInvVect(wire.InvTypeBlock, &hash),
+		data: block.MsgBlock()}
+
+	measure := func() (getData, relayed float64) {
+		getData = testing.AllocsPerRun(5, func() {
+			err := s.pushCmpctBlockMsg(h.sp, &hash, nil, nil,
+				wire.BaseEncoding)
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+		relayed = testing.AllocsPerRun(5, func() {
+			s.handleRelayInvMsg(state, relay)
+		})
+		return getData, relayed
+	}
+	emptyGetData, emptyRelay := measure()
+	for i := range 64000 {
+		known := chainhash.Hash{byte(i), byte(i >> 8), byte(i >> 16), 9}
+		h.sp.AddKnownInventory(wire.NewInvVect(wire.InvTypeTx, &known))
+	}
+	fullGetData, fullRelay := measure()
+	t.Logf("allocations with no and 64000 known transactions: getdata %v "+
+		"and %v, relay %v and %v", emptyGetData, fullGetData, emptyRelay,
+		fullRelay)
+	if fullGetData > emptyGetData+20 || fullRelay > emptyRelay+20 {
+		t.Fatal("a full known inventory adds to the cost of a compact block")
 	}
 }

@@ -601,6 +601,27 @@ func (p *Peer) GetKnownTxInventory() map[chainhash.Hash]bool {
 	return ki
 }
 
+// KnownTxs returns a map of the passed transaction hashes that are in the
+// known inventory for this peer.  Unlike GetKnownTxInventory, its work is
+// bounded by the hashes passed, such as those of a block, rather than by the
+// size of the known inventory.
+//
+// This function is safe for concurrent access.
+func (p *Peer) KnownTxs(hashes []chainhash.Hash) map[chainhash.Hash]bool {
+	p.knownInventory.invMtx.Lock()
+	defer p.knownInventory.invMtx.Unlock()
+
+	known := make(map[chainhash.Hash]bool)
+	iv := wire.InvVect{Type: wire.InvTypeTx}
+	for _, hash := range hashes {
+		iv.Hash = hash
+		if _, ok := p.knownInventory.invMap[iv]; ok {
+			known[hash] = true
+		}
+	}
+	return known
+}
+
 // StatsSnapshot returns a snapshot of the current peer flags and statistics.
 //
 // This function is safe for concurrent access.

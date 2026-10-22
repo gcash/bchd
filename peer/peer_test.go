@@ -992,3 +992,18 @@ func TestUpdateLastBlockHeight(t *testing.T) {
 			remotePeerHeight+1)
 	}
 }
+
+// TestKnownTxs ensures KnownTxs returns those of the passed hashes that are
+// known transactions of the peer, and not one known only as a block.
+func TestKnownTxs(t *testing.T) {
+	p := peer.NewInboundPeer(&peer.Config{})
+	known, unknown, block := chainhash.Hash{1}, chainhash.Hash{2},
+		chainhash.Hash{3}
+	p.AddKnownInventory(wire.NewInvVect(wire.InvTypeTx, &known))
+	p.AddKnownInventory(wire.NewInvVect(wire.InvTypeBlock, &block))
+
+	got := p.KnownTxs([]chainhash.Hash{known, unknown, block})
+	if len(got) != 1 || !got[known] {
+		t.Fatalf("got %v, want only %v", got, known)
+	}
+}
