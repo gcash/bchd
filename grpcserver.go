@@ -14,8 +14,8 @@ import (
 
 	"github.com/gcash/bchd/bchrpc"
 	"github.com/gorilla/mux"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -29,8 +29,6 @@ import (
 // If this is set to anything other than "" in the config, then the server expects
 // the client to set a key value in the context metadata to 'AuthenticationToken: cfg.AuthToken'
 const AuthenticationTokenKey = "AuthenticationToken"
-
-var prometheusEnabled = false
 
 // grpcReadHeaderTimeout and grpcIdleTimeout bound how long the gRPC HTTP
 // server waits for request headers and keeps idle connections.  There are no
@@ -79,9 +77,10 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	gRPCServer := bchrpc.NewGrpcServer(rpcCfg)
 
 	if len(cfg.PrometheusListen) != 0 {
-		// init Prometheus metrics
-		grpc_prometheus.EnableHandlingTimeHistogram()
-		grpc_prometheus.Register(server)
+		metrics := newGrpcServerMetrics()
+		if err := metrics.register(prometheus.DefaultRegisterer, server); err != nil {
+			return nil, err
+		}
 
 		router := mux.NewRouter()
 		router.Handle("/metrics", promhttp.Handler())
@@ -93,7 +92,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 			WriteTimeout: 10 * time.Second,
 		}
 
-		prometheusEnabled = true
+		grpcMetrics = metrics
 
 		go func() {
 			if err := prometheusHTTPServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
@@ -103,7 +102,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	}
 
 	// Serve only after metrics are set up, since the interceptors read
-	// prometheusEnabled.
+	// grpcMetrics.
 	grpcLog.Infof("Experimental gRPC server listening on %s", addr)
 	go func() {
 		if err := httpServer.ListenAndServeTLS(cfg.RPCCert, cfg.RPCKey); err != nil {
@@ -275,8 +274,8 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 		return err
 	}
 
-	if prometheusEnabled {
-		err = grpc_prometheus.StreamServerInterceptor(srv, ss, info, handler)
+	if grpcMetrics != nil {
+		err = grpcMetrics.interceptStreaming(srv, ss, info, handler)
 	} else {
 		err = handler(srv, ss)
 	}
@@ -304,8 +303,8 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 		return nil, err
 	}
 
-	if prometheusEnabled {
-		resp, err = grpc_prometheus.UnaryServerInterceptor(ctx, req, info, handler)
+	if grpcMetrics != nil {
+		resp, err = grpcMetrics.interceptUnary(ctx, req, info, handler)
 	} else {
 		resp, err = handler(ctx, req)
 	}
