@@ -1116,7 +1116,7 @@ func (mp *TxPool) CheckMempoolAcceptance(tx *bchutil.Tx, maxFee bchutil.Amount) 
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
-	// Leave the hash cache as it was, since the transaction is not added.
+	// Leave the transaction out of the hash cache, since it is not added.
 	if hc := mp.cfg.HashCache; hc != nil && !hc.ContainsHashes(tx.Hash()) {
 		defer hc.PurgeSigHashes(tx.Hash())
 	}

@@ -183,6 +183,40 @@ func TestHashCachePurge(t *testing.T) {
 	}
 }
 
+// TestHashCacheMaxEntries ensures the hash cache holds at most its maximum
+// number of entries, evicting others to make room for each new one, and that
+// AddSigHashes returns the sighashes it computed, whether it keeps them or
+// not.
+func TestHashCacheMaxEntries(t *testing.T) {
+	t.Parallel()
+
+	for _, maxEntries := range []uint{5, 1, 0} {
+		cache := NewHashCache(maxEntries)
+		for i := range 20 {
+			tx, err := genTestTx()
+			if err != nil {
+				t.Fatalf("unable to generate test tx: %v", err)
+			}
+			sigHashes := cache.AddSigHashes(tx)
+			if !reflect.DeepEqual(sigHashes, NewTxSigHashes(tx)) {
+				t.Fatalf("max %d: tx %d: AddSigHashes returned %v",
+					maxEntries, i, spew.Sdump(sigHashes))
+			}
+			txid := tx.TxHash()
+			cached, ok := cache.GetSigHashes(&txid)
+			if ok != (maxEntries > 0) || ok && cached != sigHashes {
+				t.Fatalf("max %d: tx %d: cached %v, as returned %v",
+					maxEntries, i, ok, cached == sigHashes)
+			}
+			want := min(uint(i+1), maxEntries)
+			if n := uint(len(cache.sigHashes)); n != want {
+				t.Fatalf("max %d: %d entries after %d adds, want %d",
+					maxEntries, n, i+1, want)
+			}
+		}
+	}
+}
+
 // TestTxSigHashesWithUtxos ensures WithUtxos returns the same sighashes as
 // AddTxSigHashUtxoFromUtxoCache without modifying the original ones.
 func TestTxSigHashesWithUtxos(t *testing.T) {

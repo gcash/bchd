@@ -59,25 +59,45 @@ func (txSighashes *TxSigHashes) WithUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) 
 // multiple goroutines can safely re-use the pre-computed partial sighashes
 // speeding up validation time amongst all inputs found within a block.
 type HashCache struct {
-	sigHashes map[chainhash.Hash]*TxSigHashes
+	sigHashes  map[chainhash.Hash]*TxSigHashes
+	maxEntries uint
 
 	sync.RWMutex
 }
 
 // NewHashCache returns a new instance of the HashCache given a maximum number
-// of entries which may exist within it at anytime.
+// of entries which may exist within it at anytime.  Random entries are
+// evicted to make room for new entries that would cause the number of
+// entries in the cache to exceed the max.
 func NewHashCache(maxSize uint) *HashCache {
 	return &HashCache{
-		sigHashes: make(map[chainhash.Hash]*TxSigHashes, maxSize),
+		sigHashes:  make(map[chainhash.Hash]*TxSigHashes, maxSize),
+		maxEntries: maxSize,
 	}
 }
 
 // AddSigHashes computes, then adds the partial sighashes for the passed
-// transaction.
-func (h *HashCache) AddSigHashes(tx *wire.MsgTx) {
+// transaction, and returns them.  When the cache is full, a random entry is
+// evicted to make room, as in SigCache.  Entries are purged once a block
+// holding their transactions passes validation, but those of transactions
+// that fail validation or leave the memory pool unmined stay until evicted.
+func (h *HashCache) AddSigHashes(tx *wire.MsgTx) *TxSigHashes {
+	sigHashes := NewTxSigHashes(tx)
+	if h.maxEntries == 0 {
+		return sigHashes
+	}
+	txid := tx.TxHash()
+
 	h.Lock()
-	h.sigHashes[tx.TxHash()] = NewTxSigHashes(tx)
+	if uint(len(h.sigHashes)+1) > h.maxEntries {
+		for evict := range h.sigHashes {
+			delete(h.sigHashes, evict)
+			break
+		}
+	}
+	h.sigHashes[txid] = sigHashes
 	h.Unlock()
+	return sigHashes
 }
 
 // ContainsHashes returns true if the partial sighashes for the passed

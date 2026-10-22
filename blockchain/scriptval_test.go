@@ -181,13 +181,16 @@ func scriptValTestBlock(txs ...*wire.MsgTx) *bchutil.Block {
 }
 
 // TestTxValidateItemsShareSpentOutputs ensures the inputs of a transaction
-// share the outputs it spends instead of each looking them up again.
+// share the outputs it spends and its sighashes instead of each looking them
+// up or computing them again, also when the hash cache does not keep them,
+// as when another transaction's entry evicts them.
 func TestTxValidateItemsShareSpentOutputs(t *testing.T) {
 	const numInputs = 50
 	view := NewUtxoViewpoint()
-	tx := bchutil.NewTx(manyInputsTestTx(view, numInputs, 1, numInputs))
-	for _, hashCache := range []*txscript.HashCache{nil,
-		txscript.NewHashCache(10)} {
+	msgTx := manyInputsTestTx(view, numInputs, 1, numInputs)
+	tx := bchutil.NewTx(msgTx)
+	for n, hashCache := range []*txscript.HashCache{nil,
+		txscript.NewHashCache(10), txscript.NewHashCache(0)} {
 
 		items := txValidateItems(tx, view, manyInputsTestFlags, hashCache,
 			new(uint32))
@@ -195,6 +198,11 @@ func TestTxValidateItemsShareSpentOutputs(t *testing.T) {
 			t.Fatalf("%d items, want %d", len(items), numInputs)
 		}
 		spent := items[0].spent
+		want := txscript.NewTxSigHashes(msgTx).WithUtxos(msgTx, spent.utxos)
+		if !reflect.DeepEqual(items[0].sigHashes, want) {
+			t.Fatalf("cache %d: input 0 has the wrong sighashes, nil %v",
+				n, items[0].sigHashes == nil)
+		}
 		for i, item := range items {
 			if item.spent != spent {
 				t.Fatalf("input %d has its own spent outputs", i)

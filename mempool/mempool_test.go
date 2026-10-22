@@ -1170,6 +1170,52 @@ func TestCheckMempoolAcceptanceMaxFee(t *testing.T) {
 	}
 }
 
+// TestRefusedTxSigHashes ensures the transactions the pool refuses because
+// their scripts fail leave at most the hash cache's maximum number of entries
+// behind, however many there are.
+func TestRefusedTxSigHashes(t *testing.T) {
+	t.Parallel()
+
+	harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	const maxEntries = 5
+	hashCache := txscript.NewHashCache(maxEntries)
+	harness.txPool.cfg.HashCache = hashCache
+
+	// Spends of the output that pay less than they sign for, so their
+	// signatures fail.
+	refused := make([]*bchutil.Tx, 4*maxEntries)
+	for i := range refused {
+		signed, err := harness.CreateTxChain(outputs[0], 1)
+		if err != nil {
+			t.Fatalf("unable to create signed tx: %v", err)
+		}
+		msgTx := signed[0].MsgTx()
+		msgTx.TxOut[0].Value -= int64(i + 1)
+		refused[i] = bchutil.NewTx(msgTx)
+		_, err = harness.txPool.ProcessTransaction(refused[i], false, 0)
+		ruleErr, _ := err.(RuleError)
+		chainErr, ok := ruleErr.Err.(blockchain.RuleError)
+		if !ok || chainErr.ErrorCode != blockchain.ErrScriptValidation {
+			t.Fatalf("tx %d: got error %v, want a script failure", i,
+				err)
+		}
+	}
+
+	cached := 0
+	for _, tx := range refused {
+		if hashCache.ContainsHashes(tx.Hash()) {
+			cached++
+		}
+	}
+	if cached > maxEntries {
+		t.Fatalf("%d of the %d refused transactions are in the hash "+
+			"cache, at most %d fit", cached, len(refused), maxEntries)
+	}
+}
+
 // TestDecodeCompressedBlockPrefilledIndexes ensures DecodeCompressedBlock
 // rejects compact blocks whose prefilled transaction indexes or transaction
 // counts do not describe a valid block layout, and that well-formed compact

@@ -296,17 +296,17 @@ func txValidateItems(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 	// partial sighashes for this transaction, then we add the
 	// sighashes for the transaction. This allows us to take
 	// advantage of the potential speed savings due to the new
-	// digest algorithm (BIP0143).
+	// digest algorithm (BIP0143).  The sighashes added are used
+	// directly, since another transaction's entry may evict them.
 	hash := tx.Hash()
-	if flags.HasFlag(txscript.ScriptVerifyBip143SigHash) && hashCache != nil &&
-		!hashCache.ContainsHashes(hash) {
-
-		hashCache.AddSigHashes(tx.MsgTx())
-	}
-
 	var cachedHashes *txscript.TxSigHashes
 	if hashCache != nil {
 		cachedHashes, _ = hashCache.GetSigHashes(hash)
+		if cachedHashes == nil &&
+			flags.HasFlag(txscript.ScriptVerifyBip143SigHash) {
+
+			cachedHashes = hashCache.AddSigHashes(tx.MsgTx())
+		}
 	} else {
 		cachedHashes = txscript.NewTxSigHashes(tx.MsgTx())
 	}
