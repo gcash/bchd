@@ -66,6 +66,7 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 		return dbStoreBlock(dbTx, block)
 	})
 	if err != nil {
+		b.requestShutdown(err)
 		return false, err
 	}
 
@@ -80,6 +81,7 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	b.index.AddNode(newNode)
 	err = b.index.flushToDB()
 	if err != nil {
+		b.requestShutdown(err)
 		return false, err
 	}
 

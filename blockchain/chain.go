@@ -802,6 +802,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Write any block status changes to DB before updating best state.
 	err := b.index.flushToDB()
 	if err != nil {
+		b.requestShutdown(err)
 		return err
 	}
 
@@ -860,6 +861,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 		return nil
 	})
 	if err != nil {
+		b.requestShutdown(err)
 		return err
 	}
 	b.utxoCache.setStaleJournal(*block.Hash(), false)
@@ -948,6 +950,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Write any block status changes to DB before updating best state.
 	err = b.index.flushToDB()
 	if err != nil {
+		b.requestShutdown(err)
 		return err
 	}
 
@@ -1011,6 +1014,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 		return nil
 	})
 	if err != nil {
+		b.requestShutdown(err)
 		return err
 	}
 	b.utxoCache.setStaleJournal(*block.Hash(), true)

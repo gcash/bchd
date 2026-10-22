@@ -1736,7 +1736,14 @@ func (tx *transaction) writePendingAndCommit() error {
 
 	// Atomically update the database cache.  The cache automatically
 	// handles flushing to the underlying persistent storage database.
-	return tx.db.cache.commitTx(tx)
+	// When that fails, as it does once leveldb stopped taking writes, the
+	// locations of the blocks were not stored, so the blocks are removed
+	// from the block files again.
+	if err := tx.db.cache.commitTx(tx); err != nil {
+		rollback()
+		return err
+	}
+	return nil
 }
 
 // Commit commits all changes that have been made to the root metadata bucket

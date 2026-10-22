@@ -2,6 +2,7 @@ package ffldb
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -193,6 +194,60 @@ func TestCommitFailsAfterWritesStopped(t *testing.T) {
 	if err := put("b"); !writesStopped(err) {
 		t.Fatalf("commit after writes stopped = %v, want writes stopped", err)
 	}
+}
+
+// TestFailedCommitRollsBackBlocks ensures a commit that fails after it wrote
+// its blocks to the block files, as when leveldb fails a write or has stopped
+// taking writes, removes them again, rather than leaving a copy of the block
+// behind every time it is stored again.
+func TestFailedCommitRollsBackBlocks(t *testing.T) {
+	pdb, dir := createTestDB(t)
+	fs := swapFailingLdb(t, pdb, dir)
+	defer pdb.cache.ldb.Close()
+
+	store := func(nonce uint32) error {
+		return pdb.Update(func(tx database.Tx) error {
+			return tx.StoreBlock(pruneTestBlock(nonce, int32(nonce)))
+		})
+	}
+	if err := store(1); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	wc := pdb.store.writeCursor
+	fileNum, offset := wc.curFileNum, wc.curOffset
+	requireRolledBack := func(what string) {
+		t.Helper()
+		info, err := os.Stat(blockFilePath(pdb.store.basePath, fileNum))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if wc.curFileNum != fileNum || wc.curOffset != offset ||
+			info.Size() != int64(offset) {
+
+			t.Errorf("%s: write cursor at file %d offset %d, file size %d, "+
+				"want file %d offset and size %d", what, wc.curFileNum,
+				wc.curOffset, info.Size(), fileNum, offset)
+		}
+	}
+
+	// Every commit flushes the cache, and the flush fails to write.
+	pdb.cache.flushInterval = 0
+	atomic.StoreInt32(&fs.fail, 1)
+	if err := store(2); err == nil {
+		t.Fatal("expected the injected flush failure")
+	}
+	atomic.StoreInt32(&fs.fail, 0)
+	requireRolledBack("after a failed flush")
+
+	atomic.StoreInt32(&fs.failSync, 1)
+	if err := store(2); !writesStopped(err) {
+		t.Fatalf("commit whose MANIFEST sync fails = %v, want writes stopped", err)
+	}
+	atomic.StoreInt32(&fs.failSync, 0)
+	if err := store(2); !writesStopped(err) {
+		t.Fatalf("commit after writes stopped = %v, want writes stopped", err)
+	}
+	requireRolledBack("after writes stopped")
 }
 
 // TestFlushRetriedAfterFailure ensures a commit after a failed flush flushes
