@@ -6,6 +6,7 @@ package indexers
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1261,46 +1262,74 @@ func DropSlpIndex(db database.DB, interrupt <-chan struct{}) error {
 
 // TopologicallySortTxs sorts a list of transactions into topological order.
 // That is, the child transactions come after parents.
+//
+// The order is the one given by passing over the list until every transaction
+// is taken, each pass taking, in list order, the transactions whose parents in
+// the list were all taken before them.  Rather than make those passes, which
+// for a chain of transactions spending each other's outputs is one pass for
+// every link, it works out the pass that takes each transaction from the
+// passes that take its parents.
 func TopologicallySortTxs(transactions []*bchutil.Tx) []*wire.MsgTx {
+	positions := make(map[chainhash.Hash]int, len(transactions))
+	for i, tx := range transactions {
+		positions[*tx.Hash()] = i
+	}
 
-	sorted := make([]*wire.MsgTx, 0, len(transactions))
-	txids := make(map[chainhash.Hash]struct{}, len(transactions))
-	outpoints := make(map[wire.OutPoint]struct{})
+	// Find the transactions in the list that spend the outputs of each
+	// one, and count the outputs in the list that each one spends.
+	children := make([][]int, len(transactions))
+	numParents := make([]int, len(transactions))
+	for i, tx := range transactions {
+		for _, in := range tx.MsgTx().TxIn {
+			j, ok := positions[in.PreviousOutPoint.Hash]
+			if !ok || uint64(in.PreviousOutPoint.Index) >=
+				uint64(len(transactions[j].MsgTx().TxOut)) {
 
-	for _, tx := range transactions {
-		for i := range tx.MsgTx().TxOut {
-			op := wire.OutPoint{
-				Hash:  *tx.Hash(),
-				Index: uint32(i),
+				continue
 			}
-			outpoints[op] = struct{}{}
+			children[j] = append(children[j], i)
+			numParents[i]++
 		}
 	}
 
-	for len(sorted) < len(transactions) {
-		for _, tx := range transactions {
-			if _, ok := txids[*tx.Hash()]; ok {
-				continue
+	// Go through the transactions with each one after its parents.  A
+	// pass takes a transaction once it has taken all of its parents: in
+	// the pass that takes a parent before it in the list, or in the pass
+	// after the one that takes a parent after it, since that pass has
+	// gone past it by then.
+	pass := make([]int, len(transactions))
+	queue := make([]int, 0, len(transactions))
+	for i, n := range numParents {
+		if n == 0 {
+			queue = append(queue, i)
+		}
+	}
+	for k := 0; k < len(queue); k++ {
+		j := queue[k]
+		for _, i := range children[j] {
+			p := pass[j]
+			if j > i {
+				p++
 			}
-			foundParent := false
-			for _, in := range tx.MsgTx().TxIn {
-				if _, ok := outpoints[in.PreviousOutPoint]; ok {
-					foundParent = true
-					break
-				}
-			}
-			if !foundParent {
-				sorted = append(sorted, tx.MsgTx())
-				for i := range tx.MsgTx().TxOut {
-					op := wire.OutPoint{
-						Hash:  *tx.Hash(),
-						Index: uint32(i),
-					}
-					delete(outpoints, op)
-				}
-				txids[*tx.Hash()] = struct{}{}
+			pass[i] = max(pass[i], p)
+			numParents[i]--
+			if numParents[i] == 0 {
+				queue = append(queue, i)
 			}
 		}
+	}
+
+	// Each pass takes its transactions in list order.
+	order := make([]int, len(transactions))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		return cmp.Compare(pass[a], pass[b])
+	})
+	sorted := make([]*wire.MsgTx, 0, len(transactions))
+	for _, i := range order {
+		sorted = append(sorted, transactions[i].MsgTx())
 	}
 	return sorted
 }
