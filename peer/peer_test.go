@@ -1007,3 +1007,47 @@ func TestKnownTxs(t *testing.T) {
 		t.Fatalf("got %v, want only %v", got, known)
 	}
 }
+
+// TestSendCmpctFlags ensures a sendcmpct sets the flags WantsCompactBlocks
+// and WantsDirectBlockRelay report, and that they can be read while the peer
+// handles it.  They were set without the mutex the readers hold, a data race
+// that the race detector reports.
+func TestSendCmpctFlags(t *testing.T) {
+	cfg := &peer.Config{
+		ChainParams:            &chaincfg.MainNetParams,
+		TstAllowSelfConnection: true,
+	}
+	inConn, outConn := pipe(
+		&conn{raddr: "10.0.0.1:8333"},
+		&conn{raddr: "10.0.0.2:8333"},
+	)
+	inPeer := peer.NewInboundPeer(cfg)
+	inPeer.AssociateConnection(inConn)
+	outPeer, err := peer.NewOutboundPeer(cfg, "10.0.0.2:8333")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outPeer.AssociateConnection(outConn)
+	defer func() {
+		inPeer.Disconnect()
+		outPeer.Disconnect()
+		inPeer.WaitForDisconnect()
+		outPeer.WaitForDisconnect()
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for !inPeer.VerAckReceived() || !outPeer.VerAckReceived() {
+		if time.Now().After(deadline) {
+			t.Fatal("handshake did not complete")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	outPeer.QueueMessage(wire.NewMsgSendCmpct(true,
+		wire.CompactBlocksProtocolVersion), nil)
+	for !inPeer.WantsCompactBlocks() || !inPeer.WantsDirectBlockRelay() {
+		if time.Now().After(deadline) {
+			t.Fatal("the flags of the sendcmpct were not set")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

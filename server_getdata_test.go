@@ -341,24 +341,19 @@ func TestCmpctBlockCostBoundedByBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The remote side asks for direct relay.  The pong to the ping after
-	// it shows the request was handled.
-	for _, msg := range []wire.Message{wire.NewMsgSendCmpct(true,
-		wire.CompactBlocksProtocolVersion), wire.NewMsgPing(1)} {
-
-		err = wire.WriteMessage(h.remote, msg, wire.ProtocolVersion,
-			chaincfg.RegressionNetParams.Net)
-		if err != nil {
-			t.Fatal(err)
-		}
+	// The remote side asks for direct relay.
+	err = wire.WriteMessage(h.remote, wire.NewMsgSendCmpct(true,
+		wire.CompactBlocksProtocolVersion), wire.ProtocolVersion,
+		chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for {
-		if _, ok := h.readMessage(t).(*wire.MsgPong); ok {
-			break
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.sp.WantsDirectBlockRelay() {
+		if time.Now().After(deadline) {
+			t.Fatal("the peer did not ask for direct relay")
 		}
-	}
-	if !h.sp.WantsDirectBlockRelay() {
-		t.Fatal("the peer did not ask for direct relay")
+		time.Sleep(10 * time.Millisecond)
 	}
 	state := newTestPeerState()
 	state.inboundPeers[h.sp.ID()] = h.sp

@@ -519,7 +519,7 @@ type Peer struct {
 	queueMtx    sync.RWMutex
 	queueClosed bool
 
-	// CompactBlocks
+	// CompactBlocks, protected by flagsMtx.
 	compactBlocksPreferred    bool
 	directBlockRelayPreferred bool
 	allowDirectBlockRelay     bool
@@ -1797,8 +1797,10 @@ out:
 			// We only know of one version so if they want something
 			// else we can't use compact blocks.
 			if msg.Version == wire.CompactBlocksProtocolVersion {
+				p.flagsMtx.Lock()
 				p.compactBlocksPreferred = true
 				p.directBlockRelayPreferred = msg.Announce
+				p.flagsMtx.Unlock()
 			}
 			if p.cfg.Listeners.OnSendCmpct != nil {
 				p.cfg.Listeners.OnSendCmpct(p, msg)
