@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/connmgr"
 	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/netsync"
@@ -403,5 +405,201 @@ func TestRelayInventoryEndsOnQuit(t *testing.T) {
 		<-s.relayInv
 		<-done
 		t.Fatal("the relay still waits after the server quit")
+	}
+}
+
+// newInboundTestPeer returns an inbound peer of s from host whose handshake
+// with a peer on the other end of a pipe has completed.
+func newInboundTestPeer(t *testing.T, s *server, host string) *serverPeer {
+	t.Helper()
+	sp := newServerPeer(s, false)
+	sp.Peer = peer.NewInboundPeer(&peer.Config{
+		ChainParams:            s.chainParams,
+		TstAllowSelfConnection: true,
+	})
+	remote, err := peer.NewOutboundPeer(&peer.Config{
+		ChainParams:            s.chainParams,
+		TstAllowSelfConnection: true,
+	}, "10.0.0.1:18444")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, remoteConn := net.Pipe()
+	sp.AssociateConnection(&addrConn{Conn: local,
+		remote: &net.TCPAddr{IP: net.ParseIP(host), Port: 18444}})
+	remote.AssociateConnection(remoteConn)
+	t.Cleanup(func() {
+		sp.Disconnect()
+		remote.Disconnect()
+		sp.WaitForDisconnect()
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for !sp.VerAckReceived() || !remote.VerAckReceived() {
+		if time.Now().After(deadline) {
+			t.Fatal("handshake did not complete")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return sp
+}
+
+// newAddPeerTestServer sets the global config to allow maxPeers peers, of
+// which targetOutbound outbound, and returns a server with a running sync
+// manager and connection manager for adding peers.
+func newAddPeerTestServer(t *testing.T, maxPeers int,
+	targetOutbound uint32) *server {
+
+	t.Helper()
+	useTestConfig(t, &config{MaxPeers: maxPeers, MaxPeersPerIP: 5,
+		TargetOutboundPeers: targetOutbound,
+		BanThreshold:        defaultBanThreshold})
+	oldSyncLevel, oldTxmpLevel := syncLog.Level(), txmpLog.Level()
+	syncLog.SetLevel(bchlog.LevelOff)
+	txmpLog.SetLevel(bchlog.LevelOff)
+	t.Cleanup(func() {
+		syncLog.SetLevel(oldSyncLevel)
+		txmpLog.SetLevel(oldTxmpLevel)
+	})
+	params := &chaincfg.RegressionNetParams
+	chain, _ := newTestChainDB(t)
+	sm, err := netsync.New(&netsync.Config{
+		PeerNotifier: nopPeerNotifier{},
+		Chain:        chain,
+		TxMemPool:    mempool.New(&mempool.Config{ChainParams: params}),
+		ChainParams:  params,
+		MaxPeers:     maxPeers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sm.Start()
+	cm, err := connmgr.New(&connmgr.Config{
+		Dial: func(net.Addr) (net.Conn, error) {
+			return nil, errors.New("no dialing in tests")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm.Start()
+	t.Cleanup(func() {
+		cm.Stop()
+		_ = sm.Stop()
+	})
+	return &server{
+		chainParams:  params,
+		chain:        chain,
+		addrManager:  addrmgr.New(t.TempDir(), nil),
+		syncManager:  sm,
+		connManager:  cm,
+		quit:         make(chan struct{}),
+		inboundHosts: make(map[string]int),
+		inboundBans:  make(map[string]time.Time),
+	}
+}
+
+// fillPeerState adds the passed numbers of inbound, outbound and persistent
+// placeholder peers, which are not connected, to state.
+func fillPeerState(state *peerState, inbound, outbound, persistent int) {
+	id := int32(-1)
+	for _, n := range []struct {
+		peers map[int32]*serverPeer
+		count int
+	}{
+		{state.inboundPeers, inbound},
+		{state.outboundPeers, outbound},
+		{state.persistentPeers, persistent},
+	} {
+		for range n.count {
+			n.peers[id] = &serverPeer{
+				Peer: peer.NewInboundPeer(&peer.Config{}),
+			}
+			id--
+		}
+	}
+}
+
+// TestAdmitInboundKeepsOutboundSlots ensures inbound connections are refused
+// once they would leave too few of the --maxpeers slots for the outbound
+// peers the connection manager keeps.
+func TestAdmitInboundKeepsOutboundSlots(t *testing.T) {
+	s := newInboundTestServer(t, 5, 4)
+	cfg.TargetOutboundPeers = 2
+	for i, want := range []bool{true, true, false} {
+		addr := &net.TCPAddr{IP: net.IPv4(10, 0, 0, byte(i+1)), Port: 1}
+		if got := s.admitInbound(addr) != nil; got != want {
+			t.Fatalf("inbound connection %d admitted %v, want %v", i,
+				got, want)
+		}
+	}
+}
+
+// TestAddPeerKeepsOutboundSlots ensures inbound peers cannot take the slots
+// of the outbound peers the connection manager keeps, and that persistent
+// peers are not limited by --maxpeers and do not count toward it.  An inbound
+// peer could take every slot, and outbound and persistent peers were then
+// refused after their handshake and only redialed.
+func TestAddPeerKeepsOutboundSlots(t *testing.T) {
+	tests := []struct {
+		name                          string
+		inbound, outbound, persistent int
+		newPeer                       string // inbound, outbound or persistent
+		want                          bool
+	}{
+		{"inbound slots full", 2, 0, 0, "inbound", false},
+		{"inbound with room", 1, 1, 0, "inbound", true},
+		{"inbound over the total", 1, 3, 0, "inbound", false},
+		{"outbound while inbound full", 2, 1, 1, "outbound", true},
+		{"outbound over the total", 2, 2, 0, "outbound", false},
+		{"persistent while full", 2, 2, 0, "persistent", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := newAddPeerTestServer(t, 4, 2)
+			state := newTestPeerState()
+			fillPeerState(state, test.inbound, test.outbound,
+				test.persistent)
+			var sp *serverPeer
+			if test.newPeer == "inbound" {
+				sp = newInboundTestPeer(t, s, "10.0.0.2")
+			} else {
+				sp = newOutboundTestPeer(t, s, "10.0.0.2:18444")
+				sp.persistent = test.newPeer == "persistent"
+			}
+			if got := s.handleAddPeerMsg(state, sp); got != test.want {
+				t.Fatalf("%s peer added %v, want %v", test.newPeer, got,
+					test.want)
+			}
+		})
+	}
+}
+
+// TestConnectNodeLimits ensures a node added as persistent through the RPC
+// server is connected however many peers there are, and a one-time
+// connection only while fewer peers than --maxpeers count toward it.
+func TestConnectNodeLimits(t *testing.T) {
+	tests := []struct {
+		name                          string
+		inbound, outbound, persistent int
+		permanent, want               bool
+	}{
+		{"persistent while full", 2, 2, 0, true, true},
+		{"one-time while full", 2, 2, 0, false, false},
+		{"one-time beside persistent", 2, 1, 1, false, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := newAddPeerTestServer(t, 4, 2)
+			state := newTestPeerState()
+			fillPeerState(state, test.inbound, test.outbound,
+				test.persistent)
+			reply := make(chan error, 1)
+			s.handleQuery(state, connectNodeMsg{addr: "10.0.0.3:18444",
+				permanent: test.permanent, reply: reply})
+			if err := <-reply; (err == nil) != test.want {
+				t.Fatalf("connect got %v, want success %v", err,
+					test.want)
+			}
+		})
 	}
 }

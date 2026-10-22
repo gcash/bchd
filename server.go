@@ -208,6 +208,13 @@ func (ps *peerState) Count() int {
 		len(ps.persistentPeers)
 }
 
+// CountLimited returns the count of the known peers that --maxpeers limits:
+// the inbound and the non-persistent outbound peers.  Persistent peers, which
+// the user asked for, come on top, as BCHN's added and manual connections do.
+func (ps *peerState) CountLimited() int {
+	return len(ps.inboundPeers) + len(ps.outboundPeers)
+}
+
 // CountIP returns the count of all peers matching the IP.
 func (ps *peerState) CountIP(host string) int {
 	return ps.connectionCount[host]
@@ -2459,13 +2466,20 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		return false
 	}
 
-	// Limit max number of total peers.
-	if state.Count() >= cfg.MaxPeers {
+	// Limit max number of inbound peers, which keeps slots for the
+	// outbound peers the connection manager maintains.
+	if sp.Inbound() && len(state.inboundPeers) >= maxInboundPeers() {
+		srvrLog.Infof("Max inbound peers reached [%d] - disconnecting "+
+			"peer %s", maxInboundPeers(), sp)
+		sp.Disconnect()
+		return false
+	}
+
+	// Limit max number of total peers.  Persistent peers are not limited.
+	if !sp.persistent && state.CountLimited() >= cfg.MaxPeers {
 		srvrLog.Infof("Max peers reached [%d] - disconnecting peer %s",
 			cfg.MaxPeers, sp)
 		sp.Disconnect()
-		// TODO: how to handle permanent peers here?
-		// they should be rescheduled.
 		return false
 	}
 
@@ -2850,8 +2864,9 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 
 	case connectNodeMsg:
 		// TODO: duplicate oneshots?
-		// Limit max number of total peers.
-		if state.Count() >= cfg.MaxPeers {
+		// Limit max number of total peers.  Persistent peers are not
+		// limited, as in handleAddPeerMsg.
+		if !msg.permanent && state.CountLimited() >= cfg.MaxPeers {
 			msg.reply <- errors.New("max peers reached")
 			return
 		}
@@ -3041,6 +3056,19 @@ func (s *server) inboundPeerConnected(conn net.Conn) {
 	go s.peerDoneHandler(sp)
 }
 
+// targetOutboundPeers returns the number of outbound peers the connection
+// manager maintains: --targetoutboundpeers, but no more than --maxpeers.
+func targetOutboundPeers() uint32 {
+	return min(cfg.TargetOutboundPeers, uint32(cfg.MaxPeers))
+}
+
+// maxInboundPeers returns the most inbound peers kept: --maxpeers less the
+// outbound peers the connection manager maintains, so that inbound peers
+// cannot take their slots, as BCHN keeps slots for its outbound connections.
+func maxInboundPeers() int {
+	return cfg.MaxPeers - int(targetOutboundPeers())
+}
+
 // admitInbound applies connection limits and bans to a new inbound connection
 // from the provided address before its handshake is started.  It returns nil
 // when the connection must be refused.  Otherwise the connection is counted
@@ -3074,9 +3102,9 @@ func (s *server) admitInbound(addr net.Addr) func() {
 			"per IP reached [%d]", host, cfg.MaxPeersPerIP)
 		return nil
 	}
-	if s.inboundTotal >= cfg.MaxPeers {
-		srvrLog.Debugf("Inbound connection from %s refused - max peers "+
-			"reached [%d]", host, cfg.MaxPeers)
+	if s.inboundTotal >= maxInboundPeers() {
+		srvrLog.Debugf("Inbound connection from %s refused - max inbound "+
+			"peers reached [%d]", host, maxInboundPeers())
 		return nil
 	}
 
@@ -4030,15 +4058,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	}
 
 	// Create a connection manager.
-	targetOutbound := cfg.TargetOutboundPeers
-	if cfg.MaxPeers < int(targetOutbound) {
-		targetOutbound = uint32(cfg.MaxPeers)
-	}
 	cmgr, err := connmgr.New(&connmgr.Config{
 		Listeners:      listeners,
 		OnAccept:       s.inboundPeerConnected,
 		RetryDuration:  connectionRetryInterval,
-		TargetOutbound: targetOutbound,
+		TargetOutbound: targetOutboundPeers(),
 		Dial:           bchdDial,
 		OnConnection:   s.outboundPeerConnected,
 		GetNewAddress:  newAddressFunc,
