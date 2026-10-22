@@ -854,16 +854,25 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 
 // OnCmpctBlock is invoked when a peer receives a cmpctblock bitcoin message.
 // A compact block arriving while maxCmpctBlocksInFlight from the peer are
-// being reconstructed is dropped, and its request forgotten.
+// being reconstructed is not decoded: the full block is requested instead,
+// keeping its request, unless the block is known, whose request is forgotten.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 	select {
 	case sp.cmpctInFlight <- struct{}{}:
 	default:
 		hash := msg.BlockHash()
-		peerLog.Debugf("Ignoring cmpctblock %v from %v -- %d of its "+
+		if have, err := sp.server.chain.HaveBlock(&hash); err != nil || have {
+			peerLog.Debugf("Ignoring cmpctblock %v from %v -- already "+
+				"known", hash, sp)
+			sp.server.syncManager.QueueBlockError(&hash, sp.Peer)
+			return
+		}
+		peerLog.Debugf("Requesting block %v from %v in full -- %d of its "+
 			"compact blocks are already being reconstructed", hash, sp,
 			maxCmpctBlocksInFlight)
-		sp.server.syncManager.QueueBlockError(&hash, sp.Peer)
+		gdmsg := wire.NewMsgGetDataSizeHint(1)
+		_ = gdmsg.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &hash))
+		sp.QueueMessage(gdmsg, nil)
 		return
 	}
 	go func() {

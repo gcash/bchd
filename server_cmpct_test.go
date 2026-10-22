@@ -656,9 +656,15 @@ func TestCompactBlockAlreadyKnown(t *testing.T) {
 
 // TestCompactBlocksInFlightLimit ensures at most two compact blocks from a
 // peer are reconstructed at a time, which bounds the memory a peer can make
-// waiting compact blocks hold.
+// waiting compact blocks hold.  A compact block dropped at the limit has its
+// full block requested, unless it is known.
 func TestCompactBlocksInFlightLimit(t *testing.T) {
 	h := newCmpctHarness(t)
+	best := h.s.chain.BestSnapshot()
+	tip, err := h.s.chain.BlockByHash(&best.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
 	blocks := make(map[chainhash.Hash]*bchutil.Block)
 	var msgs []*wire.MsgCmpctBlock
 	for i := range 3 {
@@ -670,6 +676,7 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 	for _, msg := range msgs {
 		h.sp.OnCmpctBlock(nil, msg)
 	}
+	h.sp.OnCmpctBlock(nil, shortIDsOnly(t, tip))
 
 	var waiting []chainhash.Hash
 	for done := false; !done; {
@@ -688,24 +695,20 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 			"want 2", len(waiting))
 	}
 
-	// The dropped block's request was forgotten, so it is requested again,
-	// and once the others are done its compact block is reconstructed.
+	// The dropped block is requested in full, and processed as the block
+	// requested from the peer.  The known tip is not requested.
 	for _, hash := range waiting {
 		h.expectHaveBlock(t, &hash)
 		delete(blocks, hash)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for len(h.sp.cmpctInFlight) > 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("compact blocks still in flight")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 	for hash, block := range blocks {
-		h.request(t, hash)
-		h.sp.OnCmpctBlock(nil, shortIDsOnly(t, block))
-		h.expectGetTxns(t, hash)
-		h.send(t, blockTxnsFor(block))
+		h.expectFullBlockRequest(t, hash)
+		select {
+		case iv := <-h.getData:
+			t.Fatalf("getdata for %v", iv)
+		case <-time.After(100 * time.Millisecond):
+		}
+		h.send(t, block.MsgBlock())
 		h.expectHaveBlock(t, &hash)
 	}
 }
