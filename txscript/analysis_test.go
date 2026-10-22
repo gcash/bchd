@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -209,7 +210,7 @@ func (c *analysisCorpus) addVMBVectors(t testing.TB) {
 			if err := tx.BchDecode(bytes.NewReader(txBytes), 0, 0); err != nil {
 				continue
 			}
-			rawScripts := readRawUtxoScripts(utxoBytes)
+			_, rawScripts := readRawUtxoScripts(utxoBytes)
 			for i, txIn := range tx.TxIn {
 				sigScript := txIn.SignatureScript
 				c.add(sigScript)
@@ -235,31 +236,33 @@ func (c *analysisCorpus) addVMBVectors(t testing.TB) {
 	}
 }
 
-// readRawUtxoScripts returns the serialized scripts, token prefix included,
-// of a VMB utxo list.
-func readRawUtxoScripts(b []byte) [][]byte {
+// readRawUtxoScripts returns the values and serialized scripts, token
+// prefix included, of a VMB utxo list.
+func readRawUtxoScripts(b []byte) ([]int64, [][]byte) {
 	r := bytes.NewReader(b)
 	count, err := wire.ReadVarInt(r, 0)
 	if err != nil || count > uint64(len(b)) {
-		return nil
+		return nil, nil
 	}
+	values := make([]int64, 0, count)
 	scripts := make([][]byte, 0, count)
 	for range count {
 		var value [8]byte
-		if _, err := r.Read(value[:]); err != nil {
-			return scripts
+		if _, err := io.ReadFull(r, value[:]); err != nil {
+			return values, scripts
 		}
 		n, err := wire.ReadVarInt(r, 0)
 		if err != nil || n > uint64(r.Len()) {
-			return scripts
+			return values, scripts
 		}
 		script := make([]byte, n)
-		if _, err := r.Read(script); err != nil {
-			return scripts
+		if _, err := io.ReadFull(r, script); err != nil {
+			return values, scripts
 		}
+		values = append(values, int64(binary.LittleEndian.Uint64(value[:])))
 		scripts = append(scripts, script)
 	}
-	return scripts
+	return values, scripts
 }
 
 // pushData returns the script that pushes data with the given push opcode,
