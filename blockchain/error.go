@@ -116,7 +116,11 @@ const (
 	ErrTxTooManySigChecks
 
 	// ErrBadTxOutValue indicates an output value for a transaction is
-	// invalid in some way such as being out of range.
+	// invalid in some way such as being out of range.  The checks now
+	// return ErrTxOutValueNegative, ErrTxOutValueTooHigh,
+	// ErrTxOutTotalTooHigh or ErrTxInValueOutOfRange instead, so that each
+	// gets its own reason, as in Bitcoin Cash Node; it is kept for code that
+	// names it.
 	ErrBadTxOutValue
 
 	// ErrDuplicateTxInputs indicates a transaction references the same
@@ -242,6 +246,23 @@ const (
 	// ErrUnrequestedBlock indicates a block that was not requested was
 	// not stored because it can't extend the best chain soon.
 	ErrUnrequestedBlock
+
+	// ErrTxOutValueNegative indicates a transaction output has a negative
+	// value.
+	ErrTxOutValueNegative
+
+	// ErrTxOutValueTooHigh indicates a transaction output has a value
+	// above the money supply.
+	ErrTxOutValueTooHigh
+
+	// ErrTxOutTotalTooHigh indicates the outputs of a transaction are
+	// together worth more than the money supply.
+	ErrTxOutTotalTooHigh
+
+	// ErrTxInValueOutOfRange indicates an output a transaction spends has a
+	// value out of range, or the outputs it spends are together worth more
+	// than the money supply.
+	ErrTxInValueOutOfRange
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -294,6 +315,10 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrCoinbaseHasTokens:     "ErrCoinbaseHasTokens",
 	ErrForkBeforeFinalized:   "ErrForkBeforeFinalized",
 	ErrUnrequestedBlock:      "ErrUnrequestedBlock",
+	ErrTxOutValueNegative:    "ErrTxOutValueNegative",
+	ErrTxOutValueTooHigh:     "ErrTxOutValueTooHigh",
+	ErrTxOutTotalTooHigh:     "ErrTxOutTotalTooHigh",
+	ErrTxInValueOutOfRange:   "ErrTxInValueOutOfRange",
 }
 
 // String returns the ErrorCode as a human-readable name.

@@ -292,13 +292,13 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9
 		if satoshi < 0 {
 			str := fmt.Sprintf("transaction output has negative "+
 				"value of %v", satoshi)
-			return ruleError(ErrBadTxOutValue, str)
+			return ruleError(ErrTxOutValueNegative, str)
 		}
 		if satoshi > bchutil.MaxSatoshi {
 			str := fmt.Sprintf("transaction output value of %v is "+
 				"higher than max allowed value of %v", satoshi,
 				bchutil.MaxSatoshi)
-			return ruleError(ErrBadTxOutValue, str)
+			return ruleError(ErrTxOutValueTooHigh, str)
 		}
 
 		// Two's complement int64 overflow guarantees that any overflow
@@ -309,14 +309,14 @@ func CheckTransactionSanity(tx *bchutil.Tx, magneticAnomalyActive bool, upgrade9
 			str := fmt.Sprintf("total value of all transaction "+
 				"outputs exceeds max allowed value of %v",
 				bchutil.MaxSatoshi)
-			return ruleError(ErrBadTxOutValue, str)
+			return ruleError(ErrTxOutTotalTooHigh, str)
 		}
 		if totalSatoshi > bchutil.MaxSatoshi {
 			str := fmt.Sprintf("total value of all transaction "+
 				"outputs is %v which is higher than max "+
 				"allowed value of %v", totalSatoshi,
 				bchutil.MaxSatoshi)
-			return ruleError(ErrBadTxOutValue, str)
+			return ruleError(ErrTxOutTotalTooHigh, str)
 		}
 	}
 
@@ -1020,14 +1020,14 @@ func CheckTransactionInputs(tx *bchutil.Tx, txHeight int32, utxoView *UtxoViewpo
 		if originTxSatoshi < 0 {
 			str := fmt.Sprintf("transaction output has negative "+
 				"value of %v", bchutil.Amount(originTxSatoshi))
-			return 0, ruleError(ErrBadTxOutValue, str)
+			return 0, ruleError(ErrTxInValueOutOfRange, str)
 		}
 		if originTxSatoshi > bchutil.MaxSatoshi {
 			str := fmt.Sprintf("transaction output value of %v is "+
 				"higher than max allowed value of %v",
 				bchutil.Amount(originTxSatoshi),
 				bchutil.MaxSatoshi)
-			return 0, ruleError(ErrBadTxOutValue, str)
+			return 0, ruleError(ErrTxInValueOutOfRange, str)
 		}
 
 		// The total of all outputs must not be more than the max
@@ -1041,7 +1041,7 @@ func CheckTransactionInputs(tx *bchutil.Tx, txHeight int32, utxoView *UtxoViewpo
 				"inputs is %v which is higher than max "+
 				"allowed value of %v", totalSatoshiIn,
 				bchutil.MaxSatoshi)
-			return 0, ruleError(ErrBadTxOutValue, str)
+			return 0, ruleError(ErrTxInValueOutOfRange, str)
 		}
 	}
 

@@ -2392,8 +2392,9 @@ func handleGetBlockTemplateRequest(s *rpcServer, request *btcjson.TemplateReques
 // chainErrToGBTErrString converts an error returned from btcchain to a string
 // which matches the reasons and format described in BIP0022 for rejection
 // reasons.  Where Bitcoin Cash Node rejects a block for the same reason, its
-// reason string is used.
-func chainErrToGBTErrString(err error) string {
+// reason string is used.  blockVersion is the version of the block, which
+// the reason for a version that is too old gives, as BCHN's does.
+func chainErrToGBTErrString(err error, blockVersion int32) string {
 	// When the passed error is not a RuleError, just return a generic
 	// rejected string with the error text.
 	ruleErr, ok := err.(blockchain.RuleError)
@@ -2407,7 +2408,7 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrBlockTooBig:
 		return "bad-blk-length"
 	case blockchain.ErrBlockVersionTooOld:
-		return "bad-version"
+		return fmt.Sprintf("bad-version(0x%08x)", uint32(blockVersion))
 	case blockchain.ErrInvalidTime:
 		return "bad-time"
 	case blockchain.ErrTimeTooOld:
@@ -2441,9 +2442,17 @@ func chainErrToGBTErrString(err error) string {
 	case blockchain.ErrTxTooSmall:
 		return "bad-txns-undersize"
 	case blockchain.ErrTxTooManySigChecks:
-		return "bad-txns-too-many-sigchecks"
-	case blockchain.ErrBadTxOutValue:
-		return "bad-txns-outputvalue"
+		// BCHN gives a transaction's sigchecks limit, like the block's,
+		// the reason of its parallel script checks.
+		return "blk-bad-inputs"
+	case blockchain.ErrTxOutValueNegative:
+		return "bad-txns-vout-negative"
+	case blockchain.ErrTxOutValueTooHigh:
+		return "bad-txns-vout-toolarge"
+	case blockchain.ErrTxOutTotalTooHigh:
+		return "bad-txns-txouttotal-toolarge"
+	case blockchain.ErrTxInValueOutOfRange:
+		return "bad-txns-inputvalues-outofrange"
 	case blockchain.ErrDuplicateTxInputs:
 		return "bad-txns-inputs-duplicate"
 	case blockchain.ErrBadTxInput:
@@ -2574,7 +2583,7 @@ func handleGetBlockTemplateProposal(s *rpcServer, request *btcjson.TemplateReque
 		}
 
 		rpcsLog.Infof("Rejected block proposal: %v", err)
-		return chainErrToGBTErrString(err), nil
+		return chainErrToGBTErrString(err, block.MsgBlock().Header.Version), nil
 	}
 
 	return nil, nil
@@ -4363,7 +4372,8 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 		}
 		rpcsLog.Infof("Rejected block %s via submitblock: %v",
 			block.Hash(), err)
-		return chainErrToGBTErrString(ruleErr), nil
+		return chainErrToGBTErrString(ruleErr,
+			block.MsgBlock().Header.Version), nil
 	}
 	if isOrphan {
 		rpcsLog.Infof("Block %s submitted via submitblock has an "+

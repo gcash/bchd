@@ -184,11 +184,14 @@ func chainRejectReason(code blockchain.ErrorCode) string {
 		return "bad-txns-oversize"
 	case blockchain.ErrTxTooSmall:
 		return "bad-txns-undersize"
-	case blockchain.ErrBadTxOutValue:
-		// BCHN has a reason each for a negative output, an output
-		// above the maximum and a total above it, which the code does
-		// not tell apart.
-		return "bad-txns-outputvalues-outofrange"
+	case blockchain.ErrTxOutValueNegative:
+		return "bad-txns-vout-negative"
+	case blockchain.ErrTxOutValueTooHigh:
+		return "bad-txns-vout-toolarge"
+	case blockchain.ErrTxOutTotalTooHigh:
+		return "bad-txns-txouttotal-toolarge"
+	case blockchain.ErrTxInValueOutOfRange:
+		return "bad-txns-inputvalues-outofrange"
 	case blockchain.ErrDuplicateTxInputs:
 		return "bad-txns-inputs-duplicate"
 	case blockchain.ErrBadTxInput:

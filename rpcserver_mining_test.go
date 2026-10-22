@@ -104,6 +104,13 @@ func newTestChain(t *testing.T) *blockchain.BlockChain {
 // newTestChainDB returns a fresh regtest chain along with its database.
 func newTestChainDB(t *testing.T) (*blockchain.BlockChain, database.DB) {
 	t.Helper()
+	return newTestChainDBParams(t, &chaincfg.RegressionNetParams)
+}
+
+// newTestChainDBParams returns a fresh chain with the given parameters, which
+// must use the regtest network, along with its database.
+func newTestChainDBParams(t *testing.T, params *chaincfg.Params) (*blockchain.BlockChain, database.DB) {
+	t.Helper()
 	blockchain.UseLogger(bchlog.Disabled)
 	mining.UseLogger(bchlog.Disabled)
 	t.Cleanup(func() {
@@ -118,7 +125,7 @@ func newTestChainDB(t *testing.T) (*blockchain.BlockChain, database.DB) {
 	t.Cleanup(func() { db.Close() })
 	chain, err := blockchain.New(&blockchain.Config{
 		DB:                 db,
-		ChainParams:        &chaincfg.RegressionNetParams,
+		ChainParams:        params,
 		TimeSource:         blockchain.NewMedianTime(),
 		UtxoCacheMaxSize:   16 * 1024 * 1024,
 		ExcessiveBlockSize: 32000000,
@@ -133,6 +140,18 @@ func newTestChainDB(t *testing.T) (*blockchain.BlockChain, database.DB) {
 // delta satoshis more than allowed.  A non-nil prev replaces the parent.
 func solvedBlock(t *testing.T, chain *blockchain.BlockChain, delta int64, prev *chainhash.Hash) *bchutil.Block {
 	t.Helper()
+	return solvedBlockWith(t, chain, func(msg *wire.MsgBlock) {
+		msg.Transactions[0].TxOut[0].Value += delta
+		if prev != nil {
+			msg.Header.PrevBlock = *prev
+		}
+	})
+}
+
+// solvedBlockWith returns a solved block made from a template on the chain's
+// tip, which change modifies first.
+func solvedBlockWith(t *testing.T, chain *blockchain.BlockChain, change func(*wire.MsgBlock)) *bchutil.Block {
+	t.Helper()
 	timeSource := blockchain.NewMedianTime()
 	gen := mining.NewBlkTmplGenerator(&mining.Policy{BlockMaxSize: 1000000},
 		&chaincfg.RegressionNetParams, noTxSource{}, chain, timeSource,
@@ -142,13 +161,10 @@ func solvedBlock(t *testing.T, chain *blockchain.BlockChain, delta int64, prev *
 		t.Fatal(err)
 	}
 	msg := tmpl.Block
-	msg.Transactions[0].TxOut[0].Value += delta
+	change(msg)
 	merkles := blockchain.BuildMerkleTreeStore(
 		bchutil.NewBlock(msg).Transactions())
 	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
-	if prev != nil {
-		msg.Header.PrevBlock = *prev
-	}
 	target := blockchain.CompactToBig(msg.Header.Bits)
 	for {
 		hash := msg.Header.BlockHash()
@@ -234,7 +250,8 @@ func TestSubmitBlockUsesBIP22Reasons(t *testing.T) {
 }
 
 // TestChainErrToGBTErrString ensures rule errors are reported with Bitcoin
-// Cash Node's reason strings where it has one for the same check.
+// Cash Node's reason strings where it has one for the same check, and that
+// an old block version is given as BCHN gives it.
 func TestChainErrToGBTErrString(t *testing.T) {
 	tests := []struct {
 		code blockchain.ErrorCode
@@ -264,11 +281,27 @@ func TestChainErrToGBTErrString(t *testing.T) {
 		{blockchain.ErrBadCheckpoint, "checkpoint mismatch"},
 		{blockchain.ErrForkTooOld, "bad-fork-prior-to-checkpoint"},
 		{blockchain.ErrForkBeforeFinalized, "bad-fork-prior-finalized"},
+		{blockchain.ErrTxTooManySigChecks, "blk-bad-inputs"},
+		{blockchain.ErrTxOutValueNegative, "bad-txns-vout-negative"},
+		{blockchain.ErrTxOutValueTooHigh, "bad-txns-vout-toolarge"},
+		{blockchain.ErrTxOutTotalTooHigh, "bad-txns-txouttotal-toolarge"},
+		{blockchain.ErrTxInValueOutOfRange, "bad-txns-inputvalues-outofrange"},
 	}
 	for _, test := range tests {
 		err := blockchain.RuleError{ErrorCode: test.code, Description: "x"}
-		if got := chainErrToGBTErrString(err); got != test.want {
+		if got := chainErrToGBTErrString(err, 4); got != test.want {
 			t.Errorf("%v: got %q, want %q", test.code, got, test.want)
+		}
+	}
+
+	for version, want := range map[int32]string{
+		1:  "bad-version(0x00000001)",
+		3:  "bad-version(0x00000003)",
+		-1: "bad-version(0xffffffff)",
+	} {
+		err := blockchain.RuleError{ErrorCode: blockchain.ErrBlockVersionTooOld}
+		if got := chainErrToGBTErrString(err, version); got != want {
+			t.Errorf("version %d: got %q, want %q", version, got, want)
 		}
 	}
 }
@@ -299,6 +332,77 @@ func TestSubmitBlockSideChainInconclusive(t *testing.T) {
 	if res, err := submit(side); err != nil || res != "inconclusive" {
 		t.Fatalf("block on a side chain: got %v, %v, want \"inconclusive\"",
 			res, err)
+	}
+}
+
+// TestSubmitBlockOutputValueReasons ensures a block holding an output value
+// out of range is refused with Bitcoin Cash Node's reason for the check it
+// fails: an output below zero, one above the money supply, or outputs that
+// together are above it.
+func TestSubmitBlockOutputValueReasons(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []int64
+		want   string
+	}{
+		{"negative", []int64{-1}, "bad-txns-vout-negative"},
+		{"too large", []int64{bchutil.MaxSatoshi + 1}, "bad-txns-vout-toolarge"},
+		{"total too large", []int64{bchutil.MaxSatoshi, 1},
+			"bad-txns-txouttotal-toolarge"},
+	}
+	quietRPCLog(t)
+	for _, test := range tests {
+		chain := newTestChain(t)
+		s := &rpcServer{cfg: rpcserverConfig{
+			SyncMgr: &chainSyncMgr{chain: chain},
+			Chain:   chain,
+		}}
+		block := solvedBlockWith(t, chain, func(msg *wire.MsgBlock) {
+			coinbase := msg.Transactions[0]
+			script := coinbase.TxOut[0].PkScript
+			coinbase.TxOut = nil
+			for _, value := range test.values {
+				coinbase.AddTxOut(wire.NewTxOut(value, script,
+					wire.TokenData{}))
+			}
+		})
+		res, err := handleSubmitBlock(s, &btcjson.SubmitBlockCmd{
+			HexBlock: blockHex(t, block),
+		}, nil)
+		if err != nil || res != test.want {
+			t.Errorf("%s: got %v, %v, want %q", test.name, res, err,
+				test.want)
+		}
+	}
+}
+
+// TestOldBlockVersionReason ensures submitblock and a block proposal refuse a
+// block whose version is too old with Bitcoin Cash Node's reason, which gives
+// the version.
+func TestOldBlockVersionReason(t *testing.T) {
+	quietRPCLog(t)
+	params := chaincfg.RegressionNetParams
+	params.BIP0066Height = 1
+	chain, _ := newTestChainDBParams(t, &params)
+	s := &rpcServer{cfg: rpcserverConfig{
+		SyncMgr: &chainSyncMgr{chain: chain},
+		Chain:   chain,
+	}}
+	block := solvedBlockWith(t, chain, func(msg *wire.MsgBlock) {
+		msg.Header.Version = 2
+	})
+	data := blockHex(t, block)
+
+	const want = "bad-version(0x00000002)"
+	res, err := handleGetBlockTemplateProposal(s,
+		&btcjson.TemplateRequest{Data: data})
+	if err != nil || res != want {
+		t.Errorf("proposal: got %v, %v, want %q", res, err, want)
+	}
+	res, err = handleSubmitBlock(s, &btcjson.SubmitBlockCmd{HexBlock: data},
+		nil)
+	if err != nil || res != want {
+		t.Errorf("submitblock: got %v, %v, want %q", res, err, want)
 	}
 }
 
@@ -417,7 +521,7 @@ func TestKnownBlockReasons(t *testing.T) {
 // not build on the tip uses the BIP22 spelling.
 func TestGBTReasonPrevBlockNotBest(t *testing.T) {
 	err := blockchain.RuleError{ErrorCode: blockchain.ErrPrevBlockNotBest}
-	if got := chainErrToGBTErrString(err); got != "inconclusive-not-best-prevblk" {
+	if got := chainErrToGBTErrString(err, 4); got != "inconclusive-not-best-prevblk" {
 		t.Fatalf("got %q", got)
 	}
 }

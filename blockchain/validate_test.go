@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -1086,5 +1087,73 @@ func TestCheckBlockForRelay(t *testing.T) {
 
 		t.Errorf("unknown parent: got %v, want %v", err,
 			ErrPreviousBlockUnknown)
+	}
+}
+
+// TestTxValueErrorCodes ensures each check of the values of a transaction's
+// outputs, and of the outputs it spends, returns its own error code, as Bitcoin
+// Cash Node gives each its own reason.
+func TestTxValueErrorCodes(t *testing.T) {
+	// The script is long enough for the transactions to pass the minimum
+	// transaction size.
+	script := append(bytes.Repeat([]byte{txscript.OP_NOP}, 10), txscript.OP_TRUE)
+	spendingTx := func(numInputs int, values ...int64) *bchutil.Tx {
+		tx := wire.NewMsgTx(1)
+		for i := range numInputs {
+			tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{
+				Hash:  chainhash.Hash{1},
+				Index: uint32(i),
+			}, nil))
+		}
+		for _, value := range values {
+			tx.AddTxOut(wire.NewTxOut(value, script, wire.TokenData{}))
+		}
+		return bchutil.NewTx(tx)
+	}
+	checkCode := func(what string, err error, want ErrorCode) {
+		t.Helper()
+		var rerr RuleError
+		if !errors.As(err, &rerr) || rerr.ErrorCode != want {
+			t.Errorf("%s: got %v, want %v", what, err, want)
+		}
+	}
+
+	sanity := []struct {
+		name   string
+		values []int64
+		want   ErrorCode
+	}{
+		{"negative output", []int64{-1}, ErrTxOutValueNegative},
+		{"output above the supply", []int64{bchutil.MaxSatoshi + 1},
+			ErrTxOutValueTooHigh},
+		{"outputs above the supply", []int64{bchutil.MaxSatoshi, 1},
+			ErrTxOutTotalTooHigh},
+	}
+	for _, test := range sanity {
+		err := CheckTransactionSanity(spendingTx(1, test.values...), true,
+			true, txscript.StandardVerifyFlags)
+		checkCode(test.name, err, test.want)
+	}
+
+	inputs := []struct {
+		name  string
+		spent []int64
+	}{
+		{"negative spent output", []int64{-1}},
+		{"spent output above the supply", []int64{bchutil.MaxSatoshi + 1}},
+		{"spent outputs above the supply",
+			[]int64{bchutil.MaxSatoshi, bchutil.MaxSatoshi}},
+	}
+	for _, test := range inputs {
+		tx := spendingTx(len(test.spent), 1)
+		view := NewUtxoViewpoint()
+		for i, value := range test.spent {
+			view.Entries()[tx.MsgTx().TxIn[i].PreviousOutPoint] =
+				NewUtxoEntry(wire.NewTxOut(value, script,
+					wire.TokenData{}), 1, false)
+		}
+		_, err := CheckTransactionInputs(tx, 1000, view,
+			&chaincfg.RegressionNetParams)
+		checkCode(test.name, err, ErrTxInValueOutOfRange)
 	}
 }
