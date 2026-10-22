@@ -42,10 +42,13 @@ const readyGrpcMethod = "/grpc.reflection.v1alpha.ServerReflection/X"
 // the duration of the test.
 func setGrpcTestConfig(t *testing.T, token string, prometheus bool) {
 	t.Helper()
-	savedCfg, savedProm, savedLog := cfg, prometheusEnabled, grpcLog
-	t.Cleanup(func() { cfg, prometheusEnabled, grpcLog = savedCfg, savedProm, savedLog })
+	savedCfg, savedMetrics, savedLog := cfg, grpcMetrics, grpcLog
+	t.Cleanup(func() { cfg, grpcMetrics, grpcLog = savedCfg, savedMetrics, savedLog })
 	cfg = &config{GrpcAuthToken: token}
-	prometheusEnabled = prometheus
+	grpcMetrics = nil
+	if prometheus {
+		grpcMetrics = newGrpcServerMetrics()
+	}
 	grpcLog = bchlog.Disabled
 }
 
