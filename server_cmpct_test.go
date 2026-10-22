@@ -726,7 +726,8 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 
 // TestCompactBlockInvalidNotRelayed ensures a compact block that fails the
 // checks needing no inputs, here for holding two coinbases, is not relayed,
-// as BCHN would count that against this node.
+// as BCHN relays a block before storing it only once its CheckBlock and
+// ContextualCheckBlock pass.
 func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 	h := newCmpctHarness(t)
 	msgBlock := *solvedBlock(t, h.s.chain, 0, nil).MsgBlock()

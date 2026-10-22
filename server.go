@@ -920,12 +920,12 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	targetHash := msg.BlockHash()
 
-	// We check the header here before proceeding. For one we end up wasting
-	// round trips if it turns out to be invalid. And two we might want to
-	// relay immediately to other peers without validating the block but
-	// only if the header is valid.  A block whose parent is not known is
-	// fetched in full instead, so it is processed as an orphan and its
-	// parents are requested.
+	// We check the header here before proceeding, as we end up wasting
+	// round trips if it turns out to be invalid.  The block is relayed to
+	// peers that want direct relay before it is validated in full, but only
+	// once it also passes the checks that need no inputs, below.  A block
+	// whose parent is not known is fetched in full instead, so it is
+	// processed as an orphan and its parents are requested.
 	if err := sp.server.chain.CheckBlockHeaderContext(&msg.Header); err != nil {
 		if rerr, ok := err.(blockchain.RuleError); ok &&
 			rerr.ErrorCode == blockchain.ErrPreviousBlockUnknown {
@@ -1096,11 +1096,10 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	// thread and therefore blocks further messages until
 	// the bitcoin block has been fully processed.
 	//
-	// We also lock here in case there's a race between us
-	// processing the block and any peers we sent the block
-	// to before validation requesting blocktxns. We need to
-	// wait to process the getblocktxns message until processing
-	// finishes.
+	// We also lock here so that a getblocktxns from this peer
+	// waits until the block is processed.  The peers the block
+	// was relayed to before validation are answered from the
+	// recent block instead.
 	sp.processBlockMtx.Lock()
 	sp.server.syncManager.QueueBlock(block, sp.Peer, sp.blockProcessed)
 	<-sp.blockProcessed

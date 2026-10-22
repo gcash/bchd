@@ -111,8 +111,8 @@ type config struct {
 	ConnectPeers            []string      `long:"connect" description:"Connect only to the specified peers at startup"`
 	DisableListen           bool          `long:"nolisten" description:"Disable listening for incoming connections -- NOTE: Listening is automatically disabled if the --connect or --proxy options are used without also specifying listen interfaces via --listen"`
 	Listeners               []string      `long:"listen" description:"Add an interface/port to listen for connections (default all interfaces port: 8333, testnet: 18333)"`
-	MaxPeers                int           `long:"maxpeers" description:"Max number of inbound and outbound peers"`
-	MaxPeersPerIP           int           `long:"maxpeersperip" description:"Max number of inbound and outbound peers per IP"`
+	MaxPeers                int           `long:"maxpeers" description:"Max number of inbound and outbound peers, keeping --targetoutboundpeers of them for outbound peers -- Persistent peers, from --addpeer, --connect or addnode, are not counted"`
+	MaxPeersPerIP           int           `long:"maxpeersperip" description:"Max number of inbound and outbound peers per IP -- Local addresses, such as a Tor daemon's, are not limited"`
 	MinSyncPeerNetworkSpeed uint64        `long:"minsyncpeernetworkspeed" description:"Disconnect sync peers slower than this threshold in bytes/sec"`
 	DisableBanning          bool          `long:"nobanning" description:"Disable banning of misbehaving peers"`
 	BanDuration             time.Duration `long:"banduration" description:"How long to ban misbehaving peers.  Valid time units are {s, m, h}.  Minimum 1 second"`
@@ -160,8 +160,8 @@ type config struct {
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The maximum size block (in bytes) this node will accept -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
-	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0"`
+	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
+	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0 and at most 21000000"`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Deprecated, has no effect: free transactions are no longer relayed"`
 	NoRelayPriority         bool          `long:"norelaypriority" description:"Deprecated, has no effect: transaction priority is no longer used"`
@@ -177,7 +177,7 @@ type config struct {
 	NoPeerBloomFilters      bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	NoCFilters              bool          `long:"nocfilters" description:"Disable committed filtering (CF) support"`
 	DropCfIndex             bool          `long:"dropcfindex" description:"Deletes the index used for committed filtering (CF) support from the database on start up and then exits."`
-	SigCacheMaxSize         uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
+	SigCacheMaxSize         uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache, and in the cache of transaction signature hashes"`
 	UtxoCacheMaxSizeMiB     uint          `long:"utxocachemaxsize" description:"The maximum size in MiB of the UTXO cache"`
 	GCPercent               int           `long:"gcpercent" description:"Garbage collection target percentage -- Higher values use more memory and less CPU; a negative value disables the collector (use with GOMEMLIMIT). Ignored if GOGC is set"`
 	BlocksOnly              bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`

@@ -40,10 +40,14 @@ Application Options:
 	    --listen=                  Add an interface/port to listen for
 	                               connections (default all interfaces port:
 	                               8333, testnet: 18333)
-	    --maxpeers=                Max number of inbound and outbound peers
-	                               (default: 125)
+	    --maxpeers=                Max number of inbound and outbound peers,
+	                               keeping --targetoutboundpeers of them for
+	                               outbound peers -- Persistent peers, from
+	                               --addpeer, --connect or addnode, are not
+	                               counted (default: 125)
 	    --maxpeersperip=           Max number of inbound and outbound peers per
-	                               IP (default: 5)
+	                               IP -- Local addresses, such as a Tor daemon's,
+	                               are not limited (default: 5)
 	    --minsyncpeernetworkspeed= Disconnect sync peers slower than this
 	                               threshold in bytes/sec (default: 51200)
 	    --nobanning                Disable banning of misbehaving peers
@@ -145,14 +149,16 @@ Application Options:
 	                               (default: info)
 	    --upnp                     Use UPnP to map our listening port outside of
 	                               NAT
-	    --excessiveblocksize=      The maximum size block (in bytes) this node
-	                               will accept -- 0 uses the network's default,
-	                               which is also the minimum: 2000000 on testnet4
-	                               and chipnet, otherwise 32000000
+	    --excessiveblocksize=      The block size (in bytes) that P2P and RPC
+	                               message limits are sized for, and on regtest
+	                               and simnet the floor of the block size limit
+	                               -- 0 uses the network's default, which is also
+	                               the minimum: 2000000 on testnet4 and chipnet,
+	                               otherwise 32000000
 	    --minrelaytxfee=           The minimum fee rate in BCH/kB a transaction
 	                               must pay to be relayed, accepted into the
-	                               mempool and mined -- Must be above 0 (default:
-	                               1e-05)
+	                               mempool and mined -- Must be above 0 and at
+	                               most 21000000 (default: 1e-05)
 	    --maxtxfee=                The maximum total fee in BCH of a transaction
 	                               sent with sendrawtransaction or checked with
 	                               testmempoolaccept, unless allowhighfees is set
@@ -188,7 +194,8 @@ Application Options:
 	                               (CF) support from the database on start up and
 	                               then exits.
 	    --sigcachemaxsize=         The maximum number of entries in the signature
-	                               verification cache (default: 100000)
+	                               verification cache, and in the cache of
+	                               transaction signature hashes (default: 100000)
 	    --utxocachemaxsize=        The maximum size in MiB of the UTXO cache
 	                               (default: 450)
 	    --gcpercent=               Garbage collection target percentage -- Higher

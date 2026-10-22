@@ -56,7 +56,7 @@ var helpDescsEnUS = map[string]string{
 	"createrawtransaction-cashtokens":       "Optional list of CashTokens to add to the outputs, at most one entry per output address",
 	"transactionoutputcashtoken-address":    "The output address, which must pay to the same destination as a key of the amounts object, in any form, cashaddr or legacy",
 	"transactionoutputcashtoken-category":   "The token category, in the byte order used to display transaction hashes, like a txid",
-	"transactionoutputcashtoken-amount":     "The fungible token amount; 0 or omitted for no fungible tokens",
+	"transactionoutputcashtoken-amount":     "The fungible token amount, as an integer or a decimal string; 0 or omitted for no fungible tokens",
 	"transactionoutputcashtoken-capability": "The NFT capability: none, mutable or minting; omit for no NFT",
 	"transactionoutputcashtoken-commitment": "Optional hex-encoded NFT commitment of up to 128 bytes; requires a capability",
 	"createrawtransaction-locktime":         "Locktime value; a non-zero value will also locktime-activate the inputs",
@@ -193,10 +193,10 @@ var helpDescsEnUS = map[string]string{
 	// GetBlockCmd help.
 	"getblock--synopsis":   "Returns information about a block given its hash.",
 	"getblock-hash":        "The hash of the block",
-	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), as parsed data with parsed transaction data (2), or as parsed data with parsed transaction data that includes the output spent by each input and the fee of each transaction (3) ",
+	"getblock-verbosity":   "Specifies whether the block data should be returned as a hex-encoded string (0), as parsed data with a slice of TXIDs (1), as parsed data with parsed transaction data and the fee of each transaction (2), or as parsed data with parsed transaction data that also includes the output spent by each input (3); a higher verbosity is treated as 3",
 	"getblock--condition0": "verbosity=0",
 	"getblock--condition1": "verbosity=1 or verbosity=2",
-	"getblock--condition2": "verbosity=3",
+	"getblock--condition2": "verbosity>=3",
 	"getblock--result0":    "Hex-encoded bytes of the serialized block",
 	"getblock--result1":    "JSON object with information about the block",
 	"getblock--result2":    "JSON object with information about the block and each transaction, including the output spent by each input and the fee",
@@ -275,12 +275,12 @@ var helpDescsEnUS = map[string]string{
 	"getblockverboseresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
 	"getblockverboseresult-previousblockhash": "The hash of the previous block",
 	"getblockverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
-	"getblockverboseresult-strippedsize":      "The size of the block without witness data",
+	"getblockverboseresult-strippedsize":      "Always 0, as Bitcoin Cash blocks have no witness data",
 
 	// GetBlockVerboseTxResult help.
 	"getblockverbosetxresult-hash":              "The hash of the block (same as provided)",
 	"getblockverbosetxresult-confirmations":     "The number of confirmations",
-	"getblockverbosetxresult-strippedsize":      "The size of the block without witness data",
+	"getblockverbosetxresult-strippedsize":      "Always 0, as Bitcoin Cash blocks have no witness data",
 	"getblockverbosetxresult-size":              "The size of the block",
 	"getblockverbosetxresult-height":            "The height of the block in the block chain",
 	"getblockverbosetxresult-version":           "The block version",
@@ -414,7 +414,7 @@ var helpDescsEnUS = map[string]string{
 		"Returns null when no proof is found.",
 	"getdsproof-query":     "The proof id, a transaction id, or an outpoint object with the keys txid (string) and vout (numeric)",
 	"getdsproof-verbosity": "0 or 1 returns the serialized proof and the txid, 2 (or true) returns the id, txid and outpoint, 3 adds the two spenders",
-	"getdsproof-recursive": "When looking up by txid, also search the transaction's unconfirmed ancestors",
+	"getdsproof-recursive": "When looking up by txid, also search the transaction's unconfirmed ancestors, depth first; a search past 1000 of them fails",
 	"getdsproof--result0":  "The proof",
 
 	// GetDSProofListCmd help.
@@ -438,8 +438,8 @@ var helpDescsEnUS = map[string]string{
 	"getdsproofresult-dspid":       "The proof id (verbosity 2 and 3)",
 	"getdsproofresult-txid":        "The memory pool transaction spending the double spent output, or null for an orphan proof",
 	"getdsproofresult-outpoint":    "The double spent output (verbosity 2 and 3)",
-	"getdsproofresult-path":        "When looking up by txid, the transactions from the one looked up to the one with the proof",
-	"getdsproofresult-descendants": "The transaction with the proof and all its memory pool descendants (getdsproof at verbosity 1 and above only)",
+	"getdsproofresult-path":        "When looking up by txid with recursive set, the transactions from the one looked up to the one with the proof",
+	"getdsproofresult-descendants": "The transaction with the proof and its memory pool descendants, at most the 1000 nearest (getdsproof at verbosity 1 and above only)",
 	"getdsproofresult-spenders":    "The two spenders (verbosity 3)",
 
 	// DSProofOutPoint help.
@@ -536,10 +536,7 @@ var helpDescsEnUS = map[string]string{
 	"getnetworkhashps--result0":  "Estimated hashes per second",
 
 	// GetNetworkInfo help.
-	"getnetworkinfo--synopsis":       "Returns an object containing various state info regarding P2P networking.",
-	"getnetworkinfo--result0--desc":  "GetNetworkInfo object",
-	"getnetworkinfo--result0--key":   "Field name",
-	"getnetworkinfo--result0--value": "Object containing the network info",
+	"getnetworkinfo--synopsis": "Returns an object containing various state info regarding P2P networking.",
 
 	// GetNetworkInfoResult help.
 	"getnetworkinforesult-version":         "The server version",
@@ -555,6 +552,18 @@ var helpDescsEnUS = map[string]string{
 	"getnetworkinforesult-incrementalfee":  "Minimum fee increment for mempool limiting or BIP 125 replacement in BTC/kB",
 	"getnetworkinforesult-localaddresses":  "List of local addresses",
 	"getnetworkinforesult-warnings":        "Any network and blockchain warnings",
+
+	// NetworksResult help.
+	"networksresult-name":                        "The network (ipv4, ipv6 or onion)",
+	"networksresult-limited":                     "Always false, as bchd has no option like BCHN's -onlynet to limit the networks",
+	"networksresult-reachable":                   "Whether the network is reachable",
+	"networksresult-proxy":                       "The proxy used for this network, or empty if none",
+	"networksresult-proxy_randomize_credentials": "Whether randomized credentials are used",
+
+	// LocalAddressesResult help.
+	"localaddressesresult-address": "The network address",
+	"localaddressesresult-port":    "The network port",
+	"localaddressesresult-score":   "The relative score",
 
 	// GetNetTotalsCmd help.
 	"getnettotals--synopsis": "Returns a JSON object containing network traffic statistics.",
@@ -604,9 +613,9 @@ var helpDescsEnUS = map[string]string{
 
 	// GetRawMempoolCmd help.
 	"getrawmempool--synopsis":   "Returns information about all of the transactions currently in the memory pool.",
-	"getrawmempool-verbose":     "Returns JSON object when true or an array of transaction hashes when false",
+	"getrawmempool-verbose":     "Returns a JSON object with an entry for each transaction hash when true or an array of transaction hashes when false",
 	"getrawmempool--condition0": "verbose=false",
-	"getrawmempool--condition1": "verbose=true",
+	"getrawmempool--condition1": "verbose=true, the entry for each transaction hash",
 	"getrawmempool--result0":    "Array of transaction hashes",
 
 	// GetRawTransactionCmd help.
@@ -630,7 +639,7 @@ var helpDescsEnUS = map[string]string{
 	"gettxout--synopsis":      "Returns information about an unspent transaction output.",
 	"gettxout-txid":           "The hash of the transaction",
 	"gettxout-vout":           "The index of the output",
-	"gettxout-includemempool": "Include the mempool when true",
+	"gettxout-includemempool": "Include the mempool when true, so that the outputs of its transactions are found and the outputs they spend are not",
 
 	// GetTxOutProofCmd help.
 	"gettxoutproof--synopsis": "Returns hex encoded merkle proof for a given transaction set",
@@ -674,7 +683,8 @@ var helpDescsEnUS = map[string]string{
 
 	// SendRawTransactionCmd help.
 	"sendrawtransaction--synopsis": "Submits the serialized, hex-encoded transaction to the local peer and relays it to the network.\n" +
-		"A transaction already in the mempool is relayed again.",
+		"A transaction already in the mempool is relayed again.\n" +
+		"A rejected transaction fails with code -26 and, as in BCHN, the reason, the description and the reject code.",
 	"sendrawtransaction-hextx":         "Serialized, hex-encoded signed transaction",
 	"sendrawtransaction-allowhighfees": "Allow a fee above the --maxtxfee option",
 	"sendrawtransaction--result0":      "The hash of the transaction",
@@ -690,8 +700,8 @@ var helpDescsEnUS = map[string]string{
 	"testmempoolacceptresult-size":           "The serialized size of the transaction in bytes (only present when allowed)",
 	"testmempoolacceptresult-vsize":          "The size used for fee calculations, which is larger than the size for transactions with many signature checks (only present when allowed)",
 	"testmempoolacceptresult-fees":           "The fees of the transaction (only present when allowed)",
-	"testmempoolacceptresult-reject-reason":  "The reject code and reason (only present when not allowed)",
-	"testmempoolacceptresult-reject-details": "The full reject reason (only present when not allowed)",
+	"testmempoolacceptresult-reject-reason":  "The reject code and BCHN's short reason, such as 18: txn-mempool-conflict, or missing-inputs (only present when not allowed)",
+	"testmempoolacceptresult-reject-details": "The reason followed by the description (only present when not allowed, except for missing inputs)",
 
 	// TestMempoolAcceptFees help.
 	"testmempoolacceptfees-base":              "The fee of the transaction in BCH",
@@ -732,8 +742,8 @@ var helpDescsEnUS = map[string]string{
 	"submitblock-hexblock":    "Serialized, hex-encoded block",
 	"submitblock-options":     "This parameter is currently ignored",
 	"submitblock--condition0": "Block successfully submitted",
-	"submitblock--condition1": "Block rejected",
-	"submitblock--result1":    "The BIP22 reason the block was rejected",
+	"submitblock--condition1": "Block not accepted",
+	"submitblock--result1":    "The BIP22 reason the block was not accepted, such as duplicate, inconclusive for a valid block that is not on the main chain, or the reason it is invalid",
 
 	// ValidateAddressResult help.
 	"validateaddresschainresult-isvalid":      "Whether or not the address is valid",
@@ -784,7 +794,7 @@ var helpDescsEnUS = map[string]string{
 
 	// NotifyDSProofsCmd help.
 	"notifydsproofs--synopsis": "Send a dsproof notification when a double spend proof becomes associated with a memory pool transaction.\n" +
-		"The proofs already in the memory pool are sent right away, so a proof that arrives while subscribing can be sent twice.",
+		"The proofs already in the memory pool are sent when the client subscribes, not when it calls again while subscribed, so a proof that arrives while subscribing can be sent twice.",
 	"notifydsproofs-verbosity": "0 or 1 sends the serialized proof and the txid, 2 (the default) the id, txid and outpoint, 3 adds the two spenders, as getdsproof does",
 
 	// StopNotifyDSProofsCmd help.
@@ -893,7 +903,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getmininginfo":         {(*btcjson.GetMiningInfoResult)(nil)},
 	"getnettotals":          {(*btcjson.GetNetTotalsResult)(nil)},
 	"getnetworkhashps":      {(*float64)(nil)},
-	"getnetworkinfo":        {(*map[string]btcjson.GetNetworkInfoResult)(nil)},
+	"getnetworkinfo":        {(*btcjson.GetNetworkInfoResult)(nil)},
 	"getpeerinfo":           {(*[]btcjson.GetPeerInfoResult)(nil)},
 	"getrawmempool":         {(*[]string)(nil), (*btcjson.GetRawMempoolVerboseResult)(nil)},
 	"getrawtransaction":     {(*string)(nil), (*btcjson.TxRawResult)(nil)},

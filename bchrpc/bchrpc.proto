@@ -582,16 +582,19 @@ message GetDoubleSpendProofRequest {
     }
 
     // When looking up by transaction_hash, only return a proof for that transaction,
-    // without searching its unconfirmed ancestors. Default is false.
+    // without searching its unconfirmed ancestors. Default is false. The search is
+    // depth first, and one past 1000 ancestors fails with ResourceExhausted.
     bool exclude_ancestors = 4;
 }
 
 message GetDoubleSpendProofResponse {
     DoubleSpendProof proof = 1;
-    // When looking up by transaction_hash, the transactions from the one looked up
-    // to the one the proof is for, little-endian.
+    // When looking up by transaction_hash with the ancestors searched, the
+    // transactions from the one looked up to the one the proof is for,
+    // little-endian.
     repeated bytes path = 2;
-    // The transaction the proof is for and all its mempool descendants, little-endian.
+    // The transaction the proof is for and its mempool descendants, at most the 1000
+    // nearest, little-endian.
     // Empty for an orphan proof.
     repeated bytes descendants = 3;
 }

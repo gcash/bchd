@@ -2875,7 +2875,8 @@ type GetDoubleSpendProofRequest struct {
 	//	*GetDoubleSpendProofRequest_Outpoint
 	Query isGetDoubleSpendProofRequest_Query `protobuf_oneof:"query"`
 	// When looking up by transaction_hash, only return a proof for that transaction,
-	// without searching its unconfirmed ancestors. Default is false.
+	// without searching its unconfirmed ancestors. Default is false. The search is
+	// depth first, and one past 1000 ancestors fails with ResourceExhausted.
 	ExcludeAncestors bool `protobuf:"varint,4,opt,name=exclude_ancestors,json=excludeAncestors,proto3" json:"exclude_ancestors,omitempty"`
 }
 
@@ -2977,10 +2978,12 @@ type GetDoubleSpendProofResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	Proof *DoubleSpendProof `protobuf:"bytes,1,opt,name=proof,proto3" json:"proof,omitempty"`
-	// When looking up by transaction_hash, the transactions from the one looked up
-	// to the one the proof is for, little-endian.
+	// When looking up by transaction_hash with the ancestors searched, the
+	// transactions from the one looked up to the one the proof is for,
+	// little-endian.
 	Path [][]byte `protobuf:"bytes,2,rep,name=path,proto3" json:"path,omitempty"`
-	// The transaction the proof is for and all its mempool descendants, little-endian.
+	// The transaction the proof is for and its mempool descendants, at most the 1000
+	// nearest, little-endian.
 	// Empty for an orphan proof.
 	Descendants [][]byte `protobuf:"bytes,3,rep,name=descendants,proto3" json:"descendants,omitempty"`
 }

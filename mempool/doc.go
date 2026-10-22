@@ -67,12 +67,15 @@ Errors returned by this package are either the raw errors provided by underlying
 calls or of type mempool.RuleError.  Since there are two classes of rules
 (mempool acceptance rules and blockchain (consensus) acceptance rules), the
 mempool.RuleError type contains a single Err field which will, in turn, either
-be a mempool.TxRuleError or a blockchain.RuleError.  The first indicates a
-violation of mempool acceptance rules while the latter indicates a violation of
-consensus acceptance rules.  This allows the caller to easily differentiate
+be a mempool.TxRuleError or a blockchain.RuleError, or a mempool.HighFeeError
+for a fee above the caller's limit.  The first indicates a violation of mempool
+acceptance rules while the second indicates a violation of consensus
+acceptance rules.  This allows the caller to easily differentiate
 between unexpected errors, such as database errors, versus errors due to rule
 violations through type assertions.  In addition, callers can programmatically
 determine the specific rule violation by type asserting the Err field to one of
 the aforementioned types and examining their underlying ErrorCode field.
+RejectReason returns the short reason Bitcoin Cash Node gives for a rule
+violation, such as txn-mempool-conflict.
 */
 package mempool

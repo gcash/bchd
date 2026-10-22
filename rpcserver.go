@@ -3398,8 +3398,8 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 			}
 		}
 		// no block hash was passed so use the first txn to lookup the block
-		// it appears in.  all transaction must be in the same block so which
-		// transaction is used for the lookup does not matter.
+		// it appears in.  all transactions must be in the same block, so with
+		// the transaction index any of them would do.
 		if s.cfg.TxIndex != nil {
 			// lookup location of the transaction
 			blockRegion, err := s.cfg.TxIndex.TxBlockRegion(txnSet[0])
@@ -3408,7 +3408,9 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 			}
 		} else {
 			// Without the index, find the block from an unspent output
-			// of the transaction, as BCHN does.
+			// of the first transaction.  BCHN tries each transaction in
+			// turn, so it also finds the block when only a later one has
+			// an unspent output.
 			blkHash = blockOfUnspentOutput(s.cfg.Chain, txnSet[0])
 		}
 		if blkHash == nil {
