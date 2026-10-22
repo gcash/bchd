@@ -798,7 +798,7 @@ func (idx *AddrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 	// The offset and length of the transactions within the serialized
 	// block.
-	txLocs, err := block.TxLoc()
+	txLocs, err := blockTxLocs(block)
 	if err != nil {
 		return err
 	}

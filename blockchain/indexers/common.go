@@ -14,6 +14,7 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
+	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
 
@@ -121,4 +122,15 @@ func interruptRequested(interrupted <-chan struct{}) bool {
 	}
 
 	return false
+}
+
+// blockTxLocs returns the offset and length of each transaction within the
+// serialized block.  It returns what block.TxLoc does without decoding a copy
+// of the block.
+func blockTxLocs(block *bchutil.Block) ([]wire.TxLoc, error) {
+	serialized, err := block.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return wire.BlockTxLocs(serialized)
 }

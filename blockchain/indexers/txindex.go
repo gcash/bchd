@@ -239,7 +239,7 @@ func dbFetchTxIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*database.Bl
 func dbAddTxIndexEntries(dbTx database.Tx, block *bchutil.Block, blockID uint32) error {
 	// The offset and length of the transactions within the serialized
 	// block.
-	txLocs, err := block.TxLoc()
+	txLocs, err := blockTxLocs(block)
 	if err != nil {
 		return err
 	}

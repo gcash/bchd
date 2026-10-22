@@ -7,7 +7,9 @@ package wire
 import (
 	"bytes"
 	"io"
+	"math/rand"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -323,6 +325,18 @@ func TestBlockSerialize(t *testing.T) {
 				spew.Sdump(txLocs), spew.Sdump(test.txLocs))
 			continue
 		}
+
+		// Find the transaction locations without decoding the block.
+		txLocs, err = BlockTxLocs(test.buf)
+		if err != nil {
+			t.Errorf("BlockTxLocs #%d error %v", i, err)
+			continue
+		}
+		if !reflect.DeepEqual(txLocs, test.txLocs) {
+			t.Errorf("BlockTxLocs #%d\n got: %s want: %s", i,
+				spew.Sdump(txLocs), spew.Sdump(test.txLocs))
+			continue
+		}
 	}
 }
 
@@ -381,6 +395,11 @@ func TestBlockSerializeErrors(t *testing.T) {
 		if err != test.readErr {
 			t.Errorf("DeserializeTxLoc #%d wrong error got: %v, want: %v",
 				i, err, test.readErr)
+			continue
+		}
+
+		if _, err := BlockTxLocs(test.buf[0:test.max]); err == nil {
+			t.Errorf("BlockTxLocs #%d did not fail", i)
 			continue
 		}
 	}
@@ -449,6 +468,14 @@ func TestBlockOverflowErrors(t *testing.T) {
 		_, err = msg.DeserializeTxLoc(br)
 		if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
 			t.Errorf("DeserializeTxLoc #%d wrong error got: %v, "+
+				"want: %v", i, err, reflect.TypeOf(test.err))
+			continue
+		}
+
+		// Find the transaction locations from wire format.
+		_, err = BlockTxLocs(test.buf)
+		if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+			t.Errorf("BlockTxLocs #%d wrong error got: %v, "+
 				"want: %v", i, err, reflect.TypeOf(test.err))
 			continue
 		}
@@ -637,6 +664,10 @@ func TestBlockTxCountAlloc(t *testing.T) {
 			_, err := msg.DeserializeTxLoc(bytes.NewBuffer(buf))
 			return err
 		}},
+		{"BlockTxLocs", func(buf []byte) error {
+			_, err := BlockTxLocs(buf)
+			return err
+		}},
 	}
 
 	t.Logf("Running %d tests", len(tests)*len(decoders))
@@ -658,4 +689,195 @@ func TestBlockTxCountAlloc(t *testing.T) {
 			}
 		}
 	}
+}
+
+// randTxLocBlock returns a serialized block of random transactions whose
+// counts and scripts use every length encoding, with outputs that hold token
+// data, outputs that don't, and outputs whose scripts only start like token
+// data.
+func randTxLocBlock(r *rand.Rand) []byte {
+	randBytes := func(n int) []byte {
+		b := make([]byte, n)
+		r.Read(b)
+		return b
+	}
+	count := func() int {
+		if r.Intn(30) == 0 {
+			return 0xfd + r.Intn(3)
+		}
+		return r.Intn(4)
+	}
+	scriptLen := func() int {
+		switch r.Intn(200) {
+		case 0:
+			return 0x10000 + r.Intn(10)
+		case 1, 2, 3, 4:
+			return 0xfd + r.Intn(300)
+		}
+		return r.Intn(40)
+	}
+
+	block := MsgBlock{Header: blockOne.Header}
+	for range 1 + r.Intn(10) {
+		tx := NewMsgTx(r.Int31())
+		for range count() {
+			tx.AddTxIn(&TxIn{
+				PreviousOutPoint: OutPoint{Index: r.Uint32()},
+				SignatureScript:  randBytes(scriptLen()),
+				Sequence:         r.Uint32(),
+			})
+		}
+		for range count() {
+			out := &TxOut{Value: r.Int63(), PkScript: randBytes(scriptLen())}
+			switch r.Intn(4) {
+			case 0:
+				out.TokenData = TokenData{BitField: HAS_AMOUNT,
+					Amount: 1 + r.Uint64()>>1}
+				r.Read(out.TokenData.CategoryID[:])
+			case 1:
+				out.TokenData = TokenData{
+					BitField:   HAS_NFT | HAS_COMMITMENT_LENGTH | MINTING,
+					Commitment: randBytes(1 + r.Intn(40)),
+				}
+			case 2:
+				out.PkScript = append([]byte{PREFIX_BYTE}, out.PkScript...)
+			}
+			tx.AddTxOut(out)
+		}
+		tx.LockTime = r.Uint32()
+		_ = block.AddTransaction(tx)
+	}
+	var buf bytes.Buffer
+	if err := block.Serialize(&buf); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// deserializeTxLocs returns the transaction locations DeserializeTxLoc finds
+// in the passed serialized block.
+func deserializeTxLocs(buf []byte) ([]TxLoc, error) {
+	var msg MsgBlock
+	return msg.DeserializeTxLoc(bytes.NewBuffer(buf))
+}
+
+// TestBlockTxLocsMatchesDeserialize ensures BlockTxLocs finds the same
+// transaction locations as DeserializeTxLoc in random blocks, and in damaged
+// copies of them fails where DeserializeTxLoc fails.
+func TestBlockTxLocsMatchesDeserialize(t *testing.T) {
+	t.Parallel()
+
+	r := rand.New(rand.NewSource(1))
+	for i := range 300 {
+		buf := randTxLocBlock(r)
+		want, err := deserializeTxLocs(buf)
+		if err != nil {
+			t.Fatalf("block %d: DeserializeTxLoc: %v", i, err)
+		}
+		got, err := BlockTxLocs(buf)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("block %d: BlockTxLocs = %v, %v, want %v", i, got,
+				err, want)
+		}
+
+		for j := range 20 {
+			damaged := slices.Clone(buf)
+			k := r.Intn(len(damaged))
+			switch r.Intn(3) {
+			case 0:
+				damaged = damaged[:k]
+			case 1:
+				damaged[k] = byte(r.Intn(256))
+			case 2:
+				damaged = slices.Insert(damaged, k, byte(r.Intn(256)))
+			}
+			want, wantErr := deserializeTxLocs(damaged)
+			got, err := BlockTxLocs(damaged)
+			if reflect.TypeOf(err) != reflect.TypeOf(wantErr) ||
+				!reflect.DeepEqual(got, want) {
+
+				t.Fatalf("block %d damage %d: BlockTxLocs = %v, %v, "+
+					"want %v, %v", i, j, got, err, want, wantErr)
+			}
+		}
+	}
+}
+
+// TestBlockTxLocsLimits ensures BlockTxLocs fails, as DeserializeTxLoc
+// does, on a transaction whose input or output count or script length is over
+// the limit for it, and not on one at the limit.
+func TestBlockTxLocsLimits(t *testing.T) {
+	// block returns a serialized block of one transaction that starts with
+	// the passed fields, and is cut off after them.
+	block := func(fields ...any) []byte {
+		var buf bytes.Buffer
+		_ = writeBlockHeader(&buf, 0, &blockOne.Header)
+		_ = WriteVarInt(&buf, 0, 1)
+		buf.Write([]byte{1, 0, 0, 0})
+		for _, f := range fields {
+			switch f := f.(type) {
+			case uint32:
+				_ = WriteVarInt(&buf, 0, uint64(f))
+			case []byte:
+				buf.Write(f)
+			}
+		}
+		return buf.Bytes()
+	}
+	outpoint := make([]byte, chainhash.HashSize+4)
+	value := make([]byte, 8)
+	tests := []struct {
+		name string
+		buf  []byte
+		err  error
+	}{
+		{"inputs at max", block(maxTxInPerMessage()), io.EOF},
+		{"inputs over max", block(maxTxInPerMessage() + 1), &MessageError{}},
+		{"signature script at max",
+			block(uint32(1), outpoint, maxTxInPerMessage()), io.EOF},
+		{"signature script over max",
+			block(uint32(1), outpoint, maxTxInPerMessage()+1),
+			&MessageError{}},
+		{"outputs at max", block(uint32(0), maxTxOutPerMessage()), io.EOF},
+		{"outputs over max", block(uint32(0), maxTxOutPerMessage()+1),
+			&MessageError{}},
+		{"public key script at max",
+			block(uint32(0), uint32(1), value, maxMessagePayload()), io.EOF},
+		{"public key script over max",
+			block(uint32(0), uint32(1), value, maxMessagePayload()+1),
+			&MessageError{}},
+	}
+	for _, test := range tests {
+		if _, err := deserializeTxLocs(test.buf); reflect.TypeOf(err) !=
+			reflect.TypeOf(test.err) {
+
+			t.Errorf("%s: DeserializeTxLoc error %v, want %T", test.name,
+				err, test.err)
+		}
+		if _, err := BlockTxLocs(test.buf); reflect.TypeOf(err) !=
+			reflect.TypeOf(test.err) {
+
+			t.Errorf("%s: BlockTxLocs error %v, want %T", test.name, err,
+				test.err)
+		}
+	}
+}
+
+// FuzzBlockTxLocs ensures BlockTxLocs finds the same transaction locations
+// as DeserializeTxLoc, and fails where it fails.
+func FuzzBlockTxLocs(f *testing.F) {
+	f.Add(blockOneBytes)
+	r := rand.New(rand.NewSource(2))
+	for range 4 {
+		f.Add(randTxLocBlock(r))
+	}
+	f.Fuzz(func(t *testing.T, buf []byte) {
+		want, wantErr := deserializeTxLocs(buf)
+		got, err := BlockTxLocs(buf)
+		if reflect.TypeOf(err) != reflect.TypeOf(wantErr) ||
+			!reflect.DeepEqual(got, want) {
+			t.Fatalf("BlockTxLocs = %v, %v, want %v, %v", got, err, want,
+				wantErr)
+		}
+	})
 }

@@ -169,6 +169,122 @@ func (msg *MsgBlock) DeserializeTxLoc(r *bytes.Buffer) ([]TxLoc, error) {
 	return txLocs, nil
 }
 
+// BlockTxLocs returns the start and length of each transaction within the
+// passed serialized block.  It returns the same locations DeserializeTxLoc
+// does, but it reads only the counts and lengths that frame the transactions
+// and skips everything else, so it doesn't decode a copy of the block.
+func BlockTxLocs(serialized []byte) ([]TxLoc, error) {
+	r := bytes.NewReader(serialized)
+
+	// skip moves past the next n bytes, or fails if there are fewer left.
+	skip := func(n uint64) error {
+		if n > uint64(r.Len()) {
+			return io.ErrUnexpectedEOF
+		}
+		_, err := r.Seek(int64(n), io.SeekCurrent)
+		return err
+	}
+
+	// skipScript moves past a script and its length, failing as readScript
+	// does when the script is longer than maxAllowed.
+	skipScript := func(maxAllowed uint32, fieldName string) error {
+		count, err := ReadVarInt(r, 0)
+		if err != nil {
+			return err
+		}
+		if count > uint64(maxAllowed) {
+			str := fmt.Sprintf("%s is larger than the max allowed size "+
+				"[count %d, max %d]", fieldName, count, maxAllowed)
+			return messageError("BlockTxLocs", str)
+		}
+		return skip(count)
+	}
+
+	if err := skip(MaxBlockHeaderPayload); err != nil {
+		return nil, err
+	}
+	txCount, err := ReadVarInt(r, 0)
+	if err != nil {
+		return nil, err
+	}
+	if txCount > uint64(maxTxPerBlock()) {
+		str := fmt.Sprintf("too many transactions to fit into a block "+
+			"[count %d, max %d]", txCount, maxTxPerBlock())
+		return nil, messageError("BlockTxLocs", str)
+	}
+
+	txLocs := make([]TxLoc, 0, min(txCount, uint64(defaultTransactionAlloc)))
+	for range txCount {
+		txStart := len(serialized) - r.Len()
+
+		// The version.
+		if err := skip(4); err != nil {
+			return nil, err
+		}
+
+		// The inputs, each an outpoint, a signature script and a
+		// sequence number.
+		count, err := ReadVarInt(r, 0)
+		if err != nil {
+			return nil, err
+		}
+		if count > uint64(maxTxInPerMessage()) {
+			str := fmt.Sprintf("too many input transactions to fit into "+
+				"max message size [count %d, max %d]", count,
+				maxTxInPerMessage())
+			return nil, messageError("BlockTxLocs", str)
+		}
+		for range count {
+			if err := skip(chainhash.HashSize + 4); err != nil {
+				return nil, err
+			}
+			err := skipScript(maxTxInPerMessage(),
+				"transaction input signature script")
+			if err != nil {
+				return nil, err
+			}
+			if err := skip(4); err != nil {
+				return nil, err
+			}
+		}
+
+		// The outputs, each a value and a public key script, which
+		// holds any token data.
+		count, err = ReadVarInt(r, 0)
+		if err != nil {
+			return nil, err
+		}
+		if count > uint64(maxTxOutPerMessage()) {
+			str := fmt.Sprintf("too many output transactions to fit into "+
+				"max message size [count %d, max %d]", count,
+				maxTxOutPerMessage())
+			return nil, messageError("BlockTxLocs", str)
+		}
+		for range count {
+			if err := skip(8); err != nil {
+				return nil, err
+			}
+			err := skipScript(maxMessagePayload(), "transaction output "+
+				"public key script and possible token data")
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// The lock time.
+		if err := skip(4); err != nil {
+			return nil, err
+		}
+
+		txLocs = append(txLocs, TxLoc{
+			TxStart: txStart,
+			TxLen:   len(serialized) - r.Len() - txStart,
+		})
+	}
+
+	return txLocs, nil
+}
+
 // BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
 // See Serialize for encoding blocks to be stored to disk, such as in a
