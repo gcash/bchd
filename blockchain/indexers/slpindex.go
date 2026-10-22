@@ -21,6 +21,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp"
 	"github.com/gcash/goslp/v1parser"
@@ -338,9 +339,19 @@ type SlpTxEntry struct {
 	SlpOpReturn    []byte
 }
 
+// errSlpEntryNotFound is the error for a transaction the slp index has no
+// entry for.  Connecting a block looks up the inputs of every transaction in
+// it, and most are not slp, so the message is only formatted when it is used.
+type errSlpEntryNotFound chainhash.Hash
+
+// Error implements the error interface.
+func (e errSlpEntryNotFound) Error() string {
+	return fmt.Sprintf("slp entry does not exist %v", chainhash.Hash(e))
+}
+
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
-// nil will be returned for the both the entry and the error.
+// the error is an errSlpEntryNotFound.
 func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry, error) {
 	// Load the record from the database and return now if it doesn't exist.
 	slpIndex := dbTx.Metadata().Bucket(slpIndexKey)
@@ -349,7 +360,7 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry
 	}
 	serializedData := slpIndex.Get(txHash[:])
 	if len(serializedData) == 0 {
-		return nil, fmt.Errorf("slp entry does not exist %v", txHash)
+		return nil, errSlpEntryNotFound(*txHash)
 	}
 
 	// Ensure the serialized data has enough bytes to properly deserialize.
@@ -834,7 +845,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 		return false, nil, nil
 	}
 	txSlpMsg, err := v1parser.ParseSLP(tx.TxOut[0].PkScript)
-	if err != nil {
+	if err != nil && log.Level() <= bchlog.LevelDebug {
 		log.Debugf("slp parsing failed for %v: %v", tx.TxHash(), err)
 	}
 	if txSlpMsg == nil {
@@ -1000,7 +1011,11 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 func (idx *SlpIndex) GetSlpIndexEntry(dbTx database.Tx, hash *chainhash.Hash) (*SlpTxEntry, error) {
 	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok {
 		log.Debugf("using slp txn entry cache for txid %v", hash)
-		return &entry, nil
+
+		// Only a found entry is copied to the heap, so a miss does not
+		// allocate one.
+		found := entry
+		return &found, nil
 	}
 
 	// fallback to fetch entry from db

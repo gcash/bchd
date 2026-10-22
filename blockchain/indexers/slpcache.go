@@ -119,8 +119,7 @@ func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 	defer s.Unlock()
 
 	for _, tx := range txs {
-		hash := tx.MsgTx().TxHash()
-		delete(s.mempoolSlpTxEntries, hash)
+		delete(s.mempoolSlpTxEntries, *tx.Hash())
 	}
 }
 
