@@ -13,4 +13,16 @@ means that the `SubscribeTransactionStream` RPC cannot be used by the browser. I
 RPC with the same functionality, but only using server side streaming. When using this endpoint you'll need
 to close and re-open the stream every time you want to update your `TransactionFilter`.
 
-A gRPC-Web module can be [found on npm](https://www.npmjs.com/package/grpc-web). It supports both Javascript and TypeScript. 
+A gRPC-Web module can be [found on npm](https://www.npmjs.com/package/grpc-web). It supports both Javascript and TypeScript.
+
+## Supported Formats
+
+The server accepts `application/grpc-web` (binary) and `application/grpc-web-text` (base64) requests, for unary and
+server-streaming calls, over HTTP/1.1 and HTTP/2. The websocket transport is not supported.
+
+## CORS
+
+Browsers may call the API from any origin. Responses carry `Access-Control-Allow-Origin: *` and no
+`Access-Control-Allow-Credentials`, so clients must not send credentials (`withCredentials: true`). The server uses
+no cookies; when it requires an auth token, send it in the `AuthenticationToken` header. CORS preflights are answered
+for the API's methods only.

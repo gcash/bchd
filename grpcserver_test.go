@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -35,8 +36,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// readyGrpcMethod is a method of a service that is always ready.
-const readyGrpcMethod = "/grpc.reflection.v1alpha.ServerReflection/X"
+// readyGrpcService is a service the readiness check always accepts, and
+// readyGrpcMethod is a method of it.
+const (
+	readyGrpcService = "grpc.reflection.v1alpha.ServerReflection"
+	readyGrpcMethod  = "/" + readyGrpcService + "/X"
+)
 
 // setGrpcTestConfig sets the auth token and whether metrics are enabled for
 // the duration of the test.
@@ -470,11 +475,18 @@ func dialRawH2(t *testing.T, addr string, settings ...http2.Setting) *rawH2Clien
 // call starts a gRPC call of method on the stream with the request.
 func (c *rawH2Client) call(stream uint32, method string, req proto.Message) {
 	c.t.Helper()
+	c.callAs(stream, method, "application/grpc", req)
+}
+
+// callAs starts a call of method on the stream with the request, sent with
+// the content type, which may be a gRPC-Web one.
+func (c *rawH2Client) callAs(stream uint32, method, contentType string, req proto.Message) {
+	c.t.Helper()
 	var block bytes.Buffer
 	enc := hpack.NewEncoder(&block)
 	for _, f := range [][2]string{{":method", "POST"}, {":scheme", "https"},
 		{":authority", "localhost"}, {":path", method},
-		{"content-type", "application/grpc"}, {"te", "trailers"}} {
+		{"content-type", contentType}, {"te", "trailers"}} {
 
 		_ = enc.WriteField(hpack.HeaderField{Name: f[0], Value: f[1]})
 	}
@@ -490,6 +502,9 @@ func (c *rawH2Client) call(stream uint32, method string, req proto.Message) {
 	body := make([]byte, 5+len(msg))
 	binary.BigEndian.PutUint32(body[1:5], uint32(len(msg)))
 	copy(body[5:], msg)
+	if strings.HasPrefix(contentType, "application/grpc-web-text") {
+		body = base64.StdEncoding.AppendEncode(nil, body)
+	}
 	if err := c.fr.WriteData(stream, true, body); err != nil {
 		c.t.Fatal(err)
 	}

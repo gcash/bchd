@@ -15,7 +15,6 @@ import (
 	"github.com/gcash/bchd/bchrpc"
 	"github.com/gorilla/mux"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -176,24 +175,17 @@ func (l *grpcCallLimiter) intercept(ctx context.Context, req interface{}, _ *grp
 	return handler(ctx, req)
 }
 
-// grpcHTTPHandler returns the handler of the gRPC listener, which passes
-// gRPC-Web requests and their CORS preflights to the gRPC-Web wrapper of
-// server and the others to server, and writes the replies of both with write
-// deadlines.
+// grpcHTTPHandler returns the handler of the gRPC listener, which serves
+// gRPC-Web requests and their CORS preflights with the gRPC-Web handler of
+// server and passes the others to server, and writes the replies of both with
+// write deadlines.
 func grpcHTTPHandler(server *grpc.Server) http.Handler {
-	allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
-		return true
-	})
-	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
+	webHandler := newGrpcWebHandler(server)
 
 	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		resp = &grpcDeadlineWriter{ResponseWriter: resp,
 			rc: http.NewResponseController(resp)}
-		if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
-			wrappedGrpc.ServeHTTP(resp, req)
-		} else {
-			server.ServeHTTP(resp, req)
-		}
+		webHandler.ServeHTTP(resp, req)
 	})
 }
 
