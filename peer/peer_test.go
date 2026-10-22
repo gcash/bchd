@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 )

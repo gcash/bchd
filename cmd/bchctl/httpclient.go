@@ -12,17 +12,14 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/internal/socks"
 )
 
 // newHTTPClient returns a new HTTP client that is configured according to the
 // proxy and TLS settings in the associated connection configuration.
 func newHTTPClient(cfg *config) (*http.Client, error) {
 	// Configure proxy if needed.
-	//
-	// socks.Proxy has no context-aware dial, so the context is ignored, which
-	// matches how http.Transport invoked the old Dial field internally.
 	var dialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	if cfg.Proxy != "" {
 		proxy := &socks.Proxy{
@@ -30,13 +27,7 @@ func newHTTPClient(cfg *config) (*http.Client, error) {
 			Username: cfg.ProxyUser,
 			Password: cfg.ProxyPass,
 		}
-		dialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
-			c, err := proxy.Dial(network, addr)
-			if err != nil {
-				return nil, err
-			}
-			return c, nil
-		}
+		dialContext = proxy.DialContext
 	}
 
 	// Configure TLS if needed.

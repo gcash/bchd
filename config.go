@@ -25,13 +25,13 @@ import (
 
 	"github.com/gcash/bchd/mining"
 
-	"github.com/btcsuite/go-socks/socks"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/connmgr"
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/version"
