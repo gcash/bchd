@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,12 +22,24 @@ import (
 	"github.com/gcash/bchutil"
 )
 
+// viewCountingDB counts the read transactions run on it.
+type viewCountingDB struct {
+	database.DB
+	views atomic.Int64
+}
+
+func (db *viewCountingDB) View(fn func(database.Tx) error) error {
+	db.views.Add(1)
+	return db.DB.View(fn)
+}
+
 // requestTestHarness is a sync manager whose regression test chain is
 // current, so it requests what any peer announces, with peers whose getdata
-// messages are recorded.
+// messages are recorded.  The reads of the chain's database are counted.
 type requestTestHarness struct {
 	t      *testing.T
 	sm     *SyncManager
+	db     *viewCountingDB
 	params *chaincfg.Params
 	tip    *wire.MsgBlock
 	clock  time.Time
@@ -40,11 +53,12 @@ func newRequestTestHarness(t *testing.T) *requestTestHarness {
 	t.Helper()
 
 	params := chaincfg.RegressionNetParams
-	db, err := database.Create("ffldb", t.TempDir(), params.Net)
+	created, err := database.Create("ffldb", t.TempDir(), params.Net)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { created.Close() })
+	db := &viewCountingDB{DB: created}
 	chain, err := blockchain.New(&blockchain.Config{
 		DB:                 db,
 		ChainParams:        &params,
@@ -84,6 +98,7 @@ func newRequestTestHarness(t *testing.T) *requestTestHarness {
 	h := &requestTestHarness{
 		t:      t,
 		sm:     sm,
+		db:     db,
 		params: &params,
 		tip:    tip,
 		clock:  time.Now(),
@@ -329,6 +344,78 @@ func TestPeerTxAnnouncementsCapped(t *testing.T) {
 	}
 	if _, ok := h.sm.peerStates[a].requestedTxns[hashes[limit]]; ok {
 		t.Fatal("transaction over the cap was requested")
+	}
+}
+
+// TestTxAnnouncementsLeaveUtxoCache ensures announcements of unknown
+// transactions do not fill the UTXO cache with misses.
+func TestTxAnnouncementsLeaveUtxoCache(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	hashes := make([]chainhash.Hash, 100)
+	for i := range hashes {
+		hashes[i] = chainhash.Hash{byte(i), 2}
+	}
+
+	before := h.sm.chain.CachedStateSize()
+	h.inv(a, wire.InvTypeTx, hashes...)
+	if after := h.sm.chain.CachedStateSize(); after != before {
+		t.Fatalf("UTXO cache grew from %d to %d bytes", before, after)
+	}
+}
+
+// TestTxAnnouncementsReadUtxoSetForRequests ensures the UTXO set is read for
+// an announced transaction only when it is about to be requested: not when it
+// is requested from another peer already, was rejected, or is announced by a
+// peer that has as many transactions tracked as it may.
+func TestTxAnnouncementsReadUtxoSetForRequests(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a, b, c := h.peer(1), h.peer(2), h.peer(3)
+	requested, rejected, overCap := chainhash.Hash{0xaa}, chainhash.Hash{0xbb},
+		chainhash.Hash{0xcc}
+	h.sm.rejectedTxns[rejected] = struct{}{}
+	for i := range maxPeerTxAnnouncements {
+		hash := chainhash.Hash{byte(i), byte(i >> 8), byte(i >> 16), 3}
+		h.sm.peerStates[c].requestedTxns[hash] = struct{}{}
+	}
+
+	steps := []struct {
+		peer  *peerpkg.Peer
+		hash  chainhash.Hash
+		reads int64
+	}{
+		{a, requested, 2}, // the first two outputs
+		{b, requested, 0},
+		{a, rejected, 0},
+		{c, overCap, 0},
+	}
+	for i, step := range steps {
+		before := h.db.views.Load()
+		h.inv(step.peer, wire.InvTypeTx, step.hash)
+		if n := h.db.views.Load() - before; n != step.reads {
+			t.Fatalf("step %d: %d reads of the UTXO set, want %d", i, n,
+				step.reads)
+		}
+	}
+	h.requestedTxFrom(a, requested)
+}
+
+// TestConfirmedTxNotRequested ensures an announced transaction whose first
+// output is in the UTXO set is not requested, whether or not the output is in
+// the UTXO cache.
+func TestConfirmedTxNotRequested(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	coinbase := h.tip.Transactions[0].TxHash()
+
+	h.inv(a, wire.InvTypeTx, coinbase)
+	err := h.sm.chain.FlushCachedState(blockchain.FlushRequired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.inv(a, wire.InvTypeTx, coinbase)
+	if _, ok := h.sm.requestedTxns[coinbase]; ok {
+		t.Fatal("confirmed transaction was requested")
 	}
 }
 

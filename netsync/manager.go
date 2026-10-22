@@ -1364,32 +1364,10 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 
 	case wire.InvTypeTx:
 		// Ask the transaction memory pool if the transaction is known
-		// to it in any form (main pool or orphan).
-		if sm.txMemPool.HaveTransaction(&invVect.Hash) {
-			return true, nil
-		}
-
-		// Check if the transaction exists from the point of view of the
-		// end of the main chain.  Note that this is only a best effort
-		// since it is expensive to check existence of every output and
-		// the only purpose of this check is to avoid downloading
-		// already known transactions.  Only the first two outputs are
-		// checked because the vast majority of transactions consist of
-		// two outputs where one is some form of "pay-to-somebody-else"
-		// and the other is a change output.
-		prevOut := wire.OutPoint{Hash: invVect.Hash}
-		for i := range uint32(2) {
-			prevOut.Index = i
-			entry, err := sm.chain.FetchUtxoEntry(prevOut)
-			if err != nil {
-				return false, err
-			}
-			if entry != nil && !entry.IsSpent() {
-				return true, nil
-			}
-		}
-
-		return false, nil
+		// to it in any form (main pool or orphan).  Whether the main
+		// chain has it is checked only before it is requested, by
+		// txConfirmed.
+		return sm.txMemPool.HaveTransaction(&invVect.Hash), nil
 
 	case wire.InvTypeDSProof:
 		// Ask the transaction memory pool if the proof is known or was
@@ -1400,6 +1378,29 @@ func (sm *SyncManager) haveInventory(invVect *wire.InvVect) (bool, error) {
 	// The requested inventory is is an unsupported type, so just claim
 	// it is known to avoid requesting it.
 	return true, nil
+}
+
+// txConfirmed returns whether the transaction exists from the point of view of
+// the end of the main chain.  Note that this is only a best effort since it is
+// expensive to check existence of every output and the only purpose of this
+// check is to avoid downloading already known transactions.  Only the first
+// two outputs are checked because the vast majority of transactions consist of
+// two outputs where one is some form of "pay-to-somebody-else" and the other
+// is a change output.  As this is asked for transactions peers announce, the
+// outputs are read without adding them, or the misses, to the UTXO cache.
+func (sm *SyncManager) txConfirmed(hash *chainhash.Hash) (bool, error) {
+	prevOut := wire.OutPoint{Hash: *hash}
+	for i := range uint32(2) {
+		prevOut.Index = i
+		entry, err := sm.chain.FetchUtxoEntryUncached(prevOut)
+		if err != nil {
+			return false, err
+		}
+		if entry != nil && !entry.IsSpent() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // handleInvMsg handles inv messages from all peers.

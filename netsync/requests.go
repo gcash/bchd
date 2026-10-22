@@ -98,10 +98,12 @@ func (sm *SyncManager) now() time.Time {
 	return time.Now()
 }
 
-// announceTx handles the peer's announcement of a transaction that is not
-// known.  It requests the transaction from the peer when no other peer is
-// asked for it, and otherwise keeps the peer to request it from if that
-// request fails.  It returns whether it requested the transaction.
+// announceTx handles the peer's announcement of a transaction that is not in
+// the memory pool.  It requests the transaction from the peer when no other
+// peer is asked for it and the main chain does not have it, and otherwise
+// keeps the peer to request it from if that request fails.  The main chain is
+// asked last, as that reads the database.  It returns whether it requested the
+// transaction.
 func (sm *SyncManager) announceTx(peer *peerpkg.Peer, state *peerSyncState,
 	hash *chainhash.Hash, q getDataQueue) bool {
 
@@ -112,6 +114,16 @@ func (sm *SyncManager) announceTx(peer *peerpkg.Peer, state *peerSyncState,
 	}
 	req, ok := sm.requestedTxns[*hash]
 	if !ok {
+		confirmed, err := sm.txConfirmed(hash)
+		if err != nil {
+			log.Warnf("Unexpected failure when checking for existing "+
+				"transaction %v during inv message processing: %v",
+				hash, err)
+			return false
+		}
+		if confirmed {
+			return false
+		}
 		sm.requestTx(peer, state, hash, &txRequest{}, q)
 		return true
 	}
