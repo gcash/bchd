@@ -1,9 +1,15 @@
 package bchrpc
 
 import (
+	"context"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/bchrpc/pb"
+	"github.com/gcash/bchd/chaincfg"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -111,5 +117,71 @@ func TestQueueHandlerUnbounded(t *testing.T) {
 	close(in)
 	if !<-done {
 		t.Error("queue reported an overflow")
+	}
+}
+
+// txStream is a SubscribeTransactionStream stream whose client has sent reqs
+// and then sends nothing until the stream ends.
+type txStream struct {
+	grpc.ServerStream
+	ctx  context.Context
+	reqs []*pb.SubscribeTransactionsRequest
+}
+
+func (s *txStream) Context() context.Context { return s.ctx }
+
+func (s *txStream) Send(*pb.TransactionNotification) error { return nil }
+
+func (s *txStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
+	if len(s.reqs) > 0 {
+		req := s.reqs[0]
+		s.reqs = s.reqs[1:]
+		return req, nil
+	}
+	<-s.ctx.Done()
+	return nil, s.ctx.Err()
+}
+
+// streamReaders returns the number of goroutines reading the requests of a
+// SubscribeTransactionStream call.
+func streamReaders() int {
+	buf := make([]byte, 1<<16)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	return strings.Count(string(buf),
+		"(*GrpcServer).SubscribeTransactionStream.func1(")
+}
+
+// TestSubscribeTransactionStreamReaderStops ensures the goroutine reading the
+// requests of a SubscribeTransactionStream call stops once the call ends,
+// here on a bad filter while it holds the client's next request, instead of
+// waiting forever to hand that request over.
+func TestSubscribeTransactionStreamReaderStops(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &txStream{ctx: ctx, reqs: []*pb.SubscribeTransactionsRequest{
+		{Subscribe: &pb.TransactionFilter{Addresses: []string{"bad"}}},
+		{IncludeMempool: true},
+	}}
+	if err := s.SubscribeTransactionStream(stream); err == nil {
+		t.Fatal("a filter with a bad address was accepted")
+	}
+
+	// gRPC ends the stream's context as the handler returns.
+	cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for streamReaders() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the request reader still runs after the call ended")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -2484,7 +2484,10 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
-	// Put the incoming messages on a channel.
+	// Put the incoming messages on a channel.  The handler can return with a
+	// request still to be handed over, as on a bad filter, so the reader
+	// stops once the stream's context ends, which it does as the handler
+	// returns.
 	requests := make(chan *pb.SubscribeTransactionsRequest)
 	go func() {
 		for {
@@ -2496,7 +2499,11 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				close(requests)
 				return
 			}
-			requests <- req
+			select {
+			case requests <- req:
+			case <-stream.Context().Done():
+				return
+			}
 		}
 	}()
 
