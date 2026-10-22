@@ -2,7 +2,10 @@ package ffldb
 
 import (
 	"errors"
+	"maps"
+	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -145,6 +148,168 @@ func TestPruneDeleteFailureReleasesLock(t *testing.T) {
 	if err := prune(3); err != nil {
 		t.Fatalf("DeleteBlocks after a failed removal: %v", err)
 	}
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// reopenPruneTestDB closes the database at dir and opens it again.
+func reopenPruneTestDB(t *testing.T, pdb *db, dir string) *db {
+	t.Helper()
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	idb, err := database.Open(dbType, dir, blockDataNet)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return idb.(*db)
+}
+
+// pruneTestFiles fails the test unless exactly the block files in want exist
+// among files 0 to n-1.
+func pruneTestFiles(t *testing.T, pdb *db, n uint32, want ...uint32) {
+	t.Helper()
+	for i := range n {
+		_, err := os.Stat(blockFilePath(pdb.store.basePath, i))
+		if exists := err == nil; exists != slices.Contains(want, i) {
+			t.Errorf("block file %d exists %v, want %v", i, exists, !exists)
+		}
+	}
+}
+
+// pruneTestHeights fails the test unless the last block heights the store
+// knows are want.
+func pruneTestHeights(t *testing.T, pdb *db, want map[uint32]uint32) {
+	t.Helper()
+	pdb.store.fbhMutex.RLock()
+	defer pdb.store.fbhMutex.RUnlock()
+	if !maps.Equal(pdb.store.fileBlockHeights, want) {
+		t.Errorf("last block heights %v, want %v",
+			pdb.store.fileBlockHeights, want)
+	}
+}
+
+// prunePruneTestDB deletes the block files whose blocks are all below height.
+func prunePruneTestDB(t *testing.T, pdb *db, height uint32) {
+	t.Helper()
+	err := pdb.Update(func(tx database.Tx) error {
+		return tx.DeleteBlocks(height)
+	})
+	if err != nil {
+		t.Fatalf("DeleteBlocks(%d): %v", height, err)
+	}
+}
+
+// TestPruneAfterReopen ensures block files filled before the database was
+// opened are pruned too, since their last block heights are read back when
+// it opens.  Each test block takes a file, whose last height is written when
+// the next block moves writes to the next file.
+func TestPruneAfterReopen(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	pdb := createPruneTestDB(t, dir)
+	for i := 1; i <= 3; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(uint32(i), int32(i)))
+	}
+
+	pdb = reopenPruneTestDB(t, pdb, dir)
+	pruneTestHeights(t, pdb, map[uint32]uint32{0: 1, 1: 2})
+	prunePruneTestDB(t, pdb, 3)
+	pruneTestFiles(t, pdb, 3, 2)
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestPruneAfterReopenPruned ensures the last block heights are read back
+// from the first block file on disk when the files before it were pruned.
+func TestPruneAfterReopenPruned(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	pdb := createPruneTestDB(t, dir)
+	for i := 1; i <= 5; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(uint32(i), int32(i)))
+	}
+	prunePruneTestDB(t, pdb, 3)
+	pruneTestFiles(t, pdb, 5, 2, 3, 4)
+
+	pdb = reopenPruneTestDB(t, pdb, dir)
+	pruneTestHeights(t, pdb, map[uint32]uint32{2: 3, 3: 4})
+	prunePruneTestDB(t, pdb, 5)
+	pruneTestFiles(t, pdb, 5, 4)
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestPruneAfterReopenShortFile ensures a full block file too short to hold
+// its last block height does not fail the open and is kept.
+func TestPruneAfterReopenShortFile(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	pdb := createPruneTestDB(t, dir)
+	for i := 1; i <= 3; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(uint32(i), int32(i)))
+	}
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := os.Truncate(blockFilePath(pdb.store.basePath, 0), 3); err != nil {
+		t.Fatal(err)
+	}
+
+	idb, err := database.Open(dbType, dir, blockDataNet)
+	if err != nil {
+		t.Fatalf("Open with a short block file: %v", err)
+	}
+	pdb = idb.(*db)
+	pruneTestHeights(t, pdb, map[uint32]uint32{1: 2})
+	prunePruneTestDB(t, pdb, 3)
+	pruneTestFiles(t, pdb, 3, 0, 2)
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestPruneAfterReopenRollback ensures the open forgets the last block heights
+// of the block files it removes because the metadata was not flushed after
+// their blocks were written, as after a crash.
+func TestPruneAfterReopenRollback(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	pdb := createPruneTestDB(t, dir)
+	for i := 1; i <= 3; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(uint32(i), int32(i)))
+	}
+	if err := pdb.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// The data a crash leaves: the last height of the current file and
+	// two more files, which the metadata does not know about.
+	path := func(n uint32) string { return blockFilePath(pdb.store.basePath, n) }
+	file, err := os.OpenFile(path(2), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte{3, 0, 0, 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for n := uint32(3); n <= 4; n++ {
+		if err := os.WriteFile(path(n), make([]byte, 8), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	idb, err := database.Open(dbType, dir, blockDataNet)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	pdb = idb.(*db)
+	pruneTestFiles(t, pdb, 5, 0, 1, 2)
+	pruneTestHeights(t, pdb, map[uint32]uint32{0: 1, 1: 2})
+	prunePruneTestDB(t, pdb, 3)
+	pruneTestFiles(t, pdb, 5, 2)
 	if err := pdb.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

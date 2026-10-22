@@ -796,6 +796,12 @@ func (s *blockStore) handleRollback(oldBlockFileNum, oldBlockOffset uint32) {
 				"number %d: %v", wc.curFileNum, err)
 			return
 		}
+
+		// Forget the last block height of the deleted file, or a
+		// prune would fail to delete it again.
+		s.fbhMutex.Lock()
+		delete(s.fileBlockHeights, wc.curFileNum)
+		s.fbhMutex.Unlock()
 	}
 
 	// Open the file for the current write cursor if needed.
@@ -881,38 +887,43 @@ func scanBlockFiles(dbPath string) (int, uint32, error) {
 	return lastFile, fileLen, nil
 }
 
-// loadLastBlockHeights searches the database directory for all flat block files. For
-// each file that is not our current file it seeks to four bytes from the end of the
-// file and reads the height of the last block into the fileBlockHeights map.
+// loadLastBlockHeights reads the height of the last block of each full flat
+// block file, which writeBlock writes to the end of a file when writes move to
+// the next one, into the fileBlockHeights map that deleteBlocks prunes files
+// by.  Each file before the current write file that still exists is read, so
+// the first files, which earlier prunes deleted, are skipped.  A file too short
+// to hold the height, or whose end can't be read, is left out of the map, so it
+// is never pruned.
 func (s *blockStore) loadLastBlockHeights(dbPath string) error {
 	s.writeCursor.RLock()
 	defer s.writeCursor.RUnlock()
 	s.fbhMutex.Lock()
 	defer s.fbhMutex.Unlock()
-	for i := 0; ; i++ {
-		if uint32(i) == s.writeCursor.curFileNum {
+	var heightBytes [4]byte
+	for i := uint32(0); i < s.writeCursor.curFileNum; i++ {
+		file, err := os.Open(blockFilePath(dbPath, i))
+		if os.IsNotExist(err) {
 			continue
 		}
-		filePath := blockFilePath(dbPath, uint32(i))
-		_, err := os.Stat(filePath)
-		if err != nil {
-			break
-		}
-		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
 			return err
 		}
-		defer file.Close()
-		if _, err := file.Seek(4, 2); err != nil {
-			return err
+		info, err := file.Stat()
+		if err == nil {
+			if info.Size() < int64(len(heightBytes)) {
+				err = io.ErrUnexpectedEOF
+			} else {
+				_, err = file.ReadAt(heightBytes[:],
+					info.Size()-int64(len(heightBytes)))
+			}
 		}
-		heightBytes := make([]byte, 4)
-		_, err = file.Read(heightBytes)
+		_ = file.Close()
 		if err != nil {
+			log.Warnf("Block file %d is not pruned, its last block "+
+				"height could not be read: %v", i, err)
 			continue
 		}
-		height := byteOrder.Uint32(heightBytes)
-		s.fileBlockHeights[uint32(i)] = height
+		s.fileBlockHeights[i] = byteOrder.Uint32(heightBytes[:])
 	}
 	return nil
 }
