@@ -3619,9 +3619,17 @@ func opcodeActiveBytecode(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrDisabledOpcode, str)
 	}
 	subScript := vm.subScript()
+
+	// Each opcode is encoded as its byte and its data, with one, two or four
+	// length bytes between them for OP_PUSHDATA1, OP_PUSHDATA2 and
+	// OP_PUSHDATA4, whose length field is the negated number of length
+	// bytes.
 	l := 0
 	for _, parsedOpcode := range subScript {
-		l += parsedOpcode.opcode.length
+		l += 1 + len(parsedOpcode.data)
+		if parsedOpcode.opcode.length < 0 {
+			l -= parsedOpcode.opcode.length
+		}
 	}
 	script := make([]byte, 0, l)
 	for _, parsedOpcode := range subScript {

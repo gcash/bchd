@@ -15,6 +15,7 @@ import (
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // TestOpcodeDisabled tests the opcodeDisabled function manually because all
@@ -242,6 +243,13 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 		return b
 	}
 
+	// pushdataBytecode is OP_0 OP_IF, an empty OP_PUSHDATA1, OP_PUSHDATA2
+	// and OP_PUSHDATA4 push, OP_ENDIF OP_ACTIVEBYTECODE OP_EQUAL.  The
+	// pushes are in a branch that does not run, so they need not be
+	// minimal.  Their length fields of -1, -2 and -4 once made the size of
+	// the active bytecode negative.
+	const pushdataBytecode = "00634c004d00004e0000000068c187"
+
 	testVectors := [][]struct {
 		name          string
 		scriptPubkey  []byte
@@ -370,6 +378,32 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 				scriptSig:     fromHex("065a75c188ab51"),
 				index:         0,
 				expectedError: ErrDisabledOpcode,
+			},
+			{
+				name:         "OP_ACTIVEBYTECODE OP_PUSHDATA1, 2 and 4",
+				scriptPubkey: fromHex(pushdataBytecode),
+				scriptSig:    fromHex("0f" + pushdataBytecode),
+				index:        0,
+				flags:        may2026TestFlags,
+			},
+			{
+				name: "OP_ACTIVEBYTECODE OP_PUSHDATA1, 2 and 4 in a P2SH redeem script",
+				scriptPubkey: newScript(NewScriptBuilder().
+					AddOp(OP_HASH160).
+					AddData(bchutil.Hash160(fromHex(pushdataBytecode))).
+					AddOp(OP_EQUAL)),
+				scriptSig: fromHex("0f" + pushdataBytecode + "0f" +
+					pushdataBytecode),
+				index: 0,
+				flags: may2026TestFlags,
+			},
+			{
+				// <body> OP_1 OP_DEFINE OP_1 OP_INVOKE
+				name:         "OP_ACTIVEBYTECODE OP_PUSHDATA1, 2 and 4 in a function",
+				scriptPubkey: fromHex("0f" + pushdataBytecode + "5189518a"),
+				scriptSig:    fromHex("0f" + pushdataBytecode),
+				index:        0,
+				flags:        may2026TestFlags,
 			},
 		},
 		// OP_TXVERSION (nullary)
@@ -961,6 +995,65 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 			}
 			tx.TxIn[test.index].SignatureScript = nil
 		}
+	}
+}
+
+// TestActiveBytecodeBufferSize ensures OP_ACTIVEBYTECODE pushes exactly the
+// active bytecode, in a buffer of its exact size, when the bytecode holds data
+// pushes of every kind, run or not.  The size comes from each opcode's
+// encoding, which for OP_PUSHDATA1, OP_PUSHDATA2 and OP_PUSHDATA4 is not their
+// length field.
+func TestActiveBytecodeBufferSize(t *testing.T) {
+	t.Parallel()
+
+	// Pushes of 20, 76 and 256 bytes take OP_DATA_20, OP_PUSHDATA1 and
+	// OP_PUSHDATA2.  The rest is OP_0 OP_IF, an empty push of each kind,
+	// OP_ENDIF OP_ACTIVEBYTECODE.
+	script, err := NewScriptBuilder().
+		AddData(bytes.Repeat([]byte{1}, 20)).
+		AddData(bytes.Repeat([]byte{2}, 76)).
+		AddData(bytes.Repeat([]byte{3}, 256)).
+		AddOp(OP_2DROP).
+		AddOp(OP_DROP).
+		Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tail, err := hex.DecodeString("00634c004d00004e0000000068c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script = append(script, tail...)
+
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: chainhash.Hash{1}},
+		Sequence:         0xffffffff,
+	})
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{OP_1}, wire.TokenData{}))
+	utxos := NewUtxoCache()
+	utxos.AddEntry(0, *wire.NewTxOut(2000, script, wire.TokenData{}))
+	vm, err := NewEngine(script, tx, 0, may2026TestFlags, nil, nil, utxos,
+		2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		if done, err = vm.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := vm.dstack.PeekByteArray(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, script) {
+		t.Fatalf("OP_ACTIVEBYTECODE pushed %x, want %x", got, script)
+	}
+	if cap(got) != len(got) {
+		t.Fatalf("OP_ACTIVEBYTECODE pushed %d bytes in a buffer of %d",
+			len(got), cap(got))
 	}
 }
 
