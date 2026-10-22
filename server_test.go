@@ -454,11 +454,16 @@ func newAddPeerTestServer(t *testing.T, maxPeers int,
 		TargetOutboundPeers: targetOutbound,
 		BanThreshold:        defaultBanThreshold})
 	oldSyncLevel, oldTxmpLevel := syncLog.Level(), txmpLog.Level()
+	oldAmgrLevel, oldCmgrLevel := amgrLog.Level(), cmgrLog.Level()
 	syncLog.SetLevel(bchlog.LevelOff)
 	txmpLog.SetLevel(bchlog.LevelOff)
+	amgrLog.SetLevel(bchlog.LevelOff)
+	cmgrLog.SetLevel(bchlog.LevelOff)
 	t.Cleanup(func() {
 		syncLog.SetLevel(oldSyncLevel)
 		txmpLog.SetLevel(oldTxmpLevel)
+		amgrLog.SetLevel(oldAmgrLevel)
+		cmgrLog.SetLevel(oldCmgrLevel)
 	})
 	params := &chaincfg.RegressionNetParams
 	chain, _ := newTestChainDB(t)
@@ -601,5 +606,179 @@ func TestConnectNodeLimits(t *testing.T) {
 					test.want)
 			}
 		})
+	}
+}
+
+// TestLocalPeerNotBanned ensures a peer from a local address, as inbound onion
+// peers usually are through the Tor daemon, is not banned, as in BCHN, so one
+// misbehaving peer cannot shut out the others.
+func TestLocalPeerNotBanned(t *testing.T) {
+	s := newInboundTestServer(t, 5, 10)
+	cfg.BanDuration = time.Hour
+
+	// Bans are logged at the info level and the log rotator is not
+	// initialized in tests.
+	oldLevel := srvrLog.Level()
+	srvrLog.SetLevel(bchlog.LevelOff)
+	defer srvrLog.SetLevel(oldLevel)
+	for _, addr := range []string{"127.0.0.1:8333", "[::1]:8333"} {
+		sp := newServerPeer(s, false)
+		p, err := peer.NewOutboundPeer(newPeerConfig(sp), addr)
+		if err != nil {
+			t.Fatalf("NewOutboundPeer: %v", err)
+		}
+		sp.Peer = p
+		state := newTestPeerState()
+		s.handleBanPeerMsg(state, sp)
+		if len(state.banned) != 0 || len(s.inboundBans) != 0 {
+			t.Fatalf("local peer %s was banned", addr)
+		}
+	}
+}
+
+// TestLocalHostNoPerIPLimit ensures the per-IP limit does not apply to local
+// addresses, from which inbound onion peers usually come, while it still
+// applies to others.
+func TestLocalHostNoPerIPLimit(t *testing.T) {
+	s := newInboundTestServer(t, 2, 10)
+	for _, host := range []string{"127.0.0.1", "::1", "10.0.0.1"} {
+		local := host != "10.0.0.1"
+		for i := range 3 {
+			addr := &net.TCPAddr{IP: net.ParseIP(host), Port: i}
+			want := local || i < 2
+			if got := s.admitInbound(addr) != nil; got != want {
+				t.Fatalf("connection %d from %s admitted %v, want %v", i,
+					host, got, want)
+			}
+		}
+	}
+
+	s = newAddPeerTestServer(t, 10, 2)
+	cfg.MaxPeersPerIP = 2
+	state := newTestPeerState()
+	state.connectionCount["127.0.0.1"] = 2
+	sp := newInboundTestPeer(t, s, "127.0.0.1")
+	if !s.handleAddPeerMsg(state, sp) {
+		t.Fatal("peer from a local address was refused at the per-IP limit")
+	}
+	if n := state.CountIP("127.0.0.1"); n != 3 {
+		t.Fatalf("%d peers counted for the local address, want 3", n)
+	}
+}
+
+// TestDisconnectNodeReleasesIP ensures peers disconnected through the RPC
+// server, by address as it does, no longer count toward their host's per-IP
+// limit once they are done, including every outbound peer with the address.
+// They were removed from their list before, so their done messages did not
+// lower the count, and after the limit's worth of such disconnects their host
+// could not connect again.  A peer that disconnects otherwise releases its
+// count when it is done, and a persistent peer, which is not counted, leaves
+// the count of its host alone.
+func TestDisconnectNodeReleasesIP(t *testing.T) {
+	s := newAddPeerTestServer(t, 10, 2)
+	state := newTestPeerState()
+	inbound := newInboundTestPeer(t, s, "10.0.0.4")
+	other := newInboundTestPeer(t, s, "10.0.0.7")
+	outbound := []*serverPeer{
+		newOutboundTestPeer(t, s, "10.0.0.5:18444"),
+		newOutboundTestPeer(t, s, "10.0.0.5:18444"),
+	}
+	persistent := newOutboundTestPeer(t, s, "10.0.0.5:18445")
+	persistent.persistent = true
+	for _, sp := range append([]*serverPeer{inbound, other, persistent},
+		outbound...) {
+
+		sp.connReq = &connmgr.ConnReq{}
+		if !s.handleAddPeerMsg(state, sp) {
+			t.Fatalf("peer %v not added", sp)
+		}
+	}
+
+	s.handleDonePeerMsg(state, persistent)
+	if n := state.CountIP("10.0.0.5"); n != 2 {
+		t.Fatalf("%d peers counted for the persistent peer's host, want 2",
+			n)
+	}
+	for _, addr := range []string{inbound.Addr(), "10.0.0.5:18444"} {
+		reply := make(chan error, 1)
+		s.handleQuery(state, disconnectNodeMsg{
+			cmp:   func(sp *serverPeer) bool { return sp.Addr() == addr },
+			reply: reply,
+		})
+		if err := <-reply; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, sp := range append([]*serverPeer{inbound, other}, outbound...) {
+		s.handleDonePeerMsg(state, sp)
+	}
+	if len(state.connectionCount) != 0 {
+		t.Fatalf("hosts still counted: %v", state.connectionCount)
+	}
+}
+
+// TestSweepBans ensures sweepBans forgets the bans that have ended, from the
+// peer handler's state and from the bans checked when connections are
+// accepted, and keeps the others.
+func TestSweepBans(t *testing.T) {
+	s := newInboundTestServer(t, 5, 10)
+	state := newTestPeerState()
+	now := time.Now()
+	for _, bans := range []map[string]time.Time{state.banned, s.inboundBans} {
+		bans["10.0.0.1"] = now.Add(-time.Second)
+		bans["10.0.0.2"] = now
+		bans["10.0.0.3"] = now.Add(time.Second)
+	}
+	s.sweepBans(state, now)
+	for _, bans := range []map[string]time.Time{state.banned, s.inboundBans} {
+		if len(bans) != 1 || bans["10.0.0.3"].IsZero() {
+			t.Fatalf("bans left: %v", bans)
+		}
+	}
+}
+
+// TestPeerHandlerSweepsBans ensures the peer handler forgets ended bans on its
+// own, every banSweepInterval.  An ended ban was only dropped when its host
+// connected again, so the ban maps never shrank.
+func TestPeerHandlerSweepsBans(t *testing.T) {
+	oldInterval := banSweepInterval
+	banSweepInterval = 10 * time.Millisecond
+	t.Cleanup(func() { banSweepInterval = oldInterval })
+	s := newAddPeerTestServer(t, 10, 2)
+	cfg.DisableDNSSeed = true
+	s.newPeers = make(chan *serverPeer, 1)
+	s.donePeers = make(chan *serverPeer, 1)
+	s.banPeers = make(chan *serverPeer, 1)
+	s.peerHeightsUpdate = make(chan updatePeerHeightsMsg)
+	s.relayInv = make(chan relayMsg, 1)
+	s.relayCmpctBlock = make(chan *wire.MsgCmpctBlock)
+	s.broadcast = make(chan broadcastMsg, 1)
+	s.query = make(chan interface{})
+	s.maybeAddDirectRelayPeer = make(chan *maybeAddDirectRelayPeerMsg)
+	s.inboundBans["10.0.0.1"] = time.Now().Add(-time.Second)
+	s.inboundBans["10.0.0.2"] = time.Now().Add(time.Hour)
+
+	s.wg.Add(1)
+	go s.peerHandler()
+	t.Cleanup(func() {
+		close(s.quit)
+		s.wg.Wait()
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s.inboundMtx.Lock()
+		_, ended := s.inboundBans["10.0.0.1"]
+		_, current := s.inboundBans["10.0.0.2"]
+		s.inboundMtx.Unlock()
+		if !current {
+			t.Fatal("a ban in force was forgotten")
+		}
+		if !ended {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("an ended ban was not forgotten")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

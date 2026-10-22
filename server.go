@@ -91,6 +91,10 @@ var (
 	// for transactions times out, before the wait ends.  It is for tests.
 	cmpctTxnsTimeoutHook func()
 
+	// banSweepInterval is how often the bans that ended are forgotten.  It
+	// is how often BCHN sweeps its ban list (DUMP_BANS_INTERVAL).
+	banSweepInterval = 15 * time.Minute
+
 	// userAgentName is the user agent name and is used to help identify
 	// ourselves to other bitcoin peers.
 	userAgentName = "/bchd"
@@ -222,6 +226,20 @@ func (ps *peerState) CountLimited() int {
 // CountIP returns the count of all peers matching the IP.
 func (ps *peerState) CountIP(host string) int {
 	return ps.connectionCount[host]
+}
+
+// removeIP lowers the count of peers matching the IP of a peer that is no
+// longer known, unless it is persistent, as those are not counted.  A host
+// whose count reaches zero is forgotten.
+func (ps *peerState) removeIP(sp *serverPeer) {
+	host, _, err := net.SplitHostPort(sp.Addr())
+	if err != nil || sp.persistent {
+		return
+	}
+	ps.connectionCount[host]--
+	if ps.connectionCount[host] <= 0 {
+		delete(ps.connectionCount, host)
+	}
 }
 
 // forAllOutboundPeers is a helper function that runs closure on all outbound
@@ -2494,8 +2512,9 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		delete(state.banned, host)
 	}
 
-	// Limit max number of total peers per ip.
-	if state.CountIP(host) >= cfg.MaxPeersPerIP {
+	// Limit max number of total peers per ip.  A local address is not
+	// limited, as inbound onion peers usually come from it.
+	if !isLocalHost(host) && state.CountIP(host) >= cfg.MaxPeersPerIP {
 		srvrLog.Infof("Max peers per IP reached [%d] - disconnecting peer %s",
 			cfg.MaxPeersPerIP, sp)
 		sp.Disconnect()
@@ -2624,11 +2643,7 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 		}
 
 		delete(list, sp.ID())
-
-		host, _, err := net.SplitHostPort(sp.Addr())
-		if err == nil && !sp.persistent {
-			state.connectionCount[host]--
-		}
+		state.removeIP(sp)
 
 		srvrLog.Debugf("Removed peer %s", sp)
 	}
@@ -2643,12 +2658,40 @@ func (s *server) handleBanPeerMsg(state *peerState, sp *serverPeer) {
 		return
 	}
 	direction := directionString(sp.Inbound())
+
+	// A local address is not banned, as in BCHN: inbound onion peers
+	// usually come from it, through the Tor daemon, so one misbehaving
+	// peer would shut out the others.  The peer is disconnected all the
+	// same.
+	if isLocalHost(host) {
+		srvrLog.Infof("Not banning local peer %s (%s)", sp, direction)
+		return
+	}
 	srvrLog.Infof("Banned peer %s (%s) for %v", host, direction,
 		cfg.BanDuration)
 	banEnd := time.Now().Add(cfg.BanDuration)
 	state.banned[host] = banEnd
 	s.inboundMtx.Lock()
 	s.inboundBans[host] = banEnd
+	s.inboundMtx.Unlock()
+}
+
+// sweepBans forgets the bans that ended by now, from the peer handler's state
+// and from the bans checked when connections are accepted.  Otherwise a ban
+// is only dropped when its host connects again.  It is invoked from the
+// peerHandler goroutine.
+func (s *server) sweepBans(state *peerState, now time.Time) {
+	for host, banEnd := range state.banned {
+		if !now.Before(banEnd) {
+			delete(state.banned, host)
+		}
+	}
+	s.inboundMtx.Lock()
+	for host, banEnd := range s.inboundBans {
+		if !now.Before(banEnd) {
+			delete(s.inboundBans, host)
+		}
+	}
 	s.inboundMtx.Unlock()
 }
 
@@ -2958,9 +3001,10 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 		}
 		msg.reply <- peers
 	case disconnectNodeMsg:
-		// Check inbound peers. We pass a nil callback since we don't
-		// require any additional actions on disconnect for inbound peers.
-		found := disconnectPeer(state.inboundPeers, msg.cmp, nil)
+		// Check inbound peers.  The per-IP count of a peer is lowered
+		// now, as it is removed from its list, which its done message
+		// then does not find it in.
+		found := disconnectPeer(state.inboundPeers, msg.cmp, state.removeIP)
 		if found {
 			msg.reply <- nil
 			return
@@ -2968,9 +3012,10 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 
 		// Check outbound peers.
 		found = disconnectPeer(state.outboundPeers, msg.cmp, func(sp *serverPeer) {
-			// Keep group counts ok since we remove from
-			// the list now.
+			// Keep group and per-IP counts ok since we remove
+			// from the list now.
 			state.outboundGroups[addrmgr.GroupKey(sp.NA())]--
+			state.removeIP(sp)
 		})
 		if found {
 			// If there are multiple outbound connections to the same
@@ -2979,6 +3024,7 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 			for found {
 				found = disconnectPeer(state.outboundPeers, msg.cmp, func(sp *serverPeer) {
 					state.outboundGroups[addrmgr.GroupKey(sp.NA())]--
+					state.removeIP(sp)
 				})
 			}
 			msg.reply <- nil
@@ -3093,6 +3139,14 @@ func (s *server) inboundPeerConnected(conn net.Conn) {
 	go s.peerDoneHandler(sp)
 }
 
+// isLocalHost returns whether host is a local address (loopback, or in
+// 0.0.0.0/8), as BCHN's CNetAddr::IsLocal.  Inbound onion peers come from one
+// when the Tor daemon runs on the same host, as it usually does.
+func isLocalHost(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && addrmgr.IsLocal(&wire.NetAddress{IP: ip})
+}
+
 // targetOutboundPeers returns the number of outbound peers the connection
 // manager maintains: --targetoutboundpeers, but no more than --maxpeers.
 func targetOutboundPeers() uint32 {
@@ -3134,7 +3188,7 @@ func (s *server) admitInbound(addr net.Addr) func() {
 		}
 		delete(s.inboundBans, host)
 	}
-	if s.inboundHosts[host] >= cfg.MaxPeersPerIP {
+	if !isLocalHost(host) && s.inboundHosts[host] >= cfg.MaxPeersPerIP {
 		srvrLog.Debugf("Inbound connection from %s refused - max peers "+
 			"per IP reached [%d]", host, cfg.MaxPeersPerIP)
 		return nil
@@ -3270,6 +3324,9 @@ func (s *server) peerHandler() {
 	}
 	go s.connManager.Start()
 
+	banSweep := time.NewTicker(banSweepInterval)
+	defer banSweep.Stop()
+
 out:
 	for {
 		select {
@@ -3308,6 +3365,9 @@ out:
 
 		case amsg := <-s.maybeAddDirectRelayPeer:
 			s.handleMaybeAddDirectRelayPeer(state, amsg)
+
+		case <-banSweep.C:
+			s.sweepBans(state, time.Now())
 
 		case <-s.quit:
 			// Disconnect all peers on server shutdown.
