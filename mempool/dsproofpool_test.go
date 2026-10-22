@@ -1026,8 +1026,9 @@ func TestDSProofStoragePeerShare(t *testing.T) {
 }
 
 // TestDSProofStorageOrphanResent checks that an orphan sent again by another
-// peer is blamed on the latest sender, keeps its orphan time and is counted
-// once.
+// peer stays blamed on the peer that sent it first, keeps its orphan time and
+// is counted once.  Sent again without a peer, it is no longer blamed on
+// anyone, and a later sender does not take it.
 func TestDSProofStorageOrphanResent(t *testing.T) {
 	s := newDSProofStorage()
 	start := time.Unix(2000000, 0)
@@ -1041,7 +1042,7 @@ func TestDSProofStorageOrphanResent(t *testing.T) {
 		t.Fatal("known orphan refused")
 	}
 	checkPeerOrphans(t, s)
-	if e := s.lookup(hash); e.peer != 2 || !e.orphaned.Equal(start) {
+	if e := s.lookup(hash); e.peer != 1 || !e.orphaned.Equal(start) {
 		t.Fatalf("peer %d, orphaned %v", e.peer, e.orphaned)
 	}
 	if s.numOrphans != 1 || len(s.peerOrphans) != 1 {
@@ -1056,12 +1057,40 @@ func TestDSProofStorageOrphanResent(t *testing.T) {
 	}
 	s.addOrphan(p, hash, 3, true)
 	checkPeerOrphans(t, s)
+	if len(s.peerOrphans) != 0 {
+		t.Fatalf("counts %v", s.peerOrphans)
+	}
 
 	now = start.Add(s.orphanTTL)
-	if peers := s.expireOrphans(); len(peers) != 1 || peers[0] != 3 {
+	if peers := s.expireOrphans(); len(peers) != 0 {
 		t.Fatalf("blamed %v", peers)
 	}
 	checkPeerOrphans(t, s)
+}
+
+// TestDSProofOrphanResentKeepsPeer ensures an orphan proof sent again by
+// another peer stays with the peer that sent it first, so the other peer's
+// disconnect does not remove it and the first one's does.
+func TestDSProofOrphanResentKeepsPeer(t *testing.T) {
+	harness, _ := newDSProofHarness(t, &chaincfg.MainNetParams)
+	pool := harness.txPool
+	op, _, junk := junkOrphanSpend(t, harness, 1)
+	for _, peer := range []Tag{1, 2} {
+		if r, _ := pool.ProcessDSProof(junk[0], peer, true); r != DSProofOrphan {
+			t.Fatalf("orphan from peer %d: %v", peer, r)
+		}
+	}
+
+	if n := pool.RemoveDSProofOrphansByTag(2); n != 0 {
+		t.Fatalf("removed %d orphans of the peer that sent it again", n)
+	}
+	if n := len(pool.dsProofs.findOrphans(op)); n != 1 {
+		t.Fatalf("%d orphans left, want 1", n)
+	}
+	if n := pool.RemoveDSProofOrphansByTag(1); n != 1 {
+		t.Fatalf("removed %d orphans of the first peer, want 1", n)
+	}
+	checkPeerOrphans(t, pool.dsProofs)
 }
 
 // TestDSProofDisabledHave checks that every proof is reported as known when

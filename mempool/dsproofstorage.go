@@ -121,18 +121,26 @@ func (s *dsProofStorage) add(proof *wire.MsgDSProof, hash chainhash.Hash) bool {
 }
 
 // addOrphan stores a proof as an orphan received from peer, if hasPeer is
-// set.  An existing proof becomes an orphan.  It returns false when a new
-// proof is dropped because the peer already has the most orphans it may
-// have for the outpoint or in total, or the outpoint is full of proofs
-// without a peer.
+// set.  An existing proof becomes an orphan.  An existing orphan keeps the
+// peer that sent it, so another peer cannot take it and have it removed by
+// disconnecting; sent again without a peer, it is no longer blamed on
+// anyone.  It returns false when a new proof is dropped because the peer
+// already has the most orphans it may have for the outpoint or in total, or
+// the outpoint is full of proofs without a peer.
 func (s *dsProofStorage) addOrphan(proof *wire.MsgDSProof, hash chainhash.Hash, peer Tag, hasPeer bool) bool {
-	if _, ok := s.proofs[hash]; !ok {
+	if e, ok := s.proofs[hash]; !ok {
 		if hasPeer && s.peerOrphans[peer] >= s.maxOrphans/dsProofOrphanPeerShare {
 			return false
 		}
 		if !s.makeOrphanRoom(proof.PrevOut, peer, hasPeer) {
 			return false
 		}
+	} else if e.orphan {
+		if !hasPeer {
+			s.uncountPeer(e)
+			e.hasPeer = false
+		}
+		return true
 	}
 	s.add(proof, hash)
 	e := s.proofs[hash]
