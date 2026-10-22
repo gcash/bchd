@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/bchrpc/pb"
@@ -15,6 +17,7 @@ import (
 	_ "github.com/gcash/bchd/database/ffldb"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 	"github.com/gcash/goslp/metadatamaker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -165,5 +168,133 @@ func TestTokenMetadataNotGenesis(t *testing.T) {
 	// One naming no transaction at all.
 	if tm := s.tokenMetadataOrNil(chainhash.Hash{0x09}); tm != nil {
 		t.Fatalf("got metadata %v for an unknown token ID", tm)
+	}
+}
+
+// newGraphSearchServer returns a server whose slp index holds a GENESIS from
+// the memory pool, with graph search loaded and ready, and that GENESIS.
+func newGraphSearchServer(t *testing.T) (*GrpcServer, *wire.MsgTx) {
+	t.Helper()
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100,
+		SlpGraphSearchEnabled: true})
+	if err := db.Update(idx.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatalf("TokenType1Genesis: %v", err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{1}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = db.View(func(dbTx database.Tx) error {
+		valid, err := idx.AddPotentialSlpEntries(dbTx, genesis)
+		if err == nil && !valid {
+			err = errors.New("the GENESIS is not valid")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("AddPotentialSlpEntries: %v", err)
+	}
+
+	fetch := func(*chainhash.Hash) ([]byte, error) {
+		var buf bytes.Buffer
+		err := genesis.Serialize(&buf)
+		return buf.Bytes(), err
+	}
+	idx.LoadSlpGraphSearchDb(fetch, nil, nil)
+	idx.AddGraphSearchTxn(genesis)
+	if _, err := idx.GetGraphSearchDb(); err != nil {
+		t.Fatalf("GetGraphSearchDb: %v", err)
+	}
+	return &GrpcServer{db: db, slpIndex: idx, txIndex: indexers.NewTxIndex(db)},
+		genesis
+}
+
+// TestSlpGraphSearchLogLevel ensures the lines that GetSlpGraphSearch and the
+// graph search count of GetSlpTrustedValidation log for each call are at
+// debug, so that at the default level the log does not grow with every call.
+func TestSlpGraphSearchLogLevel(t *testing.T) {
+	s, genesis := newGraphSearchServer(t)
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+
+	ctx := context.Background()
+	hash := genesis.TxHash()
+	calls := func() {
+		t.Helper()
+		_, err := s.GetSlpGraphSearch(ctx,
+			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
+		if err != nil {
+			t.Fatalf("GetSlpGraphSearch: %v", err)
+		}
+		_, err = s.GetSlpTrustedValidation(ctx,
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+				IncludeGraphsearchCount: true,
+			})
+		if err != nil {
+			t.Fatalf("GetSlpTrustedValidation: %v", err)
+		}
+	}
+
+	logger.SetLevel(bchlog.LevelInfo)
+	calls()
+	if buf.Len() != 0 {
+		t.Errorf("calls logged at the info level: %q", buf.String())
+	}
+
+	logger.SetLevel(bchlog.LevelDebug)
+	calls()
+	for _, want := range []string{
+		"[DBG] GRPC: SLP graph search returned 1 transactions for txid " +
+			hash.String(),
+		"[DBG] GRPC: SLP graph search count is 1 transactions for txid " +
+			hash.String(),
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("debug log %q, want a line with %q", buf.String(), want)
+		}
+	}
+}
+
+// TestSlpTrustedValidationBadValidHash ensures a graph search valid hash of
+// the wrong length is refused as an invalid argument, with a message that
+// does not repeat the input, rather than as an internal error that is logged
+// in full at the error level.
+func TestSlpTrustedValidationBadValidHash(t *testing.T) {
+	s, genesis := newGraphSearchServer(t)
+	hash := genesis.TxHash()
+	_, err := s.GetSlpTrustedValidation(context.Background(),
+		&pb.GetSlpTrustedValidationRequest{
+			Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+				PrevOutHash:            hash[:],
+				PrevOutVout:            1,
+				GraphsearchValidHashes: [][]byte{make([]byte, 100000)},
+			}},
+			IncludeGraphsearchCount: true,
+		})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("got %.100v, want InvalidArgument", err)
+	}
+	want := "invalid graph search valid hash: invalid hash length of 100000, " +
+		"want 32"
+	if got := status.Convert(err).Message(); got != want {
+		t.Fatalf("got message %.100q, want %q", got, want)
 	}
 }

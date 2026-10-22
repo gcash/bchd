@@ -137,9 +137,11 @@ func serviceName(method string) string {
 func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 	defer recoverGrpcPanic(info.FullMethod, &err)
 
+	// This line is logged for every call, before the caller is
+	// authenticated, so it is at debug.
 	p, ok := peer.FromContext(ss.Context())
 	if ok {
-		grpcLog.Infof("Streaming method %s invoked by %s", info.FullMethod,
+		grpcLog.Debugf("Streaming method %s invoked by %s", info.FullMethod,
 			p.Addr.String())
 	}
 
@@ -164,9 +166,11 @@ func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.Stream
 func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 	defer recoverGrpcPanic(info.FullMethod, &err)
 
+	// This line is logged for every call, before the caller is
+	// authenticated, so it is at debug.
 	p, ok := peer.FromContext(ctx)
 	if ok {
-		grpcLog.Infof("Unary method %s invoked by %s", info.FullMethod,
+		grpcLog.Debugf("Unary method %s invoked by %s", info.FullMethod,
 			p.Addr.String())
 	}
 
@@ -186,14 +190,16 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 }
 
 // logGrpcError logs the error a call failed with.  An error that answers the
-// caller, such as an unknown transaction, a bad argument, or the end of a
-// subscription it canceled, is logged at debug, so that a client polling for
-// something cannot flood the log with errors.
+// caller, such as an unknown transaction, a bad argument, an SLP transaction
+// refused with Aborted, an index the node does not run, or the end of a
+// subscription it canceled or of the server, is logged at debug, so that a
+// client polling for something cannot flood the log with errors.
 func logGrpcError(kind, method, addr string, err error) {
 	format := "%s method %s invoked by %s errored: %v"
 	switch status.Code(err) {
 	case codes.NotFound, codes.InvalidArgument, codes.OutOfRange,
-		codes.AlreadyExists, codes.FailedPrecondition, codes.Canceled:
+		codes.AlreadyExists, codes.FailedPrecondition, codes.Canceled,
+		codes.Aborted, codes.Unavailable:
 
 		grpcLog.Debugf(format, kind, method, addr, err)
 		return

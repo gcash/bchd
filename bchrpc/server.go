@@ -1716,7 +1716,7 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 				for _, validTxid := range query.GraphsearchValidHashes {
 					hash, err := chainhash.NewHash(validTxid)
 					if err != nil {
-						return nil, status.Errorf(codes.Internal, "graph search validity txid %v, error: %v", hex.EncodeToString(validTxid), err)
+						return nil, status.Errorf(codes.InvalidArgument, "invalid graph search valid hash: %v", err)
 					}
 					validityCache[*hash] = struct{}{}
 				}
@@ -1730,7 +1730,7 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "%v", err)
 			}
-			log.Infof("SLP graph search count is %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
+			log.Debugf("SLP graph search count is %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
 			result.GraphsearchTxnCount = uint32(len(txData[:]))
 		}
 
@@ -1791,7 +1791,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 
 	res := &pb.GetSlpGraphSearchResponse{}
 	res.Txdata = txData
-	log.Infof("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
+	log.Debugf("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
 
 	return res, nil
 }

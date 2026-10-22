@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -194,9 +195,10 @@ func TestGrpcHTTPServerTimeouts(t *testing.T) {
 }
 
 // TestGrpcErrorLogLevel ensures a call that fails with an answer for the
-// caller, such as NotFound for a proof a client polls for or a subscription
-// the client ended, logs at debug rather than as an error, so a client cannot
-// flood the log, while other failures still log errors.
+// caller, such as NotFound for a proof a client polls for, a subscription the
+// client ended, an SLP transaction refused with Aborted or a call needing an
+// index the node does not run, logs at debug rather than as an error, so a
+// client cannot flood the log, while other failures still log errors.
 func TestGrpcErrorLogLevel(t *testing.T) {
 	setGrpcTestConfig(t, "tok", false)
 	var buf bytes.Buffer
@@ -215,7 +217,10 @@ func TestGrpcErrorLogLevel(t *testing.T) {
 		{status.Error(codes.InvalidArgument, "x"), "[DBG]"},
 		{status.Error(codes.Canceled, "x"), "[DBG]"},
 		{context.Canceled, "[DBG]"},
+		{status.Error(codes.Aborted, "x"), "[DBG]"},
+		{status.Error(codes.Unavailable, "x"), "[DBG]"},
 		{status.Error(codes.Internal, "x"), "[ERR]"},
+		{errors.New("x"), "[ERR]"},
 	} {
 		buf.Reset()
 		unary := func(context.Context, interface{}) (interface{}, error) {
@@ -240,6 +245,44 @@ func TestGrpcErrorLogLevel(t *testing.T) {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("%v: stream log %q, want a line with %q", test.err,
 				buf.String(), want)
+		}
+	}
+}
+
+// TestGrpcCallLogLevel ensures the line naming each call and its caller is
+// logged at debug, not info, so that at the default level the log does not
+// grow with every call, made before the caller is authenticated.
+func TestGrpcCallLogLevel(t *testing.T) {
+	setGrpcTestConfig(t, "", false)
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	grpcLog = logger
+	ctx := peer.NewContext(context.Background(), &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1},
+	})
+	unary := func(context.Context, interface{}) (interface{}, error) {
+		return "ok", nil
+	}
+	info := &grpc.UnaryServerInfo{FullMethod: readyGrpcMethod}
+	stream := func(interface{}, grpc.ServerStream) error { return nil }
+	sinfo := &grpc.StreamServerInfo{FullMethod: readyGrpcMethod,
+		IsServerStream: true}
+
+	logger.SetLevel(bchlog.LevelInfo)
+	_, _ = interceptUnary(ctx, nil, info, unary)
+	_ = interceptStreaming(nil, &grpcTestStream{ctx: ctx}, sinfo, stream)
+	if buf.Len() != 0 {
+		t.Errorf("calls logged at the info level: %q", buf.String())
+	}
+
+	logger.SetLevel(bchlog.LevelDebug)
+	_, _ = interceptUnary(ctx, nil, info, unary)
+	_ = interceptStreaming(nil, &grpcTestStream{ctx: ctx}, sinfo, stream)
+	for _, kind := range []string{"Unary", "Streaming"} {
+		want := "[DBG] GRPC: " + kind + " method " + readyGrpcMethod +
+			" invoked by 127.0.0.1:1\n"
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("debug log %q, want a line with %q", buf.String(), want)
 		}
 	}
 }

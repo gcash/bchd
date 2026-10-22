@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/bchec"
@@ -11,7 +12,10 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // spendOfWatchedAddress returns a transaction spending prevOut, the pkScript
@@ -161,5 +165,91 @@ func TestFilterMatchesAddressFormats(t *testing.T) {
 			t.Errorf("%s: filter matched after the address was removed",
 				test.name)
 		}
+	}
+}
+
+// TestRPCFilterErrors ensures a filter with a bad outpoint hash or address is
+// refused as an invalid argument, with a message that does not repeat the
+// input.  An error of another kind is logged in full at the error level, and
+// an address can be as long as the request.
+func TestRPCFilterErrors(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	outpoint := func(hash []byte) *pb.TransactionFilter {
+		return &pb.TransactionFilter{Outpoints: []*pb.Transaction_Input_Outpoint{
+			{Hash: hash}}}
+	}
+	address := func(addrs ...string) *pb.TransactionFilter {
+		return &pb.TransactionFilter{Addresses: addrs}
+	}
+	long := strings.Repeat("q", 100000)
+	tests := []struct {
+		name   string
+		filter *pb.TransactionFilter
+		want   string
+	}{
+		{"short outpoint hash", outpoint(make([]byte, 31)),
+			"invalid outpoint hash: invalid hash length of 31, want 32"},
+		{"long outpoint hash", outpoint(make([]byte, 100000)),
+			"invalid outpoint hash: invalid hash length of 100000, want 32"},
+		{"long address", address(long),
+			"invalid address at index 0: invalid length address"},
+		{"second address bad", address(
+			"bitcoincash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0rq9sywjpyy",
+			"bitcoincash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0rq9sywjpyz"),
+			"invalid address at index 1: checksum mismatch"},
+	}
+	for _, test := range tests {
+		for _, op := range []struct {
+			name  string
+			apply func(*pb.TransactionFilter, *chaincfg.Params) error
+		}{
+			{"add", newTxFilter().AddRPCFilter},
+			{"remove", newTxFilter().RemoveRPCFilter},
+		} {
+			err := op.apply(test.filter, params)
+			if status.Code(err) != codes.InvalidArgument {
+				t.Errorf("%s: %s: got %.100v, want InvalidArgument",
+					test.name, op.name, err)
+				continue
+			}
+			if got := status.Convert(err).Message(); got != test.want {
+				t.Errorf("%s: %s: got message %.100q, want %q",
+					test.name, op.name, got, test.want)
+			}
+		}
+	}
+}
+
+// TestFilterFallbackAddressLogLevel ensures adding or removing an address the
+// filter matches by its encoding, such as a P2SH32 address, logs at debug, as
+// a filter can hold any number of them.
+func TestFilterFallbackAddressLogLevel(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	addr, err := bchutil.NewAddressScriptHash32FromHash(
+		bytes.Repeat([]byte{0xab}, 32), params)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash32FromHash: %v", err)
+	}
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	logger.SetLevel(bchlog.LevelInfo)
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+
+	rpcFilter := &pb.TransactionFilter{Addresses: []string{addr.EncodeAddress()}}
+	f := newTxFilter()
+	if err := f.AddRPCFilter(rpcFilter, params); err != nil {
+		t.Fatalf("AddRPCFilter: %v", err)
+	}
+	if len(f.fallbacks) != 1 {
+		t.Fatalf("%d addresses matched by their encoding, want 1",
+			len(f.fallbacks))
+	}
+	if err := f.RemoveRPCFilter(rpcFilter, params); err != nil {
+		t.Fatalf("RemoveRPCFilter: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("logged at the info level: %q", buf.String())
 	}
 }

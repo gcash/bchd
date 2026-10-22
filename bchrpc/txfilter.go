@@ -2,7 +2,6 @@ package bchrpc
 
 import (
 	"encoding/hex"
-	"fmt"
 	"slices"
 
 	"github.com/gcash/bchd/bchrpc/pb"
@@ -13,6 +12,8 @@ import (
 	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp/v1parser"
 	"golang.org/x/crypto/ripemd160"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // txFilter is used to filter transactions based on a clients interest.
@@ -107,9 +108,10 @@ func (f *txFilter) AddAddress(addr bchutil.Address) {
 	default:
 		// A new address type must have been added.  Use encoded
 		// payment address string as a fallback until a fast path
-		// is added.
+		// is added.  A filter can hold any number of addresses, so
+		// this is logged at debug.
 		addrStr := addr.EncodeAddress()
-		log.Infof("Unknown address type: %v", addrStr)
+		log.Debugf("Unknown address type: %v", addrStr)
 		f.fallbacks[addrStr] = struct{}{}
 	}
 }
@@ -211,9 +213,10 @@ func (f *txFilter) RemoveAddress(addr bchutil.Address) {
 	default:
 		// A new address type must have been added.  Use encoded
 		// payment address string as a fallback until a fast path
-		// is added.
+		// is added.  A filter can hold any number of addresses, so
+		// this is logged at debug.
 		addrStr := addr.EncodeAddress()
-		log.Infof("Unknown address type: %v", addrStr)
+		log.Debugf("Unknown address type: %v", addrStr)
 		delete(f.fallbacks, addrStr)
 	}
 }
@@ -233,6 +236,20 @@ func decodeFilterAddress(addrStr string, params *chaincfg.Params) (bchutil.Addre
 	return toCashAddress(addr, params)
 }
 
+// invalidOutpointErr returns the error for a filter outpoint whose hash cannot
+// be decoded.  It is an invalid argument, which the server logs at debug.
+func invalidOutpointErr(err error) error {
+	return status.Errorf(codes.InvalidArgument, "invalid outpoint hash: %v", err)
+}
+
+// invalidAddressErr returns the error for the address at index i of a filter
+// when it cannot be decoded.  The address is named by its index rather than
+// quoted, as it can be as long as the request; the decoding errors are short.
+func invalidAddressErr(i int, err error) error {
+	return status.Errorf(codes.InvalidArgument, "invalid address at index %d: %v",
+		i, err)
+}
+
 // AddRPCFilter adds all filter properties from the pb.TransactionFilter
 // to the filter.
 func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincfg.Params) error {
@@ -243,16 +260,16 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 	for _, op := range rpcFilter.GetOutpoints() {
 		hash, err := chainhash.NewHash(op.GetHash())
 		if err != nil {
-			return err
+			return invalidOutpointErr(err)
 		}
 		f.AddOutpoint(wire.OutPoint{Hash: *hash, Index: op.GetIndex()})
 	}
 
 	// Interpret and add addresses.
-	for _, addrStr := range rpcFilter.GetAddresses() {
+	for i, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := decodeFilterAddress(addrStr, params)
 		if err != nil {
-			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
+			return invalidAddressErr(i, err)
 		}
 		f.AddAddress(addr)
 	}
@@ -287,16 +304,16 @@ func (f *txFilter) RemoveRPCFilter(rpcFilter *pb.TransactionFilter, params *chai
 	for _, op := range rpcFilter.GetOutpoints() {
 		hash, err := chainhash.NewHash(op.GetHash())
 		if err != nil {
-			return err
+			return invalidOutpointErr(err)
 		}
 		f.RemoveOutpoint(wire.OutPoint{Hash: *hash, Index: op.GetIndex()})
 	}
 
 	// Interpret and remove addresses.
-	for _, addrStr := range rpcFilter.GetAddresses() {
+	for i, addrStr := range rpcFilter.GetAddresses() {
 		addr, err := decodeFilterAddress(addrStr, params)
 		if err != nil {
-			return fmt.Errorf("unable to decode address '%v': %v", addrStr, err)
+			return invalidAddressErr(i, err)
 		}
 		f.RemoveAddress(addr)
 	}
