@@ -90,13 +90,15 @@ var (
 
 // MaxBlockSize returns the is the maximum number of bytes allowed in
 // a block. If the UAHF hardfork is active the returned value is the
-// excessive blocksize. Otherwise it's the legacy blocksize.
+// network's floor of the block size limit, see networkSizeFloor, or with ABLA
+// active the limit after the tip when that is larger. Otherwise it's the
+// legacy blocksize.
 func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 	if uahfActive {
 		if !ablaActive {
-			return uint64(b.excessiveBlockSize)
+			return b.networkSizeFloor()
 		} else {
-			return max(uint64(b.excessiveBlockSize), b.ablaState.getBlockSizeLimit())
+			return max(b.networkSizeFloor(), b.ablaState.getBlockSizeLimit())
 		}
 	}
 	return LegacyMaxBlockSize
@@ -793,7 +795,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	// because after the Uahf activation it is not longer context free as
 	// the max size depends on whether Uahf has activated or not.
 	maxBlockSize, err := b.blockSizeLimit(prevNode, prevNode.height+1,
-		uint64(b.excessiveBlockSize))
+		b.networkSizeFloor())
 	if err != nil {
 		return err
 	}
@@ -1379,7 +1381,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	// prevent CPU exhaustion attacks.
 	if runScripts {
 		maxBlockSize, err := b.blockSizeLimit(node.parent, node.height,
-			uint64(b.excessiveBlockSize))
+			b.networkSizeFloor())
 		if err != nil {
 			return err
 		}

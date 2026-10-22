@@ -136,10 +136,11 @@ func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32, floor uin
 }
 
 // networkSizeFloor returns the floor of the block size limit that the network
-// enforces: its default block size, as in Bitcoin Cash Node.  A larger
-// excessive block size only raises the size of the blocks this node accepts.
-// On regtest and simnet, which have no network to agree with, and for chain
-// parameters without a default block size, it is the excessive block size.
+// enforces: its default block size, as in Bitcoin Cash Node.  Blocks are
+// validated against it, so a larger excessive block size does not loosen
+// validation.  On regtest and simnet, which have no network to agree with,
+// and for chain parameters without a default block size, it is the excessive
+// block size.
 func (b *BlockChain) networkSizeFloor() uint64 {
 	floor := uint64(b.excessiveBlockSize)
 	switch b.chainParams.Net {

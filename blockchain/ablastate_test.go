@@ -344,7 +344,8 @@ func writeOldABLAStates(t *testing.T, db database.DB, n int32) {
 }
 
 // TestABLANetworkDefaults ensures the ABLA configuration comes from the chain
-// parameters alone and that the excessive block size is a floor of the limit.
+// parameters alone and that the floor of the limit is the network's default
+// block size, which a larger excessive block size does not raise.
 func TestABLANetworkDefaults(t *testing.T) {
 	tests := []struct {
 		params *chaincfg.Params
@@ -353,10 +354,10 @@ func TestABLANetworkDefaults(t *testing.T) {
 	}{
 		{&chaincfg.MainNetParams, 32000000, 32000000},
 		{&chaincfg.TestNet3Params, 32000000, 32000000},
-		{&chaincfg.ChipNetParams, 32000000, 32000000},
-		{&chaincfg.TestNet4Params, 32000000, 32000000},
-		{&chaincfg.MainNetParams, 64000000, 64000000},
-		{&chaincfg.ChipNetParams, 8000000, 8000000},
+		{&chaincfg.ChipNetParams, 32000000, 2000000},
+		{&chaincfg.TestNet4Params, 32000000, 2000000},
+		{&chaincfg.MainNetParams, 64000000, 32000000},
+		{&chaincfg.ChipNetParams, 8000000, 2000000},
 	}
 	for _, test := range tests {
 		db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
@@ -377,6 +378,11 @@ func TestABLANetworkDefaults(t *testing.T) {
 		if got := chain.MaxBlockSize(true, true); got != test.limit {
 			t.Errorf("%s EB %d: ABLA limit %d, want %d", params.Name,
 				test.eb, got, test.limit)
+		}
+		floor := uint64(params.DefaultConsensusBlockSize)
+		if got := chain.MaxBlockSize(true, false); got != floor {
+			t.Errorf("%s EB %d: limit without ABLA %d, want %d",
+				params.Name, test.eb, got, floor)
 		}
 		if chain.ablaConfig.epsilon0 != params.ABLAConfig.Epsilon0 ||
 			chain.ablaConfig.beta0 != params.ABLAConfig.Beta0 {
