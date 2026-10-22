@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcash/bchd/addrmgr"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchlog"
 )
@@ -172,5 +173,43 @@ func TestDonePeerFreesDirectRelaySlot(t *testing.T) {
 	}
 	if _, ok := state.directRelayPeers[sp.ID()]; ok {
 		t.Fatal("disconnected peer still holds a direct relay slot")
+	}
+}
+
+// TestIsWhitelistedProxiedAddr checks that a peer reached through a proxy is
+// whitelisted by its own address rather than the proxy's, so whitelisting a
+// local Tor proxy's address doesn't whitelist every peer reached through it.
+func TestIsWhitelistedProxiedAddr(t *testing.T) {
+	oldCfg := cfg
+	t.Cleanup(func() { cfg = oldCfg })
+
+	parseCIDR := func(s string) *net.IPNet {
+		_, ipnet, err := net.ParseCIDR(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ipnet
+	}
+	loopback := parseCIDR("127.0.0.0/8")
+
+	tests := []struct {
+		host  string
+		peers *net.IPNet
+	}{
+		{"192.0.2.1", parseCIDR("192.0.2.0/24")},
+		{"2001:db8::1", parseCIDR("2001:db8::/32")},
+	}
+	for _, test := range tests {
+		addr := &socks.ProxiedAddr{Net: "tcp", Host: test.host, Port: 8333}
+
+		cfg = &config{whitelists: []*net.IPNet{loopback}}
+		if isWhitelisted(addr) {
+			t.Fatalf("%s whitelisted by the proxy's network", addr)
+		}
+
+		cfg = &config{whitelists: []*net.IPNet{test.peers}}
+		if !isWhitelisted(addr) {
+			t.Fatalf("%s not whitelisted by its own network", addr)
+		}
 	}
 }

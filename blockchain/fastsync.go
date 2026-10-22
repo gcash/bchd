@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -14,9 +15,9 @@ import (
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/wire"
 
-	"github.com/btcsuite/go-socks/socks"
 	"github.com/zquestz/grab"
 	"golang.org/x/text/message"
 )
@@ -210,6 +211,20 @@ func worker(cache *utxoCache, jobs <-chan []byte, results chan<- *result) {
 	results <- &result{m: m}
 }
 
+// newDownloadClient returns a download client that connects through proxy, if
+// it isn't nil.
+func newDownloadClient(proxy *socks.Proxy) *grab.Client {
+	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	if proxy != nil {
+		transport.DialContext = proxy.DialContext
+	}
+
+	return &grab.Client{
+		UserAgent:  "grab",
+		HTTPClient: &http.Client{Transport: transport},
+	}
+}
+
 // downloadUtxoSet will attempt to connect to make an HTTP GET request to the
 // provided sources one at a time and download the UTXO set to the provided path.
 // If a proxy is provided it will use it for the HTTP connection.
@@ -220,7 +235,7 @@ func downloadUtxoSet(sources []string, proxy *socks.Proxy, destination string) (
 		for retries > 0 {
 			retries--
 
-			client := grab.NewClientWithProxy(proxy)
+			client := newDownloadClient(proxy)
 			request, err := grab.NewRequest(destination, source)
 			if err != nil {
 				log.Errorf("FastSync: Error creating download request: %s", err.Error())
