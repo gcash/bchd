@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 	"sync"
@@ -356,6 +357,56 @@ func (s *utxoCache) FetchEntryUncached(outpoint wire.OutPoint) (*UtxoEntry, erro
 	return entry, err
 }
 
+// cachedUnspentOutput returns an unspent output of the transaction with the
+// given hash, with an index from start up to end, that the cache holds.
+//
+// This method is safe for concurrent access.
+func (s *utxoCache) cachedUnspentOutput(hash *chainhash.Hash, start, end uint32) *UtxoEntry {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	outpoint := wire.OutPoint{Hash: *hash}
+	for outpoint.Index = start; outpoint.Index < end; outpoint.Index++ {
+		if entry := s.cachedEntries[outpoint]; entry != nil && !entry.IsSpent() {
+			return entry.Clone()
+		}
+	}
+	return nil
+}
+
+// storedUnspentOutput returns an unspent output of the transaction with the
+// given hash that the database holds, unless the cache has it spent.  The
+// database's keys start with the hash, so one seek finds its outputs there.
+//
+// This method is safe for concurrent access.
+func (s *utxoCache) storedUnspentOutput(hash *chainhash.Hash) (*UtxoEntry, error) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	var entry *UtxoEntry
+	err := s.db.View(func(dbTx database.Tx) error {
+		cursor := dbTx.Metadata().Bucket(utxoSetBucketName).Cursor()
+		key := outpointKey(wire.OutPoint{Hash: *hash})
+		ok := cursor.Seek(*key)
+		recycleOutpointKey(key)
+		for ; ok && bytes.HasPrefix(cursor.Key(), hash[:]); ok = cursor.Next() {
+			outpoint := DeserializeOutpointKey(cursor.Key())
+			if cached, ok := s.cachedEntries[*outpoint]; ok {
+				if cached != nil && !cached.IsSpent() {
+					entry = cached.Clone()
+					return nil
+				}
+				continue
+			}
+			var err error
+			entry, err = DeserializeUtxoEntry(cursor.Value())
+			return err
+		}
+		return nil
+	})
+	return entry, err
+}
+
 // FetchUtxoEntry returns the requested unspent transaction output from the point
 // of view of the end of the main chain.
 //
@@ -382,6 +433,47 @@ func (b *BlockChain) FetchUtxoEntryUncached(outpoint wire.OutPoint) (*UtxoEntry,
 	b.chainLock.RLock()
 	defer b.chainLock.RUnlock()
 	return b.utxoCache.FetchEntryUncached(outpoint)
+}
+
+// maxTxOutputs is the most outputs a transaction can have: the smallest is 9
+// bytes, an 8 byte value and an empty script.
+const maxTxOutputs = MaxTransactionSize / 9
+
+// utxoScanChunk is how many outputs FetchUnspentOutputOfTx looks up in the
+// cache each time it takes the locks.
+const utxoScanChunk = 256
+
+// unspentOutputScanHook, when set, is called by FetchUnspentOutputOfTx between
+// its search of the cache and its read of the database.  It is for tests.
+var unspentOutputScanHook func()
+
+// FetchUnspentOutputOfTx returns an unspent output of the transaction with
+// the given hash, or nil when it has none.  Like BCHN's AccessByTxid, it
+// looks at every output a transaction can have, but without a database read
+// for each: it searches the cache, which holds the outputs added since the
+// last flush, a chunk at a time, and then reads the outputs the database
+// holds with one seek.  As the cache is searched first, an output a flush
+// moves meanwhile is still found in the database.  Nothing it reads is added
+// to the cache.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) FetchUnspentOutputOfTx(hash *chainhash.Hash) (*UtxoEntry, error) {
+	for start := uint32(0); start < maxTxOutputs; start += utxoScanChunk {
+		b.chainLock.RLock()
+		entry := b.utxoCache.cachedUnspentOutput(hash, start,
+			min(start+utxoScanChunk, maxTxOutputs))
+		b.chainLock.RUnlock()
+		if entry != nil {
+			return entry, nil
+		}
+	}
+	if unspentOutputScanHook != nil {
+		unspentOutputScanHook()
+	}
+
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+	return b.utxoCache.storedUnspentOutput(hash)
 }
 
 // spendEntry marks the output as spent.  Spending an output that is already

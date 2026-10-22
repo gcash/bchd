@@ -753,3 +753,100 @@ func TestUtxoCache_FetchEntryUncached(t *testing.T) {
 		}
 	}
 }
+
+// viewCountingDB is a database that counts its read transactions.
+type viewCountingDB struct {
+	database.DB
+	views int
+}
+
+func (db *viewCountingDB) View(fn func(database.Tx) error) error {
+	db.views++
+	return db.DB.View(fn)
+}
+
+// TestUtxoCache_FetchUnspentOutputOfTx ensures FetchUnspentOutputOfTx finds an
+// unspent output of a transaction at any index, in the cache or in the
+// database, where the cache's state overrides the database's, that it reads
+// the database once, and that it adds nothing to the cache.
+func TestUtxoCache_FetchUnspentOutputOfTx(t *testing.T) {
+	chain, _, tearDown := utxoCacheTestChain("TestUtxoCache_FetchUnspentOutputOfTx")
+	defer tearDown()
+	cache := chain.utxoCache
+	db := &viewCountingDB{DB: cache.db}
+	cache.db = db
+	defer func() { cache.db = db.DB }()
+
+	newEntry := func(height int32) *UtxoEntry {
+		return NewUtxoEntry(wire.NewTxOut(1000, opTrueScript, wire.TokenData{}),
+			height, false)
+	}
+	outpoint := func(hash byte, index uint32) wire.OutPoint {
+		return wire.OutPoint{Hash: chainhash.Hash{hash}, Index: index}
+	}
+	spent := newEntry(20)
+	spent.Spend()
+	next := chainhash.Hash{4}
+	next[chainhash.HashSize-1] = 1
+
+	// 1: in the database only.  2: in the database, its first output
+	// spent in the cache.  3: in the database and loaded into the cache
+	// during the call.  4: none, with outputs of the next hash in the
+	// database.  5 and 6: in the cache only, past the first chunk and at
+	// the last index a transaction can have.  7: spent in the cache.
+	stored := map[wire.OutPoint]*UtxoEntry{
+		outpoint(1, 5): newEntry(10),
+		outpoint(2, 0): newEntry(20),
+		outpoint(2, 2): newEntry(21),
+		outpoint(3, 1): newEntry(30),
+		{Hash: next}:   newEntry(40),
+	}
+	err := cache.db.Update(func(dbTx database.Tx) error {
+		return dbPutUtxoEntries(dbTx, stored)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.cachedEntries[outpoint(2, 0)] = spent
+	cache.cachedEntries[outpoint(5, utxoScanChunk+44)] = newEntry(50)
+	cache.cachedEntries[outpoint(6, maxTxOutputs-1)] = newEntry(60)
+	cache.cachedEntries[outpoint(7, 0)] = nil
+	numCached := len(cache.cachedEntries)
+
+	for _, test := range []struct {
+		hash   byte
+		height int32
+		load   bool
+	}{
+		{1, 10, false},
+		{2, 21, false},
+		{3, 30, true},
+		{4, 0, false},
+		{5, 50, false},
+		{6, 60, false},
+		{7, 0, false},
+	} {
+		if test.load {
+			unspentOutputScanHook = func() {
+				cache.cachedEntries[outpoint(3, 1)] = stored[outpoint(3, 1)].Clone()
+				numCached++
+			}
+		}
+		db.views = 0
+		entry, err := chain.FetchUnspentOutputOfTx(&chainhash.Hash{test.hash})
+		unspentOutputScanHook = nil
+		if err != nil {
+			t.Fatalf("%d: %v", test.hash, err)
+		}
+		if (entry == nil) != (test.height == 0) || entry != nil && entry.BlockHeight() != test.height {
+			t.Fatalf("%d: got %+v, want height %d", test.hash, entry, test.height)
+		}
+		if db.views > 1 {
+			t.Fatalf("%d: %d database reads", test.hash, db.views)
+		}
+		if len(cache.cachedEntries) != numCached {
+			t.Fatalf("%d: %d cached entries, want %d", test.hash,
+				len(cache.cachedEntries), numCached)
+		}
+	}
+}

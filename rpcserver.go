@@ -3286,23 +3286,17 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 
 // blockOfUnspentOutput returns the hash of the main chain block holding the
 // transaction, found from one of its outputs in the utxo set, or nil when it
-// has none there.  As in BCHN, it looks at every index a transaction can
-// have: the smallest output is 9 bytes, an 8 byte value and an empty script.
+// has none there.  As in BCHN, it looks at every index a transaction can have.
 func blockOfUnspentOutput(chain *blockchain.BlockChain, txid *chainhash.Hash) *chainhash.Hash {
-	for i := uint32(0); i < blockchain.MaxTransactionSize/9; i++ {
-		entry, err := chain.FetchUtxoEntryUncached(wire.OutPoint{Hash: *txid, Index: i})
-		if err != nil {
-			return nil
-		}
-		if entry != nil && !entry.IsSpent() {
-			hash, err := chain.BlockHashByHeight(entry.BlockHeight())
-			if err != nil {
-				return nil
-			}
-			return hash
-		}
+	entry, err := chain.FetchUnspentOutputOfTx(txid)
+	if err != nil || entry == nil {
+		return nil
 	}
-	return nil
+	hash, err := chain.BlockHashByHeight(entry.BlockHeight())
+	if err != nil {
+		return nil
+	}
+	return hash
 }
 
 // handleGetTxOutProof implements the gettxoutproof command.

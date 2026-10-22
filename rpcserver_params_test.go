@@ -11,6 +11,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,6 +206,12 @@ func TestFetchMempoolTxnsForAddressSkipOverflow(t *testing.T) {
 func newRPCTestChain(t *testing.T) (*blockchain.BlockChain, database.DB) {
 	t.Helper()
 	db := newRPCTestDB(t)
+	return newRPCTestChainOn(t, db), db
+}
+
+// newRPCTestChainOn returns a regtest chain on db.
+func newRPCTestChainOn(t *testing.T, db database.DB) *blockchain.BlockChain {
+	t.Helper()
 	blockchain.UseLogger(bchlog.Disabled)
 	t.Cleanup(func() { blockchain.UseLogger(chanLog) })
 	chain, err := blockchain.New(&blockchain.Config{
@@ -217,7 +224,7 @@ func newRPCTestChain(t *testing.T) (*blockchain.BlockChain, database.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return chain, db
+	return chain
 }
 
 // callTxOutProofHandler runs a gettxoutproof or verifytxoutproof handler and
@@ -239,6 +246,39 @@ func assertRPCError(t *testing.T, what string, err error, code btcjson.RPCErrorC
 	rpcErr, ok := err.(*btcjson.RPCError)
 	if !ok || rpcErr.Code != code || rpcErr.Message != msg {
 		t.Errorf("%s: got error %v, want %d: %s", what, err, code, msg)
+	}
+}
+
+// viewCountingDB is a database that counts its read transactions.
+type viewCountingDB struct {
+	database.DB
+	views atomic.Int64
+}
+
+func (db *viewCountingDB) View(fn func(database.Tx) error) error {
+	db.views.Add(1)
+	return db.DB.View(fn)
+}
+
+// TestGetTxOutProofUtxoSetReads ensures gettxoutproof without the transaction
+// index reads the database once when it looks for an unspent output of the
+// first txid, rather than once for each of the 111111 outputs a transaction
+// can have, which limited users could make it do for any txid.
+func TestGetTxOutProofUtxoSetReads(t *testing.T) {
+	db := &viewCountingDB{DB: newRPCTestDB(t)}
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       newRPCTestChainOn(t, db),
+		DB:          db,
+	}}
+	db.views.Store(0)
+	unknown := chainhash.Hash{1}
+	cmd := btcjson.NewGetTxOutProofCmd([]string{unknown.String()}, nil)
+	_, err := callTxOutProofHandler(t, handleGetTxOutProof, s, cmd)
+	assertRPCError(t, "unknown txid", err, btcjson.ErrRPCNoTxInfo,
+		"Transaction not yet in block")
+	if n := db.views.Load(); n != 1 {
+		t.Errorf("%d database reads for an unknown txid, want 1", n)
 	}
 }
 
