@@ -1403,18 +1403,20 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 			return nil, err
 		}
 
-		// The spent outputs come from the spend journal, so no
-		// txindex is needed.
-		if *c.Verbosity >= 3 {
-			stxos, err := s.cfg.Chain.FetchSpendJournal(blk)
-			if err == nil {
-				err = addBlockPrevOuts(params, rawTxns, blk, stxos)
-			}
-			if err != nil {
-				rpcsLog.Debugf("Omitting spent outputs and fees "+
-					"from block %v: %v", hash, err)
-			}
+		// The fees, as in BCHN from verbosity 2, and the spent outputs
+		// of verbosity 3 come from the spend journal, so no txindex is
+		// needed.
+		stxos, err := s.cfg.Chain.FetchSpendJournal(blk)
+		if err == nil {
+			err = addBlockPrevOuts(params, rawTxns, blk, stxos,
+				*c.Verbosity >= 3)
+		}
+		if err != nil {
+			rpcsLog.Debugf("Omitting spent outputs and fees "+
+				"from block %v: %v", hash, err)
+		}
 
+		if *c.Verbosity >= 3 {
 			return btcjson.GetBlockVerboseTxResult{
 				Hash:          blockReply.Hash,
 				Confirmations: blockReply.Confirmations,
@@ -1504,11 +1506,11 @@ func createPrevOutResult(chainParams *chaincfg.Params,
 	}
 }
 
-// addBlockPrevOuts adds the spent outputs and fees from the spend journal of a
-// block to its raw transaction results.
+// addBlockPrevOuts adds the fees from the spend journal of a block to its raw
+// transaction results, and with prevOuts the spent outputs too.
 func addBlockPrevOuts(chainParams *chaincfg.Params,
 	rawTxns []btcjson.TxRawResult, blk *bchutil.Block,
-	stxos []blockchain.SpentTxOut) error {
+	stxos []blockchain.SpentTxOut, prevOuts bool) error {
 
 	txns := blk.Transactions()
 	var numInputs int
@@ -1529,8 +1531,10 @@ func addBlockPrevOuts(chainParams *chaincfg.Params,
 			stxo := &stxos[stxoIdx]
 			stxoIdx++
 
-			rawTxn.Vin[j].PrevOut = createPrevOutResult(chainParams,
-				stxo)
+			if prevOuts {
+				rawTxn.Vin[j].PrevOut = createPrevOutResult(
+					chainParams, stxo)
+			}
 			totalIn += stxo.Amount
 		}
 

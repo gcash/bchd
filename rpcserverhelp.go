@@ -235,7 +235,7 @@ var helpDescsEnUS = map[string]string{
 	"txrawresult-locktime":      "The transaction lock time",
 	"txrawresult-vin":           "The transaction inputs as JSON objects",
 	"txrawresult-vout":          "The transaction outputs as JSON objects",
-	"txrawresult-fee":           "The transaction fee in BCH (non-coinbase txns only, only when getblock verbosity>=3)",
+	"txrawresult-fee":           "The transaction fee in BCH (non-coinbase txns only, only when getblock verbosity>=2)",
 	"txrawresult-blockhash":     "Hash of the block the transaction is part of",
 	"txrawresult-confirmations": "Number of confirmations of the block",
 	"txrawresult-time":          "Transaction time in seconds since 1 Jan 1970 GMT",

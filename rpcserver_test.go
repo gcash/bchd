@@ -22,6 +22,7 @@ import (
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -418,11 +419,11 @@ func assertGolden(t *testing.T, name string, result interface{}) {
 	}
 }
 
-// TestGetBlockVerbosity1And2Unchanged ensures the getblock results for
-// verbosity 1 and 2 are unchanged by the addition of verbosity 3.  The golden
-// files were generated from the results before verbosity 3 was added.
-func TestGetBlockVerbosity1And2Unchanged(t *testing.T) {
-	blk, _ := getBlockTestBlock(t)
+// TestGetBlockVerbosity1And2 ensures the getblock results for verbosity 1 and
+// 2 match their golden files, generated from the results before verbosity 3
+// was added, with the fees of verbosity 2 that BCHN gives too.
+func TestGetBlockVerbosity1And2(t *testing.T) {
+	blk, stxos := getBlockTestBlock(t)
 
 	reply := getBlockTestReply(blk)
 	for _, tx := range blk.Transactions() {
@@ -432,6 +433,11 @@ func TestGetBlockVerbosity1And2Unchanged(t *testing.T) {
 
 	reply = getBlockTestReply(blk)
 	reply.RawTx = getBlockTestTxns(t, blk)
+	err := addBlockPrevOuts(&chaincfg.MainNetParams, reply.RawTx, blk, stxos,
+		false)
+	if err != nil {
+		t.Fatalf("unable to add fees: %v", err)
+	}
 	assertGolden(t, "getblock-verbosity-2.json", reply)
 }
 
@@ -440,7 +446,7 @@ func TestGetBlockVerbosity1And2Unchanged(t *testing.T) {
 func TestGetBlockVerbosity3(t *testing.T) {
 	blk, stxos := getBlockTestBlock(t)
 	rawTxns := getBlockTestTxns(t, blk)
-	err := addBlockPrevOuts(&chaincfg.MainNetParams, rawTxns, blk, stxos)
+	err := addBlockPrevOuts(&chaincfg.MainNetParams, rawTxns, blk, stxos, true)
 	if err != nil {
 		t.Fatalf("unable to add prevouts: %v", err)
 	}
@@ -463,6 +469,53 @@ func TestGetBlockVerbosity3(t *testing.T) {
 	})
 }
 
+// TestGetBlockVerbosity2Fee ensures getblock at verbosity 2 gives the fee of
+// each transaction but the coinbase, as BCHN does, while still listing the
+// transactions under "rawtx" and without the outputs their inputs spend.
+func TestGetBlockVerbosity2Fee(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       chain,
+		DB:          db,
+	}}
+	first := mineTestBlock(t, chain, nil)
+	for range chaincfg.RegressionNetParams.CoinbaseMaturity {
+		mineTestBlock(t, chain, nil)
+	}
+	value := first.MsgBlock().Transactions[0].TxOut[0].Value
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: *first.Transactions()[0].Hash()}, nil))
+	spend.AddTxOut(wire.NewTxOut(value/2, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	spend.AddTxOut(wire.NewTxOut(value/2-1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	block := mineTestBlock(t, chain, nil, spend)
+
+	result, err := handleGetBlock(s, btcjson.NewGetBlockCmd(block.Hash().String(),
+		btcjson.Verbositylevel(2)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Tx    json.RawMessage       `json:"tx"`
+		RawTx []btcjson.TxRawResult `json:"rawtx"`
+	}
+	if err := json.Unmarshal(raw, &reply); err != nil || reply.Tx != nil ||
+		len(reply.RawTx) != 2 || bytes.Contains(raw, []byte(`"prevout"`)) {
+
+		t.Fatalf("unexpected verbosity 2 block: %s", raw)
+	}
+	if fee := reply.RawTx[0].Fee; fee != nil {
+		t.Errorf("coinbase fee %v", *fee)
+	}
+	if fee := reply.RawTx[1].Fee; fee == nil || *fee != bchutil.Amount(1000).ToBCH() {
+		t.Errorf("fee %v, want %v", fee, bchutil.Amount(1000).ToBCH())
+	}
+}
+
 // TestAddBlockPrevOutsJournalMismatch ensures the transaction results are left
 // unchanged, without prevouts or fees, when the spend journal does not hold
 // exactly one entry for each input of the block.
@@ -481,7 +534,7 @@ func TestAddBlockPrevOutsJournalMismatch(t *testing.T) {
 	for name, journal := range tests {
 		rawTxns := getBlockTestTxns(t, blk)
 		err := addBlockPrevOuts(&chaincfg.MainNetParams, rawTxns, blk,
-			journal)
+			journal, true)
 		if err == nil {
 			t.Errorf("%s: expected an error", name)
 		}

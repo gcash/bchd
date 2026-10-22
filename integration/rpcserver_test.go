@@ -121,8 +121,8 @@ func testGetBlockVerbosity3(r *rpctest.Harness, t *testing.T) {
 		t.Fatalf("Unable to generate block: %v", err)
 	}
 
-	// Verbosity 2 lists the transactions under "rawtx", without the
-	// prevout and fee fields.
+	// Verbosity 2 lists the transactions under "rawtx", with the fee but
+	// without the prevout fields.
 	raw, err := r.Node.RawRequest("getblock", []json.RawMessage{
 		json.RawMessage(`"` + blockHashes[0].String() + `"`),
 		json.RawMessage("2"),
@@ -137,7 +137,7 @@ func testGetBlockVerbosity3(r *rpctest.Harness, t *testing.T) {
 	_, hasRawTx := fields["rawtx"]
 	_, hasTx := fields["tx"]
 	if !hasRawTx || hasTx || bytes.Contains(raw, []byte(`"prevout"`)) ||
-		bytes.Contains(raw, []byte(`"fee"`)) {
+		!bytes.Contains(raw, []byte(`"fee"`)) {
 
 		t.Fatalf("Unexpected verbosity 2 block: %s", raw)
 	}

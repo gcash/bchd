@@ -98,6 +98,7 @@
 					}
 				}
 			],
+			"fee": 0.0001,
 			"blockhash": "92bbeb48e2184e0352a962094e674ae02c131af38bdb30cb17de21f9430104ea",
 			"confirmations": 6,
 			"time": 1700000000,
@@ -135,6 +136,7 @@
 					}
 				}
 			],
+			"fee": 0.0001,
 			"blockhash": "92bbeb48e2184e0352a962094e674ae02c131af38bdb30cb17de21f9430104ea",
 			"confirmations": 6,
 			"time": 1700000000,

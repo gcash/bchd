@@ -229,13 +229,21 @@ func (r FutureGetBlockVerboseTxResult) Receive() (*btcjson.GetBlockVerboseTxResu
 		return nil, err
 	}
 
-	var blockResult btcjson.GetBlockVerboseTxResult
+	// bchd lists the transactions of verbosity 2 under "rawtx", where BCHN
+	// lists them under "tx".
+	var blockResult struct {
+		btcjson.GetBlockVerboseTxResult
+		RawTx []btcjson.TxRawResult `json:"rawtx"`
+	}
 	err = json.Unmarshal(res, &blockResult)
 	if err != nil {
 		return nil, err
 	}
+	if blockResult.Tx == nil {
+		blockResult.Tx = blockResult.RawTx
+	}
 
-	return &blockResult, nil
+	return &blockResult.GetBlockVerboseTxResult, nil
 }
 
 // GetBlockVerboseTxAsync returns an instance of a type that can be used to get
