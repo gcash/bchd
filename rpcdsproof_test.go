@@ -351,6 +351,111 @@ func TestDSProofWebsocket(t *testing.T) {
 	}
 }
 
+// dsProofTestChain adds to the memory pool a chain of n transactions, each
+// spending the only output of the one before, the first spending op, which
+// holds value.  It returns the last and the value of its output.
+func dsProofTestChain(t *testing.T, h *dsProofTestHarness, op wire.OutPoint, value int64, n int) (*wire.MsgTx, int64) {
+	t.Helper()
+	var tx *wire.MsgTx
+	for range n {
+		tx = wire.NewMsgTx(wire.TxVersion)
+		tx.AddTxIn(&wire.TxIn{PreviousOutPoint: op, Sequence: wire.MaxTxInSequenceNum})
+		tx.AddTxOut(wire.NewTxOut(value-1000, h.pkScript, wire.TokenData{}))
+		signTestInput(t, h.mempoolTestHarness, tx, value)
+		if _, err := h.server.cfg.TxMemPool.ProcessTransaction(bchutil.NewTx(tx), false, 0); err != nil {
+			t.Fatal(err)
+		}
+		op, value = wire.OutPoint{Hash: tx.TxHash()}, value-1000
+	}
+	return tx, value
+}
+
+// TestDSProofLookupBounds ensures the work getdsproof does under the memory
+// pool lock is bounded: a recursive lookup searches at most 1000 unconfirmed
+// ancestors, and at most 1000 descendants of the transaction with the proof
+// are listed, the nearest, with the proof.  getdsproofscore still searches as
+// many ancestors as BCHN does.
+func TestDSProofLookupBounds(t *testing.T) {
+	// Two chains of 600 meet in one transaction.  The first, searched
+	// first, has no proof, and the second ends in tx1, which has one,
+	// past the first 1000 ancestors.
+	h := newDSProofTestHarness(t)
+	pool := h.server.cfg.TxMemPool
+	tipA, valueA := dsProofTestChain(t, h, h.outputs[1], mempoolTestOutputValue, 600)
+	tipB, valueB := dsProofTestChain(t, h, wire.OutPoint{Hash: h.child.TxHash()},
+		h.child.TxOut[0].Value, 599)
+	merge := wire.NewMsgTx(wire.TxVersion)
+	for _, tip := range []*wire.MsgTx{tipA, tipB} {
+		merge.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Hash: tip.TxHash()},
+			Sequence: wire.MaxTxInSequenceNum})
+	}
+	merge.AddTxOut(wire.NewTxOut(valueA+valueB-1000, h.pkScript, wire.TokenData{}))
+	for i, value := range []int64{valueA, valueB} {
+		sigScript, err := txscript.SignatureScript(merge, i, value, h.pkScript,
+			txscript.SigHashAll, h.key, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		merge.TxIn[i].SignatureScript = sigScript
+	}
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(merge), false, 0); err != nil {
+		t.Fatal(err)
+	}
+	out, err := call(t, h, "getdsproof", merge.TxHash().String())
+	if rerr, ok := err.(*btcjson.RPCError); !ok || rerr.Message != mempool.ErrDSProofSearchLimit.Error() {
+		var found struct {
+			Path []string `json:"path"`
+		}
+		_ = json.Unmarshal([]byte(out), &found)
+		t.Fatalf("lookup past 1000 ancestors: got a path of %d, error %v",
+			len(found.Path), err)
+	}
+	if out, err = call(t, h, "getdsproofscore", merge.TxHash().String()); out != "0" {
+		t.Fatalf("score past 1000 ancestors: %s %v", out, err)
+	}
+
+	// tx1, its child, a transaction splitting the child's output in two,
+	// a branch of two from the first output, and a chain of 1000 from the
+	// second: 1005 in all.
+	h = newDSProofTestHarness(t)
+	pool = h.server.cfg.TxMemPool
+	value := h.child.TxOut[0].Value
+	split := wire.NewMsgTx(wire.TxVersion)
+	split.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Hash: h.child.TxHash()},
+		Sequence: wire.MaxTxInSequenceNum})
+	split.AddTxOut(wire.NewTxOut(value/2, h.pkScript, wire.TokenData{}))
+	split.AddTxOut(wire.NewTxOut(value/2-1000, h.pkScript, wire.TokenData{}))
+	signTestInput(t, h.mempoolTestHarness, split, value)
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(split), false, 0); err != nil {
+		t.Fatal(err)
+	}
+	near, _ := dsProofTestChain(t, h, wire.OutPoint{Hash: split.TxHash()}, value/2, 2)
+	far, _ := dsProofTestChain(t, h, wire.OutPoint{Hash: split.TxHash(), Index: 1},
+		value/2-1000, 1000)
+	out, err = call(t, h, "getdsproof", h.dspID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		DSPID       string   `json:"dspid"`
+		Descendants []string `json:"descendants"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil || result.DSPID != h.dspID {
+		t.Fatalf("getdsproof: %s", out)
+	}
+	listed := make(map[string]bool)
+	for _, d := range result.Descendants {
+		listed[d] = true
+	}
+	if len(result.Descendants) != 1000 || !listed[h.tx1.TxHash().String()] ||
+		!listed[near.TxHash().String()] || listed[far.TxHash().String()] {
+		t.Fatalf("%d descendants, with tx1 %v, the end of the short branch %v "+
+			"and the end of the long one %v", len(result.Descendants),
+			listed[h.tx1.TxHash().String()], listed[near.TxHash().String()],
+			listed[far.TxHash().String()])
+	}
+}
+
 // TestDSProofRPCDisabled checks that the commands fail with -90 when proofs
 // are disabled.
 func TestDSProofRPCDisabled(t *testing.T) {

@@ -166,6 +166,41 @@ func TestGetDoubleSpendProof(t *testing.T) {
 	}
 }
 
+// TestGetDoubleSpendProofDescendantsBound ensures GetDoubleSpendProof lists
+// at most 1000 descendants of the transaction with the proof, the nearest, so
+// the work it does under the mempool lock is bounded.
+func TestGetDoubleSpendProofDescendantsBound(t *testing.T) {
+	pool, tx1, _, spend, _ := newDSProofPool(t)
+	s := &GrpcServer{chainParams: &chaincfg.MainNetParams, txMemPool: pool}
+	op := wire.OutPoint{Hash: tx1.TxHash()}
+	value := tx1.TxOut[0].Value
+	var last chainhash.Hash
+	for range 1000 {
+		tx := spend(op, value, 1000)
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0); err != nil {
+			t.Fatal(err)
+		}
+		last = tx.TxHash()
+		op = wire.OutPoint{Hash: last}
+		value -= 1000
+	}
+	txHash := tx1.TxHash()
+	resp, err := s.GetDoubleSpendProof(context.Background(), &pb.GetDoubleSpendProofRequest{
+		Query: &pb.GetDoubleSpendProofRequest_TransactionHash{TransactionHash: txHash[:]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hasTx1, hasLast bool
+	for _, d := range resp.Descendants {
+		hasTx1 = hasTx1 || bytes.Equal(d, txHash[:])
+		hasLast = hasLast || bytes.Equal(d, last[:])
+	}
+	if len(resp.Descendants) != 1000 || !hasTx1 || hasLast {
+		t.Fatalf("%d descendants, with tx1 %v and the farthest %v",
+			len(resp.Descendants), hasTx1, hasLast)
+	}
+}
+
 // dsProofStream records the notifications sent on a SubscribeDoubleSpendProofs
 // stream.
 type dsProofStream struct {

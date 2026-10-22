@@ -21,6 +21,14 @@ const (
 	// unconfirmed ancestors of a transaction for double spend proofs.
 	dsProofSearchMaxDepth = 1000
 	dsProofSearchMaxTxs   = 20000
+
+	// dsProofLookupMaxTxs and dsProofLookupMaxDescendants bound the proof
+	// lookups, which limited RPC users and gRPC clients can make: a lookup
+	// searches at most dsProofLookupMaxTxs unconfirmed ancestors and lists
+	// at most dsProofLookupMaxDescendants descendants, as both are done
+	// under the pool's lock.
+	dsProofLookupMaxTxs         = 1000
+	dsProofLookupMaxDescendants = 1000
 )
 
 // dsProofRelockHook is called by ProcessDSProof between releasing the read
@@ -482,12 +490,14 @@ func (mp *TxPool) DSProofs(includeOrphans bool) []*DSProofDesc {
 }
 
 // descendants returns the memory pool transactions spending the outputs of
-// txHash, directly or not, including txHash itself, ordered by hash.
+// txHash, directly or not, including txHash itself, ordered by hash.  Only the
+// dsProofLookupMaxDescendants nearest are returned.
 //
 // This function MUST be called with the mempool lock held (for reads).
 func (mp *TxPool) descendants(txHash chainhash.Hash) []chainhash.Hash {
 	seen := map[chainhash.Hash]struct{}{txHash: {}}
 	queue := []chainhash.Hash{txHash}
+walk:
 	for len(queue) > 0 {
 		h := queue[0]
 		queue = queue[1:]
@@ -501,6 +511,9 @@ func (mp *TxPool) descendants(txHash chainhash.Hash) []chainhash.Hash {
 				continue
 			}
 			if _, ok := seen[*child.Hash()]; !ok {
+				if len(seen) == dsProofLookupMaxDescendants {
+					break walk
+				}
 				seen[*child.Hash()] = struct{}{}
 				queue = append(queue, *child.Hash())
 			}
@@ -559,7 +572,8 @@ func (mp *TxPool) DSProofByOutPoint(op wire.OutPoint) (*DSProofDesc, []chainhash
 // DSProofByTx returns the proof of a memory pool transaction.  When
 // recursive is set and the transaction has none, its unconfirmed ancestors
 // are searched as well, and path lists the transactions from txHash to the
-// one with the proof.
+// one with the proof.  The search fails with ErrDSProofSearchLimit after
+// dsProofLookupMaxTxs ancestors.
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) DSProofByTx(txHash *chainhash.Hash, recursive bool) (desc *DSProofDesc,
@@ -577,7 +591,7 @@ func (mp *TxPool) DSProofByTx(txHash *chainhash.Hash, recursive bool) (desc *DSP
 			mp.descendants(*txHash), nil, nil
 	}
 
-	path, hash, _, err := mp.searchDSProofs(*txHash, false)
+	path, hash, _, err := mp.searchDSProofs(*txHash, false, dsProofLookupMaxTxs)
 	if err != nil || path == nil {
 		return nil, nil, nil, err
 	}
@@ -600,7 +614,7 @@ func (mp *TxPool) DSProofScore(txHash *chainhash.Hash) (float64, error) {
 	if _, ok := mp.pool[*txHash]; !ok {
 		return 0, fmt.Errorf("transaction %v is not in the pool", txHash)
 	}
-	_, _, score, err := mp.searchDSProofs(*txHash, true)
+	_, _, score, err := mp.searchDSProofs(*txHash, true, dsProofSearchMaxTxs)
 	if err == ErrDSProofSearchLimit {
 		err = nil
 	}
@@ -608,13 +622,14 @@ func (mp *TxPool) DSProofScore(txHash *chainhash.Hash) (float64, error) {
 }
 
 // searchDSProofs searches a memory pool transaction and its unconfirmed
-// ancestors, depth first, for a proof.  It returns the path from txHash to
-// the transaction with the proof and the proof id.  With scoring set, the
-// search also stops at a transaction that cannot have a proof and the score
-// is computed as described for DSProofScore.
+// ancestors, depth first, for a proof, giving up after maxTxs ancestors.  It
+// returns the path from txHash to the transaction with the proof and the
+// proof id.  With scoring set, the search also stops at a transaction that
+// cannot have a proof and the score is computed as described for
+// DSProofScore.
 //
 // This function MUST be called with the mempool lock held (for reads).
-func (mp *TxPool) searchDSProofs(txHash chainhash.Hash, scoring bool) ([]chainhash.Hash,
+func (mp *TxPool) searchDSProofs(txHash chainhash.Hash, scoring bool, maxTxs int) ([]chainhash.Hash,
 	chainhash.Hash, float64, error) {
 
 	score := 1.0
@@ -627,7 +642,7 @@ func (mp *TxPool) searchDSProofs(txHash chainhash.Hash, scoring bool) ([]chainha
 	search = func(txD *TxDesc) error {
 		hash := *txD.Tx.Hash()
 		path = append(path, hash)
-		if len(path) > dsProofSearchMaxDepth || len(seen) > dsProofSearchMaxTxs {
+		if len(path) > dsProofSearchMaxDepth || len(seen) > maxTxs {
 			score = min(score, 0.25)
 			return ErrDSProofSearchLimit
 		}
