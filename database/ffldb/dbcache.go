@@ -658,24 +658,26 @@ func (c *dbCache) commitTx(tx *transaction) error {
 
 	// Since the cached keys to be added and removed use an immutable treap,
 	// a snapshot is simply obtaining the root of the tree under the lock
-	// which is used to atomically swap the root.
+	// which is used to atomically swap the root.  The changes are applied
+	// in batches, which copy each node of the treaps at most once instead
+	// of once for every key below it.
 	c.cacheLock.RLock()
-	newCachedKeys := c.cachedKeys
-	newCachedRemove := c.cachedRemove
+	newCachedKeys := c.cachedKeys.Batch()
+	newCachedRemove := c.cachedRemove.Batch()
 	c.cacheLock.RUnlock()
 
 	// Apply every key to add in the database transaction to the cache.
 	tx.pendingKeys.ForEach(func(k, v []byte) bool {
-		newCachedRemove = newCachedRemove.Delete(k)
-		newCachedKeys = newCachedKeys.Put(k, v)
+		newCachedRemove.Delete(k)
+		newCachedKeys.Put(k, v)
 		return true
 	})
 	tx.pendingKeys = nil
 
 	// Apply every key to remove in the database transaction to the cache.
 	tx.pendingRemove.ForEach(func(k, _ []byte) bool {
-		newCachedKeys = newCachedKeys.Delete(k)
-		newCachedRemove = newCachedRemove.Put(k, nil)
+		newCachedKeys.Delete(k)
+		newCachedRemove.Put(k, nil)
 		return true
 	})
 	tx.pendingRemove = nil
@@ -683,8 +685,8 @@ func (c *dbCache) commitTx(tx *transaction) error {
 	// Atomically replace the immutable treaps which hold the cached keys to
 	// add and delete.
 	c.cacheLock.Lock()
-	c.cachedKeys = newCachedKeys
-	c.cachedRemove = newCachedRemove
+	c.cachedKeys = newCachedKeys.Immutable()
+	c.cachedRemove = newCachedRemove.Immutable()
 	c.cacheLock.Unlock()
 	return nil
 }

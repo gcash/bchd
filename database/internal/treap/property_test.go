@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
+	"unsafe"
 )
 
 // treapStats holds what checkTreap found while walking a treap.
@@ -243,5 +244,153 @@ func TestDeleteKeepsHeap(t *testing.T) {
 		t.Fatalf("priority heap broken after deletes: mutable %d, "+
 			"immutable %d nodes (depth %d and %d)", ms.heapErrs,
 			is.heapErrs, ms.depth, is.depth)
+	}
+}
+
+// copyModel returns a copy of the passed map.
+func copyModel(model map[string][]byte) map[string][]byte {
+	snap := make(map[string][]byte, len(model))
+	for k, v := range model {
+		snap[k] = v
+	}
+	return snap
+}
+
+// TestBatchMatchesMap applies random puts and deletes to an immutable treap
+// in batches and ensures every version holds the entries the map held at that
+// point.  The versions are taken before and after each batch and from the
+// middle of some, so a batch never changes a treap it started from or
+// returned.
+func TestBatchMatchesMap(t *testing.T) {
+	t.Parallel()
+
+	type version struct {
+		tr    *Immutable
+		model map[string][]byte
+	}
+	for seed := int64(1); seed <= 10; seed++ {
+		r := rand.New(rand.NewSource(seed))
+		tr := NewImmutable()
+		model := make(map[string][]byte)
+		var versions []version
+		for range 40 {
+			versions = append(versions, version{tr, copyModel(model)})
+			b := tr.Batch()
+			for op := r.Intn(200); op > 0; op-- {
+				k := randKey(r, 300)
+				if r.Intn(3) < 2 {
+					v := make([]byte, r.Intn(8))
+					r.Read(v)
+					b.Put(k, v)
+					model[string(k)] = v
+				} else {
+					b.Delete(k)
+					delete(model, string(k))
+				}
+				if r.Intn(50) == 0 {
+					versions = append(versions,
+						version{b.Immutable(), copyModel(model)})
+				}
+			}
+			tr = b.Immutable()
+		}
+		versions = append(versions, version{tr, model})
+		for _, v := range versions {
+			checkAgainstModel(t, v.tr.root, v.tr.Len(), v.tr.Size(),
+				v.tr.Get, v.model)
+		}
+		checkIter(t, tr.Iterator(nil, nil), sortedKeys(model))
+	}
+}
+
+// TestBatchEmpty ensures a batch can start from, and return to, an empty
+// treap without changing a treap it returned.
+func TestBatchEmpty(t *testing.T) {
+	t.Parallel()
+
+	b := NewImmutable().Batch()
+	b.Put([]byte("a"), []byte("1"))
+	one := b.Immutable()
+	b.Delete([]byte("a"))
+	empty := b.Immutable()
+	b.Put([]byte("b"), nil)
+	b.Put([]byte("a"), []byte("2"))
+	two := b.Immutable()
+
+	checkAgainstModel(t, one.root, one.Len(), one.Size(), one.Get,
+		map[string][]byte{"a": []byte("1")})
+	checkAgainstModel(t, empty.root, empty.Len(), empty.Size(), empty.Get,
+		map[string][]byte{})
+	checkAgainstModel(t, two.root, two.Len(), two.Size(), two.Get,
+		map[string][]byte{"a": []byte("2"), "b": {}})
+}
+
+// TestBatchCopiesNodesOnce ensures a batch of puts allocates nothing but the
+// nodes of the treap it returns that the treap it started from does not have,
+// besides what a batch and the treap it returns take with no puts, so it
+// copies no node twice.  Put on the treap itself copies the whole path to
+// each key it inserts.
+func TestBatchCopiesNodesOnce(t *testing.T) {
+	r := rand.New(rand.NewSource(3))
+	keys := make([][]byte, 2000)
+	for i := range keys {
+		keys[i] = randKey(r, 1<<30)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return bytes.Compare(keys[i], keys[j]) < 0
+	})
+	full := NewImmutable()
+	for range 20000 {
+		full = full.Put(randKey(r, 1<<30), nil)
+	}
+
+	for _, base := range []*Immutable{NewImmutable(), full} {
+		// The priorities are random, so the nodes are counted for the
+		// same run that was measured.
+		var result *Immutable
+		overhead := testing.AllocsPerRun(1, func() {
+			result = base.Batch().Immutable()
+		})
+		allocs := testing.AllocsPerRun(1, func() {
+			b := base.Batch()
+			for _, k := range keys {
+				b.Put(k, nil)
+			}
+			result = b.Immutable()
+		})
+
+		old := make(map[*treapNode]bool)
+		var walk func(n *treapNode, fn func(*treapNode))
+		walk = func(n *treapNode, fn func(*treapNode)) {
+			if n != nil {
+				fn(n)
+				walk(n.left, fn)
+				walk(n.right, fn)
+			}
+		}
+		walk(base.root, func(n *treapNode) { old[n] = true })
+		var fresh int
+		walk(result.root, func(n *treapNode) {
+			if !old[n] {
+				fresh++
+			}
+		})
+		if allocs != float64(fresh)+overhead {
+			t.Fatalf("%d puts on %d nodes made %v allocations, want %v "+
+				"for the %d new nodes and the batch", len(keys),
+				base.Len(), allocs, float64(fresh)+overhead, fresh)
+		}
+	}
+}
+
+// TestNodeFieldsSize ensures nodeFieldsSize, which Size counts for each node,
+// is the size of a node on 64-bit platforms.
+func TestNodeFieldsSize(t *testing.T) {
+	if unsafe.Sizeof(uintptr(0)) != 8 {
+		t.Skip("nodeFieldsSize assumes 64-bit pointers")
+	}
+	if got := unsafe.Sizeof(treapNode{}); got != nodeFieldsSize {
+		t.Fatalf("a node is %d bytes, nodeFieldsSize is %d", got,
+			nodeFieldsSize)
 	}
 }

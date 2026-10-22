@@ -23,5 +23,9 @@ mutations.  All readers can simply use their existing pointer as a snapshot
 since the treap it points to is immutable.  This effectively provides O(1)
 snapshot capability with efficient memory usage characteristics since the old
 nodes only remain allocated until there are no longer any references to them.
+
+A batch applies many changes to an immutable treap.  It copies each node it
+changes once, rather than once for every change below the node, and leaves the
+treap it started from as it was.
 */
 package treap

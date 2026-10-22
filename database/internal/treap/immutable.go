@@ -7,17 +7,31 @@ package treap
 import (
 	"bytes"
 	"math/rand"
+	"sync/atomic"
 )
 
-// cloneTreapNode returns a shallow copy of the passed node.
-func cloneTreapNode(node *treapNode) *treapNode {
+// cloneTreapNode returns a shallow copy of the passed node that belongs to the
+// batch with the passed generation, or to no batch when it is zero.
+func cloneTreapNode(node *treapNode, gen uint64) *treapNode {
 	return &treapNode{
 		key:      node.key,
 		value:    node.value,
 		priority: node.priority,
 		left:     node.left,
 		right:    node.right,
+		gen:      gen,
 	}
+}
+
+// ownTreapNode returns the passed node when it belongs to the batch with the
+// passed generation, so the batch can change it in place, and otherwise a copy
+// of it that belongs to the batch.  No node belongs to generation zero, so
+// for it the node is always copied.
+func ownTreapNode(node *treapNode, gen uint64) *treapNode {
+	if gen != 0 && node.gen == gen {
+		return node
+	}
+	return cloneTreapNode(node, gen)
 }
 
 // Immutable represents a treap data structure which is used to hold ordered
@@ -106,6 +120,15 @@ func (t *Immutable) Get(key []byte) []byte {
 
 // Put inserts the passed key/value pair.
 func (t *Immutable) Put(key, value []byte) *Immutable {
+	root, count, totalSize := t.put(key, value, 0)
+	return newImmutable(root, count, totalSize)
+}
+
+// put inserts the passed key/value pair into a version of the treap that
+// shares every node it does not change, and returns the root, count and total
+// size of that version.  It changes nodes that belong to the batch with the
+// passed generation in place instead of copying them.
+func (t *Immutable) put(key, value []byte, gen uint64) (*treapNode, int, uint64) {
 	// Use an empty byte slice for the value when none was provided.  This
 	// ultimately allows key existence to be determined from the value since
 	// an empty byte slice is distinguishable from nil.
@@ -116,7 +139,8 @@ func (t *Immutable) Put(key, value []byte) *Immutable {
 	// The node is the root of the tree if there isn't already one.
 	if t.root == nil {
 		root := newTreapNode(key, value, rand.Int())
-		return newImmutable(root, 1, nodeSize(root))
+		root.gen = gen
+		return root, 1, nodeSize(root)
 	}
 
 	// Find the binary tree insertion point and construct a replaced list of
@@ -130,8 +154,9 @@ func (t *Immutable) Put(key, value []byte) *Immutable {
 	var parents parentStack
 	var compareResult int
 	for node := t.root; node != nil; {
-		// Clone the node and link its parent to it if needed.
-		nodeCopy := cloneTreapNode(node)
+		// Clone the node, unless it is the batch's own, and link its
+		// parent to it if needed.
+		nodeCopy := ownTreapNode(node, gen)
 		if oldParent := parents.At(0); oldParent != nil {
 			if oldParent.left == node {
 				oldParent.left = nodeCopy
@@ -153,19 +178,21 @@ func (t *Immutable) Put(key, value []byte) *Immutable {
 			continue
 		}
 
-		// The key already exists, so update its value.
+		// The key already exists, so update its value.  The new size
+		// is worked out first, since the node may be the batch's own.
+		newTotalSize := t.totalSize - uint64(len(node.value)) +
+			uint64(len(value))
 		nodeCopy.value = value
 
 		// Return new immutable treap with the replaced node and
 		// ancestors up to and including the root of the tree.
 		newRoot := parents.At(parents.Len() - 1)
-		newTotalSize := t.totalSize - uint64(len(node.value)) +
-			uint64(len(value))
-		return newImmutable(newRoot, t.count, newTotalSize)
+		return newRoot, t.count, newTotalSize
 	}
 
 	// Link the new node into the binary tree in the correct position.
 	node := newTreapNode(key, value, rand.Int())
+	node.gen = gen
 	parent := parents.At(0)
 	if compareResult < 0 {
 		parent.left = node
@@ -205,13 +232,25 @@ func (t *Immutable) Put(key, value []byte) *Immutable {
 		}
 	}
 
-	return newImmutable(newRoot, t.count+1, t.totalSize+nodeSize(node))
+	return newRoot, t.count + 1, t.totalSize + nodeSize(node)
 }
 
 // Delete removes the passed key from the treap and returns the resulting treap
 // if it exists.  The original immutable treap is returned if the key does not
 // exist.
 func (t *Immutable) Delete(key []byte) *Immutable {
+	root, count, totalSize, ok := t.delete(key, 0)
+	if !ok {
+		return t
+	}
+	return newImmutable(root, count, totalSize)
+}
+
+// delete removes the passed key from a version of the treap that shares every
+// node it does not change, and returns the root, count and total size of that
+// version, and whether the key existed.  It changes nodes that belong to the
+// batch with the passed generation in place instead of copying them.
+func (t *Immutable) delete(key []byte, gen uint64) (*treapNode, int, uint64, bool) {
 	// Find the node for the key while constructing a list of parents while
 	// doing so.
 	var parents parentStack
@@ -238,14 +277,14 @@ func (t *Immutable) Delete(key []byte) *Immutable {
 
 	// There is nothing to do if the key does not exist.
 	if delNode == nil {
-		return t
+		return t.root, t.count, t.totalSize, false
 	}
 
 	// When the only node in the tree is the root node and it is the one
 	// being deleted, there is nothing else to do besides removing it.
 	parent := parents.At(1)
 	if parent == nil && delNode.left == nil && delNode.right == nil {
-		return newImmutable(nil, 0, 0)
+		return nil, 0, 0, true
 	}
 
 	// Construct a replaced list of parents and the node to delete itself.
@@ -255,7 +294,7 @@ func (t *Immutable) Delete(key []byte) *Immutable {
 	var newParents parentStack
 	for i := parents.Len(); i > 0; i-- {
 		node := parents.At(i - 1)
-		nodeCopy := cloneTreapNode(node)
+		nodeCopy := ownTreapNode(node, gen)
 		if oldParent := newParents.At(0); oldParent != nil {
 			if oldParent.left == node {
 				oldParent.left = nodeCopy
@@ -291,7 +330,7 @@ func (t *Immutable) Delete(key []byte) *Immutable {
 		// is on.  This has the effect of moving the node to delete
 		// towards the bottom of the tree while maintaining the
 		// min-heap.
-		child = cloneTreapNode(child)
+		child = ownTreapNode(child, gen)
 		if isLeft {
 			child.right, delNode.left = delNode, child.right
 		} else {
@@ -326,7 +365,7 @@ func (t *Immutable) Delete(key []byte) *Immutable {
 		parent.left = nil
 	}
 
-	return newImmutable(newRoot, t.count-1, t.totalSize-nodeSize(delNode))
+	return newRoot, t.count - 1, t.totalSize - nodeSize(delNode), true
 }
 
 // ForEach invokes the passed function with every key/value pair in the treap
@@ -357,4 +396,45 @@ func (t *Immutable) ForEach(fn func(k, v []byte) bool) {
 // documentation for the Immutable structure for more details.
 func NewImmutable() *Immutable {
 	return &Immutable{}
+}
+
+// batchGen is the last generation given to a batch.  Each batch takes a new
+// one, so a node that has its batch's generation was created by that batch
+// and is in no treap other than the batch's own.
+var batchGen atomic.Uint64
+
+// Batch applies a series of puts and deletes to an immutable treap.  Put and
+// Delete on an Immutable copy every node on the path to the key, so that the
+// treap they were called on is left as it was.  A batch copies a node only the
+// first time it changes it and then changes its own copy in place, so a large
+// number of changes copies far fewer nodes.  It never changes the treap it
+// started from or one Immutable returned.
+//
+// A Batch is not safe for concurrent use.
+type Batch struct {
+	t   Immutable
+	gen uint64
+}
+
+// Batch returns a batch that applies changes to the treap.
+func (t *Immutable) Batch() *Batch {
+	return &Batch{t: *t, gen: batchGen.Add(1)}
+}
+
+// Put inserts the passed key/value pair.
+func (b *Batch) Put(key, value []byte) {
+	b.t.root, b.t.count, b.t.totalSize = b.t.put(key, value, b.gen)
+}
+
+// Delete removes the passed key if it exists.
+func (b *Batch) Delete(key []byte) {
+	b.t.root, b.t.count, b.t.totalSize, _ = b.t.delete(key, b.gen)
+}
+
+// Immutable returns the treap with the changes applied so far.  The batch
+// takes a new generation, so later changes copy the nodes of the returned
+// treap instead of changing them.
+func (b *Batch) Immutable() *Immutable {
+	b.gen = batchGen.Add(1)
+	return newImmutable(b.t.root, b.t.count, b.t.totalSize)
 }

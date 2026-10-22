@@ -18,8 +18,8 @@ const (
 	// technically it is smaller on 32-bit platforms, but overestimating the
 	// size in that case is acceptable since it avoids the need to import
 	// unsafe.  It consists of 24-bytes for each key and value + 8 bytes for
-	// each of the priority, left, and right fields (24*2 + 8*3).
-	nodeFieldsSize = 72
+	// each of the priority, left, right, and gen fields (24*2 + 8*4).
+	nodeFieldsSize = 80
 )
 
 var (
@@ -29,13 +29,15 @@ var (
 	emptySlice = make([]byte, 0)
 )
 
-// treapNode represents a node in the treap.
+// treapNode represents a node in the treap.  The gen field is the generation
+// of the immutable treap batch that created the node, or zero.
 type treapNode struct {
 	key      []byte
 	value    []byte
 	priority int
 	left     *treapNode
 	right    *treapNode
+	gen      uint64
 }
 
 // nodeSize returns the number of bytes the specified node occupies including
