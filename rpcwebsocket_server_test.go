@@ -5,8 +5,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net"
@@ -17,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -34,6 +36,36 @@ func basicAuth(login string) string {
 }
 
 var testRPCGlobalsOnce sync.Once
+
+// testRPCLog collects what the test RPC server logs.
+var testRPCLog syncBuffer
+
+// syncBuffer is a bytes.Buffer that is safe for concurrent use.
+type syncBuffer struct {
+	mtx sync.Mutex
+	buf bytes.Buffer
+}
+
+// Write appends p to the buffer.
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.Write(p)
+}
+
+// Len returns the number of bytes written so far.
+func (b *syncBuffer) Len() int {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.Len()
+}
+
+// Since returns what was written after the first n bytes.
+func (b *syncBuffer) Since(n int) string {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return string(b.buf.Bytes()[n:])
+}
 
 // startTestRPCServer starts the RPC HTTP and websocket server on a loopback
 // listener with an admin and a limited user.  It returns the listen address.
@@ -49,7 +81,7 @@ func startTestRPCServer(t *testing.T) (*rpcServer, string) {
 			RPCMaxConcurrentReqs: 20,
 			RPCAuthTimeout:       1,
 		}
-		rpcsLog = bchlog.Disabled
+		rpcsLog = bchlog.NewBackend(&testRPCLog).Logger("RPCS")
 	})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -324,6 +356,73 @@ func TestWebsocketPreAuthReadLimit(t *testing.T) {
 	reply, err = wsRoundTrip(conn, req+padding)
 	if err != nil || !strings.Contains(reply, `"id":2`) {
 		t.Fatalf("large authenticated message: reply %s, err %v", reply, err)
+	}
+}
+
+// wsFrameHeader returns the header of a masked client frame with a zero mask
+// key, so the payload that follows is sent as is.
+func wsFrameHeader(opcode byte, final bool, length uint64) []byte {
+	b0 := opcode
+	if final {
+		b0 |= 0x80
+	}
+	var hdr []byte
+	switch {
+	case length < 126:
+		hdr = []byte{b0, 0x80 | byte(length)}
+	case length <= 0xffff:
+		hdr = binary.BigEndian.AppendUint16([]byte{b0, 0x80 | 126}, uint16(length))
+	default:
+		hdr = binary.BigEndian.AppendUint64([]byte{b0, 0x80 | 127}, length)
+	}
+	return append(hdr, 0, 0, 0, 0)
+}
+
+// TestWebsocketPreAuthReadLimitFrameLength ensures the pre-auth read limit
+// also holds for a fragmented message whose first frame declares a 64-bit
+// length with the top bit set, which RFC 6455 forbids.
+func TestWebsocketPreAuthReadLimitFrameLength(t *testing.T) {
+	_, addr := startTestRPCServer(t)
+	auth := `{"jsonrpc":"1.0","id":1,"method":"authenticate","params":["admin","adminpass"]}`
+	payload := []byte(auth + strings.Repeat(" ", 1<<20))
+
+	msg := wsFrameHeader(websocket.TextMessage, false, 1<<63)
+	for len(payload) > 0 {
+		n := min(len(payload), 32*1024)
+		msg = append(msg, wsFrameHeader(0, n == len(payload), uint64(n))...)
+		msg = append(msg, payload[:n]...)
+		payload = payload[n:]
+	}
+
+	// The server may close the connection before the write completes.
+	conn := dialTestWebsocket(t, addr, nil)
+	_, _ = conn.UnderlyingConn().Write(msg)
+	expectWsClosed(t, conn, "fragmented message over the pre-auth limit")
+}
+
+// TestWebsocketNormalCloseNotLogged ensures a client that closes the
+// websocket normally is not logged as a receive error.
+func TestWebsocketNormalCloseNotLogged(t *testing.T) {
+	_, addr := startTestRPCServer(t)
+	logStart := testRPCLog.Len()
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	conn := dialTestWebsocket(t, addr, hdr)
+	client := conn.LocalAddr().String()
+
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
+	if err := conn.WriteMessage(websocket.CloseMessage, closeMsg); err != nil {
+		t.Fatal(err)
+	}
+	disconnected := "Disconnected websocket client " + client
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(testRPCLog.Since(logStart), disconnected) {
+		if time.Now().After(deadline) {
+			t.Fatal("server did not disconnect the client")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if strings.Contains(testRPCLog.Since(logStart), "Websocket receive error from "+client) {
+		t.Fatal("normal close logged as a receive error")
 	}
 }
 

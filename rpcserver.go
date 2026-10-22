@@ -31,7 +31,6 @@ import (
 
 	"github.com/gcash/bchd/addrmgr"
 
-	"github.com/btcsuite/websocket"
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -48,6 +47,7 @@ import (
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/merkleblock"
+	"github.com/gorilla/websocket"
 )
 
 // API version constants
@@ -5198,7 +5198,7 @@ func (s *rpcServer) Start() {
 
 		// Attempt to upgrade the connection to a websocket connection
 		// using the default size for read/write buffers.
-		ws, err := websocket.Upgrade(w, r, nil, 0, 0)
+		ws, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			if _, ok := err.(websocket.HandshakeError); !ok {
 				rpcsLog.Errorf("Unexpected websocket error: %v",
