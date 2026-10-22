@@ -472,6 +472,17 @@ func (s *blockStore) writeBlock(rawBlock []byte, height uint32) (blockLocation, 
 			wc.curFile.Unlock()
 			return blockLocation{}, err
 		}
+
+		// Sync the file before it is closed, since a flush of the cached
+		// metadata, which locates its blocks, only syncs the current
+		// write file.
+		if err := wc.curFile.file.Sync(); err != nil {
+			wc.curFile.Unlock()
+			str := fmt.Sprintf("failed to sync file %d: %v",
+				wc.curFileNum, err)
+			return blockLocation{}, makeDbErr(database.ErrDriverSpecific,
+				str, err)
+		}
 		// Put the block height into the map
 		s.fbhMutex.Lock()
 		s.fileBlockHeights[wc.curFileNum] = height - 1

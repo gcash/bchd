@@ -5,6 +5,7 @@
 package ffldb
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,5 +102,104 @@ func TestWriteBlockRolloverWithClosedFile(t *testing.T) {
 
 	if err := idb.Close(); err != nil {
 		t.Fatalf("Close: unexpected error: %v", err)
+	}
+}
+
+// syncCheckFile is a mock file that records whether it was closed with
+// writes that were not synced.
+type syncCheckFile struct {
+	*mockFile
+	unsynced       bool
+	closedUnsynced bool
+}
+
+func (f *syncCheckFile) WriteAt(b []byte, off int64) (int, error) {
+	f.unsynced = true
+	return f.mockFile.WriteAt(b, off)
+}
+
+func (f *syncCheckFile) Sync() error {
+	if err := f.mockFile.Sync(); err != nil {
+		return err
+	}
+	f.unsynced = false
+	return nil
+}
+
+func (f *syncCheckFile) Close() error {
+	f.closedUnsynced = f.closedUnsynced || f.unsynced
+	return f.mockFile.Close()
+}
+
+// syncCheckDB creates a database whose block files are syncCheckFiles of at
+// most 1024 bytes, so each test block takes a file.
+func syncCheckDB(t *testing.T) (*db, map[uint32]*syncCheckFile) {
+	t.Helper()
+	idb, err := database.Create(dbType, filepath.Join(t.TempDir(), "db"),
+		blockDataNet)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() { idb.Close() })
+	pdb := idb.(*db)
+	files := make(map[uint32]*syncCheckFile)
+	pdb.store.maxBlockFileSize = 1024
+	pdb.store.openWriteFileFunc = func(fileNum uint32) (filer, error) {
+		file, ok := files[fileNum]
+		if !ok {
+			file = &syncCheckFile{mockFile: &mockFile{maxSize: -1}}
+			files[fileNum] = file
+		}
+		file.Lock()
+		file.closed = false
+		file.Unlock()
+		return file, nil
+	}
+	return pdb, files
+}
+
+// TestWriteBlockRolloverSyncsFile ensures a block file is synced before it is
+// closed when writes move to the next file, since the flush of the metadata
+// that locates its blocks only syncs the current file.
+func TestWriteBlockRolloverSyncsFile(t *testing.T) {
+	pdb, files := syncCheckDB(t)
+	for i := uint32(1); i <= 2; i++ {
+		storeTestBlock(t, pdb, pruneTestBlock(i, int32(i)))
+	}
+	if files[0] == nil || files[1] == nil {
+		t.Fatal("the second block did not move writes to the next file")
+	}
+	if files[0].closedUnsynced {
+		t.Fatal("the full block file was closed with writes not synced")
+	}
+}
+
+// TestWriteBlockRolloverSyncFailure ensures a failure to sync the full block
+// file when writes move to the next file fails the block's commit, which
+// rolls the block files back.
+func TestWriteBlockRolloverSyncFailure(t *testing.T) {
+	pdb, files := syncCheckDB(t)
+	storeTestBlock(t, pdb, pruneTestBlock(1, 1))
+	wc := pdb.store.writeCursor
+	offset := wc.curOffset
+	files[0].forceSyncErr = true
+
+	block := pruneTestBlock(2, 2)
+	err := pdb.Update(func(tx database.Tx) error {
+		return tx.StoreBlock(block)
+	})
+	var dbErr database.Error
+	if !errors.As(err, &dbErr) || !errors.Is(dbErr.Err, errSyncFail) {
+		t.Fatalf("store: got %v, want the sync failure", err)
+	}
+	if wc.curFileNum != 0 || wc.curOffset != offset ||
+		len(files[0].data) != int(offset) {
+
+		t.Fatalf("write cursor at file %d offset %d and %d bytes in file "+
+			"0, want offset and size %d", wc.curFileNum, wc.curOffset,
+			len(files[0].data), offset)
+	}
+	if file := files[1]; file != nil && len(file.data) != 0 {
+		t.Fatalf("%d bytes left in the next file", len(file.data))
 	}
 }
