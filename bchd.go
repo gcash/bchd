@@ -50,8 +50,9 @@ func bchdMain(serverChan chan<- *server) error {
 	}
 	cfg = tcfg
 
-	// A low GC percent limits overallocation during bursty block and
-	// transaction processing, at the cost of CPU time.  GOGC takes precedence.
+	// The GC percent trades memory for CPU time: at 50 the heap grows to
+	// 1.5 times the live data between collections, and at 10 collection
+	// took most of the CPU of a sync with indexes.  GOGC takes precedence.
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(cfg.GCPercent)
 	}

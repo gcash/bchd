@@ -71,7 +71,7 @@ const (
 	defaultSlpCacheMaxSize         = 100000
 	defaultSlpGraphSearch          = false
 	defaultUtxoCacheMaxSizeMiB     = 450
-	defaultGCPercent               = 10
+	defaultGCPercent               = 50
 	defaultMinSyncPeerNetworkSpeed = 51200
 	defaultPruneDepth              = 4320
 	defaultTargetOutboundPeers     = uint32(8)

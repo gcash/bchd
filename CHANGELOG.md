@@ -19,7 +19,7 @@ This release makes validation, initial sync and block relay considerably faster,
 
 ### New options
 
-- `--gcpercent` (default 10) sets the garbage collector target; higher values trade memory for CPU. `GOGC` and `GOMAXPROCS` are no longer overridden.
+- `--gcpercent` (default 50, up from v0.22.2's fixed 10) sets the garbage collector target; higher values trade memory for CPU. `GOGC` and `GOMAXPROCS` are no longer overridden.
 - `--maxtxfee` (default 0.1 BCH, as in BCHN) is the highest fee `sendrawtransaction` and `testmempoolaccept` accept without `allowhighfees`.
 - `--maxreorgdepth` (default 10) and `--finalizationdelay` (default 7200 seconds), as in BCHN.
 - `--rpcauthtimeout` now also applies to websocket clients.

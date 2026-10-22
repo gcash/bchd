@@ -195,7 +195,7 @@ Application Options:
 	                               values use more memory and less CPU; a
 	                               negative value disables the collector (use
 	                               with GOMEMLIMIT). Ignored if GOGC is set
-	                               (default: 10)
+	                               (default: 50)
 	    --blocksonly               Do not accept transactions from remote peers.
 	    --nodoublespendproof       Do not create, relay or answer queries for
 	                               double spend proofs
