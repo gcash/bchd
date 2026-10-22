@@ -9,7 +9,7 @@ require (
 	github.com/dchest/siphash v1.2.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
-	github.com/gcash/bchutil v0.0.0-20261022020421-c92344362bc8
+	github.com/gcash/bchutil v0.0.0-20261022212038-0a040a5603f6
 	github.com/gcash/goleveldb v1.1.0
 	github.com/gcash/goslp v1.0.0
 	github.com/golang/glog v1.2.5
