@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gorilla/websocket"
 )
 
 // dsProofTestHarness is an RPC server whose memory pool holds a transaction
@@ -435,6 +437,45 @@ func TestDSProofWebsocketReplayOnce(t *testing.T) {
 	notify()
 	if !replayed() {
 		t.Fatal("the existing proof was not sent on registering again")
+	}
+}
+
+// TestDSProofWebsocketBatchDisconnects ensures a batch of notifydsproofs and
+// stopnotifydsproofs pairs, each pair queueing the proofs in the memory pool
+// once more, disconnects a client that falls too far behind on them instead
+// of queueing them without bound, and that the rest of the batch is dropped.
+func TestDSProofWebsocketBatchDisconnects(t *testing.T) {
+	h := newDSProofTestHarness(t)
+	setWsLimits(t, wsWriteTimeout, 4096)
+	var calls atomic.Int32
+	notify := wsHandlers["notifydsproofs"]
+	wsHandlers["notifydsproofs"] = func(wsc *wsClient, cmd interface{}) (interface{}, error) {
+		calls.Add(1)
+		return notify(wsc, cmd)
+	}
+	t.Cleanup(func() { wsHandlers["notifydsproofs"] = notify })
+	s, addr := startTestRPCServer(t, withSmallSendBuffers, func(s *rpcServer) {
+		s.cfg.TxMemPool = h.server.cfg.TxMemPool
+	})
+	conn := dialStalledWebsocket(t, addr, testRPCLimitedLogin)
+
+	const pairs = 2000
+	var batch strings.Builder
+	batch.WriteByte('[')
+	for i := range pairs {
+		if i > 0 {
+			batch.WriteByte(',')
+		}
+		fmt.Fprintf(&batch, `{"jsonrpc":"2.0","id":%d,"method":"notifydsproofs","params":[]},`+
+			`{"jsonrpc":"2.0","id":%d,"method":"stopnotifydsproofs","params":[]}`, 2*i, 2*i+1)
+	}
+	batch.WriteByte(']')
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(batch.String())); err != nil {
+		t.Fatal(err)
+	}
+	waitWsClients(t, s, 0, 5*time.Second, "a client behind on the proofs")
+	if n := calls.Load(); n >= pairs {
+		t.Fatalf("all %d notifydsproofs of the batch ran", n)
 	}
 }
 

@@ -65,6 +65,22 @@ var wsUpgrader = websocket.Upgrader{
 	Error:       func(http.ResponseWriter, *http.Request, int, error) {},
 }
 
+// wsWriteTimeout is how long a websocket client may take none of a message
+// written to it.  A client that takes nothing for longer is disconnected, so
+// one that stops reading cannot hold the replies and notifications queued for
+// it for good, as BCHN's -rpcservertimeout does for its HTTP clients.
+var wsWriteTimeout = 30 * time.Second
+
+// wsWriteChunkSize is how much of a message is written to a websocket client
+// each time its write deadline is renewed: a client must take this much in
+// each wsWriteTimeout.
+const wsWriteChunkSize = 64 * 1024
+
+// wsMaxPendingNtfnBytes is the most bytes of notifications a websocket client
+// may have waiting behind the one being written to it.  A client that falls
+// further behind is disconnected, so its queue cannot grow without bound.
+var wsMaxPendingNtfnBytes = 64 << 20
+
 // timeZeroVal is simply the zero value for a time.Time and is used to avoid
 // creating multiple instances.
 var timeZeroVal time.Time
@@ -1685,6 +1701,13 @@ out:
 				if len(batchedRequests) > 0 {
 					batchSize = len(batchedRequests)
 					for _, entry := range batchedRequests {
+						// The rest of the batch is dropped once the
+						// client is disconnected, such as when it
+						// falls too far behind on notifications.
+						if c.Disconnected() {
+							break out
+						}
+
 						var reqBytes []byte
 						reqBytes, err = json.Marshal(entry)
 						if err != nil {
@@ -1952,38 +1975,50 @@ func (c *wsClient) notificationQueueHandler() {
 	// (and thus who should respond to the done channel) would be
 	// problematic without using this approach.
 	pendingNtfns := list.New()
+	pendingBytes := 0
 	waiting := false
 out:
 	for {
+		// The oldest pending notification is handed to the outHandler
+		// once the previous one is sent and the send channel has room.
+		// Meanwhile new notifications keep being taken, so a client
+		// that is slow to read cannot hold up the notification
+		// manager, which serves every client.
+		var sendChan chan<- wsResponse
+		var next wsResponse
+		if front := pendingNtfns.Front(); front != nil && !waiting {
+			sendChan = c.sendChan
+			next = wsResponse{msg: front.Value.([]byte), doneChan: ntfnSentChan}
+		}
+
 		select {
 		// This channel is notified when a message is being queued to
-		// be sent across the network socket.  It will either send the
-		// message immediately if a send is not already in progress, or
-		// queue the message to be sent once the other pending messages
-		// are sent.
+		// be sent across the network socket.  The message is queued to
+		// be sent once the other pending messages are sent.  A client
+		// with more than wsMaxPendingNtfnBytes waiting is
+		// disconnected, though one message on its own may be larger.
 		case msg := <-c.ntfnChan:
-			if !waiting {
-				c.SendMessage(msg, ntfnSentChan)
-			} else {
-				pendingNtfns.PushBack(msg)
+			if pendingNtfns.Len() > 0 &&
+				pendingBytes+len(msg) > wsMaxPendingNtfnBytes {
+
+				rpcsLog.Warnf("Websocket client %s has more than %d "+
+					"bytes of notifications waiting - "+
+					"disconnecting", c.addr, wsMaxPendingNtfnBytes)
+				c.Disconnect()
+				break out
 			}
+			pendingNtfns.PushBack(msg)
+			pendingBytes += len(msg)
+
+		case sendChan <- next:
+			pendingNtfns.Remove(pendingNtfns.Front())
+			pendingBytes -= len(next.msg)
 			waiting = true
 
 		// This channel is notified when a notification has been sent
 		// across the network socket.
 		case <-ntfnSentChan:
-			// No longer waiting if there are no more messages in
-			// the pending messages queue.
-			next := pendingNtfns.Front()
-			if next == nil {
-				waiting = false
-				continue
-			}
-
-			// Notify the outHandler about the next item to
-			// asynchronously send.
-			msg := pendingNtfns.Remove(next).([]byte)
-			c.SendMessage(msg, ntfnSentChan)
+			waiting = false
 
 		case <-c.quit:
 			break out
@@ -2006,6 +2041,27 @@ cleanup:
 		"for %s", c.addr)
 }
 
+// writeMessage writes msg to the client as one text message, renewing the
+// write deadline before each wsWriteChunkSize bytes, so that only a client
+// that takes nothing for wsWriteTimeout is disconnected, however large the
+// message is.
+func (c *wsClient) writeMessage(msg []byte) error {
+	w, err := c.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return err
+	}
+	for len(msg) > 0 {
+		n := min(len(msg), wsWriteChunkSize)
+		_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+		if _, err := w.Write(msg[:n]); err != nil {
+			return err
+		}
+		msg = msg[n:]
+	}
+	_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	return w.Close()
+}
+
 // outHandler handles all outgoing messages for the websocket connection.  It
 // must be run as a goroutine.  It uses a buffered channel to serialize output
 // messages while allowing the sender to continue running asynchronously.  It
@@ -2017,8 +2073,7 @@ out:
 		// closed.
 		select {
 		case r := <-c.sendChan:
-			err := c.conn.WriteMessage(websocket.TextMessage, r.msg)
-			if err != nil {
+			if err := c.writeMessage(r.msg); err != nil {
 				c.Disconnect()
 				break out
 			}
@@ -2085,8 +2140,14 @@ func (c *wsClient) QueueNotification(marshalledJSON []byte) error {
 		return ErrClientQuit
 	}
 
-	c.ntfnChan <- marshalledJSON
-	return nil
+	// The queue handler takes notifications without waiting on the
+	// client, and stops taking them once the client is disconnected.
+	select {
+	case c.ntfnChan <- marshalledJSON:
+		return nil
+	case <-c.quit:
+		return ErrClientQuit
+	}
 }
 
 // Disconnected returns whether or not the websocket client is disconnected.
@@ -2352,7 +2413,9 @@ func handleNotifyDSProofs(wsc *wsClient, icmd interface{}) (interface{}, error) 
 		if err != nil {
 			return nil, err
 		}
-		_ = wsc.QueueNotification(marshalled)
+		if wsc.QueueNotification(marshalled) == ErrClientQuit {
+			break
+		}
 	}
 	return nil, nil
 }

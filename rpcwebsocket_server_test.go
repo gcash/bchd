@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -20,8 +21,10 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
+	"github.com/gcash/bchutil"
 	"github.com/gorilla/websocket"
 )
 
@@ -69,7 +72,8 @@ func (b *syncBuffer) Since(n int) string {
 
 // startTestRPCServer starts the RPC HTTP and websocket server on a loopback
 // listener with an admin and a limited user.  It returns the listen address.
-func startTestRPCServer(t *testing.T) (*rpcServer, string) {
+// opts can change the server before it starts.
+func startTestRPCServer(t *testing.T, opts ...func(*rpcServer)) (*rpcServer, string) {
 	t.Helper()
 
 	// Client goroutines may outlive Stop, so the globals are set once and
@@ -99,6 +103,9 @@ func startTestRPCServer(t *testing.T) (*rpcServer, string) {
 	s.authsha = sha256.Sum256([]byte(basicAuth(testRPCAdminLogin)))
 	s.limitauthsha = sha256.Sum256([]byte(basicAuth(testRPCLimitedLogin)))
 	s.ntfnMgr = newWsNotificationManager(s)
+	for _, opt := range opts {
+		opt(s)
+	}
 	s.Start()
 	t.Cleanup(func() {
 		_ = s.Stop()
@@ -492,4 +499,332 @@ func TestBatchedRequestParams(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("websocket", []byte(wsReply))
+}
+
+// smallBufferListener gives each connection it accepts a small send buffer,
+// so writes to a client that stops reading stall after kilobytes rather than
+// after the megabytes a loopback connection can hold.
+type smallBufferListener struct{ net.Listener }
+
+func (l smallBufferListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetWriteBuffer(4096)
+	}
+	return conn, err
+}
+
+// withSmallSendBuffers is a startTestRPCServer option that gives the server's
+// connections small send buffers.
+func withSmallSendBuffers(s *rpcServer) {
+	s.cfg.Listeners[0] = smallBufferListener{s.cfg.Listeners[0]}
+}
+
+// dialStalledWebsocket opens a websocket to the test server with a small
+// receive buffer, for a client that stops reading.
+func dialStalledWebsocket(t *testing.T, addr, login string) *websocket.Conn {
+	t.Helper()
+	dialer := &websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) {
+		conn, err := net.Dial(network, addr)
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.SetReadBuffer(4096)
+		}
+		return conn, err
+	}}
+	hdr := http.Header{"Authorization": []string{basicAuth(login)}}
+	conn, _, err := dialer.Dial("ws://"+addr+"/ws", hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+// setWsLimits sets the websocket write timeout and pending notification bound
+// for the rest of the test.  It is called before the server starts, and the
+// test ends with closeWsClients, so no client reads them as they are restored.
+func setWsLimits(t *testing.T, timeout time.Duration, maxPending int) {
+	t.Helper()
+	savedTimeout, savedMax := wsWriteTimeout, wsMaxPendingNtfnBytes
+	t.Cleanup(func() { wsWriteTimeout, wsMaxPendingNtfnBytes = savedTimeout, savedMax })
+	wsWriteTimeout, wsMaxPendingNtfnBytes = timeout, maxPending
+}
+
+// numWsClients returns the number of websocket clients the server serves,
+// failing the test when the notification manager, which counts them, does not
+// answer.
+func numWsClients(t *testing.T, s *rpcServer) int {
+	t.Helper()
+	n := make(chan int, 1)
+	go func() { n <- s.ntfnMgr.NumClients() }()
+	select {
+	case n := <-n:
+		return n
+	case <-time.After(5 * time.Second):
+		t.Fatal("the notification manager did not answer NumClients")
+	}
+	return 0
+}
+
+// waitWsClients waits up to timeout for the server to serve n websocket
+// clients.
+func waitWsClients(t *testing.T, s *rpcServer, n int, timeout time.Duration, what string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for got := numWsClients(t, s); got != n; got = numWsClients(t, s) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %d websocket clients after %v, want %d", what,
+				got, timeout, n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// closeWsClients closes the connections and waits for the server to let
+// their clients go.
+func closeWsClients(t *testing.T, s *rpcServer, conns ...*websocket.Conn) {
+	t.Helper()
+	for _, conn := range conns {
+		conn.Close()
+	}
+	waitWsClients(t, s, 0, 5*time.Second, "closed clients")
+}
+
+// wsNotify sends the notification request method on conn and checks the
+// reply.
+func wsNotify(t *testing.T, conn *websocket.Conn, method string) {
+	t.Helper()
+	reply, err := wsRoundTrip(conn, `{"jsonrpc":"1.0","id":1,"method":"`+method+`","params":[]}`)
+	if err != nil || !strings.Contains(reply, `"error":null`) {
+		t.Fatalf("%s: reply %s, err %v", method, reply, err)
+	}
+}
+
+// notifyTestTx passes the notification manager the nth of a series of new
+// memory pool transactions and returns its hash.
+func notifyTestTx(s *rpcServer, n int) string {
+	tx := wire.NewMsgTx(wire.TxVersion)
+	tx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Index: uint32(n)}})
+	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	btx := bchutil.NewTx(tx)
+	hash := btx.Hash().String()
+	s.ntfnMgr.NotifyMempoolTx(btx, true)
+	return hash
+}
+
+// expectTxNtfn reads the txaccepted notification for hash from conn.
+func expectTxNtfn(t *testing.T, conn *websocket.Conn, hash, what string) {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("%s: %v", what, err)
+	}
+	if !strings.Contains(string(msg), `"method":"txaccepted","params":["`+hash+`"`) {
+		t.Fatalf("%s: unexpected message %s", what, msg)
+	}
+}
+
+// TestWebsocketStalledClient ensures a websocket client that stops reading,
+// with its send queue full of replies, holds up neither the notifications of
+// another client nor the notification manager, which counts the clients for
+// each new connection, and that it is disconnected once a write to it times
+// out.
+func TestWebsocketStalledClient(t *testing.T) {
+	setWsLimits(t, 3*time.Second, wsMaxPendingNtfnBytes)
+	s, addr := startTestRPCServer(t, withSmallSendBuffers)
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	reader := dialTestWebsocket(t, addr, hdr)
+	stalled := dialStalledWebsocket(t, addr, testRPCAdminLogin)
+	wsNotify(t, reader, "notifynewtransactions")
+	wsNotify(t, stalled, "notifynewtransactions")
+
+	// The stalled client asks for help more often than its connection
+	// holds the answers, and reads none of them, so its replies fill its
+	// send queue and its requests wait.  The sleep lets the server get
+	// there.
+	for i := range 300 {
+		req := fmt.Sprintf(`{"jsonrpc":"1.0","id":%d,"method":"help","params":[]}`, i)
+		if err := stalled.WriteMessage(websocket.TextMessage, []byte(req)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	for i := range 5 {
+		expectTxNtfn(t, reader, notifyTestTx(s, i), fmt.Sprintf(
+			"notification %d to the reader, while a client is stalled", i))
+	}
+	if n := numWsClients(t, s); n != 2 {
+		t.Fatalf("%d websocket clients while one is stalled, want 2", n)
+	}
+	waitWsClients(t, s, 1, 10*time.Second, "past the write timeout")
+	expectTxNtfn(t, reader, notifyTestTx(s, 5), "the reader, past the write timeout")
+	closeWsClients(t, s, reader, stalled)
+}
+
+// bufferListener gives each connection it accepts a send buffer of size
+// bytes.
+type bufferListener struct {
+	net.Listener
+	size int
+}
+
+func (l bufferListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetWriteBuffer(l.size)
+	}
+	return conn, err
+}
+
+// TestWebsocketSlowReaderKeepsConnection ensures a websocket client that
+// takes a message more slowly than the write timeout, but steadily, is not
+// disconnected: the timeout is for a client that takes nothing, as BCHN's
+// -rpcservertimeout is, not for the time a whole message takes.
+func TestWebsocketSlowReaderKeepsConnection(t *testing.T) {
+	// The connection's buffers hold a small part of the reply, but are not
+	// so small that the reader's pace leaves the server waiting long for
+	// each window update.
+	const bufSize = 16 * 1024
+	setWsLimits(t, time.Second, wsMaxPendingNtfnBytes)
+	s, addr := startTestRPCServer(t, func(s *rpcServer) {
+		s.cfg.Listeners[0] = bufferListener{s.cfg.Listeners[0], bufSize}
+	})
+	dialer := &websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) {
+		conn, err := net.Dial(network, addr)
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.SetReadBuffer(bufSize)
+		}
+		return conn, err
+	}}
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	conn, _, err := dialer.Dial("ws://"+addr+"/ws", hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// One batch of help requests gets one reply, of over 512 KiB.
+	reqs := make([]string, 200)
+	for i := range reqs {
+		reqs[i] = fmt.Sprintf(`{"jsonrpc":"1.0","id":%d,"method":"help","params":[]}`, i)
+	}
+	batch := "[" + strings.Join(reqs, ",") + "]"
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(batch)); err != nil {
+		t.Fatal(err)
+	}
+
+	// The reply is read 4 KiB at a time, at most 200 KB/s, so that it
+	// takes over twice the write timeout, while each part the server
+	// writes between renewals of its deadline is taken well within it.
+	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_, r, err := conn.NextReader()
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	start := time.Now()
+	buf := make([]byte, 4*1024)
+	size := 0
+	for {
+		n, err := r.Read(buf)
+		size += n
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("reply after %d bytes and %v: %v", size,
+				time.Since(start), err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if took := time.Since(start); size < 512<<10 || took < 2*wsWriteTimeout {
+		t.Fatalf("a reply of %d bytes in %v is too small or too fast to "+
+			"test the timeout", size, took)
+	}
+
+	if reply, err := wsRoundTrip(conn, `{"jsonrpc":"1.0","id":1,"method":"help","params":["help"]}`); err != nil ||
+		!strings.Contains(reply, `"error":null`) {
+
+		t.Fatalf("the slow reader after its reply: %s, %v", reply, err)
+	}
+	if n := numWsClients(t, s); n != 1 {
+		t.Fatalf("%d websocket clients, want the slow reader", n)
+	}
+	closeWsClients(t, s, conn)
+}
+
+// TestWebsocketIdleClientKeepsConnection ensures a websocket client that
+// received nothing for longer than the write timeout still gets its next
+// messages, a notification and a reply larger than the server writes at once:
+// the deadline is renewed as each message is written, so an idle client is
+// not disconnected.
+func TestWebsocketIdleClientKeepsConnection(t *testing.T) {
+	setWsLimits(t, 300*time.Millisecond, wsMaxPendingNtfnBytes)
+	s, addr := startTestRPCServer(t)
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	reader := dialTestWebsocket(t, addr, hdr)
+	wsNotify(t, reader, "notifynewtransactions")
+
+	time.Sleep(2 * wsWriteTimeout)
+	expectTxNtfn(t, reader, notifyTestTx(s, 0),
+		"the reader, idle for twice the write timeout")
+
+	time.Sleep(2 * wsWriteTimeout)
+	reqs := make([]string, 4)
+	for i := range reqs {
+		reqs[i] = fmt.Sprintf(`{"jsonrpc":"1.0","id":%d,"method":"help","params":[]}`, i)
+	}
+	reply, err := wsRoundTrip(reader, "["+strings.Join(reqs, ",")+"]")
+	if err != nil || len(reply) < 8<<10 {
+		t.Fatalf("a reply of %d bytes after idling, err %v; want over 8 KiB",
+			len(reply), err)
+	}
+	if n := numWsClients(t, s); n != 1 {
+		t.Fatalf("%d websocket clients, want the idle reader", n)
+	}
+	closeWsClients(t, s, reader)
+}
+
+// TestWebsocketPendingNotificationBound ensures a websocket client that falls
+// further behind on its notifications than wsMaxPendingNtfnBytes is
+// disconnected, while one that keeps reading is not: neither when each of its
+// notifications alone is larger than the bound, nor when they come in bursts
+// within the bound that add up to far more.
+func TestWebsocketPendingNotificationBound(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		maxPending int
+		burst      int
+	}{
+		{"notifications larger than the bound", 64, 1},
+		{"bursts within the bound", 1024, 5},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setWsLimits(t, wsWriteTimeout, test.maxPending)
+			s, addr := startTestRPCServer(t, withSmallSendBuffers)
+			hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+			reader := dialTestWebsocket(t, addr, hdr)
+			stalled := dialStalledWebsocket(t, addr, testRPCAdminLogin)
+			wsNotify(t, reader, "notifynewtransactions")
+			wsNotify(t, stalled, "notifynewtransactions")
+
+			// The stalled client reads none of its notifications,
+			// so they wait once its connection is full.
+			hashes := make([]string, test.burst)
+			for i := 0; i < 5000; i += test.burst {
+				for j := range hashes {
+					hashes[j] = notifyTestTx(s, i+j)
+				}
+				for _, hash := range hashes {
+					expectTxNtfn(t, reader, hash, "the reader")
+				}
+			}
+			waitWsClients(t, s, 1, 5*time.Second,
+				"a client behind on its notifications")
+			expectTxNtfn(t, reader, notifyTestTx(s, 5000),
+				"the reader, once the other client is gone")
+			closeWsClients(t, s, reader, stalled)
+		})
+	}
 }

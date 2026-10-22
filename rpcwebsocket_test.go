@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
@@ -350,6 +351,25 @@ func TestLoadTxFilterDecodesOutsideLocks(t *testing.T) {
 		if !wsc.filterData.existsAddress(addr) {
 			t.Errorf("address %d of the overtaken loads missing", i)
 		}
+	}
+}
+
+// TestWsQueueNotificationQuit ensures QueueNotification gives up once the
+// client quits, even when its queue is full and nothing takes from it any
+// more, so the notification manager cannot wait on a client that is gone.
+func TestWsQueueNotificationQuit(t *testing.T) {
+	wsc := &wsClient{quit: make(chan struct{}), ntfnChan: make(chan []byte, 1)}
+	wsc.ntfnChan <- nil
+	close(wsc.quit)
+	done := make(chan error, 1)
+	go func() { done <- wsc.QueueNotification([]byte("{}")) }()
+	select {
+	case err := <-done:
+		if err != ErrClientQuit {
+			t.Fatalf("got %v, want ErrClientQuit", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("QueueNotification waited on a client that quit")
 	}
 }
 
