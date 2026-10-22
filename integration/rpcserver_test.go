@@ -248,8 +248,9 @@ func testMempoolAcceptAndSend(r *rpctest.Harness, t *testing.T) {
 		}
 	}
 	result = testAccept(txHex, false)
-	if result.Allowed ||
-		result.RejectReason != "18: already have transaction "+result.Txid {
+	if result.Allowed || result.RejectReason != "18: txn-already-in-mempool" ||
+		result.RejectDetails != "txn-already-in-mempool, already have "+
+			"transaction "+result.Txid {
 
 		t.Fatalf("Unexpected result for a transaction in the "+
 			"mempool: %+v", result)

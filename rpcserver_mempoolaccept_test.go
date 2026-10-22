@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,6 +160,15 @@ func (h *mempoolTestHarness) spend(t *testing.T, prevOut wire.OutPoint, fee int6
 	})
 	tx.AddTxOut(wire.NewTxOut(mempoolTestOutputValue-fee, h.pkScript,
 		wire.TokenData{}))
+	h.sign(t, tx)
+	return tx
+}
+
+// sign signs the first input of tx, assumed to spend an output of
+// mempoolTestOutputValue paid to the harness key.
+func (h *mempoolTestHarness) sign(t *testing.T, tx *wire.MsgTx) {
+	t.Helper()
+
 	sigScript, err := txscript.SignatureScript(tx, 0,
 		mempoolTestOutputValue, h.pkScript, txscript.SigHashAll, h.key,
 		true)
@@ -165,7 +176,6 @@ func (h *mempoolTestHarness) spend(t *testing.T, prevOut wire.OutPoint, fee int6
 		t.Fatalf("unable to sign transaction: %v", err)
 	}
 	tx.TxIn[0].SignatureScript = sigScript
-	return tx
 }
 
 // txHex returns the serialized transaction in hex.
@@ -233,21 +243,26 @@ func TestHandleTestMempoolAccept(t *testing.T) {
 		t.Fatalf("ProcessTransaction: unexpected error: %v", err)
 	}
 	result = h.testMempoolAccept(t, tx, false)
-	details := "already have transaction " + tx.TxHash().String()
-	if result.Allowed || result.RejectReason != "18: "+details ||
+	details := "txn-already-in-mempool, already have transaction " +
+		tx.TxHash().String()
+	if result.Allowed || result.RejectReason != "18: txn-already-in-mempool" ||
 		result.RejectDetails != details || result.Fees != nil {
 
-		t.Fatalf("transaction in the pool: unexpected result %+v", result)
+		t.Errorf("transaction in the pool: unexpected result %+v", result)
 	}
 
 	// A transaction with an invalid signature is rejected as invalid.
 	tx = h.spend(t, h.outputs[1], 1000)
 	tx.TxOut[0].Value--
 	result = h.testMempoolAccept(t, tx, false)
-	if result.Allowed || result.RejectReason[:4] != "16: " ||
-		result.RejectReason[4:] != result.RejectDetails {
+	reason := "mandatory-script-verify-flag-failed (Script failed)"
+	details = reason + ", failed to validate input " +
+		tx.TxHash().String() + ":0 which references output " +
+		h.outputs[1].String() + " - signature not empty on failed checksig"
+	if result.Allowed || result.RejectReason != "16: "+reason ||
+		!strings.HasPrefix(result.RejectDetails, details) {
 
-		t.Fatalf("invalid signature: unexpected result %+v", result)
+		t.Errorf("invalid signature: unexpected result %+v", result)
 	}
 
 	// A transaction with unknown inputs reports missing inputs.
@@ -273,6 +288,135 @@ func TestHandleTestMempoolAccept(t *testing.T) {
 	}
 	if pool.Count() != 1 {
 		t.Fatalf("testmempoolaccept changed the pool")
+	}
+}
+
+// TestHandleTestMempoolAcceptReasons ensures testmempoolaccept gives the
+// reject code and BCHN's short reason of each rejection, and the reason
+// followed by bchd's description as the details.
+func TestHandleTestMempoolAcceptReasons(t *testing.T) {
+	t.Parallel()
+
+	h := newMempoolTestHarness(t, 10)
+	pooled := h.spend(t, h.outputs[0], 1000)
+	_, err := h.server.cfg.TxMemPool.ProcessTransaction(bchutil.NewTx(pooled),
+		false, 0)
+	if err != nil {
+		t.Fatalf("ProcessTransaction: unexpected error: %v", err)
+	}
+
+	conflict := h.spend(t, h.outputs[0], 2000)
+	unknown := h.spend(t, wire.OutPoint{Hash: h.outputs[0].Hash, Index: 100},
+		1000)
+	lowFee := h.spend(t, h.outputs[1], 100)
+	dust := h.spend(t, h.outputs[2], 1000)
+	dust.TxOut[0].Value -= 545
+	dust.AddTxOut(wire.NewTxOut(545, h.pkScript, wire.TokenData{}))
+	h.sign(t, dust)
+	nonStd := h.spend(t, h.outputs[3], 1000)
+	nonStd.TxOut[0].PkScript = bytes.Repeat([]byte{txscript.OP_1}, 202)
+	h.sign(t, nonStd)
+	badSig := h.spend(t, h.outputs[4], 1000)
+	badSig.TxOut[0].Value--
+	highFee := h.spend(t, h.outputs[5], int64(defaultMaxTxFee)+1)
+	coinbase := wire.NewMsgTx(wire.TxVersion)
+	coinbase.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Index: wire.MaxPrevOutIndex},
+		SignatureScript:  []byte{txscript.OP_1, txscript.OP_1},
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	coinbase.AddTxOut(wire.NewTxOut(1000, h.pkScript, wire.TokenData{}))
+	nonFinal := h.spend(t, h.outputs[6], 1000)
+	nonFinal.TxIn[0].Sequence = 0
+	nonFinal.LockTime = 1000100
+	h.sign(t, nonFinal)
+	overspend := h.spend(t, h.outputs[7], -1)
+	duplicate := h.spend(t, h.outputs[8], 1000)
+	duplicate.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: h.outputs[8],
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+
+	txid := func(tx *wire.MsgTx) string { return tx.TxHash().String() }
+	scriptReason := "mandatory-script-verify-flag-failed (Script failed)"
+	tests := []struct {
+		name    string
+		tx      *wire.MsgTx
+		reason  string
+		details string
+	}{
+		{"in the pool", pooled, "18: txn-already-in-mempool",
+			"txn-already-in-mempool, already have transaction " +
+				txid(pooled)},
+		{"pool conflict", conflict, "18: txn-mempool-conflict",
+			"txn-mempool-conflict, output " + h.outputs[0].String() +
+				" already spent by transaction " + txid(pooled) +
+				" in the memory pool"},
+		{"in the chain", h.funding, "18: txn-already-known",
+			"txn-already-known, transaction already exists"},
+		{"missing inputs", unknown, "missing-inputs", ""},
+		{"fee below the minimum", lowFee, "66: min relay fee not met",
+			fmt.Sprintf("min relay fee not met, transaction %s has 100 "+
+				"fees which is under the required amount of %d (min "+
+				"relay fee not met)", txid(lowFee),
+				lowFee.SerializeSize())},
+		{"dust", dust, "65: dust",
+			"dust, transaction " + txid(dust) + " is not standard: " +
+				"transaction output 1: payment of 545 is dust"},
+		{"nonstandard output script", nonStd, "64: scriptpubkey",
+			"scriptpubkey, transaction " + txid(nonStd) + " is not " +
+				"standard: transaction output 0: non-standard script form"},
+		{"failed script", badSig, "16: " + scriptReason,
+			fmt.Sprintf("%s, failed to validate input %s:0 which "+
+				"references output %v - signature not empty on failed "+
+				"checksig (input script bytes %x, prev output script "+
+				"bytes %x)", scriptReason, txid(badSig), h.outputs[4],
+				badSig.TxIn[0].SignatureScript, h.pkScript)},
+		{"fee above the maximum", highFee, "256: absurdly-high-fee",
+			"absurdly-high-fee, 10000001 > 10000000"},
+		{"coinbase", coinbase, "16: bad-tx-coinbase",
+			"bad-tx-coinbase, transaction " + txid(coinbase) +
+				" is an individual coinbase"},
+		{"not final", nonFinal, "64: bad-txns-nonfinal",
+			"bad-txns-nonfinal, transaction " + txid(nonFinal) +
+				" is not standard: transaction is not finalized " +
+				"(bad-txns-nonfinal)"},
+		{"outputs above the inputs", overspend, "16: bad-txns-in-belowout",
+			"bad-txns-in-belowout, total value of all transaction " +
+				"inputs for transaction " + txid(overspend) + " is " +
+				"100000000 which is less than the amount spent of " +
+				"100000001"},
+		{"duplicate inputs", duplicate, "16: bad-txns-inputs-duplicate",
+			"bad-txns-inputs-duplicate, transaction contains duplicate " +
+				"inputs"},
+	}
+	for _, test := range tests {
+		result := h.testMempoolAccept(t, test.tx, false)
+		if result.Allowed || result.RejectReason != test.reason ||
+			result.RejectDetails != test.details {
+
+			t.Errorf("%s: got reject-reason %q, reject-details %q, "+
+				"want %q, %q", test.name, result.RejectReason,
+				result.RejectDetails, test.reason, test.details)
+		}
+	}
+
+	// Sequence locks that the next block does not meet.
+	h = newMempoolTestHarness(t, 1, func(cfg *mempool.Config) {
+		cfg.CalcSequenceLock = func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+			return &blockchain.SequenceLock{Seconds: -1,
+				BlockHeight: 2000000}, nil
+		}
+	})
+	result := h.testMempoolAccept(t, h.spend(t, h.outputs[0], 1000), false)
+	details := "non-BIP68-final, transaction's sequence locks on inputs " +
+		"not met"
+	if result.Allowed || result.RejectReason != "64: non-BIP68-final" ||
+		result.RejectDetails != details {
+
+		t.Errorf("sequence locks: got reject-reason %q, reject-details "+
+			"%q, want %q, %q", result.RejectReason, result.RejectDetails,
+			"64: non-BIP68-final", details)
 	}
 }
 
@@ -342,7 +486,7 @@ func (h *mempoolTestHarness) sendRawTransaction(t *testing.T, tx *wire.MsgTx, al
 
 // TestHandleSendRawTransaction ensures sendrawtransaction returns the hash of
 // a transaction already in the mempool, enforces the maximum fee and returns
-// the expected error codes.
+// the expected error codes and messages.
 func TestHandleSendRawTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -379,13 +523,24 @@ func TestHandleSendRawTransaction(t *testing.T) {
 		t.Fatalf("resubmitted transaction was not relayed")
 	}
 
+	// A rejected transaction gets BCHN's reason, the description and the
+	// reject code.
+	_, err = h.sendRawTransaction(t, h.spend(t, h.outputs[0], 2000), false)
+	assertCode("conflict", err, btcjson.ErrRPCTxRejected)
+	want := "txn-mempool-conflict, output " + h.outputs[0].String() +
+		" already spent by transaction " + tx.TxHash().String() +
+		" in the memory pool (code 18)"
+	if err.(*btcjson.RPCError).Message != want {
+		t.Errorf("conflict: got message %q, want %q", err, want)
+	}
+
 	// A fee above the maximum is rejected unless allowhighfees is set.
 	tx = h.spend(t, h.outputs[1], int64(defaultMaxTxFee)+1)
 	_, err = h.sendRawTransaction(t, tx, false)
 	assertCode("high fee", err, btcjson.ErrRPCTxRejected)
-	want := "TX rejected: absurdly-high-fee, 10000001 > 10000000"
+	want = "absurdly-high-fee, 10000001 > 10000000 (code 256)"
 	if err.(*btcjson.RPCError).Message != want {
-		t.Fatalf("high fee: got message %q, want %q", err, want)
+		t.Errorf("high fee: got message %q, want %q", err, want)
 	}
 	if pool.IsTransactionInPool(bchutil.NewTx(tx).Hash()) {
 		t.Fatalf("high fee: transaction added to the pool")
@@ -400,13 +555,29 @@ func TestHandleSendRawTransaction(t *testing.T) {
 	tx.TxOut[0].Value--
 	_, err = h.sendRawTransaction(t, tx, false)
 	assertCode("invalid signature", err, btcjson.ErrRPCTxRejected)
+	msg := err.(*btcjson.RPCError).Message
+	prefix := "mandatory-script-verify-flag-failed (Script failed), " +
+		"failed to validate input "
+	if !strings.HasPrefix(msg, prefix) ||
+		!strings.HasSuffix(msg, ") (code 16)") {
+
+		t.Errorf("invalid signature: unexpected message %q", msg)
+	}
 
 	// A transaction with unknown inputs is a transaction error.
 	unknown := wire.OutPoint{Hash: h.outputs[0].Hash, Index: 100}
 	_, err = h.sendRawTransaction(t, h.spend(t, unknown, 1000), false)
 	assertCode("missing inputs", err, btcjson.ErrRPCTxError)
+	msg = err.(*btcjson.RPCError).Message
+	if !strings.HasPrefix(msg, "TX rejected: orphan transaction ") {
+		t.Errorf("missing inputs: unexpected message %q", msg)
+	}
 
 	// A transaction with unspent outputs in the chain is already in it.
 	_, err = h.sendRawTransaction(t, h.funding, false)
 	assertCode("in chain", err, btcjson.ErrRPCTxAlreadyInChain)
+	msg = err.(*btcjson.RPCError).Message
+	if msg != "TX rejected: transaction already exists" {
+		t.Errorf("in chain: unexpected message %q", msg)
+	}
 }

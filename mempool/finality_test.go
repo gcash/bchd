@@ -118,6 +118,11 @@ func TestAcceptRejectsNonFinal(t *testing.T) {
 					"want %v", test.name, acceptNonStd, code,
 					wire.RejectNonstandard)
 			}
+			if reason := RejectReason(err); reason != "bad-txns-nonfinal" {
+				t.Errorf("%s (acceptNonStd=%v): got reason %q, want "+
+					"bad-txns-nonfinal", test.name, acceptNonStd,
+					reason)
+			}
 			if !strings.Contains(err.Error(), "not finalized") {
 				t.Errorf("%s (acceptNonStd=%v): unexpected error: %v",
 					test.name, acceptNonStd, err)

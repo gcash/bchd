@@ -380,7 +380,8 @@ func (mp *TxPool) maybeAddOrphan(tx *bchutil.Tx, tag Tag) error {
 		str := fmt.Sprintf("orphan transaction size of %d bytes is "+
 			"larger than max allowed size of %d bytes",
 			serializedLen, mp.cfg.Policy.MaxOrphanTxSize)
-		return txRuleError(wire.RejectNonstandard, str)
+		return txRuleError(wire.RejectNonstandard, "orphan-tx-size",
+			str)
 	}
 
 	// Add the orphan if the none of the above disqualified it.
@@ -632,7 +633,8 @@ func (mp *TxPool) checkPoolDoubleSpend(tx *bchutil.Tx) error {
 			str := fmt.Sprintf("output %v already spent by "+
 				"transaction %v in the memory pool",
 				txIn.PreviousOutPoint, txR.Hash())
-			return txRuleError(wire.RejectDuplicate, str)
+			return txRuleError(wire.RejectDuplicate,
+				"txn-mempool-conflict", str)
 		}
 	}
 
@@ -843,7 +845,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		mp.isOrphanInPool(txHash)) {
 
 		str := fmt.Sprintf("already have transaction %v", txHash)
-		return nil, txRuleError(wire.RejectDuplicate, str)
+		return nil, txRuleError(wire.RejectDuplicate,
+			"txn-already-in-mempool", str)
 	}
 
 	medianTimePast := mp.cfg.MedianTimePast()
@@ -882,7 +885,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	if blockchain.IsCoinBase(tx) {
 		str := fmt.Sprintf("transaction %v is an individual coinbase",
 			txHash)
-		return nil, txRuleError(wire.RejectInvalid, str)
+		return nil, txRuleError(wire.RejectInvalid, "bad-tx-coinbase",
+			str)
 	}
 
 	// Don't allow non-standard transactions if the network parameters
@@ -901,7 +905,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 			}
 			str := fmt.Sprintf("transaction %v is not standard: %v",
 				txHash, err)
-			return nil, txRuleError(rejectCode, str)
+			return nil, txRuleError(rejectCode, RejectReason(err),
+				str)
 		}
 	}
 
@@ -910,7 +915,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight, medianTimePast) {
 		str := fmt.Sprintf("transaction %v is not finalized in the "+
 			"next block (bad-txns-nonfinal)", txHash)
-		return nil, txRuleError(wire.RejectNonstandard, str)
+		return nil, txRuleError(wire.RejectNonstandard,
+			"bad-txns-nonfinal", str)
 	}
 
 	// The transaction may not use any of the same outputs as other
@@ -949,6 +955,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		entry := utxoView.LookupEntry(prevOut)
 		if entry != nil && !entry.IsSpent() {
 			return nil, txRuleError(wire.RejectDuplicate,
+				"txn-already-known",
 				"transaction already exists")
 		}
 		utxoView.RemoveEntry(prevOut)
@@ -986,6 +993,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	if !blockchain.SequenceLockActive(sequenceLock, nextBlockHeight,
 		medianTimePast) {
 		return nil, txRuleError(wire.RejectNonstandard,
+			"non-BIP68-final",
 			"transaction's sequence locks on inputs not met")
 	}
 
@@ -1016,7 +1024,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 			}
 			str := fmt.Sprintf("transaction %v has a non-standard "+
 				"input: %v", txHash, err)
-			return nil, txRuleError(rejectCode, str)
+			return nil, txRuleError(rejectCode,
+				"bad-txns-nonstandard-inputs", str)
 		}
 	}
 
@@ -1030,7 +1039,8 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		str := fmt.Sprintf("transaction %v has %d fees which is under "+
 			"the required amount of %d (min relay fee not met)", txHash,
 			txFee, minFee)
-		return nil, txRuleError(wire.RejectInsufficientFee, str)
+		return nil, txRuleError(wire.RejectInsufficientFee,
+			"min relay fee not met", str)
 	}
 
 	// Reject fees above the maximum the caller allows, if any.
@@ -1307,7 +1317,8 @@ func (mp *TxPool) ProcessTransactionWithMaxFee(tx *bchutil.Tx, allowOrphan bool,
 		str := fmt.Sprintf("orphan transaction %v references "+
 			"outputs of unknown or fully-spent "+
 			"transaction %v", tx.Hash(), missingParents[0])
-		return nil, txRuleError(wire.RejectDuplicate, str)
+		return nil, txRuleError(wire.RejectDuplicate, "missing-inputs",
+			str)
 	}
 
 	// Potentially add the orphan transaction to the orphan pool.

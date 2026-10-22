@@ -4209,9 +4209,16 @@ func handleSendRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-cha
 			}
 		}
 
+		// A rejected transaction gets its reason, description and
+		// reject code, in the form of BCHN's FormatStateMessage.
+		message := "TX rejected: " + err.Error()
+		if code == btcjson.ErrRPCTxRejected {
+			rejectCode, _, details := mempoolRejectState(ruleErr)
+			message = fmt.Sprintf("%s (code %d)", details, rejectCode)
+		}
 		return nil, &btcjson.RPCError{
 			Code:    code,
-			Message: "TX rejected: " + err.Error(),
+			Message: message,
 		}
 	}
 
@@ -4436,12 +4443,22 @@ func testAcceptRejectReason(err error) (string, string) {
 	if !ok {
 		return err.Error(), err.Error()
 	}
+	code, reason, details := mempoolRejectState(ruleErr)
+	return fmt.Sprintf("%d: %s", code, reason), details
+}
+
+// mempoolRejectState returns the reject code, BCHN's short reason and the
+// details of a rule violation the mempool refused a transaction for, as
+// BCHN's validation state holds them.  The details are the reason followed
+// by the description, where BCHN puts its debug message.
+func mempoolRejectState(ruleErr mempool.RuleError) (int, string, string) {
+	reason := mempool.RejectReason(ruleErr)
 	if _, ok := ruleErr.Err.(mempool.HighFeeError); ok {
-		return fmt.Sprintf("%d: absurdly-high-fee", rejectHighFee),
-			err.Error()
+		// Its description already starts with the reason.
+		return rejectHighFee, reason, ruleErr.Error()
 	}
-	code, _ := mempool.ErrToRejectErr(err)
-	return fmt.Sprintf("%d: %s", code, err.Error()), err.Error()
+	code, _ := mempool.ErrToRejectErr(ruleErr)
+	return int(code), reason, reason + ", " + ruleErr.Error()
 }
 
 // virtualSize returns the larger of the size of a transaction and

@@ -5,7 +5,9 @@
 package mempool
 
 import (
+	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -499,6 +501,10 @@ func TestOrphanReject(t *testing.T) {
 		if code != wire.RejectDuplicate {
 			t.Fatalf("ProcessTransaction: unexpected reject code "+
 				"-- got %v, want %v", code, wire.RejectDuplicate)
+		}
+		if reason := RejectReason(err); reason != "missing-inputs" {
+			t.Fatalf("ProcessTransaction: got reason %q, want "+
+				"missing-inputs", reason)
 		}
 
 		// Ensure no transactions were reported as accepted.
@@ -1095,7 +1101,9 @@ func TestCheckMempoolAcceptance(t *testing.T) {
 
 	// A transaction already in the pool is rejected as a duplicate.
 	_, err = check(parent)
-	if code, _ := extractRejectCode(err); code != wire.RejectDuplicate {
+	if code, _ := extractRejectCode(err); code != wire.RejectDuplicate ||
+		RejectReason(err) != "txn-already-in-mempool" {
+
 		t.Fatalf("CheckMempoolAcceptance: unexpected error for a "+
 			"transaction in the pool: %v", err)
 	}
@@ -1167,6 +1175,134 @@ func TestCheckMempoolAcceptanceMaxFee(t *testing.T) {
 			t.Fatalf("max fee %d: got error %v, want %v",
 				test.maxFee, ruleErr.Err, want)
 		}
+	}
+}
+
+// TestRejectReason ensures RejectReason gives BCHN's short reason for the
+// rules of the pool, for the consensus rules a transaction can break and for
+// a fee above the maximum, and none for other errors.
+func TestRejectReason(t *testing.T) {
+	t.Parallel()
+
+	chainErr := func(code blockchain.ErrorCode) error {
+		return chainRuleError(blockchain.RuleError{ErrorCode: code})
+	}
+	script := "mandatory-script-verify-flag-failed (Script failed)"
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"pool rule", txRuleError(wire.RejectDuplicate,
+			"txn-mempool-conflict", "conflict"), "txn-mempool-conflict"},
+		{"bare pool rule", TxRuleError{Reason: "dust"}, "dust"},
+		{"fee above the maximum", RuleError{Err: HighFeeError{}},
+			"absurdly-high-fee"},
+		{"no inputs", chainErr(blockchain.ErrNoTxInputs),
+			"bad-txns-vin-empty"},
+		{"no outputs", chainErr(blockchain.ErrNoTxOutputs),
+			"bad-txns-vout-empty"},
+		{"too big", chainErr(blockchain.ErrTxTooBig), "bad-txns-oversize"},
+		{"too small", chainErr(blockchain.ErrTxTooSmall),
+			"bad-txns-undersize"},
+		{"output value", chainErr(blockchain.ErrBadTxOutValue),
+			"bad-txns-outputvalues-outofrange"},
+		{"duplicate inputs", chainErr(blockchain.ErrDuplicateTxInputs),
+			"bad-txns-inputs-duplicate"},
+		{"null input", chainErr(blockchain.ErrBadTxInput),
+			"bad-txns-prevout-null"},
+		{"coinbase script", chainErr(blockchain.ErrBadCoinbaseScriptLen),
+			"bad-tx-coinbase"},
+		{"missing output", chainErr(blockchain.ErrMissingTxOut),
+			"bad-txns-inputs-missingorspent"},
+		{"spent output", chainErr(blockchain.ErrSpentTxOut),
+			"bad-txns-inputs-missingorspent"},
+		{"immature coinbase", chainErr(blockchain.ErrImmatureSpend),
+			"bad-txns-premature-spend-of-coinbase"},
+		{"outputs above the inputs", chainErr(blockchain.ErrSpendTooHigh),
+			"bad-txns-in-belowout"},
+		{"tokens", chainErr(blockchain.ErrCashTokensValidation),
+			"bad-txns-token-invalid"},
+		{"sigchecks", chainErr(blockchain.ErrTxTooManySigChecks),
+			"non-mandatory-script-verify-flag (Validation resources " +
+				"exceeded (SigChecks))"},
+		{"script malformed", chainErr(blockchain.ErrScriptMalformed),
+			script},
+		{"script failed", chainErr(blockchain.ErrScriptValidation),
+			script},
+		{"bare consensus rule",
+			blockchain.RuleError{ErrorCode: blockchain.ErrSpendTooHigh},
+			"bad-txns-in-belowout"},
+		{"block rule", chainErr(blockchain.ErrBadFees), "rejected"},
+		{"other error", errors.New("database failure"), ""},
+		{"no error", nil, ""},
+	}
+	for _, test := range tests {
+		if got := RejectReason(test.err); got != test.want {
+			t.Errorf("%s: got %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
+// TestPoolRejectReasons ensures the pool gives BCHN's reason for a spend of
+// a nonstandard output, and its own for an orphan too large to keep.
+func TestPoolRejectReasons(t *testing.T) {
+	t.Parallel()
+
+	harness, _, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+
+	// An output whose script is longer than a standard one.
+	prev := wire.NewMsgTx(1)
+	prev.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+		Hash: chainhash.Hash{1}}})
+	prev.AddTxOut(wire.NewTxOut(100000, bytes.Repeat([]byte{txscript.OP_1},
+		maxStandardP2SScriptSize+1), wire.TokenData{}))
+	harness.chain.utxos.AddTxOuts(bchutil.NewTx(prev),
+		harness.chain.BestHeight())
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: prev.TxHash()},
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	spend.AddTxOut(wire.NewTxOut(99000, harness.payScript, wire.TokenData{}))
+	_, err = harness.txPool.ProcessTransaction(bchutil.NewTx(spend), false, 0)
+	if reason := RejectReason(err); reason != "bad-txns-nonstandard-inputs" {
+		t.Errorf("nonstandard input: got reason %q, error %v", reason, err)
+	}
+
+	// An orphan above the maximum orphan size.
+	orphan := wire.NewMsgTx(1)
+	orphan.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: chainhash.Hash{2}},
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	for range 40 {
+		orphan.AddTxOut(wire.NewTxOut(1000, harness.payScript,
+			wire.TokenData{}))
+	}
+	_, err = harness.txPool.ProcessTransaction(bchutil.NewTx(orphan), true, 0)
+	if reason := RejectReason(err); reason != "orphan-tx-size" {
+		t.Errorf("large orphan: got reason %q, error %v", reason, err)
+	}
+
+	// A pay to script hash 32 output before tokens.
+	hash32 := bytes.Repeat([]byte{0x11}, 32)
+	p2sh32, err := txscript.NewScriptBuilder().AddOp(txscript.OP_HASH256).
+		AddData(hash32).AddOp(txscript.OP_EQUAL).Script()
+	if err != nil {
+		t.Fatalf("unable to build script: %v", err)
+	}
+	prev.TxOut[0].PkScript = p2sh32
+	view := blockchain.NewUtxoViewpoint()
+	view.AddTxOuts(bchutil.NewTx(prev), 1)
+	spend.TxIn[0].PreviousOutPoint.Hash = prev.TxHash()
+	err = checkInputsStandard(bchutil.NewTx(spend), view, 0)
+	if reason := RejectReason(err); reason != "bad-txns-nonstandard-inputs" {
+		t.Errorf("pay to script hash 32: got reason %q, error %v", reason,
+			err)
 	}
 }
 

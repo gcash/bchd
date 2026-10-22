@@ -366,6 +366,7 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 	if mp.dsProofs.isRejected(hash) {
 		mp.mtx.RUnlock()
 		return DSProofIgnored, txRuleError(wire.RejectInvalid,
+			"bad-dsproof",
 			fmt.Sprintf("double spend proof %v was already rejected", hash))
 	}
 	spender := mp.outpoints[proof.PrevOut]
@@ -399,7 +400,7 @@ func (mp *TxPool) ProcessDSProof(proof *wire.MsgDSProof, peer Tag, hasPeer bool)
 	}
 
 	mp.dsProofs.markRejected(hash)
-	return DSProofIgnored, txRuleError(wire.RejectInvalid,
+	return DSProofIgnored, txRuleError(wire.RejectInvalid, "bad-dsproof",
 		fmt.Sprintf("invalid double spend proof %v: %v", hash, err))
 }
 

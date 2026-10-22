@@ -114,7 +114,8 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scr
 			if !scriptFlags.HasFlag(txscript.ScriptAllowCashTokens) {
 				str := fmt.Sprintf("transaction input #%d has a "+
 					"non-standard script form", i)
-				return txRuleError(wire.RejectNonstandard, str)
+				return txRuleError(wire.RejectNonstandard,
+					"bad-txns-nonstandard-inputs", str)
 			}
 		case txscript.NonStandardTy:
 			// After the May 2026 upgrade, any script that does not match any of the
@@ -123,7 +124,8 @@ func checkInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scr
 			if !scriptFlags.HasFlag(txscript.ScriptAllowMay2026) || len(originPkScript) > maxStandardP2SScriptSize {
 				str := fmt.Sprintf("transaction input #%d has a "+
 					"non-standard script form", i)
-				return txRuleError(wire.RejectNonstandard, str)
+				return txRuleError(wire.RejectNonstandard,
+					"bad-txns-nonstandard-inputs", str)
 			}
 		}
 	}
@@ -143,20 +145,23 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass, up
 		if err != nil {
 			str := fmt.Sprintf("multi-signature script parse "+
 				"failure: %v", err)
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptpubkey", str)
 		}
 
 		// A standard multi-signature public key script must contain
 		// from 1 to maxStandardMultiSigKeys public keys.
 		if numPubKeys < 1 {
 			str := "multi-signature script with no pubkeys"
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptpubkey", str)
 		}
 		if numPubKeys > maxStandardMultiSigKeys {
 			str := fmt.Sprintf("multi-signature script with %d "+
 				"public keys which is more than the allowed "+
 				"max of %d", numPubKeys, maxStandardMultiSigKeys)
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptpubkey", str)
 		}
 
 		// A standard multi-signature public key script must have at
@@ -164,13 +169,15 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass, up
 		// public keys.
 		if numSigs < 1 {
 			return txRuleError(wire.RejectNonstandard,
+				"scriptpubkey",
 				"multi-signature script with no signatures")
 		}
 		if numSigs > numPubKeys {
 			str := fmt.Sprintf("multi-signature script with %d "+
 				"signatures which is more than the available "+
 				"%d public keys", numSigs, numPubKeys)
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptpubkey", str)
 		}
 
 	case txscript.NonStandardTy:
@@ -178,7 +185,14 @@ func checkPkScriptStandard(pkScript []byte, scriptClass txscript.ScriptClass, up
 		// P2PK, P2PKH, P2SH20, P2SH32, OP_RETURN, or BMS types, is considered
 		// standard if it has a length less or equal to maxStandardP2SScriptSize.
 		if !upgrade12Active || len(pkScript) > maxStandardP2SScriptSize {
-			return txRuleError(wire.RejectNonstandard,
+			// BCHN counts OP_RETURN followed by pushes as data
+			// carrier bytes whatever its length, so it refuses one
+			// too long to be null data as oversize-op-return.
+			reason := "scriptpubkey"
+			if txscript.ScriptTypeName(pkScript) == txscript.NullDataTy.String() {
+				reason = "oversize-op-return"
+			}
+			return txRuleError(wire.RejectNonstandard, reason,
 				"non-standard script form")
 		}
 	}
@@ -270,13 +284,13 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		str := fmt.Sprintf("transaction version %d is not in the "+
 			"valid range of %d-%d", msgTx.Version, 1,
 			maxTxVersion)
-		return txRuleError(wire.RejectNonstandard, str)
+		return txRuleError(wire.RejectNonstandard, "version", str)
 	}
 
 	// The transaction must be finalized to be standard and therefore
 	// considered for inclusion in a block.
 	if !blockchain.IsFinalizedTransaction(tx, height, medianTimePast) {
-		return txRuleError(wire.RejectNonstandard,
+		return txRuleError(wire.RejectNonstandard, "bad-txns-nonfinal",
 			"transaction is not finalized (bad-txns-nonfinal)")
 	}
 
@@ -288,7 +302,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	if txSize > maxStandardTxSize {
 		str := fmt.Sprintf("size of transaction %v is larger than max "+
 			"allowed size of %v", txSize, maxStandardTxSize)
-		return txRuleError(wire.RejectNonstandard, str)
+		return txRuleError(wire.RejectNonstandard, "tx-size", str)
 	}
 
 	for i, txIn := range msgTx.TxIn {
@@ -310,7 +324,8 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 				"script size of %d bytes is large than max "+
 				"allowed size of %d bytes", i, sigScriptLen,
 				maxStandardSizeAllowed)
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptsig-size", str)
 		}
 
 		// Each transaction input signature script must only contain
@@ -318,7 +333,8 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		if !txscript.IsPushOnlyScript(txIn.SignatureScript) {
 			str := fmt.Sprintf("transaction input %d: signature "+
 				"script is not push only", i)
-			return txRuleError(wire.RejectNonstandard, str)
+			return txRuleError(wire.RejectNonstandard,
+				"scriptsig-not-pushonly", str)
 		}
 	}
 
@@ -330,7 +346,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		if !upgrade9Active && !txOut.TokenData.IsEmpty() {
 			rejectCode := wire.RejectNonstandard
 			str := "txn-tokens-before-activation"
-			return txRuleError(rejectCode, str)
+			return txRuleError(rejectCode, str, str)
 		}
 
 		scriptClass := txscript.GetScriptClass(txOut.PkScript)
@@ -344,7 +360,7 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 				rejectCode = rejCode
 			}
 			str := fmt.Sprintf("transaction output %d: %v", i, err)
-			return txRuleError(rejectCode, str)
+			return txRuleError(rejectCode, RejectReason(err), str)
 		}
 
 		// Accumulate the script size of outputs which only carry data.  For
@@ -356,14 +372,15 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 		} else if !txscript.IsUnspendable(txOut.PkScript) && isDust(txOut, dustRelayFee) {
 			str := fmt.Sprintf("transaction output %d: payment "+
 				"of %d is dust", i, txOut.Value)
-			return txRuleError(wire.RejectDust, str)
+			return txRuleError(wire.RejectDust, "dust", str)
 		}
 	}
 
 	// A standard transaction cannot have null data exceeding txscript.MaxDataCarrierSize
 	if dataCarrierSize > txscript.MaxDataCarrierSize {
 		str := fmt.Sprintf("transaction nulldata exceeds %d bytes", txscript.MaxDataCarrierSize)
-		return txRuleError(wire.RejectNonstandard, str)
+		return txRuleError(wire.RejectNonstandard, "oversize-op-return",
+			str)
 	}
 
 	return nil

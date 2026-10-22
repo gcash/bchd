@@ -36,6 +36,7 @@ func (e RuleError) Error() string {
 // ascertain the specific reason for the rule violation.
 type TxRuleError struct {
 	RejectCode  wire.RejectCode // The code to send with reject messages
+	Reason      string          // BCHN's short reason, such as "dust"
 	Description string          // Human readable description of the issue
 }
 
@@ -58,10 +59,12 @@ func (e HighFeeError) Error() string {
 
 // txRuleError creates an underlying TxRuleError with the given a set of
 // arguments and returns a RuleError that encapsulates it.
-func txRuleError(c wire.RejectCode, desc string) RuleError {
-	return RuleError{
-		Err: TxRuleError{RejectCode: c, Description: desc},
-	}
+func txRuleError(c wire.RejectCode, reason, desc string) RuleError {
+	return RuleError{Err: TxRuleError{
+		RejectCode:  c,
+		Reason:      reason,
+		Description: desc,
+	}}
 }
 
 // chainRuleError returns a RuleError that encapsulates the given
@@ -144,4 +147,79 @@ func ErrToRejectErr(err error) (wire.RejectCode, string) {
 	// wire.RejectInvalid with a generic rejected string plus the error
 	// text.
 	return wire.RejectInvalid, "rejected: " + err.Error()
+}
+
+// RejectReason returns the short reason Bitcoin Cash Node gives when it
+// refuses a transaction for the rule violation err reports, such as
+// "txn-mempool-conflict", or an empty string when err is not a rule
+// violation.
+func RejectReason(err error) string {
+	// Pull the underlying error out of a RuleError.
+	if rerr, ok := err.(RuleError); ok {
+		err = rerr.Err
+	}
+
+	switch err := err.(type) {
+	case TxRuleError:
+		return err.Reason
+	case blockchain.RuleError:
+		return chainRejectReason(err.ErrorCode)
+	case HighFeeError:
+		return "absurdly-high-fee"
+	}
+	return ""
+}
+
+// chainRejectReason returns the reason BCHN's mempool gives for a transaction
+// that breaks the consensus rule identified by code.  These are the reasons
+// of BCHN's CheckRegularTransaction, ContextualCheckTransaction, CheckTxInputs
+// and CheckInputs.
+func chainRejectReason(code blockchain.ErrorCode) string {
+	switch code {
+	case blockchain.ErrNoTxInputs:
+		return "bad-txns-vin-empty"
+	case blockchain.ErrNoTxOutputs:
+		return "bad-txns-vout-empty"
+	case blockchain.ErrTxTooBig:
+		return "bad-txns-oversize"
+	case blockchain.ErrTxTooSmall:
+		return "bad-txns-undersize"
+	case blockchain.ErrBadTxOutValue:
+		// BCHN has a reason each for a negative output, an output
+		// above the maximum and a total above it, which the code does
+		// not tell apart.
+		return "bad-txns-outputvalues-outofrange"
+	case blockchain.ErrDuplicateTxInputs:
+		return "bad-txns-inputs-duplicate"
+	case blockchain.ErrBadTxInput:
+		return "bad-txns-prevout-null"
+	case blockchain.ErrBadCoinbaseScriptLen:
+		// Only a coinbase is checked for it, which BCHN refuses first.
+		return "bad-tx-coinbase"
+	case blockchain.ErrMissingTxOut, blockchain.ErrSpentTxOut:
+		// A spend of a token output made before the upgrade gets this
+		// too, which BCHN refuses as
+		// bad-txns-vin-token-created-pre-activation, or as
+		// bad-txns-vin-tokenprefix when its token data does not parse.
+		return "bad-txns-inputs-missingorspent"
+	case blockchain.ErrImmatureSpend:
+		return "bad-txns-premature-spend-of-coinbase"
+	case blockchain.ErrSpendTooHigh:
+		return "bad-txns-in-belowout"
+	case blockchain.ErrCashTokensValidation:
+		// BCHN has a reason for each token rule, which the code does
+		// not identify.
+		return "bad-txns-token-invalid"
+	case blockchain.ErrTxTooManySigChecks:
+		// BCHN runs the failing script again without the limit, and as
+		// that passes, reports a policy failure.
+		return "non-mandatory-script-verify-flag (Validation " +
+			"resources exceeded (SigChecks))"
+	case blockchain.ErrScriptMalformed, blockchain.ErrScriptValidation:
+		// BCHN names the script error, and reports a failure that only
+		// the policy flags cause as non-mandatory-script-verify-flag.
+		// The code does neither.
+		return "mandatory-script-verify-flag-failed (Script failed)"
+	}
+	return "rejected"
 }

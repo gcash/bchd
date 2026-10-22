@@ -921,7 +921,8 @@ func TestDSProofRejectedNotRechecked(t *testing.T) {
 	}
 	bad := mutateProof(good, func(p *wire.MsgDSProof) { p.FirstSpender.LockTime ^= 1 })
 	hash := bad.ProofHash()
-	if r, err := pool.ProcessDSProof(bad, 7, true); r != DSProofIgnored || err == nil {
+	r, err := pool.ProcessDSProof(bad, 7, true)
+	if r != DSProofIgnored || RejectReason(err) != "bad-dsproof" {
 		t.Fatalf("bad proof: %v %v", r, err)
 	}
 	if !pool.HaveDSProof(&hash) {
@@ -931,7 +932,8 @@ func TestDSProofRejectedNotRechecked(t *testing.T) {
 	// Without the transaction a new check would make it an orphan.
 	pool.RemoveTransaction(tx1, true)
 	for range 2 {
-		if r, err := pool.ProcessDSProof(bad, 7, true); r != DSProofIgnored || err == nil {
+		r, err := pool.ProcessDSProof(bad, 7, true)
+		if r != DSProofIgnored || RejectReason(err) != "bad-dsproof" {
 			t.Fatalf("rejected proof: %v %v", r, err)
 		}
 	}

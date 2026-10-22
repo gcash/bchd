@@ -215,6 +215,12 @@ func TestCheckPkScriptStandard(t *testing.T) {
 				test.name)
 			return
 		}
+		if reason := RejectReason(got); !test.isStandard &&
+			reason != "scriptpubkey" {
+
+			t.Errorf("TestCheckPkScriptStandard test '%s': got "+
+				"reason %q, want scriptpubkey", test.name, reason)
+		}
 	}
 }
 
@@ -271,6 +277,12 @@ func TestCheckPkScriptStandardTemplates(t *testing.T) {
 			t.Errorf("%s: output check returned %v, want standard %v",
 				test.name, err, test.isStandard)
 		}
+		if reason := RejectReason(err); !test.isStandard &&
+			reason != "scriptpubkey" {
+
+			t.Errorf("%s: output check reason %q, want scriptpubkey",
+				test.name, reason)
+		}
 
 		prevTx := wire.NewMsgTx(1)
 		prevTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, 0),
@@ -289,6 +301,12 @@ func TestCheckPkScriptStandardTemplates(t *testing.T) {
 		if (err == nil) != test.spendStandard {
 			t.Errorf("%s: input check returned %v, want standard %v",
 				test.name, err, test.spendStandard)
+		}
+		if reason := RejectReason(err); !test.spendStandard &&
+			reason != "bad-txns-nonstandard-inputs" {
+
+			t.Errorf("%s: input check reason %q, want "+
+				"bad-txns-nonstandard-inputs", test.name, reason)
 		}
 	}
 }
@@ -392,6 +410,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 		height     int32
 		isStandard bool
 		code       wire.RejectCode
+		reason     string
 	}{
 		{
 			name: "Typical pay-to-pubkey-hash transaction",
@@ -415,6 +434,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "version",
 		},
 		{
 			name: "Transaction is not finalized",
@@ -431,6 +451,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "bad-txns-nonfinal",
 		},
 		{
 			name: "Transaction size is too large",
@@ -447,6 +468,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "tx-size",
 		},
 		{
 			name: "Signature script size is too large",
@@ -464,6 +486,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "scriptsig-size",
 		},
 		{
 			name: "Signature script that does more than push data",
@@ -481,6 +504,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "scriptsig-not-pushonly",
 		},
 		{
 			name: "Valid but non standard public key script",
@@ -496,6 +520,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "scriptpubkey",
 		},
 		{
 			name: "More than one nulldata output",
@@ -529,6 +554,27 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectDust,
+			reason:     "dust",
+		},
+		{
+			name: "Token output before the upgrade",
+			tx: wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{&dummyTxIn},
+				TxOut: []*wire.TxOut{{
+					Value:    100000000,
+					PkScript: dummyPkScript,
+					TokenData: wire.TokenData{
+						Amount:   1,
+						BitField: 0x10,
+					},
+				}},
+				LockTime: 0,
+			},
+			height:     300000,
+			isStandard: false,
+			code:       wire.RejectNonstandard,
+			reason:     "txn-tokens-before-activation",
 		},
 		{
 			name: "One nulldata output with 0 amount (standard)",
@@ -609,6 +655,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "oversize-op-return",
 		},
 		{
 			name: "Multiple nulldata outputs exceeds MaxDataCarrierSize (non-standard)",
@@ -660,6 +707,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     300000,
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "oversize-op-return",
 		},
 		{
 			name: "Multiple nulldata outputs are below MaxDataCarrierSize (standard)",
@@ -728,6 +776,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			height:     0, // no relay fee
 			isStandard: false,
 			code:       wire.RejectNonstandard,
+			reason:     "scriptpubkey",
 		},
 	}
 
@@ -772,6 +821,13 @@ func TestCheckTransactionStandard(t *testing.T) {
 				"error code - got %v, want %v", test.name,
 				txrerr.RejectCode, test.code)
 			continue
+		}
+
+		// Ensure the reason is BCHN's.
+		if txrerr.Reason != test.reason {
+			t.Errorf("checkTransactionStandard (%s): unexpected "+
+				"reason - got %q, want %q", test.name,
+				txrerr.Reason, test.reason)
 		}
 	}
 }
