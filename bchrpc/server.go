@@ -3133,9 +3133,11 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 		log.Criticalf("Failed to create chainhash from token ID from %s, with error: %v", hex.EncodeToString(tokenIDHash), err)
 		return -1, err
 	}
+	// A SEND of zero tokens is valid whatever token ID it names, so the
+	// token ID need not name a transaction, or a GENESIS.
 	genEntry, err := s.getSlpIndexEntry(tokenIDRev)
 	if err != nil {
-		log.Criticalf("Failed to fetch slp entry for %s, with error: %v", tokenIDRev, err)
+		log.Debugf("No slp transaction for token ID %v: %v", tokenIDRev, err)
 		return -1, err
 	}
 	genSlpMsg, err := v1parser.ParseSLP(genEntry.SlpOpReturn)
@@ -3143,8 +3145,6 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 		log.Criticalf("Failed to parse slp message for %v, with error: %v", tokenIDRev, err)
 		return -1, err
 	}
-	// A SEND of zero tokens is valid whatever token ID it names, so the
-	// token ID need not be a GENESIS.
 	genesis, ok := genSlpMsg.(*v1parser.SlpGenesis)
 	if !ok {
 		return -1, fmt.Errorf("token ID %v is not a GENESIS transaction", tokenIDRev)
@@ -3626,10 +3626,17 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 			// for nft children we populate the group token ID property in TxMetadata
 			if entry.SlpVersionType == v1parser.TokenTypeNft1Child41 {
+				// A SEND of zero tokens is valid whatever token ID it
+				// names, so the token of an NFT1 child SEND may have no
+				// GENESIS, and no group.
+				logMissing := log.Criticalf
+				if _, ok := slpMsg.(*v1parser.SlpSend); ok {
+					logMissing = log.Debugf
+				}
 				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry)
 				if err != nil {
 					msg := fmt.Sprintf("missing group id metadata for nft child txid %v, tokenId: %v, tokenIdHash: %v, %v", txid, entry.TokenID, hex.EncodeToString(entry.TokenIDHash[:]), err)
-					log.Critical(msg)
+					logMissing("%s", msg)
 					return errors.New(msg)
 				}
 				if tm.NftGroupID != nil {
@@ -3641,7 +3648,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 						log.Criticalf("slpInfo has wrong TxMetadata type for nft child %v", txid)
 					}
 				} else {
-					log.Criticalf("missing group id in token metadata for nft child %v", txid)
+					logMissing("missing group id in token metadata for nft child %v", txid)
 				}
 			}
 

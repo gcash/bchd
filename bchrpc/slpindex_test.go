@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
+	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp/metadatamaker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -296,5 +298,193 @@ func TestSlpTrustedValidationBadValidHash(t *testing.T) {
 		"want 32"
 	if got := status.Convert(err).Message(); got != want {
 		t.Fatalf("got message %.100q, want %q", got, want)
+	}
+}
+
+// TestZeroSendNoGenesisLogLevel ensures showing a SEND of zero tokens of a
+// token that has no GENESIS, which is valid, logs at debug rather than as
+// critical, for a type 1 and an NFT1 child token, in the memory pool and
+// confirmed.  Its outputs then carry no token.
+func TestZeroSendNoGenesisLogLevel(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := idx.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	s := &GrpcServer{chainParams: &chaincfg.RegressionNetParams, db: db,
+		slpIndex: idx}
+
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	logger.SetLevel(bchlog.LevelInfo)
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+
+	// show checks the transaction as the SLP calls show it.
+	show := func(name string, tx *wire.MsgTx) {
+		t.Helper()
+		buf.Reset()
+		resp := marshalTransaction(bchutil.NewTx(tx), 0, nil, 0, s)
+		if got := resp.SlpTransactionInfo.ValidityJudgement; got !=
+			pb.SlpTransactionInfo_VALID {
+
+			t.Errorf("%s: the SEND is %v, want valid", name, got)
+		}
+		if resp.Outputs[1].SlpToken != nil {
+			t.Errorf("%s: output 1 has token %v", name,
+				resp.Outputs[1].SlpToken)
+		}
+		if buf.Len() != 0 {
+			t.Errorf("%s: logged at the info level or above: %q", name,
+				buf.String())
+		}
+	}
+	n := byte(0)
+	zeroSend := func(send func([]byte, []uint64) ([]byte, error),
+		tokenID []byte) *wire.MsgTx {
+
+		t.Helper()
+		script, err := send(tokenID, []uint64{0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n++
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee, n}}, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+	for i, typ := range []struct {
+		name string
+		send func([]byte, []uint64) ([]byte, error)
+	}{
+		{"type 1", metadatamaker.TokenType1Send},
+		{"nft1 child", metadatamaker.NFT1ChildSend},
+	} {
+		// A token ID that names no transaction.
+		unknown := bytes.Repeat([]byte{0x70 + byte(i)}, 32)
+
+		pooled := zeroSend(typ.send, unknown)
+		err := db.View(func(dbTx database.Tx) error {
+			valid, err := idx.AddPotentialSlpEntries(dbTx, pooled)
+			if err == nil && !valid {
+				err = errors.New("the SEND is not valid")
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatalf("%s: AddPotentialSlpEntries: %v", typ.name, err)
+		}
+		show(typ.name+" in the memory pool", pooled)
+
+		confirmed := zeroSend(typ.send, unknown)
+		block := bchutil.NewBlock(&wire.MsgBlock{
+			Transactions: []*wire.MsgTx{confirmed}})
+		err = db.Update(func(dbTx database.Tx) error {
+			return idx.ConnectBlock(dbTx, block, nil)
+		})
+		if err != nil {
+			t.Fatalf("%s: ConnectBlock: %v", typ.name, err)
+		}
+		show(typ.name+" confirmed", confirmed)
+	}
+}
+
+// TestNftChildGenesisNoGroupLogLevel ensures an NFT1 child GENESIS whose token
+// metadata has no group, which only an inconsistent index has, is still
+// logged as critical when shown.
+func TestNftChildGenesisNoGroupLogLevel(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s := &GrpcServer{chainParams: &chaincfg.RegressionNetParams, db: db,
+		slpIndex: idx}
+
+	groupScript, err := metadatamaker.NFT1GroupGenesis([]byte("G"),
+		[]byte("Group"), nil, nil, 0, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := wire.NewMsgTx(1)
+	group.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	group.AddTxOut(&wire.TxOut{PkScript: groupScript})
+	group.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	childScript, err := metadatamaker.NFT1ChildGenesis([]byte("C"),
+		[]byte("Child"), nil, nil, 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := wire.NewMsgTx(1)
+	child.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: group.TxHash(), Index: 1}, nil))
+	child.AddTxOut(&wire.TxOut{PkScript: childScript})
+	child.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	block := bchutil.NewBlock(&wire.MsgBlock{
+		Transactions: []*wire.MsgTx{group, child}})
+
+	// Connect both, then store the child token's metadata without its
+	// group: its token ID and token type only.
+	childHash := child.TxHash()
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.ConnectBlock(dbTx, block, nil); err != nil {
+			return err
+		}
+		entry, err := idx.GetSlpIndexEntry(dbTx, &childHash)
+		if err != nil {
+			return err
+		}
+		var key [4]byte
+		binary.LittleEndian.PutUint32(key[:], entry.TokenID)
+		value := make([]byte, 34)
+		copy(value, entry.TokenIDHash[:])
+		binary.LittleEndian.PutUint16(value[32:], 0x41)
+		return dbTx.Metadata().Bucket([]byte("tokenhashbyididx")).Put(key[:],
+			value)
+	})
+	if err != nil {
+		t.Fatalf("index: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("GRPC")
+	logger.SetLevel(bchlog.LevelInfo)
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+	marshalTransaction(bchutil.NewTx(child), 0, nil, 0, s)
+	want := "[CRT] GRPC: missing group id in token metadata for nft child " +
+		childHash.String()
+	if !strings.Contains(buf.String(), want) {
+		t.Errorf("log %q, want a line with %q", buf.String(), want)
 	}
 }
