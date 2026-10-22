@@ -6,10 +6,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"math"
+	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -286,6 +289,78 @@ func TestHandleGetTxOutProofErrors(t *testing.T) {
 	assertRPCError(t, "txid not in block", err,
 		btcjson.ErrRPCInvalidAddressOrKey,
 		"Not all transactions found in specified or retrieved block")
+}
+
+// TestGetTxOutProofManyTxids ensures gettxoutproof's time grows linearly with
+// the number of txids, which limited users can send by the hundred thousand,
+// rather than its duplicate check and its count of those found in the block
+// comparing each txid with every one before it.  A duplicate is still
+// refused.
+func TestGetTxOutProofManyTxids(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: &chaincfg.RegressionNetParams,
+		Chain:       chain,
+		DB:          db,
+	}}
+
+	// A block of 20000 transactions, each spending an output of one
+	// transaction in the block before, funded by a mature coinbase.
+	const numSpends = 20000
+	first := mineTestBlock(t, chain, nil)
+	for range chaincfg.RegressionNetParams.CoinbaseMaturity {
+		mineTestBlock(t, chain, nil)
+	}
+	fanOut := wire.NewMsgTx(1)
+	fanOut.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: *first.Transactions()[0].Hash()}, nil))
+	value := first.MsgBlock().Transactions[0].TxOut[0].Value / numSpends
+	for range numSpends {
+		fanOut.AddTxOut(wire.NewTxOut(value, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	}
+	mineTestBlock(t, chain, nil, fanOut)
+	fanOutHash := fanOut.TxHash()
+	spends := make([]*wire.MsgTx, numSpends)
+	for i := range spends {
+		// Two outputs make the transaction as large as the consensus
+		// rules require.
+		spends[i] = wire.NewMsgTx(1)
+		spends[i].AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: fanOutHash, Index: uint32(i)}, nil))
+		spends[i].AddTxOut(wire.NewTxOut(value/2, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+		spends[i].AddTxOut(wire.NewTxOut(value/2, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	}
+	slices.SortFunc(spends, func(a, b *wire.MsgTx) int {
+		hashA, hashB := a.TxHash(), b.TxHash()
+		return hashA.Compare(&hashB)
+	})
+	block := mineTestBlock(t, chain, nil, spends...)
+	blockHash := block.Hash().String()
+
+	// 200000 txids that are not in the block come first, so a search of
+	// the list for each transaction of the block passes them all.
+	txids := make([]string, 0, 200000+numSpends)
+	for i := range 200000 {
+		var hash chainhash.Hash
+		binary.LittleEndian.PutUint64(hash[:], uint64(i+1))
+		txids = append(txids, hash.String())
+	}
+	for _, tx := range spends {
+		txids = append(txids, tx.TxHash().String())
+	}
+	start := time.Now()
+	_, err := callTxOutProofHandler(t, handleGetTxOutProof, s,
+		btcjson.NewGetTxOutProofCmd(txids, &blockHash))
+	elapsed := time.Since(start)
+	assertRPCError(t, "txids not in the block", err, btcjson.ErrRPCInvalidAddressOrKey,
+		"Not all transactions found in specified or retrieved block")
+	if elapsed > 2*time.Second {
+		t.Errorf("%d txids took %v", len(txids), elapsed)
+	}
+
+	dup := []string{txids[0], txids[1], txids[0]}
+	_, err = callTxOutProofHandler(t, handleGetTxOutProof, s,
+		btcjson.NewGetTxOutProofCmd(dup, &blockHash))
+	assertRPCError(t, "duplicate txid", err, btcjson.ErrRPCInvalidParameter,
+		"Duplicate txid "+txids[0]+" in set")
 }
 
 // mineTestBlock solves a block holding txns on prev, or on the chain's tip

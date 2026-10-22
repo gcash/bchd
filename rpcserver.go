@@ -3317,8 +3317,12 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		}
 	}
 
-	// store our validated transactions
+	// store our validated transactions, in order and in a map, so the
+	// duplicate check and the count of those found in the block take time
+	// linear in the number of txids, of which limited users can send
+	// hundreds of thousands
 	txnSet := make([]*chainhash.Hash, 0, len(c.TxIDs))
+	inSet := make(map[chainhash.Hash]struct{}, len(c.TxIDs))
 
 	// check if transactions are valid and there are no duplicates
 	for _, txnStr := range c.TxIDs {
@@ -3331,7 +3335,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 			}
 		}
 
-		if merkleblock.TxInSet(txnHash, txnSet) {
+		if _, ok := inSet[*txnHash]; ok {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCInvalidParameter,
 				Message: fmt.Sprintf("Duplicate txid %s in set", txnStr),
@@ -3339,6 +3343,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		}
 
 		// add valid hash to our set
+		inSet[*txnHash] = struct{}{}
 		txnSet = append(txnSet, txnHash)
 	}
 
@@ -3422,7 +3427,7 @@ func handleGetTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 	found := 0
 
 	for _, tx := range block.Transactions() {
-		if merkleblock.TxInSet(tx.Hash(), txnSet) {
+		if _, ok := inSet[*tx.Hash()]; ok {
 			found++
 		}
 	}
