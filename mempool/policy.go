@@ -349,10 +349,11 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 
 		// Accumulate the script size of outputs which only carry data.  For
 		// all other script types, ensure the output value is not
-		// "dust".
+		// "dust".  An unspendable output, such as a pay to script output
+		// starting with OP_RETURN, is never dust, as in BCHN.
 		if scriptClass == txscript.NullDataTy {
 			dataCarrierSize += len(txOut.PkScript)
-		} else if txscript.IsUnspendable(txOut.PkScript) || isDust(txOut, dustRelayFee) {
+		} else if !txscript.IsUnspendable(txOut.PkScript) && isDust(txOut, dustRelayFee) {
 			str := fmt.Sprintf("transaction output %d: payment "+
 				"of %d is dust", i, txOut.Value)
 			return txRuleError(wire.RejectDust, str)

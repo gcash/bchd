@@ -790,3 +790,75 @@ func TestNonFinalStandardReason(t *testing.T) {
 		t.Fatalf("got %v, want a rejection with bad-txns-nonfinal", err)
 	}
 }
+
+// TestUnspendableScriptStandard ensures that once the May 2026 upgrade is
+// active, an output whose script starts with OP_RETURN but is not data
+// carrier is standard pay to script with any value, as in BCHN, where an
+// unspendable output is never dust, and that it is not counted as data
+// carrier bytes.
+func TestUnspendableScriptStandard(t *testing.T) {
+	out := func(value int64, script ...byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	opReturnScript := func(size int) []byte {
+		return append([]byte{txscript.OP_RETURN},
+			bytes.Repeat([]byte{txscript.OP_NOP}, size-1)...)
+	}
+	nullData := append([]byte{txscript.OP_RETURN, txscript.OP_PUSHDATA1,
+		txscript.MaxDataCarrierSize - 3},
+		make([]byte, txscript.MaxDataCarrierSize-3)...)
+
+	tests := []struct {
+		name      string
+		outputs   []*wire.TxOut
+		upgrade12 bool
+		code      wire.RejectCode // 0 when standard
+	}{
+		{"OP_RETURN and a non-push opcode",
+			[]*wire.TxOut{out(0, txscript.OP_RETURN, txscript.OP_ADD)},
+			true, 0},
+		{"OP_RETURN and a truncated push",
+			[]*wire.TxOut{out(0, txscript.OP_RETURN, txscript.OP_DATA_5, 1)},
+			true, 0},
+		{"OP_RETURN with a value",
+			[]*wire.TxOut{out(1000, txscript.OP_RETURN, txscript.OP_ADD)},
+			true, 0},
+		{"OP_RETURN in 201 bytes",
+			[]*wire.TxOut{out(0, opReturnScript(201)...)}, true, 0},
+		{"OP_RETURN in 202 bytes",
+			[]*wire.TxOut{out(0, opReturnScript(202)...)}, true,
+			wire.RejectNonstandard},
+		{"beside a full data carrier output",
+			[]*wire.TxOut{out(0, nullData...),
+				out(0, txscript.OP_RETURN, txscript.OP_ADD)},
+			true, 0},
+		{"before the upgrade",
+			[]*wire.TxOut{out(0, txscript.OP_RETURN, txscript.OP_ADD)},
+			false, wire.RejectNonstandard},
+		{"spendable script without a value",
+			[]*wire.TxOut{out(0, txscript.OP_TRUE)}, true, wire.RejectDust},
+		{"spendable script with a value",
+			[]*wire.TxOut{out(1000, txscript.OP_TRUE)}, true, 0},
+	}
+
+	for _, test := range tests {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: chainhash.Hash{1}},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		tx.TxOut = test.outputs
+		err := checkTransactionStandard(bchutil.NewTx(tx), 300000,
+			time.Now(), DefaultDustRelayFee, 2, true, test.upgrade12)
+		code, _ := extractRejectCode(err)
+		if (err == nil) != (test.code == 0) || err != nil &&
+			code != test.code {
+
+			want := "standard"
+			if test.code != 0 {
+				want = "reject code " + test.code.String()
+			}
+			t.Errorf("%s: got %v, want %s", test.name, err, want)
+		}
+	}
+}
