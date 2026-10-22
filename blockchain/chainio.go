@@ -88,6 +88,11 @@ var (
 	// re-index of the chain state as started and not yet finished.
 	chainStateReIndexKeyName = []byte("chainstatereindex")
 
+	// chainStateFastSyncKeyName is the name of the db key that marks the
+	// utxo set as being replaced by the download of a fast sync that has
+	// not yet been verified.
+	chainStateFastSyncKeyName = []byte("chainstatefastsync")
+
 	// utxoSetBucketName is the name of the db bucket used to house the
 	// unspent transaction output set.
 	utxoSetBucketName = []byte("utxosetv2")

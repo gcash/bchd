@@ -15,6 +15,7 @@ import (
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/internal/socks"
 	"github.com/gcash/bchd/wire"
 
@@ -142,6 +143,16 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 	}
 	close(resultsChan)
 
+	utxoHash := m.Hash()
+
+	// Make sure the hash of the UTXO set we downloaded matches the expected
+	// hash before the state is marked as consistent at the checkpoint.
+	if !checkpoint.UtxoSetHash.IsEqual(&utxoHash) {
+		log.Errorf("Downloaded UTXO set hash does not match checkpoint."+
+			" Expected %s, got %s.", checkpoint.UtxoSetHash.String(), m.Hash().String())
+		return AssertError("downloaded invalid UTXO set")
+	}
+
 	if err = b.utxoCache.Flush(FlushRequired, &BestState{Hash: *checkpoint.Hash}); err != nil {
 		log.Errorf("Error processing UTXO set: %s", err.Error())
 		return err
@@ -152,13 +163,13 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		return err
 	}
 
-	utxoHash := m.Hash()
-
-	// Make sure the hash of the UTXO set we downloaded matches the expected hash.
-	if !checkpoint.UtxoSetHash.IsEqual(&utxoHash) {
-		log.Errorf("Downloaded UTXO set hash does not match checkpoint."+
-			" Expected %s, got %s.", checkpoint.UtxoSetHash.String(), m.Hash().String())
-		return AssertError("downloaded invalid UTXO set")
+	// The UTXO set is complete, so a start without fast sync can use it.
+	err = b.db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Delete(chainStateFastSyncKeyName)
+	})
+	if err != nil {
+		log.Errorf("Error processing UTXO set: %s", err.Error())
+		return err
 	}
 
 	log.Infof("Verification complete. UTXO hash %s.", m.Hash().String())

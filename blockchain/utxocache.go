@@ -758,9 +758,33 @@ func (s *utxoCache) rollForwardBlock(block *bchutil.Block) error {
 // chain.  The blocks from that block back to the best chain are then rolled
 // back too, using the spend journal entries kept for them.
 //
+// In fast sync mode the utxo set is emptied for the download instead.
+//
 // It needs to be ensured that the chainView passed to this method does not
 // get changed during the execution of this method.
 func (s *utxoCache) InitConsistentState(tip *blockNode, index *blockIndex, fastSync bool, interrupt <-chan struct{}) error {
+	if fastSync {
+		// Fast sync downloads the utxo set into an empty bucket, so the
+		// set an earlier start left is deleted, whether it is the set of
+		// a normal start or part of an earlier download, which may have
+		// failed its verification.  The download is first marked as
+		// unfinished and the state as flushed from no block, so that a
+		// start without fast sync refuses the set until a download is
+		// verified.  Like a re-index, the deletion is done in batches.
+		err := s.db.Update(func(dbTx database.Tx) error {
+			err := dbTx.Metadata().Put(chainStateFastSyncKeyName, []byte{1})
+			if err != nil {
+				return err
+			}
+			return dbPutUtxoStateConsistency(dbTx, ucsFlushOngoing,
+				&chainhash.Hash{})
+		})
+		if err != nil {
+			return err
+		}
+		return deleteBucketKeys(s.db, utxoSetBucketName, reIndexDeleteBatch)
+	}
+
 	// Load the consistency status from the database.
 	var statusCode byte
 	var statusHash *chainhash.Hash
@@ -772,35 +796,6 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, index *blockIndex, fastS
 	})
 	if err != nil {
 		return err
-	}
-
-	if fastSync {
-		// If we're in fast sync mode and the status hash is not the zerohash then
-		// we must have previously started the node not in fastsync mode which means
-		// the UTXO set bucket will be dirty. In this case let's reset the UTXO
-		// bucket so we can get a fresh start.
-		if !statusHash.IsEqual(&chainhash.Hash{}) {
-			err := s.db.Update(func(tx database.Tx) error {
-				if err := tx.Metadata().DeleteBucket(utxoSetBucketName); err != nil {
-					return err
-				}
-
-				if _, err := tx.Metadata().CreateBucket(utxoSetBucketName); err != nil {
-					return err
-				}
-
-				return nil
-			})
-
-			return err
-		}
-
-		// If we're in fast sync mode and the status hash is the zero hash then
-		// this is either a completely new node or a node that suffered a hard
-		// shutdown during fast sync. In either case we don't need to repair
-		// the UTXO set as we can just write over existing entries as we download
-		// the UTXO set.
-		return nil
 	}
 
 	log.Tracef("UTXO cache consistency status from disk: [%d] hash %v",

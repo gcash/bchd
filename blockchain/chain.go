@@ -2172,7 +2172,7 @@ func (b *BlockChain) ReIndexChainState() error {
 }
 
 // reIndexDeleteBatch is the number of entries of the old utxo set a re-index
-// deletes per database transaction.
+// or a fast sync deletes per database transaction.
 var reIndexDeleteBatch = 100000
 
 // deleteBucketKeys deletes the keys of the metadata bucket, batch keys per
@@ -2613,16 +2613,39 @@ func New(config *Config) (*BlockChain, error) {
 		b.finalizationDelay = DefaultFinalizationDelay
 	}
 
+	// A fast sync whose download of the utxo set was not verified can only
+	// be finished by another fast sync, since the utxo set is incomplete
+	// and the blocks below the headers it stored are missing.
+	var fastSyncUnfinished bool
+	if err := b.db.View(func(dbTx database.Tx) error {
+		fastSyncUnfinished = dbTx.Metadata().Get(chainStateFastSyncKeyName) != nil
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	// Initialize the chain state from the passed database.  When the db
 	// does not yet contain any chain state, both it and the chain state
-	// will be initialized to contain only the genesis block.
-	if err := b.initChainState(config.FastSync); err != nil {
+	// will be initialized to contain only the genesis block.  The tip of
+	// an unfinished fast sync can be a header without its block.
+	if err := b.initChainState(config.FastSync || fastSyncUnfinished); err != nil {
 		return nil, err
 	}
 
 	bestNode := b.bestChain.Tip()
 	lastCheckpoint := b.LatestCheckpoint()
 	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height <= lastCheckpoint.Height
+	if fastSyncUnfinished && !config.FastSync {
+		return nil, fmt.Errorf("a fast sync has not finished downloading " +
+			"the UTXO set, restart with --fastsync to download it again")
+	}
+
+	// Fast sync downloads the utxo set of the last checkpoint, so it is
+	// refused before the database changes when that checkpoint has none.
+	if config.FastSync && (lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0) {
+		errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
+		return nil, AssertError(errStr)
+	}
 
 	// A re-index of the chain state that was interrupted is resumed below.
 	// A re-index needs all blocks, which pruning and fast sync remove.
@@ -2722,10 +2745,6 @@ func New(config *Config) (*BlockChain, error) {
 	}
 
 	if config.FastSync {
-		if lastCheckpoint.UtxoSetHash == nil || len(lastCheckpoint.UtxoSetSources) == 0 || lastCheckpoint.UtxoSetSize == 0 {
-			errStr := fmt.Sprintf("chain with %s params does not support fastsync mode", b.chainParams.Name)
-			return nil, AssertError(errStr)
-		}
 		go func() {
 			if err := b.fastSyncUtxoSet(lastCheckpoint, config.Proxy); err != nil {
 				log.Errorf("fast sync UTXO set failed: %v", err)
