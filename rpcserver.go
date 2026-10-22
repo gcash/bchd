@@ -3217,6 +3217,14 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	if c.IncludeMempool != nil {
 		includeMempool = *c.IncludeMempool
 	}
+
+	// As in BCHN, with the mempool included an output a mempool transaction
+	// spends is not unspent, whether it is confirmed or not.
+	out := wire.OutPoint{Hash: *txHash, Index: c.Vout}
+	if includeMempool && s.cfg.TxMemPool.CheckSpend(out) != nil {
+		return nil, nil
+	}
+
 	// TODO: This is racy.  It should attempt to fetch it directly and check
 	// the error.
 	if includeMempool && s.cfg.TxMemPool.HaveTransaction(txHash) {
@@ -3225,13 +3233,11 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 			return nil, rpcNoTxInfoError(txHash)
 		}
 
+		// An index the transaction does not have is an output that does
+		// not exist, null, as in BCHN.
 		mtx := tx.MsgTx()
-		if c.Vout > uint32(len(mtx.TxOut)-1) {
-			return nil, &btcjson.RPCError{
-				Code: btcjson.ErrRPCInvalidTxVout,
-				Message: "Output index number (vout) does not " +
-					"exist for transaction.",
-			}
+		if c.Vout >= uint32(len(mtx.TxOut)) {
+			return nil, nil
 		}
 
 		txOut := mtx.TxOut[c.Vout]
@@ -3249,7 +3255,6 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		tokenData = txOut.TokenData
 		isCoinbase = blockchain.IsCoinBaseTx(mtx)
 	} else {
-		out := wire.OutPoint{Hash: *txHash, Index: c.Vout}
 		entry, err := s.cfg.Chain.FetchUtxoEntry(out)
 		if err != nil {
 			return nil, rpcNoTxInfoError(txHash)
@@ -3257,9 +3262,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 
 		// To match the behavior of the reference client, return nil
 		// (JSON null) if the transaction output is spent by another
-		// transaction already in the main chain.  Mined transactions
-		// that are spent by a mempool transaction are not affected by
-		// this.
+		// transaction already in the main chain.
 		if entry == nil || entry.IsSpent() {
 			return nil, nil
 		}
