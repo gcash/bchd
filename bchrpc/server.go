@@ -1413,15 +1413,19 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		tm       *pb.SlpTokenMetadata
 	)
 	if s.slpIndex != nil && req.Index > 0 && isSlpInMempool && req.IncludeMempool {
+		// An output that holds no tokens, such as the change of a GENESIS
+		// or an output of a transaction that is not valid SLP, is returned
+		// without a token, as the outputs of a transaction are.
 		slpToken, err = s.getSlpToken(txnHash, req.Index, scriptPubkey)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot get slp token for txid: %v", txnHash)
+			log.Debugf("No slp token for output %v: %v", op, err)
+		} else {
+			tokenID, err := chainhash.NewHash(slpToken.TokenId)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
+			}
+			tm = s.tokenMetadataOrNil(*tokenID)
 		}
-		tokenID, err := chainhash.NewHash(slpToken.TokenId)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
-		}
-		tm = s.tokenMetadataOrNil(*tokenID)
 	}
 
 	ret := &pb.GetUnspentOutputResponse{

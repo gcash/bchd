@@ -1,18 +1,23 @@
 package bchrpc
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
+	_ "github.com/gcash/bchd/database/ffldb"
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/goslp/metadatamaker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,6 +28,35 @@ import (
 // it without any signing.
 func newMempoolWithTx(t *testing.T,
 	numOutputs int) (*mempool.TxPool, *bchutil.Tx) {
+
+	t.Helper()
+
+	// The outputs pay to a pay-to-pubkey-hash script so that the
+	// transaction reaches the minimum transaction size.
+	outs := make([]*wire.TxOut, numOutputs)
+	for i := range outs {
+		outs[i] = &wire.TxOut{Value: 10000000, PkScript: p2pkhScript(t)}
+	}
+	return newMempoolWithTxOuts(t, outs)
+}
+
+// p2pkhScript returns a pay-to-pubkey-hash script.
+func p2pkhScript(t *testing.T) []byte {
+	t.Helper()
+	script, err := txscript.NewScriptBuilder().AddOp(txscript.OP_DUP).
+		AddOp(txscript.OP_HASH160).AddData(make([]byte, 20)).
+		AddOp(txscript.OP_EQUALVERIFY).AddOp(txscript.OP_CHECKSIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return script
+}
+
+// newMempoolWithTxOuts returns a transaction pool holding a single
+// transaction with the passed outputs, along with that transaction, as
+// newMempoolWithTx does.
+func newMempoolWithTxOuts(t *testing.T,
+	outs []*wire.TxOut) (*mempool.TxPool, *bchutil.Tx) {
 
 	t.Helper()
 
@@ -59,21 +93,13 @@ func newMempoolWithTx(t *testing.T,
 		},
 	})
 
-	// The outputs pay to a pay-to-pubkey-hash script so that the
-	// transaction reaches the minimum transaction size.
-	payScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_DUP).
-		AddOp(txscript.OP_HASH160).AddData(make([]byte, 20)).
-		AddOp(txscript.OP_EQUALVERIFY).AddOp(txscript.OP_CHECKSIG).Script()
-	if err != nil {
-		t.Fatal(err)
-	}
 	msgTx := wire.NewMsgTx(wire.TxVersion)
 	msgTx.AddTxIn(&wire.TxIn{
 		PreviousOutPoint: wire.OutPoint{Hash: *fundingTx.Hash(), Index: 0},
 		Sequence:         wire.MaxTxInSequenceNum,
 	})
-	for range numOutputs {
-		msgTx.AddTxOut(&wire.TxOut{Value: 10000000, PkScript: payScript})
+	for _, out := range outs {
+		msgTx.AddTxOut(out)
 	}
 	tx := bchutil.NewTx(msgTx)
 
@@ -141,5 +167,104 @@ func TestGetUnspentOutputMempoolIndexBounds(t *testing.T) {
 					resp.Outpoint.Index, test.index)
 			}
 		})
+	}
+}
+
+// TestGetUnspentOutputMempoolSlpNoToken ensures GetUnspentOutput returns an
+// output of an unconfirmed transaction whose first output reads as SLP but
+// that holds no tokens without a token, rather than failing with Internal:
+// the change of a GENESIS, and an output of a SEND that is not valid.  A
+// token output still has its token and the token's metadata.
+func TestGetUnspentOutputMempoolSlpNoToken(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	genesisScript, err := metadatamaker.TokenType1Genesis([]byte("T"),
+		[]byte("Token"), nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatalf("TokenType1Genesis: %v", err)
+	}
+	// The SEND spends no tokens, so it is not valid.
+	sendScript, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{1}, 32),
+		[]uint64{10})
+	if err != nil {
+		t.Fatalf("TokenType1Send: %v", err)
+	}
+	pay := p2pkhScript(t)
+	genesisPool, genesis := newMempoolWithTxOuts(t, []*wire.TxOut{
+		{PkScript: genesisScript},
+		{Value: 10000000, PkScript: pay},
+		{Value: 10000000, PkScript: pay},
+	})
+	sendPool, send := newMempoolWithTxOuts(t, []*wire.TxOut{
+		{PkScript: sendScript},
+		{Value: 10000000, PkScript: pay},
+	})
+	for _, tx := range []*bchutil.Tx{genesis, send} {
+		err := db.View(func(dbTx database.Tx) error {
+			_, err := idx.AddPotentialSlpEntries(dbTx, tx.MsgTx())
+			return err
+		})
+		if err != nil {
+			t.Fatalf("AddPotentialSlpEntries: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name  string
+		pool  *mempool.TxPool
+		tx    *bchutil.Tx
+		index uint32
+		token bool
+	}{
+		{"genesis token output", genesisPool, genesis, 1, true},
+		{"genesis change", genesisPool, genesis, 2, false},
+		{"invalid send", sendPool, send, 1, false},
+	}
+	for _, test := range tests {
+		s := &GrpcServer{chainParams: &chaincfg.RegressionNetParams,
+			txMemPool: test.pool, db: db, slpIndex: idx}
+		resp, err := s.GetUnspentOutput(context.Background(),
+			&pb.GetUnspentOutputRequest{
+				Hash:           test.tx.Hash()[:],
+				Index:          test.index,
+				IncludeMempool: true,
+			})
+		if err != nil {
+			t.Errorf("%s: GetUnspentOutput: %v", test.name, err)
+			continue
+		}
+		if resp.Value != 10000000 {
+			t.Errorf("%s: value %d, want 10000000", test.name, resp.Value)
+		}
+		if !test.token {
+			if resp.SlpToken != nil || resp.TokenMetadata != nil {
+				t.Errorf("%s: got token %v and metadata %v, want none",
+					test.name, resp.SlpToken, resp.TokenMetadata)
+			}
+			continue
+		}
+		if resp.SlpToken == nil || resp.SlpToken.Amount != 1000 {
+			t.Errorf("%s: got token %v, want 1000 tokens", test.name,
+				resp.SlpToken)
+		}
+		if resp.TokenMetadata == nil {
+			t.Errorf("%s: no token metadata", test.name)
+		}
 	}
 }
