@@ -11,7 +11,9 @@ import (
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -246,6 +248,107 @@ func TestRescanBlockSpentOutputs(t *testing.T) {
 				t.Errorf("%s: notification %d is not for tx %v",
 					test.name, i, tx.TxHash())
 			}
+		}
+	}
+}
+
+// TestLoadTxFilterDecodesOutsideLocks ensures loadtxfilter decodes its
+// addresses without holding the client's lock or its filter's, which the
+// notification manager takes for every transaction it checks, whether it
+// builds the client's first filter, adds to it or replaces it.
+func TestLoadTxFilterDecodesOutsideLocks(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	wsc := &wsClient{server: &rpcServer{cfg: rpcserverConfig{ChainParams: params}}}
+	var decoded int
+	loadTxFilterDecodeHook = func() {
+		decoded++
+		if !wsc.TryLock() {
+			t.Error("the client's lock is held while an address is decoded")
+			return
+		}
+		filter := wsc.filterData
+		wsc.Unlock()
+		if filter == nil {
+			return
+		}
+		if !filter.mu.TryLock() {
+			t.Error("the filter's lock is held while an address is decoded")
+			return
+		}
+		filter.mu.Unlock()
+	}
+	t.Cleanup(func() { loadTxFilterDecodeHook = nil })
+
+	addrs := make([]bchutil.Address, 6)
+	for i := range addrs {
+		addr, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{byte(i)}, 20), params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs[i] = addr
+	}
+	hash, err := chainhash.NewHashFromStr(testTokenCategory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outPoint := func(i int) *wire.OutPoint {
+		return &wire.OutPoint{Hash: *hash, Index: uint32(i)}
+	}
+	for i, reload := range []bool{false, false, true} {
+		cmd := &btcjson.LoadTxFilterCmd{
+			Reload: reload,
+			Addresses: []string{addrs[2*i].EncodeAddress(), "not an address",
+				addrs[2*i+1].EncodeAddress()},
+			OutPoints: []btcjson.OutPoint{{Hash: testTokenCategory, Index: uint32(i)}},
+		}
+		if _, err := handleLoadTxFilter(wsc, cmd); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != 3*(i+1) {
+			t.Fatalf("load %d: %d addresses decoded, want %d", i, decoded, 3*(i+1))
+		}
+		if !wsc.filterData.existsUnspentOutPoint(outPoint(i)) {
+			t.Errorf("load %d: outpoint missing", i)
+		}
+	}
+
+	// The last load replaced the filter holding the first four addresses
+	// and the first two outpoints.
+	for i, addr := range addrs {
+		if got, want := wsc.filterData.existsAddress(addr), i >= 4; got != want {
+			t.Errorf("address %d in the filter: %v, want %v", i, got, want)
+		}
+	}
+	for i := range 2 {
+		if wsc.filterData.existsUnspentOutPoint(outPoint(i)) {
+			t.Errorf("outpoint %d kept by the reload", i)
+		}
+	}
+	if t.Failed() {
+		return
+	}
+
+	// A first load that another first load overtakes while it decodes
+	// adds to the filter that one set.
+	wsc.filterData = nil
+	overtaken := false
+	loadTxFilterDecodeHook = func() {
+		if overtaken {
+			return
+		}
+		overtaken = true
+		cmd := &btcjson.LoadTxFilterCmd{Addresses: []string{addrs[0].EncodeAddress()}}
+		if _, err := handleLoadTxFilter(wsc, cmd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := &btcjson.LoadTxFilterCmd{Addresses: []string{addrs[1].EncodeAddress()}}
+	if _, err := handleLoadTxFilter(wsc, cmd); err != nil {
+		t.Fatal(err)
+	}
+	for i, addr := range addrs[:2] {
+		if !wsc.filterData.existsAddress(addr) {
+			t.Errorf("address %d of the overtaken loads missing", i)
 		}
 	}
 }

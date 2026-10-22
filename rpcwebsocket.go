@@ -301,7 +301,7 @@ type wsClientFilter struct {
 // for a websocket client.
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
-func newWSClientFilter(addresses []string, unspentOutPoints []wire.OutPoint, params *chaincfg.Params) *wsClientFilter {
+func newWSClientFilter(addresses []bchutil.Address, unspentOutPoints []wire.OutPoint) *wsClientFilter {
 	filter := &wsClientFilter{
 		pubKeyHashes:        map[[ripemd160.Size]byte]struct{}{},
 		scriptHashes:        map[[ripemd160.Size]byte]struct{}{},
@@ -311,8 +311,8 @@ func newWSClientFilter(addresses []string, unspentOutPoints []wire.OutPoint, par
 		unspent:             make(map[wire.OutPoint]struct{}, len(unspentOutPoints)),
 	}
 
-	for _, s := range addresses {
-		filter.addAddressStr(s, params)
+	for _, a := range addresses {
+		filter.addAddress(a)
 	}
 	for i := range unspentOutPoints {
 		filter.addUnspentOutPoint(&unspentOutPoints[i])
@@ -356,6 +356,8 @@ func (f *wsClientFilter) addAddress(a bchutil.Address) {
 // wsClientFilter using addAddress.
 //
 // NOTE: This extension was ported from github.com/decred/dcrd
+//
+//nolint:unused // ported API kept symmetrical with removeAddressStr
 func (f *wsClientFilter) addAddressStr(s string, params *chaincfg.Params) {
 	// If address can't be decoded, no point in saving it since it should also
 	// impossible to create the address from an inspected transaction output
@@ -2207,6 +2209,10 @@ func handleWebsocketHelp(wsc *wsClient, icmd interface{}) (interface{}, error) {
 	return help, nil
 }
 
+// loadTxFilterDecodeHook, when set, is called by loadtxfilter after it decodes
+// each address.  It is for tests.
+var loadTxFilterDecodeHook func()
+
 // handleLoadTxFilter implements the loadtxfilter command extension for
 // websocket connections.
 //
@@ -2229,25 +2235,48 @@ func handleLoadTxFilter(wsc *wsClient, icmd interface{}) (interface{}, error) {
 		}
 	}
 
-	params := wsc.server.cfg.ChainParams
-
+	// The addresses are decoded, and a new filter built, while neither the
+	// client's lock nor its filter's is held, as the notification manager
+	// takes both for every transaction it checks and one request can hold
+	// millions of addresses.  One that cannot be decoded is skipped, since
+	// no output can pay it.
 	wsc.Lock()
-	if cmd.Reload || wsc.filterData == nil {
-		wsc.filterData = newWSClientFilter(cmd.Addresses, outPoints,
-			params)
-		wsc.Unlock()
-	} else {
-		wsc.Unlock()
-
-		wsc.filterData.mu.Lock()
-		for _, a := range cmd.Addresses {
-			wsc.filterData.addAddressStr(a, params)
+	filter := wsc.filterData
+	wsc.Unlock()
+	params := wsc.server.cfg.ChainParams
+	addrs := make([]bchutil.Address, 0, len(cmd.Addresses))
+	for _, s := range cmd.Addresses {
+		a, err := bchutil.DecodeAddress(s, params)
+		if loadTxFilterDecodeHook != nil {
+			loadTxFilterDecodeHook()
 		}
-		for i := range outPoints {
-			wsc.filterData.addUnspentOutPoint(&outPoints[i])
+		if err == nil {
+			addrs = append(addrs, a)
 		}
-		wsc.filterData.mu.Unlock()
 	}
+
+	// Another request may have set a filter meanwhile, which this one then
+	// adds to unless it reloads.
+	if cmd.Reload || filter == nil {
+		newFilter := newWSClientFilter(addrs, outPoints)
+		wsc.Lock()
+		filter = wsc.filterData
+		if cmd.Reload || filter == nil {
+			wsc.filterData = newFilter
+			wsc.Unlock()
+			return nil, nil
+		}
+		wsc.Unlock()
+	}
+
+	filter.mu.Lock()
+	for _, a := range addrs {
+		filter.addAddress(a)
+	}
+	for i := range outPoints {
+		filter.addUnspentOutPoint(&outPoints[i])
+	}
+	filter.mu.Unlock()
 
 	return nil, nil
 }
