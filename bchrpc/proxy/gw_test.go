@@ -523,4 +523,3 @@ func TestGetSlpTrustedValidation(t *testing.T) {
 
 	t.Logf("Successfully passed %s test", method)
 }
-

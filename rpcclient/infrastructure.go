@@ -26,7 +26,7 @@ import (
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/internal/socks"
-  "github.com/gorilla/websocket"
+	"github.com/gorilla/websocket"
 )
 
 var (

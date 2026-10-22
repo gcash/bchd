@@ -84,7 +84,6 @@ func (SlpTokenType) EnumDescriptor() ([]byte, []int) {
 // SlpAction is used to allow clients to identify the type of slp transaction from this single field.
 //
 // NOTE: All enum types except for "NON_SLP" may be annotated with one or more BurnFlags.
-//
 type SlpAction int32
 
 const (
@@ -1633,17 +1632,19 @@ func (x *GetRawTransactionResponse) GetTransaction() []byte {
 //
 // RECOMMENDED:
 // Parameters have been provided to query without creating
-//   performance issues on the node or client.
 //
-// - The number of transactions to skip and fetch allow for iterating
-//       over a large set of transactions, if necessary.
+//	performance issues on the node or client.
 //
-// - A starting block parameter (either `hash` or `height`)
-//       may then be used to filter results to those occurring
-//       after a certain time.
+//   - The number of transactions to skip and fetch allow for iterating
+//     over a large set of transactions, if necessary.
+//
+//   - A starting block parameter (either `hash` or `height`)
+//     may then be used to filter results to those occurring
+//     after a certain time.
 //
 // This approach will reduce network traffic and response processing
-//   for the client, as well as reduce workload on the node.
+//
+//	for the client, as well as reduce workload on the node.
 type GetAddressTransactionsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1818,17 +1819,19 @@ func (x *GetAddressTransactionsResponse) GetUnconfirmedTransactions() []*Mempool
 //
 // RECOMMENDED:
 // Parameters have been provided to query without creating
-//   performance issues on the node or client.
 //
-// - The number of transactions to skip and fetch allow for iterating
-//       over a large set of transactions, if necessary.
+//	performance issues on the node or client.
 //
-// - A starting block parameter (either `hash` or `height`)
-//       may then be used to filter results to those occurring
-//       after a certain time.
+//   - The number of transactions to skip and fetch allow for iterating
+//     over a large set of transactions, if necessary.
+//
+//   - A starting block parameter (either `hash` or `height`)
+//     may then be used to filter results to those occurring
+//     after a certain time.
 //
 // This approach will reduce network traffic and response processing
-//   for the client, as well as reduce workload on the node.
+//
+//	for the client, as well as reduce workload on the node.
 type GetRawAddressTransactionsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2768,22 +2771,28 @@ func (x *SubscribeTransactionsRequest) GetSerializeTx() bool {
 
 // Options to define data structure to be sent by SubscribeBlock stream:
 //
-//  - BlockInfo (block metadata): `BlockInfo`
-//      - SubscribeBlocksRequest {}
+//   - BlockInfo (block metadata): `BlockInfo`
 //
-//  - Marshaled Block (with transaction hashes): `Block`
-//      - SubscribeBlocksRequest {
-//            full_block = true
-//        }
-//  - Marshaled Block (with full transaction data): `Block`
-//      - SubscribeBlocksRequest {
-//            full_block = true
-//            full_transactions = true
-//        }
-//  - Serialized Block acccording to bitcoin protocol encoding: `bytes`
-//      - SubscribeBlocksRequest {
-//            serialize_block = true
-//        }
+//   - SubscribeBlocksRequest {}
+//
+//   - Marshaled Block (with transaction hashes): `Block`
+//
+//   - SubscribeBlocksRequest {
+//     full_block = true
+//     }
+//
+//   - Marshaled Block (with full transaction data): `Block`
+//
+//   - SubscribeBlocksRequest {
+//     full_block = true
+//     full_transactions = true
+//     }
+//
+//   - Serialized Block acccording to bitcoin protocol encoding: `bytes`
+//
+//   - SubscribeBlocksRequest {
+//     serialize_block = true
+//     }
 type SubscribeBlocksRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -4778,7 +4787,6 @@ func (x *TransactionFilter) GetSlpTokenIds() [][]byte {
 // for large amounts. For this reason, an annotation has been added for JS to
 // return a string for the amount field instead of casting uint64 to the JS 'number'
 // type. Other languages may require similar treatment.
-//
 type CashToken struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -4856,7 +4864,6 @@ func (x *CashToken) GetBitfield() []byte {
 // for large amounts. For this reason, an annotation has been added for JS to
 // return a string for the amount field instead of casting uint64 to the JS 'number'
 // type. Other languages may require similar treatment.
-//
 type SlpToken struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
