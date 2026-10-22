@@ -539,6 +539,116 @@ func TestGetAddressUnspentOutputsConfirmedDuringScan(t *testing.T) {
 	}
 }
 
+// changeDuringCallTest is a transaction that spends an output of the address
+// and pays it change while its unspent outputs are being read.  A pooled one
+// is in the memory pool when the call starts, and is confirmed during it.
+type changeDuringCallTest struct {
+	name           string
+	beforeScan     bool
+	pooled         bool
+	confirm        bool
+	includeMempool bool
+}
+
+// runChangeDuringCallTest ensures the result holds the change of the
+// transaction and leaves out the output it spends, as the memory pool or the
+// chain has them once the call ends.  Without the memory pool, a transaction
+// that only reached the memory pool changes nothing.
+func runChangeDuringCallTest(t *testing.T, test changeDuringCallTest) {
+	h := newAddrUnspentHarness(t)
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	cb := h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, nil)
+	funding := spendTx(t, outPoint(cb, 0), otherRedeem, pay(49e8, addrScript))
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+		[]*wire.MsgTx{funding})
+	spend := spendTx(t, outPoint(funding, 0), addrRedeem,
+		pay(30e8, addrScript), pay(18e8, otherScript))
+
+	if test.pooled {
+		h.acceptTx(spend)
+	}
+	arrive := func() {
+		if !test.pooled {
+			h.acceptTx(spend)
+		}
+		if test.confirm {
+			h.pool.RemoveTransaction(bchutil.NewTx(spend), false)
+			h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+				[]*wire.MsgTx{spend})
+		}
+	}
+	hook := &addressUnspentScanHook
+	if test.beforeScan {
+		hook = &addressUnspentListHook
+	}
+	*hook = func() {
+		*hook = nil
+		arrive()
+	}
+	t.Cleanup(func() { *hook = nil })
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+		&pb.GetAddressUnspentOutputsRequest{
+			Address:        addr.EncodeAddress(),
+			IncludeMempool: test.includeMempool,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var want string
+	switch {
+	case test.confirm:
+		want = wantUnspent(spend, 0, false, h.height)
+	case test.includeMempool:
+		want = wantUnspent(spend, 0, false, mining.UnminedHeight)
+	default:
+		want = wantUnspent(funding, 0, false, 2)
+	}
+	got := make([]string, len(resp.Outputs))
+	for i, u := range resp.Outputs {
+		got[i] = unspentKey(u)
+	}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v\nwant [%s]", got, want)
+	}
+}
+
+// TestGetAddressUnspentOutputsChangeDuringCall ensures a transaction that
+// spends an output of the address and pays it change, entering the memory
+// pool or a block while the call reads the address's history, is seen as the
+// memory pool or the chain has it once the call ends.
+func TestGetAddressUnspentOutputsChangeDuringCall(t *testing.T) {
+	for _, test := range []changeDuringCallTest{
+		{name: "mempool before scan", beforeScan: true, includeMempool: true},
+		{name: "mempool before scan, no mempool", beforeScan: true},
+		{name: "mempool after scan", includeMempool: true},
+		{name: "mempool after scan, no mempool"},
+		{name: "confirmed before scan", beforeScan: true, confirm: true,
+			includeMempool: true},
+		{name: "confirmed before scan, no mempool", beforeScan: true,
+			confirm: true},
+		{name: "confirmed after scan", confirm: true, includeMempool: true},
+		{name: "confirmed after scan, no mempool", confirm: true},
+		{name: "pooled, confirmed after scan", pooled: true, confirm: true,
+			includeMempool: true},
+		{name: "pooled, confirmed after scan, no mempool", pooled: true,
+			confirm: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runChangeDuringCallTest(t, test)
+		})
+	}
+}
+
 // TestGetAddressTransactionsFeePerKb ensures an unconfirmed transaction's
 // fee_per_kb is its fee per kilobyte, as in the subscriptions, not per byte.
 func TestGetAddressTransactionsFeePerKb(t *testing.T) {

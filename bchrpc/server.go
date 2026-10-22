@@ -1038,9 +1038,11 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	return resp, nil
 }
 
-// addressUnspentScanHook, when set, is called by GetAddressUnspentOutputs once
-// it has read the address's confirmed history.  It is for tests.
-var addressUnspentScanHook func()
+// addressUnspentListHook and addressUnspentScanHook, when set, are called by
+// GetAddressUnspentOutputs once it has listed the address's memory pool
+// transactions, and once it has read the address's confirmed history.  They
+// are for tests.
+var addressUnspentListHook, addressUnspentScanHook func()
 
 // GetAddressUnspentOutputs returns all the unspent transaction outputs
 // for the given address.
@@ -1200,10 +1202,15 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	// The memory pool transactions are listed before the confirmed history
 	// is read, as a block connected meanwhile takes its transactions out of
-	// the memory pool and its entries can land on a page already read.
-	// They are checked afterwards, so one confirmed in between is found in
-	// the utxo set, whether or not the memory pool is included.
+	// the memory pool and its entries land in front of the pages already
+	// read, newest first.  They are checked afterwards, so one confirmed in
+	// between is found in the utxo set, whether or not the memory pool is
+	// included.
+	startHeight := s.chain.BestSnapshot().Height
 	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+	if addressUnspentListHook != nil {
+		addressUnspentListHook()
+	}
 
 	var (
 		utxos []*pb.UnspentOutput
@@ -1235,6 +1242,48 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if addressUnspentScanHook != nil {
 		addressUnspentScanHook()
 	}
+
+	// An output checked during the scan may have been spent since by a
+	// transaction that appeared during the call: one listed in the memory
+	// pool now and not before, or one in a block connected meanwhile.
+	// Those transactions are checked too, and the outputs they spend are
+	// left out, the memory pool's only when it is included.
+	var lateSpends []*bchutil.Tx
+	listed := make(map[chainhash.Hash]struct{}, len(unconfirmedTxs))
+	for _, tx := range unconfirmedTxs {
+		listed[*tx.Hash()] = struct{}{}
+	}
+	for _, tx := range s.addrIndex.UnconfirmedTxnsForAddress(addr) {
+		if _, ok := listed[*tx.Hash()]; ok {
+			continue
+		}
+		unconfirmedTxs = append(unconfirmedTxs, tx)
+		if req.IncludeMempool {
+			lateSpends = append(lateSpends, tx)
+		}
+	}
+	if s.chain.BestSnapshot().Height > startHeight {
+		for skip = 0; ; {
+			newTxs, err := s.fetchTransactionsByAddress(addr, startHeight+1,
+				fetch, skip)
+			if err != nil {
+				return nil, err
+			}
+			for _, ret := range newTxs {
+				tx := bchutil.NewTx(&ret.tx)
+				u, err := checkTxOutputs(tx)
+				if err != nil {
+					return nil, err
+				}
+				utxos = append(utxos, u...)
+				lateSpends = append(lateSpends, tx)
+			}
+			if len(newTxs) < fetch {
+				break
+			}
+			skip += fetch
+		}
+	}
 	for _, tx := range unconfirmedTxs {
 		u, err := checkTxOutputs(tx)
 		if err != nil {
@@ -1243,6 +1292,24 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		if len(u) > 0 {
 			utxos = append(utxos, u...)
 		}
+	}
+	if len(lateSpends) > 0 {
+		spent := make(map[wire.OutPoint]struct{})
+		for _, tx := range lateSpends {
+			for _, in := range tx.MsgTx().TxIn {
+				spent[in.PreviousOutPoint] = struct{}{}
+			}
+		}
+		kept := utxos[:0]
+		for _, u := range utxos {
+			var op wire.OutPoint
+			copy(op.Hash[:], u.Outpoint.Hash)
+			op.Index = u.Outpoint.Index
+			if _, ok := spent[op]; !ok {
+				kept = append(kept, u)
+			}
+		}
+		utxos = kept
 	}
 
 	var tokenMetadata []*pb.SlpTokenMetadata
