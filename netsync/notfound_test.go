@@ -19,10 +19,10 @@ func TestHandleNotFoundMsg(t *testing.T) {
 	block, cmpct, other := chainhash.Hash{0x01}, chainhash.Hash{0x02},
 		chainhash.Hash{0x03}
 	for _, hash := range []chainhash.Hash{block, cmpct} {
-		h.sm.requestedBlocks[hash] = struct{}{}
+		h.sm.requestedBlocks[hash] = h.other
 		h.sm.peerStates[h.other].requestedBlocks[hash] = struct{}{}
 	}
-	h.sm.requestedBlocks[other] = struct{}{}
+	h.sm.requestedBlocks[other] = h.syncPeer
 	h.sm.peerStates[h.syncPeer].requestedBlocks[other] = struct{}{}
 
 	notFound := wire.NewMsgNotFound()

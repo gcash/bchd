@@ -305,5 +305,11 @@ func TestHeadersFromSyncPeerAccepted(t *testing.T) {
 			t.Fatalf("requested blocks: got %d, want %d", got,
 				want)
 		}
+
+		// Their headers were validated against the checkpoint.
+		if got := state.validBlocksInFlight; got != want {
+			t.Fatalf("validated blocks in flight: got %d, want %d",
+				got, want)
+		}
 	})
 }

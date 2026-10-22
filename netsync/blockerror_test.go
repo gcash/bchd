@@ -18,7 +18,7 @@ func TestBlockErrorForgetsOwnRequest(t *testing.T) {
 	asked, other := &peerpkg.Peer{}, &peerpkg.Peer{}
 	hash := chainhash.Hash{1}
 	sm := &SyncManager{
-		requestedBlocks: map[chainhash.Hash]struct{}{hash: {}},
+		requestedBlocks: map[chainhash.Hash]*peerpkg.Peer{hash: asked},
 		peerStates: map[*peerpkg.Peer]*peerSyncState{
 			asked: {requestedBlocks: map[chainhash.Hash]struct{}{hash: {}}},
 			other: {requestedBlocks: make(map[chainhash.Hash]struct{})},

@@ -47,10 +47,6 @@ const (
 	// hashes to store in memory.
 	maxRequestedBlocks = wire.MaxInvPerMsg
 
-	// maxRequestedTxns is the maximum number of requested transactions
-	// hashes to store in memory.
-	maxRequestedTxns = wire.MaxInvPerMsg
-
 	// maxDSProofRequestsPerInv is the maximum number of double spend
 	// proofs requested for a single inv message.
 	maxDSProofRequestsPerInv = 5000
@@ -171,12 +167,21 @@ type headerNode struct {
 }
 
 // peerSyncState stores additional information that the SyncManager tracks
-// about a peer.
+// about a peer.  The peer may send the blocks in requestedBlocks, but only
+// blocksInFlight of them are still waited for from it, since the others
+// arrived from other peers, validBlocksInFlight of them with validated
+// headers, and its download timer runs from downloadingSince.  The
+// transactions it announced while another peer was asked for them are in
+// announcedTxns.
 type peerSyncState struct {
-	syncCandidate   bool
-	requestQueue    []*wire.InvVect
-	requestedTxns   map[chainhash.Hash]struct{}
-	requestedBlocks map[chainhash.Hash]struct{}
+	syncCandidate       bool
+	requestQueue        []*wire.InvVect
+	requestedTxns       map[chainhash.Hash]struct{}
+	announcedTxns       map[chainhash.Hash]struct{}
+	requestedBlocks     map[chainhash.Hash]struct{}
+	blocksInFlight      int
+	validBlocksInFlight int
+	downloadingSince    time.Time
 }
 
 // syncPeerState stores additional info about the sync peer.
@@ -238,12 +243,21 @@ type SyncManager struct {
 	quit           chan struct{}
 
 	// These fields should only be accessed from the blockHandler thread.
-	rejectedTxns    map[chainhash.Hash]struct{}
-	requestedTxns   map[chainhash.Hash]struct{}
-	requestedBlocks map[chainhash.Hash]struct{}
-	syncPeer        *peerpkg.Peer
-	syncPeerState   *syncPeerState
-	peerStates      map[*peerpkg.Peer]*peerSyncState
+	// requestedBlocks maps each block waited for to the peer it was
+	// requested from, and validBlockRequests holds those whose headers
+	// were validated.
+	rejectedTxns       map[chainhash.Hash]struct{}
+	requestedTxns      map[chainhash.Hash]*txRequest
+	txExpiries         []txExpiry
+	requestedBlocks    map[chainhash.Hash]*peerpkg.Peer
+	validBlockRequests map[chainhash.Hash]struct{}
+	blockAnnouncers    map[chainhash.Hash][]*peerpkg.Peer
+	syncPeer           *peerpkg.Peer
+	syncPeerState      *syncPeerState
+	peerStates         map[*peerpkg.Peer]*peerSyncState
+
+	// timeNow is the clock requests are timed with.
+	timeNow func() time.Time
 
 	// The following fields are used for headers-first mode.
 	headersFirstMode bool
@@ -387,8 +401,15 @@ func (sm *SyncManager) startSync() {
 	if bestPeer != nil {
 		// Clear the requestedBlocks if the sync peer changes, otherwise
 		// we may ignore blocks we need that the last sync peer failed
-		// to send.
-		sm.requestedBlocks = make(map[chainhash.Hash]struct{})
+		// to send.  The peers may still send the blocks they were asked
+		// for.
+		sm.requestedBlocks = make(map[chainhash.Hash]*peerpkg.Peer)
+		sm.validBlockRequests = make(map[chainhash.Hash]struct{})
+		sm.blockAnnouncers = make(map[chainhash.Hash][]*peerpkg.Peer)
+		for _, state := range sm.peerStates {
+			state.blocksInFlight = 0
+			state.validBlocksInFlight = 0
+		}
 
 		locator, err := sm.chain.LatestBlockLocator()
 		if err != nil {
@@ -514,11 +535,7 @@ func (sm *SyncManager) handleNewPeerMsg(peer *peerpkg.Peer) {
 	// Initialize the peer state
 	isSyncCandidate := sm.isSyncCandidate(peer)
 
-	sm.peerStates[peer] = &peerSyncState{
-		syncCandidate:   isSyncCandidate,
-		requestedTxns:   make(map[chainhash.Hash]struct{}),
-		requestedBlocks: make(map[chainhash.Hash]struct{}),
-	}
+	sm.peerStates[peer] = newPeerSyncState(isSyncCandidate)
 
 	// Start syncing by choosing the best candidate if needed.
 	if isSyncCandidate {
@@ -652,7 +669,7 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	log.Infof("Lost peer %s", peer)
 
 	// Cleanup state of requested items.
-	sm.clearRequestedState(state)
+	sm.clearRequestedState(peer, state)
 
 	// Fetch a new sync peer if this is the sync peer.
 	if peer == sm.syncPeer {
@@ -660,20 +677,37 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	}
 }
 
-// clearRequestedState removes requested transactions
-// and blocks from the global map.
-func (sm *SyncManager) clearRequestedState(state *peerSyncState) {
-	// Remove requested transactions from the global map so that they will
-	// be fetched from elsewhere next time we get an inv.
-	for txHash := range state.requestedTxns {
-		delete(sm.requestedTxns, txHash)
-	}
+// clearRequestedState forgets the peer's requests and announcements, and
+// requests the transactions and blocks it was asked for from other peers that
+// announced them.
+func (sm *SyncManager) clearRequestedState(peer *peerpkg.Peer,
+	state *peerSyncState) {
 
-	// Remove requested blocks from the global map so that they will be
-	// fetched from elsewhere next time we get an inv.
-	for blockHash := range state.requestedBlocks {
-		delete(sm.requestedBlocks, blockHash)
+	for txHash := range state.announcedTxns {
+		if req, ok := sm.requestedTxns[txHash]; ok {
+			req.announcers = slices.DeleteFunc(req.announcers,
+				func(p *peerpkg.Peer) bool { return p == peer })
+		}
 	}
+	state.announcedTxns = make(map[chainhash.Hash]struct{})
+
+	q := make(getDataQueue)
+	for txHash := range state.requestedTxns {
+		if req, ok := sm.requestedTxns[txHash]; ok && req.peer == peer {
+			sm.retryTxRequest(&txHash, q)
+		}
+	}
+	state.requestedTxns = make(map[chainhash.Hash]struct{})
+
+	for blockHash := range state.requestedBlocks {
+		if sm.requestedBlocks[blockHash] == peer {
+			sm.retryBlockRequest(&blockHash, q)
+		}
+	}
+	state.requestedBlocks = make(map[chainhash.Hash]struct{})
+	state.blocksInFlight = 0
+	state.validBlocksInFlight = 0
+	q.send()
 }
 
 // updateSyncPeer picks a new peer to sync from.
@@ -686,7 +720,7 @@ func (sm *SyncManager) updateSyncPeer() {
 	if sm.syncPeer != nil {
 		state, exists := sm.peerStates[sm.syncPeer]
 		if exists {
-			sm.clearRequestedState(state)
+			sm.clearRequestedState(sm.syncPeer, state)
 		}
 
 		log.Infof("Updating sync peer, last block: %v, violations: %v", sm.syncPeerState.lastBlockTime, sm.syncPeerState.violations)
@@ -720,7 +754,7 @@ func (sm *SyncManager) selectNewSyncPeer() {
 // handleTxMsg handles transaction messages from all peers.
 func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	peer := tmsg.peer
-	state, exists := sm.peerStates[peer]
+	_, exists := sm.peerStates[peer]
 	if !exists {
 		log.Warnf("Received tx message from unknown peer %s", peer)
 		return
@@ -750,12 +784,11 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 	acceptedTxs, err := sm.txMemPool.ProcessTransaction(tmsg.tx,
 		true, mempool.Tag(peer.ID()))
 
-	// Remove transaction from request maps. Either the mempool/chain
-	// already knows about it and as such we shouldn't have any more
-	// instances of trying to fetch it, or we failed to insert and thus
-	// we'll retry next time we get an inv.
-	delete(state.requestedTxns, *txHash)
-	delete(sm.requestedTxns, *txHash)
+	// Forget the request for the transaction, whichever peer it was
+	// requested from. Either the mempool/chain already knows about it and
+	// as such we shouldn't have any more instances of trying to fetch it,
+	// or we failed to insert and thus we'll retry next time we get an inv.
+	sm.forgetTxRequest(txHash)
 
 	if err != nil {
 		// Do not request this transaction again until a new block
@@ -866,8 +899,10 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// Remove block from request maps. Either chain will know about it and
 	// so we shouldn't have any more instances of trying to fetch it, or we
 	// will fail the insert and thus we'll retry next time we get an inv.
+	// It is no longer waited for from the peer it was requested from, if
+	// another peer sent it.
 	delete(state.requestedBlocks, *blockHash)
-	delete(sm.requestedBlocks, *blockHash)
+	sm.endBlockRequest(blockHash)
 
 	// Process the block to include validation, best chain selection, orphan
 	// handling, etc.
@@ -1048,8 +1083,9 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	}
 }
 
-// handleBlockError forgets the peer's request for the block, so it can be
-// requested again.  A peer can only make the node forget its own request.
+// handleBlockError forgets the peer's request for the block, and requests it
+// from another peer that announced it, or else so it can be requested again.
+// A peer can only make the node forget its own request.
 func (sm *SyncManager) handleBlockError(msg *blockErrorMsg) {
 	state, exists := sm.peerStates[msg.peer]
 	if !exists {
@@ -1057,26 +1093,42 @@ func (sm *SyncManager) handleBlockError(msg *blockErrorMsg) {
 	}
 	if _, ok := state.requestedBlocks[*msg.hash]; ok {
 		delete(state.requestedBlocks, *msg.hash)
-		delete(sm.requestedBlocks, *msg.hash)
+		if sm.requestedBlocks[*msg.hash] == msg.peer {
+			q := make(getDataQueue)
+			sm.retryBlockRequest(msg.hash, q)
+			q.send()
+		}
 	}
 }
 
-// handleNotFoundMsg forgets the blocks a peer reports it doesn't have, if
-// they were requested from it, so they can be requested again.
+// handleNotFoundMsg forgets the transactions and blocks a peer reports it
+// doesn't have, if they were requested from it, and requests them from other
+// peers that announced them, or else so they can be requested again.
 func (sm *SyncManager) handleNotFoundMsg(msg *notFoundMsg) {
 	state, exists := sm.peerStates[msg.peer]
 	if !exists {
 		return
 	}
+	q := make(getDataQueue)
 	for _, iv := range msg.notFound.InvList {
 		switch iv.Type {
+		case wire.InvTypeTx:
+			if req, ok := sm.requestedTxns[iv.Hash]; ok &&
+				req.peer == msg.peer {
+
+				sm.retryTxRequest(&iv.Hash, q)
+			}
+
 		case wire.InvTypeBlock, wire.InvTypeCmpctBlock:
 			if _, ok := state.requestedBlocks[iv.Hash]; ok {
 				delete(state.requestedBlocks, iv.Hash)
-				delete(sm.requestedBlocks, iv.Hash)
+				if sm.requestedBlocks[iv.Hash] == msg.peer {
+					sm.retryBlockRequest(&iv.Hash, q)
+				}
 			}
 		}
 	}
+	q.send()
 }
 
 // fetchHeaderBlocks creates and sends a request to the syncPeer for the next
@@ -1115,9 +1167,7 @@ func (sm *SyncManager) fetchHeaderBlocks() {
 		}
 		if !haveInv {
 			syncPeerState := sm.peerStates[sm.syncPeer]
-
-			sm.requestedBlocks[*node.hash] = struct{}{}
-			syncPeerState.requestedBlocks[*node.hash] = struct{}{}
+			sm.requestBlock(sm.syncPeer, syncPeerState, node.hash, true)
 
 			_ = gdmsg.AddInvVect(iv)
 			numRequested++
@@ -1494,7 +1544,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 	// Request as much as possible at once.  Anything that won't fit into
 	// the request will be requested on the next inv message.
 	numRequested := 0
-	gdmsg := wire.NewMsgGetData()
+	q := make(getDataQueue)
 	requestQueue := state.requestQueue
 	for len(requestQueue) != 0 {
 		iv := requestQueue[0]
@@ -1504,36 +1554,44 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 		switch iv.Type {
 		case wire.InvTypeBlock:
 			// Request the block if there is not already a pending
-			// request.
-			if _, exists := sm.requestedBlocks[iv.Hash]; !exists {
-				sm.requestedBlocks[iv.Hash] = struct{}{}
-				sm.limitMap(sm.requestedBlocks, maxRequestedBlocks)
-				state.requestedBlocks[iv.Hash] = struct{}{}
-
-				// Request a compact block if this peer supports it.
-				if sm.current() && imsg.peer.ProtocolVersion() >= wire.BIP0152Version {
-					iv.Type = wire.InvTypeCmpctBlock
+			// request, and otherwise keep the peer to request it
+			// from if that request fails.
+			if requester, exists := sm.requestedBlocks[iv.Hash]; exists {
+				if requester != peer {
+					sm.addBlockAnnouncer(peer, &iv.Hash)
 				}
-				_ = gdmsg.AddInvVect(iv)
-				numRequested++
+				break
 			}
+
+			// Forget random requests while there are too many, as
+			// limitMap does.
+			for hash := range sm.requestedBlocks {
+				if len(sm.requestedBlocks) < maxRequestedBlocks {
+					break
+				}
+				sm.endBlockRequest(&hash)
+			}
+			sm.requestBlock(peer, state, &iv.Hash, false)
+
+			// Request a compact block if this peer supports it.
+			if sm.current() && imsg.peer.ProtocolVersion() >= wire.BIP0152Version {
+				iv.Type = wire.InvTypeCmpctBlock
+			}
+			q.add(peer, iv)
+			numRequested++
 
 		case wire.InvTypeTx:
 			// Request the transaction if there is not already a
-			// pending request.
-			if _, exists := sm.requestedTxns[iv.Hash]; !exists {
-				sm.requestedTxns[iv.Hash] = struct{}{}
-				sm.limitMap(sm.requestedTxns, maxRequestedTxns)
-				state.requestedTxns[iv.Hash] = struct{}{}
-
-				_ = gdmsg.AddInvVect(iv)
+			// pending request, and otherwise keep the peer to
+			// request it from if that request fails.
+			if sm.announceTx(peer, state, &iv.Hash, q) {
 				numRequested++
 			}
 
 		case wire.InvTypeDSProof:
 			// Proofs are small and rare, so they are requested from
 			// every peer announcing one that is not known yet.
-			_ = gdmsg.AddInvVect(iv)
+			q.add(peer, iv)
 			numRequested++
 		}
 
@@ -1542,9 +1600,7 @@ func (sm *SyncManager) handleInvMsg(imsg *invMsg) {
 		}
 	}
 	state.requestQueue = requestQueue
-	if len(gdmsg.InvList) > 0 {
-		peer.QueueMessage(gdmsg, nil)
-	}
+	q.send()
 }
 
 // limitMap is a helper function for maps that require a maximum limit by
@@ -1574,12 +1630,16 @@ func (sm *SyncManager) limitMap(m map[chainhash.Hash]struct{}, limit int) {
 func (sm *SyncManager) blockHandler() {
 	ticker := time.NewTicker(syncPeerTickerInterval)
 	defer ticker.Stop()
+	requestTicker := time.NewTicker(requestCheckInterval)
+	defer requestTicker.Stop()
 
 out:
 	for {
 		select {
 		case <-ticker.C:
 			sm.handleCheckSyncPeer()
+		case <-requestTicker.C:
+			sm.handleRequestTimeouts()
 		case m := <-sm.msgChan:
 			switch msg := m.(type) {
 			case *newPeerMsg:
@@ -1963,9 +2023,12 @@ func New(config *Config) (*SyncManager, error) {
 		txMemPool:               config.TxMemPool,
 		chainParams:             config.ChainParams,
 		rejectedTxns:            make(map[chainhash.Hash]struct{}),
-		requestedTxns:           make(map[chainhash.Hash]struct{}),
-		requestedBlocks:         make(map[chainhash.Hash]struct{}),
+		requestedTxns:           make(map[chainhash.Hash]*txRequest),
+		requestedBlocks:         make(map[chainhash.Hash]*peerpkg.Peer),
+		validBlockRequests:      make(map[chainhash.Hash]struct{}),
+		blockAnnouncers:         make(map[chainhash.Hash][]*peerpkg.Peer),
 		peerStates:              make(map[*peerpkg.Peer]*peerSyncState),
+		timeNow:                 time.Now,
 		progressLogger:          newBlockProgressLogger("Processed", log),
 		msgChan:                 make(chan interface{}, config.MaxPeers*3),
 		headerList:              list.New(),
