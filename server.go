@@ -2468,8 +2468,10 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		s.addrManager.Connected(sp.NA())
 	}
 
-	// Signal the sync manager this peer is a new sync candidate.
-	s.syncManager.NewPeer(sp.Peer, nil)
+	// Signal the sync manager this peer is a new sync candidate.  This
+	// handler must not wait for the sync manager, which may be waiting for
+	// it to take a relayed inventory.
+	go s.syncManager.NewPeer(sp.Peer, nil)
 
 	// Update the address manager and request known addresses from the
 	// remote peer for outbound connections. This is skipped when running
@@ -2479,15 +2481,22 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 	if !cfg.SimNet && !cfg.RegressionTest && !sp.Inbound() {
 		// Advertise the local address when the server accepts incoming
 		// connections and it believes itself to be close to the best
-		// known tip.
-		if !cfg.DisableListen && s.syncManager.IsCurrent() {
-			// Get address that best matches.
-			lna := s.addrManager.GetBestLocalAddress(sp.NA())
-			if addrmgr.IsRoutable(lna) {
-				// Filter addresses the peer already knows about.
-				addresses := []*wire.NetAddressV2{lna}
-				sp.pushAddrMsg(addresses)
-			}
+		// known tip.  The sync manager is asked in another goroutine,
+		// for the same reason.
+		if !cfg.DisableListen {
+			go func() {
+				if !s.syncManager.IsCurrent() {
+					return
+				}
+				// Get address that best matches.
+				lna := s.addrManager.GetBestLocalAddress(sp.NA())
+				if addrmgr.IsRoutable(lna) {
+					// Filter addresses the peer already knows
+					// about.
+					addresses := []*wire.NetAddressV2{lna}
+					sp.pushAddrMsg(addresses)
+				}
+			}()
 		}
 
 		// Request known addresses if the server address manager needs
@@ -3261,9 +3270,14 @@ func (s *server) BanPeer(sp *serverPeer) {
 }
 
 // RelayInventory relays the passed inventory vector to all connected peers
-// that are not already known to have it.
+// that are not already known to have it.  Once the server is shutting down it
+// returns without relaying, as the peer handler no longer takes relays: the
+// sync manager it stops on its way out could otherwise be left waiting.
 func (s *server) RelayInventory(invVect *wire.InvVect, data interface{}) {
-	s.relayInv <- relayMsg{invVect: invVect, data: data}
+	select {
+	case s.relayInv <- relayMsg{invVect: invVect, data: data}:
+	case <-s.quit:
+	}
 }
 
 // BroadcastMessage sends msg to all peers currently connected to the server

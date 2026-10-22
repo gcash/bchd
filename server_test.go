@@ -11,9 +11,14 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/addrmgr"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/internal/socks"
+	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/netsync"
 	"github.com/gcash/bchd/peer"
+	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 )
 
@@ -211,5 +216,192 @@ func TestIsWhitelistedProxiedAddr(t *testing.T) {
 		if !isWhitelisted(addr) {
 			t.Fatalf("%s not whitelisted by its own network", addr)
 		}
+	}
+}
+
+// newTestPeerState returns the empty state of a peer handler.
+func newTestPeerState() *peerState {
+	return &peerState{
+		inboundPeers:     make(map[int32]*serverPeer),
+		outboundPeers:    make(map[int32]*serverPeer),
+		persistentPeers:  make(map[int32]*serverPeer),
+		directRelayPeers: make(map[int32]*serverPeer),
+		banned:           make(map[string]time.Time),
+		outboundGroups:   make(map[string]int),
+		connectionCount:  make(map[string]int),
+	}
+}
+
+// newOutboundTestPeer returns an outbound peer of s to addr whose handshake
+// with a peer on the other end of a pipe has completed.
+func newOutboundTestPeer(t *testing.T, s *server, addr string) *serverPeer {
+	t.Helper()
+	sp := newServerPeer(s, false)
+	p, err := peer.NewOutboundPeer(&peer.Config{
+		ChainParams:            s.chainParams,
+		TstAllowSelfConnection: true,
+	}, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp.Peer = p
+	remote := peer.NewInboundPeer(&peer.Config{
+		ChainParams:            s.chainParams,
+		TstAllowSelfConnection: true,
+	})
+	local, remoteConn := net.Pipe()
+	sp.AssociateConnection(local)
+	remote.AssociateConnection(&addrConn{Conn: remoteConn,
+		remote: &net.TCPAddr{IP: net.ParseIP("10.0.0.1"), Port: 18444}})
+	t.Cleanup(func() {
+		sp.Disconnect()
+		remote.Disconnect()
+		sp.WaitForDisconnect()
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for !sp.VerAckReceived() || !remote.VerAckReceived() {
+		if time.Now().After(deadline) {
+			t.Fatal("handshake did not complete")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return sp
+}
+
+// relaySignal passes the sync manager's reports to the server, signaling
+// each relay before the server takes it.
+type relaySignal struct {
+	*server
+	relaying chan struct{}
+}
+
+// RelayInventory signals the relay and passes it to the server.
+func (n relaySignal) RelayInventory(invVect *wire.InvVect, data interface{}) {
+	n.relaying <- struct{}{}
+	n.server.RelayInventory(invVect, data)
+}
+
+// TestAddPeerWhileSyncManagerRelays ensures the peer handler adds an outbound
+// peer while the sync manager waits for it to take a block relay, as the
+// relay channel is full.  The peer handler used to ask the sync manager
+// whether this node is current, and to wait for room in its message queue to
+// tell it about the peer, so neither could go on.
+func TestAddPeerWhileSyncManagerRelays(t *testing.T) {
+	t.Run("asks whether current", func(t *testing.T) {
+		testAddPeerWhileSyncManagerRelays(t, false)
+	})
+	t.Run("message queue full", func(t *testing.T) {
+		testAddPeerWhileSyncManagerRelays(t, true)
+	})
+}
+
+func testAddPeerWhileSyncManagerRelays(t *testing.T, fillQueue bool) {
+	const maxPeers = 8
+	useTestConfig(t, &config{MaxPeers: maxPeers, MaxPeersPerIP: 5,
+		BanThreshold: defaultBanThreshold})
+	oldSyncLevel, oldTxmpLevel := syncLog.Level(), txmpLog.Level()
+	syncLog.SetLevel(bchlog.LevelOff)
+	txmpLog.SetLevel(bchlog.LevelOff)
+	t.Cleanup(func() {
+		syncLog.SetLevel(oldSyncLevel)
+		txmpLog.SetLevel(oldTxmpLevel)
+	})
+	params := &chaincfg.RegressionNetParams
+	chain, _ := newTestChainDB(t)
+	// A recent tip makes the chain current, so the sync manager relays the
+	// blocks it accepts.
+	tip := solvedBlock(t, chain, 0, nil)
+	if _, _, err := chain.ProcessBlock(tip, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{
+		chainParams: params,
+		chain:       chain,
+		addrManager: addrmgr.New(t.TempDir(), nil),
+		relayInv:    make(chan relayMsg, 1),
+		quit:        make(chan struct{}),
+	}
+	notifier := relaySignal{server: s, relaying: make(chan struct{}, 1)}
+	sm, err := netsync.New(&netsync.Config{
+		PeerNotifier: notifier,
+		Chain:        chain,
+		TxMemPool:    mempool.New(&mempool.Config{ChainParams: params}),
+		ChainParams:  params,
+		MaxPeers:     maxPeers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.syncManager = sm
+	sm.Start()
+	t.Cleanup(func() {
+		close(s.quit)
+		_ = sm.Stop()
+	})
+
+	// The sync manager accepts a block and waits to relay it.
+	s.relayInv <- relayMsg{invVect: wire.NewInvVect(wire.InvTypeTx,
+		&chainhash.Hash{1})}
+	block := solvedBlock(t, chain, 0, nil)
+	go func() { _, _ = sm.ProcessBlock(block, blockchain.BFNone) }()
+	select {
+	case <-notifier.relaying:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the sync manager did not relay the block")
+	}
+
+	sp := newOutboundTestPeer(t, s, "10.0.0.2:18444")
+	if fillQueue {
+		// The sync manager queues three messages per peer.
+		filled := make(chan struct{})
+		go func() {
+			for range 3 * maxPeers {
+				sm.QueueInv(wire.NewMsgInv(), sp.Peer)
+			}
+			close(filled)
+		}()
+		select {
+		case <-filled:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the sync manager queues fewer messages")
+		}
+	}
+	added := make(chan bool, 1)
+	go func() { added <- s.handleAddPeerMsg(newTestPeerState(), sp) }()
+	select {
+	case ok := <-added:
+		if !ok {
+			t.Fatal("the outbound peer was not added")
+		}
+	case <-time.After(5 * time.Second):
+		// Take both relays, so the sync manager and the peer handler
+		// can go on and the test can end.
+		<-s.relayInv
+		<-s.relayInv
+		<-added
+		t.Fatal("the peer handler waited for the sync manager, which " +
+			"waits for the peer handler")
+	}
+}
+
+// TestRelayInventoryEndsOnQuit ensures a relay waiting for room in the full
+// relay channel ends when the server quits, so the sync manager the peer
+// handler stops on its way out cannot be left waiting to relay.
+func TestRelayInventoryEndsOnQuit(t *testing.T) {
+	s := &server{relayInv: make(chan relayMsg, 1), quit: make(chan struct{})}
+	s.relayInv <- relayMsg{}
+	done := make(chan struct{})
+	go func() {
+		s.RelayInventory(wire.NewInvVect(wire.InvTypeTx, &chainhash.Hash{1}),
+			nil)
+		close(done)
+	}()
+	close(s.quit)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		<-s.relayInv
+		<-done
+		t.Fatal("the relay still waits after the server quit")
 	}
 }

@@ -1860,7 +1860,8 @@ func parentsFirst(txs []*bchutil.Tx) []*bchutil.Tx {
 	return sorted
 }
 
-// NewPeer informs the sync manager of a newly active peer.
+// NewPeer informs the sync manager of a newly active peer.  A nil done
+// channel is not signaled.
 func (sm *SyncManager) NewPeer(peer *peerpkg.Peer, done chan struct{}) {
 	// Ignore peer if not connected.
 	if !peer.Connected() {
@@ -1869,10 +1870,18 @@ func (sm *SyncManager) NewPeer(peer *peerpkg.Peer, done chan struct{}) {
 
 	// Ignore if we are shutting down.
 	if sm.shutdown.Load() != 0 {
-		done <- struct{}{}
+		if done != nil {
+			done <- struct{}{}
+		}
 		return
 	}
-	sm.msgChan <- &newPeerMsg{peer: peer, reply: done}
+	select {
+	case sm.msgChan <- &newPeerMsg{peer: peer, reply: done}:
+	case <-sm.quit:
+		if done != nil {
+			done <- struct{}{}
+		}
+	}
 }
 
 // QueueTx adds the passed transaction message and peer to the block handling
@@ -1997,11 +2006,22 @@ func (sm *SyncManager) ProcessBlock(block *bchutil.Block, flags blockchain.Behav
 }
 
 // IsCurrent returns whether or not the sync manager believes it is synced with
-// the connected peers.
+// the connected peers.  It returns false once the sync manager has stopped.
 func (sm *SyncManager) IsCurrent() bool {
-	reply := make(chan bool)
-	sm.msgChan <- isCurrentMsg{reply: reply}
-	return <-reply
+	// Buffered, so the block handler cannot block on the reply when this
+	// gives up as the sync manager stops.
+	reply := make(chan bool, 1)
+	select {
+	case sm.msgChan <- isCurrentMsg{reply: reply}:
+	case <-sm.quit:
+		return false
+	}
+	select {
+	case current := <-reply:
+		return current
+	case <-sm.quit:
+		return false
+	}
 }
 
 // Pause pauses the sync manager until the returned channel is closed.
