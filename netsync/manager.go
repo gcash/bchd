@@ -1814,14 +1814,19 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 		// Reinsert all of the transactions (except the coinbase) into
 		// the transaction pool, parents first, as a child can come
 		// before its parent in canonical order.  They are not new, which
-		// exempts them from the minimum relay fee.
+		// exempts them from the minimum relay fee.  Each is taken out of
+		// the orphan pool first: a confirmed transaction sent again once
+		// its outputs are spent lands there, and the pool refuses a
+		// transaction that is already an orphan.
 		for _, tx := range parentsFirst(block.Transactions()[1:]) {
-			_, _, err := sm.txMemPool.MaybeAcceptTransaction(tx,
+			sm.txMemPool.RemoveOrphan(tx)
+			missing, _, err := sm.txMemPool.MaybeAcceptTransaction(tx,
 				false)
-			if err != nil {
+			if err != nil || len(missing) > 0 {
 				// Remove the transaction and all transactions
 				// that depend on it if it wasn't accepted into
-				// the transaction pool.
+				// the transaction pool, whether it was refused
+				// or a parent of it was.
 				sm.txMemPool.RemoveTransaction(tx, true)
 			}
 		}

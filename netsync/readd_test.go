@@ -91,6 +91,142 @@ func TestDisconnectedBlockReaddedParentsFirst(t *testing.T) {
 	}
 }
 
+// readdTestChain holds the unspent outputs of a test chain, each with the
+// transaction that created it.
+type readdTestChain map[wire.OutPoint]*bchutil.Tx
+
+// newReaddTestManager returns a sync manager whose memory pool sees the
+// outputs of the chain, which the caller may change, and accepts nonstandard
+// transactions and orphans.  As in the chain's view, an output that is not in
+// the chain has a nil entry.
+func newReaddTestManager(chain readdTestChain) *SyncManager {
+	pool := mempool.New(&mempool.Config{
+		Policy: mempool.Policy{
+			MaxTxVersion:    2,
+			AcceptNonStd:    true,
+			MinRelayTxFee:   1000,
+			MaxOrphanTxs:    10,
+			MaxOrphanTxSize: 100000,
+		},
+		ChainParams: &chaincfg.RegressionNetParams,
+		FetchUtxoView: func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+			view := blockchain.NewUtxoViewpoint()
+			for _, in := range tx.MsgTx().TxIn {
+				prev, ok := chain[in.PreviousOutPoint]
+				if !ok {
+					view.Entries()[in.PreviousOutPoint] = nil
+					continue
+				}
+				view.AddTxOut(prev, in.PreviousOutPoint.Index, 1)
+			}
+			return view, nil
+		},
+		BestHeight:     func() int32 { return 1000 },
+		MedianTimePast: func() time.Time { return time.Now() },
+		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+		},
+		IsDeploymentActive: func(uint32) (bool, error) { return true, nil },
+	})
+	return &SyncManager{txMemPool: pool}
+}
+
+// disconnectTestBlock tells the sync manager that a block holding a coinbase
+// and the transactions was disconnected.
+func disconnectTestBlock(sm *SyncManager, txs ...*bchutil.Tx) {
+	coinbase := wire.NewMsgTx(1)
+	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, math.MaxUint32), nil))
+	msgTxs := []*wire.MsgTx{coinbase}
+	for _, tx := range txs {
+		msgTxs = append(msgTxs, tx.MsgTx())
+	}
+	sm.handleBlockchainNotification(&blockchain.Notification{
+		Type: blockchain.NTBlockDisconnected,
+		Data: bchutil.NewBlock(&wire.MsgBlock{Transactions: msgTxs}),
+	})
+}
+
+// TestDisconnectedBlockRefusedParent ensures that when the memory pool refuses
+// a transaction of a disconnected block, the block's transaction spending it
+// is kept out with the memory pool's transactions spending that one, so none
+// is left spending an output that exists nowhere.
+func TestDisconnectedBlockRefusedParent(t *testing.T) {
+	// The parent spends an output whose script holds an upgradable NOP,
+	// which blocks allow and the memory pool's policy refuses.
+	fund := bchutil.NewTx(&wire.MsgTx{Version: 1, TxOut: []*wire.TxOut{{
+		Value:    100000000,
+		PkScript: []byte{txscript.OP_NOP10, txscript.OP_TRUE},
+	}}})
+	coin := wire.OutPoint{Hash: *fund.Hash()}
+	parent := anyoneCanSpendTx(coin, 90000000)
+	child := anyoneCanSpendTx(wire.OutPoint{Hash: *parent.Hash()}, 80000000)
+	spender := anyoneCanSpendTx(wire.OutPoint{Hash: *child.Hash()}, 70000000)
+
+	// The spender enters the memory pool while the block is connected.
+	childOut := wire.OutPoint{Hash: *child.Hash()}
+	chain := readdTestChain{childOut: child}
+	sm := newReaddTestManager(chain)
+	pool := sm.txMemPool
+	if _, err := pool.ProcessTransaction(spender, false, 0); err != nil {
+		t.Fatalf("spender not accepted: %v", err)
+	}
+
+	delete(chain, childOut)
+	chain[coin] = fund
+	disconnectTestBlock(sm, child, parent)
+	for name, tx := range map[string]*bchutil.Tx{"parent": parent,
+		"child": child, "spender": spender} {
+
+		if pool.IsTransactionInPool(tx.Hash()) {
+			t.Errorf("the %s is in the pool", name)
+		}
+	}
+}
+
+// TestDisconnectedBlockOrphan ensures a transaction of a disconnected block
+// goes back into the memory pool when it is also in the orphan pool, as a
+// confirmed transaction sent again once its outputs are spent can be, and
+// that the memory pool's transactions spending it stay.
+func TestDisconnectedBlockOrphan(t *testing.T) {
+	fund := bchutil.NewTx(&wire.MsgTx{Version: 1, TxOut: []*wire.TxOut{{
+		Value: 100000000, PkScript: []byte{txscript.OP_TRUE},
+	}}})
+	coin := wire.OutPoint{Hash: *fund.Hash()}
+	tx := anyoneCanSpendTx(coin, 90000000)
+	spend := anyoneCanSpendTx(wire.OutPoint{Hash: *tx.Hash()}, 80000000)
+
+	// With the coin and the transaction's output spent, the transaction
+	// sent again is an orphan.
+	chain := readdTestChain{}
+	sm := newReaddTestManager(chain)
+	pool := sm.txMemPool
+	_, err := pool.ProcessTransaction(tx, true, 0)
+	if err != nil || !pool.IsOrphanInPool(tx.Hash()) {
+		t.Fatalf("transaction not an orphan: %v", err)
+	}
+
+	// The block spending its output is disconnected, then its own.
+	txOut := wire.OutPoint{Hash: *tx.Hash()}
+	chain[txOut] = tx
+	disconnectTestBlock(sm, spend)
+	if !pool.IsTransactionInPool(spend.Hash()) {
+		t.Fatal("the spend was not added back")
+	}
+	delete(chain, txOut)
+	chain[coin] = fund
+	disconnectTestBlock(sm, tx)
+	for name, tx := range map[string]*bchutil.Tx{"transaction": tx,
+		"spend": spend} {
+
+		if !pool.IsTransactionInPool(tx.Hash()) {
+			t.Errorf("the %s is not in the pool", name)
+		}
+	}
+	if pool.IsOrphanInPool(tx.Hash()) {
+		t.Error("the transaction is still an orphan")
+	}
+}
+
 // TestParentsFirst ensures each transaction is put after those of the list it
 // spends, across generations, and that the order is kept otherwise.
 func TestParentsFirst(t *testing.T) {
