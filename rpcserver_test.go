@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -632,6 +633,110 @@ func TestHandleDecodeScriptP2SH(t *testing.T) {
 		if (reply.P2sh != "") != test.wantP2sh {
 			t.Errorf("%s: unexpected p2sh %q", test.name, reply.P2sh)
 		}
+	}
+}
+
+// publicKeyTestScripts returns a pay-to-pubkey script for the first of two
+// public keys, a 1-of-2 bare multisig script for both, and what each key is
+// shown as on the network: the cashaddr of its public key hash.
+func publicKeyTestScripts(t *testing.T, params *chaincfg.Params) (p2pk, multisig []byte, addrs []string) {
+	t.Helper()
+	keys := [][]byte{
+		mustDecodeHex(t, "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"),
+		mustDecodeHex(t, "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"),
+	}
+	for _, key := range keys {
+		addr, err := bchutil.NewAddressPubKeyHash(bchutil.Hash160(key), params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs = append(addrs, addr.EncodeAddress())
+	}
+	p2pk, err := txscript.NewScriptBuilder().AddData(keys[0]).
+		AddOp(txscript.OP_CHECKSIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	multisig, err = txscript.NewScriptBuilder().AddOp(txscript.OP_1).
+		AddData(keys[0]).AddData(keys[1]).AddOp(txscript.OP_2).
+		AddOp(txscript.OP_CHECKMULTISIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p2pk, multisig, addrs
+}
+
+// TestPublicKeyScriptAddresses ensures the public keys of pay-to-pubkey and
+// bare multisig scripts are shown as the cashaddr of their public key hash,
+// as BCHN does, rather than as legacy addresses, in transaction outputs, in
+// their address filter and in decodescript.
+func TestPublicKeyScriptAddresses(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	p2pk, multisig, addrs := publicKeyTestScripts(t, params)
+	tests := []struct {
+		name   string
+		script []byte
+		want   []string
+	}{
+		{"p2pk", p2pk, addrs[:1]},
+		{"multisig", multisig, addrs},
+	}
+	mtx := wire.NewMsgTx(2)
+	mtx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, 0), nil))
+	for _, test := range tests {
+		mtx.AddTxOut(wire.NewTxOut(1000, test.script, wire.TokenData{}))
+	}
+	vouts := createVoutList(mtx, params, nil)
+	filtered := createVoutList(mtx, params, map[string]struct{}{addrs[0]: {}})
+	if len(vouts) != len(tests) || len(filtered) != len(tests) {
+		t.Fatalf("%d outputs, %d filtered by %s, want %d", len(vouts),
+			len(filtered), addrs[0], len(tests))
+	}
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
+	for i, test := range tests {
+		if got := vouts[i].ScriptPubKey.Addresses; !slices.Equal(got, test.want) {
+			t.Errorf("%s: vout addresses %v, want %v", test.name, got, test.want)
+		}
+		cmd := &btcjson.DecodeScriptCmd{HexScript: hex.EncodeToString(test.script)}
+		result, err := handleDecodeScript(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		if got := result.(btcjson.DecodeScriptResult).Addresses; !slices.Equal(got, test.want) {
+			t.Errorf("%s: decodescript addresses %v, want %v", test.name,
+				got, test.want)
+		}
+	}
+}
+
+// TestVinPrevOutPublicKeyAddress ensures searchrawtransactions shows the
+// public key of a pay-to-pubkey output an input spends as the cashaddr of its
+// public key hash, as BCHN does.
+func TestVinPrevOutPublicKeyAddress(t *testing.T) {
+	h := newMempoolTestHarness(t, 1)
+	params := &chaincfg.MainNetParams
+	p2pk, _, addrs := publicKeyTestScripts(t, params)
+	origin := wire.NewMsgTx(wire.TxVersion)
+	origin.AddTxIn(&wire.TxIn{PreviousOutPoint: h.outputs[0],
+		Sequence: wire.MaxTxInSequenceNum})
+	origin.AddTxOut(wire.NewTxOut(mempoolTestOutputValue-1000, p2pk, wire.TokenData{}))
+	signTestInput(t, h, origin, mempoolTestOutputValue)
+	if _, err := h.server.cfg.TxMemPool.ProcessTransaction(bchutil.NewTx(origin), false, 0); err != nil {
+		t.Fatal(err)
+	}
+	spend := wire.NewMsgTx(wire.TxVersion)
+	spend.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Hash: origin.TxHash()}})
+	spend.AddTxOut(wire.NewTxOut(1000, h.pkScript, wire.TokenData{}))
+
+	vins, err := createVinListPrevOut(h.server, spend, params, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vins) != 1 || vins[0].PrevOut == nil ||
+		!slices.Equal(vins[0].PrevOut.Addresses, addrs[:1]) {
+
+		t.Fatalf("prevout %+v, want addresses %v", vins[0].PrevOut, addrs[:1])
 	}
 }
 

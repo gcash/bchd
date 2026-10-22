@@ -769,8 +769,9 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 	// some validity checks.
 	outputs := make(map[string]struct{}, len(c.Amounts))
 	for encodedAddr, amount := range c.Amounts {
-		// Ensure amount is in the valid range for monetary amounts.
-		if amount <= 0 || amount > bchutil.MaxSatoshi {
+		// Ensure amount is in the valid range for monetary amounts,
+		// which in BCH is MaxSatoshi over SatoshiPerBitcoin.
+		if amount <= 0 || amount > bchutil.MaxSatoshi/bchutil.SatoshiPerBitcoin {
 			return nil, &btcjson.RPCError{
 				Code:    btcjson.ErrRPCType,
 				Message: "Invalid amount",
@@ -921,6 +922,17 @@ func createTokenDataResult(tokenData *wire.TokenData) *btcjson.TokenDataResult {
 	return result
 }
 
+// encodeScriptAddress returns how an address that txscript.ExtractPkScriptAddrs
+// finds in a script is shown.  The public key of a pay-to-pubkey or bare
+// multisig script is shown as the cashaddr of its public key hash, as BCHN
+// does, rather than in the legacy form EncodeAddress gives it.
+func encodeScriptAddress(addr bchutil.Address) string {
+	if pk, ok := addr.(*bchutil.AddressPubKey); ok {
+		return pk.AddressPubKeyHash().EncodeAddress()
+	}
+	return addr.EncodeAddress()
+}
+
 // createVoutList returns a slice of JSON objects for the outputs of the passed
 // transaction.
 func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap map[string]struct{}) []btcjson.Vout {
@@ -941,7 +953,7 @@ func createVoutList(mtx *wire.MsgTx, chainParams *chaincfg.Params, filterAddrMap
 		passesFilter := len(filterAddrMap) == 0
 		encodedAddrs := make([]string, len(addrs))
 		for j, addr := range addrs {
-			encodedAddr := addr.EncodeAddress()
+			encodedAddr := encodeScriptAddress(addr)
 			encodedAddrs[j] = encodedAddr
 
 			// No need to check the map again if the filter already
@@ -1075,7 +1087,7 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		s.cfg.ChainParams)
 	addresses := make([]string, len(addrs))
 	for i, addr := range addrs {
-		addresses[i] = addr.EncodeAddress()
+		addresses[i] = encodeScriptAddress(addr)
 	}
 
 	// Convert the script itself to a pay-to-script-hash address.
@@ -1485,11 +1497,7 @@ func createPrevOutResult(chainParams *chaincfg.Params,
 		chainParams)
 	var address string
 	if scriptClass != txscript.MultiSigTy && len(addrs) == 1 {
-		if pk, ok := addrs[0].(*bchutil.AddressPubKey); ok {
-			address = pk.AddressPubKeyHash().EncodeAddress()
-		} else {
-			address = addrs[0].EncodeAddress()
-		}
+		address = encodeScriptAddress(addrs[0])
 	}
 
 	return &btcjson.GetBlockPrevOutResult{
@@ -3268,7 +3276,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		s.cfg.ChainParams)
 	addresses := make([]string, len(addrs))
 	for i, addr := range addrs {
-		addresses[i] = addr.EncodeAddress()
+		addresses[i] = encodeScriptAddress(addr)
 	}
 
 	txOutReply := &btcjson.GetTxOutResult{
@@ -3799,7 +3807,7 @@ func createVinListPrevOut(s *rpcServer, mtx *wire.MsgTx, chainParams *chaincfg.P
 		// filter when needed.
 		encodedAddrs := make([]string, len(addrs))
 		for j, addr := range addrs {
-			encodedAddr := addr.EncodeAddress()
+			encodedAddr := encodeScriptAddress(addr)
 			encodedAddrs[j] = encodedAddr
 
 			// No need to check the map again if the filter already

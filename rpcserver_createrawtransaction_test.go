@@ -629,3 +629,36 @@ func TestHandleCreateRawTransactionLegacyAddress(t *testing.T) {
 		t.Error("testnet legacy address accepted on mainnet")
 	}
 }
+
+// TestHandleCreateRawTransactionAmountRange ensures createrawtransaction
+// accepts an amount of up to 21 million BCH, all there can be, and refuses a
+// larger one, as the bound is in BCH like the amounts.
+func TestHandleCreateRawTransactionAmountRange(t *testing.T) {
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: &chaincfg.MainNetParams}}
+	addr := createRawTxTestAddr(t, 1)
+	for _, test := range []struct {
+		amount float64
+		ok     bool
+	}{
+		{21e6, true},
+		{21e6 + 1, false},
+		{1e12, false},
+	} {
+		cmd := &btcjson.CreateRawTransactionCmd{
+			Inputs:  []btcjson.TransactionInput{{Txid: testTokenCategory}},
+			Amounts: map[string]float64{addr: test.amount},
+		}
+		_, err := handleCreateRawTransaction(s, cmd, nil)
+		if test.ok {
+			if err != nil {
+				t.Errorf("%v BCH: %v", test.amount, err)
+			}
+			continue
+		}
+		if rerr, ok := err.(*btcjson.RPCError); !ok || rerr.Code != btcjson.ErrRPCType ||
+			rerr.Message != "Invalid amount" {
+
+			t.Errorf("%v BCH: got error %v, want Invalid amount", test.amount, err)
+		}
+	}
+}

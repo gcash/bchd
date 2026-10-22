@@ -331,6 +331,45 @@ func TestHandleGetTxOutProofErrors(t *testing.T) {
 		"Not all transactions found in specified or retrieved block")
 }
 
+// TestGetTxOutPublicKeyAddresses ensures gettxout shows the public keys of a
+// pay-to-pubkey and a bare multisig output as the cashaddr of their public key
+// hash, as BCHN does.
+func TestGetTxOutPublicKeyAddresses(t *testing.T) {
+	chain, db := newRPCTestChain(t)
+	params := &chaincfg.RegressionNetParams
+	s := &rpcServer{cfg: rpcserverConfig{
+		ChainParams: params,
+		Chain:       chain,
+		DB:          db,
+	}}
+	p2pk, multisig, addrs := publicKeyTestScripts(t, params)
+	first := mineTestBlock(t, chain, nil)
+	for range params.CoinbaseMaturity {
+		mineTestBlock(t, chain, nil)
+	}
+	tx := wire.NewMsgTx(1)
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: *first.Transactions()[0].Hash()}, nil))
+	tx.AddTxOut(wire.NewTxOut(1000, p2pk, wire.TokenData{}))
+	tx.AddTxOut(wire.NewTxOut(1000, multisig, wire.TokenData{}))
+	mineTestBlock(t, chain, nil, tx)
+
+	includeMempool := false
+	for i, want := range [][]string{addrs[:1], addrs} {
+		result, err := handleGetTxOut(s, &btcjson.GetTxOutCmd{
+			Txid:           tx.TxHash().String(),
+			Vout:           uint32(i),
+			IncludeMempool: &includeMempool,
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := result.(*btcjson.GetTxOutResult).ScriptPubKey.Addresses
+		if !slices.Equal(got, want) {
+			t.Errorf("output %d: addresses %v, want %v", i, got, want)
+		}
+	}
+}
+
 // TestGetTxOutProofManyTxids ensures gettxoutproof's time grows linearly with
 // the number of txids, which limited users can send by the hundred thousand,
 // rather than its duplicate check and its count of those found in the block
