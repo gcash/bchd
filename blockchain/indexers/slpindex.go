@@ -1077,6 +1077,17 @@ func (idx *SlpIndex) GetTokenMetadata(dbTx database.Tx, entry *SlpTxEntry) (*Tok
 // client subscriber methods that return notifications for both mempool and block events to prevent
 // any possibility of a race conditions with manageSlpEntryCache.
 func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx) (bool, error) {
+	// A transaction the index holds is confirmed, and valid, and the index
+	// has its entry and token metadata.  Checking it again, as a subscriber
+	// does for the transactions of each block, must not change them: a
+	// GENESIS or MINT would put back the mint baton where it put it, while
+	// a later MINT in the same block or a later block may have moved it.
+	msgHash := msgTx.TxHash()
+	if slpIndex := dbTx.Metadata().Bucket(slpIndexKey); slpIndex != nil &&
+		slpIndex.Get(msgHash[:]) != nil {
+
+		return true, nil
+	}
 
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
@@ -1129,7 +1140,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 				tm.MintBatonHash = &hash
 				tm.MintBatonVout = uint32(t.MintBatonVout)
 			}
-			err := idx.cache.AddTempTokenMetadata(tm)
+			err := idx.cache.AddTempTokenMetadata(tm, hash)
 			if err != nil {
 				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Genesis: %v", err)
 			}
@@ -1150,7 +1161,7 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 					hash := tx.TxHash()
 					tm.MintBatonHash = &hash
 					tm.MintBatonVout = uint32(t.MintBatonVout)
-					err := idx.cache.AddTempTokenMetadata(*tm)
+					err := idx.cache.AddTempTokenMetadata(*tm, hash)
 					if err != nil {
 						log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
 					}
@@ -1172,6 +1183,14 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	}
 
 	return valid, nil
+}
+
+// RemoveMempoolSlpTxsNotIn removes the mempool entries of the transactions
+// that inPool reports are no longer in the memory pool, and the token metadata
+// they set.  It is called once the memory pool has dropped the transactions a
+// block confirms or conflicts with.
+func (idx *SlpIndex) RemoveMempoolSlpTxsNotIn(inPool func(*chainhash.Hash) bool) {
+	idx.cache.RemoveMempoolSlpTxsNotIn(inPool)
 }
 
 // removeMempoolSlpTxs removes a list of transactions from the temporary cache that holds

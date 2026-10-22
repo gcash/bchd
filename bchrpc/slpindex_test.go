@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain/indexers"
@@ -16,10 +17,13 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	_ "github.com/gcash/bchd/database/ffldb"
+	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/mining"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/goslp"
 	"github.com/gcash/goslp/metadatamaker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -487,4 +491,109 @@ func TestNftChildGenesisNoGroupLogLevel(t *testing.T) {
 	if !strings.Contains(buf.String(), want) {
 		t.Errorf("log %q, want a line with %q", buf.String(), want)
 	}
+}
+
+// waitFor waits up to 5 seconds for cond to hold.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestSlpMempoolMintLeftPool ensures the token metadata a MINT set while in
+// the memory pool is dropped at the next block once the MINT has left the
+// memory pool without being confirmed, so that the mint baton is reported
+// where the chain has it rather than on an output that does not exist.
+func TestSlpMempoolMintLeftPool(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex = db, idx
+	// The memory pool does not hold the MINT, as when a conflicting
+	// transaction was confirmed or the MINT expired.
+	s.txMemPool = mempool.New(&mempool.Config{})
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	batonTx := func(prev wire.OutPoint, script []byte, err error) *wire.MsgTx {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&prev, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, metadatamaker.NewMintBatonVout(2), 1000)
+	genesis := batonTx(wire.OutPoint{Hash: chainhash.Hash{0xee}}, script, err)
+	id, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := chainhash.NewHash(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := bchutil.NewBlock(&wire.MsgBlock{Transactions: []*wire.MsgTx{genesis}})
+	err = db.Update(func(dbTx database.Tx) error {
+		return idx.ConnectBlock(dbTx, block, nil)
+	})
+	if err != nil {
+		t.Fatalf("ConnectBlock: %v", err)
+	}
+	script, err = metadatamaker.TokenType1Mint(token[:],
+		metadatamaker.NewMintBatonVout(2), 10)
+	mint := batonTx(wire.OutPoint{Hash: genesis.TxHash(), Index: 2}, script, err)
+
+	baton := func() wire.OutPoint {
+		t.Helper()
+		var tm *indexers.TokenMetadata
+		err := db.View(func(dbTx database.Tx) error {
+			var err error
+			tm, err = idx.GetTokenMetadata(dbTx,
+				&indexers.SlpTxEntry{TokenIDHash: *token})
+			return err
+		})
+		if err != nil || tm.MintBatonHash == nil {
+			t.Fatalf("token metadata %v, %v", tm, err)
+		}
+		return wire.OutPoint{Hash: *tm.MintBatonHash, Index: tm.MintBatonVout}
+	}
+	s.dispatchEvent(&rpcEventTxAccepted{&mempool.TxDesc{
+		TxDesc: mining.TxDesc{Tx: bchutil.NewTx(mint)}}})
+	waitFor(t, "the baton on the MINT", func() bool {
+		return baton() == wire.OutPoint{Hash: mint.TxHash(), Index: 2}
+	})
+
+	s.dispatchEvent(&rpcEventBlockConnected{bchutil.NewBlock(&wire.MsgBlock{})})
+	waitFor(t, "the baton back on the GENESIS", func() bool {
+		return baton() == wire.OutPoint{Hash: genesis.TxHash(), Index: 2}
+	})
 }

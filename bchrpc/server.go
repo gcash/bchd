@@ -3317,6 +3317,10 @@ func (s *GrpcServer) slpEventHandler() {
 
 			continue
 		case *rpcEventBlockConnected:
+			// By now the memory pool has dropped the transactions the
+			// block confirms or conflicts with, so the slp cache drops
+			// what the transactions no longer in it put there.
+			s.slpIndex.RemoveMempoolSlpTxsNotIn(s.txMemPool.IsTransactionInPool)
 			continue
 		}
 	}

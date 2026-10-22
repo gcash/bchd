@@ -86,7 +86,8 @@ func TestTokenMetadataCacheSnapshot(t *testing.T) {
 func TestTokenMetadataCacheMempool(t *testing.T) {
 	cache := InitSlpCache(10)
 	tokenHash := chainhash.Hash{1}
-	if err := cache.AddTempTokenMetadata(TokenMetadata{TokenID: &tokenHash}); err != nil {
+	if err := cache.AddTempTokenMetadata(TokenMetadata{TokenID: &tokenHash},
+		chainhash.Hash{2}); err != nil {
 		t.Fatal(err)
 	}
 	for _, tip := range []*chainhash.Hash{nil, {0xa}} {

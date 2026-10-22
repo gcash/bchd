@@ -13,23 +13,28 @@ import (
 )
 
 // SlpCache to manage slp index mempool inventory and recently queried slp index entries and
-// token metadata items. The RWMutex lock is held for mempoolSlpTxEntries operations since
-// gcache.Cache holds its own locks.
+// token metadata items. The RWMutex lock is held for mempoolSlpTxEntries and
+// mempoolTokenMetadata operations since gcache.Cache holds its own locks.
 type SlpCache struct {
 	sync.RWMutex
 	maxEntries          int
 	mempoolSlpTxEntries map[chainhash.Hash]*SlpTxEntry
 	slpTxEntries        gcache.Cache
 	tokenMetadata       gcache.Cache
+
+	// mempoolTokenMetadata maps the token ID of each token whose cached
+	// metadata a memory pool transaction set to that transaction.
+	mempoolTokenMetadata map[chainhash.Hash]chainhash.Hash
 }
 
 // InitSlpCache creates a new instance of SlpCache
 func InitSlpCache(maxEntries int) *SlpCache {
 	return &SlpCache{
-		maxEntries:          maxEntries,
-		mempoolSlpTxEntries: make(map[chainhash.Hash]*SlpTxEntry),
-		slpTxEntries:        gcache.New(maxEntries).LRU().Build(),
-		tokenMetadata:       gcache.New(maxEntries).LRU().Build(),
+		maxEntries:           maxEntries,
+		mempoolSlpTxEntries:  make(map[chainhash.Hash]*SlpTxEntry),
+		slpTxEntries:         gcache.New(maxEntries).LRU().Build(),
+		tokenMetadata:        gcache.New(maxEntries).LRU().Build(),
+		mempoolTokenMetadata: make(map[chainhash.Hash]chainhash.Hash),
 	}
 }
 
@@ -80,9 +85,14 @@ type cachedTokenMetadata struct {
 	tip *chainhash.Hash
 }
 
-// AddTempTokenMetadata puts token metadata from the memory pool into cache
-// with a limited size
-func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata) error {
+// AddTempTokenMetadata puts token metadata that the memory pool transaction
+// from set into cache with a limited size.  It is removed once the
+// transaction leaves the memory pool.
+func (s *SlpCache) AddTempTokenMetadata(item TokenMetadata, from chainhash.Hash) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.mempoolTokenMetadata[*item.TokenID] = from
 	return s.tokenMetadata.Set(*item.TokenID, &cachedTokenMetadata{tm: item})
 }
 
@@ -109,17 +119,55 @@ func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash, tip *chainhash.Hash) (
 
 // RemoveTokenMetadata removes a token metadata item from cache
 func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.mempoolTokenMetadata, hash)
 	s.tokenMetadata.Remove(hash)
 }
 
-// RemoveMempoolSlpTxItems is called on block events to remove mempool transaction items and
-// also we clear the tempTokenMetadata to avoid corrupt mint baton state from double spends
+// RemoveMempoolSlpTxItems is called on block events to remove the mempool
+// transaction items of the block's transactions, and the token metadata they
+// set in the memory pool, which the index now has.
 func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 	s.Lock()
 	defer s.Unlock()
 
 	for _, tx := range txs {
-		delete(s.mempoolSlpTxEntries, *tx.Hash())
+		hash := tx.Hash()
+		entry, ok := s.mempoolSlpTxEntries[*hash]
+		if !ok {
+			continue
+		}
+		delete(s.mempoolSlpTxEntries, *hash)
+		if from, ok := s.mempoolTokenMetadata[entry.TokenIDHash]; ok &&
+			from == *hash {
+
+			delete(s.mempoolTokenMetadata, entry.TokenIDHash)
+			s.tokenMetadata.Remove(entry.TokenIDHash)
+		}
+	}
+}
+
+// RemoveMempoolSlpTxsNotIn removes the mempool transaction items, and the
+// token metadata, of the transactions that inPool reports are no longer in the
+// memory pool.  A transaction that left it without being confirmed, as when a
+// conflicting one was, may have put a mint baton on an output that does not
+// exist.
+func (s *SlpCache) RemoveMempoolSlpTxsNotIn(inPool func(*chainhash.Hash) bool) {
+	s.Lock()
+	defer s.Unlock()
+
+	for hash := range s.mempoolSlpTxEntries {
+		if !inPool(&hash) {
+			delete(s.mempoolSlpTxEntries, hash)
+		}
+	}
+	for tokenID, from := range s.mempoolTokenMetadata {
+		if !inPool(&from) {
+			delete(s.mempoolTokenMetadata, tokenID)
+			s.tokenMetadata.Remove(tokenID)
+		}
 	}
 }
 
