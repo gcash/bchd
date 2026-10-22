@@ -389,8 +389,9 @@ func TestCompactBlockWaitEndsOnDisconnect(t *testing.T) {
 	}
 }
 
-// TestRemoveCmpctWaiter ensures ending a wait that already ended leaves a
-// newer wait for the same block alone.
+// TestRemoveCmpctWaiter ensures ending a wait that already ended returns the
+// reply that ended it and leaves a newer wait for the same block alone, and
+// that ending a current wait removes it.
 func TestRemoveCmpctWaiter(t *testing.T) {
 	sp := newServerPeer(&server{}, false)
 	hash := chainhash.Hash{0x01}
@@ -410,12 +411,22 @@ func TestRemoveCmpctWaiter(t *testing.T) {
 	if !ok {
 		t.Fatal("new wait not added")
 	}
-	sp.removeCmpctWaiter(hash, first)
+	if got := sp.removeCmpctWaiter(hash, first); got != wire.Message(reply) {
+		t.Fatal("the reply that ended the wait was not returned")
+	}
 	if !sp.deliverCmpctReply(hash, reply) {
 		t.Fatal("removing the ended wait removed the new one")
 	}
 	if got := <-second; got != wire.Message(reply) {
 		t.Fatal("new wait got the wrong reply")
+	}
+
+	third, ok := sp.addCmpctWaiter(hash)
+	if !ok {
+		t.Fatal("third wait not added")
+	}
+	if sp.removeCmpctWaiter(hash, third) != nil || sp.cmpctWaiting(hash) {
+		t.Fatal("ending a current wait returned a reply or left it")
 	}
 }
 
@@ -768,9 +779,11 @@ func TestCompactBlockLateFullBlock(t *testing.T) {
 	}
 }
 
-// TestCompactBlockLateBlockTxns ensures a blocktxns arriving after the
-// compact block stopped waiting forgets the block's request, so the block
-// can be requested again.
+// TestCompactBlockLateBlockTxns ensures a compact block whose wait for
+// transactions times out has its full block requested, keeping the request,
+// and that a blocktxns arriving later is ignored, as BCHN ignores a blocktxn
+// it does not expect.  The late blocktxns used to forget the request, and
+// nothing asked for the block again.
 func TestCompactBlockLateBlockTxns(t *testing.T) {
 	shortenCmpctTxnsTimeout(t)
 	h := newCmpctHarness(t)
@@ -780,6 +793,54 @@ func TestCompactBlockLateBlockTxns(t *testing.T) {
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())
 	waitDone(t, done)
+	h.expectFullBlockRequest(t, *block.Hash())
 	h.send(t, blockTxnsFor(block))
+	h.send(t, block.MsgBlock())
+	h.expectHaveBlock(t, block.Hash())
+	if !h.sp.Connected() {
+		t.Fatal("peer was disconnected for the block it was asked for")
+	}
+}
+
+// TestCompactBlockReplyAsWaitTimesOut ensures a blocktxns delivered just as
+// the compact block's wait for it times out is used.  It was lost, with the
+// request kept, so the block was not processed and the peer was eventually
+// disconnected for not sending it.
+func TestCompactBlockReplyAsWaitTimesOut(t *testing.T) {
+	shortenCmpctTxnsTimeout(t)
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
 	h.request(t, *block.Hash())
+
+	cmpctTxnsTimeoutHook = func() {
+		cmpctTxnsTimeoutHook = nil
+		h.sp.deliverCmpctReply(*block.Hash(), blockTxnsFor(block))
+	}
+	t.Cleanup(func() { cmpctTxnsTimeoutHook = nil })
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	waitDone(t, done)
+	h.expectHaveBlock(t, block.Hash())
+}
+
+// TestCompactBlockTimeoutKnownBlock ensures a compact block whose wait for
+// transactions times out after the block arrived otherwise does not have its
+// full block requested.
+func TestCompactBlockTimeoutKnownBlock(t *testing.T) {
+	shortenCmpctTxnsTimeout(t)
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	if _, _, err := h.s.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, done)
+	select {
+	case iv := <-h.getData:
+		t.Fatalf("getdata for %v", iv)
+	case <-time.After(100 * time.Millisecond):
+	}
 }
