@@ -70,6 +70,10 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 }
 
 func TestMaxTxFee(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
 	tests := []struct {
 		args    []string
 		want    bchutil.Amount
@@ -84,7 +88,9 @@ func TestMaxTxFee(t *testing.T) {
 		{args: []string{"--minrelaytxfee=0.2"}, want: 10000000},
 	}
 	for _, test := range tests {
-		os.Args = append([]string{"bchd"}, test.args...)
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
 		cfg, _, err := loadConfig()
 		if test.wantErr {
 			if err == nil {
@@ -138,6 +144,8 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 }
 
 func TestFinalizationOptions(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
 	defer func() { os.Args = []string{"bchd"} }()
 
 	tests := []struct {
@@ -154,7 +162,9 @@ func TestFinalizationOptions(t *testing.T) {
 		{[]string{"bchd", "--maxreorgdepth=0"}, 0, 0, false},
 	}
 	for _, test := range tests {
-		os.Args = test.args
+		os.Args = append([]string{test.args[0],
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args[1:]...)
 		cfg, _, err := loadConfig()
 		if !test.ok {
 			if err == nil {
