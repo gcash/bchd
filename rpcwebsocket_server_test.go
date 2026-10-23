@@ -1042,3 +1042,120 @@ func TestRequestIDEchoedAsSent(t *testing.T) {
 		}
 	}
 }
+
+// closeGateListener hands out connections whose Close reports on closing and
+// then waits for release to close, as closing a TLS connection waits up to 5 s
+// to send its close_notify alert to a client that stopped reading.
+type closeGateListener struct {
+	net.Listener
+	closing, release chan struct{}
+}
+
+func (l closeGateListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &closeGateConn{Conn: conn, closing: l.closing, release: l.release}, nil
+}
+
+// closeGateConn is a connection closeGateListener handed out.
+type closeGateConn struct {
+	net.Conn
+	closing, release chan struct{}
+	once             sync.Once
+}
+
+func (c *closeGateConn) Close() error {
+	c.once.Do(func() { close(c.closing) })
+	<-c.release
+	return c.Conn.Close()
+}
+
+// TestDisconnectClosesWithoutClientLock ensures a websocket client's
+// Disconnect closes its connection without holding the client's lock.  The
+// notification manager takes every client's lock for each transaction it
+// notifies, so while a TLS connection to a client that stopped reading waits
+// to send its close_notify alert, every client's notifications would wait.
+func TestDisconnectClosesWithoutClientLock(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closing, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	releaseConn := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseConn)
+	conns := make(chan *websocket.Conn, 1)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err == nil {
+			conns <- conn
+		}
+	})}
+	go func() { _ = srv.Serve(closeGateListener{ln, closing, release}) }()
+	t.Cleanup(func() { srv.Close() })
+
+	client, _, err := websocket.DefaultDialer.Dial("ws://"+ln.Addr().String()+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	var conn *websocket.Conn
+	select {
+	case conn = <-conns:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no websocket was accepted")
+	}
+
+	c := &wsClient{conn: conn, addr: "test", quit: make(chan struct{})}
+	done := make(chan struct{})
+	go func() {
+		c.Disconnect()
+		close(done)
+	}()
+	select {
+	case <-closing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Disconnect did not close the connection")
+	}
+
+	// While the connection closes, the client's lock is free and the
+	// client counts as disconnected.
+	locked := make(chan bool, 1)
+	go func() {
+		c.Lock()
+		locked <- c.disconnected
+		c.Unlock()
+	}()
+	select {
+	case disconnected := <-locked:
+		if !disconnected {
+			t.Error("the client does not count as disconnected while its " +
+				"connection closes")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("Disconnect holds the client's lock while its connection " +
+			"closes")
+	}
+	select {
+	case <-c.quit:
+	default:
+		t.Error("Disconnect did not close the client's quit channel")
+	}
+	releaseConn()
+	<-done
+
+	// Disconnecting again does nothing and leaves the lock free.
+	c.Disconnect()
+	go func() {
+		c.Lock()
+		locked <- c.disconnected
+		c.Unlock()
+	}()
+	select {
+	case <-locked:
+	case <-time.After(2 * time.Second):
+		t.Error("a second Disconnect left the client's lock held")
+	}
+}

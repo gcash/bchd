@@ -2259,20 +2259,26 @@ func (c *wsClient) Disconnected() bool {
 	return isDisconnected
 }
 
-// Disconnect disconnects the websocket client.
+// Disconnect disconnects the websocket client.  The connection is closed
+// after the client's lock is released: closing a TLS connection first sends a
+// close_notify alert, which waits up to 5 s for a client that stopped reading,
+// and the notification manager takes every client's lock for each transaction
+// it notifies.
 func (c *wsClient) Disconnect() {
 	c.Lock()
-	defer c.Unlock()
 
 	// Nothing to do if already disconnected.
 	if c.disconnected {
+		c.Unlock()
 		return
 	}
 
 	rpcsLog.Tracef("Disconnecting websocket client %s", c.addr)
 	close(c.quit)
-	c.conn.Close()
 	c.disconnected = true
+	c.Unlock()
+
+	c.conn.Close()
 }
 
 // Start begins processing input and output messages.
