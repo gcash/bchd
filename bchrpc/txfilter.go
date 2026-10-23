@@ -38,7 +38,17 @@ type txFilter struct {
 	// elements.
 	dataElementSize int
 
-	// maxSize is the most the filter may hold, as size counts it.
+	// matched and matchedOld hold the outpoints of the outputs
+	// MatchAndUpdate matched, so that their spends match too, the newer in
+	// matched.  They are apart from the outpoints requests add, as they
+	// are not the client's to bound, and they hold at most maxSize
+	// together: once matched holds half of it, the older are dropped and
+	// matched becomes matchedOld.
+	matched    map[wire.OutPoint]struct{}
+	matchedOld map[wire.OutPoint]struct{}
+
+	// maxSize is the most the filter may hold, as size counts it, and the
+	// most matched and matchedOld hold together.
 	maxSize int
 
 	matchAll bool
@@ -59,6 +69,8 @@ func newTxFilter(maxSize int) *txFilter {
 		dataElements:        map[string]struct{}{},
 		fallbacks:           map[string]struct{}{},
 		slpTokenIds:         map[[32]byte]struct{}{},
+		matched:             map[wire.OutPoint]struct{}{},
+		matchedOld:          map[wire.OutPoint]struct{}{},
 		maxSize:             maxSize,
 	}
 }
@@ -68,9 +80,29 @@ func (f *txFilter) AddOutpoint(op wire.OutPoint) {
 	f.outpoints[op] = struct{}{}
 }
 
-// RemoveOutpoint removes an outpoint from the filter.
-func (f *txFilter) RemoveOutpoint(op wire.OutPoint) {
+// RemoveOutpoint removes an outpoint from the filter, whether a request added
+// it or MatchAndUpdate did, and returns whether the filter held it.
+func (f *txFilter) RemoveOutpoint(op wire.OutPoint) bool {
+	_, added := f.outpoints[op]
+	_, matched := f.matched[op]
+	_, matchedOld := f.matchedOld[op]
 	delete(f.outpoints, op)
+	delete(f.matched, op)
+	delete(f.matchedOld, op)
+	return added || matched || matchedOld
+}
+
+// addMatchedOutpoint keeps the outpoint of an output MatchAndUpdate matched,
+// dropping the older half of those kept once they would be more than maxSize.
+func (f *txFilter) addMatchedOutpoint(op wire.OutPoint) {
+	if f.maxSize <= 0 {
+		return
+	}
+	f.matched[op] = struct{}{}
+	if len(f.matched) >= max(1, f.maxSize/2) {
+		f.matchedOld = f.matched
+		f.matched = make(map[wire.OutPoint]struct{})
+	}
 }
 
 // AddDataElement adds a new data element to the filter.
@@ -94,9 +126,9 @@ func (f *txFilter) RemoveDataElement(dataElement []byte) {
 	}
 }
 
-// size returns how much the filter holds: each outpoint, address and token ID
-// counts once, and each data element as dataElementUnits says.  The outpoints
-// include the outputs MatchAndUpdate added.
+// size returns how much the filter holds of what requests added: each
+// outpoint, address and token ID counts once, and each data element as
+// dataElementUnits says.  The outputs MatchAndUpdate matched are not counted.
 func (f *txFilter) size() int {
 	return len(f.outpoints) + len(f.pubKeyHashes) + len(f.scriptHashes) +
 		len(f.compressedPubKeys) + len(f.uncompressedPubKeys) +
@@ -392,8 +424,9 @@ type prevOutScriptFunc func(wire.OutPoint) []byte
 
 // MatchAndUpdate returns whether the transaction matches against the filter.
 // When the tx contains any matching outputs, all these outputs are added to the
-// filter as outpoints for matching further spends of these outputs.
-// All matching outpoints are removed from the filter.
+// filter as outpoints for matching further spends of these outputs, of which
+// it keeps the newest, at most maxSize.  All matching outpoints are removed
+// from the filter.
 //
 // prevOutScript is used to match spends of outputs the filter did not see
 // arrive, which is every output a watched address already held when the
@@ -436,9 +469,7 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params,
 	}
 
 	for _, txin := range tx.MsgTx().TxIn {
-		if _, ok := f.outpoints[txin.PreviousOutPoint]; ok {
-			delete(f.outpoints, txin.PreviousOutPoint)
-
+		if f.RemoveOutpoint(txin.PreviousOutPoint) {
 			matched = true
 			continue
 		}
@@ -481,7 +512,7 @@ func (f *txFilter) MatchAndUpdate(tx *bchutil.Tx, params *chaincfg.Params,
 				Hash:  *tx.Hash(),
 				Index: uint32(txOutIdx),
 			}
-			f.outpoints[outpoint] = struct{}{}
+			f.addMatchedOutpoint(outpoint)
 
 			matched = true
 		}

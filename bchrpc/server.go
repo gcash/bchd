@@ -116,11 +116,12 @@ type GrpcServerConfig struct {
 	AuthRequired bool
 
 	// MaxFilterEntries is the most a subscription's transaction filter may
-	// hold: each outpoint, those of the outputs it matched included,
-	// address and token ID counts once, and each data element once for
-	// each 20 bytes.  A SubscribeTransactionStream call can add to its
-	// filter with any number of requests, so without a limit its memory
-	// would have no bound.
+	// hold of what its requests add: each outpoint, address and token ID
+	// counts once, and each data element once for each 20 bytes.  A
+	// SubscribeTransactionStream call can add to its filter with any
+	// number of requests, so without a limit its memory would have no
+	// bound.  The filter also keeps at most as many outpoints of the
+	// outputs it matched, dropping the oldest.
 	MaxFilterEntries int
 }
 

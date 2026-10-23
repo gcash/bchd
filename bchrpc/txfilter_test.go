@@ -430,3 +430,125 @@ func TestFilterSizeLimit(t *testing.T) {
 		t.Errorf("refused after an entry was removed: %v", err)
 	}
 }
+
+// dataTx returns a transaction spending prevOut whose output pushes data, or
+// pushes nothing when data is nil.
+func dataTx(prevOut wire.OutPoint, data []byte) *wire.MsgTx {
+	script := []byte{txscript.OP_TRUE}
+	if data != nil {
+		script = append([]byte{txscript.OP_RETURN, byte(len(data))}, data...)
+	}
+	tx := wire.NewMsgTx(wire.TxVersion)
+	tx.AddTxIn(&wire.TxIn{PreviousOutPoint: prevOut})
+	tx.AddTxOut(&wire.TxOut{PkScript: script})
+	return tx
+}
+
+// TestFilterMatchedOutputsNotCounted ensures the outputs a filter matched do
+// not count toward its size, which bounds only what requests add, so a request
+// is still accepted however many outputs the filter has matched.
+func TestFilterMatchedOutputsNotCounted(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	data := []byte{1, 2, 3}
+	watch := &pb.TransactionFilter{DataElements: [][]byte{data}}
+	f := newTxFilter(3)
+	if err := f.AddRPCFilter(watch, params); err != nil {
+		t.Fatalf("AddRPCFilter: %v", err)
+	}
+	for i := 0; i < 10; i++ {
+		tx := bchutil.NewTx(dataTx(wire.OutPoint{Index: uint32(i)}, data))
+		if !f.MatchAndUpdate(tx, params, nil) {
+			t.Fatalf("output %d not matched", i)
+		}
+	}
+	if got := f.size(); got != 1 {
+		t.Errorf("size %d after matching outputs, want 1", got)
+	}
+	if err := f.AddRPCFilter(watch, params); err != nil {
+		t.Errorf("the entry again: %v", err)
+	}
+	if err := f.AddRPCFilter(filterOutpoints(1, 2), params); err != nil {
+		t.Errorf("two entries more: %v", err)
+	}
+	err := f.AddRPCFilter(filterOutpoints(2, 1), params)
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Errorf("an entry over the limit: got %v, want ResourceExhausted", err)
+	}
+}
+
+// TestFilterMatchedOutpointsBounded ensures a filter keeps at most maxSize of
+// the outputs it matched, so that their spends match too, dropping the oldest
+// first: the newest half of them, and at least the newest, are always kept,
+// and none older than the newest maxSize, so a bound of 0 keeps none.
+func TestFilterMatchedOutpointsBounded(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	data := []byte{1, 2, 3}
+	for _, bound := range []int{0, 1, 2, 3, 4, 10} {
+		f := newTxFilter(bound)
+		f.AddDataElement(data)
+		const n = 25
+		var outs []wire.OutPoint
+		for i := 0; i < n; i++ {
+			tx := bchutil.NewTx(dataTx(wire.OutPoint{Index: uint32(i)}, data))
+			if !f.MatchAndUpdate(tx, params, nil) {
+				t.Fatalf("bound %d: output %d not matched", bound, i)
+			}
+			outs = append(outs, wire.OutPoint{Hash: *tx.Hash()})
+		}
+		kept := 0
+		if bound > 0 {
+			kept = max(1, bound/2)
+		}
+		dropped, missing := 0, 0
+		for i, op := range outs {
+			matched := f.MatchAndUpdate(bchutil.NewTx(dataTx(op, nil)), params, nil)
+			if i < n-bound && matched {
+				dropped++
+			}
+			if i >= n-kept && !matched {
+				missing++
+			}
+		}
+		if dropped != 0 || missing != 0 {
+			t.Errorf("bound %d: spends of %d of the oldest %d outputs "+
+				"matched, of %d of the newest %d did not", bound, dropped,
+				n-bound, missing, kept)
+		}
+	}
+}
+
+// TestFilterRemovesMatchedOutpoint ensures a request that removes an outpoint
+// also removes it when the filter matched its output, as when both were one
+// set, and that a spend of an outpoint a request added matches and takes it
+// out of the filter.
+func TestFilterRemovesMatchedOutpoint(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	data := []byte{1, 2, 3}
+	f := newTxFilter(maxFilterSize)
+	if err := f.AddRPCFilter(filterOutpoints(1, 2), params); err != nil {
+		t.Fatalf("AddRPCFilter: %v", err)
+	}
+	var added wire.OutPoint
+	added.Hash[0] = 1
+	if !f.MatchAndUpdate(bchutil.NewTx(dataTx(added, nil)), params, nil) {
+		t.Error("the spend of an outpoint a request added did not match")
+	}
+	if got := f.size(); got != 1 {
+		t.Errorf("size %d after the spend, want 1", got)
+	}
+	f.AddDataElement(data)
+	tx := bchutil.NewTx(dataTx(wire.OutPoint{}, data))
+	if !f.MatchAndUpdate(tx, params, nil) {
+		t.Fatal("output not matched")
+	}
+	op := &pb.Transaction_Input_Outpoint{Hash: tx.Hash()[:]}
+	err := f.RemoveRPCFilter(&pb.TransactionFilter{
+		Outpoints: []*pb.Transaction_Input_Outpoint{op}}, params)
+	if err != nil {
+		t.Fatalf("RemoveRPCFilter: %v", err)
+	}
+	spend := dataTx(wire.OutPoint{Hash: *tx.Hash()}, nil)
+	if f.MatchAndUpdate(bchutil.NewTx(spend), params, nil) {
+		t.Error("the spend of a removed output matched")
+	}
+}

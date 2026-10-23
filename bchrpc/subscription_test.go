@@ -10,6 +10,7 @@ import (
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/wire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
@@ -458,6 +459,102 @@ func TestSubscribeTransactionStreamFilterLimit(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the call still runs with more than maxFilterSize in its filter")
+	}
+}
+
+// reqTxStream is a SubscribeTransactionStream stream whose client sends the
+// requests handed to reqs, and which passes on the notifications it is sent.
+type reqTxStream struct {
+	grpc.ServerStream
+	ctx  context.Context
+	reqs chan *pb.SubscribeTransactionsRequest
+	sent chan *pb.TransactionNotification
+}
+
+func (s *reqTxStream) Context() context.Context { return s.ctx }
+
+func (s *reqTxStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
+	select {
+	case req := <-s.reqs:
+		return req, nil
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	}
+}
+
+func (s *reqTxStream) Send(n *pb.TransactionNotification) error {
+	s.sent <- n
+	return nil
+}
+
+// TestSubscribeTransactionStreamMatchedOutputsNotCounted ensures the outputs a
+// SubscribeTransactionStream call's filter matched do not count toward the
+// filter's limit, so a later request naming an entry does not end the call
+// however many outputs the filter matched.
+func TestSubscribeTransactionStreamMatchedOutputsNotCounted(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.maxFilterEntries = 3
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &reqTxStream{ctx: ctx,
+		reqs: make(chan *pb.SubscribeTransactionsRequest),
+		sent: make(chan *pb.TransactionNotification, 10)}
+	done := make(chan error, 1)
+	go func() { done <- s.SubscribeTransactionStream(stream) }()
+
+	// The call takes a request only once it has handled the one before,
+	// so once three are taken, the first has been handled.
+	data := []byte{1, 2, 3}
+	watch := &pb.SubscribeTransactionsRequest{
+		Subscribe:      &pb.TransactionFilter{DataElements: [][]byte{data}},
+		IncludeMempool: true,
+		SerializeTx:    true,
+	}
+	send := func(what string) {
+		t.Helper()
+		for i := 0; i < 3; i++ {
+			select {
+			case stream.reqs <- watch:
+			case err := <-done:
+				t.Fatalf("%s: the call ended: %v", what, err)
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s: the call took no request", what)
+			}
+		}
+	}
+	send("the filter")
+	for i := 0; i < 5; i++ {
+		s.dispatchEvent(txEvent(dataTx(wire.OutPoint{Index: uint32(i)}, data)))
+	}
+	for i := 0; i < 5; i++ {
+		select {
+		case <-stream.sent:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d of 5 matching transactions notified", i)
+		}
+	}
+	send("the entry again")
+
+	// The call and its request reader, which logs the end of the stream,
+	// end before the test does.
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("the call ended with %v", err)
+	}
+	waitStreamReaders(t)
+}
+
+// waitStreamReaders waits until no goroutine reads the requests of a
+// SubscribeTransactionStream call.
+func waitStreamReaders(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for streamReaders() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("a request reader still runs after its call ended")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
