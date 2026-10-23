@@ -649,9 +649,11 @@ func TestABLAPrunedState(t *testing.T) {
 	}
 }
 
-// TestABLARebuildBlockReadError ensures the rebuild on a pruned datadir only
-// approximates the state of blocks whose data is missing, and reports other
-// errors reading a block.
+// TestABLARebuildBlockReadError ensures the rebuild of the stored states takes
+// the size of each block from where the database stores it, without reading
+// the block, as Bitcoin Cash Node reads only the size of a block to rebuild its
+// state (node/blockstorage.cpp:520-533).  A block whose data is corrupt or
+// pruned still gets its exact state, and the node starts.
 func TestABLARebuildBlockReadError(t *testing.T) {
 	notExist := &os.PathError{Op: "open", Path: "x", Err: os.ErrNotExist}
 	for _, test := range []struct {
@@ -671,60 +673,90 @@ func TestABLARebuildBlockReadError(t *testing.T) {
 	}
 
 	params := ablaTestParams()
-	dir := filepath.Join(t.TempDir(), "db")
-	db, err := database.Create("ffldb", dir, params.Net)
-	if err != nil {
-		t.Fatal(err)
-	}
-	chain := ablaTestChain(t, db, params)
-	blocks := ablaTestMine(t, chain, 10, 999000)
-	if err := chain.FlushCachedState(FlushRequired); err != nil {
-		t.Fatal(err)
-	}
-	writeOldABLAStates(t, db, int32(len(blocks)))
-	err = db.Update(func(dbTx database.Tx) error {
-		return dbPutBlockchainType(dbTx, prunedBlockchainEntryValue)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
+	for _, test := range []struct {
+		name    string
+		pruned  bool
+		corrupt bool
+	}{
+		{"corrupt block", false, true},
+		{"corrupt block on a pruned datadir", true, true},
+		{"pruned block", true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "db")
+			db, err := database.Create("ffldb", dir, params.Net)
+			if err != nil {
+				t.Fatal(err)
+			}
+			chain := ablaTestChain(t, db, params)
+			blocks := ablaTestMine(t, chain, 10, 999000)
+			if err := chain.FlushCachedState(FlushRequired); err != nil {
+				t.Fatal(err)
+			}
+			writeOldABLAStates(t, db, int32(len(blocks)))
+			if test.pruned {
+				err = db.Update(func(dbTx database.Tx) error {
+					return dbPutBlockchainType(dbTx,
+						prunedBlockchainEntryValue)
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !test.corrupt {
+				pruneBlockData(t, db, blocks[4].Hash())
+			}
+			db.Close()
 
-	// Corrupt the data of block 5.
-	file := filepath.Join(dir, "000000000.fdb")
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var header bytes.Buffer
-	if err := blocks[4].MsgBlock().Header.Serialize(&header); err != nil {
-		t.Fatal(err)
-	}
-	i := bytes.Index(data, header.Bytes())
-	if i < 0 {
-		t.Fatal("block 5 not found in the block file")
-	}
-	data[i+1000] ^= 0xff
-	if err := os.WriteFile(file, data, 0600); err != nil {
-		t.Fatal(err)
-	}
+			// Corrupt the data of block 5.
+			if test.corrupt {
+				file := filepath.Join(dir, "000000000.fdb")
+				data, err := os.ReadFile(file)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var header bytes.Buffer
+				err = blocks[4].MsgBlock().Header.Serialize(&header)
+				if err != nil {
+					t.Fatal(err)
+				}
+				i := bytes.Index(data, header.Bytes())
+				if i < 0 {
+					t.Fatal("block 5 not found in the block file")
+				}
+				data[i+1000] ^= 0xff
+				if err := os.WriteFile(file, data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	db, err = database.Open("ffldb", dir, params.Net)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	_, err = New(&Config{
-		DB:                 db,
-		ChainParams:        params,
-		TimeSource:         NewMedianTime(),
-		SigCache:           txscript.NewSigCache(1000),
-		UtxoCacheMaxSize:   1 << 20,
-		ExcessiveBlockSize: 1000000,
-	})
-	var dbErr database.Error
-	if !errors.As(err, &dbErr) || dbErr.ErrorCode != database.ErrCorruption {
-		t.Fatalf("start with a corrupt block: got %v, want ErrCorruption", err)
+			db, err = database.Open("ffldb", dir, params.Net)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			chain = ablaTestChain(t, db, params)
+			if want := ablaExpectedState(chain, blocks); chain.ablaState != want {
+				t.Fatalf("ABLA state %+v, want %+v", chain.ablaState, want)
+			}
+			err = db.View(func(dbTx database.Tx) error {
+				for h := 0; h <= len(blocks); h++ {
+					state, err := chain.dbFetchValidABLAState(dbTx, int32(h))
+					if err != nil {
+						return err
+					}
+					want := ablaExpectedState(chain, blocks[:h])
+					if state != want {
+						t.Errorf("height %d: ABLA state %+v, want %+v",
+							h, state, want)
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

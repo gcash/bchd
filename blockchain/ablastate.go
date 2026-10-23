@@ -307,12 +307,17 @@ func (b *BlockChain) initABLAState() error {
 	for h := firstBad; h <= tip.height; {
 		err := b.db.Update(func(dbTx database.Tx) error {
 			for i := 0; i < ablaRebuildBatch && h <= tip.height; i++ {
+				// The size is taken from where the database
+				// stores the block, which it keeps for pruned
+				// blocks too, so the block is not read, as
+				// Bitcoin Cash Node reads only the size.  A block
+				// the database has no location for, as one a
+				// fast sync never stored, is approximated.
 				node := b.bestChain.NodeByHeight(h)
-				blockBytes, err := dbTx.FetchBlock(&node.hash)
+				size, err := dbTx.FetchBlockSize(&node.hash)
 				switch {
 				case err == nil:
-					state = b.ablaNextState(state, h,
-						uint64(len(blockBytes)))
+					state = b.ablaNextState(state, h, uint64(size))
 				case (pruned || b.pruneMode) && isBlockDataMissing(err):
 					state = b.prunedABLAState(dbTx, h)
 					approximated++
@@ -343,10 +348,10 @@ func (b *BlockChain) initABLAState() error {
 }
 
 // prunedABLAState approximates the ABLA state after a main chain block whose
-// data has been pruned, using the state stored for it.  Earlier versions stored only
-// the elastic buffer size, in the first eight bytes and with zero after it,
-// so the control block size is then taken to be at its floor.  Without a
-// usable stored state, the initial state is used.
+// size the database does not have, using the state stored for it.  Earlier
+// versions stored only the elastic buffer size, in the first eight bytes and
+// with zero after it, so the control block size is then taken to be at its
+// floor.  Without a usable stored state, the initial state is used.
 func (b *BlockChain) prunedABLAState(dbTx database.Tx, height int32) ABLAState {
 	state := b.ablaBaseState(height)
 	var serializedHeight [4]byte
