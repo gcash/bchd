@@ -1394,6 +1394,38 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 		if !checkDbError(tc.t, testName, err, wantErrCode) {
 			return false
 		}
+
+		// Ensure a region ending with the block is fetched, and that
+		// regions ending past it are refused as out of bounds.  The
+		// block files store a block between its length and its
+		// checksum, which such a region would reach.
+		blockLen := uint32(len(blockBytes))
+		region = database.BlockRegion{Hash: blockHash, Offset: blockLen - 1,
+			Len: 1}
+		gotRegionBytes, err = tx.FetchBlockRegion(&region)
+		if err != nil || !bytes.Equal(gotRegionBytes, blockBytes[blockLen-1:]) {
+			tc.t.Errorf("FetchBlockRegion(%s) last byte: got %x, %v, "+
+				"want %x", blockHash, gotRegionBytes, err,
+				blockBytes[blockLen-1:])
+			return false
+		}
+		for _, region := range []database.BlockRegion{
+			{Hash: blockHash, Offset: blockLen - 1, Len: 2},
+			{Hash: blockHash, Offset: blockLen, Len: 12},
+		} {
+			testName = fmt.Sprintf("FetchBlockRegion(%s) region "+
+				"%d:%d of a block of %d bytes", blockHash,
+				region.Offset, region.Len, blockLen)
+			gotRegionBytes, err = tx.FetchBlockRegion(&region)
+			if err == nil {
+				tc.t.Errorf("%s: got %x, want an error", testName,
+					gotRegionBytes)
+				return false
+			}
+			if !checkDbError(tc.t, testName, err, wantErrCode) {
+				return false
+			}
+		}
 	}
 
 	// -----------------
@@ -1534,6 +1566,40 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 	}
 	wantErrCode = database.ErrBlockRegionInvalid
 	_, err = tx.FetchBlockRegions(badBlockRegions)
+	if !checkDbError(tc.t, testName, err, wantErrCode) {
+		return false
+	}
+
+	// Ensure regions of whole blocks are fetched, and that regions a byte
+	// longer are refused as out of bounds.
+	wholeBlocks := make([]database.BlockRegion, len(allBlockHashes))
+	for i := range wholeBlocks {
+		wholeBlocks[i] = database.BlockRegion{Hash: &allBlockHashes[i],
+			Len: uint32(len(allBlockBytes[i]))}
+	}
+	regionData, err := tx.FetchBlockRegions(wholeBlocks)
+	if err != nil {
+		tc.t.Errorf("FetchBlockRegions whole blocks: unexpected error: %v",
+			err)
+		return false
+	}
+	for i := range regionData {
+		if !bytes.Equal(regionData[i], allBlockBytes[i]) {
+			tc.t.Errorf("FetchBlockRegions(%s) whole block: bytes "+
+				"mismatch", &allBlockHashes[i])
+			return false
+		}
+	}
+	for i := range wholeBlocks {
+		wholeBlocks[i].Len++
+	}
+	testName = "FetchBlockRegions regions a byte past the blocks"
+	regionData, err = tx.FetchBlockRegions(wholeBlocks)
+	if err == nil {
+		tc.t.Errorf("%s: got %d regions, want an error", testName,
+			len(regionData))
+		return false
+	}
 	return checkDbError(tc.t, testName, err, wantErrCode)
 }
 

@@ -100,3 +100,38 @@ func TestFetchBlockSizeCorruptLocation(t *testing.T) {
 		}
 	}
 }
+
+// TestFetchBlockRegionCorruptLocation ensures a stored block length shorter
+// than the 12 bytes around a block in the block files leaves no region of the
+// block to fetch, instead of the block's size wrapping around.
+func TestFetchBlockRegionCorruptLocation(t *testing.T) {
+	pdb := createPruneTestDB(t, filepath.Join(t.TempDir(), "db"))
+	defer pdb.Close()
+	block := pruneTestBlock(1, 1)
+	storeTestBlock(t, pdb, block)
+
+	err := pdb.Update(func(tx database.Tx) error {
+		row := serializeBlockLoc(blockLocation{blockLen: 5})
+		return tx.(*transaction).blockIdxBucket.Put(block.Hash()[:], row)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pdb.View(func(tx database.Tx) error {
+		region := database.BlockRegion{Hash: block.Hash(), Len: 1}
+		got, err := tx.FetchBlockRegion(&region)
+		if err == nil {
+			t.Errorf("FetchBlockRegion: got %x, want an error", got)
+		} else {
+			checkDbError(t, "FetchBlockRegion", err,
+				database.ErrBlockRegionInvalid)
+		}
+		_, err = tx.FetchBlockRegions([]database.BlockRegion{region})
+		checkDbError(t, "FetchBlockRegions", err,
+			database.ErrBlockRegionInvalid)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

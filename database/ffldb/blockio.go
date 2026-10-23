@@ -192,6 +192,13 @@ type blockLocation struct {
 	blockLen     uint32
 }
 
+// blockSize returns the size of the block itself.  The stored length also
+// counts the network, the block length and the checksum around it in the
+// block file, 12 bytes in all, which a region of the block must not reach.
+func (loc *blockLocation) blockSize() uint32 {
+	return loc.blockLen - min(loc.blockLen, 12)
+}
+
 // deserializeBlockLoc deserializes the passed serialized block location
 // information.  This is data stored into the block index metadata for each
 // block.  The serialized data passed to this function MUST be at least
