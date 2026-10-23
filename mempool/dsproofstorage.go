@@ -73,8 +73,10 @@ type dsProofStorage struct {
 	orphanTTL  time.Duration
 	nextSeq    uint64
 
-	// peerOrphans counts the orphans of each peer.
-	peerOrphans map[Tag]int
+	// peerOrphans holds the ids of each peer's orphans: their number is the
+	// peer's share of the orphan limit, and they are removed when it
+	// disconnects without a look at the other proofs.
+	peerOrphans map[Tag]map[chainhash.Hash]struct{}
 
 	// The rejected ids are kept in two generations so the oldest half can
 	// be dropped at once.
@@ -89,7 +91,7 @@ func newDSProofStorage() *dsProofStorage {
 		proofs:      make(map[chainhash.Hash]*dsProofEntry),
 		byOutPoint:  make(map[wire.OutPoint]map[chainhash.Hash]*dsProofEntry),
 		maxOrphans:  DefaultMaxDSProofOrphans,
-		peerOrphans: make(map[Tag]int),
+		peerOrphans: make(map[Tag]map[chainhash.Hash]struct{}),
 		orphanTTL:   DefaultDSProofOrphanTTL,
 		rejected:    make(map[chainhash.Hash]struct{}),
 		now:         time.Now,
@@ -129,7 +131,7 @@ func (s *dsProofStorage) add(proof *wire.MsgDSProof, hash chainhash.Hash) bool {
 // the outpoint is full of proofs without a peer.
 func (s *dsProofStorage) addOrphan(proof *wire.MsgDSProof, hash chainhash.Hash, peer Tag, hasPeer bool) bool {
 	if e, ok := s.proofs[hash]; !ok {
-		if hasPeer && s.peerOrphans[peer] >= s.maxOrphans/dsProofOrphanPeerShare {
+		if hasPeer && len(s.peerOrphans[peer]) >= s.maxOrphans/dsProofOrphanPeerShare {
 			return false
 		}
 		if !s.makeOrphanRoom(proof.PrevOut, peer, hasPeer) {
@@ -155,18 +157,25 @@ func (s *dsProofStorage) addOrphan(proof *wire.MsgDSProof, hash chainhash.Hash, 
 		s.numOrphans++
 	}
 	if e.hasPeer {
-		s.peerOrphans[e.peer]++
+		m := s.peerOrphans[e.peer]
+		if m == nil {
+			m = make(map[chainhash.Hash]struct{})
+			s.peerOrphans[e.peer] = m
+		}
+		m[hash] = struct{}{}
 	}
 	s.limitOrphans(hash)
 	return true
 }
 
-// uncountPeer removes an orphan from the count of its peer.
+// uncountPeer removes an orphan from the orphans of its peer.
 func (s *dsProofStorage) uncountPeer(e *dsProofEntry) {
 	if !e.orphan || !e.hasPeer {
 		return
 	}
-	if s.peerOrphans[e.peer]--; s.peerOrphans[e.peer] <= 0 {
+	m := s.peerOrphans[e.peer]
+	delete(m, e.hash)
+	if len(m) == 0 {
 		delete(s.peerOrphans, e.peer)
 	}
 }
@@ -247,15 +256,10 @@ func (s *dsProofStorage) remove(hash chainhash.Hash) bool {
 
 // removePeerOrphans removes the orphans sent by peer and returns how many.
 func (s *dsProofStorage) removePeerOrphans(peer Tag) uint64 {
-	if s.peerOrphans[peer] == 0 {
-		return 0
-	}
 	var n uint64
-	for hash, e := range s.proofs {
-		if e.orphan && e.hasPeer && e.peer == peer {
-			s.remove(hash)
-			n++
-		}
+	for hash := range s.peerOrphans[peer] {
+		s.remove(hash)
+		n++
 	}
 	return n
 }
@@ -316,19 +320,20 @@ func (s *dsProofStorage) limitOrphans(keep chainhash.Hash) {
 }
 
 // expireOrphans removes the orphans older than the orphan TTL and returns the
-// peers that sent them.
+// peers that sent them.  It runs every minute, so it looks at each proof once
+// instead of sorting the orphans.
 func (s *dsProofStorage) expireOrphans() []Tag {
 	expire := s.now().Add(-s.orphanTTL)
 	var peers []Tag
 	removed := 0
-	for _, e := range s.sortedByOrphanTime() {
-		if e.orphaned.After(expire) {
-			break
+	for hash, e := range s.proofs {
+		if !e.orphan || e.orphaned.After(expire) {
+			continue
 		}
 		if e.hasPeer {
 			peers = append(peers, e.peer)
 		}
-		s.remove(e.hash)
+		s.remove(hash)
 		removed++
 	}
 	if removed > 0 {

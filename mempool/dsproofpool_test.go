@@ -373,6 +373,61 @@ func TestDSProofStorageExpiry(t *testing.T) {
 	}
 }
 
+// TestDSProofStorageExpiryNoCopy ensures an expiry that finds no orphan to
+// expire allocates nothing, where it used to copy and sort every orphan under
+// the pool's lock.
+func TestDSProofStorageExpiryNoCopy(t *testing.T) {
+	s := newDSProofStorage()
+	now := time.Unix(2000000, 0)
+	s.now = func() time.Time { return now }
+	for i := range 1000 {
+		p := makeDupeProofs(t, 1, uint64(i+1))[0]
+		s.addOrphan(p, p.ProofHash(), Tag(i%10), true)
+	}
+	if n := testing.AllocsPerRun(10, func() { s.expireOrphans() }); n != 0 {
+		t.Fatalf("expiry with no orphan to expire made %v allocations, want none", n)
+	}
+	if s.numOrphans != 1000 {
+		t.Fatalf("%d orphans left", s.numOrphans)
+	}
+}
+
+// TestDSProofStorageRemovePeerOrphansOnly ensures removing the orphans of a
+// peer reads no other proof, so a disconnect costs the same however many
+// proofs are stored.
+func TestDSProofStorageRemovePeerOrphansOnly(t *testing.T) {
+	s := newDSProofStorage()
+	var mine []chainhash.Hash
+	for i := range 4 {
+		p := makeDupeProofs(t, 1, uint64(i+1))[0]
+		s.addOrphan(p, p.ProofHash(), 1, true)
+		mine = append(mine, p.ProofHash())
+	}
+	other := makeDupeProofs(t, 1, 100)[0]
+	s.addOrphan(other, other.ProofHash(), 2, true)
+
+	// Entries that cannot be read.
+	for i := range 100 {
+		s.proofs[chainhash.Hash{0xff, byte(i)}] = nil
+	}
+	n := s.removePeerOrphans(1)
+	for i := range 100 {
+		delete(s.proofs, chainhash.Hash{0xff, byte(i)})
+	}
+	if n != uint64(len(mine)) {
+		t.Fatalf("removed %d orphans, want %d", n, len(mine))
+	}
+	for _, h := range mine {
+		if s.lookup(h) != nil {
+			t.Fatalf("orphan %v of the peer kept", h)
+		}
+	}
+	if s.lookup(other.ProofHash()) == nil || s.numOrphans != 1 {
+		t.Fatalf("other peer's orphan removed, %d orphans left", s.numOrphans)
+	}
+	checkPeerOrphans(t, s)
+}
+
 // TestDSProofRejected checks the rejected id memory.
 func TestDSProofRejected(t *testing.T) {
 	s := newDSProofStorage()
@@ -942,21 +997,26 @@ func TestDSProofRejectedNotRechecked(t *testing.T) {
 	}
 }
 
-// checkPeerOrphans checks the per peer orphan counts against the entries.
+// checkPeerOrphans checks the orphans of each peer against the entries.
 func checkPeerOrphans(t *testing.T, s *dsProofStorage) {
 	t.Helper()
 	want := make(map[Tag]int)
-	for _, e := range s.proofs {
+	for hash, e := range s.proofs {
 		if e.orphan && e.hasPeer {
 			want[e.peer]++
+			if _, ok := s.peerOrphans[e.peer][hash]; !ok {
+				t.Fatalf("orphan %v not among the orphans of peer %d",
+					hash, e.peer)
+			}
 		}
 	}
 	if len(want) != len(s.peerOrphans) {
-		t.Fatalf("peer orphan counts %v, want %v", s.peerOrphans, want)
+		t.Fatalf("orphans of %d peers, want %v", len(s.peerOrphans), want)
 	}
 	for p, n := range want {
-		if s.peerOrphans[p] != n {
-			t.Fatalf("peer orphan counts %v, want %v", s.peerOrphans, want)
+		if len(s.peerOrphans[p]) != n {
+			t.Fatalf("%d orphans of peer %d, want %d",
+				len(s.peerOrphans[p]), p, n)
 		}
 	}
 }
@@ -1021,7 +1081,7 @@ func TestDSProofStoragePeerShare(t *testing.T) {
 	if !s.addOrphan(p, p.ProofHash(), 2, true) {
 		t.Fatal("orphan refused after expiry")
 	}
-	if s.orphanExisting(proofs[0].ProofHash()); s.peerOrphans[2] != 1 {
+	if s.orphanExisting(proofs[0].ProofHash()); len(s.peerOrphans[2]) != 1 {
 		t.Fatalf("counts %v", s.peerOrphans)
 	}
 	checkPeerOrphans(t, s)
