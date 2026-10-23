@@ -85,8 +85,8 @@ github.com/fsnotify/fsnotify v1.5.4 h1:jRbGcIw6P2Meqdwuo0H1p6JVLbL5DHKAKlYndzMwV
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
 github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6 h1:3pZvWJ8MSfWstGrb8Hfh4ZpLyZNcXypcGx2Ju4ZibVM=
 github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6/go.mod h1:PpfmXTLfjRp7Tf6v/DCGTRXHz+VFbiRcsoUxi7HvwlQ=
-github.com/gcash/bchutil v0.0.0-20261022212038-0a040a5603f6 h1:Ch3IwnT/KKgC+ATN+g8+7+sFM7jxNdnf81WqMpiSnpM=
-github.com/gcash/bchutil v0.0.0-20261022212038-0a040a5603f6/go.mod h1:7mzjNjRv6gwyi5htlWewNe6pUvh32/Daj+T62ur0fFA=
+github.com/gcash/bchutil v0.0.0-20261023042530-83c74af4dbd7 h1:t/uE41HMhgBU1Tcr+enUSNolmkjBVMXEkYTFCMCCrpc=
+github.com/gcash/bchutil v0.0.0-20261023042530-83c74af4dbd7/go.mod h1:7mzjNjRv6gwyi5htlWewNe6pUvh32/Daj+T62ur0fFA=
 github.com/gcash/goleveldb v1.1.0 h1:ea7gh9xqgAD+llDYhP7ep7daQxLMlcr1zaFTENCygxE=
 github.com/gcash/goleveldb v1.1.0/go.mod h1:5iJUbCHZlp/Gm54CgQz0uYPSX5EMGStfnEzxRiQ3l3Y=
 github.com/gcash/goslp v1.0.0 h1:CUaw4OixaLjJGws1x/lW+56d2QwoABlrUhXG7ssadDw=
