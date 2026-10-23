@@ -34,7 +34,7 @@ docker:
 
 
 protoc-go:
-	protoc -I=bchrpc/ bchrpc/bchrpc.proto --go_out=plugins=grpc:bchrpc/pb --go_opt=paths=source_relative
+	bchrpc/regen.sh
 
 protoc-py:
 	# python -m pip install grpcio-tools
