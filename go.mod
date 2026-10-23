@@ -13,7 +13,6 @@ require (
 	github.com/gcash/goleveldb v1.1.0
 	github.com/gcash/goslp v1.0.0
 	github.com/golang/glog v1.2.5
-	github.com/golang/protobuf v1.5.4
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0

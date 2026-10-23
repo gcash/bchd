@@ -71,6 +71,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Get marshaled transactions related to a specific address.\n\nRECOMMENDED:\nParameters have been provided to query without creating\n  performance issues on the node or client.\n\n- The number of transactions to skip and fetch allow for iterating\n      over a large set of transactions, if necessary.\n\n- A starting block parameter (either `hash` or `height`)\n      may then be used to filter results to those occurring\n      after a certain time.\n\nThis approach will reduce network traffic and response processing\n  for the client, as well as reduce workload on the node.",
             "in": "body",
             "required": true,
             "schema": {
@@ -205,6 +206,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Request headers using a list of known block hashes.",
             "in": "body",
             "required": true,
             "schema": {
@@ -505,6 +507,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Get encoded transactions related to a specific address.\n\nRECOMMENDED:\nParameters have been provided to query without creating\n  performance issues on the node or client.\n\n- The number of transactions to skip and fetch allow for iterating\n      over a large set of transactions, if necessary.\n\n- A starting block parameter (either `hash` or `height`)\n      may then be used to filter results to those occurring\n      after a certain time.\n\nThis approach will reduce network traffic and response processing\n  for the client, as well as reduce workload on the node.",
             "in": "body",
             "required": true,
             "schema": {
@@ -572,6 +575,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Get an encoded transaction from a transaction hash.",
             "in": "body",
             "required": true,
             "schema": {
@@ -741,6 +745,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Get a transaction from a transaction hash.",
             "in": "body",
             "required": true,
             "schema": {
@@ -850,6 +855,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "- BlockInfo (block metadata): `BlockInfo`\n     - SubscribeBlocksRequest {}\n\n - Marshaled Block (with transaction hashes): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n       }\n - Marshaled Block (with full transaction data): `Block`\n     - SubscribeBlocksRequest {\n           full_block = true\n           full_transactions = true\n       }\n - Serialized Block acccording to bitcoin protocol encoding: `bytes`\n     - SubscribeBlocksRequest {\n           serialize_block = true\n       }",
             "in": "body",
             "required": true,
             "schema": {
@@ -935,7 +941,7 @@
         "parameters": [
           {
             "name": "body",
-            "description": " (streaming inputs)",
+            "description": "Request to subscribe or unsubscribe from a stream of transactions. (streaming inputs)",
             "in": "body",
             "required": true,
             "schema": {
@@ -979,6 +985,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "Request to subscribe or unsubscribe from a stream of transactions.",
             "in": "body",
             "required": true,
             "schema": {
@@ -1320,6 +1327,7 @@
         "transaction_data": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbBlockTransactionData"
           },
           "description": "List of transactions or transaction hashes."
@@ -1395,6 +1403,7 @@
           "description": "The median block time of the latest 11 block timestamps."
         }
       },
+      "description": "Identification.",
       "title": "Metadata for identifying and validating a block"
     },
     "pbBlockNotification": {
@@ -1475,6 +1484,7 @@
         "required_slp_burns": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbSlpRequiredBurn"
           }
         },
@@ -1574,6 +1584,7 @@
         "confirmed_transactions": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbTransaction"
           },
           "description": "Transactions that have been included in a block."
@@ -1581,6 +1592,7 @@
         "unconfirmed_transactions": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbMempoolTransaction"
           },
           "description": "Transactions in mempool which have not been included in a block."
@@ -1609,6 +1621,7 @@
         "outputs": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbUnspentOutput"
           },
           "description": "List of unspent outputs."
@@ -1616,6 +1629,7 @@
         "token_metadata": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbSlpTokenMetadata"
           }
         }
@@ -1765,7 +1779,7 @@
         },
         "exclude_ancestors": {
           "type": "boolean",
-          "description": "When looking up by transaction_hash, only return a proof for that transaction,\nwithout searching its unconfirmed ancestors. Default is false."
+          "description": "When looking up by transaction_hash, only return a proof for that transaction,\nwithout searching its unconfirmed ancestors. Default is false. The search is\ndepth first, and one past 1000 ancestors fails with ResourceExhausted."
         }
       }
     },
@@ -1781,7 +1795,7 @@
             "type": "string",
             "format": "byte"
           },
-          "description": "When looking up by transaction_hash, the transactions from the one looked up\nto the one the proof is for, little-endian."
+          "description": "When looking up by transaction_hash with the ancestors searched, the\ntransactions from the one looked up to the one the proof is for,\nlittle-endian."
         },
         "descendants": {
           "type": "array",
@@ -1789,7 +1803,7 @@
             "type": "string",
             "format": "byte"
           },
-          "description": "The transaction the proof is for and all its mempool descendants, little-endian.\nEmpty for an orphan proof."
+          "description": "The transaction the proof is for and its mempool descendants, at most the 1000\nnearest, little-endian.\nEmpty for an orphan proof."
         }
       }
     },
@@ -1828,6 +1842,7 @@
         "proofs": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbDoubleSpendProof"
           }
         }
@@ -1858,6 +1873,7 @@
         "headers": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbBlockInfo"
           },
           "description": "List of block headers."
@@ -1897,6 +1913,7 @@
         "transaction_data": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbGetMempoolResponseTransactionData"
           },
           "description": "List of unconfirmed transactions."
@@ -2100,13 +2117,16 @@
           "$ref": "#/definitions/pbSlpTokenType"
         },
         "v1_genesis": {
-          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_mint": {
-          "$ref": "#/definitions/pbSlpV1MintMetadata"
+          "$ref": "#/definitions/pbSlpV1MintMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_send": {
-          "$ref": "#/definitions/pbSlpV1SendMetadata"
+          "$ref": "#/definitions/pbSlpV1SendMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_nft1_child_genesis": {
           "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
@@ -2134,6 +2154,7 @@
         "token_metadata": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbSlpTokenMetadata"
           }
         }
@@ -2145,6 +2166,7 @@
         "queries": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/GetSlpTrustedValidationRequestQuery"
           }
         },
@@ -2159,6 +2181,7 @@
         "results": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/GetSlpTrustedValidationResponseValidityResult"
           }
         }
@@ -2411,13 +2434,16 @@
           }
         },
         "v1_genesis": {
-          "$ref": "#/definitions/pbSlpV1GenesisMetadata"
+          "$ref": "#/definitions/pbSlpV1GenesisMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_mint": {
-          "$ref": "#/definitions/pbSlpV1MintMetadata"
+          "$ref": "#/definitions/pbSlpV1MintMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_send": {
-          "$ref": "#/definitions/pbSlpV1SendMetadata"
+          "$ref": "#/definitions/pbSlpV1SendMetadata",
+          "title": "NFT1 Group also uses this"
         },
         "v1_nft1_child_genesis": {
           "$ref": "#/definitions/pbSlpV1Nft1ChildGenesisMetadata"
@@ -2543,6 +2569,7 @@
         "required_slp_burns": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/pbSlpRequiredBurn"
           }
         }
@@ -2628,6 +2655,7 @@
         "inputs": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/TransactionInput"
           },
           "description": "List of inputs."
@@ -2635,6 +2663,7 @@
         "outputs": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/TransactionOutput"
           },
           "description": "List of outputs."
@@ -2687,6 +2716,7 @@
         "outpoints": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/InputOutpoint"
           },
           "description": "Filter by output hash and index."
@@ -2785,14 +2815,11 @@
     "protobufAny": {
       "type": "object",
       "properties": {
-        "type_url": {
+        "@type": {
           "type": "string"
-        },
-        "value": {
-          "type": "string",
-          "format": "byte"
         }
-      }
+      },
+      "additionalProperties": {}
     },
     "rpcStatus": {
       "type": "object",
@@ -2807,6 +2834,7 @@
         "details": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }
