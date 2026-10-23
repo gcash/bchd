@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -764,6 +765,177 @@ func TestGrpcWebStalledReaderEnds(t *testing.T) {
 	waitForGrpc(t, "the call to end", func() bool {
 		return active.Load() == 0
 	})
+}
+
+// TestGrpcWebCalls ensures that the gRPC-Web wrapper serves calls as a
+// browser makes them, in the binary and the text format: a unary call gets
+// its reply and its status in gRPC-Web frames, a failed call gets its status
+// in the headers, a server stream gets each message as it is sent, every
+// reply carries the CORS headers a browser needs to read it, and a CORS
+// preflight is answered for any origin.
+func TestGrpcWebCalls(t *testing.T) {
+	const origin = "https://wallet.example"
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		// HTTP/1.1, where only the wrapper's flushes get a stream's
+		// messages out as they are sent.
+		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+	}}
+
+	// post sends method an empty request in the given format from origin,
+	// checks the reply's status and headers, and returns its body, as
+	// gRPC-Web frames, and its headers.  The body is closed when the test
+	// ends.
+	post := func(addr, method, contentType string) (io.Reader, http.Header) {
+		t.Helper()
+		var body io.Reader = bytes.NewReader([]byte{0, 0, 0, 0, 0})
+		text := contentType == "application/grpc-web-text"
+		if text {
+			body = strings.NewReader("AAAAAAA=") // the same five bytes
+		}
+		req, err := http.NewRequest("POST", "https://"+addr+"/pb.bchrpc/"+method,
+			body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("X-Grpc-Web", "1")
+		req.Header.Set("Origin", origin)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", method, err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		if resp.StatusCode != http.StatusOK ||
+			resp.Header.Get("Content-Type") != contentType {
+
+			t.Fatalf("%s: status %d, content type %q", method,
+				resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		exposed := strings.ToLower(resp.Header.Get("Access-Control-Expose-Headers"))
+		if resp.Header.Get("Access-Control-Allow-Origin") != origin ||
+			!strings.Contains(exposed, "grpc-status") {
+
+			t.Fatalf("%s: Access-Control-Allow-Origin %q, "+
+				"Access-Control-Expose-Headers %q", method,
+				resp.Header.Get("Access-Control-Allow-Origin"), exposed)
+		}
+		if text {
+			return &grpcWebTextReader{r: resp.Body}, resp.Header
+		}
+		return resp.Body, resp.Header
+	}
+
+	// readFrame reads one gRPC-Web frame: its flags and its payload.
+	readFrame := func(r io.Reader) (byte, []byte) {
+		t.Helper()
+		var header [5]byte
+		if _, err := io.ReadFull(r, header[:]); err != nil {
+			t.Fatalf("frame header: %v", err)
+		}
+		payload := make([]byte, binary.BigEndian.Uint32(header[1:]))
+		if _, err := io.ReadFull(r, payload); err != nil {
+			t.Fatalf("frame payload: %v", err)
+		}
+		return header[0], payload
+	}
+
+	for _, contentType := range []string{"application/grpc-web+proto",
+		"application/grpc-web-text"} {
+
+		// A service and server per format, so that one format's stream
+		// cannot take the other's notifications.
+		svc := &grpcWriteTestService{replySize: 100, notify: make(chan struct{})}
+		addr, _ := startGrpcWriteTest(t, svc, 30*time.Second)
+
+		body, _ := post(addr, "GetRawBlock", contentType)
+		reply := &pb.GetRawBlockResponse{}
+		flags, payload := readFrame(body)
+		if flags != 0 || proto.Unmarshal(payload, reply) != nil ||
+			len(reply.Block) != svc.replySize {
+
+			t.Fatalf("%s: message frame with flags %#x, %d bytes",
+				contentType, flags, len(payload))
+		}
+		flags, payload = readFrame(body)
+		if flags != 0x80 || !strings.Contains(string(payload), "grpc-status: 0") {
+			t.Fatalf("%s: trailer frame with flags %#x: %q", contentType,
+				flags, payload)
+		}
+
+		// grpcWriteTestService doesn't implement GetBlock, so the call
+		// fails before any message, with its status in the headers.
+		if _, header := post(addr, "GetBlock", contentType); header.Get("Grpc-Status") != "12" {
+			t.Fatalf("%s: GetBlock's grpc-status %q, want 12 (Unimplemented)",
+				contentType, header.Get("Grpc-Status"))
+		}
+
+		// The first notification arrives before the service sends the
+		// second, so the stream is flushed message by message.
+		body, _ = post(addr, "SubscribeBlocks", contentType)
+		for i := 0; i < 2; i++ {
+			flags, payload := readFrame(body)
+			notification := &pb.BlockNotification{}
+			if flags != 0 || proto.Unmarshal(payload, notification) != nil ||
+				len(notification.GetSerializedBlock()) != svc.replySize {
+
+				t.Fatalf("%s: notification %d: frame with flags %#x, "+
+					"%d bytes", contentType, i, flags, len(payload))
+			}
+			if i == 0 {
+				svc.notify <- struct{}{}
+			}
+		}
+
+		// A browser's CORS preflight is answered for any origin, and lets
+		// the call send the gRPC-Web headers.
+		req, err := http.NewRequest("OPTIONS",
+			"https://"+addr+"/pb.bchrpc/GetRawBlock", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "content-type,x-grpc-web")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		allowed := strings.ToLower(resp.Header.Get("Access-Control-Allow-Headers"))
+		if resp.Header.Get("Access-Control-Allow-Origin") != origin ||
+			!strings.Contains(allowed, "x-grpc-web") {
+
+			t.Fatalf("preflight: status %d, Access-Control-Allow-Origin %q, "+
+				"Access-Control-Allow-Headers %q", resp.StatusCode,
+				resp.Header.Get("Access-Control-Allow-Origin"), allowed)
+		}
+	}
+}
+
+// grpcWebTextReader decodes a gRPC-Web text reply as it arrives.  The text
+// format may send one padded base64 part per flush, so it decodes a
+// 4-character group at a time.
+type grpcWebTextReader struct {
+	r   io.Reader
+	buf []byte
+}
+
+func (g *grpcWebTextReader) Read(p []byte) (int, error) {
+	for len(g.buf) == 0 {
+		var group [4]byte
+		if _, err := io.ReadFull(g.r, group[:]); err != nil {
+			return 0, err
+		}
+		raw, err := base64.StdEncoding.DecodeString(string(group[:]))
+		if err != nil {
+			return 0, err
+		}
+		g.buf = raw
+	}
+	n := copy(p, g.buf)
+	g.buf = g.buf[n:]
+	return n, nil
 }
 
 // grpcLimitTestService serves a unary method X, which answers with a block of

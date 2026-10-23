@@ -14,9 +14,9 @@ import (
 
 	"github.com/gcash/bchd/bchrpc"
 	"github.com/gorilla/mux"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/traefik/grpc-web/go/grpcweb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
