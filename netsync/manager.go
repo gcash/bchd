@@ -124,6 +124,12 @@ type getSyncPeerMsg struct {
 	reply chan int32
 }
 
+// getSyncHeightMsg is a message type to be sent across the message channel
+// for retrieving the height of the latest block known of the sync peer.
+type getSyncHeightMsg struct {
+	reply chan uint64
+}
+
 // processBlockResponse is a response sent to the reply channel of a
 // processBlockMsg.
 type processBlockResponse struct {
@@ -476,8 +482,9 @@ func (sm *SyncManager) startSync() {
 	}
 }
 
-// SyncHeight returns latest known block being synced to.
-func (sm *SyncManager) SyncHeight() uint64 {
+// syncHeight returns latest known block being synced to, or 0 without a sync
+// peer.  It must be called from the block handler, which owns the sync peer.
+func (sm *SyncManager) syncHeight() uint64 {
 	if sm.syncPeer == nil {
 		return 0
 	}
@@ -1008,7 +1015,7 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 
 		// When the block is not an orphan, log information about it and
 		// update the chain state.
-		sm.progressLogger.LogBlockHeight(bmsg.block, sm.SyncHeight(), sm.chain)
+		sm.progressLogger.LogBlockHeight(bmsg.block, sm.syncHeight(), sm.chain)
 
 		// Update this peer's latest block height, for future
 		// potential sync node candidacy.
@@ -1700,6 +1707,9 @@ out:
 				}
 				msg.reply <- peerID
 
+			case getSyncHeightMsg:
+				msg.reply <- sm.syncHeight()
+
 			case processBlockMsg:
 				_, isOrphan, err := sm.chain.ProcessBlock(
 					msg.block, msg.flags)
@@ -2063,6 +2073,26 @@ func (sm *SyncManager) SyncPeerID() int32 {
 	reply := make(chan int32)
 	sm.msgChan <- getSyncPeerMsg{reply: reply}
 	return <-reply
+}
+
+// SyncHeight returns latest known block being synced to, or 0 if there is no
+// sync peer or the sync manager has stopped.  The block handler answers it, as
+// the sync peer is its own.
+func (sm *SyncManager) SyncHeight() uint64 {
+	// Buffered, so the block handler cannot block on the reply when this
+	// gives up as the sync manager stops.
+	reply := make(chan uint64, 1)
+	select {
+	case sm.msgChan <- getSyncHeightMsg{reply: reply}:
+	case <-sm.quit:
+		return 0
+	}
+	select {
+	case height := <-reply:
+		return height
+	case <-sm.quit:
+		return 0
+	}
 }
 
 // ProcessBlock makes use of ProcessBlock on an internal instance of a block

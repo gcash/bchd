@@ -122,7 +122,7 @@ func TestProgressAtOrphanTip(t *testing.T) {
 	h.due()
 	h.send(2)
 	h.send(5)
-	if got := h.sm.SyncHeight(); got != 5 {
+	if got := h.sm.syncHeight(); got != 5 {
 		t.Fatalf("sync height %d after the orphan, want 5", got)
 	}
 	h.hold()

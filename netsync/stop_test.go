@@ -29,10 +29,10 @@ func returnsWithin(t *testing.T, what string, fn func()) {
 	}
 }
 
-// TestCallsAfterStop ensures IsCurrent and NewPeer return once the sync
-// manager has stopped, rather than wait for the block handler that is gone.
-// The server makes these calls from goroutines that may outlive the sync
-// manager.
+// TestCallsAfterStop ensures IsCurrent, SyncHeight and NewPeer return once the
+// sync manager has stopped, rather than wait for the block handler that is
+// gone.  The server and the RPC server make these calls from goroutines that
+// may outlive the sync manager.
 func TestCallsAfterStop(t *testing.T) {
 	h := newRequestTestHarness(t)
 	p := h.peer(1)
@@ -46,13 +46,19 @@ func TestCallsAfterStop(t *testing.T) {
 			t.Error("stopped sync manager is current")
 		}
 	})
+	returnsWithin(t, "SyncHeight", func() {
+		if height := h.sm.SyncHeight(); height != 0 {
+			t.Errorf("stopped sync manager has sync height %d", height)
+		}
+	})
 	returnsWithin(t, "NewPeer", func() { h.sm.NewPeer(p, nil) })
 	returnsWithin(t, "DonePeer", func() { h.sm.DonePeer(p, nil) })
 }
 
-// TestCallsGiveUpOnStop ensures IsCurrent and NewPeer stop waiting for the
-// block handler to take their message when the sync manager stops, and that
-// the block handler can still answer an IsCurrent that gave up.
+// TestCallsGiveUpOnStop ensures IsCurrent, SyncHeight and NewPeer stop
+// waiting for the block handler to take their message when the sync manager
+// stops, and that the block handler can still answer an IsCurrent or a
+// SyncHeight that gave up.
 func TestCallsGiveUpOnStop(t *testing.T) {
 	h := newRequestTestHarness(t)
 	p := h.peer(1)
@@ -62,6 +68,8 @@ func TestCallsGiveUpOnStop(t *testing.T) {
 		quit: make(chan struct{})}
 	current := make(chan bool, 1)
 	go func() { current <- sm.IsCurrent() }()
+	height := make(chan uint64, 1)
+	go func() { height <- sm.SyncHeight() }()
 	added := make(chan struct{})
 	go func() {
 		sm.NewPeer(p, nil)
@@ -74,6 +82,11 @@ func TestCallsGiveUpOnStop(t *testing.T) {
 			t.Error("stopping sync manager is current")
 		}
 	})
+	returnsWithin(t, "SyncHeight", func() {
+		if got := <-height; got != 0 {
+			t.Errorf("stopping sync manager has sync height %d", got)
+		}
+	})
 	returnsWithin(t, "NewPeer", func() { <-added })
 
 	// The block handler takes the message, but the sync manager stops
@@ -82,10 +95,20 @@ func TestCallsGiveUpOnStop(t *testing.T) {
 		quit: make(chan struct{})}
 	go func() { current <- sm.IsCurrent() }()
 	msg := (<-sm.msgChan).(isCurrentMsg)
+	go func() { height <- sm.SyncHeight() }()
+	heightMsg := (<-sm.msgChan).(getSyncHeightMsg)
 	close(sm.quit)
 	returnsWithin(t, "IsCurrent", func() { <-current })
+	returnsWithin(t, "SyncHeight", func() {
+		if got := <-height; got != 0 {
+			t.Errorf("stopping sync manager has sync height %d", got)
+		}
+	})
 	returnsWithin(t, "the answer to an IsCurrent that gave up", func() {
 		msg.reply <- true
+	})
+	returnsWithin(t, "the answer to a SyncHeight that gave up", func() {
+		heightMsg.reply <- 5
 	})
 }
 

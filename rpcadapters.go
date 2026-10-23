@@ -287,6 +287,9 @@ func (b *rpcSyncMgr) LocateHeaders(locators []*chainhash.Hash, hashStop *chainha
 }
 
 // SyncHeight returns the block height of the best peer selected to sync from
+//
+// This function is safe for concurrent access and is part of the
+// rpcserverSyncManager interface implementation.
 func (b *rpcSyncMgr) SyncHeight() uint64 {
 	return b.syncMgr.SyncHeight()
 }
