@@ -253,12 +253,76 @@ func (c *Client) CreateRawTransactionAsync(inputs []btcjson.TransactionInput,
 
 // CreateRawTransaction returns a new transaction spending the provided inputs
 // and sending to the provided addresses. If the inputs are either nil or an
-// empty slice, it is interpreted as an empty slice.
+// empty slice, it is interpreted as an empty slice.  The amounts are sent as a
+// JSON object, whose keys are sorted, so the outputs are made in the order of
+// the addresses' strings; CreateRawTransactionOrdered makes them in the order
+// given.
 func (c *Client) CreateRawTransaction(inputs []btcjson.TransactionInput,
 	amounts map[bchutil.Address]bchutil.Amount, cashTokens *[]btcjson.TransactionOutputCashToken,
 	lockTime *int64) (*wire.MsgTx, error) {
 
 	return c.CreateRawTransactionAsync(inputs, amounts, cashTokens, lockTime).Receive()
+}
+
+// CreateRawTransactionOutput is an output of a transaction made by
+// CreateRawTransactionOrdered: Amount paid to Address.
+type CreateRawTransactionOutput struct {
+	Address bchutil.Address
+	Amount  bchutil.Amount
+}
+
+// CreateRawTransactionOrderedAsync returns an instance of a type that can be
+// used to get the result of the RPC at some future time by invoking the
+// Receive function on the returned instance.
+//
+// See CreateRawTransactionOrdered for the blocking version and more details.
+func (c *Client) CreateRawTransactionOrderedAsync(inputs []btcjson.TransactionInput,
+	outputs []CreateRawTransactionOutput, cashTokens *[]btcjson.TransactionOutputCashToken,
+	lockTime *int64) FutureCreateRawTransactionResult {
+
+	// The outputs are sent as an array of objects of one address and
+	// amount each, BCHN's form, which keeps their order.  Without
+	// cashtokens, a locktime is the third param, as BCHN takes it.
+	if inputs == nil {
+		inputs = []btcjson.TransactionInput{}
+	}
+	pairs := make([]map[string]float64, 0, len(outputs))
+	for _, output := range outputs {
+		pairs = append(pairs, map[string]float64{
+			output.Address.String(): output.Amount.ToBCH(),
+		})
+	}
+	params := []interface{}{inputs, pairs}
+	if cashTokens != nil {
+		params = append(params, *cashTokens)
+	}
+	if lockTime != nil {
+		params = append(params, *lockTime)
+	}
+
+	rawParams := make([]json.RawMessage, 0, len(params))
+	for _, param := range params {
+		marshalled, err := json.Marshal(param)
+		if err != nil {
+			return newFutureError(err)
+		}
+		rawParams = append(rawParams, marshalled)
+	}
+	return FutureCreateRawTransactionResult(c.RawRequestAsync(
+		"createrawtransaction", rawParams))
+}
+
+// CreateRawTransactionOrdered returns a new transaction spending the provided
+// inputs and making the provided outputs, in the order given.  If the inputs
+// are either nil or an empty slice, it is interpreted as an empty slice.  The
+// server must take the outputs as an array, as bchd does since 0.22.3 and BCHN
+// does.
+func (c *Client) CreateRawTransactionOrdered(inputs []btcjson.TransactionInput,
+	outputs []CreateRawTransactionOutput, cashTokens *[]btcjson.TransactionOutputCashToken,
+	lockTime *int64) (*wire.MsgTx, error) {
+
+	return c.CreateRawTransactionOrderedAsync(inputs, outputs, cashTokens,
+		lockTime).Receive()
 }
 
 // FutureSendRawTransactionResult is a future promise to deliver the result

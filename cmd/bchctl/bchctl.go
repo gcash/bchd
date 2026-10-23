@@ -46,6 +46,41 @@ func usage(errorMessage string) {
 	fmt.Fprintln(os.Stderr, listCmdMessage)
 }
 
+// marshalRequest returns the JSON-RPC request for method with the params given
+// on the command line, which are decoded into its btcjson command.  Those of
+// createrawtransaction are sent as the JSON given, as the server decodes them
+// itself and takes forms its command cannot hold: BCHN's outputs as an array,
+// data outputs, outputs with token data and the locktime as the third param.
+// Sent as given, the outputs also keep their order.
+func marshalRequest(method string, params []interface{}) ([]byte, error) {
+	if method != "createrawtransaction" {
+		cmd, err := btcjson.NewCmd(method, params...)
+		if err != nil {
+			return nil, err
+		}
+		return btcjson.MarshalCmd("1.0", 1, cmd)
+	}
+
+	rawParams := make([]json.RawMessage, 0, len(params))
+	for i, param := range params {
+		str, _ := param.(string)
+		if !json.Valid([]byte(str)) {
+			return nil, btcjson.Error{
+				ErrorCode: btcjson.ErrInvalidType,
+				Description: fmt.Sprintf("parameter #%d must be "+
+					"valid JSON", i+1),
+			}
+		}
+		rawParams = append(rawParams, json.RawMessage(str))
+	}
+	return json.Marshal(&btcjson.Request{
+		Jsonrpc: "1.0",
+		Method:  method,
+		Params:  rawParams,
+		ID:      1,
+	})
+}
+
 func main() {
 	cfg, args, err := loadConfig()
 	if err != nil {
@@ -103,8 +138,9 @@ func main() {
 	}
 
 	// Attempt to create the appropriate command using the arguments
-	// provided by the user.
-	cmd, err := btcjson.NewCmd(method, params...)
+	// provided by the user, and marshal it into a JSON-RPC byte slice in
+	// preparation for sending it to the RPC server.
+	marshalledJSON, err := marshalRequest(method, params)
 	if err != nil {
 		// Show the error along with its error code when it's a
 		// btcjson.Error as it realistically will always be since the
@@ -122,14 +158,6 @@ func main() {
 		// if it should happen due to a bug in the package.
 		fmt.Fprintf(os.Stderr, "%s command: %v\n", method, err)
 		commandUsage(method)
-		os.Exit(1)
-	}
-
-	// Marshal the command into a JSON-RPC byte slice in preparation for
-	// sending it to the RPC server.
-	marshalledJSON, err := btcjson.MarshalCmd("1.0", 1, cmd)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 

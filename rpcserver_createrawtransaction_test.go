@@ -14,6 +14,7 @@ import (
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/rpcclient"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -1201,6 +1202,94 @@ func TestCreateRawTransactionInputErrors(t *testing.T) {
 		mtx.TxIn[0].PreviousOutPoint.Index != 0 {
 
 		t.Errorf("vout 0: got %v, err %v", mtx, err)
+	}
+}
+
+// TestCreateRawTransactionRPCClientOrdered ensures the server makes the
+// outputs of rpcclient's CreateRawTransactionOrdered in the order given, with
+// its locktime and cashtokens, in each of the forms it sends them.
+func TestCreateRawTransactionRPCClientOrdered(t *testing.T) {
+	_, addr := startTestRPCServer(t, func(s *rpcServer) {
+		s.cfg.ChainParams = &chaincfg.MainNetParams
+	})
+	client, err := rpcclient.New(&rpcclient.ConnConfig{
+		Host:         addr,
+		User:         "admin",
+		Pass:         "adminpass",
+		HTTPPostMode: true,
+		DisableTLS:   true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Shutdown()
+
+	// The addresses are not in the order of their strings.
+	var outputs []rpcclient.CreateRawTransactionOutput
+	var scripts [][]byte
+	for i, fill := range []byte{0x91, 0x37, 0x05} {
+		decoded, err := bchutil.DecodeAddress(createRawTxTestAddr(t, fill),
+			&chaincfg.MainNetParams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script, err := txscript.PayToAddrScript(decoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		outputs = append(outputs, rpcclient.CreateRawTransactionOutput{
+			Address: decoded,
+			Amount:  bchutil.Amount(i+1) * 10000,
+		})
+		scripts = append(scripts, script)
+	}
+	inputs := []btcjson.TransactionInput{{Txid: testTokenCategory, Vout: 3}}
+	tokens := []btcjson.TransactionOutputCashToken{{
+		Address:  outputs[1].Address.String(),
+		Category: testTokenCategory,
+		Amount:   5,
+	}}
+	lockTime := int64(500000)
+
+	for _, test := range []struct {
+		name     string
+		tokens   *[]btcjson.TransactionOutputCashToken
+		lockTime *int64
+	}{
+		{"outputs", nil, nil},
+		{"locktime", nil, &lockTime},
+		{"cashtokens", &tokens, nil},
+		{"cashtokens and locktime", &tokens, &lockTime},
+	} {
+		mtx, err := client.CreateRawTransactionOrdered(inputs, outputs,
+			test.tokens, test.lockTime)
+		if err != nil {
+			t.Errorf("%s: %v", test.name, err)
+			continue
+		}
+		var wantLockTime uint32
+		if test.lockTime != nil {
+			wantLockTime = uint32(*test.lockTime)
+		}
+		if mtx.LockTime != wantLockTime || len(mtx.TxOut) != len(outputs) {
+			t.Errorf("%s: locktime %d and %d outputs, want %d and %d",
+				test.name, mtx.LockTime, len(mtx.TxOut), wantLockTime,
+				len(outputs))
+			continue
+		}
+		for i, txOut := range mtx.TxOut {
+			wantToken := test.tokens != nil && i == 1
+			if !bytes.Equal(txOut.PkScript, scripts[i]) ||
+				txOut.Value != int64(outputs[i].Amount) ||
+				txOut.TokenData.IsEmpty() == wantToken {
+
+				t.Errorf("%s: output %d pays %d to %x with token %v, "+
+					"want %d to %x with token %v", test.name, i,
+					txOut.Value, txOut.PkScript,
+					!txOut.TokenData.IsEmpty(), outputs[i].Amount,
+					scripts[i], wantToken)
+			}
+		}
 	}
 }
 
