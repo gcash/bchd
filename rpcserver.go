@@ -811,10 +811,54 @@ func parseCreateRawTransaction(params []json.RawMessage) (*createRawTxRequest, *
 			len(params))
 	}
 
-	var req createRawTxRequest
-	if err := json.Unmarshal(params[0], &req.inputs); err != nil {
+	// As in BCHN, the inputs and the outputs must be given.
+	if firstJSONByte(params[0]) == 'n' || firstJSONByte(params[1]) == 'n' {
+		return nil, rpcInvalidError("Invalid parameter, arguments 1 " +
+			"and 2 must be non-null")
+	}
+
+	// As in BCHN, each input must give its txid in full and its vout, and
+	// its sequence counts only when it is a number.  Decoded, a missing
+	// vout would be output 0, and a txid short or missing would be padded
+	// with zeros.
+	var inputs []struct {
+		Txid     string          `json:"txid"`
+		Vout     *uint32         `json:"vout"`
+		Sequence json.RawMessage `json:"sequence"`
+	}
+	if err := json.Unmarshal(params[0], &inputs); err != nil {
 		return nil, createRawTxParamError(1, "inputs", err)
 	}
+	var req createRawTxRequest
+	for _, input := range inputs {
+		if len(input.Txid) != chainhash.MaxHashStringSize {
+			return nil, rpcInvalidError("txid must be of length %d "+
+				"(not %d, for '%s')", chainhash.MaxHashStringSize,
+				len(input.Txid), input.Txid)
+		}
+		if input.Vout == nil {
+			return nil, rpcInvalidError("Invalid parameter, missing " +
+				"vout key")
+		}
+		txIn := btcjson.TransactionInput{Txid: input.Txid, Vout: *input.Vout}
+		if strings.IndexByte("-0123456789",
+			firstJSONByte(input.Sequence)) >= 0 {
+
+			var sequence int64
+			err := json.Unmarshal(input.Sequence, &sequence)
+			if err != nil {
+				return nil, createRawTxParamError(1, "inputs", err)
+			}
+			if sequence < 0 || sequence > math.MaxUint32 {
+				return nil, rpcInvalidError("Invalid parameter, " +
+					"sequence number is out of range")
+			}
+			seq := uint32(sequence)
+			txIn.Sequence = &seq
+		}
+		req.inputs = append(req.inputs, txIn)
+	}
+
 	outputs, rpcErr := parseCreateRawTxOutputs(params[1])
 	if rpcErr != nil {
 		return nil, rpcErr
@@ -846,12 +890,10 @@ func parseCreateRawTransaction(params []json.RawMessage) (*createRawTxRequest, *
 }
 
 // parseCreateRawTxOutputs decodes the outputs param of createrawtransaction:
-// an object of outputs, or an array of objects of one output each.  Null is
-// no outputs, as bchd has taken it.
+// an object of outputs, or an array of objects of one output each.
 func parseCreateRawTxOutputs(raw json.RawMessage) ([]createRawTxOutput, *btcjson.RPCError) {
 	var members []jsonMember
 	switch firstJSONByte(raw) {
-	case 'n':
 	case '{':
 		var err error
 		members, err = jsonObjectMembers(raw)

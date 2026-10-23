@@ -891,10 +891,14 @@ func TestCreateRawTransactionBCHNForms(t *testing.T) {
 			return mtx.TxOut[0].Value == 10000
 		},
 	}, {
-		name:     "null outputs",
-		params:   "[" + createRawTxTestInput("") + ",null]",
+		// As in BCHN, a sequence that is not a number is ignored.
+		name:     "sequence as a string",
+		params:   "[" + createRawTxTestInput(`,"sequence":"7"`) + "," + output + "]",
 		sequence: wire.MaxTxInSequenceNum,
-		check:    func(mtx *wire.MsgTx) bool { return len(mtx.TxOut) == 0 },
+	}, {
+		name:     "null sequence",
+		params:   "[" + createRawTxTestInput(`,"sequence":null`) + "," + output + "]",
+		sequence: wire.MaxTxInSequenceNum,
 	}, {
 		name: "output object without token data",
 		params: "[" + createRawTxTestInput("") + `,{"` + addr +
@@ -1129,6 +1133,74 @@ func TestCreateRawTransactionBCHNFormErrors(t *testing.T) {
 			t.Errorf("%s: got error %d %q, want %d %q", test.name,
 				rpcErr.Code, rpcErr.Message, test.wantCode, test.wantMsg)
 		}
+	}
+}
+
+// TestCreateRawTransactionInputErrors ensures createrawtransaction refuses an
+// input that does not give its vout or its txid in full, or a sequence out of
+// range, and null inputs or outputs, with BCHN's messages, rather than
+// spending output 0 or a hash padded with zeros, or making no inputs or
+// outputs.
+func TestCreateRawTransactionInputErrors(t *testing.T) {
+	output := `{"` + createRawTxTestAddr(t, 0x0d) + `":0.1}`
+	txid := `"txid":"` + testTokenCategory + `"`
+	missingVout := "Invalid parameter, missing vout key"
+	nonNull := "Invalid parameter, arguments 1 and 2 must be non-null"
+	sequenceRange := "Invalid parameter, sequence number is out of range"
+
+	tests := []struct {
+		name    string
+		inputs  string
+		wantMsg string
+	}{
+		{"inputs null", `null`, nonNull},
+		{"sequence negative", `[{` + txid + `,"vout":1,"sequence":-1}]`,
+			sequenceRange},
+		{"sequence over 32 bits", `[{` + txid +
+			`,"vout":1,"sequence":4294967296}]`, sequenceRange},
+		{"vout missing", `[{` + txid + `}]`, missingVout},
+		{"vout null", `[{` + txid + `,"vout":null}]`, missingVout},
+		{"vout missing from the second input", `[{` + txid + `,"vout":1},{` +
+			txid + `,"sequence":5}]`, missingVout},
+		{"txid missing", `[{"vout":1}]`,
+			"txid must be of length 64 (not 0, for '')"},
+		{"txid null", `[{"txid":null,"vout":1}]`,
+			"txid must be of length 64 (not 0, for '')"},
+		{"txid short", `[{"txid":"abc","vout":1}]`,
+			"txid must be of length 64 (not 3, for 'abc')"},
+		{"txid long", `[{"txid":"0` + testTokenCategory + `","vout":1}]`,
+			"txid must be of length 64 (not 65, for '0" +
+				testTokenCategory + "')"},
+		{"input null", `[null]`,
+			"txid must be of length 64 (not 0, for '')"},
+	}
+	for _, test := range tests {
+		_, err := runCreateRawTxParams(t, "["+test.inputs+","+output+"]")
+		rpcErr, ok := err.(*btcjson.RPCError)
+		if !ok || rpcErr.Code != btcjson.ErrRPCInvalidParameter ||
+			rpcErr.Message != test.wantMsg {
+
+			t.Errorf("%s: got error %v, want %d %q", test.name, err,
+				btcjson.ErrRPCInvalidParameter, test.wantMsg)
+		}
+	}
+
+	// Null outputs are refused too.
+	_, err := runCreateRawTxParams(t, `[[{`+txid+`,"vout":1}],null]`)
+	rpcErr, ok := err.(*btcjson.RPCError)
+	if !ok || rpcErr.Code != btcjson.ErrRPCInvalidParameter ||
+		rpcErr.Message != nonNull {
+
+		t.Errorf("outputs null: got error %v, want %d %q", err,
+			btcjson.ErrRPCInvalidParameter, nonNull)
+	}
+
+	// A vout of 0 given is used.
+	mtx, err := runCreateRawTxParams(t, `[[{`+txid+`,"vout":0}],`+output+`]`)
+	if err != nil || len(mtx.TxIn) != 1 ||
+		mtx.TxIn[0].PreviousOutPoint.Index != 0 {
+
+		t.Errorf("vout 0: got %v, err %v", mtx, err)
 	}
 }
 
