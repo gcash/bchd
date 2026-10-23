@@ -2195,13 +2195,29 @@ out:
 	s.wg.Done()
 }
 
+// maxDSProofExpiryScore is the most one expiry of orphan double spend proofs
+// adds to the ban score of a peer.  As the score halves every minute and the
+// expiry runs once a minute, expired orphans alone keep a peer's score below
+// twice this, half the default ban threshold.
+const maxDSProofExpiryScore = defaultBanThreshold / 4
+
 // expireDSProofOrphansOnce expires orphan double spend proofs with expire and
-// increases the ban score of the peers that sent them by one per orphan.  The
-// score decays, as an honest peer's proofs can expire here when this node's
-// policy is stricter than the peer's.
+// increases the ban score of the peers that sent them by one per orphan, and
+// by at most maxDSProofExpiryScore per peer.  The score decays and is bounded,
+// as an honest peer's proofs can expire here when this node's policy is
+// stricter than the peer's, as many at once as the sender of the double
+// spends likes.
 func (s *server) expireDSProofOrphansOnce(expire func() []mempool.Tag) {
-	if peers := expire(); len(peers) > 0 {
-		s.addDSProofBanScore(peers, 0, 1, "dsproof-orphan-expired")
+	counts := make(map[mempool.Tag]int)
+	var blamed []mempool.Tag
+	for _, id := range expire() {
+		if counts[id] < maxDSProofExpiryScore {
+			counts[id]++
+			blamed = append(blamed, id)
+		}
+	}
+	if len(blamed) > 0 {
+		s.addDSProofBanScore(blamed, 0, 1, "dsproof-orphan-expired")
 	}
 }
 

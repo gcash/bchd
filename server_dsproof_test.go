@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -348,6 +349,35 @@ func TestExpireDSProofOrphansOnce(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if score := sp.banScore.String(); !strings.HasPrefix(score, want) {
 		t.Fatalf("ban score %v", score)
+	}
+}
+
+// TestExpireDSProofOrphansBurst ensures one expiry raises the decaying ban
+// score of a peer by at most a quarter of the default ban threshold, however
+// many of its orphans expire, so a burst of them does not ban it.
+func TestExpireDSProofOrphansBurst(t *testing.T) {
+	sp, _ := newDSProofServerPeer(t)
+	s := sp.server
+	s.banPeers = make(chan *serverPeer, 1)
+	servePeers(t, s, sp)
+	id := mempool.Tag(sp.ID())
+	peers := []mempool.Tag{id + 1}
+	for range 2 * defaultBanThreshold {
+		peers = append(peers, id)
+	}
+	s.expireDSProofOrphansOnce(func() []mempool.Tag { return peers })
+	want := fmt.Sprintf("persistent 0 + transient %d at ", defaultBanThreshold/4)
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.HasPrefix(sp.banScore.String(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("ban score %v, want %s...", sp.banScore.String(), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case <-s.banPeers:
+		t.Fatal("peer banned")
+	default:
 	}
 }
 
