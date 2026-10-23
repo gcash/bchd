@@ -5,6 +5,7 @@
 package ffldb
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -129,6 +130,55 @@ func TestFetchBlockRegionCorruptLocation(t *testing.T) {
 		_, err = tx.FetchBlockRegions([]database.BlockRegion{region})
 		checkDbError(t, "FetchBlockRegions", err,
 			database.ErrBlockRegionInvalid)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestStoreBlockOwnSerialization ensures a block whose bytes hold more than its
+// serialization, as a block message whose payload has data after the last
+// transaction, is stored as its own serialization, as Bitcoin Cash Node writes
+// each block to disk (node/blockstorage.cpp:345-368), so that its stored size
+// is its serialized size, while it is pending too.
+func TestStoreBlockOwnSerialization(t *testing.T) {
+	pdb := createPruneTestDB(t, filepath.Join(t.TempDir(), "db"))
+	defer pdb.Close()
+	block := pruneTestBlock(1, 1)
+	want, err := block.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	padded := bchutil.NewBlockFromBlockAndBytes(block.MsgBlock(),
+		append(bytes.Clone(want), 1, 2, 3, 4, 5))
+	padded.SetHeight(block.Height())
+
+	check := func(desc string, tx database.Tx) {
+		t.Helper()
+		got, err := tx.FetchBlock(block.Hash())
+		if err != nil || !bytes.Equal(got, want) {
+			t.Errorf("%s: FetchBlock gave %d bytes, %v, want the %d-byte "+
+				"serialization", desc, len(got), err, len(want))
+		}
+		size, err := tx.FetchBlockSize(block.Hash())
+		if err != nil || size != uint32(len(want)) {
+			t.Errorf("%s: FetchBlockSize %d, %v, want %d", desc, size,
+				err, len(want))
+		}
+	}
+	err = pdb.Update(func(tx database.Tx) error {
+		if err := tx.StoreBlock(padded); err != nil {
+			return err
+		}
+		check("pending block", tx)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pdb.View(func(tx database.Tx) error {
+		check("stored block", tx)
 		return nil
 	})
 	if err != nil {

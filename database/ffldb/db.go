@@ -1185,6 +1185,24 @@ func (tx *transaction) StoreBlock(block *bchutil.Block) error {
 		return makeDbErr(database.ErrDriverSpecific, str, err)
 	}
 
+	// Store the block as its own serialization, as Bitcoin Cash Node
+	// writes each block to disk (node/blockstorage.cpp:345-368, 593-595),
+	// so the stored length is the block's size.  The bytes a block was
+	// made from can hold more, as a block message's payload with data
+	// after the last transaction does.  Blocks decode only from their
+	// canonical encoding, so bytes a block was decoded from that have its
+	// serialized size are its serialization.
+	msgBlock := block.MsgBlock()
+	if size := msgBlock.SerializeSize(); len(blockBytes) != size {
+		w := bytes.NewBuffer(make([]byte, 0, size))
+		if err := msgBlock.Serialize(w); err != nil {
+			str := fmt.Sprintf("failed to serialize block %s",
+				blockHash)
+			return makeDbErr(database.ErrDriverSpecific, str, err)
+		}
+		blockBytes = w.Bytes()
+	}
+
 	blockHeight := block.Height()
 
 	// Add the block to be stored to the list of pending blocks to store

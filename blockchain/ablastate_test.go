@@ -1007,3 +1007,139 @@ func TestMaxBlockSizeLookAheadHeights(t *testing.T) {
 		}
 	}
 }
+
+// paddedBlock returns block with bytes that hold extra data after its last
+// transaction, as the payload of a block message can.  The block, and so its
+// hash, is unchanged.
+func paddedBlock(t *testing.T, block *bchutil.Block, pad int) *bchutil.Block {
+	t.Helper()
+	serialized, err := block.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	padded := append(bytes.Clone(serialized), make([]byte, pad)...)
+	return bchutil.NewBlockFromBlockAndBytes(block.MsgBlock(), padded)
+}
+
+// checkStoredSerialization ensures the database holds block as its own
+// serialization and gives its serialized size as its size.
+func checkStoredSerialization(t *testing.T, db database.DB, block *bchutil.Block) {
+	t.Helper()
+	var want bytes.Buffer
+	if err := block.MsgBlock().Serialize(&want); err != nil {
+		t.Fatal(err)
+	}
+	err := db.View(func(dbTx database.Tx) error {
+		got, err := dbTx.FetchBlock(block.Hash())
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(got, want.Bytes()) {
+			t.Errorf("block %v stored as %d bytes, want its %d-byte "+
+				"serialization", block.Hash(), len(got), want.Len())
+		}
+		size, err := dbTx.FetchBlockSize(block.Hash())
+		if err != nil {
+			return err
+		}
+		if int(size) != want.Len() {
+			t.Errorf("block %v has a stored size of %d bytes, want %d",
+				block.Hash(), size, want.Len())
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestABLAPaddedSideChainBlock ensures a side chain block given with data
+// after its last transaction, as a block message can carry, is stored as its
+// own serialization, so the ABLA state after it, which the side chain replay
+// takes from the stored size, follows the block's serialized size, as Bitcoin
+// Cash Node's does (validation.cpp:1602-1614).
+func TestABLAPaddedSideChainBlock(t *testing.T) {
+	params := ablaTestParams()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 3, 2000)
+
+	// The side chain forks after block 1 with a small block whose bytes
+	// are padded to the 1 MB limit, a size that would grow the state.
+	side := ablaTestBlock(t, blocks[0].MsgBlock(), 2, 2001, params)
+	if _, _, err := chain.ProcessBlock(paddedBlock(t, side, 1000000-2001),
+		BFNone); err != nil {
+
+		t.Fatalf("side block: %v", err)
+	}
+	checkStoredSerialization(t, db, side)
+	got, err := chain.ablaStateAfter(chain.index.LookupNode(side.Hash()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ablaExpectedState(chain, []*bchutil.Block{blocks[0], side})
+	if got != want {
+		t.Fatalf("ABLA state after the padded side block %+v, want %+v",
+			got, want)
+	}
+}
+
+// TestABLAPaddedBlockRebuild ensures a main chain block given with data after
+// its last transaction is stored as its own serialization, so the rebuild of
+// the stored ABLA states, which takes each block's size from where it is
+// stored, gives the states that follow the serialized sizes.
+func TestABLAPaddedBlockRebuild(t *testing.T) {
+	params := ablaTestParams()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	chain := ablaTestChain(t, db, params)
+	var blocks []*bchutil.Block
+	prev := params.GenesisBlock
+	for h := int32(1); h <= 5; h++ {
+		block := ablaTestBlock(t, prev, h, 2000, params)
+		given := block
+		if h == 3 {
+			given = paddedBlock(t, block, 1000000-2000)
+		}
+		if _, _, err := chain.ProcessBlock(given, BFNone); err != nil {
+			t.Fatalf("block %d: %v", h, err)
+		}
+		blocks = append(blocks, block)
+		prev = block.MsgBlock()
+	}
+	checkStoredSerialization(t, db, blocks[2])
+	if err := chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+
+	writeOldABLAStates(t, db, int32(len(blocks)))
+	chain = ablaTestChain(t, db, params)
+	if want := ablaExpectedState(chain, blocks); chain.ablaState != want {
+		t.Fatalf("ABLA state %+v, want %+v", chain.ablaState, want)
+	}
+	err = db.View(func(dbTx database.Tx) error {
+		for h := 0; h <= len(blocks); h++ {
+			state, err := chain.dbFetchValidABLAState(dbTx, int32(h))
+			if err != nil {
+				return err
+			}
+			if want := ablaExpectedState(chain, blocks[:h]); state != want {
+				t.Errorf("height %d: ABLA state %+v, want %+v", h,
+					state, want)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
