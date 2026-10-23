@@ -2,6 +2,8 @@ package slpgraphsearch
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -103,8 +105,14 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 
 }
 
-// Find performs a graph search for a given transaction hash
-func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
+// graphSearchCheckInterval is how many transactions a graph search adds to
+// its result between looks at whether its context has ended.
+const graphSearchCheckInterval = 1000
+
+// Find performs a graph search for a given transaction hash.  The search can
+// take the whole of a large token's graph, so it stops once ctx ends and
+// returns the context's error.
+func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 
 	// get token graph
 	tokenGraph := gs.getTokenGraph(tokenID)
@@ -129,7 +137,7 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	}
 
 	// perform the recursive graph search
-	err := gs.findInternal(txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
+	err := gs.findInternal(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
 	if err != nil {
 		return nil, err
 	}
@@ -139,13 +147,18 @@ func (gs *Db) Find(hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache 
 	return txdata[0:i], nil
 }
 
-func (gs *Db) findInternal(txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
 
 	hash := txMsg.TxHash()
 
 	// check seen list
 	if _, ok := (*seen)[hash]; ok {
 		return fmt.Errorf("txn %v already seen in graph search", hash)
+	}
+	if *counter%graphSearchCheckInterval == 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 	}
 	(*seen)[hash] = struct{}{}
 
@@ -203,9 +216,13 @@ func (gs *Db) findInternal(txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chain
 			return fmt.Errorf("txn %v was parsed as an unknown kind of slp transaction", prevTxHash)
 		}
 
-		err = gs.findInternal(inpTxMsg, graph, seen, validityCache, txdata, counter)
-		if err != nil {
-			continue
+		// Only the end of the context stops the search; other errors
+		// leave out the input.
+		err = gs.findInternal(ctx, inpTxMsg, graph, seen, validityCache, txdata, counter)
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+
+			return err
 		}
 	}
 	return nil

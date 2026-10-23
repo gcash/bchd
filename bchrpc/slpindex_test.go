@@ -597,3 +597,44 @@ func TestSlpMempoolMintLeftPool(t *testing.T) {
 		return baton() == wire.OutPoint{Hash: genesis.TxHash(), Index: 2}
 	})
 }
+
+// TestSlpGraphSearchCallEnds ensures GetSlpGraphSearch, and the graph search
+// count of GetSlpTrustedValidation, stop once their call's context ends, as
+// when the client goes away or its deadline passes, and answer with the
+// context's status, as a search can take the whole of a large token's graph.
+func TestSlpGraphSearchCallEnds(t *testing.T) {
+	s, genesis := newGraphSearchServer(t)
+	hash := genesis.TxHash()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, stop := context.WithDeadline(context.Background(),
+		time.Now().Add(-time.Second))
+	defer stop()
+	for _, test := range []struct {
+		name string
+		ctx  context.Context
+		want codes.Code
+	}{
+		{"canceled", canceled, codes.Canceled},
+		{"deadline passed", expired, codes.DeadlineExceeded},
+	} {
+		_, err := s.GetSlpGraphSearch(test.ctx,
+			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
+		if status.Code(err) != test.want {
+			t.Errorf("GetSlpGraphSearch, %s: got %v, want %v", test.name,
+				err, test.want)
+		}
+		_, err = s.GetSlpTrustedValidation(test.ctx,
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+				IncludeGraphsearchCount: true,
+			})
+		if status.Code(err) != test.want {
+			t.Errorf("GetSlpTrustedValidation, %s: got %v, want %v",
+				test.name, err, test.want)
+		}
+	}
+}

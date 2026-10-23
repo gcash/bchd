@@ -1818,8 +1818,11 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 			if err != nil {
 				return nil, status.Error(codes.Unavailable, err.Error())
 			}
-			txData, err := gsDb.Find(hash, &entry.TokenIDHash, &validityCache)
+			txData, err := gsDb.Find(ctx, hash, &entry.TokenIDHash, &validityCache)
 			if err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return nil, status.FromContextError(ctxErr).Err()
+				}
 				return nil, status.Errorf(codes.Internal, "%v", err)
 			}
 			log.Debugf("SLP graph search count is %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
@@ -1875,9 +1878,13 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		validityCache[*hash] = struct{}{}
 	}
 
-	// perform the graph search
-	txData, err := gsDb.Find(hash, &entry.TokenIDHash, &validityCache)
+	// perform the graph search, which stops once the client is gone or its
+	// deadline has passed
+	txData, err := gsDb.Find(ctx, hash, &entry.TokenIDHash, &validityCache)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, status.FromContextError(ctxErr).Err()
+		}
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
