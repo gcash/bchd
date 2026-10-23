@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
-	"github.com/gcash/bchutil/bloom"
 )
 
 // useTestConfig sets the global config to c and turns off the server and
@@ -32,32 +30,42 @@ func useTestConfig(t *testing.T, c *config) {
 }
 
 // TestOnGetDataUnknownInvType ensures a getdata message whose last entry has
-// an unknown inventory type doesn't leave the handler waiting forever.
+// an unknown inventory type doesn't leave the handler waiting forever: the
+// entry before it is answered, the unknown one is ignored, and the handler
+// returns once its answer has been sent.
 func TestOnGetDataUnknownInvType(t *testing.T) {
-	useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
-	sp := &serverPeer{
-		Peer:   peer.NewInboundPeer(&peer.Config{}),
-		server: &server{},
-		filter: bloom.LoadFilter(nil),
-	}
+	h := newGetDataHarness(t)
 
-	// A filtered block request without a loaded filter is answered with
-	// nothing and counts as handled, so the unknown entry after it is
-	// the last one that could signal completion.
+	// A filtered block request without a loaded filter is answered with a
+	// merkle block matching every transaction, and the transaction, so the
+	// unknown entry after it is the last one handled.
 	msg := wire.NewMsgGetData()
 	_ = msg.AddInvVect(wire.NewInvVect(wire.InvTypeFilteredBlock,
-		&chainhash.Hash{1}))
+		&h.blocks[1]))
 	_ = msg.AddInvVect(wire.NewInvVect(wire.InvType(0x7f),
 		&chainhash.Hash{2}))
 
-	done := make(chan struct{})
-	go func() {
-		sp.OnGetData(nil, msg)
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("getdata handler did not return")
+	done := h.serve(msg)
+	if returnedWithin(done, 200*time.Millisecond) {
+		t.Fatal("getdata handler returned before its merkle block was sent")
+	}
+	merkle, ok := h.readMessage(t).(*wire.MsgMerkleBlock)
+	if !ok || merkle.Header.BlockHash() != h.blocks[1] {
+		t.Fatalf("got %v, want the merkle block of %v", merkle, h.blocks[1])
+	}
+	if _, ok := h.readMessage(t).(*wire.MsgTx); !ok {
+		t.Fatal("the merkle block's transaction was not sent")
+	}
+
+	// Nothing is sent for the unknown entry: the next message is one
+	// queued after the merkle block's transaction was read.
+	h.sp.QueueMessage(wire.NewMsgPong(7), nil)
+	if next := h.readMessage(t); next.Command() != wire.CmdPong {
+		t.Fatalf("got %s after the merkle block's transaction, want the "+
+			"pong", next.Command())
+	}
+	if !returnedWithin(done, 10*time.Second) {
+		t.Fatal("getdata handler did not return once its merkle block " +
+			"was sent")
 	}
 }
