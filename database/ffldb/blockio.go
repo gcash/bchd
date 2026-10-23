@@ -625,14 +625,17 @@ func (s *blockStore) readBlock(hash *chainhash.Hash, loc blockLocation) ([]byte,
 	return serializedData[8 : n-4], nil
 }
 
-// closeBlockFile closes the read-only handle for the passed flat file number
-// and drops it from the open files cache if it is open.
-func (s *blockStore) closeBlockFile(fileNum uint32) {
+// deleteBlockFile removes the block file for the passed flat file number,
+// first closing its read-only handle and dropping it from the open files cache
+// if it is open.  The open files lock is held until the file is removed, so a
+// read can't open the file again in between, which on Windows, where a file
+// open for reading can't be removed, would fail the removal.
+func (s *blockStore) deleteBlockFile(fileNum uint32) error {
 	s.obfMutex.Lock()
 	defer s.obfMutex.Unlock()
 	obf, ok := s.openBlockFiles[fileNum]
 	if !ok {
-		return
+		return s.deleteFileFunc(fileNum)
 	}
 	s.lruMutex.Lock()
 	if elem, ok := s.fileNumToLRUElem[fileNum]; ok {
@@ -646,6 +649,7 @@ func (s *blockStore) closeBlockFile(fileNum uint32) {
 	_ = obf.file.Close()
 	obf.Unlock()
 	delete(s.openBlockFiles, fileNum)
+	return s.deleteFileFunc(fileNum)
 }
 
 // deleteBlocks will delete all blocks in the blockstore where the height of the
@@ -667,8 +671,7 @@ func (s *blockStore) deleteBlocks(deleteBefore uint32) error {
 	s.fbhMutex.Lock()
 	defer s.fbhMutex.Unlock()
 	for _, n := range toDelete {
-		s.closeBlockFile(n)
-		if err := s.deleteFileFunc(n); err != nil {
+		if err := s.deleteBlockFile(n); err != nil {
 			return err
 		}
 		delete(s.fileBlockHeights, n)

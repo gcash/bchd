@@ -153,6 +153,93 @@ func TestPruneDeleteFailureReleasesLock(t *testing.T) {
 	}
 }
 
+// TestPruneReadDoesNotReopenFile ensures a read of a block in a block file
+// being pruned can't open the file again between the prune closing the file's
+// handle and removing the file.  On Windows a file open for reading can't be
+// removed, so such a read failed the prune, and the block being connected with
+// it.  The read is made from the removal: were the open files lock released
+// by then, it would open the file again there and then, which the test sees in
+// the open files cache; held, the read waits and finds the file removed.
+func TestPruneReadDoesNotReopenFile(t *testing.T) {
+	t.Run("open file", func(t *testing.T) {
+		testPruneReadDoesNotReopenFile(t, true)
+	})
+	t.Run("closed file", func(t *testing.T) {
+		testPruneReadDoesNotReopenFile(t, false)
+	})
+}
+
+// testPruneReadDoesNotReopenFile is TestPruneReadDoesNotReopenFile for a block
+// file whose handle is open when the prune starts, as for a block just served,
+// or not.
+func testPruneReadDoesNotReopenFile(t *testing.T, open bool) {
+	pdb := createPruneTestDB(t, filepath.Join(t.TempDir(), "db"))
+	defer pdb.Close()
+	var blocks []*bchutil.Block
+	for i := 1; i <= 4; i++ {
+		block := pruneTestBlock(uint32(i), int32(i))
+		storeTestBlock(t, pdb, block)
+		blocks = append(blocks, block)
+	}
+
+	// The first block is in file 0.
+	read := func() error {
+		return pdb.View(func(tx database.Tx) error {
+			_, err := tx.FetchBlock(blocks[0].Hash())
+			return err
+		})
+	}
+	s := pdb.store
+	if open {
+		if err := read(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.obfMutex.RLock()
+	_, cached := s.openBlockFiles[0]
+	s.obfMutex.RUnlock()
+	if cached != open {
+		t.Fatalf("block file 0 open %v before the prune, want %v", cached,
+			open)
+	}
+
+	deleteFile := s.deleteFileFunc
+	readErr := make(chan error, 1)
+	s.deleteFileFunc = func(fileNum uint32) error {
+		if fileNum == 0 {
+			if s.obfMutex.TryLock() {
+				s.obfMutex.Unlock()
+				readErr <- read()
+			} else {
+				go func() { readErr <- read() }()
+			}
+		}
+		return deleteFile(fileNum)
+	}
+	runWithTimeout(t, 5*time.Second, "DeleteBlocks", func() {
+		prunePruneTestDB(t, pdb, 3)
+	})
+	s.deleteFileFunc = deleteFile
+	pruneTestFiles(t, pdb, 4, 2, 3)
+
+	var err error
+	runWithTimeout(t, 5*time.Second, "the read", func() { err = <-readErr })
+	var dbErr database.Error
+	if !errors.As(err, &dbErr) || dbErr.ErrorCode != database.ErrDriverSpecific ||
+		!errors.Is(dbErr.Err, os.ErrNotExist) {
+
+		t.Errorf("read of the block during its file's removal: got %v, "+
+			"want a missing block file", err)
+	}
+	s.obfMutex.RLock()
+	_, cached = s.openBlockFiles[0]
+	s.obfMutex.RUnlock()
+	if cached {
+		t.Error("block file 0 was opened again between its close and " +
+			"its removal")
+	}
+}
+
 // reopenPruneTestDB closes the database at dir and opens it again.
 func reopenPruneTestDB(t *testing.T, pdb *db, dir string) *db {
 	t.Helper()
