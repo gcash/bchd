@@ -57,6 +57,7 @@ type addrUnspentHarness struct {
 	s        *GrpcServer
 	chain    *blockchain.BlockChain
 	pool     *mempool.TxPool
+	txIndex  *indexers.TxIndex
 	params   *chaincfg.Params
 	height   int32
 	prevHash chainhash.Hash
@@ -108,9 +109,10 @@ func newAddrUnspentHarness(tb testing.TB) *addrUnspentHarness {
 	})
 
 	return &addrUnspentHarness{
-		tb:    tb,
-		chain: chain,
-		pool:  pool,
+		tb:      tb,
+		chain:   chain,
+		pool:    pool,
+		txIndex: txIndex,
 		s: &GrpcServer{
 			chain:       chain,
 			chainParams: &params,

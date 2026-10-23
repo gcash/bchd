@@ -586,13 +586,13 @@ func TestSlpMempoolMintLeftPool(t *testing.T) {
 		}
 		return wire.OutPoint{Hash: *tm.MintBatonHash, Index: tm.MintBatonVout}
 	}
-	s.dispatchEvent(&rpcEventTxAccepted{&mempool.TxDesc{
+	s.dispatchEvent(&rpcEventTxAccepted{TxDesc: &mempool.TxDesc{
 		TxDesc: mining.TxDesc{Tx: bchutil.NewTx(mint)}}})
 	waitFor(t, "the baton on the MINT", func() bool {
 		return baton() == wire.OutPoint{Hash: mint.TxHash(), Index: 2}
 	})
 
-	s.dispatchEvent(&rpcEventBlockConnected{bchutil.NewBlock(&wire.MsgBlock{})})
+	s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
 	waitFor(t, "the baton back on the GENESIS", func() bool {
 		return baton() == wire.OutPoint{Hash: genesis.TxHash(), Index: 2}
 	})

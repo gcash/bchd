@@ -186,12 +186,32 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 // rpcEventTxAccepted indicates a new tx was accepted into the mempool.
 type rpcEventTxAccepted struct {
 	*mempool.TxDesc
+	spent spentScripts
 }
 
 // rpcEventBlockConnected indicates a new block connected to the current best
 // chain.
 type rpcEventBlockConnected struct {
 	*bchutil.Block
+	spent spentScripts
+}
+
+// spentScripts holds the scripts of the outputs that the transactions of an
+// event spend.  A subscription with an address filter matches an input on
+// the address of the output it spends, so they are looked up when the first
+// subscription needs them and shared by all, instead of once for each.
+type spentScripts struct {
+	once    sync.Once
+	scripts map[wire.OutPoint][]byte
+}
+
+// lookup returns the function MatchAndUpdate looks up spent outputs with.
+// The first call of any lookup loads the scripts with load.
+func (p *spentScripts) lookup(load func() map[wire.OutPoint][]byte) prevOutScriptFunc {
+	return func(op wire.OutPoint) []byte {
+		p.once.Do(func() { p.scripts = load() })
+		return p.scripts[op]
+	}
 }
 
 // rpcEventBlockDisconnected indicates a block that was disconnected from the
@@ -361,7 +381,7 @@ func (s *GrpcServer) dispatchEvent(event interface{}) {
 // are accepted in the mempool.
 func (s *GrpcServer) NotifyNewTransactions(txs []*mempool.TxDesc) {
 	for _, txDesc := range txs {
-		s.dispatchEvent(&rpcEventTxAccepted{txDesc})
+		s.dispatchEvent(&rpcEventTxAccepted{TxDesc: txDesc})
 	}
 }
 
@@ -376,7 +396,7 @@ func (s *GrpcServer) handleBlockchainNotification(notification *blockchain.Notif
 			log.Warnf("Chain connected notification is not a block.")
 			break
 		}
-		s.dispatchEvent(&rpcEventBlockConnected{block})
+		s.dispatchEvent(&rpcEventBlockConnected{Block: block})
 
 	case blockchain.NTBlockDisconnected:
 		block, ok := notification.Data.(*bchutil.Block)
@@ -2428,7 +2448,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactions rpcEventTxAccepted")
 				}
 
-				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.fetchPrevOutScript) {
+				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.txSpentScripts(txDesc)) {
 					continue
 				}
 
@@ -2474,9 +2494,10 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				}
 				// Search for all transactions.
 				block := event
+				spent := s.blockSpentScripts(block)
 
 				for _, tx := range block.Transactions() {
-					if !filter.MatchAndUpdate(tx, s.chainParams, s.fetchPrevOutScript) {
+					if !filter.MatchAndUpdate(tx, s.chainParams, spent) {
 						continue
 					}
 
@@ -2597,7 +2618,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactionStream rpcEventTxAccepted")
 				}
 
-				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.fetchPrevOutScript) {
+				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.txSpentScripts(txDesc)) {
 					continue
 				}
 
@@ -2643,9 +2664,10 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				}
 				// Search for all transactions.
 				block := event
+				spent := s.blockSpentScripts(block)
 
 				for _, tx := range block.Transactions() {
-					if !filter.MatchAndUpdate(tx, s.chainParams, s.fetchPrevOutScript) {
+					if !filter.MatchAndUpdate(tx, s.chainParams, spent) {
 						continue
 					}
 
@@ -2936,9 +2958,51 @@ func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, 
 	return txBytes, blockHeight, blockRegion.Hash, nil
 }
 
+// txSpentScripts returns the function MatchAndUpdate looks up the outputs a
+// memory pool transaction spends with.  While the transaction is in the
+// memory pool they are in the pool or the utxo set.
+func (s *GrpcServer) txSpentScripts(event *rpcEventTxAccepted) prevOutScriptFunc {
+	return event.spent.lookup(func() map[wire.OutPoint][]byte {
+		txIns := event.Tx.MsgTx().TxIn
+		scripts := make(map[wire.OutPoint][]byte, len(txIns))
+		for _, txIn := range txIns {
+			op := txIn.PreviousOutPoint
+			scripts[op] = s.fetchPrevOutScript(op)
+		}
+		return scripts
+	})
+}
+
+// blockSpentScripts returns the function MatchAndUpdate looks up the outputs
+// a connected block's transactions spend with.  They are read from the
+// block's spend journal at once, or, when that fails, as when the block was
+// disconnected since, looked up one at a time.
+func (s *GrpcServer) blockSpentScripts(event *rpcEventBlockConnected) prevOutScriptFunc {
+	return event.spent.lookup(func() map[wire.OutPoint][]byte {
+		stxos, err := s.chain.FetchSpendJournal(event.Block)
+		scripts := make(map[wire.OutPoint][]byte, len(stxos))
+		i := 0
+		for _, tx := range event.Transactions()[1:] {
+			for _, txIn := range tx.MsgTx().TxIn {
+				op := txIn.PreviousOutPoint
+				if err != nil {
+					scripts[op] = s.fetchPrevOutScript(op)
+					continue
+				}
+				// The journal holds a token output's script with
+				// its token prefix.
+				_, scripts[op] = wire.SplitPkScript(stxos[i].PkScript)
+				i++
+			}
+		}
+		return scripts
+	})
+}
+
 // fetchPrevOutScript returns the pkScript for the output referenced by op. It
-// searches the mempool first, then the transaction index when enabled. It
-// returns nil if the script cannot be resolved, which is expected for pruned or
+// searches the mempool first, then the utxo set, then the transaction index
+// when enabled, which also has spent outputs. It returns nil if the script
+// cannot be resolved, which is expected for spent outputs on pruned or
 // unindexed nodes.
 //
 // Subscription filters use it to match inputs against their funding addresses,
@@ -2950,6 +3014,13 @@ func (s *GrpcServer) fetchPrevOutScript(op wire.OutPoint) []byte {
 			return tx.MsgTx().TxOut[op.Index].PkScript
 		}
 		return nil
+	}
+
+	// The utxo cache may hold an output spent since its last flush, marked
+	// spent and without its script.
+	entry, err := s.chain.FetchUtxoEntryUncached(op)
+	if err == nil && entry != nil && !entry.IsSpent() {
+		return entry.PkScript()
 	}
 
 	if s.txIndex == nil {
