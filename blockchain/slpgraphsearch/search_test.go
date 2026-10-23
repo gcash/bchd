@@ -224,8 +224,9 @@ func randomGraph(t *testing.T, rng *rand.Rand, n int, deep bool) (*Db, *chainhas
 
 // sendChain returns a database holding a GENESIS and a chain of n sends,
 // each spending the token output of the one before, the hash of the last
-// and the token ID.
-func sendChain(t *testing.T, n int) (*Db, *chainhash.Hash, *chainhash.Hash) {
+// and the token ID.  Each send has an output with a script of extra bytes
+// after its token output.
+func sendChain(t *testing.T, n, extra int) (*Db, *chainhash.Hash, *chainhash.Hash) {
 	t.Helper()
 	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
 		nil, nil, 0, nil, 1000)
@@ -254,6 +255,10 @@ func sendChain(t *testing.T, n int) (*Db, *chainhash.Hash, *chainhash.Hash) {
 		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: tip, Index: 1}, nil))
 		tx.AddTxOut(&wire.TxOut{PkScript: send})
 		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		if extra > 0 {
+			tx.AddTxOut(&wire.TxOut{Value: 546,
+				PkScript: bytes.Repeat([]byte{txscript.OP_TRUE}, extra)})
+		}
 		if err := db.AddTxn(tx); err != nil {
 			t.Fatal(err)
 		}
@@ -268,9 +273,9 @@ func sendChain(t *testing.T, n int) (*Db, *chainhash.Hash, *chainhash.Hash) {
 
 // TestFindSameAsRecursive ensures Find returns the same transactions in the
 // same order, or the same error, and looks at its context as often, as the
-// recursive search it replaced, on random graphs, from random transactions,
-// with random validity caches, and with a context that ends during the
-// search.
+// recursive search it replaced, and Count as many transactions, on random
+// graphs, from random transactions, with random validity caches, and with a
+// context that ends during the search.
 func TestFindSameAsRecursive(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	var searches, looks, found int
@@ -307,9 +312,10 @@ func TestFindSameAsRecursive(t *testing.T) {
 			if checks == 0 {
 				want.checks = 1 << 30
 			}
-			got := *want
+			got, counted := *want, *want
 			wantRes, wantErr := findRecursive(db, want, &root, tokenID, &valid)
 			gotRes, gotErr := db.Find(&got, &root, tokenID, &valid)
+			count, countErr := db.Count(&counted, &root, tokenID, &valid)
 
 			what := fmt.Sprintf("graph %d of %d transactions, search %d "+
 				"from %v with %d valid and the context ending at check %d",
@@ -329,6 +335,13 @@ func TestFindSameAsRecursive(t *testing.T) {
 			if got.calls != want.calls {
 				t.Fatalf("%s: the context was looked at %d times, want %d",
 					what, got.calls, want.calls)
+			}
+			if fmt.Sprint(countErr) != fmt.Sprint(wantErr) ||
+				count != len(wantRes) || counted.calls != want.calls {
+
+				t.Fatalf("%s: counted %d and %v, looking at the context %d "+
+					"times, want %d and %v, %d times", what, count, countErr,
+					counted.calls, len(wantRes), wantErr, want.calls)
 			}
 			searches++
 			if want.calls > 1 {
@@ -371,7 +384,7 @@ func (c *stackContext) Err() error {
 // process.
 func TestFindDeepChainStack(t *testing.T) {
 	const sends = 100000
-	db, tip, tokenID := sendChain(t, sends)
+	db, tip, tokenID := sendChain(t, sends, 0)
 
 	runtime.GC()
 	var before runtime.MemStats
@@ -400,7 +413,7 @@ func TestFindDeepChainStack(t *testing.T) {
 // 100,001 transactions, and 24 MB for one of a million.
 func TestFindAllocatesForResult(t *testing.T) {
 	const sends = 100000
-	db, _, tokenID := sendChain(t, sends)
+	db, _, tokenID := sendChain(t, sends, 0)
 
 	// The token ID is the GENESIS's hash in the byte order it is shown in.
 	var genesis chainhash.Hash
@@ -527,5 +540,54 @@ func TestFindGraphGrows(t *testing.T) {
 	}
 	if !bytes.Equal(res[1001], buf.Bytes()) {
 		t.Error("the last transaction found is not the GENESIS")
+	}
+}
+
+// TestCountSize ensures Count does not serialize the transactions it counts:
+// what it allocates does not grow with their size, while what Find allocates
+// does.  The graph search count of GetSlpTrustedValidation once serialized
+// every transaction of the search only to count them.
+func TestCountSize(t *testing.T) {
+	const sends, extra = 2000, 10000
+	allocated := func(extra int, search func(*Db, *chainhash.Hash,
+		*chainhash.Hash) (int, error)) uint64 {
+
+		db, tip, tokenID := sendChain(t, sends, extra)
+		least := ^uint64(0)
+		for i := 0; i < 3; i++ {
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			n, err := search(db, tip, tokenID)
+			runtime.ReadMemStats(&after)
+			if err != nil || n != sends+1 {
+				t.Fatalf("found %d transactions and %v, want %d", n, err,
+					sends+1)
+			}
+			least = min(least, after.TotalAlloc-before.TotalAlloc)
+		}
+		return least
+	}
+	count := func(db *Db, tip, tokenID *chainhash.Hash) (int, error) {
+		return db.Count(context.Background(), tip, tokenID,
+			&map[chainhash.Hash]struct{}{})
+	}
+	find := func(db *Db, tip, tokenID *chainhash.Hash) (int, error) {
+		res, err := db.Find(context.Background(), tip, tokenID,
+			&map[chainhash.Hash]struct{}{})
+		return len(res), err
+	}
+
+	// Find serializes them, so it allocates their size.
+	grown := int64(allocated(extra, find)) - int64(allocated(0, find))
+	t.Logf("Find allocated %d bytes more", grown)
+	if grown < sends*extra {
+		t.Fatalf("Find allocated %d bytes more for %d transactions of %d "+
+			"bytes more", grown, sends+1, extra)
+	}
+	grown = int64(allocated(extra, count)) - int64(allocated(0, count))
+	t.Logf("Count allocated %d bytes more", grown)
+	if grown > 1<<20 {
+		t.Errorf("Count allocated %d bytes more for %d transactions of %d "+
+			"bytes more", grown, sends+1, extra)
 	}
 }

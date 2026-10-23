@@ -105,8 +105,8 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 
 }
 
-// graphSearchCheckInterval is how many transactions a graph search adds to
-// its result between looks at whether its context has ended.
+// graphSearchCheckInterval is how many transactions a graph search finds
+// between looks at whether its context has ended.
 const graphSearchCheckInterval = 1000
 
 // Find performs a graph search for a given transaction hash.  The search can
@@ -114,32 +114,19 @@ const graphSearchCheckInterval = 1000
 // returns the context's error.
 func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 
-	// get token graph
-	tokenGraph := gs.getTokenGraph(tokenID)
-	if tokenGraph == nil {
-		return nil, fmt.Errorf("graph search graph is missing for token ID %v", tokenID)
-	}
-
 	// The result grows with what the search finds, not with the token's
 	// graph, which can hold millions of transactions and can grow while the
 	// search runs.
-	seen := make(map[chainhash.Hash]struct{})
 	var txdata [][]byte
-
-	// check client validity cache transactions are valid
-	for hash := range *validityCache {
-		if txn := (*tokenGraph).getTxn(&hash); txn == nil {
-			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
+	err := gs.search(ctx, hash, tokenID, validityCache, func(txMsg *wire.MsgTx) error {
+		// add txn buffer to results
+		txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
+		if err := txMsg.Serialize(txBuf); err != nil {
+			return err
 		}
-	}
-
-	txMsg := tokenGraph.getTxn(hash)
-	if txMsg == nil {
-		return nil, fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
-	}
-
-	// perform the graph search
-	err := gs.findInternal(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata)
+		txdata = append(txdata, txBuf.Bytes())
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -149,47 +136,94 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 	return txdata, nil
 }
 
-// findInternal searches the token's graph depth first from txMsg, through
-// each input that carried the token, in the order of the inputs, and adds each
-// transaction to txdata the first time it reaches it.  It keeps the
-// transactions still to be searched on a stack of its own rather than
-// recursing, as a token's graph can hold a chain of millions of sends, and a
-// goroutine whose stack passes the runtime's 1 GB limit ends the process.  A
-// transaction's inputs go on the stack in reverse, so that each, with all it
-// leads to, is searched before the next, as a recursive search would.
-func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte) error {
+// Count returns how many transactions Find returns for the same search,
+// without serializing them, for a client that asks how large the search is.
+func (gs *Db) Count(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) (int, error) {
+	n := 0
+	err := gs.search(ctx, hash, tokenID, validityCache, func(*wire.MsgTx) error {
+		n++
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+// search performs the graph search of Find and Count, calling found for each
+// transaction it finds, in the order Find returns them.
+func (gs *Db) search(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}, found func(*wire.MsgTx) error) error {
+
+	// get token graph
+	tokenGraph := gs.getTokenGraph(tokenID)
+	if tokenGraph == nil {
+		return fmt.Errorf("graph search graph is missing for token ID %v", tokenID)
+	}
+
+	seen := make(map[chainhash.Hash]struct{})
+
+	// check client validity cache transactions are valid
+	for hash := range *validityCache {
+		if txn := (*tokenGraph).getTxn(&hash); txn == nil {
+			return fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
+		}
+	}
+
+	txMsg := tokenGraph.getTxn(hash)
+	if txMsg == nil {
+		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
+	}
+
+	// perform the graph search
+	return gs.findInternal(ctx, hash, txMsg, tokenGraph, &seen, validityCache, found)
+}
+
+// findInternal searches the token's graph depth first from txMsg, whose hash
+// is hash, through each input that carried the token, in the order of the
+// inputs, and calls found for each transaction the first time it reaches it.
+// It keeps the transactions still to be searched on a stack of its own rather
+// than recursing, as a token's graph can hold a chain of millions of sends,
+// and a goroutine whose stack passes the runtime's 1 GB limit ends the
+// process.  A transaction's inputs go on the stack in reverse, so that each,
+// with all it leads to, is searched before the next, as a recursive search
+// would.  Each goes with the hash the graph holds it by, so that the search
+// does not serialize it to hash it again.
+func (gs *Db) findInternal(ctx context.Context, hash *chainhash.Hash, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, found func(*wire.MsgTx) error) error {
+	type pending struct {
+		hash  *chainhash.Hash
+		txMsg *wire.MsgTx
+	}
 	root := txMsg
-	stack := []*wire.MsgTx{txMsg}
+	stack := []pending{{hash, txMsg}}
+	n := 0
 	for len(stack) > 0 {
-		txMsg := stack[len(stack)-1]
+		hash, txMsg := stack[len(stack)-1].hash, stack[len(stack)-1].txMsg
 		stack = stack[:len(stack)-1]
-		hash := txMsg.TxHash()
 
 		// check seen list
-		if _, ok := (*seen)[hash]; ok {
+		if _, ok := (*seen)[*hash]; ok {
 			continue
 		}
-		if len(*txdata)%graphSearchCheckInterval == 0 {
+		if n%graphSearchCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 		}
-		(*seen)[hash] = struct{}{}
+		(*seen)[*hash] = struct{}{}
 
-		// add txn buffer to results; as when the search recursed, an error
-		// leaves out the transaction, or ends the search if it is the one
+		// add txn to results; as when the search recursed, an error leaves
+		// out the transaction, or ends the search if it is the one
 		// searched from
-		txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
-		if err := txMsg.Serialize(txBuf); err != nil {
+		if err := found(txMsg); err != nil {
 			if txMsg == root {
 				return err
 			}
 			continue
 		}
-		*txdata = append(*txdata, txBuf.Bytes())
+		n++
 
 		// check exclude txids here, don't return with error
-		if _, ok := (*validityCache)[hash]; ok {
+		if _, ok := (*validityCache)[*hash]; ok {
 			//gs.logger.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
 			continue
 		}
@@ -242,7 +276,7 @@ func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenG
 				}
 				break inputs
 			}
-			stack = append(stack, inpTxMsg)
+			stack = append(stack, pending{prevTxHash, inpTxMsg})
 		}
 		slices.Reverse(stack[pushed:])
 	}

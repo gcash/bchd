@@ -1746,6 +1746,12 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 
 	resp := &pb.GetSlpTrustedValidationResponse{}
 	results := make([]*pb.GetSlpTrustedValidationResponse_ValidityResult, len(req.Queries))
+
+	// The graph search counts of the request, by the transaction searched
+	// from and the valid hashes as the query lists them, so that queries for
+	// outputs of one transaction with the same valid hashes count its search
+	// once.
+	counts := make(map[string]uint32)
 	for i, query := range req.Queries {
 		result := &pb.GetSlpTrustedValidationResponse_ValidityResult{}
 		result.PrevOutHash = query.PrevOutHash
@@ -1865,15 +1871,21 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 			if err != nil {
 				return nil, status.Error(codes.Unavailable, err.Error())
 			}
-			txData, err := gsDb.Find(ctx, hash, &entry.TokenIDHash, &validityCache)
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					return nil, status.FromContextError(ctxErr).Err()
+			key := string(hash[:]) + string(bytes.Join(query.GraphsearchValidHashes, nil))
+			count, ok := counts[key]
+			if !ok {
+				n, err := gsDb.Count(ctx, hash, &entry.TokenIDHash, &validityCache)
+				if err != nil {
+					if ctxErr := ctx.Err(); ctxErr != nil {
+						return nil, status.FromContextError(ctxErr).Err()
+					}
+					return nil, status.Errorf(codes.Internal, "%v", err)
 				}
-				return nil, status.Errorf(codes.Internal, "%v", err)
+				count = uint32(n)
+				counts[key] = count
 			}
-			log.Debugf("SLP graph search count is %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
-			result.GraphsearchTxnCount = uint32(len(txData[:]))
+			log.Debugf("SLP graph search count is %s transactions for txid %v", fmt.Sprint(count), hash)
+			result.GraphsearchTxnCount = count
 		}
 
 		results[i] = result
