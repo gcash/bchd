@@ -108,12 +108,13 @@ func newGetDataHarness(t *testing.T) *getDataHarness {
 	return h
 }
 
-// unsent returns items with nothing to send that produce no notfound: a
-// filtered block while no filter is loaded, and an unknown type.
+// unsent returns items with nothing to send that produce no notfound: those
+// of an unknown type.  A filtered block is sent whether or not a filter is
+// loaded.
 func (h *getDataHarness) unsent() []*wire.InvVect {
 	return []*wire.InvVect{
-		wire.NewInvVect(wire.InvTypeFilteredBlock, &h.blocks[0]),
 		wire.NewInvVect(wire.InvType(0x7f), &h.blocks[0]),
+		wire.NewInvVect(wire.InvType(0x7e), &h.blocks[1]),
 	}
 }
 

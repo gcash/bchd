@@ -737,32 +737,94 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 	// half of its value.
 	sp.addBanScore(0, 33, "mempool")
 
-	// Generate inventory message with the available transactions in the
-	// transaction memory pool.  Limit it to the max allowed inventory
-	// per message.  The NewMsgInvSizeHint function automatically limits
-	// the passed hint to the maximum allowed, so it's safe to pass it
-	// without double checking it here.
-	txMemPool := sp.server.txMemPool
-	txDescs := txMemPool.TxDescs()
-	invMsg := wire.NewMsgInvSizeHint(uint(len(txDescs)))
+	// Send the inventory messages, if there is anything to send.
+	for _, invMsg := range sp.mempoolInvs() {
+		sp.QueueMessage(invMsg, nil)
+	}
+}
 
-	for _, txDesc := range txDescs {
+// maxMempoolInvs is the most transactions one of the inventory messages
+// answering a mempool message lists, wire.MaxInvPerMsg.  It is a variable for
+// tests.
+var maxMempoolInvs = wire.MaxInvPerMsg
+
+// mempoolInvs returns the inventory messages that answer a mempool message
+// from the peer: the transactions of the memory pool that pass its fee filter
+// and, if it loaded one, its bloom filter, at most maxMempoolInvs to a
+// message.  As in BCHN, the whole pool is listed, and each transaction comes
+// after those it spends, so a filter that adds the outputs it matches also
+// matches the transactions spending them.
+func (sp *serverPeer) mempoolInvs() []*wire.MsgInv {
+	txMemPool := sp.server.txMemPool
+	txDescs := parentsFirstDescs(txMemPool.TxDescs())
+
+	var invMsgs []*wire.MsgInv
+	var invMsg *wire.MsgInv
+	feeFilter := atomic.LoadInt64(&sp.feeFilter)
+	for i, txDesc := range txDescs {
+		if feeFilter > 0 && txDesc.FeePerKB < feeFilter {
+			continue
+		}
+
 		// Either add all transactions when there is no bloom filter,
 		// or only the transactions that match the filter when there is
 		// one.
-		if !sp.filter.IsLoaded() || sp.filter.MatchTxAndUpdate(txDesc.Tx) {
-			iv := wire.NewInvVect(wire.InvTypeTx, txDesc.Tx.Hash())
-			_ = invMsg.AddInvVect(iv)
-			if len(invMsg.InvList)+1 > wire.MaxInvPerMsg {
-				break
+		if sp.filter.IsLoaded() && !sp.filter.MatchTxAndUpdate(txDesc.Tx) {
+			continue
+		}
+
+		// The NewMsgInvSizeHint function limits the passed hint to the
+		// max allowed inventory per message.
+		if invMsg == nil || len(invMsg.InvList) >= maxMempoolInvs {
+			invMsg = wire.NewMsgInvSizeHint(uint(len(txDescs) - i))
+			invMsgs = append(invMsgs, invMsg)
+		}
+		_ = invMsg.AddInvVect(wire.NewInvVect(wire.InvTypeTx,
+			txDesc.Tx.Hash()))
+	}
+	return invMsgs
+}
+
+// parentsFirstDescs returns the memory pool's transactions with each one after
+// those it spends, keeping their order otherwise, as netsync's parentsFirst
+// does for a block's.  The transactions waiting for their parents are kept in
+// a slice rather than on the goroutine's stack, as the memory pool puts no
+// limit on the length of a chain of transactions.
+func parentsFirstDescs(descs []*mempool.TxDesc) []*mempool.TxDesc {
+	index := make(map[chainhash.Hash]int, len(descs))
+	for i, desc := range descs {
+		index[*desc.Tx.Hash()] = i
+	}
+	seen := make([]bool, len(descs))
+	sorted := make([]*mempool.TxDesc, 0, len(descs))
+
+	// Each waiting transaction is held with the next of its inputs to look
+	// at.
+	type waiting struct{ desc, in int }
+	var stack []waiting
+	for i := range descs {
+		if seen[i] {
+			continue
+		}
+		seen[i] = true
+		stack = append(stack, waiting{desc: i})
+		for len(stack) > 0 {
+			top := &stack[len(stack)-1]
+			txIns := descs[top.desc].Tx.MsgTx().TxIn
+			if top.in == len(txIns) {
+				sorted = append(sorted, descs[top.desc])
+				stack = stack[:len(stack)-1]
+				continue
+			}
+			prevHash := txIns[top.in].PreviousOutPoint.Hash
+			top.in++
+			if parent, ok := index[prevHash]; ok && !seen[parent] {
+				seen[parent] = true
+				stack = append(stack, waiting{desc: parent})
 			}
 		}
 	}
-
-	// Send the inventory message if there is anything to send.
-	if len(invMsg.InvList) > 0 {
-		sp.QueueMessage(invMsg, nil)
-	}
+	return sorted
 }
 
 // OnGetCFMemPool is invoked when a peer receives a getcfmempool bitcoin message.
@@ -1862,19 +1924,14 @@ func (sp *serverPeer) OnFeeFilter(_ *peer.Peer, msg *wire.MsgFeeFilter) {
 
 // OnFilterAdd is invoked when a peer receives a filteradd bitcoin
 // message and is used by remote peers to add data to an already loaded bloom
-// filter.  The peer will be disconnected if a filter is not loaded when this
-// message is received or the server is not configured to allow bloom filters.
+// filter.  The peer will be disconnected if the server is not configured to
+// allow bloom filters.  Without a loaded filter the data is ignored: as in
+// BCHN, a peer that loaded no filter has one that matches everything, which
+// additions do not change.
 func (sp *serverPeer) OnFilterAdd(_ *peer.Peer, msg *wire.MsgFilterAdd) {
 	// Disconnect and/or ban depending on the node bloom services flag and
 	// negotiated protocol version.
 	if !sp.enforceNodeBloomFlag(msg.Command()) {
-		return
-	}
-
-	if !sp.filter.IsLoaded() {
-		peerLog.Debugf("%s sent a filteradd request with no filter "+
-			"loaded -- disconnecting", sp)
-		sp.Disconnect()
 		return
 	}
 
@@ -1883,23 +1940,11 @@ func (sp *serverPeer) OnFilterAdd(_ *peer.Peer, msg *wire.MsgFilterAdd) {
 
 // OnFilterClear is invoked when a peer receives a filterclear bitcoin
 // message and is used by remote peers to clear an already loaded bloom filter.
-// The peer will be disconnected if a filter is not loaded when this message is
-// received  or the server is not configured to allow bloom filters.
-func (sp *serverPeer) OnFilterClear(_ *peer.Peer, msg *wire.MsgFilterClear) {
-	// Disconnect and/or ban depending on the node bloom services flag and
-	// negotiated protocol version.
-	if !sp.enforceNodeBloomFlag(msg.Command()) {
-		return
-	}
-
-	if !sp.filter.IsLoaded() {
-		peerLog.Debugf("%s sent a filterclear request with no "+
-			"filter loaded -- disconnecting", sp)
-		sp.Disconnect()
-		return
-	}
-
+// As in BCHN, the peer is then sent every transaction, whether or not it had a
+// filter loaded and whether or not the server allows bloom filters.
+func (sp *serverPeer) OnFilterClear(_ *peer.Peer, _ *wire.MsgFilterClear) {
 	sp.filter.Unload()
+	sp.setDisableRelayTx(false)
 }
 
 // OnFilterLoad is invoked when a peer receives a filterload bitcoin
@@ -2480,19 +2525,12 @@ func (s *server) pushCmpctBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneCha
 }
 
 // pushMerkleBlockMsg sends a merkleblock message for the provided block hash to
-// the connected peer.  Since a merkle block requires the peer to have a filter
-// loaded, this call will simply be ignored if there is no filter loaded.  An
-// error is returned if the block hash is not known.
+// the connected peer.  A peer that loaded no filter is sent the block as a
+// filter that matches everything would select it, as BCHN gives every peer
+// such a filter until it loads one.  An error is returned if the block hash is
+// not known.
 func (s *server) pushMerkleBlockMsg(sp *serverPeer, hash *chainhash.Hash,
 	doneChan chan<- struct{}, waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
-
-	// Do not send a response if the peer doesn't have a filter loaded.
-	if !sp.filter.IsLoaded() {
-		if doneChan != nil {
-			doneChan <- struct{}{}
-		}
-		return nil
-	}
 
 	// Fetch the raw block bytes from the database.
 	blk, err := sp.server.chain.BlockByHash(hash)
@@ -2507,8 +2545,14 @@ func (s *server) pushMerkleBlockMsg(sp *serverPeer, hash *chainhash.Hash,
 	}
 
 	// Generate a merkle block by filtering the requested block according
-	// to the filter for the peer.
-	merkle, matchedTxIndices := bloom.NewMerkleBlock(blk, sp.filter)
+	// to the filter for the peer.  A filter with no data matches
+	// everything.
+	filter := sp.filter
+	if !filter.IsLoaded() {
+		filter = bloom.LoadFilter(wire.NewMsgFilterLoad(nil, 0, 0,
+			wire.BloomUpdateNone))
+	}
+	merkle, matchedTxIndices := bloom.NewMerkleBlock(blk, filter)
 
 	// Once we have fetched data wait for any previous operation to finish.
 	if waitChan != nil {

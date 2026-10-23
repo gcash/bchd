@@ -17,6 +17,7 @@ import (
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil/bloom"
 )
 
 // gatedConn is a connection whose writes of messages with the gated command,
@@ -57,6 +58,8 @@ type blockTxnsHarness struct {
 	replies  chan *wire.MsgBlockTxns
 	blocks   chan *wire.MsgBlock
 	cmpcts   chan *wire.MsgCmpctBlock
+	merkles  chan *wire.MsgMerkleBlock
+	txs      chan *wire.MsgTx
 	notFound chan *wire.MsgNotFound
 	getData  chan struct{}
 	tipHash  *chainhash.Hash
@@ -80,6 +83,8 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 		replies:  make(chan *wire.MsgBlockTxns, 16),
 		blocks:   make(chan *wire.MsgBlock, 16),
 		cmpcts:   make(chan *wire.MsgCmpctBlock, 16),
+		merkles:  make(chan *wire.MsgMerkleBlock, 16),
+		txs:      make(chan *wire.MsgTx, 16),
 		notFound: make(chan *wire.MsgNotFound, 16),
 		getData:  make(chan struct{}, 1),
 		tipHash:  block.Hash(),
@@ -91,7 +96,8 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 			banPeers: make(chan *serverPeer, 1),
 			quit:     make(chan struct{}),
 		},
-		quit: make(chan struct{}),
+		filter: bloom.LoadFilter(nil),
+		quit:   make(chan struct{}),
 	}
 	// The tip is the most recent block, as when it was just announced.
 	h.sp.server.setRecentBlock(block.MsgBlock())
@@ -127,6 +133,12 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 			},
 			OnCmpctBlock: func(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 				h.cmpcts <- msg
+			},
+			OnMerkleBlock: func(_ *peer.Peer, msg *wire.MsgMerkleBlock) {
+				h.merkles <- msg
+			},
+			OnTx: func(_ *peer.Peer, msg *wire.MsgTx) {
+				h.txs <- msg
 			},
 			OnNotFound: func(_ *peer.Peer, msg *wire.MsgNotFound) {
 				h.notFound <- msg
@@ -512,5 +524,42 @@ func TestGetDataInvalidBlockNotSent(t *testing.T) {
 
 		h.getDataFor(t, invType, block.Hash())
 		h.expectReply(t, invType, block.Hash(), true)
+	}
+}
+
+// TestMerkleBlockWithoutFilter ensures a getdata for a filtered block from a
+// peer that loaded no filter is answered as with a filter that matches
+// everything, as BCHN gives every peer such a filter until it loads one: with
+// the merkle block matching every transaction, and the transactions.  Nothing
+// was sent, not even a notfound.
+func TestMerkleBlockWithoutFilter(t *testing.T) {
+	h := newBlockTxnsHarness(t, false)
+	tip, err := h.chain.BlockByHash(h.tipHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase := tip.Transactions()[0].Hash()
+
+	h.getDataFor(t, wire.InvTypeFilteredBlock, h.tipHash)
+	select {
+	case msg := <-h.merkles:
+		if msg.Header.BlockHash() != *h.tipHash || len(msg.Hashes) != 1 ||
+			*msg.Hashes[0] != *coinbase {
+
+			t.Fatalf("merkle block %v with %v, want %v with %v",
+				msg.Header.BlockHash(), msg.Hashes, h.tipHash, coinbase)
+		}
+	case msg := <-h.notFound:
+		t.Fatalf("got notfound for %v", msg.InvList[0])
+	case <-time.After(5 * time.Second):
+		t.Fatal("no merkle block was sent")
+	}
+	select {
+	case msg := <-h.txs:
+		if msg.TxHash() != *coinbase {
+			t.Fatalf("got transaction %v, want %v", msg.TxHash(), coinbase)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the matched transaction was not sent")
 	}
 }
