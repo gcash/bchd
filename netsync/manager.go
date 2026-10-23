@@ -79,6 +79,9 @@ type blockMsg struct {
 	block *bchutil.Block
 	peer  *peerpkg.Peer
 	reply chan struct{}
+
+	// compact tells that the block was rebuilt from a compact block.
+	compact bool
 }
 
 // blockErrorMsg packages a peer and a block hash to signal an error processing
@@ -832,6 +835,18 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 		}
 		code, _ := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
+
+		// Punish the peer for a transaction that breaks a consensus
+		// rule, with BCHN's score (net_processing.cpp:2999-3017), once
+		// the sync manager is current.  Until then the pool checks
+		// transactions under the rules of the old tip, so a valid one
+		// using a later upgrade fails as breaking a consensus rule, and
+		// the transactions the sync peer announces are fetched, which
+		// BCHN does not do during the initial sync
+		// (net_processing.cpp:2590, 2609-2611).
+		if score := txBanScore(err); score > 0 && sm.current() {
+			sm.peerNotifier.Misbehaving(peer, score, reason)
+		}
 		return
 	}
 
@@ -874,7 +889,8 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	blockHash := bmsg.block.Hash()
 
 	behaviorFlags := blockchain.BFNone
-	if _, exists = state.requestedBlocks[*blockHash]; !exists {
+	_, requested := state.requestedBlocks[*blockHash]
+	if !requested {
 		// Peers we allow to relay blocks directly may send blocks we
 		// didn't request, but these are only stored if they could
 		// extend the best chain.
@@ -924,6 +940,12 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	delete(state.requestedBlocks, *blockHash)
 	sm.endBlockRequest(blockHash)
 
+	// Whether the block's parent is known and is the tip decides below
+	// whether the peer is punished if the block is invalid.
+	parent := &bmsg.block.MsgBlock().Header.PrevBlock
+	parentKnown, _, _ := sm.chain.BlockValidity(parent)
+	extendsTip := *parent == sm.chain.BestSnapshot().Hash
+
 	// Process the block to include validation, best chain selection, orphan
 	// handling, etc.
 	_, isOrphan, err := sm.chain.ProcessBlock(bmsg.block, behaviorFlags)
@@ -966,6 +988,18 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		reason := mempool.BlockRejectReason(err,
 			bmsg.block.MsgBlock().Header.Version)
 		peer.PushRejectMsg(wire.CmdBlock, code, reason, blockHash, false)
+
+		// Punish the peer for an invalid block it sent in a block
+		// message, with BCHN's score (net_processing.cpp:1094-1117,
+		// 3454-3457), but only for a block it was asked for whose parent
+		// is known: bchd checks some of BCHN's rules for the other blocks
+		// too, or earlier, so it could punish a peer BCHN does not.
+		if requested && parentKnown && !bmsg.compact {
+			score := blockBanScore(rerr.ErrorCode, extendsTip)
+			if score > 0 {
+				sm.peerNotifier.Misbehaving(peer, score, reason)
+			}
+		}
 		return
 	}
 
@@ -1981,13 +2015,27 @@ func (sm *SyncManager) QueueTx(tx *bchutil.Tx, peer *peerpkg.Peer, done chan str
 
 // QueueBlock adds the passed block message and peer to the block handling
 // queue. Responds to the done channel argument after the block message is
-// processed.
+// processed.  The peer sent the block in a block message, so it is punished
+// if the block is invalid, as by BCHN.
 func (sm *SyncManager) QueueBlock(block *bchutil.Block, peer *peerpkg.Peer, done chan struct{}) {
-	// Don't accept more blocks if we're shutting down.
-	if sm.shutdown.Load() != 0 ||
-		!sm.queue(&blockMsg{block: block, peer: peer, reply: done}) {
+	sm.queueBlock(&blockMsg{block: block, peer: peer, reply: done})
+}
 
-		done <- struct{}{}
+// QueueCompactBlock is QueueBlock for a block rebuilt from a compact block the
+// peer sent.  BIP 152 lets a peer relay a compact block once it has checked
+// only its header, so the peer is not punished if the block is invalid, as
+// BCHN does not punish it (net_processing.cpp:3270-3274, 3368-3377).
+func (sm *SyncManager) QueueCompactBlock(block *bchutil.Block, peer *peerpkg.Peer, done chan struct{}) {
+	sm.queueBlock(&blockMsg{block: block, peer: peer, reply: done,
+		compact: true})
+}
+
+// queueBlock adds msg to the block handling queue, or signals its done
+// channel at once if the sync manager is shutting down.
+func (sm *SyncManager) queueBlock(msg *blockMsg) {
+	// Don't accept more blocks if we're shutting down.
+	if sm.shutdown.Load() != 0 || !sm.queue(msg) {
+		msg.reply <- struct{}{}
 	}
 }
 

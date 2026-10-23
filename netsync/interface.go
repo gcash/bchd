@@ -25,6 +25,10 @@ type PeerNotifier interface {
 	RelayInventory(invVect *wire.InvVect, data interface{})
 
 	TransactionConfirmed(tx *bchutil.Tx)
+
+	// Misbehaving adds score to the ban score of the peer, which sent an
+	// invalid transaction or block, for BCHN's reject reason.
+	Misbehaving(peer *peer.Peer, score uint32, reason string)
 }
 
 // Config is a configuration struct used to initialize a new SyncManager.

@@ -1196,3 +1196,93 @@ func TestOnRejectLogsAtDebug(t *testing.T) {
 			line)
 	}
 }
+
+// TestMisbehavingAddsBanScore ensures the sync manager's report of a peer that
+// sent an invalid transaction or block adds the score to the peer's lasting
+// ban score, as BCHN's Misbehaving does: bchd bans above --banthreshold, so a
+// score of 100 does not ban the peer at the default threshold and a further
+// report does.  A persistent peer, a whitelisted one and any peer with
+// --nobanning are spared, as BCHN discourages no peer with noban or one it
+// connected to by hand.
+func TestMisbehavingAddsBanScore(t *testing.T) {
+	useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
+	s := &server{
+		query:    make(chan interface{}),
+		banPeers: make(chan *serverPeer, 4),
+		quit:     make(chan struct{}),
+	}
+	newPeer := func(persistent, whitelisted bool) *serverPeer {
+		sp := newServerPeer(s, persistent)
+		sp.isWhitelisted = whitelisted
+		sp.Peer = peer.NewInboundPeer(&peer.Config{
+			ChainParams: &chaincfg.RegressionNetParams,
+		})
+		return sp
+	}
+	normal, persistent := newPeer(false, false), newPeer(true, false)
+	whitelisted, unbanned := newPeer(false, true), newPeer(false, false)
+	connected := []*serverPeer{persistent, whitelisted, unbanned, normal}
+
+	// The peer handler answers the queries for the connected peers.
+	go func() {
+		for {
+			select {
+			case q := <-s.query:
+				q.(getPeersMsg).reply <- connected
+			case <-s.quit:
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { close(s.quit) })
+
+	// scoreBecomes fails the test unless the peer's ban score becomes want.
+	scoreBecomes := func(sp *serverPeer, want uint32) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for sp.banScore.Int() != want {
+			if time.Now().After(deadline) {
+				t.Fatalf("ban score %d, want %d", sp.banScore.Int(),
+					want)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	// The report is handled from a goroutine of its own.  At a score of no
+	// more than half the threshold, addBanScore reads the config no more
+	// once the score is seen, so the config can be changed below.
+	s.Misbehaving(normal.Peer, 10, "bad-txns-vin-empty")
+	scoreBecomes(normal, 10)
+	s.punishPeer(normal.Peer, 90, "bad-txns-vin-empty")
+	scoreBecomes(normal, 100)
+	if score := normal.banScore.String(); !strings.HasPrefix(score,
+		"persistent 100 + transient 0 ") {
+
+		t.Fatalf("ban score %s, want a lasting 100", score)
+	}
+	select {
+	case sp := <-s.banPeers:
+		t.Fatalf("%s banned at a ban score of 100", sp)
+	default:
+	}
+	s.punishPeer(normal.Peer, 100, "bad-txnmrklroot")
+	select {
+	case sp := <-s.banPeers:
+		if sp != normal {
+			t.Fatalf("banned %s, want %s", sp, normal)
+		}
+	default:
+		t.Fatal("peer not banned at a ban score of 200")
+	}
+
+	s.punishPeer(persistent.Peer, 100, "bad-txnmrklroot")
+	s.punishPeer(whitelisted.Peer, 100, "bad-txnmrklroot")
+	cfg.DisableBanning = true
+	s.punishPeer(unbanned.Peer, 100, "bad-txnmrklroot")
+	for _, sp := range []*serverPeer{persistent, whitelisted, unbanned} {
+		if score := sp.banScore.Int(); score != 0 {
+			t.Errorf("spared peer %s has ban score %d", sp, score)
+		}
+	}
+}

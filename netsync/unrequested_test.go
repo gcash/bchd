@@ -27,6 +27,7 @@ func (nopNotifier) AnnounceNewTransactions([]*mempool.TxDesc)               {}
 func (nopNotifier) UpdatePeerHeights(*chainhash.Hash, int32, *peerpkg.Peer) {}
 func (nopNotifier) RelayInventory(*wire.InvVect, interface{})               {}
 func (nopNotifier) TransactionConfirmed(*bchutil.Tx)                        {}
+func (nopNotifier) Misbehaving(*peerpkg.Peer, uint32, string)               {}
 
 // unrequestedTestManager returns a sync manager on a fresh regression test
 // chain and a registered peer that may relay blocks directly.

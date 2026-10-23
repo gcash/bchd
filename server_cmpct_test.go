@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -27,6 +28,19 @@ func (nopPeerNotifier) AnnounceNewTransactions([]*mempool.TxDesc)            {}
 func (nopPeerNotifier) UpdatePeerHeights(*chainhash.Hash, int32, *peer.Peer) {}
 func (nopPeerNotifier) RelayInventory(*wire.InvVect, interface{})            {}
 func (nopPeerNotifier) TransactionConfirmed(*bchutil.Tx)                     {}
+func (nopPeerNotifier) Misbehaving(*peer.Peer, uint32, string)               {}
+
+// misbehaviorRecorder is a PeerNotifier that records the ban score increases
+// the sync manager asks for, as their score and reason.
+type misbehaviorRecorder struct {
+	nopPeerNotifier
+	punished chan string
+}
+
+// Misbehaving records the increase.
+func (r misbehaviorRecorder) Misbehaving(_ *peer.Peer, score uint32, reason string) {
+	r.punished <- fmt.Sprintf("%d %s", score, reason)
+}
 
 // cmpctHarness is a server peer backed by a current regtest chain, an empty
 // memory pool and a running sync manager, whose remote side the test drives.
@@ -39,6 +53,9 @@ type cmpctHarness struct {
 	// getData receives the inventory of each getdata the server peer
 	// sends.
 	getData chan *wire.InvVect
+	// punished receives each ban score increase the sync manager asks
+	// for, as its score and reason.
+	punished chan string
 }
 
 // newCmpctHarness returns a harness whose peer has completed the handshake
@@ -65,8 +82,9 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 	// The sync manager gets a copy of the regtest parameters, so that,
 	// as on the other networks, it refuses blocks it did not request.
 	syncParams := *params
+	punished := make(chan string, 16)
 	sm, err := netsync.New(&netsync.Config{
-		PeerNotifier: nopPeerNotifier{},
+		PeerNotifier: misbehaviorRecorder{punished: punished},
 		Chain:        chain,
 		TxMemPool:    txPool,
 		ChainParams:  &syncParams,
@@ -128,8 +146,9 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 	}
 
 	h := &cmpctHarness{s: s, sp: sp, remote: remote,
-		getTxns: make(chan *wire.MsgGetBlockTxns, 16),
-		getData: make(chan *wire.InvVect, 16)}
+		getTxns:  make(chan *wire.MsgGetBlockTxns, 16),
+		getData:  make(chan *wire.InvVect, 16),
+		punished: punished}
 	go func() {
 		for {
 			msg, _, err := wire.ReadMessage(remote, pver, params.Net)
@@ -908,6 +927,45 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 // ContextualCheckBlock pass.
 func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 	h := newCmpctHarness(t)
+	block := twoCoinbasesBlock(t, h)
+	h.request(t, *block.Hash())
+
+	done := h.process(shortIDsOnly(t, block))
+	h.expectGetTxns(t, *block.Hash())
+	h.send(t, blockTxnsFor(block))
+	waitDone(t, done)
+	h.expectNotRelayed(t)
+
+	// BIP 152 lets a peer relay a compact block once it has checked only
+	// the header, so, as in BCHN, the peer is not punished for it.
+	select {
+	case p := <-h.punished:
+		t.Fatalf("the peer of an invalid compact block was punished: %s", p)
+	default:
+	}
+}
+
+// TestInvalidBlockMessagePunished ensures the peer that sent an invalid block
+// it was asked for in a block message is punished with BCHN's score.
+func TestInvalidBlockMessagePunished(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := twoCoinbasesBlock(t, h)
+	h.request(t, *block.Hash())
+	h.send(t, block.MsgBlock())
+	select {
+	case p := <-h.punished:
+		if p != "100 bad-tx-coinbase" {
+			t.Fatalf("punished %s, want 100 bad-tx-coinbase", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the peer of an invalid block was not punished")
+	}
+}
+
+// twoCoinbasesBlock returns a block on the harness's tip that fails the
+// checks needing no inputs, for holding two coinbases.
+func twoCoinbasesBlock(t *testing.T, h *cmpctHarness) *bchutil.Block {
+	t.Helper()
 	msgBlock := *solvedBlock(t, h.s.chain, 0, nil).MsgBlock()
 	second := msgBlock.Transactions[0].Copy()
 	second.TxOut[0].Value--
@@ -920,14 +978,7 @@ func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 
 		msgBlock.Header.Nonce++
 	}
-	block := bchutil.NewBlock(&msgBlock)
-	h.request(t, *block.Hash())
-
-	done := h.process(shortIDsOnly(t, block))
-	h.expectGetTxns(t, *block.Hash())
-	h.send(t, blockTxnsFor(block))
-	waitDone(t, done)
-	h.expectNotRelayed(t)
+	return bchutil.NewBlock(&msgBlock)
 }
 
 // shortenCmpctTxnsTimeout makes compact blocks wait briefly for missing

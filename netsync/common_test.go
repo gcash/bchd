@@ -209,6 +209,9 @@ func (mock *MockPeerNotifier) TransactionConfirmed(tx *bchutil.Tx) {
 	mock.transactionConfirmedChan <- &transactionConfirmedCall{tx: tx}
 }
 
+// Misbehaving ignores ban score increases.
+func (mock *MockPeerNotifier) Misbehaving(*peer.Peer, uint32, string) {}
+
 // NewMockPeerNotifier creates a new MockPeerNotifier and initializes the
 // channels.
 func NewMockPeerNotifier() *MockPeerNotifier {

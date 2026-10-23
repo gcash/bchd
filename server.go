@@ -1192,7 +1192,8 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	// was relayed to before validation are answered from the
 	// recent block instead.
 	sp.processBlockMtx.Lock()
-	sp.server.syncManager.QueueBlock(block, sp.Peer, sp.blockProcessed)
+	sp.server.syncManager.QueueCompactBlock(block, sp.Peer,
+		sp.blockProcessed)
 	<-sp.blockProcessed
 	sp.processBlockMtx.Unlock()
 }
@@ -2213,6 +2214,42 @@ func (s *server) TransactionConfirmed(tx *bchutil.Tx) {
 
 	iv := wire.NewInvVect(wire.InvTypeTx, tx.Hash())
 	s.RemoveRebroadcastInventory(iv)
+}
+
+// Misbehaving adds score to the ban score of the connected peer p, which sent
+// an invalid transaction or block, as BCHN's Misbehaving does
+// (net_processing.cpp:894-918).  It does so from a goroutine, as the sync
+// manager calls this from its block handler, which must not wait for the peer
+// handler.
+//
+// This function is safe for concurrent access and is part of the
+// netsync.PeerNotifier interface implementation.
+func (s *server) Misbehaving(p *peer.Peer, score uint32, reason string) {
+	go s.punishPeer(p, score, reason)
+}
+
+// punishPeer adds score to the ban score of the connected peer p.  A
+// persistent peer is spared, as BCHN does not discourage a peer it connected
+// to by hand (net_processing.cpp:3792-3794); a whitelisted one and
+// --nobanning are left to addBanScore.
+func (s *server) punishPeer(p *peer.Peer, score uint32, reason string) {
+	reply := make(chan []*serverPeer, 1)
+	connected, ok := queryPeerHandler(s, getPeersMsg{reply: reply}, reply)
+	if !ok {
+		return
+	}
+	for _, sp := range connected {
+		if sp.Peer != p {
+			continue
+		}
+		if sp.persistent {
+			peerLog.Debugf("Misbehaving persistent peer %s: %s", sp,
+				reason)
+			return
+		}
+		sp.addBanScore(score, 0, reason)
+		return
+	}
 }
 
 // pushTxMsg sends a tx message for the provided transaction hash to the
