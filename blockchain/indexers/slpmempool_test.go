@@ -171,6 +171,69 @@ func TestSlpMempoolMetadataLifetime(t *testing.T) {
 	}
 }
 
+// TestSlpConfirmedMintMetadata ensures a block confirming a MINT leaves the
+// token metadata that a later MINT in the memory pool set, one spending the
+// confirmed MINT's mint baton, so that the baton is reported where that MINT
+// puts it rather than on the output it spends.  The token metadata of a MINT
+// the block double-spends still goes at the block's event, once the memory
+// pool has dropped that MINT, and that of the confirmed MINT itself goes at
+// once, also while graph search loads, when the index keeps the memory pool
+// entries of the block's transactions.
+func TestSlpConfirmedMintMetadata(t *testing.T) {
+	genesis := batonGenesis(t, 1)
+	token := tokenIDOf(t, genesis)
+	onGenesis := wire.OutPoint{Hash: genesis.TxHash(), Index: 2}
+	mint1 := batonMint(t, token, onGenesis)
+	onMint1 := wire.OutPoint{Hash: mint1.TxHash(), Index: 2}
+	mint2 := batonMint(t, token, onMint1)
+	onMint2 := wire.OutPoint{Hash: mint2.TxHash(), Index: 2}
+	check := func(test *slpTokenIDTest, when string, want wire.OutPoint) {
+		t.Helper()
+		if got := test.baton(token); got == nil || *got != want {
+			t.Errorf("%s: baton %v, want %v", when, got, want)
+		}
+	}
+
+	// Both MINTs are in the memory pool, and a block confirms the first.
+	test := newSlpTokenIDTest(t)
+	test.connect(genesis)
+	test.addPotential(mint1)
+	test.addPotential(mint2)
+	pool := map[chainhash.Hash]bool{mint2.TxHash(): true}
+	inPool := func(hash *chainhash.Hash) bool { return pool[*hash] }
+	test.connect(mint1)
+	check(test, "first MINT confirmed, second in the memory pool", onMint2)
+	test.idx.RemoveMempoolSlpTxsNotIn(inPool)
+	check(test, "at the block's event", onMint2)
+	delete(pool, mint2.TxHash())
+	test.idx.RemoveMempoolSlpTxsNotIn(inPool)
+	check(test, "second MINT gone", onMint1)
+
+	// A block confirms a MINT that double-spends the one in the memory
+	// pool, which the memory pool then drops.
+	test = newSlpTokenIDTest(t)
+	test.connect(genesis)
+	test.addPotential(mint1)
+	script, err := metadatamaker.TokenType1Mint(token[:],
+		metadatamaker.NewMintBatonVout(2), 20)
+	other := batonTx(t, onGenesis, script, err)
+	test.connect(other)
+	test.idx.RemoveMempoolSlpTxsNotIn(func(*chainhash.Hash) bool { return false })
+	check(test, "double-spending MINT confirmed, at the block's event",
+		wire.OutPoint{Hash: other.TxHash(), Index: 2})
+
+	// Graph search is on but has no database yet, as while it loads, so
+	// the index keeps the memory pool entries of a block's transactions
+	// until the block's event.  A block confirms the MINT in the memory
+	// pool and one spending its mint baton that the memory pool never had.
+	test = newSlpTokenIDTest(t)
+	test.idx.config.SlpGraphSearchEnabled = true
+	test.connect(genesis)
+	test.addPotential(mint1)
+	test.connect(mint1, mint2)
+	check(test, "both MINTs confirmed while graph search loads", onMint2)
+}
+
 // TestSlpRemoveNotInUnlocked ensures RemoveMempoolSlpTxsNotIn asks the memory
 // pool about each transaction with no slp cache lock held, and then removes
 // the entry and token metadata of a transaction that left it and keeps those

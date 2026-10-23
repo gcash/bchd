@@ -121,11 +121,19 @@ func (s *SlpCache) GetTokenMetadata(hash *chainhash.Hash, tip *chainhash.Hash) (
 	return TokenMetadata{}, false
 }
 
-// RemoveTokenMetadata removes a token metadata item from cache
-func (s *SlpCache) RemoveTokenMetadata(hash chainhash.Hash) {
+// RemoveTokenMetadata removes the cached metadata of the token hash as a block
+// confirms mint, a MINT of the token, unless another memory pool transaction
+// set it.  That is a later MINT spending the confirmed one's mint baton, whose
+// metadata stays while it is in the memory pool, or one no longer in the pool
+// once the block is connected, whose metadata RemoveMempoolSlpTxsNotIn removes
+// at the block's event.
+func (s *SlpCache) RemoveTokenMetadata(hash, mint chainhash.Hash) {
 	s.Lock()
 	defer s.Unlock()
 
+	if from, ok := s.mempoolTokenMetadata[hash]; ok && from != mint {
+		return
+	}
 	delete(s.mempoolTokenMetadata, hash)
 	s.tokenMetadata.Remove(hash)
 }

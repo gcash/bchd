@@ -561,15 +561,12 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			return fmt.Errorf("transaction has no outputs %v", tx.TxHash())
 		}
 
-		// Here we take special care to avoid the situation where a double-spend of an slp mint baton
-		// has been mined but the SlpCache.tempTokenMetadata cache contains metadata with a current mint baton
-		// outpoint location that is based the first seen mint baton spend. This scenario would not impact slp validation,
-		// however it would result in the gRPC server sending the client the wrong mint baton hash until the cache
-		// was cleared in a bchd restart or cleared from exceeding the SlpCache.maxEntries limit.
-		//
-		// The consequence of this is chained unconfirmed mint transactions may cause an outdated mint baton outpoint
-		// to be returned if a chained parent is recently confirmed mint children are remaining in the mempool.
-		// This situation only presents an inconvenience to the user.
+		// A MINT moves its token's mint baton, so the token metadata cached for the token is dropped, to be read
+		// from the index again, unless another mempool transaction set it. That one is either a later MINT
+		// spending this MINT's baton, whose metadata holds while that MINT is in the mempool, or one no longer in
+		// the mempool once this block is connected, such as a MINT this block double-spends, whose metadata goes
+		// at the block's event (RemoveMempoolSlpTxsNotIn). Telling the two apart here would need the mempool's
+		// view.
 		//
 		// Since the mint baton outpoint location is the only stateful property of token metadata there are no other
 		// similar situations with slp v1/nft1.
@@ -579,7 +576,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
 			} else {
 				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
-				idx.cache.RemoveTokenMetadata(*hash)
+				idx.cache.RemoveTokenMetadata(*hash, tx.TxHash())
 			}
 		}
 
