@@ -462,6 +462,44 @@ func TestBlockchainSync(t *testing.T) {
 		t.Fatal("Expected IsCurrent() to be true")
 	}
 
+	// A transaction the chain has gets no reject message, as BCHN sends
+	// none for a transaction it has.
+	syncMgr.QueueTx(spendTx, localNode, syncChan)
+	select {
+	case <-syncChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for sync manager to process transaction")
+	}
+
+	// A requested block the chain got from elsewhere in the meantime gets
+	// no reject message when it arrives, as BCHN sends none for a block it
+	// has.
+	known, err := rpctest.CreateBlock(block, nil, blockVersion,
+		time.Now().Truncate(time.Second), address, []wire.TxOut{},
+		&chainParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncMgr.QueueInv(buildBlockInv(known), localNode)
+	select {
+	case <-remoteMessages.getDataChan:
+	case msg := <-remoteMessages.rejectChan:
+		t.Fatalf("Received unexpected reject message for %v: %s, %q",
+			msg.Hash, msg.Code, msg.Reason)
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for remote node to receive getdata message")
+	}
+	if _, err := syncMgr.ProcessBlock(known, blockchain.BFNone); err != nil {
+		t.Fatalf("failed to process block: %v", err)
+	}
+	syncMgr.QueueBlock(known, localNode, syncChan)
+	select {
+	case <-syncChan:
+	case <-time.After(time.Second):
+		t.Fatalf("Timeout waiting for sync manager to process block %d",
+			known.Height())
+	}
+
 	// Send invalid block with timestamp in the far future
 	prevBlock = block
 	timestamp = time.Now().Truncate(time.Second).Add(1000 * time.Hour)
@@ -474,6 +512,9 @@ func TestBlockchainSync(t *testing.T) {
 	syncMgr.QueueInv(buildBlockInv(block), localNode)
 	select {
 	case <-remoteMessages.getDataChan:
+	case msg := <-remoteMessages.rejectChan:
+		t.Fatalf("Received unexpected reject message for %v: %s, %q",
+			msg.Hash, msg.Code, msg.Reason)
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for remote node to receive getdata message")
 	}
@@ -492,12 +533,17 @@ func TestBlockchainSync(t *testing.T) {
 			localNode.LastBlock())
 	}
 
-	// Expect node to send reject in response to invalid block
+	// Expect node to send reject in response to invalid block, with
+	// BCHN's reason
 	select {
 	case msg := <-remoteMessages.rejectChan:
-		if msg.Code != wire.RejectInvalid {
-			t.Fatalf("Reject message has unexpected code %s, expected %s",
-				msg.Code, wire.RejectInvalid)
+		if msg.Hash != *block.Hash() || msg.Code != wire.RejectInvalid ||
+			msg.Reason != "time-too-new" {
+
+			t.Fatalf("Reject message for %v has unexpected code %s and "+
+				"reason %q, expected %v, %s and %q", msg.Hash, msg.Code,
+				msg.Reason, block.Hash(), wire.RejectInvalid,
+				"time-too-new")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for remote node to receive reject message")
@@ -662,6 +708,64 @@ func TestMempoolSync(t *testing.T) {
 			"to PeerNotifier")
 	}
 
+	// A transaction the pool already has and an orphan too large to keep
+	// get no reject message, as BCHN sends none for either.
+	unknownParent := wire.NewMsgTx(1)
+	unknownParent.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+		Index: 9}})
+	unknownParent.AddTxOut(wire.NewTxOut(1e8, nil, wire.TokenData{}))
+	largeOrphan, err := createSpendingTx(bchutil.NewTx(unknownParent), 0,
+		scriptSig, address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	largeOrphanMsg := largeOrphan.MsgTx()
+	largeOrphanMsg.TxOut[0].Value -= 1000
+	largeOrphanMsg.AddTxOut(wire.NewTxOut(1000,
+		largeOrphanMsg.TxOut[0].PkScript, wire.TokenData{}))
+	for _, tx := range []*bchutil.Tx{tx2, bchutil.NewTx(largeOrphanMsg)} {
+		syncMgr.QueueTx(tx, localNode, syncChan)
+		select {
+		case <-syncChan:
+		case <-time.After(time.Second):
+			t.Fatalf("Timeout waiting for sync manager to process "+
+				"transaction %v", tx.Hash())
+		}
+	}
+
+	// A transaction whose script fails gets BCHN's reason, cut to the 111
+	// bytes BCHN sends.
+	falseScriptSig, err := txscript.NewScriptBuilder().
+		AddData([]byte{txscript.OP_FALSE}).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badSpend, err := createSpendingTx(tx3, 0, falseScriptSig, address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncMgr.QueueTx(badSpend, localNode, syncChan)
+	select {
+	case <-syncChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for sync manager to process the spend")
+	}
+	reason := "mandatory-script-verify-flag-failed (Script evaluated " +
+		"without error but finished with a false/empty top stack element)"
+	select {
+	case msg := <-remoteMessages.rejectChan:
+		if msg.Hash != *badSpend.Hash() || msg.Code != wire.RejectInvalid ||
+			msg.Reason != reason[:111] {
+
+			t.Fatalf("Reject message for %v has unexpected code %s and "+
+				"reason %q, expected %v, %s and %q", msg.Hash, msg.Code,
+				msg.Reason, badSpend.Hash(), wire.RejectInvalid,
+				reason[:111])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for remote node to receive reject message")
+	}
+
 	// Send non-standard, invalid transaction with corrupt scriptSig
 	badScriptSig := append(scriptSig, 0xaa, 0xbb, 0xcc, 0xdd)
 	tx4, err := createSpendingTx(tx3, 0, badScriptSig, address)
@@ -686,12 +790,17 @@ func TestMempoolSync(t *testing.T) {
 	default:
 	}
 
-	// Expect node to send reject in response to invalid transaction
+	// Expect node to send reject in response to invalid transaction, with
+	// BCHN's reason
 	select {
 	case msg := <-remoteMessages.rejectChan:
-		if msg.Code != wire.RejectNonstandard {
-			t.Fatalf("Reject message has unexpected code %s, expected %s",
-				msg.Code, wire.RejectNonstandard)
+		if msg.Hash != *tx4.Hash() || msg.Code != wire.RejectNonstandard ||
+			msg.Reason != "scriptsig-not-pushonly" {
+
+			t.Fatalf("Reject message for %v has unexpected code %s and "+
+				"reason %q, expected %v, %s and %q", msg.Hash, msg.Code,
+				msg.Reason, tx4.Hash(), wire.RejectNonstandard,
+				"scriptsig-not-pushonly")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for remote node to receive reject message")

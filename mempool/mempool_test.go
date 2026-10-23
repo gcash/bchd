@@ -1264,6 +1264,65 @@ func TestRejectReason(t *testing.T) {
 	}
 }
 
+// TestBlockRejectReason ensures rule errors are reported with Bitcoin Cash
+// Node's reason strings where it has one for the same check, that the reason
+// for a template that does not build on the tip uses the BIP22 spelling, and
+// that an old block version is given as BCHN gives it.
+func TestBlockRejectReason(t *testing.T) {
+	tests := []struct {
+		code blockchain.ErrorCode
+		want string
+	}{
+		{blockchain.ErrNoTransactions, "bad-cb-missing"},
+		{blockchain.ErrFirstTxNotCoinbase, "bad-cb-missing"},
+		{blockchain.ErrMultipleCoinbases, "bad-tx-coinbase"},
+		{blockchain.ErrNoTxInputs, "bad-txns-vin-empty"},
+		{blockchain.ErrNoTxOutputs, "bad-txns-vout-empty"},
+		{blockchain.ErrTxTooBig, "bad-txns-oversize"},
+		{blockchain.ErrTxTooSmall, "bad-txns-undersize"},
+		{blockchain.ErrDuplicateTxInputs, "bad-txns-inputs-duplicate"},
+		{blockchain.ErrBadTxInput, "bad-txns-prevout-null"},
+		{blockchain.ErrMissingTxOut, "bad-txns-inputs-missingorspent"},
+		{blockchain.ErrSpentTxOut, "bad-txns-inputs-missingorspent"},
+		{blockchain.ErrUnfinalizedTx, "bad-txns-nonfinal"},
+		{blockchain.ErrOverwriteTx, "bad-txns-BIP30"},
+		{blockchain.ErrImmatureSpend, "bad-txns-premature-spend-of-coinbase"},
+		{blockchain.ErrSpendTooHigh, "bad-txns-in-belowout"},
+		{blockchain.ErrBadCoinbaseValue, "bad-cb-amount"},
+		{blockchain.ErrBadFees, "bad-txns-accumulated-fee-outofrange"},
+		{blockchain.ErrTooManySigChecks, "blk-bad-inputs"},
+		{blockchain.ErrScriptMalformed, "blk-bad-inputs"},
+		{blockchain.ErrScriptValidation, "blk-bad-inputs"},
+		{blockchain.ErrInvalidTxOrder, "tx-ordering"},
+		{blockchain.ErrBadCheckpoint, "checkpoint mismatch"},
+		{blockchain.ErrForkTooOld, "bad-fork-prior-to-checkpoint"},
+		{blockchain.ErrForkBeforeFinalized, "bad-fork-prior-finalized"},
+		{blockchain.ErrTxTooManySigChecks, "blk-bad-inputs"},
+		{blockchain.ErrTxOutValueNegative, "bad-txns-vout-negative"},
+		{blockchain.ErrTxOutValueTooHigh, "bad-txns-vout-toolarge"},
+		{blockchain.ErrTxOutTotalTooHigh, "bad-txns-txouttotal-toolarge"},
+		{blockchain.ErrTxInValueOutOfRange, "bad-txns-inputvalues-outofrange"},
+		{blockchain.ErrPrevBlockNotBest, "inconclusive-not-best-prevblk"},
+	}
+	for _, test := range tests {
+		err := blockchain.RuleError{ErrorCode: test.code, Description: "x"}
+		if got := BlockRejectReason(err, 4); got != test.want {
+			t.Errorf("%v: got %q, want %q", test.code, got, test.want)
+		}
+	}
+
+	for version, want := range map[int32]string{
+		1:  "bad-version(0x00000001)",
+		3:  "bad-version(0x00000003)",
+		-1: "bad-version(0xffffffff)",
+	} {
+		err := blockchain.RuleError{ErrorCode: blockchain.ErrBlockVersionTooOld}
+		if got := BlockRejectReason(err, version); got != want {
+			t.Errorf("version %d: got %q, want %q", version, got, want)
+		}
+	}
+}
+
 // TestScriptErrorString ensures each script error code BCHN has one error for
 // gets the text BCHN gives that error, and the others their own text.
 func TestScriptErrorString(t *testing.T) {

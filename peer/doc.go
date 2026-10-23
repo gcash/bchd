@@ -127,9 +127,9 @@ Next, the PushGetBlocksMsg and PushGetHeadersMsg functions will construct proper
 messages using a block locator and ignore back to back duplicate requests.
 
 Finally, the PushRejectMsg function can be used to easily create and send an
-appropriate reject message based on the provided parameters as well as
-optionally provides a flag to cause it to block until the message is actually
-sent.
+appropriate reject message based on the provided parameters, with the reason
+cut to the 111 bytes Bitcoin Cash Node reads, as well as optionally provides a
+flag to cause it to block until the message is actually sent.
 
 # Peer Statistics
 

@@ -1132,10 +1132,15 @@ func (p *Peer) PushGetHeadersMsg(locator blockchain.BlockLocator, stopHash *chai
 	return nil
 }
 
+// maxSentRejectReasonLen is the length in bytes of the longest reject reason
+// BCHN sends or reads (MAX_REJECT_MESSAGE_LENGTH).
+const maxSentRejectReasonLen = 111
+
 // PushRejectMsg sends a reject message for the provided command, reject code,
 // reject reason, and hash.  The hash will only be used when the command is a tx
 // or block and should be nil in other cases.  The wait parameter will cause the
-// function to block until the reject message has actually been sent.
+// function to block until the reject message has actually been sent.  A reason
+// longer than the 111 bytes BCHN reads is cut to them, as BCHN cuts its own.
 //
 // This function is safe for concurrent access.
 func (p *Peer) PushRejectMsg(command string, code wire.RejectCode, reason string, hash *chainhash.Hash, wait bool) {
@@ -1145,6 +1150,9 @@ func (p *Peer) PushRejectMsg(command string, code wire.RejectCode, reason string
 		return
 	}
 
+	if len(reason) > maxSentRejectReasonLen {
+		reason = reason[:maxSentRejectReasonLen]
+	}
 	msg := wire.NewMsgReject(command, code, reason)
 	if command == wire.CmdTx || command == wire.CmdBlock {
 		if hash == nil {

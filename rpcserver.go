@@ -2772,127 +2772,6 @@ func handleGetBlockTemplateRequest(s *rpcServer, request *btcjson.TemplateReques
 	return state.blockTemplateResult(useCoinbaseValue, nil)
 }
 
-// chainErrToGBTErrString converts an error returned from btcchain to a string
-// which matches the reasons and format described in BIP0022 for rejection
-// reasons.  Where Bitcoin Cash Node rejects a block for the same reason, its
-// reason string is used.  blockVersion is the version of the block, which
-// the reason for a version that is too old gives, as BCHN's does.
-func chainErrToGBTErrString(err error, blockVersion int32) string {
-	// When the passed error is not a RuleError, just return a generic
-	// rejected string with the error text.
-	ruleErr, ok := err.(blockchain.RuleError)
-	if !ok {
-		return "rejected: " + err.Error()
-	}
-
-	switch ruleErr.ErrorCode {
-	case blockchain.ErrDuplicateBlock:
-		return "duplicate"
-	case blockchain.ErrBlockTooBig:
-		return "bad-blk-length"
-	case blockchain.ErrBlockVersionTooOld:
-		return fmt.Sprintf("bad-version(0x%08x)", uint32(blockVersion))
-	case blockchain.ErrInvalidTime:
-		return "bad-time"
-	case blockchain.ErrTimeTooOld:
-		return "time-too-old"
-	case blockchain.ErrTimeTooNew:
-		return "time-too-new"
-	case blockchain.ErrDifficultyTooLow:
-		return "bad-diffbits"
-	case blockchain.ErrUnexpectedDifficulty:
-		return "bad-diffbits"
-	case blockchain.ErrHighHash:
-		return "high-hash"
-	case blockchain.ErrBadMerkleRoot:
-		return "bad-txnmrklroot"
-	case blockchain.ErrBadCheckpoint:
-		return "checkpoint mismatch"
-	case blockchain.ErrForkTooOld:
-		return "bad-fork-prior-to-checkpoint"
-	case blockchain.ErrForkBeforeFinalized:
-		return "bad-fork-prior-finalized"
-	case blockchain.ErrCheckpointTimeTooOld:
-		return "checkpoint-time-too-old"
-	case blockchain.ErrNoTransactions:
-		return "bad-cb-missing"
-	case blockchain.ErrNoTxInputs:
-		return "bad-txns-vin-empty"
-	case blockchain.ErrNoTxOutputs:
-		return "bad-txns-vout-empty"
-	case blockchain.ErrTxTooBig:
-		return "bad-txns-oversize"
-	case blockchain.ErrTxTooSmall:
-		return "bad-txns-undersize"
-	case blockchain.ErrTxTooManySigChecks:
-		// BCHN gives a transaction's sigchecks limit, like the block's,
-		// the reason of its parallel script checks.
-		return "blk-bad-inputs"
-	case blockchain.ErrTxOutValueNegative:
-		return "bad-txns-vout-negative"
-	case blockchain.ErrTxOutValueTooHigh:
-		return "bad-txns-vout-toolarge"
-	case blockchain.ErrTxOutTotalTooHigh:
-		return "bad-txns-txouttotal-toolarge"
-	case blockchain.ErrTxInValueOutOfRange:
-		return "bad-txns-inputvalues-outofrange"
-	case blockchain.ErrDuplicateTxInputs:
-		return "bad-txns-inputs-duplicate"
-	case blockchain.ErrBadTxInput:
-		return "bad-txns-prevout-null"
-	case blockchain.ErrMissingTxOut:
-		return "bad-txns-inputs-missingorspent"
-	case blockchain.ErrSpentTxOut:
-		return "bad-txns-inputs-missingorspent"
-	case blockchain.ErrUnfinalizedTx:
-		return "bad-txns-nonfinal"
-	case blockchain.ErrDuplicateTx:
-		return "bad-txns-duplicate"
-	case blockchain.ErrOverwriteTx:
-		return "bad-txns-BIP30"
-	case blockchain.ErrImmatureSpend:
-		return "bad-txns-premature-spend-of-coinbase"
-	case blockchain.ErrSpendTooHigh:
-		return "bad-txns-in-belowout"
-	case blockchain.ErrBadFees:
-		return "bad-txns-accumulated-fee-outofrange"
-	case blockchain.ErrTooManySigChecks:
-		// BCHN gives the block's sigchecks limit the reason of its
-		// parallel script checks.
-		return "blk-bad-inputs"
-	case blockchain.ErrFirstTxNotCoinbase:
-		return "bad-cb-missing"
-	case blockchain.ErrMultipleCoinbases:
-		return "bad-tx-coinbase"
-	case blockchain.ErrBadCoinbaseScriptLen:
-		return "bad-cb-length"
-	case blockchain.ErrBadCoinbaseValue:
-		return "bad-cb-amount"
-	case blockchain.ErrMissingCoinbaseHeight:
-		return "bad-cb-height"
-	case blockchain.ErrBadCoinbaseHeight:
-		return "bad-cb-height"
-	case blockchain.ErrScriptMalformed:
-		return "blk-bad-inputs"
-	case blockchain.ErrScriptValidation:
-		return "blk-bad-inputs"
-	case blockchain.ErrPreviousBlockUnknown:
-		return "prev-blk-not-found"
-	case blockchain.ErrInvalidAncestorBlock:
-		return "bad-prevblk"
-	case blockchain.ErrPrevBlockNotBest:
-		return "inconclusive-not-best-prevblk"
-	case blockchain.ErrInvalidTxOrder:
-		return "tx-ordering"
-	case blockchain.ErrBadTxVersion:
-		return "bad-txns-version"
-	case blockchain.ErrCoinbaseHasTokens:
-		return "bad-txns-coinbase-has-tokens"
-	}
-
-	return "rejected: " + err.Error()
-}
-
 // knownBlockReason returns the BIP22 reason for a block the chain already
 // has, or an empty string when the block still has to be checked.  Known
 // orphans only count for submitblock, and a block in the index whose validity
@@ -2966,7 +2845,7 @@ func handleGetBlockTemplateProposal(s *rpcServer, request *btcjson.TemplateReque
 		}
 
 		rpcsLog.Infof("Rejected block proposal: %v", err)
-		return chainErrToGBTErrString(err, block.MsgBlock().Header.Version), nil
+		return mempool.BlockRejectReason(err, block.MsgBlock().Header.Version), nil
 	}
 
 	return nil, nil
@@ -4760,7 +4639,7 @@ func handleSubmitBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struc
 		}
 		rpcsLog.Infof("Rejected block %s via submitblock: %v",
 			block.Hash(), err)
-		return chainErrToGBTErrString(ruleErr,
+		return mempool.BlockRejectReason(ruleErr,
 			block.MsgBlock().Header.Version), nil
 	}
 	if isOrphan {

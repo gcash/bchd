@@ -17,7 +17,6 @@ import (
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
-	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/mempool"
 	peerpkg "github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
@@ -808,9 +807,19 @@ func (sm *SyncManager) handleTxMsg(tmsg *txMsg) {
 				txHash, err)
 		}
 
-		// Convert the error into an appropriate reject message and
-		// send it.
-		code, reason := mempool.ErrToRejectErr(err)
+		// Send a reject message with the reject code and BCHN's short
+		// reason, as BCHN does for a transaction it refuses.  It sends
+		// none when something went wrong, for a transaction it already
+		// has in its pool, its orphans or the chain, which it does not
+		// validate again, and for an orphan, which it drops quietly
+		// when it is too large to keep.
+		reason := mempool.RejectReason(err)
+		switch reason {
+		case "", "txn-already-in-mempool", "txn-already-known",
+			"orphan-tx-size":
+			return
+		}
+		code, _ := mempool.ErrToRejectErr(err)
 		peer.PushRejectMsg(wire.CmdTx, code, reason, txHash, false)
 		return
 	}
@@ -933,15 +942,18 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 			log.Errorf("Failed to process block %v: %v",
 				blockHash, err)
 		}
-		// The chain has requested a shutdown for the database error,
-		// which is not the peer's fault.
-		if _, ok := err.(database.Error); ok {
+		// Send a reject message with the reject code and BCHN's reason,
+		// as BCHN does for a block that breaks a rule, except for a
+		// block the chain already has.  Other errors, such as a database
+		// error for which the chain has requested a shutdown, are not the
+		// peer's fault.
+		if !errors.As(err, &rerr) ||
+			rerr.ErrorCode == blockchain.ErrDuplicateBlock {
 			return
 		}
-
-		// Convert the error into an appropriate reject message and
-		// send it.
-		code, reason := mempool.ErrToRejectErr(err)
+		code, _ := mempool.ErrToRejectErr(err)
+		reason := mempool.BlockRejectReason(err,
+			bmsg.block.MsgBlock().Header.Version)
 		peer.PushRejectMsg(wire.CmdBlock, code, reason, blockHash, false)
 		return
 	}
