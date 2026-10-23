@@ -39,6 +39,20 @@ var (
 	grpcIdleTimeout       = 5 * time.Minute
 )
 
+// grpcWriteTimeout is how long a gRPC client may take none of a reply being
+// written to it.  A stream whose client takes nothing for longer is reset, and
+// a connection to which nothing can be written for longer is closed, so a
+// client that stops reading cannot hold a call's goroutines and the reply for
+// good, as BCHN's -rpcservertimeout does for its HTTP clients.  It only runs
+// while a reply is being written, so a subscription with nothing to send is
+// kept however long it waits.
+var grpcWriteTimeout = 30 * time.Second
+
+// grpcWritePartSize is how much of a reply is written to a gRPC stream each
+// time its write deadline is renewed: a client must take this much in each
+// grpcWriteTimeout.
+const grpcWritePartSize = 64 * 1024
+
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	if len(netAddrs) == 0 {
 		return nil, nil
@@ -55,22 +69,9 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	opts = append(opts, grpc.Creds(creds))
 	server := grpc.NewServer(opts...)
 
-	allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
-		return true
-	})
-	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
-
 	rpcCfg.Server = server
 
-	handler := func(resp http.ResponseWriter, req *http.Request) {
-		if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
-			wrappedGrpc.ServeHTTP(resp, req)
-		} else {
-			server.ServeHTTP(resp, req)
-		}
-	}
-
-	httpServer := newGrpcHTTPServer(addr.String(), http.HandlerFunc(handler))
+	httpServer := newGrpcHTTPServer(addr.String(), grpcHTTPHandler(server))
 
 	rpcCfg.HTTPServer = httpServer
 
@@ -112,13 +113,75 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	return gRPCServer, nil
 }
 
-// newGrpcHTTPServer returns the HTTP server for the gRPC listener.
+// grpcHTTPHandler returns the handler of the gRPC listener, which passes
+// gRPC-Web requests and their CORS preflights to the gRPC-Web wrapper of
+// server and the others to server, and writes the replies of both with write
+// deadlines.
+func grpcHTTPHandler(server *grpc.Server) http.Handler {
+	allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
+		return true
+	})
+	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
+
+	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		resp = &grpcDeadlineWriter{ResponseWriter: resp,
+			rc: http.NewResponseController(resp)}
+		if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
+			wrappedGrpc.ServeHTTP(resp, req)
+		} else {
+			server.ServeHTTP(resp, req)
+		}
+	})
+}
+
+// grpcDeadlineWriter is the ResponseWriter of a gRPC request.  It renews the
+// write deadline of the request's stream before each grpcWritePartSize bytes
+// it writes and before it flushes, and clears it once the write returns, so a
+// stream is reset only when its client takes none of a part for
+// grpcWriteTimeout, however large the reply and however long the stream is
+// idle between replies.
+type grpcDeadlineWriter struct {
+	http.ResponseWriter
+	rc *http.ResponseController
+}
+
+// Write writes p in parts of grpcWritePartSize, renewing the write deadline
+// before each.
+func (w *grpcDeadlineWriter) Write(p []byte) (int, error) {
+	n := 0
+	for {
+		part := p[n:min(len(p), n+grpcWritePartSize)]
+		_ = w.rc.SetWriteDeadline(time.Now().Add(grpcWriteTimeout))
+		m, err := w.ResponseWriter.Write(part)
+		n += m
+		if err != nil || n == len(p) {
+			_ = w.rc.SetWriteDeadline(time.Time{})
+			return n, err
+		}
+	}
+}
+
+// Flush sends what has been written, under the write deadline.  gRPC requires
+// the writer to be an http.Flusher.
+func (w *grpcDeadlineWriter) Flush() {
+	_ = w.rc.SetWriteDeadline(time.Now().Add(grpcWriteTimeout))
+	_ = w.rc.Flush()
+	_ = w.rc.SetWriteDeadline(time.Time{})
+}
+
+// newGrpcHTTPServer returns the HTTP server for the gRPC listener.  An HTTP/2
+// connection to which nothing can be written for grpcWriteTimeout is closed,
+// as a client that does not read its socket stalls every stream on it, which
+// the deadline of each stream cannot end.
 func newGrpcHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: grpcReadHeaderTimeout,
 		IdleTimeout:       grpcIdleTimeout,
+		HTTP2: &http.HTTP2Config{
+			WriteByteTimeout: grpcWriteTimeout,
+		},
 	}
 }
 

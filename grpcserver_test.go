@@ -5,23 +5,34 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchlog"
+	"github.com/gcash/bchutil"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // readyGrpcMethod is a method of a service that is always ready.
@@ -289,4 +300,442 @@ func TestGrpcCallLogLevel(t *testing.T) {
 			t.Errorf("debug log %q, want a line with %q", buf.String(), want)
 		}
 	}
+}
+
+// grpcWriteTestService answers GetRawBlock with a block of replySize bytes,
+// and SubscribeBlocks with a notification of replySize bytes at once and
+// another each time notify receives.
+type grpcWriteTestService struct {
+	pb.UnimplementedBchrpcServer
+	replySize int
+	notify    chan struct{}
+}
+
+func (s *grpcWriteTestService) GetRawBlock(context.Context, *pb.GetRawBlockRequest) (*pb.GetRawBlockResponse, error) {
+	return &pb.GetRawBlockResponse{Block: make([]byte, s.replySize)}, nil
+}
+
+func (s *grpcWriteTestService) SubscribeBlocks(_ *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
+	for {
+		err := stream.Send(&pb.BlockNotification{
+			Block: &pb.BlockNotification_SerializedBlock{
+				SerializedBlock: make([]byte, s.replySize),
+			},
+		})
+		if err != nil {
+			return err
+		}
+		select {
+		case <-s.notify:
+		case <-stream.Context().Done():
+			return nil
+		}
+	}
+}
+
+// grpcBufferListener sets small socket buffers on the connections it
+// accepts, so that a client that stops reading stalls the server's writes
+// soon.
+type grpcBufferListener struct {
+	net.Listener
+}
+
+func (l grpcBufferListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetWriteBuffer(16 << 10)
+	}
+	return conn, err
+}
+
+// startGrpcWriteTest serves svc over TLS with the gRPC listener's HTTP server
+// and handler, with grpcWriteTimeout set to timeout, and returns the server's
+// address and the number of requests its handler is serving.
+func startGrpcWriteTest(t *testing.T, svc pb.BchrpcServer,
+	timeout time.Duration) (string, *atomic.Int32) {
+
+	t.Helper()
+	saved := grpcWriteTimeout
+	t.Cleanup(func() { grpcWriteTimeout = saved })
+	grpcWriteTimeout = timeout
+
+	dir := t.TempDir()
+	cert, key, err := bchutil.NewTLSCertPair("bchd test",
+		time.Now().Add(time.Hour), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certFile := filepath.Join(dir, "rpc.cert")
+	keyFile := filepath.Join(dir, "rpc.key")
+	if err := os.WriteFile(certFile, cert, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, key, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	gs := grpc.NewServer()
+	pb.RegisterBchrpcServer(gs, svc)
+	handler := grpcHTTPHandler(gs)
+	var active atomic.Int32
+	srv := newGrpcHTTPServer("", http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			active.Add(1)
+			defer active.Add(-1)
+			handler.ServeHTTP(w, r)
+		}))
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.ServeTLS(grpcBufferListener{ln}, certFile, keyFile) }()
+	t.Cleanup(func() {
+		srv.Close()
+		gs.Stop()
+		// No handler may read grpcWriteTimeout once it is restored.
+		waitForGrpc(t, "the handlers to return", func() bool {
+			return active.Load() == 0
+		})
+	})
+	return ln.Addr().String(), &active
+}
+
+// waitForGrpc waits up to 20 seconds for cond.
+func waitForGrpc(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(20 * time.Second); !cond(); {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// rawH2Client is an HTTP/2 client connection whose reads and flow control
+// the test drives.
+type rawH2Client struct {
+	t    *testing.T
+	conn *tls.Conn
+	fr   *http2.Framer
+}
+
+// dialRawH2 connects to addr and sends the client preface and settings.
+func dialRawH2(t *testing.T, addr string, settings ...http2.Setting) *rawH2Client {
+	t.Helper()
+	tcp, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tcp.(*net.TCPConn).SetReadBuffer(16 << 10)
+	conn := tls.Client(tcp, &tls.Config{InsecureSkipVerify: true,
+		NextProtos: []string{"h2"}})
+	t.Cleanup(func() { conn.Close() })
+	if err := conn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(conn, http2.ClientPreface); err != nil {
+		t.Fatal(err)
+	}
+	c := &rawH2Client{t: t, conn: conn, fr: http2.NewFramer(conn, conn)}
+	c.fr.ReadMetaHeaders = hpack.NewDecoder(4096, nil)
+	if err := c.fr.WriteSettings(settings...); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// call starts a gRPC call of method on the stream with the request.
+func (c *rawH2Client) call(stream uint32, method string, req proto.Message) {
+	c.t.Helper()
+	var block bytes.Buffer
+	enc := hpack.NewEncoder(&block)
+	for _, f := range [][2]string{{":method", "POST"}, {":scheme", "https"},
+		{":authority", "localhost"}, {":path", method},
+		{"content-type", "application/grpc"}, {"te", "trailers"}} {
+
+		_ = enc.WriteField(hpack.HeaderField{Name: f[0], Value: f[1]})
+	}
+	err := c.fr.WriteHeaders(http2.HeadersFrameParam{StreamID: stream,
+		BlockFragment: block.Bytes(), EndHeaders: true})
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	msg, err := proto.Marshal(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	body := make([]byte, 5+len(msg))
+	binary.BigEndian.PutUint32(body[1:5], uint32(len(msg)))
+	copy(body[5:], msg)
+	if err := c.fr.WriteData(stream, true, body); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// next returns the next frame read before the deadline, or nil once the
+// deadline passes, answering the server's settings and pings.  The frame is
+// valid until the next read.
+func (c *rawH2Client) next(deadline time.Time) http2.Frame {
+	c.t.Helper()
+	for {
+		_ = c.conn.SetReadDeadline(deadline)
+		f, err := c.fr.ReadFrame()
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			return nil
+		}
+		if err != nil {
+			c.t.Fatalf("reading a frame: %v", err)
+		}
+		switch f := f.(type) {
+		case *http2.SettingsFrame:
+			if !f.IsAck() {
+				if err := c.fr.WriteSettingsAck(); err != nil {
+					c.t.Fatal(err)
+				}
+			}
+			continue
+		case *http2.PingFrame:
+			if !f.IsAck() {
+				if err := c.fr.WritePing(true, f.Data); err != nil {
+					c.t.Fatal(err)
+				}
+			}
+			continue
+		case *http2.WindowUpdateFrame:
+			continue
+		}
+		return f
+	}
+}
+
+// TestGrpcStalledReaderReset ensures that a call whose client stops granting
+// flow control while its reply is written, unary or streaming, large or small,
+// is reset once the client has taken none of it for grpcWriteTimeout, so that
+// the call's goroutines and the reply are not held for good.
+func TestGrpcStalledReaderReset(t *testing.T) {
+	const timeout = 500 * time.Millisecond
+	for _, test := range []struct {
+		method string
+		size   int
+	}{
+		{"/pb.bchrpc/GetRawBlock", 1 << 20},
+		// A small reply waits in the writer's buffer until it is flushed.
+		{"/pb.bchrpc/GetRawBlock", 100},
+		{"/pb.bchrpc/SubscribeBlocks", 1 << 20},
+	} {
+		method := test.method
+		svc := &grpcWriteTestService{replySize: test.size,
+			notify: make(chan struct{})}
+		addr, active := startGrpcWriteTest(t, svc, timeout)
+
+		// The client grants no window, so none of the reply is sent.
+		c := dialRawH2(t, addr, http2.Setting{
+			ID: http2.SettingInitialWindowSize, Val: 0})
+		var req proto.Message = &pb.GetRawBlockRequest{}
+		if method == "/pb.bchrpc/SubscribeBlocks" {
+			req = &pb.SubscribeBlocksRequest{}
+		}
+		c.call(1, method, req)
+		start := time.Now()
+		reset := false
+		for !reset {
+			f := c.next(start.Add(10 * timeout))
+			if f == nil {
+				break
+			}
+			if _, ok := f.(*http2.DataFrame); ok {
+				t.Fatalf("%s, %d bytes: data sent without a window",
+					method, test.size)
+			}
+			_, reset = f.(*http2.RSTStreamFrame)
+		}
+		if !reset {
+			t.Errorf("%s, %d bytes: stream not reset after %v", method,
+				test.size, time.Since(start))
+			continue
+		}
+		if took := time.Since(start); took < timeout {
+			t.Errorf("%s, %d bytes: reset after %v, before the timeout",
+				method, test.size, took)
+		}
+		waitForGrpc(t, method+" to end", func() bool {
+			return active.Load() == 0
+		})
+	}
+}
+
+// TestGrpcSlowReaderKeepsCall ensures that a client that takes a reply slowly
+// but steadily gets all of it, although it takes several times
+// grpcWriteTimeout, since the deadline is renewed as the reply goes out.
+func TestGrpcSlowReaderKeepsCall(t *testing.T) {
+	const timeout = 500 * time.Millisecond
+	const size = 1 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	addr, _ := startGrpcWriteTest(t, svc, timeout)
+
+	// The client takes 16 KiB every 40 ms, so 64 KiB in 160 ms and the
+	// whole reply in about 2.6 s.
+	const window = 16 << 10
+	c := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: window})
+	c.call(1, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+	start := time.Now()
+	received := 0
+	for {
+		f := c.next(time.Now().Add(10 * timeout))
+		switch f := f.(type) {
+		case nil:
+			t.Fatalf("no frame after %d bytes", received)
+		case *http2.RSTStreamFrame:
+			t.Fatalf("stream reset after %d bytes in %v", received,
+				time.Since(start))
+		case *http2.DataFrame:
+			n := len(f.Data())
+			received += n
+			if n == 0 {
+				continue
+			}
+			time.Sleep(time.Duration(n) * 40 * time.Millisecond / window)
+			if err := c.fr.WriteWindowUpdate(1, uint32(n)); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.fr.WriteWindowUpdate(0, uint32(n)); err != nil {
+				t.Fatal(err)
+			}
+		case *http2.MetaHeadersFrame:
+			if !f.StreamEnded() {
+				continue
+			}
+			if got := f.PseudoValue("status"); got != "" {
+				t.Fatalf("trailers with status %q", got)
+			}
+			var grpcStatus string
+			for _, hf := range f.Fields {
+				if hf.Name == "grpc-status" {
+					grpcStatus = hf.Value
+				}
+			}
+			if grpcStatus != "0" || received < size {
+				t.Fatalf("call ended with grpc-status %q after %d bytes",
+					grpcStatus, received)
+			}
+			if took := time.Since(start); took < 2*timeout {
+				t.Fatalf("the reply took %v, not long enough to test",
+					took)
+			}
+			return
+		}
+	}
+}
+
+// TestGrpcIdleStreamKept ensures that a subscription that has nothing to send
+// for longer than grpcWriteTimeout is kept, since the deadline only runs
+// while a write is in progress.
+func TestGrpcIdleStreamKept(t *testing.T) {
+	const timeout = 300 * time.Millisecond
+	svc := &grpcWriteTestService{replySize: 256 << 10,
+		notify: make(chan struct{})}
+	addr, _ := startGrpcWriteTest(t, svc, timeout)
+
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(
+		credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cc.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stream, err := pb.NewBchrpcClient(cc).SubscribeBlocks(ctx,
+		&pb.SubscribeBlocksRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := stream.Recv(); err != nil {
+			t.Fatalf("notification %d: %v", i, err)
+		}
+		time.Sleep(3 * timeout)
+		svc.notify <- struct{}{}
+	}
+}
+
+// TestGrpcStalledConnectionClosed ensures that a connection to which nothing
+// can be written for grpcWriteTimeout, as when the client stops reading from
+// its socket, is closed, so that its calls end.
+func TestGrpcStalledConnectionClosed(t *testing.T) {
+	const timeout = 500 * time.Millisecond
+	svc := &grpcWriteTestService{replySize: 32 << 20}
+	addr, active := startGrpcWriteTest(t, svc, timeout)
+
+	// Flow control lets the whole reply out at once, so only the socket
+	// holds it back.
+	c := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: 1<<31 - 1})
+	if err := c.fr.WriteWindowUpdate(0, 1<<31-1-65535); err != nil {
+		t.Fatal(err)
+	}
+	c.call(1, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+	for {
+		f := c.next(time.Now().Add(10 * time.Second))
+		if f == nil {
+			t.Fatal("no reply headers")
+		}
+		if _, ok := f.(*http2.MetaHeadersFrame); ok {
+			break
+		}
+	}
+
+	// From here on the client reads nothing.  Closing the connection then
+	// takes up to 5 s more, as crypto/tls gives the close_notify alert that
+	// long to be written.
+	waitForGrpc(t, "the call to end", func() bool {
+		return active.Load() == 0
+	})
+}
+
+// TestGrpcWebStalledReaderEnds ensures that a gRPC-Web call over HTTP/1.1
+// whose client stops reading its reply ends once the client has taken none of
+// it for grpcWriteTimeout, as gRPC-Web replies go through the same deadlines.
+func TestGrpcWebStalledReaderEnds(t *testing.T) {
+	const timeout = 500 * time.Millisecond
+	svc := &grpcWriteTestService{replySize: 32 << 20}
+	addr, active := startGrpcWriteTest(t, svc, timeout)
+
+	tcp, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tcp.(*net.TCPConn).SetReadBuffer(16 << 10)
+	conn := tls.Client(tcp, &tls.Config{InsecureSkipVerify: true,
+		NextProtos: []string{"http/1.1"}})
+	defer conn.Close()
+	body := []byte{0, 0, 0, 0, 0} // an empty GetRawBlockRequest
+	req, err := http.NewRequest("POST", "https://localhost/pb.bchrpc/GetRawBlock",
+		bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/grpc-web+proto")
+	req.Header.Set("X-Grpc-Web", "1")
+	if err := req.Write(conn); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK ||
+		resp.Header.Get("Content-Type") != "application/grpc-web+proto" {
+
+		t.Fatalf("status %d, content type %q", resp.StatusCode,
+			resp.Header.Get("Content-Type"))
+	}
+
+	// From here on the client reads nothing.  Closing the connection then
+	// takes up to 5 s more, as crypto/tls gives the close_notify alert that
+	// long to be written.
+	waitForGrpc(t, "the call to end", func() bool {
+		return active.Load() == 0
+	})
 }
