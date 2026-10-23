@@ -56,6 +56,7 @@ const (
 	defaultMaxRPCConcurrentReqs    = 20
 	defaultGrpcMaxSubscriptions    = 100
 	defaultGrpcMaxFilterEntries    = 100000
+	defaultGrpcMaxConcurrentCalls  = 16
 	defaultDbType                  = "ffldb"
 	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
 	highMaxTxFee                   = bchutil.Amount(bchutil.SatoshiPerBitcoin)
@@ -203,6 +204,7 @@ type config struct {
 	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
 	GrpcMaxSubscriptions    int           `long:"grpcmaxsubscriptions" description:"Max number of gRPC subscriptions clients may hold at once"`
 	GrpcMaxFilterEntries    int           `long:"grpcmaxfilterentries" description:"Max number of entries a gRPC subscription's transaction filter may hold; an address, outpoint or token ID counts once, a data element once per 20 bytes"`
+	GrpcMaxConcurrentCalls  int           `long:"grpcmaxconcurrentcalls" description:"Max number of gRPC calls other than subscriptions in progress at once; up to 4 times as many more wait, and later ones are refused"`
 	DBCacheSize             uint64        `long:"dbcachesize" description:"The maximum size in MiB of the database cache"`
 	DBFlushInterval         uint32        `long:"dbflushinterval" description:"The number of seconds between database flushes"`
 	PrometheusListen        string        `long:"prometheus" description:"Specify an (addr):port to serve prometheus metrics (for example :9000 or my-interface:9000, default disabled)"`
@@ -453,6 +455,7 @@ func loadConfig() (*config, []string, error) {
 		RPCMaxConcurrentReqs:    defaultMaxRPCConcurrentReqs,
 		GrpcMaxSubscriptions:    defaultGrpcMaxSubscriptions,
 		GrpcMaxFilterEntries:    defaultGrpcMaxFilterEntries,
+		GrpcMaxConcurrentCalls:  defaultGrpcMaxConcurrentCalls,
 		DataDir:                 defaultDataDir,
 		LogDir:                  defaultLogDir,
 		DbType:                  defaultDbType,
@@ -901,6 +904,15 @@ func loadConfig() (*config, []string, error) {
 		str := "%s: The rpcmaxwebsocketconcurrentrequests option may " +
 			"not be less than 0 -- parsed [%d]"
 		err := fmt.Errorf(str, funcName, cfg.RPCMaxConcurrentReqs)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	if cfg.GrpcMaxConcurrentCalls < 0 {
+		str := "%s: The grpcmaxconcurrentcalls option may not be less " +
+			"than 0 -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, cfg.GrpcMaxConcurrentCalls)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err

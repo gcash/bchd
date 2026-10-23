@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gcash/bchd/bchrpc"
@@ -21,6 +22,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 )
 
@@ -61,7 +63,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 	// returns a single server instance.
 	addr := netAddrs[0]
 	rpcCfg.NetMgr = svr
-	opts := []grpc.ServerOption{grpc.StreamInterceptor(interceptStreaming), grpc.UnaryInterceptor(interceptUnary)}
+	opts := grpcServerOptions(newGrpcCallLimiter(cfg.GrpcMaxConcurrentCalls))
 	creds, err := credentials.NewServerTLSFromFile(cfg.RPCCert, cfg.RPCKey)
 	if err != nil {
 		return nil, err
@@ -112,6 +114,98 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 
 	return gRPCServer, nil
 }
+
+// grpcServerOptions returns the gRPC server's interceptors and stats handler,
+// with calls bounding the unary calls once they are authorized.
+func grpcServerOptions(calls *grpcCallLimiter) []grpc.ServerOption {
+	return []grpc.ServerOption{
+		grpc.StreamInterceptor(interceptStreaming),
+		grpc.ChainUnaryInterceptor(interceptUnary, calls.intercept),
+		grpc.StatsHandler(calls),
+	}
+}
+
+// grpcCallQueueFactor is how many unary gRPC calls may wait for a place, as a
+// multiple of how many may be in progress.
+const grpcCallQueueFactor = 4
+
+// grpcCallLimiter bounds the unary gRPC calls in progress, from the time a
+// call's request has been read and its caller authorized until its reply has
+// been sent.  Any client may call when no auth token is set, and a call can
+// make the node read a block and build a reply larger still, which it holds
+// until the client takes it.  A call over the limit waits for a place, while
+// fewer than grpcCallQueueFactor times the limit wait, and is refused with
+// ResourceExhausted otherwise, as BCHN's HTTP server runs 16 requests at once
+// and queues 64 more.  Subscriptions have their own limit.
+type grpcCallLimiter struct {
+	places     chan struct{} // a value for each call in progress
+	waiting    atomic.Int64  // calls waiting for a place
+	maxWaiting int64
+}
+
+// newGrpcCallLimiter returns a limiter of max unary calls in progress.
+func newGrpcCallLimiter(max int) *grpcCallLimiter {
+	return &grpcCallLimiter{
+		places:     make(chan struct{}, max),
+		maxWaiting: grpcCallQueueFactor * int64(max),
+	}
+}
+
+// grpcCallPlaceKey is the context key of the mark TagRPC gives each call,
+// which is set while the call holds a place.
+type grpcCallPlaceKey struct{}
+
+// intercept runs a unary call once it holds a place, waiting for one until
+// its context ends.  The place is freed by HandleRPC once the reply has been
+// sent.
+func (l *grpcCallLimiter) intercept(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	select {
+	case l.places <- struct{}{}:
+	default:
+		if l.waiting.Add(1) > l.maxWaiting {
+			l.waiting.Add(-1)
+			return nil, status.Errorf(codes.ResourceExhausted,
+				"too many calls, the limit is %d", cap(l.places))
+		}
+		select {
+		case l.places <- struct{}{}:
+			l.waiting.Add(-1)
+		case <-ctx.Done():
+			l.waiting.Add(-1)
+			return nil, status.FromContextError(ctx.Err()).Err()
+		}
+	}
+	ctx.Value(grpcCallPlaceKey{}).(*atomic.Bool).Store(true)
+	return handler(ctx, req)
+}
+
+// TagRPC gives each call's context the mark of whether it holds a place.
+//
+// This is part of the stats.Handler interface.
+func (l *grpcCallLimiter) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context {
+	return context.WithValue(ctx, grpcCallPlaceKey{}, new(atomic.Bool))
+}
+
+// HandleRPC frees a call's place when the call ends, which for a unary call
+// is once its reply and status have been sent.
+//
+// This is part of the stats.Handler interface.
+func (l *grpcCallLimiter) HandleRPC(ctx context.Context, s stats.RPCStats) {
+	if _, ok := s.(*stats.End); !ok {
+		return
+	}
+	if place, ok := ctx.Value(grpcCallPlaceKey{}).(*atomic.Bool); ok && place.Load() {
+		<-l.places
+	}
+}
+
+// TagConn is part of the stats.Handler interface.
+func (l *grpcCallLimiter) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
+	return ctx
+}
+
+// HandleConn is part of the stats.Handler interface.
+func (l *grpcCallLimiter) HandleConn(context.Context, stats.ConnStats) {}
 
 // grpcHTTPHandler returns the handler of the gRPC listener, which passes
 // gRPC-Web requests and their CORS preflights to the gRPC-Web wrapper of

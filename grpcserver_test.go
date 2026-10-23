@@ -355,6 +355,17 @@ func startGrpcWriteTest(t *testing.T, svc pb.BchrpcServer,
 	timeout time.Duration) (string, *atomic.Int32) {
 
 	t.Helper()
+	return startGrpcTest(t, timeout, func(gs *grpc.Server) {
+		pb.RegisterBchrpcServer(gs, svc)
+	})
+}
+
+// startGrpcTest serves the services register registers on a gRPC server
+// with opts as startGrpcWriteTest does.
+func startGrpcTest(t *testing.T, timeout time.Duration,
+	register func(*grpc.Server), opts ...grpc.ServerOption) (string, *atomic.Int32) {
+
+	t.Helper()
 	saved := grpcWriteTimeout
 	t.Cleanup(func() { grpcWriteTimeout = saved })
 	grpcWriteTimeout = timeout
@@ -374,8 +385,8 @@ func startGrpcWriteTest(t *testing.T, svc pb.BchrpcServer,
 		t.Fatal(err)
 	}
 
-	gs := grpc.NewServer()
-	pb.RegisterBchrpcServer(gs, svc)
+	gs := grpc.NewServer(opts...)
+	register(gs)
 	handler := grpcHTTPHandler(gs)
 	var active atomic.Int32
 	srv := newGrpcHTTPServer("", http.HandlerFunc(
@@ -398,6 +409,18 @@ func startGrpcWriteTest(t *testing.T, svc pb.BchrpcServer,
 		})
 	})
 	return ln.Addr().String(), &active
+}
+
+// recvGrpc waits up to 20 seconds for a value from ch.
+func recvGrpc[T any](t *testing.T, what string, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(20 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+		panic("unreachable")
+	}
 }
 
 // waitForGrpc waits up to 20 seconds for cond.
@@ -738,4 +761,280 @@ func TestGrpcWebStalledReaderEnds(t *testing.T) {
 	waitForGrpc(t, "the call to end", func() bool {
 		return active.Load() == 0
 	})
+}
+
+// grpcLimitTestService serves a unary method X, which answers with a block of
+// replySize bytes once release receives or is closed, or its call ends,
+// telling started first, and a streaming method Y, which sends one
+// notification and waits for its call to end.  It is registered under the
+// name of the reflection service, which ServiceReady always finds ready, so
+// that its calls pass the interceptors as bchrpc's do once the node runs.
+type grpcLimitTestService struct {
+	replySize int
+	started   chan struct{}
+	release   chan struct{}
+}
+
+// grpcLimitTestStream is Y's method name.
+const grpcLimitTestStream = "/grpc.reflection.v1alpha.ServerReflection/Y"
+
+func (s *grpcLimitTestService) register(gs *grpc.Server) {
+	x := func(ctx context.Context, _ interface{}) (interface{}, error) {
+		if s.started != nil {
+			s.started <- struct{}{}
+			select {
+			case <-s.release:
+			case <-ctx.Done():
+			}
+		}
+		return &pb.GetRawBlockResponse{Block: make([]byte, s.replySize)}, nil
+	}
+	gs.RegisterService(&grpc.ServiceDesc{
+		ServiceName: "grpc.reflection.v1alpha.ServerReflection",
+		HandlerType: (*interface{})(nil),
+		Methods: []grpc.MethodDesc{{
+			MethodName: "X",
+			Handler: func(srv interface{}, ctx context.Context,
+				dec func(interface{}) error,
+				intercept grpc.UnaryServerInterceptor) (interface{}, error) {
+
+				req := new(pb.GetRawBlockRequest)
+				if err := dec(req); err != nil {
+					return nil, err
+				}
+				info := &grpc.UnaryServerInfo{Server: srv,
+					FullMethod: readyGrpcMethod}
+				return intercept(ctx, req, info, x)
+			},
+		}},
+		Streams: []grpc.StreamDesc{{
+			StreamName:    "Y",
+			ServerStreams: true,
+			Handler: func(_ interface{}, stream grpc.ServerStream) error {
+				if err := stream.RecvMsg(new(pb.SubscribeBlocksRequest)); err != nil {
+					return err
+				}
+				if err := stream.SendMsg(&pb.BlockNotification{}); err != nil {
+					return err
+				}
+				<-stream.Context().Done()
+				return nil
+			},
+		}},
+	}, s)
+}
+
+// dialGrpcTest returns a connection to the test server at addr.
+func dialGrpcTest(t *testing.T, addr string) *grpc.ClientConn {
+	t.Helper()
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(
+		credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cc.Close() })
+	return cc
+}
+
+// TestGrpcCallLimit ensures that at most the limit of unary calls are in
+// progress at once, that up to four times as many more wait for a place
+// until their context ends, that calls beyond those are refused with
+// ResourceExhausted, that a caller without the auth token is refused before
+// it takes a place, and that streaming calls are not counted.
+func TestGrpcCallLimit(t *testing.T) {
+	setGrpcTestConfig(t, "tok", false)
+	svc := &grpcLimitTestService{replySize: 10,
+		started: make(chan struct{}, 100), release: make(chan struct{})}
+	calls := newGrpcCallLimiter(2)
+	addr, _ := startGrpcTest(t, time.Minute, svc.register,
+		grpcServerOptions(calls)...)
+	cc := dialGrpcTest(t, addr)
+	ctx := metadata.AppendToOutgoingContext(context.Background(),
+		AuthenticationTokenKey, "tok")
+	call := func(ctx context.Context) error {
+		return cc.Invoke(ctx, readyGrpcMethod, &pb.GetRawBlockRequest{},
+			new(pb.GetRawBlockResponse))
+	}
+
+	// Two calls take the places.
+	errs := make(chan error, 10)
+	for i := 0; i < 2; i++ {
+		go func() { errs <- call(ctx) }()
+	}
+	for i := 0; i < 2; i++ {
+		recvGrpc(t, "a call to start", svc.started)
+	}
+
+	// A waiting call leaves the queue when its deadline passes, or when its
+	// client cancels it.
+	dctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	if err := call(dctx); status.Code(err) != codes.DeadlineExceeded {
+		t.Errorf("call past its deadline: got %v, want DeadlineExceeded", err)
+	}
+	waitForGrpc(t, "the queue to empty", func() bool {
+		return calls.waiting.Load() == 0
+	})
+	cctx, cancel := context.WithCancel(ctx)
+	canceled := make(chan error, 1)
+	go func() { canceled <- call(cctx) }()
+	waitForGrpc(t, "a call to wait", func() bool {
+		return calls.waiting.Load() == 1
+	})
+	cancel()
+	if err := recvGrpc(t, "the canceled call", canceled); status.Code(err) != codes.Canceled {
+		t.Errorf("canceled call: got %v, want Canceled", err)
+	}
+	waitForGrpc(t, "the queue to empty", func() bool {
+		return calls.waiting.Load() == 0
+	})
+
+	// Eight more wait, and none of them runs.
+	for i := 0; i < 8; i++ {
+		go func() { errs <- call(ctx) }()
+	}
+	waitForGrpc(t, "eight calls to wait", func() bool {
+		return calls.waiting.Load() == 8
+	})
+	if n := len(svc.started); n != 0 {
+		t.Fatalf("%d calls ran past the limit", n)
+	}
+
+	// The next is refused at once, one without the token is refused for
+	// that, and a streaming call still runs.
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := call(rctx)
+	if status.Code(err) != codes.ResourceExhausted ||
+		!strings.Contains(err.Error(), "the limit is 2") {
+
+		t.Errorf("call over the queue: got %v, want ResourceExhausted", err)
+	}
+	if err := call(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "invalid authentication token") {
+
+		t.Errorf("call without the token: got %v, want the auth error", err)
+	}
+	sctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := cc.NewStream(sctx, &grpc.StreamDesc{ServerStreams: true},
+		grpcLimitTestStream)
+	if err == nil {
+		err = stream.SendMsg(&pb.SubscribeBlocksRequest{})
+	}
+	if err == nil {
+		err = stream.CloseSend()
+	}
+	if err == nil {
+		err = stream.RecvMsg(new(pb.BlockNotification))
+	}
+	if err != nil {
+		t.Errorf("streaming call with the places taken: %v", err)
+	}
+	cancel()
+
+	// A place freed goes to one waiting call.
+	svc.release <- struct{}{}
+	recvGrpc(t, "a waiting call to start", svc.started)
+	waitForGrpc(t, "a waiting call to start", func() bool {
+		return calls.waiting.Load() == 7
+	})
+	if n := len(svc.started); n != 0 {
+		t.Errorf("%d more calls started", n)
+	}
+
+	close(svc.release)
+	for i := 0; i < 10; i++ {
+		if err := recvGrpc(t, "the calls to end", errs); err != nil {
+			t.Errorf("call %d: %v", i, err)
+		}
+	}
+}
+
+// TestGrpcCallLimiterContextEnds ensures that a call whose context ends while
+// it waits for a place returns Canceled or DeadlineExceeded, which are logged
+// at debug, as the client is gone or has given up.
+func TestGrpcCallLimiterContextEnds(t *testing.T) {
+	calls := newGrpcCallLimiter(1)
+	calls.places <- struct{}{}
+	handler := func(context.Context, interface{}) (interface{}, error) {
+		t.Error("handler ran without a place")
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := calls.intercept(ctx, nil, nil, handler)
+	if status.Code(err) != codes.Canceled {
+		t.Errorf("canceled: got %v, want Canceled", err)
+	}
+	ctx, cancel = context.WithDeadline(context.Background(), time.Now())
+	defer cancel()
+	_, err = calls.intercept(ctx, nil, nil, handler)
+	if status.Code(err) != codes.DeadlineExceeded {
+		t.Errorf("deadline passed: got %v, want DeadlineExceeded", err)
+	}
+	if n := calls.waiting.Load(); n != 0 {
+		t.Errorf("%d calls left waiting", n)
+	}
+}
+
+// TestGrpcCallLimitZero ensures that a limit of 0 refuses every unary call,
+// as a limit of 0 subscriptions refuses every subscription.
+func TestGrpcCallLimitZero(t *testing.T) {
+	setGrpcTestConfig(t, "", false)
+	svc := &grpcLimitTestService{replySize: 10}
+	addr, _ := startGrpcTest(t, time.Minute, svc.register,
+		grpcServerOptions(newGrpcCallLimiter(0))...)
+	err := dialGrpcTest(t, addr).Invoke(context.Background(),
+		readyGrpcMethod, &pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Errorf("got %v, want ResourceExhausted", err)
+	}
+}
+
+// TestGrpcCallPlaceHeldUntilReplySent ensures that a call keeps its place
+// until its reply has been sent, not only while its handler runs, so that
+// clients that do not read their replies cannot make the node hold any
+// number of them.
+func TestGrpcCallPlaceHeldUntilReplySent(t *testing.T) {
+	setGrpcTestConfig(t, "", false)
+	const timeout = 2 * time.Second
+	svc := &grpcLimitTestService{replySize: 1 << 20}
+	calls := newGrpcCallLimiter(1)
+	addr, _ := startGrpcTest(t, timeout, svc.register,
+		grpcServerOptions(calls)...)
+
+	// The first call's client grants no window for its reply.
+	c := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: 0})
+	c.call(1, readyGrpcMethod, &pb.GetRawBlockRequest{})
+	start := time.Now()
+	for {
+		f := c.next(start.Add(10 * time.Second))
+		if f == nil {
+			t.Fatal("no reply headers")
+		}
+		if _, ok := f.(*http2.MetaHeadersFrame); ok {
+			break
+		}
+	}
+
+	// The second waits until the first's stream is reset.
+	cc := dialGrpcTest(t, addr)
+	done := make(chan error, 1)
+	go func() {
+		done <- cc.Invoke(context.Background(), readyGrpcMethod,
+			&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+	}()
+	waitForGrpc(t, "the second call to wait", func() bool {
+		return calls.waiting.Load() == 1
+	})
+	if err := recvGrpc(t, "the second call", done); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if took := time.Since(start); took < timeout {
+		t.Errorf("the second call ended after %v, while the first's reply "+
+			"was still waiting", took)
+	}
 }

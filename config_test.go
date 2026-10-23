@@ -405,3 +405,39 @@ func TestGrpcMaxSubscriptions(t *testing.T) {
 		}
 	}
 }
+
+// TestGrpcMaxConcurrentCalls ensures the limit on gRPC calls defaults to 16,
+// as many as BCHN's HTTP server runs at once, can be set, and may not be
+// negative.
+func TestGrpcMaxConcurrentCalls(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	for _, test := range []struct {
+		args []string
+		want int
+	}{
+		{nil, 16},
+		{[]string{"--grpcmaxconcurrentcalls=5"}, 5},
+		{[]string{"--grpcmaxconcurrentcalls=-1"}, -1},
+	} {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.want < 0 {
+			if err == nil {
+				t.Errorf("%v: no error", test.args)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.GrpcMaxConcurrentCalls != test.want {
+			t.Errorf("%v: got %d, want %d", test.args,
+				cfg.GrpcMaxConcurrentCalls, test.want)
+		}
+	}
+}

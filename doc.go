@@ -253,6 +253,10 @@ Application Options:
 	                               transaction filter may hold; an address,
 	                               outpoint or token ID counts once, a data
 	                               element once per 20 bytes (default: 100000)
+	    --grpcmaxconcurrentcalls=  Max number of gRPC calls other than
+	                               subscriptions in progress at once; up to 4
+	                               times as many more wait, and later ones are
+	                               refused (default: 16)
 	    --dbcachesize=             The maximum size in MiB of the database cache
 	                               (default: 500)
 	    --dbflushinterval=         The number of seconds between database flushes

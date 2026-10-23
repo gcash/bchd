@@ -55,6 +55,14 @@ token ID counting once and a data element once for each 20 bytes, and a request 
 filter past that fails with `ResourceExhausted`. A server for wallets that watch more can raise
 it with `--grpcmaxfilterentries`.
 
+At most 16 other calls are in progress at once, from reading the request to sending the reply.
+Up to 64 more wait for a place, and a call beyond those fails with `ResourceExhausted`. A public
+server with many clients can raise the limit:
+
+```bash
+bchd --grpclisten=0.0.0.0 --grpcmaxconcurrentcalls=64
+```
+
 Finally you don't need to use indexes to use the gRPC API but it's recommended so
 you have access to all API calls. This obviously means you should not run in either
 `--prune` mode or `--fastsync` mode. To use the indexes run with:
