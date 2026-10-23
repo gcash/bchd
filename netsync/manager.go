@@ -1840,29 +1840,42 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 }
 
 // parentsFirst returns the transactions with each one after those it spends,
-// keeping their order otherwise.
+// keeping their order otherwise.  The transactions waiting for their parents
+// are kept in a slice rather than on the goroutine's stack, as a chain of
+// transactions can be as long as a block holds transactions.
 func parentsFirst(txs []*bchutil.Tx) []*bchutil.Tx {
 	index := make(map[chainhash.Hash]int, len(txs))
 	for i, tx := range txs {
 		index[*tx.Hash()] = i
 	}
-	added := make([]bool, len(txs))
+	seen := make([]bool, len(txs))
 	sorted := make([]*bchutil.Tx, 0, len(txs))
-	var add func(i int)
-	add = func(i int) {
-		if added[i] {
-			return
+
+	// Each waiting transaction is held with the next of its inputs to look
+	// at.
+	type waiting struct{ tx, in int }
+	var stack []waiting
+	for i := range txs {
+		if seen[i] {
+			continue
 		}
-		added[i] = true
-		for _, in := range txs[i].MsgTx().TxIn {
-			if parent, ok := index[in.PreviousOutPoint.Hash]; ok {
-				add(parent)
+		seen[i] = true
+		stack = append(stack, waiting{tx: i})
+		for len(stack) > 0 {
+			top := &stack[len(stack)-1]
+			txIns := txs[top.tx].MsgTx().TxIn
+			if top.in == len(txIns) {
+				sorted = append(sorted, txs[top.tx])
+				stack = stack[:len(stack)-1]
+				continue
+			}
+			prevHash := txIns[top.in].PreviousOutPoint.Hash
+			top.in++
+			if parent, ok := index[prevHash]; ok && !seen[parent] {
+				seen[parent] = true
+				stack = append(stack, waiting{tx: parent})
 			}
 		}
-		sorted = append(sorted, txs[i])
-	}
-	for i := range txs {
-		add(i)
 	}
 	return sorted
 }

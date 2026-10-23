@@ -7,6 +7,8 @@ package netsync
 import (
 	"bytes"
 	"math"
+	"runtime"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -246,6 +248,113 @@ func TestParentsFirst(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("position %d holds %v, want %v", i, got[i].Hash(),
 				want[i].Hash())
+		}
+	}
+}
+
+// TestParentsFirstInputOrder ensures the parents of a transaction are put in
+// the order of its inputs.
+func TestParentsFirstInputOrder(t *testing.T) {
+	tx := func(tag byte, prevs ...chainhash.Hash) *bchutil.Tx {
+		msg := wire.NewMsgTx(2)
+		for _, prev := range prevs {
+			msg.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: prev},
+				[]byte{tag}))
+		}
+		return bchutil.NewTx(msg)
+	}
+	a := tx(1, chainhash.Hash{1})
+	b := tx(2, chainhash.Hash{2})
+	c := tx(3, *b.Hash(), chainhash.Hash{3}, *a.Hash())
+
+	got := parentsFirst([]*bchutil.Tx{c, a, b})
+	want := []*bchutil.Tx{b, a, c}
+	if len(got) != len(want) {
+		t.Fatalf("%d transactions, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d holds %v, want %v", i, got[i].Hash(),
+				want[i].Hash())
+		}
+	}
+}
+
+// TestParentsFirstSharedParent ensures a transaction spent by two others, and
+// one listed before the transactions spending it, are each put once.
+func TestParentsFirstSharedParent(t *testing.T) {
+	tx := func(tag byte, prevs ...chainhash.Hash) *bchutil.Tx {
+		msg := wire.NewMsgTx(2)
+		for _, prev := range prevs {
+			msg.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: prev},
+				[]byte{tag}))
+		}
+		return bchutil.NewTx(msg)
+	}
+	a := tx(1, chainhash.Hash{1})
+	b := tx(2, *a.Hash())
+	c := tx(3, *b.Hash(), *a.Hash())
+
+	got := parentsFirst([]*bchutil.Tx{a, c, b})
+	want := []*bchutil.Tx{a, b, c}
+	if len(got) != len(want) {
+		t.Fatalf("%d transactions, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d holds %v, want %v", i, got[i].Hash(),
+				want[i].Hash())
+		}
+	}
+}
+
+// TestParentsFirstLongChain ensures putting the transactions of a block that
+// form one long chain in order takes no stack for each transaction.  The order
+// was found recursively, with a stack frame for each transaction of the chain,
+// so the longest chain a 32 MB block holds grew the stack to 128 MiB, and one
+// in a block of about 240 MB passed Go's stack limit, which ends the process.
+func TestParentsFirstLongChain(t *testing.T) {
+	const n = 100000
+	chain := make([]*bchutil.Tx, n)
+	prev := chainhash.Hash{1}
+	for i := range chain {
+		msg := wire.NewMsgTx(2)
+		msg.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: prev}, nil))
+		chain[i] = bchutil.NewTx(msg)
+		prev = *chain[i].Hash()
+	}
+	// The block holds the chain children first.
+	txs := make([]*bchutil.Tx, n)
+	for i, tx := range chain {
+		txs[n-1-i] = tx
+	}
+
+	// No collection runs meanwhile, which could shrink the stack.
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+	var sorted []*bchutil.Tx
+	var grown int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		sorted = parentsFirst(txs)
+		runtime.ReadMemStats(&after)
+		grown = int64(after.StackInuse) - int64(before.StackInuse)
+	}()
+	<-done
+
+	if grown > 1<<20 {
+		t.Errorf("the stack grew by %d bytes for a chain of %d "+
+			"transactions", grown, n)
+	}
+	if len(sorted) != n {
+		t.Fatalf("%d transactions, want %d", len(sorted), n)
+	}
+	for i, tx := range sorted {
+		if tx != chain[i] {
+			t.Fatalf("position %d holds %v, want %v", i, tx.Hash(),
+				chain[i].Hash())
 		}
 	}
 }
