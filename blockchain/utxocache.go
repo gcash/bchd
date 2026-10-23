@@ -649,6 +649,15 @@ func (s *utxoCache) Commit(view *UtxoViewpoint) error {
 		if ourEntry.IsSpent() && !entry.IsSpent() {
 			ourEntry = entry.Clone()
 			override = true
+
+			// A spent entry in the cache is a removal the database may
+			// not have seen yet, as when a reorg removed a flushed
+			// output, so the entry added back is not fresh, whatever the
+			// view says.  Spent before the next flush, a fresh entry would
+			// be dropped from the cache, and the database would keep the
+			// output as unspent.  Bitcoin Cash Node also never marks a
+			// coin fresh when it replaces a spent one it has not flushed.
+			ourEntry.packedFlags &^= tfFresh
 		}
 
 		// Store the entry we don't know.

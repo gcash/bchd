@@ -850,3 +850,127 @@ func TestUtxoCache_FetchUnspentOutputOfTx(t *testing.T) {
 		}
 	}
 }
+
+// dbHasUtxoEntry returns whether the utxo set in the database holds the
+// output, whatever the cache holds for it.
+func dbHasUtxoEntry(t *testing.T, db database.DB, outpoint wire.OutPoint) bool {
+	t.Helper()
+	var entry *UtxoEntry
+	err := db.View(func(dbTx database.Tx) error {
+		var err error
+		entry, err = dbFetchUtxoEntry(dbTx, outpoint)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("failed to read the utxo set: %v", err)
+	}
+	return entry != nil
+}
+
+// TestUtxoCacheReaddedOutputSpent ensures that the output of a transaction,
+// whose block is removed from the best chain after a flush and which a block
+// of the new best chain mines again, is removed from the utxo set in the
+// database once a later block spends it, so that spending it again is
+// rejected.  The transaction is mined again in a block the reorg attaches or
+// in a later one, and the cache is flushed at different points.
+func TestUtxoCacheReaddedOutputSpent(t *testing.T) {
+	tests := []struct {
+		name string
+
+		// invalidate removes the old block with InvalidateBlock, after
+		// which the new branch extends the best chain block by block.
+		// Otherwise the second block of the new branch causes a reorg,
+		// which attaches the first two.
+		invalidate bool
+
+		// remine and spend are the blocks of the new branch, counted from
+		// 0, that mine the transaction again and spend its output.
+		remine, spend int
+
+		// flushAfter is the block of the new branch after which the
+		// cache is flushed, or -1.
+		flushAfter int
+	}{
+		{name: "mined again in a block the reorg attaches",
+			remine: 0, spend: 2, flushAfter: -1},
+		{name: "mined again in the block causing the reorg",
+			remine: 1, spend: 2, flushAfter: -1},
+		{name: "mined again after the reorg",
+			remine: 2, spend: 3, flushAfter: -1},
+		{name: "mined again and spent in one block after the reorg",
+			remine: 2, spend: 2, flushAfter: -1},
+		{name: "flushed before it is mined again",
+			remine: 2, spend: 3, flushAfter: 1},
+		{name: "flushed before it is spent",
+			remine: 2, spend: 3, flushAfter: 2},
+		{name: "mined again after invalidateblock", invalidate: true,
+			remine: 0, spend: 1, flushAfter: -1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			params := chaincfg.RegressionNetParams
+			m := newRuleTestMiner(t, &params)
+			flush := func() {
+				t.Helper()
+				if err := m.chain.FlushCachedState(FlushRequired); err != nil {
+					t.Fatalf("flush: %v", err)
+				}
+			}
+
+			// The transaction spends the coinbase of the first block and
+			// is mined in the next one, which is flushed.
+			b1 := m.build(nil)
+			m.mustAccept(b1)
+			value := b1.MsgBlock().Transactions[0].TxOut[0].Value - 1000
+			tx := ruleTestSpend(wire.OutPoint{Hash: *b1.Transactions()[0].Hash()},
+				value, 1)
+			out := wire.OutPoint{Hash: tx.TxHash()}
+			cb := m.coinbase(2)
+			cb.TxOut[1] = ruleTestPadding(1)
+			old := m.build(cb, tx)
+			m.mustAccept(old)
+			flush()
+			if !dbHasUtxoEntry(t, m.chain.db, out) {
+				t.Fatal("output not flushed to the database")
+			}
+
+			// Build the new branch on the first block.
+			if test.invalidate {
+				if err := m.chain.InvalidateBlock(old.Hash()); err != nil {
+					t.Fatalf("InvalidateBlock: %v", err)
+				}
+			}
+			m.tip, m.height = b1.MsgBlock(), 1
+			for i := 0; i <= test.spend; i++ {
+				cb := m.coinbase(m.height + 1)
+				cb.TxOut[1] = ruleTestPadding(2)
+				var txs []*wire.MsgTx
+				if i == test.remine {
+					txs = append(txs, tx)
+				}
+				if i == test.spend {
+					txs = append(txs, ruleTestSpend(out, value-1000, 2))
+				}
+				m.mustAccept(m.build(cb, txs...))
+				if i == test.flushAfter {
+					flush()
+				}
+			}
+			if m.chain.BestSnapshot().Hash != m.tip.BlockHash() {
+				t.Fatal("the new branch is not the best chain")
+			}
+
+			// The spent output is gone from the database after the next
+			// flush, and a block spending it again is rejected.
+			flush()
+			if dbHasUtxoEntry(t, m.chain.db, out) {
+				t.Errorf("spent output %v left in the database", out)
+			}
+			err := m.accept(m.build(nil, ruleTestSpend(out, value-1000, 3)))
+			if err == nil {
+				t.Fatalf("block spending %v a second time accepted", out)
+			}
+			requireRuleError(t, err, ErrMissingTxOut)
+		})
+	}
+}
