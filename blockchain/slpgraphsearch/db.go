@@ -3,8 +3,8 @@ package slpgraphsearch
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -136,7 +136,7 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 		return nil, fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
 	}
 
-	// perform the recursive graph search
+	// perform the graph search
 	err := gs.findInternal(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
 	if err != nil {
 		return nil, err
@@ -147,83 +147,103 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 	return txdata[0:i], nil
 }
 
+// findInternal searches the token's graph depth first from txMsg, through
+// each input that carried the token, in the order of the inputs, and adds each
+// transaction to txdata the first time it reaches it.  It keeps the
+// transactions still to be searched on a stack of its own rather than
+// recursing, as a token's graph can hold a chain of millions of sends, and a
+// goroutine whose stack passes the runtime's 1 GB limit ends the process.  A
+// transaction's inputs go on the stack in reverse, so that each, with all it
+// leads to, is searched before the next, as a recursive search would.
 func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+	root := txMsg
+	stack := []*wire.MsgTx{txMsg}
+	for len(stack) > 0 {
+		txMsg := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		hash := txMsg.TxHash()
 
-	hash := txMsg.TxHash()
-
-	// check seen list
-	if _, ok := (*seen)[hash]; ok {
-		return fmt.Errorf("txn %v already seen in graph search", hash)
-	}
-	if *counter%graphSearchCheckInterval == 0 {
-		if err := ctx.Err(); err != nil {
-			return err
+		// check seen list
+		if _, ok := (*seen)[hash]; ok {
+			continue
 		}
-	}
-	(*seen)[hash] = struct{}{}
+		if *counter%graphSearchCheckInterval == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		(*seen)[hash] = struct{}{}
 
-	// add txn buffer to results
-	txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
-	if err := txMsg.Serialize(txBuf); err != nil {
-		return err
-	}
-	(*txdata)[*counter] = txBuf.Bytes()
-	(*counter)++
+		// add txn buffer to results; as when the search recursed, an error
+		// leaves out the transaction, or ends the search if it is the one
+		// searched from
+		txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
+		if err := txMsg.Serialize(txBuf); err != nil {
+			if txMsg == root {
+				return err
+			}
+			continue
+		}
+		(*txdata)[*counter] = txBuf.Bytes()
+		(*counter)++
 
-	// check exclude txids here, don't return with error
-	if _, ok := (*validityCache)[hash]; ok {
-		//gs.logger.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
-		return nil
-	}
-
-	// loop through inputs and recurse
-	for _, txn := range txMsg.TxIn {
-		prevTxHash := &txn.PreviousOutPoint.Hash
-		prevTxVout := txn.PreviousOutPoint.Index
-
-		inpTxMsg := graph.getTxn(prevTxHash)
-		if inpTxMsg == nil {
+		// check exclude txids here, don't return with error
+		if _, ok := (*validityCache)[hash]; ok {
+			//gs.logger.Debugf("skipping valid slp txn provided by client exclude list for %v", hash)
 			continue
 		}
 
-		// try to parse slp msg to check if this input contributes to this transaction
-		inpSlpMsg, err := v1parser.ParseSLP(inpTxMsg.TxOut[0].PkScript)
-		if err != nil {
-			continue
-		}
+		// loop through inputs and push those that contributed, then turn
+		// them around so the first is searched first
+		pushed := len(stack)
+	inputs:
+		for _, txn := range txMsg.TxIn {
+			prevTxHash := &txn.PreviousOutPoint.Hash
+			prevTxVout := txn.PreviousOutPoint.Index
 
-		// check to see if this parent contributed
-		switch msg := inpSlpMsg.(type) {
-		case *v1parser.SlpGenesis:
-			if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+			inpTxMsg := graph.getTxn(prevTxHash)
+			if inpTxMsg == nil {
 				continue
 			}
-			if prevTxVout == 1 && msg.Qty == 0 {
-				continue
-			}
-		case *v1parser.SlpMint:
-			if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
-				continue
-			}
-			if prevTxVout == 1 && msg.Qty == 0 {
-				continue
-			}
-		case *v1parser.SlpSend:
-			if int(prevTxVout) > len(msg.Amounts) {
-				continue
-			}
-		default:
-			return fmt.Errorf("txn %v was parsed as an unknown kind of slp transaction", prevTxHash)
-		}
 
-		// Only the end of the context stops the search; other errors
-		// leave out the input.
-		err = gs.findInternal(ctx, inpTxMsg, graph, seen, validityCache, txdata, counter)
-		if errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
+			// try to parse slp msg to check if this input contributes to this transaction
+			inpSlpMsg, err := v1parser.ParseSLP(inpTxMsg.TxOut[0].PkScript)
+			if err != nil {
+				continue
+			}
 
-			return err
+			// check to see if this parent contributed
+			switch msg := inpSlpMsg.(type) {
+			case *v1parser.SlpGenesis:
+				if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+					continue
+				}
+				if prevTxVout == 1 && msg.Qty == 0 {
+					continue
+				}
+			case *v1parser.SlpMint:
+				if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+					continue
+				}
+				if prevTxVout == 1 && msg.Qty == 0 {
+					continue
+				}
+			case *v1parser.SlpSend:
+				if int(prevTxVout) > len(msg.Amounts) {
+					continue
+				}
+			default:
+				// As when the search recursed, this leaves out the
+				// input and those after it, or ends the search for
+				// the transaction searched from.
+				if txMsg == root {
+					return fmt.Errorf("txn %v was parsed as an unknown kind of slp transaction", prevTxHash)
+				}
+				break inputs
+			}
+			stack = append(stack, inpTxMsg)
 		}
+		slices.Reverse(stack[pushed:])
 	}
 	return nil
 }
