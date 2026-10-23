@@ -1116,6 +1116,12 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 // GetAddressUnspentOutputs loads at a time.  It is a variable for tests.
 var addressUnspentPageSize = 10000
 
+// errChainReorganized is the error of a GetAddressUnspentOutputs call during
+// which a block was disconnected from the main chain, so that its answer could
+// mix outputs of both branches.  The client can call again.
+var errChainReorganized = status.Error(codes.Aborted,
+	"the chain reorganized during the call")
+
 // addressUnspentListHook and addressUnspentScanHook, when set, are called by
 // GetAddressUnspentOutputs once it has listed the address's memory pool
 // transactions, and once it has read the address's confirmed history.  They
@@ -1279,13 +1285,26 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		return utxos, nil
 	}
 
+	// A block disconnected from the main chain during the call may have
+	// spent or created outputs the call read, and the call reads the blocks
+	// connected meanwhile only from above the height it started at, so it
+	// fails once the count of disconnections has changed, or once the block
+	// it started at has left the main chain, as it does when a
+	// disconnection under way as the call starts ends.
+	//
 	// The memory pool transactions are listed before the confirmed history
 	// is read, as a block connected meanwhile takes its transactions out of
 	// the memory pool and its entries land in front of the pages already
 	// read, newest first.  They are checked afterwards, so one confirmed in
 	// between is found in the utxo set, whether or not the memory pool is
 	// included.
-	startHeight := s.chain.BestSnapshot().Height
+	disconnects := s.chain.DisconnectCount()
+	best := s.chain.BestSnapshot()
+	startHeight, startHash := best.Height, best.Hash
+	reorganized := func() bool {
+		return s.chain.DisconnectCount() != disconnects ||
+			!s.chain.MainChainHasBlock(&startHash)
+	}
 	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	if addressUnspentListHook != nil {
 		addressUnspentListHook()
@@ -1335,6 +1354,13 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if scanErr != nil {
 		return nil, scanErr
 	}
+	// A disconnection can also fail the read of a page whose blocks leave
+	// the main chain meanwhile.
+	if errors.Is(err, indexers.ErrAddrHistoryChanged) ||
+		err != nil && reorganized() {
+
+		return nil, errChainReorganized
+	}
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
 	}
@@ -1368,6 +1394,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			}
 			newTxs, err := s.fetchTransactionsByAddress(addr, startHeight+1,
 				fetch, skip)
+			if err != nil && reorganized() {
+				return nil, errChainReorganized
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -1394,6 +1423,10 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		if len(u) > 0 {
 			utxos = append(utxos, u...)
 		}
+	}
+	// Everything the answer holds has been read.
+	if reorganized() {
+		return nil, errChainReorganized
 	}
 	if len(lateSpends) > 0 {
 		spent := make(map[wire.OutPoint]struct{})

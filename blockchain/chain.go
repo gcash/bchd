@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
@@ -204,6 +205,11 @@ type BlockChain struct {
 	// chain state can be quickly reconstructed on load.
 	stateLock     sync.RWMutex
 	stateSnapshot *BestState
+
+	// disconnects counts the blocks disconnected from the main chain.  It
+	// is raised as each disconnection starts, with the chain lock held, and
+	// read without it.
+	disconnects atomic.Uint64
 
 	// shutdownRequest is closed, once, when a failure to write the chain
 	// state requires the process to shut down.
@@ -945,6 +951,10 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 			"block at the end of the main chain")
 	}
 
+	// Count the disconnection before it changes anything, so a caller that
+	// finds the count unchanged knows no disconnection started meanwhile.
+	b.disconnects.Add(1)
+
 	// Load the previous block since some details for it are needed below.
 	prevNode := node.parent
 	var prevBlock *bchutil.Block
@@ -1611,6 +1621,17 @@ func (b *BlockChain) BestSnapshot() *BestState {
 	snapshot := b.stateSnapshot
 	b.stateLock.RUnlock()
 	return snapshot
+}
+
+// DisconnectCount returns how many blocks have been disconnected from the main
+// chain since the chain instance was created.  The count is raised as a
+// disconnection starts, before it changes anything, so two equal counts mean
+// no disconnection started between them, though one already under way at the
+// first may finish after it.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) DisconnectCount() uint64 {
+	return b.disconnects.Load()
 }
 
 // HeaderByHash returns the block header identified by the given hash or an

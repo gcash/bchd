@@ -825,3 +825,131 @@ func (b *getCountingBucket) Get(key []byte) []byte {
 	b.gets++
 	return b.internalBucket.Get(key)
 }
+
+// TestTxRegionPagesForAddressReorg ensures that once a block of the history
+// TxRegionPagesForAddress read with its first page has been disconnected, its
+// later pages fail with ErrAddrHistoryChanged instead of naming the blocks
+// that took over the IDs of those disconnected, or failing to name any, and
+// that blocks connected meanwhile change nothing.
+func TestTxRegionPagesForAddressReorg(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	addr, err := bchutil.NewAddressPubKeyHash(make([]byte, 20), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrKey, err := addrToKey(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serializedID := func(id uint32) []byte {
+		var serialized [4]byte
+		byteOrder.PutUint32(serialized[:], id)
+		return serialized[:]
+	}
+	blockHash := func(id []byte, branch byte) chainhash.Hash {
+		return chainhash.DoubleHashH(append([]byte{branch}, id...))
+	}
+
+	for _, test := range []struct {
+		name   string
+		change func(ids database.Bucket) error
+		want   error
+	}{{
+		// Blocks 9 and 10 are replaced.
+		"replaced", func(ids database.Bucket) error {
+			for id := uint32(9); id <= 10; id++ {
+				hash := blockHash(serializedID(id), 1)
+				if err := ids.Put(serializedID(id), hash[:]); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, ErrAddrHistoryChanged,
+	}, {
+		"disconnected", func(ids database.Bucket) error {
+			return ids.Delete(serializedID(10))
+		}, ErrAddrHistoryChanged,
+	}, {
+		"connected", func(ids database.Bucket) error {
+			hash := blockHash(serializedID(11), 0)
+			return ids.Put(serializedID(11), hash[:])
+		}, nil,
+	}} {
+		db, err := database.Create("ffldb", t.TempDir(), wire.TestNet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		idx := NewAddrIndex(db, params)
+
+		// 100 transactions in blocks 1 to 10, ten in each.
+		const n = 100
+		levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
+		for i := 0; i < n; i++ {
+			err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
+				wire.TxLoc{TxStart: i, TxLen: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		err = db.Update(func(dbTx database.Tx) error {
+			bucket, err := dbTx.Metadata().CreateBucket(addrIndexKey)
+			if err != nil {
+				return err
+			}
+			for key, value := range levels.levels {
+				if err := bucket.Put(key[:], value); err != nil {
+					return err
+				}
+			}
+			ids, err := dbTx.Metadata().CreateBucket(hashByIDIndexBucketName)
+			if err != nil {
+				return err
+			}
+			for id := uint32(1); id <= n/10; id++ {
+				hash := blockHash(serializedID(id), 0)
+				if err := ids.Put(serializedID(id), hash[:]); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The chain changes after the first page of 7, all of block 10.
+		var got []database.BlockRegion
+		err = idx.TxRegionPagesForAddress(addr, 7,
+			func(regions []database.BlockRegion) error {
+				if len(got) == 0 {
+					err := db.Update(func(dbTx database.Tx) error {
+						return test.change(dbTx.Metadata().Bucket(
+							hashByIDIndexBucketName))
+					})
+					if err != nil {
+						return err
+					}
+				}
+				got = append(got, regions...)
+				return nil
+			})
+		if err != test.want {
+			t.Errorf("%s: got %v, want %v", test.name, err, test.want)
+		}
+		for i, region := range got {
+			id := serializedID(uint32((n-1-i)/10 + 1))
+			if want := blockHash(id, 0); !region.Hash.IsEqual(&want) {
+				t.Errorf("%s: entry %d names block %v, want %v", test.name,
+					i, region.Hash, want)
+			}
+		}
+		if test.want == nil && len(got) != n {
+			t.Errorf("%s: %d entries, want %d", test.name, len(got), n)
+		}
+		if test.want != nil && len(got) != 7 {
+			t.Errorf("%s: %d entries, want the first page's 7", test.name,
+				len(got))
+		}
+	}
+}

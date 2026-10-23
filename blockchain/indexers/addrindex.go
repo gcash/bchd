@@ -85,6 +85,12 @@ var (
 	// unsupported address type has been used.
 	errUnsupportedAddressType = errors.New("address type is not supported " +
 		"by the address index")
+
+	// ErrAddrHistoryChanged is returned by TxRegionPagesForAddress when a
+	// block of the history it read has been disconnected since, so the
+	// entries read no longer name their blocks.
+	ErrAddrHistoryChanged = errors.New("blocks of the address's history " +
+		"were disconnected while it was read")
 )
 
 // -----------------------------------------------------------------------------
@@ -920,9 +926,11 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 // TxRegionsForAddress reads about n²/(2*pageSize), as each call reads the
 // levels from the newest again.  Each page's blocks are looked up in a
 // database transaction of its own, and fn is called outside it.  The pages
-// after the first are decoded from the levels as read with it, so the entries
-// of a block disconnected in between fail to decode, or name the block that
-// took its ID.
+// after the first are decoded from the levels as read with it, whose entries
+// name their blocks by IDs that the blocks connected after a disconnection
+// take over, so once the newest block of the history read has been
+// disconnected, the next page fails with ErrAddrHistoryChanged.  While it is
+// connected, so are all the older blocks of the history.
 //
 // This function is safe for concurrent access.
 func (idx *AddrIndex) TxRegionPagesForAddress(addr bchutil.Address, pageSize uint32, fn func([]database.BlockRegion) error) error {
@@ -931,7 +939,10 @@ func (idx *AddrIndex) TxRegionPagesForAddress(addr bchutil.Address, pageSize uin
 		return err
 	}
 
-	var serialized []byte
+	var (
+		serialized []byte
+		newest     *chainhash.Hash // the newest block of the history
+	)
 	for skip := uint32(0); ; skip += pageSize {
 		var regions []database.BlockRegion
 		err := idx.db.View(func(dbTx database.Tx) error {
@@ -943,6 +954,12 @@ func (idx *AddrIndex) TxRegionPagesForAddress(addr bchutil.Address, pageSize uin
 				}
 				serialized = dbFetchAddrIndexLevels(bucket, addrKey,
 					math.MaxUint64)
+			} else {
+				id := serialized[len(serialized)-txEntrySize:][:4]
+				hash, err := dbFetchBlockHashBySerializedID(dbTx, id)
+				if err != nil || !hash.IsEqual(newest) {
+					return ErrAddrHistoryChanged
+				}
 			}
 			fetchBlockHash := func(id []byte) (*chainhash.Hash, error) {
 				return dbFetchBlockHashBySerializedID(dbTx, id)
@@ -950,6 +967,9 @@ func (idx *AddrIndex) TxRegionPagesForAddress(addr bchutil.Address, pageSize uin
 			var err error
 			regions, _, err = addrIndexEntryRegions(serialized, addrKey,
 				skip, pageSize, true, fetchBlockHash)
+			if err == nil && skip == 0 && len(regions) > 0 {
+				newest = regions[0].Hash
+			}
 			return err
 		})
 		if err != nil {

@@ -7,6 +7,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -79,6 +80,16 @@ func newAddrUnspentHarnessDB(tb testing.TB,
 	indexDB func(database.DB) database.DB) *addrUnspentHarness {
 
 	tb.Helper()
+	return newAddrUnspentHarnessWith(tb, indexDB, nil)
+}
+
+// newAddrUnspentHarnessWith is newAddrUnspentHarnessDB with the chain calling
+// its index manager through manager(m) when manager is not nil.
+func newAddrUnspentHarnessWith(tb testing.TB,
+	indexDB func(database.DB) database.DB,
+	manager func(blockchain.IndexManager) blockchain.IndexManager) *addrUnspentHarness {
+
+	tb.Helper()
 
 	params := chaincfg.RegressionNetParams
 	db, err := database.Create("ffldb", tb.TempDir(), params.Net)
@@ -93,8 +104,11 @@ func newAddrUnspentHarnessDB(tb testing.TB,
 		addrIndexDB = indexDB(db)
 	}
 	addrIndex := indexers.NewAddrIndex(addrIndexDB, &params)
-	indexManager := indexers.NewManager(db,
+	var indexManager blockchain.IndexManager = indexers.NewManager(db,
 		[]indexers.Indexer{txIndex, addrIndex})
+	if manager != nil {
+		indexManager = manager(indexManager)
+	}
 	chain, err := blockchain.New(&blockchain.Config{
 		DB:                 db,
 		ChainParams:        &params,
@@ -952,5 +966,374 @@ func TestGetAddressTransactionsOneSnapshot(t *testing.T) {
 	if index.connect == nil {
 		t.Error("the address index read its entries in a database " +
 			"transaction of its own")
+	}
+}
+
+// viewCountdownDB runs hook once, before the views-th read transaction
+// started through it.
+type viewCountdownDB struct {
+	database.DB
+	views int
+	hook  func()
+}
+
+func (db *viewCountdownDB) View(fn func(database.Tx) error) error {
+	if db.views > 0 {
+		db.views--
+		if db.views == 0 {
+			db.hook()
+		}
+	}
+	return db.DB.View(fn)
+}
+
+// TestGetAddressUnspentOutputsReorgDuringCall ensures a GetAddressUnspentOutputs
+// call during which the chain reorganizes below the blocks it read fails with
+// Aborted, so that the client calls again, and that the next call gives the
+// outputs of the new chain: when blocks of the address's history are replaced
+// between two of its pages, whose entries would name the blocks that took
+// over their IDs, and when blocks above the history are replaced after it
+// was read, which the call reads again only from above the height it
+// started at.
+func TestGetAddressUnspentOutputsReorgDuringCall(t *testing.T) {
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	addressUnspentPageSize = 1
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) []*wire.TxOut {
+		return []*wire.TxOut{wire.NewTxOut(value, script, wire.TokenData{})}
+	}
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		// The scripts paid by heights 1 to 3, then the height whose
+		// block is replaced, before which read of the address index, and
+		// the scripts paid by its replacement and those after it.
+		paid     [3][]byte
+		replace  int32
+		view     int
+		replaced [][]byte
+		want     int // outputs of the new chain
+	}{
+		{"history", [3][]byte{addrScript, addrScript, addrScript}, 2, 2,
+			[][]byte{otherScript, otherScript, otherScript}, 1},
+		{"above the history", [3][]byte{addrScript, otherScript, otherScript}, 3, 2,
+			[][]byte{addrScript}, 2},
+	} {
+		var index *viewCountdownDB
+		h := newAddrUnspentHarnessDB(t, func(db database.DB) database.DB {
+			index = &viewCountdownDB{DB: db}
+			return index
+		})
+		var hashes []chainhash.Hash
+		for i, script := range test.paid {
+			h.mineBlock(pay(int64(i+1)*1e8, script), nil)
+			hashes = append(hashes, h.prevHash)
+		}
+		index.views = test.view
+		index.hook = func() {
+			if err := h.chain.InvalidateBlock(&hashes[test.replace-1]); err != nil {
+				t.Fatalf("InvalidateBlock: %v", err)
+			}
+			h.height, h.prevHash = test.replace-1, hashes[test.replace-2]
+			for i, script := range test.replaced {
+				h.mineBlock(pay(int64(i+10)*1e8, script), nil)
+			}
+		}
+
+		req := &pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()}
+		_, err := h.s.GetAddressUnspentOutputs(context.Background(), req)
+		if status.Code(err) != codes.Aborted {
+			t.Errorf("%s: got %v, want Aborted", test.name, err)
+		}
+		resp, err := h.s.GetAddressUnspentOutputs(context.Background(), req)
+		if err != nil {
+			t.Fatalf("%s: the next call: %v", test.name, err)
+		}
+		if len(resp.Outputs) != test.want {
+			t.Errorf("%s: the next call gave %d outputs, want %d", test.name,
+				len(resp.Outputs), test.want)
+		}
+	}
+}
+
+// TestGetAddressUnspentOutputsReorgAboveStart ensures a GetAddressUnspentOutputs
+// call fails with Aborted when a block connected during it is replaced, though
+// the block it started at stays on the main chain: the replaced block spent an
+// output of the address that a later page of the history holds, so the call
+// read the output as spent, and its replacements do not spend it.
+func TestGetAddressUnspentOutputsReorgAboveStart(t *testing.T) {
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	addressUnspentPageSize = 1
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+
+	var index *viewCountdownDB
+	h := newAddrUnspentHarnessDB(t, func(db database.DB) database.DB {
+		index = &viewCountdownDB{DB: db}
+		return index
+	})
+	var paid []*wire.MsgTx
+	for i := int64(1); i <= 3; i++ {
+		paid = append(paid, h.mineBlock([]*wire.TxOut{pay(i*1e8, addrScript)}, nil))
+	}
+	startHash := h.prevHash
+
+	// Once the first page, the output of block 3, has been read, block 4
+	// spends the output of block 1, which the last page holds.
+	var spending chainhash.Hash
+	index.views = 2
+	index.hook = func() {
+		spend := spendTx(t, outPoint(paid[0], 0), addrRedeem,
+			pay(1e8-1000, otherScript))
+		h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+			[]*wire.MsgTx{spend})
+		spending = h.prevHash
+	}
+
+	// Once the history has been read, two blocks that spend nothing of the
+	// address replace block 4.
+	addressUnspentScanHook = func() {
+		addressUnspentScanHook = nil
+		if err := h.chain.InvalidateBlock(&spending); err != nil {
+			t.Fatalf("InvalidateBlock: %v", err)
+		}
+		h.height, h.prevHash = 3, startHash
+		h.mineBlock([]*wire.TxOut{pay(49e8, otherScript)}, nil)
+		h.mineBlock([]*wire.TxOut{pay(49e8, otherScript)}, nil)
+	}
+	t.Cleanup(func() { addressUnspentScanHook = nil })
+
+	req := &pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()}
+	resp, err := h.s.GetAddressUnspentOutputs(context.Background(), req)
+	if status.Code(err) != codes.Aborted {
+		t.Errorf("got %d outputs and %v, want Aborted", len(resp.GetOutputs()),
+			err)
+	}
+	resp, err = h.s.GetAddressUnspentOutputs(context.Background(), req)
+	if err != nil {
+		t.Fatalf("the next call: %v", err)
+	}
+	if len(resp.Outputs) != 3 {
+		t.Errorf("the next call gave %d outputs, want 3", len(resp.Outputs))
+	}
+}
+
+// regionsHookDB runs hook once, before the regions-th read of block regions in
+// the read transactions started through it, and fails that read when hook is
+// nil.
+type regionsHookDB struct {
+	database.DB
+	regions int
+	hook    func()
+}
+
+func (db *regionsHookDB) View(fn func(database.Tx) error) error {
+	return db.DB.View(func(dbTx database.Tx) error {
+		return fn(regionsHookTx{Tx: dbTx, db: db})
+	})
+}
+
+type regionsHookTx struct {
+	database.Tx
+	db *regionsHookDB
+}
+
+func (tx regionsHookTx) FetchBlockRegions(regions []database.BlockRegion) ([][]byte, error) {
+	if tx.db.regions > 0 {
+		tx.db.regions--
+		if tx.db.regions == 0 {
+			if tx.db.hook == nil {
+				return nil, errors.New("block regions not read")
+			}
+			tx.db.hook()
+		}
+	}
+	return tx.Tx.FetchBlockRegions(regions)
+}
+
+// TestGetAddressUnspentOutputsReorgFailsRead ensures a GetAddressUnspentOutputs
+// call fails with Aborted, not with the error of its read, when a block whose
+// transactions it is about to read leaves the main chain: a block of the
+// history's first, middle or last page, the middle one after its page passed
+// the check of the history's newest block, or a block connected during the
+// call, which the call reads once it has read the history.  A read that fails
+// with the chain unchanged keeps its error.
+func TestGetAddressUnspentOutputsReorgFailsRead(t *testing.T) {
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	addressUnspentPageSize = 1
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) []*wire.TxOut {
+		return []*wire.TxOut{wire.NewTxOut(value, script, wire.TokenData{})}
+	}
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		// The block left the main chain, before which read of block
+		// regions, counted from the call's start or, for a block
+		// connected during the call, from once the history was read.
+		height    int32
+		regions   int
+		connected bool
+		want      codes.Code
+	}{
+		{"first page", 4, 1, false, codes.Aborted},
+		{"middle page", 3, 2, false, codes.Aborted},
+		{"last page", 2, 3, false, codes.Aborted},
+		{"connected during the call", 5, 1, true, codes.Aborted},
+		{"no reorg", 0, 2, false, codes.InvalidArgument},
+	} {
+		h := newAddrUnspentHarness(t)
+		db := &regionsHookDB{DB: h.s.db}
+		h.s.db = db
+		h.mineBlock(pay(1e8, otherScript), nil)
+		for i := int64(2); i <= 4; i++ {
+			h.mineBlock(pay(i*1e8, addrScript), nil)
+		}
+
+		// The block is replaced as its transactions are about to be read.
+		replace := func() {
+			hash, err := h.chain.BlockHashByHeight(test.height)
+			if err != nil {
+				t.Fatalf("%s: BlockHashByHeight: %v", test.name, err)
+			}
+			if err := h.chain.InvalidateBlock(hash); err != nil {
+				t.Fatalf("%s: InvalidateBlock: %v", test.name, err)
+			}
+			h.height = test.height - 1
+			h.prevHash = h.chain.BestSnapshot().Hash
+			h.mineBlock(pay(60e8, otherScript), nil)
+		}
+		if test.height == 0 {
+			replace = nil
+		}
+		if test.connected {
+			addressUnspentScanHook = func() {
+				addressUnspentScanHook = nil
+				h.mineBlock(pay(5e8, addrScript), nil)
+				db.regions, db.hook = test.regions, replace
+			}
+			t.Cleanup(func() { addressUnspentScanHook = nil })
+		} else {
+			db.regions, db.hook = test.regions, replace
+		}
+
+		req := &pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()}
+		_, err := h.s.GetAddressUnspentOutputs(context.Background(), req)
+		if status.Code(err) != test.want {
+			t.Errorf("%s: got %v, want %v", test.name, err, test.want)
+		}
+		if db.regions != 0 {
+			t.Errorf("%s: the read was not reached", test.name)
+		}
+	}
+}
+
+// disconnectHookManager is an index manager that runs hook, when set, before
+// the indexes hear of a block disconnection, which is under way then.
+type disconnectHookManager struct {
+	blockchain.IndexManager
+	hook func()
+}
+
+func (m *disconnectHookManager) DisconnectBlock(dbTx database.Tx,
+	block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
+
+	if m.hook != nil {
+		m.hook()
+	}
+	return m.IndexManager.DisconnectBlock(dbTx, block, stxos)
+}
+
+// TestGetAddressUnspentOutputsDisconnectUnderWay ensures a GetAddressUnspentOutputs
+// call that starts while the block it starts at is being disconnected fails
+// with Aborted, though the count of disconnections already holds that
+// disconnection when the call reads it: the block is not in the address's
+// history, so no page fails, and the call would miss an output of the block
+// replacing it, at the height it starts at, which it does not read again.
+func TestGetAddressUnspentOutputsDisconnectUnderWay(t *testing.T) {
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) []*wire.TxOut {
+		return []*wire.TxOut{wire.NewTxOut(value, script, wire.TokenData{})}
+	}
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+	manager := &disconnectHookManager{}
+	h := newAddrUnspentHarnessWith(t, nil,
+		func(m blockchain.IndexManager) blockchain.IndexManager {
+			manager.IndexManager = m
+			return manager
+		})
+	h.mineBlock(pay(1e8, addrScript), nil)
+	h.mineBlock(pay(2e8, addrScript), nil)
+	h.mineBlock(pay(3e8, otherScript), nil)
+
+	// The call starts once the disconnection of block 3 has been counted,
+	// and has listed the memory pool, so read its tip, before the
+	// disconnection goes on.  Once it has read the history, a block paying
+	// the address replaces block 3.
+	type result struct {
+		resp *pb.GetAddressUnspentOutputsResponse
+		err  error
+	}
+	results := make(chan result, 1)
+	listed := make(chan struct{})
+	addressUnspentListHook = func() {
+		addressUnspentListHook = nil
+		close(listed)
+	}
+	addressUnspentScanHook = func() {
+		addressUnspentScanHook = nil
+		best := h.chain.BestSnapshot()
+		h.height, h.prevHash = best.Height, best.Hash
+		h.mineBlock(pay(4e8, addrScript), nil)
+	}
+	t.Cleanup(func() {
+		addressUnspentListHook = nil
+		addressUnspentScanHook = nil
+	})
+	manager.hook = func() {
+		manager.hook = nil
+		go func() {
+			resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+				&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+			results <- result{resp, err}
+		}()
+		<-listed
+	}
+	tip := h.prevHash
+	if err := h.chain.InvalidateBlock(&tip); err != nil {
+		t.Fatalf("InvalidateBlock: %v", err)
+	}
+	select {
+	case r := <-results:
+		if status.Code(r.err) != codes.Aborted {
+			t.Errorf("got %d outputs and %v, want Aborted",
+				len(r.resp.GetOutputs()), r.err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the call did not end")
 	}
 }
