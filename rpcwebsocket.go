@@ -135,9 +135,11 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 		conn.SetReadLimit(wsPreAuthReadLimit)
 	}
 
-	// Limit max number of websocket clients.
+	// Limit max number of websocket clients.  Clients that have not
+	// authenticated are limited apart, so they cannot take the slots of
+	// those that have.
 	rpcsLog.Infof("New websocket client %s", remoteAddr)
-	if s.ntfnMgr.NumClients()+1 > cfg.RPCMaxWebsockets {
+	if !s.addWsClient(authenticated) {
 		rpcsLog.Infof("Max websocket clients exceeded [%d] - "+
 			"disconnecting client %s", cfg.RPCMaxWebsockets,
 			remoteAddr)
@@ -151,6 +153,7 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 	client, err := newWebsocketClient(s, conn, remoteAddr, authenticated, isAdmin)
 	if err != nil {
 		rpcsLog.Errorf("Failed to serve client %s: %v", remoteAddr, err)
+		s.removeWsClient(authenticated)
 		conn.Close()
 		return
 	}
@@ -158,7 +161,55 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 	client.Start()
 	client.WaitForShutdown()
 	s.ntfnMgr.RemoveClient(client)
+	s.removeWsClient(client.authenticated)
 	rpcsLog.Infof("Disconnected websocket client %s", remoteAddr)
+}
+
+// addWsClient counts a new websocket client, authenticated or not, and returns
+// false when the server already serves --rpcmaxwebsockets clients of the same
+// kind.  Clients that have not authenticated are counted apart, so however
+// many of them connect, they cannot take the slots of clients that have.
+func (s *rpcServer) addWsClient(authenticated bool) bool {
+	s.wsClientsMtx.Lock()
+	defer s.wsClientsMtx.Unlock()
+
+	count := &s.wsPreAuthClients
+	if authenticated {
+		count = &s.wsAuthClients
+	}
+	if *count >= cfg.RPCMaxWebsockets {
+		return false
+	}
+	*count++
+	return true
+}
+
+// authenticateWsClient moves a websocket client that authenticated with the
+// authenticate command to the authenticated clients.  It returns false, and
+// leaves the client counted as not authenticated, when the server already
+// serves --rpcmaxwebsockets authenticated clients.
+func (s *rpcServer) authenticateWsClient() bool {
+	s.wsClientsMtx.Lock()
+	defer s.wsClientsMtx.Unlock()
+
+	if s.wsAuthClients >= cfg.RPCMaxWebsockets {
+		return false
+	}
+	s.wsPreAuthClients--
+	s.wsAuthClients++
+	return true
+}
+
+// removeWsClient uncounts a websocket client that has disconnected.
+func (s *rpcServer) removeWsClient(authenticated bool) {
+	s.wsClientsMtx.Lock()
+	defer s.wsClientsMtx.Unlock()
+
+	if authenticated {
+		s.wsAuthClients--
+	} else {
+		s.wsPreAuthClients--
+	}
 }
 
 // wsNotificationManager is a connection and notification manager used for
@@ -1432,12 +1483,20 @@ type wsClient struct {
 }
 
 // setAuthenticated marks the client as authenticated and lifts the limits
-// that apply before authentication.  It must only be called from inHandler.
-func (c *wsClient) setAuthenticated(isAdmin bool) {
+// that apply before authentication.  It returns false, leaving the client
+// unauthenticated, when the server already serves the most authenticated
+// websocket clients it may.  It must only be called from inHandler.
+func (c *wsClient) setAuthenticated(isAdmin bool) bool {
+	if !c.server.authenticateWsClient() {
+		rpcsLog.Infof("Max websocket clients exceeded [%d] - "+
+			"disconnecting client %s", cfg.RPCMaxWebsockets, c.addr)
+		return false
+	}
 	c.authenticated = true
 	c.isAdmin = isAdmin
 	_ = c.conn.SetReadDeadline(timeZeroVal)
 	c.conn.SetReadLimit(maxRPCRequestSize())
+	return true
 }
 
 // isNormalWebsocketClose returns whether err is the error a websocket read
@@ -1583,7 +1642,9 @@ out:
 					rpcsLog.Warnf("Auth failure.")
 					break out
 				}
-				c.setAuthenticated(cmp == 1)
+				if !c.setAuthenticated(cmp == 1) {
+					break out
+				}
 
 				// Marshal and send response.
 				reply, err = createMarshalledReply(cmd.jsonrpc, cmd.id, nil, nil)
@@ -1835,7 +1896,9 @@ out:
 								break out
 							}
 
-							c.setAuthenticated(cmp == 1)
+							if !c.setAuthenticated(cmp == 1) {
+								break out
+							}
 
 							// Marshal and send response.
 							reply, err = createMarshalledReply(cmd.jsonrpc, cmd.id, nil, nil)

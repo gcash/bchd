@@ -128,7 +128,7 @@ type config struct {
 	RPCCert                 string        `long:"rpccert" description:"File containing the certificate file"`
 	RPCKey                  string        `long:"rpckey" description:"File containing the certificate key"`
 	RPCMaxClients           int           `long:"rpcmaxclients" description:"Max number of RPC clients for standard connections"`
-	RPCMaxWebsockets        int           `long:"rpcmaxwebsockets" description:"Max number of RPC websocket connections"`
+	RPCMaxWebsockets        int           `long:"rpcmaxwebsockets" description:"Max number of authenticated RPC websocket clients, and of those yet to authenticate"`
 	RPCMaxConcurrentReqs    int           `long:"rpcmaxconcurrentreqs" description:"Max number of concurrent RPC requests that may be processed concurrently"`
 	RPCQuirks               bool          `long:"rpcquirks" description:"Mirror some JSON-RPC quirks of Bitcoin Core -- NOTE: Discouraged unless interoperability issues need to be worked around"`
 	RPCAuthTimeout          uint          `long:"rpcauthtimeout" description:"The number of seconds a connection to the RPC server is allowed to stay open without authenticating. To disable the timeout use 0."`

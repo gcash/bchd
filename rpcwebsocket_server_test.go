@@ -828,3 +828,91 @@ func TestWebsocketPendingNotificationBound(t *testing.T) {
 		})
 	}
 }
+
+// wsSession sends the session command on conn and returns an error unless
+// the server answers it.
+func wsSession(conn *websocket.Conn) error {
+	reply, err := wsRoundTrip(conn, `{"jsonrpc":"1.0","id":1,"method":"session","params":[]}`)
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(reply, `"sessionid"`) {
+		return fmt.Errorf("unexpected reply %s", reply)
+	}
+	return nil
+}
+
+// TestWebsocketPreAuthSlots ensures websocket clients that have not
+// authenticated have --rpcmaxwebsockets slots of their own, so they cannot
+// take those of the clients that have, and that a client that authenticates
+// with the authenticate command moves to an authenticated slot, or is
+// disconnected when none is free.
+func TestWebsocketPreAuthSlots(t *testing.T) {
+	s, addr := startTestRPCServer(t, func(s *rpcServer) {
+		s.cfg.RPCAuthTimeout = 60
+	})
+	limit := cfg.RPCMaxWebsockets
+	adminHdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	authenticate := `{"jsonrpc":"1.0","id":1,"method":"authenticate",` +
+		`"params":["admin","adminpass"]}`
+
+	// Fill the slots of clients that have not authenticated.  One more
+	// such client is refused, but one that authenticated with its request
+	// is still served.
+	var conns []*websocket.Conn
+	for range limit {
+		conns = append(conns, dialTestWebsocket(t, addr, nil))
+	}
+	waitWsClients(t, s, limit, 5*time.Second, "unauthenticated clients")
+	expectWsClosed(t, dialTestWebsocket(t, addr, nil),
+		"unauthenticated client over the limit")
+	authed := dialTestWebsocket(t, addr, adminHdr)
+	if err := wsSession(authed); err != nil {
+		t.Fatalf("authenticated client with all unauthenticated slots "+
+			"taken: %v", err)
+	}
+	conns = append(conns, authed)
+
+	// A client that authenticates with the command frees its slot for
+	// another that has not authenticated.
+	reply, err := wsRoundTrip(conns[0], authenticate)
+	if err != nil || !strings.Contains(reply, `"error":null`) {
+		t.Fatalf("authenticate: reply %s, err %v", reply, err)
+	}
+	conns = append(conns, dialTestWebsocket(t, addr, nil))
+	waitWsClients(t, s, limit+2, 5*time.Second,
+		"unauthenticated client after another authenticated")
+
+	// With the authenticated slots full, another authenticated client is
+	// refused, and so is one that then authenticates with the command,
+	// which frees its slot.
+	for range limit - 2 {
+		conns = append(conns, dialTestWebsocket(t, addr, adminHdr))
+	}
+	waitWsClients(t, s, 2*limit, 5*time.Second, "authenticated clients")
+	expectWsClosed(t, dialTestWebsocket(t, addr, adminHdr),
+		"authenticated client over the limit")
+	if reply, err := wsRoundTrip(conns[1], authenticate); err == nil {
+		t.Fatalf("authenticate over the limit: reply %s", reply)
+	}
+	conns = append(conns, dialTestWebsocket(t, addr, nil))
+	waitWsClients(t, s, 2*limit, 5*time.Second,
+		"unauthenticated client after one was disconnected")
+
+	// The client that authenticated with the command frees an
+	// authenticated slot when it leaves.
+	conns[0].Close()
+	waitWsClients(t, s, 2*limit-1, 5*time.Second, "client leaving")
+	authed = dialTestWebsocket(t, addr, adminHdr)
+	if err := wsSession(authed); err != nil {
+		t.Fatalf("authenticated client after another left: %v", err)
+	}
+	conns = append(conns, authed)
+
+	// A batched authenticate request over the limit is refused too.
+	reply, err = wsRoundTrip(conns[2], "["+authenticate+"]")
+	if err == nil {
+		t.Fatalf("batched authenticate over the limit: reply %s", reply)
+	}
+	closeWsClients(t, s, conns...)
+}

@@ -82,7 +82,8 @@ Application Options:
 	                               ~/.bchd/rpc.key)
 	    --rpcmaxclients=           Max number of RPC clients for standard
 	                               connections (default: 10)
-	    --rpcmaxwebsockets=        Max number of RPC websocket connections
+	    --rpcmaxwebsockets=        Max number of authenticated RPC websocket
+	                               clients, and of those yet to authenticate
 	                               (default: 25)
 	    --rpcmaxconcurrentreqs=    Max number of concurrent RPC requests that may
 	                               be processed concurrently (default: 20)
