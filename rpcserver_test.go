@@ -915,7 +915,8 @@ func TestHandleValidateAddressTokenAware(t *testing.T) {
 			p2sh.EncodeCashAddress(true), true},
 		{"token-aware p2sh32", p2sh32.EncodeCashAddress(true),
 			p2sh32.EncodeCashAddress(true), true},
-		{"legacy", legacy.EncodeAddress(), legacy.EncodeAddress(), false},
+		{"legacy", legacy.EncodeAddress(), p2pkh.EncodeCashAddress(false),
+			false},
 		{"slp", params.SlpAddressPrefix + ":" + slp.EncodeAddress(),
 			slp.EncodeAddress(), false},
 	}

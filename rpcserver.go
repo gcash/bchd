@@ -4873,29 +4873,41 @@ func handleValidateAddress(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 		return result, nil
 	}
 
-	// A legacy address can be for another network.
-	switch addr.(type) {
-	case *bchutil.LegacyAddressPubKeyHash, *bchutil.LegacyAddressScriptHash:
-		if !addr.IsForNet(s.cfg.ChainParams) {
+	// A legacy address, which can be for another network, is shown as the
+	// cashaddr of the same destination, as BCHN shows it.  A public key is
+	// shown as the cashaddr of its pay-to-pubkey-hash address.
+	params := s.cfg.ChainParams
+	payTo := addr
+	switch a := addr.(type) {
+	case *bchutil.LegacyAddressPubKeyHash:
+		if !a.IsForNet(params) {
 			return result, nil
 		}
+		payTo, err = bchutil.NewAddressPubKeyHash(a.Hash160()[:], params)
+	case *bchutil.LegacyAddressScriptHash:
+		if !a.IsForNet(params) {
+			return result, nil
+		}
+		payTo, err = bchutil.NewAddressScriptHashFromHash(a.Hash160()[:],
+			params)
+	case *bchutil.AddressPubKey:
+		payTo = a.AddressPubKeyHash()
+	}
+	if err != nil {
+		context := "Failed to convert address to cashaddr"
+		return nil, internalRPCError(err.Error(), context)
 	}
 
 	// Keep the token-aware form of a cashaddr.
 	tokenAware := false
-	if t, ok := addr.(bchutil.TokenAwareAddress); ok {
+	if t, ok := payTo.(bchutil.TokenAwareAddress); ok {
 		result.Address = t.CashAddress()
 		tokenAware = t.IsTokenAware()
 	} else {
-		result.Address = addr.EncodeAddress()
+		result.Address = payTo.EncodeAddress()
 	}
 
-	// Report the script the address pays to, as BCHN does.  A public key
-	// is shown as its pay-to-pubkey-hash address, so it gets that script.
-	payTo := addr
-	if pubKey, ok := addr.(*bchutil.AddressPubKey); ok {
-		payTo = pubKey.AddressPubKeyHash()
-	}
+	// Report the script the address pays to, as BCHN does.
 	script, err := txscript.PayToAddrScript(payTo)
 	if err != nil {
 		context := "Failed to generate pay-to-address script"
@@ -4903,8 +4915,7 @@ func handleValidateAddress(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 	}
 	isScript := false
 	switch payTo.(type) {
-	case *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32,
-		*bchutil.LegacyAddressScriptHash:
+	case *bchutil.AddressScriptHash, *bchutil.AddressScriptHash32:
 		isScript = true
 	}
 
