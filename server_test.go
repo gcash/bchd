@@ -978,3 +978,143 @@ func TestPeerHandlerSendsAfterQuit(t *testing.T) {
 		}
 	}
 }
+
+// answerQuery answers msg, a query of the peer handler, as the peer handler
+// does, with a made up answer.
+func answerQuery(msg interface{}) {
+	switch msg := msg.(type) {
+	case getConnCountMsg:
+		msg.reply <- 1
+	case getOutboundGroup:
+		msg.reply <- 1
+	case connectNodeMsg:
+		msg.reply <- nil
+	case removeNodeMsg:
+		msg.reply <- nil
+	case disconnectNodeMsg:
+		msg.reply <- nil
+	case getPeersMsg:
+		msg.reply <- nil
+	case getAddedNodesMsg:
+		msg.reply <- nil
+	}
+}
+
+// TestPeerHandlerQueriesAfterQuit ensures the calls that ask the peer handler
+// a question, and a peer height update, return once the server quits, as the
+// peer handler stops then.  They waited for good: the connection manager asks
+// for outbound group counts from goroutines nothing waits for, the RPC server
+// asks for the peers and the connection count and changes connections, and
+// the sync manager updates peer heights from a goroutine of its own.  A query
+// that the stopped peer handler's drain took was never answered either.
+func TestPeerHandlerQueriesAfterQuit(t *testing.T) {
+	connChange := func(name string, change func(*rpcConnManager) error) func(*server) {
+		return func(s *server) {
+			err := change(&rpcConnManager{server: s})
+			if !errors.Is(err, errServerShutdown) {
+				t.Errorf("%s: %v once the server quit, want %v", name,
+					err, errServerShutdown)
+			}
+		}
+	}
+	queries := []struct {
+		name string
+		fn   func(*server)
+	}{
+		{"ConnectedCount", func(s *server) {
+			if n := s.ConnectedCount(); n != 0 {
+				t.Errorf("ConnectedCount %d once the server quit", n)
+			}
+		}},
+		{"OutboundGroupCount", func(s *server) {
+			if n := s.OutboundGroupCount("10.0.0.0"); n != 0 {
+				t.Errorf("OutboundGroupCount %d once the server quit", n)
+			}
+		}},
+		{"Connect", connChange("Connect", func(cm *rpcConnManager) error {
+			return cm.Connect("10.0.0.1:8333", false)
+		})},
+		{"RemoveByID", connChange("RemoveByID", func(cm *rpcConnManager) error {
+			return cm.RemoveByID(1)
+		})},
+		{"RemoveByAddr", connChange("RemoveByAddr", func(cm *rpcConnManager) error {
+			return cm.RemoveByAddr("10.0.0.1:8333")
+		})},
+		{"DisconnectByID", connChange("DisconnectByID", func(cm *rpcConnManager) error {
+			return cm.DisconnectByID(1)
+		})},
+		{"DisconnectByAddr", connChange("DisconnectByAddr", func(cm *rpcConnManager) error {
+			return cm.DisconnectByAddr("10.0.0.1:8333")
+		})},
+		{"ConnectedPeers", func(s *server) {
+			peers := (&rpcConnManager{server: s}).ConnectedPeers()
+			if len(peers) != 0 {
+				t.Errorf("ConnectedPeers %d once the server quit",
+					len(peers))
+			}
+		}},
+		{"PersistentPeers", func(s *server) {
+			peers := (&rpcConnManager{server: s}).PersistentPeers()
+			if len(peers) != 0 {
+				t.Errorf("PersistentPeers %d once the server quit",
+					len(peers))
+			}
+		}},
+	}
+
+	// Nothing takes the queries.
+	for _, query := range queries {
+		s := &server{query: make(chan interface{}), quit: make(chan struct{})}
+		close(s.quit)
+		done := make(chan struct{})
+		go func() {
+			query.fn(s)
+			close(done)
+		}()
+		if !returnedWithin(done, 5*time.Second) {
+			t.Errorf("%s still waits for the peer handler after the "+
+				"server quit", query.name)
+		}
+	}
+
+	// The peer handler takes each query, as its drain does, but the server
+	// quits before an answer.  The query returns, and an answer still given
+	// does not wait for it.
+	for _, query := range queries {
+		s := &server{query: make(chan interface{}), quit: make(chan struct{})}
+		done := make(chan struct{})
+		go func() {
+			query.fn(s)
+			close(done)
+		}()
+		msg := <-s.query
+		close(s.quit)
+		if !returnedWithin(done, 5*time.Second) {
+			t.Errorf("%s still waits for its answer after the server "+
+				"quit", query.name)
+		}
+		answered := make(chan struct{})
+		go func() {
+			answerQuery(msg)
+			close(answered)
+		}()
+		if !returnedWithin(answered, 5*time.Second) {
+			t.Errorf("the answer to a %s that gave up waits", query.name)
+		}
+	}
+
+	s := &server{
+		peerHeightsUpdate: make(chan updatePeerHeightsMsg),
+		quit:              make(chan struct{}),
+	}
+	close(s.quit)
+	done := make(chan struct{})
+	go func() {
+		s.UpdatePeerHeights(&chainhash.Hash{1}, 1, nil)
+		close(done)
+	}()
+	if !returnedWithin(done, 5*time.Second) {
+		t.Error("UpdatePeerHeights still waits for the peer handler " +
+			"after the server quit")
+	}
+}

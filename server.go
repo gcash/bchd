@@ -3613,21 +3613,42 @@ func (s *server) BroadcastMessage(msg wire.Message, exclPeers ...*serverPeer) {
 	}
 }
 
-// ConnectedCount returns the number of currently connected peers.
+// queryPeerHandler sends msg, a query whose answer comes on reply, to the peer
+// handler and returns the answer and true.  Once the server is shutting down
+// it returns the zero value and false, as the peer handler then answers no
+// more queries.  reply must be buffered, so the peer handler's answer cannot
+// block when this gives up.
+func queryPeerHandler[T any](s *server, msg interface{}, reply chan T) (T, bool) {
+	var none T
+	select {
+	case s.query <- msg:
+	case <-s.quit:
+		return none, false
+	}
+	select {
+	case answer := <-reply:
+		return answer, true
+	case <-s.quit:
+		return none, false
+	}
+}
+
+// ConnectedCount returns the number of currently connected peers, or 0 once
+// the server is shutting down.
 func (s *server) ConnectedCount() int32 {
-	replyChan := make(chan int32)
-
-	s.query <- getConnCountMsg{reply: replyChan}
-
-	return <-replyChan
+	replyChan := make(chan int32, 1)
+	count, _ := queryPeerHandler(s, getConnCountMsg{reply: replyChan},
+		replyChan)
+	return count
 }
 
 // OutboundGroupCount returns the number of peers connected to the given
-// outbound group key.
+// outbound group key, or 0 once the server is shutting down.
 func (s *server) OutboundGroupCount(key string) int {
-	replyChan := make(chan int)
-	s.query <- getOutboundGroup{key: key, reply: replyChan}
-	return <-replyChan
+	replyChan := make(chan int, 1)
+	count, _ := queryPeerHandler(s,
+		getOutboundGroup{key: key, reply: replyChan}, replyChan)
+	return count
 }
 
 // AddBytesSent adds the passed number of bytes to the total bytes sent counter
@@ -3652,12 +3673,17 @@ func (s *server) NetTotals() (uint64, uint64) {
 // UpdatePeerHeights updates the heights of all peers who have have announced
 // the latest connected main chain block, or a recognized orphan. These height
 // updates allow us to dynamically refresh peer heights, ensuring sync peer
-// selection has access to the latest block heights for each peer.
+// selection has access to the latest block heights for each peer.  Once the
+// server is shutting down it returns without updating them, as the peer
+// handler then takes no more updates.
 func (s *server) UpdatePeerHeights(latestBlkHash *chainhash.Hash, latestHeight int32, updateSource *peer.Peer) {
-	s.peerHeightsUpdate <- updatePeerHeightsMsg{
+	select {
+	case s.peerHeightsUpdate <- updatePeerHeightsMsg{
 		newHash:    latestBlkHash,
 		newHeight:  latestHeight,
 		originPeer: updateSource,
+	}:
+	case <-s.quit:
 	}
 }
 

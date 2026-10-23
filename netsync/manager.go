@@ -63,6 +63,10 @@ const (
 // zeroHash is the zero value hash (all zeros).  It is defined as a convenience.
 var zeroHash chainhash.Hash
 
+// errStopped is the error ProcessBlock returns once the sync manager has
+// stopped, as its block handler then processes no more blocks.
+var errStopped = errors.New("sync manager stopped")
+
 // newPeerMsg signifies a newly connected peer to the block handler.
 type newPeerMsg struct {
 	peer  *peerpkg.Peer
@@ -2068,11 +2072,23 @@ func (sm *SyncManager) Stop() error {
 	return nil
 }
 
-// SyncPeerID returns the ID of the current sync peer, or 0 if there is none.
+// SyncPeerID returns the ID of the current sync peer, or 0 if there is none
+// or the sync manager has stopped.
 func (sm *SyncManager) SyncPeerID() int32 {
-	reply := make(chan int32)
-	sm.msgChan <- getSyncPeerMsg{reply: reply}
-	return <-reply
+	// Buffered, so the block handler cannot block on the reply when this
+	// gives up as the sync manager stops.
+	reply := make(chan int32, 1)
+	select {
+	case sm.msgChan <- getSyncPeerMsg{reply: reply}:
+	case <-sm.quit:
+		return 0
+	}
+	select {
+	case peerID := <-reply:
+		return peerID
+	case <-sm.quit:
+		return 0
+	}
 }
 
 // SyncHeight returns latest known block being synced to, or 0 if there is no
@@ -2096,12 +2112,22 @@ func (sm *SyncManager) SyncHeight() uint64 {
 }
 
 // ProcessBlock makes use of ProcessBlock on an internal instance of a block
-// chain.
+// chain.  It returns errStopped once the sync manager has stopped.
 func (sm *SyncManager) ProcessBlock(block *bchutil.Block, flags blockchain.BehaviorFlags) (bool, error) {
-	reply := make(chan processBlockResponse)
-	sm.msgChan <- processBlockMsg{block: block, flags: flags, reply: reply}
-	response := <-reply
-	return response.isOrphan, response.err
+	// Buffered, so the block handler cannot block on the reply when this
+	// gives up as the sync manager stops.
+	reply := make(chan processBlockResponse, 1)
+	select {
+	case sm.msgChan <- processBlockMsg{block: block, flags: flags, reply: reply}:
+	case <-sm.quit:
+		return false, errStopped
+	}
+	select {
+	case response := <-reply:
+		return response.isOrphan, response.err
+	case <-sm.quit:
+		return false, errStopped
+	}
 }
 
 // IsCurrent returns whether or not the sync manager believes it is synced with
@@ -2123,13 +2149,18 @@ func (sm *SyncManager) IsCurrent() bool {
 	}
 }
 
-// Pause pauses the sync manager until the returned channel is closed.
+// Pause pauses the sync manager until the returned channel is closed.  Once
+// the sync manager has stopped, it returns without pausing it, as nothing is
+// processed then.
 //
 // Note that while paused, all peer and block processing is halted.  The
 // message sender should avoid pausing the sync manager for long durations.
 func (sm *SyncManager) Pause() chan<- struct{} {
 	c := make(chan struct{})
-	sm.msgChan <- pauseMsg{c}
+	select {
+	case sm.msgChan <- pauseMsg{c}:
+	case <-sm.quit:
+	}
 	return c
 }
 

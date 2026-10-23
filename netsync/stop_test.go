@@ -5,9 +5,11 @@
 package netsync
 
 import (
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
 	peerpkg "github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
@@ -29,10 +31,10 @@ func returnsWithin(t *testing.T, what string, fn func()) {
 	}
 }
 
-// TestCallsAfterStop ensures IsCurrent, SyncHeight and NewPeer return once the
-// sync manager has stopped, rather than wait for the block handler that is
-// gone.  The server and the RPC server make these calls from goroutines that
-// may outlive the sync manager.
+// TestCallsAfterStop ensures IsCurrent, SyncHeight, SyncPeerID, ProcessBlock,
+// Pause and NewPeer return once the sync manager has stopped, rather than wait
+// for the block handler that is gone.  The server, the RPC server and the CPU
+// miner make these calls from goroutines that may outlive the sync manager.
 func TestCallsAfterStop(t *testing.T) {
 	h := newRequestTestHarness(t)
 	p := h.peer(1)
@@ -51,6 +53,19 @@ func TestCallsAfterStop(t *testing.T) {
 			t.Errorf("stopped sync manager has sync height %d", height)
 		}
 	})
+	returnsWithin(t, "SyncPeerID", func() {
+		if id := h.sm.SyncPeerID(); id != 0 {
+			t.Errorf("stopped sync manager has sync peer %d", id)
+		}
+	})
+	returnsWithin(t, "ProcessBlock", func() {
+		_, err := h.sm.ProcessBlock(bchutil.NewBlock(h.tip),
+			blockchain.BFNone)
+		if !errors.Is(err, errStopped) {
+			t.Errorf("stopped sync manager processed a block: %v", err)
+		}
+	})
+	returnsWithin(t, "Pause", func() { close(h.sm.Pause()) })
 	returnsWithin(t, "NewPeer", func() { h.sm.NewPeer(p, nil) })
 	returnsWithin(t, "DonePeer", func() { h.sm.DonePeer(p, nil) })
 }
@@ -109,6 +124,71 @@ func TestCallsGiveUpOnStop(t *testing.T) {
 	})
 	returnsWithin(t, "the answer to a SyncHeight that gave up", func() {
 		heightMsg.reply <- 5
+	})
+}
+
+// TestRPCCallsGiveUpOnStop ensures SyncPeerID, ProcessBlock and Pause, which
+// the RPC server and the CPU miner call, stop waiting for the block handler to
+// take their message when the sync manager stops, and that the block handler
+// can still answer a SyncPeerID or a ProcessBlock that gave up.  They waited
+// for good for a block handler that was gone.
+func TestRPCCallsGiveUpOnStop(t *testing.T) {
+	block := bchutil.NewBlock(chaincfg.RegressionNetParams.GenesisBlock)
+	processBlock := func(sm *SyncManager, processed chan<- error) {
+		_, err := sm.ProcessBlock(block, blockchain.BFNone)
+		processed <- err
+	}
+	stopped := func(processed <-chan error) func() {
+		return func() {
+			if err := <-processed; !errors.Is(err, errStopped) {
+				t.Errorf("stopping sync manager processed a block: %v",
+					err)
+			}
+		}
+	}
+
+	// Nothing takes the messages.
+	sm := &SyncManager{msgChan: make(chan interface{}),
+		quit: make(chan struct{})}
+	peerID := make(chan int32, 1)
+	go func() { peerID <- sm.SyncPeerID() }()
+	processed := make(chan error, 1)
+	go processBlock(sm, processed)
+	paused := make(chan struct{})
+	go func() {
+		close(sm.Pause())
+		close(paused)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(sm.quit)
+	returnsWithin(t, "SyncPeerID", func() {
+		if id := <-peerID; id != 0 {
+			t.Errorf("stopping sync manager has sync peer %d", id)
+		}
+	})
+	returnsWithin(t, "ProcessBlock", stopped(processed))
+	returnsWithin(t, "Pause", func() { <-paused })
+
+	// The block handler takes the messages, but the sync manager stops
+	// before it answers.
+	sm = &SyncManager{msgChan: make(chan interface{}, 1),
+		quit: make(chan struct{})}
+	go func() { peerID <- sm.SyncPeerID() }()
+	peerMsg := (<-sm.msgChan).(getSyncPeerMsg)
+	go processBlock(sm, processed)
+	processMsg := (<-sm.msgChan).(processBlockMsg)
+	close(sm.quit)
+	returnsWithin(t, "SyncPeerID", func() {
+		if id := <-peerID; id != 0 {
+			t.Errorf("stopping sync manager has sync peer %d", id)
+		}
+	})
+	returnsWithin(t, "ProcessBlock", stopped(processed))
+	returnsWithin(t, "the answer to a SyncPeerID that gave up", func() {
+		peerMsg.reply <- 1
+	})
+	returnsWithin(t, "the answer to a ProcessBlock that gave up", func() {
+		processMsg.reply <- processBlockResponse{}
 	})
 }
 
