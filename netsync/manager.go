@@ -933,9 +933,10 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 			log.Errorf("Failed to process block %v: %v",
 				blockHash, err)
 		}
-		if dbErr, ok := err.(database.Error); ok && dbErr.ErrorCode ==
-			database.ErrCorruption {
-			panic(dbErr)
+		// The chain has requested a shutdown for the database error,
+		// which is not the peer's fault.
+		if _, ok := err.(database.Error); ok {
+			return
 		}
 
 		// Convert the error into an appropriate reject message and

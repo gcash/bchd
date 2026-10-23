@@ -2743,6 +2743,16 @@ func New(config *Config) (*BlockChain, error) {
 		err := b.reIndexChainState(!config.ReIndexChainState,
 			config.Interrupt)
 		if err != nil {
+			// A rebuild that can't read the stored blocks leaves only
+			// a sync from scratch, which the advice to re-index the
+			// chain state leaves out until then.
+			if isDbErr(err) {
+				log.Criticalf("Re-indexing the UTXO set failed: %v",
+					err)
+				log.Critical("The UTXO set can't be rebuilt from the " +
+					"stored blocks. Sync again from an empty data " +
+					"directory")
+			}
 			return nil, err
 		}
 		log.Info("Re-indexing complete")
@@ -2781,6 +2791,28 @@ func (b *BlockChain) RequestedProcessShutdown() <-chan struct{} {
 // process to shut down, since the chain can't safely continue without it.
 func (b *BlockChain) requestShutdown(err error) {
 	log.Criticalf("Failed to write the chain state: %v", err)
+	b.closeShutdownRequest()
+}
+
+// requestDatabaseErrorShutdown logs the database error err that stopped a
+// block, with how to recover when the database is corrupt, and requests the
+// process to shut down, since blocks that need the data can't be connected.
+// BCHN stops the same way when it cannot read a block or the UTXO set.  The
+// shutdown still flushes the caches and closes the database.
+func (b *BlockChain) requestDatabaseErrorShutdown(err error) {
+	if isDbCorruptionErr(err) {
+		log.Criticalf("The database is corrupt: %v", err)
+		log.Critical("Restart with --reindexchainstate to rebuild the " +
+			"UTXO set from the stored blocks")
+	} else {
+		log.Criticalf("A database error stopped block processing: %v",
+			err)
+	}
+	b.closeShutdownRequest()
+}
+
+// closeShutdownRequest requests the process to shut down, once.
+func (b *BlockChain) closeShutdownRequest() {
 	b.shutdownRequestOnce.Do(func() {
 		log.Critical("Requesting shutdown")
 		close(b.shutdownRequest)

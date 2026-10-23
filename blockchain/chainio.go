@@ -147,6 +147,19 @@ func isDbBucketNotFoundErr(err error) bool {
 	return ok && dbErr.ErrorCode == database.ErrBucketNotFound
 }
 
+// isDbErr returns whether or not the passed error is a database.Error.
+func isDbErr(err error) bool {
+	_, ok := err.(database.Error)
+	return ok
+}
+
+// isDbCorruptionErr returns whether or not the passed error is a
+// database.Error with an error code of database.ErrCorruption.
+func isDbCorruptionErr(err error) bool {
+	dbErr, ok := err.(database.Error)
+	return ok && dbErr.ErrorCode == database.ErrCorruption
+}
+
 // dbFetchVersion fetches an individual version with the given key from the
 // metadata bucket.  It is primarily used to track versions on entities such as
 // buckets.  It returns zero if the provided key does not exist.

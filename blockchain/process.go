@@ -227,11 +227,26 @@ func (b *BlockChain) knownInvalid(hash *chainhash.Hash) bool {
 // whether or not the block is on the main chain and the second indicates
 // whether or not the block is an orphan.
 //
+// When processing the block fails with a database error, as when stored data
+// is corrupt or can't be read, the process is requested to shut down, as
+// blocks can't be connected without the data.
+//
 // This function is safe for concurrent access.
 func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bool, bool, error) {
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
+	isMainChain, isOrphan, err := b.processBlock(block, flags)
+	if isDbErr(err) {
+		b.requestDatabaseErrorShutdown(err)
+	}
+	return isMainChain, isOrphan, err
+}
+
+// processBlock processes the block as described for ProcessBlock.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) processBlock(block *bchutil.Block, flags BehaviorFlags) (bool, bool, error) {
 	blockHash := block.Hash()
 	log.Tracef("Processing block %v", blockHash)
 
