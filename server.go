@@ -4517,6 +4517,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			SlpIndex:    s.slpIndex,
 
 			MaxSubscriptions: cfg.GrpcMaxSubscriptions,
+			AuthRequired:     cfg.GrpcAuthToken != "",
 			MaxFilterEntries: cfg.GrpcMaxFilterEntries,
 		}, &s)
 		if err != nil {

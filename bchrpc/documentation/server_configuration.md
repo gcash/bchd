@@ -43,8 +43,11 @@ response, err := client.SomeRPC(ctx, someRequest)
 ```
 
 Clients may hold at most 100 subscriptions at once, over all the subscription calls, and a
-call over the limit fails with `ResourceExhausted`. A public server with more subscribers can
-raise it:
+call over the limit fails with `ResourceExhausted`. Without `--grpcauthtoken`, one IPv4 address,
+or one IPv6 /56, may hold at most a quarter of them, so one such client cannot take them all;
+a client with several addresses can still hold more. Clients at loopback, private or link-local
+addresses, such as a proxy in front of the server, share only the overall limit. A public server
+with more subscribers can raise it:
 
 ```bash
 bchd --grpclisten=0.0.0.0 --grpcmaxsubscriptions=1000

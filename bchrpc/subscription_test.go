@@ -12,6 +12,7 @@ import (
 	"github.com/gcash/bchd/mempool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -290,6 +291,150 @@ func TestClientSubscriptionLimit(t *testing.T) {
 	}
 }
 
+// testPeerAddr is a client's address as grpc-go's ServeHTTP transport gives
+// it, the request's remote address.
+type testPeerAddr string
+
+func (a testPeerAddr) Network() string { return "tcp" }
+
+func (a testPeerAddr) String() string { return string(a) }
+
+// TestClientSubscriptionShare ensures a client holds at most its share of the
+// subscriptions, so one client cannot take every place: a client is an IPv4
+// address, also when mapped into IPv6, or the /56 of an IPv6 address.  Other
+// clients still subscribe, and a subscription that ends gives its place back.
+// Clients at loopback, private and link-local addresses, which are usually a
+// proxy in front of the server, have no share of their own, nor do those
+// whose address cannot be read, and with an auth token no client has one.
+func TestClientSubscriptionShare(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.maxSubscriptions = 100
+	s.maxClientShare = 2
+
+	type held struct {
+		cancel context.CancelFunc
+		done   chan error
+	}
+	var subs []held
+	defer func() {
+		for _, sub := range subs {
+			sub.cancel()
+		}
+	}()
+	// subscribe makes a SubscribeBlocks call from addr, or from a client
+	// without an address when addr is empty, and returns its error once
+	// it is refused, or nil once it holds a place.
+	subscribe := func(addr string) error {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		if addr != "" {
+			ctx = peer.NewContext(ctx, &peer.Peer{Addr: testPeerAddr(addr)})
+		}
+		// The dispatcher handles one message at a time, so once it has
+		// taken this unsubscribe of a subscription it does not hold, it
+		// counts every subscription that ended.
+		s.unsubscribe <- &rpcEventSubscription{}
+		n := s.numSubscriptions()
+		done := make(chan error, 1)
+		go func() {
+			done <- s.SubscribeBlocks(&pb.SubscribeBlocksRequest{},
+				&blockStream{ctx: ctx})
+		}()
+		for deadline := time.Now().Add(5 * time.Second); ; {
+			select {
+			case err := <-done:
+				cancel()
+				return err
+			default:
+			}
+			if s.numSubscriptions() > n {
+				subs = append(subs, held{cancel, done})
+				return nil
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: the call neither subscribed nor ended", addr)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	refused := func(addr string) {
+		t.Helper()
+		err := subscribe(addr)
+		if status.Code(err) != codes.ResourceExhausted ||
+			!strings.Contains(err.Error(), "from one client, the limit is 2") {
+
+			t.Errorf("%s over its share: got %v, want ResourceExhausted",
+				addr, err)
+		}
+	}
+	accepted := func(addrs ...string) {
+		t.Helper()
+		for _, addr := range addrs {
+			if err := subscribe(addr); err != nil {
+				t.Errorf("%s: refused: %v", addr, err)
+			}
+		}
+	}
+
+	accepted("203.0.113.5:1000", "203.0.113.5:1001")
+	refused("203.0.113.5:1002")
+	refused("[::ffff:203.0.113.5]:1003")
+	accepted("203.0.113.6:1000", "203.0.113.6:1001")
+	accepted("198.51.100.7:1000", "198.51.100.7:1001")
+	accepted("[2001:db8:1:2::1]:1000", "[2001:db8:1:3:ffff::1]:1001")
+	refused("[2001:db8:1:ff::abcd]:1002")
+	accepted("[2001:db8:1:100::1]:1000")
+	for _, addr := range []string{"127.0.0.1:1000", "[::1]:1000",
+		"10.1.2.3:1000", "172.16.0.1:1000", "192.168.0.1:1000",
+		"[fd00::1]:1000", "169.254.1.1:1000", "[fe80::1]:1000",
+		"not an address", ""} {
+
+		accepted(addr, addr, addr)
+	}
+
+	// A subscription that ends gives its place in the share back.
+	subs[0].cancel()
+	if err := <-subs[0].done; err != nil {
+		t.Fatalf("the first subscription ended with %v", err)
+	}
+	subs = subs[1:]
+	accepted("203.0.113.5:1004")
+	refused("203.0.113.5:1005")
+
+	// A call refused by the overall limit takes no place in its client's
+	// share.
+	s.maxSubscriptions = int(s.clientSubscriptions.Load())
+	if err := subscribe("203.0.113.7:1000"); status.Code(err) != codes.ResourceExhausted ||
+		!strings.Contains(err.Error(), "too many subscriptions, the limit") {
+
+		t.Errorf("over the overall limit: got %v, want ResourceExhausted", err)
+	}
+	s.maxSubscriptions = 100
+	accepted("203.0.113.7:1001", "203.0.113.7:1002")
+
+	// With an auth token, clients have no share of their own.
+	s.maxClientShare = 0
+	accepted("203.0.113.9:1000", "203.0.113.9:1001", "203.0.113.9:1002")
+
+	// Once every subscription has ended, no client is counted.
+	for _, sub := range subs {
+		sub.cancel()
+		if err := <-sub.done; err != nil {
+			t.Fatalf("a subscription ended with %v", err)
+		}
+	}
+	subs = nil
+	s.clientSharesMu.Lock()
+	left := len(s.clientShares)
+	s.clientSharesMu.Unlock()
+	if left != 0 {
+		t.Errorf("%d clients still counted", left)
+	}
+	if n := s.clientSubscriptions.Load(); n != 0 {
+		t.Errorf("%d subscriptions still counted", n)
+	}
+}
+
 // TestSubscribeTransactionStreamFilterLimit ensures a SubscribeTransactionStream
 // call ends with ResourceExhausted once its requests together add more than
 // maxFilterSize to its filter, as each request may add up to gRPC's message
@@ -328,6 +473,22 @@ func TestNewGrpcServerMaxSubscriptions(t *testing.T) {
 	}
 	if s.maxFilterEntries != 11 {
 		t.Errorf("filter limit %d, want 11", s.maxFilterEntries)
+	}
+
+	// Each client may hold a quarter of the subscriptions, rounded up,
+	// unless clients need the auth token.
+	for _, test := range []struct {
+		max, share int
+		auth       bool
+	}{{7, 2, false}, {100, 25, false}, {1, 1, false}, {8, 2, false},
+		{100, 0, true}} {
+
+		s := NewGrpcServer(&GrpcServerConfig{Server: grpc.NewServer(),
+			MaxSubscriptions: test.max, AuthRequired: test.auth})
+		if s.maxClientShare != test.share {
+			t.Errorf("limit %d, auth %v: share %d, want %d", test.max,
+				test.auth, s.maxClientShare, test.share)
+		}
 	}
 }
 

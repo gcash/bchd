@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"sync"
@@ -31,6 +32,7 @@ import (
 	"github.com/gcash/goslp/v1parser"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -108,6 +110,11 @@ type GrpcServerConfig struct {
 	// over all the subscription calls.
 	MaxSubscriptions int
 
+	// AuthRequired is whether clients need the auth token to call.  When
+	// they do not, any client may subscribe, so each client may hold at
+	// most a quarter of MaxSubscriptions.
+	AuthRequired bool
+
 	// MaxFilterEntries is the most a subscription's transaction filter may
 	// hold: each outpoint, those of the outputs it matched included,
 	// address and token ID counts once, and each data element once for
@@ -142,7 +149,15 @@ type GrpcServer struct {
 
 	maxSubscriptions    int
 	clientSubscriptions atomic.Int64 // number held by client calls
-	maxFilterEntries    int
+
+	// maxClientShare is the most subscriptions one client may hold, or not
+	// above 0 when clients have no share of their own, and clientShares
+	// holds the number each client holds, by subscriptionClient's key.
+	maxClientShare int
+	clientSharesMu sync.Mutex
+	clientShares   map[netip.Prefix]int
+
+	maxFilterEntries int
 
 	wg       sync.WaitGroup
 	ready    atomic.Uint32 // atomic
@@ -172,6 +187,9 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 
 		maxSubscriptions: cfg.MaxSubscriptions,
 		maxFilterEntries: cfg.MaxFilterEntries,
+	}
+	if !cfg.AuthRequired {
+		s.maxClientShare = (cfg.MaxSubscriptions + 3) / 4
 	}
 	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
@@ -245,6 +263,10 @@ type rpcEventSubscription struct {
 	unsubscribe chan struct{}    // closed on unsubscribe
 	done        chan struct{}    // closed when the queue handler stops
 	overflowed  atomic.Bool      // set when the queue limit was hit
+
+	// client is the client whose share of the subscriptions a client's
+	// subscription counts in, when it is valid.
+	client netip.Prefix
 }
 
 // Events returns the channel clients listen to for new events.  It is closed
@@ -312,25 +334,93 @@ func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
 	return sub
 }
 
-// subscribeClient returns a new subscription for a client's call, or a
-// ResourceExhausted error when clients hold maxSubscriptions already.  Every
+// subscribeClient returns a new subscription for the call of a client whose
+// call has the context ctx, or a ResourceExhausted error when clients hold
+// maxSubscriptions already or this client holds its share of them.  Every
 // subscription is handed every event and holds goroutines and a queue, and
 // without an auth token any client may subscribe, so the limit bounds that
-// work.  The subscription must be ended with unsubscribeClient.
-func (s *GrpcServer) subscribeClient() (*rpcEventSubscription, error) {
+// work, and the shares keep one client from taking every place.  The
+// subscription must be ended with unsubscribeClient.
+func (s *GrpcServer) subscribeClient(ctx context.Context) (*rpcEventSubscription, error) {
+	var client netip.Prefix
+	if s.maxClientShare > 0 {
+		client = subscriptionClient(ctx)
+	}
+	if client.IsValid() {
+		s.clientSharesMu.Lock()
+		if s.clientShares[client] >= s.maxClientShare {
+			s.clientSharesMu.Unlock()
+			return nil, status.Errorf(codes.ResourceExhausted,
+				"too many subscriptions from one client, the limit is %d",
+				s.maxClientShare)
+		}
+		if s.clientShares == nil {
+			s.clientShares = make(map[netip.Prefix]int)
+		}
+		s.clientShares[client]++
+		s.clientSharesMu.Unlock()
+	}
 	if s.clientSubscriptions.Add(1) > int64(s.maxSubscriptions) {
 		s.clientSubscriptions.Add(-1)
+		s.releaseClientShare(client)
 		return nil, status.Errorf(codes.ResourceExhausted,
 			"too many subscriptions, the limit is %d", s.maxSubscriptions)
 	}
-	return s.subscribeEvents(maxSubscriptionQueue), nil
+	sub := s.subscribeEvents(maxSubscriptionQueue)
+	sub.client = client
+	return sub, nil
 }
 
 // unsubscribeClient ends a subscription subscribeClient returned and frees its
-// place.
+// place, and its place in its client's share.
 func (s *GrpcServer) unsubscribeClient(sub *rpcEventSubscription) {
 	sub.Unsubscribe()
 	s.clientSubscriptions.Add(-1)
+	s.releaseClientShare(sub.client)
+}
+
+// releaseClientShare frees a place in the share of client, when it is valid.
+func (s *GrpcServer) releaseClientShare(client netip.Prefix) {
+	if !client.IsValid() {
+		return
+	}
+	s.clientSharesMu.Lock()
+	s.clientShares[client]--
+	if s.clientShares[client] <= 0 {
+		delete(s.clientShares, client)
+	}
+	s.clientSharesMu.Unlock()
+}
+
+// subscriptionClient returns the client whose call has the context ctx, as
+// the shares of the subscriptions count clients: its IPv4 address, or the /56
+// of its IPv6 address, as a site is commonly given a whole /56; a client with
+// more addresses can still hold more.  A client at a loopback, private or
+// link-local address, usually a proxy in front of the server carrying many
+// clients, has no share of its own, nor has one whose address cannot be read;
+// for them it returns an invalid prefix.
+func subscriptionClient(ctx context.Context) netip.Prefix {
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.Addr == nil {
+		return netip.Prefix{}
+	}
+	addrPort, err := netip.ParseAddrPort(p.Addr.String())
+	if err != nil {
+		return netip.Prefix{}
+	}
+	addr := addrPort.Addr().Unmap()
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() {
+		return netip.Prefix{}
+	}
+	bits := 56
+	if addr.Is4() {
+		bits = 32
+	}
+	client, err := addr.Prefix(bits)
+	if err != nil {
+		return netip.Prefix{}
+	}
+	return client
 }
 
 // numSubscriptions returns the number of subscriptions the dispatcher holds.
@@ -2522,7 +2612,7 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
-	subscription, err := s.subscribeClient()
+	subscription, err := s.subscribeClient(stream.Context())
 	if err != nil {
 		return err
 	}
@@ -2658,7 +2748,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
-	subscription, err := s.subscribeClient()
+	subscription, err := s.subscribeClient(stream.Context())
 	if err != nil {
 		return err
 	}
@@ -2822,7 +2912,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 // SubscribeBlocks creates a subscription for notifications of new blocks being
 // connected to the blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
-	subscription, err := s.subscribeClient()
+	subscription, err := s.subscribeClient(stream.Context())
 	if err != nil {
 		return err
 	}
