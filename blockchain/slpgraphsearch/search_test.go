@@ -393,3 +393,139 @@ func TestFindDeepChainStack(t *testing.T) {
 			float64(grown)/1e6)
 	}
 }
+
+// TestFindAllocatesForResult ensures a search allocates in proportion to what
+// it finds, not to the token's graph.  A search of the GENESIS alone once
+// allocated a slot for each transaction of the graph: 2.4 MB for a graph of
+// 100,001 transactions, and 24 MB for one of a million.
+func TestFindAllocatesForResult(t *testing.T) {
+	const sends = 100000
+	db, _, tokenID := sendChain(t, sends)
+
+	// The token ID is the GENESIS's hash in the byte order it is shown in.
+	var genesis chainhash.Hash
+	for i := range genesis {
+		genesis[i] = tokenID[chainhash.HashSize-1-i]
+	}
+	var res [][]byte
+	var err error
+	search := func() uint64 {
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		res, err = db.Find(context.Background(), &genesis, tokenID,
+			&map[chainhash.Hash]struct{}{})
+		runtime.ReadMemStats(&after)
+		return after.TotalAlloc - before.TotalAlloc
+	}
+	least := search()
+	for i := 0; i < 4; i++ {
+		least = min(least, search())
+	}
+	if err != nil || len(res) != 1 {
+		t.Fatalf("got %d transactions and %v, want the GENESIS", len(res), err)
+	}
+	if least > 64<<10 {
+		t.Errorf("a search finding 1 of %d transactions allocated %d bytes",
+			sends+1, least)
+	}
+}
+
+// growingContext is a context that adds tx to db the second time it is
+// looked at.
+type growingContext struct {
+	context.Context
+	db    *Db
+	tx    *wire.MsgTx
+	calls int
+	err   error
+}
+
+func (c *growingContext) Err() error {
+	c.calls++
+	if c.calls == 2 {
+		c.err = c.db.AddTxn(c.tx)
+	}
+	return nil
+}
+
+// TestFindGraphGrows ensures a search that finds more transactions than the
+// token's graph held when it began returns all of them.  Block connection and
+// the memory pool add transactions to the graph in goroutines of their own, in
+// no set order, so a search can find a parent added after it began; its
+// result once had a slot for each transaction the graph held at the start, and
+// the search indexed past the last.
+func TestFindGraphGrows(t *testing.T) {
+	// A GENESIS, added to the graph only once the search has begun, a SEND
+	// spending its token output, a chain of 999 sends from outside the
+	// graph, and the SEND searched from, which spends the token outputs of
+	// the chain's last and of the first SEND, in that order.
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{2}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	tokenIDBuf, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenID, err := chainhash.NewHash(tokenIDBuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send, err := metadatamaker.TokenType1Send(tokenIDBuf, []uint64{1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := NewDb()
+	sendFrom := func(prev ...wire.OutPoint) *wire.MsgTx {
+		t.Helper()
+		tx := wire.NewMsgTx(1)
+		for i := range prev {
+			tx.AddTxIn(wire.NewTxIn(&prev[i], nil))
+		}
+		tx.AddTxOut(&wire.TxOut{PkScript: send})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		if err := db.AddTxn(tx); err != nil {
+			t.Fatal(err)
+		}
+		return tx
+	}
+	first := sendFrom(wire.OutPoint{Hash: genesis.TxHash(), Index: 1})
+	chain := sendFrom(wire.OutPoint{Hash: chainhash.Hash{3}, Index: 1})
+	for i := 1; i < 999; i++ {
+		chain = sendFrom(wire.OutPoint{Hash: chain.TxHash(), Index: 1})
+	}
+	root := sendFrom(wire.OutPoint{Hash: chain.TxHash(), Index: 1},
+		wire.OutPoint{Hash: first.TxHash(), Index: 1})
+
+	// The context is looked at before the search adds the 1001st
+	// transaction, the first SEND, the last the graph held at the start.
+	ctx := &growingContext{Context: context.Background(), db: db, tx: genesis}
+	var res [][]byte
+	var panicked interface{}
+	func() {
+		defer func() { panicked = recover() }()
+		hash := root.TxHash()
+		res, err = db.Find(ctx, &hash, tokenID, &map[chainhash.Hash]struct{}{})
+	}()
+	if panicked != nil {
+		t.Fatalf("the search panicked: %v", panicked)
+	}
+	if ctx.err != nil {
+		t.Fatalf("adding the GENESIS: %v", ctx.err)
+	}
+	if err != nil || len(res) != 1002 {
+		t.Fatalf("got %d transactions and %v, want 1002", len(res), err)
+	}
+	var buf bytes.Buffer
+	if err := genesis.Serialize(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(res[1001], buf.Bytes()) {
+		t.Error("the last transaction found is not the GENESIS")
+	}
+}

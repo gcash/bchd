@@ -120,9 +120,11 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 		return nil, fmt.Errorf("graph search graph is missing for token ID %v", tokenID)
 	}
 
+	// The result grows with what the search finds, not with the token's
+	// graph, which can hold millions of transactions and can grow while the
+	// search runs.
 	seen := make(map[chainhash.Hash]struct{})
-	txdata := make([][]byte, tokenGraph.size())
-	i := 0
+	var txdata [][]byte
 
 	// check client validity cache transactions are valid
 	for hash := range *validityCache {
@@ -137,14 +139,14 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 	}
 
 	// perform the graph search
-	err := gs.findInternal(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
+	err := gs.findInternal(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO: Do an integrity check before returning results to client!
 
-	return txdata[0:i], nil
+	return txdata, nil
 }
 
 // findInternal searches the token's graph depth first from txMsg, through
@@ -155,7 +157,7 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 // goroutine whose stack passes the runtime's 1 GB limit ends the process.  A
 // transaction's inputs go on the stack in reverse, so that each, with all it
 // leads to, is searched before the next, as a recursive search would.
-func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte) error {
 	root := txMsg
 	stack := []*wire.MsgTx{txMsg}
 	for len(stack) > 0 {
@@ -167,7 +169,7 @@ func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenG
 		if _, ok := (*seen)[hash]; ok {
 			continue
 		}
-		if *counter%graphSearchCheckInterval == 0 {
+		if len(*txdata)%graphSearchCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -184,8 +186,7 @@ func (gs *Db) findInternal(ctx context.Context, txMsg *wire.MsgTx, graph *tokenG
 			}
 			continue
 		}
-		(*txdata)[*counter] = txBuf.Bytes()
-		(*counter)++
+		*txdata = append(*txdata, txBuf.Bytes())
 
 		// check exclude txids here, don't return with error
 		if _, ok := (*validityCache)[hash]; ok {
