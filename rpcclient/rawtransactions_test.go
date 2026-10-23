@@ -144,3 +144,39 @@ func TestCreateRawTransactionOrdered(t *testing.T) {
 		}
 	}
 }
+
+// TestCreateRawTransactionCashTokenNames ensures CreateRawTransaction and
+// CreateRawTransactionOrdered send cashtokens entries with the names bchd
+// documents, rather than Go's field names.
+func TestCreateRawTransactionCashTokenNames(t *testing.T) {
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Index: 1}, nil))
+	tx.AddTxOut(wire.NewTxOut(10000, []byte{0x51}, wire.TokenData{}))
+	client, params := newCreateRawTxTestClient(t, tx)
+
+	addr := createRawTxTestAddr(t, 0x91)
+	tokens := []btcjson.TransactionOutputCashToken{{
+		Address:  addr.String(),
+		Category: "00",
+		Amount:   5,
+	}}
+	sentTokens := `[{"address":"` + addr.String() + `","category":"00",` +
+		`"amount":5}]`
+
+	_, err := client.CreateRawTransaction(nil,
+		map[bchutil.Address]bchutil.Amount{addr: 10000}, &tokens, nil)
+	want := `[[],{"` + addr.String() + `":0.0001},` + sentTokens + `]`
+	if sent := <-params; err != nil || sent != want {
+		t.Errorf("CreateRawTransaction: sent params %s, err %v, want %s",
+			sent, err, want)
+	}
+
+	_, err = client.CreateRawTransactionOrdered(nil,
+		[]CreateRawTransactionOutput{{Address: addr, Amount: 10000}},
+		&tokens, nil)
+	want = `[[],[{"` + addr.String() + `":0.0001}],` + sentTokens + `]`
+	if sent := <-params; err != nil || sent != want {
+		t.Errorf("CreateRawTransactionOrdered: sent params %s, err %v, "+
+			"want %s", sent, err, want)
+	}
+}

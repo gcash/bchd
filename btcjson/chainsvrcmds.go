@@ -59,22 +59,29 @@ type TransactionInput struct {
 	Sequence *uint32 `json:"sequence,omitempty"`
 }
 
+// TransactionOutputCashToken is an entry of createrawtransaction's cashtokens
+// param.  It is marshalled with the names the server documents, without the
+// capability and the commitment when they are empty, as for no NFT.  Names
+// are matched without regard to case when it is unmarshalled, so entries with
+// Go's field names, as earlier clients sent them, still decode.
 type TransactionOutputCashToken struct {
-	Address    string
-	Category   string // hex
-	Amount     uint64
-	Capability string // none, mutable or minting
-	Commitment string // hex
+	Address    string `json:"address"`
+	Category   string `json:"category"` // hex
+	Amount     uint64 `json:"amount"`
+	Capability string `json:"capability,omitempty"` // none, mutable or minting
+	Commitment string `json:"commitment,omitempty"` // hex
 }
 
 // UnmarshalJSON reads the token amount from a JSON integer or a string of
 // decimal digits, as Bitcoin Cash Node does, so clients that can't hold an
 // integer above 2^53 in a JSON number can still pass any amount exactly.
 func (t *TransactionOutputCashToken) UnmarshalJSON(b []byte) error {
+	// The raw amount has the amount field's name, so it takes the place of
+	// the uint64 field, which would refuse a string.
 	type tokenOutput TransactionOutputCashToken
 	aux := struct {
 		*tokenOutput
-		Amount json.RawMessage
+		Amount json.RawMessage `json:"amount"`
 	}{tokenOutput: (*tokenOutput)(t)}
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err

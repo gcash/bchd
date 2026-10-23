@@ -101,6 +101,31 @@ func TestChainSvrCmds(t *testing.T) {
 				LockTime:   btcjson.Int64(12312333333),
 			},
 		},
+		{
+			name: "createrawtransaction cashtokens",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("createrawtransaction", `[]`,
+					`{"456":0.0123}`, `[{"address":"456","category":"00",`+
+						`"amount":5,"capability":"none","commitment":"ab"}]`)
+			},
+			staticCmd: func() interface{} {
+				amounts := map[string]float64{"456": .0123}
+				cashTokens := &[]btcjson.TransactionOutputCashToken{{
+					Address: "456", Category: "00", Amount: 5,
+					Capability: "none", Commitment: "ab",
+				}}
+				return btcjson.NewCreateRawTransactionCmd(nil, amounts, cashTokens, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"createrawtransaction","params":[[],{"456":0.0123},[{"address":"456","category":"00","amount":5,"capability":"none","commitment":"ab"}]],"id":1}`,
+			unmarshalled: &btcjson.CreateRawTransactionCmd{
+				Inputs:  []btcjson.TransactionInput{},
+				Amounts: map[string]float64{"456": .0123},
+				CashTokens: &[]btcjson.TransactionOutputCashToken{{
+					Address: "456", Category: "00", Amount: 5,
+					Capability: "none", Commitment: "ab",
+				}},
+			},
+		},
 
 		{
 			name: "decoderawtransaction",
@@ -1520,6 +1545,55 @@ func TestCreateRawTransactionTokenAmount(t *testing.T) {
 			tokens[0].Address != "a" || tokens[0].Category != "00" {
 
 			t.Errorf("%s: got %+v", test.amount, tokens)
+		}
+	}
+}
+
+// TestTransactionOutputCashTokenJSON ensures a cashtokens entry is marshalled
+// with the names bchd documents and reads, without the capability and the
+// commitment when they are empty, as for no NFT, and that an entry with Go's
+// field names, as earlier clients sent it, still decodes to the same entry,
+// with the amount as an integer or a string.
+func TestTransactionOutputCashTokenJSON(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		token btcjson.TransactionOutputCashToken
+		want  string
+	}{{
+		btcjson.TransactionOutputCashToken{Address: "a", Category: "00",
+			Amount: 5},
+		`{"address":"a","category":"00","amount":5}`,
+	}, {
+		btcjson.TransactionOutputCashToken{Address: "a", Category: "00",
+			Capability: "mutable", Commitment: "ab"},
+		`{"address":"a","category":"00","amount":0,"capability":"mutable",` +
+			`"commitment":"ab"}`,
+	}} {
+		got, err := json.Marshal(test.token)
+		if err != nil || string(got) != test.want {
+			t.Errorf("%+v: got %s, err %v, want %s", test.token, got, err,
+				test.want)
+		}
+		var back btcjson.TransactionOutputCashToken
+		if err := json.Unmarshal(got, &back); err != nil || back != test.token {
+			t.Errorf("%s: decoded %+v, err %v", got, back, err)
+		}
+	}
+
+	want := btcjson.TransactionOutputCashToken{Address: "a", Category: "00",
+		Amount: 18446744073709551615, Capability: "minting", Commitment: "ab"}
+	for _, entry := range []string{
+		`{"Address":"a","Category":"00","Amount":18446744073709551615,` +
+			`"Capability":"minting","Commitment":"ab"}`,
+		`{"Address":"a","Category":"00","Amount":"18446744073709551615",` +
+			`"Capability":"minting","Commitment":"ab"}`,
+		`{"address":"a","category":"00","amount":"18446744073709551615",` +
+			`"capability":"minting","commitment":"ab"}`,
+	} {
+		var got btcjson.TransactionOutputCashToken
+		if err := json.Unmarshal([]byte(entry), &got); err != nil || got != want {
+			t.Errorf("%s: got %+v, err %v, want %+v", entry, got, err, want)
 		}
 	}
 }
