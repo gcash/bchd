@@ -5,6 +5,7 @@
 package btcjson
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -44,14 +45,16 @@ func NewRPCError(code RPCErrorCode, message string) *RPCError {
 // requests, responses, or notifications) is valid.  JSON-RPC 1.0 allows any
 // valid JSON type.  JSON-RPC 2.0 (which bitcoind follows for some parts) only
 // allows string, number, or null, so this function restricts the allowed types
-// to that list.  This function is only provided in case the caller is manually
-// marshalling for some reason.  The functions which accept an ID in this
-// package already call this function to ensure the provided id is valid.
+// to that list.  A json.Number is the number of a request id as it was sent.
+// This function is only provided in case the caller is manually marshalling
+// for some reason.  The functions which accept an ID in this package already
+// call this function to ensure the provided id is valid.
 func IsValidIDType(id interface{}) bool {
 	switch id.(type) {
 	case int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64,
 		float32, float64,
+		json.Number,
 		string,
 		nil:
 		return true
@@ -76,7 +79,7 @@ type Request struct {
 // UnmarshalJSON is a custom unmarshal func for the Request struct. The param
 // field defaults to an empty json.RawMessage array it is omitted by the request
 // or nil if the supplied value is invalid.  Each parameter is kept exactly as
-// sent.
+// sent, and so is a numeric id, as a json.Number.
 func (request *Request) UnmarshalJSON(b []byte) error {
 	var data map[string]json.RawMessage
 	err := json.Unmarshal(b, &data)
@@ -86,7 +89,9 @@ func (request *Request) UnmarshalJSON(b []byte) error {
 
 	// The members other than params are decoded into generic values, so the
 	// id keeps its Go type and method and jsonrpc can be checked to be
-	// strings.
+	// strings.  Numbers are kept as sent, as BCHN gives an id back, since a
+	// float64 would round an integer id above 2^53 and change the form of
+	// others, such as 1.0.
 	values := make(map[string]interface{}, 3)
 	for _, name := range []string{"id", "method", "jsonrpc"} {
 		raw, ok := data[name]
@@ -94,7 +99,9 @@ func (request *Request) UnmarshalJSON(b []byte) error {
 			continue
 		}
 		var value interface{}
-		if err := json.Unmarshal(raw, &value); err != nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		if err := dec.Decode(&value); err != nil {
 			return err
 		}
 		values[name] = value

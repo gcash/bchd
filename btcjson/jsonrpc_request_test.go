@@ -57,7 +57,7 @@ func TestRequestUnmarshalValid(t *testing.T) {
 		id      interface{}
 		params  int
 	}{
-		{`{"method":"getblockcount","params":[],"id":1}`, "", "getblockcount", float64(1), 0},
+		{`{"method":"getblockcount","params":[],"id":1}`, "", "getblockcount", json.Number("1"), 0},
 		{`{"jsonrpc":"1.0","method":"getblock","params":["00",true],"id":"a"}`, "1.0", "getblock", "a", 2},
 		{`{"jsonrpc":"2.0","method":"getblockcount","id":null}`, "2.0", "getblockcount", nil, 0},
 		{`{"jsonrpc":"2.0","method":"getblockcount"}`, "2.0", "getblockcount", nil, 0},
@@ -108,6 +108,33 @@ func TestRequestUnmarshalKeepsParams(t *testing.T) {
 		}
 		if req.Params != nil {
 			t.Errorf("%s: got params %v, want nil", raw, req.Params)
+		}
+	}
+}
+
+// TestRequestIDKeptAsSent ensures a numeric request id is kept as sent and
+// is given back in the response exactly, as BCHN gives it back, so integers
+// above 2^53 are not rounded and other numbers keep their form.
+func TestRequestIDKeptAsSent(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{`12345678901234567890`, `9007199254740993`,
+		`-9223372036854775809`, `1.0`, `1e3`, `-0`, `0.1`, `"x"`} {
+
+		raw := `{"jsonrpc":"1.0","method":"getblockcount","params":[],"id":` +
+			id + `}`
+		req, err := unmarshalRequest(raw)
+		if err != nil {
+			t.Errorf("%s: %v", id, err)
+			continue
+		}
+		reply, err := btcjson.MarshalResponse(req.Jsonrpc, req.ID, 1, nil)
+		if err != nil {
+			t.Errorf("%s: %v", id, err)
+			continue
+		}
+		want := `{"jsonrpc":"1.0","result":1,"error":null,"id":` + id + `}`
+		if string(reply) != want {
+			t.Errorf("%s: got reply %s, want %s", id, reply, want)
 		}
 	}
 }
