@@ -2089,9 +2089,29 @@ func (sp *serverPeer) addAddresses(addrs []*wire.NetAddressV2) {
 	sp.server.addrManager.AddAddresses(addrs, sp.NA())
 }
 
-// OnReject logs all reject messages received from the remote peer.
+// maxReadRejectReasonLen is the length in bytes of the longest reject reason
+// BCHN reads (MAX_REJECT_MESSAGE_LENGTH, validation.h:130).
+const maxReadRejectReasonLen = 111
+
+// OnReject logs the reject messages received from the remote peer at debug
+// level, as BCHN logs them only with -debug=net (net_processing.cpp:2025-2049).
+// BCHN reads at most 12 bytes of the command and 111 of the reason, and logs a
+// reject with a longer one as unparseable, so this does too.  The command and
+// the reason are quoted, so the peer's text can't start a log line of its own.
 func (sp *serverPeer) OnReject(p *peer.Peer, msg *wire.MsgReject) {
-	peerLog.Warnf("Received reject message from peer %s, code: %s, reason: %s", p, msg.Code.String(), msg.Reason)
+	if len(msg.Cmd) > wire.CommandSize ||
+		len(msg.Reason) > maxReadRejectReasonLen {
+
+		peerLog.Debugf("Unparseable reject message received from peer %s",
+			p)
+		return
+	}
+	hash := ""
+	if msg.Cmd == wire.CmdBlock || msg.Cmd == wire.CmdTx {
+		hash = ", hash: " + msg.Hash.String()
+	}
+	peerLog.Debugf("Received reject message from peer %s, command: %q, "+
+		"code: %s, reason: %q%s", p, msg.Cmd, msg.Code, msg.Reason, hash)
 }
 
 // OnNotFound logs all not found messages received from the remote peer and

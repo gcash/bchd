@@ -5,9 +5,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -1116,5 +1118,81 @@ func TestPeerHandlerQueriesAfterQuit(t *testing.T) {
 	if !returnedWithin(done, 5*time.Second) {
 		t.Error("UpdatePeerHeights still waits for the peer handler " +
 			"after the server quit")
+	}
+}
+
+// TestOnRejectLogsAtDebug ensures a reject message from a peer is logged only
+// at debug level, as BCHN logs rejects only with -debug=net, with its command,
+// code, reason and hash, the command and the reason quoted, so a peer's text
+// starts no log line of its own.  One with a reason over the 111 bytes BCHN
+// reads, or a command over 12, is logged as unparseable, without them.  Each
+// reject was logged at warn level with its whole reason, up to 2 MiB, as often
+// as a peer sent them.
+func TestOnRejectLogsAtDebug(t *testing.T) {
+	var logged bytes.Buffer
+	savedLog := peerLog
+	peerLog = bchlog.NewBackend(&logged).Logger("PEER")
+	t.Cleanup(func() { peerLog = savedLog })
+	sp := newServerPeer(&server{}, false)
+	sp.Peer = peer.NewInboundPeer(&peer.Config{
+		ChainParams: &chaincfg.RegressionNetParams,
+	})
+	hash := chainhash.Hash{1}
+	reject := func(cmd, reason string) string {
+		logged.Reset()
+		sp.OnReject(sp.Peer, &wire.MsgReject{Cmd: cmd,
+			Code: wire.RejectInvalid, Reason: reason, Hash: hash})
+		return logged.String()
+	}
+	reason := strings.Repeat("r", 111)
+
+	peerLog.SetLevel(bchlog.LevelInfo)
+	for _, r := range []string{reason, reason + "r"} {
+		if line := reject(wire.CmdTx, r); line != "" {
+			t.Errorf("a reject was logged at info level: %q", line)
+		}
+	}
+
+	peerLog.SetLevel(bchlog.LevelDebug)
+	line := reject(wire.CmdTx, reason)
+	for _, want := range []string{"[DBG]", `"tx"`, "REJECT_INVALID",
+		`"` + reason + `"`, hash.String()} {
+
+		if !strings.Contains(line, want) {
+			t.Errorf("reject logged as %q, which does not say %q", line,
+				want)
+		}
+	}
+	if line := reject(wire.CmdPing, "no hash"); strings.Contains(line,
+		hash.String()) {
+
+		t.Errorf("a ping's reject was logged with a hash: %q", line)
+	}
+	if line := reject(wire.CmdDSProof, "x"); !strings.Contains(line,
+		`"`+wire.CmdDSProof+`"`) {
+
+		t.Errorf("a reject for the 12-byte command %q was logged as %q",
+			wire.CmdDSProof, line)
+	}
+
+	for _, unparseable := range []struct{ cmd, reason string }{
+		{wire.CmdTx, reason + "r"},
+		{"commandtoolong", "x"},
+	} {
+		line := reject(unparseable.cmd, unparseable.reason)
+		if !strings.Contains(line, "Unparseable reject message") ||
+			strings.Contains(line, unparseable.reason) ||
+			strings.Contains(line, unparseable.cmd) {
+
+			t.Errorf("reject for %q with a %d-byte reason logged as %q, "+
+				"want it unparseable", unparseable.cmd,
+				len(unparseable.reason), line)
+		}
+	}
+
+	line = reject(wire.CmdBlock, "a\n2026-10-22 00:00:00.000 [INF] PEER: x")
+	if n := strings.Count(line, "\n"); n != 1 {
+		t.Errorf("a reason with a newline was logged in %d lines: %q", n,
+			line)
 	}
 }
