@@ -1401,17 +1401,25 @@ func (mp *TxPool) MiningDescs() []*mining.TxDesc {
 }
 
 // RawMempoolVerbose returns all of the entries in the mempool as a fully
-// populated btcjson result.
+// populated btcjson result.  The lock is held only to take the pool's
+// descriptors, which do not change, and the result is built from them after
+// it is released, so writers do not wait for the whole result, which takes
+// about a microsecond per transaction.
 //
 // This function is safe for concurrent access.
 func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseResult {
-	mp.mtx.RLock()
-	defer mp.mtx.RUnlock()
+	descs := mp.TxDescs()
+
+	// A transaction depends on the transactions of the snapshot it spends.
+	inPool := make(map[chainhash.Hash]struct{}, len(descs))
+	for _, desc := range descs {
+		inPool[*desc.Tx.Hash()] = struct{}{}
+	}
 
 	result := make(map[string]*btcjson.GetRawMempoolVerboseResult,
-		len(mp.pool))
+		len(descs))
 
-	for _, desc := range mp.pool {
+	for _, desc := range descs {
 		// The priority fields are deprecated and left at 0.
 		tx := desc.Tx
 		mpd := &btcjson.GetRawMempoolVerboseResult{
@@ -1423,7 +1431,7 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 		}
 		for _, txIn := range tx.MsgTx().TxIn {
 			hash := &txIn.PreviousOutPoint.Hash
-			if mp.haveTransaction(hash) {
+			if _, ok := inPool[*hash]; ok {
 				mpd.Depends = append(mpd.Depends,
 					hash.String())
 			}
