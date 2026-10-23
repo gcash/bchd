@@ -9,7 +9,6 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math/big"
 	"math/bits"
@@ -969,8 +968,13 @@ func opcodeNop(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-// popIfBool pops the top item off the stack and returns a bool
+// popIfBool pops the top item off the stack and returns a bool.  BCHN reports
+// an OP_IF or OP_NOTIF without an item as an unbalanced conditional.
 func popIfBool(vm *Engine) (bool, error) {
+	if vm.dstack.Depth() < 1 {
+		return false, scriptError(ErrUnbalancedConditional,
+			"conditional without an item on the stack")
+	}
 	return vm.dstack.PopBool(vm.flags.HasFlag(ScriptVerifyMinimalIf))
 }
 
@@ -1069,13 +1073,13 @@ func opcodeUntil(op *parsedOpcode, vm *Engine) error {
 	}
 
 	if len(vm.condStack) == 0 {
-		return scriptError(ErrUnbalancedConditional,
+		return scriptError(ErrUnbalancedControlFlow,
 			"OP_UNTIL without matching OP_BEGIN")
 	}
 
 	top := vm.condStack[len(vm.condStack)-1]
 	if !isCondStackLoop(top) {
-		return scriptError(ErrUnbalancedConditional,
+		return scriptError(ErrUnbalancedControlFlow,
 			"OP_UNTIL found but top of control stack is not a loop pointer")
 	}
 
@@ -1112,7 +1116,7 @@ func opcodeElse(op *parsedOpcode, vm *Engine) error {
 
 	conditionalIdx := len(vm.condStack) - 1
 	if isCondStackLoop(vm.condStack[conditionalIdx]) {
-		return scriptError(ErrUnbalancedConditional,
+		return scriptError(vm.loopOnTopErrorCode(),
 			"OP_ELSE cannot appear inside an OP_BEGIN block"+
 				"without a matching OP_IF")
 	}
@@ -1144,12 +1148,25 @@ func opcodeEndif(op *parsedOpcode, vm *Engine) error {
 
 	top := vm.condStack[len(vm.condStack)-1]
 	if isCondStackLoop(top) {
-		return scriptError(ErrUnbalancedConditional,
+		return scriptError(vm.loopOnTopErrorCode(),
 			"OP_ENDIF cannot close an OP_BEGIN block")
 	}
 
 	vm.condStack = vm.condStack[:len(vm.condStack)-1]
 	return nil
+}
+
+// loopOnTopErrorCode returns the code of the error for an OP_ELSE or OP_ENDIF
+// whose innermost block is a loop.  As in BCHN, it is an unbalanced
+// conditional when no conditional is open, and an unbalanced control flow
+// otherwise.
+func (vm *Engine) loopOnTopErrorCode() ErrorCode {
+	for _, cond := range vm.condStack {
+		if !isCondStackLoop(cond) {
+			return ErrUnbalancedControlFlow
+		}
+	}
+	return ErrUnbalancedConditional
 }
 
 // abstractVerify examines the top item on the data stack as a boolean value and
@@ -1375,6 +1392,10 @@ func opcodeToAltStack(op *parsedOpcode, vm *Engine) error {
 // Main data stack transformation: [... x1 x2 x3] -> [... x1 x2 x3 y3]
 // Alt data stack transformation:  [... y1 y2 y3] -> [... y1 y2]
 func opcodeFromAltStack(op *parsedOpcode, vm *Engine) error {
+	if vm.astack.Depth() < 1 {
+		return scriptError(ErrInvalidAltStackOperation,
+			"alternate stack is empty")
+	}
 	so, err := vm.astack.PopByteArray()
 	if err != nil {
 		return err
@@ -1523,7 +1544,10 @@ func opcodeOver(op *parsedOpcode, vm *Engine) error {
 // Example with n=1: [x2 x1 x0 1] -> [x2 x1 x0 x1]
 // Example with n=2: [x2 x1 x0 2] -> [x2 x1 x0 x2]
 func opcodePick(op *parsedOpcode, vm *Engine) error {
-	val, err := vm.dstack.PopInt()
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
+	val, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -1542,7 +1566,10 @@ func opcodePick(op *parsedOpcode, vm *Engine) error {
 // Example with n=1: [x2 x1 x0 1] -> [x2 x0 x1]
 // Example with n=2: [x2 x1 x0 2] -> [x1 x0 x2]
 func opcodeRoll(op *parsedOpcode, vm *Engine) error {
-	val, err := vm.dstack.PopInt()
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
+	val, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -1614,7 +1641,10 @@ func opcodeCat(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: x n OP_SPLIT -> x1 x2
 func opcodeSplit(op *parsedOpcode, vm *Engine) error {
-	n, err := vm.dstack.PopInt()
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
+	n, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -1623,10 +1653,11 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 	if n.Int32() > int32(len(c)) {
-		return scriptError(ErrNumberTooBig, "n is larger than length of array")
+		return scriptError(ErrInvalidSplitRange,
+			"n is larger than length of array")
 	}
 	if n.Int32() < 0 {
-		return scriptError(ErrNumberTooSmall, "n is negative")
+		return scriptError(ErrInvalidSplitRange, "n is negative")
 	}
 	a := c[:n.Int32()]
 	b := c[n.Int32():]
@@ -1644,7 +1675,10 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a b OP_NUM2BIN -> x
 func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
-	n, err := vm.dstack.PopInt()
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
+	n, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -1656,22 +1690,23 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 	// Bounds check the requested size as an int64 before converting it to
 	// an int so the result does not depend on the width of int.  Int64
 	// saturates values that do not fit, so those are rejected as well.  A
-	// negative size is also rejected, matching BCHN, which reads the size as
-	// an unsigned 64-bit integer.
+	// negative size is also rejected as too large, matching BCHN, which
+	// reads the size as an unsigned 64-bit integer.
 	requestedSize := n.Int64()
 	if requestedSize > int64(vm.maxScriptElementSize) {
-		return scriptError(ErrNumberTooBig,
+		return scriptError(ErrElementTooBig,
 			fmt.Sprintf("n is larger than the max of %d",
 				vm.maxScriptElementSize))
 	}
 	if requestedSize < 0 {
-		return scriptError(ErrNumberTooSmall, "n is negative")
+		return scriptError(ErrElementTooBig, "n is negative")
 	}
 	size := int(requestedSize)
 
 	b := minimallyEncode(a)
 	if len(b) > size {
-		return scriptError(ErrNumberTooSmall, "cannot fit it into n sized array")
+		return scriptError(ErrImpossibleEncoding,
+			"cannot fit it into n sized array")
 	}
 	if len(b) == size {
 		vm.dstack.PushByteArray(b)
@@ -1724,7 +1759,7 @@ func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
 		defaultScriptNumLen = defaultBigIntScriptNumLen
 	}
 	if len(n.Bytes()) > defaultScriptNumLen {
-		return scriptError(ErrNumberTooBig,
+		return scriptError(numberRangeErrorCode(defaultScriptNumLen),
 			fmt.Sprintf("script numbers are limited to %d bytes", defaultScriptNumLen))
 	}
 
@@ -1946,6 +1981,9 @@ func opcodeDefine(op *parsedOpcode, vm *Engine) error {
 		return opcodeReserved(op, vm)
 	}
 
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
 	identifier, err := vm.dstack.PopByteArray()
 	if err != nil {
 		return err
@@ -2011,6 +2049,15 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
+	// No function can have a longer identifier, which BCHN reports as
+	// invalid rather than undefined.
+	if len(identifier) > MaxFunctionIdentifierLength {
+		return scriptError(ErrInvalidFunctionIdentifier,
+			fmt.Sprintf(
+				"function identifier length %d exceeds max %d",
+				len(identifier), MaxFunctionIdentifierLength))
+	}
+
 	function, exists := vm.functionTable[string(identifier)]
 	if !exists {
 		return scriptError(ErrUndefinedFunction,
@@ -2021,7 +2068,7 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 
 	// Check control-stack depth including the frame we're about to push.
 	if controlStackDepth := vm.controlStackDepth() + 1; controlStackDepth > MaxConditionalStackDepth {
-		return scriptError(ErrConditionalStackDepth, fmt.Sprintf(
+		return scriptError(ErrControlStackDepth, fmt.Sprintf(
 			"control stack depth %d is larger than max allowed depth: %d",
 			controlStackDepth, MaxConditionalStackDepth))
 	}
@@ -2051,6 +2098,12 @@ func opcodeInvoke(op *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
+// resultRangeErrorCode returns the code of the error for an arithmetic result
+// outside the range of numbers, as BCHN names it under the engine's rules.
+func (vm *Engine) resultRangeErrorCode() ErrorCode {
+	return numberRangeErrorCode(vm.dstack.defaultScriptNumLen)
+}
+
 // opcode1Add treats the top item on the data stack as an integer and replaces
 // it with its incremented value (plus 1).
 //
@@ -2064,12 +2117,12 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 	incrementedVal := m.Add(&m, makeScriptNumFromInt(1)) // m + 1
 
 	if !vm.hasFlag(ScriptAllowMay2025) && incrementedVal.IsGreaterThanInt(maxInt64) {
-		return scriptError(ErrIntegerOverflow, "integer overflow")
+		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
 
 	resultBytes := incrementedVal.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
-		return scriptError(ErrElementTooBig, fmt.Sprintf(
+		return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
@@ -2093,12 +2146,12 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 	decrementedVal := m.Sub(&m, makeScriptNumFromInt(1)) // m - 1
 
 	if !vm.hasFlag(ScriptAllowMay2025) && (decrementedVal.IsGreaterThanInt(maxInt64) || decrementedVal.IsLessThanInt(minInt64+1)) {
-		return scriptError(ErrIntegerOverflow, "integer overflow")
+		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
 
 	resultBytes := decrementedVal.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
-		return scriptError(ErrElementTooBig, fmt.Sprintf(
+		return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
@@ -2120,13 +2173,16 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 		return opcodeDisabled(op, vm)
 	}
 
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
 	bitcount, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
 
 	if bitcount.IsLessThanInt(0) {
-		return scriptError(ErrNumberTooSmall, "negative shift count")
+		return scriptError(ErrInvalidBitShift, "negative shift count")
 	}
 
 	m, err := vm.dstack.PopInt()
@@ -2143,7 +2199,7 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 		bitcount.IsGreaterThanInt(int64(vm.maxScriptElementSize)*8) {
 		str := fmt.Sprintf("shift result exceeds max allowed size %d",
 			vm.maxScriptElementSize)
-		return scriptError(ErrElementTooBig, str)
+		return scriptError(vm.resultRangeErrorCode(), str)
 	}
 
 	shift := uint(bitcount.Int32())
@@ -2153,7 +2209,7 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 	if len(result.Bytes()) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
 			len(result.Bytes()), vm.maxScriptElementSize)
-		return scriptError(ErrElementTooBig, str)
+		return scriptError(vm.resultRangeErrorCode(), str)
 	}
 
 	vm.dstack.PushInt(*result)
@@ -2174,13 +2230,16 @@ func opcode2Div(op *parsedOpcode, vm *Engine) error {
 		return opcodeDisabled(op, vm)
 	}
 
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
 	bitcount, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
 
 	if bitcount.IsLessThanInt(0) {
-		return scriptError(ErrNumberTooSmall, "negative shift count")
+		return scriptError(ErrInvalidBitShift, "negative shift count")
 	}
 
 	m, err := vm.dstack.PopInt()
@@ -2195,7 +2254,7 @@ func opcode2Div(op *parsedOpcode, vm *Engine) error {
 	if len(result.Bytes()) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
 			len(result.Bytes()), vm.maxScriptElementSize)
-		return scriptError(ErrElementTooBig, str)
+		return scriptError(vm.resultRangeErrorCode(), str)
 	}
 
 	vm.dstack.PushInt(*result)
@@ -2218,7 +2277,7 @@ func opcodeNegate(op *parsedOpcode, vm *Engine) error {
 
 	resultBytes := negatedVal.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
-		return scriptError(ErrElementTooBig, fmt.Sprintf(
+		return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
@@ -2243,7 +2302,7 @@ func opcodeAbs(op *parsedOpcode, vm *Engine) error {
 
 	resultBytes := m.Bytes()
 	if len(resultBytes) > vm.maxScriptElementSize {
-		return scriptError(ErrElementTooBig, fmt.Sprintf(
+		return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
@@ -2307,12 +2366,7 @@ func opcode0NotEqual(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... x1+x2]
 func opcodeAdd(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2320,13 +2374,13 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 	c.Add(&v0, &v1)
 
 	if !vm.hasFlag(ScriptAllowMay2025) && (c.IsGreaterThanInt(maxInt64) || c.IsLessThanInt(minInt64+1)) {
-		return scriptError(ErrIntegerOverflow, "integer overflow")
+		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
 
 	if (c.IsGreaterThan(&v0)) == (v1.IsGreaterThanInt(0)) {
 		resultBytes := c.Bytes()
 		if len(resultBytes) > vm.maxScriptElementSize {
-			return scriptError(ErrElementTooBig, fmt.Sprintf(
+			return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 				"result size %d exceeds max allowed size %d",
 				len(resultBytes), vm.maxScriptElementSize))
 		}
@@ -2336,7 +2390,7 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 
 		return nil
 	}
-	return scriptError(ErrIntegerOverflow, "integer overflow")
+	return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 }
 
 // opcodeSub treats the top two items on the data stack as integers and replaces
@@ -2345,12 +2399,7 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... x1-x2]
 func opcodeSub(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2359,12 +2408,12 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 	c.Sub(&v1, &v0)
 
 	if !vm.hasFlag(ScriptAllowMay2025) && (c.IsGreaterThanInt(maxInt64) || c.IsLessThanInt(minInt64+1)) {
-		return scriptError(ErrIntegerOverflow, "integer overflow")
+		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
 	if (c.IsLessThan(&v1)) == (v0.IsGreaterThanInt(0)) {
 		resultBytes := c.Bytes()
 		if len(resultBytes) > vm.maxScriptElementSize {
-			return scriptError(ErrElementTooBig, fmt.Sprintf(
+			return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 				"result size %d exceeds max allowed size %d",
 				len(resultBytes), vm.maxScriptElementSize))
 		}
@@ -2374,7 +2423,7 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 
 		return nil
 	}
-	return scriptError(ErrIntegerOverflow, "integer overflow")
+	return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 }
 
 // opcodeMul return the integer product of a and b.
@@ -2386,12 +2435,7 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	b, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	a, err := vm.dstack.PopInt()
+	a, b, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2404,7 +2448,7 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 	c.Mul(&a, &b)
 
 	if !vm.hasFlag(ScriptAllowMay2025) && (c.IsGreaterThanInt(maxInt64) || c.IsLessThanInt(minInt64+1)) {
-		return scriptError(ErrIntegerOverflow, "integer overflow")
+		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
 	if (c.IsLessThanInt(0)) == ((a.IsLessThanInt(0)) != (b.IsLessThanInt(0))) {
 		var d scriptNum
@@ -2412,7 +2456,7 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 		if d.IsEqualeTo(&a) {
 			resultBytes := c.Bytes()
 			if len(resultBytes) > vm.maxScriptElementSize {
-				return scriptError(ErrElementTooBig, fmt.Sprintf(
+				return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
 					"result size %d exceeds max allowed size %d",
 					len(resultBytes), vm.maxScriptElementSize))
 			}
@@ -2423,7 +2467,7 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 			return nil
 		}
 	}
-	return scriptError(ErrIntegerOverflow, "integer overflow")
+	return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 }
 
 // opcodeDiv return the integer quotient of a and b. If the result
@@ -2431,18 +2475,13 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a b OP_DIV -> out
 func opcodeDiv(op *parsedOpcode, vm *Engine) error {
-	b, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	a, err := vm.dstack.PopInt()
+	a, b, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
 
 	if b.IsEqualeToInt(0) {
-		return scriptError(ErrNumberTooSmall, "divide by zero")
+		return scriptError(ErrDivByZero, "divide by zero")
 	}
 
 	var c scriptNum
@@ -2459,18 +2498,13 @@ func opcodeDiv(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: a b OP_MOD -> out
 func opcodeMod(op *parsedOpcode, vm *Engine) error {
-	b, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	a, err := vm.dstack.PopInt()
+	a, b, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
 
 	if b.IsEqualeToInt(0) {
-		return scriptError(ErrNumberTooSmall, "mod by zero")
+		return scriptError(ErrModByZero, "mod by zero")
 	}
 
 	var c scriptNum
@@ -2494,13 +2528,16 @@ func opcodeLShift(op *parsedOpcode, vm *Engine) error {
 		return opcodeDisabled(op, vm)
 	}
 
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
 	bitcount, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
 
 	if bitcount.IsLessThanInt(0) {
-		return scriptError(ErrNumberTooSmall, "negative shift count")
+		return scriptError(ErrInvalidBitShift, "negative shift count")
 	}
 
 	shift := uint(bitcount.Int32())
@@ -2554,13 +2591,16 @@ func opcodeRShift(op *parsedOpcode, vm *Engine) error {
 		return opcodeDisabled(op, vm)
 	}
 
+	if err := vm.dstack.checkDepth(2); err != nil {
+		return err
+	}
 	bitcount, err := vm.dstack.PopInt()
 	if err != nil {
 		return err
 	}
 
 	if bitcount.IsLessThanInt(0) {
-		return scriptError(ErrNumberTooSmall, "negative shift count")
+		return scriptError(ErrInvalidBitShift, "negative shift count")
 	}
 
 	shift := uint(bitcount.Int32())
@@ -2610,12 +2650,7 @@ func opcodeRShift(op *parsedOpcode, vm *Engine) error {
 // Stack transformation (x1==0, x2!=0): [... 0 7] -> [... 0]
 // Stack transformation (x1!=0, x2!=0): [... 4 8] -> [... 1]
 func opcodeBoolAnd(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2638,12 +2673,7 @@ func opcodeBoolAnd(op *parsedOpcode, vm *Engine) error {
 // Stack transformation (x1==0, x2!=0): [... 0 7] -> [... 1]
 // Stack transformation (x1!=0, x2!=0): [... 4 8] -> [... 1]
 func opcodeBoolOr(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2664,12 +2694,7 @@ func opcodeBoolOr(op *parsedOpcode, vm *Engine) error {
 // Stack transformation (x1==x2): [... 5 5] -> [... 1]
 // Stack transformation (x1!=x2): [... 5 7] -> [... 0]
 func opcodeNumEqual(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2716,12 +2741,7 @@ func opcodeNumEqualVerify(op *parsedOpcode, vm *Engine) error {
 // Stack transformation (x1==x2): [... 5 5] -> [... 0]
 // Stack transformation (x1!=x2): [... 5 7] -> [... 1]
 func opcodeNumNotEqual(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2742,12 +2762,7 @@ func opcodeNumNotEqual(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... bool]
 func opcodeLessThan(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2768,12 +2783,7 @@ func opcodeLessThan(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... bool]
 func opcodeGreaterThan(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2793,12 +2803,7 @@ func opcodeGreaterThan(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... bool]
 func opcodeLessThanOrEqual(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2818,12 +2823,7 @@ func opcodeLessThanOrEqual(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... bool]
 func opcodeGreaterThanOrEqual(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2843,12 +2843,7 @@ func opcodeGreaterThanOrEqual(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... min(x1, x2)]
 func opcodeMin(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2871,12 +2866,7 @@ func opcodeMin(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 x2] -> [... max(x1, x2)]
 func opcodeMax(op *parsedOpcode, vm *Engine) error {
-	v0, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	v1, err := vm.dstack.PopInt()
+	v1, v0, err := vm.dstack.popIntPair()
 	if err != nil {
 		return err
 	}
@@ -2903,17 +2893,7 @@ func opcodeMax(op *parsedOpcode, vm *Engine) error {
 //
 // Stack transformation: [... x1 min max] -> [... bool]
 func opcodeWithin(op *parsedOpcode, vm *Engine) error {
-	maxVal, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	minVal, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-
-	x, err := vm.dstack.PopInt()
+	x, minVal, maxVal, err := vm.dstack.popIntTriple()
 	if err != nil {
 		return err
 	}
@@ -3249,7 +3229,7 @@ func opcodeCheckSigVerify(op *parsedOpcode, vm *Engine) error {
 // Stack transformation:
 // [... dummy [sig ...] numsigs [pubkey ...] numpubkeys] -> [... bool]
 func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
-	numKeys, err := vm.dstack.PopInt()
+	numKeys, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -3284,7 +3264,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		pubKeys = append(pubKeys, pubKey)
 	}
 
-	numSigs, err := vm.dstack.PopInt()
+	numSigs, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
@@ -3350,18 +3330,19 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		dummy = append(dummy, make([]byte, 4-len(dummy))...)
 		checkBits := binary.LittleEndian.Uint32(dummy)
 
+		// Check the range of the bits does not exceed the number of
+		// pubkeys.  BCHN checks this before the number of bits.
+		mask := uint32(1<<uint64(numPubKeys)) - 1
+		if checkBits&mask != checkBits {
+			str := "Invalid bit range"
+			return scriptError(ErrInvalidBitRange, str)
+		}
+
 		// The bitfield doesn't set the right number of signatures.
 		numBits := bits.OnesCount32(checkBits)
 		if numBits != numSignatures {
 			str := fmt.Sprintf("Number of set bits in schnorr multisig (%d) "+
 				"is greater than number of signatures (%d)", numBits, numSignatures)
-			return scriptError(ErrInvalidBitCount, str)
-		}
-
-		// Check the range of the bits does not exceed the number of pubkeys.
-		mask := uint32(1<<uint64(numPubKeys)) - 1
-		if checkBits&mask != checkBits {
-			str := "Invalid bit range"
 			return scriptError(ErrInvalidBitCount, str)
 		}
 
@@ -3394,7 +3375,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			// Only the pubkeys associated with a signature are checked.
 			if len(rawSig) > 0 {
 				if len(rawSig) != 65 {
-					return scriptError(ErrSigInvalidDataLen, "Schnorr signatures must be 64 bytes in CHECKMULTISIG")
+					return scriptError(ErrSigNonSchnorr, "Schnorr signatures must be 64 bytes in CHECKMULTISIG")
 				}
 				hashType := SigHashType(rawSig[len(rawSig)-1])
 				if err := vm.checkHashTypeEncoding(hashType); err != nil {
@@ -3441,7 +3422,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 				hashType := SigHashType(rawSig[len(rawSig)-1])
 				signature := rawSig[:len(rawSig)-1]
 				if vm.hasFlag(ScriptVerifySchnorr) && len(signature) == 64 {
-					return scriptError(ErrSigInvalidDataLen, "Signature cannot be 65 bytes in CHECKMULTISIG")
+					return scriptError(ErrSigBadLength, "Signature cannot be 65 bytes in CHECKMULTISIG")
 				}
 				if err := vm.checkSignatureEncoding(signature); err != nil {
 					return err
@@ -3727,13 +3708,13 @@ func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return scriptError(ErrInvalidIndex, "index out of range")
+		return scriptError(ErrInvalidTxInputIndex, "index out of range")
 	}
 	if utxo.Value > MaxSatoshi {
 		return scriptError(ErrNumberTooBig,
@@ -3759,13 +3740,13 @@ func opcodeUtxoByteCode(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return scriptError(ErrInvalidIndex, "index out of range")
+		return scriptError(ErrInvalidTxInputIndex, "index out of range")
 	}
 	ret := vm.introspectionBytecode(&utxo)
 	if len(ret) > vm.maxScriptElementSize {
@@ -3815,14 +3796,14 @@ func opcodeOutpointTxHash(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxIn)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxInputIndex, str)
 	}
 
 	index := i.Int32()
@@ -3849,14 +3830,14 @@ func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxIn)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxInputIndex, str)
 	}
 
 	index := makeScriptNumFromUInt64(uint64(vm.tx.TxIn[i.Int32()].PreviousOutPoint.Index))
@@ -3877,14 +3858,14 @@ func opcodeInputBytecode(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxIn)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxInputIndex, str)
 	}
 
 	index := i.Int32()
@@ -3913,14 +3894,14 @@ func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxIn)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxInputIndex, str)
 	}
 	sequence := makeScriptNumFromUInt64(uint64(vm.tx.TxIn[i.Int32()].Sequence))
 	vm.dstack.PushInt(*sequence)
@@ -3940,14 +3921,14 @@ func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxOut)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxOutputIndex, str)
 	}
 	value := makeScriptNumFromInt64(vm.tx.TxOut[i.Int32()].Value)
 	vm.dstack.PushInt(*value)
@@ -3967,14 +3948,14 @@ func opcodeOutputBytecode(op *parsedOpcode, vm *Engine) error {
 			op.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
 	}
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() >= int32(len(vm.tx.TxOut)) || i.IsLessThanInt(0) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxOutputIndex, str)
 	}
 
 	index := i.Int32()
@@ -4019,13 +4000,13 @@ func opcodeUtxoTokenCategory(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return scriptError(ErrInvalidIndex, "index out of range")
+		return scriptError(ErrInvalidTxInputIndex, "index out of range")
 	}
 	if utxo.TokenData.IsEmpty() {
 		vm.dstack.PushInt(*makeScriptNumFromInt64(0))
@@ -4052,13 +4033,13 @@ func opcodeUtxoTokenCommitment(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return scriptError(ErrInvalidIndex, "index out of range")
+		return scriptError(ErrInvalidTxInputIndex, "index out of range")
 	}
 	if !utxo.TokenData.HasNFT() || len(utxo.TokenData.Commitment) == 0 {
 		vm.dstack.PushInt(*makeScriptNumFromInt64(0))
@@ -4079,13 +4060,13 @@ func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	utxo, err := vm.utxoCache.GetEntry(int(i.Int32()))
 	if err != nil {
-		return scriptError(ErrInvalidIndex, "index out of range")
+		return scriptError(ErrInvalidTxInputIndex, "index out of range")
 	}
 
 	if !utxo.TokenData.HasAmount() {
@@ -4111,18 +4092,19 @@ func opcodeOutputTokenCategory(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() < 0 {
-		return errors.New("OP_OUTPUTTOKENCATEGORY requires a positive index from the stack")
+		return scriptError(ErrInvalidTxOutputIndex,
+			"OP_OUTPUTTOKENCATEGORY requires a positive index from the stack")
 	}
 
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxOutputIndex, str)
 	}
 	txOut := vm.tx.TxOut[i.Int32()]
 
@@ -4152,18 +4134,19 @@ func opcodeOutputTokenCommitment(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() < 0 {
-		return errors.New("OP_OUTPUTTOKENCOMMITMENT requires a positive index from the stack")
+		return scriptError(ErrInvalidTxOutputIndex,
+			"OP_OUTPUTTOKENCOMMITMENT requires a positive index from the stack")
 	}
 
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxOutputIndex, str)
 	}
 	txOut := vm.tx.TxOut[i.Int32()]
 	if !txOut.TokenData.HasNFT() || len(txOut.TokenData.Commitment) == 0 {
@@ -4185,18 +4168,19 @@ func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	i, err := vm.dstack.PopInt()
+	i, err := vm.dstack.popLegacyInt()
 	if err != nil {
 		return err
 	}
 	if i.Int32() < 0 {
-		return errors.New("OP_OUTPUTTOKENAMOUNT requires a positive index from the stack")
+		return scriptError(ErrInvalidTxOutputIndex,
+			"OP_OUTPUTTOKENAMOUNT requires a positive index from the stack")
 	}
 
 	if i.Int32() >= int32(len(vm.tx.TxOut)) {
 		str := fmt.Sprintf("index %d out of range",
 			i.Int32())
-		return scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidTxOutputIndex, str)
 	}
 	txOut := vm.tx.TxOut[i.Int32()]
 

@@ -91,7 +91,7 @@ func checkMinimalDataEncoding(v []byte) error {
 		if len(v) == 1 || v[len(v)-2]&0x80 == 0 {
 			str := fmt.Sprintf("numeric value encoded as %x is "+
 				"not minimally encoded", v)
-			return scriptError(ErrMinimalData, str)
+			return scriptError(ErrMinimalNumber, str)
 		}
 	}
 
@@ -378,6 +378,19 @@ func makeScriptNumFromUInt64(v uint64) *scriptNum {
 	return (*scriptNum)(num)
 }
 
+// numberRangeErrorCode returns the code of the error for a number outside the
+// range of numbers of at most scriptNumLen bytes, as BCHN names it: a range of
+// 32 bits below 8 bytes, of 64 bits at 8 and of big integers above.
+func numberRangeErrorCode(scriptNumLen int) ErrorCode {
+	switch {
+	case scriptNumLen > defaultBigScriptNumLen:
+		return ErrNumberRangeBigInt
+	case scriptNumLen == defaultBigScriptNumLen:
+		return ErrNumberRange64Bit
+	}
+	return ErrNumberRange32Bit
+}
+
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
 // and returns the result as a script number.
 //
@@ -389,9 +402,9 @@ func makeScriptNumFromUInt64(v uint64) *scriptNum {
 // requireMinimal enabled.
 //
 // The scriptNumLen is the maximum number of bytes the encoded value can be
-// before an ErrStackNumberTooBig is returned.  This effectively limits the
-// range of allowed values and is important, for example, where script
-// arguments are allowed only in a limited range on a per opcode basis.
+// before the error numberRangeErrorCode gives is returned.  This effectively
+// limits the range of allowed values and is important, for example, where
+// script arguments are allowed only in a limited range on a per opcode basis.
 //
 // WARNING:  Great care should be taken if passing a value larger than
 // defaultScriptNumLen, which could lead to undefined behavior.
@@ -404,7 +417,8 @@ func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, 
 		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
 			"which exceeds the max allowed of %d", v, len(v),
 			scriptNumLen)
-		return *makeScriptNumFromInt(0), scriptError(ErrNumberTooBig, str)
+		return *makeScriptNumFromInt(0), scriptError(
+			numberRangeErrorCode(scriptNumLen), str)
 	}
 
 	// Enforce minimal encoded if requested.

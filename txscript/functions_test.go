@@ -62,23 +62,29 @@ func TestInvokeUnbalancedControlStack(t *testing.T) {
 	tests := []struct {
 		name     string
 		pkScript string
+		code     ErrorCode
 	}{{
 		// <0x51> <1> OP_DEFINE OP_1 OP_IF <1> OP_INVOKE
 		name:     "open if before a trailing invoke",
 		pkScript: "0151" + "51" + "89" + "51" + "63" + "51" + "8a",
+		code:     ErrUnbalancedConditional,
 	}, {
 		// <0x51> <1> OP_DEFINE OP_BEGIN <1> OP_INVOKE
+		// An open loop alone is an unbalanced control flow, as in BCHN.
 		name:     "open begin before a trailing invoke",
 		pkScript: "0151" + "51" + "89" + "65" + "51" + "8a",
+		code:     ErrUnbalancedControlFlow,
 	}, {
 		// <0x51> <1> OP_DEFINE <OP_1 OP_IF <1> OP_INVOKE> <2> OP_DEFINE
 		// <2> OP_INVOKE
 		name:     "open if in a function before a trailing invoke",
 		pkScript: "0151" + "51" + "89" + "04" + "5163518a" + "52" + "89" + "52" + "8a",
+		code:     ErrUnbalancedConditional,
 	}, {
 		// <0x51> <1> OP_DEFINE OP_1 OP_IF <1> OP_INVOKE OP_NOP
 		name:     "open if before an invoke and a nop",
 		pkScript: "0151" + "51" + "89" + "51" + "63" + "51" + "8a" + "61",
+		code:     ErrUnbalancedConditional,
 	}}
 
 	policyFlags := StandardVerifyFlags | ScriptAllowCashTokens |
@@ -87,10 +93,9 @@ func TestInvokeUnbalancedControlStack(t *testing.T) {
 	for _, test := range tests {
 		for _, flags := range []ScriptFlags{may2026TestFlags, policyFlags} {
 			_, err := runFunctionsTestScript(t, nil, test.pkScript, flags)
-			if !IsErrorCode(err, ErrUnbalancedConditional) {
+			if !IsErrorCode(err, test.code) {
 				t.Errorf("%s: flags %x: got error %v, want %v",
-					test.name, uint64(flags), err,
-					ErrUnbalancedConditional)
+					test.name, uint64(flags), err, test.code)
 			}
 		}
 	}

@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"bytes"
+	"encoding/hex"
 	"reflect"
 	"strings"
 	"testing"
@@ -1383,5 +1384,241 @@ func TestExportedEncodingChecks(t *testing.T) {
 	}
 	if err := CheckPubKeyEncoding(compressed[:32], flags); err == nil {
 		t.Error("short key accepted")
+	}
+}
+
+// TestBCHNErrorOrder ensures a script that breaks several rules fails with the
+// error BCHN reports, where txscript used to check another rule first or give
+// several of BCHN's errors one code.
+func TestBCHNErrorOrder(t *testing.T) {
+	t.Parallel()
+
+	may2025 := may2026TestFlags &^ ScriptAllowMay2026
+	bits64 := may2025 &^ ScriptAllowMay2025
+	noPushOnly := may2026TestFlags &^ ScriptVerifySigPushOnly
+	der := "0x30 0x06 0x02 0x01 0x01 0x02 0x01 0x01"
+	pubKey := "0x21 0x02ce0b14fb842b1ba549fdd675c98075f12e9c510f8ef52bd021a9a1f4809d3b4d"
+	dataSig := "0x40 0x" + strings.Repeat("11", 64) + " 0 " + pubKey +
+		" CHECKDATASIG DROP"
+	redeem := mustParseShortForm("0")
+	p2sh := "HASH160 0x14 0x" + hex.EncodeToString(bchutil.Hash160(redeem)) +
+		" EQUAL"
+	wrongP2SH := "HASH160 0x14 0x" + strings.Repeat("00", 20) + " EQUAL"
+	wrongP2SH32 := "HASH256 0x20 0x" + strings.Repeat("00", 32) + " EQUAL"
+
+	// An input script that is not push only, has more signature checks
+	// than its size allows and ends with the redeem script.
+	denseSig := "0x40 0x" + strings.Repeat("11", 64) + " 0 " + pubKey +
+		strings.Repeat(" 3DUP CHECKDATASIG DROP", 6) +
+		" DROP DROP DROP 0x01 0x00"
+	tests := []struct {
+		name      string
+		sigScript string
+		pkScript  string
+		flags     ScriptFlags
+		want      ErrorCode
+	}{
+		{"second operand read first", "0x09 0x010000000000000001 0x02 0x0100",
+			"ADD", bits64, ErrNumberRange64Bit},
+		{"deepest operand read first",
+			"0x09 0x010000000000000001 0x02 0x0100 1", "WITHIN", bits64,
+			ErrNumberRange64Bit},
+		{"stack size before the operands", "0x02 0x0100 1", "WITHIN",
+			bits64, ErrInvalidStackOperation},
+		{"result out of the 64-bit range",
+			"0x08 0xffffffffffffff7f", "1ADD", bits64, ErrNumberRange64Bit},
+		{"lock time over 5 bytes", "0x06 0x010000000000",
+			"CHECKLOCKTIMEVERIFY", may2026TestFlags, ErrNumberRange32Bit},
+		{"until without a loop", "", "UNTIL", may2026TestFlags,
+			ErrUnbalancedControlFlow},
+		{"until on a conditional", "", "1 IF UNTIL", may2026TestFlags,
+			ErrUnbalancedControlFlow},
+		{"else on a loop in a conditional", "", "1 IF BEGIN ELSE",
+			may2026TestFlags, ErrUnbalancedControlFlow},
+		{"endif on a loop", "", "BEGIN ENDIF", may2026TestFlags,
+			ErrUnbalancedConditional},
+		{"end of script in a loop", "", "1 BEGIN", may2026TestFlags,
+			ErrUnbalancedControlFlow},
+		{"end of script in a conditional in a loop", "", "BEGIN 1 IF",
+			may2026TestFlags, ErrUnbalancedConditional},
+		{"conditional depth before May 2026",
+			strings.Repeat("1 ", 101), strings.Repeat("IF ", 101), may2025,
+			ErrConditionalStackDepth},
+		{"invoke of a long identifier", "",
+			"0x08 0x0102030405060708 INVOKE", may2026TestFlags,
+			ErrInvalidFunctionIdentifier},
+		{"define with one item", "", "0x08 0x0102030405060708 DEFINE",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"fork id where it is illegal", "0x09 " + der + " 0x41",
+			pubKey + " CHECKSIG", may2026TestFlags &^ ScriptVerifyBip143SigHash,
+			ErrIllegalForkID},
+		{"missing fork id", "0x09 " + der + " 0x01", pubKey + " CHECKSIG",
+			may2026TestFlags, ErrMustUseForkID},
+		{"undefined base type before the fork id", "0x09 " + der + " 0x04",
+			pubKey + " CHECKSIG", may2026TestFlags, ErrInvalidSigHashType},
+		{"false result before the signature density", "",
+			dataSig + " " + dataSig + " 0",
+			bits64&^ScriptVerifyNullFail | ScriptVerifyInputSigChecks,
+			ErrEvalFalse},
+		{"clean stack before the signature density", "",
+			dataSig + " " + dataSig + " 1 1",
+			bits64&^ScriptVerifyNullFail | ScriptVerifyInputSigChecks,
+			ErrCleanStack},
+		{"pay to script hash scripts before push only",
+			"1 DROP 0x01 0x00", wrongP2SH, noPushOnly, ErrEvalFalse},
+		{"pay to script hash push only before the redeem script",
+			"1 DROP 0x01 0x00", p2sh, noPushOnly, ErrNotPushOnly},
+		{"pay to script hash 32 scripts before push only",
+			"1 DROP 0x01 0x00", wrongP2SH32, noPushOnly, ErrEvalFalse},
+		{"pay to script hash push only before the signature density",
+			denseSig, p2sh,
+			bits64&^(ScriptVerifyNullFail|ScriptVerifySigPushOnly) |
+				ScriptVerifyInputSigChecks, ErrNotPushOnly},
+		{"stack size before the roll position", "0x02 0x0100", "ROLL",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"stack size before the split position", "0x02 0x0100", "SPLIT",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"negative split position", "0x02 0x0102 -1", "SPLIT",
+			may2026TestFlags, ErrInvalidSplitRange},
+		{"stack size before the size", "0x02 0x0100", "NUM2BIN",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"bin2num out of the 64-bit range", "0x09 0x010000000000000001",
+			"BIN2NUM", bits64, ErrNumberRange64Bit},
+		{"shift result out of the big integer range", "1 0x03 0x803801",
+			"LSHIFTNUM", may2026TestFlags, ErrNumberRangeBigInt},
+		{"negative right shift", "1 -1", "RSHIFTNUM", may2026TestFlags,
+			ErrInvalidBitShift},
+		{"negative left binary shift", "0x02 0x0102 -1", "LSHIFTBIN",
+			may2026TestFlags, ErrInvalidBitShift},
+		{"negative right binary shift", "0x02 0x0102 -1", "RSHIFTBIN",
+			may2026TestFlags, ErrInvalidBitShift},
+		{"stack size before the shift", "-1", "LSHIFTNUM",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"stack size before the right shift", "-1", "RSHIFTNUM",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"stack size before the binary shift", "-1", "LSHIFTBIN",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"stack size before the right binary shift", "-1", "RSHIFTBIN",
+			may2026TestFlags, ErrInvalidStackOperation},
+		{"invoke past the control stack depth", strings.Repeat("1 ", 100),
+			"0x01 0x51 0x01 0x11 DEFINE " + strings.Repeat("IF ", 100) +
+				"0x01 0x11 INVOKE", may2026TestFlags, ErrControlStackDepth},
+		{"key count over 8 bytes", "",
+			"0x09 0x010000000000000001 CHECKMULTISIG", may2026TestFlags,
+			ErrNumberRange64Bit},
+		{"signature count over 8 bytes", "",
+			"0x09 0x010000000000000001 0 CHECKMULTISIG", may2026TestFlags,
+			ErrNumberRange64Bit},
+		{"input index over 8 bytes", "",
+			"0x09 0x010000000000000001 UTXOVALUE", may2026TestFlags,
+			ErrNumberRange64Bit},
+		{"output index over 8 bytes", "",
+			"0x09 0x010000000000000001 OUTPUTVALUE", may2026TestFlags,
+			ErrNumberRange64Bit},
+		{"negative token output index", "", "-1 OUTPUTTOKENCATEGORY",
+			may2026TestFlags, ErrInvalidTxOutputIndex},
+		{"negative token output index for the commitment", "",
+			"-1 OUTPUTTOKENCOMMITMENT", may2026TestFlags,
+			ErrInvalidTxOutputIndex},
+		{"negative token output index for the amount", "",
+			"-1 OUTPUTTOKENAMOUNT", may2026TestFlags,
+			ErrInvalidTxOutputIndex},
+		{"token output index", "", "5 OUTPUTTOKENCATEGORY",
+			may2026TestFlags, ErrInvalidTxOutputIndex},
+		{"token input index", "", "5 UTXOTOKENCATEGORY", may2026TestFlags,
+			ErrInvalidTxInputIndex},
+		{"token input index for the commitment", "",
+			"5 UTXOTOKENCOMMITMENT", may2026TestFlags,
+			ErrInvalidTxInputIndex},
+		{"token input index for the amount", "", "5 UTXOTOKENAMOUNT",
+			may2026TestFlags, ErrInvalidTxInputIndex},
+	}
+	for _, test := range tests {
+		sigScript := mustParseShortForm(test.sigScript)
+		pkScript := mustParseShortForm(test.pkScript)
+		_, err := runFunctionsTestScript(t, sigScript,
+			hex.EncodeToString(pkScript), test.flags)
+		if !IsErrorCode(err, test.want) {
+			t.Errorf("%s: got error %v, want %v", test.name, err,
+				test.want)
+		}
+	}
+
+	// A script that passes leaves its stack without the top item, as
+	// before the checks moved.
+	vm, err := runFunctionsTestScript(t, nil, "5251", ScriptBip16)
+	if err != nil {
+		t.Fatalf("2 1: %v", err)
+	}
+	if got := vm.GetStack(); !reflect.DeepEqual(got, [][]byte{{2}}) {
+		t.Errorf("2 1: stack %x after the checks, want [02]", got)
+	}
+
+	// The stack size is checked before the operation cost, as BCHN does.
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(&wire.TxIn{})
+	tx.AddTxOut(wire.NewTxOut(0, []byte{OP_1}, wire.TokenData{}))
+	vm, err = NewEngine([]byte{OP_1}, tx, 0, may2026TestFlags, nil, nil,
+		nil, 0)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	for range MaxStackSize {
+		vm.dstack.PushByteArray(nil)
+	}
+	vm.metrics.AddOPCost(int(vm.metrics.GetMaxOpCostLimit()))
+	if _, err := vm.Step(); !IsErrorCode(err, ErrStackOverflow) {
+		t.Errorf("stack size and operation cost: got error %v, want %v",
+			err, ErrStackOverflow)
+	}
+}
+
+// TestLegacyIntReads ensures the stack positions, sizes, counts and indexes
+// opcodes take are reported outside the 64-bit range when they are longer
+// than 8 bytes, as BCHN reports them, without failing an item that passed
+// before: an encoding of a value in the 64-bit range that is not minimal.
+func TestLegacyIntReads(t *testing.T) {
+	t.Parallel()
+
+	may2025 := may2026TestFlags &^ ScriptAllowMay2026
+	notMinimal := may2025 &^ ScriptVerifyMinimalData
+	before2022 := may2025 &^ (ScriptAllowMay2025 | ScriptVerify64BitIntegers)
+	tests := []struct {
+		name      string
+		sigScript string
+		pkScript  string
+		flags     ScriptFlags
+		want      ErrorCode // ErrInternal when the script passes
+	}{
+		{"zero over 8 bytes without minimal data",
+			"1 0x09 0x000000000000000000", "PICK NIP", notMinimal,
+			ErrInternal},
+		{"zero over 8 bytes", "1 0x09 0x000000000000000000", "PICK NIP",
+			may2025, ErrNumberRange64Bit},
+		{"position over 8 bytes", "1 0x09 0x010000000000000001",
+			"PICK NIP", notMinimal, ErrNumberRange64Bit},
+		{"negative position over 8 bytes", "1 0x09 0x010000000000000081",
+			"PICK NIP", notMinimal, ErrNumberRange64Bit},
+		{"position over 4 bytes before 64-bit integers", "1 0x05 0x0100000001",
+			"PICK NIP", before2022, ErrNumberRange32Bit},
+		{"position over 8 bytes before 64-bit integers",
+			"1 0x09 0x010000000000000001", "PICK NIP", before2022,
+			ErrNumberRange32Bit},
+	}
+	for _, test := range tests {
+		_, err := runFunctionsTestScript(t,
+			mustParseShortForm(test.sigScript),
+			hex.EncodeToString(mustParseShortForm(test.pkScript)),
+			test.flags)
+		if test.want == ErrInternal {
+			if err != nil {
+				t.Errorf("%s: got error %v, want none", test.name, err)
+			}
+			continue
+		}
+		if !IsErrorCode(err, test.want) {
+			t.Errorf("%s: got error %v, want %v", test.name, err,
+				test.want)
+		}
 	}
 }

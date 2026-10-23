@@ -521,7 +521,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_UTXOVALUE missing arg",
@@ -574,7 +574,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_UTXOBYTECODE missing arg",
@@ -626,7 +626,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_OUTPOINTTXHASH missing arg",
@@ -678,7 +678,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_OUTPOINTINDEX missing arg",
@@ -735,7 +735,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_INPUTBYTECODE missing arg",
@@ -787,7 +787,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxInputIndex,
 			},
 			{
 				name: "OP_INPUTSEQUENCENUMBER missing arg",
@@ -839,7 +839,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxOutputIndex,
 			},
 			{
 				name: "OP_OUTPUTVALUE missing arg",
@@ -892,7 +892,7 @@ func TestNativeIntrospectionOpcodes(t *testing.T) {
 					AddOp(OP_EQUAL)),
 				index:         0,
 				flags:         ScriptVerifyNativeIntrospection,
-				expectedError: ErrInvalidIndex,
+				expectedError: ErrInvalidTxOutputIndex,
 			},
 			{
 				name: "OP_OUTPUTBYTECODE missing arg",
@@ -1199,7 +1199,7 @@ func TestNum2binNonMinimalNegative(t *testing.T) {
 		{
 			sigScript: "0x03 0xff0080 1",
 			pkScript:  "NUM2BIN DROP 1",
-			err:       ErrNumberTooSmall,
+			err:       ErrImpossibleEncoding,
 			wantErr:   true,
 		},
 		{sigScript: "0x03 0xff0080", pkScript: "BIN2NUM 0x02 0xff80 EQUAL"},
@@ -1247,32 +1247,32 @@ func TestNum2binSizeBounds(t *testing.T) {
 	}
 
 	common := []num2binSizeTest{
-		{name: "negative", sigScript: "1 -3", err: ErrNumberTooSmall, wantErr: true},
+		{name: "negative", sigScript: "1 -3", err: ErrElementTooBig, wantErr: true},
 		{name: "max legacy element", sigScript: "1 520"},
 	}
 	wide := []num2binSizeTest{
 		{
 			name:      "2^31",
 			sigScript: "1 0x05 0x0000008000",
-			err:       ErrNumberTooBig,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		},
 		{
 			name:      "2^32+2",
 			sigScript: "1 0x05 0x0200000001",
-			err:       ErrNumberTooBig,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		},
 		{
 			name:      "-(2^32-3)",
 			sigScript: "1 0x05 0xfdffffff80",
-			err:       ErrNumberTooSmall,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		},
 		{
 			name:      "2^63-1",
 			sigScript: "1 0x08 0xffffffffffffff7f",
-			err:       ErrNumberTooBig,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		},
 	}
@@ -1281,13 +1281,13 @@ func TestNum2binSizeBounds(t *testing.T) {
 		"pre-May 2022": append(common, num2binSizeTest{
 			name:      "max legacy element + 1",
 			sigScript: "1 521",
-			err:       ErrNumberTooBig,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		}),
 		"May 2022": append(append(common, wide...), num2binSizeTest{
 			name:      "max legacy element + 1",
 			sigScript: "1 521",
-			err:       ErrNumberTooBig,
+			err:       ErrElementTooBig,
 			wantErr:   true,
 		}),
 		"current": append(append(common, wide...),
@@ -1295,13 +1295,13 @@ func TestNum2binSizeBounds(t *testing.T) {
 			num2binSizeTest{
 				name:      "max element + 1",
 				sigScript: "1 10001",
-				err:       ErrNumberTooBig,
+				err:       ErrElementTooBig,
 				wantErr:   true,
 			},
 			num2binSizeTest{
 				name:      "2^64+2",
 				sigScript: "1 0x09 0x020000000000000001",
-				err:       ErrNumberTooBig,
+				err:       ErrNumberRange64Bit,
 				wantErr:   true,
 			},
 		),

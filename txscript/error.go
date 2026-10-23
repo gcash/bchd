@@ -101,20 +101,14 @@ const (
 	// number of public keys.
 	ErrInvalidSignatureCount
 
-	// ErrNumberTooBig is returned when the argument for an opcode that
-	// expects numeric input is larger than the expected maximum number of
-	// bytes.  For the most part, opcodes that deal with stack manipulation
-	// via offsets, arithmetic, numeric comparison, and boolean logic are
-	// those that this applies to.  However, any opcode that expects numeric
-	// input may fail with this code.
+	// ErrNumberTooBig is returned when OP_UTXOVALUE finds a value over the
+	// maximum amount.  The script engine reports a number that is too long
+	// with ErrNumberRange32Bit, ErrNumberRange64Bit or ErrNumberRangeBigInt.
 	ErrNumberTooBig
 
-	// ErrNumberTooSmall is returned when the argument for an opcode that
-	// expects numeric input is smaller than the expected maximum number of
-	// bytes.  For the most part, opcodes that deal with stack manipulation
-	// via offsets, arithmetic, numeric comparison, and boolean logic are
-	// those that this applies to.  However, any opcode that expects numeric
-	// input may fail with this code.
+	// ErrNumberTooSmall is not returned by the script engine, which reports
+	// the failures it stood for with the codes of BCHN's errors, such as
+	// ErrDivByZero, ErrInvalidSplitRange and ErrInvalidBitShift.
 	ErrNumberTooSmall
 
 	// ErrOpCost is returned when the VM cost limit exceeds.
@@ -334,7 +328,9 @@ const (
 	// allowed signature density.
 	ErrInputSigChecks
 
-	// ErrIntegerOverflow is returned when a stack operation overflows an int64.
+	// ErrIntegerOverflow is not returned by the script engine, which
+	// reports an arithmetic result out of range with ErrNumberRange64Bit or
+	// ErrNumberRangeBigInt.
 	ErrIntegerOverflow
 
 	// ErrInvalidFunctionIdentifier is returned when the length of a function
@@ -348,6 +344,93 @@ const (
 	// ErrUndefinedFunction is returned when OP_INVOKE is called with
 	// an identifier that does not exist in the function table.
 	ErrUndefinedFunction
+
+	// ------------------------------------------------------------------
+	// Failures that Bitcoin Cash Node reports with an error of their own,
+	// which the codes above gave together with other failures.
+	// ------------------------------------------------------------------
+
+	// ErrMinimalNumber is returned when the ScriptVerifyMinimalData flag
+	// is set and a number is not minimally encoded.
+	ErrMinimalNumber
+
+	// ErrNumberRange32Bit is returned when a number is longer than an
+	// opcode allows, where the limit is less than 8 bytes, as the 5 bytes
+	// of OP_CHECKLOCKTIMEVERIFY and OP_CHECKSEQUENCEVERIFY and the 4 bytes
+	// before ScriptVerify64BitIntegers.
+	ErrNumberRange32Bit
+
+	// ErrNumberRange64Bit is returned when a number is longer than the 8
+	// bytes an opcode allows, or a result is outside the 64-bit range,
+	// before ScriptAllowMay2025.
+	ErrNumberRange64Bit
+
+	// ErrNumberRangeBigInt is returned when a number is longer than the
+	// big integer limit, or a result is outside its range, once
+	// ScriptAllowMay2025 is set.
+	ErrNumberRangeBigInt
+
+	// ErrImpossibleEncoding is returned when OP_NUM2BIN is asked for a
+	// size too small for the number.
+	ErrImpossibleEncoding
+
+	// ErrInvalidSplitRange is returned when the position OP_SPLIT is given
+	// is negative or past the end of the data.
+	ErrInvalidSplitRange
+
+	// ErrDivByZero is returned when OP_DIV is given a zero divisor.
+	ErrDivByZero
+
+	// ErrModByZero is returned when OP_MOD is given a zero divisor.
+	ErrModByZero
+
+	// ErrInvalidBitShift is returned when a shift opcode is given a
+	// negative bit count.
+	ErrInvalidBitShift
+
+	// ErrInvalidBitRange is returned when the schnorr multisig dummy
+	// element selects public keys past the number of public keys.
+	ErrInvalidBitRange
+
+	// ErrInvalidAltStackOperation is returned when OP_FROMALTSTACK is
+	// executed with an empty alternate stack.
+	ErrInvalidAltStackOperation
+
+	// ErrUnbalancedControlFlow is returned when an OP_ELSE, OP_ENDIF or
+	// OP_UNTIL does not close the innermost conditional or loop, or the
+	// end of a script is reached inside a loop.
+	ErrUnbalancedControlFlow
+
+	// ErrControlStackDepth is returned when the depth of the control
+	// stack, nested conditionals, loops and function invocations together,
+	// is over MaxConditionalStackDepth once ScriptAllowMay2026 is set.
+	ErrControlStackDepth
+
+	// ErrInvalidTxInputIndex is returned when an introspection opcode is
+	// given an index that is not one of the transaction's inputs.
+	ErrInvalidTxInputIndex
+
+	// ErrInvalidTxOutputIndex is returned when an introspection opcode is
+	// given an index that is not one of the transaction's outputs.
+	ErrInvalidTxOutputIndex
+
+	// ErrIllegalForkID is returned when the ScriptVerifyStrictEncoding
+	// flag is set, ScriptVerifyBip143SigHash is not and a signature hash
+	// type has the fork id bit.
+	ErrIllegalForkID
+
+	// ErrMustUseForkID is returned when the ScriptVerifyStrictEncoding and
+	// ScriptVerifyBip143SigHash flags are set and a signature hash type
+	// does not have the fork id bit.
+	ErrMustUseForkID
+
+	// ErrSigBadLength is returned when an ECDSA multisig signature has
+	// the 64 bytes of a schnorr signature.
+	ErrSigBadLength
+
+	// ErrSigNonSchnorr is returned when a schnorr multisig signature is
+	// not 64 bytes long.
+	ErrSigNonSchnorr
 
 	// numErrorCodes is the maximum error code number used in tests.  This
 	// entry MUST be the last entry in the enum.
@@ -425,6 +508,25 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrInvalidFunctionIdentifier: "ErrInvalidFunctionIdentifier",
 	ErrFunctionAlreadyDefined:    "ErrFunctionAlreadyDefined",
 	ErrUndefinedFunction:         "ErrUndefinedFunction",
+	ErrMinimalNumber:             "ErrMinimalNumber",
+	ErrNumberRange32Bit:          "ErrNumberRange32Bit",
+	ErrNumberRange64Bit:          "ErrNumberRange64Bit",
+	ErrNumberRangeBigInt:         "ErrNumberRangeBigInt",
+	ErrImpossibleEncoding:        "ErrImpossibleEncoding",
+	ErrInvalidSplitRange:         "ErrInvalidSplitRange",
+	ErrDivByZero:                 "ErrDivByZero",
+	ErrModByZero:                 "ErrModByZero",
+	ErrInvalidBitShift:           "ErrInvalidBitShift",
+	ErrInvalidBitRange:           "ErrInvalidBitRange",
+	ErrInvalidAltStackOperation:  "ErrInvalidAltStackOperation",
+	ErrUnbalancedControlFlow:     "ErrUnbalancedControlFlow",
+	ErrControlStackDepth:         "ErrControlStackDepth",
+	ErrInvalidTxInputIndex:       "ErrInvalidTxInputIndex",
+	ErrInvalidTxOutputIndex:      "ErrInvalidTxOutputIndex",
+	ErrIllegalForkID:             "ErrIllegalForkID",
+	ErrMustUseForkID:             "ErrMustUseForkID",
+	ErrSigBadLength:              "ErrSigBadLength",
+	ErrSigNonSchnorr:             "ErrSigNonSchnorr",
 }
 
 // String returns the ErrorCode as a human-readable name.

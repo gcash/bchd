@@ -91,6 +91,98 @@ func (s *stack) PopInt() (scriptNum, error) {
 	return makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
 }
 
+// checkDepth returns an error unless the stack holds at least n items.  BCHN
+// checks this before an opcode reads any of its operands, so that a failure
+// is reported as BCHN reports it.
+func (s *stack) checkDepth(n int32) error {
+	if sz := s.Depth(); sz < n {
+		str := fmt.Sprintf("index %d is invalid for stack size %d", n-1,
+			sz)
+		return scriptError(ErrInvalidStackOperation, str)
+	}
+	return nil
+}
+
+// popIntPair pops the top two items of the stack as script numbers and
+// returns the second item and the top one.  It reads the second item first,
+// as BCHN does, so a missing item fails before the top one is read.
+//
+// Stack transformation: [... x1 x2] -> [...]
+func (s *stack) popIntPair() (scriptNum, scriptNum, error) {
+	zero := *makeScriptNumFromInt(0)
+	a, err := s.PeekInt(1)
+	if err != nil {
+		return zero, zero, err
+	}
+	b, err := s.PeekInt(0)
+	if err != nil {
+		return zero, zero, err
+	}
+	s.dropTop(2)
+	return a, b, nil
+}
+
+// popIntTriple pops the top three items of the stack as script numbers and
+// returns them deepest first.  It reads the deepest first, as BCHN does, so a
+// missing item fails before the others are read.
+//
+// Stack transformation: [... x1 x2 x3] -> [...]
+func (s *stack) popIntTriple() (scriptNum, scriptNum, scriptNum, error) {
+	zero := *makeScriptNumFromInt(0)
+	a, err := s.PeekInt(2)
+	if err != nil {
+		return zero, zero, zero, err
+	}
+	b, err := s.PeekInt(1)
+	if err != nil {
+		return zero, zero, zero, err
+	}
+	c, err := s.PeekInt(0)
+	if err != nil {
+		return zero, zero, zero, err
+	}
+	s.dropTop(3)
+	return a, b, c, nil
+}
+
+// dropTop removes the top n items, which the caller has checked are there.
+func (s *stack) dropTop(n int) {
+	sz := len(s.stk)
+	clear(s.stk[sz-n:])
+	s.stk = s.stk[:sz-n]
+}
+
+// popLegacyInt pops the top item of the stack as a script number, for the
+// stack positions, sizes, counts and indexes opcodes take.  BCHN reads these
+// with a limit of 8 bytes whatever the size of other numbers, so once numbers
+// may be longer, an item over 8 bytes that does not read, or whose value is
+// outside the 64-bit range, is reported as BCHN reports it, outside the
+// 64-bit range.  Every such item fails here or in the opcode, as none of these
+// values can be that large, so the error is the only change.  A longer item
+// whose value is in the 64-bit range, which only an encoding that is not
+// minimal can give, is read as before.
+//
+// Stack transformation: [... x1 x2] -> [... x1]
+func (s *stack) popLegacyInt() (scriptNum, error) {
+	so, err := s.PopByteArray()
+	if err != nil {
+		return *makeScriptNumFromInt(0), err
+	}
+
+	n, err := makeScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen)
+	if s.defaultScriptNumLen > defaultBigScriptNumLen &&
+		len(so) > defaultBigScriptNumLen && (err != nil ||
+		n.IsGreaterThanInt(maxInt64) || n.IsLessThanInt(-maxInt64)) {
+
+		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
+			"which exceeds the max allowed of %d", so, len(so),
+			defaultBigScriptNumLen)
+		return *makeScriptNumFromInt(0), scriptError(ErrNumberRange64Bit,
+			str)
+	}
+	return n, err
+}
+
 // PopBool pops the value off the top of the stack, converts it into a bool, and
 // returns it.
 //

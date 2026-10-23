@@ -628,22 +628,17 @@ func refNewEngineChecks(scriptPubKey []byte, tx *wire.MsgTx, txIdx int,
 		scriptIdx++
 	}
 
+	// The input script of a P2SH or P2SH32 spend must only push data,
+	// which the engine checks once the public key script has passed, as
+	// BCHN does, rather than here.
 	bip16 := false
 	if flags.HasFlag(ScriptBip16) && refIsScriptHash(parsed[1]) {
-		if !refIsPushOnly(parsed[0]) {
-			return 0, false, scriptError(ErrNotPushOnly,
-				"pay to script hash is not push only")
-		}
 		bip16 = true
 	}
 
 	if flags.HasFlag(ScriptBip16) && flags.HasFlag(ScriptAllowCashTokens) &&
 		refIsScriptHash32(parsed[1]) {
 
-		if !refIsPushOnly(parsed[0]) {
-			return 0, false, scriptError(ErrNotPushOnly,
-				"pay to script hash is not push only")
-		}
 		bip16 = true
 	}
 

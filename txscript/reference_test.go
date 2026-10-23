@@ -310,114 +310,113 @@ func parseLegacyScriptFlags(flagStr string) (ScriptFlags, error) {
 	return flags, nil
 }
 
+// bchnScriptErrorCodes maps the name of each of BCHN's script errors, as its
+// script tests spell it (test/script_tests.cpp), to the codes txscript gives
+// that error.  No code stands for two of these names, so the error of every
+// failing test row is the one BCHN names, and the mempool reports it with
+// BCHN's text.
+var bchnScriptErrorCodes = map[string][]ErrorCode{
+	"EVAL_FALSE":                   {ErrEvalFalse, ErrEmptyStack},
+	"OP_RETURN":                    {ErrEarlyReturn},
+	"SCRIPT_SIZE":                  {ErrScriptTooBig},
+	"PUSH_SIZE":                    {ErrElementTooBig},
+	"OP_COUNT":                     {ErrTooManyOperations},
+	"STACK_SIZE":                   {ErrStackOverflow},
+	"SIG_COUNT":                    {ErrInvalidSignatureCount},
+	"PUBKEY_COUNT":                 {ErrInvalidPubKeyCount},
+	"INPUT_SIGCHECKS":              {ErrInputSigChecks},
+	"OPERAND_SIZE":                 {ErrInvalidInputLength},
+	"INVALID_NUMBER_RANGE_32_BIT":  {ErrNumberRange32Bit},
+	"INVALID_NUMBER_RANGE_64_BIT":  {ErrNumberRange64Bit},
+	"INVALID_NUMBER_RANGE_BIG_INT": {ErrNumberRangeBigInt},
+	"IMPOSSIBLE_ENCODING":          {ErrImpossibleEncoding},
+	"SPLIT_RANGE":                  {ErrInvalidSplitRange},
+	"INVALID_BIT_COUNT":            {ErrInvalidBitCount},
+	"VERIFY":                       {ErrVerify},
+	"EQUALVERIFY":                  {ErrEqualVerify},
+	"CHECKMULTISIGVERIFY":          {ErrCheckMultiSigVerify},
+	"CHECKSIGVERIFY":               {ErrCheckSigVerify},
+	"CHECKDATASIGVERIFY":           {ErrCheckDataSigVerify},
+	"NUMEQUALVERIFY":               {ErrNumEqualVerify},
+	"BAD_OPCODE":                   {ErrReservedOpcode, ErrMalformedPush},
+	"DISABLED_OPCODE":              {ErrDisabledOpcode},
+	"INVALID_STACK_OPERATION":      {ErrInvalidStackOperation},
+	"INVALID_ALTSTACK_OPERATION":   {ErrInvalidAltStackOperation},
+	"UNBALANCED_CONDITIONAL":       {ErrUnbalancedConditional},
+	"UNBALANCED_CONTROL_FLOW":      {ErrUnbalancedControlFlow},
+	"NEGATIVE_LOCKTIME":            {ErrNegativeLockTime},
+	"UNSATISFIED_LOCKTIME":         {ErrUnsatisfiedLockTime},
+	"SIG_HASHTYPE":                 {ErrInvalidSigHashType},
+	"SIG_DER": {ErrSigTooShort, ErrSigTooLong, ErrSigInvalidSeqID,
+		ErrSigInvalidDataLen, ErrSigMissingSTypeID, ErrSigMissingSLen,
+		ErrSigInvalidSLen, ErrSigInvalidRIntID, ErrSigZeroRLen,
+		ErrSigNegativeR, ErrSigTooMuchRPadding, ErrSigInvalidSIntID,
+		ErrSigZeroSLen, ErrSigNegativeS, ErrSigTooMuchSPadding},
+	"MINIMALDATA":                {ErrMinimalData},
+	"SIG_PUSHONLY":               {ErrNotPushOnly},
+	"SIG_HIGH_S":                 {ErrSigHighS},
+	"PUBKEYTYPE":                 {ErrPubKeyType},
+	"CLEANSTACK":                 {ErrCleanStack},
+	"MINIMALIF":                  {ErrMinimalIf},
+	"NULLFAIL":                   {ErrNullFail},
+	"MINIMALNUM":                 {ErrMinimalNumber},
+	"SIG_BADLENGTH":              {ErrSigBadLength},
+	"SIG_NONSCHNORR":             {ErrSigNonSchnorr},
+	"DISCOURAGE_UPGRADABLE_NOPS": {ErrDiscourageUpgradableNOPs},
+	"ILLEGAL_FORKID":             {ErrIllegalForkID},
+	"MISSING_FORKID":             {ErrMustUseForkID},
+	"DIV_BY_ZERO":                {ErrDivByZero},
+	"MOD_BY_ZERO":                {ErrModByZero},
+	"BITFIELD_SIZE":              {ErrInvalidDummy},
+	"BIT_RANGE":                  {ErrInvalidBitRange},
+	"OP_COST":                    {ErrOpCost},
+	"HASH_ITERS":                 {ErrTooManyHashIters},
+	"CONDITIONAL_STACK_DEPTH":    {ErrConditionalStackDepth},
+	"CONTROL_STACK_DEPTH":        {ErrControlStackDepth},
+}
+
+// legacyScriptErrorCodes maps the names only script_tests_bchd.json uses,
+// those of older BCHN releases and of bchd's rules before an upgrade, to the
+// codes txscript gives them.
+var legacyScriptErrorCodes = map[string][]ErrorCode{
+	// Older releases named every number error UNKNOWN_ERROR.
+	"UNKNOWN_ERROR": {ErrNumberRange32Bit, ErrNumberRange64Bit,
+		ErrMinimalNumber},
+	"INVALID_NUMBER_RANGE": {ErrNumberRange32Bit},
+	"NONCOMPRESSED_PUBKEY": {ErrPubKeyType},
+	"SIG_NULLDUMMY":        {ErrSigNullDummy},
+}
+
 // parseExpectedResult parses the provided expected result string into allowed
 // script error codes.  An error is returned if the expected result string is
 // not supported.
 func parseExpectedResult(expected string) ([]ErrorCode, error) {
-	switch expected {
-	case "OK":
+	if expected == "OK" {
 		return nil, nil
-	case "UNKNOWN_ERROR", "OPERAND_SIZE":
-		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall, ErrMinimalData, ErrInvalidInputLength, ErrIntegerOverflow}, nil
-	case "PUBKEYTYPE", "NONCOMPRESSED_PUBKEY":
-		return []ErrorCode{ErrPubKeyType}, nil
-	case "SIG_DER", "SIG_BADLENGTH", "MISSING_FORKID":
-		return []ErrorCode{ErrSigTooShort, ErrSigTooLong,
-			ErrSigInvalidSeqID, ErrSigInvalidDataLen, ErrSigMissingSTypeID,
-			ErrSigMissingSLen, ErrSigInvalidSLen,
-			ErrSigInvalidRIntID, ErrSigZeroRLen, ErrSigNegativeR,
-			ErrSigTooMuchRPadding, ErrSigInvalidSIntID,
-			ErrSigZeroSLen, ErrSigNegativeS, ErrSigTooMuchSPadding,
-			ErrInvalidSigHashType}, nil
-	case "ILLEGAL_FORKID":
-		return []ErrorCode{ErrInvalidSigHashType}, nil
-	case "EVAL_FALSE":
-		return []ErrorCode{ErrEvalFalse, ErrEmptyStack, ErrCleanStack}, nil
-	case "EQUALVERIFY":
-		return []ErrorCode{ErrEqualVerify}, nil
-	case "NULLFAIL":
-		return []ErrorCode{ErrNullFail}, nil
-	case "SIG_HIGH_S":
-		return []ErrorCode{ErrSigHighS}, nil
-	case "SIG_HASHTYPE":
-		return []ErrorCode{ErrInvalidSigHashType}, nil
-	case "SIG_NULLDUMMY":
-		return []ErrorCode{ErrSigNullDummy}, nil
-	case "SIG_PUSHONLY":
-		return []ErrorCode{ErrNotPushOnly}, nil
-	case "CLEANSTACK":
-		return []ErrorCode{ErrCleanStack}, nil
-	case "BAD_OPCODE":
-		return []ErrorCode{ErrReservedOpcode, ErrMalformedPush}, nil
-	case "UNBALANCED_CONDITIONAL":
-		return []ErrorCode{ErrUnbalancedConditional,
-			ErrInvalidStackOperation}, nil
-	case "OP_RETURN":
-		return []ErrorCode{ErrEarlyReturn}, nil
-	case "VERIFY":
-		return []ErrorCode{ErrVerify}, nil
-	case "INVALID_STACK_OPERATION", "INVALID_ALTSTACK_OPERATION":
-		return []ErrorCode{ErrInvalidStackOperation, ErrDisabledOpcode}, nil
-	case "DISABLED_OPCODE":
-		return []ErrorCode{ErrDisabledOpcode}, nil
-	case "DISCOURAGE_UPGRADABLE_NOPS":
-		return []ErrorCode{ErrDiscourageUpgradableNOPs}, nil
-	case "PUSH_SIZE", "IMPOSSIBLE_ENCODING", "INVALID_NUMBER_RANGE", "DIV_BY_ZERO", "MOD_BY_ZERO":
-		return []ErrorCode{ErrElementTooBig, ErrNumberTooBig, ErrNumberTooSmall}, nil
-	case "OP_COUNT":
-		return []ErrorCode{ErrTooManyOperations}, nil
-	case "STACK_SIZE":
-		return []ErrorCode{ErrStackOverflow}, nil
-	case "SCRIPT_SIZE":
-		return []ErrorCode{ErrScriptTooBig}, nil
-	case "ELEMENT_SIZE":
-		return []ErrorCode{ErrElementTooBig}, nil
-	case "PUBKEY_COUNT":
-		return []ErrorCode{ErrInvalidPubKeyCount}, nil
-	case "SIG_COUNT":
-		return []ErrorCode{ErrInvalidSignatureCount}, nil
-	case "MINIMALDATA", "MINIMALIF":
-		return []ErrorCode{ErrMinimalData, ErrMinimalIf}, nil
-	case "NEGATIVE_LOCKTIME":
-		return []ErrorCode{ErrNegativeLockTime}, nil
-	case "UNSATISFIED_LOCKTIME":
-		return []ErrorCode{ErrUnsatisfiedLockTime}, nil
-	case "CHECKDATASIGVERIFY":
-		return []ErrorCode{ErrCheckDataSigVerify}, nil
-	case "CHECKSIGVERIFY":
-		return []ErrorCode{ErrCheckSigVerify}, nil
-	case "CHECKMULTISIGVERIFY":
-		return []ErrorCode{ErrCheckMultiSigVerify}, nil
-	case "SPLIT_RANGE":
-		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall}, nil
-	case "BITFIELD_SIZE":
-		return []ErrorCode{ErrInvalidDummy}, nil
-	case "BIT_RANGE", "INVALID_BIT_COUNT":
-		return []ErrorCode{ErrInvalidBitCount}, nil
-	case "SIG_NONSCHNORR":
-		return []ErrorCode{ErrSigInvalidDataLen}, nil
-	case "INPUT_SIGCHECKS":
-		return []ErrorCode{ErrInputSigChecks}, nil
-	case "INVALID_NUMBER_RANGE_32_BIT", "INVALID_NUMBER_RANGE_64_BIT",
-		"INVALID_NUMBER_RANGE_BIG_INT":
-		return []ErrorCode{ErrNumberTooBig, ErrNumberTooSmall,
-			ErrIntegerOverflow}, nil
-	case "MINIMALNUM":
-		return []ErrorCode{ErrMinimalData}, nil
-	case "NUMEQUALVERIFY":
-		return []ErrorCode{ErrNumEqualVerify}, nil
-	case "UNBALANCED_CONTROL_FLOW":
-		return []ErrorCode{ErrUnbalancedConditional}, nil
-	case "OP_COST":
-		return []ErrorCode{ErrOpCost}, nil
-	case "HASH_ITERS":
-		return []ErrorCode{ErrTooManyHashIters}, nil
-	case "CONDITIONAL_STACK_DEPTH", "CONTROL_STACK_DEPTH":
-		return []ErrorCode{ErrConditionalStackDepth}, nil
+	}
+	if codes, ok := bchnScriptErrorCodes[expected]; ok {
+		return codes, nil
+	}
+	if codes, ok := legacyScriptErrorCodes[expected]; ok {
+		return codes, nil
 	}
 
 	return nil, fmt.Errorf("unrecognized expected result in test data: %v",
 		expected)
+}
+
+// TestBCHNScriptErrorCodes ensures no error code stands for two of BCHN's
+// script errors in the reference test mapping.
+func TestBCHNScriptErrorCodes(t *testing.T) {
+	names := make(map[ErrorCode]string)
+	for name, codes := range bchnScriptErrorCodes {
+		for _, code := range codes {
+			if other, ok := names[code]; ok {
+				t.Errorf("%v stands for %s and %s", code, other, name)
+			}
+			names[code] = name
+		}
+	}
 }
 
 // createSpendingTx generates a basic spending transaction given the passed
