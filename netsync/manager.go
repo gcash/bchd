@@ -1728,6 +1728,32 @@ out:
 			break out
 		}
 	}
+
+	// Answer the messages still queued, as the peers that queued them wait
+	// for the answer.
+cleanup:
+	for {
+		select {
+		case m := <-sm.msgChan:
+			var reply chan struct{}
+			switch msg := m.(type) {
+			case *newPeerMsg:
+				reply = msg.reply
+			case *txMsg:
+				reply = msg.reply
+			case *blockMsg:
+				reply = msg.reply
+			case *donePeerMsg:
+				reply = msg.reply
+			}
+			if reply != nil {
+				reply <- struct{}{}
+			}
+		default:
+			break cleanup
+		}
+	}
+
 	log.Debug("Block handler shutting down: flushing blockchain caches...")
 	if err := sm.chain.FlushCachedState(blockchain.FlushRequired); err != nil {
 		log.Errorf("Error while flushing blockchain caches: %v", err)
@@ -1904,17 +1930,27 @@ func (sm *SyncManager) NewPeer(peer *peerpkg.Peer, done chan struct{}) {
 	}
 }
 
+// queue sends msg to the block handler, and returns false without sending it
+// once the sync manager stops, as the block handler then takes no more.
+func (sm *SyncManager) queue(msg interface{}) bool {
+	select {
+	case sm.msgChan <- msg:
+		return true
+	case <-sm.quit:
+		return false
+	}
+}
+
 // QueueTx adds the passed transaction message and peer to the block handling
 // queue. Responds to the done channel argument after the tx message is
 // processed.
 func (sm *SyncManager) QueueTx(tx *bchutil.Tx, peer *peerpkg.Peer, done chan struct{}) {
 	// Don't accept more transactions if we're shutting down.
-	if sm.shutdown.Load() != 0 {
-		done <- struct{}{}
-		return
-	}
+	if sm.shutdown.Load() != 0 ||
+		!sm.queue(&txMsg{tx: tx, peer: peer, reply: done}) {
 
-	sm.msgChan <- &txMsg{tx: tx, peer: peer, reply: done}
+		done <- struct{}{}
+	}
 }
 
 // QueueBlock adds the passed block message and peer to the block handling
@@ -1922,12 +1958,11 @@ func (sm *SyncManager) QueueTx(tx *bchutil.Tx, peer *peerpkg.Peer, done chan str
 // processed.
 func (sm *SyncManager) QueueBlock(block *bchutil.Block, peer *peerpkg.Peer, done chan struct{}) {
 	// Don't accept more blocks if we're shutting down.
-	if sm.shutdown.Load() != 0 {
-		done <- struct{}{}
-		return
-	}
+	if sm.shutdown.Load() != 0 ||
+		!sm.queue(&blockMsg{block: block, peer: peer, reply: done}) {
 
-	sm.msgChan <- &blockMsg{block: block, peer: peer, reply: done}
+		done <- struct{}{}
+	}
 }
 
 // QueueBlockError adds the passed block message and peer to the block handling
@@ -1936,7 +1971,7 @@ func (sm *SyncManager) QueueBlockError(hash *chainhash.Hash, peer *peerpkg.Peer)
 	if sm.shutdown.Load() != 0 {
 		return
 	}
-	sm.msgChan <- &blockErrorMsg{hash: hash, peer: peer}
+	sm.queue(&blockErrorMsg{hash: hash, peer: peer})
 }
 
 // QueueNotFound adds the passed notfound message and peer to the block
@@ -1945,7 +1980,7 @@ func (sm *SyncManager) QueueNotFound(notFound *wire.MsgNotFound, peer *peerpkg.P
 	if sm.shutdown.Load() != 0 {
 		return
 	}
-	sm.msgChan <- &notFoundMsg{notFound: notFound, peer: peer}
+	sm.queue(&notFoundMsg{notFound: notFound, peer: peer})
 }
 
 // QueueInv adds the passed inv message and peer to the block handling queue.
@@ -1956,7 +1991,7 @@ func (sm *SyncManager) QueueInv(inv *wire.MsgInv, peer *peerpkg.Peer) {
 		return
 	}
 
-	sm.msgChan <- &invMsg{inv: inv, peer: peer}
+	sm.queue(&invMsg{inv: inv, peer: peer})
 }
 
 // QueueHeaders adds the passed headers message and peer to the block handling
@@ -1968,18 +2003,20 @@ func (sm *SyncManager) QueueHeaders(headers *wire.MsgHeaders, peer *peerpkg.Peer
 		return
 	}
 
-	sm.msgChan <- &headersMsg{headers: headers, peer: peer}
+	sm.queue(&headersMsg{headers: headers, peer: peer})
 }
 
-// DonePeer informs the blockmanager that a peer has disconnected.
+// DonePeer informs the blockmanager that a peer has disconnected.  A nil done
+// channel is not signaled.
 func (sm *SyncManager) DonePeer(peer *peerpkg.Peer, done chan struct{}) {
 	// Ignore if we are shutting down.
-	if sm.shutdown.Load() != 0 {
-		done <- struct{}{}
-		return
-	}
+	if sm.shutdown.Load() != 0 ||
+		!sm.queue(&donePeerMsg{peer: peer, reply: done}) {
 
-	sm.msgChan <- &donePeerMsg{peer: peer, reply: done}
+		if done != nil {
+			done <- struct{}{}
+		}
+	}
 }
 
 // Start begins the core block handler which processes block and inv messages.

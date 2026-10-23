@@ -3406,7 +3406,12 @@ func (s *server) peerDoneHandler(sp *serverPeer) {
 	if sp.releaseInbound != nil {
 		sp.releaseInbound()
 	}
-	s.donePeers <- sp
+
+	// The peer handler takes no done peers once the server quits.
+	select {
+	case s.donePeers <- sp:
+	case <-s.quit:
+	}
 
 	// Only tell sync manager we are gone if we ever told it we existed.
 	if sp.VerAckReceived() {
@@ -3559,14 +3564,24 @@ cleanup:
 	srvrLog.Info("Peer handler complete")
 }
 
-// AddPeer adds a new peer that has already been connected to the server.
+// AddPeer adds a new peer that has already been connected to the server.  Once
+// the server is shutting down it returns without adding it, as the peer
+// handler then takes no more peers.
 func (s *server) AddPeer(sp *serverPeer) {
-	s.newPeers <- sp
+	select {
+	case s.newPeers <- sp:
+	case <-s.quit:
+	}
 }
 
 // BanPeer bans a peer that has already been connected to the server by ip.
+// Once the server is shutting down it returns without banning it, as the peer
+// handler then takes no more bans.
 func (s *server) BanPeer(sp *serverPeer) {
-	s.banPeers <- sp
+	select {
+	case s.banPeers <- sp:
+	case <-s.quit:
+	}
 }
 
 // RelayInventory relays the passed inventory vector to all connected peers
@@ -3581,10 +3596,15 @@ func (s *server) RelayInventory(invVect *wire.InvVect, data interface{}) {
 }
 
 // BroadcastMessage sends msg to all peers currently connected to the server
-// except those in the passed peers to exclude.
+// except those in the passed peers to exclude.  Once the server is shutting
+// down it returns without sending it, as the peer handler then takes no more
+// broadcasts.
 func (s *server) BroadcastMessage(msg wire.Message, exclPeers ...*serverPeer) {
 	bmsg := broadcastMsg{message: msg, excludePeers: exclPeers}
-	s.broadcast <- bmsg
+	select {
+	case s.broadcast <- bmsg:
+	case <-s.quit:
+	}
 }
 
 // ConnectedCount returns the number of currently connected peers.

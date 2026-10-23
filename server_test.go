@@ -833,3 +833,53 @@ func TestRebroadcastDropsTxsNotInPool(t *testing.T) {
 		t.Fatal("the transaction in the pool is no longer pending")
 	}
 }
+
+// TestPeerHandlerSendsAfterQuit ensures adding, banning and broadcasting to
+// peers, and a peer's end, return once the server quits, as the peer handler
+// that takes them stops then.  Each queue holds --maxpeers entries, which the
+// stopped handler drains once, and the ban queue never, so once that many
+// came after it stopped, the next sender waited for good.
+func TestPeerHandlerSendsAfterQuit(t *testing.T) {
+	s := &server{
+		newPeers:  make(chan *serverPeer, 1),
+		donePeers: make(chan *serverPeer, 1),
+		banPeers:  make(chan *serverPeer, 1),
+		broadcast: make(chan broadcastMsg, 1),
+		quit:      make(chan struct{}),
+	}
+	close(s.quit)
+	sp := newServerPeer(s, false)
+	sp.Peer = peer.NewInboundPeer(&peer.Config{
+		ChainParams: &chaincfg.RegressionNetParams,
+	})
+	sp.Disconnect()
+
+	// The queues are full.
+	s.newPeers <- sp
+	s.donePeers <- sp
+	s.banPeers <- sp
+	s.broadcast <- broadcastMsg{}
+
+	calls := []struct {
+		name string
+		fn   func()
+	}{
+		{"AddPeer", func() { s.AddPeer(sp) }},
+		{"BanPeer", func() { s.BanPeer(sp) }},
+		{"BroadcastMessage", func() {
+			s.BroadcastMessage(wire.NewMsgPing(1))
+		}},
+		{"the end of a peer", func() { s.peerDoneHandler(sp) }},
+	}
+	for _, call := range calls {
+		done := make(chan struct{})
+		go func() {
+			call.fn()
+			close(done)
+		}()
+		if !returnedWithin(done, 5*time.Second) {
+			t.Errorf("%s still waits for the peer handler after the "+
+				"server quit", call.name)
+		}
+	}
+}
