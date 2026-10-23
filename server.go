@@ -696,8 +696,15 @@ func (sp *serverPeer) OnVerAck(peer *peer.Peer, msg *wire.MsgVerAck) {
 	// This peer supports the compact blocks version so we should
 	// send them a sendcmpt message.
 	if sp.compactBlocksSupported() {
+		// The peer handler gives no direct relay slots once the server
+		// quits.
 		resp := make(chan bool)
-		sp.server.maybeAddDirectRelayPeer <- &maybeAddDirectRelayPeerMsg{response: resp, peer: sp}
+		amsg := &maybeAddDirectRelayPeerMsg{response: resp, peer: sp}
+		select {
+		case sp.server.maybeAddDirectRelayPeer <- amsg:
+		case <-sp.server.quit:
+			return
+		}
 		announce := <-resp
 		peer.SetAllowDirectBlockRelay(announce)
 		sendCmpctMessage := wire.NewMsgSendCmpct(announce, wire.CompactBlocksProtocolVersion)
@@ -1091,7 +1098,12 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 			processed := sp.server.blockProcessing(targetHash)
 			defer processed()
 			sp.server.setRecentBlock(msgBlock)
-			sp.server.relayCmpctBlock <- msg
+
+			// The peer handler takes no relays once the server quits.
+			select {
+			case sp.server.relayCmpctBlock <- msg:
+			case <-sp.server.quit:
+			}
 		}
 	}
 

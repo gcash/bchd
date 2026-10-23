@@ -726,6 +726,51 @@ func TestBlockProcessingRelayedTwice(t *testing.T) {
 	}
 }
 
+// TestCompactBlockRelayAfterQuit ensures a compact block reconstructed after
+// the peer handler stopped is processed without being relayed, rather than
+// waiting forever for the peer handler to take the relay.
+func TestCompactBlockRelayAfterQuit(t *testing.T) {
+	h := newCmpctHarness(t)
+	h.s.relayCmpctBlock = make(chan *wire.MsgCmpctBlock)
+	h.s.quit = make(chan struct{})
+	close(h.s.quit)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, h.process(msg))
+	h.expectHaveBlock(t, block.Hash())
+}
+
+// TestVerAckAfterQuit ensures a peer that completes its handshake after the
+// peer handler stopped does not wait forever for a direct relay slot.
+func TestVerAckAfterQuit(t *testing.T) {
+	s := &server{
+		newPeers:                make(chan *serverPeer, 1),
+		maybeAddDirectRelayPeer: make(chan *maybeAddDirectRelayPeerMsg),
+		quit:                    make(chan struct{}),
+	}
+	close(s.quit)
+	sp := newServerPeer(s, false)
+	sp.Peer = peer.NewInboundPeer(&peer.Config{
+		ChainParams: &chaincfg.RegressionNetParams,
+	})
+	sp.setSupportsCompactBlocks(true)
+	done := make(chan struct{})
+	go func() {
+		sp.OnVerAck(sp.Peer, wire.NewMsgVerAck())
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the handshake still waits for a direct relay slot " +
+			"after the server quit")
+	}
+}
+
 // TestDirectRelaySlotNotForGonePeer ensures a direct relay slot is not given
 // to a peer that is already gone, as one turned away at the peer limit can
 // ask for it after its disconnect was handled, and the slot would then never
