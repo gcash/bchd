@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1202,6 +1203,67 @@ func TestCreateRawTransactionInputErrors(t *testing.T) {
 		mtx.TxIn[0].PreviousOutPoint.Index != 0 {
 
 		t.Errorf("vout 0: got %v, err %v", mtx, err)
+	}
+}
+
+// TestCreateRawTransactionVoutRange ensures createrawtransaction takes a vout
+// from 0 to 2^31-1 and refuses the others with BCHN's errors, which come from
+// reading the vout as an int32: a number that is not one, such as 2^31 or
+// 1.5, with univalue's -1 "JSON integer out of range", a negative one with
+// -8 "vout must be positive", and a value that is not a number with -8
+// "vout must be a number".  The inputs are checked in order, as in BCHN.
+func TestCreateRawTransactionVoutRange(t *testing.T) {
+	output := `{"` + createRawTxTestAddr(t, 0x0e) + `":0.1}`
+	txid := `"txid":"` + testTokenCategory + `"`
+	outOfRange := "JSON integer out of range"
+	notPositive := "Invalid parameter, vout must be positive"
+	notNumber := "Invalid parameter, vout must be a number"
+
+	tests := []struct {
+		inputs   string
+		wantCode btcjson.RPCErrorCode
+		wantMsg  string
+	}{
+		{`[{` + txid + `,"vout":2147483648}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":4294967295}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":4294967296}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":-2147483649}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":1.5}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":1.0}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":1e2}]`, btcjson.ErrRPCMisc, outOfRange},
+		{`[{` + txid + `,"vout":-1}]`, btcjson.ErrRPCInvalidParameter, notPositive},
+		{`[{` + txid + `,"vout":-2147483648}]`, btcjson.ErrRPCInvalidParameter,
+			notPositive},
+		{`[{` + txid + `,"vout":"1"}]`, btcjson.ErrRPCInvalidParameter, notNumber},
+		{`[{` + txid + `,"vout":true}]`, btcjson.ErrRPCInvalidParameter, notNumber},
+		{`[{` + txid + `,"vout":[1]}]`, btcjson.ErrRPCInvalidParameter, notNumber},
+		{`[{` + txid + `,"vout":1},{` + txid + `,"vout":2147483648}]`,
+			btcjson.ErrRPCMisc, outOfRange},
+		{`[{"txid":"abc","vout":1},{` + txid + `,"vout":-1}]`,
+			btcjson.ErrRPCInvalidParameter,
+			"txid must be of length 64 (not 3, for 'abc')"},
+	}
+	for _, test := range tests {
+		_, err := runCreateRawTxParams(t, "["+test.inputs+","+output+"]")
+		rpcErr, ok := err.(*btcjson.RPCError)
+		if !ok || rpcErr.Code != test.wantCode || rpcErr.Message != test.wantMsg {
+			t.Errorf("%s: got error %v, want %d %q", test.inputs, err,
+				test.wantCode, test.wantMsg)
+		}
+	}
+
+	// The vouts in range are used, -0 as 0 as in BCHN.
+	for _, test := range []struct {
+		vout string
+		want uint32
+	}{{"0", 0}, {"1", 1}, {"2147483647", 2147483647}, {" -0 ", 0}} {
+		inputs := fmt.Sprintf(`[{%s,"vout":%s}]`, txid, test.vout)
+		mtx, err := runCreateRawTxParams(t, "["+inputs+","+output+"]")
+		if err != nil || len(mtx.TxIn) != 1 ||
+			mtx.TxIn[0].PreviousOutPoint.Index != test.want {
+
+			t.Errorf("vout %s: got %v, err %v", test.vout, mtx, err)
+		}
 	}
 }
 

@@ -820,10 +820,11 @@ func parseCreateRawTransaction(params []json.RawMessage) (*createRawTxRequest, *
 	// As in BCHN, each input must give its txid in full and its vout, and
 	// its sequence counts only when it is a number.  Decoded, a missing
 	// vout would be output 0, and a txid short or missing would be padded
-	// with zeros.
+	// with zeros.  The vout is kept as sent so it is checked as BCHN checks
+	// it, input by input.
 	var inputs []struct {
 		Txid     string          `json:"txid"`
-		Vout     *uint32         `json:"vout"`
+		Vout     json.RawMessage `json:"vout"`
 		Sequence json.RawMessage `json:"sequence"`
 	}
 	if err := json.Unmarshal(params[0], &inputs); err != nil {
@@ -836,11 +837,28 @@ func parseCreateRawTransaction(params []json.RawMessage) (*createRawTxRequest, *
 				"(not %d, for '%s')", chainhash.MaxHashStringSize,
 				len(input.Txid), input.Txid)
 		}
-		if input.Vout == nil {
+		switch first := firstJSONByte(input.Vout); {
+		case first == 0 || first == 'n':
 			return nil, rpcInvalidError("Invalid parameter, missing " +
 				"vout key")
+		case strings.IndexByte("-0123456789", first) < 0:
+			return nil, rpcInvalidError("Invalid parameter, vout " +
+				"must be a number")
 		}
-		txIn := btcjson.TransactionInput{Txid: input.Txid, Vout: *input.Vout}
+
+		// BCHN reads the vout as an int32 before it checks the sign, so
+		// a number that is not one, such as 2^31 or 1.5, is refused with
+		// univalue's error, which its RPC server gives code -1.
+		vout, err := strconv.ParseInt(string(input.Vout), 10, 32)
+		if err != nil {
+			return nil, btcjson.NewRPCError(btcjson.ErrRPCMisc,
+				"JSON integer out of range")
+		}
+		if vout < 0 {
+			return nil, rpcInvalidError("Invalid parameter, vout " +
+				"must be positive")
+		}
+		txIn := btcjson.TransactionInput{Txid: input.Txid, Vout: uint32(vout)}
 		if strings.IndexByte("-0123456789",
 			firstJSONByte(input.Sequence)) >= 0 {
 
