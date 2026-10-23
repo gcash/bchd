@@ -636,6 +636,61 @@ func TestHandleDecodeScriptP2SH(t *testing.T) {
 	}
 }
 
+// TestHandleDecodeScriptP2SH32 ensures decodescript gives the pay-to-script-
+// hash32 address of a script under p2sh_32, alongside its p2sh address, as
+// BCHN does, and gives neither for a script that is already pay-to-script-
+// hash.
+func TestHandleDecodeScriptP2SH32(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: params}}
+	tests := []struct {
+		name   string
+		script string
+		wrap   bool
+	}{
+		{"p2pkh", tokenTestP2PKHScript, true},
+		{"empty", "", true},
+		{"nonstandard", "51ac6a", true},
+		{"p2sh", "a914" + strings.Repeat("ab", 20) + "87", false},
+		{"p2sh32", "aa20" + strings.Repeat("ab", 32) + "87", false},
+	}
+
+	for _, test := range tests {
+		cmd := &btcjson.DecodeScriptCmd{HexScript: test.script}
+		result, err := handleDecodeScript(s, cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		marshalled, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		var reply map[string]interface{}
+		if err := json.Unmarshal(marshalled, &reply); err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+
+		if !test.wrap {
+			if p2sh32, ok := reply["p2sh_32"]; ok {
+				t.Errorf("%s: unexpected p2sh_32 %v", test.name, p2sh32)
+			}
+			continue
+		}
+		hash := chainhash.DoubleHashB(mustDecodeHex(t, test.script))
+		addr, err := bchutil.NewAddressScriptHash32FromHash(hash, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := reply["p2sh_32"]; got != addr.EncodeAddress() {
+			t.Errorf("%s: p2sh_32 %v, want %s", test.name, got,
+				addr.EncodeAddress())
+		}
+		if _, ok := reply["p2sh"]; !ok {
+			t.Errorf("%s: no p2sh", test.name)
+		}
+	}
+}
+
 // publicKeyTestScripts returns a pay-to-pubkey script for the first of two
 // public keys, a 1-of-2 bare multisig script for both, and what each key is
 // shown as on the network: the cashaddr of its public key hash.

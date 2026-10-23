@@ -1090,10 +1090,16 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		addresses[i] = encodeScriptAddress(addr)
 	}
 
-	// Convert the script itself to a pay-to-script-hash address.
+	// Convert the script itself to a pay-to-script-hash address, and to a
+	// pay-to-script-hash32 address as BCHN also gives.
 	p2sh, err := bchutil.NewAddressScriptHash(script, s.cfg.ChainParams)
 	if err != nil {
 		context := "Failed to convert script to pay-to-script-hash"
+		return nil, internalRPCError(err.Error(), context)
+	}
+	p2sh32, err := bchutil.NewAddressScriptHash32(script, s.cfg.ChainParams)
+	if err != nil {
+		context := "Failed to convert script to pay-to-script-hash32"
 		return nil, internalRPCError(err.Error(), context)
 	}
 
@@ -1108,6 +1114,7 @@ func handleDecodeScript(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		scriptClass != txscript.ScriptHash32Ty {
 
 		reply.P2sh = p2sh.EncodeAddress()
+		reply.P2sh32 = p2sh32.EncodeAddress()
 	}
 	return reply, nil
 }

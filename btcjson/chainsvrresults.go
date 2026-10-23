@@ -95,6 +95,7 @@ type DecodeScriptResult struct {
 	Type      string   `json:"type"`
 	Addresses []string `json:"addresses,omitempty"`
 	P2sh      string   `json:"p2sh,omitempty"`
+	P2sh32    string   `json:"p2sh_32,omitempty"`
 }
 
 // GetAddedNodeInfoResultAddr models the data of the addresses portion of the
