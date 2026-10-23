@@ -4403,6 +4403,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
 			SlpIndex:    s.slpIndex,
+
+			MaxSubscriptions: cfg.GrpcMaxSubscriptions,
+			MaxFilterEntries: cfg.GrpcMaxFilterEntries,
 		}, &s)
 		if err != nil {
 			return nil, err

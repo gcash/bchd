@@ -3,6 +3,7 @@ package bchrpc
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,6 +18,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// maxFilterSize is the limit the tests give their filters, the default of
+// --grpcmaxfilterentries.
+const maxFilterSize = 100000
 
 // spendOfWatchedAddress returns a transaction spending prevOut, the pkScript
 // that funded it, and the watched address.  Nothing in the transaction pays
@@ -62,14 +67,14 @@ func TestFilterMatchesSpendOfUnseenOutput(t *testing.T) {
 	tx, pkScript, addr := spendOfWatchedAddress(t, params, prevOut)
 
 	// Without a resolver the spend cannot be matched.
-	f := newTxFilter()
+	f := newTxFilter(maxFilterSize)
 	f.AddAddress(addr)
 	if f.MatchAndUpdate(tx, params, nil) {
 		t.Fatal("filter matched a spend it had no way to resolve")
 	}
 
 	// With one it matches.
-	f = newTxFilter()
+	f = newTxFilter(maxFilterSize)
 	f.AddAddress(addr)
 	resolve := func(op wire.OutPoint) []byte {
 		if op == prevOut {
@@ -96,7 +101,7 @@ func TestFilterSkipsPrevOutLookupWithoutAddresses(t *testing.T) {
 		return pkScript
 	}
 
-	f := newTxFilter()
+	f := newTxFilter(maxFilterSize)
 	f.AddDataElement([]byte{0x01})
 	if f.MatchAndUpdate(tx, params, resolve) {
 		t.Fatal("filter matched on an unrelated data element")
@@ -145,7 +150,7 @@ func TestFilterMatchesAddressFormats(t *testing.T) {
 		tx.AddTxOut(&wire.TxOut{Value: 1000, PkScript: test.pkScript})
 
 		rpcFilter := &pb.TransactionFilter{Addresses: []string{test.address}}
-		f := newTxFilter()
+		f := newTxFilter(maxFilterSize)
 		if err := f.AddRPCFilter(rpcFilter, params); err != nil {
 			t.Fatalf("%s: AddRPCFilter: %v", test.name, err)
 		}
@@ -154,7 +159,7 @@ func TestFilterMatchesAddressFormats(t *testing.T) {
 				test.name, test.address)
 		}
 
-		f = newTxFilter()
+		f = newTxFilter(maxFilterSize)
 		if err := f.AddRPCFilter(rpcFilter, params); err != nil {
 			t.Fatalf("%s: AddRPCFilter: %v", test.name, err)
 		}
@@ -203,8 +208,8 @@ func TestRPCFilterErrors(t *testing.T) {
 			name  string
 			apply func(*pb.TransactionFilter, *chaincfg.Params) error
 		}{
-			{"add", newTxFilter().AddRPCFilter},
-			{"remove", newTxFilter().RemoveRPCFilter},
+			{"add", newTxFilter(maxFilterSize).AddRPCFilter},
+			{"remove", newTxFilter(maxFilterSize).RemoveRPCFilter},
 		} {
 			err := op.apply(test.filter, params)
 			if status.Code(err) != codes.InvalidArgument {
@@ -238,7 +243,7 @@ func TestFilterFallbackAddressLogLevel(t *testing.T) {
 	defer UseLogger(saved)
 
 	rpcFilter := &pb.TransactionFilter{Addresses: []string{addr.EncodeAddress()}}
-	f := newTxFilter()
+	f := newTxFilter(maxFilterSize)
 	if err := f.AddRPCFilter(rpcFilter, params); err != nil {
 		t.Fatalf("AddRPCFilter: %v", err)
 	}
@@ -251,5 +256,177 @@ func TestFilterFallbackAddressLogLevel(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("logged at the info level: %q", buf.String())
+	}
+}
+
+// filterOutpoints returns a filter of n outpoints, all different from the
+// ones other calls with a different seed return.
+func filterOutpoints(seed byte, n int) *pb.TransactionFilter {
+	ops := make([]*pb.Transaction_Input_Outpoint, n)
+	for i := range ops {
+		hash := make([]byte, chainhash.HashSize)
+		hash[0] = seed
+		hash[1], hash[2], hash[3] = byte(i), byte(i>>8), byte(i>>16)
+		ops[i] = &pb.Transaction_Input_Outpoint{Hash: hash}
+	}
+	return &pb.TransactionFilter{Outpoints: ops}
+}
+
+// TestFilterSize ensures a filter's size counts each outpoint, address and
+// token ID once, and a data element once for each 20 bytes it holds, rounded
+// up and at least once, and that removing an entry takes it off.
+func TestFilterSize(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	key, err := bchec.NewPrivateKey(bchec.S256())
+	if err != nil {
+		t.Fatalf("NewPrivateKey: %v", err)
+	}
+	compressed, err := bchutil.NewAddressPubKey(
+		key.PubKey().SerializeCompressed(), params)
+	if err != nil {
+		t.Fatalf("NewAddressPubKey: %v", err)
+	}
+	uncompressed, err := bchutil.NewAddressPubKey(
+		key.PubKey().SerializeUncompressed(), params)
+	if err != nil {
+		t.Fatalf("NewAddressPubKey: %v", err)
+	}
+	hash := bytes.Repeat([]byte{0xab}, 32)
+	pkh, err := bchutil.NewAddressPubKeyHash(hash[:20], params)
+	if err != nil {
+		t.Fatalf("NewAddressPubKeyHash: %v", err)
+	}
+	sh, err := bchutil.NewAddressScriptHashFromHash(hash[:20], params)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHashFromHash: %v", err)
+	}
+	sh32, err := bchutil.NewAddressScriptHash32FromHash(hash, params)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash32FromHash: %v", err)
+	}
+
+	f := newTxFilter(maxFilterSize)
+	want := 0
+	check := func(what string) {
+		t.Helper()
+		if got := f.size(); got != want {
+			t.Fatalf("after %s: size %d, want %d", what, got, want)
+		}
+	}
+	f.AddOutpoint(wire.OutPoint{Index: 1})
+	want++
+	check("an outpoint")
+	for _, addr := range []bchutil.Address{compressed, uncompressed, pkh, sh, sh32} {
+		f.AddAddress(addr)
+		want++
+		check(addr.String())
+	}
+	f.AddSlpTokenID(hash)
+	want++
+	check("a token ID")
+	for _, test := range []struct {
+		size, units int
+	}{{0, 1}, {1, 1}, {20, 1}, {21, 2}, {40, 2}, {41, 3},
+		{txscript.MaxScriptElementSize, 500}} {
+
+		element := bytes.Repeat([]byte{0xcd}, test.size)
+		f.AddDataElement(element)
+		want += test.units
+		check(fmt.Sprintf("a data element of %d bytes", test.size))
+		f.AddDataElement(element)
+		check(fmt.Sprintf("the data element of %d bytes again", test.size))
+	}
+	f.AddDataElement(make([]byte, txscript.MaxScriptElementSize+1))
+	check("a data element too long to match")
+
+	f.RemoveDataElement(bytes.Repeat([]byte{0xcd}, 41))
+	want -= 3
+	check("removing a data element")
+	f.RemoveDataElement(bytes.Repeat([]byte{0xcd}, 41))
+	check("removing the data element again")
+	f.RemoveAddress(sh32)
+	want--
+	check("removing an address")
+	f.RemoveOutpoint(wire.OutPoint{Index: 1})
+	want--
+	check("removing an outpoint")
+}
+
+// TestFilterSizeLimit ensures a filter holds at most maxFilterSize, whatever
+// the entries a request adds, and that removing entries makes room again.  A
+// SubscribeTransactionStream call can add to its filter without end, and a
+// request of small entries holds several times its size in the filter.
+func TestFilterSizeLimit(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	full := func(room int) *txFilter {
+		t.Helper()
+		f := newTxFilter(maxFilterSize)
+		for i := 0; i < 4; i++ {
+			n := maxFilterSize / 4
+			if i == 3 {
+				n = maxFilterSize - 3*(maxFilterSize/4) - room
+			}
+			if err := f.AddRPCFilter(filterOutpoints(byte(i), n), params); err != nil {
+				t.Fatalf("filling the filter: %v", err)
+			}
+		}
+		return f
+	}
+	key, err := bchec.NewPrivateKey(bchec.S256())
+	if err != nil {
+		t.Fatalf("NewPrivateKey: %v", err)
+	}
+	pubKey := hex.EncodeToString(key.PubKey().SerializeCompressed())
+	tests := []struct {
+		name   string
+		room   int
+		filter *pb.TransactionFilter
+		refuse bool
+	}{
+		{"outpoint", 0, filterOutpoints(9, 1), true},
+		{"outpoint with room", 1, filterOutpoints(9, 1), false},
+		{"address", 0, &pb.TransactionFilter{Addresses: []string{
+			"bitcoincash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0rq9sywjpyy"}}, true},
+		{"pubkey", 0, &pb.TransactionFilter{Addresses: []string{pubKey}}, true},
+		{"token ID", 0, &pb.TransactionFilter{SlpTokenIds: [][]byte{
+			bytes.Repeat([]byte{1}, 32)}}, true},
+		{"empty data element", 0, &pb.TransactionFilter{
+			DataElements: [][]byte{{}}}, true},
+		{"data element", 0, &pb.TransactionFilter{
+			DataElements: [][]byte{{1}}}, true},
+		{"500 byte data element", 25, &pb.TransactionFilter{
+			DataElements: [][]byte{make([]byte, 500)}}, false},
+		{"501 byte data element", 25, &pb.TransactionFilter{
+			DataElements: [][]byte{make([]byte, 501)}}, true},
+		{"data element too long to match", 0, &pb.TransactionFilter{
+			DataElements: [][]byte{make([]byte, txscript.MaxScriptElementSize+1)}},
+			false},
+	}
+	for _, test := range tests {
+		f := full(test.room)
+		err := f.AddRPCFilter(test.filter, params)
+		if !test.refuse {
+			if err != nil {
+				t.Errorf("%s: refused: %v", test.name, err)
+			}
+			continue
+		}
+		if status.Code(err) != codes.ResourceExhausted {
+			t.Errorf("%s: got %v, want ResourceExhausted", test.name, err)
+			continue
+		}
+		want := fmt.Sprintf("filter holds more than %d entries", maxFilterSize)
+		if got := status.Convert(err).Message(); got != want {
+			t.Errorf("%s: got message %q, want %q", test.name, got, want)
+		}
+	}
+
+	// Removing entries makes room.
+	f := full(0)
+	if err := f.RemoveRPCFilter(filterOutpoints(0, 1), params); err != nil {
+		t.Fatalf("RemoveRPCFilter: %v", err)
+	}
+	if err := f.AddRPCFilter(filterOutpoints(9, 1), params); err != nil {
+		t.Errorf("refused after an entry was removed: %v", err)
 	}
 }

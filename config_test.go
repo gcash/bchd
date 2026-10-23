@@ -330,3 +330,68 @@ func TestDeprecatedOptions(t *testing.T) {
 		t.Errorf("unexpected warning: %q", logged.String())
 	}
 }
+
+// TestGrpcMaxFilterEntries ensures --grpcmaxfilterentries defaults to 100000,
+// takes 0 and larger values, and refuses a negative one.
+func TestGrpcMaxFilterEntries(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	for _, test := range []struct {
+		args    []string
+		want    int
+		wantErr bool
+	}{
+		{args: nil, want: 100000},
+		{args: []string{"--grpcmaxfilterentries=500000"}, want: 500000},
+		{args: []string{"--grpcmaxfilterentries=0"}, want: 0},
+		{args: []string{"--grpcmaxfilterentries=-1"}, wantErr: true},
+	} {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.wantErr {
+			if err == nil {
+				t.Errorf("%v: expected an error", test.args)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.GrpcMaxFilterEntries != test.want {
+			t.Errorf("%v: got %d, want %d", test.args,
+				cfg.GrpcMaxFilterEntries, test.want)
+		}
+	}
+}
+
+// TestGrpcMaxSubscriptions ensures --grpcmaxsubscriptions defaults to 100 and
+// can be set.
+func TestGrpcMaxSubscriptions(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	for _, test := range []struct {
+		args []string
+		want int
+	}{
+		{nil, 100},
+		{[]string{"--grpcmaxsubscriptions=5"}, 5},
+	} {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.GrpcMaxSubscriptions != test.want {
+			t.Errorf("%v: got %d, want %d", test.args,
+				cfg.GrpcMaxSubscriptions, test.want)
+		}
+	}
+}

@@ -16,6 +16,13 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// dataElementUnits returns how much a data element counts toward a filter's
+// size: once for each 20 bytes, rounded up, and at least once, since a data
+// element can be 500 times as long as an address hash.
+func dataElementUnits(dataElement []byte) int {
+	return max(1, (len(dataElement)+19)/20)
+}
+
 // txFilter is used to filter transactions based on a clients interest.
 // It supports filtering for TX outpoints and all kinds of addresses.
 type txFilter struct {
@@ -27,14 +34,22 @@ type txFilter struct {
 	dataElements        map[string]struct{}
 	fallbacks           map[string]struct{}
 
+	// dataElementSize is the sum of dataElementUnits over the data
+	// elements.
+	dataElementSize int
+
+	// maxSize is the most the filter may hold, as size counts it.
+	maxSize int
+
 	matchAll bool
 
 	matchAllSlp bool
 	slpTokenIds map[[32]byte]struct{}
 }
 
-// newTxFilter creates a new txFilter.
-func newTxFilter() *txFilter {
+// newTxFilter creates a new txFilter that holds at most maxSize, as size
+// counts it.
+func newTxFilter(maxSize int) *txFilter {
 	return &txFilter{
 		outpoints:           map[wire.OutPoint]struct{}{},
 		pubKeyHashes:        map[[ripemd160.Size]byte]struct{}{},
@@ -44,6 +59,7 @@ func newTxFilter() *txFilter {
 		dataElements:        map[string]struct{}{},
 		fallbacks:           map[string]struct{}{},
 		slpTokenIds:         map[[32]byte]struct{}{},
+		maxSize:             maxSize,
 	}
 }
 
@@ -62,12 +78,29 @@ func (f *txFilter) AddDataElement(dataElement []byte) {
 	if len(dataElement) > txscript.MaxScriptElementSize {
 		return
 	}
-	f.dataElements[hex.EncodeToString(dataElement)] = struct{}{}
+	key := hex.EncodeToString(dataElement)
+	if _, ok := f.dataElements[key]; !ok {
+		f.dataElements[key] = struct{}{}
+		f.dataElementSize += dataElementUnits(dataElement)
+	}
 }
 
 // RemoveDataElement removes a data element from the filter.
 func (f *txFilter) RemoveDataElement(dataElement []byte) {
-	delete(f.dataElements, hex.EncodeToString(dataElement))
+	key := hex.EncodeToString(dataElement)
+	if _, ok := f.dataElements[key]; ok {
+		delete(f.dataElements, key)
+		f.dataElementSize -= dataElementUnits(dataElement)
+	}
+}
+
+// size returns how much the filter holds: each outpoint, address and token ID
+// counts once, and each data element as dataElementUnits says.  The outpoints
+// include the outputs MatchAndUpdate added.
+func (f *txFilter) size() int {
+	return len(f.outpoints) + len(f.pubKeyHashes) + len(f.scriptHashes) +
+		len(f.compressedPubKeys) + len(f.uncompressedPubKeys) +
+		len(f.fallbacks) + len(f.slpTokenIds) + f.dataElementSize
 }
 
 func (f *txFilter) AddSlpTokenID(tokenID []byte) {
@@ -250,8 +283,16 @@ func invalidAddressErr(i int, err error) error {
 		i, err)
 }
 
+// filterFullErr is the error for a filter that would hold more than its
+// maxSize.
+func (f *txFilter) filterFullErr() error {
+	return status.Errorf(codes.ResourceExhausted,
+		"filter holds more than %d entries", f.maxSize)
+}
+
 // AddRPCFilter adds all filter properties from the pb.TransactionFilter
-// to the filter.
+// to the filter.  It fails once the filter holds more than its maxSize,
+// with some of the entries added, so the caller must then drop the filter.
 func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincfg.Params) error {
 	if rpcFilter == nil {
 		return nil
@@ -263,6 +304,9 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 			return invalidOutpointErr(err)
 		}
 		f.AddOutpoint(wire.OutPoint{Hash: *hash, Index: op.GetIndex()})
+		if f.size() > f.maxSize {
+			return f.filterFullErr()
+		}
 	}
 
 	// Interpret and add addresses.
@@ -272,11 +316,17 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 			return invalidAddressErr(i, err)
 		}
 		f.AddAddress(addr)
+		if f.size() > f.maxSize {
+			return f.filterFullErr()
+		}
 	}
 
 	// Add data elements
 	for _, dataElement := range rpcFilter.GetDataElements() {
 		f.AddDataElement(dataElement)
+		if f.size() > f.maxSize {
+			return f.filterFullErr()
+		}
 	}
 
 	f.matchAll = rpcFilter.AllTransactions
@@ -287,6 +337,9 @@ func (f *txFilter) AddRPCFilter(rpcFilter *pb.TransactionFilter, params *chaincf
 		if !f.matchAllSlp {
 			for _, tokenID := range rpcFilter.GetSlpTokenIds() {
 				f.AddSlpTokenID(tokenID)
+				if f.size() > f.maxSize {
+					return f.filterFullErr()
+				}
 			}
 		}
 	}

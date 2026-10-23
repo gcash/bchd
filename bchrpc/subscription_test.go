@@ -9,6 +9,7 @@ import (
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchd/mempool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,10 +20,12 @@ import (
 func newDispatcherTestServer(t *testing.T) *GrpcServer {
 	t.Helper()
 	s := &GrpcServer{
-		subscribe:   make(chan *rpcEventSubscription),
-		unsubscribe: make(chan *rpcEventSubscription),
-		events:      make(chan interface{}),
-		quit:        make(chan struct{}),
+		subscribe:        make(chan *rpcEventSubscription),
+		unsubscribe:      make(chan *rpcEventSubscription),
+		events:           make(chan interface{}),
+		quit:             make(chan struct{}),
+		maxSubscriptions: 10,
+		maxFilterEntries: maxFilterSize,
 	}
 	s.wg.Add(1)
 	go s.runEventDispatcher()
@@ -183,5 +186,215 @@ func TestSubscribeTransactionStreamReaderStops(t *testing.T) {
 			t.Fatal("the request reader still runs after the call ended")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// blockStream is a SubscribeBlocks stream that takes every notification.
+type blockStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *blockStream) Context() context.Context { return s.ctx }
+
+func (s *blockStream) Send(*pb.BlockNotification) error { return nil }
+
+// waitSubscriptions waits until the dispatcher holds n subscriptions.
+func waitSubscriptions(t *testing.T, s *GrpcServer, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for s.numSubscriptions() != n {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d subscriptions in the dispatcher, want %d",
+				s.numSubscriptions(), n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestClientSubscriptionLimit ensures clients hold at most maxSubscriptions
+// subscriptions at once, whatever the calls, that a call over the limit is
+// refused at once with ResourceExhausted, and that a subscription that ends
+// frees its place.  The server's own subscriptions do not count.
+func TestClientSubscriptionLimit(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.txMemPool = mempool.New(&mempool.Config{})
+	s.maxSubscriptions = 2
+
+	own := s.subscribeEvents(0)
+	defer own.Unsubscribe()
+
+	type call struct {
+		cancel context.CancelFunc
+		done   chan error
+	}
+	subscribe := func() call {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		c := call{cancel: cancel, done: make(chan error, 1)}
+		go func() {
+			c.done <- s.SubscribeBlocks(&pb.SubscribeBlocksRequest{},
+				&blockStream{ctx: ctx})
+		}()
+		return c
+	}
+	first, second := subscribe(), subscribe()
+	defer first.cancel()
+	defer second.cancel()
+	waitSubscriptions(t, s, 3)
+
+	calls := []struct {
+		name string
+		call func(context.Context) error
+	}{
+		{"SubscribeTransactions", func(ctx context.Context) error {
+			return s.SubscribeTransactions(&pb.SubscribeTransactionsRequest{},
+				&txStream{ctx: ctx})
+		}},
+		{"SubscribeTransactionStream", func(ctx context.Context) error {
+			return s.SubscribeTransactionStream(&txStream{ctx: ctx})
+		}},
+		{"SubscribeBlocks", func(ctx context.Context) error {
+			return s.SubscribeBlocks(&pb.SubscribeBlocksRequest{},
+				&blockStream{ctx: ctx})
+		}},
+		{"SubscribeDoubleSpendProofs", func(ctx context.Context) error {
+			return s.SubscribeDoubleSpendProofs(
+				&pb.SubscribeDoubleSpendProofsRequest{},
+				&dsProofStream{ctx: ctx})
+		}},
+	}
+	for _, c := range calls {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		err := c.call(ctx)
+		cancel()
+		if status.Code(err) != codes.ResourceExhausted {
+			t.Errorf("%s over the limit: got %v, want ResourceExhausted",
+				c.name, err)
+		}
+	}
+
+	// The refused calls took no place, and one that ends frees its own.
+	first.cancel()
+	if err := <-first.done; err != nil {
+		t.Fatalf("the first subscription ended with %v", err)
+	}
+	third := subscribe()
+	defer third.cancel()
+	waitSubscriptions(t, s, 3)
+	select {
+	case err := <-third.done:
+		t.Fatalf("a subscription after one ended was refused: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestSubscribeTransactionStreamFilterLimit ensures a SubscribeTransactionStream
+// call ends with ResourceExhausted once its requests together add more than
+// maxFilterSize to its filter, as each request may add up to gRPC's message
+// limit and the call can send any number of them.
+func TestSubscribeTransactionStreamFilterLimit(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &txStream{ctx: ctx, reqs: []*pb.SubscribeTransactionsRequest{
+		{Subscribe: filterOutpoints(1, maxFilterSize/2)},
+		{Subscribe: filterOutpoints(2, maxFilterSize/2)},
+		{Subscribe: filterOutpoints(3, 1)},
+	}}
+	done := make(chan error, 1)
+	go func() { done <- s.SubscribeTransactionStream(stream) }()
+	select {
+	case err := <-done:
+		if status.Code(err) != codes.ResourceExhausted {
+			t.Fatalf("got %v, want ResourceExhausted", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the call still runs with more than maxFilterSize in its filter")
+	}
+}
+
+// TestNewGrpcServerMaxSubscriptions ensures the server takes its subscription
+// and filter limits from its config.
+func TestNewGrpcServerMaxSubscriptions(t *testing.T) {
+	saved := serviceMap["pb.bchrpc"]
+	defer func() { serviceMap["pb.bchrpc"] = saved }()
+	s := NewGrpcServer(&GrpcServerConfig{Server: grpc.NewServer(),
+		MaxSubscriptions: 7, MaxFilterEntries: 11})
+	if s.maxSubscriptions != 7 {
+		t.Errorf("limit %d, want 7", s.maxSubscriptions)
+	}
+	if s.maxFilterEntries != 11 {
+		t.Errorf("filter limit %d, want 11", s.maxFilterEntries)
+	}
+}
+
+// TestSubscribeTransactionsConfiguredFilterLimit ensures a SubscribeTransactions
+// request whose filter is over the server's configured limit is refused with
+// ResourceExhausted, naming the limit.
+func TestSubscribeTransactionsConfiguredFilterLimit(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.maxFilterEntries = 3
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- s.SubscribeTransactions(&pb.SubscribeTransactionsRequest{
+			Subscribe: filterOutpoints(1, 4)}, &txStream{ctx: ctx})
+	}()
+	select {
+	case err := <-done:
+		if status.Code(err) != codes.ResourceExhausted ||
+			!strings.Contains(err.Error(), "more than 3 entries") {
+
+			t.Fatalf("got %v, want ResourceExhausted at 3 entries", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("a filter over the limit was not refused")
+	}
+}
+
+// TestSubscribeTransactionStreamConfiguredFilterLimit ensures a
+// SubscribeTransactionStream call holds its filter to the server's configured
+// limit: requests that fill it are kept, and one more entry ends the call with
+// ResourceExhausted, naming the limit.
+func TestSubscribeTransactionStreamConfiguredFilterLimit(t *testing.T) {
+	for _, over := range []bool{false, true} {
+		s := newDispatcherTestServer(t)
+		s.chainParams = &chaincfg.RegressionNetParams
+		s.maxFilterEntries = 3
+		ctx, cancel := context.WithCancel(context.Background())
+		reqs := []*pb.SubscribeTransactionsRequest{
+			{Subscribe: filterOutpoints(1, 2)},
+			{Subscribe: filterOutpoints(2, 1)},
+		}
+		if over {
+			reqs = append(reqs, &pb.SubscribeTransactionsRequest{
+				Subscribe: filterOutpoints(3, 1)})
+		}
+		stream := &txStream{ctx: ctx, reqs: reqs}
+		done := make(chan error, 1)
+		go func() { done <- s.SubscribeTransactionStream(stream) }()
+		select {
+		case err := <-done:
+			if !over {
+				t.Fatalf("a filter at the limit ended the call: %v", err)
+			}
+			if status.Code(err) != codes.ResourceExhausted ||
+				!strings.Contains(err.Error(), "more than 3 entries") {
+
+				t.Fatalf("got %v, want ResourceExhausted at 3 "+
+					"entries", err)
+			}
+		case <-time.After(time.Second):
+			if over {
+				t.Fatal("the call still runs with more than 3 " +
+					"entries in its filter")
+			}
+		}
+		cancel()
 	}
 }

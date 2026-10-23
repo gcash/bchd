@@ -175,8 +175,11 @@ func (s *GrpcServer) SubscribeDoubleSpendProofs(req *pb.SubscribeDoubleSpendProo
 	if !s.txMemPool.DSProofsEnabled() {
 		return errDSProofsDisabled
 	}
-	subscription := s.subscribeEvents(maxSubscriptionQueue)
-	defer subscription.Unsubscribe()
+	subscription, err := s.subscribeClient()
+	if err != nil {
+		return err
+	}
+	defer s.unsubscribeClient(subscription)
 
 	if req.IncludeMempool {
 		for _, desc := range s.txMemPool.DSProofs(false) {

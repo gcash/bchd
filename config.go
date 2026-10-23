@@ -54,6 +54,8 @@ const (
 	defaultMaxRPCClients           = 10
 	defaultMaxRPCWebsockets        = 25
 	defaultMaxRPCConcurrentReqs    = 20
+	defaultGrpcMaxSubscriptions    = 100
+	defaultGrpcMaxFilterEntries    = 100000
 	defaultDbType                  = "ffldb"
 	defaultMaxTxFee                = bchutil.Amount(bchutil.SatoshiPerBitcoin / 10)
 	highMaxTxFee                   = bchutil.Amount(bchutil.SatoshiPerBitcoin)
@@ -199,6 +201,8 @@ type config struct {
 	FastSync                bool          `long:"fastsync" description:"Download the UTXO set of the last checkpoint that has one and sync full blocks from there to the tip rather than from genesis."`
 	GrpcListeners           []string      `long:"grpclisten" description:"Add an interface/port to listen for experimental gRPC connections (default port: 8335, testnet: 18335)"`
 	GrpcAuthToken           string        `long:"grpcauthtoken" description:"An authentication token for the gRPC API to authenticate clients"`
+	GrpcMaxSubscriptions    int           `long:"grpcmaxsubscriptions" description:"Max number of gRPC subscriptions clients may hold at once"`
+	GrpcMaxFilterEntries    int           `long:"grpcmaxfilterentries" description:"Max number of entries a gRPC subscription's transaction filter may hold; an address, outpoint or token ID counts once, a data element once per 20 bytes"`
 	DBCacheSize             uint64        `long:"dbcachesize" description:"The maximum size in MiB of the database cache"`
 	DBFlushInterval         uint32        `long:"dbflushinterval" description:"The number of seconds between database flushes"`
 	PrometheusListen        string        `long:"prometheus" description:"Specify an (addr):port to serve prometheus metrics (for example :9000 or my-interface:9000, default disabled)"`
@@ -447,6 +451,8 @@ func loadConfig() (*config, []string, error) {
 		RPCMaxClients:           defaultMaxRPCClients,
 		RPCMaxWebsockets:        defaultMaxRPCWebsockets,
 		RPCMaxConcurrentReqs:    defaultMaxRPCConcurrentReqs,
+		GrpcMaxSubscriptions:    defaultGrpcMaxSubscriptions,
+		GrpcMaxFilterEntries:    defaultGrpcMaxFilterEntries,
 		DataDir:                 defaultDataDir,
 		LogDir:                  defaultLogDir,
 		DbType:                  defaultDbType,
@@ -753,6 +759,15 @@ func loadConfig() (*config, []string, error) {
 	if cfg.BanDuration < time.Second {
 		str := "%s: The banduration option may not be less than 1s -- parsed [%v]"
 		err := fmt.Errorf(str, funcName, cfg.BanDuration)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	if cfg.GrpcMaxFilterEntries < 0 {
+		str := "%s: The grpcmaxfilterentries option may not be less " +
+			"than 0 -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, cfg.GrpcMaxFilterEntries)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err

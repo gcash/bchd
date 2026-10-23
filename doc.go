@@ -247,6 +247,12 @@ Application Options:
 	                               8335, testnet: 18335)
 	    --grpcauthtoken=           An authentication token for the gRPC API to
 	                               authenticate clients
+	    --grpcmaxsubscriptions=    Max number of gRPC subscriptions clients may
+	                               hold at once (default: 100)
+	    --grpcmaxfilterentries=    Max number of entries a gRPC subscription's
+	                               transaction filter may hold; an address,
+	                               outpoint or token ID counts once, a data
+	                               element once per 20 bytes (default: 100000)
 	    --dbcachesize=             The maximum size in MiB of the database cache
 	                               (default: 500)
 	    --dbflushinterval=         The number of seconds between database flushes

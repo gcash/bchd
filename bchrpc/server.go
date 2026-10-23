@@ -103,6 +103,18 @@ type GrpcServerConfig struct {
 	AddrIndex *indexers.AddrIndex
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
+
+	// MaxSubscriptions is the most subscriptions clients may hold at once,
+	// over all the subscription calls.
+	MaxSubscriptions int
+
+	// MaxFilterEntries is the most a subscription's transaction filter may
+	// hold: each outpoint, those of the outputs it matched included,
+	// address and token ID counts once, and each data element once for
+	// each 20 bytes.  A SubscribeTransactionStream call can add to its
+	// filter with any number of requests, so without a limit its memory
+	// would have no bound.
+	MaxFilterEntries int
 }
 
 // GrpcServer is the gRPC server implementation. It holds all the objects
@@ -127,6 +139,10 @@ type GrpcServer struct {
 	quit        chan struct{}
 
 	subscriptions atomic.Int32 // number held by the dispatcher
+
+	maxSubscriptions    int
+	clientSubscriptions atomic.Int64 // number held by client calls
+	maxFilterEntries    int
 
 	wg       sync.WaitGroup
 	ready    atomic.Uint32 // atomic
@@ -153,6 +169,9 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		events:      make(chan interface{}),
 		quit:        make(chan struct{}),
 		wg:          sync.WaitGroup{},
+
+		maxSubscriptions: cfg.MaxSubscriptions,
+		maxFilterEntries: cfg.MaxFilterEntries,
 	}
 	reflection.Register(cfg.Server)
 	pb.RegisterBchrpcServer(cfg.Server, s)
@@ -259,6 +278,27 @@ func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
 	case <-s.quit:
 	}
 	return sub
+}
+
+// subscribeClient returns a new subscription for a client's call, or a
+// ResourceExhausted error when clients hold maxSubscriptions already.  Every
+// subscription is handed every event and holds goroutines and a queue, and
+// without an auth token any client may subscribe, so the limit bounds that
+// work.  The subscription must be ended with unsubscribeClient.
+func (s *GrpcServer) subscribeClient() (*rpcEventSubscription, error) {
+	if s.clientSubscriptions.Add(1) > int64(s.maxSubscriptions) {
+		s.clientSubscriptions.Add(-1)
+		return nil, status.Errorf(codes.ResourceExhausted,
+			"too many subscriptions, the limit is %d", s.maxSubscriptions)
+	}
+	return s.subscribeEvents(maxSubscriptionQueue), nil
+}
+
+// unsubscribeClient ends a subscription subscribeClient returned and frees its
+// place.
+func (s *GrpcServer) unsubscribeClient(sub *rpcEventSubscription) {
+	sub.Unsubscribe()
+	s.clientSubscriptions.Add(-1)
 }
 
 // numSubscriptions returns the number of subscriptions the dispatcher holds.
@@ -2356,10 +2396,13 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
-	subscription := s.subscribeEvents(maxSubscriptionQueue)
-	defer subscription.Unsubscribe()
+	subscription, err := s.subscribeClient()
+	if err != nil {
+		return err
+	}
+	defer s.unsubscribeClient(subscription)
 
-	filter := newTxFilter()
+	filter := newTxFilter(s.maxFilterEntries)
 	if err := filter.AddRPCFilter(req.GetSubscribe(), s.chainParams); err != nil {
 		return err
 	}
@@ -2488,6 +2531,12 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
+	subscription, err := s.subscribeClient()
+	if err != nil {
+		return err
+	}
+	defer s.unsubscribeClient(subscription)
+
 	// Put the incoming messages on a channel.  The handler can return with a
 	// request still to be handed over, as on a bad filter, so the reader
 	// stops once the stream's context ends, which it does as the handler
@@ -2511,10 +2560,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 		}
 	}()
 
-	subscription := s.subscribeEvents(maxSubscriptionQueue)
-	defer subscription.Unsubscribe()
-
-	filter := newTxFilter()
+	filter := newTxFilter(s.maxFilterEntries)
 	var includeMempool, includeBlocks, serializeTx bool
 	for {
 		select {
@@ -2648,8 +2694,11 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 // SubscribeBlocks creates a subscription for notifications of new blocks being
 // connected to the blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
-	subscription := s.subscribeEvents(maxSubscriptionQueue)
-	defer subscription.Unsubscribe()
+	subscription, err := s.subscribeClient()
+	if err != nil {
+		return err
+	}
+	defer s.unsubscribeClient(subscription)
 
 	for {
 		select {

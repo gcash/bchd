@@ -42,6 +42,19 @@ ctx := metadata.NewOutgoingContext(context.Background(), md)
 response, err := client.SomeRPC(ctx, someRequest)
 ```
 
+Clients may hold at most 100 subscriptions at once, over all the subscription calls, and a
+call over the limit fails with `ResourceExhausted`. A public server with more subscribers can
+raise it:
+
+```bash
+bchd --grpclisten=0.0.0.0 --grpcmaxsubscriptions=1000
+```
+
+A subscription's transaction filter may hold at most 100,000 entries, an address, outpoint or
+token ID counting once and a data element once for each 20 bytes, and a request that takes a
+filter past that fails with `ResourceExhausted`. A server for wallets that watch more can raise
+it with `--grpcmaxfilterentries`.
+
 Finally you don't need to use indexes to use the gRPC API but it's recommended so
 you have access to all API calls. This obviously means you should not run in either
 `--prune` mode or `--fastsync` mode. To use the indexes run with:
