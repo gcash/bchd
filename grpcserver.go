@@ -191,20 +191,24 @@ func interceptUnary(ctx context.Context, req interface{}, info *grpc.UnaryServer
 
 // logGrpcError logs the error a call failed with.  An error that answers the
 // caller, such as an unknown transaction, a bad argument, an SLP transaction
-// refused with Aborted, an index the node does not run, or the end of a
-// subscription it canceled or of the server, is logged at debug, so that a
-// client polling for something cannot flood the log with errors.
+// refused with Aborted, an index the node does not run, a limit such as on
+// subscriptions or proof searches, the end of a subscription it canceled or of
+// the server, or its deadline passing, is logged at debug, so that a client
+// polling for something cannot flood the log with errors.
 func logGrpcError(kind, method, addr string, err error) {
 	format := "%s method %s invoked by %s errored: %v"
 	switch status.Code(err) {
 	case codes.NotFound, codes.InvalidArgument, codes.OutOfRange,
 		codes.AlreadyExists, codes.FailedPrecondition, codes.Canceled,
-		codes.Aborted, codes.Unavailable:
+		codes.Aborted, codes.Unavailable, codes.ResourceExhausted,
+		codes.DeadlineExceeded:
 
 		grpcLog.Debugf(format, kind, method, addr, err)
 		return
 	}
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+
 		grpcLog.Debugf(format, kind, method, addr, err)
 		return
 	}

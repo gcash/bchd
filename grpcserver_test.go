@@ -196,9 +196,10 @@ func TestGrpcHTTPServerTimeouts(t *testing.T) {
 
 // TestGrpcErrorLogLevel ensures a call that fails with an answer for the
 // caller, such as NotFound for a proof a client polls for, a subscription the
-// client ended, an SLP transaction refused with Aborted or a call needing an
-// index the node does not run, logs at debug rather than as an error, so a
-// client cannot flood the log, while other failures still log errors.
+// client ended, an SLP transaction refused with Aborted, a call needing an
+// index the node does not run, a limit the call reached or its deadline
+// passing, logs at debug rather than as an error, so a client cannot flood
+// the log, while other failures still log errors.
 func TestGrpcErrorLogLevel(t *testing.T) {
 	setGrpcTestConfig(t, "tok", false)
 	var buf bytes.Buffer
@@ -219,6 +220,9 @@ func TestGrpcErrorLogLevel(t *testing.T) {
 		{context.Canceled, "[DBG]"},
 		{status.Error(codes.Aborted, "x"), "[DBG]"},
 		{status.Error(codes.Unavailable, "x"), "[DBG]"},
+		{status.Error(codes.ResourceExhausted, "x"), "[DBG]"},
+		{status.Error(codes.DeadlineExceeded, "x"), "[DBG]"},
+		{context.DeadlineExceeded, "[DBG]"},
 		{status.Error(codes.Internal, "x"), "[ERR]"},
 		{errors.New("x"), "[ERR]"},
 	} {
