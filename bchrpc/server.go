@@ -1281,6 +1281,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		if atomic.LoadInt32(&s.shutdown) > 0 {
 			return nil, status.Error(codes.Canceled, "canceled by server")
 		}
+		// The scan reads the address's whole history, so it stops once
+		// the client is gone or its deadline has passed.
+		if err := ctx.Err(); err != nil {
+			return nil, status.FromContextError(err).Err()
+		}
 		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
 		if err != nil {
 			return nil, err
@@ -1324,6 +1329,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 	if s.chain.BestSnapshot().Height > startHeight {
 		for skip = 0; ; {
+			if err := ctx.Err(); err != nil {
+				return nil, status.FromContextError(err).Err()
+			}
 			newTxs, err := s.fetchTransactionsByAddress(addr, startHeight+1,
 				fetch, skip)
 			if err != nil {

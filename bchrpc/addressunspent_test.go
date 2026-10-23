@@ -24,6 +24,8 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -683,5 +685,64 @@ func TestGetAddressTransactionsFeePerKb(t *testing.T) {
 	want := int64(fee * 1000 / tx.SerializeSize())
 	if got := resp.UnconfirmedTransactions[0].FeePerKb; got != want {
 		t.Fatalf("fee_per_kb %d, want %d", got, want)
+	}
+}
+
+// TestGetAddressUnspentOutputsCallEnds ensures GetAddressUnspentOutputs stops
+// reading the address's history once its call's context ends, as it does when
+// the client goes away or its deadline passes: before the scan, or, with a
+// block connected meanwhile, before it reads that block's history.  It
+// answers with the context's status.
+func TestGetAddressUnspentOutputsCallEnds(t *testing.T) {
+	tests := []struct {
+		name      string
+		afterScan bool
+		deadline  bool
+		want      codes.Code
+	}{
+		{"canceled before the scan", false, false, codes.Canceled},
+		{"deadline passed", false, true, codes.DeadlineExceeded},
+		{"canceled after the scan", true, false, codes.Canceled},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := newAddrUnspentHarness(t)
+			addrScript := p2shScript(t, addrRedeem)
+			pay := []*wire.TxOut{wire.NewTxOut(50e8, addrScript,
+				wire.TokenData{})}
+			h.mineBlock(pay, nil)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if test.deadline {
+				var stop context.CancelFunc
+				ctx, stop = context.WithDeadline(ctx,
+					time.Now().Add(-time.Second))
+				defer stop()
+			}
+			hook := &addressUnspentListHook
+			if test.afterScan {
+				hook = &addressUnspentScanHook
+			}
+			*hook = func() {
+				*hook = nil
+				if test.afterScan {
+					h.mineBlock(pay, nil)
+				}
+				cancel()
+			}
+			t.Cleanup(func() { *hook = nil })
+
+			addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = h.s.GetAddressUnspentOutputs(ctx,
+				&pb.GetAddressUnspentOutputsRequest{
+					Address: addr.EncodeAddress()})
+			if status.Code(err) != test.want {
+				t.Fatalf("got %v, want %v", err, test.want)
+			}
+		})
 	}
 }
