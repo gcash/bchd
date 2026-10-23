@@ -193,7 +193,19 @@ type rpcEventTxAccepted struct {
 // chain.
 type rpcEventBlockConnected struct {
 	*bchutil.Block
-	spent spentScripts
+	spent   spentScripts
+	journal spendJournal
+}
+
+// spendJournal holds the outputs that a connected block's transactions spend,
+// in the order of their inputs, and the index of the first that each
+// transaction spends.  They are read from the block's spend journal when the
+// first subscription needs them and shared by all.
+type spendJournal struct {
+	once   sync.Once
+	stxos  []blockchain.SpentTxOut
+	starts []int
+	err    error
 }
 
 // spentScripts holds the scripts of the outputs that the transactions of an
@@ -988,12 +1000,14 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	tip := s.chain.BestSnapshot().Height
 	for _, cTx := range confirmedTxs {
 		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s)
-		if s.txIndex != nil {
-			if err := s.setInputMetadata(tx); err != nil {
-				return nil, err
-			}
-		}
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
+	}
+	// The inputs of all the transactions are done at once, so a transaction
+	// that many of them spend from is read once.
+	if s.txIndex != nil {
+		if err := s.setInputMetadata(resp.ConfirmedTransactions...); err != nil {
+			return nil, err
+		}
 	}
 
 	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
@@ -2531,7 +2545,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				block := event
 				spent := s.blockSpentScripts(block)
 
-				for _, tx := range block.Transactions() {
+				for idx, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams, spent) {
 						continue
 					}
@@ -2557,7 +2571,7 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 
 						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s)
 						if s.txIndex != nil {
-							if err := s.setInputMetadata(respTx); err != nil {
+							if err := s.setBlockInputMetadata(respTx, block, idx); err != nil {
 								return err
 							}
 						}
@@ -2701,7 +2715,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				block := event
 				spent := s.blockSpentScripts(block)
 
-				for _, tx := range block.Transactions() {
+				for idx, tx := range block.Transactions() {
 					if !filter.MatchAndUpdate(tx, s.chainParams, spent) {
 						continue
 					}
@@ -2727,7 +2741,7 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 
 						respTx := marshalTransaction(tx, s.chain.BestSnapshot().Height-block.Height()+1, &header, block.Height(), s)
 						if s.txIndex != nil {
-							if err := s.setInputMetadata(respTx); err != nil {
+							if err := s.setBlockInputMetadata(respTx, block, idx); err != nil {
 								return err
 							}
 						}
@@ -3014,7 +3028,7 @@ func (s *GrpcServer) txSpentScripts(event *rpcEventTxAccepted) prevOutScriptFunc
 // disconnected since, looked up one at a time.
 func (s *GrpcServer) blockSpentScripts(event *rpcEventBlockConnected) prevOutScriptFunc {
 	return event.spent.lookup(func() map[wire.OutPoint][]byte {
-		stxos, err := s.chain.FetchSpendJournal(event.Block)
+		stxos, _, err := s.blockSpendJournal(event)
 		scripts := make(map[wire.OutPoint][]byte, len(stxos))
 		i := 0
 		for _, tx := range event.Transactions()[1:] {
@@ -3032,6 +3046,28 @@ func (s *GrpcServer) blockSpentScripts(event *rpcEventBlockConnected) prevOutScr
 		}
 		return scripts
 	})
+}
+
+// blockSpendJournal returns the outputs that the transactions of a connected
+// block spend, in the order of their inputs, and the index of the first that
+// each transaction spends.  The block's spend journal is read the first time
+// any subscription asks for the event.
+func (s *GrpcServer) blockSpendJournal(event *rpcEventBlockConnected) ([]blockchain.SpentTxOut, []int, error) {
+	j := &event.journal
+	j.once.Do(func() {
+		j.stxos, j.err = s.chain.FetchSpendJournal(event.Block)
+		if j.err != nil {
+			return
+		}
+		txs := event.Transactions()
+		j.starts = make([]int, len(txs))
+		n := 0
+		for i := 1; i < len(txs); i++ {
+			j.starts[i] = n
+			n += len(txs[i].MsgTx().TxIn)
+		}
+	})
+	return j.stxos, j.starts, j.err
 }
 
 // fetchPrevOutScript returns the pkScript for the output referenced by op. It
@@ -3088,75 +3124,110 @@ func (s *GrpcServer) fetchPrevOutScript(op wire.OutPoint) []byte {
 	return loadedTx.TxOut[op.Index].PkScript
 }
 
-// setInputMetadata sets the value, previous script, and address for each
-// transaction input by loading the previous transaction from the transaction
-// index.
-func (s *GrpcServer) setInputMetadata(tx *pb.Transaction) error {
-	inputTxMap := make(map[chainhash.Hash]*wire.MsgTx)
-	for i, in := range tx.Inputs {
-		ch, err := chainhash.NewHash(in.Outpoint.Hash)
+// setInputMetadata sets the value, previous script, token data and address of
+// each input of the confirmed transactions txs from the output it spends,
+// loading the transaction of that output from the transaction index.  Each
+// such transaction is loaded once for all of txs, as BCHN loads each once for
+// the inputs of a transaction (rpc/rawtransaction.cpp:140-199), and only the
+// outputs spent are kept from it, so a call listing many transactions that
+// spend from one large transaction decodes it once rather than once for each.
+func (s *GrpcServer) setInputMetadata(txs ...*pb.Transaction) error {
+	// The inputs spending from each transaction, which are loaded in the
+	// order they are first spent from.
+	spends := make(map[chainhash.Hash][]*pb.Transaction_Input)
+	var prevHashes []chainhash.Hash
+	for _, tx := range txs {
+		for _, in := range tx.Inputs {
+			ch, err := chainhash.NewHash(in.Outpoint.Hash)
+			if err != nil {
+				return status.Error(codes.Internal, "error marshaling chainhash")
+			}
+			if ch.IsEqual(&chainhash.Hash{}) { // Coinbase txs don't have an input.
+				continue
+			}
+			if _, ok := spends[*ch]; !ok {
+				prevHashes = append(prevHashes, *ch)
+			}
+			spends[*ch] = append(spends[*ch], in)
+		}
+	}
+
+	for i := range prevHashes {
+		blockRegion, err := s.txIndex.TxBlockRegion(&prevHashes[i])
 		if err != nil {
-			return status.Error(codes.Internal, "error marshaling chainhash")
+			return status.Error(codes.InvalidArgument, "failed to retrieve transaction location")
 		}
-		if ch.IsEqual(&chainhash.Hash{}) { // Coinbase txs don't have an input.
-			continue
+		if blockRegion == nil {
+			return status.Error(codes.NotFound, "transaction not found")
 		}
-		if prevTx, ok := inputTxMap[*ch]; ok {
-			tokenData := prevTx.TxOut[in.Outpoint.Index].TokenData
-			if !tokenData.IsEmpty() {
-				tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
-			}
 
-			tx.Inputs[i].Value = prevTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = prevTx.TxOut[in.Outpoint.Index].PkScript
+		var txBytes []byte
+		err = s.db.View(func(dbTx database.Tx) error {
+			var err error
+			txBytes, err = dbTx.FetchBlockRegion(blockRegion)
+			return err
+		})
+		if err != nil {
+			return status.Error(codes.Internal, "failed to load transaction bytes")
+		}
 
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(prevTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
-			if err == nil && len(addrs) > 0 {
-				tx.Inputs[i].Address = addrs[0].String()
-				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
-			}
-		} else {
-			blockRegion, err := s.txIndex.TxBlockRegion(ch)
-			if err != nil {
-				return status.Error(codes.InvalidArgument, "failed to retrieve transaction location")
-			}
-			if blockRegion == nil {
-				return status.Error(codes.NotFound, "transaction not found")
-			}
+		loadedTx := wire.MsgTx{}
+		if err := loadedTx.BchDecode(bytes.NewReader(txBytes), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+			return status.Error(codes.Internal, "failed to unmarshal transaction")
+		}
 
-			var txBytes []byte
-			err = s.db.View(func(dbTx database.Tx) error {
-				var err error
-				txBytes, err = dbTx.FetchBlockRegion(blockRegion)
-				return err
-			})
-			if err != nil {
-				return status.Error(codes.Internal, "failed to load transaction bytes")
-			}
-
-			loadedTx := wire.MsgTx{}
-			if err := loadedTx.BchDecode(bytes.NewReader(txBytes), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
-				return status.Error(codes.Internal, "failed to unmarshal transaction")
-			}
-
-			tokenData := loadedTx.TxOut[in.Outpoint.Index].TokenData
-			if !tokenData.IsEmpty() {
-				tx.Inputs[i].CashToken = getPbCashTokenDataFromTokenData(tokenData)
-			}
-
-			tx.Inputs[i].Value = loadedTx.TxOut[in.Outpoint.Index].Value
-			tx.Inputs[i].PreviousScript = loadedTx.TxOut[in.Outpoint.Index].PkScript
-
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(loadedTx.TxOut[in.Outpoint.Index].PkScript, s.chainParams)
-			if err == nil && len(addrs) > 0 {
-				tx.Inputs[i].Address = addrs[0].String()
-				s.setInputSlpTokenAddress(tx.Inputs[i], addrs[0])
-			}
-
-			inputTxMap[*ch] = &loadedTx
+		for _, in := range spends[prevHashes[i]] {
+			// The script is copied, as the decoded transaction holds
+			// all its scripts in one buffer, which the reply would
+			// otherwise keep.
+			out := *loadedTx.TxOut[in.Outpoint.Index]
+			out.PkScript = bytes.Clone(out.PkScript)
+			s.setSpentOutput(in, &out)
 		}
 	}
 	return nil
+}
+
+// setBlockInputMetadata sets the value, previous script, token data and
+// address of each input of respTx, the transaction at index idx of the
+// connected block of event, from the block's spend journal, as GetBlock does.
+// The journal is read once for all the transactions of the block that the
+// subscriptions send, instead of each transaction loading those it spends
+// from.  The first transaction, the coinbase, spends nothing, and when the
+// journal cannot be read, as for a block disconnected since, the outputs are
+// loaded from the transaction index by setInputMetadata.
+func (s *GrpcServer) setBlockInputMetadata(respTx *pb.Transaction, event *rpcEventBlockConnected, idx int) error {
+	stxos, starts, err := s.blockSpendJournal(event)
+	if err != nil || idx == 0 {
+		return s.setInputMetadata(respTx)
+	}
+	for i, in := range respTx.Inputs {
+		stxo := &stxos[starts[idx]+i]
+
+		// The journal holds a token output's script with its token
+		// prefix.
+		tokenData, pkScript := wire.SplitPkScript(stxo.PkScript)
+		s.setSpentOutput(in, &wire.TxOut{Value: stxo.Amount,
+			PkScript: pkScript, TokenData: tokenData})
+	}
+	return nil
+}
+
+// setSpentOutput sets the value, previous script, token data and address of
+// the input from out, the output it spends.
+func (s *GrpcServer) setSpentOutput(in *pb.Transaction_Input, out *wire.TxOut) {
+	if !out.TokenData.IsEmpty() {
+		in.CashToken = getPbCashTokenDataFromTokenData(out.TokenData)
+	}
+
+	in.Value = out.Value
+	in.PreviousScript = out.PkScript
+
+	_, addrs, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, s.chainParams)
+	if err == nil && len(addrs) > 0 {
+		in.Address = addrs[0].String()
+		s.setInputSlpTokenAddress(in, addrs[0])
+	}
 }
 
 type retrievedTx struct {
