@@ -1043,6 +1043,79 @@ func TestRequestIDEchoedAsSent(t *testing.T) {
 	}
 }
 
+// TestHTTPRequestWithoutIDAnswered ensures an HTTP request without an id, or
+// with a null id, is run and answered with a null id, alone and in a batch,
+// whatever its jsonrpc version, as BCHN does.  Over the websocket such a
+// request is still a notification, which gets no reply, as a reply with a
+// null id would look like a notification from the server to the client.
+func TestHTTPRequestWithoutIDAnswered(t *testing.T) {
+	withIndexEchoHandler(t)
+	_, addr := startTestRPCServer(t)
+
+	for _, test := range []struct{ req, want string }{{
+		`{"jsonrpc":"1.0","method":"getblockhash","params":[7]}`,
+		`{"jsonrpc":"1.0","result":7,"error":null,"id":null}`,
+	}, {
+		`{"jsonrpc":"1.0","id":null,"method":"getblockhash","params":[8]}`,
+		`{"jsonrpc":"1.0","result":8,"error":null,"id":null}`,
+	}, {
+		`{"method":"getblockhash","params":[9]}`,
+		`{"jsonrpc":"1.0","result":9,"error":null,"id":null}`,
+	}, {
+		`{"jsonrpc":"2.0","method":"getblockhash","params":[10]}`,
+		`{"jsonrpc":"2.0","result":10,"error":null,"id":null}`,
+	}, {
+		`{"method":"nosuchmethod","params":[]}`,
+		`{"jsonrpc":"1.0","result":null,"error":{"code":-32601,` +
+			`"message":"Method not found"},"id":null}`,
+	}, {
+		`[{"jsonrpc":"2.0","method":"getblockhash","params":[1]},` +
+			`{"jsonrpc":"2.0","id":null,"method":"getblockhash","params":[2]},` +
+			`{"jsonrpc":"2.0","id":3,"method":"getblockhash","params":[3]}]`,
+		`[{"jsonrpc":"2.0","result":1,"error":null,"id":null},` +
+			`{"jsonrpc":"2.0","result":2,"error":null,"id":null},` +
+			`{"jsonrpc":"2.0","result":3,"error":null,"id":3}]`,
+	}, {
+		`[{"jsonrpc":"2.0","method":"getblockhash","params":[4]}]`,
+		`[{"jsonrpc":"2.0","result":4,"error":null,"id":null}]`,
+	}} {
+		httpReq, err := http.NewRequest("POST", "http://"+addr+"/",
+			strings.NewReader(test.req))
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq.Header.Set("Authorization", basicAuth(testRPCAdminLogin))
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		reply, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || string(reply) != test.want+"\n" {
+			t.Errorf("%s: reply %q, err %v, want %s", test.req, reply,
+				err, test.want)
+		}
+	}
+
+	// Over the websocket, the request without an id gets no reply, so the
+	// next reply read is the batch's, which leaves its request without an
+	// id out.
+	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
+	conn := dialTestWebsocket(t, addr, hdr)
+	err := conn.WriteMessage(websocket.TextMessage,
+		[]byte(`{"jsonrpc":"1.0","method":"getblockhash","params":[5]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply, err := wsRoundTrip(conn, `[{"jsonrpc":"2.0","method":"getblockhash",`+
+		`"params":[6]},{"jsonrpc":"2.0","id":7,"method":"getblockhash",`+
+		`"params":[7]}]`)
+	want := `[{"jsonrpc":"2.0","result":7,"error":null,"id":7}]`
+	if err != nil || reply != want {
+		t.Errorf("websocket: reply %s, err %v, want %s", reply, err, want)
+	}
+}
+
 // closeGateListener hands out connections whose Close reports on closing and
 // then waits for release to close, as closing a TLS connection waits up to 5 s
 // to send its close_notify alert to a client that stopped reading.

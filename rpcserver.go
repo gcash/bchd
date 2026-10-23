@@ -5302,14 +5302,11 @@ func (s *rpcServer) processRequest(request *btcjson.Request, isAdmin bool, close
 			return msg
 		}
 
-		// Valid requests with no ID (notifications) must not have a response
-		// per the JSON-RPC spec.
-		if request.ID == nil {
-			return nil
-		}
-
 		// Attempt to parse the JSON-RPC request into a known
-		// concrete command.
+		// concrete command.  A request without an id, or with a null
+		// id, is run and answered with a null id, as BCHN does, rather
+		// than taken for a JSON-RPC notification, which is neither run
+		// nor answered.
 		parsedCmd := parseCmd(request)
 		if parsedCmd.err != nil {
 			jsonErr = parsedCmd.err
