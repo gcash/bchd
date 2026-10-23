@@ -834,6 +834,101 @@ func TestRebroadcastDropsTxsNotInPool(t *testing.T) {
 	}
 }
 
+// TestRebroadcastHandlerRounds ensures the rebroadcast handler's rounds, the
+// first and the later ones, relay the pending transactions, that one added or
+// removed between rounds is relayed or not from the next round, and that the
+// handler ends when the server quits.  The rounds, which come after 5 minutes
+// and then at random within 30, are shortened to milliseconds.
+func TestRebroadcastHandlerRounds(t *testing.T) {
+	h := newMempoolTestHarness(t, 2)
+	pool := h.server.cfg.TxMemPool
+	var txs [2]*mempool.TxDesc
+	for i := range txs {
+		accepted, err := pool.ProcessTransaction(bchutil.NewTx(
+			h.spend(t, h.outputs[i], 1000)), false, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		txs[i] = accepted[0]
+	}
+	first, second := txs[0].Tx.Hash(), txs[1].Tx.Hash()
+
+	// The first round comes once the first transaction was added.
+	oldDelay, oldInterval := rebroadcastDelay, rebroadcastInterval
+	rebroadcastDelay = 50 * time.Millisecond
+	rebroadcastInterval = 2 * time.Millisecond
+	t.Cleanup(func() {
+		rebroadcastDelay, rebroadcastInterval = oldDelay, oldInterval
+	})
+
+	// The relay queue holds what the rounds relay in far longer than the
+	// test takes, so no round waits for the test to take a relay.
+	s := &server{
+		txMemPool:            pool,
+		relayInv:             make(chan relayMsg, 100000),
+		modifyRebroadcastInv: make(chan interface{}),
+		quit:                 make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.rebroadcastHandler()
+
+	// next returns the hash of the next transaction a round relays.
+	next := func() chainhash.Hash {
+		t.Helper()
+		select {
+		case msg := <-s.relayInv:
+			return msg.invVect.Hash
+		case <-time.After(5 * time.Second):
+		}
+		t.Fatal("no rebroadcast round relayed a transaction")
+		return chainhash.Hash{}
+	}
+
+	// The first round and a later one relay the first transaction.
+	s.AddRebroadcastInventory(wire.NewInvVect(wire.InvTypeTx, first), txs[0])
+	for range 2 {
+		if got := next(); got != *first {
+			t.Fatalf("relayed %v, want %v", got, first)
+		}
+	}
+
+	// The rounds after the second is added relay both.
+	s.AddRebroadcastInventory(wire.NewInvVect(wire.InvTypeTx, second),
+		txs[1])
+	for seen := 0; seen < 2; {
+		switch got := next(); got {
+		case *second:
+			seen++
+		case *first:
+		default:
+			t.Fatalf("relayed %v, want %v or %v", got, first, second)
+		}
+	}
+
+	// The rounds after the first is removed, as when a block confirms it,
+	// relay only the second.  What earlier rounds relayed is skipped.
+	s.RemoveRebroadcastInventory(wire.NewInvVect(wire.InvTypeTx, first))
+	for range len(s.relayInv) {
+		<-s.relayInv
+	}
+	for range 4 {
+		if got := next(); got != *second {
+			t.Fatalf("relayed %v after it was removed, want %v",
+				got, second)
+		}
+	}
+
+	close(s.quit)
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	if !returnedWithin(done, 5*time.Second) {
+		t.Fatal("the rebroadcast handler did not end when the server quit")
+	}
+}
+
 // TestPeerHandlerSendsAfterQuit ensures adding, banning and broadcasting to
 // peers, and a peer's end, return once the server quits, as the peer handler
 // that takes them stops then.  Each queue holds --maxpeers entries, which the

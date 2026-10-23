@@ -95,6 +95,12 @@ var (
 	// is how often BCHN sweeps its ban list (DUMP_BANS_INTERVAL).
 	banSweepInterval = 15 * time.Minute
 
+	// rebroadcastDelay is how long after start the first round of
+	// rebroadcasts comes, and each later round comes at random within
+	// rebroadcastInterval of the one before.
+	rebroadcastDelay    = 5 * time.Minute
+	rebroadcastInterval = 30 * time.Minute
+
 	// userAgentName is the user agent name and is used to help identify
 	// ourselves to other bitcoin peers.
 	userAgentName = "/bchd"
@@ -3659,8 +3665,8 @@ func (s *server) UpdatePeerHeights(latestBlkHash *chainhash.Hash, latestHeight i
 // sent out but have not yet made it into a block. We periodically rebroadcast
 // them in case our peers restarted or otherwise lost track of them.
 func (s *server) rebroadcastHandler() {
-	// Wait 5 min before first tx rebroadcast.
-	timer := time.NewTimer(5 * time.Minute)
+	// Wait rebroadcastDelay, 5 min, before first tx rebroadcast.
+	timer := time.NewTimer(rebroadcastDelay)
 	pendingInvs := make(map[wire.InvVect]interface{})
 
 out:
@@ -3683,10 +3689,11 @@ out:
 			// yet. We periodically resubmit them until they have.
 			s.rebroadcast(pendingInvs)
 
-			// Process at a random time up to 30mins (in seconds)
-			// in the future.
-			timer.Reset(time.Second *
-				time.Duration(randomUint16Number(1800)))
+			// Process at a random time up to rebroadcastInterval,
+			// 30mins, in the future, in steps of 1/1800 of it
+			// (seconds).
+			timer.Reset(rebroadcastInterval *
+				time.Duration(randomUint16Number(1800)) / 1800)
 
 		case <-s.quit:
 			break out
