@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -371,6 +372,17 @@ func startGrpcTest(t *testing.T, timeout time.Duration,
 	register func(*grpc.Server), opts ...grpc.ServerOption) (string, *atomic.Int32) {
 
 	t.Helper()
+	return startGrpcRepliesTest(t, timeout,
+		newGrpcReplyBudget(grpcMaxReplyBytes), register, opts...)
+}
+
+// startGrpcRepliesTest is startGrpcTest with the replies written within the
+// budget replies.
+func startGrpcRepliesTest(t *testing.T, timeout time.Duration,
+	replies *grpcReplyBudget, register func(*grpc.Server),
+	opts ...grpc.ServerOption) (string, *atomic.Int32) {
+
+	t.Helper()
 	saved, savedRead := grpcWriteTimeout, grpcReadTimeout
 	t.Cleanup(func() { grpcWriteTimeout, grpcReadTimeout = saved, savedRead })
 	grpcWriteTimeout, grpcReadTimeout = timeout, timeout
@@ -392,7 +404,7 @@ func startGrpcTest(t *testing.T, timeout time.Duration,
 
 	gs := grpc.NewServer(opts...)
 	register(gs)
-	handler := grpcHTTPHandler(gs)
+	handler := grpcHTTPHandler(gs, replies)
 	var active atomic.Int32
 	srv := newGrpcHTTPServer("", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -1450,4 +1462,745 @@ func TestGrpcReadDeadline(t *testing.T) {
 	d.renew()
 	d.clear()
 	check("after the request ended", 1, time.Now())
+}
+
+// grpcRepliesHeld returns the number of replies the budget counts and the
+// bytes they hold.
+func grpcRepliesHeld(b *grpcReplyBudget) (int, int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.writers), b.used
+}
+
+// setGrpcStallTimeout sets grpcStallTimeout for the duration of the test.  It
+// is restored after the cleanups of the servers started later, which wait for
+// their handlers to return.
+func setGrpcStallTimeout(t *testing.T, timeout time.Duration) {
+	saved := grpcStallTimeout
+	t.Cleanup(func() { grpcStallTimeout = saved })
+	grpcStallTimeout = timeout
+}
+
+// headers reads the client's frames until the reply headers of the stream.
+func (c *rawH2Client) headers(stream uint32) {
+	c.t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		f := c.next(deadline)
+		if f == nil {
+			c.t.Fatalf("no reply headers for stream %d", stream)
+		}
+		if h, ok := f.(*http2.MetaHeadersFrame); ok && h.StreamID == stream {
+			return
+		}
+	}
+}
+
+// resets returns the streams the client sees reset until the deadline.
+func (c *rawH2Client) resets(deadline time.Time) map[uint32]bool {
+	c.t.Helper()
+	reset := make(map[uint32]bool)
+	for {
+		switch f := c.next(deadline).(type) {
+		case nil:
+			return reset
+		case *http2.RSTStreamFrame:
+			reset[f.StreamID] = true
+		case *http2.DataFrame:
+			c.t.Fatalf("data sent on stream %d without a window", f.StreamID)
+		}
+	}
+}
+
+// takeSteadily takes at least size bytes of the stream's reply or
+// notification, 16 KiB every 40 ms, so a part in each 160 ms, granting flow
+// control for each frame once it has come, and tells done how it went:
+// "taken whole" once size bytes have come.
+func (c *rawH2Client) takeSteadily(stream uint32, size int, done chan<- string) {
+	const window = 16 << 10
+	received := 0
+	for received < size {
+		switch f := c.next(time.Now().Add(10 * time.Second)).(type) {
+		case nil:
+			done <- fmt.Sprintf("no frame after %d bytes", received)
+			return
+		case *http2.RSTStreamFrame:
+			done <- fmt.Sprintf("reset after %d bytes", received)
+			return
+		case *http2.DataFrame:
+			n := len(f.Data())
+			received += n
+			if n == 0 {
+				continue
+			}
+			time.Sleep(time.Duration(n) * 40 * time.Millisecond / window)
+			_ = c.fr.WriteWindowUpdate(stream, uint32(n))
+			_ = c.fr.WriteWindowUpdate(0, uint32(n))
+		case *http2.MetaHeadersFrame:
+			if f.StreamEnded() {
+				done <- fmt.Sprintf("ended after %d bytes", received)
+				return
+			}
+		}
+	}
+	done <- "taken whole"
+}
+
+// TestGrpcStalledRepliesMakeRoom ensures that once the replies being written
+// hold more than the budget, a reply that needs room resets the writes whose
+// clients have taken none of a part for grpcStallTimeout, the longest stalled
+// first, until the others fit, and is sent at once, so that clients that take
+// none of their replies can neither make the node hold more nor keep other
+// calls waiting, and that the room is given back as the writes end.  A small
+// reply waits in its flush, which counts a part.
+func TestGrpcStalledRepliesMakeRoom(t *testing.T) {
+	setGrpcStallTimeout(t, 100*time.Millisecond)
+	for _, test := range []struct {
+		size int
+		room int64
+	}{
+		{1 << 20, 3<<20 + 1<<19},
+		{100, 3*grpcWritePartSize + grpcWritePartSize/2},
+	} {
+		svc := &grpcWriteTestService{replySize: test.size}
+		replies := newGrpcReplyBudget(test.room)
+		addr, _ := startGrpcRepliesTest(t, time.Minute, replies,
+			func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+		// A client takes none of three replies, called one after the
+		// other, and then none for grpcStallTimeout more.
+		c := dialRawH2(t, addr, http2.Setting{
+			ID: http2.SettingInitialWindowSize, Val: 0})
+		for _, stream := range []uint32{1, 3, 5} {
+			c.call(stream, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+			c.headers(stream)
+			time.Sleep(50 * time.Millisecond)
+		}
+		time.Sleep(grpcStallTimeout)
+
+		// Another client's call gets its reply, and the first of the three
+		// is reset to make room for it.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := dialGrpcTest(t, addr).Invoke(ctx, "/pb.bchrpc/GetRawBlock",
+			&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+		cancel()
+		if err != nil {
+			t.Fatalf("%d bytes: a call with the room taken: %v", test.size, err)
+		}
+		reset := c.resets(time.Now().Add(500 * time.Millisecond))
+		if !reset[1] || reset[3] || reset[5] {
+			t.Errorf("%d bytes: streams reset %v, want only 1", test.size, reset)
+		}
+		if n, used := grpcRepliesHeld(replies); n != 2 || used > test.room {
+			t.Errorf("%d bytes: %d replies hold %d bytes, want 2 within %d",
+				test.size, n, used, test.room)
+		}
+
+		// The room is given back once the client goes.
+		c.conn.Close()
+		waitForGrpc(t, "the room to be given back", func() bool {
+			n, used := grpcRepliesHeld(replies)
+			return n == 0 && used == 0
+		})
+	}
+}
+
+// TestGrpcSteadyReplyKeptForRoom ensures that a reply whose client takes it
+// steadily is not reset to make room while one whose client has taken none of
+// it for grpcStallTimeout is written, though the first started before.
+func TestGrpcSteadyReplyKeptForRoom(t *testing.T) {
+	setGrpcStallTimeout(t, 300*time.Millisecond)
+	const size = 1 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	replies := newGrpcReplyBudget(2*size + size/2)
+	addr, _ := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// The steady client takes the whole reply in about 2.6 s.
+	steady := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: 16 << 10})
+	steady.call(1, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+	done := make(chan string, 1)
+	go steady.takeSteadily(1, size, done)
+
+	// Then a client takes none of its reply, for longer than
+	// grpcStallTimeout.
+	time.Sleep(200 * time.Millisecond)
+	stalled := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: 0})
+	stalled.call(1, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+	stalled.headers(1)
+	time.Sleep(500 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := dialGrpcTest(t, addr).Invoke(ctx, "/pb.bchrpc/GetRawBlock",
+		&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+	if err != nil {
+		t.Fatalf("a call with the room taken: %v", err)
+	}
+	if reset := stalled.resets(time.Now().Add(500 * time.Millisecond)); !reset[1] {
+		t.Error("the stalled reply was not reset")
+	}
+	if got := recvGrpc(t, "the steady reply", done); got != "taken whole" {
+		t.Errorf("the steady reply: %s", got)
+	}
+}
+
+// TestGrpcReadersKeptOverBudget ensures that replies whose clients are taking
+// them are never reset to make room, however much more than the budget they
+// hold together, the replies of calls and the notifications of subscriptions
+// alike, so that clients reading normally get what they got before the
+// budget.
+func TestGrpcReadersKeptOverBudget(t *testing.T) {
+	setGrpcStallTimeout(t, time.Second)
+	const size = 1 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	replies := newGrpcReplyBudget(size + size/2)
+	addr, _ := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// Three clients take their replies steadily, starting 200 ms apart, so
+	// that the three are written at once, twice the budget.
+	done := make(chan string, 3)
+	for _, method := range []string{"/pb.bchrpc/GetRawBlock",
+		"/pb.bchrpc/SubscribeBlocks", "/pb.bchrpc/GetRawBlock"} {
+
+		c := dialRawH2(t, addr, http2.Setting{
+			ID: http2.SettingInitialWindowSize, Val: 16 << 10})
+		var req proto.Message = &pb.GetRawBlockRequest{}
+		if method == "/pb.bchrpc/SubscribeBlocks" {
+			req = &pb.SubscribeBlocksRequest{}
+		}
+		c.call(1, method, req)
+		go c.takeSteadily(1, size, done)
+		time.Sleep(200 * time.Millisecond)
+	}
+	for i := 0; i < 3; i++ {
+		if got := recvGrpc(t, "a reply", done); got != "taken whole" {
+			t.Errorf("a reply: %s", got)
+		}
+	}
+}
+
+// TestGrpcStalledSocketReplyFreed ensures that a reply reset to make room on a
+// connection whose client does not read its socket, where the reset waits
+// behind the frame being written, stays counted until its write returns, and
+// that the connection is closed once the reset has not ended the write within
+// grpcStallTimeout, which ends the call and frees the reply.
+func TestGrpcStalledSocketReplyFreed(t *testing.T) {
+	setGrpcStallTimeout(t, 300*time.Millisecond)
+	const size = 1 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	replies := newGrpcReplyBudget(size + size/2)
+	addr, active := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// Flow control lets the whole reply out at once, so only the socket
+	// holds it back.  From the reply headers on, the client reads nothing.
+	c := dialRawH2(t, addr, http2.Setting{
+		ID: http2.SettingInitialWindowSize, Val: 1<<31 - 1})
+	if err := c.fr.WriteWindowUpdate(0, 1<<31-1-65535); err != nil {
+		t.Fatal(err)
+	}
+	c.call(1, "/pb.bchrpc/GetRawBlock", &pb.GetRawBlockRequest{})
+	c.headers(1)
+	time.Sleep(2 * grpcStallTimeout)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := dialGrpcTest(t, addr).Invoke(ctx, "/pb.bchrpc/GetRawBlock",
+		&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+	if err != nil {
+		t.Fatalf("a call with the room taken: %v", err)
+	}
+	if n, used := grpcRepliesHeld(replies); n != 1 || used < size {
+		t.Errorf("after the reset: %d replies hold %d bytes, want the "+
+			"stalled one, still held", n, used)
+	}
+	for deadline := time.Now().Add(5 * time.Second); active.Load() != 0; {
+		if time.Now().After(deadline) {
+			t.Fatal("the stalled call still runs 5 s after its reset")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n, used := grpcRepliesHeld(replies); n != 0 || used != 0 {
+		t.Errorf("after the call ended: %d replies hold %d bytes", n, used)
+	}
+}
+
+// TestGrpcReplyLargerThanRoomSent ensures that a reply larger than the room
+// of the budget is still sent whole when nothing else is written.
+func TestGrpcReplyLargerThanRoomSent(t *testing.T) {
+	svc := &grpcWriteTestService{replySize: 1 << 20}
+	replies := newGrpcReplyBudget(256 << 10)
+	addr, _ := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp := new(pb.GetRawBlockResponse)
+	err := dialGrpcTest(t, addr).Invoke(ctx, "/pb.bchrpc/GetRawBlock",
+		&pb.GetRawBlockRequest{}, resp)
+	if err != nil || len(resp.Block) != 1<<20 {
+		t.Errorf("got %d bytes, %v", len(resp.Block), err)
+	}
+}
+
+// TestGrpcUnflushedReplyReleased ensures that a reply the request ends without
+// flushing, as grpc-go's http.Error answer to a request it refuses before any
+// call, is given back once the request ends, so that it can neither fill the
+// budget for good nor, once stalled, have a later reset close whatever its
+// connection then carries.
+func TestGrpcUnflushedReplyReleased(t *testing.T) {
+	svc := &grpcWriteTestService{replySize: 10}
+	replies := newGrpcReplyBudget(grpcMaxReplyBytes)
+	addr, active := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// grpc-go refuses a GET over HTTP/1.1 with an error body written by
+	// http.Error, which nothing flushes.
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	t.Cleanup(client.CloseIdleConnections)
+	resp, err := client.Get("https://" + addr + "/pb.bchrpc/GetRawBlock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode == http.StatusOK || len(body) == 0 {
+		t.Fatalf("the GET got %d, %q, %v; want an error body",
+			resp.StatusCode, body, err)
+	}
+	waitForGrpc(t, "the request to end", func() bool {
+		return active.Load() == 0
+	})
+	if n, used := grpcRepliesHeld(replies); n != 0 || used != 0 {
+		t.Errorf("after the request ended, %d replies hold %d bytes", n, used)
+	}
+}
+
+// grpcWebCall sends a gRPC-Web request for GetRawBlock over HTTP/1.1 with the
+// content type and body given, and returns the connection once the reply
+// headers have come, the client reading nothing more from it.
+func grpcWebCall(t *testing.T, addr, contentType string, body []byte) net.Conn {
+	t.Helper()
+	tcp, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tcp.(*net.TCPConn).SetReadBuffer(16 << 10)
+	conn := tls.Client(tcp, &tls.Config{InsecureSkipVerify: true,
+		NextProtos: []string{"http/1.1"}})
+	t.Cleanup(func() { conn.Close() })
+	req, err := http.NewRequest("POST", "https://localhost/pb.bchrpc/GetRawBlock",
+		bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("X-Grpc-Web", "1")
+	if err := req.Write(conn); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.Header.Get("Content-Type"); got != contentType {
+		t.Fatalf("status %d, content type %q", resp.StatusCode, got)
+	}
+	return conn
+}
+
+// TestGrpcWebStalledReplyMakesRoom ensures that a gRPC-Web reply over HTTP/1.1
+// whose client stops reading is reset to make room as a gRPC reply is.
+func TestGrpcWebStalledReplyMakesRoom(t *testing.T) {
+	setGrpcStallTimeout(t, 100*time.Millisecond)
+	const size = 32 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	replies := newGrpcReplyBudget(size + size/2)
+	addr, active := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// An empty GetRawBlockRequest.  From the reply headers on, the client
+	// reads nothing, and a gRPC call's reply needs the room.
+	grpcWebCall(t, addr, "application/grpc-web+proto", []byte{0, 0, 0, 0, 0})
+	time.Sleep(200 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := dialGrpcTest(t, addr).Invoke(ctx, "/pb.bchrpc/GetRawBlock",
+		&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse),
+		grpc.MaxCallRecvMsgSize(2*size))
+	if err != nil {
+		t.Fatalf("a call with the room taken: %v", err)
+	}
+	waitForGrpc(t, "the gRPC-Web call to end", func() bool {
+		return active.Load() == 0
+	})
+}
+
+// TestGrpcWebTextReplyCounted ensures that a gRPC-Web reply in the text
+// format, which the wrapper writes base64 encoded 1 KiB at a time, counts as
+// its whole message while its client takes none of it, as gRPC holds the
+// message until its last part is written.
+func TestGrpcWebTextReplyCounted(t *testing.T) {
+	const size = 8 << 20
+	svc := &grpcWriteTestService{replySize: size}
+	replies := newGrpcReplyBudget(grpcMaxReplyBytes)
+	addr, _ := startGrpcRepliesTest(t, time.Minute, replies,
+		func(gs *grpc.Server) { pb.RegisterBchrpcServer(gs, svc) })
+
+	// A GetRawBlockRequest for height 1, base64 encoded.
+	grpcWebCall(t, addr, "application/grpc-web-text", []byte("AAAAAAIQAQ=="))
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		n, used := grpcRepliesHeld(replies)
+		if n == 1 && used >= size {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d replies hold %d bytes, want the reply's %d", n,
+				used, size)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// deadlineRecorder is a ResponseWriter that records the write deadlines set
+// on it and takes what is written to it.
+type deadlineRecorder struct {
+	http.ResponseWriter
+	deadlines []time.Time
+	written   int
+}
+
+func (r *deadlineRecorder) SetWriteDeadline(t time.Time) error {
+	r.deadlines = append(r.deadlines, t)
+	return nil
+}
+
+func (r *deadlineRecorder) Write(p []byte) (int, error) {
+	r.written += len(p)
+	return len(p), nil
+}
+
+// TestGrpcDeadlineWriterParts ensures that a reply's write deadline is set at
+// its first write, renewed each time a part more has been written however the
+// reply is split into writes, as the text format splits it into writes of
+// 1 KiB, and cleared by its flush, so that a client must take a part, not a
+// write, in each grpcWriteTimeout.
+func TestGrpcDeadlineWriterParts(t *testing.T) {
+	rec := &deadlineRecorder{}
+	w := &grpcDeadlineWriter{ResponseWriter: rec,
+		rc:      http.NewResponseController(rec),
+		replies: newGrpcReplyBudget(grpcMaxReplyBytes)}
+	piece := make([]byte, 1<<10)
+	for i := 0; i < 200; i++ {
+		if _, err := w.Write(piece); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(rec.deadlines) != 4 {
+		t.Errorf("200 writes of 1 KiB set %d deadlines, want the first and "+
+			"3 renewals", len(rec.deadlines))
+	}
+	w.Flush()
+	if n := len(rec.deadlines); n != 5 || !rec.deadlines[n-1].IsZero() {
+		t.Fatalf("%d deadlines after the flush, the last %v, want 5, the "+
+			"last cleared", n, rec.deadlines[n-1])
+	}
+	for i, d := range rec.deadlines[:4] {
+		if d.IsZero() {
+			t.Errorf("deadline %d cleared", i)
+		}
+	}
+	if rec.written != 200<<10 {
+		t.Errorf("%d bytes written, want %d", rec.written, 200<<10)
+	}
+}
+
+// TestGrpcReplyCountedByPrefix ensures a reply counts the length its message
+// prefix gives, from its first write, also when the prefix comes in pieces or
+// base64 encoded as in the text format, and that a reply without a valid
+// prefix counts what has been written, at least a part, until its flush.
+func TestGrpcReplyCountedByPrefix(t *testing.T) {
+	prefix := func(flag byte, length uint32) []byte {
+		p := []byte{flag, 0, 0, 0, 0}
+		binary.BigEndian.PutUint32(p[1:], length)
+		return p
+	}
+	text := func(p []byte) []byte {
+		return []byte(base64.StdEncoding.EncodeToString(p))
+	}
+	message := prefix(0, 3<<20)
+	encoded := text(append(message, 7))
+	for _, test := range []struct {
+		name   string
+		text   bool
+		writes [][]byte
+		want   int64
+	}{
+		{"binary", false, [][]byte{message}, 5 + 3<<20},
+		{"binary in pieces", false, [][]byte{message[:2], message[2:]},
+			5 + 3<<20},
+		{"compressed", false, [][]byte{prefix(1, 1<<20)}, 5 + 1<<20},
+		{"text", true, [][]byte{encoded[:4], encoded[4:]}, 5 + 3<<20},
+		{"text trailers", true, [][]byte{text(prefix(0x80, 1<<20))},
+			5 + 1<<20},
+		{"small", false, [][]byte{prefix(0, 10)}, grpcWritePartSize},
+		{"no prefix", false, [][]byte{bytes.Repeat([]byte("x"), 200<<10)},
+			192 << 10},
+		{"not a message", false, [][]byte{[]byte("invalid gRPC request")},
+			grpcWritePartSize},
+		{"not base64", true, [][]byte{[]byte("invalid gRPC request")},
+			grpcWritePartSize},
+	} {
+		b := newGrpcReplyBudget(grpcMaxReplyBytes)
+		rec := &deadlineRecorder{}
+		w := &grpcDeadlineWriter{ResponseWriter: rec,
+			rc: http.NewResponseController(rec), replies: b, text: test.text}
+		for _, p := range test.writes {
+			if _, err := w.Write(p); err != nil {
+				t.Fatalf("%s: %v", test.name, err)
+			}
+		}
+		if n, used := grpcRepliesHeld(b); n != 1 || used != test.want {
+			t.Errorf("%s: %d replies hold %d bytes, want 1 and %d",
+				test.name, n, used, test.want)
+		}
+		w.Flush()
+		if n, used := grpcRepliesHeld(b); n != 0 || used != 0 {
+			t.Errorf("%s: after the flush %d replies hold %d bytes",
+				test.name, n, used)
+		}
+	}
+}
+
+// closeRecorder is a connection that counts the times it is closed.
+type closeRecorder struct {
+	net.Conn
+	closes atomic.Int32
+}
+
+func (c *closeRecorder) Close() error {
+	c.closes.Add(1)
+	return nil
+}
+
+// TestGrpcReplyBudget ensures the budget counts each reply as at least a
+// part, and while the replies hold more than the budget resets the writes of
+// others whose clients have taken none of a part for grpcStallTimeout, the
+// longest stalled first, until the others fit, never one whose client is
+// taking its reply nor the writer itself, so that a write goes ahead over the
+// budget when no other has stalled.  A reset reply stays counted, without
+// making room twice, until its write returns, the writes of a writer it reset
+// are refused, and the connection of one whose write has not returned within
+// grpcStallTimeout is closed.
+func TestGrpcReplyBudget(t *testing.T) {
+	setGrpcStallTimeout(t, 100*time.Millisecond)
+	const k = 1 << 10
+	b := newGrpcReplyBudget(350 * k)
+	writer := func() (*grpcDeadlineWriter, *deadlineRecorder, *closeRecorder) {
+		rec := &deadlineRecorder{}
+		conn := &closeRecorder{}
+		return &grpcDeadlineWriter{ResponseWriter: rec,
+			rc: http.NewResponseController(rec), replies: b,
+			conn: conn}, rec, conn
+	}
+	w1, rec1, conn1 := writer()
+	w2, rec2, conn2 := writer()
+	w3, rec3, conn3 := writer()
+	check := func(what string, replies int, used int64, reset ...bool) {
+		t.Helper()
+		if n, u := grpcRepliesHeld(b); n != replies || u != used {
+			t.Errorf("%s: %d replies hold %d bytes, want %d and %d", what,
+				n, u, replies, used)
+		}
+		for i, w := range []*grpcDeadlineWriter{w1, w2, w3} {
+			if w.reset.Load() != reset[i] {
+				t.Errorf("%s: writer %d reset %v, want %v", what, i+1,
+					w.reset.Load(), reset[i])
+			}
+		}
+	}
+
+	// A reply over the budget goes ahead while the others are young.
+	b.count(w1, 100*k, false)
+	time.Sleep(20 * time.Millisecond)
+	b.count(w2, 100*k, false)
+	b.count(w3, 200*k, false)
+	check("over the budget", 3, 400*k, false, false, false)
+
+	// Once both have stalled, the longest stalled makes room, and stays
+	// counted until its write returns, but the room it makes is not made
+	// again.
+	time.Sleep(120 * time.Millisecond)
+	b.count(w3, 0, true)
+	check("w1 reset", 3, 400*k, true, false, false)
+	b.count(w3, 240*k, false)
+	check("within the room made", 3, 440*k, true, false, false)
+	b.count(w3, 300*k, false)
+	check("w2 reset", 3, 500*k, true, true, false)
+	for i, rec := range []*deadlineRecorder{rec1, rec2} {
+		if len(rec.deadlines) != 1 || !rec.deadlines[0].Equal(grpcResetDeadline) {
+			t.Errorf("writer %d: deadlines %v, want the reset's", i+1,
+				rec.deadlines)
+		}
+	}
+	if len(rec3.deadlines) != 0 {
+		t.Errorf("the writer making room had deadlines %v", rec3.deadlines)
+	}
+
+	// With no other reply stalled, w3's goes ahead over the budget, and a
+	// reset writer's replies are refused.
+	b.count(w3, 400*k, false)
+	check("no reply stalled", 3, 600*k, true, true, false)
+	if b.count(w1, k, false) {
+		t.Error("a reset writer's reply was counted")
+	}
+
+	// w1's write returns in time and gives back its room, and w2's
+	// connection is closed once its write has not returned within
+	// grpcStallTimeout.
+	b.release(w1)
+	check("w1 released", 2, 500*k, true, true, false)
+	waitForGrpc(t, "w2's connection to be closed", func() bool {
+		return conn2.closes.Load() == 1
+	})
+	b.release(w2)
+	check("w2 released", 1, 400*k, true, true, false)
+	time.Sleep(120 * time.Millisecond)
+	if conn1.closes.Load() != 0 || conn2.closes.Load() != 1 ||
+		conn3.closes.Load() != 0 {
+
+		t.Errorf("connections closed %d, %d and %d times, want only w2's "+
+			"once", conn1.closes.Load(), conn2.closes.Load(),
+			conn3.closes.Load())
+	}
+
+	// A reply larger than the budget never resets its own writer, and a
+	// reply counts at least a part.
+	b.count(w3, 500*k, false)
+	b.release(w3)
+	check("all released", 0, 0, true, true, false)
+	w4, _, _ := writer()
+	b.count(w4, 10, false)
+	if n, used := grpcRepliesHeld(b); n != 1 || used != grpcWritePartSize {
+		t.Errorf("a small reply: %d replies hold %d bytes", n, used)
+	}
+	b.release(w4)
+	if n, used := grpcRepliesHeld(b); n != 0 || used != 0 {
+		t.Errorf("the end: %d replies hold %d bytes", n, used)
+	}
+}
+
+// TestGrpcReplyReleased ensures a reply gives back its room once its writer
+// has been reset, at its next write rather than its flush, that a reply the
+// request ends without flushing gives it back too, that a writer's next reply
+// is counted and has its deadline set again after a flush, and that the timer
+// of a reset reply closes nothing once the reply has been given back.
+func TestGrpcReplyReleased(t *testing.T) {
+	setGrpcStallTimeout(t, 50*time.Millisecond)
+	b := newGrpcReplyBudget(grpcWritePartSize)
+	writer := func() (*grpcDeadlineWriter, *deadlineRecorder, *closeRecorder) {
+		rec := &deadlineRecorder{}
+		conn := &closeRecorder{}
+		return &grpcDeadlineWriter{ResponseWriter: rec,
+			rc: http.NewResponseController(rec), replies: b,
+			conn: conn}, rec, conn
+	}
+	held := func(what string, want int) {
+		t.Helper()
+		if n, _ := grpcRepliesHeld(b); n != want {
+			t.Errorf("%s: %d replies held, want %d", what, n, want)
+		}
+	}
+	prefix := []byte{0, 0, 0, 0, 10}
+
+	// A writer's second reply is counted, and its deadline set, as its
+	// first was.
+	w1, rec1, conn1 := writer()
+	for i := 0; i < 2; i++ {
+		if _, err := w1.Write(prefix); err != nil {
+			t.Fatal(err)
+		}
+		held("a reply being written", 1)
+		w1.Flush()
+		held("a reply flushed", 0)
+	}
+	if n := len(rec1.deadlines); n != 4 {
+		t.Errorf("two replies set %d deadlines, want each set and cleared", n)
+	}
+
+	// w1's third reply stalls, and w2's makes room by resetting it: w1's
+	// next write gives the room back at once.
+	if _, err := w1.Write(prefix); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(60 * time.Millisecond)
+	w2, _, _ := writer()
+	if _, err := w2.Write(prefix); err != nil {
+		t.Fatal(err)
+	}
+	if !w1.reset.Load() {
+		t.Fatal("the stalled reply was not reset")
+	}
+	held("after the reset", 2)
+	if _, err := w1.Write(make([]byte, 10)); err != errGrpcReplyReset {
+		t.Errorf("a reset writer's write: %v", err)
+	}
+	held("after the reset writer's write", 1)
+
+	// The timer of w1's reset closes nothing, as w1's reply was given back,
+	// and the end of w2's request gives back its reply, never flushed.
+	b.closeStalled(w1, 0)
+	time.Sleep(60 * time.Millisecond)
+	if n := conn1.closes.Load(); n != 0 {
+		t.Errorf("the reset reply's connection was closed %d times", n)
+	}
+	w2.close()
+	held("after the request ended", 0)
+}
+
+// TestGrpcDeadlineWriterReset ensures that once a writer has been reset its
+// writes do not renew or clear its write deadline, which the reset set in the
+// past, and are refused, and that a reset after the request has ended sets
+// no deadline.
+func TestGrpcDeadlineWriterReset(t *testing.T) {
+	rec := &deadlineRecorder{}
+	w := &grpcDeadlineWriter{ResponseWriter: rec,
+		rc: http.NewResponseController(rec), replies: newGrpcReplyBudget(1)}
+	if !w.renewDeadline() {
+		t.Fatal("deadline not renewed")
+	}
+	w.clearDeadline()
+	if len(rec.deadlines) != 2 || rec.deadlines[0].IsZero() ||
+		!rec.deadlines[1].IsZero() {
+
+		t.Fatalf("deadlines %v, want one renewed and cleared", rec.deadlines)
+	}
+
+	w.reset.Store(true)
+	w.resetStream()
+	if w.renewDeadline() {
+		t.Error("a reset writer renewed its deadline")
+	}
+	w.clearDeadline()
+	if _, err := w.Write([]byte{1}); err != errGrpcReplyReset {
+		t.Errorf("a reset writer's write: %v", err)
+	}
+	w.Flush()
+	if len(rec.deadlines) != 3 || !rec.deadlines[2].Equal(grpcResetDeadline) {
+		t.Errorf("deadlines %v, want the reset's last", rec.deadlines)
+	}
+	if rec.written != 0 {
+		t.Errorf("a reset writer wrote %d bytes", rec.written)
+	}
+
+	rec.deadlines = nil
+	w.close()
+	w.resetStream()
+	if len(rec.deadlines) != 0 {
+		t.Errorf("a reset after the request ended set %v", rec.deadlines)
+	}
 }

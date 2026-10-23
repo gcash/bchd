@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -64,6 +67,143 @@ const grpcWritePartSize = 64 * 1024
 // chooses has its request once its handler starts.
 var grpcReadTimeout = 30 * time.Second
 
+// grpcMaxReplyBytes is how much memory the gRPC replies being written may
+// hold before those whose clients have stalled are reset to make room.  A
+// call's place is freed when its handler returns, so without a bound,
+// clients that take their replies slowly or not at all could make the node
+// hold any number of them, each until its write deadline ends it.  No reply
+// waits for room, and none whose client takes a part of it in each
+// grpcStallTimeout is reset for room, so while no other has stalled, a reply
+// is written over the bound.  BCHN has no such bound: its replies wait in its
+// HTTP server's output buffers, but every RPC request needs its password.
+var grpcMaxReplyBytes int64 = 512 << 20
+
+// grpcStallTimeout is how long a gRPC client may take none of a part of a
+// reply while the replies being written hold more than grpcMaxReplyBytes.
+// The writes of clients that have taken nothing for longer are reset then,
+// those stalled longest first, until the others fit.  A reset is written
+// behind the frame being written, so the connection of a client whose reset
+// has not ended the write grpcStallTimeout later is closed, as a client that
+// does not read its socket takes neither.
+var grpcStallTimeout = 2 * time.Second
+
+// grpcResetDeadline is a write deadline in the past, which resets a stream at
+// once.
+var grpcResetDeadline = time.Unix(1, 0)
+
+// grpcReplyBudget counts the memory that the gRPC replies being written hold.
+// A reply counts from its first write until its flush, by the length in its
+// message prefix, as gRPC holds the whole message until all of it has been
+// written, and at least grpcWritePartSize, for its stream's goroutines and
+// buffers.
+type grpcReplyBudget struct {
+	mu      sync.Mutex
+	max     int64
+	used    int64 // the bytes the replies counted hold
+	resets  int64 // the bytes of those reset, until their writes return
+	writers map[*grpcDeadlineWriter]struct{}
+}
+
+// newGrpcReplyBudget returns a budget of max bytes.
+func newGrpcReplyBudget(max int64) *grpcReplyBudget {
+	return &grpcReplyBudget{max: max,
+		writers: make(map[*grpcDeadlineWriter]struct{})}
+}
+
+// count counts w's reply in the budget as at least n bytes until release,
+// with took set when its client has just taken a part.  While the replies
+// counted, less those reset, hold more than the budget, it resets the writes
+// of others whose clients have taken none of a part for grpcStallTimeout,
+// those stalled longest first, and closes the connection of one whose write
+// has not returned grpcStallTimeout later.  It returns false once w has been
+// reset.
+func (b *grpcReplyBudget) count(w *grpcDeadlineWriter, n int64, took bool) bool {
+	type victim struct {
+		w       *grpcDeadlineWriter
+		stalled time.Duration
+	}
+	b.mu.Lock()
+	if w.reset.Load() {
+		b.mu.Unlock()
+		return false
+	}
+	now := time.Now()
+	if _, ok := b.writers[w]; !ok {
+		b.writers[w] = struct{}{}
+		w.held, w.since = 0, now
+	}
+	if took {
+		w.since = now
+	}
+	if n = max(n, grpcWritePartSize); n > w.held {
+		b.used += n - w.held
+		w.held = n
+	}
+	var victims []victim
+	for b.used-b.resets > b.max {
+		var v *grpcDeadlineWriter
+		for o := range b.writers {
+			if o != w && !o.reset.Load() &&
+				now.Sub(o.since) >= grpcStallTimeout &&
+				(v == nil || o.since.Before(v.since)) {
+
+				v = o
+			}
+		}
+		if v == nil {
+			break
+		}
+		v.reset.Store(true)
+		v.counted = true
+		b.resets += v.held
+		after := grpcStallTimeout
+		v.closer = time.AfterFunc(after, func() { b.closeStalled(v, after) })
+		victims = append(victims, victim{v, now.Sub(v.since)})
+	}
+	used := b.used
+	b.mu.Unlock()
+
+	for _, v := range victims {
+		v.w.resetStream()
+		grpcLog.Debugf("Reset a gRPC reply to %s, which took none of it for "+
+			"%v while the replies being written held %d bytes", v.w.remote,
+			v.stalled.Round(time.Millisecond), used)
+	}
+	return true
+}
+
+// release ends the count of w's reply.
+func (b *grpcReplyBudget) release(w *grpcDeadlineWriter) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.writers[w]; !ok {
+		return
+	}
+	delete(b.writers, w)
+	b.used -= w.held
+	if w.counted {
+		b.resets -= w.held
+		w.counted = false
+	}
+	w.held = 0
+	if w.closer != nil {
+		w.closer.Stop()
+		w.closer = nil
+	}
+}
+
+// closeStalled closes w's connection when the write of its reply, reset
+// after ago, has not returned, as the reset then waits behind a frame its
+// client does not take.
+func (b *grpcReplyBudget) closeStalled(w *grpcDeadlineWriter, after time.Duration) {
+	b.mu.Lock()
+	_, held := b.writers[w]
+	b.mu.Unlock()
+	if held {
+		w.closeConn(after)
+	}
+}
+
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	if len(netAddrs) == 0 {
 		return nil, nil
@@ -82,7 +222,8 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 
 	rpcCfg.Server = server
 
-	httpServer := newGrpcHTTPServer(addr.String(), grpcHTTPHandler(server))
+	httpServer := newGrpcHTTPServer(addr.String(), grpcHTTPHandler(server,
+		newGrpcReplyBudget(grpcMaxReplyBytes)))
 
 	rpcCfg.HTTPServer = httpServer
 
@@ -190,16 +331,21 @@ func (l *grpcCallLimiter) intercept(ctx context.Context, req interface{}, _ *grp
 // grpcHTTPHandler returns the handler of the gRPC listener, which passes
 // gRPC-Web requests and their CORS preflights to the gRPC-Web wrapper of
 // server and the others to server, and writes the replies of both with write
-// deadlines.
-func grpcHTTPHandler(server *grpc.Server) http.Handler {
+// deadlines, within the replies budget.
+func grpcHTTPHandler(server *grpc.Server, replies *grpcReplyBudget) http.Handler {
 	allowAllOrigins := grpcweb.WithOriginFunc(func(origin string) bool {
 		return true
 	})
 	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
 
 	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		conn, _ := req.Context().Value(grpcConnKey{}).(net.Conn)
 		w := &grpcDeadlineWriter{ResponseWriter: resp,
-			rc: http.NewResponseController(resp)}
+			rc: http.NewResponseController(resp), replies: replies,
+			conn: conn, remote: req.RemoteAddr,
+			text: wrappedGrpc.IsGrpcWebRequest(req) && strings.HasPrefix(
+				req.Header.Get("Content-Type"), grpcWebTextContentType)}
+		defer w.close()
 		if req.Body != http.NoBody {
 			d := &grpcReadDeadline{rc: w.rc}
 			defer d.end()
@@ -290,45 +436,224 @@ func (b *grpcDeadlineBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// grpcDeadlineWriter is the ResponseWriter of a gRPC request.  It renews the
-// write deadline of the request's stream before each grpcWritePartSize bytes
-// it writes and before it flushes, and clears it once the write returns, so a
-// stream is reset only when its client takes none of a part for
-// grpcWriteTimeout, however large the reply and however long the stream is
-// idle between replies.
+// grpcConnKey is the context key of a gRPC request's connection.
+type grpcConnKey struct{}
+
+// grpcWebTextContentType is the content type of gRPC-Web's text format, whose
+// replies are base64 encoded.
+const grpcWebTextContentType = "application/grpc-web-text"
+
+// errGrpcReplyReset is returned for the writes of a reply reset to make room
+// for others.
+var errGrpcReplyReset = errors.New("reply reset to make room for others")
+
+// grpcDeadlineWriter is the ResponseWriter of a gRPC request.  It sets the
+// write deadline of the request's stream at the first write of each reply,
+// renews it each time grpcWritePartSize bytes more of the reply have been
+// written, and clears it once the reply's flush returns, so a stream is reset
+// only when its client takes none of a part for grpcWriteTimeout, however
+// large the reply, however it is split into writes and however long the
+// stream is idle between replies.  Its replies are counted in the replies
+// budget, which may reset them sooner.
 type grpcDeadlineWriter struct {
 	http.ResponseWriter
-	rc *http.ResponseController
+	rc      *http.ResponseController
+	replies *grpcReplyBudget
+	conn    net.Conn // the request's connection, if known
+	remote  string   // the client's address, for the log
+	text    bool     // the replies are base64, in gRPC-Web's text format
+
+	// The reply being written, from its first write until its flush.
+	// gRPC writes a stream's replies one at a time, from one goroutine.
+	open    bool
+	prefix  [8]byte // the reply's first bytes, until its length is read
+	nprefix int
+	sized   bool  // the prefix has been read
+	known   bool  // and gave the reply's length
+	written int64 // the bytes of the reply written
+	part    int   // those written since the deadline was renewed
+
+	// held, since, counted and closer are guarded by the budget's lock: the
+	// bytes the reply counts, when its client last took a part of it,
+	// whether the budget reset it and counts its bytes in its resets, and
+	// the timer that then closes the connection.
+	held    int64
+	since   time.Time
+	counted bool
+	closer  *time.Timer
+
+	// reset is set once the budget has reset the stream, and mu orders the
+	// deadlines set by the writes and by the reset, and the reset after
+	// the request's end, closed.
+	reset  atomic.Bool
+	mu     sync.Mutex
+	closed bool
 }
 
-// Write writes p in parts of grpcWritePartSize, renewing the write deadline
-// before each.
+// Write writes p as part of the reply its first write began, renewing the
+// write deadline each time grpcWritePartSize bytes more have been written.
+// The writes of a writer that has been reset are refused.
 func (w *grpcDeadlineWriter) Write(p []byte) (int, error) {
+	if !w.open {
+		w.begin()
+	}
+	if !w.sized {
+		w.readPrefix(p)
+	}
 	n := 0
 	for {
-		part := p[n:min(len(p), n+grpcWritePartSize)]
-		_ = w.rc.SetWriteDeadline(time.Now().Add(grpcWriteTimeout))
-		m, err := w.ResponseWriter.Write(part)
+		if w.reset.Load() {
+			w.replies.release(w)
+			return n, errGrpcReplyReset
+		}
+		if n == len(p) {
+			return n, nil
+		}
+		m, err := w.ResponseWriter.Write(
+			p[n:min(len(p), n+grpcWritePartSize-w.part)])
 		n += m
-		if err != nil || n == len(p) {
-			_ = w.rc.SetWriteDeadline(time.Time{})
+		w.part += m
+		w.written += int64(m)
+		if err != nil {
+			if w.reset.Load() {
+				w.replies.release(w)
+			}
 			return n, err
+		}
+		if w.part == grpcWritePartSize {
+			w.part = 0
+			var grown int64
+			if !w.known {
+				grown = w.written
+			}
+			w.replies.count(w, grown, true)
+			w.renewDeadline()
 		}
 	}
 }
 
-// Flush sends what has been written, under the write deadline.  gRPC requires
-// the writer to be an http.Flusher.
+// begin starts a reply at its first write, counting it in the budget, and
+// sets its write deadline.
+func (w *grpcDeadlineWriter) begin() {
+	w.open = true
+	w.nprefix, w.sized, w.known, w.written, w.part = 0, false, false, 0, 0
+	w.replies.count(w, 0, false)
+	w.renewDeadline()
+}
+
+// readPrefix reads the length of the reply from the gRPC message prefix in
+// its first 5 bytes, base64 encoded in its first 8 in gRPC-Web's text format,
+// as the writes bring them, and counts the whole reply.  A reply without a
+// valid prefix counts what has been written of it.
+func (w *grpcDeadlineWriter) readPrefix(p []byte) {
+	size := 5
+	if w.text {
+		size = 8
+	}
+	w.nprefix += copy(w.prefix[w.nprefix:size], p)
+	if w.nprefix < size {
+		return
+	}
+	w.sized = true
+	prefix := w.prefix[:5]
+	if w.text {
+		var raw [6]byte
+		n, err := base64.StdEncoding.Decode(raw[:], w.prefix[:8])
+		if err != nil || n < 5 {
+			return
+		}
+		prefix = raw[:5]
+	}
+
+	// The flag byte says whether the message is compressed, and in gRPC-Web
+	// whether it holds the trailers.
+	if prefix[0]&^0x81 != 0 {
+		return
+	}
+	w.known = true
+	w.replies.count(w, 5+int64(binary.BigEndian.Uint32(prefix[1:])), false)
+}
+
+// Flush sends what has been written of the reply, under its write deadline,
+// and ends it.  gRPC requires the writer to be an http.Flusher, and flushes
+// each message once it is written.  A flush with nothing written, of the
+// headers or trailers alone, counts as a reply while it waits.
 func (w *grpcDeadlineWriter) Flush() {
+	if !w.open {
+		w.begin()
+	}
+	if !w.reset.Load() {
+		_ = w.rc.Flush()
+	}
+	w.open = false
+	w.clearDeadline()
+	w.replies.release(w)
+}
+
+// renewDeadline sets the write deadline grpcWriteTimeout ahead, unless the
+// stream has been reset, which it returns false for.
+func (w *grpcDeadlineWriter) renewDeadline() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.reset.Load() {
+		return false
+	}
 	_ = w.rc.SetWriteDeadline(time.Now().Add(grpcWriteTimeout))
-	_ = w.rc.Flush()
-	_ = w.rc.SetWriteDeadline(time.Time{})
+	return true
+}
+
+// clearDeadline clears the write deadline, unless the stream has been reset.
+func (w *grpcDeadlineWriter) clearDeadline() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.reset.Load() {
+		_ = w.rc.SetWriteDeadline(time.Time{})
+	}
+}
+
+// resetStream sets a write deadline in the past, which resets the stream of
+// an HTTP/2 request at once and fails the writes of an HTTP/1.1 request,
+// unless the request has ended.
+func (w *grpcDeadlineWriter) resetStream() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.closed {
+		_ = w.rc.SetWriteDeadline(grpcResetDeadline)
+	}
+}
+
+// close marks the request ended, after which its ResponseController may no
+// longer be used, and ends the count of a reply not flushed.
+func (w *grpcDeadlineWriter) close() {
+	w.mu.Lock()
+	w.closed = true
+	w.mu.Unlock()
+	w.replies.release(w)
+}
+
+// closeConn closes the request's connection, which ends every call on it,
+// for a client that took none of its reset reply for after.  The socket of a
+// TLS connection is closed directly, as closing the TLS connection first
+// gives an alert up to 5 s to be written to the socket the client does not
+// read.
+func (w *grpcDeadlineWriter) closeConn(after time.Duration) {
+	conn := w.conn
+	if tc, ok := conn.(*tls.Conn); ok {
+		conn = tc.NetConn()
+	}
+	if conn == nil {
+		return
+	}
+	grpcLog.Debugf("Closing the gRPC connection of %s, which took none of a "+
+		"reset reply for %v", w.remote, after)
+	_ = conn.Close()
 }
 
 // newGrpcHTTPServer returns the HTTP server for the gRPC listener.  An HTTP/2
 // connection to which nothing can be written for grpcWriteTimeout is closed,
 // as a client that does not read its socket stalls every stream on it, which
-// the deadline of each stream cannot end.
+// the deadline of each stream cannot end.  Each request's context holds its
+// connection, which the replies budget closes sooner.
 func newGrpcHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -337,6 +662,9 @@ func newGrpcHTTPServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:       grpcIdleTimeout,
 		HTTP2: &http.HTTP2Config{
 			WriteByteTimeout: grpcWriteTimeout,
+		},
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, grpcConnKey{}, c)
 		},
 	}
 }

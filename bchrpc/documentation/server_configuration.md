@@ -66,6 +66,13 @@ ready to send. Up to 64 more wait for a place, and a call beyond those fails wit
 bchd --grpclisten=0.0.0.0 --grpcmaxconcurrentcalls=64
 ```
 
+While the replies being sent hold more than 512 MiB together, each counting its whole message
+and at least 64 KiB, a reply whose client has taken no 64 KiB part of it in the last 2 seconds
+is reset, those stalled longest first, and the connection of a client that takes none of the
+reset either is closed. A stream whose client takes at least 32 KiB a second, a 64 KiB part
+every 2 seconds, is never reset for room, so replies read that fast may hold more; a slower
+stream can be reset while the replies in flight hold more than 512 MiB.
+
 Finally you don't need to use indexes to use the gRPC API but it's recommended so
 you have access to all API calls. This obviously means you should not run in either
 `--prune` mode or `--fastsync` mode. To use the indexes run with:
