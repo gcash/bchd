@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -651,10 +652,10 @@ func TestABLAPrunedState(t *testing.T) {
 }
 
 // TestABLARebuildBlockReadError ensures the rebuild of the stored states takes
-// the size of each block from where the database stores it, without reading
-// the block, as Bitcoin Cash Node reads only the size of a block to rebuild its
-// state (node/blockstorage.cpp:520-533).  A block whose data is corrupt or
-// pruned still gets its exact state, and the node starts.
+// the size of each block from where the database stores it, as Bitcoin Cash
+// Node reads only the size of a block to rebuild its state
+// (node/blockstorage.cpp:520-533), so a block whose data is corrupt or pruned
+// still gets its exact state, and the node starts.
 func TestABLARebuildBlockReadError(t *testing.T) {
 	notExist := &os.PathError{Op: "open", Path: "x", Err: os.ErrNotExist}
 	for _, test := range []struct {
@@ -1141,5 +1142,302 @@ func TestABLAPaddedBlockRebuild(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// legacyPaddedDB is a database that gives the blocks in padded the way earlier
+// versions stored a block made from a block message with data after its last
+// transaction: with that data, in their bytes and in their stored size.  The
+// blocks in unreadable can't be read, as if pruned.  It counts the reads of
+// the padded blocks.
+type legacyPaddedDB struct {
+	database.DB
+	padded     map[chainhash.Hash][]byte
+	unreadable map[chainhash.Hash]bool
+	reads      int
+}
+
+// View runs fn with a transaction that gives the padded blocks.
+func (db *legacyPaddedDB) View(fn func(database.Tx) error) error {
+	return db.DB.View(func(tx database.Tx) error {
+		return fn(legacyPaddedTx{tx, db})
+	})
+}
+
+// Update runs fn with a transaction that gives the padded blocks.
+func (db *legacyPaddedDB) Update(fn func(database.Tx) error) error {
+	return db.DB.Update(func(tx database.Tx) error {
+		return fn(legacyPaddedTx{tx, db})
+	})
+}
+
+// pad makes block one stored with pad bytes after it, which can't be read
+// when unreadable is set.
+func (db *legacyPaddedDB) pad(t *testing.T, block *bchutil.Block, pad int, unreadable bool) {
+	t.Helper()
+	var serialized bytes.Buffer
+	if err := block.MsgBlock().Serialize(&serialized); err != nil {
+		t.Fatal(err)
+	}
+	db.padded[*block.Hash()] = append(serialized.Bytes(), make([]byte, pad)...)
+	db.unreadable[*block.Hash()] = unreadable
+}
+
+// legacyPaddedTx is a transaction of a legacyPaddedDB.
+type legacyPaddedTx struct {
+	database.Tx
+	db *legacyPaddedDB
+}
+
+// FetchBlock returns the bytes of a padded block with the data after it.
+func (tx legacyPaddedTx) FetchBlock(hash *chainhash.Hash) ([]byte, error) {
+	padded, ok := tx.db.padded[*hash]
+	if !ok {
+		return tx.Tx.FetchBlock(hash)
+	}
+	tx.db.reads++
+	if tx.db.unreadable[*hash] {
+		return nil, database.Error{ErrorCode: database.ErrDriverSpecific,
+			Err: os.ErrNotExist}
+	}
+	return padded, nil
+}
+
+// FetchBlockSize returns the size of a padded block with the data after it.
+func (tx legacyPaddedTx) FetchBlockSize(hash *chainhash.Hash) (uint32, error) {
+	if padded, ok := tx.db.padded[*hash]; ok {
+		return uint32(len(padded)), nil
+	}
+	return tx.Tx.FetchBlockSize(hash)
+}
+
+// newLegacyPaddedDB returns a new ffldb database wrapped in a legacyPaddedDB.
+func newLegacyPaddedDB(t *testing.T, params *chaincfg.Params) *legacyPaddedDB {
+	t.Helper()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return &legacyPaddedDB{DB: db, padded: make(map[chainhash.Hash][]byte),
+		unreadable: make(map[chainhash.Hash]bool)}
+}
+
+// TestABLASideChainLegacyPaddedBlock ensures the side chain replay takes the
+// serialized size of a block an earlier version stored with data after its
+// last transaction when that data would change the ABLA state, reading the
+// block only then, and the stored size when the block can't be read.
+func TestABLASideChainLegacyPaddedBlock(t *testing.T) {
+	params := ablaTestParams()
+	db := newLegacyPaddedDB(t, params)
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 3, 2000)
+	cfg := &chain.ablaConfig
+	forkState := ablaExpectedState(chain, blocks[:1])
+
+	// Side blocks after block 1, the first with a second transaction, so
+	// that its size is where its last transaction ends.
+	parent := blocks[0].MsgBlock()
+	spend := wire.NewMsgTx(2)
+	spend.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: parent.Transactions[0].TxHash()},
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	spend.AddTxOut(wire.NewTxOut(0, append([]byte{txscript.OP_RETURN},
+		make([]byte, 1000)...), wire.TokenData{}))
+	var sides []*bchutil.Block
+	for i, size := range []int{3000, 2001, 2002} {
+		var extra []*wire.MsgTx
+		if i == 0 {
+			extra = append(extra, spend)
+		}
+		side := ablaTestBlock(t, parent, 2, size, params, extra...)
+		if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
+			t.Fatalf("side block %d: %v", i, err)
+		}
+		sides = append(sides, side)
+	}
+
+	for _, test := range []struct {
+		name       string
+		side       *bchutil.Block
+		pad        int
+		unreadable bool
+		size       uint64
+		reads      int
+	}{
+		// Padded to the 1 MB limit, which would grow the state.
+		{"padded", sides[0], 1000000 - 3000, false, 3000, 1},
+		// Padded too little to change the state: not read.
+		{"padded a little", sides[1], 1000, false, 3001, 0},
+		// Padded to the limit, but unreadable: the stored size.
+		{"padded and pruned", sides[2], 1000000 - 2002, true, 1000000, 1},
+	} {
+		db.reads = 0
+		db.pad(t, test.side, test.pad, test.unreadable)
+		got, err := chain.ablaStateAfter(chain.index.LookupNode(test.side.Hash()))
+		if err != nil {
+			t.Fatalf("%s: %v", test.name, err)
+		}
+		if want := forkState.nextABLAState(cfg, test.size); got != want {
+			t.Errorf("%s: ABLA state %+v, want %+v", test.name, got, want)
+		}
+		if db.reads != test.reads {
+			t.Errorf("%s: %d reads of the block, want %d", test.name,
+				db.reads, test.reads)
+		}
+	}
+}
+
+// TestABLASideChainLegacyPaddedAboveFloor ensures the check of a side chain
+// block's stored size starts from the state after its parent: above the floor,
+// even a little data an earlier version stored with a small block would change
+// the state after it.
+func TestABLASideChainLegacyPaddedAboveFloor(t *testing.T) {
+	params := ablaTestParams()
+	db := newLegacyPaddedDB(t, params)
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 20, 999000)
+	forkState := ablaExpectedState(chain, blocks[:19])
+	if forkState.controlBlockSize == chain.ablaConfig.epsilon0 {
+		t.Fatal("test blocks did not grow the ABLA state")
+	}
+
+	side := ablaTestBlock(t, blocks[18].MsgBlock(), 20, 2000, params)
+	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
+		t.Fatalf("side block: %v", err)
+	}
+	db.pad(t, side, 28000, false)
+	got, err := chain.ablaStateAfter(chain.index.LookupNode(side.Hash()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := forkState.nextABLAState(&chain.ablaConfig, 2000)
+	if got != want {
+		t.Errorf("ABLA state %+v, want %+v", got, want)
+	}
+	if padded := forkState.nextABLAState(&chain.ablaConfig, 30000); padded == want {
+		t.Errorf("the padded size gives the same state %+v", want)
+	}
+	if db.reads != 1 {
+		t.Errorf("%d reads of the block, want 1", db.reads)
+	}
+}
+
+// TestABLARebuildLegacyPaddedBlock ensures the rebuild of the stored ABLA
+// states takes the serialized size of a block an earlier version stored with
+// data after its last transaction, reading only that block, whose stored size
+// would change the state.
+func TestABLARebuildLegacyPaddedBlock(t *testing.T) {
+	params := ablaTestParams()
+	db := newLegacyPaddedDB(t, params)
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 5, 2000)
+	if err := chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+	db.pad(t, blocks[2], 1000000-2000, false)
+	db.pad(t, blocks[3], 1000, false)
+
+	writeOldABLAStates(t, db, int32(len(blocks)))
+	chain = ablaTestChain(t, db, params)
+	if want := ablaExpectedState(chain, blocks); chain.ablaState != want {
+		t.Fatalf("ABLA state %+v, want %+v", chain.ablaState, want)
+	}
+	err := db.View(func(dbTx database.Tx) error {
+		for h := 0; h <= len(blocks); h++ {
+			state, err := chain.dbFetchValidABLAState(dbTx, int32(h))
+			if err != nil {
+				return err
+			}
+			if want := ablaExpectedState(chain, blocks[:h]); state != want {
+				t.Errorf("height %d: ABLA state %+v, want %+v", h,
+					state, want)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.reads != 1 {
+		t.Errorf("%d reads of the padded blocks, want 1", db.reads)
+	}
+}
+
+// TestABLANextStateMonotone ensures the ABLA state after a block never
+// decreases as the block's size grows, which ablaBlockSize relies on to leave
+// a block unread when its stored size gives the state an empty block would.
+func TestABLANextStateMonotone(t *testing.T) {
+	for _, params := range []*chaincfg.Params{ablaTestParams(),
+		&chaincfg.MainNetParams, &chaincfg.ChipNetParams} {
+
+		c := params.ABLAConfig
+		cfg := &ABLAConfig{epsilon0: c.Epsilon0, beta0: c.Beta0, n0: c.N0,
+			gammaReciprocal: c.GammaReciprocal, zetaXB7: c.ZetaXB7,
+			thetaReciprocal: c.ThetaReciprocal, delta: c.Delta,
+			fixedSize: c.FixedSize}
+		cfg.SetMax()
+		floor := ABLAState{blockHeight: cfg.n0 + 1,
+			controlBlockSize: cfg.epsilon0, elasticBufferSize: cfg.beta0}
+		states := []ABLAState{floor,
+			{floor.blockHeight, cfg.epsilon0 + 1, cfg.beta0},
+			{floor.blockHeight, cfg.epsilon0 + 300, cfg.beta0 + 5000},
+			{floor.blockHeight, 3 * cfg.epsilon0, 2 * cfg.beta0},
+			{floor.blockHeight, cfg.epsilonMax, cfg.betaMax}}
+		for _, prev := range states {
+			limit := prev.controlBlockSize + prev.elasticBufferSize
+			// Above this size the control block size grows.
+			threshold := muldiv(prev.controlBlockSize, B7, cfg.zetaXB7)
+			sizes := []uint64{0, 1, 1000, 25000, 100000, threshold - 1,
+				threshold, threshold + 1, threshold + 100000, limit / 2,
+				limit - 1, limit, limit + 1, limit + 100000}
+			slices.Sort(sizes)
+			last := prev.nextABLAState(cfg, sizes[0])
+			for _, size := range sizes[1:] {
+				next := prev.nextABLAState(cfg, size)
+				if next.controlBlockSize < last.controlBlockSize ||
+					next.elasticBufferSize < last.elasticBufferSize {
+
+					t.Errorf("%s: state after %+v with %d bytes, %+v, "+
+						"is below the one with fewer bytes, %+v",
+						params.Name, prev, size, next, last)
+				}
+				last = next
+			}
+		}
+	}
+}
+
+// TestABLARebuildLegacyPaddedAboveFloor ensures the rebuild checks a block's
+// stored size from the state after its parent: above the floor, even a little
+// data an earlier version stored with a small block would change the state.
+func TestABLARebuildLegacyPaddedAboveFloor(t *testing.T) {
+	params := ablaTestParams()
+	db := newLegacyPaddedDB(t, params)
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 20, 999000)
+
+	// A small block, then another one, so that the padded block is not
+	// the tip, which the start reads for its own reasons.
+	for h := int32(21); h <= 22; h++ {
+		block := ablaTestBlock(t, blocks[h-2].MsgBlock(), h, 2000, params)
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatal(err)
+		}
+		blocks = append(blocks, block)
+	}
+	if err := chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+	db.pad(t, blocks[20], 28000, false)
+
+	writeOldABLAStates(t, db, int32(len(blocks)))
+	chain = ablaTestChain(t, db, params)
+	if want := ablaExpectedState(chain, blocks); chain.ablaState != want {
+		t.Fatalf("ABLA state %+v, want %+v", chain.ablaState, want)
+	}
+	if db.reads != 1 {
+		t.Errorf("%d reads of the padded block, want 1", db.reads)
 	}
 }

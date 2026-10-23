@@ -84,12 +84,47 @@ func (b *BlockChain) ablaNextState(prev ABLAState, height int32, size uint64) AB
 	return prev.nextABLAState(&b.ablaConfig, size)
 }
 
+// ablaBlockSize returns the size of the block of the passed node to compute
+// the ABLA state after it with, where prev is the state after its parent.  It
+// is the size the database stores the block with, which it keeps for pruned
+// blocks too.  The database stores each block as its serialization, whose
+// size the state follows, as in Bitcoin Cash Node (validation.cpp:1602-1614),
+// but earlier versions stored a block made from a block message with any data
+// after its last transaction, so its stored size can be larger.  The next
+// state never decreases as the size grows, so when the stored size gives the
+// state an empty block would, any smaller size does too, and the block is not
+// read.  Otherwise the size is where the block's last transaction ends, read
+// from the block; one that can't be read, as a pruned one, keeps its stored
+// size.
+func (b *BlockChain) ablaBlockSize(dbTx database.Tx, prev ABLAState, node *blockNode) (uint64, error) {
+	stored, err := dbTx.FetchBlockSize(&node.hash)
+	if err != nil {
+		return 0, err
+	}
+	size := uint64(stored)
+	if b.ablaNextState(prev, node.height, size) ==
+		b.ablaNextState(prev, node.height, 0) {
+
+		return size, nil
+	}
+	serialized, err := dbTx.FetchBlock(&node.hash)
+	if err == nil {
+		txLocs, err := wire.BlockTxLocs(serialized)
+		if err == nil && len(txLocs) > 0 {
+			last := txLocs[len(txLocs)-1]
+			size = uint64(last.TxStart + last.TxLen)
+		}
+	}
+	return size, nil
+}
+
 // ablaStateAfter returns the ABLA state after the passed node, which sets the
 // size limit of its children.  Side chain states are computed from the fork
 // point using the stored block sizes.  The sizes are taken from where the
 // database stores the blocks, which it keeps for pruned blocks too, so no block
 // data is read, as Bitcoin Cash Node keeps the state of every block in its
-// block index.
+// block index, except for a stored size that could hold data an earlier
+// version stored with the block (see ablaBlockSize).
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) ablaStateAfter(node *blockNode) (ABLAState, error) {
@@ -132,11 +167,11 @@ func (b *BlockChain) ablaStateAfter(node *blockNode) (ABLAState, error) {
 	err = b.db.View(func(dbTx database.Tx) error {
 		for i := len(sideNodes) - 1; i >= 0; i-- {
 			n := sideNodes[i]
-			size, err := dbTx.FetchBlockSize(&n.hash)
+			size, err := b.ablaBlockSize(dbTx, state, n)
 			if err != nil {
 				return err
 			}
-			state = b.ablaNextState(state, n.height, uint64(size))
+			state = b.ablaNextState(state, n.height, size)
 			b.cacheSideABLAState(n.hash, state)
 		}
 		return nil
@@ -345,14 +380,16 @@ func (b *BlockChain) initABLAState() error {
 				// The size is taken from where the database
 				// stores the block, which it keeps for pruned
 				// blocks too, so the block is not read, as
-				// Bitcoin Cash Node reads only the size.  A block
-				// the database has no location for, as one a
-				// fast sync never stored, is approximated.
+				// Bitcoin Cash Node reads only the size, unless
+				// the stored size could hold data an earlier
+				// version stored with it (see ablaBlockSize).  A
+				// block the database has no location for, as one
+				// a fast sync never stored, is approximated.
 				node := b.bestChain.NodeByHeight(h)
-				size, err := dbTx.FetchBlockSize(&node.hash)
+				size, err := b.ablaBlockSize(dbTx, state, node)
 				switch {
 				case err == nil:
-					state = b.ablaNextState(state, h, uint64(size))
+					state = b.ablaNextState(state, h, size)
 				case (pruned || b.pruneMode) && isBlockDataMissing(err):
 					state = b.prunedABLAState(dbTx, h)
 					approximated++
