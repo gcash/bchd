@@ -44,14 +44,17 @@ func (s *SlpCache) AddSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) error {
 	return s.slpTxEntries.Set(*hash, &item)
 }
 
-// AddMempoolSlpTxEntry puts new items in the mempool cache
+// AddMempoolSlpTxEntry puts new items in the mempool cache.  A transaction
+// whose entry only the LRU holds, as one back in the memory pool, is put there
+// too, as the LRU could otherwise evict the entry while the transaction is in
+// the pool.
 func (s *SlpCache) AddMempoolSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
-	if _, ok := s.GetSlpTxEntry(hash); ok {
-		return
-	}
-
 	s.Lock()
 	defer s.Unlock()
+
+	if _, ok := s.mempoolSlpTxEntries[*hash]; ok {
+		return
+	}
 	s.mempoolSlpTxEntries[*hash] = &item
 	_ = s.slpTxEntries.Set(*hash, &item)
 }

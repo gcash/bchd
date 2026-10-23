@@ -293,3 +293,86 @@ func TestSlpRemoveNotInChangedMeanwhile(t *testing.T) {
 			"was asked is %v, %v", tm, ok)
 	}
 }
+
+// TestSlpMempoolEntryBackInPool ensures a transaction that comes back to the
+// memory pool after its memory pool entry was removed is pinned in the slp
+// cache again, even though the cache's LRU still holds its entry, so that the
+// LRU cannot evict the entry while the transaction is in the pool.  The entry
+// is all the index has of a transaction in the pool: once it is evicted, the
+// transaction is not valid slp to the index, and neither is a transaction
+// that spends its tokens.
+func TestSlpMempoolEntryBackInPool(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	genesis := genesisTx(t, 1)
+	hash := genesis.TxHash()
+	token := tokenIDOf(t, genesis)
+
+	// The GENESIS is in the memory pool, then leaves it, as when it
+	// expires, so the next block event removes its memory pool entry,
+	// and then comes back, as when its wallet sends it again.
+	test.addPotential(genesis)
+	test.idx.RemoveMempoolSlpTxsNotIn(func(*chainhash.Hash) bool { return false })
+	if test.idx.cache.GetMempoolItem(&hash) != nil {
+		t.Fatal("the GENESIS that left the memory pool is still pinned")
+	}
+	test.addPotential(genesis)
+	if test.idx.cache.GetMempoolItem(&hash) == nil {
+		t.Error("the GENESIS back in the memory pool is not pinned")
+	}
+
+	// Other entries fill the LRU, which holds 100.
+	for i := 0; i < 100; i++ {
+		other := chainhash.Hash{0xaa, byte(i)}
+		if err := test.idx.cache.AddSlpTxEntry(&other, SlpTxEntry{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := test.db.View(func(dbTx database.Tx) error {
+		_, err := test.idx.GetSlpIndexEntry(dbTx, &hash)
+		return err
+	})
+	if err != nil {
+		t.Errorf("the GENESIS in the memory pool has no slp entry: %v", err)
+	}
+
+	// A SEND of its tokens.
+	script, err := metadatamaker.TokenType1Send(token[:], []uint64{1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := wire.NewMsgTx(1)
+	send.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: hash, Index: 1}, nil))
+	send.AddTxOut(&wire.TxOut{PkScript: script})
+	send.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{0x51}})
+	var valid bool
+	err = test.db.View(func(dbTx database.Tx) error {
+		var err error
+		valid, err = test.idx.AddPotentialSlpEntries(dbTx, send)
+		return err
+	})
+	if err != nil || !valid {
+		t.Errorf("a SEND of the tokens of the GENESIS in the memory pool is "+
+			"%v, %v; want valid", valid, err)
+	}
+}
+
+// TestSlpRemoveNotInCheckedAgain ensures checking a transaction again while
+// its memory pool entry is in the slp cache, as each gRPC subscriber does for
+// the transactions it sends, keeps that entry, so that RemoveMempoolSlpTxsNotIn
+// still removes it once the memory pool reports the transaction gone, even
+// when the check comes while the pool is asked.
+func TestSlpRemoveNotInCheckedAgain(t *testing.T) {
+	cache := InitSlpCache(10)
+	genesis := genesisTx(t, 1)
+	hash := genesis.TxHash()
+	entry := SlpTxEntry{TokenIDHash: tokenIDOf(t, genesis)}
+	cache.AddMempoolSlpTxEntry(&hash, entry)
+	cache.RemoveMempoolSlpTxsNotIn(func(*chainhash.Hash) bool {
+		cache.AddMempoolSlpTxEntry(&hash, entry)
+		return false
+	})
+	if cache.GetMempoolItem(&hash) != nil {
+		t.Error("the entry of the transaction that left the memory pool is " +
+			"still there")
+	}
+}
