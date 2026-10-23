@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/gcash/bchd/blockchain"
@@ -266,10 +267,22 @@ func dbFetchAddrIndexEntries(bucket internalBucket, addrKey [addrKeySize]byte, n
 	// transactions (highest level) and thus the total count is needed.
 	// However, when the reverse flag is set, only enough records to satisfy
 	// the requested amount are needed.
+	want := uint64(math.MaxUint64)
+	if reverse {
+		want = (uint64(numToSkip) + uint64(numRequested)) * txEntrySize
+	}
+	serialized := dbFetchAddrIndexLevels(bucket, addrKey, want)
+	return addrIndexEntryRegions(serialized, addrKey, numToSkip,
+		numRequested, reverse, fetchBlockHash)
+}
+
+// dbFetchAddrIndexLevels returns the serialized entries of the given address
+// key's levels, oldest first, reading the levels from the newest until it has
+// at least want bytes or there are no more.
+func dbFetchAddrIndexLevels(bucket internalBucket, addrKey [addrKeySize]byte, want uint64) []byte {
 	var level uint8
 	var serialized []byte
-	for !reverse || uint64(len(serialized)) <
-		(uint64(numToSkip)+uint64(numRequested))*txEntrySize {
+	for uint64(len(serialized)) < want {
 		curLevelKey := keyForLevel(addrKey, level)
 		levelData := bucket.Get(curLevelKey[:])
 		if levelData == nil {
@@ -284,7 +297,14 @@ func dbFetchAddrIndexEntries(bucket internalBucket, addrKey [addrKeySize]byte, n
 		serialized = prepended
 		level++
 	}
+	return serialized
+}
 
+// addrIndexEntryRegions returns the block regions of the entries of
+// serialized, an address's levels as dbFetchAddrIndexLevels returns them,
+// that dbFetchAddrIndexEntries returns for the same arguments, and the number
+// of entries skipped.
+func addrIndexEntryRegions(serialized []byte, addrKey [addrKeySize]byte, numToSkip, numRequested uint32, reverse bool, fetchBlockHash fetchBlockHashFunc) ([]database.BlockRegion, uint32, error) {
 	// When the requested number of entries to skip is larger than the
 	// number available, skip them all and return now with the actual number
 	// skipped.
@@ -897,6 +917,58 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 	})
 
 	return regions, skipped, err
+}
+
+// TxRegionPagesForAddress calls fn with the block regions of the transactions
+// involving the passed address, newest first, pageSize at a time, until fn
+// returns an error, which it returns, or they run out.  The address's levels
+// are read once, with the first page, so reading the history of an address
+// with n transactions reads its n entries, where paging through it with
+// TxRegionsForAddress reads about n²/(2*pageSize), as each call reads the
+// levels from the newest again.  Each page's blocks are looked up in a
+// database transaction of its own, and fn is called outside it.  The pages
+// after the first are decoded from the levels as read with it, so the entries
+// of a block disconnected in between fail to decode, or name the block that
+// took its ID.
+//
+// This function is safe for concurrent access.
+func (idx *AddrIndex) TxRegionPagesForAddress(addr bchutil.Address, pageSize uint32, fn func([]database.BlockRegion) error) error {
+	addrKey, err := addrToKey(addr)
+	if err != nil {
+		return err
+	}
+
+	var serialized []byte
+	for skip := uint32(0); ; skip += pageSize {
+		var regions []database.BlockRegion
+		err := idx.db.View(func(dbTx database.Tx) error {
+			if skip == 0 {
+				bucket := dbTx.Metadata().Bucket(addrIndexKey)
+				if bucket == nil {
+					return fmt.Errorf("bucket nil for key: %s",
+						addrIndexKey)
+				}
+				serialized = dbFetchAddrIndexLevels(bucket, addrKey,
+					math.MaxUint64)
+			}
+			fetchBlockHash := func(id []byte) (*chainhash.Hash, error) {
+				return dbFetchBlockHashBySerializedID(dbTx, id)
+			}
+			var err error
+			regions, _, err = addrIndexEntryRegions(serialized, addrKey,
+				skip, pageSize, true, fetchBlockHash)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		if len(regions) == 0 {
+			return nil
+		}
+		if err := fn(regions); err != nil {
+			return err
+		}
+	}
 }
 
 // indexUnconfirmedAddresses modifies the unconfirmed (memory-only) address

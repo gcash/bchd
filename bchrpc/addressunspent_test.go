@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -68,6 +70,15 @@ type addrUnspentHarness struct {
 
 func newAddrUnspentHarness(tb testing.TB) *addrUnspentHarness {
 	tb.Helper()
+	return newAddrUnspentHarnessDB(tb, nil)
+}
+
+// newAddrUnspentHarnessDB is newAddrUnspentHarness with the address index
+// reading the database through indexDB(db) when indexDB is not nil.
+func newAddrUnspentHarnessDB(tb testing.TB,
+	indexDB func(database.DB) database.DB) *addrUnspentHarness {
+
+	tb.Helper()
 
 	params := chaincfg.RegressionNetParams
 	db, err := database.Create("ffldb", tb.TempDir(), params.Net)
@@ -77,7 +88,11 @@ func newAddrUnspentHarness(tb testing.TB) *addrUnspentHarness {
 	tb.Cleanup(func() { db.Close() })
 
 	txIndex := indexers.NewTxIndex(db)
-	addrIndex := indexers.NewAddrIndex(db, &params)
+	addrIndexDB := db
+	if indexDB != nil {
+		addrIndexDB = indexDB(db)
+	}
+	addrIndex := indexers.NewAddrIndex(addrIndexDB, &params)
 	indexManager := indexers.NewManager(db,
 		[]indexers.Indexer{txIndex, addrIndex})
 	chain, err := blockchain.New(&blockchain.Config{
@@ -744,5 +759,145 @@ func TestGetAddressUnspentOutputsCallEnds(t *testing.T) {
 				t.Fatalf("got %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+// addrIndexReadsDB counts the bytes read from the address index's bucket
+// through it.
+type addrIndexReadsDB struct {
+	database.DB
+	bytes atomic.Int64
+}
+
+func (db *addrIndexReadsDB) View(fn func(database.Tx) error) error {
+	return db.DB.View(func(tx database.Tx) error {
+		return fn(addrIndexReadsTx{Tx: tx, db: db})
+	})
+}
+
+type addrIndexReadsTx struct {
+	database.Tx
+	db *addrIndexReadsDB
+}
+
+func (tx addrIndexReadsTx) Metadata() database.Bucket {
+	return addrIndexReadsBucket{dbBucket: tx.Tx.Metadata(), db: tx.db}
+}
+
+// dbBucket names the bucket addrIndexReadsBucket embeds, whose Bucket method
+// would clash with a field named Bucket.
+type dbBucket = database.Bucket
+
+type addrIndexReadsBucket struct {
+	dbBucket
+	db      *addrIndexReadsDB
+	counted bool
+}
+
+func (b addrIndexReadsBucket) Bucket(key []byte) database.Bucket {
+	child := b.dbBucket.Bucket(key)
+	if child == nil {
+		return nil
+	}
+	return addrIndexReadsBucket{dbBucket: child, db: b.db,
+		counted: string(key) == "txbyaddridx"}
+}
+
+func (b addrIndexReadsBucket) Get(key []byte) []byte {
+	v := b.dbBucket.Get(key)
+	if b.counted {
+		b.db.bytes.Add(int64(len(v)))
+	}
+	return v
+}
+
+// TestGetAddressUnspentOutputsReadsHistoryOnce ensures GetAddressUnspentOutputs
+// reads the address index entries of an address's history once, however many
+// pages it loads its transactions in, where reading them again for each page
+// costs time quadratic in the history's length, and that the outputs do not
+// depend on the page size.
+func TestGetAddressUnspentOutputsReadsHistoryOnce(t *testing.T) {
+	var reads *addrIndexReadsDB
+	h := newAddrUnspentHarnessDB(t, func(db database.DB) database.DB {
+		reads = &addrIndexReadsDB{DB: db}
+		return reads
+	})
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+
+	// A coinbase pays the address 30 outputs, 30 transactions spend them
+	// and pay it change, and 15 spend every other change: 46 transactions
+	// of the address and 15 unspent outputs.
+	const n = 30
+	outs := make([]*wire.TxOut, n)
+	for i := range outs {
+		outs[i] = pay(1e8, addrScript)
+	}
+	cb := h.mineBlock(outs, nil)
+	change := make([]*wire.MsgTx, n)
+	for i := range change {
+		change[i] = spendTx(t, outPoint(cb, uint32(i)), addrRedeem,
+			pay(9e7, addrScript), pay(1e6, otherScript))
+	}
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, change)
+	var spends []*wire.MsgTx
+	for i := 0; i < n; i += 2 {
+		spends = append(spends, spendTx(t, outPoint(change[i], 0),
+			addrRedeem, pay(8e7, otherScript)))
+	}
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, spends)
+	const entries = 1 + n + n/2
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	for _, pageSize := range []int{10000, 1, 7, 10, entries, entries + 1} {
+		addressUnspentPageSize = pageSize
+		reads.bytes.Store(0)
+		resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+			&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+		if err != nil {
+			t.Fatalf("pages of %d: %v", pageSize, err)
+		}
+		var got, want []string
+		for _, u := range resp.Outputs {
+			got = append(got, unspentKey(u))
+		}
+		for i := 1; i < n; i += 2 {
+			want = append(want, wantUnspent(change[i], 0, false, 2))
+		}
+		sort.Strings(got)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("pages of %d: got %v, want %v", pageSize, got, want)
+		}
+		if b := reads.bytes.Load(); b != entries*12 {
+			t.Errorf("pages of %d: read %d bytes of the address index, "+
+				"want its %d", pageSize, b, entries*12)
+		}
+	}
+}
+
+// TestGetAddressUnspentOutputsShutdown ensures GetAddressUnspentOutputs stops
+// reading the address's history once the server shuts down.
+func TestGetAddressUnspentOutputsShutdown(t *testing.T) {
+	h := newAddrUnspentHarness(t)
+	h.mineBlock([]*wire.TxOut{wire.NewTxOut(50e8, p2shScript(t, addrRedeem),
+		wire.TokenData{})}, nil)
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomic.StoreInt32(&h.s.shutdown, 1)
+	_, err = h.s.GetAddressUnspentOutputs(context.Background(),
+		&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+	if status.Code(err) != codes.Canceled {
+		t.Errorf("got %v, want Canceled", err)
 	}
 }

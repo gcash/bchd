@@ -1098,6 +1098,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 	return resp, nil
 }
 
+// addressUnspentPageSize is how many transactions of an address's history
+// GetAddressUnspentOutputs loads at a time.  It is a variable for tests.
+var addressUnspentPageSize = 10000
+
 // addressUnspentListHook and addressUnspentScanHook, when set, are called by
 // GetAddressUnspentOutputs once it has listed the address's memory pool
 // transactions, and once it has read the address's confirmed history.  They
@@ -1156,9 +1160,10 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	}
 	tokenMetadataSet := make(map[chainhash.Hash]struct{})
 
-	// Each output is returned once, even when the history lists its
-	// transaction twice: a block connected during the scan shifts the
-	// pages, and a repeated coinbase has two entries.
+	// Each output is returned once, even when its transaction is checked
+	// twice: a block connected after the call starts is read with the
+	// history and again with the blocks connected during the call, and a
+	// repeated coinbase has two entries.
 	found := make(map[wire.OutPoint]struct{})
 	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
 		txHash := *tx.Hash()
@@ -1272,37 +1277,52 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		addressUnspentListHook()
 	}
 
+	// The address's history is read once, newest first, and its
+	// transactions loaded and checked a page at a time.
 	var (
-		utxos []*pb.UnspentOutput
-		skip  = 0
-		fetch = 10000
+		utxos   []*pb.UnspentOutput
+		fetch   = addressUnspentPageSize
+		scanErr error
 	)
-	for {
-		if atomic.LoadInt32(&s.shutdown) > 0 {
-			return nil, status.Error(codes.Canceled, "canceled by server")
-		}
-		// The scan reads the address's whole history, so it stops once
-		// the client is gone or its deadline has passed.
-		if err := ctx.Err(); err != nil {
-			return nil, status.FromContextError(err).Err()
-		}
-		confirmedTxs, err := s.fetchTransactionsByAddress(addr, 0, fetch, skip)
-		if err != nil {
-			return nil, err
-		}
-		if len(confirmedTxs) == 0 {
-			break
-		}
-		for _, ret := range confirmedTxs {
-			u, err := checkTxOutputs(bchutil.NewTx(&ret.tx))
+	err = s.addrIndex.TxRegionPagesForAddress(addr, uint32(fetch),
+		func(regions []database.BlockRegion) error {
+			if atomic.LoadInt32(&s.shutdown) > 0 {
+				scanErr = status.Error(codes.Canceled, "canceled by server")
+				return scanErr
+			}
+			// The scan reads the address's whole history, so it stops
+			// once the client is gone or its deadline has passed.
+			if err := ctx.Err(); err != nil {
+				scanErr = status.FromContextError(err).Err()
+				return scanErr
+			}
+			var confirmedTxs []retrievedTx
+			err := s.db.View(func(dbTx database.Tx) error {
+				var err error
+				confirmedTxs, err = s.appendRegionTxs(nil, dbTx,
+					regions, 0)
+				return err
+			})
 			if err != nil {
-				return nil, err
+				return err
 			}
-			if len(u) > 0 {
-				utxos = append(utxos, u...)
+			for _, ret := range confirmedTxs {
+				u, err := checkTxOutputs(bchutil.NewTx(&ret.tx))
+				if err != nil {
+					scanErr = err
+					return err
+				}
+				if len(u) > 0 {
+					utxos = append(utxos, u...)
+				}
 			}
-		}
-		skip += len(confirmedTxs)
+			return nil
+		})
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
 	}
 	if addressUnspentScanHook != nil {
 		addressUnspentScanHook()
@@ -1328,7 +1348,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		}
 	}
 	if s.chain.BestSnapshot().Height > startHeight {
-		for skip = 0; ; {
+		for skip := 0; ; {
 			if err := ctx.Err(); err != nil {
 				return nil, status.FromContextError(err).Err()
 			}
@@ -3180,40 +3200,10 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			if err != nil {
 				return err
 			}
-
-			// Load the raw transaction bytes from the database.
-			serializedTxns, err := dbTx.FetchBlockRegions(regions)
+			addressTxns, err = s.appendRegionTxs(addressTxns, dbTx,
+				regions, startHeight)
 			if err != nil {
 				return err
-			}
-
-			// Add the transaction and the hash of the block it is
-			// contained in to the list.  Note that the transaction
-			// is left serialized here since the caller might have
-			// requested non-verbose output and hence there would be
-			// no point in deserializing it just to reserialize it
-			// later.
-			for i, serializedTx := range serializedTxns {
-				blockHeight, err := s.chain.BlockHeightByHash(regions[i].Hash)
-				if err != nil {
-					return err
-				}
-				if blockHeight >= startHeight {
-					header, err := s.chain.HeaderByHash(regions[i].Hash)
-					if err != nil {
-						return err
-					}
-					tx := wire.MsgTx{}
-					if err := tx.BchDecode(bytes.NewReader(serializedTx), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
-						return err
-					}
-					addressTxns = append(addressTxns, retrievedTx{
-						tx:          tx,
-						txBytes:     serializedTx,
-						blockHeight: blockHeight,
-						blockHeader: &header,
-					})
-				}
 			}
 			numSkipped += dbSkipped
 
@@ -3226,6 +3216,44 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	}
 
 	return addressTxns, nil
+}
+
+// appendRegionTxs appends to txs the transactions at the regions, read with
+// dbTx, but those in blocks below startHeight.
+func (s *GrpcServer) appendRegionTxs(txs []retrievedTx, dbTx database.Tx, regions []database.BlockRegion, startHeight int32) ([]retrievedTx, error) {
+	// Load the raw transaction bytes from the database.
+	serializedTxns, err := dbTx.FetchBlockRegions(regions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the transaction and the hash of the block it is contained in to
+	// the list.  Note that the transaction is left serialized here since
+	// the caller might have requested non-verbose output and hence there
+	// would be no point in deserializing it just to reserialize it later.
+	for i, serializedTx := range serializedTxns {
+		blockHeight, err := s.chain.BlockHeightByHash(regions[i].Hash)
+		if err != nil {
+			return nil, err
+		}
+		if blockHeight >= startHeight {
+			header, err := s.chain.HeaderByHash(regions[i].Hash)
+			if err != nil {
+				return nil, err
+			}
+			tx := wire.MsgTx{}
+			if err := tx.BchDecode(bytes.NewReader(serializedTx), wire.ProtocolVersion, wire.BaseEncoding); err != nil {
+				return nil, err
+			}
+			txs = append(txs, retrievedTx{
+				tx:          tx,
+				txBytes:     serializedTx,
+				blockHeight: blockHeight,
+				blockHeader: &header,
+			})
+		}
+	}
+	return txs, nil
 }
 
 // getSlpIndexEntry fetches an SlpIndexEntry object leveraging a cache of SlpIndexEntry items

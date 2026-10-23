@@ -7,8 +7,10 @@ package indexers
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
@@ -666,4 +668,160 @@ func TestAddrIndexP2SH32Key(t *testing.T) {
 				"only tx %d", test.addr, len(unconfirmed), test.tx)
 		}
 	}
+}
+
+// TestTxRegionPagesForAddress ensures TxRegionPagesForAddress gives the block
+// regions of an address's transactions newest first, as
+// dbFetchAddrIndexEntries does, in pages of the size asked for, that it stops
+// at the first error of its callback and returns it, and that it does not
+// call it for an address without transactions.  It also ensures
+// dbFetchAddrIndexEntries, which shares the reading of the levels, still
+// gives them all oldest first, and reads only the levels it needs newest
+// first.
+func TestTxRegionPagesForAddress(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), wire.TestNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	params := &chaincfg.MainNetParams
+	idx := NewAddrIndex(db, params)
+	addr, err := bchutil.NewAddressPubKeyHash(make([]byte, 20), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrKey, err := addrToKey(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 100 transactions in blocks 1 to 10, ten in each.
+	const n = 100
+	levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
+	for i := 0; i < n; i++ {
+		err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
+			wire.TxLoc{TxStart: i, TxLen: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	blockHash := func(id []byte) (*chainhash.Hash, error) {
+		h := chainhash.DoubleHashH(id)
+		return &h, nil
+	}
+	err = db.Update(func(dbTx database.Tx) error {
+		bucket, err := dbTx.Metadata().CreateBucket(addrIndexKey)
+		if err != nil {
+			return err
+		}
+		for key, value := range levels.levels {
+			if err := bucket.Put(key[:], value); err != nil {
+				return err
+			}
+		}
+		ids, err := dbTx.Metadata().CreateBucket(hashByIDIndexBucketName)
+		if err != nil {
+			return err
+		}
+		for id := uint32(1); id <= n/10; id++ {
+			var serializedID [4]byte
+			byteOrder.PutUint32(serializedID[:], id)
+			hash, _ := blockHash(serializedID[:])
+			if err := ids.Put(serializedID[:], hash[:]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _, err := dbFetchAddrIndexEntries(levels, addrKey, 0, n, true,
+		blockHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read from the oldest, the same entries come in the other order, and
+	// from the newest, only the levels needed are read.
+	forward, _, err := dbFetchAddrIndexEntries(levels, addrKey, 0, n, false,
+		blockHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range forward {
+		if !reflect.DeepEqual(forward[i], want[n-1-i]) {
+			t.Fatalf("oldest first, entry %d: got %v, want %v", i,
+				forward[i], want[n-1-i])
+		}
+	}
+	gets := &getCountingBucket{internalBucket: levels}
+	_, _, err = dbFetchAddrIndexEntries(gets, addrKey, 0, 1, true, blockHash)
+	if err != nil || gets.gets != 1 {
+		t.Errorf("newest entry: %d levels read and %v, want 1", gets.gets, err)
+	}
+
+	for _, pageSize := range []uint32{1, 7, n, n + 1} {
+		var got []database.BlockRegion
+		pages := 0
+		err := idx.TxRegionPagesForAddress(addr, pageSize,
+			func(regions []database.BlockRegion) error {
+				pages++
+				if pages > n {
+					return errors.New("too many pages")
+				}
+				if len(regions) > int(pageSize) {
+					t.Errorf("pages of %d: a page of %d", pageSize,
+						len(regions))
+				}
+				got = append(got, regions...)
+				return nil
+			})
+		if err != nil {
+			t.Fatalf("pages of %d: %v", pageSize, err)
+		}
+		if wantPages := (n + int(pageSize) - 1) / int(pageSize); pages != wantPages {
+			t.Errorf("pages of %d: %d pages, want %d", pageSize, pages,
+				wantPages)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("pages of %d: got %v, want %v", pageSize, got, want)
+		}
+	}
+
+	stop := errors.New("stop")
+	calls := 0
+	err = idx.TxRegionPagesForAddress(addr, 10,
+		func([]database.BlockRegion) error {
+			calls++
+			return stop
+		})
+	if err != stop || calls != 1 {
+		t.Errorf("callback failing: got %v after %d calls, want its error "+
+			"after 1", err, calls)
+	}
+
+	unused, err := bchutil.NewAddressPubKeyHash(append(make([]byte, 19), 1),
+		params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = idx.TxRegionPagesForAddress(unused, 10,
+		func([]database.BlockRegion) error {
+			return errors.New("called")
+		})
+	if err != nil {
+		t.Errorf("address without transactions: %v", err)
+	}
+}
+
+// getCountingBucket counts the reads of an internalBucket.
+type getCountingBucket struct {
+	internalBucket
+	gets int
+}
+
+func (b *getCountingBucket) Get(key []byte) []byte {
+	b.gets++
+	return b.internalBucket.Get(key)
 }
