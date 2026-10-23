@@ -76,6 +76,10 @@ violations through type assertions.  In addition, callers can programmatically
 determine the specific rule violation by type asserting the Err field to one of
 the aforementioned types and examining their underlying ErrorCode field.
 RejectReason returns the short reason Bitcoin Cash Node gives for a rule
-violation, such as txn-mempool-conflict.
+violation, such as txn-mempool-conflict.  As in Bitcoin Cash Node, a
+transaction whose input script fails only standard script flags it does not
+count as mandatory is refused as nonstandard, with a mempool.TxRuleError,
+while the blockchain.RuleError of a script that also fails without them holds
+the script engine's error.
 */
 package mempool

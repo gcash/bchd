@@ -286,6 +286,94 @@ func TestValidateMissingInput(t *testing.T) {
 	if !reflect.DeepEqual(err, want) {
 		t.Fatalf("checkBlockScripts: got %v, want %v", err, want)
 	}
+	err = ValidateTransactionInputScript(tx, 1, view, manyInputsTestFlags,
+		nil, nil)
+	if !reflect.DeepEqual(err, want) {
+		t.Fatalf("ValidateTransactionInputScript: got %v, want %v", err,
+			want)
+	}
+}
+
+// TestValidateScriptFailureInput ensures the rule error of an input script
+// that fails holds the index of the input and the script engine's error, and
+// that ValidateTransactionInputScript runs that input alone, with the flags
+// it is given.
+func TestValidateScriptFailureInput(t *testing.T) {
+	prevTx := wire.NewMsgTx(2)
+	prevTx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+		Hash: chainhash.Hash{4}}})
+	for range 4 {
+		prevTx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE},
+			wire.TokenData{}))
+	}
+	view := NewUtxoViewpoint()
+	view.AddTxOuts(bchutil.NewTx(prevTx), 10)
+	prevHash := prevTx.TxHash()
+	spend := func(first uint32, sigScript []byte) *bchutil.Tx {
+		msgTx := wire.NewMsgTx(2)
+		msgTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, first), nil))
+		msgTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, first+1),
+			sigScript))
+		msgTx.AddTxOut(wire.NewTxOut(1500, []byte{txscript.OP_TRUE},
+			wire.TokenData{}))
+		return bchutil.NewTx(msgTx)
+	}
+
+	// The second input of the first transaction leaves an item too many
+	// on the stack, and that of the second has a signature script that
+	// is not push only.
+	tests := []struct {
+		tx        *bchutil.Tx
+		code      ErrorCode
+		scriptErr txscript.ErrorCode
+		flag      txscript.ScriptFlags
+	}{
+		{spend(0, []byte{txscript.OP_TRUE}), ErrScriptValidation,
+			txscript.ErrCleanStack, txscript.ScriptVerifyCleanStack},
+		{spend(2, []byte{txscript.OP_TRUE, txscript.OP_DROP}),
+			ErrScriptMalformed, txscript.ErrNotPushOnly,
+			txscript.ScriptVerifySigPushOnly},
+	}
+	flags := txscript.StandardVerifyFlags
+	for _, test := range tests {
+		check := func(name string, err error) {
+			t.Helper()
+			rerr, ok := err.(RuleError)
+			if !ok || rerr.ErrorCode != test.code || rerr.InputIndex != 1 ||
+				!txscript.IsErrorCode(rerr.ScriptErr, test.scriptErr) {
+
+				t.Fatalf("%s: got %#v, want %v at input 1 with %v", name,
+					err, test.code, test.scriptErr)
+			}
+		}
+		_, want := ValidateTransactionScripts(test.tx, view, flags, nil,
+			nil, 0)
+		check("ValidateTransactionScripts", want)
+		err := checkBlockScripts(scriptValTestBlock(test.tx.MsgTx()), view,
+			flags, nil, nil, 0, 0)
+		check("checkBlockScripts", err)
+
+		err = ValidateTransactionInputScript(test.tx, 1, view, flags, nil,
+			nil)
+		if !reflect.DeepEqual(err, want) {
+			t.Fatalf("input 1: got %v, want %v", err, want)
+		}
+		err = ValidateTransactionInputScript(test.tx, 1, view,
+			flags&^test.flag, nil, nil)
+		if err != nil {
+			t.Fatalf("input 1 without %v: %v", test.scriptErr, err)
+		}
+		err = ValidateTransactionInputScript(test.tx, 0, view, flags, nil,
+			nil)
+		if err != nil {
+			t.Fatalf("input 0: %v", err)
+		}
+		err = ValidateTransactionInputScript(test.tx, 2, view, flags, nil,
+			nil)
+		if _, ok := err.(AssertError); !ok {
+			t.Fatalf("input 2: got %v, want an assertion error", err)
+		}
+	}
 }
 
 // TestCheckBlockScriptsFailingTx ensures a block in which one transaction

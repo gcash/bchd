@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 )
 
@@ -174,7 +175,7 @@ func RejectReason(err error) string {
 	case TxRuleError:
 		return err.Reason
 	case blockchain.RuleError:
-		return chainRejectReason(err.ErrorCode)
+		return chainRejectReason(err)
 	case HighFeeError:
 		return "absurdly-high-fee"
 	}
@@ -182,11 +183,11 @@ func RejectReason(err error) string {
 }
 
 // chainRejectReason returns the reason BCHN's mempool gives for a transaction
-// that breaks the consensus rule identified by code.  These are the reasons
-// of BCHN's CheckRegularTransaction, ContextualCheckTransaction, CheckTxInputs
-// and CheckInputs.
-func chainRejectReason(code blockchain.ErrorCode) string {
-	switch code {
+// that breaks the consensus rule err reports.  These are the reasons of BCHN's
+// CheckRegularTransaction, ContextualCheckTransaction, CheckTxInputs and
+// CheckInputs.
+func chainRejectReason(err blockchain.RuleError) string {
+	switch err.ErrorCode {
 	case blockchain.ErrNoTxInputs:
 		return "bad-txns-vin-empty"
 	case blockchain.ErrNoTxOutputs:
@@ -230,10 +231,88 @@ func chainRejectReason(code blockchain.ErrorCode) string {
 		return "non-mandatory-script-verify-flag (Validation " +
 			"resources exceeded (SigChecks))"
 	case blockchain.ErrScriptMalformed, blockchain.ErrScriptValidation:
-		// BCHN names the script error, and reports a failure that only
-		// the policy flags cause as non-mandatory-script-verify-flag.
-		// The code does neither.
-		return "mandatory-script-verify-flag-failed (Script failed)"
+		// The pool refuses a script that fails only standard flags BCHN
+		// does not count as mandatory with a TxRuleError and
+		// non-mandatory-script-verify-flag, as BCHN does.
+		return "mandatory-script-verify-flag-failed (" +
+			scriptErrorString(err.ScriptErr) + ")"
 	}
 	return "rejected"
+}
+
+// The texts of BCHN's EVAL_FALSE and SIG_DER script errors, which several
+// codes stand for.
+const (
+	bchnEvalFalse = "Script evaluated without error but finished with a " +
+		"false/empty top stack element"
+	bchnSigDER = "Non-canonical DER signature"
+)
+
+// bchnScriptErrors holds the text BCHN's ScriptErrorString gives the script
+// error each of these codes stands for.  The other codes of txscript stand for
+// several of BCHN's errors, or for none.
+var bchnScriptErrors = map[txscript.ErrorCode]string{
+	txscript.ErrEarlyReturn:               "OP_RETURN was encountered",
+	txscript.ErrEmptyStack:                bchnEvalFalse,
+	txscript.ErrEvalFalse:                 bchnEvalFalse,
+	txscript.ErrScriptTooBig:              "Script is too big",
+	txscript.ErrTooManyOperations:         "Operation limit exceeded",
+	txscript.ErrStackOverflow:             "Stack size limit exceeded",
+	txscript.ErrInvalidPubKeyCount:        "Pubkey count negative or limit exceeded",
+	txscript.ErrInvalidSignatureCount:     "Signature count negative or greater than pubkey count",
+	txscript.ErrOpCost:                    "VM cost limit exceeded",
+	txscript.ErrTooManyHashIters:          "Hash iteration limit exceeded",
+	txscript.ErrVerify:                    "Script failed an OP_VERIFY operation",
+	txscript.ErrEqualVerify:               "Script failed an OP_EQUALVERIFY operation",
+	txscript.ErrNumEqualVerify:            "Script failed an OP_NUMEQUALVERIFY operation",
+	txscript.ErrCheckSigVerify:            "Script failed an OP_CHECKSIGVERIFY operation",
+	txscript.ErrCheckMultiSigVerify:       "Script failed an OP_CHECKMULTISIGVERIFY operation",
+	txscript.ErrCheckDataSigVerify:        "Script failed an OP_CHECKDATASIGVERIFY operation",
+	txscript.ErrDisabledOpcode:            "Attempted to use a disabled opcode",
+	txscript.ErrReservedOpcode:            "Opcode missing or not understood",
+	txscript.ErrMalformedPush:             "Opcode missing or not understood",
+	txscript.ErrInvalidInputLength:        "Invalid operand size",
+	txscript.ErrMinimalIf:                 "OP_IF/NOTIF argument must be minimal",
+	txscript.ErrSigTooShort:               bchnSigDER,
+	txscript.ErrSigTooLong:                bchnSigDER,
+	txscript.ErrSigInvalidSeqID:           bchnSigDER,
+	txscript.ErrSigMissingSTypeID:         bchnSigDER,
+	txscript.ErrSigMissingSLen:            bchnSigDER,
+	txscript.ErrSigInvalidSLen:            bchnSigDER,
+	txscript.ErrSigInvalidRIntID:          bchnSigDER,
+	txscript.ErrSigZeroRLen:               bchnSigDER,
+	txscript.ErrSigNegativeR:              bchnSigDER,
+	txscript.ErrSigTooMuchRPadding:        bchnSigDER,
+	txscript.ErrSigInvalidSIntID:          bchnSigDER,
+	txscript.ErrSigZeroSLen:               bchnSigDER,
+	txscript.ErrSigNegativeS:              bchnSigDER,
+	txscript.ErrSigTooMuchSPadding:        bchnSigDER,
+	txscript.ErrSigHighS:                  "Non-canonical signature: S value is unnecessarily high",
+	txscript.ErrNotPushOnly:               "Only push operators allowed in signatures",
+	txscript.ErrPubKeyType:                "Public key is neither compressed or uncompressed",
+	txscript.ErrCleanStack:                "Extra items left on stack after execution",
+	txscript.ErrNullFail:                  "Signature must be zero for failed CHECK(MULTI)SIG operation",
+	txscript.ErrDiscourageUpgradableNOPs:  "NOPx reserved for soft-fork upgrades",
+	txscript.ErrNegativeLockTime:          "Negative locktime",
+	txscript.ErrUnsatisfiedLockTime:       "Locktime requirement not satisfied",
+	txscript.ErrInvalidDummy:              "Bitfield of unexpected size error",
+	txscript.ErrInputSigChecks:            "Input SigChecks limit exceeded",
+	txscript.ErrInvalidFunctionIdentifier: "Function identifier is not within the valid range [0, 999]",
+	txscript.ErrFunctionAlreadyDefined:    "Redefinition of an existing function with the same identifier is disallowed",
+	txscript.ErrUndefinedFunction:         "Attempted to invoke an undefined function",
+}
+
+// scriptErrorString returns the text BCHN gives the script error err when its
+// code stands for one of BCHN's errors, and the error's own text otherwise.
+// Without an error it is BCHN's text for an error it cannot name.
+func scriptErrorString(err error) string {
+	if err == nil {
+		return "unknown error"
+	}
+	if serr, ok := err.(txscript.Error); ok {
+		if s, ok := bchnScriptErrors[serr.ErrorCode]; ok {
+			return s
+		}
+	}
+	return err.Error()
 }

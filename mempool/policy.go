@@ -56,6 +56,21 @@ const (
 	// maxStandardP2SScriptSize is the maximum length of currently
 	// standard bare multi-signature (BMS) outputs.
 	maxStandardP2SScriptSize = 201
+
+	// standardNotMandatoryFlags are the script flags of the pool that BCHN
+	// does not count as mandatory (STANDARD_NOT_MANDATORY_VERIFY_FLAGS):
+	// an input script that fails only these makes a transaction
+	// nonstandard rather than invalid, although blocks now enforce some of
+	// them.  BCHN's flag that disallows the recovery of coins sent to
+	// segwit scripts is here the absence of
+	// txscript.ScriptVerifyAllowSegwitRecovery.
+	standardNotMandatoryFlags = txscript.ScriptVerifyDERSignatures |
+		txscript.ScriptVerifySigPushOnly |
+		txscript.ScriptDiscourageUpgradableNops |
+		txscript.ScriptVerifyCleanStack |
+		txscript.ScriptVerifyCheckLockTimeVerify |
+		txscript.ScriptVerifyCheckSequenceVerify |
+		txscript.ScriptVerifyInputSigChecks
 )
 
 // calcMinRequiredTxRelayFee returns the minimum transaction fee required for a

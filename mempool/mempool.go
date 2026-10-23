@@ -1057,7 +1057,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		mp.cfg.SigCache, mp.cfg.HashCache, mp.cfg.ChainParams.Upgrade9ForkHeight)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
-			return nil, chainRuleError(cerr)
+			return nil, mp.scriptFailure(tx, utxoView, scriptFlags, cerr)
 		}
 		return nil, err
 	}
@@ -1069,6 +1069,34 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		bestHeight:  bestHeight,
 		scriptFlags: scriptFlags,
 	}, nil
+}
+
+// scriptFailure returns the error for a transaction whose scripts failed with
+// cerr.  As BCHN does, the input whose script failed runs again without the
+// standard flags BCHN does not count as mandatory, keeping the stricter
+// costing of the VM limits: an input that then passes makes the transaction
+// nonstandard, refused with code 64 and its first failure, and one that fails
+// again makes it invalid, refused with code 16 and its second failure.
+func (mp *TxPool) scriptFailure(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint,
+	flags txscript.ScriptFlags, cerr blockchain.RuleError) RuleError {
+
+	if cerr.ScriptErr == nil {
+		return chainRuleError(cerr)
+	}
+	mandatory := flags&^standardNotMandatoryFlags |
+		txscript.ScriptVerifyAllowSegwitRecovery
+	err := blockchain.ValidateTransactionInputScript(tx, cerr.InputIndex,
+		utxoView, mandatory, mp.cfg.SigCache, mp.cfg.HashCache)
+	if err == nil {
+		reason := fmt.Sprintf("non-mandatory-script-verify-flag (%s)",
+			scriptErrorString(cerr.ScriptErr))
+		return txRuleError(wire.RejectNonstandard, reason,
+			cerr.Description)
+	}
+	if merr, ok := err.(blockchain.RuleError); ok {
+		return chainRuleError(merr)
+	}
+	return chainRuleError(cerr)
 }
 
 // standardScriptFlags returns the script flags transactions must pass to be

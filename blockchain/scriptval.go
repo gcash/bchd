@@ -104,8 +104,7 @@ out:
 				v.sendResult(err)
 				break out
 			}
-			// Create a new script engine for the script pair.
-			sigScript := txIn.SignatureScript
+			// The script and amount of the spent output.
 			pkScript := utxo.PkScript()
 			inputAmount := utxo.Amount()
 
@@ -153,37 +152,14 @@ out:
 				}
 			}
 
-			vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),
-				txVI.txInIndex, v.flags, v.sigCache, txVI.sigHashes,
-				spent.utxos, inputAmount)
+			inputSigChecks, err := checkInputScript(txVI, pkScript,
+				inputAmount, v.flags, v.sigCache)
 			if err != nil {
-				str := fmt.Sprintf("failed to parse input "+
-					"%s:%d which references output %v - "+
-					"%v (input script "+
-					"bytes %x, prev output script bytes %x)",
-					txVI.tx.Hash(), txVI.txInIndex,
-					txIn.PreviousOutPoint, err,
-					sigScript, pkScript)
-				err := ruleError(ErrScriptMalformed, str)
 				v.sendResult(err)
 				break out
 			}
 
-			// Execute the script pair.
-			if err := vm.Execute(); err != nil {
-				str := fmt.Sprintf("failed to validate input "+
-					"%s:%d which references output %v - "+
-					"%v (input script "+
-					"bytes %x, prev output script bytes %x)",
-					txVI.tx.Hash(), txVI.txInIndex,
-					txIn.PreviousOutPoint, err,
-					sigScript, pkScript)
-				err := ruleError(ErrScriptValidation, str)
-				v.sendResult(err)
-				break out
-			}
-
-			txSigChecks := atomic.AddUint32(txVI.txSigChecks, uint32(vm.SigChecks()))
+			txSigChecks := atomic.AddUint32(txVI.txSigChecks, uint32(inputSigChecks))
 
 			if v.flags.HasFlag(txscript.ScriptReportSigChecks) && txSigChecks > MaxTransactionSigChecks {
 				str := fmt.Sprintf("transaction %s too many sig checks",
@@ -194,7 +170,7 @@ out:
 			}
 
 			if v.maxSigChecks > 0 && v.flags.HasFlag(txscript.ScriptReportSigChecks) {
-				if v.sigChecks.Add(uint32(vm.SigChecks())) > v.maxSigChecks {
+				if v.sigChecks.Add(uint32(inputSigChecks)) > v.maxSigChecks {
 					str := "block too many sig checks"
 					err := ruleError(ErrTooManySigChecks, str)
 					v.sendResult(err)
@@ -209,6 +185,47 @@ out:
 			break out
 		}
 	}
+}
+
+// checkInputScript runs the script of the input txVI describes, which spends
+// an output with the passed script and amount, and returns the number of
+// sigchecks it did.  A script that fails gives an ErrScriptMalformed or
+// ErrScriptValidation rule error holding the script engine's error and the
+// index of the input.
+func checkInputScript(txVI *txValidateItem, pkScript []byte, inputAmount int64,
+	flags txscript.ScriptFlags, sigCache *txscript.SigCache) (int, error) {
+
+	txIn := txVI.txIn
+	vm, err := txscript.NewEngine(pkScript, txVI.tx.MsgTx(),
+		txVI.txInIndex, flags, sigCache, txVI.sigHashes,
+		txVI.spent.utxos, inputAmount)
+	if err != nil {
+		str := fmt.Sprintf("failed to parse input "+
+			"%s:%d which references output %v - "+
+			"%v (input script "+
+			"bytes %x, prev output script bytes %x)",
+			txVI.tx.Hash(), txVI.txInIndex,
+			txIn.PreviousOutPoint, err,
+			txIn.SignatureScript, pkScript)
+		return 0, RuleError{ErrorCode: ErrScriptMalformed,
+			Description: str, ScriptErr: err,
+			InputIndex: txVI.txInIndex}
+	}
+
+	// Execute the script pair.
+	if err := vm.Execute(); err != nil {
+		str := fmt.Sprintf("failed to validate input "+
+			"%s:%d which references output %v - "+
+			"%v (input script "+
+			"bytes %x, prev output script bytes %x)",
+			txVI.tx.Hash(), txVI.txInIndex,
+			txIn.PreviousOutPoint, err,
+			txIn.SignatureScript, pkScript)
+		return 0, RuleError{ErrorCode: ErrScriptValidation,
+			Description: str, ScriptErr: err,
+			InputIndex: txVI.txInIndex}
+	}
+	return vm.SigChecks(), nil
 }
 
 // Validate validates the scripts for all of the passed transaction inputs using
@@ -354,6 +371,35 @@ func ValidateTransactionScripts(tx *bchutil.Tx, utxoView *UtxoViewpoint,
 		return 0, err
 	}
 	return sigChecks, nil
+}
+
+// ValidateTransactionInputScript runs the script of the input at index
+// txInIdx of the passed transaction alone, with the passed flags and no limit
+// on the sigchecks of the transaction.  The memory pool runs an input whose
+// script failed again with other flags to tell what made it fail.
+func ValidateTransactionInputScript(tx *bchutil.Tx, txInIdx int,
+	utxoView *UtxoViewpoint, flags txscript.ScriptFlags,
+	sigCache *txscript.SigCache, hashCache *txscript.HashCache) error {
+
+	for _, item := range txValidateItems(tx, utxoView, flags, hashCache,
+		new(uint32)) {
+
+		if item.txInIndex != txInIdx {
+			continue
+		}
+		utxo := utxoView.LookupEntry(item.txIn.PreviousOutPoint)
+		if utxo == nil {
+			str := fmt.Sprintf("unable to find unspent output %v "+
+				"referenced from transaction %s:%d",
+				item.txIn.PreviousOutPoint, tx.Hash(), txInIdx)
+			return ruleError(ErrMissingTxOut, str)
+		}
+		_, err := checkInputScript(item, utxo.PkScript(), utxo.Amount(),
+			flags, sigCache)
+		return err
+	}
+	return AssertError(fmt.Sprintf("transaction %s has no input %d to "+
+		"validate", tx.Hash(), txInIdx))
 }
 
 // Checks if the input contains pre-activation token-forgery output.

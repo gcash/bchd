@@ -6,9 +6,11 @@ package mempool
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"runtime"
 	"strings"
@@ -1187,7 +1189,13 @@ func TestRejectReason(t *testing.T) {
 	chainErr := func(code blockchain.ErrorCode) error {
 		return chainRuleError(blockchain.RuleError{ErrorCode: code})
 	}
-	script := "mandatory-script-verify-flag-failed (Script failed)"
+	script := "mandatory-script-verify-flag-failed (unknown error)"
+	scriptErr := func(code txscript.ErrorCode, desc string) error {
+		return chainRuleError(blockchain.RuleError{
+			ErrorCode: blockchain.ErrScriptValidation,
+			ScriptErr: txscript.Error{ErrorCode: code, Description: desc},
+		})
+	}
 	tests := []struct {
 		name string
 		err  error
@@ -1236,6 +1244,12 @@ func TestRejectReason(t *testing.T) {
 			script},
 		{"script failed", chainErr(blockchain.ErrScriptValidation),
 			script},
+		{"signature failed", scriptErr(txscript.ErrNullFail, "x"),
+			"mandatory-script-verify-flag-failed (Signature must be " +
+				"zero for failed CHECK(MULTI)SIG operation)"},
+		{"division by zero", scriptErr(txscript.ErrNumberTooSmall,
+			"divide by zero"),
+			"mandatory-script-verify-flag-failed (divide by zero)"},
 		{"bare consensus rule",
 			blockchain.RuleError{ErrorCode: blockchain.ErrSpendTooHigh},
 			"bad-txns-in-belowout"},
@@ -1247,6 +1261,114 @@ func TestRejectReason(t *testing.T) {
 		if got := RejectReason(test.err); got != test.want {
 			t.Errorf("%s: got %q, want %q", test.name, got, test.want)
 		}
+	}
+}
+
+// TestScriptErrorString ensures each script error code BCHN has one error for
+// gets the text BCHN gives that error, and the others their own text.
+func TestScriptErrorString(t *testing.T) {
+	t.Parallel()
+
+	der := "Non-canonical DER signature"
+	tests := []struct {
+		code txscript.ErrorCode
+		want string
+	}{
+		{txscript.ErrEarlyReturn, "OP_RETURN was encountered"},
+		{txscript.ErrEmptyStack, "Script evaluated without error but " +
+			"finished with a false/empty top stack element"},
+		{txscript.ErrEvalFalse, "Script evaluated without error but " +
+			"finished with a false/empty top stack element"},
+		{txscript.ErrScriptTooBig, "Script is too big"},
+		{txscript.ErrTooManyOperations, "Operation limit exceeded"},
+		{txscript.ErrStackOverflow, "Stack size limit exceeded"},
+		{txscript.ErrInvalidPubKeyCount,
+			"Pubkey count negative or limit exceeded"},
+		{txscript.ErrInvalidSignatureCount,
+			"Signature count negative or greater than pubkey count"},
+		{txscript.ErrOpCost, "VM cost limit exceeded"},
+		{txscript.ErrTooManyHashIters, "Hash iteration limit exceeded"},
+		{txscript.ErrVerify, "Script failed an OP_VERIFY operation"},
+		{txscript.ErrEqualVerify,
+			"Script failed an OP_EQUALVERIFY operation"},
+		{txscript.ErrNumEqualVerify,
+			"Script failed an OP_NUMEQUALVERIFY operation"},
+		{txscript.ErrCheckSigVerify,
+			"Script failed an OP_CHECKSIGVERIFY operation"},
+		{txscript.ErrCheckMultiSigVerify,
+			"Script failed an OP_CHECKMULTISIGVERIFY operation"},
+		{txscript.ErrCheckDataSigVerify,
+			"Script failed an OP_CHECKDATASIGVERIFY operation"},
+		{txscript.ErrDisabledOpcode, "Attempted to use a disabled opcode"},
+		{txscript.ErrReservedOpcode, "Opcode missing or not understood"},
+		{txscript.ErrMalformedPush, "Opcode missing or not understood"},
+		{txscript.ErrInvalidInputLength, "Invalid operand size"},
+		{txscript.ErrMinimalIf, "OP_IF/NOTIF argument must be minimal"},
+		{txscript.ErrSigTooShort, der},
+		{txscript.ErrSigTooLong, der},
+		{txscript.ErrSigInvalidSeqID, der},
+		{txscript.ErrSigMissingSTypeID, der},
+		{txscript.ErrSigMissingSLen, der},
+		{txscript.ErrSigInvalidSLen, der},
+		{txscript.ErrSigInvalidRIntID, der},
+		{txscript.ErrSigZeroRLen, der},
+		{txscript.ErrSigNegativeR, der},
+		{txscript.ErrSigTooMuchRPadding, der},
+		{txscript.ErrSigInvalidSIntID, der},
+		{txscript.ErrSigZeroSLen, der},
+		{txscript.ErrSigNegativeS, der},
+		{txscript.ErrSigTooMuchSPadding, der},
+		{txscript.ErrSigHighS,
+			"Non-canonical signature: S value is unnecessarily high"},
+		{txscript.ErrNotPushOnly,
+			"Only push operators allowed in signatures"},
+		{txscript.ErrPubKeyType,
+			"Public key is neither compressed or uncompressed"},
+		{txscript.ErrCleanStack,
+			"Extra items left on stack after execution"},
+		{txscript.ErrNullFail, "Signature must be zero for failed " +
+			"CHECK(MULTI)SIG operation"},
+		{txscript.ErrDiscourageUpgradableNOPs,
+			"NOPx reserved for soft-fork upgrades"},
+		{txscript.ErrNegativeLockTime, "Negative locktime"},
+		{txscript.ErrUnsatisfiedLockTime,
+			"Locktime requirement not satisfied"},
+		{txscript.ErrInvalidDummy, "Bitfield of unexpected size error"},
+		{txscript.ErrInputSigChecks, "Input SigChecks limit exceeded"},
+		{txscript.ErrInvalidFunctionIdentifier, "Function identifier is " +
+			"not within the valid range [0, 999]"},
+		{txscript.ErrFunctionAlreadyDefined, "Redefinition of an existing " +
+			"function with the same identifier is disallowed"},
+		{txscript.ErrUndefinedFunction,
+			"Attempted to invoke an undefined function"},
+
+		// Codes txscript gives several of BCHN's errors.
+		{txscript.ErrNumberTooBig, "own text"},
+		{txscript.ErrNumberTooSmall, "own text"},
+		{txscript.ErrIntegerOverflow, "own text"},
+		{txscript.ErrElementTooBig, "own text"},
+		{txscript.ErrMinimalData, "own text"},
+		{txscript.ErrInvalidStackOperation, "own text"},
+		{txscript.ErrUnbalancedConditional, "own text"},
+		{txscript.ErrConditionalStackDepth, "own text"},
+		{txscript.ErrInvalidIndex, "own text"},
+		{txscript.ErrInvalidSigHashType, "own text"},
+		{txscript.ErrSigInvalidDataLen, "own text"},
+		{txscript.ErrInvalidBitCount, "own text"},
+		{txscript.ErrSigNullDummy, "own text"},
+		{txscript.ErrInternal, "own text"},
+	}
+	for _, test := range tests {
+		err := txscript.Error{ErrorCode: test.code, Description: "own text"}
+		if got := scriptErrorString(err); got != test.want {
+			t.Errorf("%v: got %q, want %q", test.code, got, test.want)
+		}
+	}
+	if got := scriptErrorString(nil); got != "unknown error" {
+		t.Errorf("no error: got %q, want %q", got, "unknown error")
+	}
+	if got := scriptErrorString(errors.New("x")); got != "x" {
+		t.Errorf("other error: got %q, want %q", got, "x")
 	}
 }
 
@@ -1339,6 +1461,202 @@ func TestPoolRejectReasons(t *testing.T) {
 	if reason := RejectReason(err); reason != "bad-txns-nonstandard-inputs" {
 		t.Errorf("pay to script hash 32: got reason %q, error %v", reason,
 			err)
+	}
+}
+
+// TestPoolScriptFailures ensures the pool tells an input script that fails
+// only standard flags BCHN does not count as mandatory from one that fails
+// without them, as BCHN does: the first is refused with code 64 and a
+// non-mandatory reason naming its failure, the second with code 16 and a
+// mandatory reason naming its failure without those flags.
+func TestPoolScriptFailures(t *testing.T) {
+	t.Parallel()
+
+	harness, _, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	script := func(b *txscript.ScriptBuilder) []byte {
+		s, err := b.Script()
+		if err != nil {
+			t.Fatalf("unable to build script: %v", err)
+		}
+		return s
+	}
+
+	// Three signature checks for a signature script of 62 bytes, which
+	// allows two, with an operation cost within its limit.
+	msgHash := sha256.Sum256([]byte{1})
+	sig, err := harness.signKey.SignSchnorr(msgHash[:])
+	if err != nil {
+		t.Fatalf("unable to sign: %v", err)
+	}
+	pubKey := harness.signKey.PubKey().SerializeCompressed()
+	sigChecks := script(txscript.NewScriptBuilder().AddOp(txscript.OP_DROP).
+		AddData(sig.Serialize()).AddOp(txscript.OP_1).AddData(pubKey).
+		AddOp(txscript.OP_3DUP).AddOp(txscript.OP_3DUP).
+		AddOp(txscript.OP_CHECKDATASIGVERIFY).
+		AddOp(txscript.OP_CHECKDATASIGVERIFY).
+		AddOp(txscript.OP_CHECKDATASIG))
+	sigChecksSig := script(txscript.NewScriptBuilder().
+		AddData(make([]byte, 61)))
+
+	// A pay to script hash output whose redeem script is a segwit program
+	// leaving a false item on the stack, which only the segwit recovery
+	// exemption lets pass.
+	redeem := append([]byte{txscript.OP_0, txscript.OP_DATA_20},
+		make([]byte, 20)...)
+	p2sh := script(txscript.NewScriptBuilder().AddOp(txscript.OP_HASH160).
+		AddData(bchutil.Hash160(redeem)).AddOp(txscript.OP_EQUAL))
+	redeemSig := script(txscript.NewScriptBuilder().AddData(redeem))
+
+	// 21 hash iterations, one more than the standard limit of an empty
+	// signature script allows and fewer than the consensus limit.
+	hashes := append([]byte{txscript.OP_1},
+		bytes.Repeat([]byte{txscript.OP_SHA256}, 21)...)
+
+	// highS returns the signature script of input 1 of tx, which spends a
+	// pay to pubkey hash output of the harness key holding amount, whose
+	// ECDSA signature has its S value replaced by N - S, which only the low
+	// S rule refuses.
+	highS := func(tx *wire.MsgTx, amount int64) []byte {
+		raw, err := txscript.RawTxInECDSASignature(tx, 1, harness.payScript,
+			txscript.SigHashAll, harness.signKey, amount)
+		if err != nil {
+			t.Fatalf("unable to sign: %v", err)
+		}
+		sig, err := bchec.ParseDERSignature(raw[:len(raw)-1], bchec.S256())
+		if err != nil {
+			t.Fatalf("unable to parse signature: %v", err)
+		}
+		integer := func(n *big.Int) []byte {
+			b := n.Bytes()
+			if b[0]&0x80 != 0 {
+				b = append([]byte{0}, b...)
+			}
+			return append([]byte{0x02, byte(len(b))}, b...)
+		}
+		body := append(integer(sig.R),
+			integer(new(big.Int).Sub(bchec.S256().N, sig.S))...)
+		der := append([]byte{0x30, byte(len(body))}, body...)
+		return script(txscript.NewScriptBuilder().
+			AddData(append(der, raw[len(raw)-1])).AddData(pubKey))
+	}
+
+	lockTime := script(txscript.NewScriptBuilder().AddInt64(500000).
+		AddOp(txscript.OP_CHECKLOCKTIMEVERIFY).AddOp(txscript.OP_DROP).
+		AddOp(txscript.OP_TRUE))
+	sequence := script(txscript.NewScriptBuilder().AddInt64(10).
+		AddOp(txscript.OP_CHECKSEQUENCEVERIFY).AddOp(txscript.OP_DROP).
+		AddOp(txscript.OP_TRUE))
+
+	nonMandatory := func(s string) string {
+		return "non-mandatory-script-verify-flag (" + s + ")"
+	}
+	mandatory := func(s string) string {
+		return "mandatory-script-verify-flag-failed (" + s + ")"
+	}
+	evalFalse := "Script evaluated without error but finished with a " +
+		"false/empty top stack element"
+	tests := []struct {
+		name         string
+		pkScript     []byte
+		sigScript    []byte
+		acceptNonStd bool
+		code         wire.RejectCode
+		reason       string
+		desc         string
+	}{
+		{"upgradable nop", []byte{txscript.OP_NOP10, txscript.OP_TRUE},
+			nil, false, wire.RejectNonstandard,
+			nonMandatory("NOPx reserved for soft-fork upgrades"),
+			"OP_NOP10 reserved for soft-fork upgrades"},
+		{"clean stack", []byte{txscript.OP_TRUE}, []byte{txscript.OP_TRUE},
+			false, wire.RejectNonstandard,
+			nonMandatory("Extra items left on stack after execution"),
+			"stack contains 1 unexpected items"},
+		{"lock time", lockTime, nil, false, wire.RejectNonstandard,
+			nonMandatory("Locktime requirement not satisfied"),
+			"locktime requirement not satisfied"},
+		{"sequence lock", sequence, nil, false, wire.RejectNonstandard,
+			nonMandatory("Locktime requirement not satisfied"),
+			"invalid transaction version: 1"},
+		{"signature script not push only", []byte{txscript.OP_TRUE},
+			[]byte{txscript.OP_TRUE, txscript.OP_DROP}, true,
+			wire.RejectNonstandard,
+			nonMandatory("Only push operators allowed in signatures"),
+			"failed to parse input"},
+		{"signature density", sigChecks, sigChecksSig, false,
+			wire.RejectNonstandard,
+			nonMandatory("Input SigChecks limit exceeded"),
+			"script exceeds maximum signature density"},
+		{"segwit recovery", p2sh, redeemSig, false, wire.RejectNonstandard,
+			nonMandatory("Extra items left on stack after execution"),
+			"stack contains 1 unexpected items"},
+		{"false result", []byte{txscript.OP_FALSE}, nil, false,
+			wire.RejectInvalid, mandatory(evalFalse),
+			"false stack entry at end of script execution"},
+		{"upgradable nop and false result",
+			[]byte{txscript.OP_NOP10, txscript.OP_FALSE}, nil, false,
+			wire.RejectInvalid, mandatory(evalFalse),
+			"false stack entry at end of script execution"},
+		{"standard hash costing", hashes, nil, false, wire.RejectInvalid,
+			mandatory("Hash iteration limit exceeded"),
+			"hash iteration limit exceeded"},
+		{"high S", harness.payScript, nil, false, wire.RejectInvalid,
+			mandatory("Non-canonical signature: S value is " +
+				"unnecessarily high"),
+			"signature is not canonical due to unnecessarily high S " +
+				"value"},
+	}
+	for i, test := range tests {
+		// The script of the first input passes, so the second one is
+		// the one that fails.
+		prev := wire.NewMsgTx(1)
+		prev.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{
+			Hash: chainhash.Hash{byte(i + 1)}, Index: 7}})
+		prev.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE},
+			wire.TokenData{}))
+		prev.AddTxOut(wire.NewTxOut(100000, test.pkScript,
+			wire.TokenData{}))
+		harness.chain.utxos.AddTxOuts(bchutil.NewTx(prev),
+			harness.chain.BestHeight())
+		spend := wire.NewMsgTx(1)
+		spend.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: prev.TxHash()},
+		})
+		spend.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: prev.TxHash(), Index: 1},
+			SignatureScript:  test.sigScript,
+		})
+		spend.AddTxOut(wire.NewTxOut(99000, harness.payScript,
+			wire.TokenData{}))
+		// The spend of the harness key's output is signed.
+		if bytes.Equal(test.pkScript, harness.payScript) {
+			spend.TxIn[1].SignatureScript = highS(spend, 100000)
+		}
+
+		harness.txPool.cfg.Policy.AcceptNonStd = test.acceptNonStd
+		_, err := harness.txPool.ProcessTransaction(bchutil.NewTx(spend),
+			false, 0)
+		code, desc := ErrToRejectErr(err)
+		if code != test.code || !strings.Contains(desc, test.desc) {
+			t.Errorf("%s: got %v %q, want %v and %q", test.name, code,
+				desc, test.code, test.desc)
+		}
+		if reason := RejectReason(err); reason != test.reason {
+			t.Errorf("%s: got reason %q, want %q", test.name, reason,
+				test.reason)
+		}
+
+		// A failure without the standard flags is still a script
+		// failure for code that looks at the chain error.
+		ruleErr, _ := err.(RuleError)
+		chainErr, ok := ruleErr.Err.(blockchain.RuleError)
+		failed := ok && chainErr.ErrorCode == blockchain.ErrScriptValidation
+		if failed != (test.code == wire.RejectInvalid) {
+			t.Errorf("%s: got error %#v", test.name, ruleErr.Err)
+		}
 	}
 }
 

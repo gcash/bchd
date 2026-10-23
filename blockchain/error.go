@@ -337,6 +337,12 @@ func (e ErrorCode) String() string {
 type RuleError struct {
 	ErrorCode   ErrorCode // Describes the kind of error
 	Description string    // Human readable description of the issue
+
+	// ScriptErr is the script engine's error and InputIndex the index of
+	// the input whose script failed, for ErrScriptMalformed and
+	// ErrScriptValidation.  ScriptErr is nil for other errors.
+	ScriptErr  error
+	InputIndex int
 }
 
 // Error satisfies the error interface and prints human-readable errors.

@@ -206,6 +206,52 @@ func (h *mempoolTestHarness) testMempoolAccept(t *testing.T, tx *wire.MsgTx, all
 	return results[0]
 }
 
+// withOutputs returns an option that adds the outputs of prev, mined at the
+// harness height, to the chain the mempool sees.
+func withOutputs(prev *wire.MsgTx) func(*mempool.Config) {
+	utxos := blockchain.NewUtxoViewpoint()
+	utxos.AddTxOuts(bchutil.NewTx(prev), 1000000)
+	return func(cfg *mempool.Config) {
+		fetch := cfg.FetchUtxoView
+		cfg.FetchUtxoView = func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+			view, err := fetch(tx)
+			if err != nil {
+				return nil, err
+			}
+			for _, txIn := range tx.MsgTx().TxIn {
+				entry := utxos.LookupEntry(txIn.PreviousOutPoint)
+				if entry != nil {
+					view.Entries()[txIn.PreviousOutPoint] = entry.Clone()
+				}
+			}
+			return view, nil
+		}
+	}
+}
+
+// nopTestTx returns a transaction whose output pays to a script that uses
+// OP_NOP10, which only standard flags refuse.
+func nopTestTx() *wire.MsgTx {
+	prev := wire.NewMsgTx(wire.TxVersion)
+	prev.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Index: 1}})
+	prev.AddTxOut(wire.NewTxOut(mempoolTestOutputValue,
+		[]byte{txscript.OP_NOP10, txscript.OP_TRUE}, wire.TokenData{}))
+	return prev
+}
+
+// spendNop returns a transaction that spends the output of nopTestTx, prev,
+// with a fee of 1000 satoshis.
+func (h *mempoolTestHarness) spendNop(prev *wire.MsgTx) *wire.MsgTx {
+	tx := wire.NewMsgTx(wire.TxVersion)
+	tx.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: prev.TxHash()},
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	tx.AddTxOut(wire.NewTxOut(mempoolTestOutputValue-1000, h.pkScript,
+		wire.TokenData{}))
+	return tx
+}
+
 // TestHandleTestMempoolAccept ensures testmempoolaccept reports whether the
 // mempool would accept a transaction, without adding it.
 func TestHandleTestMempoolAccept(t *testing.T) {
@@ -255,7 +301,8 @@ func TestHandleTestMempoolAccept(t *testing.T) {
 	tx = h.spend(t, h.outputs[1], 1000)
 	tx.TxOut[0].Value--
 	result = h.testMempoolAccept(t, tx, false)
-	reason := "mandatory-script-verify-flag-failed (Script failed)"
+	reason := "mandatory-script-verify-flag-failed (Signature must be " +
+		"zero for failed CHECK(MULTI)SIG operation)"
 	details = reason + ", failed to validate input " +
 		tx.TxHash().String() + ":0 which references output " +
 		h.outputs[1].String() + " - signature not empty on failed checksig"
@@ -297,7 +344,8 @@ func TestHandleTestMempoolAccept(t *testing.T) {
 func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 	t.Parallel()
 
-	h := newMempoolTestHarness(t, 10)
+	nopPrev := nopTestTx()
+	h := newMempoolTestHarness(t, 10, withOutputs(nopPrev))
 	pooled := h.spend(t, h.outputs[0], 1000)
 	_, err := h.server.cfg.TxMemPool.ProcessTransaction(bchutil.NewTx(pooled),
 		false, 0)
@@ -331,6 +379,7 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 	nonFinal.LockTime = 1000100
 	h.sign(t, nonFinal)
 	overspend := h.spend(t, h.outputs[7], -1)
+	nopSpend := h.spendNop(nopPrev)
 	duplicate := h.spend(t, h.outputs[8], 1000)
 	duplicate.AddTxIn(&wire.TxIn{
 		PreviousOutPoint: h.outputs[8],
@@ -344,7 +393,10 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 	undersize.AddTxOut(wire.NewTxOut(1000, nil, wire.TokenData{}))
 
 	txid := func(tx *wire.MsgTx) string { return tx.TxHash().String() }
-	scriptReason := "mandatory-script-verify-flag-failed (Script failed)"
+	scriptReason := "mandatory-script-verify-flag-failed (Signature " +
+		"must be zero for failed CHECK(MULTI)SIG operation)"
+	nopReason := "non-mandatory-script-verify-flag (NOPx reserved for " +
+		"soft-fork upgrades)"
 	tests := []struct {
 		name    string
 		tx      *wire.MsgTx
@@ -378,6 +430,12 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 				"checksig (input script bytes %x, prev output script "+
 				"bytes %x)", scriptReason, txid(badSig), h.outputs[4],
 				badSig.TxIn[0].SignatureScript, h.pkScript)},
+		{"script failing a standard flag", nopSpend, "64: " + nopReason,
+			fmt.Sprintf("%s, failed to validate input %s:0 which "+
+				"references output %v - OP_NOP10 reserved for "+
+				"soft-fork upgrades (input script bytes , prev output "+
+				"script bytes b951)", nopReason, txid(nopSpend),
+				nopSpend.TxIn[0].PreviousOutPoint)},
 		{"fee above the maximum", highFee, "256: absurdly-high-fee",
 			"absurdly-high-fee, 10000001 > 10000000"},
 		{"coinbase", coinbase, "16: bad-tx-coinbase",
@@ -500,7 +558,8 @@ func (h *mempoolTestHarness) sendRawTransaction(t *testing.T, tx *wire.MsgTx, al
 func TestHandleSendRawTransaction(t *testing.T) {
 	t.Parallel()
 
-	h := newMempoolTestHarness(t, 5)
+	nopPrev := nopTestTx()
+	h := newMempoolTestHarness(t, 5, withOutputs(nopPrev))
 	pool := h.server.cfg.TxMemPool
 
 	assertCode := func(name string, err error, code btcjson.RPCErrorCode) {
@@ -566,12 +625,26 @@ func TestHandleSendRawTransaction(t *testing.T) {
 	_, err = h.sendRawTransaction(t, tx, false)
 	assertCode("invalid signature", err, btcjson.ErrRPCTxRejected)
 	msg := err.(*btcjson.RPCError).Message
-	prefix := "mandatory-script-verify-flag-failed (Script failed), " +
-		"failed to validate input "
+	prefix := "mandatory-script-verify-flag-failed (Signature must be " +
+		"zero for failed CHECK(MULTI)SIG operation), failed to validate " +
+		"input "
 	if !strings.HasPrefix(msg, prefix) ||
 		!strings.HasSuffix(msg, ") (code 16)") {
 
 		t.Errorf("invalid signature: unexpected message %q", msg)
+	}
+
+	// A transaction whose script fails only a standard flag is
+	// nonstandard.
+	_, err = h.sendRawTransaction(t, h.spendNop(nopPrev), false)
+	assertCode("standard flag", err, btcjson.ErrRPCTxRejected)
+	msg = err.(*btcjson.RPCError).Message
+	prefix = "non-mandatory-script-verify-flag (NOPx reserved for " +
+		"soft-fork upgrades), failed to validate input "
+	if !strings.HasPrefix(msg, prefix) ||
+		!strings.HasSuffix(msg, ") (code 64)") {
+
+		t.Errorf("standard flag: unexpected message %q", msg)
 	}
 
 	// A transaction with unknown inputs is a transaction error.
