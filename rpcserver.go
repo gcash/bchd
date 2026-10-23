@@ -2582,26 +2582,19 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 	return &reply, nil
 }
 
-// handleGetBlockTemplateLongPoll is a helper for handleGetBlockTemplateRequest
-// which deals with handling long polling for block templates.  When a caller
-// sends a request with a long poll ID that was previously returned, a response
-// is not sent until the caller should stop working on the previous block
-// template in favor of the new one.  In particular, this is the case when the
-// old block template is no longer valid due to a solution already being found
-// and added to the block chain, or new transactions have shown up and some time
-// has passed without finding a solution.
-//
-// See https://en.bitcoin.it/wiki/BIP_0022 for more details.
-func handleGetBlockTemplateLongPoll(s *rpcServer, longPollID string, useCoinbaseValue bool, closeNotifier <-chan struct{}) (interface{}, error) {
-	state := s.gbtWorkState
+// longPollTemplate is the part of handleGetBlockTemplateLongPoll done before
+// it waits.  It returns the block template result to reply with right away,
+// when the long poll ID is invalid or its block template is stale, and else
+// the previous block hash of the ID and a channel that is closed once its
+// block template is stale.  It unlocks the state before returning, with a
+// deferred unlock, so a panic that runRPCHandler recovers cannot leave the
+// state locked and every later getblocktemplate call waiting for it.
+func (state *gbtWorkState) longPollTemplate(s *rpcServer, longPollID string, useCoinbaseValue bool) (*btcjson.GetBlockTemplateResult, *chainhash.Hash, chan struct{}, error) {
 	state.Lock()
-	// The state unlock is intentionally not deferred here since it needs to
-	// be manually unlocked before waiting for a notification about block
-	// template changes.
+	defer state.Unlock()
 
 	if err := state.updateBlockTemplate(s, useCoinbaseValue); err != nil {
-		state.Unlock()
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	// Just return the current block template if the long poll ID provided by
@@ -2610,12 +2603,9 @@ func handleGetBlockTemplateLongPoll(s *rpcServer, longPollID string, useCoinbase
 	if err != nil {
 		result, err := state.blockTemplateResult(useCoinbaseValue, nil)
 		if err != nil {
-			state.Unlock()
-			return nil, err
+			return nil, nil, nil, err
 		}
-
-		state.Unlock()
-		return result, nil
+		return result, nil, nil, nil
 	}
 
 	// Return the block template now if the specific block template
@@ -2632,20 +2622,38 @@ func handleGetBlockTemplateLongPoll(s *rpcServer, longPollID string, useCoinbase
 		result, err := state.blockTemplateResult(useCoinbaseValue,
 			&submitOld)
 		if err != nil {
-			state.Unlock()
-			return nil, err
+			return nil, nil, nil, err
 		}
-
-		state.Unlock()
-		return result, nil
+		return result, nil, nil, nil
 	}
 
 	// Register the previous hash and last generated time for notifications
 	// Get a channel that will be notified when the template associated with
 	// the provided ID is stale and a new block template should be returned to
 	// the caller.
-	longPollChan := state.templateUpdateChan(prevHash, lastGenerated)
-	state.Unlock()
+	return nil, prevHash, state.templateUpdateChan(prevHash, lastGenerated), nil
+}
+
+// handleGetBlockTemplateLongPoll is a helper for handleGetBlockTemplateRequest
+// which deals with handling long polling for block templates.  When a caller
+// sends a request with a long poll ID that was previously returned, a response
+// is not sent until the caller should stop working on the previous block
+// template in favor of the new one.  In particular, this is the case when the
+// old block template is no longer valid due to a solution already being found
+// and added to the block chain, or new transactions have shown up and some time
+// has passed without finding a solution.
+//
+// See https://en.bitcoin.it/wiki/BIP_0022 for more details.
+func handleGetBlockTemplateLongPoll(s *rpcServer, longPollID string, useCoinbaseValue bool, closeNotifier <-chan struct{}) (interface{}, error) {
+	state := s.gbtWorkState
+	result, prevHash, longPollChan, err := state.longPollTemplate(s,
+		longPollID, useCoinbaseValue)
+	if err != nil {
+		return nil, err
+	}
+	if result != nil {
+		return result, nil
+	}
 
 	select {
 	// When the client closes before it's time to send a reply, just return
@@ -2670,7 +2678,7 @@ func handleGetBlockTemplateLongPoll(s *rpcServer, longPollID string, useCoinbase
 	// block template depending on whether or not a solution has already
 	// been found and added to the block chain.
 	submitOld := prevHash.IsEqual(&state.template.Block.Header.PrevBlock)
-	result, err := state.blockTemplateResult(useCoinbaseValue, &submitOld)
+	result, err = state.blockTemplateResult(useCoinbaseValue, &submitOld)
 	if err != nil {
 		return nil, err
 	}

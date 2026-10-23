@@ -2850,7 +2850,11 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *chaincfg.Params) []string {
 	var transactions []string
 
+	// The unlock is deferred so a panic that runRPCHandler recovers cannot
+	// leave the filter locked, as the notification manager locks it for
+	// every transaction it checks.
 	filter.mu.Lock()
+	defer filter.mu.Unlock()
 	for _, tx := range block.Transactions() {
 		msgTx := tx.MsgTx()
 
@@ -2900,7 +2904,6 @@ func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *cha
 			}
 		}
 	}
-	filter.mu.Unlock()
 
 	return transactions
 }

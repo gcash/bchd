@@ -546,6 +546,112 @@ func TestGBTBCHNFields(t *testing.T) {
 	}
 }
 
+// TestGBTLongPollPanicUnlocks ensures a panic in a getblocktemplate long poll
+// request, which runRPCHandler recovers, leaves the block template state
+// unlocked, so later getblocktemplate calls are not stuck behind it.
+func TestGBTLongPollPanicUnlocks(t *testing.T) {
+	quietRPCLog(t)
+
+	// With no block template generator, making a template panics.
+	s := &rpcServer{gbtWorkState: newGbtWorkState(blockchain.NewMedianTime())}
+	_, err := runRPCHandler("getblocktemplate", func() (interface{}, error) {
+		return handleGetBlockTemplateLongPoll(s, "", true, nil)
+	})
+	if rpcErr, ok := err.(*btcjson.RPCError); !ok ||
+		rpcErr.Code != btcjson.ErrRPCInternal.Code {
+
+		t.Fatalf("got error %v, want the internal error of a recovered "+
+			"panic", err)
+	}
+	if !s.gbtWorkState.TryLock() {
+		t.Fatal("block template state left locked")
+	}
+	s.gbtWorkState.Unlock()
+}
+
+// TestGBTLongPollReplies ensures a getblocktemplate long poll request is
+// answered right away for an invalid or stale long poll ID, and for the
+// current one once the block template is stale or the client has gone, each
+// time leaving the block template state unlocked.
+func TestGBTLongPollReplies(t *testing.T) {
+	quietRPCLog(t)
+	chain := newTestChain(t)
+	timeSource := blockchain.NewMedianTime()
+	gen := mining.NewBlkTmplGenerator(&mining.Policy{BlockMaxSize: 1000000},
+		&chaincfg.RegressionNetParams, noTxSource{}, chain, timeSource,
+		txscript.NewSigCache(10), txscript.NewHashCache(10))
+	s := &rpcServer{
+		cfg:          rpcserverConfig{Chain: chain, Generator: gen},
+		gbtWorkState: newGbtWorkState(timeSource),
+	}
+	state := s.gbtWorkState
+
+	// longPoll runs a long poll request and fails when it leaves the state
+	// locked.
+	errLocked := errors.New("block template state left locked")
+	longPoll := func(id string, closeNotifier <-chan struct{}) (*btcjson.GetBlockTemplateResult, error) {
+		res, err := handleGetBlockTemplateLongPoll(s, id, true, closeNotifier)
+		if !state.TryLock() {
+			return nil, errLocked
+		}
+		state.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		return res.(*btcjson.GetBlockTemplateResult), nil
+	}
+
+	current, err := longPoll("invalid", nil)
+	if err != nil || current.SubmitOld != nil || current.LongPollID == "" {
+		t.Fatalf("invalid long poll ID: got %+v, %v", current, err)
+	}
+	stale := encodeTemplateID(&chainhash.Hash{1}, time.Now())
+	res, err := longPoll(stale, nil)
+	if err != nil || res.SubmitOld == nil || *res.SubmitOld {
+		t.Fatalf("stale long poll ID: got %+v, %v", res, err)
+	}
+
+	// The current ID waits until the block template is stale.
+	type reply struct {
+		res *btcjson.GetBlockTemplateResult
+		err error
+	}
+	done := make(chan reply, 1)
+	go func() {
+		res, err := longPoll(current.LongPollID, nil)
+		done <- reply{res, err}
+	}()
+	var got reply
+	for wait := true; wait; {
+		state.NotifyBlockConnected(&chainhash.Hash{2})
+		select {
+		case got = <-done:
+			wait = false
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if got.err != nil || got.res.SubmitOld == nil || !*got.res.SubmitOld {
+		t.Fatalf("current long poll ID: got %+v, %v", got.res, got.err)
+	}
+
+	// It also returns when the client goes.
+	closeNotifier := make(chan struct{})
+	go func() {
+		res, err := longPoll(current.LongPollID, closeNotifier)
+		done <- reply{res, err}
+	}()
+	close(closeNotifier)
+	select {
+	case got = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("long poll did not return when the client went")
+	}
+	if got.err != ErrClientQuit {
+		t.Fatalf("long poll after the client went: got %+v, %v", got.res,
+			got.err)
+	}
+}
+
 // TestKnownBlockReasons ensures blocks the chain already has are reported by
 // submitblock and proposals with the reasons Bitcoin Cash Node uses.
 func TestKnownBlockReasons(t *testing.T) {

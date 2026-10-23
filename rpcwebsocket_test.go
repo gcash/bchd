@@ -392,3 +392,24 @@ func TestLimitedUserStopNotify(t *testing.T) {
 		}
 	}
 }
+
+// TestRescanBlockFilterPanicUnlocks ensures a panic while a block is scanned
+// for rescanblocks, which runRPCHandler recovers, leaves the client's filter
+// unlocked, as the notification manager locks it for every transaction.  A
+// nil transaction stands in for whatever could panic.
+func TestRescanBlockFilterPanicUnlocks(t *testing.T) {
+	filter := newWSClientFilter(nil, nil)
+	block := bchutil.NewBlock(&wire.MsgBlock{Transactions: []*wire.MsgTx{nil}})
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("scanning a nil transaction did not panic")
+			}
+		}()
+		rescanBlockFilter(filter, block, &chaincfg.MainNetParams)
+	}()
+	if !filter.mu.TryLock() {
+		t.Fatal("filter left locked")
+	}
+	filter.mu.Unlock()
+}
