@@ -35,6 +35,41 @@ func (b *BlockChain) ablaBaseState(height int32) ABLAState {
 	}
 }
 
+// maxBlockSizeLookAheadBlocks is how many blocks after the tip the block size
+// look-ahead goes: twice Bitcoin Cash Node's block download window of 1024
+// blocks (validation.h:124), as in its TipChanged.
+const maxBlockSizeLookAheadBlocks = 2 * 1024
+
+// notifyMaxBlockSizeLookAhead passes the configured callback the largest size
+// ABLA can let a block have within the next maxBlockSizeLookAheadBlocks
+// blocks, assuming they are all full.  Bitcoin Cash Node computes this guess
+// whenever its tip changes and accepts block messages of up to twice it
+// (validation.cpp:2199-2234, protocol.cpp:166-182).
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) notifyMaxBlockSizeLookAhead() {
+	if b.notifyLookAhead == nil {
+		return
+	}
+
+	// The state after the tip is the next block's, so the last block is one
+	// step fewer away.  A step to a height of n0 or less resets the state to
+	// its initial values, so only heights from n0-steps to n0+1 give
+	// different results.  The height is moved into that range and the
+	// result kept, so the next tips reuse it while the state's sizes stay
+	// the same, as they do while blocks are small.
+	const steps = maxBlockSizeLookAheadBlocks - 1
+	n0 := b.ablaConfig.n0
+	from := b.ablaState
+	from.blockHeight = min(max(from.blockHeight, n0-min(n0, steps)), n0+1)
+	if from != b.lookAheadFrom {
+		ahead := from.lookaheadState(&b.ablaConfig, steps)
+		b.lookAheadFrom = from
+		b.lookAheadSize = ahead.getBlockSizeLimit()
+	}
+	b.notifyLookAhead(b.lookAheadSize)
+}
+
 // ablaNextState returns the ABLA state after a block of the given size at the
 // given height, where prev is the state after its parent.  The activation
 // block starts from the initial state.

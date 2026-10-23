@@ -682,6 +682,93 @@ func TestSetLimitsLargeBlockSize(t *testing.T) {
 	}
 }
 
+// TestSetMaxBlockSizeLookAhead ensures the block message limit follows the
+// block size look-ahead the chain sets, at twice it as in BCHN, never below
+// the limit SetLimits sets nor above 2 GB, and that a block header claiming
+// the limit is read on while one claiming a byte more is refused.  The limit
+// was fixed at startup, so a valid block larger than four times the excessive
+// block size, which ABLA allows after a long run of full blocks, could not be
+// received.
+func TestSetMaxBlockSizeLookAhead(t *testing.T) {
+	pver := ProtocolVersion
+	bchnet := MainNet
+	SetLimits(32000000)
+	t.Cleanup(func() {
+		SetMaxBlockSizeLookAhead(0)
+		SetLimits(fixedExcessiveBlockSize)
+	})
+
+	tests := []struct {
+		size       uint64 // Block size look-ahead
+		blockLimit uint32 // Limit of a block message
+	}{
+		{0, 128000000},
+		{35847033, 128000000}, // ABLA's floor on mainnet
+		{64000000, 128000000},
+		{64000001, 128000002},
+		{170902942, 341805884},
+		{999999999, 1999999998},
+		{1000000000, 2000000000},
+		{2000000000, 2000000000}, // ABLA's largest block
+		{math.MaxUint64, 2000000000},
+		{35847033, 128000000},
+	}
+	for _, test := range tests {
+		SetMaxBlockSizeLookAhead(test.size)
+		if got := MaxBlockPayload(); got != test.blockLimit {
+			t.Errorf("look-ahead %d: block limit %d, want %d",
+				test.size, got, test.blockLimit)
+		}
+		cmpctLimit := (&MsgCmpctBlock{}).MaxPayloadLength(pver)
+		if got := maxMessagePayload(); got < cmpctLimit {
+			t.Errorf("look-ahead %d: overall limit %d is below the "+
+				"cmpctblock limit %d", test.size, got, cmpctLimit)
+		}
+
+		hdr := makeHeader(bchnet, CmdBlock, test.blockLimit, 0)
+		_, _, err := ReadMessage(bytes.NewReader(hdr), pver, bchnet)
+		if err != io.EOF {
+			t.Errorf("look-ahead %d: header claiming %d bytes got %v, "+
+				"want the payload read", test.size, test.blockLimit,
+				err)
+		}
+		hdr = makeHeader(bchnet, CmdBlock, test.blockLimit+1, 0)
+		_, _, err = ReadMessage(bytes.NewReader(hdr), pver, bchnet)
+		if _, ok := err.(*MessageError); !ok {
+			t.Errorf("look-ahead %d: header claiming %d bytes got %v, "+
+				"want it refused at the header", test.size,
+				test.blockLimit+1, err)
+		}
+	}
+
+	// A larger limit from SetLimits still applies.
+	SetMaxBlockSizeLookAhead(170902942)
+	SetLimits(100000000)
+	if got := MaxBlockPayload(); got != 400000000 {
+		t.Errorf("block limit %d, want 400000000", got)
+	}
+}
+
+// TestSetMaxBlockSizeLookAheadConcurrent ensures the block size look-ahead can
+// be set, as the chain does whenever its tip changes, while peers read
+// messages, which the race detector checks.
+func TestSetMaxBlockSizeLookAheadConcurrent(t *testing.T) {
+	t.Cleanup(func() { SetMaxBlockSizeLookAhead(0) })
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for size := range uint64(1000) {
+			SetMaxBlockSizeLookAhead(100000000 + size)
+		}
+	}()
+	hdr := makeHeader(MainNet, CmdBlock, 200000000, 0)
+	for range 1000 {
+		_, _, _ = ReadMessage(bytes.NewReader(hdr), ProtocolVersion,
+			MainNet)
+	}
+	<-done
+}
+
 // TestReadMessageLengthFitsInt ensures a header claiming more than an int can
 // hold, which a cmpctblock may claim at the largest block sizes, is refused
 // rather than read.  On 32-bit platforms the payload buffer's size, taken as

@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -788,6 +789,221 @@ func TestNetworkSizeFloor(t *testing.T) {
 		chain.excessiveBlockSize = test.eb
 		if got := chain.networkSizeFloor(); got != test.want {
 			t.Errorf("%s: got %d, want %d", test.name, got, test.want)
+		}
+	}
+}
+
+// expectedLookAhead returns the size limit ABLA gives the block 2048 blocks
+// after the chain's tip when every block in between is full, as BCHN's
+// TipChanged computes its look-ahead guess.
+func expectedLookAhead(chain *BlockChain) uint64 {
+	tip := chain.bestChain.Tip().height
+	state := chain.ablaState
+	for height := tip + 1; height < tip+2048; height++ {
+		state = chain.ablaNextState(state, height, state.getBlockSizeLimit())
+	}
+	return state.getBlockSizeLimit()
+}
+
+// TestMaxBlockSizeLookAhead ensures the chain reports the block size
+// look-ahead to NotifyMaxBlockSizeLookAhead when it is loaded and whenever
+// its tip changes.
+func TestMaxBlockSizeLookAhead(t *testing.T) {
+	params := ablaTestParams()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
+		params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var notified []uint64
+	open := func() *BlockChain {
+		t.Helper()
+		chain, err := New(&Config{
+			DB:                 db,
+			ChainParams:        params,
+			TimeSource:         NewMedianTime(),
+			SigCache:           txscript.NewSigCache(1000),
+			UtxoCacheMaxSize:   1 << 20,
+			ExcessiveBlockSize: 1000000,
+			NotifyMaxBlockSizeLookAhead: func(size uint64) {
+				notified = append(notified, size)
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return chain
+	}
+	check := func(desc string, chain *BlockChain, calls int) {
+		t.Helper()
+		if len(notified) != calls {
+			t.Fatalf("%s: %d notifications, want %d", desc,
+				len(notified), calls)
+		}
+		want := expectedLookAhead(chain)
+		if got := notified[calls-1]; got != want {
+			t.Fatalf("%s: look-ahead %d, want %d", desc, got, want)
+		}
+	}
+
+	chain := open()
+	check("loaded", chain, 1)
+	atGenesis := notified[0]
+
+	// Full blocks grow the look-ahead, and each one is reported.
+	blocks := ablaTestMine(t, chain, 20, 999000)
+	check("after 20 full blocks", chain, 21)
+	if notified[20] <= atGenesis {
+		t.Fatalf("look-ahead %d did not grow from %d", notified[20],
+			atGenesis)
+	}
+
+	// Disconnecting the tip reports the look-ahead after its parent.
+	if err := chain.InvalidateBlock(blocks[19].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	check("tip disconnected", chain, 22)
+	if notified[21] >= notified[20] {
+		t.Fatalf("look-ahead %d after the disconnect, want below %d",
+			notified[21], notified[20])
+	}
+
+	// A restart reports the look-ahead of the stored tip.
+	if err := chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+	chain = open()
+	check("restart", chain, 23)
+	if notified[22] != notified[21] {
+		t.Fatalf("look-ahead %d after a restart, want %d", notified[22],
+			notified[21])
+	}
+}
+
+// blockMessageHeader returns the header of a block message on net that claims
+// length bytes of payload.
+func blockMessageHeader(net wire.BitcoinNet, length uint32) []byte {
+	var hdr [wire.MessageHeaderSize]byte
+	binary.LittleEndian.PutUint32(hdr[0:4], uint32(net))
+	copy(hdr[4:16], wire.CmdBlock)
+	binary.LittleEndian.PutUint32(hdr[16:20], length)
+	return hdr[:]
+}
+
+// TestMaxBlockSizeLookAheadBlockMessages ensures that after a long run of full
+// blocks, through which ABLA raises the block size limit past four times the
+// excessive block size, wire's block message limit, kept up to date by the
+// chain, still lets a block of the next block's size limit be received.  The
+// limit was set once at startup, so such a block was refused at its header.
+func TestMaxBlockSizeLookAheadBlockMessages(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
+		params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	t.Cleanup(func() { wire.SetMaxBlockSizeLookAhead(0) })
+	chain, err := New(&Config{
+		DB:                          db,
+		ChainParams:                 &params,
+		TimeSource:                  NewMedianTime(),
+		SigCache:                    txscript.NewSigCache(1000),
+		UtxoCacheMaxSize:            1 << 20,
+		ExcessiveBlockSize:          32000000,
+		NotifyMaxBlockSizeLookAhead: wire.SetMaxBlockSizeLookAhead,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain.TstSetCoinbaseMaturity(1)
+	m := &ruleTestMiner{t: t, chain: chain, tip: params.GenesisBlock}
+	m.mustAccept(m.build(nil))
+
+	// Stand in for a long run of full blocks by advancing the state after
+	// the tip, until the next block's limit is past wire's block message
+	// limit, plus a thousand blocks.
+	chain.chainLock.Lock()
+	state := chain.ablaState
+	for past := 0; past < 1000; {
+		state = state.nextABLAState(&chain.ablaConfig,
+			state.getBlockSizeLimit())
+		if state.getBlockSizeLimit() > uint64(wire.MaxBlockPayload()) {
+			past++
+		}
+	}
+	chain.ablaState = state
+	chain.chainLock.Unlock()
+	m.mustAccept(m.build(nil))
+
+	limit := chain.MaxBlockSize(true, true)
+	if got := uint64(wire.MaxBlockPayload()); got < limit {
+		t.Fatalf("block message limit %d is below the next block's "+
+			"size limit %d", got, limit)
+	}
+	hdr := blockMessageHeader(params.Net, uint32(limit))
+	_, _, err = wire.ReadMessage(bytes.NewReader(hdr), wire.ProtocolVersion,
+		params.Net)
+	if err != io.EOF {
+		t.Fatalf("header of a block of %d bytes got %v, want its payload "+
+			"read", limit, err)
+	}
+}
+
+// TestMaxBlockSizeLookAheadHeights ensures the look-ahead is the same as one
+// computed from the state at its own height, around the height n0 from which
+// ABLA applies, and that the cached look-ahead moves the height into the range
+// where it matters, so that tips whose states differ only in height share it.
+func TestMaxBlockSizeLookAheadHeights(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"),
+		params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var got uint64
+	chain, err := New(&Config{
+		DB:                          db,
+		ChainParams:                 &params,
+		TimeSource:                  NewMedianTime(),
+		SigCache:                    txscript.NewSigCache(1000),
+		UtxoCacheMaxSize:            1 << 20,
+		ExcessiveBlockSize:          32000000,
+		NotifyMaxBlockSizeLookAhead: func(size uint64) { got = size },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const n0 = 3000
+	chain.chainLock.Lock()
+	defer chain.chainLock.Unlock()
+	config := &chain.ablaConfig
+	config.n0 = n0
+	initial := ABLAState{controlBlockSize: config.epsilon0,
+		elasticBufferSize: config.beta0}
+	grown := initial
+	for range 100 {
+		grown = grown.nextABLAState(config, grown.getBlockSizeLimit())
+	}
+	for _, state := range []ABLAState{initial, grown} {
+		for height := uint64(n0 - 2100); height <= n0+3; height++ {
+			state.blockHeight = height
+			chain.ablaState = state
+			chain.notifyMaxBlockSizeLookAhead()
+			ahead := state.lookaheadState(config, 2047)
+			if want := ahead.getBlockSizeLimit(); got != want {
+				t.Fatalf("state %+v: look-ahead %d, want %d", state,
+					got, want)
+			}
+			key := min(max(height, n0-2047), n0+1)
+			if chain.lookAheadFrom.blockHeight != key {
+				t.Fatalf("state %+v: cached at height %d, want %d",
+					state, chain.lookAheadFrom.blockHeight, key)
+			}
 		}
 	}
 }

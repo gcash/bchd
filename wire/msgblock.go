@@ -22,9 +22,11 @@ const defaultTransactionAlloc = 2048
 // MaxBlocksPerMsg is the maximum number of blocks allowed per message.
 const MaxBlocksPerMsg = 500
 
-// MaxBlockPayload returns the maximum bytes a block message can be in bytes.
+// MaxBlockPayload returns the maximum bytes a block message can be in bytes:
+// the limit SetLimits sets, or the one SetMaxBlockSizeLookAhead sets when that
+// is larger.
 func MaxBlockPayload() uint32 {
-	return ebs
+	return max(blockPayloadFloor.Load(), blockPayloadLookAhead.Load())
 }
 
 // maxTxPerBlock returns the maximum number of transactions that could

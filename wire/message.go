@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -34,21 +35,45 @@ const maxBlockPayloadLimit = 2000000000
 // reads, have limits of their own.
 const maxProtocolMessageLength = 2 * 1024 * 1024
 
-// ebs is the excessive block size, used to determine reasonable maximum message sizes.
-// 32MB is the current default value
-var ebs uint32 = 32000000 * 4
+// The block message limit, from which the other limits are computed, is the
+// larger of the two.  They are read by every peer's goroutines and set while
+// they run, so they are atomic.
+var (
+	// blockPayloadFloor is the block message limit SetLimits sets.
+	blockPayloadFloor atomic.Uint32
+
+	// blockPayloadLookAhead is the block message limit
+	// SetMaxBlockSizeLookAhead sets, which follows the block size limit as
+	// ABLA raises it.
+	blockPayloadLookAhead atomic.Uint32
+)
+
+// The limits start at those for the default excessive block size, 32 MB.
+func init() {
+	SetLimits(32000000)
+}
 
 // SetLimits adjusts various message limits based on max block size
 // configuration.  A block message may be four times the passed size, up to
 // maxBlockPayloadLimit.
 func SetLimits(excessiveBlockSize uint32) {
-	ebs = uint32(min(uint64(excessiveBlockSize)*4, maxBlockPayloadLimit))
+	blockPayloadFloor.Store(uint32(min(uint64(excessiveBlockSize)*4,
+		maxBlockPayloadLimit)))
+}
+
+// SetMaxBlockSizeLookAhead sets the largest size a block can have within the
+// next 2048 blocks, which the chain computes from ABLA whenever its tip
+// changes.  As in Bitcoin Cash Node, a block message may then be twice that
+// size, so the limit follows the block size limit as it grows; it never drops
+// below the limit SetLimits sets, nor passes maxBlockPayloadLimit.
+func SetMaxBlockSizeLookAhead(size uint64) {
+	blockPayloadLookAhead.Store(uint32(min(size, maxBlockPayloadLimit/2) * 2))
 }
 
 // MaxMessagePayload returns is the maximum bytes a message can be regardless of other
 // individual limits imposed by messages themselves.
 func maxMessagePayload() uint32 {
-	return ((ebs / 1000000) * 1024 * 1024) * 2
+	return ((MaxBlockPayload() / 1000000) * 1024 * 1024) * 2
 }
 
 // Commands used in bitcoin message headers which describe the type of message.

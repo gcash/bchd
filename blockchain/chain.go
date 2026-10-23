@@ -128,6 +128,7 @@ type BlockChain struct {
 	indexManager        IndexManager
 	hashCache           *txscript.HashCache
 	excessiveBlockSize  uint32
+	notifyLookAhead     func(size uint64)
 
 	// The following fields are calculated based upon the provided chain
 	// parameters.  They are also set when the instance is created and
@@ -147,6 +148,11 @@ type BlockChain struct {
 	ablaConfig    ABLAConfig
 	ablaState     ABLAState
 	ablaSideCache map[chainhash.Hash]ABLAState
+
+	// lookAheadFrom and lookAheadSize cache the block size look-ahead
+	// notifyMaxBlockSizeLookAhead computes.
+	lookAheadFrom ABLAState
+	lookAheadSize uint64
 
 	// These fields are related to the memory block index.  They both have
 	// their own locks, however they are often also protected by the chain
@@ -882,6 +888,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// This node is now the end of the best chain.
 	b.bestChain.SetTip(node)
 	b.ablaState = ablaState
+	b.notifyMaxBlockSizeLookAhead()
 	b.maybeFinalize(node, time.Now().Unix())
 
 	// Update the state for the best block.  Notice how this replaces the
@@ -1035,6 +1042,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// This node's parent is now the end of the best chain.
 	b.bestChain.SetTip(node.parent)
 	b.ablaState = ablaState
+	b.notifyMaxBlockSizeLookAhead()
 	if b.finalizedNode == node {
 		b.finalizedNode = node.parent
 	}
@@ -2582,6 +2590,14 @@ type Config struct {
 	// a block known, before the block is finalized.  Zero selects
 	// DefaultFinalizationDelay.
 	FinalizationDelay time.Duration
+
+	// NotifyMaxBlockSizeLookAhead, when not nil, is called with the largest
+	// size ABLA can let a block have within the next 2048 blocks, assuming
+	// they are all full, once the chain is loaded and whenever its tip
+	// changes, as Bitcoin Cash Node updates the look-ahead guess that limits
+	// the block messages it accepts.  It is called with the chain lock
+	// held, so it must not call into the chain.
+	NotifyMaxBlockSizeLookAhead func(size uint64)
 }
 
 // New returns a BlockChain instance using the provided configuration details.
@@ -2657,6 +2673,7 @@ func New(config *Config) (*BlockChain, error) {
 		timeSource:          config.TimeSource,
 		sigCache:            config.SigCache,
 		excessiveBlockSize:  config.ExcessiveBlockSize,
+		notifyLookAhead:     config.NotifyMaxBlockSizeLookAhead,
 		ablaConfig:          ablaConfig,
 		ablaState:           ablaState,
 		indexManager:        config.IndexManager,
@@ -2705,6 +2722,7 @@ func New(config *Config) (*BlockChain, error) {
 	if err := b.initChainState(config.FastSync || fastSyncUnfinished); err != nil {
 		return nil, err
 	}
+	b.notifyMaxBlockSizeLookAhead()
 
 	bestNode := b.bestChain.Tip()
 	lastCheckpoint := b.LatestCheckpoint()

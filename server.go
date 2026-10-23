@@ -4171,6 +4171,8 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		FastSync:           cfg.FastSync,
 		FastSyncDataDir:    cfg.DataDir,
 		Proxy:              cfg.Proxy,
+
+		NotifyMaxBlockSizeLookAhead: wire.SetMaxBlockSizeLookAhead,
 	})
 	if err != nil {
 		return nil, err
