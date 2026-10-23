@@ -1337,3 +1337,72 @@ func TestGetAddressUnspentOutputsDisconnectUnderWay(t *testing.T) {
 		t.Fatal("the call did not end")
 	}
 }
+
+// TestGetAddressUnspentOutputsConfirmedAfterReread ensures a GetAddressUnspentOutputs
+// call does not return an output together with the change of the memory pool
+// transaction spending it, when that transaction is confirmed after the call
+// has read the blocks connected during it: its change is found in the utxo
+// set, so the output it spends is left out, with or without the memory pool.
+func TestGetAddressUnspentOutputsConfirmedAfterReread(t *testing.T) {
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+
+	for _, includeMempool := range []bool{false, true} {
+		h := newAddrUnspentHarness(t)
+		db := &regionsHookDB{DB: h.s.db}
+		h.s.db = db
+		cb := h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, nil)
+		funding := spendTx(t, outPoint(cb, 0), otherRedeem, pay(49e8, addrScript))
+		h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+			[]*wire.MsgTx{funding})
+		spend := spendTx(t, outPoint(funding, 0), addrRedeem,
+			pay(30e8, addrScript), pay(18e8, otherScript))
+		h.acceptTx(spend)
+
+		// Once the history has been read, block 3 pays the address, so the
+		// call reads it, and as it reads the block's transactions, block 4
+		// confirms the spend.
+		var paid *wire.MsgTx
+		addressUnspentScanHook = func() {
+			addressUnspentScanHook = nil
+			paid = h.mineBlock([]*wire.TxOut{pay(50e8, addrScript)}, nil)
+			db.regions, db.hook = 1, func() {
+				h.pool.RemoveTransaction(bchutil.NewTx(spend), false)
+				h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)},
+					[]*wire.MsgTx{spend})
+			}
+		}
+		t.Cleanup(func() { addressUnspentScanHook = nil })
+
+		resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+			&pb.GetAddressUnspentOutputsRequest{
+				Address:        addr.EncodeAddress(),
+				IncludeMempool: includeMempool,
+			})
+		if err != nil {
+			t.Fatalf("mempool %v: %v", includeMempool, err)
+		}
+		if db.regions != 0 {
+			t.Fatalf("mempool %v: the spend was not confirmed during the call",
+				includeMempool)
+		}
+		got := make([]string, len(resp.Outputs))
+		for i, u := range resp.Outputs {
+			got[i] = unspentKey(u)
+		}
+		sort.Strings(got)
+		want := []string{wantUnspent(paid, 0, true, 3),
+			wantUnspent(spend, 0, false, 4)}
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("mempool %v: got %v\nwant %v", includeMempool, got, want)
+		}
+	}
+}

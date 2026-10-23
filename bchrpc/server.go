@@ -1183,11 +1183,14 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	// Each output is returned once, even when its transaction is checked
 	// twice: a block connected after the call starts is read with the
 	// history and again with the blocks connected during the call, and a
-	// repeated coinbase has two entries.
+	// repeated coinbase has two entries.  checkTxOutputs also tells whether
+	// it found an output of the transaction in the utxo set, which only a
+	// confirmed transaction's outputs are in.
 	found := make(map[wire.OutPoint]struct{})
-	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, error) {
+	checkTxOutputs := func(tx *bchutil.Tx) ([]*pb.UnspentOutput, bool, error) {
 		txHash := *tx.Hash()
 		var utxos []*pb.UnspentOutput
+		confirmed := false
 
 		// Outputs of a mempool transaction are unconfirmed.
 		var poolView *blockchain.UtxoViewpoint
@@ -1238,8 +1241,9 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if entry == nil {
 				entry, err = s.chain.FetchUtxoEntryUncached(*op)
 				if err != nil {
-					return nil, err
+					return nil, false, err
 				}
+				confirmed = confirmed || entry != nil
 			}
 			if entry == nil || entry.IsSpent() {
 				continue
@@ -1259,7 +1263,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				if req.IncludeTokenMetadata && slpToken != nil {
 					hash, err := chainhash.NewHash(slpToken.TokenId)
 					if err != nil {
-						return nil, status.Errorf(codes.Internal, "failed to parse token id: %s: %v", hex.EncodeToString(slpToken.TokenId), err)
+						return nil, false, status.Errorf(codes.Internal, "failed to parse token id: %s: %v", hex.EncodeToString(slpToken.TokenId), err)
 					}
 					tokenMetadataSet[*hash] = struct{}{}
 				}
@@ -1282,7 +1286,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				utxos = append(utxos, utxo)
 			}
 		}
-		return utxos, nil
+		return utxos, confirmed, nil
 	}
 
 	// A block disconnected from the main chain during the call may have
@@ -1340,7 +1344,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				return err
 			}
 			for _, ret := range confirmedTxs {
-				u, err := checkTxOutputs(bchutil.NewTx(&ret.tx))
+				u, _, err := checkTxOutputs(bchutil.NewTx(&ret.tx))
 				if err != nil {
 					scanErr = err
 					return err
@@ -1370,9 +1374,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 	// An output checked during the scan may have been spent since by a
 	// transaction that appeared during the call: one listed in the memory
-	// pool now and not before, or one in a block connected meanwhile.
-	// Those transactions are checked too, and the outputs they spend are
-	// left out, the memory pool's only when it is included.
+	// pool now and not before, or one confirmed meanwhile, in a block
+	// connected during the call or, for a listed one, found confirmed when
+	// it is checked below.  Those transactions are checked too, and the
+	// outputs they spend are left out, those of the memory pool only when
+	// it is included.
 	var lateSpends []*bchutil.Tx
 	listed := make(map[chainhash.Hash]struct{}, len(unconfirmedTxs))
 	for _, tx := range unconfirmedTxs {
@@ -1402,7 +1408,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			}
 			for _, ret := range newTxs {
 				tx := bchutil.NewTx(&ret.tx)
-				u, err := checkTxOutputs(tx)
+				u, _, err := checkTxOutputs(tx)
 				if err != nil {
 					return nil, err
 				}
@@ -1415,13 +1421,19 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			skip += fetch
 		}
 	}
+	// A listed transaction whose outputs are in the utxo set was confirmed
+	// during the call, maybe after the blocks connected meanwhile were read,
+	// so the outputs it spends are left out too.
 	for _, tx := range unconfirmedTxs {
-		u, err := checkTxOutputs(tx)
+		u, confirmed, err := checkTxOutputs(tx)
 		if err != nil {
 			return nil, err
 		}
 		if len(u) > 0 {
 			utxos = append(utxos, u...)
+		}
+		if confirmed {
+			lateSpends = append(lateSpends, tx)
 		}
 	}
 	// Everything the answer holds has been read.
