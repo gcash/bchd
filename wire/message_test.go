@@ -454,6 +454,49 @@ func TestReadMessageShortPayloadAlloc(t *testing.T) {
 	}
 }
 
+// TestCFilterClaimedSizeAlloc ensures a cfilter whose filter claims the
+// largest size, while its payload ends sooner, is refused without allocating
+// the claimed size.  The cfilter limit grows with the block limit, to 34 MB
+// at the default block size, so a message of a few dozen bytes could
+// otherwise make the node allocate that much.
+func TestCFilterClaimedSizeAlloc(t *testing.T) {
+	pver := ProtocolVersion
+	SetLimits(32000000)
+	t.Cleanup(func() { SetLimits(fixedExcessiveBlockSize) })
+
+	claimed := maxCFilterDataSize()
+	tests := []struct {
+		sent int   // Filter bytes in the payload
+		err  error // Expected decode error
+	}{
+		{0, io.EOF},
+		{5, io.ErrUnexpectedEOF},
+	}
+	for _, test := range tests {
+		var payload bytes.Buffer
+		payload.WriteByte(byte(GCSFilterRegular))
+		payload.Write(make([]byte, chainhash.HashSize))
+		_ = WriteVarInt(&payload, pver, uint64(claimed))
+		payload.Write(make([]byte, test.sent))
+
+		var msg MsgCFilter
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		err := msg.BchDecode(&payload, pver, BaseEncoding)
+		runtime.ReadMemStats(&after)
+		if err != test.err {
+			t.Errorf("%d bytes sent: got %v, want %v", test.sent, err,
+				test.err)
+		}
+		const maxAlloc = 1024 * 1024
+		if alloc := after.TotalAlloc - before.TotalAlloc; alloc > maxAlloc {
+			t.Errorf("%d bytes sent: allocated %d bytes for a filter "+
+				"claiming %d, want at most %d", test.sent, alloc,
+				claimed, maxAlloc)
+		}
+	}
+}
+
 // TestReadMessageLargePayload ensures that large messages, whose payloads
 // span many reads and several increases of the payload buffer, still read
 // back identically to what was written.

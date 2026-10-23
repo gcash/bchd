@@ -703,6 +703,15 @@ func ReadVarBytes(r io.Reader, pver uint32, maxAllowed uint32,
 		return nil, messageError("ReadVarBytes", str)
 	}
 
+	// A byte array longer than the rest of an in-memory payload fails the
+	// same way reading it would, without allocating for the missing bytes.
+	if remaining, ok := readerRemaining(r); ok && count > remaining {
+		if remaining == 0 {
+			return nil, io.EOF
+		}
+		return nil, io.ErrUnexpectedEOF
+	}
+
 	b := make([]byte, count)
 	_, err = io.ReadFull(r, b)
 	if err != nil {

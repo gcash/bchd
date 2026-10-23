@@ -20,11 +20,31 @@ const (
 )
 
 const (
-	// MaxCFilterDataSize is the maximum byte size of a committed filter.
-	// The maximum size is currently defined as 4MiB. This allows it to
-	// accomodate a large mempool.
+	// MaxCFilterDataSize is the least maximum byte size of a committed
+	// filter, 4MiB. This allows it to accomodate a large mempool.  The
+	// maximum is larger for the filters of the largest blocks, see
+	// maxCFilterDataSize.
 	MaxCFilterDataSize = 4 * 1024 * 1024
+
+	// gcsFilterP and gcsFilterM are the Golomb-Rice coding parameters of
+	// the regular filter, those of BIP158's basic filter.
+	gcsFilterP = 19
+	gcsFilterM = 784931
 )
+
+// maxCFilterDataSize returns the maximum byte size of a committed filter: that
+// of the regular filter of the largest block a block message may hold, or
+// MaxCFilterDataSize when larger.  The filter holds the outpoints a block
+// spends and its distinct non-empty output scripts, and each of them takes at
+// least 10 bytes of the block, so a block of B bytes gives at most B/10
+// entries.  Each entry takes P+1 bits and its quotient, and the quotients add
+// up to less than M/2^P bits per entry, after the entry count's at most 5
+// bytes.
+func maxCFilterDataSize() uint32 {
+	entries := uint64(MaxBlockPayload()) / 10
+	bits := entries*(gcsFilterP+1) + entries*gcsFilterM>>gcsFilterP
+	return uint32(max(MaxCFilterDataSize, 5+(bits+7)/8))
+}
 
 // MsgCFilter implements the Message interface and represents a bitcoin cfilter
 // message. It is used to deliver a committed filter in response to a
@@ -51,7 +71,7 @@ func (msg *MsgCFilter) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) er
 	}
 
 	// Read filter data
-	msg.Data, err = ReadVarBytes(r, pver, MaxCFilterDataSize,
+	msg.Data, err = ReadVarBytes(r, pver, maxCFilterDataSize(),
 		"cfilter data")
 	return err
 }
@@ -60,9 +80,9 @@ func (msg *MsgCFilter) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) er
 // This is part of the Message interface implementation.
 func (msg *MsgCFilter) BchEncode(w io.Writer, pver uint32, _ MessageEncoding) error {
 	size := len(msg.Data)
-	if size > MaxCFilterDataSize {
+	if maxSize := maxCFilterDataSize(); uint64(size) > uint64(maxSize) {
 		str := fmt.Sprintf("cfilter size too large for message "+
-			"[size %v, max %v]", size, MaxCFilterDataSize)
+			"[size %v, max %v]", size, maxSize)
 		return messageError("MsgCFilter.BchEncode", str)
 	}
 
@@ -104,8 +124,9 @@ func (msg *MsgCFilter) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgCFilter) MaxPayloadLength(pver uint32) uint32 {
-	return uint32(VarIntSerializeSize(MaxCFilterDataSize)) +
-		MaxCFilterDataSize + chainhash.HashSize + 1
+	maxSize := maxCFilterDataSize()
+	return uint32(VarIntSerializeSize(uint64(maxSize))) + maxSize +
+		chainhash.HashSize + 1
 }
 
 // NewMsgCFilter returns a new bitcoin cfilter message that conforms to the
