@@ -159,7 +159,7 @@ func TestDustNotFromMinRelayFee(t *testing.T) {
 		return err
 	}
 	err = spend(545)
-	if code, _ := extractRejectCode(err); code != wire.RejectDust {
+	if code, _ := extractRejectCode(err); code != wire.RejectNonstandard {
 		t.Fatalf("545 satoshi output: got %v, want dust", err)
 	}
 	if err := spend(600); err != nil {

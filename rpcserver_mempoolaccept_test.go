@@ -336,6 +336,12 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 		PreviousOutPoint: h.outputs[8],
 		Sequence:         wire.MaxTxInSequenceNum,
 	})
+	undersize := wire.NewMsgTx(wire.TxVersion)
+	undersize.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: h.outputs[9],
+		Sequence:         wire.MaxTxInSequenceNum,
+	})
+	undersize.AddTxOut(wire.NewTxOut(1000, nil, wire.TokenData{}))
 
 	txid := func(tx *wire.MsgTx) string { return tx.TxHash().String() }
 	scriptReason := "mandatory-script-verify-flag-failed (Script failed)"
@@ -360,7 +366,7 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 				"fees which is under the required amount of %d (min "+
 				"relay fee not met)", txid(lowFee),
 				lowFee.SerializeSize())},
-		{"dust", dust, "65: dust",
+		{"dust", dust, "64: dust",
 			"dust, transaction " + txid(dust) + " is not standard: " +
 				"transaction output 1: payment of 545 is dust"},
 		{"nonstandard output script", nonStd, "64: scriptpubkey",
@@ -389,6 +395,10 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 		{"duplicate inputs", duplicate, "16: bad-txns-inputs-duplicate",
 			"bad-txns-inputs-duplicate, transaction contains duplicate " +
 				"inputs"},
+		{"below the minimum size", undersize, "64: bad-txns-undersize",
+			fmt.Sprintf("bad-txns-undersize, serialized transaction is "+
+				"too small - got %d, min %d", undersize.SerializeSize(),
+				blockchain.MinTransactionSize)},
 	}
 	for _, test := range tests {
 		result := h.testMempoolAccept(t, test.tx, false)

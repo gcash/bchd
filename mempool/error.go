@@ -79,9 +79,20 @@ func chainRuleError(chainErr blockchain.RuleError) RuleError {
 // by examining the error for known types.  It will return true if a code
 // was successfully extracted.
 func extractRejectCode(err error) (wire.RejectCode, bool) {
-	// Pull the underlying error out of a RuleError.
+	// Pull the underlying error out of a RuleError, which the pool returns
+	// for a transaction it refuses.  A transaction below the minimum size or
+	// above its sigchecks limit is nonstandard there, as in BCHN's memory
+	// pool, which finds the first in its contextual checks and runs the
+	// scripts of the second again without the limit, while a block holding
+	// one is invalid.
 	if rerr, ok := err.(RuleError); ok {
 		err = rerr.Err
+		if cerr, ok := err.(blockchain.RuleError); ok {
+			switch cerr.ErrorCode {
+			case blockchain.ErrTxTooSmall, blockchain.ErrTxTooManySigChecks:
+				return wire.RejectNonstandard, true
+			}
+		}
 	}
 
 	switch err := err.(type) {

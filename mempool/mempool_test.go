@@ -1250,6 +1250,36 @@ func TestRejectReason(t *testing.T) {
 	}
 }
 
+// TestPoolRejectCodes ensures the pool reports a transaction below the
+// minimum size and one above its sigchecks limit as nonstandard, as BCHN's
+// memory pool does, while a block holding one is still invalid, and that
+// other consensus failures are invalid in both.
+func TestPoolRejectCodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code blockchain.ErrorCode
+		pool wire.RejectCode
+	}{
+		{blockchain.ErrTxTooSmall, wire.RejectNonstandard},
+		{blockchain.ErrTxTooManySigChecks, wire.RejectNonstandard},
+		{blockchain.ErrTxTooBig, wire.RejectInvalid},
+		{blockchain.ErrScriptValidation, wire.RejectInvalid},
+	}
+	for _, test := range tests {
+		cerr := blockchain.RuleError{ErrorCode: test.code, Description: "desc"}
+		code, desc := ErrToRejectErr(chainRuleError(cerr))
+		if code != test.pool || desc != "desc" {
+			t.Errorf("%v in the pool: got %v %q, want %v %q", test.code,
+				code, desc, test.pool, "desc")
+		}
+		if code, _ := ErrToRejectErr(cerr); code != wire.RejectInvalid {
+			t.Errorf("%v in a block: got %v, want %v", test.code, code,
+				wire.RejectInvalid)
+		}
+	}
+}
+
 // TestPoolRejectReasons ensures the pool gives BCHN's reason for a spend of
 // a nonstandard output, and its own for an orphan too large to keep.
 func TestPoolRejectReasons(t *testing.T) {

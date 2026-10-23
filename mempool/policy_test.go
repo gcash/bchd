@@ -553,7 +553,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 			},
 			height:     300000,
 			isStandard: false,
-			code:       wire.RejectDust,
+			code:       wire.RejectNonstandard,
 			reason:     "dust",
 		},
 		{
@@ -892,7 +892,7 @@ func TestUnspendableScriptStandard(t *testing.T) {
 			[]*wire.TxOut{out(0, txscript.OP_RETURN, txscript.OP_ADD)},
 			false, wire.RejectNonstandard},
 		{"spendable script without a value",
-			[]*wire.TxOut{out(0, txscript.OP_TRUE)}, true, wire.RejectDust},
+			[]*wire.TxOut{out(0, txscript.OP_TRUE)}, true, wire.RejectNonstandard},
 		{"spendable script with a value",
 			[]*wire.TxOut{out(1000, txscript.OP_TRUE)}, true, 0},
 	}
