@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -55,10 +56,53 @@ func runCreateRawTx(t *testing.T, addr string,
 		CashTokens: cashTokens,
 	}
 
-	result, err := handleCreateRawTransaction(s, cmd, nil)
+	result, err := runCreateRawTxCmd(t, s, cmd)
 	if err != nil {
 		return nil, err
 	}
+
+	mtx := decodeCreateRawTxResult(t, result)
+	if len(mtx.TxOut) != 1 {
+		t.Fatalf("expected 1 output, got %d", len(mtx.TxOut))
+	}
+	return mtx, nil
+}
+
+// runCreateRawTxCmd runs cmd as the server runs a createrawtransaction
+// request: the command is marshalled, and its params decoded by parseCmd for
+// the handler.
+func runCreateRawTxCmd(t *testing.T, s *rpcServer,
+	cmd *btcjson.CreateRawTransactionCmd) (interface{}, error) {
+
+	t.Helper()
+
+	marshalled, err := btcjson.MarshalCmd("1.0", 1, cmd)
+	if err != nil {
+		t.Fatalf("unable to marshal command: %v", err)
+	}
+	return runCreateRawTxRequest(t, s, string(marshalled))
+}
+
+// runCreateRawTxRequest runs a marshalled createrawtransaction request through
+// parseCmd and the handler, as the server does.
+func runCreateRawTxRequest(t *testing.T, s *rpcServer, request string) (interface{}, error) {
+	t.Helper()
+
+	var req btcjson.Request
+	if err := json.Unmarshal([]byte(request), &req); err != nil {
+		t.Fatalf("unable to unmarshal request %s: %v", request, err)
+	}
+	parsed := parseCmd(&req)
+	if parsed.err != nil {
+		return nil, parsed.err
+	}
+	return s.standardCmdResult(parsed, nil)
+}
+
+// decodeCreateRawTxResult decodes the transaction createrawtransaction
+// returned.
+func decodeCreateRawTxResult(t *testing.T, result interface{}) *wire.MsgTx {
+	t.Helper()
 
 	serialized, err := hex.DecodeString(result.(string))
 	if err != nil {
@@ -70,10 +114,7 @@ func runCreateRawTx(t *testing.T, addr string,
 	if err != nil {
 		t.Fatalf("unable to decode result transaction: %v", err)
 	}
-	if len(mtx.TxOut) != 1 {
-		t.Fatalf("expected 1 output, got %d", len(mtx.TxOut))
-	}
-	return &mtx, nil
+	return &mtx
 }
 
 // TestHandleCreateRawTransactionNoTokens ensures createrawtransaction works
@@ -487,7 +528,7 @@ func TestHandleCreateRawTransactionDuplicateDestination(t *testing.T) {
 			Amounts: amounts,
 		}
 
-		_, err := handleCreateRawTransaction(s, cmd, nil)
+		_, err := runCreateRawTxCmd(t, s, cmd)
 		rpcErr, ok := err.(*btcjson.RPCError)
 		if !ok {
 			t.Errorf("%s: expected *btcjson.RPCError, got %T: %v",
@@ -559,22 +600,12 @@ func TestHandleCreateRawTransactionTokenAddressForms(t *testing.T) {
 			}},
 		}
 
-		result, err := handleCreateRawTransaction(s, cmd, nil)
+		result, err := runCreateRawTxCmd(t, s, cmd)
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", test.name, err)
 			continue
 		}
-		serialized, err := hex.DecodeString(result.(string))
-		if err != nil {
-			t.Fatalf("%s: unable to decode result hex: %v",
-				test.name, err)
-		}
-		var mtx wire.MsgTx
-		err = mtx.BchDecode(bytes.NewReader(serialized),
-			maxProtocolVersion, wire.BaseEncoding)
-		if err != nil {
-			t.Fatalf("%s: unable to decode result: %v", test.name, err)
-		}
+		mtx := decodeCreateRawTxResult(t, result)
 		if len(mtx.TxOut) != 2 {
 			t.Fatalf("%s: expected 2 outputs, got %d", test.name,
 				len(mtx.TxOut))
@@ -648,7 +679,7 @@ func TestHandleCreateRawTransactionAmountRange(t *testing.T) {
 			Inputs:  []btcjson.TransactionInput{{Txid: testTokenCategory}},
 			Amounts: map[string]float64{addr: test.amount},
 		}
-		_, err := handleCreateRawTransaction(s, cmd, nil)
+		_, err := runCreateRawTxCmd(t, s, cmd)
 		if test.ok {
 			if err != nil {
 				t.Errorf("%v BCH: %v", test.amount, err)
@@ -660,5 +691,456 @@ func TestHandleCreateRawTransactionAmountRange(t *testing.T) {
 
 			t.Errorf("%v BCH: got error %v, want Invalid amount", test.amount, err)
 		}
+	}
+}
+
+// runCreateRawTxParams runs a mainnet createrawtransaction request with the
+// params given in JSON, as the server does, and returns the transaction made
+// or the error.
+func runCreateRawTxParams(t *testing.T, params string) (*wire.MsgTx, error) {
+	t.Helper()
+
+	s := &rpcServer{cfg: rpcserverConfig{ChainParams: &chaincfg.MainNetParams}}
+	request := `{"jsonrpc":"1.0","id":1,"method":"createrawtransaction",` +
+		`"params":` + params + `}`
+	result, err := runCreateRawTxRequest(t, s, request)
+	if err != nil {
+		return nil, err
+	}
+	return decodeCreateRawTxResult(t, result), nil
+}
+
+// createRawTxTestInput is the input the createrawtransaction tests spend,
+// in JSON, with extra members such as a sequence number.
+func createRawTxTestInput(extra string) string {
+	return `[{"txid":"` + testTokenCategory + `","vout":3` + extra + `}]`
+}
+
+// TestCreateRawTransactionOutputOrder ensures createrawtransaction makes the
+// outputs in the order given, in an object of outputs as in an array of
+// single-key objects, as BCHN does.
+func TestCreateRawTransactionOutputOrder(t *testing.T) {
+	var addrs []string
+	var wantScripts [][]byte
+	for _, fill := range []byte{0x37, 0x05, 0x91, 0x22, 0x10, 0x6c, 0x48, 0x03} {
+		addr := createRawTxTestAddr(t, fill)
+		decoded, err := bchutil.DecodeAddress(addr, &chaincfg.MainNetParams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script, err := txscript.PayToAddrScript(decoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs = append(addrs, addr)
+		wantScripts = append(wantScripts, script)
+	}
+
+	var object, array []string
+	for i, addr := range addrs {
+		member := `"` + addr + `":0.000` + string(rune('1'+i))
+		object = append(object, member)
+		array = append(array, "{"+member+"}")
+	}
+	for name, outputs := range map[string]string{
+		"object": "{" + strings.Join(object, ",") + "}",
+		"array":  "[" + strings.Join(array, ",") + "]",
+	} {
+		mtx, err := runCreateRawTxParams(t, "["+createRawTxTestInput("")+
+			","+outputs+"]")
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if len(mtx.TxOut) != len(addrs) {
+			t.Errorf("%s: %d outputs, want %d", name, len(mtx.TxOut),
+				len(addrs))
+			continue
+		}
+		for i, txOut := range mtx.TxOut {
+			if !bytes.Equal(txOut.PkScript, wantScripts[i]) ||
+				txOut.Value != int64(i+1)*10000 {
+
+				t.Errorf("%s: output %d pays %d to %x, want %d to %x",
+					name, i, txOut.Value, txOut.PkScript,
+					(i+1)*10000, wantScripts[i])
+			}
+		}
+	}
+}
+
+// TestCreateRawTransactionBCHNForms ensures createrawtransaction takes the
+// params in BCHN's forms: the locktime as the third param, an input's
+// sequence number, an output given as an object with its amount and token
+// data, and "data" outputs, and makes a version 2 transaction as BCHN does,
+// while bchd's forms keep working.
+func TestCreateRawTransactionBCHNForms(t *testing.T) {
+	addr := createRawTxTestAddr(t, 0x0a)
+	decoded, err := bchutil.DecodeAddress(addr, &chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrScript, err := txscript.PayToAddrScript(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	category, err := chainhash.NewHashFromStr(testTokenCategory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := `{"` + addr + `":0.0001}`
+	tokenEntry := `[{"address":"` + addr + `","category":"` +
+		testTokenCategory + `","amount":5}]`
+	push76 := strings.Repeat("ab", 76)
+
+	// pushes returns a null data script with pushes of each length given,
+	// with the push opcodes BCHN uses.
+	pushes := func(lengths ...int) (string, []byte) {
+		var hexes []string
+		script := []byte{txscript.OP_RETURN}
+		for _, n := range lengths {
+			data := bytes.Repeat([]byte{0xcd}, n)
+			hexes = append(hexes, `"`+hex.EncodeToString(data)+`"`)
+			switch {
+			case n < 76:
+				script = append(script, byte(n))
+			case n < 256:
+				script = append(script, 0x4c, byte(n))
+			case n < 65536:
+				script = append(script, 0x4d, byte(n), byte(n>>8))
+			default:
+				script = append(script, 0x4e, byte(n), byte(n>>8),
+					byte(n>>16), byte(n>>24))
+			}
+			script = append(script, data...)
+		}
+		return "[" + strings.Join(hexes, ",") + "]", script
+	}
+	longPushes, longScript := pushes(75, 255, 256, 65535, 65536)
+
+	// tokenData returns the token data of the first output.
+	tokenData := func(mtx *wire.MsgTx) *wire.TokenData { return &mtx.TxOut[0].TokenData }
+
+	tests := []struct {
+		name     string
+		params   string
+		lockTime uint32
+		sequence uint32
+		check    func(*wire.MsgTx) bool
+	}{{
+		name:     "locktime as the third param",
+		params:   "[" + createRawTxTestInput("") + "," + output + ",500000]",
+		lockTime: 500000,
+		sequence: wire.MaxTxInSequenceNum - 1,
+	}, {
+		name:     "sequence",
+		params:   "[" + createRawTxTestInput(`,"sequence":7`) + "," + output + "]",
+		sequence: 7,
+	}, {
+		name: "sequence with a locktime",
+		params: "[" + createRawTxTestInput(`,"sequence":4294967295`) + "," +
+			output + ",500000]",
+		lockTime: 500000,
+		sequence: wire.MaxTxInSequenceNum,
+	}, {
+		name: "output object with token data",
+		params: "[" + createRawTxTestInput("") + `,{"` + addr +
+			`":{"amount":0.0001,"tokenData":{"category":"` +
+			testTokenCategory + `","amount":"1000","nft":{` +
+			`"capability":"mutable","commitment":"beef"}}}}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			td := tokenData(mtx)
+			return mtx.TxOut[0].Value == 10000 &&
+				bytes.Equal(mtx.TxOut[0].PkScript, addrScript) &&
+				td.CategoryID == [32]byte(*category) &&
+				td.Amount == 1000 && td.IsMutableNFT() &&
+				bytes.Equal(td.Commitment, []byte{0xbe, 0xef})
+		},
+	}, {
+		name: "output object with an nft of no capability",
+		params: "[" + createRawTxTestInput("") + `,[{"` + addr +
+			`":{"amount":0.0001,"tokenData":{"category":"` +
+			testTokenCategory + `","nft":{}}}}]]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			td := tokenData(mtx)
+			return td.HasNFT() && !td.IsMutableNFT() &&
+				!td.IsMintingNFT() && td.Amount == 0 &&
+				len(td.Commitment) == 0
+		},
+	}, {
+		// The capability and commitment of a cashtokens entry are not
+		// members of BCHN's tokenData, which ignores them.
+		name: "token data with members of a cashtokens entry",
+		params: "[" + createRawTxTestInput("") + `,{"` + addr +
+			`":{"amount":0.0001,"tokenData":{"category":"` +
+			testTokenCategory + `","amount":5,"capability":"minting",` +
+			`"commitment":"beef"}}}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			td := tokenData(mtx)
+			return td.Amount == 5 && !td.HasNFT()
+		},
+	}, {
+		name: "output object with the amount twice",
+		params: "[" + createRawTxTestInput("") + `,{"` + addr +
+			`":{"amount":0.0001,"amount":0.0002}}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			return mtx.TxOut[0].Value == 10000
+		},
+	}, {
+		name:     "null outputs",
+		params:   "[" + createRawTxTestInput("") + ",null]",
+		sequence: wire.MaxTxInSequenceNum,
+		check:    func(mtx *wire.MsgTx) bool { return len(mtx.TxOut) == 0 },
+	}, {
+		name: "output object without token data",
+		params: "[" + createRawTxTestInput("") + `,{"` + addr +
+			`":{"amount":0.0001}}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			return mtx.TxOut[0].Value == 10000 && tokenData(mtx).IsEmpty()
+		},
+	}, {
+		name: "data",
+		params: "[" + createRawTxTestInput("") + `,{"data":"00ff","` + addr +
+			`":0.0001}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			return len(mtx.TxOut) == 2 && mtx.TxOut[0].Value == 0 &&
+				bytes.Equal(mtx.TxOut[0].PkScript,
+					[]byte{0x6a, 0x02, 0x00, 0xff}) &&
+				bytes.Equal(mtx.TxOut[1].PkScript, addrScript)
+		},
+	}, {
+		// Single bytes are pushed with a length byte, as BCHN pushes
+		// them, not as small integer opcodes.
+		name: "data array",
+		params: "[" + createRawTxTestInput("") + `,[{"data":["01","10","81","` +
+			push76 + `"]}]]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			want := append([]byte{0x6a, 0x01, 0x01, 0x01, 0x10, 0x01,
+				0x81, 0x4c, 76}, bytes.Repeat([]byte{0xab}, 76)...)
+			return len(mtx.TxOut) == 1 && mtx.TxOut[0].Value == 0 &&
+				bytes.Equal(mtx.TxOut[0].PkScript, want)
+		},
+	}, {
+		name: "data pushes at each length boundary",
+		params: "[" + createRawTxTestInput("") + `,{"data":` + longPushes +
+			`}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			return len(mtx.TxOut) == 1 &&
+				bytes.Equal(mtx.TxOut[0].PkScript, longScript)
+		},
+	}, {
+		name:     "two data outputs",
+		params:   "[" + createRawTxTestInput("") + `,{"data":"01","data":"02"}]`,
+		sequence: wire.MaxTxInSequenceNum,
+		check: func(mtx *wire.MsgTx) bool {
+			return len(mtx.TxOut) == 2 &&
+				bytes.Equal(mtx.TxOut[0].PkScript, []byte{0x6a, 0x01, 0x01}) &&
+				bytes.Equal(mtx.TxOut[1].PkScript, []byte{0x6a, 0x01, 0x02})
+		},
+	}, {
+		name:     "bchd form with tokens and locktime",
+		params:   "[" + createRawTxTestInput("") + "," + output + "," + tokenEntry + ",7]",
+		lockTime: 7,
+		sequence: wire.MaxTxInSequenceNum - 1,
+		check:    func(mtx *wire.MsgTx) bool { return tokenData(mtx).Amount == 5 },
+	}, {
+		name:     "bchd form with tokens",
+		params:   "[" + createRawTxTestInput("") + "," + output + "," + tokenEntry + "]",
+		sequence: wire.MaxTxInSequenceNum,
+		check:    func(mtx *wire.MsgTx) bool { return tokenData(mtx).Amount == 5 },
+	}, {
+		name:     "bchd form without tokens, with locktime",
+		params:   "[" + createRawTxTestInput("") + "," + output + ",null,8]",
+		lockTime: 8,
+		sequence: wire.MaxTxInSequenceNum - 1,
+	}, {
+		name:     "null third param",
+		params:   "[" + createRawTxTestInput("") + "," + output + ",null]",
+		sequence: wire.MaxTxInSequenceNum,
+	}}
+
+	for _, test := range tests {
+		mtx, err := runCreateRawTxParams(t, test.params)
+		if err != nil {
+			t.Errorf("%s: %v", test.name, err)
+			continue
+		}
+		if mtx.Version != 2 {
+			t.Errorf("%s: version %d, want 2", test.name, mtx.Version)
+		}
+		if mtx.LockTime != test.lockTime {
+			t.Errorf("%s: locktime %d, want %d", test.name,
+				mtx.LockTime, test.lockTime)
+		}
+		if len(mtx.TxIn) != 1 || mtx.TxIn[0].Sequence != test.sequence ||
+			mtx.TxIn[0].PreviousOutPoint.Index != 3 {
+
+			t.Errorf("%s: %d inputs, the first %+v, want one spending "+
+				"output 3 with sequence %d", test.name, len(mtx.TxIn),
+				*mtx.TxIn[0], test.sequence)
+		}
+		if test.check != nil && !test.check(mtx) {
+			t.Errorf("%s: unexpected outputs %+v", test.name, mtx.TxOut)
+		}
+	}
+}
+
+// TestCreateRawTransactionBCHNFormErrors ensures createrawtransaction refuses
+// the outputs BCHN refuses, with its messages, and an output given token data
+// both with it and in the cashtokens param.
+func TestCreateRawTransactionBCHNFormErrors(t *testing.T) {
+	addr := createRawTxTestAddr(t, 0x0b)
+	otherAddr := createRawTxTestAddr(t, 0x0c)
+	input := createRawTxTestInput("")
+	tokenObject := `{"amount":0.0001,"tokenData":{"category":"` +
+		testTokenCategory + `","amount":1}}`
+
+	tests := []struct {
+		name     string
+		params   string
+		wantCode btcjson.RPCErrorCode
+		wantMsg  string
+	}{{
+		name:     "array member not an object",
+		params:   "[" + input + `,[1]]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, key-value pair not an object as expected",
+	}, {
+		name:     "array member with two keys",
+		params:   "[" + input + `,[{"` + addr + `":0.1,"` + otherAddr + `":0.1}]]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, key-value pair must contain exactly one key",
+	}, {
+		name:     "array member with no key",
+		params:   "[" + input + `,[{}]]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, key-value pair must contain exactly one key",
+	}, {
+		name:     "address twice in an array",
+		params:   "[" + input + `,[{"` + addr + `":0.1},{"` + addr + `":0.2}]]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, duplicated address: " + addr,
+	}, {
+		name:     "address twice in an object",
+		params:   "[" + input + `,{"` + addr + `":0.1,"` + addr + `":0.2}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, duplicated address: " + addr,
+	}, {
+		name:     "data not hex",
+		params:   "[" + input + `,{"data":"zz"}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data must be hexadecimal string (not 'zz')",
+	}, {
+		name:     "data of odd length",
+		params:   "[" + input + `,{"data":"abc"}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data must be hexadecimal string (not 'abc')",
+	}, {
+		name:     "data empty",
+		params:   "[" + input + `,{"data":""}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data must be hexadecimal string (not '')",
+	}, {
+		name:     "data array empty",
+		params:   "[" + input + `,{"data":[]}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data array must contain at least one element",
+	}, {
+		name:     "data array element not a string",
+		params:   "[" + input + `,{"data":[1]}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data array element must be hexadecimal string",
+	}, {
+		name:     "data array element not hex",
+		params:   "[" + input + `,{"data":["0g"]}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data array element must be hexadecimal string (not '0g')",
+	}, {
+		name:     "data neither string nor array",
+		params:   "[" + input + `,{"data":5}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "data must be either a hexadecimal string or an array of hexadecimal strings",
+	}, {
+		name:     "output object without amount",
+		params:   "[" + input + `,{"` + addr + `":{"tokenData":{}}}]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, missing amount key",
+	}, {
+		name: "nft capability empty",
+		params: "[" + input + `,{"` + addr + `":{"amount":0.0001,"tokenData":{` +
+			`"category":"` + testTokenCategory + `","nft":{"capability":""}}}}]`,
+		wantCode: btcjson.ErrRPCType,
+		wantMsg:  "Invalid token capability",
+	}, {
+		name: "token data twice",
+		params: "[" + input + `,{"` + addr + `":` + tokenObject + `},[{"address":"` +
+			addr + `","category":"` + testTokenCategory + `","amount":2}]]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Invalid parameter, duplicated cashtokens address: " + addr,
+	}, {
+		name:     "numeric third param and a fourth",
+		params:   "[" + input + `,{"` + addr + `":0.1},5,6]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg: "Failed to parse request: parameter #3 'cashtokens' must " +
+			"be type []btcjson.TransactionOutputCashToken (got number)",
+	}, {
+		name:     "five params",
+		params:   "[" + input + `,{"` + addr + `":0.1},[],5,6]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg: "Failed to parse request: wrong number of params " +
+			"(expected between 2 and 4, received 5)",
+	}, {
+		name:     "one param",
+		params:   "[" + input + `]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg: "Failed to parse request: wrong number of params " +
+			"(expected between 2 and 4, received 1)",
+	}, {
+		name:     "locktime not an integer",
+		params:   "[" + input + `,{"` + addr + `":0.1},1.5]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg: "Failed to parse request: parameter #3 'locktime' must " +
+			"be type int64 (got number 1.5)",
+	}, {
+		name:     "outputs not an object or array",
+		params:   "[" + input + `,"` + addr + `"]`,
+		wantCode: btcjson.ErrRPCInvalidParameter,
+		wantMsg:  "Failed to parse request: parameter #2 'amounts'",
+	}}
+
+	for _, test := range tests {
+		_, err := runCreateRawTxParams(t, test.params)
+		rpcErr, ok := err.(*btcjson.RPCError)
+		if !ok {
+			t.Errorf("%s: got %v, want an RPC error", test.name, err)
+			continue
+		}
+		if rpcErr.Code != test.wantCode ||
+			!strings.HasPrefix(rpcErr.Message, test.wantMsg) {
+
+			t.Errorf("%s: got error %d %q, want %d %q", test.name,
+				rpcErr.Code, rpcErr.Message, test.wantCode, test.wantMsg)
+		}
+	}
+}
+
+// TestCreateRawTxDataScriptLongPush ensures a push of 16 MiB or more gets all
+// four bytes of its OP_PUSHDATA4 length, as no JSON test request is that
+// large.
+func TestCreateRawTxDataScriptLongPush(t *testing.T) {
+	push := make([]byte, 1<<24+2)
+	script := createRawTxDataScript([][]byte{push})
+	want := []byte{txscript.OP_RETURN, txscript.OP_PUSHDATA4, 2, 0, 0, 1}
+	if len(script) != len(want)+len(push) || !bytes.Equal(script[:len(want)], want) {
+		t.Errorf("script of %d bytes starts %x, want %d bytes starting %x",
+			len(script), script[:len(want)], len(want)+len(push), want)
 	}
 }

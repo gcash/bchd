@@ -41,19 +41,20 @@ var helpDescsEnUS = map[string]string{
 	"node-connectsubcmd": "'perm' to make the connected peer a permanent one, 'temp' to try a single connect to a peer",
 
 	// TransactionInput help.
-	"transactioninput-txid": "The hash of the input transaction",
-	"transactioninput-vout": "The specific output of the input transaction to redeem",
+	"transactioninput-txid":     "The hash of the input transaction",
+	"transactioninput-vout":     "The specific output of the input transaction to redeem",
+	"transactioninput-sequence": "Optional sequence number of the input; 4294967295 when omitted, or 4294967294 with a non-zero locktime",
 
 	// CreateRawTransactionCmd help.
-	"createrawtransaction--synopsis": "Returns a new transaction spending the provided inputs and sending to the provided addresses.\n" +
+	"createrawtransaction--synopsis": "Returns a new version 2 transaction spending the provided inputs and sending to the provided addresses, with the outputs in the order given.\n" +
 		"The transaction inputs are not signed in the created transaction.\n" +
 		"The signrawtransaction RPC command provided by wallet must be used to sign the resulting transaction.",
 	"createrawtransaction-inputs":           "The inputs to the transaction",
-	"createrawtransaction-amounts":          "JSON object with the destination addresses as keys and amounts as values; a destination may appear only once, even in a different form, such as the plain and token-aware cashaddr of the same hash",
+	"createrawtransaction-amounts":          "JSON object with the destination addresses as keys and amounts as values, or, as in BCHN, an array of objects with one such member each; a value may also be an object with the amount and the output's tokenData, {\"category\":\"hex\",\"amount\":n,\"nft\":{\"capability\":\"none|mutable|minting\",\"commitment\":\"hex\"}}, and a \"data\" key with the hex of a push, or an array of them, adds a null data output with those pushes; a destination may appear only once, even in a different form, such as the plain and token-aware cashaddr of the same hash",
 	"createrawtransaction-amounts--key":     "address",
 	"createrawtransaction-amounts--value":   "n.nnn",
 	"createrawtransaction-amounts--desc":    "The destination address as the key and the amount in BTC as the value",
-	"createrawtransaction-cashtokens":       "Optional list of CashTokens to add to the outputs, at most one entry per output address",
+	"createrawtransaction-cashtokens":       "Optional list of CashTokens to add to the outputs, at most one entry per output address; as in BCHN, a number given here, as the last param, is the locktime",
 	"transactionoutputcashtoken-address":    "The output address, which must pay to the same destination as a key of the amounts object, in any form, cashaddr or legacy",
 	"transactionoutputcashtoken-category":   "The token category, in the byte order used to display transaction hashes, like a txid",
 	"transactionoutputcashtoken-amount":     "The fungible token amount, as an integer or a decimal string; 0 or omitted for no fungible tokens",

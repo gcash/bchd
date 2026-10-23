@@ -51,10 +51,12 @@ func NewAddNodeCmd(addr string, subCmd AddNodeSubCmd) *AddNodeCmd {
 }
 
 // TransactionInput represents the inputs to a transaction.  Specifically a
-// transaction hash and output number pair.
+// transaction hash and output number pair, and, for createrawtransaction,
+// optionally the sequence number of the input.
 type TransactionInput struct {
-	Txid string `json:"txid"`
-	Vout uint32 `json:"vout"`
+	Txid     string  `json:"txid"`
+	Vout     uint32  `json:"vout"`
+	Sequence *uint32 `json:"sequence,omitempty"`
 }
 
 type TransactionOutputCashToken struct {

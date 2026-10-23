@@ -567,6 +567,16 @@ func messageToHex(msg wire.Message) (string, error) {
 	return hex.EncodeToString(buf.Bytes()), nil
 }
 
+// invalidTokenCapabilityError returns the error for an NFT capability that is
+// not none, mutable or minting.
+func invalidTokenCapabilityError() *btcjson.RPCError {
+	return &btcjson.RPCError{
+		Code: btcjson.ErrRPCType,
+		Message: "Invalid token capability; must be one of: " +
+			"none, mutable, minting",
+	}
+}
+
 // createRawTxTokenData converts the token data requested for an output of a
 // createrawtransaction command to the wire representation.
 func createRawTxTokenData(ct *btcjson.TransactionOutputCashToken) (*wire.TokenData, error) {
@@ -604,11 +614,7 @@ func createRawTxTokenData(ct *btcjson.TransactionOutputCashToken) (*wire.TokenDa
 	case "minting":
 		capability = wire.MINTING
 	default:
-		return nil, &btcjson.RPCError{
-			Code: btcjson.ErrRPCType,
-			Message: "Invalid token capability; must be one of: " +
-				"none, mutable, minting",
-		}
+		return nil, invalidTokenCapabilityError()
 	}
 
 	commitment, err := hex.DecodeString(ct.Commitment)
@@ -704,13 +710,340 @@ func createRawTxOutputScript(encodedAddr string, params *chaincfg.Params) ([]byt
 	return pkScript, nil
 }
 
+// createRawTxVersion is the version of the transactions createrawtransaction
+// makes, BCHN's CTransaction::CURRENT_VERSION.  Unlike a version 1
+// transaction, it lets the sequence numbers of its inputs set relative lock
+// times (BIP0068) and satisfy OP_CHECKSEQUENCEVERIFY.
+const createRawTxVersion = 2
+
+// createRawTxRequest is a createrawtransaction request as parseCmd decodes it
+// for the handler, with the outputs in the order given.
+type createRawTxRequest struct {
+	inputs     []btcjson.TransactionInput
+	outputs    []createRawTxOutput
+	cashTokens *[]btcjson.TransactionOutputCashToken
+	lockTime   *int64
+}
+
+// createRawTxOutput is an output requested with createrawtransaction: an
+// address with its amount in BCH and the token data given with it, if any,
+// or, when data is not nil, a null data output with those pushes.
+type createRawTxOutput struct {
+	address string
+	amount  float64
+	token   *btcjson.TransactionOutputCashToken
+	data    [][]byte
+}
+
+// jsonMember is a member of a JSON object.
+type jsonMember struct {
+	key   string
+	value json.RawMessage
+}
+
+// jsonObjectMembers returns the members of a JSON object in the order they
+// are given in, keys given more than once included.  It returns an error
+// when the value is not an object.
+func jsonObjectMembers(raw json.RawMessage) ([]jsonMember, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	token, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	if token != json.Delim('{') {
+		return nil, errors.New("not a JSON object")
+	}
+	var members []jsonMember
+	for dec.More() {
+		token, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, errors.New("not a JSON object")
+		}
+		var value json.RawMessage
+		if err := dec.Decode(&value); err != nil {
+			return nil, err
+		}
+		members = append(members, jsonMember{key: key, value: value})
+	}
+	return members, nil
+}
+
+// firstJSONByte returns the first byte of a JSON value decoded as a
+// json.RawMessage, which starts with the value itself.  The byte gives the
+// type of the value.
+func firstJSONByte(raw json.RawMessage) byte {
+	if len(raw) == 0 {
+		return 0
+	}
+	return raw[0]
+}
+
+// createRawTxParamError returns the error for a createrawtransaction param
+// that does not decode, worded as btcjson.UnmarshalCmd words it for the
+// params of other commands.
+func createRawTxParamError(param int, name string, err error) *btcjson.RPCError {
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		return rpcInvalidError("Failed to parse request: parameter #%d "+
+			"'%s' must be type %v (got %v)", param, name, typeErr.Type,
+			typeErr.Value)
+	}
+	return rpcInvalidError("Failed to parse request: parameter #%d '%s' "+
+		"failed to unmarshal: %v", param, name, err)
+}
+
+// parseCreateRawTransaction decodes the params of a createrawtransaction
+// request.  Besides bchd's form, with the outputs as an object of addresses
+// and amounts, their tokens as the third param and the locktime as the
+// fourth, it takes BCHN's (rpc/rawtransaction.cpp): the outputs as that
+// object or as an array of objects with one member each, an output's value as
+// its amount or as an object of the amount and the output's tokenData, "data"
+// members for null data outputs, and the locktime as the third param.  The
+// outputs keep the order they are given in, as in BCHN.
+func parseCreateRawTransaction(params []json.RawMessage) (*createRawTxRequest, *btcjson.RPCError) {
+	if len(params) < 2 || len(params) > 4 {
+		return nil, rpcInvalidError("Failed to parse request: wrong "+
+			"number of params (expected between 2 and 4, received %d)",
+			len(params))
+	}
+
+	var req createRawTxRequest
+	if err := json.Unmarshal(params[0], &req.inputs); err != nil {
+		return nil, createRawTxParamError(1, "inputs", err)
+	}
+	outputs, rpcErr := parseCreateRawTxOutputs(params[1])
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	req.outputs = outputs
+
+	// BCHN takes the locktime as the third and last param, where bchd
+	// takes the tokens, which are never a number.
+	rest := params[2:]
+	if len(rest) == 1 && strings.IndexByte("-0123456789",
+		firstJSONByte(rest[0])) >= 0 {
+
+		if err := json.Unmarshal(rest[0], &req.lockTime); err != nil {
+			return nil, createRawTxParamError(3, "locktime", err)
+		}
+		return &req, nil
+	}
+	if len(rest) > 0 {
+		if err := json.Unmarshal(rest[0], &req.cashTokens); err != nil {
+			return nil, createRawTxParamError(3, "cashtokens", err)
+		}
+	}
+	if len(rest) > 1 {
+		if err := json.Unmarshal(rest[1], &req.lockTime); err != nil {
+			return nil, createRawTxParamError(4, "locktime", err)
+		}
+	}
+	return &req, nil
+}
+
+// parseCreateRawTxOutputs decodes the outputs param of createrawtransaction:
+// an object of outputs, or an array of objects of one output each.  Null is
+// no outputs, as bchd has taken it.
+func parseCreateRawTxOutputs(raw json.RawMessage) ([]createRawTxOutput, *btcjson.RPCError) {
+	var members []jsonMember
+	switch firstJSONByte(raw) {
+	case 'n':
+	case '{':
+		var err error
+		members, err = jsonObjectMembers(raw)
+		if err != nil {
+			return nil, createRawTxParamError(2, "amounts", err)
+		}
+	case '[':
+		var objects []json.RawMessage
+		if err := json.Unmarshal(raw, &objects); err != nil {
+			return nil, createRawTxParamError(2, "amounts", err)
+		}
+		for _, object := range objects {
+			pair, err := jsonObjectMembers(object)
+			if err != nil {
+				return nil, rpcInvalidError("Invalid parameter, " +
+					"key-value pair not an object as expected")
+			}
+			if len(pair) != 1 {
+				return nil, rpcInvalidError("Invalid parameter, " +
+					"key-value pair must contain exactly one key")
+			}
+			members = append(members, pair[0])
+		}
+	default:
+		return nil, rpcInvalidError("Failed to parse request: parameter " +
+			"#2 'amounts' must be an object or an array of objects")
+	}
+
+	outputs := make([]createRawTxOutput, 0, len(members))
+	for _, member := range members {
+		output, err := parseCreateRawTxOutput(member)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, output)
+	}
+	return outputs, nil
+}
+
+// parseCreateRawTxOutput decodes an output of createrawtransaction: an
+// address with its amount in BCH or with an object of the amount and,
+// optionally, the output's tokenData, or "data" with the hex of one push, or
+// an array of them, for a null data output.
+func parseCreateRawTxOutput(member jsonMember) (createRawTxOutput, *btcjson.RPCError) {
+	output := createRawTxOutput{address: member.key}
+	if member.key == "data" {
+		var err *btcjson.RPCError
+		output.data, err = parseCreateRawTxData(member.value)
+		return output, err
+	}
+
+	amount := member.value
+	var tokenData json.RawMessage
+	if firstJSONByte(member.value) == '{' {
+		// As in BCHN, the first amount and tokenData members count.
+		fields, err := jsonObjectMembers(member.value)
+		if err != nil {
+			return output, createRawTxParamError(2, "amounts", err)
+		}
+		amount = nil
+		for _, field := range fields {
+			switch {
+			case field.key == "amount" && amount == nil:
+				amount = field.value
+			case field.key == "tokenData" && tokenData == nil:
+				tokenData = field.value
+			}
+		}
+		if amount == nil {
+			return output, rpcInvalidError("Invalid parameter, " +
+				"missing amount key")
+		}
+	}
+	if err := json.Unmarshal(amount, &output.amount); err != nil {
+		return output, createRawTxParamError(2, "amounts", err)
+	}
+	if tokenData != nil {
+		token, err := parseCreateRawTxTokenData(member.key, tokenData)
+		if err != nil {
+			return output, err
+		}
+		output.token = token
+	}
+	return output, nil
+}
+
+// parseCreateRawTxData decodes the value of a "data" output, the hex of one
+// push or an array of them, as BCHN takes it.
+func parseCreateRawTxData(raw json.RawMessage) ([][]byte, *btcjson.RPCError) {
+	name := "data"
+	var chunks []json.RawMessage
+	switch firstJSONByte(raw) {
+	case '"':
+		chunks = []json.RawMessage{raw}
+	case '[':
+		if err := json.Unmarshal(raw, &chunks); err != nil {
+			return nil, createRawTxParamError(2, "amounts", err)
+		}
+		if len(chunks) == 0 {
+			return nil, rpcInvalidError("data array must contain at " +
+				"least one element")
+		}
+		name = "data array element"
+	default:
+		return nil, rpcInvalidError("data must be either a hexadecimal " +
+			"string or an array of hexadecimal strings")
+	}
+
+	pushes := make([][]byte, 0, len(chunks))
+	for _, chunk := range chunks {
+		var str string
+		if err := json.Unmarshal(chunk, &str); err != nil {
+			return nil, rpcInvalidError("data array element must be " +
+				"hexadecimal string")
+		}
+		push, err := hex.DecodeString(str)
+		if err != nil || len(push) == 0 {
+			return nil, rpcInvalidError("%s must be hexadecimal "+
+				"string (not '%s')", name, str)
+		}
+		pushes = append(pushes, push)
+	}
+	return pushes, nil
+}
+
+// parseCreateRawTxTokenData decodes the tokenData of an output given as an
+// object, in BCHN's form (core_read.cpp): the category, the fungible amount
+// as an integer or a decimal string, and an nft object of the capability,
+// none when not given, and the commitment.  It returns the token as a
+// cashtokens entry for the output's address.
+func parseCreateRawTxTokenData(address string, raw json.RawMessage) (*btcjson.TransactionOutputCashToken, *btcjson.RPCError) {
+	// The category and amount decode as in a cashtokens entry.
+	var token btcjson.TransactionOutputCashToken
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return nil, createRawTxParamError(2, "amounts", err)
+	}
+	var nft struct {
+		NFT *struct {
+			Capability *string `json:"capability"`
+			Commitment string  `json:"commitment"`
+		} `json:"nft"`
+	}
+	if err := json.Unmarshal(raw, &nft); err != nil {
+		return nil, createRawTxParamError(2, "amounts", err)
+	}
+
+	token.Address = address
+	token.Capability, token.Commitment = "", ""
+	if nft.NFT != nil {
+		token.Capability = "none"
+		if nft.NFT.Capability != nil {
+			if *nft.NFT.Capability == "" {
+				return nil, invalidTokenCapabilityError()
+			}
+			token.Capability = *nft.NFT.Capability
+		}
+		token.Commitment = nft.NFT.Commitment
+	}
+	return &token, nil
+}
+
+// createRawTxDataScript returns the script of a null data output with the
+// passed pushes.  Each is pushed with the shortest push opcode for its length,
+// and never as a small integer opcode, as BCHN pushes data (script/script.h),
+// so the script is the one BCHN makes.
+func createRawTxDataScript(pushes [][]byte) []byte {
+	script := []byte{txscript.OP_RETURN}
+	for _, push := range pushes {
+		switch n := len(push); {
+		case n < txscript.OP_PUSHDATA1:
+			script = append(script, byte(n))
+		case n <= math.MaxUint8:
+			script = append(script, txscript.OP_PUSHDATA1, byte(n))
+		case n <= math.MaxUint16:
+			script = append(script, txscript.OP_PUSHDATA2, byte(n),
+				byte(n>>8))
+		default:
+			script = append(script, txscript.OP_PUSHDATA4, byte(n),
+				byte(n>>8), byte(n>>16), byte(n>>24))
+		}
+		script = append(script, push...)
+	}
+	return script
+}
+
 // handleCreateRawTransaction handles createrawtransaction commands.
 func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
-	c := cmd.(*btcjson.CreateRawTransactionCmd)
+	c := cmd.(*createRawTxRequest)
 
 	// Validate the locktime, if given.
-	if c.LockTime != nil &&
-		(*c.LockTime < 0 || *c.LockTime > int64(wire.MaxTxInSequenceNum)) {
+	if c.lockTime != nil &&
+		(*c.lockTime < 0 || *c.lockTime > int64(wire.MaxTxInSequenceNum)) {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCInvalidParameter,
 			Message: "Locktime out of range",
@@ -718,9 +1051,10 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 	}
 
 	// Add all transaction inputs to a new transaction after performing
-	// some validity checks.
-	mtx := wire.NewMsgTx(wire.TxVersion)
-	for _, input := range c.Inputs {
+	// some validity checks.  A sequence number given with an input is
+	// used as given.
+	mtx := wire.NewMsgTx(createRawTxVersion)
+	for _, input := range c.inputs {
 		txHash, err := chainhash.NewHashFromStr(input.Txid)
 		if err != nil {
 			return nil, rpcDecodeHexError(input.Txid)
@@ -728,8 +1062,11 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 
 		prevOut := wire.NewOutPoint(txHash, input.Vout)
 		txIn := wire.NewTxIn(prevOut, []byte{})
-		if c.LockTime != nil && *c.LockTime != 0 {
+		if c.lockTime != nil && *c.lockTime != 0 {
 			txIn.Sequence = wire.MaxTxInSequenceNum - 1
+		}
+		if input.Sequence != nil {
+			txIn.Sequence = *input.Sequence
 		}
 		mtx.AddTxIn(txIn)
 	}
@@ -739,8 +1076,8 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 	params := s.cfg.ChainParams
 	tokens := make(map[string]*wire.TokenData)
 	var tokenScripts, tokenAddrs []string
-	if c.CashTokens != nil {
-		for _, ct := range *c.CashTokens {
+	if c.cashTokens != nil {
+		for _, ct := range *c.cashTokens {
 			pkScript, err := createRawTxOutputScript(ct.Address,
 				params)
 			if err != nil {
@@ -765,10 +1102,18 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 		}
 	}
 
-	// Add all transaction outputs to the transaction after performing
-	// some validity checks.
-	outputs := make(map[string]struct{}, len(c.Amounts))
-	for encodedAddr, amount := range c.Amounts {
+	// Add all transaction outputs to the transaction, in the order given,
+	// after performing some validity checks.
+	outputs := make(map[string]struct{}, len(c.outputs))
+	for _, output := range c.outputs {
+		if output.data != nil {
+			script := createRawTxDataScript(output.data)
+			mtx.AddTxOut(wire.NewTxOut(0, script, wire.TokenData{}))
+			continue
+		}
+
+		encodedAddr, amount := output.address, output.amount
+
 		// Ensure amount is in the valid range for monetary amounts,
 		// which in BCH is MaxSatoshi over SatoshiPerBitcoin.
 		if amount <= 0 || amount > bchutil.MaxSatoshi/bchutil.SatoshiPerBitcoin {
@@ -800,9 +1145,24 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 			return nil, internalRPCError(err.Error(), context)
 		}
 
-		// Attach the token data requested for this address, if any.
+		// Attach the token data given with the output or for its
+		// address in the cashtokens param, which cannot both be given.
 		var tokenData wire.TokenData
-		if td, ok := tokens[string(pkScript)]; ok {
+		td, ok := tokens[string(pkScript)]
+		if output.token != nil {
+			if ok {
+				return nil, &btcjson.RPCError{
+					Code: btcjson.ErrRPCInvalidParameter,
+					Message: "Invalid parameter, duplicated " +
+						"cashtokens address: " + encodedAddr,
+				}
+			}
+			td, err = createRawTxTokenData(output.token)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if td != nil {
 			tokenData = *td
 			delete(tokens, string(pkScript))
 		}
@@ -824,8 +1184,8 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-c
 	}
 
 	// Set the Locktime, if given.
-	if c.LockTime != nil {
-		mtx.LockTime = uint32(*c.LockTime)
+	if c.lockTime != nil {
+		mtx.LockTime = uint32(*c.lockTime)
 	}
 
 	// Return the serialized and hex-encoded transaction.  Note that this
@@ -4909,6 +5269,18 @@ func parseCmd(request *btcjson.Request) *parsedRPCCmd {
 	// in BCHN, although btcjson still knows it.
 	if _, ok := rpcRemoved[request.Method]; ok {
 		parsedCmd.err = btcjson.ErrRPCMethodNotFound
+		return &parsedCmd
+	}
+
+	// createrawtransaction also takes its params in BCHN's forms, which its
+	// btcjson type cannot hold, so they are decoded here for its handler.
+	if request.Method == "createrawtransaction" {
+		cmd, err := parseCreateRawTransaction(request.Params)
+		if err != nil {
+			parsedCmd.err = err
+		} else {
+			parsedCmd.cmd = cmd
+		}
 		return &parsedCmd
 	}
 
