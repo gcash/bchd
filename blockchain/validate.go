@@ -831,7 +831,7 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	// coinbase must not have token outputs.
 	if prevNode.height+1 > b.chainParams.Upgrade9ForkHeight {
 		for _, tx := range block.Transactions() {
-			if err := checkTransactionVersion(tx); err != nil {
+			if err := CheckTransactionVersion(tx); err != nil {
 				return err
 			}
 		}
@@ -891,9 +891,9 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 	return nil
 }
 
-// checkTransactionVersion ensures the version of the transaction is within
+// CheckTransactionVersion ensures the version of the transaction is within
 // the range allowed once Upgrade9 is active.
-func checkTransactionVersion(tx *bchutil.Tx) error {
+func CheckTransactionVersion(tx *bchutil.Tx) error {
 	version := tx.MsgTx().Version
 	if version < txscript.MinTxVersion || version > txscript.MaxTxVersion {
 		str := fmt.Sprintf("transaction %v has version %d which is "+

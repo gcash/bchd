@@ -919,6 +919,21 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 			"bad-txns-nonfinal", str)
 	}
 
+	// Once Upgrade9 is active, the version of the transaction must be in
+	// the range the consensus rules allow.  BCHN checks this with the
+	// finality of the transaction, before its inputs and scripts, also
+	// when nonstandard transactions are accepted, and refuses a
+	// transaction that breaks it as nonstandard (see extractRejectCode).
+	if upgrade9Active {
+		err := blockchain.CheckTransactionVersion(tx)
+		if err != nil {
+			if cerr, ok := err.(blockchain.RuleError); ok {
+				return nil, chainRuleError(cerr)
+			}
+			return nil, err
+		}
+	}
+
 	// The transaction may not use any of the same outputs as other
 	// transactions already in the pool as that would ultimately result in a
 	// double spend.  This check is intended to be quick and therefore only

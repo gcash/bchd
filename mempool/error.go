@@ -81,16 +81,17 @@ func chainRuleError(chainErr blockchain.RuleError) RuleError {
 // was successfully extracted.
 func extractRejectCode(err error) (wire.RejectCode, bool) {
 	// Pull the underlying error out of a RuleError, which the pool returns
-	// for a transaction it refuses.  A transaction below the minimum size or
-	// above its sigchecks limit is nonstandard there, as in BCHN's memory
-	// pool, which finds the first in its contextual checks and runs the
-	// scripts of the second again without the limit, while a block holding
-	// one is invalid.
+	// for a transaction it refuses.  A transaction below the minimum size,
+	// with a version outside the consensus range or above its sigchecks
+	// limit is nonstandard there, as in BCHN's memory pool, which finds the
+	// first two in its contextual checks and runs the scripts of the third
+	// again without the limit, while a block holding one is invalid.
 	if rerr, ok := err.(RuleError); ok {
 		err = rerr.Err
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			switch cerr.ErrorCode {
-			case blockchain.ErrTxTooSmall, blockchain.ErrTxTooManySigChecks:
+			case blockchain.ErrTxTooSmall, blockchain.ErrBadTxVersion,
+				blockchain.ErrTxTooManySigChecks:
 				return wire.RejectNonstandard, true
 			}
 		}
@@ -196,6 +197,8 @@ func chainRejectReason(err blockchain.RuleError) string {
 		return "bad-txns-oversize"
 	case blockchain.ErrTxTooSmall:
 		return "bad-txns-undersize"
+	case blockchain.ErrBadTxVersion:
+		return "bad-txns-version"
 	case blockchain.ErrTxOutValueNegative:
 		return "bad-txns-vout-negative"
 	case blockchain.ErrTxOutValueTooHigh:

@@ -1213,6 +1213,8 @@ func TestRejectReason(t *testing.T) {
 		{"too big", chainErr(blockchain.ErrTxTooBig), "bad-txns-oversize"},
 		{"too small", chainErr(blockchain.ErrTxTooSmall),
 			"bad-txns-undersize"},
+		{"version", chainErr(blockchain.ErrBadTxVersion),
+			"bad-txns-version"},
 		{"negative output", chainErr(blockchain.ErrTxOutValueNegative),
 			"bad-txns-vout-negative"},
 		{"output too large", chainErr(blockchain.ErrTxOutValueTooHigh),
@@ -1432,9 +1434,10 @@ func TestScriptErrorString(t *testing.T) {
 }
 
 // TestPoolRejectCodes ensures the pool reports a transaction below the
-// minimum size and one above its sigchecks limit as nonstandard, as BCHN's
-// memory pool does, while a block holding one is still invalid, and that
-// other consensus failures are invalid in both.
+// minimum size, one with a version outside the consensus range and one above
+// its sigchecks limit as nonstandard, as BCHN's memory pool does, while a
+// block holding one is still invalid, and that other consensus failures are
+// invalid in both.
 func TestPoolRejectCodes(t *testing.T) {
 	t.Parallel()
 
@@ -1443,6 +1446,7 @@ func TestPoolRejectCodes(t *testing.T) {
 		pool wire.RejectCode
 	}{
 		{blockchain.ErrTxTooSmall, wire.RejectNonstandard},
+		{blockchain.ErrBadTxVersion, wire.RejectNonstandard},
 		{blockchain.ErrTxTooManySigChecks, wire.RejectNonstandard},
 		{blockchain.ErrTxTooBig, wire.RejectInvalid},
 		{blockchain.ErrScriptValidation, wire.RejectInvalid},
@@ -1714,6 +1718,101 @@ func TestPoolScriptFailures(t *testing.T) {
 		chainErr, ok := ruleErr.Err.(blockchain.RuleError)
 		failed := ok && chainErr.ErrorCode == blockchain.ErrScriptValidation
 		if failed != (test.code == wire.RejectInvalid) {
+			t.Errorf("%s: got error %#v", test.name, ruleErr.Err)
+		}
+	}
+}
+
+// TestPoolTxVersionRule ensures the pool applies the consensus transaction
+// version rule from the first block it is active in, before the inputs and
+// scripts, also when nonstandard transactions are accepted, and refuses a
+// transaction that breaks it with code 64 and bad-txns-version, as BCHN's
+// contextual checks do.  Without nonstandard transactions the standardness
+// check refuses such a version first, as before.
+func TestPoolTxVersionRule(t *testing.T) {
+	t.Parallel()
+
+	// At this best height the next block is the first the rule applies to.
+	active := chaincfg.MainNetParams.Upgrade9ForkHeight
+	tests := []struct {
+		name         string
+		version      int32
+		bestHeight   int32
+		acceptNonStd bool
+		orphan       bool
+		reason       string // empty when the transaction is accepted
+		desc         string
+	}{
+		{"version 3", 3, active, true, false, "bad-txns-version",
+			"has version 3 which is not in the valid range of 1-2"},
+		{"version 0", 0, active, true, false, "bad-txns-version",
+			"has version 0 which is not in the valid range of 1-2"},
+		{"negative version", -1, active, true, false, "bad-txns-version",
+			"has version -1 which is not in the valid range of 1-2"},
+		{"version 3 orphan", 3, active, true, true, "bad-txns-version",
+			"has version 3 which is not in the valid range of 1-2"},
+		{"version 1", 1, active, true, false, "", ""},
+		{"version 2", 2, active, true, false, "", ""},
+		{"version 3 before the rule", 3, active - 1, true, false, "", ""},
+		{"version 3 standard only", 3, active, false, false, "version",
+			"transaction version 3 is not in the valid range of 1-2"},
+	}
+	for _, test := range tests {
+		harness, outputs, err := newPoolHarness(&chaincfg.MainNetParams)
+		if err != nil {
+			t.Fatalf("unable to create test pool: %v", err)
+		}
+		harness.txPool.cfg.Policy.AcceptNonStd = test.acceptNonStd
+		harness.txPool.cfg.Policy.MaxTxVersion = 2
+		harness.chain.SetHeight(test.bestHeight)
+
+		out := outputs[0]
+		if test.orphan {
+			out.outPoint.Hash = chainhash.Hash{1}
+		}
+		tx := wire.NewMsgTx(test.version)
+		tx.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: out.outPoint,
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		tx.AddTxOut(wire.NewTxOut(int64(out.amount)-1000,
+			harness.payScript, wire.TokenData{}))
+		sigScript, err := txscript.SignatureScript(tx, 0,
+			int64(out.amount), harness.payScript, txscript.SigHashAll,
+			harness.signKey, true)
+		if err != nil {
+			t.Fatalf("unable to sign: %v", err)
+		}
+		tx.TxIn[0].SignatureScript = sigScript
+
+		btx := bchutil.NewTx(tx)
+		_, err = harness.txPool.ProcessTransaction(btx, true, 0)
+		if test.reason == "" {
+			if err != nil {
+				t.Errorf("%s: refused: %v", test.name, err)
+			}
+			continue
+		}
+		code, desc := ErrToRejectErr(err)
+		if code != wire.RejectNonstandard || !strings.Contains(desc,
+			test.desc) {
+
+			t.Errorf("%s: got %v %q, want %v and %q", test.name, code,
+				desc, wire.RejectNonstandard, test.desc)
+		}
+		if reason := RejectReason(err); reason != test.reason {
+			t.Errorf("%s: got reason %q, want %q", test.name, reason,
+				test.reason)
+		}
+		if harness.txPool.HaveTransaction(btx.Hash()) {
+			t.Errorf("%s: refused transaction kept", test.name)
+		}
+
+		// Code that looks at the chain error finds the consensus rule.
+		ruleErr, _ := err.(RuleError)
+		chainErr, ok := ruleErr.Err.(blockchain.RuleError)
+		consensus := ok && chainErr.ErrorCode == blockchain.ErrBadTxVersion
+		if consensus != (test.reason == "bad-txns-version") {
 			t.Errorf("%s: got error %#v", test.name, ruleErr.Err)
 		}
 	}
