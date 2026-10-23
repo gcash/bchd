@@ -22,6 +22,7 @@ import (
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
+	"github.com/gcash/bchutil"
 )
 
 // newInboundTestServer sets the global config to allow maxPerIP inbound
@@ -780,5 +781,55 @@ func TestPeerHandlerSweepsBans(t *testing.T) {
 			t.Fatal("an ended ban was not forgotten")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestRebroadcastDropsTxsNotInPool ensures a transaction that left the memory
+// pool without being mined, here because a block spent its input, is dropped
+// from the rebroadcast set instead of announced again.  It stayed there until
+// a restart, announced to every peer at each rebroadcast, while the node
+// answered a getdata for it with notfound.
+func TestRebroadcastDropsTxsNotInPool(t *testing.T) {
+	h := newMempoolTestHarness(t, 2)
+	pool := h.server.cfg.TxMemPool
+	kept, err := pool.ProcessTransaction(bchutil.NewTx(
+		h.spend(t, h.outputs[0], 1000)), false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, err := pool.ProcessTransaction(bchutil.NewTx(
+		h.spend(t, h.outputs[1], 1000)), false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool.RemoveDoubleSpends(bchutil.NewTx(h.spend(t, h.outputs[1], 2000)))
+	if pool.IsTransactionInPool(gone[0].Tx.Hash()) {
+		t.Fatal("the double spent transaction is still in the pool")
+	}
+
+	keptIV := wire.NewInvVect(wire.InvTypeTx, kept[0].Tx.Hash())
+	goneIV := wire.NewInvVect(wire.InvTypeTx, gone[0].Tx.Hash())
+	pendingInvs := map[wire.InvVect]interface{}{
+		*keptIV: kept[0],
+		*goneIV: gone[0],
+	}
+	s := &server{
+		txMemPool: pool,
+		relayInv:  make(chan relayMsg, 2),
+		quit:      make(chan struct{}),
+	}
+	s.rebroadcast(pendingInvs)
+
+	if n := len(s.relayInv); n != 1 {
+		t.Fatalf("%d transactions relayed, want 1", n)
+	}
+	if msg := <-s.relayInv; *msg.invVect != *keptIV {
+		t.Fatalf("relayed %v, want %v", msg.invVect, keptIV)
+	}
+	if _, ok := pendingInvs[*goneIV]; ok {
+		t.Fatal("the transaction that left the pool is still pending")
+	}
+	if _, ok := pendingInvs[*keptIV]; !ok {
+		t.Fatal("the transaction in the pool is no longer pending")
 	}
 }

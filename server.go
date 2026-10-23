@@ -3617,10 +3617,7 @@ out:
 		case <-timer.C:
 			// Any inventory we have has not made it into a block
 			// yet. We periodically resubmit them until they have.
-			for iv, data := range pendingInvs {
-				ivCopy := iv
-				s.RelayInventory(&ivCopy, data)
-			}
+			s.rebroadcast(pendingInvs)
 
 			// Process at a random time up to 30mins (in seconds)
 			// in the future.
@@ -3645,6 +3642,24 @@ cleanup:
 		}
 	}
 	s.wg.Done()
+}
+
+// rebroadcast relays the pending inventory again.  A transaction that left the
+// memory pool without being mined, as when it expired or a block spent its
+// inputs, is dropped instead: no block will remove it, and the node can no
+// longer send it to a peer that asks.  BCHN's wallet, too, relays again only
+// the transactions in its memory pool.
+func (s *server) rebroadcast(pendingInvs map[wire.InvVect]interface{}) {
+	for iv, data := range pendingInvs {
+		if iv.Type == wire.InvTypeTx &&
+			!s.txMemPool.IsTransactionInPool(&iv.Hash) {
+
+			delete(pendingInvs, iv)
+			continue
+		}
+		ivCopy := iv
+		s.RelayInventory(&ivCopy, data)
+	}
 }
 
 // Start begins accepting connections from peers.
