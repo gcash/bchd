@@ -593,6 +593,62 @@ func TestCompactBlockUnknownParent(t *testing.T) {
 	h.expectNotRelayed(t)
 }
 
+// TestCompactBlockKnownOrphan ensures a compact block for a block the chain
+// holds as an orphan is not fetched in full again.  A block whose parent is
+// unknown is fetched in full, and the chain was only asked whether it has the
+// block once the parent was known, so each later compact block for the block,
+// one from every peer that relays it, fetched it again.
+func TestCompactBlockKnownOrphan(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, &chainhash.Hash{0x55})
+	h.request(t, *block.Hash())
+
+	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, h.process(msg))
+	h.expectFullBlockRequest(t, *block.Hash())
+	h.send(t, block.MsgBlock())
+	h.expectHaveBlock(t, block.Hash())
+	if !h.s.chain.IsKnownOrphan(block.Hash()) {
+		t.Fatal("the block is not an orphan")
+	}
+
+	waitDone(t, h.process(msg))
+	select {
+	case iv := <-h.getData:
+		t.Fatalf("getdata for %v, whose block is a known orphan", iv)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestCompactBlockKnownForgetsRequest ensures a compact block for a block the
+// chain got otherwise forgets the block's request from the peer.  A full block
+// the peer sends afterwards is then one it was not asked for, and the peer is
+// disconnected for it.
+func TestCompactBlockKnownForgetsRequest(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+	if _, _, err := h.s.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+
+	waitDone(t, h.process(shortIDsOnly(t, block)))
+	h.send(t, block.MsgBlock())
+	disconnected := make(chan struct{})
+	go func() {
+		h.sp.WaitForDisconnect()
+		close(disconnected)
+	}()
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the block was still requested from the peer")
+	}
+}
+
 // TestDirectRelaySlotNotForGonePeer ensures a direct relay slot is not given
 // to a peer that is already gone, as one turned away at the peer limit can
 // ask for it after its disconnect was handled, and the slot would then never

@@ -920,6 +920,16 @@ func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
 func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	targetHash := msg.BlockHash()
 
+	// A block the chain has in any form, as an orphan too, is not fetched
+	// or reconstructed again.  This comes before the header check, which
+	// fetches the full block of one whose parent is unknown.
+	if have, err := sp.server.chain.HaveBlock(&targetHash); err != nil || have {
+		peerLog.Debugf("Ignoring cmpctblock %v from %v -- already known",
+			targetHash, sp)
+		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
+		return
+	}
+
 	// We check the header here before proceeding, as we end up wasting
 	// round trips if it turns out to be invalid.  The block is relayed to
 	// peers that want direct relay before it is validated in full, but only
@@ -946,12 +956,6 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	// Check what is cheap to check before decoding, which takes memory
 	// for every transaction the block describes and a pass over the
 	// memory pool.
-	if have, err := sp.server.chain.HaveBlock(&targetHash); err != nil || have {
-		peerLog.Debugf("Ignoring cmpctblock %v from %v -- already known",
-			targetHash, sp)
-		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
-		return
-	}
 	limit, err := sp.server.chain.NextBlockSizeLimit(&msg.Header.PrevBlock)
 	if err != nil {
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- %v", targetHash,
