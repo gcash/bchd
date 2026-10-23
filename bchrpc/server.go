@@ -256,6 +256,51 @@ type rpcEventBlockDisconnected struct {
 // subscription is ended.
 const maxSubscriptionQueue = 50000
 
+// rpcEventKinds is a set of kinds of event, those a subscription takes.
+type rpcEventKinds uint32
+
+const (
+	rpcEventsTxAccepted rpcEventKinds = 1 << iota
+	rpcEventsBlockConnected
+	rpcEventsBlockDisconnected
+	rpcEventsDSProof
+
+	// rpcEventsOther is the kind of any other event.
+	rpcEventsOther
+
+	// rpcEventsAll is every kind.
+	rpcEventsAll = ^rpcEventKinds(0)
+)
+
+// rpcEventKind returns the kind of an event.
+func rpcEventKind(event interface{}) rpcEventKinds {
+	switch event.(type) {
+	case *rpcEventTxAccepted:
+		return rpcEventsTxAccepted
+	case *rpcEventBlockConnected:
+		return rpcEventsBlockConnected
+	case *rpcEventBlockDisconnected:
+		return rpcEventsBlockDisconnected
+	case *rpcEventDSProof:
+		return rpcEventsDSProof
+	}
+	return rpcEventsOther
+}
+
+// txEventKinds returns the kinds of event a transaction subscription takes:
+// accepted transactions with includeMempool, and connected blocks with
+// includeBlocks.
+func txEventKinds(includeMempool, includeBlocks bool) rpcEventKinds {
+	var kinds rpcEventKinds
+	if includeMempool {
+		kinds |= rpcEventsTxAccepted
+	}
+	if includeBlocks {
+		kinds |= rpcEventsBlockConnected
+	}
+	return kinds
+}
+
 // rpcEventSubscription represents a subscription to events from the RPC server.
 type rpcEventSubscription struct {
 	server      *GrpcServer
@@ -265,9 +310,24 @@ type rpcEventSubscription struct {
 	done        chan struct{}    // closed when the queue handler stops
 	overflowed  atomic.Bool      // set when the queue limit was hit
 
+	// kinds holds the kinds of event the subscription takes, an
+	// rpcEventKinds.  The dispatcher hands it only those, so that only
+	// they wait in its queue and count toward its limit.
+	kinds atomic.Uint32
+
 	// client is the client whose share of the subscriptions a client's
 	// subscription counts in, when it is valid.
 	client netip.Prefix
+}
+
+// setKinds sets the kinds of event the subscription takes from now on.
+func (s *rpcEventSubscription) setKinds(kinds rpcEventKinds) {
+	s.kinds.Store(uint32(kinds))
+}
+
+// takes returns whether the subscription takes events of kind.
+func (s *rpcEventSubscription) takes(kind rpcEventKinds) bool {
+	return rpcEventKinds(s.kinds.Load())&kind != 0
 }
 
 // Events returns the channel clients listen to for new events.  It is closed
@@ -305,10 +365,10 @@ func (s *rpcEventSubscription) closedErr() error {
 	return status.Error(codes.Unavailable, "server shutting down")
 }
 
-// subscribeEvents returns a new subscription to all the events the RPC server
-// receives.  The subscription ends once more than maxQueue events are waiting
-// to be read, or never when maxQueue is 0.
-func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
+// subscribeEvents returns a new subscription to the events of the given kinds
+// the RPC server receives.  The subscription ends once more than maxQueue
+// events are waiting to be read, or never when maxQueue is 0.
+func (s *GrpcServer) subscribeEvents(maxQueue int, kinds rpcEventKinds) *rpcEventSubscription {
 	sub := &rpcEventSubscription{
 		server:      s,
 		in:          make(chan interface{}),
@@ -316,6 +376,7 @@ func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
 		unsubscribe: make(chan struct{}),
 		done:        make(chan struct{}),
 	}
+	sub.setKinds(kinds)
 
 	// Start a queue handler for the subscription so that slow connections don't
 	// hold up faster ones.
@@ -335,14 +396,15 @@ func (s *GrpcServer) subscribeEvents(maxQueue int) *rpcEventSubscription {
 	return sub
 }
 
-// subscribeClient returns a new subscription for the call of a client whose
-// call has the context ctx, or a ResourceExhausted error when clients hold
-// maxSubscriptions already or this client holds its share of them.  Every
-// subscription is handed every event and holds goroutines and a queue, and
-// without an auth token any client may subscribe, so the limit bounds that
-// work, and the shares keep one client from taking every place.  The
-// subscription must be ended with unsubscribeClient.
-func (s *GrpcServer) subscribeClient(ctx context.Context) (*rpcEventSubscription, error) {
+// subscribeClient returns a new subscription to the events of the given kinds
+// for the call of a client whose call has the context ctx, or a
+// ResourceExhausted error when clients hold maxSubscriptions already or this
+// client holds its share of them.  Every subscription is handed the events of
+// its kinds and holds goroutines and a queue, and without an auth token any
+// client may subscribe, so the limit bounds that work, and the shares keep one
+// client from taking every place.  The subscription must be ended with
+// unsubscribeClient.
+func (s *GrpcServer) subscribeClient(ctx context.Context, kinds rpcEventKinds) (*rpcEventSubscription, error) {
 	var client netip.Prefix
 	if s.maxClientShare > 0 {
 		client = subscriptionClient(ctx)
@@ -367,7 +429,7 @@ func (s *GrpcServer) subscribeClient(ctx context.Context) (*rpcEventSubscription
 		return nil, status.Errorf(codes.ResourceExhausted,
 			"too many subscriptions, the limit is %d", s.maxSubscriptions)
 	}
-	sub := s.subscribeEvents(maxSubscriptionQueue)
+	sub := s.subscribeEvents(maxSubscriptionQueue, kinds)
 	sub.client = client
 	return sub, nil
 }
@@ -448,9 +510,13 @@ func (s *GrpcServer) runEventDispatcher() {
 			s.subscriptions.Store(int32(len(subscriptions)))
 
 		case event := <-s.events:
-			// Dispatch to all clients.  The queue handlers never block
-			// for long while they run.
+			// Dispatch to all clients that take its kind.  The queue
+			// handlers never block for long while they run.
+			kind := rpcEventKind(event)
 			for sub := range subscriptions {
+				if !sub.takes(kind) {
+					continue
+				}
 				select {
 				case sub.in <- event:
 
@@ -2613,7 +2679,8 @@ func (s *GrpcServer) SubmitTransaction(ctx context.Context, req *pb.SubmitTransa
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest, stream pb.Bchrpc_SubscribeTransactionsServer) error {
-	subscription, err := s.subscribeClient(stream.Context())
+	subscription, err := s.subscribeClient(stream.Context(),
+		txEventKinds(req.IncludeMempool, req.IncludeInBlock))
 	if err != nil {
 		return err
 	}
@@ -2749,7 +2816,8 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 //
 // **Requires TxIndex to receive input metadata**
 func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransactionStreamServer) error {
-	subscription, err := s.subscribeClient(stream.Context())
+	// The call takes no events until a request says which.
+	subscription, err := s.subscribeClient(stream.Context(), 0)
 	if err != nil {
 		return err
 	}
@@ -2789,6 +2857,8 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 			includeMempool = req.IncludeMempool
 			includeBlocks = req.IncludeInBlock
 			serializeTx = req.SerializeTx
+			subscription.setKinds(txEventKinds(includeMempool,
+				includeBlocks))
 
 			// Update filter.
 			if err := filter.AddRPCFilter(req.GetSubscribe(), s.chainParams); err != nil {
@@ -2913,7 +2983,8 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 // SubscribeBlocks creates a subscription for notifications of new blocks being
 // connected to the blockchain or blocks being disconnected.
 func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.Bchrpc_SubscribeBlocksServer) error {
-	subscription, err := s.subscribeClient(stream.Context())
+	subscription, err := s.subscribeClient(stream.Context(),
+		rpcEventsBlockConnected|rpcEventsBlockDisconnected)
 	if err != nil {
 		return err
 	}
@@ -3663,7 +3734,8 @@ func (s *GrpcServer) slpEventHandler() {
 
 	// This subscription is not bounded, since dropping it would stop SLP
 	// validation of mempool transactions.
-	subscription := s.subscribeEvents(0)
+	subscription := s.subscribeEvents(0,
+		rpcEventsTxAccepted|rpcEventsBlockConnected)
 	defer subscription.Unsubscribe()
 
 	for {

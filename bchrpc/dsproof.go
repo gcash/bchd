@@ -175,7 +175,7 @@ func (s *GrpcServer) SubscribeDoubleSpendProofs(req *pb.SubscribeDoubleSpendProo
 	if !s.txMemPool.DSProofsEnabled() {
 		return errDSProofsDisabled
 	}
-	subscription, err := s.subscribeClient(stream.Context())
+	subscription, err := s.subscribeClient(stream.Context(), rpcEventsDSProof)
 	if err != nil {
 		return err
 	}

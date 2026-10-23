@@ -45,7 +45,7 @@ func TestSubscriptionTeardown(t *testing.T) {
 
 	const n = 50
 	for range n {
-		sub := s.subscribeEvents(maxSubscriptionQueue)
+		sub := s.subscribeEvents(maxSubscriptionQueue, rpcEventsAll)
 		sub.Unsubscribe()
 
 		// The queue handler closes done as it returns.
@@ -65,9 +65,9 @@ func TestSubscriptionTeardown(t *testing.T) {
 // dropped once its queue is full, instead of buffering every event.
 func TestSubscriptionQueueBounded(t *testing.T) {
 	s := newDispatcherTestServer(t)
-	slow := s.subscribeEvents(maxSubscriptionQueue)
+	slow := s.subscribeEvents(maxSubscriptionQueue, rpcEventsAll)
 	defer slow.Unsubscribe()
-	fast := s.subscribeEvents(maxSubscriptionQueue)
+	fast := s.subscribeEvents(maxSubscriptionQueue, rpcEventsAll)
 	defer fast.Unsubscribe()
 
 	received := make(chan int)
@@ -224,7 +224,7 @@ func TestClientSubscriptionLimit(t *testing.T) {
 	s.txMemPool = mempool.New(&mempool.Config{})
 	s.maxSubscriptions = 2
 
-	own := s.subscribeEvents(0)
+	own := s.subscribeEvents(0, rpcEventsAll)
 	defer own.Unsubscribe()
 
 	type call struct {
@@ -655,4 +655,322 @@ func TestSubscribeTransactionStreamConfiguredFilterLimit(t *testing.T) {
 		}
 		cancel()
 	}
+}
+
+// TestSubscriptionEventKinds ensures the dispatcher hands a subscription only
+// the kinds of event it takes, so that others neither wait in its queue nor
+// end it however many come, that events of a kind it takes still end it once
+// more than its queue holds wait, and that it takes the kinds set last.
+func TestSubscriptionEventKinds(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	blocks := s.subscribeEvents(maxSubscriptionQueue,
+		rpcEventsBlockConnected|rpcEventsBlockDisconnected)
+	defer blocks.Unsubscribe()
+	connectedOnly := s.subscribeEvents(maxSubscriptionQueue,
+		rpcEventsBlockConnected)
+	defer connectedOnly.Unsubscribe()
+	disconnectedOnly := s.subscribeEvents(maxSubscriptionQueue,
+		rpcEventsBlockDisconnected)
+	defer disconnectedOnly.Unsubscribe()
+	later := s.subscribeEvents(maxSubscriptionQueue, 0)
+	defer later.Unsubscribe()
+
+	for i := 0; i < maxSubscriptionQueue+10; i++ {
+		s.dispatchEvent(&rpcEventTxAccepted{})
+		s.dispatchEvent(&rpcEventDSProof{})
+		s.dispatchEvent(i)
+	}
+	recv := func(what string, sub *rpcEventSubscription) interface{} {
+		t.Helper()
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				t.Fatalf("%s: the subscription ended: %v", what,
+					sub.closedErr())
+			}
+			return event
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: no event", what)
+		}
+		return nil
+	}
+	connected, disconnected := &rpcEventBlockConnected{}, &rpcEventBlockDisconnected{}
+	connected2, disconnected2 := &rpcEventBlockConnected{}, &rpcEventBlockDisconnected{}
+	s.dispatchEvent(connected)
+	s.dispatchEvent(disconnected)
+	s.dispatchEvent(connected2)
+	s.dispatchEvent(disconnected2)
+	for _, want := range []interface{}{connected, disconnected, connected2} {
+		if event := recv("blocks", blocks); event != want {
+			t.Errorf("blocks: got %T, want %T", event, want)
+		}
+	}
+	for _, want := range []interface{}{connected, connected2} {
+		if event := recv("connected", connectedOnly); event != want {
+			t.Errorf("connected: got %T, want %T", event, want)
+		}
+	}
+	for _, want := range []interface{}{disconnected, disconnected2} {
+		if event := recv("disconnected", disconnectedOnly); event != want {
+			t.Errorf("disconnected: got %T, want %T", event, want)
+		}
+	}
+	later.setKinds(rpcEventsTxAccepted)
+	accepted := &rpcEventTxAccepted{}
+	s.dispatchEvent(&rpcEventDSProof{})
+	s.dispatchEvent(0)
+	s.dispatchEvent(&rpcEventBlockConnected{})
+	s.dispatchEvent(&rpcEventBlockDisconnected{})
+	s.dispatchEvent(accepted)
+	if event := recv("later", later); event != accepted {
+		t.Errorf("later: got %T first, want the transaction set later", event)
+	}
+
+	// More events of a kind it takes than its queue holds end it.
+	for i := 0; i < maxSubscriptionQueue+10; i++ {
+		s.dispatchEvent(&rpcEventBlockConnected{})
+	}
+	select {
+	case _, ok := <-blocks.Events():
+		if ok {
+			t.Fatal("blocks: an event left after its queue overflowed")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocks: not ended by more blocks than its queue holds")
+	}
+	if got := status.Code(blocks.closedErr()); got != codes.ResourceExhausted {
+		t.Errorf("blocks: ended with %v, want ResourceExhausted", got)
+	}
+}
+
+// TestTxEventKinds ensures a transaction subscription takes accepted
+// transactions only with the memory pool included, and connected blocks only
+// with blocks included.
+func TestTxEventKinds(t *testing.T) {
+	for _, test := range []struct {
+		mempool, blocks bool
+		want            rpcEventKinds
+	}{{false, false, 0}, {true, false, rpcEventsTxAccepted},
+		{false, true, rpcEventsBlockConnected},
+		{true, true, rpcEventsTxAccepted | rpcEventsBlockConnected}} {
+
+		if got := txEventKinds(test.mempool, test.blocks); got != test.want {
+			t.Errorf("mempool %v, blocks %v: kinds %b, want %b",
+				test.mempool, test.blocks, got, test.want)
+		}
+	}
+}
+
+// heldSender holds each notification a stream sends until release is closed,
+// telling sending as it starts.
+type heldSender struct {
+	sending chan struct{}
+	release chan struct{}
+}
+
+func newHeldSender() *heldSender {
+	return &heldSender{sending: make(chan struct{}, 100),
+		release: make(chan struct{})}
+}
+
+func (h *heldSender) send() error {
+	h.sending <- struct{}{}
+	<-h.release
+	return nil
+}
+
+// heldTxStream is a transaction subscription's stream whose client sends the
+// requests handed to reqs and whose notifications are held.
+type heldTxStream struct {
+	grpc.ServerStream
+	*heldSender
+	ctx  context.Context
+	reqs chan *pb.SubscribeTransactionsRequest
+}
+
+func (s *heldTxStream) Context() context.Context { return s.ctx }
+
+func (s *heldTxStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
+	select {
+	case req := <-s.reqs:
+		return req, nil
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	}
+}
+
+func (s *heldTxStream) Send(*pb.TransactionNotification) error { return s.send() }
+
+// heldBlockStream is a SubscribeBlocks stream whose notifications are held.
+type heldBlockStream struct {
+	grpc.ServerStream
+	*heldSender
+	ctx context.Context
+}
+
+func (s *heldBlockStream) Context() context.Context { return s.ctx }
+
+func (s *heldBlockStream) Send(*pb.BlockNotification) error { return s.send() }
+
+// heldDSProofStream is a SubscribeDoubleSpendProofs stream whose notifications
+// are held.
+type heldDSProofStream struct {
+	grpc.ServerStream
+	*heldSender
+	ctx context.Context
+}
+
+func (s *heldDSProofStream) Context() context.Context { return s.ctx }
+
+func (s *heldDSProofStream) Send(*pb.DoubleSpendProofNotification) error {
+	return s.send()
+}
+
+// checkOtherEventsKept ensures that the subscription made by call, the only
+// one of s, once held in the send of its notification of an event trigger
+// makes, is not ended by more events of each of the kinds others makes than
+// its queue holds, which it does not take: once released it sends trigger's
+// notification again.  It returns a function that waits for the call to end
+// once its context ends.
+func checkOtherEventsKept(t *testing.T, name string, s *GrpcServer,
+	held *heldSender, call func() error, trigger func() interface{},
+	others ...func() interface{}) func() {
+
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- call() }()
+	waitSubscriptions(t, s, 1)
+	ended := false
+	sent := func(what string) bool {
+		t.Helper()
+		s.dispatchEvent(trigger())
+		select {
+		case <-held.sending:
+			return true
+		case err := <-done:
+			ended = true
+			t.Errorf("%s: ended before its notification %s: %v", name,
+				what, err)
+		case <-time.After(5 * time.Second):
+			t.Errorf("%s: no notification %s", name, what)
+		}
+		return false
+	}
+	wait := func() {
+		if ended {
+			return
+		}
+		if err := <-done; err != nil {
+			t.Errorf("%s: ended with %v", name, err)
+		}
+	}
+	if !sent("first") {
+		return wait
+	}
+	for _, other := range others {
+		for i := 0; i < maxSubscriptionQueue+10; i++ {
+			s.dispatchEvent(other())
+		}
+	}
+	close(held.release)
+	sent("after the other events")
+	return wait
+}
+
+// TestSubscriptionsTakeTheirEventKinds ensures each subscription call takes
+// only the kinds of event it sends notifications of, so that a subscriber
+// busy with a notification is not ended by more events of other kinds than
+// its queue holds: a block subscriber by memory pool transactions or proofs,
+// a transaction subscriber without blocks by blocks or proofs, and a proof
+// subscriber by transactions or blocks.
+func TestSubscriptionsTakeTheirEventKinds(t *testing.T) {
+	data := []byte{1, 2, 3}
+	watch := &pb.SubscribeTransactionsRequest{
+		Subscribe:      &pb.TransactionFilter{DataElements: [][]byte{data}},
+		IncludeMempool: true,
+		SerializeTx:    true,
+	}
+	n := uint32(0)
+	accepted := func() interface{} {
+		n++
+		return txEvent(dataTx(wire.OutPoint{Index: n}, data))
+	}
+	connected := func() interface{} { return &rpcEventBlockConnected{} }
+	disconnected := func() interface{} { return &rpcEventBlockDisconnected{} }
+	proof := func() interface{} {
+		return &rpcEventDSProof{&mempool.DSProofDesc{Proof: &wire.MsgDSProof{}}}
+	}
+
+	newServer := func() *GrpcServer {
+		s := newDispatcherTestServer(t)
+		s.chainParams = &chaincfg.RegressionNetParams
+		s.txMemPool = mempool.New(&mempool.Config{})
+		return s
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls []func()
+	s, held := newServer(), newHeldSender()
+	calls = append(calls, checkOtherEventsKept(t, "SubscribeTransactions", s, held, func() error {
+		return s.SubscribeTransactions(watch, &heldTxStream{ctx: ctx,
+			heldSender: held})
+	}, accepted, connected, disconnected, proof))
+
+	// The stream takes events once it has handled its first request,
+	// which it has once it takes the third.
+	s, held = newServer(), newHeldSender()
+	reqs := make(chan *pb.SubscribeTransactionsRequest)
+	stream := &heldTxStream{ctx: ctx, heldSender: held, reqs: reqs}
+	streamDone := make(chan error, 1)
+	go func() { streamDone <- s.SubscribeTransactionStream(stream) }()
+	for i := 0; i < 3; i++ {
+		select {
+		case reqs <- watch:
+		case err := <-streamDone:
+			t.Fatalf("SubscribeTransactionStream ended: %v", err)
+		}
+	}
+	calls = append(calls, checkOtherEventsKept(t, "SubscribeTransactionStream", s, held, func() error {
+		return <-streamDone
+	}, accepted, connected, disconnected, proof))
+
+	s, held = newServer(), newHeldSender()
+	calls = append(calls, checkOtherEventsKept(t, "SubscribeDoubleSpendProofs", s, held, func() error {
+		return s.SubscribeDoubleSpendProofs(
+			&pb.SubscribeDoubleSpendProofsRequest{},
+			&heldDSProofStream{ctx: ctx, heldSender: held})
+	}, proof, accepted, connected, disconnected))
+
+	// The block subscriber is notified of a connection, then of a
+	// disconnection.
+	h := newAddrUnspentHarness(t)
+	h.startDispatcher()
+	h.mineBlock([]*wire.TxOut{wire.NewTxOut(50e8, p2shScript(t, otherRedeem),
+		wire.TokenData{})}, nil)
+	block, err := h.chain.BlockByHash(&h.prevHash)
+	if err != nil {
+		t.Fatalf("BlockByHash: %v", err)
+	}
+	blockEvents := 0
+	blockChange := func() interface{} {
+		blockEvents++
+		if blockEvents == 1 {
+			return blockEvent(block)
+		}
+		return &rpcEventBlockDisconnected{block}
+	}
+	held = newHeldSender()
+	calls = append(calls, checkOtherEventsKept(t, "SubscribeBlocks", h.s, held, func() error {
+		return h.s.SubscribeBlocks(&pb.SubscribeBlocksRequest{},
+			&heldBlockStream{ctx: ctx, heldSender: held})
+	}, blockChange, accepted, proof))
+
+	// The calls and the stream's request reader, which logs the end of
+	// the stream, end before the test does.
+	cancel()
+	for _, wait := range calls {
+		wait()
+	}
+	waitStreamReaders(t)
 }
