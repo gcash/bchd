@@ -1477,6 +1477,23 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 	// common ancenstor (the point where the chain forked).
 	detachNodes, attachNodes := b.getReorganizeNodes(node)
 
+	// A pruned node can't switch to a chain holding a block whose data it
+	// deleted, so it stays on its own chain, as Bitcoin Cash Node removes
+	// such a chain from the candidates for the best chain.  This is checked
+	// before anything is read for the reorganize.
+	if b.isPruned {
+		pruned, err := b.prunedNode(attachNodes)
+		if err != nil {
+			return false, err
+		}
+		if pruned != nil {
+			log.Warnf("Considered switching to better tip %v, but the "+
+				"data of block %v on its chain was pruned", node.hash,
+				pruned.hash)
+			return false, nil
+		}
+	}
+
 	// Reorganize the chain.
 	log.Infof("REORGANIZE: Block %v is causing a reorganize.", node.hash)
 	err := b.reorganizeChain(detachNodes, attachNodes)
@@ -1490,6 +1507,30 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 	}
 
 	return err == nil, err
+}
+
+// prunedNode returns the first of the passed nodes whose block data has been
+// pruned, or nil when the data of every one of them is stored.  Only the
+// header of each block is read.
+//
+// This function MUST be called with the chain state lock held (for reads).
+func (b *BlockChain) prunedNode(nodes *list.List) (*blockNode, error) {
+	var pruned *blockNode
+	err := b.db.View(func(dbTx database.Tx) error {
+		for e := nodes.Front(); e != nil; e = e.Next() {
+			n := e.Value.(*blockNode)
+			_, err := dbTx.FetchBlockHeader(&n.hash)
+			if isBlockDataMissing(err) {
+				pruned = n
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return pruned, err
 }
 
 // isCurrent returns whether or not the chain believes it is current.  Several
