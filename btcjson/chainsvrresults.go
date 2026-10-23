@@ -154,9 +154,11 @@ type GetBlockChainInfoResult struct {
 // getblocktemplate command.
 type GetBlockTemplateResultTx struct {
 	Data      string  `json:"data"`
+	TxID      string  `json:"txid"`
 	Hash      string  `json:"hash"`
 	Depends   []int64 `json:"depends"`
 	Fee       int64   `json:"fee"`
+	SigOps    int64   `json:"sigops"` // The sigchecks, under BCHN's name
 	SigChecks int64   `json:"sigchecks"`
 	Size      int64   `json:"size"`
 }
@@ -176,6 +178,7 @@ type GetBlockTemplateResult struct {
 	CurTime       int64                      `json:"curtime"`
 	Height        int64                      `json:"height"`
 	PreviousHash  string                     `json:"previousblockhash"`
+	SigOpLimit    int64                      `json:"sigoplimit,omitempty"` // The sigchecks limit, under BCHN's name
 	SizeLimit     int64                      `json:"sizelimit,omitempty"`
 	SigCheckLimit int64                      `json:"sigchecklimit,omitempty"`
 	SigCheckTotal int64                      `json:"sigchecktotal,omitempty"`

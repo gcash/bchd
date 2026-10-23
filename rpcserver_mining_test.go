@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -456,6 +457,92 @@ func TestGBTDependsCoversLaterParents(t *testing.T) {
 	}
 	if deps := res.Transactions[1].Depends; len(deps) != 0 {
 		t.Fatalf("parent depends on %v, want nothing", deps)
+	}
+}
+
+// TestGBTBCHNFields ensures getblocktemplate lists each transaction with the
+// txid and sigops members BCHN gives, sigops holding its sigchecks as in
+// BCHN, and the sigoplimit BCHN gives, the block sigchecks limit, along with
+// bchd's own members.
+func TestGBTBCHNFields(t *testing.T) {
+	cb := wire.NewMsgTx(1)
+	cb.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: *wire.NewOutPoint(&chainhash.Hash{},
+			wire.MaxPrevOutIndex),
+		SignatureScript: []byte{0x51, 0x51},
+	})
+	cb.AddTxOut(wire.NewTxOut(0, []byte{0x51}, wire.TokenData{}))
+	var blk wire.MsgBlock
+	blk.Header.Timestamp = time.Unix(time.Now().Unix(), 0)
+	if err := blk.AddTransaction(cb); err != nil {
+		t.Fatal(err)
+	}
+	for i := range uint32(2) {
+		tx := wire.NewMsgTx(2)
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{1}, i), nil))
+		tx.AddTxOut(wire.NewTxOut(1000, []byte{0x51}, wire.TokenData{}))
+		if err := blk.AddTransaction(tx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := newGbtWorkState(blockchain.NewMedianTime())
+	state.prevHash = &chainhash.Hash{}
+	state.template = &mining.BlockTemplate{
+		Block:           &blk,
+		Fees:            []int64{-300, 100, 200},
+		SigChecks:       []int64{1, 3, 5},
+		ValidPayAddress: true,
+		MaxBlockSize:    32000000,
+		MaxSigChecks:    226950,
+	}
+
+	for _, useCoinbaseValue := range []bool{true, false} {
+		res, err := state.blockTemplateResult(useCoinbaseValue, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		marshalled, err := json.Marshal(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var reply struct {
+			SigOpLimit    *int64                   `json:"sigoplimit"`
+			SigCheckLimit *int64                   `json:"sigchecklimit"`
+			Transactions  []map[string]interface{} `json:"transactions"`
+			CoinbaseTxn   map[string]interface{}   `json:"coinbasetxn"`
+		}
+		if err := json.Unmarshal(marshalled, &reply); err != nil {
+			t.Fatal(err)
+		}
+		if reply.SigOpLimit == nil || *reply.SigOpLimit != 226950 ||
+			reply.SigCheckLimit == nil || *reply.SigCheckLimit != 226950 {
+
+			t.Errorf("result %s, want sigoplimit and sigchecklimit "+
+				"226950", marshalled)
+		}
+
+		entries := reply.Transactions
+		if !useCoinbaseValue {
+			entries = append([]map[string]interface{}{reply.CoinbaseTxn},
+				entries...)
+		} else {
+			entries = append([]map[string]interface{}{nil}, entries...)
+		}
+		for i, entry := range entries {
+			if entry == nil {
+				continue
+			}
+			hash := blk.Transactions[i].TxHash().String()
+			sigChecks := float64(state.template.SigChecks[i])
+			if entry["txid"] != hash || entry["hash"] != hash ||
+				entry["sigops"] != sigChecks ||
+				entry["sigchecks"] != sigChecks {
+
+				t.Errorf("coinbase value %v, transaction %d: %v, want "+
+					"txid and hash %s, sigops and sigchecks %v",
+					useCoinbaseValue, i, entry, hash, sigChecks)
+			}
+		}
 	}
 }
 

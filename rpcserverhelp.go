@@ -340,10 +340,11 @@ var helpDescsEnUS = map[string]string{
 
 	// GetBlockTemplateResultTx help.
 	"getblocktemplateresulttx-data":      "Hex-encoded transaction data (byte-for-byte)",
+	"getblocktemplateresulttx-txid":      "The transaction id, the same as hash, as in BCHN",
 	"getblocktemplateresulttx-hash":      "Hex-encoded transaction hash (little endian if treated as a 256-bit number)",
 	"getblocktemplateresulttx-depends":   "Other transactions (by 1-based index in the 'transactions' list) that must be present in the final block if this one is",
 	"getblocktemplateresulttx-fee":       "Difference in value between transaction inputs and outputs (in Satoshi)",
-	"getblocktemplateresulttx-sigops":    "Total number of signature operations as counted for purposes of block limits",
+	"getblocktemplateresulttx-sigops":    "The number of signature checks, the same as sigchecks, under the name BCHN keeps",
 	"getblocktemplateresulttx-sigchecks": "Total number of signature checks as counted for purposes of block limits",
 	"getblocktemplateresulttx-size":      "The size of the transaction",
 
@@ -355,7 +356,7 @@ var helpDescsEnUS = map[string]string{
 	"getblocktemplateresult-curtime":                    "Current time as seen by the server (recommended for block time); must fall within mintime/maxtime rules",
 	"getblocktemplateresult-height":                     "Height of the block to be solved",
 	"getblocktemplateresult-previousblockhash":          "Hex-encoded big-endian hash of the previous block",
-	"getblocktemplateresult-sigoplimit":                 "Number of sigops allowed in blocks ",
+	"getblocktemplateresult-sigoplimit":                 "The maximum number of signature checks allowed by the consensus rules, the same as sigchecklimit, under the name BCHN keeps",
 	"getblocktemplateresult-sizelimit":                  "Number of bytes allowed in blocks",
 	"getblocktemplateresult-transactions":               "Array of transactions as JSON objects",
 	"getblocktemplateresult-version":                    "The block version",

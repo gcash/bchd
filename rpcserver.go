@@ -2498,12 +2498,16 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 			return nil, internalRPCError(err.Error(), context)
 		}
 
+		// The txid and sigops members are BCHN's, its sigops being the
+		// sigchecks.
 		bTx := bchutil.NewTx(tx)
 		resultTx := btcjson.GetBlockTemplateResultTx{
 			Data:      hex.EncodeToString(txBuf.Bytes()),
+			TxID:      txHash.String(),
 			Hash:      txHash.String(),
 			Depends:   depends,
 			Fee:       template.Fees[i],
+			SigOps:    template.SigChecks[i],
 			SigChecks: template.SigChecks[i],
 			Size:      int64(bTx.MsgTx().SerializeSize()),
 		}
@@ -2521,6 +2525,7 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		CurTime:       header.Timestamp.Unix(),
 		Height:        int64(template.Height),
 		PreviousHash:  header.PrevBlock.String(),
+		SigOpLimit:    int64(template.MaxSigChecks),
 		SigCheckLimit: int64(template.MaxSigChecks),
 		SigCheckTotal: sigChecks,
 		SizeLimit:     int64(template.MaxBlockSize),
@@ -2560,11 +2565,14 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 			return nil, internalRPCError(err.Error(), context)
 		}
 
+		txHash := tx.TxHash().String()
 		resultTx := btcjson.GetBlockTemplateResultTx{
 			Data:      hex.EncodeToString(txBuf.Bytes()),
-			Hash:      tx.TxHash().String(),
+			TxID:      txHash,
+			Hash:      txHash,
 			Depends:   []int64{},
 			Fee:       template.Fees[0],
+			SigOps:    template.SigChecks[0],
 			SigChecks: template.SigChecks[0],
 		}
 
