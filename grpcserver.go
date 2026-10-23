@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,6 +53,16 @@ var grpcWriteTimeout = 30 * time.Second
 // time its write deadline is renewed: a client must take this much in each
 // grpcWriteTimeout.
 const grpcWritePartSize = 64 * 1024
+
+// grpcReadTimeout is how long a gRPC client may take to send each
+// grpcWritePartSize bytes of a call's request, as BCHN's HTTP server ends a
+// request it does not receive within -rpcservertimeout, 30 s by default
+// (httpserver.cpp:434-435, httpserver.h:29).  It runs from the request's
+// headers until its body ends, so a client that sends the headers and nothing
+// more cannot hold the call's goroutines, which the call limit counts only
+// once the request has been read.  A call whose client sends messages when it
+// chooses has its request once its handler starts.
+var grpcReadTimeout = 30 * time.Second
 
 func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *server) (*bchrpc.GrpcServer, error) {
 	if len(netAddrs) == 0 {
@@ -186,14 +198,96 @@ func grpcHTTPHandler(server *grpc.Server) http.Handler {
 	wrappedGrpc := grpcweb.WrapServer(server, allowAllOrigins)
 
 	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		resp = &grpcDeadlineWriter{ResponseWriter: resp,
+		w := &grpcDeadlineWriter{ResponseWriter: resp,
 			rc: http.NewResponseController(resp)}
+		if req.Body != http.NoBody {
+			d := &grpcReadDeadline{rc: w.rc}
+			defer d.end()
+			d.renew()
+			req = req.WithContext(context.WithValue(req.Context(),
+				grpcReadDeadlineKey{}, d))
+			req.Body = &grpcDeadlineBody{ReadCloser: req.Body, deadline: d}
+		}
 		if wrappedGrpc.IsGrpcWebRequest(req) || wrappedGrpc.IsAcceptableGrpcCorsRequest(req) {
-			wrappedGrpc.ServeHTTP(resp, req)
+			wrappedGrpc.ServeHTTP(w, req)
 		} else {
-			server.ServeHTTP(resp, req)
+			server.ServeHTTP(w, req)
 		}
 	})
+}
+
+// grpcReadDeadlineKey is the context key of a request's grpcReadDeadline.
+type grpcReadDeadlineKey struct{}
+
+// grpcReadDeadline is the read deadline of a gRPC request's body, renewed for
+// each grpcWritePartSize bytes received until the call has its request.
+type grpcReadDeadline struct {
+	rc *http.ResponseController
+
+	mu    sync.Mutex
+	got   int  // bytes received since the deadline was renewed
+	done  bool // the call has its request
+	ended bool // the request has ended
+}
+
+// renew sets the read deadline grpcReadTimeout ahead, unless the call has its
+// request or the request has ended.
+func (d *grpcReadDeadline) renew() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.done && !d.ended {
+		_ = d.rc.SetReadDeadline(time.Now().Add(grpcReadTimeout))
+	}
+}
+
+// read counts n bytes of the body received, renewing the deadline once a part
+// has come, and clears it once the body has ended or failed.
+func (d *grpcReadDeadline) read(n int, err error) {
+	if err != nil {
+		d.clear()
+		return
+	}
+	d.mu.Lock()
+	d.got += n
+	full := d.got >= grpcWritePartSize
+	if full {
+		d.got = 0
+	}
+	d.mu.Unlock()
+	if full {
+		d.renew()
+	}
+}
+
+// clear clears the read deadline, as the call has its request.
+func (d *grpcReadDeadline) clear() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.done && !d.ended {
+		d.done = true
+		_ = d.rc.SetReadDeadline(time.Time{})
+	}
+}
+
+// end marks the request ended, after which its ResponseController may no
+// longer be used.
+func (d *grpcReadDeadline) end() {
+	d.mu.Lock()
+	d.ended = true
+	d.mu.Unlock()
+}
+
+// grpcDeadlineBody is the body of a gRPC request, read under its read
+// deadline.
+type grpcDeadlineBody struct {
+	io.ReadCloser
+	deadline *grpcReadDeadline
+}
+
+func (b *grpcDeadlineBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	b.deadline.read(n, err)
+	return n, err
 }
 
 // grpcDeadlineWriter is the ResponseWriter of a gRPC request.  It renews the
@@ -261,6 +355,14 @@ func serviceName(method string) string {
 // last so that the handler never runs for an unauthenticated caller.
 func interceptStreaming(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 	defer recoverGrpcPanic(info.FullMethod, &err)
+
+	// A call whose client streams sends its messages when it chooses, so
+	// it has its request once it starts.
+	if info.IsClientStream {
+		if d, ok := ss.Context().Value(grpcReadDeadlineKey{}).(*grpcReadDeadline); ok {
+			d.clear()
+		}
+	}
 
 	// This line is logged for every call, before the caller is
 	// authenticated, so it is at debug.

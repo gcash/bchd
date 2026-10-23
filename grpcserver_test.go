@@ -353,8 +353,9 @@ func (l grpcBufferListener) Accept() (net.Conn, error) {
 }
 
 // startGrpcWriteTest serves svc over TLS with the gRPC listener's HTTP server
-// and handler, with grpcWriteTimeout set to timeout, and returns the server's
-// address and the number of requests its handler is serving.
+// and handler, with grpcWriteTimeout and grpcReadTimeout set to timeout, and
+// returns the server's address and the number of requests its handler is
+// serving.
 func startGrpcWriteTest(t *testing.T, svc pb.BchrpcServer,
 	timeout time.Duration) (string, *atomic.Int32) {
 
@@ -370,9 +371,9 @@ func startGrpcTest(t *testing.T, timeout time.Duration,
 	register func(*grpc.Server), opts ...grpc.ServerOption) (string, *atomic.Int32) {
 
 	t.Helper()
-	saved := grpcWriteTimeout
-	t.Cleanup(func() { grpcWriteTimeout = saved })
-	grpcWriteTimeout = timeout
+	saved, savedRead := grpcWriteTimeout, grpcReadTimeout
+	t.Cleanup(func() { grpcWriteTimeout, grpcReadTimeout = saved, savedRead })
+	grpcWriteTimeout, grpcReadTimeout = timeout, timeout
 
 	dir := t.TempDir()
 	cert, key, err := bchutil.NewTLSCertPair("bchd test",
@@ -407,7 +408,7 @@ func startGrpcTest(t *testing.T, timeout time.Duration,
 	t.Cleanup(func() {
 		srv.Close()
 		gs.Stop()
-		// No handler may read grpcWriteTimeout once it is restored.
+		// No handler may read the timeouts once they are restored.
 		waitForGrpc(t, "the handlers to return", func() bool {
 			return active.Load() == 0
 		})
@@ -474,6 +475,22 @@ func dialRawH2(t *testing.T, addr string, settings ...http2.Setting) *rawH2Clien
 // call starts a gRPC call of method on the stream with the request.
 func (c *rawH2Client) call(stream uint32, method string, req proto.Message) {
 	c.t.Helper()
+	c.start(stream, method)
+	msg, err := proto.Marshal(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	body := make([]byte, 5+len(msg))
+	binary.BigEndian.PutUint32(body[1:5], uint32(len(msg)))
+	copy(body[5:], msg)
+	if err := c.fr.WriteData(stream, true, body); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// start starts a gRPC call of method on the stream, sending its headers only.
+func (c *rawH2Client) start(stream uint32, method string) {
+	c.t.Helper()
 	var block bytes.Buffer
 	enc := hpack.NewEncoder(&block)
 	for _, f := range [][2]string{{":method", "POST"}, {":scheme", "https"},
@@ -485,16 +502,6 @@ func (c *rawH2Client) call(stream uint32, method string, req proto.Message) {
 	err := c.fr.WriteHeaders(http2.HeadersFrameParam{StreamID: stream,
 		BlockFragment: block.Bytes(), EndHeaders: true})
 	if err != nil {
-		c.t.Fatal(err)
-	}
-	msg, err := proto.Marshal(req)
-	if err != nil {
-		c.t.Fatal(err)
-	}
-	body := make([]byte, 5+len(msg))
-	binary.BigEndian.PutUint32(body[1:5], uint32(len(msg)))
-	copy(body[5:], msg)
-	if err := c.fr.WriteData(stream, true, body); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -940,8 +947,9 @@ func (g *grpcWebTextReader) Read(p []byte) (int, error) {
 
 // grpcLimitTestService serves a unary method X, which answers with a block of
 // replySize bytes once release receives or is closed, or its call ends,
-// telling started first, and a streaming method Y, which sends one
-// notification and waits for its call to end.  It is registered under the
+// telling started first, a streaming method Y, which sends one notification
+// and waits for its call to end, and a method Z streaming both ways, which
+// answers each message it receives.  It is registered under the
 // name of the reflection service, which ServiceReady always finds ready, so
 // that its calls pass the interceptors as bchrpc's do once the node runs.
 type grpcLimitTestService struct {
@@ -994,6 +1002,24 @@ func (s *grpcLimitTestService) register(gs *grpc.Server) {
 				}
 				<-stream.Context().Done()
 				return nil
+			},
+		}, {
+			StreamName:    "Z",
+			ServerStreams: true,
+			ClientStreams: true,
+			Handler: func(_ interface{}, stream grpc.ServerStream) error {
+				for {
+					err := stream.RecvMsg(new(pb.SubscribeBlocksRequest))
+					if err == io.EOF {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					if err := stream.SendMsg(&pb.BlockNotification{}); err != nil {
+						return err
+					}
+				}
 			},
 		}},
 	}, s)
@@ -1223,4 +1249,205 @@ func TestGrpcCallLimiterPanicFreesPlace(t *testing.T) {
 	if n := len(calls.places); n != 0 {
 		t.Errorf("%d places held after the handler panicked", n)
 	}
+}
+
+// TestGrpcRequestNotSentEnds ensures that a call whose client sends the
+// request's headers and nothing more, unary or streaming, ends once
+// grpcReadTimeout has passed, so that the call's goroutines are not held for
+// as long as the client keeps its connection, and that this is logged at
+// debug.
+func TestGrpcRequestNotSentEnds(t *testing.T) {
+	const timeout = 300 * time.Millisecond
+	setGrpcTestConfig(t, "", false)
+	lines := make(grpcLogLines, 100)
+	logger := bchlog.NewBackend(lines).Logger("GRPC")
+	logger.SetLevel(bchlog.LevelDebug)
+	grpcLog = logger
+	svc := &grpcLimitTestService{replySize: 10}
+	addr, active := startGrpcTest(t, timeout, svc.register,
+		grpcServerOptions(newGrpcCallLimiter(1))...)
+	c := dialRawH2(t, addr)
+	c.start(1, readyGrpcMethod)
+	c.start(3, grpcLimitTestStream)
+	start := time.Now()
+	waitForGrpc(t, "the calls to start", func() bool {
+		return active.Load() == 2
+	})
+	for deadline := start.Add(5 * time.Second); active.Load() != 0; {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d calls held after %v", active.Load(),
+				time.Since(start))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if took := time.Since(start); took < timeout {
+		t.Errorf("the calls ended after %v, before the timeout", took)
+	}
+
+	// The streaming call's error is logged at debug, so such clients
+	// cannot flood the log, and before the test restores the log.
+	for {
+		line := recvGrpc(t, "the streaming call's error", lines)
+		if strings.Contains(line, "errored") {
+			if !strings.Contains(line, "[DBG]") {
+				t.Errorf("logged %q", line)
+			}
+			return
+		}
+	}
+}
+
+// grpcLogLines passes on the lines logged to it.
+type grpcLogLines chan string
+
+func (c grpcLogLines) Write(p []byte) (int, error) {
+	c <- string(p)
+	return len(p), nil
+}
+
+// TestGrpcSlowRequestKept ensures that a request whose client sends it slowly
+// but steadily is read whole, although it takes several times
+// grpcReadTimeout, since the deadline is renewed as the request comes.
+func TestGrpcSlowRequestKept(t *testing.T) {
+	const timeout = 500 * time.Millisecond
+	svc := &grpcWriteTestService{replySize: 10}
+	addr, _ := startGrpcWriteTest(t, svc, timeout)
+	c := dialRawH2(t, addr)
+	c.start(1, "/pb.bchrpc/GetRawBlock")
+	msg, err := proto.Marshal(&pb.GetRawBlockRequest{
+		HashOrHeight: &pb.GetRawBlockRequest_Hash{Hash: make([]byte, 512<<10)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := make([]byte, 5+len(msg))
+	binary.BigEndian.PutUint32(body[1:5], uint32(len(msg)))
+	copy(body[5:], msg)
+
+	// 16 KiB every 40 ms, so 64 KiB in 160 ms and the whole request in
+	// about 1.3 s.
+	start := time.Now()
+	for len(body) > 0 {
+		n := min(len(body), 16<<10)
+		if err := c.fr.WriteData(1, n == len(body), body[:n]); err != nil {
+			t.Fatal(err)
+		}
+		body = body[n:]
+		time.Sleep(40 * time.Millisecond)
+	}
+	if took := time.Since(start); took < 2*timeout {
+		t.Fatalf("the request took %v, not long enough to test", took)
+	}
+	for {
+		switch f := c.next(time.Now().Add(10 * time.Second)).(type) {
+		case nil:
+			t.Fatal("no reply")
+		case *http2.RSTStreamFrame:
+			t.Fatal("stream reset")
+		case *http2.MetaHeadersFrame:
+			if !f.StreamEnded() {
+				continue
+			}
+			for _, hf := range f.Fields {
+				if hf.Name == "grpc-status" && hf.Value != "0" {
+					t.Fatalf("grpc-status %s", hf.Value)
+				}
+			}
+			return
+		}
+	}
+}
+
+// TestGrpcClientStreamNotTimed ensures that a call whose client streams can
+// send its messages as far apart as it chooses, as a subscription updating
+// its filter does.
+func TestGrpcClientStreamNotTimed(t *testing.T) {
+	const timeout = 300 * time.Millisecond
+	setGrpcTestConfig(t, "", false)
+	svc := &grpcLimitTestService{}
+	addr, _ := startGrpcTest(t, timeout, svc.register,
+		grpcServerOptions(newGrpcCallLimiter(1))...)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	stream, err := dialGrpcTest(t, addr).NewStream(ctx, &grpc.StreamDesc{
+		ServerStreams: true, ClientStreams: true},
+		"/grpc.reflection.v1alpha.ServerReflection/Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := stream.SendMsg(&pb.SubscribeBlocksRequest{}); err != nil {
+			t.Fatalf("message %d: %v", i, err)
+		}
+		if err := stream.RecvMsg(new(pb.BlockNotification)); err != nil {
+			t.Fatalf("answer %d: %v", i, err)
+		}
+		time.Sleep(3 * timeout)
+	}
+
+	// The call ends once its client is done.
+	if err := stream.CloseSend(); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.RecvMsg(new(pb.BlockNotification)); err != io.EOF {
+		t.Errorf("the end of the call: %v", err)
+	}
+}
+
+// readDeadlineRecorder is a ResponseWriter that records the read deadlines set
+// on it.
+type readDeadlineRecorder struct {
+	http.ResponseWriter
+	deadlines []time.Time
+}
+
+func (r *readDeadlineRecorder) SetReadDeadline(t time.Time) error {
+	r.deadlines = append(r.deadlines, t)
+	return nil
+}
+
+// TestGrpcReadDeadline ensures a request's read deadline is set
+// grpcReadTimeout ahead, renewed once each part has come, and cleared once its
+// body ends, after which, or once the request has ended, it is not set again.
+func TestGrpcReadDeadline(t *testing.T) {
+	saved := grpcReadTimeout
+	t.Cleanup(func() { grpcReadTimeout = saved })
+	grpcReadTimeout = 7 * time.Minute
+	rec := &readDeadlineRecorder{}
+	d := &grpcReadDeadline{rc: http.NewResponseController(rec)}
+	check := func(what string, n int, last time.Time) {
+		t.Helper()
+		if len(rec.deadlines) != n {
+			t.Fatalf("%s: deadlines %v, want %d", what, rec.deadlines, n)
+		}
+		if got := rec.deadlines[n-1]; got.IsZero() != last.IsZero() {
+			t.Errorf("%s: last deadline %v", what, got)
+		}
+	}
+	d.renew()
+	check("the headers", 1, time.Now())
+	if ahead := time.Until(rec.deadlines[0]); ahead < 6*time.Minute ||
+		ahead > grpcReadTimeout {
+
+		t.Errorf("the deadline is %v ahead, want %v", ahead, grpcReadTimeout)
+	}
+	d.read(grpcWritePartSize-1, nil)
+	check("under a part", 1, time.Now())
+	d.read(1, nil)
+	check("a part", 2, time.Now())
+	d.read(grpcWritePartSize-1, nil)
+	check("under the next part", 2, time.Now())
+	d.read(0, io.EOF)
+	check("the end of the body", 3, time.Time{})
+	d.read(grpcWritePartSize, nil)
+	d.renew()
+	d.clear()
+	check("after the end of the body", 3, time.Time{})
+
+	rec.deadlines = nil
+	d = &grpcReadDeadline{rc: http.NewResponseController(rec)}
+	d.renew()
+	d.end()
+	d.renew()
+	d.clear()
+	check("after the request ended", 1, time.Now())
 }
