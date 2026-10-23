@@ -23,7 +23,7 @@ import (
 // load, or after a rollback that happened once file writes had started during a
 // transaction commit -- which previously caused a nil pointer dereference.
 func TestWriteBlockRolloverWithClosedFile(t *testing.T) {
-	dbPath := filepath.Join(os.TempDir(), "ffldb-writeblockrollover")
+	dbPath := filepath.Join(t.TempDir(), "ffldb-writeblockrollover")
 	_ = os.RemoveAll(dbPath)
 	idb, err := database.Create(dbType, dbPath, blockDataNet)
 	if err != nil {

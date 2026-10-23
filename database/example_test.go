@@ -30,13 +30,17 @@ func ExampleCreate() {
 	// Typically you wouldn't want to remove the database right away like
 	// this, nor put it in the temp directory, but it's done here to ensure
 	// the example cleans up after itself.
-	dbPath := filepath.Join(os.TempDir(), "examplecreate")
-	db, err := database.Create("ffldb", dbPath, wire.MainNet)
+	dir, err := os.MkdirTemp("", "examplecreate")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer os.RemoveAll(dbPath)
+	defer os.RemoveAll(dir)
+	db, err := database.Create("ffldb", filepath.Join(dir, "db"), wire.MainNet)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	defer db.Close()
 
 	// Output:
@@ -56,13 +60,17 @@ func Example_basicUsage() {
 	// Typically you wouldn't want to remove the database right away like
 	// this, nor put it in the temp directory, but it's done here to ensure
 	// the example cleans up after itself.
-	dbPath := filepath.Join(os.TempDir(), "exampleusage")
-	db, err := database.Create("ffldb", dbPath, wire.MainNet)
+	dir, err := os.MkdirTemp("", "exampleusage")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer os.RemoveAll(dbPath)
+	defer os.RemoveAll(dir)
+	db, err := database.Create("ffldb", filepath.Join(dir, "db"), wire.MainNet)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	defer db.Close()
 
 	// Use the Update function of the database to perform a managed
@@ -122,13 +130,17 @@ func Example_blockStorageAndRetrieval() {
 	// Typically you wouldn't want to remove the database right away like
 	// this, nor put it in the temp directory, but it's done here to ensure
 	// the example cleans up after itself.
-	dbPath := filepath.Join(os.TempDir(), "exampleblkstorage")
-	db, err := database.Create("ffldb", dbPath, wire.MainNet)
+	dir, err := os.MkdirTemp("", "exampleblkstorage")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer os.RemoveAll(dbPath)
+	defer os.RemoveAll(dir)
+	db, err := database.Create("ffldb", filepath.Join(dir, "db"), wire.MainNet)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	defer db.Close()
 
 	// Use the Update function of the database to perform a managed
