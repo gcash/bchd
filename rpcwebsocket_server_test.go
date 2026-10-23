@@ -917,40 +917,44 @@ func TestWebsocketPreAuthSlots(t *testing.T) {
 	closeWsClients(t, s, conns...)
 }
 
-// TestRequestIDEchoedAsSent ensures the server gives a numeric request id
-// back exactly as sent, as BCHN does, over HTTP and the websocket, alone and
-// in a batch, so an integer id above 2^53 is not rounded.
+// TestRequestIDEchoedAsSent ensures the server gives a request id back
+// exactly as sent, as BCHN does, over HTTP and the websocket, alone and in a
+// batch: an integer id above 2^53 is not rounded, and an id that is a bool,
+// an object or an array, which JSON-RPC 1.0 allows, gets a reply.
 func TestRequestIDEchoedAsSent(t *testing.T) {
 	_, addr := startTestRPCServer(t)
-	const id = `12345678901234567890`
-	single := `{"jsonrpc":"1.0","id":` + id + `,"method":"uptime","params":[]}`
-	batch := `[{"jsonrpc":"2.0","id":` + id + `,"method":"uptime","params":[]}]`
-	want := `"id":` + id + `}`
-
-	for _, req := range []string{single, batch} {
-		httpReq, err := http.NewRequest("POST", "http://"+addr+"/",
-			strings.NewReader(req))
-		if err != nil {
-			t.Fatal(err)
-		}
-		httpReq.Header.Set("Authorization", basicAuth(testRPCAdminLogin))
-		resp, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		reply, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || !strings.Contains(string(reply), want) {
-			t.Errorf("http %s: reply %s, err %v", req, reply, err)
-		}
-	}
-
 	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
 	conn := dialTestWebsocket(t, addr, hdr)
-	for _, req := range []string{single, batch} {
-		reply, err := wsRoundTrip(conn, req)
-		if err != nil || !strings.Contains(reply, want) {
-			t.Errorf("websocket %s: reply %s, err %v", req, reply, err)
+
+	for _, id := range []string{`12345678901234567890`, `true`,
+		`{"b":1,"a":[2,"x"]}`, `[1,"x"]`} {
+
+		single := `{"jsonrpc":"1.0","id":` + id + `,"method":"uptime","params":[]}`
+		batch := `[{"jsonrpc":"2.0","id":` + id + `,"method":"uptime","params":[]}]`
+		want := `"id":` + id + `}`
+
+		for _, req := range []string{single, batch} {
+			httpReq, err := http.NewRequest("POST", "http://"+addr+"/",
+				strings.NewReader(req))
+			if err != nil {
+				t.Fatal(err)
+			}
+			httpReq.Header.Set("Authorization", basicAuth(testRPCAdminLogin))
+			resp, err := http.DefaultClient.Do(httpReq)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			reply, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil || !strings.Contains(string(reply), want) {
+				t.Errorf("http %s: reply %s, err %v", req, reply, err)
+			}
+
+			wsReply, err := wsRoundTrip(conn, req)
+			if err != nil || !strings.Contains(wsReply, want) {
+				t.Errorf("websocket %s: reply %s, err %v", req, wsReply,
+					err)
+			}
 		}
 	}
 }

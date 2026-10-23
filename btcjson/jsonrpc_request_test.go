@@ -138,3 +138,35 @@ func TestRequestIDKeptAsSent(t *testing.T) {
 		}
 	}
 }
+
+// TestRequestIDOtherTypesKeptAsSent ensures a request id that is a bool, an
+// object or an array, which JSON-RPC 1.0 allows, is kept as a json.RawMessage
+// of the JSON sent and given back in the response as sent, as BCHN gives it
+// back, with an object's members in their order and numbers in their form.
+func TestRequestIDOtherTypesKeptAsSent(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{`true`, `false`, `{"b":1,"a":[2,"x"]}`,
+		`{"n":12345678901234567890,"n":1.0}`, `[1e3,null,{}]`, `{}`, `[]`} {
+
+		raw := `{"jsonrpc":"1.0","method":"getblockcount","params":[],"id":` +
+			id + `}`
+		req, err := unmarshalRequest(raw)
+		if err != nil {
+			t.Errorf("%s: %v", id, err)
+			continue
+		}
+		if got, ok := req.ID.(json.RawMessage); !ok || string(got) != id {
+			t.Errorf("%s: got id %#v, want it as a json.RawMessage", id,
+				req.ID)
+		}
+		reply, err := btcjson.MarshalResponse(req.Jsonrpc, req.ID, 1, nil)
+		if err != nil {
+			t.Errorf("%s: %v", id, err)
+			continue
+		}
+		want := `{"jsonrpc":"1.0","result":1,"error":null,"id":` + id + `}`
+		if string(reply) != want {
+			t.Errorf("%s: got reply %s, want %s", id, reply, want)
+		}
+	}
+}

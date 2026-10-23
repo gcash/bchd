@@ -35,6 +35,7 @@ func TestIsValidIDType(t *testing.T) {
 		{"float32", float32(1), true},
 		{"float64", float64(1), true},
 		{"json.Number", json.Number("12345678901234567890"), true},
+		{"json.RawMessage", json.RawMessage(`{"b":[true]}`), true},
 		{"bool", true, false},
 		{"chan int", make(chan int), false},
 		{"complex64", complex64(1), false},
