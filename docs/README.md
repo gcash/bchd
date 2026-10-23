@@ -266,6 +266,11 @@ utxocachemaxsize=250
 dbcachesize=250
 ```
 
+The garbage collector's target, `--gcpercent`, defaults to 50. Lower values
+use less memory and more CPU: `gcpercent=10` is what 0.22.2 used. Go's
+`GOMEMLIMIT` environment variable sets a soft limit on the memory bchd's heap
+may use.
+
 On Linux, the memory reported for bchd can also keep growing after sync even
 though bchd is not using it. This comes from a kernel setting called
 transparent huge pages. If `cat /sys/kernel/mm/transparent_hugepage/enabled`
