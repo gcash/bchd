@@ -993,25 +993,25 @@ func TestGrpcCallLimitZero(t *testing.T) {
 	}
 }
 
-// TestGrpcCallPlaceHeldUntilReplySent ensures that a call keeps its place
-// until its reply has been sent, not only while its handler runs, so that
-// clients that do not read their replies cannot make the node hold any
-// number of them.
-func TestGrpcCallPlaceHeldUntilReplySent(t *testing.T) {
+// TestGrpcCallPlaceFreedWhenHandlerReturns ensures that a call frees its place
+// once its handler has made the reply, as BCHN's HTTP server frees its worker
+// thread and leaves the reply to the connection, so that a client that takes
+// a large reply slowly, or not at all, does not keep other calls waiting for
+// as long as the reply takes to send.
+func TestGrpcCallPlaceFreedWhenHandlerReturns(t *testing.T) {
 	setGrpcTestConfig(t, "", false)
-	const timeout = 2 * time.Second
 	svc := &grpcLimitTestService{replySize: 1 << 20}
 	calls := newGrpcCallLimiter(1)
-	addr, _ := startGrpcTest(t, timeout, svc.register,
+	addr, _ := startGrpcTest(t, time.Minute, svc.register,
 		grpcServerOptions(calls)...)
 
-	// The first call's client grants no window for its reply.
+	// The first call's client grants no window for its reply, so the reply
+	// waits to be sent until the write deadline, a minute later.
 	c := dialRawH2(t, addr, http2.Setting{
 		ID: http2.SettingInitialWindowSize, Val: 0})
 	c.call(1, readyGrpcMethod, &pb.GetRawBlockRequest{})
-	start := time.Now()
-	for {
-		f := c.next(start.Add(10 * time.Second))
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		f := c.next(deadline)
 		if f == nil {
 			t.Fatal("no reply headers")
 		}
@@ -1020,21 +1020,32 @@ func TestGrpcCallPlaceHeldUntilReplySent(t *testing.T) {
 		}
 	}
 
-	// The second waits until the first's stream is reset.
-	cc := dialGrpcTest(t, addr)
-	done := make(chan error, 1)
-	go func() {
-		done <- cc.Invoke(context.Background(), readyGrpcMethod,
-			&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
-	}()
-	waitForGrpc(t, "the second call to wait", func() bool {
-		return calls.waiting.Load() == 1
-	})
-	if err := recvGrpc(t, "the second call", done); err != nil {
-		t.Fatalf("second call: %v", err)
+	// The second runs meanwhile.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := dialGrpcTest(t, addr).Invoke(ctx, readyGrpcMethod,
+		&pb.GetRawBlockRequest{}, new(pb.GetRawBlockResponse))
+	if err != nil {
+		t.Fatalf("second call while the first's reply waits: %v", err)
 	}
-	if took := time.Since(start); took < timeout {
-		t.Errorf("the second call ended after %v, while the first's reply "+
-			"was still waiting", took)
+	if f := c.next(time.Now().Add(100 * time.Millisecond)); f != nil {
+		t.Errorf("the first call got a %T frame before its client took any "+
+			"of its reply", f)
+	}
+}
+
+// TestGrpcCallLimiterPanicFreesPlace ensures that a call whose handler panics
+// frees its place, as interceptUnary recovers the panic and answers the call.
+func TestGrpcCallLimiterPanicFreesPlace(t *testing.T) {
+	calls := newGrpcCallLimiter(1)
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = calls.intercept(context.Background(), nil, nil,
+			func(context.Context, interface{}) (interface{}, error) {
+				panic("handler")
+			})
+	}()
+	if n := len(calls.places); n != 0 {
+		t.Errorf("%d places held after the handler panicked", n)
 	}
 }

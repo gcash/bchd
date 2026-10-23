@@ -55,9 +55,9 @@ token ID counting once and a data element once for each 20 bytes, and a request 
 filter past that fails with `ResourceExhausted`. A server for wallets that watch more can raise
 it with `--grpcmaxfilterentries`.
 
-At most 16 other calls are in progress at once, from reading the request to sending the reply.
-Up to 64 more wait for a place, and a call beyond those fails with `ResourceExhausted`. A public
-server with many clients can raise the limit:
+At most 16 other calls are in progress at once, from reading the request until the reply is
+ready to send. Up to 64 more wait for a place, and a call beyond those fails with
+`ResourceExhausted`. A public server with many clients can raise the limit:
 
 ```bash
 bchd --grpclisten=0.0.0.0 --grpcmaxconcurrentcalls=64
