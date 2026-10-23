@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -761,6 +762,103 @@ func TestGrpcWebStalledReaderEnds(t *testing.T) {
 	waitForGrpc(t, "the call to end", func() bool {
 		return active.Load() == 0
 	})
+}
+
+// TestGrpcWebCalls checks that binary and text gRPC-Web calls over HTTP/1.1
+// get their messages and status in gRPC-Web frames, and that a server stream
+// gets each message as it is sent.
+func TestGrpcWebCalls(t *testing.T) {
+	svc := &grpcWriteTestService{replySize: 3, notify: make(chan struct{})}
+	addr, _ := startGrpcWriteTest(t, svc, 30*time.Second)
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSNextProto:    map[string]func(string, *tls.Conn) http.RoundTripper{},
+	}}
+	call := func(method, contentType string) (*http.Response, io.Reader) {
+		body := []byte{0, 0, 0, 0, 0} // an empty request
+		var reqBody io.Reader = bytes.NewReader(body)
+		if contentType == "application/grpc-web-text" {
+			reqBody = strings.NewReader(base64.StdEncoding.EncodeToString(body))
+		}
+		req, err := http.NewRequest("POST", "https://"+addr+"/pb.bchrpc/"+method,
+			reqBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("X-Grpc-Web", "1")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		if resp.StatusCode != http.StatusOK ||
+			resp.Header.Get("Content-Type") != contentType {
+
+			t.Fatalf("%s: status %d, content type %q", method,
+				resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		if contentType != "application/grpc-web-text" {
+			return resp, resp.Body
+		}
+		// A text reply may be several padded base64 parts, each a whole
+		// number of 4-byte groups.
+		text, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var raw []byte
+		for ; len(text) >= 4; text = text[4:] {
+			part, err := base64.StdEncoding.DecodeString(string(text[:4]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw = append(raw, part...)
+		}
+		return resp, bytes.NewReader(raw)
+	}
+	frame := func(r io.Reader) (byte, []byte) {
+		var header [5]byte
+		if _, err := io.ReadFull(r, header[:]); err != nil {
+			t.Fatal(err)
+		}
+		payload := make([]byte, binary.BigEndian.Uint32(header[1:]))
+		if _, err := io.ReadFull(r, payload); err != nil {
+			t.Fatal(err)
+		}
+		return header[0], payload
+	}
+	for _, contentType := range []string{"application/grpc-web+proto",
+		"application/grpc-web-text"} {
+
+		_, body := call("GetRawBlock", contentType)
+		reply := &pb.GetRawBlockResponse{}
+		if flag, payload := frame(body); flag != 0 ||
+			proto.Unmarshal(payload, reply) != nil || len(reply.Block) != 3 {
+
+			t.Fatalf("%s: message frame %#x %x", contentType, flag, payload)
+		}
+		if flag, payload := frame(body); flag != 0x80 ||
+			!strings.Contains(string(payload), "grpc-status: 0") {
+
+			t.Fatalf("%s: trailer frame %#x %q", contentType, flag, payload)
+		}
+
+		resp, _ := call("GetBlock", contentType)
+		if got := resp.Header.Get("Grpc-Status"); got != "12" {
+			t.Fatalf("%s: GetBlock status %q, want 12", contentType, got)
+		}
+	}
+
+	_, body := call("SubscribeBlocks", "application/grpc-web+proto")
+	for i := 0; i < 2; i++ {
+		if flag, payload := frame(body); flag != 0 || len(payload) == 0 {
+			t.Fatalf("notification %d: frame %#x %x", i, flag, payload)
+		}
+		if i == 0 {
+			svc.notify <- struct{}{}
+		}
+	}
 }
 
 // grpcLimitTestService serves a unary method X, which answers with a block of
