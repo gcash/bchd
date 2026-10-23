@@ -1421,6 +1421,48 @@ func (tx *transaction) FetchBlocks(hashes []chainhash.Hash) ([][]byte, error) {
 	return blocks, nil
 }
 
+// FetchBlockSize returns the size of the serialized block identified by the
+// given hash.  It is taken from the location of the block in the block index,
+// without reading the block files, so it is also known for a block whose file
+// was deleted by DeleteBlocks, which keeps the block index entries.
+//
+// Returns the following errors as required by the interface contract:
+//   - ErrBlockNotFound if the requested block hash does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchBlockSize(hash *chainhash.Hash) (uint32, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return 0, err
+	}
+
+	// When the block is pending to be written on commit return the size
+	// of its bytes.
+	if idx, exists := tx.pendingBlocks[*hash]; exists {
+		return uint32(len(tx.pendingBlockData[idx].bytes)), nil
+	}
+
+	// Lookup the location of the block in the files from the block index.
+	blockRow, err := tx.fetchBlockRow(hash)
+	if err != nil {
+		return 0, err
+	}
+	location := deserializeBlockLoc(blockRow)
+
+	// The stored length also counts the network, the block length and the
+	// checksum, 12 bytes in all.  A block holds at least its header, so a
+	// shorter one means the block index is corrupt.  Bitcoin Cash Node
+	// checks the block sizes it reads the same way.
+	if location.blockLen < blockHdrSize+12 {
+		str := fmt.Sprintf("block %s has a stored length of %d bytes",
+			hash, location.blockLen)
+		return 0, makeDbErr(database.ErrCorruption, str, nil)
+	}
+	return location.blockLen - 12, nil
+}
+
 // fetchPendingRegion attempts to fetch the provided region from any block which
 // are pending to be written on commit.  It will return nil for the byte slice
 // when the region references a block which is not pending.  When the region

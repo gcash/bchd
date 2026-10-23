@@ -6,7 +6,9 @@ package blockchain
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -314,6 +316,148 @@ func TestABLASideChainLimit(t *testing.T) {
 	}
 	if want := sideState.nextABLAState(&chain.ablaConfig, uint64(sideLimit)); got != want {
 		t.Fatalf("side chain ABLA state %+v, want %+v", got, want)
+	}
+}
+
+// pruneBlockData makes the data of the stored block with the given hash
+// unreadable, as pruning does.  Pruning deletes whole block files but keeps the
+// location of every block, with its length, in ffldb's block index, so the
+// location is moved to a block file that does not exist.
+func pruneBlockData(t *testing.T, db database.DB, hash *chainhash.Hash) {
+	t.Helper()
+	err := db.Update(func(dbTx database.Tx) error {
+		blockIdx := dbTx.Metadata().Bucket([]byte("ffldb-blockidx"))
+		row := blockIdx.Get(hash[:])
+		if len(row) != 12 {
+			return fmt.Errorf("location of block %v is %x", hash, row)
+		}
+
+		// The location starts with the block file number.
+		moved := bytes.Clone(row)
+		binary.LittleEndian.PutUint32(moved[0:4], 999999)
+		return blockIdx.Put(hash[:], moved)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestABLASideChainPrunedParent ensures a block whose parent is a side chain
+// block with pruned data is checked against the size limit that follows from
+// its parent and does not stop the node.  Bitcoin Cash Node keeps the ABLA
+// state of every block in its block index, so it never reads the data of an
+// ancestor for it (validation.cpp:4208, 5998-6008).
+func TestABLASideChainPrunedParent(t *testing.T) {
+	params := ablaTestParams()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 20, 999000)
+	cfg := &chain.ablaConfig
+
+	// spend returns a transaction spending the first output of the
+	// coinbase of block, which lets a block grow beyond the transaction
+	// size limit.
+	spend := func(block *wire.MsgBlock) *wire.MsgTx {
+		tx := wire.NewMsgTx(2)
+		tx.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: block.Transactions[0].TxHash()},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		tx.AddTxOut(wire.NewTxOut(0, append([]byte{txscript.OP_RETURN},
+			make([]byte, 100000)...), wire.TokenData{}))
+		return tx
+	}
+
+	// The side chain forks after block 1 with a block at its limit, whose
+	// data is then pruned.
+	parent := blocks[0].MsgBlock()
+	sideState := ablaExpectedState(chain, blocks[:1])
+	sideSize := int(sideState.getBlockSizeLimit())
+	side := ablaTestBlock(t, parent, 2, sideSize, params, spend(parent))
+	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
+		t.Fatalf("side block: %v", err)
+	}
+	pruneBlockData(t, db, side.Hash())
+	err = db.View(func(dbTx database.Tx) error {
+		_, err := dbTx.FetchBlock(side.Hash())
+		return err
+	})
+	var dbErr database.Error
+	if !errors.As(err, &dbErr) || dbErr.ErrorCode != database.ErrDriverSpecific ||
+		!errors.Is(dbErr.Err, os.ErrNotExist) {
+
+		t.Fatalf("reading the pruned side block: got %v, want a missing "+
+			"block file", err)
+	}
+
+	// The next block's limit follows from the size of the pruned block.
+	nextState := sideState.nextABLAState(cfg, uint64(sideSize))
+	nextLimit := int(max(1000000, nextState.getBlockSizeLimit()))
+	tooBig := ablaTestBlock(t, side.MsgBlock(), 3, nextLimit+1, params,
+		spend(side.MsgBlock()))
+	_, _, err = chain.ProcessBlock(tooBig, BFNone)
+	select {
+	case <-chain.RequestedProcessShutdown():
+		t.Fatalf("a block on a pruned side block requested a shutdown: %v",
+			err)
+	default:
+	}
+	var rerr RuleError
+	if !errors.As(err, &rerr) || rerr.ErrorCode != ErrBlockTooBig {
+		t.Fatalf("block of %d bytes over its limit of %d: got %v, want "+
+			"ErrBlockTooBig", nextLimit+1, nextLimit, err)
+	}
+
+	atLimit := ablaTestBlock(t, side.MsgBlock(), 3, nextLimit, params,
+		spend(side.MsgBlock()))
+	if _, _, err := chain.ProcessBlock(atLimit, BFNone); err != nil {
+		t.Fatalf("block at its limit on the pruned side block: %v", err)
+	}
+	got, err := chain.ablaStateAfter(chain.index.LookupNode(atLimit.Hash()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := nextState.nextABLAState(cfg, uint64(nextLimit)); got != want {
+		t.Fatalf("side chain ABLA state %+v, want %+v", got, want)
+	}
+}
+
+// TestABLASideChainSizeError ensures a side chain block whose size the database
+// can't give, here one without a location in ffldb's block index, fails the
+// next block with the database error instead of being replayed without it.
+func TestABLASideChainSizeError(t *testing.T) {
+	params := ablaTestParams()
+	db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	chain := ablaTestChain(t, db, params)
+	blocks := ablaTestMine(t, chain, 3, 2000)
+	side := ablaTestBlock(t, blocks[0].MsgBlock(), 2, 2001, params)
+	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
+		t.Fatalf("side block: %v", err)
+	}
+	err = db.Update(func(dbTx database.Tx) error {
+		blockIdx := dbTx.Metadata().Bucket([]byte("ffldb-blockidx"))
+		return blockIdx.Delete(side.Hash()[:])
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := ablaTestBlock(t, side.MsgBlock(), 3, 2000, params)
+	_, _, err = chain.ProcessBlock(next, BFNone)
+	var dbErr database.Error
+	if !errors.As(err, &dbErr) || dbErr.ErrorCode != database.ErrBlockNotFound {
+		t.Fatalf("block on a side block without a location: got %v, "+
+			"want ErrBlockNotFound", err)
 	}
 }
 

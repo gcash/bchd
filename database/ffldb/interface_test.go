@@ -1141,6 +1141,13 @@ func testFetchBlockIOMissing(tc *testContext, tx database.Tx) bool {
 			return false
 		}
 
+		// Ensure FetchBlockSize returns expected error.
+		testName = fmt.Sprintf("FetchBlockSize #%d on missing block", i)
+		_, err = tx.FetchBlockSize(blockHash)
+		if !checkDbError(tc.t, testName, err, wantErrCode) {
+			return false
+		}
+
 		// Ensure FetchBlockHeader returns expected error.
 		testName = fmt.Sprintf("FetchBlockHeader #%d on missing block",
 			i)
@@ -1264,6 +1271,20 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 			return false
 		}
 
+		// Ensure the block size fetched from the database is the size
+		// of the block.
+		gotSize, err := tx.FetchBlockSize(blockHash)
+		if err != nil {
+			tc.t.Errorf("FetchBlockSize(%s): unexpected error: %v",
+				blockHash, err)
+			return false
+		}
+		if gotSize != uint32(len(blockBytes)) {
+			tc.t.Errorf("FetchBlockSize(%s): got %d, want %d",
+				blockHash, gotSize, len(blockBytes))
+			return false
+		}
+
 		// Ensure the block header fetched from the database matches the
 		// expected bytes.
 		wantHeaderBytes := blockBytes[0:wire.MaxBlockHeaderPayload]
@@ -1328,6 +1349,15 @@ func testFetchBlockIO(tc *testContext, tx database.Tx) bool {
 			badBlockHash)
 		wantErrCode := database.ErrBlockNotFound
 		_, err = tx.FetchBlock(badBlockHash)
+		if !checkDbError(tc.t, testName, err, wantErrCode) {
+			return false
+		}
+
+		// Ensure fetching the size of a block that doesn't exist
+		// returns the expected error.
+		testName = fmt.Sprintf("FetchBlockSize(%s) invalid block",
+			badBlockHash)
+		_, err = tx.FetchBlockSize(badBlockHash)
 		if !checkDbError(tc.t, testName, err, wantErrCode) {
 			return false
 		}
@@ -1862,6 +1892,13 @@ func testClosedTxInterface(tc *testContext, tx database.Tx) bool {
 		// Ensure FetchBlock returns expected error.
 		testName = fmt.Sprintf("FetchBlock #%d on closed tx", i)
 		_, err = tx.FetchBlock(blockHash)
+		if !checkDbError(tc.t, testName, err, wantErrCode) {
+			return false
+		}
+
+		// Ensure FetchBlockSize returns expected error.
+		testName = fmt.Sprintf("FetchBlockSize #%d on closed tx", i)
+		_, err = tx.FetchBlockSize(blockHash)
 		if !checkDbError(tc.t, testName, err, wantErrCode) {
 			return false
 		}

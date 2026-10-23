@@ -51,7 +51,10 @@ func (b *BlockChain) ablaNextState(prev ABLAState, height int32, size uint64) AB
 
 // ablaStateAfter returns the ABLA state after the passed node, which sets the
 // size limit of its children.  Side chain states are computed from the fork
-// point using the stored block sizes.
+// point using the stored block sizes.  The sizes are taken from where the
+// database stores the blocks, which it keeps for pruned blocks too, so no block
+// data is read, as Bitcoin Cash Node keeps the state of every block in its
+// block index.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) ablaStateAfter(node *blockNode) (ABLAState, error) {
@@ -94,11 +97,11 @@ func (b *BlockChain) ablaStateAfter(node *blockNode) (ABLAState, error) {
 	err = b.db.View(func(dbTx database.Tx) error {
 		for i := len(sideNodes) - 1; i >= 0; i-- {
 			n := sideNodes[i]
-			blockBytes, err := dbTx.FetchBlock(&n.hash)
+			size, err := dbTx.FetchBlockSize(&n.hash)
 			if err != nil {
 				return err
 			}
-			state = b.ablaNextState(state, n.height, uint64(len(blockBytes)))
+			state = b.ablaNextState(state, n.height, uint64(size))
 			b.cacheSideABLAState(n.hash, state)
 		}
 		return nil

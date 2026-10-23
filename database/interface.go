@@ -345,6 +345,18 @@ type Tx interface {
 	// implementations.
 	FetchBlocks(hashes []chainhash.Hash) ([][]byte, error)
 
+	// FetchBlockSize returns the size of the serialized block identified
+	// by the given hash without reading the block.  The size is known for
+	// every stored block, also for one whose data was deleted by
+	// DeleteBlocks.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrBlockNotFound if the requested block hash does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	FetchBlockSize(hash *chainhash.Hash) (uint32, error)
+
 	// FetchBlockRegion returns the raw serialized bytes for the given
 	// block region.
 	//
