@@ -24,7 +24,7 @@ func TestBlockTxns(t *testing.T) {
 	}
 
 	// Ensure max payload is expected value.
-	wantPayload := maxMessagePayload()
+	wantPayload := MaxBlockPayload()
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+

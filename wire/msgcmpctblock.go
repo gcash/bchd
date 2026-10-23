@@ -160,9 +160,10 @@ func (msg *MsgCmpctBlock) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgCmpctBlock) MaxPayloadLength(pver uint32) uint32 {
-	// This can take up to the max payload. The derived block
-	// cannot be larger than the excessive block size.
-	return maxMessagePayload()
+	// The largest is the largest block with every transaction prefilled:
+	// the block + nonce 8 bytes + short ID count (varInt) 1 byte + a one
+	// byte differential index for every transaction.
+	return MaxBlockPayload() + 9 + maxTxPerBlock()
 }
 
 // BlockHash computes the block identifier hash for this block.

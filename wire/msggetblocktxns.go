@@ -98,9 +98,10 @@ func (msg *MsgGetBlockTxns) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgGetBlockTxns) MaxPayloadLength(pver uint32) uint32 {
-	// In practice this will always be less than the payload but the number
-	// of txs in a block can vary so we really don't know the real max.
-	return maxMessagePayload()
+	// The limit BCHN applies to every message but block, cmpctblock and
+	// blocktxn: at a byte for each requested transaction, about two
+	// million of them.
+	return maxProtocolMessageLength
 }
 
 // RequestedTransactions extracts the transactions that were requested by this

@@ -32,8 +32,9 @@ func TestCmpctBlock(t *testing.T) {
 	}
 
 	// Ensure max payload is expected value for latest protocol version.
-	// Num addresses (varInt) + max allowed addresses.
-	wantPayload := maxMessagePayload()
+	// Max block payload + nonce 8 bytes + short ID count (varInt) 1 byte +
+	// a one byte index for every transaction.
+	wantPayload := MaxBlockPayload() + 9 + maxTxPerBlock()
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+

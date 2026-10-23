@@ -25,8 +25,9 @@ func TestGetBlockTxns(t *testing.T) {
 			cmd, wantCmd)
 	}
 
-	// Ensure max payload is expected value.
-	wantPayload := maxMessagePayload()
+	// Ensure max payload is expected value: the limit BCHN applies to
+	// every message but block, cmpctblock and blocktxn.
+	wantPayload := uint32(2 * 1024 * 1024)
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"unicode/utf8"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -22,13 +23,26 @@ const MessageHeaderSize = 24
 // header.  Shorter commands must be zero padded.
 const CommandSize = 12
 
+// maxBlockPayloadLimit is the most the block message limit can be, 2 GB, the
+// largest block ABLA allows, as BCHN's MAX_CONSENSUS_BLOCK_SIZE.  It keeps the
+// limits computed from the block message limit within 32 bits.
+const maxBlockPayloadLimit = 2000000000
+
+// maxProtocolMessageLength is the most a message other than block, cmpctblock
+// and blocktxn may be, BCHN's MAX_PROTOCOL_MESSAGE_LENGTH.  bchd's own compact
+// filter messages, which BCHN does not have, and merkleblock, which BCHN never
+// reads, have limits of their own.
+const maxProtocolMessageLength = 2 * 1024 * 1024
+
 // ebs is the excessive block size, used to determine reasonable maximum message sizes.
 // 32MB is the current default value
 var ebs uint32 = 32000000 * 4
 
-// SetLimits adjusts various message limits based on max block size configuration.
+// SetLimits adjusts various message limits based on max block size
+// configuration.  A block message may be four times the passed size, up to
+// maxBlockPayloadLimit.
 func SetLimits(excessiveBlockSize uint32) {
-	ebs = excessiveBlockSize * 4 // TODO TODO set max?
+	ebs = uint32(min(uint64(excessiveBlockSize)*4, maxBlockPayloadLimit))
 }
 
 // MaxMessagePayload returns is the maximum bytes a message can be regardless of other
@@ -329,7 +343,7 @@ func WriteMessageWithEncodingN(w io.Writer, msg Message, pver uint32,
 	lenp := len(payload)
 
 	// Enforce maximum overall message payload.
-	if lenp > int(maxMessagePayload()) {
+	if uint64(lenp) > uint64(maxMessagePayload()) {
 		str := fmt.Sprintf("message payload is too large - encoded "+
 			"%d bytes, but maximum message payload is %d bytes",
 			lenp, maxMessagePayload())
@@ -432,6 +446,15 @@ func ReadMessageWithEncodingN(r io.Reader, pver uint32, bchnet BitcoinNet,
 			"bytes.", hdr.length, maxMessagePayload())
 		return totalBytes, nil, nil, messageError("ReadMessage", str)
 
+	}
+
+	// The payload is read into a byte slice, whose length is an int, so on
+	// 32-bit platforms it must be less than 2 GiB.
+	if uint64(hdr.length) > math.MaxInt {
+		str := fmt.Sprintf("message payload is too large - header "+
+			"indicates %d bytes, but at most %d bytes can be held on "+
+			"this platform.", hdr.length, math.MaxInt)
+		return totalBytes, nil, nil, messageError("ReadMessage", str)
 	}
 
 	// Check for messages from the wrong bitcoin network.

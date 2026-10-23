@@ -37,10 +37,10 @@ func TestTx(t *testing.T) {
 			cmd, wantCmd)
 	}
 
-	// Ensure max payload is expected value for latest protocol version.
-	// Using "* 4" is not the most optimal approach.
-	// A cleaner solution would involve modifying the behavior of wire.SetLimits.
-	wantPayload := fixedExcessiveBlockSize * 4
+	// Ensure max payload is expected value for latest protocol version: the
+	// limit BCHN applies to every message but block, cmpctblock and
+	// blocktxn, whatever the block size.
+	wantPayload := uint32(2 * 1024 * 1024)
 	maxPayload := msg.MaxPayloadLength(pver)
 	if maxPayload != wantPayload {
 		t.Errorf("MaxPayloadLength: wrong max payload length for "+

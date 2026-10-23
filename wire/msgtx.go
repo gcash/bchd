@@ -73,6 +73,13 @@ const (
 	// payload + min output payload.
 	minTxPayload = 10
 
+	// maxTxPayload is the maximum payload size for a tx message, the limit
+	// BCHN applies to every message but block, cmpctblock and blocktxn.  A
+	// transaction consensus allows is at most 1,000,000 bytes
+	// (blockchain.MaxTransactionSize), and a longer one in a message below
+	// the limit is refused as a transaction, as BCHN refuses it.
+	maxTxPayload = maxProtocolMessageLength
+
 	// freeListMaxScriptSize is the size of each buffer in the free list
 	// that	is used for deserializing scripts from the wire before they are
 	// concatenated into a single contiguous buffers.  This value was chosen
@@ -686,7 +693,7 @@ func (msg *MsgTx) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgTx) MaxPayloadLength(pver uint32) uint32 {
-	return MaxBlockPayload()
+	return maxTxPayload
 }
 
 // PkScriptLocs returns a slice containing the start of each public key script

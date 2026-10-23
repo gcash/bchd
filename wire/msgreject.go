@@ -168,8 +168,8 @@ func (msg *MsgReject) MaxPayloadLength(pver uint32) uint32 {
 	if pver >= RejectVersion {
 		// Unfortunately the bitcoin protocol does not enforce a sane
 		// limit on the length of the reason, so the max payload is the
-		// overall maximum message payload.
-		plen = maxMessagePayload()
+		// limit for messages that carry no block.
+		plen = maxProtocolMessageLength
 	}
 
 	return plen
