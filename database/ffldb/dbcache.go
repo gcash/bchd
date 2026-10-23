@@ -626,31 +626,40 @@ func (c *dbCache) needsFlush(tx *transaction) bool {
 // database even if the transaction fails to apply, but it will only be the
 // state of the cache without the transaction applied.
 //
+// When it fails, the returned bool reports whether the transaction's keys may
+// have been stored anyway.  They may when the leveldb transaction that writes
+// them directly fails with writes stopped, as its MANIFEST commit can fail
+// after the record reached the disk, and the next open keeps the record then
+// (see leveldb.Transaction.Commit).
+//
 // This function MUST be called during a database write transaction which in
 // turn implies the database write lock will be held.
-func (c *dbCache) commitTx(tx *transaction) error {
+func (c *dbCache) commitTx(tx *transaction) (bool, error) {
 	if c.writesStopped != nil {
-		return c.writesStopped
+		return false, c.writesStopped
 	}
 
 	// Flush the cache and write the current transaction directly to the
 	// database if a flush is needed.
 	if c.needsFlush(tx) {
 		if err := c.flush(); err != nil {
-			return err
+			return false, err
 		}
 
-		// Perform all leveldb updates using an atomic transaction.
+		// Perform all leveldb updates using an atomic transaction.  When
+		// it fails with writes stopped, which noteWriteError records, its
+		// MANIFEST commit may have failed after the record reached the
+		// disk, so the keys may be stored.
 		err := c.commitTreaps(tx.pendingKeys, tx.pendingRemove)
 		if err != nil {
 			c.noteWriteError(err)
-			return err
+			return c.writesStopped != nil, err
 		}
 
 		// Clear the transaction entries since they have been committed.
 		tx.pendingKeys = nil
 		tx.pendingRemove = nil
-		return nil
+		return false, nil
 	}
 
 	// At this point a database flush is not needed, so atomically commit
@@ -688,7 +697,7 @@ func (c *dbCache) commitTx(tx *transaction) error {
 	c.cachedKeys = newCachedKeys.Immutable()
 	c.cachedRemove = newCachedRemove.Immutable()
 	c.cacheLock.Unlock()
-	return nil
+	return false, nil
 }
 
 // Close cleanly shuts down the database cache by syncing all data and closing

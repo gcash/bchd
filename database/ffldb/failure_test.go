@@ -1,6 +1,7 @@
 package ffldb
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -248,6 +249,170 @@ func TestFailedCommitRollsBackBlocks(t *testing.T) {
 		t.Fatalf("commit after writes stopped = %v, want writes stopped", err)
 	}
 	requireRolledBack("after writes stopped")
+}
+
+// TestReopenAfterFailedCommit ensures the database opens after a commit whose
+// leveldb MANIFEST commit failed, the cache flush's or the commit's own, both
+// when the record reached the disk anyway, as leveldb says it may, and when it
+// did not, and that the database then holds the blocks the record stored.
+// Removing the blocks of a commit whose own record reached the disk left the
+// stored write cursor past the end of the block files, which the next open
+// refuses as corruption.
+func TestReopenAfterFailedCommit(t *testing.T) {
+	tests := []struct {
+		name string
+
+		// cached is whether block 1 waits in the cache, so the MANIFEST
+		// commit that fails is the flush's rather than block 2's own.
+		cached bool
+
+		// stored is whether the failed MANIFEST record reaches the disk.
+		stored bool
+
+		// blocks is the number of blocks the reopened database holds.
+		blocks int
+	}{
+		{name: "flush record stored", cached: true, stored: true, blocks: 1},
+		{name: "flush record lost", cached: true, stored: false, blocks: 0},
+		{name: "own record stored", cached: false, stored: true, blocks: 2},
+		{name: "own record lost", cached: false, stored: false, blocks: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pdb, dir := createTestDB(t)
+			fs := swapFailingLdb(t, pdb, dir)
+			store := func(pdb *db, nonce uint32) error {
+				return pdb.Update(func(tx database.Tx) error {
+					return tx.StoreBlock(pruneTestBlock(nonce, int32(nonce)))
+				})
+			}
+			fileSize := func(pdb *db) int64 {
+				t.Helper()
+				info, err := os.Stat(blockFilePath(pdb.store.basePath, 0))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return info.Size()
+			}
+
+			// With a flush interval of 0, every commit flushes the cache
+			// and then writes its own keys to leveldb.
+			if !test.cached {
+				pdb.cache.flushInterval = 0
+			}
+			if err := store(pdb, 1); err != nil {
+				t.Fatalf("store block 1: %v", err)
+			}
+			pdb.cache.flushInterval = 0
+
+			// The test blocks are all the same size.
+			blockSize := pdb.store.writeCursor.curOffset
+
+			// A write that fails without stopping leveldb's writes stores
+			// nothing, so the commit's block goes.
+			atomic.StoreInt32(&fs.fail, 1)
+			if err := store(pdb, 2); err == nil || writesStopped(err) {
+				t.Fatalf("commit whose write fails = %v, want the injected failure", err)
+			}
+			atomic.StoreInt32(&fs.fail, 0)
+			if got := fileSize(pdb); got != int64(blockSize) {
+				t.Fatalf("failed commit left the block file at %d bytes, want %d",
+					got, blockSize)
+			}
+
+			// The MANIFEST sync of block 2's commit fails, after the record
+			// was written to the file.
+			manifest, err := fs.GetMeta()
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifestPath := filepath.Join(dir, metadataDbName, manifest.String())
+			info, err := os.Stat(manifestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			atomic.StoreInt32(&fs.failSync, 1)
+			if err := store(pdb, 2); !writesStopped(err) {
+				t.Fatalf("commit whose MANIFEST sync fails = %v, want writes stopped", err)
+			}
+			atomic.StoreInt32(&fs.failSync, 0)
+
+			// A commit refused once writes stopped leaves the block files as
+			// they were.
+			size := fileSize(pdb)
+			if err := store(pdb, 3); !writesStopped(err) {
+				t.Fatalf("commit after writes stopped = %v, want writes stopped", err)
+			}
+			if got := fileSize(pdb); got != size {
+				t.Errorf("refused commit changed the block file from %d to %d bytes",
+					size, got)
+			}
+
+			if err := pdb.Close(); !writesStopped(err) {
+				t.Fatalf("close after writes stopped = %v, want writes stopped", err)
+			}
+			if err := fs.Close(); err != nil {
+				t.Fatalf("close storage: %v", err)
+			}
+			if !test.stored {
+				// The write of the record is lost, as it can be when its
+				// sync fails.
+				if err := os.Truncate(manifestPath, info.Size()); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			idb, err := openDB(dir, blockDataNet, false, 0, 0)
+			if err != nil {
+				t.Fatalf("open after the failed commit: %v", err)
+			}
+			pdb = idb.(*db)
+			defer pdb.Close()
+
+			// The block files end after the blocks the database holds,
+			// where its write cursor is.
+			want := uint32(test.blocks) * blockSize
+			wc := pdb.store.writeCursor
+			if size := fileSize(pdb); wc.curFileNum != 0 || wc.curOffset != want ||
+				size != int64(want) {
+
+				t.Errorf("write cursor at file %d offset %d, block file size %d, "+
+					"want file 0 offset and size %d", wc.curFileNum,
+					wc.curOffset, size, want)
+			}
+			err = pdb.View(func(tx database.Tx) error {
+				for nonce := uint32(1); nonce <= 2; nonce++ {
+					block := pruneTestBlock(nonce, int32(nonce))
+					has, err := tx.HasBlock(block.Hash())
+					if err != nil {
+						return err
+					}
+					if want := int(nonce) <= test.blocks; has != want {
+						t.Errorf("has block %d = %v, want %v", nonce, has, want)
+					}
+					if !has {
+						continue
+					}
+					got, err := tx.FetchBlock(block.Hash())
+					if err != nil {
+						return err
+					}
+					if want, _ := block.Bytes(); !bytes.Equal(got, want) {
+						t.Errorf("block %d read back differs", nonce)
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("read the blocks: %v", err)
+			}
+
+			// The database takes blocks again.
+			if err := store(pdb, 3); err != nil {
+				t.Fatalf("store block 3 after reopening: %v", err)
+			}
+		})
+	}
 }
 
 // TestFlushRetriedAfterFailure ensures a commit after a failed flush flushes

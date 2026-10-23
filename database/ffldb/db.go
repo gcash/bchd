@@ -1780,9 +1780,18 @@ func (tx *transaction) writePendingAndCommit() error {
 	// handles flushing to the underlying persistent storage database.
 	// When that fails, as it does once leveldb stopped taking writes, the
 	// locations of the blocks were not stored, so the blocks are removed
-	// from the block files again.
-	if err := tx.db.cache.commitTx(tx); err != nil {
-		rollback()
+	// from the block files again.  The exception is a failed leveldb
+	// commit of the transaction's own keys that may have stored them
+	// anyway: the next open keeps a MANIFEST record that reached the disk
+	// before its commit failed, so the blocks stay, as BCHN keeps the
+	// block data when its block index write fails.  If the record was
+	// lost, the next open's reconcileDB removes them, as after a crash.
+	// The write cursor stays after them, so a commit refused while
+	// leveldb takes no writes rolls back to there.
+	if mayBeStored, err := tx.db.cache.commitTx(tx); err != nil {
+		if !mayBeStored {
+			rollback()
+		}
 		return err
 	}
 	return nil
