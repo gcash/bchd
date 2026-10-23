@@ -3849,6 +3849,54 @@ func TestExtractDataElements(t *testing.T) {
 	}
 }
 
+// TestExtractRedeemScript ensures ExtractRedeemScript returns the data of the
+// last push of a signature script, and an error instead of a panic for a
+// script that pushes nothing or does not parse.
+func TestExtractRedeemScript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		script string
+		want   []byte
+		err    error
+	}{{
+		name:   "empty",
+		script: "",
+		err:    scriptError(ErrInvalidStackOperation, ""),
+	}, {
+		name:   "one push",
+		script: "DATA_2 0x5152",
+		want:   []byte{0x51, 0x52},
+	}, {
+		name:   "last of several pushes",
+		script: "0 DATA_1 0x51 DATA_2 0x5253",
+		want:   []byte{0x52, 0x53},
+	}, {
+		name:   "malformed push",
+		script: "DATA_2 0x51",
+		err:    scriptError(ErrMalformedPush, ""),
+	}}
+	for _, test := range tests {
+		var got []byte
+		var err error
+		p := panicValue(func() {
+			got, err = ExtractRedeemScript(mustParseShortForm(test.script))
+		})
+		if p != nil {
+			t.Errorf("%s: panicked: %v", test.name, p)
+			continue
+		}
+		if e := tstCheckScriptError(err, test.err); e != nil {
+			t.Errorf("%s: %v", test.name, e)
+			continue
+		}
+		if !bytes.Equal(got, test.want) {
+			t.Errorf("%s: got %x, want %x", test.name, got, test.want)
+		}
+	}
+}
+
 // TestRemoveOpcodes ensures that removing opcodes from scripts behaves as
 // expected.
 func TestRemoveOpcodes(t *testing.T) {

@@ -406,6 +406,16 @@ func TestCalcScriptInfo(t *testing.T) {
 			scriptInfoErr: scriptError(ErrMalformedPush, ""),
 		},
 		{
+			// A pay-to-script-hash output spent by an empty
+			// signature script has no redeem script.
+			name:      "p2sh with an empty sigScript",
+			sigScript: "",
+			pkScript: "HASH160 DATA_20 0xfe441065b6532231de2fac56" +
+				"3152205ec4f59c74 EQUAL",
+			bip16:         true,
+			scriptInfoErr: scriptError(ErrInvalidStackOperation, ""),
+		},
+		{
 			// Invented scripts, the hashes do not match
 			name: "p2sh standard script",
 			sigScript: "1 81 DATA_25 DUP HASH160 DATA_20 0x010203" +

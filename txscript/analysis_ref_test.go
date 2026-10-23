@@ -303,7 +303,11 @@ func refCalcScriptInfo(sigScript, pkScript []byte, scriptFlags ScriptFlags) (*Sc
 	switch {
 	case si.PkScriptClass == ScriptHashTy && scriptFlags.HasFlag(ScriptBip16):
 		// The pay-to-hash-script is the final data push of the
-		// signature script.
+		// signature script, so an empty one has none.
+		if len(sigPops) == 0 {
+			return nil, scriptError(ErrInvalidStackOperation,
+				"signature script is empty")
+		}
 		script := sigPops[len(sigPops)-1].data
 		shPops, err := parseScript(script)
 		if err != nil {

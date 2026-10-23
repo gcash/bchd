@@ -130,11 +130,17 @@ func ExtractDataElements(script []byte) ([][]byte, error) {
 
 // ExtractRedeemScript attempts to extract the redeem script from a signature
 // script. In practice this amount to just returning the last popped element
-// as we don't know for sure if it's a redeem script.
+// as we don't know for sure if it's a redeem script.  An empty script has no
+// element, so it gets ErrInvalidStackOperation, the error the script engine
+// gives a pay-to-script-hash input with an empty signature script.
 func ExtractRedeemScript(script []byte) ([]byte, error) {
 	pops, err := parseScript(script)
 	if err != nil {
 		return nil, err
+	}
+	if len(pops) == 0 {
+		return nil, scriptError(ErrInvalidStackOperation,
+			"signature script is empty")
 	}
 	return pops[len(pops)-1].data, nil
 }
