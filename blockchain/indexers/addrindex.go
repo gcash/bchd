@@ -882,7 +882,9 @@ func (idx *AddrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 // transaction that involves the passed address according to the specified
 // number to skip, number requested, and whether or not the results should be
 // reversed.  It also returns the number actually skipped since it could be less
-// in the case where there are not enough entries.
+// in the case where there are not enough entries.  The entries are read with
+// dbTx, so that the caller reads the transactions at the regions in the same
+// state of the database.
 //
 // NOTE: These results only include transactions confirmed in blocks.  See the
 // UnconfirmedTxnsForAddress method for obtaining unconfirmed transactions
@@ -895,28 +897,19 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 		return nil, 0, err
 	}
 
-	var regions []database.BlockRegion
-	var skipped uint32
-	err = idx.db.View(func(dbTx database.Tx) error {
-		// Create closure to lookup the block hash given the ID using
-		// the database transaction.
-		fetchBlockHash := func(id []byte) (*chainhash.Hash, error) {
-			// Deserialize and populate the result.
-			return dbFetchBlockHashBySerializedID(dbTx, id)
-		}
+	// Create closure to lookup the block hash given the ID using the
+	// database transaction.
+	fetchBlockHash := func(id []byte) (*chainhash.Hash, error) {
+		// Deserialize and populate the result.
+		return dbFetchBlockHashBySerializedID(dbTx, id)
+	}
 
-		var err error
-		addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
-		if addrIdxBucket == nil {
-			return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
-		}
-		regions, skipped, err = dbFetchAddrIndexEntries(addrIdxBucket,
-			addrKey, numToSkip, numRequested, reverse,
-			fetchBlockHash)
-		return err
-	})
-
-	return regions, skipped, err
+	addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if addrIdxBucket == nil {
+		return nil, 0, fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	return dbFetchAddrIndexEntries(addrIdxBucket, addrKey, numToSkip,
+		numRequested, reverse, fetchBlockHash)
 }
 
 // TxRegionPagesForAddress calls fn with the block regions of the transactions

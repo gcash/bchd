@@ -901,3 +901,56 @@ func TestGetAddressUnspentOutputsShutdown(t *testing.T) {
 		t.Errorf("got %v, want Canceled", err)
 	}
 }
+
+// blockBeforeViewDB connects a block, once, when a read transaction is
+// started through it, before the transaction starts.
+type blockBeforeViewDB struct {
+	database.DB
+	connect func()
+}
+
+func (db *blockBeforeViewDB) View(fn func(database.Tx) error) error {
+	if connect := db.connect; connect != nil {
+		db.connect = nil
+		connect()
+	}
+	return db.DB.View(fn)
+}
+
+// TestGetAddressTransactionsOneSnapshot ensures GetAddressTransactions reads
+// an address's index entries in the database transaction it reads their
+// transactions in, so that a block connected meanwhile is in both or in
+// neither, where entries read in a transaction of their own could name a
+// block the other could not read, and the call failed.
+func TestGetAddressTransactionsOneSnapshot(t *testing.T) {
+	var index *blockBeforeViewDB
+	h := newAddrUnspentHarnessDB(t, func(db database.DB) database.DB {
+		index = &blockBeforeViewDB{DB: db}
+		return index
+	})
+	pay := []*wire.TxOut{wire.NewTxOut(50e8, p2shScript(t, addrRedeem),
+		wire.TokenData{})}
+	cb1 := h.mineBlock(pay, nil)
+	index.connect = func() { h.mineBlock(pay, nil) }
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatalf("NewAddressScriptHash: %v", err)
+	}
+
+	resp, err := h.s.GetAddressTransactions(context.Background(),
+		&pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatalf("GetAddressTransactions: %v", err)
+	}
+	hash := cb1.TxHash()
+	if len(resp.ConfirmedTransactions) != 1 ||
+		!bytes.Equal(resp.ConfirmedTransactions[0].Hash, hash[:]) {
+
+		t.Errorf("%d confirmed transactions, want cb1 only",
+			len(resp.ConfirmedTransactions))
+	}
+	if index.connect == nil {
+		t.Error("the address index read its entries in a database " +
+			"transaction of its own")
+	}
+}
