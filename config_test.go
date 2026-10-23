@@ -441,3 +441,43 @@ func TestGrpcMaxConcurrentCalls(t *testing.T) {
 		}
 	}
 }
+
+// TestMaxPeers ensures --maxpeers defaults to 125, takes 0 and larger values,
+// and refuses a negative one, with which the server could not make its peer
+// queues and panicked at start.
+func TestMaxPeers(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	for _, test := range []struct {
+		args    []string
+		want    int
+		wantErr string
+	}{
+		{args: nil, want: 125},
+		{args: []string{"--maxpeers=0"}, want: 0},
+		{args: []string{"--maxpeers=10"}, want: 10},
+		{args: []string{"--maxpeers=-1"}, wantErr: "loadConfig: The " +
+			"maxpeers option may not be less than 0 -- parsed [-1]"},
+	} {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.wantErr != "" {
+			if err == nil || err.Error() != test.wantErr {
+				t.Errorf("%v: got error %v, want %s", test.args, err,
+					test.wantErr)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.MaxPeers != test.want {
+			t.Errorf("%v: got %d, want %d", test.args, cfg.MaxPeers,
+				test.want)
+		}
+	}
+}

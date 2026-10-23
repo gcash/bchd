@@ -767,6 +767,17 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// The server makes its peer queues with room for maxpeers peers, which
+	// panics for a negative count.
+	if cfg.MaxPeers < 0 {
+		str := "%s: The maxpeers option may not be less than 0 " +
+			"-- parsed [%d]"
+		err := fmt.Errorf(str, funcName, cfg.MaxPeers)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	if cfg.GrpcMaxFilterEntries < 0 {
 		str := "%s: The grpcmaxfilterentries option may not be less " +
 			"than 0 -- parsed [%d]"
