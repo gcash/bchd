@@ -8,6 +8,7 @@ package blockchain
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"sync"
@@ -2179,13 +2180,24 @@ func (b *BlockChain) ReIndexChainState() error {
 // or a fast sync deletes per database transaction.
 var reIndexDeleteBatch = 100000
 
+// deleteProgressInterval is how often the deletion of the old utxo set logs
+// its progress.
+var deleteProgressInterval = time.Minute
+
 // deleteBucketKeys deletes the keys of the metadata bucket, batch keys per
 // database transaction, until the bucket is empty.  Each batch continues
 // after the last key the previous one deleted.  The deleted keys stay in the
 // database until it compacts them, and a cursor started from the first key
 // would step over all of them again, which makes the deletion quadratic.
+//
+// The progress is logged every deleteProgressInterval, with the position of
+// the last deleted key in the key space, which estimates the share of the
+// keys deleted when they start with a hash, as those of the utxo set do.
 func deleteBucketKeys(db database.DB, bucketName []byte, batch int) error {
 	var last []byte
+	var total uint64
+	ticker := time.NewTicker(deleteProgressInterval)
+	defer ticker.Stop()
 	for {
 		var deleted int
 		err := db.Update(func(dbTx database.Tx) error {
@@ -2208,7 +2220,22 @@ func deleteBucketKeys(db database.DB, bucketName []byte, batch int) error {
 		if err != nil || deleted < batch {
 			return err
 		}
+		total += uint64(deleted)
+		select {
+		case <-ticker.C:
+			log.Infof("Deletion progress: %d entries deleted (about %d%%)",
+				total, int(keySpacePosition(last)*100))
+		default:
+		}
 	}
+}
+
+// keySpacePosition returns where the key falls among all keys, from 0 to 1,
+// by its first eight bytes.
+func keySpacePosition(key []byte) float64 {
+	var prefix [8]byte
+	copy(prefix[:], key)
+	return float64(binary.BigEndian.Uint64(prefix[:])) / (1 << 64)
 }
 
 // reIndexResumeNode returns the block an interrupted re-index of the chain

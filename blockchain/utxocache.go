@@ -874,7 +874,13 @@ func (s *utxoCache) InitConsistentState(tip *blockNode, index *blockIndex, fastS
 		if err != nil {
 			return err
 		}
-		return deleteBucketKeys(s.db, utxoSetBucketName, reIndexDeleteBatch)
+		log.Info("Deleting the UTXO set...")
+		err = deleteBucketKeys(s.db, utxoSetBucketName, reIndexDeleteBatch)
+		if err != nil {
+			return err
+		}
+		log.Info("Deletion complete")
+		return nil
 	}
 
 	// Load the consistency status from the database.
