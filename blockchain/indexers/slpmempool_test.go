@@ -11,6 +11,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp/metadatamaker"
 )
 
@@ -167,5 +168,128 @@ func TestSlpMempoolMetadataLifetime(t *testing.T) {
 	mintHash := mint.TxHash()
 	if test.idx.cache.GetMempoolItem(&mintHash) != nil {
 		t.Error("the MINT's mempool entry is still there")
+	}
+}
+
+// TestSlpRemoveNotInUnlocked ensures RemoveMempoolSlpTxsNotIn asks the memory
+// pool about each transaction with no slp cache lock held, and then removes
+// the entry and token metadata of a transaction that left it and keeps those
+// of one still there.  Asking takes the memory pool's lock, whose holder may
+// be waiting for the chain lock, which block connection holds while it takes
+// the slp cache lock.
+func TestSlpRemoveNotInUnlocked(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	left, pooled := batonGenesis(t, 1), batonGenesis(t, 2)
+	test.addPotential(left)
+	test.addPotential(pooled)
+	pooledHash := pooled.TxHash()
+
+	asked := 0
+	test.idx.RemoveMempoolSlpTxsNotIn(func(hash *chainhash.Hash) bool {
+		asked++
+		if !test.idx.cache.TryLock() {
+			t.Error("the slp cache lock is held while the memory pool is asked")
+		} else {
+			test.idx.cache.Unlock()
+		}
+		return *hash == pooledHash
+	})
+	if asked == 0 {
+		t.Fatal("the memory pool was not asked")
+	}
+	for _, c := range []struct {
+		name string
+		tx   *wire.MsgTx
+		want bool
+	}{
+		{"the GENESIS that left", left, false},
+		{"the GENESIS in the memory pool", pooled, true},
+	} {
+		hash := c.tx.TxHash()
+		token := tokenIDOf(t, c.tx)
+		if got := test.idx.cache.GetMempoolItem(&hash) != nil; got != c.want {
+			t.Errorf("%s: mempool entry %v, want %v", c.name, got, c.want)
+		}
+		if _, got := test.idx.cache.GetTokenMetadata(&token, nil); got != c.want {
+			t.Errorf("%s: token metadata %v, want %v", c.name, got, c.want)
+		}
+		test.idx.cache.RLock()
+		_, got := test.idx.cache.mempoolTokenMetadata[token]
+		test.idx.cache.RUnlock()
+		if got != c.want {
+			t.Errorf("%s: the transaction that set the token metadata "+
+				"recorded %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestSlpRemoveNotInChangedMeanwhile ensures RemoveMempoolSlpTxsNotIn keeps an
+// entry or token metadata put in the slp cache while the memory pool was
+// asked, as it is not the one the memory pool was asked about: an entry
+// removed and added again, and token metadata that a MINT set since.
+func TestSlpRemoveNotInChangedMeanwhile(t *testing.T) {
+	genesis := batonGenesis(t, 1)
+	token := tokenIDOf(t, genesis)
+	genesisHash := genesis.TxHash()
+	mint := batonMint(t, token, wire.OutPoint{Hash: genesisHash, Index: 2})
+	mintHash := mint.TxHash()
+
+	// removeNotIn runs RemoveMempoolSlpTxsNotIn on cache, which runs
+	// meanwhile the first time it asks the memory pool, and reports every
+	// transaction gone.
+	removeNotIn := func(cache *SlpCache, meanwhile func()) {
+		t.Helper()
+		cache.RemoveMempoolSlpTxsNotIn(func(*chainhash.Hash) bool {
+			if !cache.TryLock() {
+				t.Error("the slp cache lock is held while the memory pool is asked")
+				return false
+			}
+			cache.Unlock()
+			if meanwhile != nil {
+				meanwhile()
+				meanwhile = nil
+			}
+			return false
+		})
+	}
+
+	// The cache holds one entry besides those of the memory pool, so the
+	// GENESIS's leaves it when another is read.  A block confirms the
+	// GENESIS, and once its entry is gone, the GENESIS is back in the
+	// memory pool, as after a reorg, and is checked again.
+	cache := InitSlpCache(1)
+	cache.AddMempoolSlpTxEntry(&genesisHash, SlpTxEntry{TokenIDHash: token})
+	removeNotIn(cache, func() {
+		cache.RemoveMempoolSlpTxItems([]*bchutil.Tx{bchutil.NewTx(genesis)})
+		other := chainhash.Hash{0xee}
+		if err := cache.AddSlpTxEntry(&other, SlpTxEntry{}); err != nil {
+			t.Fatal(err)
+		}
+		cache.AddMempoolSlpTxEntry(&genesisHash, SlpTxEntry{TokenIDHash: token})
+	})
+	if cache.GetMempoolItem(&genesisHash) == nil {
+		t.Error("the entry added again while the memory pool was asked is gone")
+	}
+
+	// A MINT in the memory pool moves the mint baton that the GENESIS put
+	// on its output 2.
+	cache = InitSlpCache(10)
+	err := cache.AddTempTokenMetadata(TokenMetadata{TokenID: &token,
+		MintBatonHash: &genesisHash, MintBatonVout: 2}, genesisHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removeNotIn(cache, func() {
+		err := cache.AddTempTokenMetadata(TokenMetadata{TokenID: &token,
+			MintBatonHash: &mintHash, MintBatonVout: 2}, mintHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if tm, ok := cache.GetTokenMetadata(&token, nil); !ok ||
+		tm.MintBatonHash == nil || *tm.MintBatonHash != mintHash {
+
+		t.Errorf("the token metadata the MINT set while the memory pool "+
+			"was asked is %v, %v", tm, ok)
 	}
 }

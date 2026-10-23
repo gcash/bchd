@@ -7,11 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"runtime/pprof"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/bchrpc/pb"
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -595,6 +598,156 @@ func TestSlpMempoolMintLeftPool(t *testing.T) {
 	s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
 	waitFor(t, "the baton back on the GENESIS", func() bool {
 		return baton() == wire.OutPoint{Hash: genesis.TxHash(), Index: 2}
+	})
+}
+
+// TestSlpBlockEventPoolDeadlock ensures the slp event handler, which asks the
+// memory pool on each block event whether the transactions in the slp cache
+// are still there, cannot deadlock with block connection and a submission.  A
+// submission, as SubmitTransaction and sendrawtransaction make, holds the
+// memory pool's lock while it waits for the chain lock, and block connection
+// holds the chain lock while it takes the slp cache lock, so the handler must
+// not hold the slp cache lock while it waits for the memory pool's.  The test
+// plays only the chain lock, around the slp index's ConnectBlock.
+func TestSlpBlockEventPoolDeadlock(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex = db, idx
+
+	// Block connection holds the chain lock until chainUnlocked is closed,
+	// and the memory pool waits for it to read the outputs a transaction
+	// spends.  The wait also ends on abort, so that a deadlock found can
+	// be undone.
+	chainUnlocked := make(chan struct{})
+	abort := make(chan struct{})
+	stop := sync.OnceFunc(func() { close(abort) })
+	t.Cleanup(stop)
+	poolWaits := make(chan struct{})
+	s.txMemPool = mempool.New(&mempool.Config{
+		Policy:         mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
+		ChainParams:    &chaincfg.RegressionNetParams,
+		BestHeight:     func() int32 { return 1 },
+		MedianTimePast: time.Now,
+		FetchUtxoView: func(*bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+			close(poolWaits)
+			select {
+			case <-chainUnlocked:
+			case <-abort:
+			}
+			return nil, errors.New("the test's chain has no outputs")
+		},
+	})
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	// The handler puts a GENESIS that the memory pool does not hold in the
+	// slp cache, as one that has left it.
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	id, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := chainhash.NewHash(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// cached reports whether the slp cache has the token metadata the
+	// GENESIS set, which the index's database does not have.
+	cached := func() bool {
+		return db.View(func(dbTx database.Tx) error {
+			_, err := idx.GetTokenMetadata(dbTx,
+				&indexers.SlpTxEntry{TokenIDHash: *token})
+			return err
+		}) == nil
+	}
+	s.dispatchEvent(&rpcEventTxAccepted{TxDesc: &mempool.TxDesc{
+		TxDesc: mining.TxDesc{Tx: bchutil.NewTx(genesis)}}})
+	waitFor(t, "the GENESIS in the slp cache", cached)
+
+	// A submission takes the memory pool's lock and waits for the chain
+	// lock.
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xdd}},
+		bytes.Repeat([]byte{txscript.OP_TRUE}, 100)))
+	spend.AddTxOut(&wire.TxOut{Value: 1000, PkScript: []byte{txscript.OP_TRUE}})
+	submitted := make(chan error, 1)
+	go func() {
+		_, err := s.txMemPool.ProcessTransaction(bchutil.NewTx(spend), false, 0)
+		submitted <- err
+	}()
+	select {
+	case <-poolWaits:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the submission to wait for the chain lock")
+	}
+
+	// The handler gets the event of the block connected before the one
+	// being connected, and asks the memory pool about the GENESIS.
+	s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
+	waitFor(t, "the slp event handler to ask the memory pool", func() bool {
+		var stacks bytes.Buffer
+		_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
+		return strings.Contains(stacks.String(), "(*TxPool).IsTransactionInPool")
+	})
+
+	// Block connection reaches the slp index, which looks up the inputs of
+	// a transaction that is not slp in the slp cache.
+	other := wire.NewMsgTx(1)
+	other.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xcc}}, nil))
+	other.AddTxOut(&wire.TxOut{Value: 1000, PkScript: []byte{txscript.OP_TRUE}})
+	block := bchutil.NewBlock(&wire.MsgBlock{Transactions: []*wire.MsgTx{other}})
+	connected := make(chan error, 1)
+	go func() {
+		connected <- db.Update(func(dbTx database.Tx) error {
+			return idx.ConnectBlock(dbTx, block, nil)
+		})
+		close(chainUnlocked)
+	}()
+	select {
+	case err = <-connected:
+	case <-time.After(5 * time.Second):
+		t.Error("deadlock: block connection waits for the slp cache lock, " +
+			"which the slp event handler holds while it waits for the " +
+			"memory pool's lock, which the submission holds while it " +
+			"waits for the chain lock")
+		stop()
+		err = <-connected
+	}
+	if err != nil {
+		t.Errorf("ConnectBlock: %v", err)
+	}
+	if err := <-submitted; err == nil {
+		t.Error("the submission was accepted")
+	}
+	waitFor(t, "the GENESIS to leave the slp cache", func() bool {
+		return !cached()
 	})
 }
 

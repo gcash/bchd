@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/bluele/gcache"
@@ -154,17 +155,43 @@ func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 // memory pool.  A transaction that left it without being confirmed, as when a
 // conflicting one was, may have put a mint baton on an output that does not
 // exist.
+//
+// inPool is called with no cache lock held.  It takes the memory pool's lock,
+// whose holder may be waiting for the chain lock, which block connection holds
+// while it takes the cache lock, so holding the cache lock while waiting for
+// the memory pool could deadlock all three.
 func (s *SlpCache) RemoveMempoolSlpTxsNotIn(inPool func(*chainhash.Hash) bool) {
+	s.RLock()
+	entries := maps.Clone(s.mempoolSlpTxEntries)
+	sources := maps.Clone(s.mempoolTokenMetadata)
+	s.RUnlock()
+
+	// Leave in the copies only what transactions that left the memory pool
+	// put there.
+	for hash := range entries {
+		if inPool(&hash) {
+			delete(entries, hash)
+		}
+	}
+	for tokenID, from := range sources {
+		if inPool(&from) {
+			delete(sources, tokenID)
+		}
+	}
+
+	// Remove them, but not an entry or token metadata that was replaced
+	// while the memory pool was asked, as that is not the one it was asked
+	// about.
 	s.Lock()
 	defer s.Unlock()
 
-	for hash := range s.mempoolSlpTxEntries {
-		if !inPool(&hash) {
+	for hash, entry := range entries {
+		if s.mempoolSlpTxEntries[hash] == entry {
 			delete(s.mempoolSlpTxEntries, hash)
 		}
 	}
-	for tokenID, from := range s.mempoolTokenMetadata {
-		if !inPool(&from) {
+	for tokenID, from := range sources {
+		if current, ok := s.mempoolTokenMetadata[tokenID]; ok && current == from {
 			delete(s.mempoolTokenMetadata, tokenID)
 			s.tokenMetadata.Remove(tokenID)
 		}
