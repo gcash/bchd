@@ -310,10 +310,13 @@ type server struct {
 	services                wire.ServiceFlag
 
 	// recentBlock is the block announced most recently, from which
-	// getblocktxns requests are answered.
-	recentBlockMtx  sync.Mutex
-	recentBlock     *wire.MsgBlock
-	recentBlockHash chainhash.Hash
+	// getblocktxns requests are answered.  processingBlocks holds, for each
+	// block relayed before it was processed, a channel that is closed once
+	// it has been.
+	recentBlockMtx   sync.Mutex
+	recentBlock      *wire.MsgBlock
+	recentBlockHash  chainhash.Hash
+	processingBlocks map[chainhash.Hash]chan struct{}
 
 	// The following fields are used for optional indexes.  They will be nil
 	// if the associated index is not enabled.  These fields are set during
@@ -1077,12 +1080,16 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 
 	// Relay the block to peers which want direct relay if it extends the
 	// best chain and passes the checks that need no inputs, as BCHN does.
-	// Those peers may ask for its transactions before it is stored.
+	// Those peers may ask for its transactions before it is stored, which
+	// the recent block answers, and for the block, whose getdata waits
+	// until it was processed.
 	if msg.Header.PrevBlock == sp.server.chain.BestSnapshot().Hash {
 		if err := sp.server.chain.CheckBlockForRelay(block); err != nil {
 			peerLog.Debugf("Not relaying cmpctblock %v from %v -- %v",
 				targetHash, sp, err)
 		} else {
+			processed := sp.server.blockProcessing(targetHash)
+			defer processed()
 			sp.server.setRecentBlock(msgBlock)
 			sp.server.relayCmpctBlock <- msg
 		}
@@ -1201,6 +1208,51 @@ func (s *server) recentBlockByHash(hash *chainhash.Hash) *wire.MsgBlock {
 		return nil
 	}
 	return s.recentBlock
+}
+
+// blockProcessing records that the block with the passed hash, relayed before
+// it was processed, is being processed, and returns the function to call once
+// it has been.  Until then a getdata for the block waits.  A block relayed
+// again, for another peer, is waited for until it was processed for that peer.
+func (s *server) blockProcessing(hash chainhash.Hash) (processed func()) {
+	done := make(chan struct{})
+	s.recentBlockMtx.Lock()
+	if s.processingBlocks == nil {
+		s.processingBlocks = make(map[chainhash.Hash]chan struct{})
+	}
+	s.processingBlocks[hash] = done
+	s.recentBlockMtx.Unlock()
+	return func() {
+		s.recentBlockMtx.Lock()
+		if s.processingBlocks[hash] == done {
+			delete(s.processingBlocks, hash)
+		}
+		s.recentBlockMtx.Unlock()
+		close(done)
+	}
+}
+
+// checkBlockToSend returns an error when a getdata for the block is not to be
+// answered with it.  A block relayed before it was processed is waited for, and
+// a block known to be invalid is not sent: BCHN finishes validating a block
+// before it answers a getdata for it, and does not send one that failed.
+func (s *server) checkBlockToSend(sp *serverPeer, hash *chainhash.Hash) error {
+	s.recentBlockMtx.Lock()
+	processing := s.processingBlocks[*hash]
+	s.recentBlockMtx.Unlock()
+	if processing != nil {
+		select {
+		case <-processing:
+		case <-sp.quit:
+			return errors.New("the peer quit")
+		case <-s.quit:
+			return errors.New("the server quit")
+		}
+	}
+	if _, _, invalid := s.chain.BlockValidity(hash); invalid {
+		return errors.New("the block is known to be invalid")
+	}
+	return nil
 }
 
 // OnInv is invoked when a peer receives an inv bitcoin message and is
@@ -2254,9 +2306,20 @@ func (s *server) pushDSProofMsg(sp *serverPeer, hash *chainhash.Hash, doneChan c
 }
 
 // pushBlockMsg sends a block message for the provided block hash to the
-// connected peer.  An error is returned if the block hash is not known.
+// connected peer.  An error is returned if the block hash is not known, or the
+// block is not to be sent.
 func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
 	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	if err := s.checkBlockToSend(sp, hash); err != nil {
+		peerLog.Tracef("Not sending requested block hash %v: %v", hash,
+			err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
 
 	// Fetch the raw block bytes from the database.
 	var blockBytes []byte
@@ -2320,9 +2383,22 @@ func (s *server) pushBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan cha
 }
 
 // pushCmpctBlockMsg sends a cmpctblock message for the provided block hash to the
-// connected peer.  An error is returned if the block hash is not known.
+// connected peer.  An error is returned if the block hash is not known, or the
+// block is not to be sent.
 func (s *server) pushCmpctBlockMsg(sp *serverPeer, hash *chainhash.Hash, doneChan chan<- struct{},
 	waitChan <-chan struct{}, encoding wire.MessageEncoding) error {
+
+	// This comes first, so a block relayed before it was processed is sent
+	// as the tip it became.
+	if err := s.checkBlockToSend(sp, hash); err != nil {
+		peerLog.Tracef("Not sending requested cmpctblock hash %v: %v",
+			hash, err)
+
+		if doneChan != nil {
+			doneChan <- struct{}{}
+		}
+		return err
+	}
 
 	// A block more than maxCmpctBlockDepth below the tip is sent in full,
 	// as in BCHN, which also spares building a compact block for it.  A

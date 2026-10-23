@@ -56,6 +56,8 @@ type blockTxnsHarness struct {
 	handled  atomic.Int32
 	replies  chan *wire.MsgBlockTxns
 	blocks   chan *wire.MsgBlock
+	cmpcts   chan *wire.MsgCmpctBlock
+	notFound chan *wire.MsgNotFound
 	getData  chan struct{}
 	tipHash  *chainhash.Hash
 	openGate func()
@@ -74,17 +76,20 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 	}
 
 	h := &blockTxnsHarness{
-		chain:   chain,
-		replies: make(chan *wire.MsgBlockTxns, 16),
-		blocks:  make(chan *wire.MsgBlock, 16),
-		getData: make(chan struct{}, 1),
-		tipHash: block.Hash(),
+		chain:    chain,
+		replies:  make(chan *wire.MsgBlockTxns, 16),
+		blocks:   make(chan *wire.MsgBlock, 16),
+		cmpcts:   make(chan *wire.MsgCmpctBlock, 16),
+		notFound: make(chan *wire.MsgNotFound, 16),
+		getData:  make(chan struct{}, 1),
+		tipHash:  block.Hash(),
 	}
 	h.sp = &serverPeer{
 		server: &server{
 			chain:    chain,
 			db:       db,
 			banPeers: make(chan *serverPeer, 1),
+			quit:     make(chan struct{}),
 		},
 		quit: make(chan struct{}),
 	}
@@ -119,6 +124,12 @@ func newBlockTxnsHarness(t *testing.T, gated bool) *blockTxnsHarness {
 			},
 			OnBlock: func(_ *peer.Peer, msg *wire.MsgBlock, _ []byte) {
 				h.blocks <- msg
+			},
+			OnCmpctBlock: func(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
+				h.cmpcts <- msg
+			},
+			OnNotFound: func(_ *peer.Peer, msg *wire.MsgNotFound) {
+				h.notFound <- msg
 			},
 		},
 	}, "127.0.0.1:18444")
@@ -347,5 +358,159 @@ func TestGetDataStopsAfterDisconnect(t *testing.T) {
 	if n := db.views.Load(); n > 4 {
 		t.Fatalf("%d of %d blocks read for a disconnected peer, want "+
 			"at most 4", n, numBlocks)
+	}
+}
+
+// getDataFor sends a getdata for the block from the remote peer.
+func (h *blockTxnsHarness) getDataFor(t *testing.T, invType wire.InvType,
+	hash *chainhash.Hash) {
+
+	t.Helper()
+	getData := wire.NewMsgGetData()
+	if err := getData.AddInvVect(wire.NewInvVect(invType, hash)); err != nil {
+		t.Fatal(err)
+	}
+	h.remote.QueueMessage(getData, nil)
+}
+
+// expectNothingSent ensures no block, compact block or notfound arrives at
+// the remote peer for a while.
+func (h *blockTxnsHarness) expectNothingSent(t *testing.T) {
+	t.Helper()
+	select {
+	case msg := <-h.blocks:
+		t.Fatalf("block %v sent", msg.BlockHash())
+	case msg := <-h.cmpcts:
+		t.Fatalf("compact block %v sent", msg.BlockHash())
+	case msg := <-h.notFound:
+		t.Fatalf("notfound for %v sent", msg.InvList[0])
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// expectReply waits for the reply to a getdata of the given type for the
+// block: the block in that form, or notfound if notFound is set.
+func (h *blockTxnsHarness) expectReply(t *testing.T, invType wire.InvType,
+	hash *chainhash.Hash, notFound bool) {
+
+	t.Helper()
+	var got string
+	select {
+	case msg := <-h.blocks:
+		if msg.BlockHash() == *hash && !notFound &&
+			invType == wire.InvTypeBlock {
+
+			return
+		}
+		got = "block " + msg.BlockHash().String()
+	case msg := <-h.cmpcts:
+		if msg.BlockHash() == *hash && !notFound &&
+			invType == wire.InvTypeCmpctBlock {
+
+			return
+		}
+		got = "compact block " + msg.BlockHash().String()
+	case msg := <-h.notFound:
+		if len(msg.InvList) == 1 && msg.InvList[0].Hash == *hash &&
+			notFound {
+
+			return
+		}
+		got = "notfound for " + msg.InvList[0].Hash.String()
+	case <-time.After(5 * time.Second):
+		got = "nothing"
+	}
+	t.Fatalf("got %s for %v of %v, want notfound %v", got, invType, hash,
+		notFound)
+}
+
+// TestGetDataWaitsForRelayedBlock ensures a getdata for a block relayed as a
+// compact block before it was processed is answered once it has been, as BCHN
+// finishes validating a block before it answers a getdata for it: with the
+// block, or with notfound if it turned out invalid.  It was answered with
+// notfound at once, which BCHN ignores for blocks: it waited for the block
+// until its block download timeout and then disconnected this node.
+func TestGetDataWaitsForRelayedBlock(t *testing.T) {
+	tests := []struct {
+		name    string
+		invType wire.InvType
+		invalid bool
+	}{
+		{"block", wire.InvTypeBlock, false},
+		{"compact block", wire.InvTypeCmpctBlock, false},
+		{"invalid block", wire.InvTypeBlock, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := newBlockTxnsHarness(t, false)
+			// A block paying one satoshi too much is stored, and fails
+			// once it is connected.
+			var delta int64
+			if test.invalid {
+				delta = 1
+			}
+			block := solvedBlock(t, h.chain, delta, nil)
+			processed := h.sp.server.blockProcessing(*block.Hash())
+			h.sp.server.setRecentBlock(block.MsgBlock())
+
+			h.getDataFor(t, test.invType, block.Hash())
+			h.expectNothingSent(t)
+			_, _, err := h.chain.ProcessBlock(block, blockchain.BFNone)
+			if (err != nil) != test.invalid {
+				t.Fatalf("processing the block: %v", err)
+			}
+			processed()
+			h.expectReply(t, test.invType, block.Hash(), test.invalid)
+		})
+	}
+}
+
+// TestGetDataWaitEndsOnQuit ensures a getdata waiting for a block relayed
+// before it was processed stops waiting when the peer or the server quits.
+func TestGetDataWaitEndsOnQuit(t *testing.T) {
+	for _, serverQuits := range []bool{false, true} {
+		h := newBlockTxnsHarness(t, false)
+		block := solvedBlock(t, h.chain, 0, nil)
+		h.sp.server.blockProcessing(*block.Hash())
+		h.getDataFor(t, wire.InvTypeBlock, block.Hash())
+		select {
+		case <-h.getData:
+			t.Fatal("getdata was handled before the block was processed")
+		case <-time.After(100 * time.Millisecond):
+		}
+		if serverQuits {
+			close(h.sp.server.quit)
+		} else {
+			close(h.sp.quit)
+		}
+		select {
+		case <-h.getData:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("getdata still waits after the quit (server %v)",
+				serverQuits)
+		}
+	}
+}
+
+// TestGetDataInvalidBlockNotSent ensures a block known to be invalid is not
+// sent for a getdata, as BCHN sends only blocks it validated.  A block relayed
+// early as a compact block is stored before its inputs are checked, and BCHN
+// discourages a peer that sends it an invalid block in full.
+func TestGetDataInvalidBlockNotSent(t *testing.T) {
+	h := newBlockTxnsHarness(t, false)
+	block := solvedBlock(t, h.chain, 1, nil)
+	if _, _, err := h.chain.ProcessBlock(block, blockchain.BFNone); err == nil {
+		t.Fatal("the block paying too much was accepted")
+	}
+	if known, _, invalid := h.chain.BlockValidity(block.Hash()); !known ||
+		!invalid {
+
+		t.Fatalf("block known %v, invalid %v, want both", known, invalid)
+	}
+	for _, invType := range []wire.InvType{wire.InvTypeBlock,
+		wire.InvTypeCmpctBlock} {
+
+		h.getDataFor(t, invType, block.Hash())
+		h.expectReply(t, invType, block.Hash(), true)
 	}
 }

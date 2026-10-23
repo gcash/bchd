@@ -649,6 +649,83 @@ func TestCompactBlockKnownForgetsRequest(t *testing.T) {
 	}
 }
 
+// TestCompactBlockRelayedGetDataWaits ensures a block relayed as a compact
+// block before it was processed is recorded as being processed until it has
+// been, so a getdata for it waits for that.
+func TestCompactBlockRelayedGetDataWaits(t *testing.T) {
+	h := newCmpctHarness(t)
+	h.s.relayCmpctBlock = make(chan *wire.MsgCmpctBlock)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	h.request(t, *block.Hash())
+	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Holding the peer's block processing lock keeps the block from being
+	// processed once it is relayed.
+	h.sp.processBlockMtx.Lock()
+	done := h.process(msg)
+	select {
+	case <-h.s.relayCmpctBlock:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the compact block was not relayed")
+	}
+	checked := make(chan error, 1)
+	go func() { checked <- h.s.checkBlockToSend(h.sp, block.Hash()) }()
+	select {
+	case err := <-checked:
+		t.Fatalf("a getdata did not wait for the relayed block: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	h.sp.processBlockMtx.Unlock()
+	waitDone(t, done)
+	select {
+	case err := <-checked:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a getdata still waits after the block was processed")
+	}
+	if n := len(h.s.processingBlocks); n != 0 {
+		t.Fatalf("%d blocks still recorded as being processed", n)
+	}
+}
+
+// TestBlockProcessingRelayedTwice ensures a block relayed for two peers before
+// it was processed is waited for until it was processed for both.
+func TestBlockProcessingRelayedTwice(t *testing.T) {
+	s := &server{chain: newTestChain(t)}
+	sp := newServerPeer(s, false)
+	hash := chainhash.Hash{0x07}
+	first := s.blockProcessing(hash)
+	second := s.blockProcessing(hash)
+	first()
+
+	checked := make(chan error, 1)
+	go func() { checked <- s.checkBlockToSend(sp, &hash) }()
+	select {
+	case err := <-checked:
+		t.Fatalf("the block was no longer waited for after the first "+
+			"peer: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	second()
+	select {
+	case err := <-checked:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the block was still waited for after both peers")
+	}
+	if n := len(s.processingBlocks); n != 0 {
+		t.Fatalf("%d blocks still recorded as being processed", n)
+	}
+}
+
 // TestDirectRelaySlotNotForGonePeer ensures a direct relay slot is not given
 // to a peer that is already gone, as one turned away at the peer limit can
 // ask for it after its disconnect was handled, and the slot would then never
