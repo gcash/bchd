@@ -417,10 +417,18 @@ func readPayload(r io.Reader, length uint32) ([]byte, int, error) {
 			return payload, total, nil
 		}
 
-		grown := make([]byte, min(2*len(payload), int(length)))
+		grown := make([]byte, nextPayloadSize(len(payload), length))
 		copy(grown, payload)
 		payload = grown
 	}
+}
+
+// nextPayloadSize returns the size readPayload grows a full buffer of size
+// bytes to: twice the size, at most length.  It is computed in 64 bits, as
+// twice a buffer over 1 GiB overflows a 32-bit int; length is at most
+// math.MaxInt, which ReadMessageWithEncodingN checks, so the result fits.
+func nextPayloadSize(size int, length uint32) int {
+	return int(min(2*uint64(size), uint64(length)))
 }
 
 // ReadMessageWithEncodingN reads, validates, and parses the next bitcoin Message

@@ -786,3 +786,28 @@ func TestWriteMessageWireErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestNextPayloadSize ensures the payload buffer grows to twice its size, at
+// most the payload's length, without overflowing a 32-bit int: twice a buffer
+// over 1 GiB is more than math.MaxInt32, which made a 32-bit build panic once
+// a peer had sent that much of one message.
+func TestNextPayloadSize(t *testing.T) {
+	tests := []struct {
+		size   int
+		length uint32
+		want   int
+	}{
+		{32 * 1024, 100000, 64 * 1024},
+		{64 * 1024, 100000, 100000},
+		{1 << 29, 1<<31 - 1, 1 << 30},
+		{1 << 30, 1<<31 - 1, 1<<31 - 1},
+		{1<<30 + 1, 1<<31 - 1, 1<<31 - 1},
+	}
+	for _, test := range tests {
+		got := nextPayloadSize(test.size, test.length)
+		if got != test.want {
+			t.Errorf("nextPayloadSize(%d, %d) = %d, want %d",
+				test.size, test.length, got, test.want)
+		}
+	}
+}
