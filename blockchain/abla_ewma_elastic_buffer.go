@@ -99,7 +99,9 @@ func (config *ABLAConfig) SetMax() {
 		config.betaMax = config.beta0
 	}
 
-	fmt.Fprintf(os.Stderr, "[INFO] Auto-configured epsilonMax: %d, betaMax: %d\n", config.epsilonMax, config.betaMax)
+	// Bitcoin Cash Node logs this in its ABLA debug category.
+	log.Debugf("Auto-configured ABLA epsilonMax: %d, betaMax: %d",
+		config.epsilonMax, config.betaMax)
 }
 
 func (config *ABLAConfig) IsValid() (errs *strings.Builder) {

@@ -1,13 +1,18 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gcash/bchd/chaincfg"
+	"github.com/gcash/bchlog"
 )
 
 // ablaNumber is a number of the ABLA test vectors, which are given either as
@@ -193,4 +198,57 @@ func runABLATest(test *ablaTest) error {
 		n++
 	}
 	return check(0, true)
+}
+
+// TestABLASetMaxLogsAtDebug ensures that SetMax reports the maximums it chose
+// through the package's logger at the debug level, as BCHN logs them in its
+// ABLA debug category, and writes nothing to standard error.
+func TestABLASetMaxLogsAtDebug(t *testing.T) {
+	var logged bytes.Buffer
+	logger := bchlog.NewBackend(&logged).Logger("CHAN")
+	saved := log
+	UseLogger(logger)
+	t.Cleanup(func() { UseLogger(saved) })
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	stderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = stderr }()
+
+	// Nothing is logged at the info level, and one line at the debug level.
+	params := chaincfg.MainNetParams.ABLAConfig
+	var config ABLAConfig
+	for _, level := range []bchlog.Level{bchlog.LevelInfo, bchlog.LevelDebug} {
+		logger.SetLevel(level)
+		config = ABLAConfig{
+			epsilon0:        params.Epsilon0,
+			beta0:           params.Beta0,
+			n0:              params.N0,
+			gammaReciprocal: params.GammaReciprocal,
+			zetaXB7:         params.ZetaXB7,
+			thetaReciprocal: params.ThetaReciprocal,
+			delta:           params.Delta,
+		}
+		config.SetMax()
+	}
+
+	os.Stderr = stderr
+	w.Close()
+	written, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(written) != 0 {
+		t.Errorf("SetMax wrote %q to standard error", written)
+	}
+	want := fmt.Sprintf("[DBG] CHAN: Auto-configured ABLA epsilonMax: %d, "+
+		"betaMax: %d\n", config.epsilonMax, config.betaMax)
+	got := logged.String()
+	if strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, want) {
+		t.Errorf("logged %q, want one line ending in %q", got, want)
+	}
 }
