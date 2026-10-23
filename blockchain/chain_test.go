@@ -318,6 +318,38 @@ func TestCalcSequenceLock(t *testing.T) {
 				BlockHeight: prevUtxoHeight + 2,
 			},
 		},
+		// The same input in a transaction whose version is negative as
+		// a signed number.  BIP68 and BCHN read the version as
+		// unsigned, so it is at least 2 and the sequence lock applies.
+		{
+			tx: &wire.MsgTx{
+				Version: -1,
+				TxIn: []*wire.TxIn{{
+					PreviousOutPoint: utxo,
+					Sequence:         LockTimeToSequence(false, 3),
+				}},
+			},
+			view: utxoView,
+			want: &SequenceLock{
+				Seconds:     -1,
+				BlockHeight: prevUtxoHeight + 2,
+			},
+		},
+		// A transaction of version zero has sequence locks disabled.
+		{
+			tx: &wire.MsgTx{
+				Version: 0,
+				TxIn: []*wire.TxIn{{
+					PreviousOutPoint: utxo,
+					Sequence:         LockTimeToSequence(false, 3),
+				}},
+			},
+			view: utxoView,
+			want: &SequenceLock{
+				Seconds:     -1,
+				BlockHeight: -1,
+			},
+		},
 		// A transaction with two inputs with lock times expressed in
 		// seconds.  The selected sequence lock value for seconds should
 		// be the time further in the future.

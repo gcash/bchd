@@ -1323,3 +1323,40 @@ func TestNum2binSizeBounds(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckSequenceVerifyVersion ensures OP_CHECKSEQUENCEVERIFY reads the
+// transaction version as unsigned, as BIP68 and BCHN do, so a version that is
+// negative as a signed number is at least 2 and the relative lock applies.
+func TestCheckSequenceVerifyVersion(t *testing.T) {
+	t.Parallel()
+
+	pkScript := mustParseShortForm("10 CHECKSEQUENCEVERIFY")
+	tests := []struct {
+		version int32
+		valid   bool
+	}{
+		{version: 0, valid: false},
+		{version: 1, valid: false},
+		{version: 2, valid: true},
+		{version: -1, valid: true},
+		{version: -1 << 31, valid: true},
+	}
+	for _, test := range tests {
+		tx := wire.NewMsgTx(test.version)
+		tx.AddTxIn(&wire.TxIn{Sequence: 10})
+		tx.AddTxOut(wire.NewTxOut(0, []byte{OP_TRUE}, wire.TokenData{}))
+		vm, err := NewEngine(pkScript, tx, 0,
+			ScriptVerifyCheckSequenceVerify, nil, nil, nil, 0)
+		if err != nil {
+			t.Fatalf("version %d: NewEngine: %v", test.version, err)
+		}
+		err = vm.Execute()
+		switch {
+		case test.valid && err != nil:
+			t.Errorf("version %d: %v", test.version, err)
+		case !test.valid && !IsErrorCode(err, ErrUnsatisfiedLockTime):
+			t.Errorf("version %d: got %v, want ErrUnsatisfiedLockTime",
+				test.version, err)
+		}
+	}
+}

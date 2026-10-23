@@ -592,9 +592,11 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 	// been activated then sequence locks are disabled. Additionally,
 	// sequence locks don't apply to coinbase transactions Therefore, we
 	// return sequence lock values of -1 indicating that this transaction
-	// can be included within a block at any given height or time.
+	// can be included within a block at any given height or time.  The
+	// version is compared as unsigned, as in BIP68 and BCHN, so a version
+	// that is negative as a signed number is at least 2.
 	mTx := tx.MsgTx()
-	sequenceLockActive := mTx.Version >= 2 && csvSoftforkActive
+	sequenceLockActive := uint32(mTx.Version) >= 2 && csvSoftforkActive
 	if !sequenceLockActive || IsCoinBase(tx) {
 		return sequenceLock, nil
 	}
