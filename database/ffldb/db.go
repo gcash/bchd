@@ -1933,7 +1933,8 @@ func rollbackOnPanic(tx *transaction) {
 
 // View invokes the passed function in the context of a managed read-only
 // transaction with the root bucket for the namespace.  Any errors returned from
-// the user-supplied function are returned from this function.
+// the user-supplied function are returned from this function, unless a read
+// from the database failed, whose error is returned instead.
 //
 // This function is part of the database.DB interface implementation.
 func (db *db) View(fn func(database.Tx) error) error {
@@ -1952,17 +1953,17 @@ func (db *db) View(fn func(database.Tx) error) error {
 	tx.managed = true
 	err = fn(tx)
 	tx.managed = false
+
+	// A read that failed returned nothing, as for a missing key, so the
+	// caller gets its error instead, also over an error the function
+	// returned for what it read, such as a block that was not found.
+	if readErr := tx.readError(); readErr != nil {
+		err = readErr
+	}
 	if err != nil {
 		// The error is ignored here because nothing was written yet
 		// and regardless of a rollback failure, the tx is closed now
 		// anyways.
-		_ = tx.Rollback()
-		return err
-	}
-
-	// A read that failed returned nothing, as for a missing key, so the
-	// caller gets its error instead.
-	if err := tx.readError(); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -1973,8 +1974,9 @@ func (db *db) View(fn func(database.Tx) error) error {
 // Update invokes the passed function in the context of a managed read-write
 // transaction with the root bucket for the namespace.  Any errors returned from
 // the user-supplied function will cause the transaction to be rolled back and
-// are returned from this function.  Otherwise, the transaction is committed
-// when the user-supplied function returns a nil error.
+// are returned from this function, unless a read from the database failed,
+// whose error is returned instead, as in View.  Otherwise, the transaction is
+// committed when the user-supplied function returns a nil error.
 //
 // This function is part of the database.DB interface implementation.
 func (db *db) Update(fn func(database.Tx) error) error {
@@ -1994,6 +1996,14 @@ func (db *db) Update(fn func(database.Tx) error) error {
 	err = fn(tx)
 	tx.managed = false
 	if err != nil {
+		// A read that failed returned nothing, as for a missing key,
+		// so its error is returned rather than the one the function
+		// made of what it read.  When the function succeeds, Commit
+		// refuses the transaction for the failed read instead.
+		if readErr := tx.readError(); readErr != nil {
+			err = readErr
+		}
+
 		// The error is ignored here because nothing was written yet
 		// and regardless of a rollback failure, the tx is closed now
 		// anyways.

@@ -352,3 +352,81 @@ func TestReadErrorFailsTransaction(t *testing.T) {
 		t.Fatalf("View once readable: %v", err)
 	}
 }
+
+// TestReadErrorOverFnError ensures View and Update return the error of a read
+// that failed rather than the error their function made of what it read: a
+// block whose index entry can't be read is not found, and a key that can't
+// be read is missing.  Otherwise a caller acts on "not found", as a rescan
+// does by looking for a reorg.
+func TestReadErrorOverFnError(t *testing.T) {
+	pdb, dir := createTestDB(t)
+	key := []byte("k")
+	block := pruneTestBlock(1, 1)
+	if err := pdb.Update(func(tx database.Tx) error {
+		if err := tx.StoreBlock(block); err != nil {
+			return err
+		}
+		return tx.Metadata().Put(key, []byte("v"))
+	}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := pdb.cache.flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	// Reopening leveldb moves the key from its journal to a table file.
+	fs := swapFailingLdb(t, pdb, dir)
+	defer pdb.cache.ldb.Close()
+
+	errMissing := errors.New("key missing")
+	fns := []struct {
+		name string
+		fn   func(tx database.Tx) error
+	}{{
+		name: "FetchBlock",
+		fn: func(tx database.Tx) error {
+			_, err := tx.FetchBlock(block.Hash())
+			return err
+		},
+	}, {
+		name: "Get",
+		fn: func(tx database.Tx) error {
+			if tx.Metadata().Get(key) == nil {
+				return errMissing
+			}
+			return nil
+		},
+	}}
+	atomic.StoreInt32(&fs.failOpen, 1)
+	for _, test := range fns {
+		if err := pdb.View(test.fn); !readFailed(err) {
+			t.Errorf("View with %s: got %v, want the read error",
+				test.name, err)
+		}
+		if err := pdb.Update(test.fn); !readFailed(err) {
+			t.Errorf("Update with %s: got %v, want the read error",
+				test.name, err)
+		}
+	}
+
+	// Without a failed read, the function's own error is returned.
+	atomic.StoreInt32(&fs.failOpen, 0)
+	missing := func(tx database.Tx) error {
+		if tx.Metadata().Get([]byte("absent")) == nil {
+			return errMissing
+		}
+		return nil
+	}
+	if err := pdb.View(missing); err != errMissing {
+		t.Errorf("View of a missing key: got %v, want %v", err, errMissing)
+	}
+	if err := pdb.Update(missing); err != errMissing {
+		t.Errorf("Update of a missing key: got %v, want %v", err,
+			errMissing)
+	}
+	for _, test := range fns {
+		if err := pdb.View(test.fn); err != nil {
+			t.Errorf("View with %s once readable: %v", test.name, err)
+		}
+	}
+}
