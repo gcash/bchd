@@ -1,10 +1,10 @@
 # Temp files
 *~
 
-# Binaries
-bchd
-bchctl
-gw
+# Binaries, built in the repository root
+/bchd
+/bchctl
+/gw
 
 # Databases
 btcd.db
