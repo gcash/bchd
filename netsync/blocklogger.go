@@ -6,7 +6,6 @@ package netsync
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -22,6 +21,10 @@ type blockProgressLogger struct {
 	receivedLogBlocks int64
 	receivedLogTx     int64
 	lastBlockLogTime  time.Time
+
+	// synced is whether the last message showed the node at the height it
+	// syncs to, and it has stayed there since.
+	synced bool
 
 	subsystemLogger bchlog.Logger
 	progressAction  string
@@ -43,7 +46,10 @@ func newBlockProgressLogger(progressMessage string, logger bchlog.Logger) *block
 
 // LogBlockHeight logs a new block height as an information message to show
 // progress to the user. In order to prevent spam, it limits logging to one
-// message every 10 seconds with duration and totals included.
+// message every 10 seconds with duration and totals included.  The block that
+// brings the node to the height it syncs to is logged at once, unless the last
+// message showed the node there and it has stayed there since, so the log
+// shows the end of a sync without waiting for the next block.
 func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight uint64, chain *blockchain.BlockChain) {
 	b.Lock()
 	defer b.Unlock()
@@ -51,9 +57,30 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 	b.receivedLogBlocks++
 	b.receivedLogTx += int64(len(block.MsgBlock().Transactions))
 
+	// Processing a block on the main chain also connects the orphans that
+	// build on it.  At the end of a sync the sync peer's tip is one: the
+	// peer announces it after each batch of blocks it sends, so it arrives
+	// before its parents.  The progress is then that of the chain's tip.
+	height := block.Height()
+	timestamp := block.MsgBlock().Header.Timestamp
+	if best := chain.BestSnapshot(); best.Height > height &&
+		chain.MainChainHasBlock(block.Hash()) {
+
+		header, err := chain.HeaderByHash(&best.Hash)
+		if err == nil {
+			height = best.Height
+			timestamp = header.Timestamp
+		}
+	}
+
+	reached := bestHeight > 0 && uint64(height) >= bestHeight
+	if !reached {
+		b.synced = false
+	}
+
 	now := time.Now()
 	duration := now.Sub(b.lastBlockLogTime)
-	if duration < time.Second*10 {
+	if duration < time.Second*10 && (!reached || b.synced) {
 		return
 	}
 
@@ -74,28 +101,31 @@ func (b *blockProgressLogger) LogBlockHeight(block *bchutil.Block, bestHeight ui
 	progress := float64(0.0)
 
 	if bestHeight > 0 {
-		progress = math.Min(float64(block.Height())/float64(bestHeight), 1.0) * 100
+		// Truncated to hundredths of a percent, so it is only 100% at the
+		// height the node syncs to.
+		progress = float64(min(uint64(height)*10000/bestHeight, 10000)) / 100
 	}
 
 	var heightStr string
 
 	if bestHeight == 0 {
 		// We don't have a best height due to no sync peer. Don't log the percentage.
-		heightStr = fmt.Sprintf("%d", block.Height())
-	} else if uint64(block.Height()) >= bestHeight {
+		heightStr = fmt.Sprintf("%d", height)
+	} else if reached {
 		// sync is up to date so shorten the height output
-		heightStr = fmt.Sprintf("%d (%.2f%%)", block.Height(), progress)
+		heightStr = fmt.Sprintf("%d (%.2f%%)", height, progress)
 	} else {
 		// sync is partial and in progress
-		heightStr = fmt.Sprintf("%d/%d (%.2f%%)", block.Height(),
+		heightStr = fmt.Sprintf("%d/%d (%.2f%%)", height,
 			bestHeight, progress)
 	}
 
 	cacheSizeStr := fmt.Sprintf("~%d MiB", chain.CachedStateSize()/1024/1024)
 	b.subsystemLogger.Infof("%s %d %s in %s (%d %s, height %s, %s, %s cache)",
 		b.progressAction, b.receivedLogBlocks, blockStr, tDuration, b.receivedLogTx,
-		txStr, heightStr, block.MsgBlock().Header.Timestamp, cacheSizeStr)
+		txStr, heightStr, timestamp, cacheSizeStr)
 
+	b.synced = reached
 	b.receivedLogBlocks = 0
 	b.receivedLogTx = 0
 	b.lastBlockLogTime = now
