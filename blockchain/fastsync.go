@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gcash/bchd/bchec"
@@ -22,6 +23,10 @@ import (
 	"github.com/zquestz/grab"
 	"golang.org/x/text/message"
 )
+
+// fastSyncProgressInterval is how often the progress of the verification of
+// the downloaded UTXO set is logged.  It is a variable so tests can shorten it.
+var fastSyncProgressInterval = 5 * time.Minute
 
 // fastSyncUtxoSet will download the UTXO set from the sources provided in the checkpoint. Each
 // UTXO will be saved to the database and the ECMH hash of the UTXO set will be validated against
@@ -72,18 +77,31 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 		pkScript       []byte
 		serializedUtxo []byte
 		n              int
-		totalRead      int
 		scriptLen      uint32
 		progress       float64
 		progressStr    string
+
+		// totalRead is atomic, as the progress goroutine reads it while
+		// the loop below adds to it.
+		totalRead atomic.Int64
 	)
 
-	ticker := time.NewTicker(time.Minute * 5)
+	// Stopping the ticker does not close its channel, so the progress
+	// goroutine also ends when done is closed, as the function returns.
+	ticker := time.NewTicker(fastSyncProgressInterval)
 	defer ticker.Stop()
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		for range ticker.C {
-			progress = math.Min(float64(totalRead)/float64(checkpoint.UtxoSetSize), 1.0) * 100
-			progressStr = fmt.Sprintf("%d/%d MiB (%.2f%%)", totalRead/(1024*1024)+1, checkpoint.UtxoSetSize/(1024*1024)+1, progress)
+		for {
+			select {
+			case <-ticker.C:
+			case <-done:
+				return
+			}
+			read := totalRead.Load()
+			progress = math.Min(float64(read)/float64(checkpoint.UtxoSetSize), 1.0) * 100
+			progressStr = fmt.Sprintf("%d/%d MiB (%.2f%%)", read/(1024*1024)+1, checkpoint.UtxoSetSize/(1024*1024)+1, progress)
 			log.Infof("UTXO verification progress: processed %s", progressStr)
 		}
 	}()
@@ -106,12 +124,12 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 			log.Errorf("Error reading UTXO set: %s", err.Error())
 			return err
 		}
-		totalRead += n
+		totalRead.Add(int64(n))
 
 		// The last four bytes that we read is the length of the script
 		scriptLen = binary.LittleEndian.Uint32(buf52[48:])
 		if scriptLen > maxScriptLen {
-			log.Error("Read invalid UTXO script length", totalRead)
+			log.Error("Read invalid UTXO script length", totalRead.Load())
 			return errors.New("invalid script length")
 		}
 
@@ -122,7 +140,7 @@ func (b *BlockChain) fastSyncUtxoSet(checkpoint *chaincfg.Checkpoint, proxyAddr 
 			log.Errorf("Error reading UTXO set: %s", err.Error())
 			return err
 		}
-		totalRead += n
+		totalRead.Add(int64(n))
 
 		serializedUtxo = append(buf52, pkScript...)
 

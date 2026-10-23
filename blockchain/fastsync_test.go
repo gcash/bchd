@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -392,5 +393,75 @@ func TestFastSyncStartDeletesUtxoSet(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// progressGoroutines returns the number of goroutines that fastSyncUtxoSet
+// started and are still running.
+func progressGoroutines() int {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return strings.Count(string(buf[:n]),
+				"blockchain.(*BlockChain).fastSyncUtxoSet.func")
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
+// TestFastSyncProgress ensures the goroutine that logs the progress of the
+// verification of the downloaded utxo set reads the count of bytes read
+// safely, which the race detector checks, and ends with the verification.
+// It read the count without synchronization, and as stopping a ticker does
+// not close its channel, it never ended.
+func TestFastSyncProgress(t *testing.T) {
+	saved := fastSyncProgressInterval
+	fastSyncProgressInterval = time.Millisecond
+	t.Cleanup(func() { fastSyncProgressInterval = saved })
+
+	params := chaincfg.RegressionNetParams
+	r := newReorgTest(t, filepath.Join(t.TempDir(), "db"), &params)
+	defer r.db.Close()
+	if err := r.chain.FlushCachedState(FlushRequired); err != nil {
+		t.Fatalf("failed to flush the utxo set: %v", err)
+	}
+	tip := r.chain.BestSnapshot()
+	r.chain.utxoCache = newUtxoCache(r.db, 250*1024*1024)
+	if err := r.chain.utxoCache.InitConsistentState(nil, nil, true, nil); err != nil {
+		t.Fatalf("failed to start the fast sync: %v", err)
+	}
+	r.chain.fastSyncDataDir = t.TempDir()
+
+	// Enough outputs to take many intervals to verify.  The set does not
+	// match the checkpoint, so the sync ends after the verification.
+	outpoints := make([]wire.OutPoint, 5000)
+	for i := range outpoints {
+		outpoints[i].Hash[0], outpoints[i].Hash[1] = byte(i), byte(i>>8)
+	}
+	url, _, size := serveUtxoSet(t, outpoints...)
+	logged := captureInfoLog(t)
+	before := progressGoroutines()
+	err := r.chain.fastSyncUtxoSet(&chaincfg.Checkpoint{
+		Height:         tip.Height,
+		Hash:           &tip.Hash,
+		UtxoSetHash:    &chainhash.Hash{1},
+		UtxoSetSources: []string{url},
+		UtxoSetSize:    size,
+	}, "")
+	if err == nil {
+		t.Fatal("a utxo set that does not match the checkpoint was loaded")
+	}
+	if !strings.Contains(logged.String(), "UTXO verification progress") {
+		t.Fatal("no progress logged")
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for progressGoroutines() > before {
+		if time.Now().After(deadline) {
+			t.Fatal("the progress goroutine still runs after the " +
+				"verification")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
