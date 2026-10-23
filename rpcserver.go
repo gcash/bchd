@@ -5019,12 +5019,12 @@ type rpcServer struct {
 	requestProcessShutdown chan struct{}
 	quit                   chan int
 
-	// wsAuthClients and wsPreAuthClients count the websocket clients
-	// that have authenticated and those that have not yet.  They are
-	// guarded by wsClientsMtx.
+	// wsAuthClients counts the websocket clients that have authenticated,
+	// and wsPreAuthClients holds those that have not yet, oldest first.
+	// They are guarded by wsClientsMtx.
 	wsClientsMtx     sync.Mutex
 	wsAuthClients    int
-	wsPreAuthClients int
+	wsPreAuthClients []*wsClient
 }
 
 // Stop is used by server.go to stop the rpc listener.

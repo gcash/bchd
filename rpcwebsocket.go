@@ -19,6 +19,7 @@ import (
 	"math"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"time"
 
@@ -135,11 +136,21 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 		conn.SetReadLimit(wsPreAuthReadLimit)
 	}
 
+	// Create a new websocket client to handle the new websocket connection.
+	rpcsLog.Infof("New websocket client %s", remoteAddr)
+	client, err := newWebsocketClient(s, conn, remoteAddr, authenticated, isAdmin)
+	if err != nil {
+		rpcsLog.Errorf("Failed to serve client %s: %v", remoteAddr, err)
+		conn.Close()
+		return
+	}
+
 	// Limit max number of websocket clients.  Clients that have not
 	// authenticated are limited apart, so they cannot take the slots of
-	// those that have.
-	rpcsLog.Infof("New websocket client %s", remoteAddr)
-	if !s.addWsClient(authenticated) {
+	// those that have, and the oldest of them makes room for a new one, so
+	// they cannot keep out the clients that authenticate with the
+	// authenticate command either.
+	if !s.addWsClient(client) {
 		rpcsLog.Infof("Max websocket clients exceeded [%d] - "+
 			"disconnecting client %s", cfg.RPCMaxWebsockets,
 			remoteAddr)
@@ -147,68 +158,93 @@ func (s *rpcServer) WebsocketHandler(conn *websocket.Conn, remoteAddr string,
 		return
 	}
 
-	// Create a new websocket client to handle the new websocket connection
-	// and wait for it to shutdown.  Once it has shutdown (and hence
-	// disconnected), remove it and any notifications it registered for.
-	client, err := newWebsocketClient(s, conn, remoteAddr, authenticated, isAdmin)
-	if err != nil {
-		rpcsLog.Errorf("Failed to serve client %s: %v", remoteAddr, err)
-		s.removeWsClient(authenticated)
-		conn.Close()
-		return
-	}
+	// Start the client and wait for it to shutdown.  Once it has shutdown
+	// (and hence disconnected), remove it and any notifications it
+	// registered for.
 	s.ntfnMgr.AddClient(client)
 	client.Start()
 	client.WaitForShutdown()
 	s.ntfnMgr.RemoveClient(client)
-	s.removeWsClient(client.authenticated)
+	s.removeWsClient(client)
 	rpcsLog.Infof("Disconnected websocket client %s", remoteAddr)
 }
 
-// addWsClient counts a new websocket client, authenticated or not, and returns
-// false when the server already serves --rpcmaxwebsockets clients of the same
-// kind.  Clients that have not authenticated are counted apart, so however
-// many of them connect, they cannot take the slots of clients that have.
-func (s *rpcServer) addWsClient(authenticated bool) bool {
-	s.wsClientsMtx.Lock()
-	defer s.wsClientsMtx.Unlock()
+// addWsClient counts a new websocket client and returns false when the server
+// already serves --rpcmaxwebsockets authenticated clients, for one that has
+// authenticated.  Clients that have not authenticated have --rpcmaxwebsockets
+// slots of their own, so however many of them connect, they cannot take the
+// slots of clients that have.  When those are full, the oldest client that has
+// not authenticated is disconnected to make room, so a client that must send
+// the authenticate command, such as a browser, cannot be kept out by others
+// that connect and wait: each holds its slot only until that many newer
+// clients arrive, while a client that authenticates at once keeps it.
+func (s *rpcServer) addWsClient(client *wsClient) bool {
+	var oldest *wsClient
+	added := func() bool {
+		s.wsClientsMtx.Lock()
+		defer s.wsClientsMtx.Unlock()
 
-	count := &s.wsPreAuthClients
-	if authenticated {
-		count = &s.wsAuthClients
+		if client.authenticated {
+			if s.wsAuthClients >= cfg.RPCMaxWebsockets {
+				return false
+			}
+			s.wsAuthClients++
+			return true
+		}
+		if len(s.wsPreAuthClients) >= cfg.RPCMaxWebsockets {
+			// With no slots at all, there is none to free.
+			if len(s.wsPreAuthClients) == 0 {
+				return false
+			}
+			oldest = s.wsPreAuthClients[0]
+			s.wsPreAuthClients = slices.Delete(s.wsPreAuthClients, 0, 1)
+		}
+		s.wsPreAuthClients = append(s.wsPreAuthClients, client)
+		return true
+	}()
+
+	// The oldest is disconnected without the lock held, as closing its
+	// connection may wait on the network.
+	if oldest != nil {
+		rpcsLog.Infof("Max unauthenticated websocket clients exceeded "+
+			"[%d] - disconnecting the oldest, %s", cfg.RPCMaxWebsockets,
+			oldest.addr)
+		oldest.Disconnect()
 	}
-	if *count >= cfg.RPCMaxWebsockets {
-		return false
-	}
-	*count++
-	return true
+	return added
 }
 
 // authenticateWsClient moves a websocket client that authenticated with the
 // authenticate command to the authenticated clients.  It returns false, and
 // leaves the client counted as not authenticated, when the server already
-// serves --rpcmaxwebsockets authenticated clients.
-func (s *rpcServer) authenticateWsClient() bool {
+// serves --rpcmaxwebsockets authenticated clients, and returns false as well
+// when the client has been disconnected to make room for a newer one.
+func (s *rpcServer) authenticateWsClient(client *wsClient) bool {
 	s.wsClientsMtx.Lock()
 	defer s.wsClientsMtx.Unlock()
 
-	if s.wsAuthClients >= cfg.RPCMaxWebsockets {
+	i := slices.Index(s.wsPreAuthClients, client)
+	if i < 0 || s.wsAuthClients >= cfg.RPCMaxWebsockets {
 		return false
 	}
-	s.wsPreAuthClients--
+	s.wsPreAuthClients = slices.Delete(s.wsPreAuthClients, i, i+1)
 	s.wsAuthClients++
 	return true
 }
 
-// removeWsClient uncounts a websocket client that has disconnected.
-func (s *rpcServer) removeWsClient(authenticated bool) {
+// removeWsClient uncounts a websocket client that has disconnected.  A client
+// that has not authenticated and was disconnected to make room for a newer one
+// has been uncounted already.
+func (s *rpcServer) removeWsClient(client *wsClient) {
 	s.wsClientsMtx.Lock()
 	defer s.wsClientsMtx.Unlock()
 
-	if authenticated {
+	if client.authenticated {
 		s.wsAuthClients--
-	} else {
-		s.wsPreAuthClients--
+		return
+	}
+	if i := slices.Index(s.wsPreAuthClients, client); i >= 0 {
+		s.wsPreAuthClients = slices.Delete(s.wsPreAuthClients, i, i+1)
 	}
 }
 
@@ -1485,9 +1521,10 @@ type wsClient struct {
 // setAuthenticated marks the client as authenticated and lifts the limits
 // that apply before authentication.  It returns false, leaving the client
 // unauthenticated, when the server already serves the most authenticated
-// websocket clients it may.  It must only be called from inHandler.
+// websocket clients it may, or when the client has been disconnected to make
+// room for a newer one.  It must only be called from inHandler.
 func (c *wsClient) setAuthenticated(isAdmin bool) bool {
-	if !c.server.authenticateWsClient() {
+	if !c.server.authenticateWsClient(c) {
 		rpcsLog.Infof("Max websocket clients exceeded [%d] - "+
 			"disconnecting client %s", cfg.RPCMaxWebsockets, c.addr)
 		return false

@@ -141,8 +141,12 @@ Until it has authenticated, a websocket client must send the
 `--rpcauthtimeout` option (10 seconds by default, 0 disables the timeout), and
 each message it sends may be at most 64 KiB. A client that does not
 authenticate in time, sends a larger message, or sends a request that is not a
-valid JSON-RPC request is disconnected. Clients that authenticate with the
-HTTP Authorization header when connecting are not affected. Once
+valid JSON-RPC request is disconnected. Clients waiting to authenticate have
+`--rpcmaxwebsockets` slots (25 by default) of their own, apart from those of
+authenticated clients; when all are taken, a new client disconnects the one
+that has waited longest, so a client should authenticate as soon as it
+connects. Clients that authenticate with the HTTP Authorization header when
+connecting are not affected. Once
 authenticated, a single message may be up to 32 MiB plus eight times the
 larger of `--excessiveblocksize` and 32 MB (about 276 MiB with the default),
 enough for a hex-encoded block of the largest accepted size.
