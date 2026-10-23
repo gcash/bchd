@@ -8,6 +8,7 @@ package peer
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -1211,16 +1212,67 @@ func (p *Peer) handlePongMsg(msg *wire.MsgPong) {
 	}
 }
 
-// readMessage reads the next bitcoin message from the peer with logging.
+// headerRecorder reads from r and keeps the first bytes read, up to a message
+// header's, so that the header of the message being read is known when it
+// can't be decoded.
+type headerRecorder struct {
+	r   io.Reader
+	hdr [wire.MessageHeaderSize]byte
+	n   int
+}
+
+// Read reads from the underlying reader, keeping what it reads of the header.
+func (h *headerRecorder) Read(b []byte) (int, error) {
+	n, err := h.r.Read(b)
+	if h.n < len(h.hdr) {
+		h.n += copy(h.hdr[h.n:], b[:n])
+	}
+	return n, err
+}
+
+// messageDecodeError is the error of a message whose header, length and
+// checksum were valid, but whose payload could not be decoded.
+type messageDecodeError struct {
+	command string
+	err     error
+}
+
+func (e *messageDecodeError) Error() string { return e.err.Error() }
+
+func (e *messageDecodeError) Unwrap() error { return e.err }
+
+// decodeError returns err, the error of reading a message through h after n
+// bytes, as a messageDecodeError with the command of the message's header when
+// its whole payload was read and the error is not one of wire's checks before
+// decoding, which all report themselves as ReadMessage's; the payload's
+// checksum is the last of them.  With the header read only in part, n is
+// below the header's size, so no payload was read.
+func decodeError(h *headerRecorder, n int, err error) error {
+	const lengthOffset = 4 + wire.CommandSize
+	length := binary.LittleEndian.Uint32(h.hdr[lengthOffset:])
+	if uint64(n) != wire.MessageHeaderSize+uint64(length) {
+		return err
+	}
+	var merr *wire.MessageError
+	if errors.As(err, &merr) && merr.Func == "ReadMessage" {
+		return err
+	}
+	command := string(bytes.TrimRight(h.hdr[4:lengthOffset], "\x00"))
+	return &messageDecodeError{command: command, err: err}
+}
+
+// readMessage reads the next bitcoin message from the peer with logging.  A
+// message whose payload can't be decoded returns a messageDecodeError.
 func (p *Peer) readMessage(encoding wire.MessageEncoding) (wire.Message, []byte, error) {
-	n, msg, buf, err := wire.ReadMessageWithEncodingN(p.conn,
+	h := &headerRecorder{r: p.conn}
+	n, msg, buf, err := wire.ReadMessageWithEncodingN(h,
 		p.ProtocolVersion(), p.cfg.ChainParams.Net, encoding)
 	p.bytesReceived.Add(uint64(n))
 	if p.cfg.Listeners.OnRead != nil {
 		p.cfg.Listeners.OnRead(p, n, msg, err)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, decodeError(h, n, err)
 	}
 
 	// Use closures to log expensive operations so they are only run when
@@ -1294,8 +1346,10 @@ func (p *Peer) isAllowedReadError(err error) bool {
 		return false
 	}
 
-	// Don't allow the error if it's not specifically a malformed message error.
-	if _, ok := err.(*wire.MessageError); !ok {
+	// Don't allow the error if it's not specifically a malformed message
+	// error, which a messageDecodeError may hold.
+	var merr *wire.MessageError
+	if !errors.As(err, &merr) {
 		return false
 	}
 
@@ -1605,15 +1659,24 @@ out:
 					log.Errorf("%s", errMsg)
 				}
 
-				// Push a reject message for the malformed message and disconnect
-				// from the peer immediately to prevent sync issues.
-				//
-				// Ideally this would include the command in the header if
-				// at least that much of the message was valid, but that is not
-				// currently exposed by wire, so just used malformed for the
-				// command.
-				p.PushRejectMsg("malformed", wire.RejectMalformed, errMsg, nil,
-					true)
+				// A message whose payload can't be decoded gets BCHN's
+				// reject for it: its own command, the malformed code
+				// and "error parsing message" (net_processing.cpp:
+				// 3927-3932).  wire sends a hash for a transaction or
+				// block, zero here, as it isn't known; BCHN sends none.
+				// BCHN sends no reject for the other read errors: it
+				// discourages and disconnects a peer for another
+				// network's message or a bad checksum (3876-3888,
+				// 3905-3914), disconnects it for too large a payload
+				// (net.cpp:688-692) and drops a message with an invalid
+				// command (3891-3896).  Disconnect from the peer
+				// immediately to prevent sync issues.
+				var decodeErr *messageDecodeError
+				if errors.As(err, &decodeErr) {
+					p.PushRejectMsg(decodeErr.command,
+						wire.RejectMalformed, "error parsing message",
+						&zeroHash, true)
+				}
 
 				p.Disconnect()
 			}
