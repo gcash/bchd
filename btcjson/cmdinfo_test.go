@@ -153,6 +153,18 @@ func TestMethodUsageText(t *testing.T) {
 			method:   "getblock",
 			expected: `getblock "hash" (verbosity=1)`,
 		},
+		{
+			// The outputs and the third param have a form of bchd's
+			// and one of BCHN's, given as alternatives.
+			name:   "createrawtransaction",
+			method: "createrawtransaction",
+			expected: `createrawtransaction ` +
+				`[{"txid":"value","vout":n,"sequence":sequence},...] ` +
+				`{"address":amount,...}|[{"address":amount},{"data":"hex"},...] ` +
+				`([{"address":"value","category":"value","amount":n,` +
+				`"capability":"value","commitment":"value"},...]|locktime ` +
+				`locktime)`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

@@ -105,10 +105,13 @@ func (t *TransactionOutputCashToken) UnmarshalJSON(b []byte) error {
 }
 
 // CreateRawTransactionCmd defines the createrawtransaction JSON-RPC command.
+// The server also takes BCHN's form, with the outputs as an array of objects
+// of one member each and the locktime as the third and last param, which
+// the command cannot hold; its usage gives both forms as alternatives.
 type CreateRawTransactionCmd struct {
 	Inputs     []TransactionInput
-	Amounts    map[string]float64 `jsonrpcusage:"{\"address\":amount,...}"` // In BTC
-	CashTokens *[]TransactionOutputCashToken
+	Amounts    map[string]float64            `jsonrpcusage:"{\"address\":amount,...}|[{\"address\":amount},{\"data\":\"hex\"},...]"` // In BTC
+	CashTokens *[]TransactionOutputCashToken `jsonrpcusage:"[{\"address\":\"value\",\"category\":\"value\",\"amount\":n,\"capability\":\"value\",\"commitment\":\"value\"},...]|locktime"`
 	LockTime   *int64
 }
 
