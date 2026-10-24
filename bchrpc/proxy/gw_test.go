@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,10 @@ const dustLimit = 546
 
 var httpClient *HTTPClient
 
+// nodeErr is why the BCHD node the proxy forwards to can't be reached, if it
+// can't.
+var nodeErr error
+
 func TestMain(m *testing.M) {
 	var err error
 	flag.Parse()
@@ -37,6 +42,17 @@ func TestMain(m *testing.M) {
 	if !isFlagPresent("bchd-grpc-url") {
 		testFullNodeEndpoint := bchdTestNode
 		grpcServerEndpoint = &testFullNodeEndpoint
+	}
+
+	// The node may be down, for example while it rebuilds an index, so the
+	// tests that need it are skipped if it can't be reached.
+	conn, err := net.DialTimeout("tcp", *grpcServerEndpoint, 10*time.Second)
+	if err != nil {
+		nodeErr = err
+		log.Printf("BCHD node %s can't be reached, skipping the tests that "+
+			"need it: %v", *grpcServerEndpoint, err)
+	} else {
+		conn.Close()
 	}
 
 	log.Println("Starting local test HTTP server...")
@@ -80,7 +96,18 @@ func TestMain(m *testing.M) {
 	os.Exit(exitVal)
 }
 
+// requireNode skips the test if the BCHD node the proxy forwards to can't be
+// reached.
+func requireNode(t *testing.T) {
+	t.Helper()
+	if nodeErr != nil {
+		t.Skipf("BCHD node %s can't be reached: %v", *grpcServerEndpoint,
+			nodeErr)
+	}
+}
+
 func TestGetBlockchainInfo(t *testing.T) {
+	requireNode(t)
 	method := "GetBlockchainInfo"
 	minBlockHeight := 668619 // to ensure our node returns expected data on other API calls
 	//res, err := httpClient.RequestMap(method, D{})
@@ -144,6 +171,7 @@ func TestOptionsRequest(t *testing.T) {
 }
 
 func TestRequestInvalid(t *testing.T) {
+	requireNode(t)
 	// ensure BCHD doesn't crash or return unexpected data
 	method := "GetTransaction"
 	res, err := httpClient.RequestMap(method, D{
@@ -157,6 +185,7 @@ func TestRequestInvalid(t *testing.T) {
 }
 
 func TestGetTransaction(t *testing.T) {
+	requireNode(t)
 	method := "GetTransaction"
 	txHash, _ := hex.DecodeString("15388bfd9998429b2955700da25d22178658cee8a9037423793a94efc047fbed")
 	txHashBase64 := base64.StdEncoding.EncodeToString(reverseBytes(txHash))
@@ -197,6 +226,7 @@ func TestGetTransaction(t *testing.T) {
 }
 
 func TestGetAddressUnspentOutputs(t *testing.T) {
+	requireNode(t)
 	method := "GetAddressUnspentOutputs"
 	address := "simpleledger:qq9djgun97em5arkvqa9le0wdstlv8lmdvgu0xc2c2"
 	res, err := httpClient.RequestRaw(method, D{
@@ -238,6 +268,7 @@ func TestGetAddressUnspentOutputs(t *testing.T) {
 }
 
 func TestGetCashAddressUnspentOutputs(t *testing.T) {
+	requireNode(t)
 	method := "GetAddressUnspentOutputs"
 	address := "bitcoincash:qzstwj2dksk0jch0w4lnzvph790a23rsg54uy4mwee"
 	res, err := httpClient.RequestRaw(method, D{
@@ -266,6 +297,7 @@ func TestGetCashAddressUnspentOutputs(t *testing.T) {
 }
 
 func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
+	requireNode(t)
 	method := "GetAddressUnspentOutputs"
 	address := "simpleledger:qpfdgdftjj43f9fhzm2k4ysrcuwlae2l3vd4pvmhy7"
 	res, err := httpClient.RequestRaw(method, D{
@@ -295,6 +327,7 @@ func TestGetAddressUnspentOutputsEmpty(t *testing.T) {
 }
 
 func TestGetTokenBalance(t *testing.T) {
+	requireNode(t)
 	method := "GetAddressUnspentOutputs"
 	tokenID := "9872d22e12d815e76ebfe13ffb26385bc7c433cb8ac15d73c33ef7b71971fb5e"
 	tokenIDBytes, _ := hex.DecodeString(tokenID)
@@ -341,6 +374,7 @@ func TestGetTokenBalance(t *testing.T) {
 }
 
 func TestGetSlpTokenMetadata(t *testing.T) {
+	requireNode(t)
 	method := "GetSlpTokenMetadata"
 	tokenID := "7278363093d3b899e0e1286ff681bf50d7ddc3c2a68565df743d0efc54c0e7fd"
 	tokenIDBase64, _ := hexToBase64(tokenID)
@@ -374,6 +408,7 @@ func TestGetSlpTokenMetadata(t *testing.T) {
 }
 
 func TestCheckSlpTransaction(t *testing.T) {
+	requireNode(t)
 	method := "CheckSlpTransaction"
 	transaction := "0200000002d41b1a8d69c5bcdf3d8501b68eb27517d02b015a8c285e7857bccd66b32725bb010000006a47304402202f1e0939621d83758b41177bde092312b935c540afe6fec58e6ca7c057a2ff6e022039d0a11a533e6bede4e546a8d5b35e9d7013310972831c3bc70425f538ac0649412103de58c47c5263d8b049861d5a737fd52c1bb72c196f7ceff841c5189702b58830ffffffffd41b1a8d69c5bcdf3d8501b68eb27517d02b015a8c285e7857bccd66b32725bb030000006a47304402206f4a0a8db47f9f77e609ca3fc5dba6e6a9950829abc81c421a14dd80bf88e9930220664be287f234199138c1a2b739546949156d25e795b961670a34ceb503eedea0412103de58c47c5263d8b049861d5a737fd52c1bb72c196f7ceff841c5189702b58830ffffffff040000000000000000406a04534c500001010453454e44207278363093d3b899e0e1286ff681bf50d7ddc3c2a68565df743d0efc54c0e7fd080000001d8e36aefb0800000002deecde8022020000000000001976a9142940168352672c655e827c1748f5bf8601b6cbe588ac22020000000000001976a914f1d032a93fe7e71b79a25511dc7fc3bad1ea8d0c88ac6a1b0700000000001976a9142940168352672c655e827c1748f5bf8601b6cbe588ac00000000"
 
@@ -403,6 +438,8 @@ func TestCheckSlpTransaction(t *testing.T) {
 }
 
 func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
+	requireNode(t)
+
 	// input taken from SLP test: allows BURNED_INPUTS_OTHER_TOKEN, for ending a mint baton
 	// https://github.com/simpleledgerinc/grpc-bchrpc-node/blob/master/test/client.spec.ts
 
@@ -445,6 +482,7 @@ func TestCheckSlpTransactionBurnAllowed(t *testing.T) {
 }
 
 func TestGetSlpParsedScript(t *testing.T) {
+	requireNode(t)
 	method := "GetSlpParsedScript"
 	slpScriptBase64 := "agRTTFAAAQEEU0VORCByeDYwk9O4meDhKG/2gb9Q193DwqaFZd90PQ78VMDn/QgAAABxis0TAAgAAAAC34V1AA=="
 	tokenID, _ := base64.StdEncoding.DecodeString("cng2MJPTuJng4Shv9oG/UNfdw8KmhWXfdD0O/FTA5/0=")
@@ -480,6 +518,7 @@ func TestGetSlpParsedScript(t *testing.T) {
 }
 
 func TestGetSlpTrustedValidation(t *testing.T) {
+	requireNode(t)
 	method := "GetSlpTrustedValidation"
 	transactionID, _ := hex.DecodeString("3ff425384539519e815507f7f6739d9c12a44af84ff895601606b85157e0fb19")
 	transactionIDBase64 := base64.StdEncoding.EncodeToString(reverseBytes(transactionID))
