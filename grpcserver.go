@@ -243,6 +243,7 @@ func newGrpcServer(netAddrs []net.Addr, rpcCfg *bchrpc.GrpcServerConfig, svr *se
 			Handler:      router,
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 10 * time.Second,
+			ErrorLog:     httpErrorLog(grpcLog),
 		}
 
 		grpcMetrics = metrics
@@ -666,6 +667,7 @@ func newGrpcHTTPServer(addr string, handler http.Handler) *http.Server {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			return context.WithValue(ctx, grpcConnKey{}, c)
 		},
+		ErrorLog: httpErrorLog(grpcLog),
 	}
 }
 

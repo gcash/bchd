@@ -5556,6 +5556,7 @@ func (s *rpcServer) Start() {
 	httpServer := &http.Server{
 		Handler:           rpcServeMux,
 		ReadHeaderTimeout: time.Duration(s.cfg.RPCAuthTimeout) * time.Second,
+		ErrorLog:          httpErrorLog(rpcsLog),
 	}
 
 	rpcServeMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
