@@ -885,6 +885,13 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		return
 	}
 
+	// Whether the block's parent is known decides below whether a block that
+	// was not requested is checked for work, and, with whether the parent is
+	// the tip, whether the peer is punished if the block is invalid.
+	parent := &bmsg.block.MsgBlock().Header.PrevBlock
+	parentKnown, _, _ := sm.chain.BlockValidity(parent)
+	extendsTip := *parent == sm.chain.BestSnapshot().Hash
+
 	// If we didn't ask for this block then the peer is misbehaving.
 	blockHash := bmsg.block.Hash()
 
@@ -893,9 +900,16 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	if !requested {
 		// Peers we allow to relay blocks directly may send blocks we
 		// didn't request, but these are only stored if they could
-		// extend the best chain.
+		// extend the best chain.  An orphan is the exception: its work
+		// isn't known until its parents arrive, and the peer is asked
+		// for those below, so it is on a chain being downloaded.
+		// Checking it once they arrive would drop it while its chain
+		// has less work than the tip, and nothing would request it
+		// again.
 		if peer.AllowDirectBlockRelay() {
-			behaviorFlags |= blockchain.BFUnrequested
+			if parentKnown {
+				behaviorFlags |= blockchain.BFUnrequested
+			}
 		} else if sm.chainParams != &chaincfg.RegressionNetParams {
 			// The regression test intentionally sends some blocks
 			// twice to test duplicate block insertion fails.  Don't
@@ -939,12 +953,6 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	// another peer sent it.
 	delete(state.requestedBlocks, *blockHash)
 	sm.endBlockRequest(blockHash)
-
-	// Whether the block's parent is known and is the tip decides below
-	// whether the peer is punished if the block is invalid.
-	parent := &bmsg.block.MsgBlock().Header.PrevBlock
-	parentKnown, _, _ := sm.chain.BlockValidity(parent)
-	extendsTip := *parent == sm.chain.BestSnapshot().Hash
 
 	// Process the block to include validation, best chain selection, orphan
 	// handling, etc.

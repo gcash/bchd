@@ -107,3 +107,43 @@ func TestUnrequestedBlockBelowMinimumChainWork(t *testing.T) {
 		t.Fatal("unrequested block extending the tip was not stored")
 	}
 }
+
+// TestUnrequestedOrphanStored ensures an orphan that a direct relay peer sends
+// without being asked is stored once its parent arrives, even though its chain
+// still has less work than the tip, as when a peer relays the blocks of a
+// competing chain while this node mines its own.
+func TestUnrequestedOrphanStored(t *testing.T) {
+	sm, params, peer := unrequestedTestManager(t)
+
+	prev := params.GenesisBlock
+	for height := int32(1); height <= 3; height++ {
+		block := mineBlock(t, params, prev, height, 0)
+		if _, _, err := sm.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+			t.Fatal(err)
+		}
+		prev = block.MsgBlock()
+	}
+
+	// The first block of the competing chain has less work than the tip,
+	// so it is ignored.
+	fork1 := mineBlock(t, params, params.GenesisBlock, 1, 1)
+	fork2 := mineBlock(t, params, fork1.MsgBlock(), 2, 1)
+	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
+	if have, _ := sm.chain.HaveBlock(fork1.Hash()); have {
+		t.Fatal("unrequested block with less work than the tip was stored")
+	}
+
+	// The next one is an orphan, so its parent is requested.
+	sm.handleBlockMsg(&blockMsg{block: fork2, peer: peer})
+	if !sm.chain.IsKnownOrphan(fork2.Hash()) {
+		t.Fatal("unrequested orphan was not kept")
+	}
+	sm.requestBlock(peer, sm.peerStates[peer], fork1.Hash(), false)
+	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
+	for _, block := range []*bchutil.Block{fork1, fork2} {
+		if known, _, _ := sm.chain.BlockValidity(block.Hash()); !known {
+			t.Fatalf("block %v of the competing chain was not stored",
+				block.Hash())
+		}
+	}
+}
