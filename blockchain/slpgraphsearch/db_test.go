@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -57,6 +58,7 @@ func TestSlpGraphSearch(t *testing.T) {
 		}
 
 		txns := make(map[chainhash.Hash]*wire.MsgTx)
+		raw := make(map[chainhash.Hash][]byte)
 		for _, txnHex := range test.TokenGraph { // TODO: rename this to txn DB
 			txnBuf, err := hex.DecodeString(txnHex)
 			if err != nil {
@@ -69,6 +71,7 @@ func TestSlpGraphSearch(t *testing.T) {
 				t.Fatal(err.Error())
 			}
 			txns[msgTx.TxHash()] = msgTx
+			raw[msgTx.TxHash()] = txnBuf
 		}
 
 		tokenIDBuf, err := goslp.GetSlpTokenID(txns[*hash])
@@ -113,8 +116,13 @@ func TestSlpGraphSearch(t *testing.T) {
 			t.Fatal("exclude set size does not match test excludes")
 		}
 
-		// perform the graph search
-		gsDb := NewDb()
+		// perform the graph search, reading the transactions from the test
+		gsDb := NewDb(func(hash *chainhash.Hash) ([]byte, error) {
+			if txnBuf, ok := raw[*hash]; ok {
+				return txnBuf, nil
+			}
+			return nil, fmt.Errorf("txn %v is not in the test", hash)
+		})
 		gsDb.graphs[*tokenID] = tokenGraph
 		gsRes, err := gsDb.Find(context.Background(), hash, tokenID, &validityCacheSet)
 		if err != nil {
@@ -193,10 +201,8 @@ func TestFindStopsWhenContextEnds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db := NewDb()
-	if err := db.AddTxn(genesis); err != nil {
-		t.Fatal(err)
-	}
+	db := newTestDb()
+	db.addTxn(t, genesis)
 	const sends = 5000
 	tip := genesis.TxHash()
 	for i := 0; i < sends; i++ {
@@ -204,9 +210,7 @@ func TestFindStopsWhenContextEnds(t *testing.T) {
 		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: tip, Index: 1}, nil))
 		tx.AddTxOut(&wire.TxOut{PkScript: send})
 		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
-		if err := db.AddTxn(tx); err != nil {
-			t.Fatal(err)
-		}
+		db.addTxn(t, tx)
 		tip = tx.TxHash()
 	}
 	tokenID, err := chainhash.NewHash(tokenIDBuf)

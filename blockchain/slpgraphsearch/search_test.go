@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -21,35 +22,77 @@ import (
 	"github.com/gcash/goslp/v1parser"
 )
 
-// findRecursive is the graph search as Find did it before it kept a stack of
-// its own, recursing once for each transaction it adds, which the tests
-// compare Find with.
-func findRecursive(gs *Db, ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
+// errNotStored is the error testDb reads a transaction the test did not store
+// with.
+var errNotStored = errors.New("transaction not stored")
 
-	// get token graph
-	tokenGraph := gs.getTokenGraph(tokenID)
-	if tokenGraph == nil {
-		return nil, fmt.Errorf("graph search graph is missing for token ID %v", tokenID)
+// testDb is a database that reads the transactions its searches return from
+// those the test stored, as a node reads them from its transaction index, and
+// counts the reads.
+type testDb struct {
+	*Db
+	raw   map[chainhash.Hash][]byte
+	reads int
+}
+
+func newTestDb() *testDb {
+	db := &testDb{raw: make(map[chainhash.Hash][]byte)}
+	db.Db = NewDb(db.fetch)
+	return db
+}
+
+func (db *testDb) fetch(hash *chainhash.Hash) ([]byte, error) {
+	db.reads++
+	raw, ok := db.raw[*hash]
+	if !ok {
+		return nil, fmt.Errorf("%v: %w", hash, errNotStored)
 	}
+	return raw, nil
+}
+
+// store stores tx for the database to read.
+func (db *testDb) store(t *testing.T, tx *wire.MsgTx) {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := tx.Serialize(&buf); err != nil {
+		t.Fatal(err)
+	}
+	db.raw[tx.TxHash()] = buf.Bytes()
+}
+
+// addTxn stores tx and adds it to the database.
+func (db *testDb) addTxn(t *testing.T, tx *wire.MsgTx) {
+	t.Helper()
+	db.store(t, tx)
+	if err := db.AddTxn(tx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// findRecursive is the graph search as Find did it before it kept a stack of
+// its own and before the graph held only what the search needs of each
+// transaction, recursing once for each transaction it adds, through a graph
+// of whole transactions, which the tests compare Find with.
+func findRecursive(graph map[chainhash.Hash]*wire.MsgTx, ctx context.Context, hash *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 
 	seen := make(map[chainhash.Hash]struct{})
-	txdata := make([][]byte, tokenGraph.size())
+	txdata := make([][]byte, len(graph))
 	i := 0
 
 	// check client validity cache transactions are valid
 	for hash := range *validityCache {
-		if txn := (*tokenGraph).getTxn(&hash); txn == nil {
+		if txn := graph[hash]; txn == nil {
 			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
 		}
 	}
 
-	txMsg := tokenGraph.getTxn(hash)
+	txMsg := graph[*hash]
 	if txMsg == nil {
 		return nil, fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
 	}
 
 	// perform the recursive graph search
-	err := findInternalRecursive(ctx, txMsg, tokenGraph, &seen, validityCache, &txdata, &i)
+	err := findInternalRecursive(ctx, txMsg, graph, &seen, validityCache, &txdata, &i)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +102,7 @@ func findRecursive(gs *Db, ctx context.Context, hash *chainhash.Hash, tokenID *c
 	return txdata[0:i], nil
 }
 
-func findInternalRecursive(ctx context.Context, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
+func findInternalRecursive(ctx context.Context, txMsg *wire.MsgTx, graph map[chainhash.Hash]*wire.MsgTx, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, txdata *[][]byte, counter *int) error {
 
 	hash := txMsg.TxHash()
 
@@ -92,7 +135,7 @@ func findInternalRecursive(ctx context.Context, txMsg *wire.MsgTx, graph *tokenG
 		prevTxHash := &txn.PreviousOutPoint.Hash
 		prevTxVout := txn.PreviousOutPoint.Index
 
-		inpTxMsg := graph.getTxn(prevTxHash)
+		inpTxMsg := graph[*prevTxHash]
 		if inpTxMsg == nil {
 			continue
 		}
@@ -149,7 +192,7 @@ func findInternalRecursive(ctx context.Context, txMsg *wire.MsgTx, graph *tokenG
 // the graph.  In a deep graph each transaction also spends the first token
 // output of the one before, which carries tokens, so that a search from the
 // last goes back through the whole graph.
-func randomGraph(t *testing.T, rng *rand.Rand, n int, deep bool) (*Db, *chainhash.Hash, []*wire.MsgTx) {
+func randomGraph(t *testing.T, rng *rand.Rand, n int, deep bool) (*testDb, *chainhash.Hash, []*wire.MsgTx) {
 	t.Helper()
 	tokenID := chainhash.Hash{0x51, byte(n), byte(rng.Intn(256))}
 	baton := func() *metadatamaker.MintBatonVout {
@@ -164,6 +207,7 @@ func randomGraph(t *testing.T, rng *rand.Rand, n int, deep bool) (*Db, *chainhas
 		}
 		return uint64(1 + rng.Intn(1000))
 	}
+	db := newTestDb()
 	graph := newTokenGraph(&tokenID)
 	txs := make([]*wire.MsgTx, 0, n)
 	for i := 0; i < n; i++ {
@@ -215,18 +259,17 @@ func randomGraph(t *testing.T, rng *rand.Rand, n int, deep bool) (*Db, *chainhas
 		if err := graph.addTxn(tx); err != nil {
 			t.Fatal(err)
 		}
+		db.store(t, tx)
 		txs = append(txs, tx)
 	}
-	db := NewDb()
 	db.graphs[tokenID] = graph
 	return db, &tokenID, txs
 }
 
 // sendChain returns a database holding a GENESIS and a chain of n sends,
 // each spending the token output of the one before, the hash of the last
-// and the token ID.  Each send has an output with a script of extra bytes
-// after its token output.
-func sendChain(t *testing.T, n, extra int) (*Db, *chainhash.Hash, *chainhash.Hash) {
+// and the token ID.
+func sendChain(t *testing.T, n int) (*testDb, *chainhash.Hash, *chainhash.Hash) {
 	t.Helper()
 	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
 		nil, nil, 0, nil, 1000)
@@ -245,23 +288,15 @@ func sendChain(t *testing.T, n, extra int) (*Db, *chainhash.Hash, *chainhash.Has
 	if err != nil {
 		t.Fatal(err)
 	}
-	db := NewDb()
-	if err := db.AddTxn(genesis); err != nil {
-		t.Fatal(err)
-	}
+	db := newTestDb()
+	db.addTxn(t, genesis)
 	tip := genesis.TxHash()
 	for i := 0; i < n; i++ {
 		tx := wire.NewMsgTx(1)
 		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: tip, Index: 1}, nil))
 		tx.AddTxOut(&wire.TxOut{PkScript: send})
 		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
-		if extra > 0 {
-			tx.AddTxOut(&wire.TxOut{Value: 546,
-				PkScript: bytes.Repeat([]byte{txscript.OP_TRUE}, extra)})
-		}
-		if err := db.AddTxn(tx); err != nil {
-			t.Fatal(err)
-		}
+		db.addTxn(t, tx)
 		tip = tx.TxHash()
 	}
 	tokenID, err := chainhash.NewHash(tokenIDBuf)
@@ -271,11 +306,22 @@ func sendChain(t *testing.T, n, extra int) (*Db, *chainhash.Hash, *chainhash.Has
 	return db, &tip, tokenID
 }
 
+// genesisHash returns the hash of the GENESIS of tokenID, which is the token
+// ID in the byte order it is shown in.
+func genesisHash(tokenID *chainhash.Hash) chainhash.Hash {
+	var genesis chainhash.Hash
+	for i := range genesis {
+		genesis[i] = tokenID[chainhash.HashSize-1-i]
+	}
+	return genesis
+}
+
 // TestFindSameAsRecursive ensures Find returns the same transactions in the
 // same order, or the same error, and looks at its context as often, as the
-// recursive search it replaced, and Count as many transactions, on random
-// graphs, from random transactions, with random validity caches, and with a
-// context that ends during the search.
+// recursive search through whole transactions it replaced, reading each
+// transaction it returns once, and Count as many transactions, reading none,
+// on random graphs, from random transactions, with random validity caches,
+// and with a context that ends during the search.
 func TestFindSameAsRecursive(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	var searches, looks, found int
@@ -285,6 +331,10 @@ func TestFindSameAsRecursive(t *testing.T) {
 			n, deep = 3000, true
 		}
 		db, tokenID, txs := randomGraph(t, rng, n, deep)
+		whole := make(map[chainhash.Hash]*wire.MsgTx, len(txs))
+		for _, tx := range txs {
+			whole[tx.TxHash()] = tx
+		}
 		for s := 0; s < 12; s++ {
 			root := txs[rng.Intn(len(txs))].TxHash()
 			if deep && s >= 6 {
@@ -313,8 +363,10 @@ func TestFindSameAsRecursive(t *testing.T) {
 				want.checks = 1 << 30
 			}
 			got, counted := *want, *want
-			wantRes, wantErr := findRecursive(db, want, &root, tokenID, &valid)
+			wantRes, wantErr := findRecursive(whole, want, &root, &valid)
+			db.reads = 0
 			gotRes, gotErr := db.Find(&got, &root, tokenID, &valid)
+			reads := db.reads
 			count, countErr := db.Count(&counted, &root, tokenID, &valid)
 
 			what := fmt.Sprintf("graph %d of %d transactions, search %d "+
@@ -336,12 +388,20 @@ func TestFindSameAsRecursive(t *testing.T) {
 				t.Fatalf("%s: the context was looked at %d times, want %d",
 					what, got.calls, want.calls)
 			}
+			if wantErr == nil && reads != len(wantRes) {
+				t.Fatalf("%s: read %d transactions for %d", what, reads,
+					len(wantRes))
+			}
 			if fmt.Sprint(countErr) != fmt.Sprint(wantErr) ||
 				count != len(wantRes) || counted.calls != want.calls {
 
 				t.Fatalf("%s: counted %d and %v, looking at the context %d "+
 					"times, want %d and %v, %d times", what, count, countErr,
 					counted.calls, len(wantRes), wantErr, want.calls)
+			}
+			if db.reads != reads {
+				t.Fatalf("%s: counting read %d transactions", what,
+					db.reads-reads)
 			}
 			searches++
 			if want.calls > 1 {
@@ -384,7 +444,7 @@ func (c *stackContext) Err() error {
 // process.
 func TestFindDeepChainStack(t *testing.T) {
 	const sends = 100000
-	db, tip, tokenID := sendChain(t, sends, 0)
+	db, tip, tokenID := sendChain(t, sends)
 
 	runtime.GC()
 	var before runtime.MemStats
@@ -413,13 +473,9 @@ func TestFindDeepChainStack(t *testing.T) {
 // 100,001 transactions, and 24 MB for one of a million.
 func TestFindAllocatesForResult(t *testing.T) {
 	const sends = 100000
-	db, _, tokenID := sendChain(t, sends, 0)
+	db, _, tokenID := sendChain(t, sends)
 
-	// The token ID is the GENESIS's hash in the byte order it is shown in.
-	var genesis chainhash.Hash
-	for i := range genesis {
-		genesis[i] = tokenID[chainhash.HashSize-1-i]
-	}
+	genesis := genesisHash(tokenID)
 	var res [][]byte
 	var err error
 	search := func() uint64 {
@@ -493,7 +549,8 @@ func TestFindGraphGrows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db := NewDb()
+	db := newTestDb()
+	db.store(t, genesis)
 	sendFrom := func(prev ...wire.OutPoint) *wire.MsgTx {
 		t.Helper()
 		tx := wire.NewMsgTx(1)
@@ -502,9 +559,7 @@ func TestFindGraphGrows(t *testing.T) {
 		}
 		tx.AddTxOut(&wire.TxOut{PkScript: send})
 		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
-		if err := db.AddTxn(tx); err != nil {
-			t.Fatal(err)
-		}
+		db.addTxn(t, tx)
 		return tx
 	}
 	first := sendFrom(wire.OutPoint{Hash: genesis.TxHash(), Index: 1})
@@ -517,7 +572,7 @@ func TestFindGraphGrows(t *testing.T) {
 
 	// The context is looked at before the search adds the 1001st
 	// transaction, the first SEND, the last the graph held at the start.
-	ctx := &growingContext{Context: context.Background(), db: db, tx: genesis}
+	ctx := &growingContext{Context: context.Background(), db: db.Db, tx: genesis}
 	var res [][]byte
 	var panicked interface{}
 	func() {
@@ -534,60 +589,175 @@ func TestFindGraphGrows(t *testing.T) {
 	if err != nil || len(res) != 1002 {
 		t.Fatalf("got %d transactions and %v, want 1002", len(res), err)
 	}
-	var buf bytes.Buffer
-	if err := genesis.Serialize(&buf); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(res[1001], buf.Bytes()) {
+	if !bytes.Equal(res[1001], db.raw[genesis.TxHash()]) {
 		t.Error("the last transaction found is not the GENESIS")
 	}
 }
 
-// TestCountSize ensures Count does not serialize the transactions it counts:
-// what it allocates does not grow with their size, while what Find allocates
-// does.  The graph search count of GetSlpTrustedValidation once serialized
-// every transaction of the search only to count them.
-func TestCountSize(t *testing.T) {
-	const sends, extra = 2000, 10000
-	allocated := func(extra int, search func(*Db, *chainhash.Hash,
-		*chainhash.Hash) (int, error)) uint64 {
+// TestCountReadsNothing ensures Count reads none of the transactions it
+// counts, while Find reads each it returns once.  The graph search count of
+// GetSlpTrustedValidation once serialized every transaction of the search
+// only to count them.
+func TestCountReadsNothing(t *testing.T) {
+	const sends = 2000
+	db, tip, tokenID := sendChain(t, sends)
+	n, err := db.Count(context.Background(), tip, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if err != nil || n != sends+1 || db.reads != 0 {
+		t.Fatalf("counted %d and %v, reading %d transactions, want %d, "+
+			"reading none", n, err, db.reads, sends+1)
+	}
+	res, err := db.Find(context.Background(), tip, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if err != nil || len(res) != sends+1 || db.reads != sends+1 {
+		t.Fatalf("found %d and %v, reading %d transactions, want %d, "+
+			"reading each once", len(res), err, db.reads, sends+1)
+	}
+}
 
-		db, tip, tokenID := sendChain(t, sends, extra)
-		least := ^uint64(0)
-		for i := 0; i < 3; i++ {
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			n, err := search(db, tip, tokenID)
-			runtime.ReadMemStats(&after)
-			if err != nil || n != sends+1 {
-				t.Fatalf("found %d transactions and %v, want %d", n, err,
-					sends+1)
-			}
-			least = min(least, after.TotalAlloc-before.TotalAlloc)
-		}
-		return least
-	}
-	count := func(db *Db, tip, tokenID *chainhash.Hash) (int, error) {
-		return db.Count(context.Background(), tip, tokenID,
-			&map[chainhash.Hash]struct{}{})
-	}
-	find := func(db *Db, tip, tokenID *chainhash.Hash) (int, error) {
+// TestFindReadError ensures a search that cannot read a transaction it finds
+// fails with the error and the transaction's hash, whether that is the
+// transaction searched from or one it leads to, rather than returning the
+// others, while Count, which reads none, still counts it.
+func TestFindReadError(t *testing.T) {
+	const sends = 10
+	db, tip, tokenID := sendChain(t, sends)
+	genesis := genesisHash(tokenID)
+	for _, hash := range []*chainhash.Hash{tip, &genesis} {
+		raw := db.raw[*hash]
+		delete(db.raw, *hash)
 		res, err := db.Find(context.Background(), tip, tokenID,
 			&map[chainhash.Hash]struct{}{})
-		return len(res), err
+		if !errors.Is(err, errNotStored) || res != nil ||
+			!strings.Contains(err.Error(), "failed to read txn "+hash.String()) {
+
+			t.Errorf("without %v: got %d transactions and %v", hash,
+				len(res), err)
+		}
+		n, err := db.Count(context.Background(), tip, tokenID,
+			&map[chainhash.Hash]struct{}{})
+		if err != nil || n != sends+1 {
+			t.Errorf("without %v: counted %d and %v, want %d", hash, n,
+				err, sends+1)
+		}
+		db.raw[*hash] = raw
+	}
+}
+
+// TestFindUnknownKind ensures a search that reaches an input spending a
+// transaction whose slp message is of a kind it does not know fails, from the
+// transaction searched from, and elsewhere leaves out that input and those
+// after it, as the recursive search did.  The slp parser returns no such kind
+// today.
+func TestFindUnknownKind(t *testing.T) {
+	db, _, tokenID := sendChain(t, 0)
+	genesis := genesisHash(tokenID)
+	send, err := metadatamaker.TokenType1Send(tokenID.CloneBytes(),
+		[]uint64{1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sendFrom := func(prev ...chainhash.Hash) chainhash.Hash {
+		t.Helper()
+		tx := wire.NewMsgTx(1)
+		for i := range prev {
+			tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: prev[i], Index: 1},
+				nil))
+		}
+		tx.AddTxOut(&wire.TxOut{PkScript: send})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		db.addTxn(t, tx)
+		return tx.TxHash()
 	}
 
-	// Find serializes them, so it allocates their size.
-	grown := int64(allocated(extra, find)) - int64(allocated(0, find))
-	t.Logf("Find allocated %d bytes more", grown)
-	if grown < sends*extra {
-		t.Fatalf("Find allocated %d bytes more for %d transactions of %d "+
-			"bytes more", grown, sends+1, extra)
+	// The SEND searched from spends one that spends the first of two sends,
+	// then a transaction of an unknown kind, then the second send.
+	unknown := chainhash.Hash{0x0f}
+	db.getTokenGraph(tokenID).graph[unknown] = graphTxn{
+		slp: slpOutputs{kind: slpOther}}
+	first := sendFrom(genesis)
+	second := sendFrom(first)
+	mid := sendFrom(first, unknown, second)
+	root := sendFrom(mid)
+
+	res, err := db.Find(context.Background(), &root, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	grown = int64(allocated(extra, count)) - int64(allocated(0, count))
-	t.Logf("Count allocated %d bytes more", grown)
-	if grown > 1<<20 {
-		t.Errorf("Count allocated %d bytes more for %d transactions of %d "+
-			"bytes more", grown, sends+1, extra)
+	want := []chainhash.Hash{root, mid, first, genesis}
+	if len(res) != len(want) {
+		t.Fatalf("got %d transactions, want %d", len(res), len(want))
+	}
+	for i := range want {
+		if !bytes.Equal(res[i], db.raw[want[i]]) {
+			t.Errorf("transaction %d is not %v", i, want[i])
+		}
+	}
+	n, err := db.Count(context.Background(), &root, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if err != nil || n != len(want) {
+		t.Errorf("counted %d and %v, want %d", n, err, len(want))
+	}
+
+	wantErr := fmt.Sprintf("txn %v was parsed as an unknown kind of slp "+
+		"transaction", unknown)
+	res, err = db.Find(context.Background(), &mid, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if fmt.Sprint(err) != wantErr || res != nil {
+		t.Errorf("from the SEND spending it: got %d transactions and %v, "+
+			"want %s", len(res), err, wantErr)
+	}
+	n, err = db.Count(context.Background(), &mid, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if fmt.Sprint(err) != wantErr || n != 0 {
+		t.Errorf("counting from the SEND spending it: got %d and %v, want "+
+			"%s", n, err, wantErr)
+	}
+}
+
+// TestGraphTxnSize ensures a token's graph holds little of each transaction,
+// and nothing that grows with its scripts, as it can hold millions: of a SEND
+// spending 2 outputs, it holds the outpoints and what its slp message says,
+// where it once held the whole transaction, scripts and all.
+func TestGraphTxnSize(t *testing.T) {
+	const txns, scripts = 5000, 1000
+	tokenID := chainhash.Hash{0x51}
+	send, err := metadatamaker.TokenType1Send(tokenID[:], []uint64{600, 400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := NewDb(nil)
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for i := 0; i < txns; i++ {
+		tx := wire.NewMsgTx(1)
+		for j := 0; j < 2; j++ {
+			prev := wire.OutPoint{Hash: chainhash.Hash{byte(i), byte(i >> 8),
+				byte(j)}, Index: 1}
+			tx.AddTxIn(wire.NewTxIn(&prev,
+				bytes.Repeat([]byte{txscript.OP_TRUE}, scripts)))
+		}
+		tx.AddTxOut(&wire.TxOut{PkScript: send})
+		for j := 0; j < 2; j++ {
+			tx.AddTxOut(&wire.TxOut{Value: 546,
+				PkScript: bytes.Repeat([]byte{txscript.OP_TRUE}, scripts)})
+		}
+		if err := db.AddTxn(tx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	held := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / txns
+	t.Logf("the graph holds %d bytes for each transaction", held)
+	if held > 400 {
+		t.Errorf("the graph holds %d bytes for each of %d transactions of "+
+			"%d bytes of scripts", held, txns, 4*scripts)
+	}
+	if size := db.getTokenGraph(&tokenID).size(); size != txns {
+		t.Fatalf("the graph holds %d transactions, want %d", size, txns)
 	}
 }

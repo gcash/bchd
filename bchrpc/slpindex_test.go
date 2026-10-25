@@ -791,3 +791,39 @@ func TestSlpGraphSearchCallEnds(t *testing.T) {
 		}
 	}
 }
+
+// TestFetchGraphSearchTxn ensures slp graph search reads a memory pool
+// transaction, which its graph holds before a block does, from the memory
+// pool, and looks for any other in the transaction index.
+func TestFetchGraphSearchTxn(t *testing.T) {
+	pool, tx1, _, _, funding := newDSProofPool(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.MainNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	txIndex := indexers.NewTxIndex(db)
+	if err := db.Update(txIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s := &GrpcServer{db: db, txMemPool: pool, txIndex: txIndex}
+
+	var want bytes.Buffer
+	if err := tx1.Serialize(&want); err != nil {
+		t.Fatal(err)
+	}
+	hash := tx1.TxHash()
+	got, err := s.fetchGraphSearchTxn(&hash)
+	if err != nil || !bytes.Equal(got, want.Bytes()) {
+		t.Errorf("the memory pool transaction: got %x and %v, want %x", got,
+			err, want.Bytes())
+	}
+
+	// The transaction tx1 spends is in no block the index holds.
+	hash = funding.TxHash()
+	got, err = s.fetchGraphSearchTxn(&hash)
+	if status.Code(err) != codes.NotFound || got != nil {
+		t.Errorf("a transaction outside the memory pool: got %x and %v, "+
+			"want the index's NotFound", got, err)
+	}
+}

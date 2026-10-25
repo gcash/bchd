@@ -1,7 +1,6 @@
 package slpgraphsearch
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -10,7 +9,6 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/goslp"
-	"github.com/gcash/goslp/v1parser"
 )
 
 // Db manages slp token graphs for graph search and TODO: recently queried items
@@ -18,13 +16,19 @@ type Db struct {
 	sync.RWMutex
 	graphs map[chainhash.Hash]*tokenGraph
 	state  uint32 // 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
+
+	// fetchTxn reads a transaction of the graphs, serialized, as they hold
+	// only what a search needs of each.
+	fetchTxn func(txnHash *chainhash.Hash) ([]byte, error)
 }
 
-// NewDb creates a new instance of SlpCache
-func NewDb() *Db {
+// NewDb creates a new instance of SlpCache, whose searches read the
+// transactions they return with fetchTxn.
+func NewDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error)) *Db {
 	return &Db{
-		graphs: make(map[chainhash.Hash]*tokenGraph),
-		state:  0,
+		graphs:   make(map[chainhash.Hash]*tokenGraph),
+		state:    0,
+		fetchTxn: fetchTxn,
 	}
 }
 
@@ -111,20 +115,21 @@ const graphSearchCheckInterval = 1000
 
 // Find performs a graph search for a given transaction hash.  The search can
 // take the whole of a large token's graph, so it stops once ctx ends and
-// returns the context's error.
+// returns the context's error.  It reads each transaction it returns, and
+// fails if it cannot read one.
 func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 
 	// The result grows with what the search finds, not with the token's
 	// graph, which can hold millions of transactions and can grow while the
 	// search runs.
 	var txdata [][]byte
-	err := gs.search(ctx, hash, tokenID, validityCache, func(txMsg *wire.MsgTx) error {
+	err := gs.search(ctx, hash, tokenID, validityCache, func(hash *chainhash.Hash) error {
 		// add txn buffer to results
-		txBuf := bytes.NewBuffer(make([]byte, 0, txMsg.SerializeSize()))
-		if err := txMsg.Serialize(txBuf); err != nil {
-			return err
+		txBuf, err := gs.fetchTxn(hash)
+		if err != nil {
+			return fmt.Errorf("graph search failed to read txn %v: %w", hash, err)
 		}
-		txdata = append(txdata, txBuf.Bytes())
+		txdata = append(txdata, txBuf)
 		return nil
 	})
 	if err != nil {
@@ -137,10 +142,10 @@ func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash
 }
 
 // Count returns how many transactions Find returns for the same search,
-// without serializing them, for a client that asks how large the search is.
+// without reading them, for a client that asks how large the search is.
 func (gs *Db) Count(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) (int, error) {
 	n := 0
-	err := gs.search(ctx, hash, tokenID, validityCache, func(*wire.MsgTx) error {
+	err := gs.search(ctx, hash, tokenID, validityCache, func(*chainhash.Hash) error {
 		n++
 		return nil
 	})
@@ -150,9 +155,10 @@ func (gs *Db) Count(ctx context.Context, hash *chainhash.Hash, tokenID *chainhas
 	return n, nil
 }
 
-// search performs the graph search of Find and Count, calling found for each
-// transaction it finds, in the order Find returns them.
-func (gs *Db) search(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}, found func(*wire.MsgTx) error) error {
+// search performs the graph search of Find and Count, calling found with the
+// hash of each transaction it finds, in the order Find returns them.  An
+// error from found ends the search.
+func (gs *Db) search(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}, found func(*chainhash.Hash) error) error {
 
 	// get token graph
 	tokenGraph := gs.getTokenGraph(tokenID)
@@ -164,40 +170,40 @@ func (gs *Db) search(ctx context.Context, hash *chainhash.Hash, tokenID *chainha
 
 	// check client validity cache transactions are valid
 	for hash := range *validityCache {
-		if txn := (*tokenGraph).getTxn(&hash); txn == nil {
+		if _, ok := (*tokenGraph).getTxn(&hash); !ok {
 			return fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
 		}
 	}
 
-	txMsg := tokenGraph.getTxn(hash)
-	if txMsg == nil {
+	txn, ok := tokenGraph.getTxn(hash)
+	if !ok {
 		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
 	}
 
 	// perform the graph search
-	return gs.findInternal(ctx, hash, txMsg, tokenGraph, &seen, validityCache, found)
+	return gs.findInternal(ctx, hash, txn, tokenGraph, &seen, validityCache, found)
 }
 
-// findInternal searches the token's graph depth first from txMsg, whose hash
-// is hash, through each input that carried the token, in the order of the
+// findInternal searches the token's graph depth first from txn, whose hash is
+// hash, through each input that carried the token, in the order of the
 // inputs, and calls found for each transaction the first time it reaches it.
 // It keeps the transactions still to be searched on a stack of its own rather
 // than recursing, as a token's graph can hold a chain of millions of sends,
 // and a goroutine whose stack passes the runtime's 1 GB limit ends the
 // process.  A transaction's inputs go on the stack in reverse, so that each,
 // with all it leads to, is searched before the next, as a recursive search
-// would.  Each goes with the hash the graph holds it by, so that the search
-// does not serialize it to hash it again.
-func (gs *Db) findInternal(ctx context.Context, hash *chainhash.Hash, txMsg *wire.MsgTx, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, found func(*wire.MsgTx) error) error {
+// would.  Each goes with what the graph holds of it, so that the search does
+// not look it up again.
+func (gs *Db) findInternal(ctx context.Context, hash *chainhash.Hash, txn graphTxn, graph *tokenGraph, seen *map[chainhash.Hash]struct{}, validityCache *map[chainhash.Hash]struct{}, found func(*chainhash.Hash) error) error {
 	type pending struct {
-		hash  *chainhash.Hash
-		txMsg *wire.MsgTx
+		hash *chainhash.Hash
+		txn  graphTxn
 	}
-	root := txMsg
-	stack := []pending{{hash, txMsg}}
+	root := *hash
+	stack := []pending{{hash, txn}}
 	n := 0
 	for len(stack) > 0 {
-		hash, txMsg := stack[len(stack)-1].hash, stack[len(stack)-1].txMsg
+		hash, txn := stack[len(stack)-1].hash, stack[len(stack)-1].txn
 		stack = stack[:len(stack)-1]
 
 		// check seen list
@@ -211,14 +217,9 @@ func (gs *Db) findInternal(ctx context.Context, hash *chainhash.Hash, txMsg *wir
 		}
 		(*seen)[*hash] = struct{}{}
 
-		// add txn to results; as when the search recursed, an error leaves
-		// out the transaction, or ends the search if it is the one
-		// searched from
-		if err := found(txMsg); err != nil {
-			if txMsg == root {
-				return err
-			}
-			continue
+		// add txn to results
+		if err := found(hash); err != nil {
+			return err
 		}
 		n++
 
@@ -232,51 +233,41 @@ func (gs *Db) findInternal(ctx context.Context, hash *chainhash.Hash, txMsg *wir
 		// them around so the first is searched first
 		pushed := len(stack)
 	inputs:
-		for _, txn := range txMsg.TxIn {
-			prevTxHash := &txn.PreviousOutPoint.Hash
-			prevTxVout := txn.PreviousOutPoint.Index
+		for i := range txn.inputs {
+			prevTxHash := &txn.inputs[i].Hash
+			prevTxVout := txn.inputs[i].Index
 
-			inpTxMsg := graph.getTxn(prevTxHash)
-			if inpTxMsg == nil {
+			inpTxn, ok := graph.getTxn(prevTxHash)
+			if !ok {
 				continue
 			}
 
-			// try to parse slp msg to check if this input contributes to this transaction
-			inpSlpMsg, err := v1parser.ParseSLP(inpTxMsg.TxOut[0].PkScript)
-			if err != nil {
+			// check to see if this parent contributed, by what its slp
+			// msg says of the output this input spends
+			switch out := inpTxn.slp; out.kind {
+			case slpUnparsed:
 				continue
-			}
-
-			// check to see if this parent contributed
-			switch msg := inpSlpMsg.(type) {
-			case *v1parser.SlpGenesis:
-				if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
+			case slpGenesis, slpMint:
+				if prevTxVout != 1 && prevTxVout != out.mintBatonVout {
 					continue
 				}
-				if prevTxVout == 1 && msg.Qty == 0 {
+				if prevTxVout == 1 && !out.mintsTokens {
 					continue
 				}
-			case *v1parser.SlpMint:
-				if prevTxVout != 1 && prevTxVout != uint32(msg.MintBatonVout) {
-					continue
-				}
-				if prevTxVout == 1 && msg.Qty == 0 {
-					continue
-				}
-			case *v1parser.SlpSend:
-				if int(prevTxVout) > len(msg.Amounts) {
+			case slpSend:
+				if int(prevTxVout) > out.sendAmounts {
 					continue
 				}
 			default:
 				// As when the search recursed, this leaves out the
 				// input and those after it, or ends the search for
 				// the transaction searched from.
-				if txMsg == root {
+				if *hash == root {
 					return fmt.Errorf("txn %v was parsed as an unknown kind of slp transaction", prevTxHash)
 				}
 				break inputs
 			}
-			stack = append(stack, pending{prevTxHash, inpTxMsg})
+			stack = append(stack, pending{prevTxHash, inpTxn})
 		}
 		slices.Reverse(stack[pushed:])
 	}

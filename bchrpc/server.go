@@ -3196,6 +3196,21 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 	}
 }
 
+// fetchGraphSearchTxn reads a transaction of slp graph search, serialized.
+// The graph holds a memory pool transaction before a block does, so one in
+// the memory pool is read from it, and any other from its block.
+func (s *GrpcServer) fetchGraphSearchTxn(txnHash *chainhash.Hash) ([]byte, error) {
+	if tx, err := s.txMemPool.FetchTransaction(txnHash); err == nil {
+		txBuf := bytes.NewBuffer(make([]byte, 0, tx.MsgTx().SerializeSize()))
+		if err := tx.MsgTx().Serialize(txBuf); err != nil {
+			return nil, err
+		}
+		return txBuf.Bytes(), nil
+	}
+	txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
+	return txn, err
+}
+
 func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, int32, *chainhash.Hash, error) {
 	// Look up the location of the transaction.
 	blockRegion, err := s.txIndex.TxBlockRegion(txHash)
@@ -3753,12 +3768,8 @@ func (s *GrpcServer) slpEventHandler() {
 				firstMempoolTxnSeen = true
 				if s.slpIndex.GraphSearchEnabled() {
 					log.Debug("starting slp graph search")
-					fetchTxn := func(txnHash *chainhash.Hash) ([]byte, error) {
-						txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
-						return txn, err
-					}
 					initWg.Add(1)
-					go s.slpIndex.LoadSlpGraphSearchDb(fetchTxn, &initWg, &s.shutdown)
+					go s.slpIndex.LoadSlpGraphSearchDb(s.fetchGraphSearchTxn, &initWg, &s.shutdown)
 				}
 			}
 

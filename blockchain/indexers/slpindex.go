@@ -666,7 +666,9 @@ func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 	}
 }
 
-// LoadSlpGraphSearchDb is used to load data needed for slp graph search
+// LoadSlpGraphSearchDb is used to load data needed for slp graph search.
+// fetchTxn reads a transaction, serialized, for the load and for the searches,
+// which read back each transaction they return.
 //
 // NOTE: this is launched as a goroutine and does not return errors!
 func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), initWg *sync.WaitGroup, interupt *int32) {
@@ -676,7 +678,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 		return
 	}
 
-	idx.graphSearchDb = slpgraphsearch.NewDb()
+	idx.graphSearchDb = slpgraphsearch.NewDb(fetchTxn)
 
 	// now that graphSearchDB is set we can call Done()
 	if initWg != nil {
