@@ -753,6 +753,7 @@ var ChipNetParams = Params{
 	Net:         wire.ChipNet,
 	DefaultPort: "48333",
 	DNSSeeds: []DNSSeed{
+		{"chipnet-seed.bchd.cash", true},
 		{"chipnet.bitjson.com", true},
 	},
 

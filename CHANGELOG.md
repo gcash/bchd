@@ -13,6 +13,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 ### Consensus & Network
 
 - Catching up with a competing chain that overtakes the node's own no longer takes two minutes per block.
+- Add the `chipnet-seed.bchd.cash` DNS seed.
 
 ### Other
 
