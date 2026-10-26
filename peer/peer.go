@@ -1501,8 +1501,12 @@ func (p *Peer) stallHandler() {
 	defer stallTicker.Stop()
 
 	// ioStopped is used to detect when both the input and output handler
-	// goroutines are done.
+	// goroutines are done.  A closed channel stays ready, so each quit
+	// channel is set to nil once it fires, and the stall handler waits for
+	// the other one instead of taking the same one twice and leaving while
+	// a handler can still send it a control message.
 	var ioStopped bool
+	inQuit, outQuit := p.inQuit, p.outQuit
 out:
 	for {
 		select {
@@ -1581,21 +1585,23 @@ out:
 			// Reset the deadline offset for the next tick.
 			deadlineOffset = 0
 
-		case <-p.inQuit:
+		case <-inQuit:
 			// The stall handler can exit once both the input and
 			// output handler goroutines are done.
 			if ioStopped {
 				break out
 			}
 			ioStopped = true
+			inQuit = nil
 
-		case <-p.outQuit:
+		case <-outQuit:
 			// The stall handler can exit once both the input and
 			// output handler goroutines are done.
 			if ioStopped {
 				break out
 			}
 			ioStopped = true
+			outQuit = nil
 		}
 	}
 

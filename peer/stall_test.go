@@ -111,3 +111,54 @@ func TestGetBlockTxnsAnsweredByBlock(t *testing.T) {
 		}
 	}
 }
+
+// TestStallHandlerWaitsForBothHandlers verifies that the stall handler keeps
+// taking control messages after the input or the output handler is done, and
+// leaves once both are.  A closed quit channel stays ready, so it took the
+// first handler's twice and left, and the other handler, still handling a
+// message after a disconnect, blocked forever on its next control message,
+// holding the peer and the message.
+func TestStallHandlerWaitsForBothHandlers(t *testing.T) {
+	t.Parallel()
+
+	for _, inFirst := range []bool{true, false} {
+		p := newPeerBase(&Config{}, false)
+		done := make(chan struct{})
+		go func() {
+			p.stallHandler()
+			close(done)
+		}()
+
+		first, second := p.outQuit, p.inQuit
+		if inFirst {
+			first, second = p.inQuit, p.outQuit
+		}
+		close(first)
+		select {
+		case <-done:
+			t.Fatalf("input handler done first %v: stall handler left "+
+				"while the other handler ran", inFirst)
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		// A message received and handled after a disconnect.
+		for _, command := range []stallControlCmd{sccReceiveMessage,
+			sccHandlerStart, sccHandlerDone} {
+
+			select {
+			case p.stallControl <- stallControlMsg{command, wire.NewMsgPing(0)}:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("input handler done first %v: control message "+
+					"%d not taken", inFirst, command)
+			}
+		}
+
+		close(second)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("input handler done first %v: stall handler stayed "+
+				"after both handlers were done", inFirst)
+		}
+	}
+}
