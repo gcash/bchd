@@ -15,17 +15,28 @@ import (
 )
 
 // RawTxInECDSASignature returns the serialized ECDSA signature for the input idx of
-// the given transaction, with hashType appended to it.
+// the given transaction, with hashType appended to it.  It doesn't know the
+// outputs the transaction spends, so its signature for an input that spends
+// tokens is invalid, and it returns an error for SigHashUTXO;
+// RawTxInECDSASignatureWithSigHashes signs those.
 func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
 
-	// If the forkID was not passed in with the hashtype then add it here
-	if hashType&SigHashForkID != SigHashForkID {
-		hashType |= SigHashForkID
-	}
+	return RawTxInECDSASignatureWithSigHashes(tx, NewTxSigHashes(tx), idx,
+		subScript, hashType, key, amt)
+}
 
-	sigHashes := NewTxSigHashes(tx)
-	hash, _, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+// RawTxInECDSASignatureWithSigHashes is RawTxInECDSASignature with the
+// signature hashes of the transaction passed in, which can be computed once
+// for all its inputs.  To sign an input that spends tokens, or with
+// SigHashUTXO, they must include the outputs the transaction spends, as
+// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+func RawTxInECDSASignatureWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
+	idx int, subScript []byte, hashType SigHashType, key *bchec.PrivateKey,
+	amt int64) ([]byte, error) {
+
+	hash, hashType, err := signatureHash(tx, sigHashes, idx, subScript,
+		hashType, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -38,17 +49,28 @@ func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 }
 
 // RawTxInSchnorrSignature returns the serialized Schnorr signature for the input idx of
-// the given transaction, with hashType appended to it.
+// the given transaction, with hashType appended to it.  It doesn't know the
+// outputs the transaction spends, so its signature for an input that spends
+// tokens is invalid, and it returns an error for SigHashUTXO;
+// RawTxInSchnorrSignatureWithSigHashes signs those.
 func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
 
-	// If the forkID was not passed in with the hashtype then add it here
-	if hashType&SigHashForkID != SigHashForkID {
-		hashType |= SigHashForkID
-	}
+	return RawTxInSchnorrSignatureWithSigHashes(tx, NewTxSigHashes(tx), idx,
+		subScript, hashType, key, amt)
+}
 
-	sigHashes := NewTxSigHashes(tx)
-	hash, _, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+// RawTxInSchnorrSignatureWithSigHashes is RawTxInSchnorrSignature with the
+// signature hashes of the transaction passed in, which can be computed once
+// for all its inputs.  To sign an input that spends tokens, or with
+// SigHashUTXO, they must include the outputs the transaction spends, as
+// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+func RawTxInSchnorrSignatureWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
+	idx int, subScript []byte, hashType SigHashType, key *bchec.PrivateKey,
+	amt int64) ([]byte, error) {
+
+	hash, hashType, err := signatureHash(tx, sigHashes, idx, subScript,
+		hashType, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +80,37 @@ func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	}
 
 	return append(signature.Serialize(), byte(hashType)), nil
+}
+
+// signatureHash returns the hash that signs input idx of tx with hashType, and
+// hashType with the fork id, which is added if it lacks it.
+func signatureHash(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
+	subScript []byte, hashType SigHashType, amt int64) ([]byte, SigHashType, error) {
+
+	// If the forkID was not passed in with the hashtype then add it here
+	if hashType&SigHashForkID != SigHashForkID {
+		hashType |= SigHashForkID
+	}
+	if err := checkSigHashes(sigHashes, hashType); err != nil {
+		return nil, 0, err
+	}
+
+	hash, _, err := CalcSignatureHash(subScript, sigHashes, hashType, tx, idx, amt, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	return hash, hashType, nil
+}
+
+// checkSigHashes returns an error if a signature with hashType covers the
+// outputs the transaction spends and sigHashes lacks them, as the signature
+// would be invalid.
+func checkSigHashes(sigHashes *TxSigHashes, hashType SigHashType) error {
+	if hashType&SigHashUTXO != 0 && !sigHashes.hasUtxos {
+		return errors.New("signing with SigHashUTXO needs the outputs " +
+			"the transaction spends in its signature hashes")
+	}
+	return nil
 }
 
 // LegacyTxInSignature generates a signature using the pre-uahf signature
@@ -86,9 +139,26 @@ func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 // as the idx'th input. privKey is serialized in either a compressed or
 // uncompressed format based on compress. This format must match the same format
 // used to generate the payment address, or the script validation will fail.
+// It doesn't know the outputs tx spends, so its signature for an input that
+// spends tokens is invalid, and it returns an error for SigHashUTXO;
+// SignatureScriptWithSigHashes signs those.
 func SignatureScript(tx *wire.MsgTx, idx int, amt int64, subscript []byte,
 	hashType SigHashType, privKey *bchec.PrivateKey, compress bool) ([]byte, error) {
-	sig, err := RawTxInSchnorrSignature(tx, idx, subscript, hashType, privKey, amt)
+
+	return SignatureScriptWithSigHashes(tx, NewTxSigHashes(tx), idx, amt,
+		subscript, hashType, privKey, compress)
+}
+
+// SignatureScriptWithSigHashes is SignatureScript with the signature hashes of
+// tx passed in, which can be computed once for all its inputs.  To sign an
+// input that spends tokens, or with SigHashUTXO, they must include the outputs
+// tx spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+func SignatureScriptWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
+	idx int, amt int64, subscript []byte, hashType SigHashType,
+	privKey *bchec.PrivateKey, compress bool) ([]byte, error) {
+
+	sig, err := RawTxInSchnorrSignatureWithSigHashes(tx, sigHashes, idx,
+		subscript, hashType, privKey, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +194,12 @@ func LegacySignatureScript(tx *wire.MsgTx, idx int, subscript []byte,
 	return NewScriptBuilder().AddData(sig).AddData(pkData).Script()
 }
 
-func p2pkSignatureScript(tx *wire.MsgTx, idx int, amt int64, subScript []byte,
-	hashType SigHashType, privKey *bchec.PrivateKey) ([]byte, error) {
-	sig, err := RawTxInSchnorrSignature(tx, idx, subScript, hashType, privKey, amt)
+func p2pkSignatureScript(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
+	amt int64, subScript []byte, hashType SigHashType,
+	privKey *bchec.PrivateKey) ([]byte, error) {
+
+	sig, err := RawTxInSchnorrSignatureWithSigHashes(tx, sigHashes, idx,
+		subScript, hashType, privKey, amt)
 	if err != nil {
 		return nil, err
 	}
@@ -139,8 +212,9 @@ func p2pkSignatureScript(tx *wire.MsgTx, idx int, amt int64, subScript []byte,
 // the contract (i.e. nrequired signatures are provided).  Since it is arguably
 // legal to not be able to sign any of the outputs, no error is returned.
 
-func signMultiSig(tx *wire.MsgTx, idx int, amt int64, subScript []byte, hashType SigHashType,
-	addresses []bchutil.Address, nRequired int, kdb KeyDB) ([]byte, bool) {
+func signMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
+	subScript []byte, hashType SigHashType, addresses []bchutil.Address,
+	nRequired int, kdb KeyDB) ([]byte, bool) {
 	// We start with a single OP_FALSE to work around the (now standard)
 	// but in the reference implementation that causes a spurious pop at
 	// the end of OP_CHECKMULTISIG.
@@ -151,7 +225,8 @@ func signMultiSig(tx *wire.MsgTx, idx int, amt int64, subScript []byte, hashType
 		if err != nil {
 			continue
 		}
-		sig, err := RawTxInECDSASignature(tx, idx, subScript, hashType, key, amt)
+		sig, err := RawTxInECDSASignatureWithSigHashes(tx, sigHashes, idx,
+			subScript, hashType, key, amt)
 		if err != nil {
 			continue
 		}
@@ -168,9 +243,9 @@ func signMultiSig(tx *wire.MsgTx, idx int, amt int64, subScript []byte, hashType
 	return script, signed == nRequired
 }
 
-func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
-	subScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB) ([]byte,
-	ScriptClass, []bchutil.Address, int, error) {
+func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, sigHashes *TxSigHashes,
+	idx int, amt int64, subScript []byte, hashType SigHashType, kdb KeyDB,
+	sdb ScriptDB) ([]byte, ScriptClass, []bchutil.Address, int, error) {
 
 	class, addresses, nrequired, err := ExtractPkScriptAddrs(subScript,
 		chainParams)
@@ -186,8 +261,8 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
 			return nil, class, nil, 0, err
 		}
 
-		script, err := p2pkSignatureScript(tx, idx, amt, subScript, hashType,
-			key)
+		script, err := p2pkSignatureScript(tx, sigHashes, idx, amt, subScript,
+			hashType, key)
 		if err != nil {
 			return nil, class, nil, 0, err
 		}
@@ -200,8 +275,8 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
 			return nil, class, nil, 0, err
 		}
 
-		script, err := SignatureScript(tx, idx, amt, subScript, hashType,
-			key, compressed)
+		script, err := SignatureScriptWithSigHashes(tx, sigHashes, idx, amt,
+			subScript, hashType, key, compressed)
 		if err != nil {
 			return nil, class, nil, 0, err
 		}
@@ -215,8 +290,8 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
 
 		return script, class, addresses, nrequired, nil
 	case MultiSigTy:
-		script, _ := signMultiSig(tx, idx, amt, subScript, hashType,
-			addresses, nrequired, kdb)
+		script, _ := signMultiSig(tx, sigHashes, idx, amt, subScript,
+			hashType, addresses, nrequired, kdb)
 		return script, class, addresses, nrequired, nil
 	case NullDataTy:
 		return nil, class, nil, 0,
@@ -233,8 +308,9 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int, amt int64,
 // The return value is the best effort merging of the two scripts. Calling this
 // function with addresses, class and nrequired that do not match pkScript is
 // an error and results in undefined behaviour.
-func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
-	amt int64, pkScript []byte, class ScriptClass, addresses []bchutil.Address, nRequired int,
+func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
+	sigHashes *TxSigHashes, idx int, amt int64, pkScript []byte,
+	class ScriptClass, addresses []bchutil.Address, nRequired int,
 	sigScript, prevScript []byte) ([]byte, error) {
 
 	// TODO: the scripthash and multisig paths here are overly
@@ -267,8 +343,8 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 		prevScript, _ := unparseScript(prevPops)
 
 		// Merge
-		mergedScript, err := mergeScripts(chainParams, tx, idx, amt, script,
-			class, addresses, nrequired, sigScript, prevScript)
+		mergedScript, err := mergeScripts(chainParams, tx, sigHashes, idx,
+			amt, script, class, addresses, nrequired, sigScript, prevScript)
 		if err != nil {
 			return nil, err
 		}
@@ -280,8 +356,8 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 		finalScript, _ := builder.Script()
 		return finalScript, nil
 	case MultiSigTy:
-		return mergeMultiSig(tx, idx, amt, addresses, nRequired, pkScript,
-			sigScript, prevScript)
+		return mergeMultiSig(tx, sigHashes, idx, amt, addresses, nRequired,
+			pkScript, sigScript, prevScript)
 
 	// It doesn't actually make sense to merge anything other than multiig
 	// and scripthash (because it could contain multisig). Everything else
@@ -303,8 +379,9 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 // pkScript. Since this function is internal only we assume that the arguments
 // have come from other functions internally and thus are all consistent with
 // each other, behaviour is undefined if this contract is broken.
-func mergeMultiSig(tx *wire.MsgTx, idx int, amt int64, addresses []bchutil.Address,
-	nRequired int, pkScript, sigScript, prevScript []byte) ([]byte, error) {
+func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
+	addresses []bchutil.Address, nRequired int, pkScript, sigScript,
+	prevScript []byte) ([]byte, error) {
 
 	// This is an internal only function and we already parsed this script
 	// as ok for multisig (this is how we got here), so if this fails then
@@ -363,7 +440,6 @@ sigLoop:
 		// however, assume no sigs etc are in the script since that
 		// would make the transaction nonstandard and thus not
 		// MultiSigTy, so we just need to hash the full thing.
-		sigHashes := NewTxSigHashes(tx)
 		hash, _, err := calcSignatureHash(pkPops, sigHashes, hashType, tx, idx, amt, true)
 		if err != nil {
 			return nil, err
@@ -451,19 +527,41 @@ func (sc ScriptClosure) GetScript(address bchutil.Address) ([]byte, error) {
 // Any pay-to-script-hash signatures will be similarly looked up by calling
 // getScript. If previousScript is provided then the results in previousScript
 // will be merged in a type-dependent manner with the newly generated.
-// signature script.
+// signature script.  It doesn't know the outputs tx spends, so its signatures
+// for an input that spends tokens are invalid, and it returns an error for
+// SigHashUTXO; SignTxOutputWithSigHashes signs those.
 func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
 
-	sigScript, class, addresses, nrequired, err := sign(chainParams, tx, idx, amt, pkScript, hashType, kdb, sdb)
+	return SignTxOutputWithSigHashes(chainParams, tx, NewTxSigHashes(tx), idx,
+		amt, pkScript, hashType, kdb, sdb, previousScript)
+}
+
+// SignTxOutputWithSigHashes is SignTxOutput with the signature hashes of tx
+// passed in, which can be computed once for all its inputs.  To sign an input
+// that spends tokens, or with SigHashUTXO, they must include the outputs tx
+// spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
+	sigHashes *TxSigHashes, idx int, amt int64, pkScript []byte,
+	hashType SigHashType, kdb KeyDB, sdb ScriptDB,
+	previousScript []byte) ([]byte, error) {
+
+	// Check the hashes here, as a multisig script skips the keys it fails
+	// to sign with.
+	if err := checkSigHashes(sigHashes, hashType); err != nil {
+		return nil, err
+	}
+
+	sigScript, class, addresses, nrequired, err := sign(chainParams, tx,
+		sigHashes, idx, amt, pkScript, hashType, kdb, sdb)
 	if err != nil {
 		return nil, err
 	}
 
 	if class == ScriptHashTy {
 		// TODO keep the sub addressed and pass down to merge.
-		realSigScript, _, _, _, err := sign(chainParams, tx, idx,
+		realSigScript, _, _, _, err := sign(chainParams, tx, sigHashes, idx,
 			amt, sigScript, hashType, kdb, sdb)
 		if err != nil {
 			return nil, err
@@ -479,6 +577,6 @@ func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	}
 
 	// Merge scripts. with any previous data, if any.
-	return mergeScripts(chainParams, tx, idx, amt, pkScript, class,
+	return mergeScripts(chainParams, tx, sigHashes, idx, amt, pkScript, class,
 		addresses, nrequired, sigScript, previousScript)
 }

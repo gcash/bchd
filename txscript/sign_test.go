@@ -5,6 +5,7 @@
 package txscript
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"testing"
@@ -1725,5 +1726,183 @@ nexttest:
 				continue nexttest
 			}
 		}
+	}
+}
+
+// tokenSpendTx returns a transaction whose first input spends an output with
+// tokens, and second an output without, both locked by pkScript, and the
+// outputs it spends.
+func tokenSpendTx(pkScript []byte) (*wire.MsgTx, *UtxoCache) {
+	tokenData := wire.TokenData{
+		CategoryID: chainhash.DoubleHashH([]byte("category")),
+		Commitment: []byte{0x01, 0x02},
+		Amount:     1000,
+		BitField: wire.HAS_AMOUNT | wire.HAS_NFT | wire.HAS_COMMITMENT_LENGTH |
+			wire.MUTABLE,
+	}
+	tx := wire.NewMsgTx(2)
+	utxos := NewUtxoCache()
+	for i, spent := range []wire.TokenData{tokenData, {}} {
+		prevHash := chainhash.DoubleHashH([]byte{byte(i)})
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, 0), nil))
+		utxos.AddEntry(i, *wire.NewTxOut(100000, pkScript, spent))
+	}
+	tx.AddTxOut(wire.NewTxOut(90000, pkScript, tokenData))
+	tx.AddTxOut(wire.NewTxOut(90000, pkScript, wire.TokenData{}))
+	return tx, utxos
+}
+
+// TestSignTokenInputs ensures the signing functions that take the signature
+// hashes of a transaction sign an input that spends tokens, and with
+// SigHashUTXO, for each script class SignTxOutput signs, multisig signatures
+// merged from two signers included.  It also ensures SignTxOutput signs an
+// input that spends no tokens as they do, and that the functions without the
+// hashes return an error for SigHashUTXO.
+func TestSignTokenInputs(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	key1, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{1}, 32))
+	key2, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{2}, 32))
+	signer := func(key *bchec.PrivateKey) (*bchutil.AddressPubKey, KeyDB) {
+		addr, err := bchutil.NewAddressPubKey(
+			(*bchec.PublicKey)(&key.PublicKey).SerializeCompressed(), params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return addr, mkGetKey(map[string]addressToKey{
+			addr.EncodeAddress():                     {key, true},
+			addr.AddressPubKeyHash().EncodeAddress(): {key, true},
+		})
+	}
+	addr1, kdb1 := signer(key1)
+	addr2, kdb2 := signer(key2)
+
+	p2pkh, err := PayToAddrScript(addr1.AddressPubKeyHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2pk, err := PayToAddrScript(addr1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiSig, err := MultiSigScript([]*bchutil.AddressPubKey{addr1, addr2}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptAddr, err := bchutil.NewAddressScriptHash(multiSig, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh, err := PayToAddrScript(scriptAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdb := mkGetScript(map[string][]byte{scriptAddr.EncodeAddress(): multiSig})
+
+	tests := []struct {
+		name     string
+		pkScript []byte
+		signers  []KeyDB // Sign in turn, each merging the script before.
+	}{
+		{"p2pkh", p2pkh, []KeyDB{kdb1}},
+		{"p2pk", p2pk, []KeyDB{kdb1}},
+		{"multisig", multiSig, []KeyDB{kdb1, kdb2}},
+		{"p2sh multisig", p2sh, []KeyDB{kdb1, kdb2}},
+	}
+	for _, test := range tests {
+		tx, utxos := tokenSpendTx(test.pkScript)
+		withUtxos := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+
+		// sign signs input idx with each signer in turn, with the passed
+		// hashes, or with SignTxOutput if they are nil.
+		sign := func(sigHashes *TxSigHashes, idx int,
+			hashType SigHashType) ([]byte, error) {
+
+			var script []byte
+			for _, kdb := range test.signers {
+				var err error
+				if sigHashes == nil {
+					script, err = SignTxOutput(params, tx, idx, 100000,
+						test.pkScript, hashType, kdb, sdb, script)
+				} else {
+					script, err = SignTxOutputWithSigHashes(params, tx,
+						sigHashes, idx, 100000, test.pkScript, hashType,
+						kdb, sdb, script)
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
+			return script, nil
+		}
+		verify := func(idx int, sigScript []byte) error {
+			tx.TxIn[idx].SignatureScript = sigScript
+			vm, err := NewEngine(test.pkScript, tx, idx,
+				StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos,
+				100000)
+			if err != nil {
+				return err
+			}
+			return vm.Execute()
+		}
+
+		for _, base := range []SigHashType{SigHashAll, SigHashNone, SigHashSingle} {
+			for _, extra := range []SigHashType{0, SigHashAnyOneCanPay, SigHashUTXO} {
+				hashType := base | extra
+				for idx := range tx.TxIn {
+					msg := fmt.Sprintf("%s, hash type %#x, input %d",
+						test.name, hashType, idx)
+					sigScript, err := sign(withUtxos, idx, hashType)
+					if err != nil {
+						t.Errorf("%s: %v", msg, err)
+						continue
+					}
+					if err := verify(idx, sigScript); err != nil {
+						t.Errorf("%s: %v", msg, err)
+					}
+
+					old, err := sign(nil, idx, hashType)
+					if extra == SigHashUTXO {
+						if err == nil {
+							t.Errorf("%s: SignTxOutput signed with "+
+								"SigHashUTXO", msg)
+						}
+						_, err := sign(NewTxSigHashes(tx), idx, hashType)
+						if err == nil {
+							t.Errorf("%s: signed with SigHashUTXO "+
+								"without the spent outputs", msg)
+						}
+						continue
+					}
+					if err != nil {
+						t.Errorf("%s: SignTxOutput: %v", msg, err)
+						continue
+					}
+					if idx == 0 {
+						if verify(idx, old) == nil {
+							t.Errorf("%s: SignTxOutput signed the "+
+								"token input validly", msg)
+						}
+					} else if !bytes.Equal(old, sigScript) {
+						t.Errorf("%s: SignTxOutput signed differently", msg)
+					}
+				}
+			}
+		}
+	}
+
+	// The functions that sign a single signature without the hashes
+	// can't sign with SigHashUTXO either.
+	tx, _ := tokenSpendTx(p2pkh)
+	hashType := SigHashAll | SigHashUTXO
+	if _, err := RawTxInECDSASignature(tx, 1, p2pkh, hashType, key1, 100000); err == nil {
+		t.Error("RawTxInECDSASignature signed with SigHashUTXO")
+	}
+	if _, err := RawTxInSchnorrSignature(tx, 1, p2pkh, hashType, key1, 100000); err == nil {
+		t.Error("RawTxInSchnorrSignature signed with SigHashUTXO")
+	}
+	if _, err := SignatureScript(tx, 1, 100000, p2pkh, hashType, key1, true); err == nil {
+		t.Error("SignatureScript signed with SigHashUTXO")
 	}
 }

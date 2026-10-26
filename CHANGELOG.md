@@ -14,6 +14,10 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 - Catching up with a competing chain that overtakes the node's own no longer takes two minutes per block.
 
+### Other
+
+- txscript can sign inputs that spend CashTokens, and sign with `SIGHASH_UTXOS`. `SignTxOutputWithSigHashes`, `SignatureScriptWithSigHashes`, `RawTxInECDSASignatureWithSigHashes` and `RawTxInSchnorrSignatureWithSigHashes` take the transaction's signature hashes, computed once for all its inputs, which must include the outputs it spends (`NewTxSigHashes(tx).WithUtxos(tx, utxos)`) for those. The functions without them can't see the spent outputs, so they now return an error for `SIGHASH_UTXOS` instead of a signature the network refuses.
+
 ## 0.22.3 (2026-10-23)
 
 This release makes validation, initial sync and block relay considerably faster, adds double spend proofs, block finalization and Tor v3 support, adds CashTokens data and several BCHN-compatible calls to the JSON-RPC server, and brings consensus validation in line with Bitcoin Cash Node in a number of edge cases. It also drops free transactions, as BCHN did, and fixes many robustness issues in the P2P, RPC, gRPC and database code. Upgrading is recommended for all nodes; read the upgrade notes first if the node sets `--minrelaytxfee` to 0 or uses `--profile`, runs pruned or with `--addrindex` or `--slpindex`, serves `sendrawtransaction`, websocket or gRPC clients, or is short of memory.
