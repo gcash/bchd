@@ -133,12 +133,22 @@ func (n scriptNum) Bytes() []byte {
 	// Write the magnitude little-endian straight from its words.  The words
 	// are normalized, so every byte past the magnitude stays zero and the
 	// sign byte, when there is one, is left zero by make.
+	const wordBytes = bits.UintSize / 8
+	words := bigN.Bits()
 	i := 0
-	for _, w := range bigN.Bits() {
-		for j := 0; j < bits.UintSize/8 && i < size; j++ {
+	for _, w := range words {
+		if i+wordBytes <= size {
+			if wordBytes == 8 {
+				binary.LittleEndian.PutUint64(result[i:], uint64(w))
+			} else {
+				binary.LittleEndian.PutUint32(result[i:], uint32(w))
+			}
+			i += wordBytes
+			continue
+		}
+		for ; i < size; i++ {
 			result[i] = byte(w)
 			w >>= 8
-			i++
 		}
 	}
 
