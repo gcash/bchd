@@ -7,6 +7,7 @@ package txscript
 import (
 	"fmt"
 	"math/big"
+	"math/bits"
 )
 
 const (
@@ -115,7 +116,6 @@ func checkMinimalDataEncoding(v []byte) error {
 //	 32768 -> [0x00 0x80 0x00]
 //	-32768 -> [0x00 0x80 0x80]
 func (n scriptNum) Bytes() []byte {
-
 	bigN := (*big.Int)(&n)
 
 	// Zero encodes as an empty byte slice.
@@ -123,33 +123,28 @@ func (n scriptNum) Bytes() []byte {
 		return nil
 	}
 
-	// Take the absolute bytes and keep track of whether it was originally
-	// negative.
-	absBytes := bigN.Bytes()
-	isNegative := bigN.Sign() == -1
+	// The magnitude takes BitLen/8 bytes rounded up, plus one more byte for
+	// the sign when the high bit of the top byte is taken.  Both cases come
+	// to BitLen/8 + 1.
+	size := bigN.BitLen()/8 + 1
+	result := make([]byte, size)
 
-	// reverse the byte slice to convert to little-endian
-	result := make([]byte, len(absBytes))
-	for i := range absBytes {
-		result[i] = absBytes[len(absBytes)-1-i]
+	// Write the magnitude little-endian straight from its words.  The words
+	// are normalized, so every byte past the magnitude stays zero and the
+	// sign byte, when there is one, is left zero by make.
+	i := 0
+	for _, w := range bigN.Bits() {
+		for j := 0; j < bits.UintSize/8 && i < size; j++ {
+			result[i] = byte(w)
+			w >>= 8
+			i++
+		}
 	}
 
-	// When the most significant byte already has the high bit set, an
-	// additional high byte is required to indicate whether the number is
-	// negative or positive.  The additional byte is removed when converting
-	// back to an integral and its high bit is used to denote the sign.
-	//
-	// Otherwise, when the most significant byte does not already have the
-	// high bit set, use it to indicate the value is negative, if needed.
-	if result[len(result)-1]&0x80 != 0 {
-		extraByte := byte(0x00)
-		if isNegative {
-			extraByte = 0x80
-		}
-		result = append(result, extraByte)
-
-	} else if isNegative {
-		result[len(result)-1] |= 0x80
+	// The high bit of the top byte is free in both cases, so it carries
+	// the sign.
+	if bigN.Sign() < 0 {
+		result[size-1] |= 0x80
 	}
 
 	return result
