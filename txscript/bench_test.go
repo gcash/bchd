@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/gcash/bchd/bchec"
@@ -360,5 +361,41 @@ func BenchmarkStackRoll(b *testing.B) {
 		if _, err := s.RollN(999); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// BenchmarkExecuteArithmetic runs scripts dominated by numeric opcodes: one
+// squares a 254-bit number modulo the BN254 field prime 150 times, the other
+// counts with small numbers, OP_PICK and OP_MOD.  A 1,000-byte push in the
+// signature script raises the operation cost budget.
+func BenchmarkExecuteArithmetic(b *testing.B) {
+	p, _ := new(big.Int).SetString("21888242871839275222246405745257275088696311157297823662689037894645226208583", 10)
+	a := new(big.Int).Rsh(p, 3)
+	sigScript, err := NewScriptBuilder().AddData(bytes.Repeat([]byte{1}, 1000)).Script()
+	if err != nil {
+		b.Fatal(err)
+	}
+	modSquare := []byte{OP_DUP, OP_MUL, OP_OVER, OP_MOD}
+	count := []byte{OP_1ADD, OP_DUP, OP_7, OP_MOD, OP_DROP, OP_0, OP_PICK, OP_NIP}
+
+	benches := []struct {
+		name  string
+		start *ScriptBuilder
+		loop  []byte
+	}{
+		{"bigint-modsquare", NewScriptBuilder().AddOp(OP_DROP).
+			AddData(scriptNum(*p).Bytes()).AddData(scriptNum(*a).Bytes()), modSquare},
+		{"small-count", NewScriptBuilder().AddOp(OP_DROP).AddOp(OP_0).AddOp(OP_0), count},
+	}
+	for _, bench := range benches {
+		b.Run(bench.name, func(b *testing.B) {
+			pkScript, err := bench.start.Script()
+			if err != nil {
+				b.Fatal(err)
+			}
+			pkScript = append(pkScript, bytes.Repeat(bench.loop, 150)...)
+			pkScript = append(pkScript, OP_2DROP, OP_1)
+			benchExecute(b, createSpendingTx(sigScript, pkScript, 0), pkScript, 0, benchBlockFlags)
+		})
 	}
 }
