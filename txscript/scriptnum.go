@@ -5,6 +5,7 @@
 package txscript
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"math/bits"
@@ -436,29 +437,50 @@ func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, 
 	if len(v) == 0 {
 		return *makeScriptNumFromInt(0), nil
 	}
-	// reverse the byte slice to convert to big-endian
-	bigEndian := make([]byte, len(v))
-	for i := range v {
-		bigEndian[i] = v[len(v)-1-i]
+	// Up to 8 bytes the magnitude fits in 63 bits.
+	if len(v) <= 8 {
+		var abs uint64
+		for i := len(v) - 1; i >= 0; i-- {
+			abs = abs<<8 | uint64(v[i])
+		}
+		signBit := uint64(0x80) << (8 * (len(v) - 1))
+		var result big.Int
+		if abs&signBit != 0 {
+			result.SetInt64(-int64(abs &^ signBit))
+		} else {
+			result.SetInt64(int64(abs))
+		}
+		return scriptNum(result), nil
 	}
 
-	// When the most significant byte of the input bytes has the sign bit
-	// set, the result is negative.  So, remove the sign bit from the result
-	// and set the isNegative to true.
-	isNegative := false
-	if bigEndian[0]&0x80 != 0 {
-		bigEndian[0] = bigEndian[0] & ^byte(0x80)
-		isNegative = true
+	// Read the little-endian magnitude straight into words, leaving out the
+	// sign bit, which is the high bit of the last byte.
+	const wordBytes = bits.UintSize / 8
+	words := make([]big.Word, (len(v)+wordBytes-1)/wordBytes)
+	full := len(v) / wordBytes
+	for k := 0; k < full; k++ {
+		if wordBytes == 8 {
+			words[k] = big.Word(binary.LittleEndian.Uint64(v[8*k:]))
+		} else {
+			words[k] = big.Word(binary.LittleEndian.Uint32(v[4*k:]))
+		}
 	}
-
-	result := new(big.Int).SetBytes(bigEndian)
-
-	// Make the result negative.
+	for i := full * wordBytes; i < len(v); i++ {
+		words[full] |= big.Word(v[i]) << (8 * (i - full*wordBytes))
+	}
+	last := len(v) - 1
+	isNegative := v[last]&0x80 != 0
 	if isNegative {
-		result.Neg(result)
+		words[last/wordBytes] &^= big.Word(0x80) << (8 * (last % wordBytes))
 	}
 
-	return (scriptNum)(*result), nil
+	var result big.Int
+	result.SetBits(words)
+	if isNegative {
+		result.Neg(&result)
+	}
+
+	return scriptNum(result), nil
 }
 
 // minimallyEncode takes in a byte slice and returns a slice that contains a
