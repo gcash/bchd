@@ -24,10 +24,26 @@ func asBool(t []byte) bool {
 	return false
 }
 
+// trueBytes is the encoding of true, and smallIntBytes[n] that of the number
+// n for 1 <= n <= 16 (index 0 is unused).  Stack items are never modified in
+// place (pushed data shares the script's own bytes), so every push of these
+// values shares one slice.  The capacity equals the length, so an append to
+// one always copies.
+var (
+	trueBytes     = []byte{1}[:1:1]
+	negOneBytes   = []byte{0x81}[:1:1]
+	smallIntBytes = func() (t [17][]byte) {
+		for n := 1; n <= 16; n++ {
+			t[n] = []byte{byte(n)}[:1:1]
+		}
+		return t
+	}()
+)
+
 // fromBool converts a boolean into the appropriate byte array.
 func fromBool(v bool) []byte {
 	if v {
-		return []byte{1}
+		return trueBytes
 	}
 	return nil
 }
