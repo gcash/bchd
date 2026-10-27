@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -162,6 +163,47 @@ func TestMakeScriptNumMatchesReference(t *testing.T) {
 						in, minimal, limit, (*big.Int)(&got), want)
 				}
 			}
+		}
+	}
+}
+
+// TestOpMulProductRange checks OP_MUL at the edges of the 64-bit range with
+// both signs, and with a zero operand, before and after the May 2025
+// upgrade.  Before it, a product outside -(2^63-1) to 2^63-1 fails with
+// "integer overflow".
+func TestOpMulProductRange(t *testing.T) {
+	may2025 := ScriptFlags(may2026TestFlags) &^ ScriptAllowMay2026
+	bits64 := may2025 &^ ScriptAllowMay2025
+	tests := []struct {
+		script   string
+		overflow bool // before May 2025
+	}{
+		{"-5 0 MUL 0 NUMEQUAL", false},
+		{"0 -5 MUL 0 NUMEQUAL", false},
+		{"-2 -3 MUL 6 NUMEQUAL", false},
+		{"-1 -9223372036854775807 MUL 9223372036854775807 NUMEQUAL", false},
+		{"9223372036854775807 -1 MUL -9223372036854775807 NUMEQUAL", false},
+		{"-4611686018427387903 2 MUL -9223372036854775806 NUMEQUAL", false},
+		{"3037000499 -3037000499 MUL -9223372030926249001 NUMEQUAL", false},
+		{"4611686018427387904 2 MUL DROP 1", true},
+		{"-4611686018427387904 2 MUL DROP 1", true},
+		{"2 -4611686018427387904 MUL DROP 1", true},
+		{"-3037000500 -3037000500 MUL DROP 1", true},
+		{"3037000500 -3037000500 MUL DROP 1", true},
+		{"9223372036854775807 9223372036854775807 MUL DROP 1", true},
+	}
+	for _, test := range tests {
+		pkScript := hex.EncodeToString(mustParseShortForm(test.script))
+		_, err := runFunctionsTestScript(t, nil, pkScript, bits64)
+		if !test.overflow && err != nil {
+			t.Errorf("%s: %v", test.script, err)
+		}
+		if test.overflow && (!IsErrorCode(err, ErrNumberRange64Bit) ||
+			err.Error() != "integer overflow") {
+			t.Errorf("%s: got %v, want integer overflow", test.script, err)
+		}
+		if _, err := runFunctionsTestScript(t, nil, pkScript, may2025); err != nil {
+			t.Errorf("%s after May 2025: %v", test.script, err)
 		}
 	}
 }

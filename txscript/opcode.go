@@ -2452,24 +2452,21 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 	if !vm.hasFlag(ScriptAllowMay2025) && (c.IsGreaterThanInt(maxInt64) || c.IsLessThanInt(minInt64+1)) {
 		return scriptError(vm.resultRangeErrorCode(), "integer overflow")
 	}
-	if (c.IsLessThanInt(0)) == ((a.IsLessThanInt(0)) != (b.IsLessThanInt(0))) {
-		var d scriptNum
-		d.Div(&c, &b)
-		if d.IsEqualeTo(&a) {
-			resultBytes := c.Bytes()
-			if len(resultBytes) > vm.maxScriptElementSize {
-				return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
-					"result size %d exceeds max allowed size %d",
-					len(resultBytes), vm.maxScriptElementSize))
-			}
-			vm.dstack.PushByteArray(resultBytes)
 
-			vm.metrics.AddOPCost(2*len(resultBytes) + (a.byteLen() * b.byteLen()))
-
-			return nil
-		}
+	// The product is exact, so it needs no overflow check beyond the range
+	// check above: dividing it by b gives back a, and its sign is the
+	// product of the signs.
+	resultBytes := c.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
+		return scriptError(vm.resultRangeErrorCode(), fmt.Sprintf(
+			"result size %d exceeds max allowed size %d",
+			len(resultBytes), vm.maxScriptElementSize))
 	}
-	return scriptError(vm.resultRangeErrorCode(), "integer overflow")
+	vm.dstack.PushByteArray(resultBytes)
+
+	vm.metrics.AddOPCost(2*len(resultBytes) + (a.byteLen() * b.byteLen()))
+
+	return nil
 }
 
 // opcodeDiv return the integer quotient of a and b. If the result
