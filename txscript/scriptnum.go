@@ -253,29 +253,26 @@ func (n *scriptNum) IsLessThan(v *scriptNum) bool {
 
 func (n *scriptNum) IsEqualeToInt(v int64) bool {
 	a := (*big.Int)(n)
-	b := big.NewInt(v)
 
-	result := a.Cmp(b)
-
-	return result == 0
+	return a.IsInt64() && a.Int64() == v
 }
 
 func (n *scriptNum) IsGreaterThanInt(v int64) bool {
 	a := (*big.Int)(n)
-	b := big.NewInt(v)
+	if !a.IsInt64() {
+		return a.Sign() > 0
+	}
 
-	result := a.Cmp(b)
-
-	return result == 1
+	return a.Int64() > v
 }
 
 func (n *scriptNum) IsLessThanInt(v int64) bool {
 	a := (*big.Int)(n)
-	b := big.NewInt(v)
+	if !a.IsInt64() {
+		return a.Sign() < 0
+	}
 
-	result := a.Cmp(b)
-
-	return result == -1
+	return a.Int64() < v
 }
 
 // Add sets n to the sum x+y and returns n.
@@ -284,7 +281,7 @@ func (n *scriptNum) Add(x, y *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 	b := (*big.Int)(y)
 
-	(*big.Int)(n).Set(new(big.Int).Add(a, b))
+	(*big.Int)(n).Add(a, b)
 
 	return n
 }
@@ -295,7 +292,7 @@ func (n *scriptNum) Sub(x, y *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 	b := (*big.Int)(y)
 
-	(*big.Int)(n).Set(new(big.Int).Sub(a, b))
+	(*big.Int)(n).Sub(a, b)
 
 	return n
 }
@@ -306,7 +303,7 @@ func (n *scriptNum) Div(x, y *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 	b := (*big.Int)(y)
 
-	(*big.Int)(n).Set(new(big.Int).Quo(a, b))
+	(*big.Int)(n).Quo(a, b)
 
 	return n
 }
@@ -317,7 +314,7 @@ func (n *scriptNum) Mul(x, y *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 	b := (*big.Int)(y)
 
-	(*big.Int)(n).Set(new(big.Int).Mul(a, b))
+	(*big.Int)(n).Mul(a, b)
 
 	return n
 }
@@ -328,7 +325,7 @@ func (n *scriptNum) Mod(x, y *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 	b := (*big.Int)(y)
 
-	(*big.Int)(n).Set(new(big.Int).Rem(a, b))
+	(*big.Int)(n).Rem(a, b)
 
 	return n
 }
@@ -338,7 +335,7 @@ func (n *scriptNum) Mod(x, y *scriptNum) *scriptNum {
 func (n *scriptNum) Neg(x *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 
-	(*big.Int)(n).Set(new(big.Int).Neg(a))
+	(*big.Int)(n).Neg(a)
 
 	return n
 }
@@ -348,7 +345,7 @@ func (n *scriptNum) Neg(x *scriptNum) *scriptNum {
 func (n *scriptNum) Abs(x *scriptNum) *scriptNum {
 	a := (*big.Int)(x)
 
-	(*big.Int)(n).Set(new(big.Int).Abs(a))
+	(*big.Int)(n).Abs(a)
 
 	return n
 }
@@ -358,7 +355,7 @@ func (n *scriptNum) Abs(x *scriptNum) *scriptNum {
 func (n *scriptNum) LShift(x *scriptNum, shift uint) *scriptNum {
 	a := (*big.Int)(x)
 
-	(*big.Int)(n).Set(new(big.Int).Lsh(a, shift))
+	(*big.Int)(n).Lsh(a, shift)
 
 	return n
 }
@@ -368,7 +365,7 @@ func (n *scriptNum) LShift(x *scriptNum, shift uint) *scriptNum {
 func (n *scriptNum) RShift(x *scriptNum, shift uint) *scriptNum {
 	a := (*big.Int)(x)
 
-	(*big.Int)(n).Set(new(big.Int).Rsh(a, shift))
+	(*big.Int)(n).Rsh(a, shift)
 
 	return n
 }

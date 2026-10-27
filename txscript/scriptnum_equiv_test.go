@@ -167,6 +167,61 @@ func TestMakeScriptNumMatchesReference(t *testing.T) {
 	}
 }
 
+// TestScriptNumArithmeticMatchesReference checks the scriptNum operations,
+// which compute into their receiver, against big.Int results computed into
+// fresh values, both with a fresh receiver and with the receiver aliasing
+// the first operand, and the comparisons with an int64 against big.Int.Cmp.
+func TestScriptNumArithmeticMatchesReference(t *testing.T) {
+	r := rand.New(rand.NewSource(3))
+	vals := equivValues(r, 40)
+	ints := []int64{0, 1, -1, 2, -2, 127, -128, maxInt32, minInt32, maxInt64, minInt64, minInt64 + 1}
+	for k := 0; k < 20000; k++ {
+		x := vals[r.Intn(len(vals))]
+		y := vals[r.Intn(len(vals))]
+		type op struct {
+			name string
+			do   func(n, a, b *scriptNum) *scriptNum
+			ref  func(a, b *big.Int) *big.Int
+		}
+		ops := []op{
+			{"Add", func(n, a, b *scriptNum) *scriptNum { return n.Add(a, b) }, func(a, b *big.Int) *big.Int { return new(big.Int).Add(a, b) }},
+			{"Sub", func(n, a, b *scriptNum) *scriptNum { return n.Sub(a, b) }, func(a, b *big.Int) *big.Int { return new(big.Int).Sub(a, b) }},
+			{"Mul", func(n, a, b *scriptNum) *scriptNum { return n.Mul(a, b) }, func(a, b *big.Int) *big.Int { return new(big.Int).Mul(a, b) }},
+			{"Neg", func(n, a, b *scriptNum) *scriptNum { return n.Neg(a) }, func(a, b *big.Int) *big.Int { return new(big.Int).Neg(a) }},
+			{"Abs", func(n, a, b *scriptNum) *scriptNum { return n.Abs(a) }, func(a, b *big.Int) *big.Int { return new(big.Int).Abs(a) }},
+			{"LShift", func(n, a, b *scriptNum) *scriptNum { return n.LShift(a, 13) }, func(a, b *big.Int) *big.Int { return new(big.Int).Lsh(a, 13) }},
+			{"RShift", func(n, a, b *scriptNum) *scriptNum { return n.RShift(a, 13) }, func(a, b *big.Int) *big.Int { return new(big.Int).Rsh(a, 13) }},
+		}
+		if y.Sign() != 0 {
+			ops = append(ops,
+				op{"Div", func(n, a, b *scriptNum) *scriptNum { return n.Div(a, b) }, func(a, b *big.Int) *big.Int { return new(big.Int).Quo(a, b) }},
+				op{"Mod", func(n, a, b *scriptNum) *scriptNum { return n.Mod(a, b) }, func(a, b *big.Int) *big.Int { return new(big.Int).Rem(a, b) }})
+		}
+		for _, o := range ops {
+			want := o.ref(x, y)
+			a, b := scriptNum(*new(big.Int).Set(x)), scriptNum(*new(big.Int).Set(y))
+			var n scriptNum
+			if got := (*big.Int)(o.do(&n, &a, &b)); got.Cmp(want) != 0 {
+				t.Fatalf("%s(%v, %v) = %v, want %v", o.name, x, y, got, want)
+			}
+			if (*big.Int)(&a).Cmp(x) != 0 || (*big.Int)(&b).Cmp(y) != 0 {
+				t.Fatalf("%s(%v, %v) modified an operand", o.name, x, y)
+			}
+			if got := (*big.Int)(o.do(&a, &a, &b)); got.Cmp(want) != 0 {
+				t.Fatalf("%s(%v, %v) in place = %v, want %v", o.name, x, y, got, want)
+			}
+		}
+		n := scriptNum(*x)
+		for _, v := range ints {
+			c := x.Cmp(big.NewInt(v))
+			if n.IsEqualeToInt(v) != (c == 0) || n.IsGreaterThanInt(v) != (c == 1) ||
+				n.IsLessThanInt(v) != (c == -1) {
+				t.Fatalf("comparing %v with %d disagrees with Cmp", x, v)
+			}
+		}
+	}
+}
+
 // TestOpMulProductRange checks OP_MUL at the edges of the 64-bit range with
 // both signs, and with a zero operand, before and after the May 2025
 // upgrade.  Before it, a product outside -(2^63-1) to 2^63-1 fails with
