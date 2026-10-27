@@ -150,6 +150,15 @@ func (n scriptNum) Bytes() []byte {
 	return result
 }
 
+// byteLen returns the length of the encoding Bytes returns, without encoding.
+func (n *scriptNum) byteLen() int {
+	bigN := (*big.Int)(n)
+	if bigN.Sign() == 0 {
+		return 0
+	}
+	return bigN.BitLen()/8 + 1
+}
+
 // Int32 returns the script number clamped to a valid int32.  That is to say
 // when the script number is higher than the max allowed int32, the max int32
 // value is returned and vice versa for the minimum value.  Note that this

@@ -1496,7 +1496,7 @@ func opcodeDepth(op *parsedOpcode, vm *Engine) error {
 	depth := makeScriptNumFromInt64(int64(vm.dstack.Depth()))
 	vm.dstack.PushInt(*depth)
 
-	vm.metrics.AddOPCost(len(depth.Bytes()))
+	vm.metrics.AddOPCost(depth.byteLen())
 
 	return nil
 }
@@ -1758,14 +1758,14 @@ func opcodeBin2num(op *parsedOpcode, vm *Engine) error {
 	if vm.hasFlag(ScriptAllowMay2025) {
 		defaultScriptNumLen = defaultBigIntScriptNumLen
 	}
-	if len(n.Bytes()) > defaultScriptNumLen {
+	if n.byteLen() > defaultScriptNumLen {
 		return scriptError(numberRangeErrorCode(defaultScriptNumLen),
 			fmt.Sprintf("script numbers are limited to %d bytes", defaultScriptNumLen))
 	}
 
 	vm.dstack.PushInt(n)
 
-	vm.metrics.AddOPCost(len(n.Bytes()))
+	vm.metrics.AddOPCost(n.byteLen())
 
 	return nil
 }
@@ -1782,7 +1782,7 @@ func opcodeSize(op *parsedOpcode, vm *Engine) error {
 
 	vm.dstack.PushInt(*makeScriptNumFromInt(len(so)))
 
-	vm.metrics.AddOPCost(len(makeScriptNumFromInt(len(so)).Bytes()))
+	vm.metrics.AddOPCost(makeScriptNumFromInt(len(so)).byteLen())
 
 	return nil
 }
@@ -2126,7 +2126,7 @@ func opcode1Add(op *parsedOpcode, vm *Engine) error {
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
-	vm.dstack.PushInt(*incrementedVal)
+	vm.dstack.PushByteArray(resultBytes)
 
 	vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2155,7 +2155,7 @@ func opcode1Sub(op *parsedOpcode, vm *Engine) error {
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
-	vm.dstack.PushInt(*decrementedVal)
+	vm.dstack.PushByteArray(resultBytes)
 
 	vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2206,15 +2206,16 @@ func opcode2Mul(op *parsedOpcode, vm *Engine) error {
 
 	result := m.LShift(&m, shift)
 
-	if len(result.Bytes()) > vm.maxScriptElementSize {
+	resultBytes := result.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
-			len(result.Bytes()), vm.maxScriptElementSize)
+			len(resultBytes), vm.maxScriptElementSize)
 		return scriptError(vm.resultRangeErrorCode(), str)
 	}
 
-	vm.dstack.PushInt(*result)
+	vm.dstack.PushByteArray(resultBytes)
 
-	vm.metrics.AddOPCost(len(result.Bytes()))
+	vm.metrics.AddOPCost(len(resultBytes))
 
 	return nil
 }
@@ -2251,15 +2252,16 @@ func opcode2Div(op *parsedOpcode, vm *Engine) error {
 
 	result := m.RShift(&m, shift)
 
-	if len(result.Bytes()) > vm.maxScriptElementSize {
+	resultBytes := result.Bytes()
+	if len(resultBytes) > vm.maxScriptElementSize {
 		str := fmt.Sprintf("size %d exceeds max allowed size %d",
-			len(result.Bytes()), vm.maxScriptElementSize)
+			len(resultBytes), vm.maxScriptElementSize)
 		return scriptError(vm.resultRangeErrorCode(), str)
 	}
 
-	vm.dstack.PushInt(*result)
+	vm.dstack.PushByteArray(resultBytes)
 
-	vm.metrics.AddOPCost(len(result.Bytes()))
+	vm.metrics.AddOPCost(len(resultBytes))
 
 	return nil
 }
@@ -2281,7 +2283,7 @@ func opcodeNegate(op *parsedOpcode, vm *Engine) error {
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
-	vm.dstack.PushInt(*negatedVal)
+	vm.dstack.PushByteArray(resultBytes)
 
 	vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2306,7 +2308,7 @@ func opcodeAbs(op *parsedOpcode, vm *Engine) error {
 			"result size %d exceeds max allowed size %d",
 			len(resultBytes), vm.maxScriptElementSize))
 	}
-	vm.dstack.PushInt(m)
+	vm.dstack.PushByteArray(resultBytes)
 
 	vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2384,7 +2386,7 @@ func opcodeAdd(op *parsedOpcode, vm *Engine) error {
 				"result size %d exceeds max allowed size %d",
 				len(resultBytes), vm.maxScriptElementSize))
 		}
-		vm.dstack.PushInt(c)
+		vm.dstack.PushByteArray(resultBytes)
 
 		vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2417,7 +2419,7 @@ func opcodeSub(op *parsedOpcode, vm *Engine) error {
 				"result size %d exceeds max allowed size %d",
 				len(resultBytes), vm.maxScriptElementSize))
 		}
-		vm.dstack.PushInt(c)
+		vm.dstack.PushByteArray(resultBytes)
 
 		vm.metrics.AddOPCost(2 * len(resultBytes))
 
@@ -2460,9 +2462,9 @@ func opcodeMul(op *parsedOpcode, vm *Engine) error {
 					"result size %d exceeds max allowed size %d",
 					len(resultBytes), vm.maxScriptElementSize))
 			}
-			vm.dstack.PushInt(c)
+			vm.dstack.PushByteArray(resultBytes)
 
-			vm.metrics.AddOPCost(2*len(resultBytes) + (len(a.Bytes()) * len(b.Bytes())))
+			vm.metrics.AddOPCost(2*len(resultBytes) + (a.byteLen() * b.byteLen()))
 
 			return nil
 		}
@@ -2488,7 +2490,7 @@ func opcodeDiv(op *parsedOpcode, vm *Engine) error {
 	c.Div(&a, &b)
 	vm.dstack.PushInt(c)
 
-	vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) * len(b.Bytes())))
+	vm.metrics.AddOPCost(2*c.byteLen() + (a.byteLen() * b.byteLen()))
 
 	return nil
 }
@@ -2511,7 +2513,7 @@ func opcodeMod(op *parsedOpcode, vm *Engine) error {
 	c.Mod(&a, &b)
 	vm.dstack.PushInt(c)
 
-	vm.metrics.AddOPCost(2*len(c.Bytes()) + (len(a.Bytes()) * len(b.Bytes())))
+	vm.metrics.AddOPCost(2*c.byteLen() + (a.byteLen() * b.byteLen()))
 
 	return nil
 }
@@ -2848,12 +2850,12 @@ func opcodeMin(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	cost := 2 * len(v1.Bytes())
+	cost := 2 * v1.byteLen()
 	if v1.IsLessThan(&v0) {
 		vm.dstack.PushInt(v1)
 	} else {
 		vm.dstack.PushInt(v0)
-		cost = 2 * len(v0.Bytes())
+		cost = 2 * v0.byteLen()
 	}
 
 	vm.metrics.AddOPCost(cost)
@@ -2871,12 +2873,12 @@ func opcodeMax(op *parsedOpcode, vm *Engine) error {
 		return err
 	}
 
-	cost := 2 * len(v1.Bytes())
+	cost := 2 * v1.byteLen()
 	if v1.IsGreaterThan(&v0) {
 		vm.dstack.PushInt(v1)
 	} else {
 		vm.dstack.PushInt(v0)
-		cost = 2 * len(v0.Bytes())
+		cost = 2 * v0.byteLen()
 	}
 
 	vm.metrics.AddOPCost(cost)
@@ -3577,7 +3579,7 @@ func opcodeInputIndex(op *parsedOpcode, vm *Engine) error {
 	index := makeScriptNumFromInt(vm.txIdx)
 	vm.dstack.PushInt(*index)
 
-	vm.metrics.AddOPCost(len(index.Bytes()))
+	vm.metrics.AddOPCost(index.byteLen())
 
 	return nil
 }
@@ -3643,7 +3645,7 @@ func opcodeTxVersion(op *parsedOpcode, vm *Engine) error {
 	version := makeScriptNumFromInt64(int64(vm.tx.Version))
 	vm.dstack.PushInt(*version)
 
-	vm.metrics.AddOPCost(len(version.Bytes()))
+	vm.metrics.AddOPCost(version.byteLen())
 
 	return nil
 }
@@ -3660,7 +3662,7 @@ func opcodeTxInputCount(op *parsedOpcode, vm *Engine) error {
 	txInputCount := makeScriptNumFromInt(len(vm.tx.TxIn))
 	vm.dstack.PushInt(*txInputCount)
 
-	vm.metrics.AddOPCost(len(txInputCount.Bytes()))
+	vm.metrics.AddOPCost(txInputCount.byteLen())
 
 	return nil
 }
@@ -3676,7 +3678,7 @@ func opcodeTxOutputCount(op *parsedOpcode, vm *Engine) error {
 	txOutputCount := makeScriptNumFromInt(len(vm.tx.TxOut))
 	vm.dstack.PushInt(*txOutputCount)
 
-	vm.metrics.AddOPCost(len(txOutputCount.Bytes()))
+	vm.metrics.AddOPCost(txOutputCount.byteLen())
 
 	return nil
 }
@@ -3692,7 +3694,7 @@ func opcodeTxLocktime(op *parsedOpcode, vm *Engine) error {
 	lockTime := makeScriptNumFromUInt64(uint64(vm.tx.LockTime))
 	vm.dstack.PushInt(*lockTime)
 
-	vm.metrics.AddOPCost(len(lockTime.Bytes()))
+	vm.metrics.AddOPCost(lockTime.byteLen())
 
 	return nil
 }
@@ -3724,7 +3726,7 @@ func opcodeUtxoValue(op *parsedOpcode, vm *Engine) error {
 	value := makeScriptNumFromInt64(utxo.Value)
 	vm.dstack.PushInt(*value)
 
-	vm.metrics.AddOPCost(len(value.Bytes()))
+	vm.metrics.AddOPCost(value.byteLen())
 
 	return nil
 }
@@ -3843,7 +3845,7 @@ func opcodeOutpointIndex(op *parsedOpcode, vm *Engine) error {
 	index := makeScriptNumFromUInt64(uint64(vm.tx.TxIn[i.Int32()].PreviousOutPoint.Index))
 	vm.dstack.PushInt(*index)
 
-	vm.metrics.AddOPCost(len(index.Bytes()))
+	vm.metrics.AddOPCost(index.byteLen())
 
 	return nil
 }
@@ -3906,7 +3908,7 @@ func opcodeInputSequenceNumber(op *parsedOpcode, vm *Engine) error {
 	sequence := makeScriptNumFromUInt64(uint64(vm.tx.TxIn[i.Int32()].Sequence))
 	vm.dstack.PushInt(*sequence)
 
-	vm.metrics.AddOPCost(len(sequence.Bytes()))
+	vm.metrics.AddOPCost(sequence.byteLen())
 
 	return nil
 }
@@ -3933,7 +3935,7 @@ func opcodeOutputValue(op *parsedOpcode, vm *Engine) error {
 	value := makeScriptNumFromInt64(vm.tx.TxOut[i.Int32()].Value)
 	vm.dstack.PushInt(*value)
 
-	vm.metrics.AddOPCost(len(value.Bytes()))
+	vm.metrics.AddOPCost(value.byteLen())
 
 	return nil
 }
@@ -4075,7 +4077,7 @@ func opcodeUtxoTokenAmount(op *parsedOpcode, vm *Engine) error {
 		amount := makeScriptNumFromUInt64(utxo.TokenData.Amount)
 		vm.dstack.PushInt(*amount)
 
-		vm.metrics.AddOPCost(len(amount.Bytes()))
+		vm.metrics.AddOPCost(amount.byteLen())
 	}
 
 	return nil
@@ -4190,7 +4192,7 @@ func opcodeOutputTokenAmount(op *parsedOpcode, vm *Engine) error {
 		amount := makeScriptNumFromUInt64(txOut.TokenData.Amount)
 		vm.dstack.PushInt(*amount)
 
-		vm.metrics.AddOPCost(len(amount.Bytes()))
+		vm.metrics.AddOPCost(amount.byteLen())
 	}
 
 	return nil
