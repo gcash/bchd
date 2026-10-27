@@ -276,6 +276,23 @@ func TestPopLegacyInt32MatchesPopLegacyInt(t *testing.T) {
 	}
 }
 
+// TestSmallIntBytes checks the shared encodings of true, -1 and 1 to 16
+// against the encoder.
+func TestSmallIntBytes(t *testing.T) {
+	for n := 1; n <= 16; n++ {
+		want := makeScriptNumFromInt(n).Bytes()
+		if !bytes.Equal(smallIntBytes[n], want) || cap(smallIntBytes[n]) != len(want) {
+			t.Fatalf("smallIntBytes[%d] = %x, want %x", n, smallIntBytes[n], want)
+		}
+	}
+	if want := makeScriptNumFromInt(-1).Bytes(); !bytes.Equal(negOneBytes, want) || cap(negOneBytes) != 1 {
+		t.Fatalf("negOneBytes = %x, want %x", negOneBytes, want)
+	}
+	if want := makeScriptNumFromInt(1).Bytes(); !bytes.Equal(trueBytes, want) || cap(trueBytes) != 1 {
+		t.Fatalf("trueBytes = %x, want %x", trueBytes, want)
+	}
+}
+
 // TestOpMulProductRange checks OP_MUL at the edges of the 64-bit range with
 // both signs, and with a zero operand, before and after the May 2025
 // upgrade.  Before it, a product outside -(2^63-1) to 2^63-1 fails with

@@ -1066,6 +1066,8 @@ func (vm *Engine) isSegwitExemption() bool {
 
 // GetStack returns the contents of the primary stack as an array. where the
 // last item in the array is the top of the stack.
+// The items are the engine's own slices, which may be shared with the
+// scripts and with other engines, so they must not be modified.
 func (vm *Engine) GetStack() [][]byte {
 	return getStack(&vm.dstack)
 }
@@ -1078,6 +1080,8 @@ func (vm *Engine) SetStack(data [][]byte) {
 
 // GetAltStack returns the contents of the alternate stack as an array where the
 // last item in the array is the top of the stack.
+// The items are the engine's own slices, which may be shared with the
+// scripts and with other engines, so they must not be modified.
 func (vm *Engine) GetAltStack() [][]byte {
 	return getStack(&vm.astack)
 }

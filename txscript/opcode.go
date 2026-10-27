@@ -932,7 +932,7 @@ func opcodePushData(op *parsedOpcode, vm *Engine) error {
 
 // opcode1Negate pushes -1, encoded as a number, to the data stack.
 func opcode1Negate(op *parsedOpcode, vm *Engine) error {
-	vm.dstack.PushInt(*makeScriptNumFromInt64(-1))
+	vm.dstack.PushByteArray(negOneBytes)
 
 	vm.metrics.AddOPCost(1)
 
@@ -945,7 +945,7 @@ func opcode1Negate(op *parsedOpcode, vm *Engine) error {
 func opcodeN(op *parsedOpcode, vm *Engine) error {
 	// The opcodes are all defined consecutively, so the numeric value is
 	// the difference.
-	vm.dstack.PushInt(*makeScriptNumFromInt64(int64(op.opcode.value - (OP_1 - 1))))
+	vm.dstack.PushByteArray(smallIntBytes[op.opcode.value-(OP_1-1)])
 
 	vm.metrics.AddOPCost(1)
 
