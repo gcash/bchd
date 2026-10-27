@@ -222,6 +222,60 @@ func TestScriptNumArithmeticMatchesReference(t *testing.T) {
 	}
 }
 
+// TestPopLegacyInt32MatchesPopLegacyInt checks popLegacyInt32 against
+// popLegacyInt followed by Int32: the value, the error and the stack left.
+func TestPopLegacyInt32MatchesPopLegacyInt(t *testing.T) {
+	r := rand.New(rand.NewSource(4))
+	var items [][]byte
+	for _, v := range equivValues(r, 12) {
+		items = append(items, refScriptNumBytes(v))
+	}
+	for n := 0; n <= 12; n++ {
+		for k := 0; k < 8; k++ {
+			buf := make([]byte, n)
+			r.Read(buf)
+			items = append(items, buf)
+			if n > 0 {
+				b := append([]byte(nil), buf...)
+				b[n-1] &= 0x80
+				items = append(items, b)
+			}
+		}
+	}
+	for _, minimal := range []bool{false, true} {
+		for _, numLen := range []int{defaultSmallScriptNumLen, defaultBigScriptNumLen, defaultBigIntScriptNumLen} {
+			// An empty stack fails the same way.
+			s1 := stack{verifyMinimalData: minimal, defaultScriptNumLen: numLen}
+			s2 := s1
+			_, err1 := s1.popLegacyInt()
+			_, err2 := s2.popLegacyInt32()
+			if err1 == nil || fmt.Sprint(err1) != fmt.Sprint(err2) {
+				t.Fatalf("empty stack: errors %v and %v", err1, err2)
+			}
+			for _, item := range items {
+				s1 := stack{stk: [][]byte{{1}, item}, verifyMinimalData: minimal, defaultScriptNumLen: numLen}
+				s2 := stack{stk: [][]byte{{1}, item}, verifyMinimalData: minimal, defaultScriptNumLen: numLen}
+				n1, err1 := s1.popLegacyInt()
+				v2, err2 := s2.popLegacyInt32()
+				if fmt.Sprint(err1) != fmt.Sprint(err2) {
+					t.Fatalf("%x (minimal %v, len %d): errors %v and %v",
+						item, minimal, numLen, err1, err2)
+				}
+				if err1 != nil && err1.(Error).ErrorCode != err2.(Error).ErrorCode {
+					t.Fatalf("%x: codes %v and %v", item, err1, err2)
+				}
+				if err1 == nil && n1.Int32() != v2 {
+					t.Fatalf("%x (minimal %v, len %d): %d and %d",
+						item, minimal, numLen, n1.Int32(), v2)
+				}
+				if s1.Depth() != s2.Depth() {
+					t.Fatalf("%x: depths %d and %d", item, s1.Depth(), s2.Depth())
+				}
+			}
+		}
+	}
+}
+
 // TestOpMulProductRange checks OP_MUL at the edges of the 64-bit range with
 // both signs, and with a zero operand, before and after the May 2025
 // upgrade.  Before it, a product outside -(2^63-1) to 2^63-1 fails with

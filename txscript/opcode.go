@@ -1547,12 +1547,12 @@ func opcodePick(op *parsedOpcode, vm *Engine) error {
 	if err := vm.dstack.checkDepth(2); err != nil {
 		return err
 	}
-	val, err := vm.dstack.popLegacyInt()
+	val, err := vm.dstack.popLegacyInt32()
 	if err != nil {
 		return err
 	}
 
-	pickedItemLength, err := vm.dstack.PickN(val.Int32())
+	pickedItemLength, err := vm.dstack.PickN(val)
 
 	vm.metrics.AddOPCost(pickedItemLength)
 
@@ -1569,13 +1569,13 @@ func opcodeRoll(op *parsedOpcode, vm *Engine) error {
 	if err := vm.dstack.checkDepth(2); err != nil {
 		return err
 	}
-	val, err := vm.dstack.popLegacyInt()
+	val, err := vm.dstack.popLegacyInt32()
 	if err != nil {
 		return err
 	}
-	rolledItemLength, err := vm.dstack.RollN(val.Int32())
+	rolledItemLength, err := vm.dstack.RollN(val)
 
-	vm.metrics.AddOPCost(int(val.Int32()))
+	vm.metrics.AddOPCost(int(val))
 	vm.metrics.AddOPCost(rolledItemLength)
 
 	return err
