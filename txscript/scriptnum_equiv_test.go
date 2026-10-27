@@ -99,6 +99,9 @@ func TestScriptNumBytesMatchesReference(t *testing.T) {
 		if !bytes.Equal(got, want) {
 			t.Fatalf("Bytes(%v) = %x, want %x", v, got, want)
 		}
+		if l := (*scriptNum)(v).byteLen(); l != len(want) {
+			t.Fatalf("byteLen(%v) = %d, want %d", v, l, len(want))
+		}
 	}
 }
 
