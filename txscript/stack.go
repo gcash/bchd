@@ -183,6 +183,33 @@ func (s *stack) popLegacyInt() (scriptNum, error) {
 	return n, err
 }
 
+// popLegacyInt32 returns popLegacyInt's number as Int32 gives it, without
+// making a big.Int for an item of up to 8 bytes, which is never reported
+// outside the 64-bit range.  It pops the item, and returns the same error,
+// as popLegacyInt.
+func (s *stack) popLegacyInt32() (int32, error) {
+	so, err := s.PeekByteArray(0)
+	if err != nil || len(so) > defaultBigScriptNumLen {
+		n, err := s.popLegacyInt()
+		if err != nil {
+			return 0, err
+		}
+		return n.Int32(), nil
+	}
+	s.dropTop(1)
+	if err := checkScriptNum(so, s.verifyMinimalData, s.defaultScriptNumLen); err != nil {
+		return 0, err
+	}
+	v := decodeSmallScriptNum(so)
+	if v > maxInt32 {
+		return maxInt32, nil
+	}
+	if v < minInt32 {
+		return minInt32, nil
+	}
+	return int32(v), nil
+}
+
 // PopBool pops the value off the top of the stack, converts it into a bool, and
 // returns it.
 //

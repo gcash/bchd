@@ -403,6 +403,46 @@ func numberRangeErrorCode(scriptNumLen int) ErrorCode {
 	return ErrNumberRange32Bit
 }
 
+// checkScriptNum returns the error makeScriptNum returns for v, if any: v is
+// longer than scriptNumLen bytes, or, when requireMinimal is set, it is not
+// minimally encoded.
+func checkScriptNum(v []byte, requireMinimal bool, scriptNumLen int) error {
+	// Interpreting data requires that it is not larger than
+	// the passed scriptNumLen value.
+	if len(v) > scriptNumLen {
+		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
+			"which exceeds the max allowed of %d", v, len(v),
+			scriptNumLen)
+		return scriptError(numberRangeErrorCode(scriptNumLen), str)
+	}
+
+	// Enforce minimal encoded if requested.
+	if requireMinimal {
+		if err := checkMinimalDataEncoding(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decodeSmallScriptNum returns the value of the script number encoded in v,
+// which is at most 8 bytes long, so its magnitude fits in 63 bits.  An empty
+// v is zero.
+func decodeSmallScriptNum(v []byte) int64 {
+	if len(v) == 0 {
+		return 0
+	}
+	var abs uint64
+	for i := len(v) - 1; i >= 0; i-- {
+		abs = abs<<8 | uint64(v[i])
+	}
+	signBit := uint64(0x80) << (8 * (len(v) - 1))
+	if abs&signBit != 0 {
+		return -int64(abs &^ signBit)
+	}
+	return int64(abs)
+}
+
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
 // and returns the result as a script number.
 //
@@ -423,40 +463,19 @@ func numberRangeErrorCode(scriptNumLen int) ErrorCode {
 //
 // See the Bytes function documentation for example encodings.
 func makeScriptNum(v []byte, requireMinimal bool, scriptNumLen int) (scriptNum, error) {
-	// Interpreting data requires that it is not larger than
-	// the passed scriptNumLen value.
-	if len(v) > scriptNumLen {
-		str := fmt.Sprintf("numeric value encoded as %x is %d bytes "+
-			"which exceeds the max allowed of %d", v, len(v),
-			scriptNumLen)
-		return *makeScriptNumFromInt(0), scriptError(
-			numberRangeErrorCode(scriptNumLen), str)
-	}
-
-	// Enforce minimal encoded if requested.
-	if requireMinimal {
-		if err := checkMinimalDataEncoding(v); err != nil {
-			return *makeScriptNumFromInt(0), err
-		}
+	if err := checkScriptNum(v, requireMinimal, scriptNumLen); err != nil {
+		return *makeScriptNumFromInt(0), err
 	}
 
 	// Zero is encoded as an empty byte slice.
 	if len(v) == 0 {
 		return *makeScriptNumFromInt(0), nil
 	}
+
 	// Up to 8 bytes the magnitude fits in 63 bits.
 	if len(v) <= 8 {
-		var abs uint64
-		for i := len(v) - 1; i >= 0; i-- {
-			abs = abs<<8 | uint64(v[i])
-		}
-		signBit := uint64(0x80) << (8 * (len(v) - 1))
 		var result big.Int
-		if abs&signBit != 0 {
-			result.SetInt64(-int64(abs &^ signBit))
-		} else {
-			result.SetInt64(int64(abs))
-		}
+		result.SetInt64(decodeSmallScriptNum(v))
 		return scriptNum(result), nil
 	}
 
