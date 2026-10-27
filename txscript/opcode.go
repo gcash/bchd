@@ -1716,21 +1716,20 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 		return nil
 	}
 
+	// Move the sign bit to the last of size bytes and zero the bytes
+	// between.  b is a fresh copy, so clearing its sign bit is safe.
 	signbit := byte(0x00)
-
 	if len(b) > 0 {
 		signbit = b[len(b)-1] & 0x80
 		b[len(b)-1] &= 0x7f
 	}
-	for len(b) < size-1 {
-		b = append(b, 0x00)
-	}
+	result := make([]byte, size)
+	copy(result, b)
+	result[size-1] = signbit
 
-	b = append(b, signbit)
+	vm.dstack.PushByteArray(result)
 
-	vm.dstack.PushByteArray(b)
-
-	vm.metrics.AddOPCost(len(b))
+	vm.metrics.AddOPCost(len(result))
 
 	return nil
 }
