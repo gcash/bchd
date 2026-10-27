@@ -1558,7 +1558,7 @@
         "nb_skip": {
           "type": "integer",
           "format": "int64",
-          "description": "The number of confirmed transactions to skip, starting with the oldest first.\nDoes not affect results of unconfirmed transactions."
+          "description": "The number of confirmed transactions to skip, starting with the newest.\nDoes not affect results of unconfirmed transactions."
         },
         "nb_fetch": {
           "type": "integer",
@@ -1596,6 +1596,11 @@
             "$ref": "#/definitions/pbMempoolTransaction"
           },
           "description": "Transactions in mempool which have not been included in a block."
+        },
+        "confirmed_count": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions to a request that\nskips none, and a count of 0, is from such a node."
         }
       }
     },
@@ -1976,7 +1981,7 @@
         "nb_skip": {
           "type": "integer",
           "format": "int64",
-          "description": "The number of confirmed transactions to skip, starting with the oldest first.\nDoes not affect results of unconfirmed transactions."
+          "description": "The number of confirmed transactions to skip, starting with the newest.\nDoes not affect results of unconfirmed transactions."
         },
         "nb_fetch": {
           "type": "integer",
@@ -2014,6 +2019,11 @@
             "format": "byte"
           },
           "description": "Transactions in mempool which have not been included in a block."
+        },
+        "confirmed_count": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions to a request that\nskips none, and a count of 0, is from such a node."
         }
       }
     },

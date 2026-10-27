@@ -953,3 +953,113 @@ func TestTxRegionPagesForAddressReorg(t *testing.T) {
 		}
 	}
 }
+
+// TestTxRegionsAndCountForAddress ensures TxRegionsAndCountForAddress gives
+// the number of transactions of an address across the boundaries of its
+// levels, and the same block regions as TxRegionsForAddress reading newest
+// first, whatever the number skipped and requested.
+func TestTxRegionsAndCountForAddress(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	addr, err := bchutil.NewAddressPubKeyHash(make([]byte, 20), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{1}, 20),
+		params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrKey, err := addrToKey(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Level 0 holds 8 entries, level 1 16 more and level 2 32 more, so
+	// these counts fill levels and start new ones.
+	for _, n := range []uint32{0, 1, 8, 9, 24, 25, 56, 57, 100} {
+		db, err := database.Create("ffldb", t.TempDir(), wire.TestNet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idx := NewAddrIndex(db, params)
+
+		// The transactions are in blocks of ten.
+		levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
+		for i := uint32(0); i < n; i++ {
+			err := dbPutAddrIndexEntry(levels, addrKey, i/10+1,
+				wire.TxLoc{TxStart: int(i), TxLen: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		err = db.Update(func(dbTx database.Tx) error {
+			bucket, err := dbTx.Metadata().CreateBucket(addrIndexKey)
+			if err != nil {
+				return err
+			}
+			for key, value := range levels.levels {
+				if err := bucket.Put(key[:], value); err != nil {
+					return err
+				}
+			}
+			ids, err := dbTx.Metadata().CreateBucket(hashByIDIndexBucketName)
+			if err != nil {
+				return err
+			}
+			for id := uint32(1); id <= n/10+1; id++ {
+				var serializedID [4]byte
+				byteOrder.PutUint32(serializedID[:], id)
+				hash := chainhash.DoubleHashH(serializedID[:])
+				if err := ids.Put(serializedID[:], hash[:]); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = db.View(func(dbTx database.Tx) error {
+			_, _, count, err := idx.TxRegionsAndCountForAddress(dbTx,
+				other, 0, 10)
+			if err != nil || count != 0 {
+				t.Errorf("n=%d: another address counts %d, %v, want 0",
+					n, count, err)
+			}
+			for _, skip := range []uint32{0, 1, 7, n / 2, n, n + 5} {
+				for _, fetch := range []uint32{0, 1, 8, 50, n + 1} {
+					got, gotSkipped, count, err :=
+						idx.TxRegionsAndCountForAddress(dbTx,
+							addr, skip, fetch)
+					if err != nil {
+						return err
+					}
+					want, wantSkipped, err := idx.TxRegionsForAddress(
+						dbTx, addr, skip, fetch, true)
+					if err != nil {
+						return err
+					}
+					if count != n {
+						t.Errorf("n=%d skip=%d fetch=%d: count "+
+							"%d, want %d", n, skip, fetch,
+							count, n)
+					}
+					if gotSkipped != wantSkipped ||
+						!reflect.DeepEqual(got, want) {
+
+						t.Errorf("n=%d skip=%d fetch=%d: got "+
+							"%v skipped %d, want %v skipped "+
+							"%d", n, skip, fetch, got,
+							gotSkipped, want, wantSkipped)
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+	}
+}

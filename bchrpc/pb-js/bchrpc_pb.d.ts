@@ -653,6 +653,9 @@ export class GetAddressTransactionsResponse extends jspb.Message {
   setUnconfirmedTransactionsList(value: Array<MempoolTransaction>): void;
   addUnconfirmedTransactions(value?: MempoolTransaction, index?: number): MempoolTransaction;
 
+  getConfirmedCount(): number;
+  setConfirmedCount(value: number): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetAddressTransactionsResponse.AsObject;
   static toObject(includeInstance: boolean, msg: GetAddressTransactionsResponse): GetAddressTransactionsResponse.AsObject;
@@ -667,6 +670,7 @@ export namespace GetAddressTransactionsResponse {
   export type AsObject = {
     confirmedTransactionsList: Array<Transaction.AsObject>,
     unconfirmedTransactionsList: Array<MempoolTransaction.AsObject>,
+    confirmedCount: number,
   }
 }
 
@@ -734,6 +738,9 @@ export class GetRawAddressTransactionsResponse extends jspb.Message {
   setUnconfirmedTransactionsList(value: Array<Uint8Array | string>): void;
   addUnconfirmedTransactions(value: Uint8Array | string, index?: number): Uint8Array | string;
 
+  getConfirmedCount(): number;
+  setConfirmedCount(value: number): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetRawAddressTransactionsResponse.AsObject;
   static toObject(includeInstance: boolean, msg: GetRawAddressTransactionsResponse): GetRawAddressTransactionsResponse.AsObject;
@@ -748,6 +755,7 @@ export namespace GetRawAddressTransactionsResponse {
   export type AsObject = {
     confirmedTransactionsList: Array<Uint8Array | string>,
     unconfirmedTransactionsList: Array<Uint8Array | string>,
+    confirmedCount: number,
   }
 }
 

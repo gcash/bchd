@@ -918,6 +918,40 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 		numRequested, reverse, fetchBlockHash)
 }
 
+// TxRegionsAndCountForAddress returns what TxRegionsForAddress returns for the
+// passed address, number to skip and number requested, newest first, and the
+// number of transactions the index holds for the address.  It reads all of the
+// address's levels, where TxRegionsForAddress reads the newest it needs, but
+// no transactions, so the count costs the reading of 12 bytes for each of the
+// address's transactions.
+//
+// NOTE: These results only include transactions confirmed in blocks.
+//
+// This function is safe for concurrent access.
+func (idx *AddrIndex) TxRegionsAndCountForAddress(dbTx database.Tx, addr bchutil.Address, numToSkip, numRequested uint32) ([]database.BlockRegion, uint32, uint32, error) {
+	addrKey, err := addrToKey(addr)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	fetchBlockHash := func(id []byte) (*chainhash.Hash, error) {
+		return dbFetchBlockHashBySerializedID(dbTx, id)
+	}
+
+	addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if addrIdxBucket == nil {
+		return nil, 0, 0, fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	serialized := dbFetchAddrIndexLevels(addrIdxBucket, addrKey,
+		math.MaxUint64)
+	regions, skipped, err := addrIndexEntryRegions(serialized, addrKey,
+		numToSkip, numRequested, true, fetchBlockHash)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return regions, skipped, uint32(len(serialized) / txEntrySize), nil
+}
+
 // TxRegionPagesForAddress calls fn with the block regions of the transactions
 // involving the passed address, newest first, pageSize at a time, until fn
 // returns an error, which it returns, or they run out.  The address's levels

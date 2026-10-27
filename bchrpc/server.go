@@ -1147,12 +1147,12 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &pb.GetAddressTransactionsResponse{}
+	resp := &pb.GetAddressTransactionsResponse{ConfirmedCount: confirmedCount}
 
 	tip := s.chain.BestSnapshot().Height
 	for _, cTx := range confirmedTxs {
@@ -1246,12 +1246,12 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &pb.GetRawAddressTransactionsResponse{}
+	resp := &pb.GetRawAddressTransactionsResponse{ConfirmedCount: confirmedCount}
 
 	for _, cTx := range confirmedTxs {
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, cTx.txBytes)
@@ -1555,7 +1555,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if err := ctx.Err(); err != nil {
 				return nil, status.FromContextError(err).Err()
 			}
-			newTxs, err := s.fetchTransactionsByAddress(addr, startHeight+1,
+			newTxs, _, err := s.fetchTransactionsByAddress(addr, startHeight+1,
 				fetch, skip)
 			if err != nil && reorganized() {
 				return nil, errChainReorganized
@@ -3471,7 +3471,12 @@ type retrievedTx struct {
 	blockHeight int32
 }
 
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, error) {
+// fetchTransactionsByAddress returns the address's confirmed transactions
+// that GetAddressTransactions returns for the passed start height, number to
+// fetch and number to skip, newest first, and the number of confirmed
+// transactions the address has, whatever the others.  Both are read in one
+// database transaction, so they agree.
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, uint32, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
@@ -3483,7 +3488,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 		}
 	}
 	if numRequested == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Override the default number of entries to skip if needed.
@@ -3501,17 +3506,19 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	// client.
 	numSkipped := uint32(0)
 	addressTxns := make([]retrievedTx, 0, numRequested)
+	var count uint32
 
 	// Fetch transactions from the database in the desired order if more are
 	// needed.
 	if len(addressTxns) < numRequested {
 		err := s.db.View(func(dbTx database.Tx) error {
-			regions, dbSkipped, err := s.addrIndex.TxRegionsForAddress(
+			regions, dbSkipped, total, err := s.addrIndex.TxRegionsAndCountForAddress(
 				dbTx, addr, uint32(numToSkip)-numSkipped,
-				uint32(numRequested-len(addressTxns)), true)
+				uint32(numRequested-len(addressTxns)))
 			if err != nil {
 				return err
 			}
+			count = total
 			addressTxns, err = s.appendRegionTxs(addressTxns, dbTx,
 				regions, startHeight)
 			if err != nil {
@@ -3522,12 +3529,12 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			return nil
 		})
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
+			return nil, 0, status.Error(codes.InvalidArgument, "failed to load address index entries")
 		}
 
 	}
 
-	return addressTxns, nil
+	return addressTxns, count, nil
 }
 
 // appendRegionTxs appends to txs the transactions at the regions, read with

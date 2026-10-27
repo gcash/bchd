@@ -4653,7 +4653,8 @@ proto.pb.GetAddressTransactionsResponse.toObject = function(includeInstance, msg
     confirmedTransactionsList: jspb.Message.toObjectList(msg.getConfirmedTransactionsList(),
     proto.pb.Transaction.toObject, includeInstance),
     unconfirmedTransactionsList: jspb.Message.toObjectList(msg.getUnconfirmedTransactionsList(),
-    proto.pb.MempoolTransaction.toObject, includeInstance)
+    proto.pb.MempoolTransaction.toObject, includeInstance),
+    confirmedCount: jspb.Message.getFieldWithDefault(msg, 3, 0)
   };
 
   if (includeInstance) {
@@ -4700,6 +4701,10 @@ proto.pb.GetAddressTransactionsResponse.deserializeBinaryFromReader = function(m
       reader.readMessage(value,proto.pb.MempoolTransaction.deserializeBinaryFromReader);
       msg.addUnconfirmedTransactions(value);
       break;
+    case 3:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setConfirmedCount(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -4743,6 +4748,13 @@ proto.pb.GetAddressTransactionsResponse.serializeBinaryToWriter = function(messa
       2,
       f,
       proto.pb.MempoolTransaction.serializeBinaryToWriter
+    );
+  }
+  f = message.getConfirmedCount();
+  if (f !== 0) {
+    writer.writeUint32(
+      3,
+      f
     );
   }
 };
@@ -4807,6 +4819,21 @@ proto.pb.GetAddressTransactionsResponse.prototype.addUnconfirmedTransactions = f
 
 proto.pb.GetAddressTransactionsResponse.prototype.clearUnconfirmedTransactionsList = function() {
   this.setUnconfirmedTransactionsList([]);
+};
+
+
+/**
+ * optional uint32 confirmed_count = 3;
+ * @return {number}
+ */
+proto.pb.GetAddressTransactionsResponse.prototype.getConfirmedCount = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 3, 0));
+};
+
+
+/** @param {number} value */
+proto.pb.GetAddressTransactionsResponse.prototype.setConfirmedCount = function(value) {
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 
@@ -5193,7 +5220,8 @@ proto.pb.GetRawAddressTransactionsResponse.prototype.toObject = function(opt_inc
 proto.pb.GetRawAddressTransactionsResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
     confirmedTransactionsList: msg.getConfirmedTransactionsList_asB64(),
-    unconfirmedTransactionsList: msg.getUnconfirmedTransactionsList_asB64()
+    unconfirmedTransactionsList: msg.getUnconfirmedTransactionsList_asB64(),
+    confirmedCount: jspb.Message.getFieldWithDefault(msg, 3, 0)
   };
 
   if (includeInstance) {
@@ -5238,6 +5266,10 @@ proto.pb.GetRawAddressTransactionsResponse.deserializeBinaryFromReader = functio
       var value = /** @type {!Uint8Array} */ (reader.readBytes());
       msg.addUnconfirmedTransactions(value);
       break;
+    case 3:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setConfirmedCount(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -5278,6 +5310,13 @@ proto.pb.GetRawAddressTransactionsResponse.serializeBinaryToWriter = function(me
   if (f.length > 0) {
     writer.writeRepeatedBytes(
       2,
+      f
+    );
+  }
+  f = message.getConfirmedCount();
+  if (f !== 0) {
+    writer.writeUint32(
+      3,
       f
     );
   }
@@ -5387,6 +5426,21 @@ proto.pb.GetRawAddressTransactionsResponse.prototype.addUnconfirmedTransactions 
 
 proto.pb.GetRawAddressTransactionsResponse.prototype.clearUnconfirmedTransactionsList = function() {
   this.setUnconfirmedTransactionsList([]);
+};
+
+
+/**
+ * optional uint32 confirmed_count = 3;
+ * @return {number}
+ */
+proto.pb.GetRawAddressTransactionsResponse.prototype.getConfirmedCount = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 3, 0));
+};
+
+
+/** @param {number} value */
+proto.pb.GetRawAddressTransactionsResponse.prototype.setConfirmedCount = function(value) {
+  jspb.Message.setProto3IntField(this, 3, value);
 };
 
 

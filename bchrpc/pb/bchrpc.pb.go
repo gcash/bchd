@@ -1604,7 +1604,7 @@ type GetAddressTransactionsRequest struct {
 	// The address to query transactions, in lowercase cashaddr format.
 	// The network prefix is optional (i.e. "cashaddress:").
 	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// The number of confirmed transactions to skip, starting with the oldest first.
+	// The number of confirmed transactions to skip, starting with the newest.
 	// Does not affect results of unconfirmed transactions.
 	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
 	// Specify the number of transactions to fetch.
@@ -1720,8 +1720,13 @@ type GetAddressTransactionsResponse struct {
 	ConfirmedTransactions []*Transaction `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
 	// Transactions in mempool which have not been included in a block.
 	UnconfirmedTransactions []*MempoolTransaction `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// The number of confirmed transactions of the address, whatever the
+	// skip, fetch and start block of the request.  Nodes that predate it
+	// leave it 0, so a reply with confirmed transactions to a request that
+	// skips none, and a count of 0, is from such a node.
+	ConfirmedCount uint32 `protobuf:"varint,3,opt,name=confirmed_count,json=confirmedCount,proto3" json:"confirmed_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetAddressTransactionsResponse) Reset() {
@@ -1768,6 +1773,13 @@ func (x *GetAddressTransactionsResponse) GetUnconfirmedTransactions() []*Mempool
 	return nil
 }
 
+func (x *GetAddressTransactionsResponse) GetConfirmedCount() uint32 {
+	if x != nil {
+		return x.ConfirmedCount
+	}
+	return 0
+}
+
 // Get encoded transactions related to a specific address.
 //
 // RECOMMENDED:
@@ -1790,7 +1802,7 @@ type GetRawAddressTransactionsRequest struct {
 	// The address to query transactions, in lowercase cashaddr format.
 	// The network prefix is optional (i.e. "cashaddress:").
 	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// The number of confirmed transactions to skip, starting with the oldest first.
+	// The number of confirmed transactions to skip, starting with the newest.
 	// Does not affect results of unconfirmed transactions.
 	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
 	// Specify the number of transactions to fetch.
@@ -1906,8 +1918,13 @@ type GetRawAddressTransactionsResponse struct {
 	ConfirmedTransactions [][]byte `protobuf:"bytes,1,rep,name=confirmed_transactions,json=confirmedTransactions,proto3" json:"confirmed_transactions,omitempty"`
 	// Transactions in mempool which have not been included in a block.
 	UnconfirmedTransactions [][]byte `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// The number of confirmed transactions of the address, whatever the
+	// skip, fetch and start block of the request.  Nodes that predate it
+	// leave it 0, so a reply with confirmed transactions to a request that
+	// skips none, and a count of 0, is from such a node.
+	ConfirmedCount uint32 `protobuf:"varint,3,opt,name=confirmed_count,json=confirmedCount,proto3" json:"confirmed_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetRawAddressTransactionsResponse) Reset() {
@@ -1952,6 +1969,13 @@ func (x *GetRawAddressTransactionsResponse) GetUnconfirmedTransactions() [][]byt
 		return x.UnconfirmedTransactions
 	}
 	return nil
+}
+
+func (x *GetRawAddressTransactionsResponse) GetConfirmedCount() uint32 {
+	if x != nil {
+		return x.ConfirmedCount
+	}
+	return 0
 }
 
 type GetAddressUnspentOutputsRequest struct {
@@ -6649,20 +6673,22 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\bnb_fetch\x18\x03 \x01(\rR\anbFetch\x12\x14\n" +
 	"\x04hash\x18\x04 \x01(\fH\x00R\x04hash\x12\x18\n" +
 	"\x06height\x18\x05 \x01(\x05H\x00R\x06heightB\r\n" +
-	"\vstart_block\"\xbb\x01\n" +
+	"\vstart_block\"\xe4\x01\n" +
 	"\x1eGetAddressTransactionsResponse\x12F\n" +
 	"\x16confirmed_transactions\x18\x01 \x03(\v2\x0f.pb.TransactionR\x15confirmedTransactions\x12Q\n" +
-	"\x18unconfirmed_transactions\x18\x02 \x03(\v2\x16.pb.MempoolTransactionR\x17unconfirmedTransactions\"\xaf\x01\n" +
+	"\x18unconfirmed_transactions\x18\x02 \x03(\v2\x16.pb.MempoolTransactionR\x17unconfirmedTransactions\x12'\n" +
+	"\x0fconfirmed_count\x18\x03 \x01(\rR\x0econfirmedCount\"\xaf\x01\n" +
 	" GetRawAddressTransactionsRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x17\n" +
 	"\anb_skip\x18\x02 \x01(\rR\x06nbSkip\x12\x19\n" +
 	"\bnb_fetch\x18\x03 \x01(\rR\anbFetch\x12\x14\n" +
 	"\x04hash\x18\x04 \x01(\fH\x00R\x04hash\x12\x18\n" +
 	"\x06height\x18\x05 \x01(\x05H\x00R\x06heightB\r\n" +
-	"\vstart_block\"\x95\x01\n" +
+	"\vstart_block\"\xbe\x01\n" +
 	"!GetRawAddressTransactionsResponse\x125\n" +
 	"\x16confirmed_transactions\x18\x01 \x03(\fR\x15confirmedTransactions\x129\n" +
-	"\x18unconfirmed_transactions\x18\x02 \x03(\fR\x17unconfirmedTransactions\"\x9a\x01\n" +
+	"\x18unconfirmed_transactions\x18\x02 \x03(\fR\x17unconfirmedTransactions\x12'\n" +
+	"\x0fconfirmed_count\x18\x03 \x01(\rR\x0econfirmedCount\"\x9a\x01\n" +
 	"\x1fGetAddressUnspentOutputsRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12'\n" +
 	"\x0finclude_mempool\x18\x02 \x01(\bR\x0eincludeMempool\x124\n" +

@@ -351,7 +351,7 @@ message GetAddressTransactionsRequest {
     // The network prefix is optional (i.e. "cashaddress:").
     string address = 1;
 
-    // The number of confirmed transactions to skip, starting with the oldest first.
+    // The number of confirmed transactions to skip, starting with the newest.
     // Does not affect results of unconfirmed transactions.
     uint32 nb_skip = 2;
     // Specify the number of transactions to fetch.
@@ -372,6 +372,11 @@ message GetAddressTransactionsResponse {
     repeated Transaction confirmed_transactions = 1;
     // Transactions in mempool which have not been included in a block.
     repeated MempoolTransaction unconfirmed_transactions = 2;
+    // The number of confirmed transactions of the address, whatever the
+    // skip, fetch and start block of the request.  Nodes that predate it
+    // leave it 0, so a reply with confirmed transactions to a request that
+    // skips none, and a count of 0, is from such a node.
+    uint32 confirmed_count = 3;
 }
 
 // Get encoded transactions related to a specific address.
@@ -394,7 +399,7 @@ message GetRawAddressTransactionsRequest {
     // The network prefix is optional (i.e. "cashaddress:").
     string address = 1;
 
-    // The number of confirmed transactions to skip, starting with the oldest first.
+    // The number of confirmed transactions to skip, starting with the newest.
     // Does not affect results of unconfirmed transactions.
     uint32 nb_skip = 2;
     // Specify the number of transactions to fetch.
@@ -414,6 +419,11 @@ message GetRawAddressTransactionsResponse {
     repeated bytes confirmed_transactions = 1;
     // Transactions in mempool which have not been included in a block.
     repeated bytes unconfirmed_transactions = 2;
+    // The number of confirmed transactions of the address, whatever the
+    // skip, fetch and start block of the request.  Nodes that predate it
+    // leave it 0, so a reply with confirmed transactions to a request that
+    // skips none, and a count of 0, is from such a node.
+    uint32 confirmed_count = 3;
 }
 
 message GetAddressUnspentOutputsRequest {

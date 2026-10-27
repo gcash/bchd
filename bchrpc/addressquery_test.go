@@ -30,6 +30,14 @@ import (
 // each of the passed scripts.
 func newAddrIndexServer(t *testing.T, pkScripts [][]byte) *GrpcServer {
 	t.Helper()
+	return newAddrIndexServerBlocks(t, pkScripts, 1)
+}
+
+// newAddrIndexServerBlocks returns a server with an address index over a
+// regtest chain of the passed number of blocks after the genesis block, each
+// with a coinbase paying to each of the passed scripts.
+func newAddrIndexServerBlocks(t *testing.T, pkScripts [][]byte, blocks int) *GrpcServer {
+	t.Helper()
 
 	params := chaincfg.RegressionNetParams
 	db, err := database.Create("ffldb", t.TempDir(), params.Net)
@@ -56,37 +64,45 @@ func newAddrIndexServer(t *testing.T, pkScripts [][]byte) *GrpcServer {
 		t.Fatalf("blockchain.New: %v", err)
 	}
 
-	sigScript, err := txscript.NewScriptBuilder().AddInt64(1).
-		AddData(make([]byte, 40)).Script()
-	if err != nil {
-		t.Fatalf("coinbase script: %v", err)
-	}
-	coinbase := wire.NewMsgTx(1)
-	coinbase.AddTxIn(&wire.TxIn{
-		PreviousOutPoint: wire.OutPoint{Index: wire.MaxPrevOutIndex},
-		SignatureScript:  sigScript,
-		Sequence:         wire.MaxTxInSequenceNum,
-	})
-	for _, pkScript := range pkScripts {
-		coinbase.AddTxOut(wire.NewTxOut(1000, pkScript, wire.TokenData{}))
-	}
+	prevHash := *params.GenesisHash
+	start := time.Now().Unix()
+	for height := 1; height <= blocks; height++ {
+		// The height in the coinbase script keeps the coinbases apart.
+		sigScript, err := txscript.NewScriptBuilder().
+			AddInt64(int64(height)).AddData(make([]byte, 40)).Script()
+		if err != nil {
+			t.Fatalf("coinbase script: %v", err)
+		}
+		coinbase := wire.NewMsgTx(1)
+		coinbase.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Index: wire.MaxPrevOutIndex},
+			SignatureScript:  sigScript,
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		for _, pkScript := range pkScripts {
+			coinbase.AddTxOut(wire.NewTxOut(1000, pkScript,
+				wire.TokenData{}))
+		}
 
-	txs := []*bchutil.Tx{bchutil.NewTx(coinbase)}
-	merkles := blockchain.BuildMerkleTreeStore(txs)
-	block := wire.MsgBlock{
-		Header: wire.BlockHeader{
-			Version:    4,
-			PrevBlock:  *params.GenesisHash,
-			MerkleRoot: *merkles[len(merkles)-1],
-			Timestamp:  time.Unix(time.Now().Unix(), 0),
-			Bits:       params.PowLimitBits,
-		},
-		Transactions: []*wire.MsgTx{coinbase},
-	}
-	_, isOrphan, err := chain.ProcessBlock(bchutil.NewBlock(&block),
-		blockchain.BFNoPoWCheck)
-	if err != nil || isOrphan {
-		t.Fatalf("ProcessBlock: orphan %v, %v", isOrphan, err)
+		txs := []*bchutil.Tx{bchutil.NewTx(coinbase)}
+		merkles := blockchain.BuildMerkleTreeStore(txs)
+		block := wire.MsgBlock{
+			Header: wire.BlockHeader{
+				Version:    4,
+				PrevBlock:  prevHash,
+				MerkleRoot: *merkles[len(merkles)-1],
+				Timestamp:  time.Unix(start+int64(height), 0),
+				Bits:       params.PowLimitBits,
+			},
+			Transactions: []*wire.MsgTx{coinbase},
+		}
+		_, isOrphan, err := chain.ProcessBlock(bchutil.NewBlock(&block),
+			blockchain.BFNoPoWCheck)
+		if err != nil || isOrphan {
+			t.Fatalf("ProcessBlock %d: orphan %v, %v", height, isOrphan,
+				err)
+		}
+		prevHash = block.BlockHash()
 	}
 
 	return &GrpcServer{
@@ -119,9 +135,9 @@ func TestAddressQueriesP2SH32(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAddressTransactions: %v", err)
 	}
-	if len(txResp.ConfirmedTransactions) != 1 {
-		t.Fatalf("got %d confirmed transactions, want 1",
-			len(txResp.ConfirmedTransactions))
+	if len(txResp.ConfirmedTransactions) != 1 || txResp.ConfirmedCount != 1 {
+		t.Fatalf("got %d confirmed transactions and a count of %d, want 1",
+			len(txResp.ConfirmedTransactions), txResp.ConfirmedCount)
 	}
 
 	utxoResp, err := s.GetAddressUnspentOutputs(context.Background(),
@@ -192,9 +208,10 @@ func TestAddressQueriesLegacy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: GetAddressTransactions: %v", address, err)
 		}
-		if len(txResp.ConfirmedTransactions) != 1 {
-			t.Fatalf("%s: got %d confirmed transactions, want 1", address,
-				len(txResp.ConfirmedTransactions))
+		if len(txResp.ConfirmedTransactions) != 1 || txResp.ConfirmedCount != 1 {
+			t.Fatalf("%s: got %d confirmed transactions and a count of "+
+				"%d, want 1", address, len(txResp.ConfirmedTransactions),
+				txResp.ConfirmedCount)
 		}
 
 		rawResp, err := s.GetRawAddressTransactions(ctx,
@@ -202,9 +219,10 @@ func TestAddressQueriesLegacy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: GetRawAddressTransactions: %v", address, err)
 		}
-		if len(rawResp.ConfirmedTransactions) != 1 {
-			t.Fatalf("%s: got %d raw confirmed transactions, want 1",
-				address, len(rawResp.ConfirmedTransactions))
+		if len(rawResp.ConfirmedTransactions) != 1 || rawResp.ConfirmedCount != 1 {
+			t.Fatalf("%s: got %d raw confirmed transactions and a count "+
+				"of %d, want 1", address, len(rawResp.ConfirmedTransactions),
+				rawResp.ConfirmedCount)
 		}
 
 		utxoResp, err := s.GetAddressUnspentOutputs(ctx,
@@ -250,9 +268,9 @@ func TestAddressQueriesPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRawAddressTransactions: %v", err)
 	}
-	if len(rawResp.ConfirmedTransactions) != 1 {
-		t.Fatalf("got %d raw confirmed transactions, want 1",
-			len(rawResp.ConfirmedTransactions))
+	if len(rawResp.ConfirmedTransactions) != 1 || rawResp.ConfirmedCount != 1 {
+		t.Fatalf("got %d raw confirmed transactions and a count of %d, want 1",
+			len(rawResp.ConfirmedTransactions), rawResp.ConfirmedCount)
 	}
 
 	txResp, err := s.GetAddressTransactions(ctx,
@@ -260,9 +278,9 @@ func TestAddressQueriesPubKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAddressTransactions: %v", err)
 	}
-	if len(txResp.ConfirmedTransactions) != 1 {
-		t.Fatalf("got %d confirmed transactions, want 1",
-			len(txResp.ConfirmedTransactions))
+	if len(txResp.ConfirmedTransactions) != 1 || txResp.ConfirmedCount != 1 {
+		t.Fatalf("got %d confirmed transactions and a count of %d, want 1",
+			len(txResp.ConfirmedTransactions), txResp.ConfirmedCount)
 	}
 
 	utxoResp, err := s.GetAddressUnspentOutputs(ctx,
@@ -300,5 +318,103 @@ func TestAddressUnspentNotBareMultisig(t *testing.T) {
 	if len(resp.Outputs) != 1 || !bytes.Equal(resp.Outputs[0].PubkeyScript, p2pkScript) {
 		t.Fatalf("got %d unspent outputs, want only the pay-to-pubkey one",
 			len(resp.Outputs))
+	}
+}
+
+// TestAddressTransactionsCount ensures GetAddressTransactions and
+// GetRawAddressTransactions give the number of confirmed transactions of the
+// address whatever the skip, fetch and start block of the request, newest
+// first, 0 for an address without any, and that without an address index
+// both fail as before.
+func TestAddressTransactionsCount(t *testing.T) {
+	hash := bytes.Repeat([]byte{0xef}, 20)
+	p2pkhScript := append(append([]byte{txscript.OP_DUP, txscript.OP_HASH160,
+		txscript.OP_DATA_20}, hash...), txscript.OP_EQUALVERIFY,
+		txscript.OP_CHECKSIG)
+	const blocks = 12
+	s := newAddrIndexServerBlocks(t, [][]byte{p2pkhScript}, blocks)
+	ctx := context.Background()
+
+	addr, err := bchutil.NewAddressPubKeyHash(hash, s.chainParams)
+	if err != nil {
+		t.Fatalf("NewAddressPubKeyHash: %v", err)
+	}
+	unused, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{0x12}, 20),
+		s.chainParams)
+	if err != nil {
+		t.Fatalf("NewAddressPubKeyHash: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		address     string
+		skip, fetch uint32
+		height      int32
+		wantTxs     int
+		wantNewest  int32
+		wantCount   uint32
+	}{
+		{"all", addr.EncodeAddress(), 0, 0, 0, blocks, blocks, blocks},
+		{"first page", addr.EncodeAddress(), 0, 5, 0, 5, blocks, blocks},
+		{"last page", addr.EncodeAddress(), 10, 5, 0, 2, 2, blocks},
+		{"past the end", addr.EncodeAddress(), 20, 5, 0, 0, 0, blocks},
+		{"from a height", addr.EncodeAddress(), 0, 0, 9, 4, blocks, blocks},
+		{"unused", unused.EncodeAddress(), 0, 0, 0, 0, 0, 0},
+	}
+	for _, test := range tests {
+		req := &pb.GetAddressTransactionsRequest{Address: test.address,
+			NbSkip: test.skip, NbFetch: test.fetch}
+		rawReq := &pb.GetRawAddressTransactionsRequest{Address: test.address,
+			NbSkip: test.skip, NbFetch: test.fetch}
+		if test.height > 0 {
+			req.StartBlock = &pb.GetAddressTransactionsRequest_Height{
+				Height: test.height}
+			rawReq.StartBlock = &pb.GetRawAddressTransactionsRequest_Height{
+				Height: test.height}
+		}
+
+		resp, err := s.GetAddressTransactions(ctx, req)
+		if err != nil {
+			t.Fatalf("%s: GetAddressTransactions: %v", test.name, err)
+		}
+		if len(resp.ConfirmedTransactions) != test.wantTxs ||
+			resp.ConfirmedCount != test.wantCount {
+
+			t.Errorf("%s: got %d transactions and a count of %d, want "+
+				"%d and %d", test.name, len(resp.ConfirmedTransactions),
+				resp.ConfirmedCount, test.wantTxs, test.wantCount)
+		}
+		if test.wantTxs > 0 &&
+			resp.ConfirmedTransactions[0].BlockHeight != test.wantNewest {
+
+			t.Errorf("%s: first transaction at height %d, want %d",
+				test.name, resp.ConfirmedTransactions[0].BlockHeight,
+				test.wantNewest)
+		}
+
+		rawResp, err := s.GetRawAddressTransactions(ctx, rawReq)
+		if err != nil {
+			t.Fatalf("%s: GetRawAddressTransactions: %v", test.name, err)
+		}
+		if len(rawResp.ConfirmedTransactions) != test.wantTxs ||
+			rawResp.ConfirmedCount != test.wantCount {
+
+			t.Errorf("%s: got %d raw transactions and a count of %d, "+
+				"want %d and %d", test.name,
+				len(rawResp.ConfirmedTransactions),
+				rawResp.ConfirmedCount, test.wantTxs, test.wantCount)
+		}
+	}
+
+	noIndex := &GrpcServer{chain: s.chain, chainParams: s.chainParams, db: s.db}
+	_, err = noIndex.GetAddressTransactions(ctx,
+		&pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if status.Code(err) != codes.Unavailable {
+		t.Errorf("no address index: got %v, want Unavailable", err)
+	}
+	_, err = noIndex.GetRawAddressTransactions(ctx,
+		&pb.GetRawAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if status.Code(err) != codes.Unavailable {
+		t.Errorf("no address index, raw: got %v, want Unavailable", err)
 	}
 }
