@@ -2834,9 +2834,15 @@ func New(config *Config) (*BlockChain, error) {
 	}
 
 	// Initialize and catch up all of the currently active optional indexes
-	// as needed.
+	// as needed.  The failure of an index the error names is that index's,
+	// as requestShutdown has it.
 	if b.indexManager != nil {
 		err := b.indexManager.Init(&b, config.Interrupt)
+		var index interface{ IndexName() string }
+		if errors.As(err, &index) {
+			return nil, fmt.Errorf("failed to update the %s: %w",
+				index.IndexName(), err)
+		}
 		if err != nil {
 			return nil, err
 		}

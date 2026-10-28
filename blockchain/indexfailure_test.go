@@ -18,14 +18,14 @@ import (
 	"github.com/gcash/bchutil"
 )
 
-// failingIndexer is an index manager whose connection and disconnection of a
-// block fail with the passed errors.
+// failingIndexer is an index manager whose initialization, and connection and
+// disconnection of a block, fail with the passed errors.
 type failingIndexer struct {
-	connectErr, disconnectErr error
+	initErr, connectErr, disconnectErr error
 }
 
 func (m *failingIndexer) Init(*BlockChain, <-chan struct{}) error {
-	return nil
+	return m.initErr
 }
 
 func (m *failingIndexer) ConnectBlock(database.Tx, *bchutil.Block, []SpentTxOut) error {
@@ -128,6 +128,41 @@ func TestIndexFailureLog(t *testing.T) {
 		case <-chain.RequestedProcessShutdown():
 		default:
 			t.Errorf("%s: no shutdown requested", c.name)
+		}
+	}
+}
+
+// TestIndexInitFailureNamesIndex ensures the chain's creation, which fails when
+// the index manager fails to initialize, or catch up, an index, names the index
+// that failed, which the index manager's error names, keeping the error, while
+// an error naming no index is returned as it is.
+func TestIndexInitFailureNamesIndex(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"named", namedIndexError{"test index"},
+			"failed to update the test index: the index broke"},
+		{"unnamed", errors.New("the index broke"), "the index broke"},
+	} {
+		params := chaincfg.RegressionNetParams
+		db, err := database.Create("ffldb", filepath.Join(t.TempDir(), "db"), params.Net)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = New(&Config{
+			DB:                 db,
+			ChainParams:        &params,
+			TimeSource:         NewMedianTime(),
+			SigCache:           txscript.NewSigCache(10),
+			IndexManager:       &failingIndexer{initErr: c.err},
+			ExcessiveBlockSize: LegacyMaxBlockSize,
+			MaxReorgDepth:      -1,
+		})
+		db.Close()
+		if err == nil || err.Error() != c.want || !errors.Is(err, c.err) {
+			t.Errorf("%s: got %v, want %q", c.name, err, c.want)
 		}
 	}
 }

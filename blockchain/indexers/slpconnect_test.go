@@ -337,3 +337,115 @@ func TestSlpTokenMetadataRecordLength(t *testing.T) {
 		}
 	}
 }
+
+// TestSlpCatchUpCorruptEntryNamesIndex ensures the chain's creation fails,
+// naming the slp index, when the index manager's catch-up of the slp index at
+// startup finds a corrupt entry, so that the node's failure to start says which
+// index to rebuild.
+func TestSlpCatchUpCorruptEntryNamesIndex(t *testing.T) {
+	params := chaincfg.RegressionNetParams
+	db, err := database.Create("ffldb", t.TempDir(), params.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	newChain := func() (*blockchain.BlockChain, *SlpIndex, error) {
+		idx := NewSlpIndex(db, &SlpConfig{StartHash: params.SlpIndexStartHash,
+			StartHeight: params.SlpIndexStartHeight, MaxCacheSize: 100})
+		chain, err := blockchain.New(&blockchain.Config{
+			DB:                 db,
+			ChainParams:        &params,
+			TimeSource:         blockchain.NewMedianTime(),
+			IndexManager:       NewManager(db, []Indexer{idx}),
+			UtxoCacheMaxSize:   1024 * 1024,
+			ExcessiveBlockSize: 32000000,
+		})
+		return chain, idx, err
+	}
+	chain, idx, err := newChain()
+	if err != nil {
+		t.Fatalf("blockchain.New: %v", err)
+	}
+
+	// Block 1's coinbase is a GENESIS, and block 2 holds a SEND of its
+	// tokens.
+	start := time.Now().Add(-time.Hour).Truncate(time.Second)
+	mine := func(prev chainhash.Hash, height int32, outs []*wire.TxOut,
+		txs ...*wire.MsgTx) *wire.MsgBlock {
+
+		t.Helper()
+		sigScript, err := txscript.NewScriptBuilder().AddInt64(int64(height)).
+			AddData(make([]byte, 40)).Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+		coinbase := wire.NewMsgTx(1)
+		coinbase.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Index: wire.MaxPrevOutIndex},
+			SignatureScript:  sigScript,
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+		for _, out := range outs {
+			coinbase.AddTxOut(out)
+		}
+		msgTxs := append([]*wire.MsgTx{coinbase}, txs...)
+		utilTxs := make([]*bchutil.Tx, len(msgTxs))
+		for i, tx := range msgTxs {
+			utilTxs[i] = bchutil.NewTx(tx)
+		}
+		merkles := blockchain.BuildMerkleTreeStore(utilTxs)
+		block := &wire.MsgBlock{
+			Header: wire.BlockHeader{
+				Version:    4,
+				PrevBlock:  prev,
+				MerkleRoot: *merkles[len(merkles)-1],
+				Timestamp:  start.Add(time.Duration(height) * time.Second),
+				Bits:       params.PowLimitBits,
+			},
+			Transactions: msgTxs,
+		}
+		_, _, err = chain.ProcessBlock(bchutil.NewBlock(block),
+			blockchain.BFFastAdd|blockchain.BFNoPoWCheck)
+		if err != nil {
+			t.Fatalf("block %d: %v", height, err)
+		}
+		return block
+	}
+	genesisScript, err := metadatamaker.TokenType1Genesis([]byte("T"),
+		[]byte("Token"), nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block1 := mine(*params.GenesisHash, 1, []*wire.TxOut{
+		{PkScript: genesisScript},
+		{Value: 1000, PkScript: []byte{txscript.OP_TRUE}},
+	})
+	genesis := block1.Transactions[0]
+	block2 := mine(block1.BlockHash(), 2, []*wire.TxOut{
+		{Value: 1000, PkScript: []byte{txscript.OP_TRUE}},
+	}, spendingSlpTx(t, genesis, true))
+	if err := chain.FlushCachedState(blockchain.FlushRequired); err != nil {
+		t.Fatal(err)
+	}
+
+	// The slp index goes back to block 1, as if it stopped there, and the
+	// GENESIS's entry is corrupt, so that the next start catches the index
+	// up with block 2.
+	block := bchutil.NewBlock(block2)
+	block.SetHeight(2)
+	err = db.Update(func(dbTx database.Tx) error {
+		return dbIndexDisconnectBlock(dbTx, idx, block, nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptSlpEntry(t, db, genesis.TxHash(), slpEntryCorruptions[0].corrupt)
+
+	_, _, err = newChain()
+	checkSlpEntryCorrupt(t, "the start", err, genesis.TxHash())
+	want := "failed to update the slp index: the slp index entry of transaction " +
+		genesis.TxHash().String() + " is corrupt"
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("the start: got %v, want an error starting with %q", err, want)
+	}
+}

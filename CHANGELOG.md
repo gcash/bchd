@@ -45,6 +45,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - A block spending an output whose SLP index entry is corrupt stops the node with advice to rebuild the index with `--dropslpindex`, instead of storing the spending transaction as invalid for good.
 - A corrupt SLP token metadata record stops the node with advice to rebuild the index, or fails the gRPC call that reads it, instead of crashing the node.
 - When an index fails on a block, the log names the index instead of reporting a failure to write the chain state.
+- When an index fails to catch up at startup, the error names the index.
 
 ### Other
 

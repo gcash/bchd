@@ -371,11 +371,14 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			err = m.db.Update(func(dbTx database.Tx) error {
 				// Remove all of the index entries associated
 				// with the block and update the indexer tip.
+				// The index's failure names it, while a read of
+				// the database that fails fails the update
+				// instead, as the database error it is.
 				err = dbIndexDisconnectBlock(
 					dbTx, indexer, block, spentTxos,
 				)
 				if err != nil {
-					return err
+					return indexError{name: indexer.Name(), err: err}
 				}
 
 				// Update the tip to the previous block.
@@ -472,9 +475,13 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			}
 
 			err := m.db.Update(func(dbTx database.Tx) error {
-				return dbIndexConnectBlock(
+				err := dbIndexConnectBlock(
 					dbTx, indexer, block, spentTxos,
 				)
+				if err != nil {
+					return indexError{name: indexer.Name(), err: err}
+				}
+				return nil
 			})
 			if err != nil {
 				return err
