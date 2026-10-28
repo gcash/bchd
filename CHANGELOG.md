@@ -65,7 +65,6 @@ This release fetches announced blocks through their headers, as BCHN does, cuts 
 ### Upgrade notes
 
 - **Address index.** On first start, and after an earlier release has run with `--addrindex`, nodes with it read the address index once to count the transactions of large addresses: under a second on chipnet, a few minutes at most on mainnet.
-- **SLP index.** An index that recorded a mint baton burned in the same block that confirmed the token's GENESIS or MINT from the memory pool keeps reporting that baton in `GetSlpTokenMetadata` until it is rebuilt: start once with `--dropslpindex`, which exits when done, then with `--slpindex`.
 
 ## 0.22.3 (2026-10-23)
 
