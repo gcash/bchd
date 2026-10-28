@@ -4,7 +4,9 @@ All notable user-visible changes to [bchd](https://github.com/gcash/bchd), a ful
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
-## Unreleased
+## 0.22.4 (2026-10-27)
+
+This release fetches announced blocks through their headers, as BCHN does, cuts the memory `--slpgraphsearch` needs to about a fifth, and has the gRPC address calls return the address's number of transactions. Nodes with `--addrindex` should read the upgrade notes first.
 
 ### Performance
 
