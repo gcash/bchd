@@ -717,6 +717,76 @@ func TestGetAddressTransactionsFeePerKb(t *testing.T) {
 	}
 }
 
+// TestGetAddressTransactionsConfirmedNotUnconfirmed ensures a transaction
+// confirmed by a block whose transactions the memory pool has yet to remove is
+// among the confirmed transactions of GetAddressTransactions and
+// GetRawAddressTransactions, and counted, and not among their unconfirmed
+// ones, where a transaction only in the memory pool stays.
+func TestGetAddressTransactionsConfirmedNotUnconfirmed(t *testing.T) {
+	h := newAddrUnspentHarness(t)
+	h.s.txIndex = h.txIndex
+	addrScript := p2shScript(t, addrRedeem)
+	otherScript := p2shScript(t, otherRedeem)
+	pay := func(value int64, script []byte) *wire.TxOut {
+		return wire.NewTxOut(value, script, wire.TokenData{})
+	}
+	cb := h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, nil)
+	funding := spendTx(t, outPoint(cb, 0), otherRedeem, pay(24e8, otherScript),
+		pay(24e8, otherScript))
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, []*wire.MsgTx{funding})
+	confirmed := spendTx(t, outPoint(funding, 0), otherRedeem,
+		pay(24e8-1e6, addrScript))
+	pooled := spendTx(t, outPoint(funding, 1), otherRedeem,
+		pay(24e8-1e6, addrScript))
+	h.acceptTx(confirmed)
+	h.acceptTx(pooled)
+	h.mineBlock([]*wire.TxOut{pay(50e8, otherScript)}, []*wire.MsgTx{confirmed})
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	resp, err := h.s.GetAddressTransactions(ctx,
+		&pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmedHash, pooledHash := confirmed.TxHash(), pooled.TxHash()
+	if len(resp.ConfirmedTransactions) != 1 || resp.ConfirmedCount != 1 ||
+		!bytes.Equal(resp.ConfirmedTransactions[0].Hash, confirmedHash[:]) {
+
+		t.Fatalf("%d confirmed transactions, a count of %d, want the "+
+			"confirmed one", len(resp.ConfirmedTransactions),
+			resp.ConfirmedCount)
+	}
+	if len(resp.UnconfirmedTransactions) != 1 || !bytes.Equal(
+		resp.UnconfirmedTransactions[0].Transaction.Hash, pooledHash[:]) {
+
+		t.Fatalf("%d unconfirmed transactions, want only the one in the "+
+			"memory pool", len(resp.UnconfirmedTransactions))
+	}
+
+	raw, err := h.s.GetRawAddressTransactions(ctx,
+		&pb.GetRawAddressTransactionsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := pooled.Serialize(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.ConfirmedTransactions) != 1 || raw.ConfirmedCount != 1 ||
+		len(raw.UnconfirmedTransactions) != 1 ||
+		!bytes.Equal(raw.UnconfirmedTransactions[0], buf.Bytes()) {
+
+		t.Fatalf("raw: %d confirmed transactions, a count of %d, %d "+
+			"unconfirmed, want 1, 1 and only the one in the memory pool",
+			len(raw.ConfirmedTransactions), raw.ConfirmedCount,
+			len(raw.UnconfirmedTransactions))
+	}
+}
+
 // TestGetAddressUnspentOutputsCallEnds ensures GetAddressUnspentOutputs stops
 // reading the address's history once its call's context ends, as it does when
 // the client goes away or its deadline passes: before the scan, or, with a

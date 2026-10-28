@@ -485,6 +485,19 @@ func (idx *TxIndex) TxBlockRegionIn(dbTx database.Tx, hash *chainhash.Hash) (*da
 	return dbFetchTxIndexEntry(dbTx, hash)
 }
 
+// HasTx returns whether the transaction index, as read with dbTx, holds the
+// transaction with the provided hash, which it does once a block of the main
+// chain confirms it.
+//
+// This function is safe for concurrent access.
+func (idx *TxIndex) HasTx(dbTx database.Tx, hash *chainhash.Hash) (bool, error) {
+	txIndex := dbTx.Metadata().Bucket(txIndexKey)
+	if txIndex == nil {
+		return false, fmt.Errorf("bucket nil for key: %s", txIndexKey)
+	}
+	return len(txIndex.Get(hash[:])) > 0, nil
+}
+
 // NewTxIndex returns a new instance of an indexer that is used to create a
 // mapping of the hashes of all transactions in the blockchain to the respective
 // block, location within the block, and size of the transaction.

@@ -1147,7 +1147,11 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true)
+	// The address's memory pool transactions are listed before its history
+	// is read, and those confirmed in the history read, by a block whose
+	// transactions the memory pool has yet to remove, are left out.
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+	confirmedTxs, confirmedCount, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true, unconfirmedTxs)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,7 +1171,6 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		}
 	}
 
-	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		tx := marshalTransaction(uTx, 0, nil, 0, s)
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
@@ -1246,7 +1249,10 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true)
+	// The memory pool transactions confirmed in the history read are left
+	// out, as in GetAddressTransactions.
+	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
+	confirmedTxs, confirmedCount, unconfirmedTxs, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true, unconfirmedTxs)
 	if err != nil {
 		return nil, err
 	}
@@ -1257,7 +1263,6 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, cTx.txBytes)
 	}
 
-	unconfirmedTxs := s.addrIndex.UnconfirmedTxnsForAddress(addr)
 	for _, uTx := range unconfirmedTxs {
 		var buf bytes.Buffer
 		if err := uTx.MsgTx().BchEncode(&buf, wire.ProtocolVersion, wire.BaseEncoding); err != nil {
@@ -1555,8 +1560,8 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if err := ctx.Err(); err != nil {
 				return nil, status.FromContextError(err).Err()
 			}
-			newTxs, _, err := s.fetchTransactionsByAddress(addr, startHeight+1,
-				uint32(fetch), skip, false)
+			newTxs, _, _, err := s.fetchTransactionsByAddress(addr,
+				startHeight+1, uint32(fetch), skip, false, nil)
 			if err != nil && reorganized() {
 				return nil, errChainReorganized
 			}
@@ -3542,10 +3547,12 @@ type retrievedTx struct {
 
 // fetchTransactionsByAddress returns the address's confirmed transactions
 // that GetAddressTransactions returns for the passed start height, number to
-// fetch and number to skip, newest first, and, when count is set, the number
-// of confirmed transactions the address has, whatever the others.  Both are
-// read in one database transaction, so they agree.
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip uint32, count bool) ([]retrievedTx, uint32, error) {
+// fetch and number to skip, newest first, when count is set the number of
+// confirmed transactions the address has, whatever the others, and those of
+// the passed memory pool transactions of the address that the transaction
+// index does not hold.  All are read in one database transaction, so they
+// agree.
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip uint32, count bool, unconfirmed []*bchutil.Tx) ([]retrievedTx, uint32, []*bchutil.Tx, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
@@ -3554,7 +3561,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 		numRequested = nbFetch
 	}
 	if numRequested == 0 {
-		return nil, 0, nil
+		return nil, 0, unconfirmed, nil
 	}
 
 	// The number of entries to skip stays unsigned, as an int would turn a
@@ -3600,15 +3607,32 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			}
 			numSkipped += dbSkipped
 
+			// A memory pool transaction the transaction index holds
+			// was confirmed by a block whose transactions the memory
+			// pool has yet to remove.
+			if s.txIndex == nil {
+				return nil
+			}
+			pooled := make([]*bchutil.Tx, 0, len(unconfirmed))
+			for _, tx := range unconfirmed {
+				confirmed, err := s.txIndex.HasTx(dbTx, tx.Hash())
+				if err != nil {
+					return err
+				}
+				if !confirmed {
+					pooled = append(pooled, tx)
+				}
+			}
+			unconfirmed = pooled
 			return nil
 		})
 		if err != nil {
-			return nil, 0, status.Error(codes.InvalidArgument, "failed to load address index entries")
+			return nil, 0, nil, status.Error(codes.InvalidArgument, "failed to load address index entries")
 		}
 
 	}
 
-	return addressTxns, total, nil
+	return addressTxns, total, unconfirmed, nil
 }
 
 // appendRegionTxs appends to txs the transactions at the regions, read with
