@@ -77,8 +77,8 @@ from being fed a fake chain while it syncs, and they let it skip the most
 expensive checks on old blocks, which makes the first sync much faster. bchd
 uses the same checkpoints as Bitcoin Cash Node for mainnet, testnet3, testnet4
 and chipnet; the latest mainnet checkpoint is block 970892. A block at the
-height of a checkpoint must match it, and a block that forks the chain before
-the last checkpoint is rejected.
+height of a checkpoint must match it, and once bchd's chain has reached a
+checkpoint, a block that forks the chain before it is rejected.
 
 While syncing, bchd downloads the block headers from one checkpoint to the next
 and then the blocks for them, until it reaches the last checkpoint. These
