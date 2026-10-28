@@ -471,6 +471,17 @@ func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 		return sigScript, nil
 	}
 
+	// In Schnorr multisig mode the dummy is the bitfield of the keys that
+	// signed, so it isn't empty, and the signatures are Schnorr ones, which
+	// the ECDSA multisig made here can't take, as consensus refuses them
+	// there, so merging would lose them.
+	if dummy := prevPops[0]; dummy.opcode.value > OP_PUSHDATA4 ||
+		len(dummy.data) != 0 {
+
+		return nil, errors.New("can't merge a previous multisig " +
+			"signature script whose dummy isn't empty, as in Schnorr mode")
+	}
+
 	// Convenience function to avoid duplication.
 	extractSigs := func(pops []parsedOpcode, sigs [][]byte) [][]byte {
 		for _, pop := range pops {
@@ -483,7 +494,14 @@ func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 
 	possibleSigs := make([][]byte, 0, len(sigPops)+len(prevPops))
 	possibleSigs = extractSigs(sigPops, possibleSigs)
+	newSigs := len(possibleSigs)
 	possibleSigs = extractSigs(prevPops, possibleSigs)
+
+	// The previous signatures are dropped if the network refuses their
+	// hash type, which is checked as the engine's strict encoding does.
+	// The new ones have the hash type the caller chose.
+	strict := Engine{flags: ScriptVerifyStrictEncoding |
+		ScriptVerifyBip143SigHash | ScriptAllowCashTokens}
 
 	// Now we need to match the signatures to pubkeys, the only real way to
 	// do that is to try to verify them all and match it to the pubkey
@@ -492,7 +510,7 @@ func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 	// throw away.
 	addrToSig := make(map[string][]byte)
 sigLoop:
-	for _, sig := range possibleSigs {
+	for i, sig := range possibleSigs {
 
 		// can't have a valid signature that doesn't at least have a
 		// hashtype, in practise it is even longer than this. but
@@ -502,6 +520,9 @@ sigLoop:
 		}
 		tSig := sig[:len(sig)-1]
 		hashType := SigHashType(sig[len(sig)-1])
+		if i >= newSigs && strict.checkHashTypeEncoding(hashType) != nil {
+			continue
+		}
 
 		pSig, err := bchec.ParseDERSignature(tSig, bchec.S256())
 		if err != nil {
@@ -601,13 +622,15 @@ func (sc ScriptClosure) GetScript(address bchutil.Address) ([]byte, error) {
 // Any pay-to-script-hash signatures will be similarly looked up by calling
 // getScript. If previousScript is provided then the results in previousScript
 // will be merged in a type-dependent manner with the newly generated.
-// signature script.  Only the signatures in previousScript that verify are
-// kept, and for a script that takes one signature, previousScript is kept if
-// it is valid.  It doesn't know the outputs tx spends, so its signatures for
-// an input that spends tokens are invalid, and it returns an error for
-// SigHashUTXO; SignTxOutputWithSigHashes signs those.  For the same reason, it
-// drops the signatures in previousScript that cover those outputs: the ones
-// with SigHashUTXO, and all for an input that spends tokens.
+// signature script.  Only the signatures in previousScript that verify, with
+// a hash type the network takes, are kept, and for a script that takes one
+// signature, previousScript is kept if it is valid.  A multisig
+// previousScript in Schnorr mode can't be merged, and is an error.  It
+// doesn't know the outputs tx spends, so its signatures for an input that
+// spends tokens are invalid, and it returns an error for SigHashUTXO;
+// SignTxOutputWithSigHashes signs those.  For the same reason, it drops the
+// signatures in previousScript that cover those outputs: the ones with
+// SigHashUTXO, and all for an input that spends tokens.
 func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
