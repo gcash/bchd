@@ -7,6 +7,7 @@ package indexers
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -22,11 +23,13 @@ import (
 	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp"
 	"github.com/gcash/goslp/metadatamaker"
+	"github.com/gcash/goslp/v1parser"
 )
 
 // slpEntryCorruptions are the ways the stored slp entry of a transaction can
-// be corrupt: a value too short to read, one whose token has no metadata, and
-// one whose slp message does not parse.
+// be corrupt: a value too short to read, one whose token has no metadata or a
+// metadata record too short to read, and one whose slp message does not
+// parse.
 var slpEntryCorruptions = []struct {
 	name    string
 	corrupt func(dbTx database.Tx, hash chainhash.Hash, entry []byte) error
@@ -36,6 +39,10 @@ var slpEntryCorruptions = []struct {
 	}},
 	{"without token metadata", func(dbTx database.Tx, hash chainhash.Hash, entry []byte) error {
 		return dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName).Delete(entry[:4])
+	}},
+	{"with token metadata too short", func(dbTx database.Tx, hash chainhash.Hash, entry []byte) error {
+		return dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName).Put(entry[:4],
+			make([]byte, 10))
 	}},
 	{"with a message that does not parse", func(dbTx database.Tx, hash chainhash.Hash, entry []byte) error {
 		value := append(bytes.Clone(entry[:6]),
@@ -261,5 +268,63 @@ func TestSlpConnectCorruptEntryStopsNode(t *testing.T) {
 
 		t.Errorf("log %q, want the advice to rebuild the slp index only",
 			logged.String())
+	}
+}
+
+// TestSlpTokenMetadataRecordLength ensures a token metadata record of a length
+// the format does not have is read as corrupt, rather than sliced, which
+// panics for one under 32 bytes, while the records the index writes, of a token
+// with neither a mint baton nor a group, of one with a mint baton, and of an
+// NFT1 child token with its group, are read back.
+func TestSlpTokenMetadataRecordLength(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	token, baton, group := chainhash.Hash{1}, chainhash.Hash{2}, chainhash.Hash{3}
+	for i, tm := range []TokenMetadata{
+		{TokenID: &token, SlpVersion: v1parser.TokenTypeFungible01},
+		{TokenID: &token, SlpVersion: v1parser.TokenTypeFungible01,
+			MintBatonHash: &baton, MintBatonVout: 2},
+		{TokenID: &token, SlpVersion: v1parser.TokenTypeNft1Child41,
+			NftGroupID: &group},
+	} {
+		var got *TokenMetadata
+		err := test.db.Update(func(dbTx database.Tx) error {
+			if err := dbPutTokenIDIndexEntry(dbTx, uint32(i+1), &tm); err != nil {
+				return err
+			}
+			var err error
+			got, err = dbFetchTokenMetadataByID(dbTx, uint32(i+1))
+			return err
+		})
+		if err != nil || *got.TokenID != token ||
+			(got.MintBatonHash == nil) != (tm.MintBatonHash == nil) ||
+			got.MintBatonVout != tm.MintBatonVout ||
+			(got.NftGroupID == nil) != (tm.NftGroupID == nil) {
+
+			t.Errorf("record %d: got %+v and %v, want %+v", i, got, err, tm)
+		}
+	}
+
+	for _, n := range []int{1, 31, 32, 33, 35, 65, 67, 69, 71} {
+		var err error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic: %v", r)
+				}
+			}()
+			err = test.db.Update(func(dbTx database.Tx) error {
+				err := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName).Put(
+					[]byte{9, 0, 0, 0}, make([]byte, n))
+				if err != nil {
+					return err
+				}
+				_, err = dbFetchTokenMetadataByID(dbTx, 9)
+				return err
+			})
+		}()
+		var dbErr database.Error
+		if !errors.As(err, &dbErr) || dbErr.ErrorCode != database.ErrCorruption {
+			t.Errorf("a record of %d bytes: got %v, want it corrupt", n, err)
+		}
 	}
 }

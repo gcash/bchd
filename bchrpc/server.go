@@ -4145,7 +4145,8 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 	}
 
 	// A read of the database that fails is a failure of the slp index, as
-	// opposed to the index holding no metadata for the token.
+	// is a metadata record it cannot read, as opposed to the index holding
+	// no metadata for the token.
 	var (
 		dbTm  *indexers.TokenMetadata
 		tmErr error
@@ -4154,7 +4155,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 		dbTm, tmErr = s.slpIndex.GetTokenMetadata(dbTx, entry)
 		return tmErr
 	})
-	if err != nil && err != tmErr {
+	if err != nil && (err != tmErr || !indexers.IsTokenNotIndexed(err)) {
 		return nil, errSlpIndexFailure{err}
 	}
 	if err != nil {
@@ -4401,7 +4402,13 @@ func marshalTransactionChecked(tx *bchutil.Tx, confirmations int32, blockHeader 
 				if _, ok := slpMsg.(*v1parser.SlpSend); ok {
 					logMissing = log.Debugf
 				}
+				// A metadata record the index cannot read is a
+				// failure of the index, as opposed to a token it
+				// holds no metadata for.
 				tm, err := s.slpIndex.GetTokenMetadata(dbTx, entry)
+				if err != nil && !indexers.IsTokenNotIndexed(err) {
+					return err
+				}
 				if err != nil {
 					msg := fmt.Sprintf("missing group id metadata for nft child txid %v, tokenId: %v, tokenIdHash: %v, %v", txid, entry.TokenID, hex.EncodeToString(entry.TokenIDHash[:]), err)
 					logMissing("%s", msg)

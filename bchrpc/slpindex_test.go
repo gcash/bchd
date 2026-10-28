@@ -1629,6 +1629,18 @@ func TestSlpTokenMetadataErrors(t *testing.T) {
 		t.Errorf("a token of the memory pool whose metadata the cache no "+
 			"longer holds: got %v, want NotFound with %q", err, want)
 	}
+
+	// A transaction or output of the token is returned without its
+	// metadata.
+	id, err := chainhash.NewHash(tokenID(genesis.TxHash()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm, err := s.tokenMetadataOrNil(*id); tm != nil || err != nil {
+		t.Errorf("the metadata of a transaction or output of a token of the "+
+			"memory pool whose metadata the cache no longer holds: got %v "+
+			"and %v, want none", tm, err)
+	}
 }
 
 // newSlpCheckServer returns a server over a regtest chain of the genesis block
@@ -2689,5 +2701,133 @@ func TestSlpEventCorruptEntry(t *testing.T) {
 	if n := failures(child); n != 2 || !strings.Contains(logged.String(), want) {
 		t.Errorf("the third SEND: the check was logged %d times, want twice, "+
 			"the second with %q", n, want)
+	}
+}
+
+// TestSlpTokenMetadataCorruptRecord ensures a token metadata record the slp
+// index cannot read, here too short, fails the calls that read it, rather than
+// panicking or answering without the token's metadata or an NFT1 child's
+// group: Internal for GetSlpTokenMetadata and the calls that return a
+// transaction or output with its token's metadata, an error for a transaction
+// marshalled for a call, and an unknown slp state for one sent to a stream.
+func TestSlpTokenMetadataCorruptRecord(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s := &GrpcServer{chainParams: &chaincfg.RegressionNetParams, db: db,
+		slpIndex: idx}
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+
+	// An NFT1 group GENESIS and a child GENESIS spending its token, whose
+	// metadata, internal token ID 2, records the group.
+	groupScript, err := metadatamaker.NFT1GroupGenesis([]byte("G"),
+		[]byte("Group"), nil, nil, 0, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := wire.NewMsgTx(1)
+	group.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	group.AddTxOut(&wire.TxOut{PkScript: groupScript})
+	group.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	childScript, err := metadatamaker.NFT1ChildGenesis([]byte("C"),
+		[]byte("Child"), nil, nil, 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := wire.NewMsgTx(1)
+	child.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: group.TxHash(), Index: 1}, nil))
+	child.AddTxOut(&wire.TxOut{PkScript: childScript})
+	child.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = db.Update(func(dbTx database.Tx) error {
+		return idx.ConnectBlock(dbTx, bchutil.NewBlock(&wire.MsgBlock{
+			Transactions: []*wire.MsgTx{group, child}}), nil)
+	})
+	if err != nil {
+		t.Fatalf("ConnectBlock: %v", err)
+	}
+
+	// The entries are read once, so the cache holds them and only the
+	// metadata record is read from the database.  The record is then cut
+	// short.
+	childHash := child.TxHash()
+	for _, tx := range []*wire.MsgTx{group, child} {
+		hash := tx.TxHash()
+		if _, err := s.getSlpIndexEntry(&hash); err != nil {
+			t.Fatalf("getSlpIndexEntry(%v): %v", hash, err)
+		}
+	}
+	err = db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket([]byte("tokenhashbyididx")).Put(
+			[]byte{2, 0, 0, 0}, make([]byte, 10))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := goslp.GetSlpTokenID(child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenID, err := chainhash.NewHash(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	noPanic := func(what string, call func()) {
+		t.Helper()
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("%s: panic: %v", what, r)
+			}
+		}()
+		call()
+	}
+	noPanic("GetSlpTokenMetadata", func() {
+		_, err := s.GetSlpTokenMetadata(context.Background(),
+			&pb.GetSlpTokenMetadataRequest{TokenIds: [][]byte{token}})
+		if status.Code(err) != codes.Internal {
+			t.Errorf("GetSlpTokenMetadata: got %v, want Internal", err)
+		}
+	})
+	noPanic("the metadata of a transaction or output", func() {
+		if tm, err := s.tokenMetadataOrNil(*tokenID); tm != nil || err == nil {
+			t.Errorf("the metadata of a transaction or output: got %v and "+
+				"%v, want a failure", tm, err)
+		}
+	})
+	noPanic("a transaction marshalled for a call", func() {
+		_, err := marshalTransactionChecked(bchutil.NewTx(child), 0, nil, 0, s)
+		if err == nil {
+			t.Error("a transaction marshalled for a call: no failure")
+		}
+	})
+	noPanic("a transaction sent to a stream", func() {
+		tx := marshalTransaction(bchutil.NewTx(child), 0, nil, 0, s)
+		if tx.SlpTransactionInfo.ValidityJudgement != pb.SlpTransactionInfo_UNKNOWN_OR_INVALID ||
+			tx.Outputs[1].SlpToken != nil {
+			t.Errorf("a transaction sent to a stream: got %v, want its slp "+
+				"state unknown", tx.SlpTransactionInfo)
+		}
+	})
+	want := "[ERR] GRPC: Failed to load the slp data of transaction " +
+		childHash.String() + ": corrupt slp token metadata"
+	if !strings.Contains(logged.String(), want) {
+		t.Errorf("log %q, want a line with %q", logged.String(), want)
 	}
 }

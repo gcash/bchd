@@ -190,12 +190,23 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 		return nil, errNoTokenMetadataEntry
 	}
 
+	// A record holds the token ID and the token type, then the mint baton's
+	// outpoint, an NFT1 child token's group, or neither.  One of any other
+	// length is corrupt, and is not sliced.
+	switch len(serializedData) {
+	case 34, 66, 70:
+	default:
+		return nil, database.Error{
+			ErrorCode: database.ErrCorruption,
+			Description: fmt.Sprintf("corrupt slp token metadata of %d "+
+				"bytes for internal token ID %x", len(serializedData),
+				serializedID),
+		}
+	}
+
 	tokenIDHash, err := chainhash.NewHash(serializedData[0:32])
 	if err != nil {
 		return nil, fmt.Errorf("failed to create hash from %s", hex.EncodeToString(serializedData[0:32]))
-	}
-	if len(serializedData) < 34 {
-		return nil, fmt.Errorf("missing token version type for token metadata of token ID %v", tokenIDHash)
 	}
 
 	slpVersion := v1parser.TokenType(byteOrder.Uint16(serializedData[32:34]))
