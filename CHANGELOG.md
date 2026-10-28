@@ -31,6 +31,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `GetSlpTrustedValidation` answers a query hash of the wrong length with `InvalidArgument` rather than `Aborted`.
 - `GetSlpTokenMetadata` answers a token with no GENESIS or metadata in the SLP index with `NotFound`, a failure to read the index with `Internal`, and a token ID of the wrong length with `InvalidArgument`, instead of `Aborted`.
 - `CheckSlpTransaction` and `SubmitTransaction` answer `Internal` when the SLP index cannot read an input's entry, rather than taking the input for one without tokens.
+- When the SLP index fails to read a transaction's SLP data, `GetTransaction`, `GetBlock`, `GetMempool` and `GetAddressTransactions` answer `Internal`, and the subscriptions send the transaction as `UNKNOWN_OR_INVALID`, instead of reporting an invalid SLP transaction that burns its inputs.
 
 ### Other
 

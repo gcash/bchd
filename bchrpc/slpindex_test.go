@@ -1768,3 +1768,258 @@ func TestCheckSlpTransactionIndexFailure(t *testing.T) {
 		t.Errorf("log %q, want a line with %q", logged.String(), want)
 	}
 }
+
+// TestMarshalTransactionIndexFailure ensures a transaction whose slp data the
+// slp index fails to read, its own entry, an input's or the GENESIS of an
+// output's token, is sent with its slp state unknown rather than judged:
+// UNKNOWN_OR_INVALID, with no burn flags and no tokens on its inputs and
+// outputs, as a transaction whose entry was missing once was, burn flags and
+// all, and the failure logged as an error, and that GetTransaction answers
+// with an internal error instead, while a transaction the index does not hold
+// is still not valid slp.
+func TestMarshalTransactionIndexFailure(t *testing.T) {
+	s := newSlpCheckServer(t)
+	pool, funding := newOpTruePool(t)
+	s.txMemPool = pool
+	s.txIndex = indexers.NewTxIndex(s.db)
+	if err := s.db.Update(s.txIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	ctx := context.Background()
+	token := bytes.Repeat([]byte{0x06}, 32)
+	sendTx := func(token []byte, amounts []uint64, prev wire.OutPoint) *wire.MsgTx {
+		t.Helper()
+		script, err := metadatamaker.TokenType1Send(token, amounts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&prev, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 90000000, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+
+	// The index has a corrupt entry for a SEND in the memory pool and
+	// for the GENESIS of a token, which a SEND of zero tokens it holds
+	// names.
+	own := sendTx(token, []uint64{1000}, wire.OutPoint{Hash: funding.TxHash()})
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(own), false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	input := sendTx(token, []uint64{1000}, wire.OutPoint{Hash: own.TxHash(), Index: 1})
+	genesis := chainhash.Hash{0xee, 7}
+	tokenID, err := hex.DecodeString(genesis.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := sendTx(tokenID, []uint64{0}, wire.OutPoint{Hash: chainhash.Hash{0xee, 8}})
+
+	// A valid SEND of the tokens of a GENESIS the index holds also spends
+	// an output of a transaction whose entry is corrupt, so that its
+	// other input and its outputs have tokens the index can tell.
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := wire.NewMsgTx(1)
+	valid.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee, 10}}, nil))
+	valid.AddTxOut(&wire.TxOut{PkScript: script})
+	valid.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	validToken, err := goslp.GetSlpTokenID(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beside := sendTx(validToken, []uint64{1000},
+		wire.OutPoint{Hash: valid.TxHash(), Index: 1})
+	besideCorrupt := chainhash.Hash{0xee, 11}
+	beside.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: besideCorrupt, Index: 1}, nil))
+
+	ownHash := own.TxHash()
+	err = s.db.Update(func(dbTx database.Tx) error {
+		for _, tx := range []*wire.MsgTx{output, valid, beside} {
+			ok, err := s.slpIndex.AddPotentialSlpEntries(dbTx, tx)
+			if err == nil && !ok {
+				err = fmt.Errorf("%v is not valid", tx.TxHash())
+			}
+			if err != nil {
+				return err
+			}
+		}
+		bucket := dbTx.Metadata().Bucket([]byte("slptxbyhashidx"))
+		for _, hash := range []chainhash.Hash{ownHash, genesis, besideCorrupt} {
+			if err := bucket.Put(hash[:], []byte{1}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var logged bytes.Buffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+	for _, test := range []struct {
+		name string
+		tx   *wire.MsgTx
+	}{
+		{"its own entry", own},
+		{"an input's entry", input},
+		{"the GENESIS of an output's token", output},
+		{"an input's entry, beside tokens it can tell", beside},
+	} {
+		logged.Reset()
+		resp := marshalTransaction(bchutil.NewTx(test.tx), 0, nil, 0, s)
+		info := resp.SlpTransactionInfo
+		if info.ValidityJudgement != pb.SlpTransactionInfo_UNKNOWN_OR_INVALID ||
+			len(info.BurnFlags) != 0 {
+
+			t.Errorf("%s failing: validity %v, burn flags %v, want unknown",
+				test.name, info.ValidityJudgement, info.BurnFlags)
+		}
+		for i, in := range resp.Inputs {
+			if in.SlpToken != nil {
+				t.Errorf("%s failing: input %d has token %v", test.name, i,
+					in.SlpToken)
+			}
+		}
+		for i, out := range resp.Outputs {
+			if out.SlpToken != nil {
+				t.Errorf("%s failing: output %d has token %v", test.name, i,
+					out.SlpToken)
+			}
+		}
+		want := "[ERR] GRPC: Failed to load the slp data of transaction " +
+			test.tx.TxHash().String() + ": corrupt slp index entry for "
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("%s failing: log %q, want a line with %q", test.name,
+				logged.String(), want)
+		}
+	}
+
+	// GetTransaction and GetMempool answer with an internal error.
+	_, err = s.GetTransaction(ctx, &pb.GetTransactionRequest{Hash: ownHash[:]})
+	want := "failed to load slp index entry"
+	if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+		t.Errorf("GetTransaction: got %v, want Internal with %q", err, want)
+	}
+	_, err = s.GetMempool(ctx, &pb.GetMempoolRequest{FullTransactions: true})
+	if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+		t.Errorf("GetMempool: got %v, want Internal with %q", err, want)
+	}
+
+	// A transaction the index does not hold.
+	logged.Reset()
+	other := sendTx(token, []uint64{1000}, wire.OutPoint{Hash: chainhash.Hash{0xee, 9}})
+	resp := marshalTransaction(bchutil.NewTx(other), 0, nil, 0, s)
+	flags := resp.SlpTransactionInfo.BurnFlags
+	if resp.SlpTransactionInfo.ValidityJudgement != pb.SlpTransactionInfo_UNKNOWN_OR_INVALID ||
+		len(flags) != 1 || flags[0] != pb.SlpTransactionInfo_BURNED_INPUTS_OUTPUTS_TOO_HIGH ||
+		strings.Contains(logged.String(), "[ERR]") {
+
+		t.Errorf("a transaction the index does not hold: validity %v, burn "+
+			"flags %v, log %q", resp.SlpTransactionInfo.ValidityJudgement,
+			flags, logged.String())
+	}
+}
+
+// TestSlpIndexFailureCalls ensures GetBlock, GetTransaction of a confirmed
+// transaction and GetAddressTransactions, of a confirmed and of an unconfirmed
+// transaction, answer with an internal error when the slp index fails to read
+// the slp data of a transaction they would return, rather than return it
+// judged.
+func TestSlpIndexFailureCalls(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	address := func(b byte) (bchutil.Address, []byte) {
+		t.Helper()
+		addr, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{b}, 20),
+			params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return addr, script
+	}
+	confirmedAddr, confirmedScript := address(1)
+	unconfirmedAddr, unconfirmedScript := address(2)
+	s := newAddrIndexServerBlocks(t, [][]byte{confirmedScript}, 1)
+	s.slpIndex = indexers.NewSlpIndex(s.db, &indexers.SlpConfig{MaxCacheSize: 100})
+	if err := s.db.Update(s.slpIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s.txIndex = indexers.NewTxIndex(s.db)
+	s.txMemPool = mempool.New(&mempool.Config{})
+
+	// The index has corrupt entries for the coinbase of block 1, which
+	// pays to one address, and for a transaction of the memory pool that
+	// pays to another.
+	block, err := s.chain.BlockByHeight(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase := block.Transactions()[0].Hash()
+	unconfirmed := wire.NewMsgTx(1)
+	unconfirmed.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee, 12}}, nil))
+	unconfirmed.AddTxOut(&wire.TxOut{Value: 1000, PkScript: unconfirmedScript})
+	s.addrIndex.AddUnconfirmedTx(bchutil.NewTx(unconfirmed),
+		blockchain.NewUtxoViewpoint())
+	unconfirmedHash := unconfirmed.TxHash()
+	err = s.db.Update(func(dbTx database.Tx) error {
+		bucket := dbTx.Metadata().Bucket([]byte("slptxbyhashidx"))
+		for _, hash := range []*chainhash.Hash{coinbase, &unconfirmedHash} {
+			if err := bucket.Put(hash[:], []byte{1}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	blockHash := block.Hash()
+	for _, test := range []struct {
+		name string
+		call func() error
+	}{
+		{"GetBlock", func() error {
+			_, err := s.GetBlock(ctx, &pb.GetBlockRequest{
+				HashOrHeight:     &pb.GetBlockRequest_Hash{Hash: blockHash[:]},
+				FullTransactions: true,
+			})
+			return err
+		}},
+		{"GetTransaction", func() error {
+			_, err := s.GetTransaction(ctx,
+				&pb.GetTransactionRequest{Hash: coinbase[:]})
+			return err
+		}},
+		{"GetAddressTransactions, confirmed", func() error {
+			_, err := s.GetAddressTransactions(ctx,
+				&pb.GetAddressTransactionsRequest{
+					Address: confirmedAddr.EncodeAddress()})
+			return err
+		}},
+		{"GetAddressTransactions, unconfirmed", func() error {
+			_, err := s.GetAddressTransactions(ctx,
+				&pb.GetAddressTransactionsRequest{
+					Address: unconfirmedAddr.EncodeAddress()})
+			return err
+		}},
+	} {
+		err := test.call()
+		want := "failed to load slp index entry"
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+			t.Errorf("%s: got %v, want Internal with %q", test.name, err, want)
+		}
+	}
+}

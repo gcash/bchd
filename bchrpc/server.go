@@ -633,7 +633,10 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 	resp := &pb.GetMempoolResponse{}
 	for _, txDesc := range rawMempool {
 		if req.FullTransactions {
-			respTx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
+			respTx, err := marshalTransactionChecked(txDesc.Tx, 0, nil, 0, s)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "failed to load slp index entry")
+			}
 			stxos, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
 			if err != nil {
 				continue
@@ -808,7 +811,10 @@ func (s *GrpcServer) GetBlock(ctx context.Context, req *pb.GetBlockRequest) (*pb
 	for idx, tx := range block.Transactions() {
 		if req.FullTransactions {
 			header := block.MsgBlock().Header
-			respTx := marshalTransaction(tx, confirmations, &header, block.Height(), s)
+			respTx, err := marshalTransactionChecked(tx, confirmations, &header, block.Height(), s)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "failed to load slp index entry")
+			}
 			for i := range tx.MsgTx().TxIn {
 				if idx > 0 {
 					stxo := spentTxos[spendIdx]
@@ -993,7 +999,10 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 	}
 
 	if txDesc, err := s.txMemPool.FetchTxDesc(txHash); err == nil {
-		tx := marshalTransaction(txDesc.Tx, 0, nil, 0, s)
+		tx, err := marshalTransactionChecked(txDesc.Tx, 0, nil, 0, s)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to load slp index entry")
+		}
 		tx.Timestamp = txDesc.Added.Unix()
 
 		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
@@ -1051,7 +1060,10 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		return nil, status.Errorf(codes.Internal, "failed to load block header %v", err)
 	}
 
-	respTx := marshalTransaction(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
+	respTx, err := marshalTransactionChecked(bchutil.NewTx(&msgTx), s.chain.BestSnapshot().Height-blockHeight+1, &header, blockHeight, s)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to load slp index entry")
+	}
 	if s.txIndex != nil {
 		if err := s.setInputMetadata(respTx); err != nil {
 			return nil, err
@@ -1161,7 +1173,10 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 
 	tip := s.chain.BestSnapshot().Height
 	for _, cTx := range confirmedTxs {
-		tx := marshalTransaction(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s)
+		tx, err := marshalTransactionChecked(bchutil.NewTx(&cTx.tx), tip-cTx.blockHeight+1, cTx.blockHeader, cTx.blockHeight, s)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to load slp index entry")
+		}
 		resp.ConfirmedTransactions = append(resp.ConfirmedTransactions, tx)
 	}
 	// The inputs of all the transactions are done at once, so a transaction
@@ -1173,7 +1188,10 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 	}
 
 	for _, uTx := range unconfirmedTxs {
-		tx := marshalTransaction(uTx, 0, nil, 0, s)
+		tx, err := marshalTransactionChecked(uTx, 0, nil, 0, s)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to load slp index entry")
+		}
 		txDesc, err := s.txMemPool.FetchTxDesc(uTx.Hash())
 		if err != nil {
 			continue
@@ -3734,11 +3752,31 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpTxEntr
 		entry, err = s.slpIndex.GetSlpIndexEntry(dbTx, hash)
 		return err
 	})
+	if err != nil && !indexers.IsSlpEntryNotFound(err) {
+		return nil, errSlpIndexFailure{err}
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	return entry, nil
+}
+
+// errSlpIndexFailure is the error getSlpIndexEntry returns when the slp index
+// fails to read an entry, as opposed to holding none for the transaction.  Its
+// callers pass it on as it is.
+type errSlpIndexFailure struct {
+	err error
+}
+
+// Error implements the error interface.
+func (e errSlpIndexFailure) Error() string {
+	return e.err.Error()
+}
+
+// Unwrap returns the index's error.
+func (e errSlpIndexFailure) Unwrap() error {
+	return e.err
 }
 
 // slpEntryStatus returns the status a call answers with when it cannot read
@@ -4131,6 +4169,16 @@ func marshalBlockInfo(block *bchutil.Block, confirmations int32, medianTime time
 }
 
 func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, s *GrpcServer) *pb.Transaction {
+	respTx, _ := marshalTransactionChecked(tx, confirmations, blockHeader, blockHeight, s)
+	return respTx
+}
+
+// marshalTransactionChecked is marshalTransaction for a call that answers with
+// the transactions alone, which fails with the slp index's error rather than
+// send a transaction with its slp state unknown.  A stream sends it, as ending
+// the stream for it would take more from the client than the transaction's
+// slp state.
+func marshalTransactionChecked(tx *bchutil.Tx, confirmations int32, blockHeader *wire.BlockHeader, blockHeight int32, s *GrpcServer) (*pb.Transaction, error) {
 	var (
 		txid        = tx.Hash()
 		slpMsg      v1parser.ParseResult
@@ -4252,11 +4300,13 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	}
 
 	// check slp validity
+	var indexErr error
 	if s.slpIndex != nil {
+		var groupErr error
 		err := s.db.View(func(dbTx database.Tx) error {
 			entry, err := s.slpIndex.GetSlpIndexEntry(dbTx, txid)
 			if err != nil {
-				return fmt.Errorf("slp entry does not exist for %v", txid)
+				return err
 			}
 			slpInfo.ValidityJudgement = pb.SlpTransactionInfo_VALID
 
@@ -4273,7 +4323,8 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 				if err != nil {
 					msg := fmt.Sprintf("missing group id metadata for nft child txid %v, tokenId: %v, tokenIdHash: %v, %v", txid, entry.TokenID, hex.EncodeToString(entry.TokenIDHash[:]), err)
 					logMissing("%s", msg)
-					return errors.New(msg)
+					groupErr = errors.New(msg)
+					return groupErr
 				}
 				if tm.NftGroupID != nil {
 					if t, ok := slpInfo.TxMetadata.(*pb.SlpTransactionInfo_V1Nft1ChildGenesis); ok {
@@ -4290,8 +4341,14 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 
 			return nil
 		})
-		if err != nil {
+		switch {
+		case err == nil:
+		case indexers.IsSlpEntryNotFound(err):
+			log.Debugf("slp entry does not exist for %v", txid)
+		case err == groupErr:
 			log.Debug(err)
+		default:
+			indexErr = err
 		}
 	}
 
@@ -4315,7 +4372,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	for i, input := range tx.MsgTx().TxIn {
 
 		inputToken, err := s.getSlpToken(&input.PreviousOutPoint.Hash, input.PreviousOutPoint.Index, nil)
-		if err != nil {
+		if _, ok := err.(errSlpIndexFailure); ok {
+			indexErr = err
+		} else if err != nil {
 			log.Debugf("error: %v (input %v:%s)", err, input.PreviousOutPoint.Hash, fmt.Sprint(input.PreviousOutPoint.Index))
 		}
 
@@ -4352,7 +4411,9 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 	for i, output := range tx.MsgTx().TxOut {
 
 		outputToken, err := s.getSlpToken(tx.Hash(), uint32(i), output.PkScript)
-		if err != nil {
+		if _, ok := err.(errSlpIndexFailure); ok {
+			indexErr = err
+		} else if err != nil {
 			log.Debugf("no token stored for %v index: %v", txid, uint32(i))
 		}
 
@@ -4379,6 +4440,23 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 			out.DisassembledScript = disassm
 		}
 		respTx.Outputs = append(respTx.Outputs, out)
+	}
+
+	// A failure of the slp index leaves the transaction's slp state unknown
+	// rather than judged.  The proto has no value for unknown alone, so it
+	// is UNKNOWN_OR_INVALID, without burn flags, which would claim tokens
+	// burned, and without tokens on the inputs and outputs, which the index
+	// could not all tell.
+	if indexErr != nil {
+		log.Errorf("Failed to load the slp data of transaction %v: %v", txid, indexErr)
+		slpInfo.ValidityJudgement = pb.SlpTransactionInfo_UNKNOWN_OR_INVALID
+		for _, in := range respTx.Inputs {
+			in.SlpToken = nil
+		}
+		for _, out := range respTx.Outputs {
+			out.SlpToken = nil
+		}
+		return respTx, indexErr
 	}
 
 	// label slp burns caused by missing bch outputs, or input amt > output amt
@@ -4432,7 +4510,7 @@ func marshalTransaction(tx *bchutil.Tx, confirmations int32, blockHeader *wire.B
 		}
 	}
 
-	return respTx
+	return respTx, nil
 }
 
 // setInputMetadataFromView will set the value, previous script, and address for each input in the mempool transaction
