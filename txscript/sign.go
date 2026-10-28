@@ -310,7 +310,7 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, sigHashes *TxSigHashes,
 		}
 
 		return script, class, addresses, nrequired, nil
-	case ScriptHashTy:
+	case ScriptHashTy, ScriptHash32Ty:
 		script, err := sdb.GetScript(addresses[0])
 		if err != nil {
 			return nil, class, nil, 0, err
@@ -346,7 +346,7 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
 	// some internal refactoring could probably make this avoid needless
 	// extra calculations.
 	switch class {
-	case ScriptHashTy:
+	case ScriptHashTy, ScriptHash32Ty:
 		// Remove the last push in the script and then recurse.
 		// this could be a lot less inefficient.
 		sigPops, err := parseScript(sigScript)
@@ -537,6 +537,7 @@ func (kc KeyClosure) GetKey(address bchutil.Address) (*bchec.PrivateKey,
 
 // ScriptDB is an interface type provided to SignTxOutput, it encapsulates any
 // user state required to get the scripts for an pay-to-script-hash address.
+// The address of a P2SH32 script is a *bchutil.AddressScriptHash32.
 type ScriptDB interface {
 	GetScript(bchutil.Address) ([]byte, error)
 }
@@ -593,7 +594,7 @@ func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 		return nil, err
 	}
 
-	if class == ScriptHashTy {
+	if class == ScriptHashTy || class == ScriptHash32Ty {
 		// TODO keep the sub addressed and pass down to merge.
 		realSigScript, _, _, _, err := sign(chainParams, tx, sigHashes, idx,
 			amt, sigScript, hashType, kdb, sdb)

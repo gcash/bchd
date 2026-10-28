@@ -1799,7 +1799,27 @@ func TestSignTokenInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sdb := mkGetScript(map[string][]byte{scriptAddr.EncodeAddress(): multiSig})
+	scriptAddr32, err := bchutil.NewAddressScriptHash32(multiSig, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh32, err := PayToAddrScript(scriptAddr32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2pkhAddr32, err := bchutil.NewAddressScriptHash32(p2pkh, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh32P2PKH, err := PayToAddrScript(p2pkhAddr32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdb := mkGetScript(map[string][]byte{
+		scriptAddr.EncodeAddress():   multiSig,
+		scriptAddr32.EncodeAddress(): multiSig,
+		p2pkhAddr32.EncodeAddress():  p2pkh,
+	})
 
 	tests := []struct {
 		name     string
@@ -1810,6 +1830,8 @@ func TestSignTokenInputs(t *testing.T) {
 		{"p2pk", p2pk, []KeyDB{kdb1}},
 		{"multisig", multiSig, []KeyDB{kdb1, kdb2}},
 		{"p2sh multisig", p2sh, []KeyDB{kdb1, kdb2}},
+		{"p2sh32 multisig", p2sh32, []KeyDB{kdb1, kdb2}},
+		{"p2sh32 p2pkh", p2sh32P2PKH, []KeyDB{kdb1}},
 	}
 	for _, test := range tests {
 		tx, utxos := tokenSpendTx(test.pkScript)
