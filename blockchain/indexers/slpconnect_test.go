@@ -165,8 +165,9 @@ func TestSlpConnectCorruptEntry(t *testing.T) {
 
 // TestSlpConnectCorruptEntryStopsNode ensures a block whose connection the slp
 // index fails on a corrupt entry is not connected and requests the node to
-// shut down, as a database error while processing a block does, with the
-// advice to rebuild the slp index rather than the utxo set.
+// shut down, as a database error while processing a block does, logging the
+// failure as the slp index's with the advice to rebuild it rather than the
+// utxo set.
 func TestSlpConnectCorruptEntryStopsNode(t *testing.T) {
 	var logged bytes.Buffer
 	blockchain.UseLogger(bchlog.NewBackend(&logged).Logger("CHAN"))
@@ -268,6 +269,14 @@ func TestSlpConnectCorruptEntryStopsNode(t *testing.T) {
 
 		t.Errorf("log %q, want the advice to rebuild the slp index only",
 			logged.String())
+	}
+	want := "[CRT] CHAN: Failed to update the slp index: the slp index entry " +
+		"of transaction " + genesis.TxHash().String() + " is corrupt"
+	if !strings.Contains(logged.String(), want) ||
+		strings.Contains(logged.String(), "Failed to write the chain state") {
+
+		t.Errorf("log %q, want a line with %q and none naming the chain state",
+			logged.String(), want)
 	}
 }
 

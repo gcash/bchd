@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -2487,7 +2488,8 @@ func (b *BlockChain) LocateHeaders(locator BlockLocator, hashStop *chainhash.Has
 
 // IndexManager provides a generic interface that the is called when blocks are
 // connected and disconnected to and from the tip of the main chain for the
-// purpose of supporting optional indexes.
+// purpose of supporting optional indexes.  An error with an IndexName method is
+// logged as the failure of the index it names.
 type IndexManager interface {
 	// Init is invoked during chain initialize in order to allow the index
 	// manager to initialize itself and any indexes it is managing.  The
@@ -2901,10 +2903,16 @@ func (b *BlockChain) RequestedProcessShutdown() <-chan struct{} {
 	return b.shutdownRequest
 }
 
-// requestShutdown logs the failure to write the chain state and requests the
-// process to shut down, since the chain can't safely continue without it.
+// requestShutdown logs the failure to write the chain state, or that of the
+// index an error of the index manager names, and requests the process to shut
+// down, since the chain can't safely continue without it.
 func (b *BlockChain) requestShutdown(err error) {
-	log.Criticalf("Failed to write the chain state: %v", err)
+	var index interface{ IndexName() string }
+	if errors.As(err, &index) {
+		log.Criticalf("Failed to update the %s: %v", index.IndexName(), err)
+	} else {
+		log.Criticalf("Failed to write the chain state: %v", err)
+	}
 	b.closeShutdownRequest()
 }
 

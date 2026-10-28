@@ -534,6 +534,31 @@ func dbFetchTx(dbTx database.Tx, hash *chainhash.Hash) (*wire.MsgTx, error) {
 	return &msgTx, nil
 }
 
+// indexError is the error of an index that failed to connect or disconnect a
+// block, which names the index, so that the chain logs the failure as the
+// index's rather than as one to write the chain state.  It is not a
+// database.Error, which the chain answers with advice to rebuild the utxo set,
+// which leaves the index as it is.
+type indexError struct {
+	name string
+	err  error
+}
+
+// Error implements the error interface.
+func (e indexError) Error() string {
+	return e.err.Error()
+}
+
+// IndexName returns the name of the index that failed.
+func (e indexError) IndexName() string {
+	return e.name
+}
+
+// Unwrap returns the index's error.
+func (e indexError) Unwrap() error {
+	return e.err
+}
+
 // ConnectBlock must be invoked when a block is extending the main chain.  It
 // keeps track of the state of each index it is managing, performs some sanity
 // checks, and invokes each indexer.
@@ -567,7 +592,7 @@ func (m *Manager) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 
 		err := dbIndexConnectBlock(dbTx, index, block, stxos)
 		if err != nil {
-			return err
+			return indexError{name: index.Name(), err: err}
 		}
 	}
 	return nil
@@ -587,7 +612,7 @@ func (m *Manager) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 	for _, index := range m.enabledIndexes {
 		err := dbIndexDisconnectBlock(dbTx, index, block, stxo)
 		if err != nil {
-			return err
+			return indexError{name: index.Name(), err: err}
 		}
 	}
 	return nil
