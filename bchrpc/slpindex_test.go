@@ -1614,3 +1614,157 @@ func TestSlpTokenMetadataErrors(t *testing.T) {
 			"longer holds: got %v, want NotFound with %q", err, want)
 	}
 }
+
+// newSlpCheckServer returns a server over a regtest chain of the genesis block
+// alone, with an slp index, for the slp validity checks.
+func newSlpCheckServer(t *testing.T) *GrpcServer {
+	t.Helper()
+	params := chaincfg.RegressionNetParams
+	db, err := database.Create("ffldb", t.TempDir(), params.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	chain, err := blockchain.New(&blockchain.Config{
+		DB:                 db,
+		ChainParams:        &params,
+		TimeSource:         blockchain.NewMedianTime(),
+		UtxoCacheMaxSize:   1024 * 1024,
+		ExcessiveBlockSize: 32000000,
+	})
+	if err != nil {
+		t.Fatalf("blockchain.New: %v", err)
+	}
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	return &GrpcServer{chain: chain, chainParams: &params, db: db, slpIndex: idx}
+}
+
+// TestCheckSlpTransactionIndexFailure ensures CheckSlpTransaction, and the
+// check SubmitTransaction makes, fail with an internal error, logging the
+// failure, when the slp index cannot read the entry of a transaction an input
+// spends, for a transaction of each kind, rather than take the input for one
+// that is not slp, which could find a transaction that burns tokens valid,
+// while an input of a transaction the index does not hold is still not slp.
+func TestCheckSlpTransactionIndexFailure(t *testing.T) {
+	s := newSlpCheckServer(t)
+
+	// The index has a corrupt entry for one transaction, and for another
+	// an entry it can read, with the internal ID 1 of a token whose
+	// metadata it has, whose slp message does not parse.
+	corrupt, garbled := chainhash.Hash{0xee, 4}, chainhash.Hash{0xee, 6}
+	unknown := chainhash.Hash{0xee, 5}
+	err := s.db.Update(func(dbTx database.Tx) error {
+		meta := dbTx.Metadata()
+		err := meta.Bucket([]byte("slptxbyhashidx")).Put(corrupt[:], []byte{1})
+		if err != nil {
+			return err
+		}
+		id := []byte{1, 0, 0, 0}
+		err = meta.Bucket([]byte("tokenhashbyididx")).Put(id,
+			append(bytes.Repeat([]byte{0x05}, 32), 1, 0))
+		if err != nil {
+			return err
+		}
+		entry := append(append(id, 1, 0), bytes.Repeat([]byte{txscript.OP_TRUE}, 37)...)
+		return meta.Bucket([]byte("slptxbyhashidx")).Put(garbled[:], entry)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := bytes.Repeat([]byte{0x05}, 32)
+	scripts := []struct {
+		name   string
+		script func() ([]byte, error)
+	}{
+		{"not slp", func() ([]byte, error) { return []byte{txscript.OP_TRUE}, nil }},
+		{"SEND", func() ([]byte, error) {
+			return metadatamaker.TokenType1Send(token, []uint64{1})
+		}},
+		{"MINT", func() ([]byte, error) {
+			return metadatamaker.TokenType1Mint(token,
+				metadatamaker.NewMintBatonVout(2), 10)
+		}},
+		{"GENESIS", func() ([]byte, error) {
+			return metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+				nil, nil, 0, nil, 1000)
+		}},
+	}
+	tx := func(script []byte, prev chainhash.Hash) []byte {
+		t.Helper()
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: prev, Index: 1}, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		var buf bytes.Buffer
+		if err := tx.Serialize(&buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+
+	var logged bytes.Buffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+	ctx := context.Background()
+	for _, kind := range scripts {
+		script, err := kind.script()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = s.CheckSlpTransaction(ctx,
+			&pb.CheckSlpTransactionRequest{Transaction: tx(script, corrupt)})
+		want := "failed to load slp index entry"
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+			t.Errorf("%s spending a corrupt entry: got %v, want Internal "+
+				"with %q", kind.name, err, want)
+		}
+		_, err = s.SubmitTransaction(ctx,
+			&pb.SubmitTransactionRequest{Transaction: tx(script, corrupt)})
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+			t.Errorf("%s spending a corrupt entry, submitted: got %v, want "+
+				"Internal with %q", kind.name, err, want)
+		}
+		resp, err := s.CheckSlpTransaction(ctx,
+			&pb.CheckSlpTransactionRequest{Transaction: tx(script, unknown)})
+		if err != nil || resp == nil {
+			t.Errorf("%s spending a transaction the index does not hold: %v",
+				kind.name, err)
+		}
+	}
+	want := "[ERR] GRPC: Failed to load the slp entry of the output " +
+		corrupt.String() + ":1 an input spends: corrupt slp index entry for " +
+		corrupt.String()
+	if !strings.Contains(logged.String(), want) {
+		t.Errorf("log %q, want a line with %q", logged.String(), want)
+	}
+
+	script, err := scripts[1].script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logged.Reset()
+	_, err = s.CheckSlpTransaction(ctx,
+		&pb.CheckSlpTransactionRequest{Transaction: tx(script, garbled)})
+	if status.Code(err) != codes.Internal {
+		t.Errorf("a SEND spending an entry whose slp message does not "+
+			"parse: got %v, want Internal", err)
+	}
+	want = "[ERR] GRPC: Failed to parse the slp entry of the output " +
+		garbled.String() + ":1 an input spends"
+	if !strings.Contains(logged.String(), want) {
+		t.Errorf("log %q, want a line with %q", logged.String(), want)
+	}
+}

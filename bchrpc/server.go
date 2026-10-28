@@ -2244,6 +2244,9 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 			// check to see if the input is a burn
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, nil, i)
 			if slpEntry == nil {
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if err != nil {
@@ -2268,6 +2271,9 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		for i, txIn := range msgTx.TxIn {
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, md, i)
 			if slpEntry == nil {
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if err != nil && useSafeValidityJudgement {
@@ -2351,6 +2357,9 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		for i, txIn := range msgTx.TxIn {
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, slpMd, i)
 			if slpEntry == nil {
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if err != nil && useSafeValidityJudgement {
@@ -2417,6 +2426,9 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 		for i, txIn := range msgTx.TxIn {
 			slpEntry, err := s.getSlpIndexEntryAndCheckBurnOtherToken(txIn.PreviousOutPoint, requiredBurns, slpMd, i)
 			if slpEntry == nil {
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if err != nil && useSafeValidityJudgement {
@@ -2493,16 +2505,26 @@ func (s *GrpcServer) checkTransactionSlpValidity(msgTx *wire.MsgTx, requiredBurn
 // NOTE: nft1 child genesis is allowed without error as long as the burned outpoint is a
 //
 //	nft1 Group type and the quantity is 1.
+//
+// An outpoint of a transaction the slp index does not hold is not an slp
+// outpoint.  An entry the index cannot read, or read but not parse, fails the
+// check with an Internal error, as taking its outpoint for one that is not slp
+// could find a transaction that burns tokens valid.
 func (s *GrpcServer) getSlpIndexEntryAndCheckBurnOtherToken(outpoint wire.OutPoint, requiredBurns []*pb.SlpRequiredBurn, txnSlpMsg v1parser.ParseResult, inputIdx int) (*indexers.SlpTxEntry, error) {
 
 	slpEntry, err := s.getSlpIndexEntry(&outpoint.Hash)
+	if indexers.IsSlpEntryNotFound(err) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, err
+		log.Errorf("Failed to load the slp entry of the output %v an input spends: %v", outpoint, err)
+		return nil, status.Error(codes.Internal, "failed to load slp index entry")
 	}
 
 	inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 	if err != nil {
-		return nil, errors.New("could not parse slpMsg from and existing db entry, this should never happen")
+		log.Errorf("Failed to parse the slp entry of the output %v an input spends: %v", outpoint, err)
+		return nil, status.Error(codes.Internal, "could not parse slpMsg from and existing db entry, this should never happen")
 	}
 
 	// exit early if the outpoint is not an slp outpoint, or is a zero output slp
