@@ -23,6 +23,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 ### Other
 
 - txscript can sign inputs that spend CashTokens, and sign with `SIGHASH_UTXOS`. `SignTxOutputWithSigHashes`, `SignatureScriptWithSigHashes`, `RawTxInECDSASignatureWithSigHashes` and `RawTxInSchnorrSignatureWithSigHashes` take the transaction's signature hashes, computed once for all its inputs, which must include the outputs it spends (`NewTxSigHashes(tx).WithUtxos(tx, utxos)`) for those. The functions without them can't see the spent outputs, so they now return an error for `SIGHASH_UTXOS` instead of a signature the network refuses.
+- txscript's signing functions return an error, instead of panicking or making an invalid signature, for signature hashes that don't fit the transaction and for `SIGHASH_UTXOS` with `SIGHASH_ANYONECANPAY`.
 
 ### Upgrade notes
 

@@ -7,6 +7,7 @@ package txscript
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/chaincfg"
@@ -28,9 +29,10 @@ func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 
 // RawTxInECDSASignatureWithSigHashes is RawTxInECDSASignature with the
 // signature hashes of the transaction passed in, which can be computed once
-// for all its inputs.  To sign an input that spends tokens, or with
-// SigHashUTXO, they must include the outputs the transaction spends, as
-// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+// for all its inputs.  They must be computed from the finished transaction:
+// only its signature scripts may change afterwards.  To sign an input that
+// spends tokens, or with SigHashUTXO, they must include the outputs the
+// transaction spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
 func RawTxInECDSASignatureWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
 	idx int, subScript []byte, hashType SigHashType, key *bchec.PrivateKey,
 	amt int64) ([]byte, error) {
@@ -62,9 +64,10 @@ func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 
 // RawTxInSchnorrSignatureWithSigHashes is RawTxInSchnorrSignature with the
 // signature hashes of the transaction passed in, which can be computed once
-// for all its inputs.  To sign an input that spends tokens, or with
-// SigHashUTXO, they must include the outputs the transaction spends, as
-// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+// for all its inputs.  They must be computed from the finished transaction:
+// only its signature scripts may change afterwards.  To sign an input that
+// spends tokens, or with SigHashUTXO, they must include the outputs the
+// transaction spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
 func RawTxInSchnorrSignatureWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
 	idx int, subScript []byte, hashType SigHashType, key *bchec.PrivateKey,
 	amt int64) ([]byte, error) {
@@ -91,7 +94,7 @@ func signatureHash(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	if hashType&SigHashForkID != SigHashForkID {
 		hashType |= SigHashForkID
 	}
-	if err := checkSigHashes(sigHashes, hashType); err != nil {
+	if err := checkSigHashes(tx, sigHashes, idx, hashType); err != nil {
 		return nil, 0, err
 	}
 
@@ -102,13 +105,36 @@ func signatureHash(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	return hash, hashType, nil
 }
 
-// checkSigHashes returns an error if a signature with hashType covers the
-// outputs the transaction spends and sigHashes lacks them, as the signature
-// would be invalid.
-func checkSigHashes(sigHashes *TxSigHashes, hashType SigHashType) error {
-	if hashType&SigHashUTXO != 0 && !sigHashes.hasUtxos {
-		return errors.New("signing with SigHashUTXO needs the outputs " +
-			"the transaction spends in its signature hashes")
+// checkSigHashes returns an error if signing input idx of tx with hashType and
+// sigHashes would make a signature the network refuses, as far as sigHashes
+// shows: with both SigHashUTXO and SigHashAnyOneCanPay, with SigHashUTXO if
+// sigHashes lacks an output tx spends, if sigHashes is for a transaction with
+// other inputs, or if it has the outputs tx spends but not the one input idx
+// spends, whose tokens the signature covers.
+func checkSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
+	hashType SigHashType) error {
+
+	if hashType&SigHashUTXO != 0 {
+		if hashType&SigHashAnyOneCanPay != 0 {
+			return errors.New("SigHashUTXO can't be combined with " +
+				"SigHashAnyOneCanPay")
+		}
+		if !sigHashes.hasUtxos || len(sigHashes.missingUtxos) != 0 {
+			return errors.New("signing with SigHashUTXO needs the " +
+				"outputs the transaction spends in its signature hashes")
+		}
+	}
+	if !sigHashes.hasUtxos {
+		return nil
+	}
+	if len(sigHashes.tokenDataList) != len(tx.TxIn) {
+		return fmt.Errorf("signature hashes for %d inputs, but the "+
+			"transaction has %d", len(sigHashes.tokenDataList),
+			len(tx.TxIn))
+	}
+	if slices.Contains(sigHashes.missingUtxos, idx) {
+		return fmt.Errorf("the signature hashes lack the output input "+
+			"%d spends", idx)
 	}
 	return nil
 }
@@ -150,9 +176,11 @@ func SignatureScript(tx *wire.MsgTx, idx int, amt int64, subscript []byte,
 }
 
 // SignatureScriptWithSigHashes is SignatureScript with the signature hashes of
-// tx passed in, which can be computed once for all its inputs.  To sign an
-// input that spends tokens, or with SigHashUTXO, they must include the outputs
-// tx spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+// tx passed in, which can be computed once for all its inputs.  They must be
+// computed from the finished transaction: only its signature scripts may
+// change afterwards.  To sign an input that spends tokens, or with
+// SigHashUTXO, they must include the outputs tx spends, as
+// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
 func SignatureScriptWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
 	idx int, amt int64, subscript []byte, hashType SigHashType,
 	privKey *bchec.PrivateKey, compress bool) ([]byte, error) {
@@ -529,7 +557,9 @@ func (sc ScriptClosure) GetScript(address bchutil.Address) ([]byte, error) {
 // will be merged in a type-dependent manner with the newly generated.
 // signature script.  It doesn't know the outputs tx spends, so its signatures
 // for an input that spends tokens are invalid, and it returns an error for
-// SigHashUTXO; SignTxOutputWithSigHashes signs those.
+// SigHashUTXO; SignTxOutputWithSigHashes signs those.  For the same reason, it
+// drops the multisig signatures in previousScript that cover those outputs:
+// the ones with SigHashUTXO, and all for an input that spends tokens.
 func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
@@ -539,9 +569,13 @@ func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 }
 
 // SignTxOutputWithSigHashes is SignTxOutput with the signature hashes of tx
-// passed in, which can be computed once for all its inputs.  To sign an input
-// that spends tokens, or with SigHashUTXO, they must include the outputs tx
-// spends, as NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
+// passed in, which can be computed once for all its inputs.  They must be
+// computed from the finished transaction: only its signature scripts may
+// change afterwards.  To sign an input that spends tokens, or with
+// SigHashUTXO, they must include the outputs tx spends, as
+// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.  The multisig signatures in
+// previousScript are checked with the same hashes, so those that cover the
+// outputs tx spends are dropped unless the hashes include them.
 func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 	sigHashes *TxSigHashes, idx int, amt int64, pkScript []byte,
 	hashType SigHashType, kdb KeyDB, sdb ScriptDB,
@@ -549,7 +583,7 @@ func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 
 	// Check the hashes here, as a multisig script skips the keys it fails
 	// to sign with.
-	if err := checkSigHashes(sigHashes, hashType); err != nil {
+	if err := checkSigHashes(tx, sigHashes, idx, hashType); err != nil {
 		return nil, err
 	}
 

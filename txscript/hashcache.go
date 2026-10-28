@@ -23,6 +23,11 @@ type TxSigHashes struct {
 	HashUTXOS     chainhash.Hash
 	tokenDataList [][]byte
 	hasUtxos      bool
+
+	// missingUtxos lists the inputs whose spent outputs were not in the
+	// UtxoCache the spent outputs were added from, so signing can refuse
+	// the signatures that would leave them out.
+	missingUtxos []int
 }
 
 // NewTxSigHashes computes, and returns the cached sighashes of the given
@@ -41,7 +46,8 @@ func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
 func (txSighashes *TxSigHashes) AddTxSigHashUtxoFromUtxoCache(tx *wire.MsgTx, utxoCache *UtxoCache) {
 	hash := calcHashUtxos(tx, utxoCache)
 	txSighashes.HashUTXOS = hash
-	txSighashes.tokenDataList = calUtxoTokenData(tx, utxoCache)
+	txSighashes.tokenDataList, txSighashes.missingUtxos =
+		calUtxoTokenData(tx, utxoCache)
 	txSighashes.hasUtxos = true
 }
 

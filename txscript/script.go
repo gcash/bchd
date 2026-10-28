@@ -410,8 +410,11 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 	return chainhash.Hash{}
 }
 
-func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) [][]byte {
+// calUtxoTokenData returns the token data of the outputs the inputs of tx
+// spend, which utxoCache holds, and the inputs whose spent outputs it lacks.
+func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) ([][]byte, []int) {
 	tokenDataList := make([][]byte, len(tx.TxIn))
+	var missing []int
 	for i := range tx.TxIn {
 		if utxoCache != nil {
 			utxo, err := utxoCache.GetEntry(i)
@@ -422,12 +425,14 @@ func calUtxoTokenData(tx *wire.MsgTx, utxoCache *UtxoCache) [][]byte {
 				}
 			} else {
 				log.Debugf("%v", err)
+				missing = append(missing, i)
 			}
 		} else {
 			log.Debugf("utxoCache is nil.") // It might not be a bad idea to fail the function at this point.
+			missing = append(missing, i)
 		}
 	}
-	return tokenDataList
+	return tokenDataList, missing
 }
 
 // calcHashSequence computes an aggregated hash of each of the sequence numbers
