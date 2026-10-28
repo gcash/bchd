@@ -33,6 +33,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `CheckSlpTransaction` and `SubmitTransaction` answer `Internal` when the SLP index cannot read an input's entry, rather than taking the input for one without tokens.
 - When the SLP index fails to read a transaction's SLP data, `GetTransaction`, `GetBlock`, `GetMempool` and `GetAddressTransactions` answer `Internal`, and the subscriptions send the transaction as `UNKNOWN_OR_INVALID`, instead of reporting an invalid SLP transaction that burns its inputs.
 - An SLP transaction in the memory pool whose check hits a database failure is checked again at the next block, instead of staying invalid to the SLP calls while it is in the pool.
+- `GetUnspentOutput`, `GetAddressUnspentOutputs` and `GetTransaction` answer `Internal` when the SLP index fails to read a token or its metadata, rather than leaving it out.
 
 ### Other
 

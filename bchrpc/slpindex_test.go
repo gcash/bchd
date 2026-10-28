@@ -153,6 +153,9 @@ func TestTokenMetadataNotGenesis(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	if err := db.Update(idx.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 	s := &GrpcServer{db: db, slpIndex: idx}
 
 	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x01}, 32),
@@ -172,12 +175,12 @@ func TestTokenMetadataNotGenesis(t *testing.T) {
 	}
 
 	// The SEND's own hash is a token ID naming no GENESIS.
-	if tm := s.tokenMetadataOrNil(send.TxHash()); tm != nil {
-		t.Fatalf("got metadata %v for a token ID naming no GENESIS", tm)
+	if tm, err := s.tokenMetadataOrNil(send.TxHash()); tm != nil || err != nil {
+		t.Fatalf("got metadata %v and %v for a token ID naming no GENESIS", tm, err)
 	}
 	// One naming no transaction at all.
-	if tm := s.tokenMetadataOrNil(chainhash.Hash{0x09}); tm != nil {
-		t.Fatalf("got metadata %v for an unknown token ID", tm)
+	if tm, err := s.tokenMetadataOrNil(chainhash.Hash{0x09}); tm != nil || err != nil {
+		t.Fatalf("got metadata %v and %v for an unknown token ID", tm, err)
 	}
 }
 
@@ -2226,5 +2229,288 @@ func TestSlpEventRecheck(t *testing.T) {
 		_, err := s.GetSlpGraphSearch(context.Background(),
 			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
 		return err == nil
+	})
+}
+
+// lastViewDB is a database whose fail-th read transaction fails with err, and
+// that counts its read transactions.
+type lastViewDB struct {
+	database.DB
+	err   error
+	fail  int32
+	views atomic.Int32
+}
+
+func (db *lastViewDB) View(fn func(database.Tx) error) error {
+	if db.views.Add(1) == db.fail {
+		return db.err
+	}
+	return db.DB.View(fn)
+}
+
+// TestSlpTokenIndexFailureCalls ensures GetUnspentOutput and
+// GetAddressUnspentOutputs answer with an internal error, logging the failure,
+// when the slp index fails to read the token of an output they would return,
+// and GetTransaction when it fails to read the metadata of the token of the
+// transaction it returns, from the memory pool or confirmed, rather than
+// return a result that lacks them, while a token the index holds no GENESIS of
+// still just has no metadata.
+func TestSlpTokenIndexFailureCalls(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	ctx := context.Background()
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+	check := func(what string, err error, msg, logLine string) {
+		t.Helper()
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != msg {
+			t.Errorf("%s: got %v, want Internal with %q", what, err, msg)
+		}
+		if !strings.Contains(logged.String(), logLine) {
+			t.Errorf("%s: log %q, want a line with %q", what, logged.String(),
+				logLine)
+		}
+	}
+	zeroSend := func(token []byte) []byte {
+		script, err := metadatamaker.TokenType1Send(token, []uint64{0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return script
+	}
+	addPotential := func(s *GrpcServer, tx *wire.MsgTx) {
+		t.Helper()
+		err := s.db.View(func(dbTx database.Tx) error {
+			valid, err := s.slpIndex.AddPotentialSlpEntries(dbTx, tx)
+			if err == nil && !valid {
+				err = errors.New("not valid")
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatalf("AddPotentialSlpEntries(%v): %v", tx.TxHash(), err)
+		}
+	}
+	corruptEntries := func(s *GrpcServer, hashes ...chainhash.Hash) {
+		t.Helper()
+		err := s.db.Update(func(dbTx database.Tx) error {
+			bucket := dbTx.Metadata().Bucket([]byte("slptxbyhashidx"))
+			for _, hash := range hashes {
+				if err := bucket.Put(hash[:], []byte{1}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// From the memory pool: a SEND whose entry is corrupt, a SEND of zero
+	// tokens, with no output after its OP_RETURN, of a token whose
+	// GENESIS's entry is corrupt, another of a valid GENESIS, and another
+	// of a token with no GENESIS.
+	s := newSlpCheckServer(t)
+	pool, funding := newOpTruePool(t)
+	s.txMemPool = pool
+	s.txIndex = indexers.NewTxIndex(s.db)
+	if err := s.db.Update(s.txIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	tx := func(script []byte, prev wire.OutPoint, outputs int) *wire.MsgTx {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&prev, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		for i := 1; i < outputs; i++ {
+			tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		}
+		return tx
+	}
+	corruptGenesis := chainhash.Hash{0xee, 15}
+	corruptToken, err := hex.DecodeString(corruptGenesis.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisScript, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := tx(genesisScript, wire.OutPoint{Hash: chainhash.Hash{0xee, 16}}, 2)
+	genesisToken, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pooled := []*wire.MsgTx{
+		tx(zeroSend(bytes.Repeat([]byte{0x0a}, 32)), wire.OutPoint{Hash: funding.TxHash()}, 2),
+		tx(zeroSend(corruptToken), wire.OutPoint{Hash: funding.TxHash(), Index: 1}, 1),
+	}
+	for _, p := range pooled {
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(p), false, 0); err != nil {
+			t.Fatalf("ProcessTransaction: %v", err)
+		}
+	}
+	corruptOutput, corruptMetadata := pooled[0], pooled[1]
+	addPotential(s, corruptMetadata)
+	addPotential(s, genesis)
+	corruptEntries(s, corruptOutput.TxHash(), corruptGenesis)
+
+	op := wire.OutPoint{Hash: corruptOutput.TxHash(), Index: 1}
+	_, err = s.GetUnspentOutput(ctx, &pb.GetUnspentOutputRequest{Hash: op.Hash[:],
+		Index: 1, IncludeMempool: true})
+	check("GetUnspentOutput", err, "failed to load slp index entry",
+		"[ERR] GRPC: Failed to load the slp token of output "+op.String()+
+			": corrupt slp index entry for "+op.Hash.String())
+
+	hash := corruptMetadata.TxHash()
+	metadata := func(hash chainhash.Hash) (*pb.GetTransactionResponse, error) {
+		return s.GetTransaction(ctx, &pb.GetTransactionRequest{Hash: hash[:],
+			IncludeTokenMetadata: true})
+	}
+	_, err = metadata(hash)
+	check("GetTransaction from the memory pool", err,
+		"failed to load slp token metadata", "[ERR] GRPC: Failed to load slp "+
+			"token metadata of token ID "+hex.EncodeToString(corruptToken)+
+			": corrupt slp index entry for "+corruptGenesis.String())
+
+	// The read of the metadata itself fails: that of the GENESIS's token,
+	// which a SEND of zero tokens in the memory pool names, is read in the
+	// call's last database transaction.
+	pool2, funding2 := newOpTruePool(t)
+	ofGenesis := tx(zeroSend(genesisToken), wire.OutPoint{Hash: funding2.TxHash()}, 1)
+	addPotential(s, ofGenesis)
+	if _, err := pool2.ProcessTransaction(bchutil.NewTx(ofGenesis), false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	s.txMemPool = pool2
+	last := &lastViewDB{DB: s.db, err: errors.New("the database failed")}
+	s.db = last
+	resp, err := metadata(ofGenesis.TxHash())
+	if err != nil || resp.TokenMetadata == nil {
+		t.Fatalf("the token of the GENESIS: got %v and %v", resp, err)
+	}
+	last.fail, last.views = last.views.Load(), atomic.Int32{}
+	_, err = metadata(ofGenesis.TxHash())
+	check("GetTransaction with the metadata's read failing", err,
+		"failed to load slp token metadata", "[ERR] GRPC: Failed to load slp "+
+			"token metadata of token ID "+hex.EncodeToString(genesisToken)+
+			": the database failed")
+	s.db = last.DB
+
+	// A token with no GENESIS has no metadata.
+	unknown := tx(zeroSend(bytes.Repeat([]byte{0x0b}, 32)),
+		wire.OutPoint{Hash: funding2.TxHash(), Index: 1}, 1)
+	if _, err := pool2.ProcessTransaction(bchutil.NewTx(unknown), false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	addPotential(s, unknown)
+	resp, err = metadata(unknown.TxHash())
+	if err != nil || resp.TokenMetadata != nil {
+		t.Errorf("a token with no GENESIS: got metadata %v and %v", resp, err)
+	}
+
+	// Confirmed: block 1's coinbase is a SEND of zero tokens of the token
+	// whose GENESIS's entry is corrupt, and block 2's pays to an address
+	// on its output 1, and its entry is corrupt.
+	addrHash := bytes.Repeat([]byte{0x03}, 20)
+	addr, err := bchutil.NewAddressPubKeyHash(addrHash, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrScript, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newAddrIndexServerBlocks(t, [][]byte{zeroSend(corruptToken)}, 1)
+	c.slpIndex = indexers.NewSlpIndex(c.db, &indexers.SlpConfig{MaxCacheSize: 100})
+	if err := c.db.Update(c.slpIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	c.txIndex = indexers.NewTxIndex(c.db)
+	c.txMemPool = mempool.New(&mempool.Config{})
+	block, err := c.chain.BlockByHeight(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase := block.Transactions()[0]
+	addPotential(c, coinbase.MsgTx())
+	corruptEntries(c, corruptGenesis)
+	_, err = c.GetTransaction(ctx, &pb.GetTransactionRequest{
+		Hash: coinbase.Hash()[:], IncludeTokenMetadata: true})
+	check("GetTransaction confirmed", err, "failed to load slp token metadata",
+		"[ERR] GRPC: Failed to load slp token metadata of token ID "+
+			hex.EncodeToString(corruptToken))
+
+	a := newAddrIndexServerBlocks(t, [][]byte{{txscript.OP_TRUE}, addrScript}, 1)
+	a.slpIndex = indexers.NewSlpIndex(a.db, &indexers.SlpConfig{MaxCacheSize: 100})
+	if err := a.db.Update(a.slpIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	block, err = a.chain.BlockByHeight(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase = block.Transactions()[0]
+	corruptEntries(a, *coinbase.Hash())
+	_, err = a.GetAddressUnspentOutputs(ctx, &pb.GetAddressUnspentOutputsRequest{
+		Address: addr.EncodeAddress()})
+	op = wire.OutPoint{Hash: *coinbase.Hash(), Index: 1}
+	check("GetAddressUnspentOutputs", err, "failed to load slp index entry",
+		"[ERR] GRPC: Failed to load the slp token of output "+op.String())
+
+	// The read of the metadata of the token of an output fails: that of
+	// a GENESIS of the memory pool paying to another address, read in the
+	// call's last database transaction.
+	addr2, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{0x04}, 20),
+		params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr2Script, err := txscript.PayToAddrScript(addr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool3, funding3 := newOpTruePool(t)
+	pooledGenesis := tx(genesisScript, wire.OutPoint{Hash: funding3.TxHash()}, 1)
+	pooledGenesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: addr2Script})
+	if _, err := pool3.ProcessTransaction(bchutil.NewTx(pooledGenesis), false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	pooledToken, err := goslp.GetSlpTokenID(pooledGenesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failMetadata := func(what string, s *GrpcServer, call func() error) {
+		t.Helper()
+		last := &lastViewDB{DB: s.db, err: errors.New("the database failed")}
+		s.db = last
+		defer func() { s.db = last.DB }()
+		if err := call(); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		last.fail, last.views = last.views.Load(), atomic.Int32{}
+		check(what+" with the metadata's read failing", call(),
+			"failed to load slp token metadata", "[ERR] GRPC: Failed to load "+
+				"slp token metadata of token ID "+hex.EncodeToString(pooledToken)+
+				": the database failed")
+	}
+	s.txMemPool = pool3
+	addPotential(s, pooledGenesis)
+	failMetadata("GetUnspentOutput", s, func() error {
+		hash := pooledGenesis.TxHash()
+		_, err := s.GetUnspentOutput(ctx, &pb.GetUnspentOutputRequest{Hash: hash[:],
+			Index: 1, IncludeMempool: true, IncludeTokenMetadata: true})
+		return err
+	})
+	a.txMemPool = pool3
+	addPotential(a, pooledGenesis)
+	a.addrIndex.AddUnconfirmedTx(bchutil.NewTx(pooledGenesis), blockchain.NewUtxoViewpoint())
+	failMetadata("GetAddressUnspentOutputs", a, func() error {
+		_, err := a.GetAddressUnspentOutputs(ctx, &pb.GetAddressUnspentOutputsRequest{
+			Address: addr2.EncodeAddress(), IncludeMempool: true,
+			IncludeTokenMetadata: true})
+		return err
 	})
 }

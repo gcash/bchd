@@ -1033,7 +1033,10 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id: %s: %v", hex.EncodeToString(tx.SlpTransactionInfo.TokenId), err)
 			}
-			tokenMetadata = s.tokenMetadataOrNil(*tokenID)
+			tokenMetadata, err = s.tokenMetadataOrNil(*tokenID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "failed to load slp token metadata")
+			}
 		}
 
 		resp := &pb.GetTransactionResponse{
@@ -1076,7 +1079,10 @@ func (s *GrpcServer) GetTransaction(ctx context.Context, req *pb.GetTransactionR
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "an unknown problem occurred when parsing token id %s: %v", hex.EncodeToString(respTx.SlpTransactionInfo.TokenId), err)
 		}
-		tokenMetadata = s.tokenMetadataOrNil(*tokenID)
+		tokenMetadata, err = s.tokenMetadataOrNil(*tokenID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to load slp token metadata")
+		}
 	}
 
 	resp := &pb.GetTransactionResponse{
@@ -1440,7 +1446,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 
 			var slpToken *pb.SlpToken
 			if s.slpIndex != nil {
-				slpToken, _ = s.getSlpToken(&txHash, uint32(i), out.PkScript)
+				slpToken, err = s.getSlpToken(&txHash, uint32(i), out.PkScript)
+				if _, ok := err.(errSlpIndexFailure); ok {
+					log.Errorf("Failed to load the slp token of output %v: %v", op, err)
+					return nil, false, status.Error(codes.Internal, "failed to load slp index entry")
+				}
 				if req.IncludeTokenMetadata && slpToken != nil {
 					hash, err := chainhash.NewHash(slpToken.TokenId)
 					if err != nil {
@@ -1644,11 +1654,11 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 	if req.IncludeTokenMetadata && s.slpIndex != nil {
 		tokenMetadata = make([]*pb.SlpTokenMetadata, 0)
 		for hash := range tokenMetadataSet {
-			tm, err := s.marshalTokenMetadata(hash)
+			tm, err := s.tokenMetadataOrNil(hash)
 			if err != nil {
-				log.Debugf("Could not build slp token metadata for %v", hash)
+				return nil, status.Error(codes.Internal, "failed to load slp token metadata")
 			}
-			if tm != nil && err == nil {
+			if tm != nil {
 				tokenMetadata = append(tokenMetadata, tm)
 			}
 		}
@@ -1745,6 +1755,10 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		// or an output of a transaction that is not valid SLP, is returned
 		// without a token, as the outputs of a transaction are.
 		slpToken, err = s.getSlpToken(txnHash, req.Index, scriptPubkey)
+		if _, ok := err.(errSlpIndexFailure); ok {
+			log.Errorf("Failed to load the slp token of output %v: %v", op, err)
+			return nil, status.Error(codes.Internal, "failed to load slp index entry")
+		}
 		if err != nil {
 			log.Debugf("No slp token for output %v: %v", op, err)
 		} else {
@@ -1752,7 +1766,10 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
 			}
-			tm = s.tokenMetadataOrNil(*tokenID)
+			tm, err = s.tokenMetadataOrNil(*tokenID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "failed to load slp token metadata")
+			}
 		}
 	}
 
@@ -4066,13 +4083,19 @@ var errTokenNotGenesis = errors.New("cannot build token metadata from a non-gene
 // tokenMetadataOrNil returns the metadata of the token, or nil when it cannot
 // be built.  A valid SEND of zero tokens may name a token ID that is no
 // GENESIS, so the metadata of a transaction or output is then just missing.
-func (s *GrpcServer) tokenMetadataOrNil(tokenID chainhash.Hash) *pb.SlpTokenMetadata {
+// A failure of the slp index to read it is logged and returned, for the call
+// to fail with rather than answer without the metadata.
+func (s *GrpcServer) tokenMetadataOrNil(tokenID chainhash.Hash) (*pb.SlpTokenMetadata, error) {
 	tm, err := s.marshalTokenMetadata(tokenID)
+	if _, ok := err.(errSlpIndexFailure); ok {
+		log.Errorf("Failed to load slp token metadata of token ID %x: %v", tokenID[:], err)
+		return nil, err
+	}
 	if err != nil {
 		log.Debugf("No token metadata for token ID %v: %v", tokenID, err)
-		return nil
+		return nil, nil
 	}
-	return tm
+	return tm, nil
 }
 
 // marshalTokenMetadata returns marshalled token metadata for the provided tokenID hash
@@ -4112,11 +4135,19 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 		TokenType: getTokenType(slpMsg.TokenType()),
 	}
 
-	var dbTm *indexers.TokenMetadata
+	// A read of the database that fails is a failure of the slp index, as
+	// opposed to the index holding no metadata for the token.
+	var (
+		dbTm  *indexers.TokenMetadata
+		tmErr error
+	)
 	err = s.db.View(func(dbTx database.Tx) error {
-		dbTm, err = s.slpIndex.GetTokenMetadata(dbTx, entry)
-		return err
+		dbTm, tmErr = s.slpIndex.GetTokenMetadata(dbTx, entry)
+		return tmErr
 	})
+	if err != nil && err != tmErr {
+		return nil, errSlpIndexFailure{err}
+	}
 	if err != nil {
 		return nil, err
 	}
