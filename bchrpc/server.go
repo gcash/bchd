@@ -3782,11 +3782,12 @@ func (e errSlpIndexFailure) Unwrap() error {
 // slpEntryStatus returns the status a call answers with when it cannot read
 // the slp entry of the transaction hash: NotFound for a transaction the slp
 // index does not hold, and Internal for a failure of the database, without
-// its error, which can name the node's files.
+// its error, which can name the node's files, and which is logged instead.
 func slpEntryStatus(hash *chainhash.Hash, err error) error {
 	if indexers.IsSlpEntryNotFound(err) {
 		return status.Errorf(codes.NotFound, "transaction %v is not in the slp index", hash)
 	}
+	log.Errorf("Failed to load the slp entry of transaction %v: %v", hash, err)
 	return status.Error(codes.Internal, "failed to load slp index entry")
 }
 

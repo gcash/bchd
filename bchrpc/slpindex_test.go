@@ -1419,8 +1419,9 @@ func TestSlpGraphSearchClientErrors(t *testing.T) {
 // TestSlpIndexEntryErrors ensures GetSlpGraphSearch and GetSlpTrustedValidation
 // answer a transaction the slp index does not hold as not found, naming it,
 // and a failure of the index as an internal error, with a message that leaves
-// out the database's own error, which can name the node's files, rather than
-// both as Aborted with the index's error.
+// out the database's own error, which can name the node's files, and which is
+// logged as an error instead, rather than both as Aborted with the index's
+// error.
 func TestSlpIndexEntryErrors(t *testing.T) {
 	s, _ := newGraphSearchServer(t)
 	ctx := context.Background()
@@ -1462,11 +1463,22 @@ func TestSlpIndexEntryErrors(t *testing.T) {
 			t.Errorf("%s of a transaction the index does not hold: got %v, "+
 				"want NotFound with %q", call.name, err, want)
 		}
+		var logged bytes.Buffer
+		saved := log
+		UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
 		err = call.call(corrupt)
+		UseLogger(saved)
 		want = "failed to load slp index entry"
 		if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
 			t.Errorf("%s of a corrupt entry: got %v, want Internal with %q",
 				call.name, err, want)
+		}
+		want = "[ERR] GRPC: Failed to load the slp entry of transaction " +
+			corrupt.String() + ": corrupt slp index entry for " +
+			corrupt.String()
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("%s of a corrupt entry: log %q, want a line with %q",
+				call.name, logged.String(), want)
 		}
 	}
 }
