@@ -667,19 +667,49 @@ func TestWebsocketStalledClient(t *testing.T) {
 	closeWsClients(t, s, reader, stalled)
 }
 
-// bufferListener gives each connection it accepts a send buffer of size
-// bytes.
-type bufferListener struct {
+// pipeListener serves the test server, in place of the listener it embeds,
+// whose address it keeps, the connections its dial method makes.  Each is an
+// in-memory pipe, which holds nothing: a write to it returns once the other
+// end has read all of it.  So the server's writes take as long as its client
+// takes to read them, where on TCP the kernel's flow control paces them too.
+type pipeListener struct {
 	net.Listener
-	size int
+	conns  chan net.Conn
+	closed chan struct{}
+	once   sync.Once
 }
 
-func (l bufferListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if tcp, ok := conn.(*net.TCPConn); ok {
-		_ = tcp.SetWriteBuffer(l.size)
+func newPipeListener(l net.Listener) *pipeListener {
+	return &pipeListener{
+		Listener: l,
+		conns:    make(chan net.Conn),
+		closed:   make(chan struct{}),
 	}
-	return conn, err
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *pipeListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return l.Listener.Close()
+}
+
+// dial connects a client to the server through a new pipe.
+func (l *pipeListener) dial(string, string) (net.Conn, error) {
+	server, client := net.Pipe()
+	select {
+	case l.conns <- server:
+		return client, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
 }
 
 // TestWebsocketSlowReaderKeepsConnection ensures a websocket client that
@@ -687,21 +717,16 @@ func (l bufferListener) Accept() (net.Conn, error) {
 // disconnected: the timeout is for a client that takes nothing, as BCHN's
 // -rpcservertimeout is, not for the time a whole message takes.
 func TestWebsocketSlowReaderKeepsConnection(t *testing.T) {
-	// The connection's buffers hold a small part of the reply, but are not
-	// so small that the reader's pace leaves the server waiting long for
-	// each window update.
-	const bufSize = 16 * 1024
+	// The client connects through a pipe, so the server waits on the
+	// client's pace alone.  Over loopback TCP with small buffers, how the
+	// kernel paces the window made the reply too slow on some machines.
 	setWsLimits(t, time.Second, wsMaxPendingNtfnBytes)
+	var ln *pipeListener
 	s, addr := startTestRPCServer(t, func(s *rpcServer) {
-		s.cfg.Listeners[0] = bufferListener{s.cfg.Listeners[0], bufSize}
+		ln = newPipeListener(s.cfg.Listeners[0])
+		s.cfg.Listeners[0] = ln
 	})
-	dialer := &websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) {
-		conn, err := net.Dial(network, addr)
-		if tcp, ok := conn.(*net.TCPConn); ok {
-			_ = tcp.SetReadBuffer(bufSize)
-		}
-		return conn, err
-	}}
+	dialer := &websocket.Dialer{NetDial: ln.dial}
 	hdr := http.Header{"Authorization": []string{basicAuth(testRPCAdminLogin)}}
 	conn, _, err := dialer.Dial("ws://"+addr+"/ws", hdr)
 	if err != nil {
@@ -719,9 +744,12 @@ func TestWebsocketSlowReaderKeepsConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The reply is read 4 KiB at a time, at most 200 KB/s, so that it
-	// takes over twice the write timeout, while each part the server
-	// writes between renewals of its deadline is taken well within it.
+	// The reply is read 4 KiB at a time at 200 KiB/s, so that it takes over
+	// twice the write timeout, while each 64 KiB part the server writes
+	// between renewals of its deadline is taken in a third of it.  Each read
+	// waits until the bytes before it are due, counted from the start, so a
+	// late wakeup is made up for by the next read.
+	const pace = 200 << 10 // bytes per second
 	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	_, r, err := conn.NextReader()
 	if err != nil {
@@ -731,6 +759,7 @@ func TestWebsocketSlowReaderKeepsConnection(t *testing.T) {
 	buf := make([]byte, 4*1024)
 	size := 0
 	for {
+		time.Sleep(time.Until(start.Add(time.Duration(size) * time.Second / pace)))
 		n, err := r.Read(buf)
 		size += n
 		if err == io.EOF {
@@ -740,7 +769,6 @@ func TestWebsocketSlowReaderKeepsConnection(t *testing.T) {
 			t.Fatalf("reply after %d bytes and %v: %v", size,
 				time.Since(start), err)
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
 	if took := time.Since(start); size < 512<<10 || took < 2*wsWriteTimeout {
 		t.Fatalf("a reply of %d bytes in %v is too small or too fast to "+
