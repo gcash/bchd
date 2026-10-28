@@ -460,6 +460,16 @@ func IsSlpEntryCorrupt(err error) bool {
 	return errors.As(err, &corrupt)
 }
 
+// genesisHashOf returns the hash of the GENESIS of the token whose token ID
+// hash holds the token ID's bytes, which are those of the hash in reverse.
+func genesisHashOf(tokenIDHash *chainhash.Hash) chainhash.Hash {
+	var hash chainhash.Hash
+	for i := range hash {
+		hash[i] = tokenIDHash[len(tokenIDHash)-1-i]
+	}
+	return hash
+}
+
 // errSlpMsgUnparsable returns the error for the entry of the transaction hash
 // whose slp message fails to parse with err.
 func errSlpMsgUnparsable(hash chainhash.Hash, err error) error {
@@ -1335,6 +1345,27 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		if failure != nil {
 			return failure
 		}
+
+		// A MINT moves its token's mint baton, which the metadata read from
+		// the index then records for the memory pool.  The metadata is read
+		// in the check's database transaction, whose read that fails fails
+		// the check, for the caller to check it again, and before the MINT
+		// is cached, so that a record the index cannot read, which is
+		// corrupt, leaves the MINT unjudged, as a corrupt entry does.  A
+		// token the index holds no metadata for has none to update.
+		var mintMetadata *TokenMetadata
+		if _, ok := slpMsg.(*v1parser.SlpMint); ok {
+			tm, err := idx.GetTokenMetadata(dbTx, &SlpTxEntry{TokenIDHash: *tokenIDHash})
+			switch {
+			case err == nil:
+				mintMetadata = tm
+			case IsTokenNotIndexed(err):
+				log.Debugf("AddPotentialSlpEntries: no token metadata for mint txn %v: %v", tx.TxHash(), err)
+			default:
+				return errSlpEntryCorrupt{hash: genesisHashOf(tokenIDHash), err: err}
+			}
+		}
+
 		scriptPubKey := tx.TxOut[0].PkScript
 		hash := tx.TxHash()
 
@@ -1385,31 +1416,18 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		case *v1parser.SlpMint:
 			// update the mint baton location
 			log.Debugf("adding slp mint token metadata for %v", hex.EncodeToString(tokenIDHash[:]))
-			err := idx.db.View(func(dbTx database.Tx) error {
-				hash := tx.TxHash()
-				entry, err := idx.GetSlpIndexEntry(dbTx, &hash)
+			if mintMetadata == nil {
+				break
+			}
+			if t.MintBatonVout > 1 {
+				mintMetadata.MintBatonHash = &hash
+				mintMetadata.MintBatonVout = uint32(t.MintBatonVout)
+				err := idx.cache.AddTempTokenMetadata(*mintMetadata, hash)
 				if err != nil {
-					return fmt.Errorf("could not retreive token entry for mint txn %v: %v", hash, err)
+					log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
 				}
-				tm, err := idx.GetTokenMetadata(dbTx, entry)
-				if err != nil {
-					return fmt.Errorf("could not retreive token metadata for mint txn %v: %v", hash, err)
-				}
-				if t.MintBatonVout > 1 {
-					hash := tx.TxHash()
-					tm.MintBatonHash = &hash
-					tm.MintBatonVout = uint32(t.MintBatonVout)
-					err := idx.cache.AddTempTokenMetadata(*tm, hash)
-					if err != nil {
-						log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
-					}
-				} else {
-					return fmt.Errorf("invalid mint baton for mint txn %v: %v", hash, err)
-				}
-				return nil
-			})
-			if err != nil {
-				log.Debugf("AddPotentialSlpEntries: %v", err)
+			} else {
+				log.Debugf("AddPotentialSlpEntries: invalid mint baton for mint txn %v", hash)
 			}
 		}
 		return nil
