@@ -1717,14 +1717,15 @@ func opcodeNum2bin(op *parsedOpcode, vm *Engine) error {
 	}
 
 	// Move the sign bit to the last of size bytes and zero the bytes
-	// between.  b is a fresh copy, so clearing its sign bit is safe.
+	// between.  The sign bit is cleared in result, which is allocated here,
+	// as b may share a stack item's bytes, and those are never modified.
+	result := make([]byte, size)
+	copy(result, b)
 	signbit := byte(0x00)
 	if len(b) > 0 {
 		signbit = b[len(b)-1] & 0x80
-		b[len(b)-1] &= 0x7f
+		result[len(b)-1] &= 0x7f
 	}
-	result := make([]byte, size)
-	copy(result, b)
 	result[size-1] = signbit
 
 	vm.dstack.PushByteArray(result)
