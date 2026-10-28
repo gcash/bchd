@@ -43,6 +43,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `--slpgraphsearch` no longer logs an error for each SLP transaction that arrives while the graph loads.
 - txscript's `SignTxOutput` drops multisig signatures in `previousScript` whose hash type the network refuses, and returns an error for a `previousScript` in Schnorr multisig mode instead of losing its signatures.
 - txscript's signing functions return an error for a hash type the network refuses, such as `SigHashOld`, instead of a signature it rejects.
+- txscript's `SignTxOutput` returns an error for a P2SH or P2SH32 input whose redeem script is itself P2SH or P2SH32, instead of an invalid script.
 
 ### Upgrade notes
 

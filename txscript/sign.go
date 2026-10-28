@@ -693,10 +693,17 @@ func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 
 	if class == ScriptHashTy || class == ScriptHash32Ty {
 		// TODO keep the sub addressed and pass down to merge.
-		realSigScript, _, _, _, err := sign(chainParams, tx, sigHashes, idx,
-			amt, sigScript, hashType, kdb, sdb)
+		realSigScript, subClass, _, _, err := sign(chainParams, tx,
+			sigHashes, idx, amt, sigScript, hashType, kdb, sdb)
 		if err != nil {
 			return nil, err
+		}
+
+		// For a redeem script that is P2SH or P2SH32 itself, sign returned
+		// its own redeem script, which BCHN's signer refuses to nest.
+		if subClass == ScriptHashTy || subClass == ScriptHash32Ty {
+			return nil, errors.New("can't sign a redeem script that is " +
+				"P2SH or P2SH32 itself")
 		}
 
 		// Append the p2sh script as the last push in the script.

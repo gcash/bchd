@@ -2829,3 +2829,78 @@ func TestSignRefusedHashTypes(t *testing.T) {
 	check(signers, taken, refused)
 	check(legacy, legacyTaken, legacyRefused)
 }
+
+// TestSignNestedP2SH ensures SignTxOutput and SignTxOutputWithSigHashes
+// return an error for a P2SH or P2SH32 script whose redeem script is itself
+// P2SH or P2SH32, as BCHN's signer refuses one, also when merging a previous
+// script, instead of a bogus script.
+func TestSignNestedP2SH(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	key, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{1}, 32))
+	addr, err := bchutil.NewAddressPubKey(
+		(*bchec.PublicKey)(&key.PublicKey).SerializeCompressed(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kdb := mkGetKey(map[string]addressToKey{
+		addr.AddressPubKeyHash().EncodeAddress(): {key, true},
+	})
+	p2pkh, err := PayToAddrScript(addr.AddressPubKeyHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// scriptHash returns the P2SH or P2SH32 script of script, which the
+	// script lookup then finds.
+	scripts := make(map[string][]byte)
+	sdb := mkGetScript(scripts)
+	scriptHash := func(script []byte, p2sh32 bool) []byte {
+		var a bchutil.Address
+		var err error
+		if p2sh32 {
+			a, err = bchutil.NewAddressScriptHash32(script, params)
+		} else {
+			a, err = bchutil.NewAddressScriptHash(script, params)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		scripts[a.EncodeAddress()] = script
+		pkScript, err := PayToAddrScript(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pkScript
+	}
+
+	for _, outer32 := range []bool{false, true} {
+		for _, inner32 := range []bool{false, true} {
+			redeem := scriptHash(p2pkh, inner32)
+			pkScript := scriptHash(redeem, outer32)
+			name := fmt.Sprintf("p2sh32 %v in p2sh32 %v", inner32, outer32)
+			tx, utxos := tokenSpendTx(pkScript)
+			withUtxos := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+			prev, err := NewScriptBuilder().AddData(redeem).Script()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, prev := range [][]byte{nil, prev} {
+				msg := fmt.Sprintf("%s, previous script %x", name, prev)
+				script, err := SignTxOutput(params, tx, 1, 100000, pkScript,
+					SigHashAll, kdb, sdb, prev)
+				if err == nil {
+					t.Errorf("%s: SignTxOutput signed %x", msg, script)
+				}
+				script, err = SignTxOutputWithSigHashes(params, tx,
+					withUtxos, 1, 100000, pkScript, SigHashAll, kdb, sdb,
+					prev)
+				if err == nil {
+					t.Errorf("%s: SignTxOutputWithSigHashes signed %x", msg,
+						script)
+				}
+			}
+		}
+	}
+}
