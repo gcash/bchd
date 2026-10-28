@@ -1563,12 +1563,12 @@
         "nb_fetch": {
           "type": "integer",
           "format": "int64",
-          "description": "Specify the number of transactions to fetch."
+          "description": "Specify the number of confirmed transactions to fetch, 100 if 0.  A\nrequest for more than 10,000 fails.  Does not affect results of\nunconfirmed transactions."
         },
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by hash, little-endian."
+          "description": "Recommended. Only get transactions after (or within) a\nstarting block identified by hash, little-endian.  A hash of no\nblock of the main chain is taken for the genesis block."
         },
         "height": {
           "type": "integer",
@@ -1986,17 +1986,17 @@
         "nb_fetch": {
           "type": "integer",
           "format": "int64",
-          "description": "Specify the number of transactions to fetch."
+          "description": "Specify the number of confirmed transactions to fetch, 100 if 0.  A\nrequest for more than 10,000 fails.  Does not affect results of\nunconfirmed transactions."
         },
         "hash": {
           "type": "string",
           "format": "byte",
-          "description": "Recommended. Only return transactions after some starting block\nidentified by hash, little-endian."
+          "description": "Recommended. Only return transactions in or after some starting\nblock identified by hash, little-endian.  A hash of no block of\nthe main chain is taken for the genesis block."
         },
         "height": {
           "type": "integer",
           "format": "int32",
-          "description": "Recommended. Only return transactions after some starting block\nidentified by block number."
+          "description": "Recommended. Only return transactions in or after some starting\nblock identified by block number."
         }
       },
       "description": "Get encoded transactions related to a specific address.\n\nRECOMMENDED:\nParameters have been provided to query without creating\n  performance issues on the node or client.\n\n- The number of transactions to skip and fetch allow for iterating\n      over a large set of transactions, if necessary.\n\n- A starting block parameter (either `hash` or `height`)\n      may then be used to filter results to those occurring\n      after a certain time.\n\nThis approach will reduce network traffic and response processing\n  for the client, as well as reduce workload on the node."

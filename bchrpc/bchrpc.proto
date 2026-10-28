@@ -354,13 +354,16 @@ message GetAddressTransactionsRequest {
     // The number of confirmed transactions to skip, starting with the newest.
     // Does not affect results of unconfirmed transactions.
     uint32 nb_skip = 2;
-    // Specify the number of transactions to fetch.
+    // Specify the number of confirmed transactions to fetch, 100 if 0.  A
+    // request for more than 10,000 fails.  Does not affect results of
+    // unconfirmed transactions.
     uint32 nb_fetch = 3;
 
 
     oneof start_block {
         // Recommended. Only get transactions after (or within) a
-        // starting block identified by hash, little-endian.
+        // starting block identified by hash, little-endian.  A hash of no
+        // block of the main chain is taken for the genesis block.
         bytes hash = 4;
         // Recommended. Only get transactions after (or within) a
         // starting block identified by block number.
@@ -402,15 +405,18 @@ message GetRawAddressTransactionsRequest {
     // The number of confirmed transactions to skip, starting with the newest.
     // Does not affect results of unconfirmed transactions.
     uint32 nb_skip = 2;
-    // Specify the number of transactions to fetch.
+    // Specify the number of confirmed transactions to fetch, 100 if 0.  A
+    // request for more than 10,000 fails.  Does not affect results of
+    // unconfirmed transactions.
     uint32 nb_fetch = 3;
 
     oneof start_block {
-        // Recommended. Only return transactions after some starting block
-        // identified by hash, little-endian.
+        // Recommended. Only return transactions in or after some starting
+        // block identified by hash, little-endian.  A hash of no block of
+        // the main chain is taken for the genesis block.
         bytes hash = 4;
-        // Recommended. Only return transactions after some starting block
-        // identified by block number.
+        // Recommended. Only return transactions in or after some starting
+        // block identified by block number.
         int32 height = 5;
     }
 }

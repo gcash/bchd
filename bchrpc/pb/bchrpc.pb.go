@@ -1607,7 +1607,9 @@ type GetAddressTransactionsRequest struct {
 	// The number of confirmed transactions to skip, starting with the newest.
 	// Does not affect results of unconfirmed transactions.
 	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
-	// Specify the number of transactions to fetch.
+	// Specify the number of confirmed transactions to fetch, 100 if 0.  A
+	// request for more than 10,000 fails.  Does not affect results of
+	// unconfirmed transactions.
 	NbFetch uint32 `protobuf:"varint,3,opt,name=nb_fetch,json=nbFetch,proto3" json:"nb_fetch,omitempty"`
 	// Types that are valid to be assigned to StartBlock:
 	//
@@ -1700,7 +1702,8 @@ type isGetAddressTransactionsRequest_StartBlock interface {
 
 type GetAddressTransactionsRequest_Hash struct {
 	// Recommended. Only get transactions after (or within) a
-	// starting block identified by hash, little-endian.
+	// starting block identified by hash, little-endian.  A hash of no
+	// block of the main chain is taken for the genesis block.
 	Hash []byte `protobuf:"bytes,4,opt,name=hash,proto3,oneof"`
 }
 
@@ -1805,7 +1808,9 @@ type GetRawAddressTransactionsRequest struct {
 	// The number of confirmed transactions to skip, starting with the newest.
 	// Does not affect results of unconfirmed transactions.
 	NbSkip uint32 `protobuf:"varint,2,opt,name=nb_skip,json=nbSkip,proto3" json:"nb_skip,omitempty"`
-	// Specify the number of transactions to fetch.
+	// Specify the number of confirmed transactions to fetch, 100 if 0.  A
+	// request for more than 10,000 fails.  Does not affect results of
+	// unconfirmed transactions.
 	NbFetch uint32 `protobuf:"varint,3,opt,name=nb_fetch,json=nbFetch,proto3" json:"nb_fetch,omitempty"`
 	// Types that are valid to be assigned to StartBlock:
 	//
@@ -1897,14 +1902,15 @@ type isGetRawAddressTransactionsRequest_StartBlock interface {
 }
 
 type GetRawAddressTransactionsRequest_Hash struct {
-	// Recommended. Only return transactions after some starting block
-	// identified by hash, little-endian.
+	// Recommended. Only return transactions in or after some starting
+	// block identified by hash, little-endian.  A hash of no block of
+	// the main chain is taken for the genesis block.
 	Hash []byte `protobuf:"bytes,4,opt,name=hash,proto3,oneof"`
 }
 
 type GetRawAddressTransactionsRequest_Height struct {
-	// Recommended. Only return transactions after some starting block
-	// identified by block number.
+	// Recommended. Only return transactions in or after some starting
+	// block identified by block number.
 	Height int32 `protobuf:"varint,5,opt,name=height,proto3,oneof"`
 }
 

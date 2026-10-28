@@ -511,3 +511,79 @@ func TestAddressTransactionsCountThreshold(t *testing.T) {
 		}
 	}
 }
+
+// TestAddressTransactionsRequestDocs ensures GetAddressTransactions and
+// GetRawAddressTransactions do what the docs of their requests say: an
+// nb_fetch of 0 fetches 100 transactions, one above 10,000 fails, a start
+// block's own transactions are returned, and a start hash of no block of the
+// main chain is taken for the genesis block.
+func TestAddressTransactionsRequestDocs(t *testing.T) {
+	hash := bytes.Repeat([]byte{0x56}, 20)
+	p2pkhScript := append(append([]byte{txscript.OP_DUP, txscript.OP_HASH160,
+		txscript.OP_DATA_20}, hash...), txscript.OP_EQUALVERIFY,
+		txscript.OP_CHECKSIG)
+	const blocks = 120
+	s := newAddrIndexServerBlocks(t, [][]byte{p2pkhScript}, blocks)
+	ctx := context.Background()
+	addr, err := bchutil.NewAddressPubKeyHash(hash, s.chainParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startHash, err := s.chain.BlockHashByHeight(blocks - 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		fetch    uint32
+		hash     []byte
+		wantTxs  int
+		wantCode codes.Code
+	}{
+		{"fetch 0", 0, nil, 100, codes.OK},
+		{"fetch 10,000", 10000, nil, blocks, codes.OK},
+		{"fetch 10,001", 10001, nil, 0, codes.InvalidArgument},
+		{"start block", 0, startHash[:], 4, codes.OK},
+		{"unknown start block", 0, bytes.Repeat([]byte{1}, 32), 100,
+			codes.OK},
+	}
+	for _, test := range tests {
+		req := &pb.GetAddressTransactionsRequest{Address: addr.EncodeAddress(),
+			NbFetch: test.fetch}
+		rawReq := &pb.GetRawAddressTransactionsRequest{
+			Address: addr.EncodeAddress(), NbFetch: test.fetch}
+		if test.hash != nil {
+			req.StartBlock = &pb.GetAddressTransactionsRequest_Hash{
+				Hash: test.hash}
+			rawReq.StartBlock = &pb.GetRawAddressTransactionsRequest_Hash{
+				Hash: test.hash}
+		}
+		resp, err := s.GetAddressTransactions(ctx, req)
+		if status.Code(err) != test.wantCode {
+			t.Fatalf("%s: %v, want %v", test.name, err, test.wantCode)
+		}
+		raw, rawErr := s.GetRawAddressTransactions(ctx, rawReq)
+		if status.Code(rawErr) != test.wantCode {
+			t.Fatalf("%s: raw: %v, want %v", test.name, rawErr,
+				test.wantCode)
+		}
+		if err != nil {
+			continue
+		}
+		if len(resp.ConfirmedTransactions) != test.wantTxs ||
+			len(raw.ConfirmedTransactions) != test.wantTxs {
+
+			t.Fatalf("%s: %d and %d raw transactions, want %d", test.name,
+				len(resp.ConfirmedTransactions),
+				len(raw.ConfirmedTransactions), test.wantTxs)
+		}
+		if test.wantTxs == 4 &&
+			resp.ConfirmedTransactions[3].BlockHeight != blocks-3 {
+
+			t.Fatalf("%s: oldest transaction at height %d, want %d",
+				test.name, resp.ConfirmedTransactions[3].BlockHeight,
+				blocks-3)
+		}
+	}
+}
