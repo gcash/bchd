@@ -1543,6 +1543,18 @@ func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 		state.bestHeader = header
 	}
 
+	// As with a block announced with an inv, the peer's height is raised to
+	// its best header's once this node has the block: at once if it does,
+	// and otherwise when it accepts it.  Otherwise a sync peer that
+	// announced a block another peer delivered first would look behind
+	// this node, and the sync peer check would replace it.  The height is
+	// not raised before then, as a sync peer above this node's height makes
+	// the chain not current, and the block would not be fetched.
+	peer.UpdateLastAnnouncedBlock(&state.bestHeader.Hash)
+	if height, err := sm.chain.BlockHeightByHash(&state.bestHeader.Hash); err == nil {
+		peer.UpdateLastBlockHeight(height)
+	}
+
 	// The peer may have more headers after a full message.
 	if numHeaders == wire.MaxBlockHeadersPerMsg {
 		locator := blockchain.BlockLocator([]*chainhash.Hash{&header.Hash})

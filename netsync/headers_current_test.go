@@ -101,6 +101,56 @@ func TestAnnouncedBlockGetsHeaders(t *testing.T) {
 	}
 }
 
+// TestSyncPeerAnnouncingTipKept ensures a sync peer that announces, with its
+// header, a block another peer delivered first is kept once it has gone a
+// while without sending a block.  As an inv does, its header raises its
+// height to the block's, so it isn't taken for a sync peer that is behind
+// this node.  Peers announce blocks with headers since bchd asks for them,
+// and a sync peer was replaced after every block it wasn't first to deliver.
+func TestSyncPeerAnnouncingTipKept(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	setStalledSyncPeer(h.sm, a)
+
+	h.extendTip(1)
+	h.announce(a, &h.tip.Header)
+	best := h.sm.chain.BestSnapshot().Height
+	if got := a.LastBlock(); got != best {
+		t.Fatalf("sync peer's height %d after it announced the tip, "+
+			"want %d", got, best)
+	}
+	h.sm.handleCheckSyncPeer()
+	if h.sm.syncPeer != a || isDisconnected(a) {
+		t.Fatal("the sync peer that announced the tip was replaced")
+	}
+}
+
+// TestAnnouncedBlockKeptForHeight ensures the header of a block this node
+// lacks makes the block the peer's last announced one, whose acceptance
+// raises the peer's height, as with an inv, but leaves the height alone until
+// then: a sync peer above this node's height makes the chain not current, and
+// the block would not be fetched.
+func TestAnnouncedBlockKeptForHeight(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	setStalledSyncPeer(h.sm, a)
+	height := a.LastBlock()
+
+	block := h.tipBlock(0)
+	hash := *block.Hash()
+	h.announce(a, &block.MsgBlock().Header)
+	if got := a.LastAnnouncedBlock(); got == nil || *got != hash {
+		t.Fatalf("last announced block %v, want %v", got, hash)
+	}
+	if got := a.LastBlock(); got != height {
+		t.Fatalf("height %d before the block arrived, want %d", got,
+			height)
+	}
+	if !h.requested(hash) {
+		t.Fatal("the announced block was not requested")
+	}
+}
+
 // TestAnnouncedLowWorkForkNotFetched ensures a block of a fork with less work
 // than the tip that a peer announces is neither requested nor stored, even
 // once the peer sends its header.
