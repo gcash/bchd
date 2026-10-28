@@ -1483,9 +1483,10 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 // the peer 20, and the others are kept until their blocks arrive, the blocks
 // of the last one's chain being requested when it has at least the tip's work,
 // and later those of the peer's best header as blocks arrive.  The header of a
-// compact block, which cmpct tells, costs the peer nothing, and its block is
-// fetched in full if it was requested from the peer, or its chain when that
-// has more work than the tip, as BCHN does (3039-3075, 3115-3129).
+// compact block, which cmpct tells, costs the peer nothing when it doesn't
+// connect, and its block is fetched in full if it was requested from the
+// peer, or its chain when that has more work than the tip, as BCHN does
+// (3039-3075, 3115-3129).
 func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 	headers []*wire.BlockHeader, cmpct bool) {
 
@@ -1530,10 +1531,7 @@ func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 		}
 		log.Debugf("Rejected header %v from %s: %v",
 			headers[failed].BlockHash(), peer, err)
-		if cmpct {
-			return
-		}
-		score, reason := headerBanScore(rerr.ErrorCode, headers[failed],
+		score, reason := HeaderBanScore(rerr.ErrorCode, headers[failed],
 			sm.chainParams.PowLimit)
 		if score > 0 {
 			sm.peerNotifier.Misbehaving(peer, score, reason)

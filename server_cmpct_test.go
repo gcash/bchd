@@ -7,6 +7,8 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,8 +60,10 @@ type cmpctHarness struct {
 	getHeaders chan *wire.MsgGetHeaders
 	headers    chan *wire.MsgHeaders
 	invs       chan *wire.InvVect
-	// pongs receives the nonce of each pong the server peer sends.
-	pongs chan uint64
+	// pongs receives the nonce of each pong the server peer sends, and
+	// cmpcts each compact block.
+	pongs  chan uint64
+	cmpcts chan *wire.MsgCmpctBlock
 	// punished receives each ban score increase the sync manager asks
 	// for, as its score and reason.
 	punished chan string
@@ -161,6 +165,7 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 		headers:    make(chan *wire.MsgHeaders, 16),
 		invs:       make(chan *wire.InvVect, 16),
 		pongs:      make(chan uint64, 16),
+		cmpcts:     make(chan *wire.MsgCmpctBlock, 16),
 		punished:   punished}
 	go func() {
 		for {
@@ -187,6 +192,8 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 				}
 			case *wire.MsgPong:
 				h.pongs <- m.Nonce
+			case *wire.MsgCmpctBlock:
+				h.cmpcts <- m
 			}
 		}
 	}()
@@ -1182,5 +1189,115 @@ func TestCompactBlockTimeoutKnownBlock(t *testing.T) {
 	case iv := <-h.getData:
 		t.Fatalf("getdata for %v", iv)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// answerPeerQueries has the harness's server answer queries for its peers as
+// its peer handler does, so that a punishment of the peer reaches its ban
+// score, and returns the number of queries answered.
+func (h *cmpctHarness) answerPeerQueries(t *testing.T) *atomic.Int32 {
+	h.s.query = make(chan interface{})
+	quit := make(chan struct{})
+	h.s.quit = quit
+	t.Cleanup(func() { close(quit) })
+	var answered atomic.Int32
+	go func() {
+		for {
+			select {
+			case msg := <-h.s.query:
+				if q, ok := msg.(getPeersMsg); ok {
+					answered.Add(1)
+					q.reply <- []*serverPeer{h.sp}
+				}
+			case <-quit:
+				return
+			}
+		}
+	}()
+	return &answered
+}
+
+// TestCompactBlockInvalidHeaderPunished ensures the peer that sent a compact
+// block whose header breaks a rule is punished with BCHN's score for the
+// rule, as BCHN punishes an invalid header in a cmpctblock
+// (net_processing.cpp:3058-3070), and not for a header too far in the
+// future, which BCHN scores 0.
+func TestCompactBlockInvalidHeaderPunished(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(header *wire.BlockHeader)
+		want   string
+	}{{
+		name: "hash above the target",
+		change: func(header *wire.BlockHeader) {
+			for blockchain.CheckHeaderProofOfWork(header,
+				chaincfg.RegressionNetParams.PowLimit) == nil {
+
+				header.Nonce++
+			}
+		},
+		want: "persistent 50 + transient 0",
+	}, {
+		name: "wrong difficulty",
+		change: func(header *wire.BlockHeader) {
+			header.Bits = 0x1f7fffff
+			solveHeader(header)
+		},
+		want: "persistent 100 + transient 0",
+	}, {
+		name: "too far in the future",
+		change: func(header *wire.BlockHeader) {
+			header.Timestamp = time.Unix(time.Now().Add(3*time.Hour).
+				Unix(), 0)
+			solveHeader(header)
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := newCmpctHarness(t)
+			// With a ban threshold above the scores, the punishment
+			// reads the configuration only before raising the score,
+			// which the test waits for, so it doesn't race with the
+			// configuration being restored when the test ends.
+			useTestConfig(t, &config{BanThreshold: 1000})
+			queries := h.answerPeerQueries(t)
+			block := solvedBlock(t, h.s.chain, 0, nil)
+			msg := shortIDsOnly(t, block)
+			test.change(&msg.Header)
+
+			waitDone(t, h.process(msg))
+			if test.want == "" {
+				time.Sleep(100 * time.Millisecond)
+				if n := queries.Load(); n != 0 {
+					t.Fatalf("the peer was punished %d times", n)
+				}
+				return
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for !strings.HasPrefix(h.sp.banScore.String(), test.want) {
+				if time.Now().After(deadline) {
+					t.Fatalf("ban score %s, want %s",
+						h.sp.banScore.String(), test.want)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			select {
+			case <-h.getTxns:
+				t.Fatal("transactions requested for the compact block")
+			case iv := <-h.getData:
+				t.Fatalf("getdata for %v", iv)
+			default:
+			}
+		})
+	}
+}
+
+// solveHeader finds a nonce that gives the header valid proof of work.
+func solveHeader(header *wire.BlockHeader) {
+	header.Nonce = 0
+	for blockchain.CheckHeaderProofOfWork(header,
+		chaincfg.RegressionNetParams.PowLimit) != nil {
+
+		header.Nonce++
 	}
 }

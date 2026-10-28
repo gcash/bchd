@@ -543,7 +543,7 @@ func TestHeaderBanScore(t *testing.T) {
 		{blockchain.ErrDuplicateBlock, inRange, 0, ""},
 	}
 	for _, test := range tests {
-		score, reason := headerBanScore(test.code, test.header,
+		score, reason := HeaderBanScore(test.code, test.header,
 			params.PowLimit)
 		if score != test.score || reason != test.reason {
 			t.Errorf("%v: got %d %q, want %d %q", test.code, score,
@@ -553,11 +553,11 @@ func TestHeaderBanScore(t *testing.T) {
 }
 
 // TestCmpctHeaders ensures the header of a compact block that is not
-// reconstructed costs the peer nothing when it is invalid or doesn't connect,
-// has the headers before it requested without counting against the peer, has
-// its block fetched in full if it was requested from the peer, and has its
-// chain fetched only when that has more work than the tip, as BCHN does
-// (net_processing.cpp:3039-3075, 3115-3129).
+// reconstructed costs the peer nothing when it doesn't connect, but has the
+// headers before it requested without counting against the peer, costs it
+// BCHN's score when it is invalid, has its block fetched in full if it was
+// requested from the peer, and has its chain fetched only when that has more
+// work than the tip, as BCHN does (net_processing.cpp:3039-3075, 3115-3129).
 func TestCmpctHeaders(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a := h.peer(1)
@@ -580,7 +580,7 @@ func TestCmpctHeaders(t *testing.T) {
 	invalid := h.tipBlock(0).MsgBlock().Header
 	invalid.Bits = 0x2100ffff
 	cmpct(&invalid)
-	h.expectScores()
+	h.expectScores("50 high-hash")
 
 	sibling := mineBlock(t, h.params, h.params.GenesisBlock, 1, 1)
 	cmpct(&sibling.MsgBlock().Header)

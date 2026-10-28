@@ -381,3 +381,106 @@ func TestHeadersAnnouncedOnce(t *testing.T) {
 	default:
 	}
 }
+
+// wantDirectRelay has the remote side ask for blocks to be relayed to it as
+// compact blocks, and waits for that to take effect.
+func (h *cmpctHarness) wantDirectRelay(t *testing.T) {
+	t.Helper()
+	h.send(t, wire.NewMsgSendCmpct(true, wire.CompactBlocksProtocolVersion))
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.sp.WantsDirectBlockRelay() {
+		if time.Now().After(deadline) {
+			t.Fatal("the peer did not ask for direct relay")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// expectCmpctBlock waits for the compact block of the block to be sent to the
+// remote side.
+func (h *cmpctHarness) expectCmpctBlock(t *testing.T, hash *chainhash.Hash) {
+	t.Helper()
+	select {
+	case msg := <-h.cmpcts:
+		if msg.BlockHash() != *hash {
+			t.Fatalf("compact block %v sent, want %v", msg.BlockHash(),
+				hash)
+		}
+	case iv := <-h.invs:
+		t.Fatalf("inv for %v, want its compact block", iv.Hash)
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no compact block for %v", hash)
+	}
+}
+
+// TestCmpctBlockSentWhenParentKnown ensures a block is relayed as a compact
+// block to a peer that asked for direct relay only when the peer is known to
+// have the header of the block's parent, as BCHN sends one
+// (net_processing.cpp:4358-4413), and announced with an inv otherwise, and
+// that the compact block counts as the block's header sent to the peer.
+func TestCmpctBlockSentWhenParentKnown(t *testing.T) {
+	h := newCmpctHarness(t)
+	h.wantDirectRelay(t)
+	tipHash := h.s.chain.BestSnapshot().Hash
+	tip, err := h.s.chain.BlockByHash(&tipHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first := solvedBlock(t, h.s.chain, 0, nil)
+	h.relay(first)
+	h.expectAnnouncement(t, first.Hash(), false)
+	h.sync(t, 1)
+	select {
+	case msg := <-h.cmpcts:
+		t.Fatalf("compact block %v sent", msg.BlockHash())
+	default:
+	}
+
+	msg := wire.NewMsgHeaders()
+	if err := msg.AddBlockHeader(&tip.MsgBlock().Header); err != nil {
+		t.Fatal(err)
+	}
+	h.send(t, msg)
+	h.sync(t, 2)
+	second := solvedBlock(t, h.s.chain, -1, nil)
+	h.relay(second)
+	h.expectCmpctBlock(t, second.Hash())
+
+	if _, _, err := h.s.chain.ProcessBlock(second, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+	third := solvedBlock(t, h.s.chain, 0, nil)
+	h.relay(third)
+	h.expectCmpctBlock(t, third.Hash())
+}
+
+// TestFastCmpctRelayWhenParentKnown ensures a compact block relayed before its
+// block is validated reaches a peer that asked for direct relay only when the
+// peer is known to have the header of the block's parent, as BCHN's
+// NewPoWValidBlock sends one (net_processing.cpp:1035-1042), and counts as the
+// block's header sent to the peer.
+func TestFastCmpctRelayWhenParentKnown(t *testing.T) {
+	h := newCmpctHarness(t)
+	h.wantDirectRelay(t)
+	state := newTestPeerState()
+	state.inboundPeers[h.sp.ID()] = h.sp
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	msg := shortIDsOnly(t, block)
+
+	h.s.handleRelayCmpctBlock(state, msg)
+	h.sync(t, 1)
+	select {
+	case msg := <-h.cmpcts:
+		t.Fatalf("compact block %v sent", msg.BlockHash())
+	default:
+	}
+
+	tipHash := h.s.chain.BestSnapshot().Hash
+	h.sp.gotBlockFrom(&tipHash)
+	h.s.handleRelayCmpctBlock(state, msg)
+	h.expectCmpctBlock(t, block.Hash())
+	if !h.sp.knowsBlock(block.Hash()) {
+		t.Fatal("the compact block did not count as its header sent")
+	}
+}

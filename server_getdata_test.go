@@ -360,6 +360,9 @@ func TestCmpctBlockCostBoundedByBlock(t *testing.T) {
 	state.inboundPeers[h.sp.ID()] = h.sp
 	relay := relayMsg{invVect: wire.NewInvVect(wire.InvTypeBlock, &hash),
 		data: block.MsgBlock()}
+	// The peer has the block's parent, so the block is relayed to it as a
+	// compact block.
+	h.sp.gotBlockFrom(&h.blocks[0])
 
 	measure := func() (getData, relayed float64) {
 		getData = testing.AllocsPerRun(5, func() {

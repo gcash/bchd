@@ -160,7 +160,7 @@ func blockBanScore(code blockchain.ErrorCode, extendsTip bool) uint32 {
 // (validation.cpp:3567-3576), ContextualCheckBlockHeader (3685-3781, with
 // -finalizeheaderspenalty at its default) and AcceptBlockHeader (3931-3946).
 // ErrUnexpectedDifficulty is a target out of range, high-hash, or the wrong
-// one, bad-diffbits, told apart by headerBanScore.  Codes BCHN gives no score
+// one, bad-diffbits, told apart by HeaderBanScore.  Codes BCHN gives no score
 // for are left out: a time too old or too new, an old version and a header of
 // a block known to be invalid.
 var headerBanReasons = map[blockchain.ErrorCode]struct {
@@ -175,10 +175,11 @@ var headerBanReasons = map[blockchain.ErrorCode]struct {
 	blockchain.ErrPreviousBlockUnknown: {10, "prev-blk-not-found"},
 }
 
-// headerBanScore returns the ban score and reject reason BCHN gives the peer
-// that sent the header, which failed with the rule error code, or 0 when it
-// gives none.  powLimit tells a target out of range from a wrong one.
-func headerBanScore(code blockchain.ErrorCode, header *wire.BlockHeader,
+// HeaderBanScore returns the ban score and reject reason BCHN gives the peer
+// that sent the header, in a headers message or a compact block, which failed
+// with the rule error code, or 0 when it gives none.  powLimit tells a target
+// out of range from a wrong one.
+func HeaderBanScore(code blockchain.ErrorCode, header *wire.BlockHeader,
 	powLimit *big.Int) (uint32, string) {
 
 	if code == blockchain.ErrUnexpectedDifficulty {

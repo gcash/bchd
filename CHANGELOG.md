@@ -17,6 +17,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - Add the `chipnet-seed.bchd.cash` DNS seed.
 - A peer disconnected just as one of its messages arrived no longer leaves a goroutine behind.
 - A synced node no longer downloads and stores the blocks of lower-work forks that peers announce.
+- A compact block with an invalid header now costs the peer BCHN's ban score, and compact blocks go only to peers known to have the parent's header.
 
 ### RPC & gRPC
 

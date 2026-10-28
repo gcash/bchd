@@ -1082,8 +1082,18 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 			sp.QueueMessage(gdmsg, nil)
 			return
 		}
+		// The peer is punished with BCHN's score for the header's rule, as
+		// BCHN punishes an invalid header in a cmpctblock
+		// (net_processing.cpp:3058-3070).
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- "+
 			"invalid header: %v", msg.Header.BlockHash(), sp, err)
+		if rerr, ok := err.(blockchain.RuleError); ok {
+			score, reason := netsync.HeaderBanScore(rerr.ErrorCode,
+				&msg.Header, sp.server.chainParams.PowLimit)
+			if score > 0 {
+				sp.server.Misbehaving(sp.Peer, score, reason)
+			}
+		}
 		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 		return
 	}
@@ -3034,13 +3044,18 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			}
 
 			// If the peer wants direct compact block relay we will set it to
-			// him right away rather than sending an inv message.
+			// him right away rather than sending an inv message, when it
+			// doesn't have the block and is known to have the header of its
+			// parent, as BCHN does (net_processing.cpp:4358-4413).  The block
+			// is announced as below otherwise.
 			blockHash := block.BlockHash()
 			blockInv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 			if sp.WantsDirectBlockRelay() {
 				// We need to check if the peer already has this block before
 				// pushing it to them.
-				if !sp.HasKnownInventory(blockInv) {
+				if !sp.HasKnownInventory(blockInv) &&
+					sp.knowsBlock(&block.Header.PrevBlock) {
+
 					if blockTxHashes == nil {
 						blockTxHashes, _ = block.TxHashes()
 					}
@@ -3052,6 +3067,7 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 						return
 					}
 					sp.QueueMessage(cmpctBlock, nil)
+					sp.sentHeaderTo(&blockHash)
 					return
 				}
 			}
@@ -3152,16 +3168,20 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 }
 
 // handleRelayCmpctBlock deals with direct relaying a compact block to
-// peers which both want a compact block and accept direct relay.
+// peers which both want a compact block and accept direct relay, and are known
+// to have the header of the block's parent, as BCHN's NewPoWValidBlock relays
+// one (net_processing.cpp:1035-1042).
 func (s *server) handleRelayCmpctBlock(state *peerState, msg *wire.MsgCmpctBlock) {
 	blockHash := msg.BlockHash()
 	iv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 	state.forAllPeers(func(sp *serverPeer) {
 		if sp.WantsCompactBlocks() && sp.WantsDirectBlockRelay() &&
-			sp.ProtocolVersion() >= wire.NoValidationRelayVersion && !sp.HasKnownInventory(iv) {
+			sp.ProtocolVersion() >= wire.NoValidationRelayVersion && !sp.HasKnownInventory(iv) &&
+			sp.knowsBlock(&msg.Header.PrevBlock) {
 
 			sp.AddKnownInventory(iv)
 			sp.QueueMessage(msg, nil)
+			sp.sentHeaderTo(&blockHash)
 		}
 	})
 }
