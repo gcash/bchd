@@ -1039,6 +1039,39 @@ func TestSlpGraphSearchTxnNotFound(t *testing.T) {
 	}
 }
 
+// newOpTruePool returns a memory pool that takes nonstandard transactions
+// and a confirmed transaction it spends the outputs of, two of 100,000,000
+// satoshis each that anyone can spend.
+func newOpTruePool(t *testing.T) (*mempool.TxPool, *wire.MsgTx) {
+	t.Helper()
+	funding := wire.NewMsgTx(1)
+	funding.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	for range 2 {
+		funding.AddTxOut(&wire.TxOut{Value: 100000000,
+			PkScript: []byte{txscript.OP_TRUE}})
+	}
+	utxos := blockchain.NewUtxoViewpoint()
+	utxos.AddTxOuts(bchutil.NewTx(funding), 1)
+	pool := mempool.New(&mempool.Config{
+		Policy:      mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
+		ChainParams: &chaincfg.RegressionNetParams,
+		FetchUtxoView: func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+			view := blockchain.NewUtxoViewpoint()
+			for _, in := range tx.MsgTx().TxIn {
+				view.Entries()[in.PreviousOutPoint] =
+					utxos.LookupEntry(in.PreviousOutPoint).Clone()
+			}
+			return view, nil
+		},
+		BestHeight:     func() int32 { return 1000 },
+		MedianTimePast: time.Now,
+		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+		},
+	})
+	return pool, funding
+}
+
 // TestSlpGraphSearchFromPool ensures the graph search that the slp event
 // handler loads at the first memory pool transaction finds a GENESIS and a
 // SEND accepted into the memory pool, and reads them from it, as neither is
@@ -1069,30 +1102,8 @@ func TestSlpGraphSearchFromPool(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// The memory pool spends the outputs of a confirmed transaction.
 	opTrue := []byte{txscript.OP_TRUE}
-	funding := wire.NewMsgTx(1)
-	funding.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
-	funding.AddTxOut(&wire.TxOut{Value: 100000000, PkScript: opTrue})
-	utxos := blockchain.NewUtxoViewpoint()
-	utxos.AddTxOuts(bchutil.NewTx(funding), 1)
-	pool := mempool.New(&mempool.Config{
-		Policy:      mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
-		ChainParams: &chaincfg.RegressionNetParams,
-		FetchUtxoView: func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
-			view := blockchain.NewUtxoViewpoint()
-			for _, in := range tx.MsgTx().TxIn {
-				view.Entries()[in.PreviousOutPoint] =
-					utxos.LookupEntry(in.PreviousOutPoint).Clone()
-			}
-			return view, nil
-		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: time.Now,
-		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
-		},
-	})
+	pool, funding := newOpTruePool(t)
 	s.chainParams = &chaincfg.RegressionNetParams
 	s.db, s.slpIndex, s.txIndex, s.txMemPool = db, idx, txIndex, pool
 	go s.slpEventHandler()
@@ -1224,4 +1235,92 @@ func TestSlpTrustedValidationLeftPool(t *testing.T) {
 	waitFor(t, "the GENESIS to be no longer valid", func() bool {
 		return status.Code(validate()) == codes.Aborted
 	})
+}
+
+// TestSlpTrustedValidationDisconnected ensures an output of a GENESIS that a
+// reorg disconnects is still valid to GetSlpTrustedValidation once the
+// memory pool has taken the GENESIS back, and is no longer valid from the
+// disconnection's event when the memory pool has not, rather than until the
+// slp cache evicts the GENESIS's entry.
+func TestSlpTrustedValidationDisconnected(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	pool, funding := newOpTruePool(t)
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex, s.txMemPool = db, idx, pool
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	// A block confirms two GENESIS transactions, each spending an output
+	// of the funding transaction, and a reorg disconnects it.
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := func(i uint32) *wire.MsgTx {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: funding.TxHash(),
+			Index: i}, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 90000000, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+	back, gone := genesis(0), genesis(1)
+	block := bchutil.NewBlock(&wire.MsgBlock{Transactions: []*wire.MsgTx{back, gone}})
+	for _, update := range []func(database.Tx, *bchutil.Block, []blockchain.SpentTxOut) error{
+		idx.ConnectBlock, idx.DisconnectBlock,
+	} {
+		err := db.Update(func(dbTx database.Tx) error {
+			return update(dbTx, block, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The reorg puts the first back in the memory pool, as it does the
+	// transactions of a block it disconnects, and not the second, as one
+	// that a block of the other chain double-spends.
+	if _, _, err := pool.MaybeAcceptTransaction(bchutil.NewTx(back), false); err != nil {
+		t.Fatalf("MaybeAcceptTransaction: %v", err)
+	}
+	validate := func(tx *wire.MsgTx) error {
+		hash := tx.TxHash()
+		_, err := s.GetSlpTrustedValidation(context.Background(),
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+			})
+		return err
+	}
+	s.dispatchEvent(&rpcEventBlockDisconnected{block})
+	waitFor(t, "the GENESIS the memory pool did not take back to be no "+
+		"longer valid", func() bool {
+		return status.Code(validate(gone)) == codes.Aborted
+	})
+	if err := validate(back); err != nil {
+		t.Errorf("the GENESIS back in the memory pool: %v", err)
+	}
 }

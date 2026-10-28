@@ -1040,6 +1040,22 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
+	// The slp cache keeps the entries of the block's slp transactions with
+	// the memory pool's, as the reorg puts the transactions back in the
+	// memory pool if it takes them (see AddDisconnectedSlpTxEntry).
+	for _, tx := range block.Transactions() {
+		entry, err := dbFetchSlpIndexEntry(dbTx, tx.Hash())
+		if _, ok := err.(errSlpEntryNotFound); ok {
+			continue
+		}
+		if err != nil {
+			log.Criticalf("Failed to read the slp entry of disconnected transaction %v: %v", tx.Hash(), err)
+			continue
+		}
+		entry.SlpOpReturn = bytes.Clone(entry.SlpOpReturn)
+		idx.cache.AddDisconnectedSlpTxEntry(tx.Hash(), *entry)
+	}
+
 	// Remove all of the transactions in the block from the index.
 	return dbRemoveSlpIndexEntries(dbTx, block)
 }

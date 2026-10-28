@@ -8,11 +8,14 @@ import (
 	"bytes"
 	"errors"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
 	"github.com/gcash/goslp/metadatamaker"
 )
@@ -544,5 +547,108 @@ func TestSlpEntryScript(t *testing.T) {
 			t.Errorf("%s: %d bytes held for each transaction of %d bytes "+
 				"of scripts", c.name, held, scripts)
 		}
+	}
+}
+
+// TestSlpDisconnectedEntries ensures the slp entries of the transactions of a
+// block a reorg disconnects stay valid slp until the memory pool is next
+// asked, and then only for those the memory pool took back, as the reorg puts
+// them back in it without the check a new memory pool transaction gets, and
+// for those a block confirms again, also when the entry of one in the memory
+// pool before was kept while graph search loads.  An entry the index cannot
+// read is left out and logged, without failing the disconnection.
+func TestSlpDisconnectedEntries(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("INDX")
+	logger.SetLevel(bchlog.LevelInfo)
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+	back, gone, again, pooled := genesisTx(t, 1), genesisTx(t, 2),
+		genesisTx(t, 3), genesisTx(t, 4)
+	backHash := back.TxHash()
+	valid := func(tx *wire.MsgTx) bool {
+		t.Helper()
+		hash := tx.TxHash()
+		err := test.db.View(func(dbTx database.Tx) error {
+			_, err := test.idx.GetSlpIndexEntry(dbTx, &hash)
+			return err
+		})
+		return err == nil
+	}
+
+	// The last was in the memory pool before a block confirmed it, while
+	// graph search loads, so its memory pool entry stays.  The block also
+	// holds a transaction that is not slp.
+	test.idx.config.SlpGraphSearchEnabled = true
+	test.addPotential(pooled)
+	test.connect(back, gone, again, pooled, notSlpTx())
+	test.disconnect(back, gone, again, pooled, notSlpTx())
+	for i, tx := range []*wire.MsgTx{back, gone, again, pooled} {
+		if !valid(tx) {
+			t.Errorf("GENESIS %d is not valid once disconnected", i)
+		}
+	}
+	if buf.Len() != 0 {
+		t.Errorf("disconnecting logged %q", buf.String())
+	}
+	test.connect(again)
+	test.idx.RemoveMempoolSlpTxsNotIn(func(hash *chainhash.Hash) bool {
+		return *hash == backHash
+	})
+	for _, c := range []struct {
+		name  string
+		tx    *wire.MsgTx
+		valid bool
+	}{
+		{"the GENESIS the memory pool took back", back, true},
+		{"the GENESIS it did not", gone, false},
+		{"the GENESIS confirmed again", again, true},
+		{"the GENESIS pinned before", pooled, false},
+	} {
+		if got := valid(c.tx); got != c.valid {
+			t.Errorf("%s: valid %v, want %v", c.name, got, c.valid)
+		}
+	}
+
+	// The entry of a confirmed transaction is cut short.
+	broken := genesisTx(t, 5)
+	brokenHash := broken.TxHash()
+	test.connect(broken)
+	err := test.db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket(slpIndexKey).Put(brokenHash[:],
+			[]byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	test.disconnect(broken)
+	if !strings.Contains(buf.String(), "[CRT] INDX: Failed to read the slp "+
+		"entry of disconnected transaction "+brokenHash.String()) {
+
+		t.Errorf("log %q, want the entry that could not be read", buf.String())
+	}
+}
+
+// TestSlpDisconnectedWhileAsked ensures the disconnection of a block confirming
+// a transaction whose memory pool entry the slp cache kept, as while graph
+// search loads, keeps that entry, so that RemoveMempoolSlpTxsNotIn still
+// removes it once the memory pool reports the transaction gone, even when the
+// disconnection comes while the pool is asked.
+func TestSlpDisconnectedWhileAsked(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	test.idx.config.SlpGraphSearchEnabled = true
+	genesis := genesisTx(t, 1)
+	hash := genesis.TxHash()
+	test.addPotential(genesis)
+	test.connect(genesis)
+	disconnect := sync.OnceFunc(func() { test.disconnect(genesis) })
+	test.idx.RemoveMempoolSlpTxsNotIn(func(*chainhash.Hash) bool {
+		disconnect()
+		return false
+	})
+	if _, ok := test.idx.cache.GetSlpTxEntry(&hash); ok {
+		t.Error("the GENESIS that left the memory pool is still valid")
 	}
 }

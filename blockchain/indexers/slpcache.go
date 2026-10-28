@@ -59,6 +59,24 @@ func (s *SlpCache) AddMempoolSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
 	_ = s.slpTxEntries.Set(*hash, &item)
 }
 
+// AddDisconnectedSlpTxEntry puts the entry of a transaction of a block that a
+// reorg disconnects with the memory pool's entries, and in the LRU in place of
+// the index's, as the reorg puts the transaction back in the memory pool if
+// the pool takes it, without the check a new memory pool transaction gets.
+// It is valid slp until RemoveMempoolSlpTxsNotIn finds whether the memory
+// pool holds it.
+func (s *SlpCache) AddDisconnectedSlpTxEntry(hash *chainhash.Hash, item SlpTxEntry) {
+	s.Lock()
+	defer s.Unlock()
+
+	entry, ok := s.mempoolSlpTxEntries[*hash]
+	if !ok {
+		entry = &item
+		s.mempoolSlpTxEntries[*hash] = entry
+	}
+	_ = s.slpTxEntries.Set(*hash, entry)
+}
+
 // GetSlpTxEntry gets tx entry items from the cache
 func (s *SlpCache) GetSlpTxEntry(hash *chainhash.Hash) (SlpTxEntry, bool) {
 	s.RLock()
@@ -164,8 +182,9 @@ func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 // RemoveMempoolSlpTxsNotIn removes the mempool transaction items, and the
 // token metadata, of the transactions that inPool reports are no longer in the
 // memory pool.  A transaction that left it without being confirmed, as when a
-// conflicting one was, is not valid slp, and may have put a mint baton on an
-// output that does not exist.
+// conflicting one was, or that a reorg disconnected and the memory pool did
+// not take back, is not valid slp, and may have put a mint baton on an output
+// that does not exist.
 //
 // inPool is called with no cache lock held.  It takes the memory pool's lock,
 // whose holder may be waiting for the chain lock, which block connection holds

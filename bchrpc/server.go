@@ -3855,7 +3855,7 @@ func (s *GrpcServer) slpEventHandler() {
 	// This subscription is not bounded, since dropping it would stop SLP
 	// validation of mempool transactions.
 	subscription := s.subscribeEvents(0,
-		rpcEventsTxAccepted|rpcEventsBlockConnected)
+		rpcEventsTxAccepted|rpcEventsBlockConnected|rpcEventsBlockDisconnected)
 	defer subscription.Unsubscribe()
 
 	for {
@@ -3886,10 +3886,11 @@ func (s *GrpcServer) slpEventHandler() {
 			}
 
 			continue
-		case *rpcEventBlockConnected:
-			// By now the memory pool has dropped the transactions the
-			// block confirms or conflicts with, so the slp cache drops
-			// what the transactions no longer in it put there.
+		case *rpcEventBlockConnected, *rpcEventBlockDisconnected:
+			// By now the memory pool has dropped the transactions a
+			// block confirms or conflicts with, and taken back those
+			// of a block disconnected that it takes, so the slp cache
+			// drops what the transactions not in it put there.
 			s.slpIndex.RemoveMempoolSlpTxsNotIn(s.txMemPool.IsTransactionInPool)
 			continue
 		}
