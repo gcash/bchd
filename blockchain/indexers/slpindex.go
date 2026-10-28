@@ -395,7 +395,10 @@ func dbFetchSlpIndexEntry(dbTx database.Tx, txHash *chainhash.Hash) (*SlpTxEntry
 	}
 	entry.TokenIDHash = *tokenMetadata.TokenID
 	entry.SlpVersionType = v1parser.TokenType(byteOrder.Uint16(serializedData[4:6]))
-	entry.SlpOpReturn = serializedData[6:]
+
+	// The value is valid only during the database transaction, and the
+	// entry is cached and returned to callers that outlive it.
+	entry.SlpOpReturn = bytes.Clone(serializedData[6:])
 	return entry, nil
 }
 
@@ -1060,7 +1063,6 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 			log.Criticalf("Failed to read the slp entry of disconnected transaction %v: %v", tx.Hash(), err)
 			continue
 		}
-		entry.SlpOpReturn = bytes.Clone(entry.SlpOpReturn)
 		idx.cache.AddDisconnectedSlpTxEntry(tx.Hash(), *entry)
 	}
 

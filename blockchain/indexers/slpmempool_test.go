@@ -652,3 +652,84 @@ func TestSlpDisconnectedWhileAsked(t *testing.T) {
 		t.Error("the GENESIS that left the memory pool is still valid")
 	}
 }
+
+// clearingTx is a database transaction whose buckets return copies of their
+// values, which clear overwrites, as a database may reuse the buffers of the
+// values it returned once the transaction has ended.
+type clearingTx struct {
+	database.Tx
+	values [][]byte
+}
+
+func (tx *clearingTx) Metadata() database.Bucket {
+	return &clearingBucket{wrappedBucket: tx.Tx.Metadata(), tx: tx}
+}
+
+// clear overwrites the values the transaction's buckets returned.
+func (tx *clearingTx) clear() {
+	for _, value := range tx.values {
+		clear(value)
+	}
+}
+
+// wrappedBucket names the bucket a clearingBucket wraps, whose Bucket method
+// it replaces.
+type wrappedBucket = database.Bucket
+
+// clearingBucket is a bucket of a clearingTx.
+type clearingBucket struct {
+	wrappedBucket
+	tx *clearingTx
+}
+
+func (b *clearingBucket) Bucket(key []byte) database.Bucket {
+	bucket := b.wrappedBucket.Bucket(key)
+	if bucket == nil {
+		return nil
+	}
+	return &clearingBucket{wrappedBucket: bucket, tx: b.tx}
+}
+
+func (b *clearingBucket) Get(key []byte) []byte {
+	value := b.wrappedBucket.Get(key)
+	if value == nil {
+		return nil
+	}
+	value = bytes.Clone(value)
+	b.tx.values = append(b.tx.values, value)
+	return value
+}
+
+// TestSlpEntryCopied ensures the slp entry the index reads from the database,
+// which it caches and returns, holds a copy of the transaction's slp message,
+// as a value the database returns is valid only during its transaction.
+func TestSlpEntryCopied(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	genesis := genesisTx(t, 1)
+	test.connect(genesis)
+
+	// The index is opened again, with an empty cache, so that it reads the
+	// entry from the database.
+	test.restart()
+	hash := genesis.TxHash()
+	var entry *SlpTxEntry
+	err := test.db.View(func(dbTx database.Tx) error {
+		tx := &clearingTx{Tx: dbTx}
+		defer tx.clear()
+		var err error
+		entry, err = test.idx.GetSlpIndexEntry(tx, &hash)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := genesis.TxOut[0].PkScript
+	if !bytes.Equal(entry.SlpOpReturn, want) {
+		t.Errorf("the entry read holds %x, want %x", entry.SlpOpReturn, want)
+	}
+	cached, ok := test.idx.cache.GetSlpTxEntry(&hash)
+	if !ok || !bytes.Equal(cached.SlpOpReturn, want) {
+		t.Errorf("the entry cached holds %x, %v, want %x", cached.SlpOpReturn,
+			ok, want)
+	}
+}
