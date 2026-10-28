@@ -2113,6 +2113,10 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, status.FromContextError(ctxErr).Err()
 		}
+		var notFound errGraphSearchTxnNotFound
+		if errors.As(err, &notFound) {
+			return nil, status.Error(codes.NotFound, notFound.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
@@ -3196,19 +3200,64 @@ func (s *GrpcServer) SubscribeBlocks(req *pb.SubscribeBlocksRequest, stream pb.B
 	}
 }
 
+// errGraphSearchTxnNotFound is the error for a transaction of slp graph search
+// that is in neither the memory pool nor the transaction index.  The graph
+// holds a transaction a block confirms before the block is committed, and
+// keeps one a reorg disconnects or that leaves the memory pool unconfirmed.
+type errGraphSearchTxnNotFound chainhash.Hash
+
+// Error implements the error interface.
+func (e errGraphSearchTxnNotFound) Error() string {
+	return fmt.Sprintf("transaction %v of the graph search is in neither "+
+		"the memory pool nor the transaction index", chainhash.Hash(e))
+}
+
+// errGraphSearchTxnLoad is the error for transactions of slp graph search that
+// the database failed to load.  It leaves out the database's own error, which
+// can name the node's files, as a search answers the client with it; the
+// server logs that error instead.
+var errGraphSearchTxnLoad = errors.New("failed to load transaction bytes")
+
 // fetchGraphSearchTxn reads a transaction of slp graph search, serialized.
 // The graph holds a memory pool transaction before a block does, so one in
-// the memory pool is read from it, and any other from its block.
+// the memory pool is read from it, and any other from its block, found in the
+// transaction index in the same database transaction.  The index holds only
+// the blocks of the main chain, so the block's height is not looked up.  A
+// transaction in neither is an errGraphSearchTxnNotFound, and the database
+// failing is errGraphSearchTxnLoad.
 func (s *GrpcServer) fetchGraphSearchTxn(txnHash *chainhash.Hash) ([]byte, error) {
-	if tx, err := s.txMemPool.FetchTransaction(txnHash); err == nil {
-		txBuf := bytes.NewBuffer(make([]byte, 0, tx.MsgTx().SerializeSize()))
-		if err := tx.MsgTx().Serialize(txBuf); err != nil {
+	// Most transactions a search returns are confirmed, and FetchTransaction
+	// allocates an error for each the memory pool does not hold.
+	if s.txMemPool.IsTransactionInPool(txnHash) {
+		if tx, err := s.txMemPool.FetchTransaction(txnHash); err == nil {
+			txBuf := bytes.NewBuffer(make([]byte, 0, tx.MsgTx().SerializeSize()))
+			if err := tx.MsgTx().Serialize(txBuf); err != nil {
+				return nil, err
+			}
+			return txBuf.Bytes(), nil
+		}
+	}
+	var txBytes []byte
+	err := s.db.View(func(dbTx database.Tx) error {
+		region, err := s.txIndex.TxBlockRegionIn(dbTx, txnHash)
+		if err != nil {
+			return err
+		}
+		if region == nil {
+			return errGraphSearchTxnNotFound(*txnHash)
+		}
+		txBytes, err = dbTx.FetchBlockRegion(region)
+		return err
+	})
+	if err != nil {
+		var notFound errGraphSearchTxnNotFound
+		if errors.As(err, &notFound) {
 			return nil, err
 		}
-		return txBuf.Bytes(), nil
+		log.Errorf("Failed to load graph search transaction %v: %v", txnHash, err)
+		return nil, errGraphSearchTxnLoad
 	}
-	txn, _, _, err := s.fetchTransactionFromBlock(txnHash)
-	return txn, err
+	return txBytes, nil
 }
 
 func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, int32, *chainhash.Hash, error) {

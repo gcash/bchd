@@ -477,6 +477,14 @@ func (idx *TxIndex) TxBlockRegion(hash *chainhash.Hash) (*database.BlockRegion, 
 	return region, err
 }
 
+// TxBlockRegionIn is TxBlockRegion in the database transaction dbTx, for a
+// caller that loads the transaction in the same database transaction.
+//
+// This function is safe for concurrent access.
+func (idx *TxIndex) TxBlockRegionIn(dbTx database.Tx, hash *chainhash.Hash) (*database.BlockRegion, error) {
+	return dbFetchTxIndexEntry(dbTx, hash)
+}
+
 // NewTxIndex returns a new instance of an indexer that is used to create a
 // mapping of the hashes of all transactions in the blockchain to the respective
 // block, location within the block, and size of the transaction.

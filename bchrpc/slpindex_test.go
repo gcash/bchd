@@ -792,11 +792,26 @@ func TestSlpGraphSearchCallEnds(t *testing.T) {
 	}
 }
 
+// failingViewDB is a database whose read transactions fail with err.
+type failingViewDB struct {
+	database.DB
+	err error
+}
+
+func (db *failingViewDB) View(func(database.Tx) error) error {
+	return db.err
+}
+
 // TestFetchGraphSearchTxn ensures slp graph search reads a memory pool
 // transaction, which its graph holds before a block does, from the memory
-// pool, and looks for any other in the transaction index.
+// pool, also once a block holds it, and any other from its block, in one
+// database transaction and without the chain, as the transaction index holds
+// only the blocks of the main chain.  A transaction in neither is not found,
+// by its hash, and the database failing is a load error that leaves out the
+// database's own, which can name the node's files, and which is logged as an
+// error instead.
 func TestFetchGraphSearchTxn(t *testing.T) {
-	pool, tx1, _, _, funding := newDSProofPool(t)
+	pool, tx1, _, spend, funding := newDSProofPool(t)
 	db, err := database.Create("ffldb", t.TempDir(), chaincfg.MainNetParams.Net)
 	if err != nil {
 		t.Fatalf("database.Create: %v", err)
@@ -806,24 +821,197 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 	if err := db.Update(txIndex.Create); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	s := &GrpcServer{db: db, txMemPool: pool, txIndex: txIndex}
 
-	var want bytes.Buffer
-	if err := tx1.Serialize(&want); err != nil {
-		t.Fatal(err)
+	// A block holds a transaction outside the memory pool and tx1.
+	confirmed := spend(wire.OutPoint{Hash: funding.TxHash(), Index: 1},
+		100000000, 1000)
+	block := bchutil.NewBlock(&wire.MsgBlock{
+		Transactions: []*wire.MsgTx{confirmed, tx1}})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := dbTx.StoreBlock(block); err != nil {
+			return err
+		}
+		return txIndex.ConnectBlock(dbTx, block, nil)
+	})
+	if err != nil {
+		t.Fatalf("connecting the block: %v", err)
 	}
-	hash := tx1.TxHash()
-	got, err := s.fetchGraphSearchTxn(&hash)
-	if err != nil || !bytes.Equal(got, want.Bytes()) {
-		t.Errorf("the memory pool transaction: got %x and %v, want %x", got,
-			err, want.Bytes())
+	counted := &viewCountingDB{DB: db}
+	s := &GrpcServer{db: counted, txMemPool: pool, txIndex: txIndex}
+
+	for _, test := range []struct {
+		name  string
+		tx    *wire.MsgTx
+		views int32
+	}{
+		{"the memory pool transaction", tx1, 0},
+		{"the confirmed transaction", confirmed, 1},
+	} {
+		var want bytes.Buffer
+		if err := test.tx.Serialize(&want); err != nil {
+			t.Fatal(err)
+		}
+		counted.views.Store(0)
+		hash := test.tx.TxHash()
+		got, err := s.fetchGraphSearchTxn(&hash)
+		if err != nil || !bytes.Equal(got, want.Bytes()) {
+			t.Errorf("%s: got %x and %v, want %x", test.name, got, err,
+				want.Bytes())
+		}
+		if views := counted.views.Load(); views != test.views {
+			t.Errorf("%s: read in %d database transactions, want %d",
+				test.name, views, test.views)
+		}
+	}
+
+	// Asking the memory pool about the confirmed transaction allocates
+	// nothing.
+	hash := confirmed.TxHash()
+	readAllocs := testing.AllocsPerRun(10, func() {
+		var txBytes []byte
+		_ = db.View(func(dbTx database.Tx) error {
+			region, err := txIndex.TxBlockRegionIn(dbTx, &hash)
+			if err == nil {
+				txBytes, err = dbTx.FetchBlockRegion(region)
+			}
+			return err
+		})
+		_ = txBytes
+	})
+	fetchAllocs := testing.AllocsPerRun(10, func() {
+		_, _ = s.fetchGraphSearchTxn(&hash)
+	})
+	if fetchAllocs > readAllocs {
+		t.Errorf("reading the confirmed transaction made %v allocations, "+
+			"reading its block region %v", fetchAllocs, readAllocs)
 	}
 
 	// The transaction tx1 spends is in no block the index holds.
+	counted.views.Store(0)
 	hash = funding.TxHash()
+	got, err := s.fetchGraphSearchTxn(&hash)
+	var notFound errGraphSearchTxnNotFound
+	if !errors.As(err, &notFound) || chainhash.Hash(notFound) != hash ||
+		got != nil {
+
+		t.Errorf("a transaction in neither: got %x and %v, want it not "+
+			"found", got, err)
+	}
+	if views := counted.views.Load(); views != 1 {
+		t.Errorf("a transaction in neither: read in %d database "+
+			"transactions, want 1", views)
+	}
+
+	// The index entry of the confirmed transaction runs past the end of
+	// its block.
+	hash = confirmed.TxHash()
+	err = db.Update(func(dbTx database.Tx) error {
+		bucket := dbTx.Metadata().Bucket([]byte("txbyhashidx"))
+		entry := bytes.Clone(bucket.Get(hash[:]))
+		binary.LittleEndian.PutUint32(entry[8:], 1<<20)
+		return bucket.Put(hash[:], entry)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err = s.fetchGraphSearchTxn(&hash)
-	if status.Code(err) != codes.NotFound || got != nil {
-		t.Errorf("a transaction outside the memory pool: got %x and %v, "+
-			"want the index's NotFound", got, err)
+	if err != errGraphSearchTxnLoad || got != nil {
+		t.Errorf("a region past the end of its block: got %x and %v, want %v",
+			got, err, errGraphSearchTxnLoad)
+	}
+
+	failed := "read /home/node/.bchd/data/mainnet/blocks_ffldb/000000001.fdb: " +
+		"input/output error"
+	s.db = &failingViewDB{DB: db, err: errors.New(failed)}
+	var logged bytes.Buffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+	got, err = s.fetchGraphSearchTxn(&hash)
+	if err != errGraphSearchTxnLoad || got != nil {
+		t.Errorf("the database failing: got %x and %v, want %v", got, err,
+			errGraphSearchTxnLoad)
+	}
+	if want := "[ERR] GRPC: Failed to load graph search transaction " +
+		hash.String() + ": " + failed; !strings.Contains(logged.String(), want) {
+
+		t.Errorf("the database failing: log %q, want a line with %q",
+			logged.String(), want)
+	}
+}
+
+// TestSlpGraphSearchTxnNotFound ensures GetSlpGraphSearch answers NotFound,
+// naming the transaction, when a transaction of the search is in neither the
+// memory pool nor the transaction index, as one a block confirms is until the
+// block is committed, and Internal when the index fails, with a message that
+// leaves out the database's own error, which can name the node's files.
+func TestSlpGraphSearchTxnNotFound(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100,
+		SlpGraphSearchEnabled: true})
+	txIndex := indexers.NewTxIndex(db)
+	for _, create := range []func(database.Tx) error{idx.Create, txIndex.Create} {
+		if err := db.Update(create); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatalf("TokenType1Genesis: %v", err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{1}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = db.View(func(dbTx database.Tx) error {
+		valid, err := idx.AddPotentialSlpEntries(dbTx, genesis)
+		if err == nil && !valid {
+			err = errors.New("the GENESIS is not valid")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("AddPotentialSlpEntries: %v", err)
+	}
+
+	// The memory pool does not hold the GENESIS, and neither does the
+	// transaction index.
+	s := &GrpcServer{db: db, slpIndex: idx, txIndex: txIndex,
+		txMemPool: mempool.New(&mempool.Config{})}
+	idx.LoadSlpGraphSearchDb(s.fetchGraphSearchTxn, nil, nil)
+	idx.AddGraphSearchTxn(genesis)
+	if _, err := idx.GetGraphSearchDb(); err != nil {
+		t.Fatalf("GetGraphSearchDb: %v", err)
+	}
+	hash := genesis.TxHash()
+	req := &pb.GetSlpGraphSearchRequest{Hash: hash[:]}
+	_, err = s.GetSlpGraphSearch(context.Background(), req)
+	want := "transaction " + hash.String() + " of the graph search is in " +
+		"neither the memory pool nor the transaction index"
+	if status.Code(err) != codes.NotFound || status.Convert(err).Message() != want {
+		t.Errorf("got %v, want NotFound with %q", err, want)
+	}
+
+	// The transaction index entry of the GENESIS is cut short.
+	err = db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket([]byte("txbyhashidx")).Put(hash[:],
+			[]byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.GetSlpGraphSearch(context.Background(), req)
+	msg := status.Convert(err).Message()
+	if status.Code(err) != codes.Internal ||
+		!strings.Contains(msg, errGraphSearchTxnLoad.Error()) ||
+		strings.Contains(msg, "corrupt") || strings.Contains(msg, "rpc error") {
+
+		t.Errorf("got %v, want Internal with %q and not the database's "+
+			"error", err, errGraphSearchTxnLoad)
 	}
 }
