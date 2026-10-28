@@ -232,7 +232,7 @@ nextTest:
 		}
 		for i := range test.numInsert {
 			txLoc := wire.TxLoc{TxStart: i * 2}
-			err := dbPutAddrIndexEntry(populatedBucket, test.key,
+			_, err := dbPutAddrIndexEntry(populatedBucket, test.key,
 				uint32(i), txLoc)
 			if err != nil {
 				t.Errorf("dbPutAddrIndexEntry #%d (%s) - "+
@@ -476,19 +476,26 @@ func TestAddrIndexTokenSpends(t *testing.T) {
 	checkRegions(fundRegion)
 }
 
-// TestAddrIndexMigrate ensures an index from before the current version is
-// dropped for a rebuild and a current one is kept.
+// TestAddrIndexMigrate ensures an index from before version 2 is dropped for a
+// rebuild and a later one is kept, with its counts kept at its tip, an index
+// of version 2 becoming the current version and a later version staying.
 func TestAddrIndexMigrate(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		version uint32
-		dropped bool
+		name      string
+		version   uint32
+		dropped   bool
+		countsTip bool
 	}{
 		{name: "no version", version: 0, dropped: true},
 		{name: "version 1", version: 1, dropped: true},
+		{name: "version 2", version: 2, dropped: false},
+		{name: "version 2 with counts at its tip", version: 2,
+			dropped: false, countsTip: true},
 		{name: "current version", version: addrIndexVersion,
+			dropped: false},
+		{name: "later version", version: addrIndexVersion + 1,
 			dropped: false},
 	}
 	for _, test := range tests {
@@ -497,6 +504,14 @@ func TestAddrIndexMigrate(t *testing.T) {
 		tipHash := &chainhash.Hash{1}
 		const tipHeight = 1000
 		err := db.Update(func(dbTx database.Tx) error {
+			if test.countsTip {
+				bucket := dbTx.Metadata().Bucket(addrIndexKey)
+				err := bucket.Put(addrIndexCountsTipKey,
+					serializeIndexerTip(tipHash, tipHeight))
+				if err != nil {
+					return err
+				}
+			}
 			bucket := dbTx.Metadata().Bucket(addrIndexKey)
 			var err error
 			if test.version == 0 {
@@ -533,9 +548,9 @@ func TestAddrIndexMigrate(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if version != addrIndexVersion {
+			if want := max(test.version, addrIndexVersion); version != want {
 				t.Errorf("%s: version %d, want %d", test.name,
-					version, addrIndexVersion)
+					version, want)
 			}
 			hash, height, err := dbFetchIndexerTip(dbTx, addrIndexKey)
 			if err != nil {
@@ -555,6 +570,11 @@ func TestAddrIndexMigrate(t *testing.T) {
 				t.Errorf("%s: tip %v at %d, want %v at %d",
 					test.name, hash, height, wantHash,
 					wantHeight)
+			}
+			countsKept, err := dbAddrIndexCountsKept(dbTx)
+			if err != nil || !countsKept {
+				t.Errorf("%s: counts kept %v, %v", test.name,
+					countsKept, err)
 			}
 			return nil
 		})
@@ -699,7 +719,7 @@ func TestTxRegionPagesForAddress(t *testing.T) {
 	const n = 100
 	levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
 	for i := 0; i < n; i++ {
-		err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
+		_, err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
 			wire.TxLoc{TxStart: i, TxLen: 1})
 		if err != nil {
 			t.Fatal(err)
@@ -886,7 +906,7 @@ func TestTxRegionPagesForAddressReorg(t *testing.T) {
 		const n = 100
 		levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
 		for i := 0; i < n; i++ {
-			err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
+			_, err := dbPutAddrIndexEntry(levels, addrKey, uint32(i/10+1),
 				wire.TxLoc{TxStart: i, TxLen: 1})
 			if err != nil {
 				t.Fatal(err)
@@ -986,7 +1006,7 @@ func TestTxRegionsAndCountForAddress(t *testing.T) {
 		// The transactions are in blocks of ten.
 		levels := &addrIndexBucket{levels: make(map[[levelKeySize]byte][]byte)}
 		for i := uint32(0); i < n; i++ {
-			err := dbPutAddrIndexEntry(levels, addrKey, i/10+1,
+			_, err := dbPutAddrIndexEntry(levels, addrKey, i/10+1,
 				wire.TxLoc{TxStart: int(i), TxLen: 1})
 			if err != nil {
 				t.Fatal(err)
@@ -995,6 +1015,9 @@ func TestTxRegionsAndCountForAddress(t *testing.T) {
 		err = db.Update(func(dbTx database.Tx) error {
 			bucket, err := dbTx.Metadata().CreateBucket(addrIndexKey)
 			if err != nil {
+				return err
+			}
+			if _, err := bucket.CreateBucket(addrIndexCountsKey); err != nil {
 				return err
 			}
 			for key, value := range levels.levels {

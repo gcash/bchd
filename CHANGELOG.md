@@ -16,9 +16,17 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - Add the `chipnet-seed.bchd.cash` DNS seed.
 - A peer disconnected while one of its messages was being handled no longer leaves a goroutine behind, holding the peer and the message, for good.
 
+### RPC & gRPC
+
+- gRPC `GetAddressTransactions` and `GetRawAddressTransactions` return the address's number of confirmed transactions in `confirmed_count`.
+
 ### Other
 
 - txscript can sign inputs that spend CashTokens, and sign with `SIGHASH_UTXOS`. `SignTxOutputWithSigHashes`, `SignatureScriptWithSigHashes`, `RawTxInECDSASignatureWithSigHashes` and `RawTxInSchnorrSignatureWithSigHashes` take the transaction's signature hashes, computed once for all its inputs, which must include the outputs it spends (`NewTxSigHashes(tx).WithUtxos(tx, utxos)`) for those. The functions without them can't see the spent outputs, so they now return an error for `SIGHASH_UTXOS` instead of a signature the network refuses.
+
+### Upgrade notes
+
+- **Address index.** On first start, and after an earlier release has run with `--addrindex`, nodes with it read the address index once to count the transactions of large addresses: under a second on chipnet, a few minutes at most on mainnet.
 
 ## 0.22.3 (2026-10-23)
 

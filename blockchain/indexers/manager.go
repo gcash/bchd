@@ -34,15 +34,20 @@ var (
 //   block height    uint32           4 bytes
 // -----------------------------------------------------------------------------
 
-// dbPutIndexerTip uses an existing database transaction to update or add the
-// current tip for the given index to the provided values.
-func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, height int32) error {
+// serializeIndexerTip serializes the provided index tip according to the
+// format described above.
+func serializeIndexerTip(hash *chainhash.Hash, height int32) []byte {
 	serialized := make([]byte, chainhash.HashSize+4)
 	copy(serialized, hash[:])
 	byteOrder.PutUint32(serialized[chainhash.HashSize:], uint32(height))
+	return serialized
+}
 
+// dbPutIndexerTip uses an existing database transaction to update or add the
+// current tip for the given index to the provided values.
+func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, height int32) error {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
-	return indexesBucket.Put(idxKey, serialized)
+	return indexesBucket.Put(idxKey, serializeIndexerTip(hash, height))
 }
 
 // dbFetchIndexerTip uses an existing database transaction to retrieve the

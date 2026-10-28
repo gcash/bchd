@@ -1147,7 +1147,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1246,7 +1246,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip))
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1556,7 +1556,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 				return nil, status.FromContextError(err).Err()
 			}
 			newTxs, _, err := s.fetchTransactionsByAddress(addr, startHeight+1,
-				fetch, skip)
+				fetch, skip, false)
 			if err != nil && reorganized() {
 				return nil, errChainReorganized
 			}
@@ -3473,10 +3473,10 @@ type retrievedTx struct {
 
 // fetchTransactionsByAddress returns the address's confirmed transactions
 // that GetAddressTransactions returns for the passed start height, number to
-// fetch and number to skip, newest first, and the number of confirmed
-// transactions the address has, whatever the others.  Both are read in one
-// database transaction, so they agree.
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int) ([]retrievedTx, uint32, error) {
+// fetch and number to skip, newest first, and, when count is set, the number
+// of confirmed transactions the address has, whatever the others.  Both are
+// read in one database transaction, so they agree.
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int, count bool) ([]retrievedTx, uint32, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
@@ -3506,19 +3506,29 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 	// client.
 	numSkipped := uint32(0)
 	addressTxns := make([]retrievedTx, 0, numRequested)
-	var count uint32
+	var total uint32
 
 	// Fetch transactions from the database in the desired order if more are
 	// needed.
 	if len(addressTxns) < numRequested {
 		err := s.db.View(func(dbTx database.Tx) error {
-			regions, dbSkipped, total, err := s.addrIndex.TxRegionsAndCountForAddress(
-				dbTx, addr, uint32(numToSkip)-numSkipped,
-				uint32(numRequested-len(addressTxns)))
+			var (
+				regions   []database.BlockRegion
+				dbSkipped uint32
+				err       error
+			)
+			if count {
+				regions, dbSkipped, total, err = s.addrIndex.TxRegionsAndCountForAddress(
+					dbTx, addr, uint32(numToSkip)-numSkipped,
+					uint32(numRequested-len(addressTxns)))
+			} else {
+				regions, dbSkipped, err = s.addrIndex.TxRegionsForAddress(
+					dbTx, addr, uint32(numToSkip)-numSkipped,
+					uint32(numRequested-len(addressTxns)), true)
+			}
 			if err != nil {
 				return err
 			}
-			count = total
 			addressTxns, err = s.appendRegionTxs(addressTxns, dbTx,
 				regions, startHeight)
 			if err != nil {
@@ -3534,7 +3544,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 
 	}
 
-	return addressTxns, count, nil
+	return addressTxns, total, nil
 }
 
 // appendRegionTxs appends to txs the transactions at the regions, read with

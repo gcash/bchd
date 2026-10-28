@@ -898,6 +898,56 @@ func TestGetAddressUnspentOutputsReadsHistoryOnce(t *testing.T) {
 	}
 }
 
+// TestGetAddressUnspentOutputsLateBlocksReadNewest ensures that for a block
+// connected during the call, GetAddressUnspentOutputs reads the newest entries
+// of the address it needs, without counting the address's transactions,
+// which would read all of its entries again.
+func TestGetAddressUnspentOutputsLateBlocksReadNewest(t *testing.T) {
+	var reads *addrIndexReadsDB
+	h := newAddrUnspentHarnessDB(t, func(db database.DB) database.DB {
+		reads = &addrIndexReadsDB{DB: db}
+		return reads
+	})
+	h.s.db = reads
+	addrScript := p2shScript(t, addrRedeem)
+	pay := []*wire.TxOut{wire.NewTxOut(50e8, addrScript, wire.TokenData{})}
+	const n = 40
+	for range n {
+		h.mineBlock(pay, nil)
+	}
+	var late *wire.MsgTx
+	addressUnspentScanHook = func() {
+		addressUnspentScanHook = nil
+		late = h.mineBlock(pay, nil)
+	}
+	t.Cleanup(func() { addressUnspentScanHook = nil })
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	addressUnspentPageSize = 7
+
+	addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.s.GetAddressUnspentOutputs(context.Background(),
+		&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, u := range resp.Outputs {
+		found = found || unspentKey(u) == wantUnspent(late, 0, true, n+1)
+	}
+	if len(resp.Outputs) != n+1 || !found {
+		t.Fatalf("got %d outputs, the late block's among them %v, want %d",
+			len(resp.Outputs), found, n+1)
+	}
+	if b := reads.bytes.Load(); b >= (n+n+1)*12 {
+		t.Errorf("read %d bytes of the address index, the history of %d "+
+			"entries once and all %d after the late block", b, n, n+1)
+	}
+}
+
 // TestGetAddressUnspentOutputsShutdown ensures GetAddressUnspentOutputs stops
 // reading the address's history once the server shuts down.
 func TestGetAddressUnspentOutputsShutdown(t *testing.T) {

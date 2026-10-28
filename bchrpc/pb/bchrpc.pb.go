@@ -1722,8 +1722,8 @@ type GetAddressTransactionsResponse struct {
 	UnconfirmedTransactions []*MempoolTransaction `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
 	// The number of confirmed transactions of the address, whatever the
 	// skip, fetch and start block of the request.  Nodes that predate it
-	// leave it 0, so a reply with confirmed transactions to a request that
-	// skips none, and a count of 0, is from such a node.
+	// leave it 0, so a reply with confirmed transactions and a count of 0 is
+	// from such a node.
 	ConfirmedCount uint32 `protobuf:"varint,3,opt,name=confirmed_count,json=confirmedCount,proto3" json:"confirmed_count,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -1920,8 +1920,8 @@ type GetRawAddressTransactionsResponse struct {
 	UnconfirmedTransactions [][]byte `protobuf:"bytes,2,rep,name=unconfirmed_transactions,json=unconfirmedTransactions,proto3" json:"unconfirmed_transactions,omitempty"`
 	// The number of confirmed transactions of the address, whatever the
 	// skip, fetch and start block of the request.  Nodes that predate it
-	// leave it 0, so a reply with confirmed transactions to a request that
-	// skips none, and a count of 0, is from such a node.
+	// leave it 0, so a reply with confirmed transactions and a count of 0 is
+	// from such a node.
 	ConfirmedCount uint32 `protobuf:"varint,3,opt,name=confirmed_count,json=confirmedCount,proto3" json:"confirmed_count,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

@@ -5,11 +5,13 @@
 package indexers
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -68,8 +70,20 @@ const (
 
 	// addrIndexVersion is the current version of the index.  Version 1
 	// indexes spends of token outputs.  Version 2 keys P2SH32 addresses by
-	// their own type.
-	addrIndexVersion = 2
+	// their own type.  Version 3 stores the number of entries of each
+	// address whose highest level is at least addrIndexCountLevel.
+	addrIndexVersion = 3
+
+	// addrIndexRecountVersion is the oldest version of the index that is
+	// kept.  An index of that version or later only gets its stored counts
+	// counted again.
+	addrIndexRecountVersion = 2
+
+	// addrIndexCountLevel is the lowest level whose addresses have their
+	// number of entries stored.  An address without a stored count has at
+	// most the 2040 entries the levels below it hold, so counting them
+	// reads at most about 24 KB.
+	addrIndexCountLevel = 8
 )
 
 var (
@@ -80,6 +94,15 @@ var (
 	// addrIndexVersionKey is the key in the index bucket that holds the
 	// index version.  It is shorter than any level key.
 	addrIndexVersionKey = []byte("version")
+
+	// addrIndexCountsKey is the key of the bucket, nested in the index
+	// bucket, that holds the stored counts, keyed by address key.
+	addrIndexCountsKey = []byte("counts")
+
+	// addrIndexCountsTipKey is the key in the index bucket that holds the
+	// index tip the stored counts were last kept at, serialized as the
+	// index tips are.  It is shorter than any level key.
+	addrIndexCountsTipKey = []byte("countstip")
 
 	// errUnsupportedAddressType is an error that is used to signal an
 	// unsupported address type has been used.
@@ -148,6 +171,23 @@ var (
 //   tx length       uint32    4 bytes
 //   -----
 //   Total: 12 bytes per indexed tx
+//
+// The index also stores the number of entries of each address whose highest
+// level is at least addrIndexCountLevel, so that it can be read without the
+// address's levels.  Since every level after level 0 is empty, half full or
+// full, with no gaps, an address has entries in that level exactly when it
+// has more than the levels below it hold.  So the add that first moves
+// entries into the level, which finds the levels below full, knows the count
+// to store, and the removal that leaves the address no more entries than they
+// hold deletes it.  The count of an address without one is the sum of the
+// lengths of its levels.
+//
+// The serialized format of a stored count, keyed by the address key, is:
+//
+//   <count>
+//
+//   Field           Type      Size
+//   count           uint32    4 bytes
 // -----------------------------------------------------------------------------
 
 // fetchBlockHashFunc defines a callback function to use in order to convert a
@@ -195,8 +235,10 @@ func keyForLevel(addrKey [addrKeySize]byte, level uint8) [levelKeySize]byte {
 }
 
 // dbPutAddrIndexEntry updates the address index to include the provided entry
-// according to the level-based scheme described in detail above.
-func dbPutAddrIndexEntry(bucket internalBucket, addrKey [addrKeySize]byte, blockID uint32, txLoc wire.TxLoc) error {
+// according to the level-based scheme described in detail above.  It returns
+// the level after level 0 that the entry's merges moved entries into when the
+// level was empty, which makes it the address's new highest level, or 0.
+func dbPutAddrIndexEntry(bucket internalBucket, addrKey [addrKeySize]byte, blockID uint32, txLoc wire.TxLoc) (uint8, error) {
 	// Start with level 0 and its initial max number of entries.
 	curLevel := uint8(0)
 	maxLevelBytes := level0MaxEntries * txEntrySize
@@ -213,11 +255,12 @@ func dbPutAddrIndexEntry(bucket internalBucket, addrKey [addrKeySize]byte, block
 			copy(mergedData, level0Data)
 			copy(mergedData[len(level0Data):], newData)
 		}
-		return bucket.Put(level0Key[:], mergedData)
+		return 0, bucket.Put(level0Key[:], mergedData)
 	}
 
 	// At this point, level 0 is full, so merge each level into higher
 	// levels as many times as needed to free up level 0.
+	var newLevel uint8
 	prevLevelData := level0Data
 	for {
 		// Each new level holds twice as much as the previous one.
@@ -240,10 +283,12 @@ func dbPutAddrIndexEntry(bucket internalBucket, addrKey [addrKeySize]byte, block
 				len(prevLevelData))
 			copy(mergedData, curLevelData)
 			copy(mergedData[len(curLevelData):], prevLevelData)
+		} else {
+			newLevel = curLevel
 		}
 		err := bucket.Put(curLevelKey[:], mergedData)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		// Move all of the levels before the previous one up a level.
@@ -253,14 +298,110 @@ func dbPutAddrIndexEntry(bucket internalBucket, addrKey [addrKeySize]byte, block
 			prevData := bucket.Get(prevLevelKey[:])
 			err := bucket.Put(mergeLevelKey[:], prevData)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
 		break
 	}
 
 	// Finally, insert the new entry into level 0 now that it is empty.
-	return bucket.Put(level0Key[:], newData)
+	return newLevel, bucket.Put(level0Key[:], newData)
+}
+
+// dbPutAddrIndexEntries adds an entry for each of the passed transactions of a
+// block, those of txLocs at txIdxs, to the address index for the provided key,
+// as dbPutAddrIndexEntry does, and keeps the address's stored count.
+func dbPutAddrIndexEntries(bucket, counts internalBucket, addrKey [addrKeySize]byte, blockID uint32, txLocs []wire.TxLoc, txIdxs []int) error {
+	count, stored, err := dbFetchAddrIndexStoredCount(counts, addrKey)
+	if err != nil {
+		return err
+	}
+	for _, txIdx := range txIdxs {
+		newLevel, err := dbPutAddrIndexEntry(bucket, addrKey, blockID,
+			txLocs[txIdx])
+		if err != nil {
+			return err
+		}
+		switch {
+		case stored:
+			count++
+
+		// The merges that start the count level find the levels below
+		// it full.
+		case newLevel == addrIndexCountLevel:
+			count = uint32(minEntriesToReachLevel(addrIndexCountLevel))
+			stored = true
+		}
+	}
+	if !stored {
+		return nil
+	}
+	return counts.Put(addrKey[:], serializeAddrIndexCount(count))
+}
+
+// serializeAddrIndexCount serializes the provided stored count according to
+// the format described in detail above.
+func serializeAddrIndexCount(count uint32) []byte {
+	serialized := make([]byte, 4)
+	byteOrder.PutUint32(serialized, count)
+	return serialized
+}
+
+// dbFetchAddrIndexStoredCount returns the stored count of the given address
+// key, and whether it has one.
+func dbFetchAddrIndexStoredCount(counts internalBucket, addrKey [addrKeySize]byte) (uint32, bool, error) {
+	serialized := counts.Get(addrKey[:])
+	if serialized == nil {
+		return 0, false, nil
+	}
+	if len(serialized) != 4 {
+		return 0, false, database.Error{
+			ErrorCode: database.ErrCorruption,
+			Description: fmt.Sprintf("stored count of address key "+
+				"%x is %d bytes", addrKey, len(serialized)),
+		}
+	}
+	return byteOrder.Uint32(serialized), true, nil
+}
+
+// dbFetchAddrIndexCount returns the number of entries the address index holds
+// for the given address key: its stored count, or the sum of the lengths of
+// its levels, of which an address without a stored count has fewer than
+// addrIndexCountLevel, read one at a time.
+func dbFetchAddrIndexCount(bucket, counts internalBucket, addrKey [addrKeySize]byte) (uint32, error) {
+	count, stored, err := dbFetchAddrIndexStoredCount(counts, addrKey)
+	if err != nil || stored {
+		return count, err
+	}
+	for level := uint8(0); ; level++ {
+		levelKey := keyForLevel(addrKey, level)
+		levelData := bucket.Get(levelKey[:])
+		if levelData == nil {
+			return count, nil
+		}
+		count += uint32(len(levelData) / txEntrySize)
+	}
+}
+
+// dbRemoveAddrIndexCount keeps the stored count of the given address key, if
+// it has one, when dbRemoveAddrIndexEntries removes the specified number of
+// its entries.  The count is deleted once the address is left no more entries
+// than the levels below addrIndexCountLevel hold, and so no entries in it.
+func dbRemoveAddrIndexCount(counts internalBucket, addrKey [addrKeySize]byte, count int) error {
+	stored, ok, err := dbFetchAddrIndexStoredCount(counts, addrKey)
+	if err != nil || !ok {
+		return err
+	}
+	if uint64(count) > uint64(stored) {
+		return AssertError(fmt.Sprintf("dbRemoveAddrIndexCount stored "+
+			"count %d of address key %x is below the %d entries to "+
+			"delete", stored, addrKey, count))
+	}
+	stored -= uint32(count)
+	if stored < uint32(minEntriesToReachLevel(addrIndexCountLevel)) {
+		return counts.Delete(addrKey[:])
+	}
+	return counts.Put(addrKey[:], serializeAddrIndexCount(stored))
 }
 
 // dbFetchAddrIndexEntries returns block regions for transactions referenced by
@@ -678,22 +819,48 @@ func dbPutAddrIndexVersion(dbTx database.Tx) error {
 	return bucket.Put(addrIndexVersionKey, versionBytes)
 }
 
-// Migrate drops an index older than the current version.  The index manager
-// then rebuilds it from the blockchain as it continues its Init function.
+// dbAddrIndexCountsKept returns whether the index has its stored counts, last
+// kept at its tip.  They were not when a release that does not keep them has
+// connected or disconnected blocks of the index since.
+func dbAddrIndexCountsKept(dbTx database.Tx) (bool, error) {
+	bucket := dbTx.Metadata().Bucket(addrIndexKey)
+	if bucket == nil {
+		return false, fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	tip := dbTx.Metadata().Bucket(indexTipsBucketName).Get(addrIndexKey)
+	keptTip := bucket.Get(addrIndexCountsTipKey)
+	return tip != nil && bytes.Equal(keptTip, tip) &&
+		bucket.Bucket(addrIndexCountsKey) != nil, nil
+}
+
+// Migrate drops an index older than version 2, which the index manager then
+// rebuilds from the blockchain as it continues its Init function.  A later
+// index has its stored counts counted again unless they were last kept at its
+// tip, which they were not for an index of version 2, which then becomes the
+// current version, or one an earlier release has connected or disconnected
+// blocks of since.
 //
 // This is part of the Indexer interface.
 func (idx *AddrIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
 	var version uint32
+	var countsKept bool
 	err := db.View(func(dbTx database.Tx) error {
 		var err error
 		version, err = dbFetchAddrIndexVersion(dbTx)
+		if err != nil {
+			return err
+		}
+		countsKept, err = dbAddrIndexCountsKept(dbTx)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	if version >= addrIndexVersion {
-		return nil
+	if version >= addrIndexRecountVersion {
+		if version >= addrIndexVersion && countsKept {
+			return nil
+		}
+		return storeAddrIndexCounts(db, interrupt)
 	}
 
 	log.Infof("The %s was built by an older version and will be "+
@@ -707,6 +874,155 @@ func (idx *AddrIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
 		}
 		return dbPutIndexerTip(dbTx, addrIndexKey, &chainhash.Hash{}, -1)
 	})
+}
+
+// addrIndexCountBatch is the number of level keys storeAddrIndexCounts reads
+// in each database transaction.  It is a variable for tests.
+var addrIndexCountBatch = 2000000
+
+// storeAddrIndexCounts replaces the stored counts with the number of entries
+// of each address whose highest level is at least addrIndexCountLevel, read
+// from its levels, marks them kept at the index's tip, and makes an older
+// index the current version.  It reads the whole index once, a batch of keys
+// at a time, and stores the counts of each batch as it goes.  The tip they
+// were kept at is deleted first and stored last, so an interrupted pass is
+// done again from the start.
+func storeAddrIndexCounts(db database.DB, interrupt <-chan struct{}) error {
+	log.Infof("Counting the transactions of each address in the %s.  "+
+		"This might take a while...", addrIndexName)
+	start := time.Now()
+	err := db.Update(func(dbTx database.Tx) error {
+		bucket := dbTx.Metadata().Bucket(addrIndexKey)
+		if bucket == nil {
+			return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+		}
+		if err := bucket.Delete(addrIndexCountsTipKey); err != nil {
+			return err
+		}
+		err := deleteBucketsIfExist(bucket, addrIndexCountsKey)
+		if err != nil {
+			return err
+		}
+		_, err = bucket.CreateBucket(addrIndexCountsKey)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// The levels of an address are under consecutive keys, lowest first,
+	// and those read last in a batch may be followed by more in the next
+	// one.
+	type addrCount struct {
+		addrKey [addrKeySize]byte
+		count   uint32
+	}
+	var (
+		last                []byte // the last level key read
+		cur                 addrCount
+		highest             uint8
+		started, done       bool
+		totalKeys, numAddrs uint64
+		numCounted          uint64
+		found               []addrCount
+	)
+	endAddr := func() {
+		if !started {
+			return
+		}
+		numAddrs++
+		if highest >= addrIndexCountLevel {
+			found = append(found, cur)
+		}
+	}
+	for !done {
+		var numKeys int
+		err := db.View(func(dbTx database.Tx) error {
+			cursor := dbTx.Metadata().Bucket(addrIndexKey).Cursor()
+			ok := cursor.First()
+			if last != nil {
+				// The next key is the first after last.
+				ok = cursor.Seek(append(last[:len(last):len(last)], 0))
+			}
+			for ; ok && numKeys < addrIndexCountBatch; ok = cursor.Next() {
+				// The nested bucket and the other keys of the
+				// index are not level keys.
+				key := cursor.Key()
+				if len(key) != levelKeySize {
+					continue
+				}
+				numKeys++
+				last = key
+				if !started || !bytes.Equal(key[:addrKeySize], cur.addrKey[:]) {
+					endAddr()
+					copy(cur.addrKey[:], key)
+					cur.count, highest, started = 0, 0, true
+				}
+				cur.count += uint32(len(cursor.Value()) / txEntrySize)
+				highest = max(highest, key[levelOffset])
+			}
+			done = !ok
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if done {
+			endAddr()
+		}
+
+		// The counts found so far are stored, and once they all are, the
+		// tip they were kept at and the version.
+		err = db.Update(func(dbTx database.Tx) error {
+			bucket := dbTx.Metadata().Bucket(addrIndexKey)
+			counts := bucket.Bucket(addrIndexCountsKey)
+			for _, c := range found {
+				err := counts.Put(c.addrKey[:],
+					serializeAddrIndexCount(c.count))
+				if err != nil {
+					return err
+				}
+			}
+			if !done {
+				return nil
+			}
+			tip := dbTx.Metadata().Bucket(indexTipsBucketName).Get(
+				addrIndexKey)
+			if tip == nil {
+				return fmt.Errorf("no tip for the %s", addrIndexName)
+			}
+			if err := bucket.Put(addrIndexCountsTipKey, tip); err != nil {
+				return err
+			}
+			version, err := dbFetchAddrIndexVersion(dbTx)
+			if err != nil || version >= addrIndexVersion {
+				return err
+			}
+			return dbPutAddrIndexVersion(dbTx)
+		})
+		if err != nil {
+			return err
+		}
+		numCounted += uint64(len(found))
+		found = found[:0]
+		totalKeys += uint64(numKeys)
+		if numKeys > 0 {
+			log.Infof("Read %d keys (%d total) from %s", numKeys,
+				totalKeys, addrIndexName)
+		}
+
+		// The pass is done again on the next start.
+		if !done && interruptRequested(interrupt) {
+			return errInterruptRequested
+		}
+	}
+
+	log.Infof("Done counting the transactions of each address in the "+
+		"%s.  %d of %d addresses have more than %d, whose counts are "+
+		"stored, in %d seconds", addrIndexName, numCounted, numAddrs,
+		minEntriesToReachLevel(addrIndexCountLevel)-1,
+		int64(time.Since(start)/time.Second))
+	return nil
 }
 
 // Key returns the database key to use for the index as a byte slice.
@@ -725,15 +1041,23 @@ func (idx *AddrIndex) Name() string {
 
 // Create is invoked when the indexer manager determines the index needs
 // to be created for the first time.  It creates the bucket for the address
-// index and stores the index version.
+// index, stores the index version, and creates the bucket for the stored
+// counts, kept at the tip the index is given before any block.
 //
 // This is part of the Indexer interface.
 func (idx *AddrIndex) Create(dbTx database.Tx) error {
-	_, err := dbTx.Metadata().CreateBucket(addrIndexKey)
+	bucket, err := dbTx.Metadata().CreateBucket(addrIndexKey)
 	if err != nil {
 		return err
 	}
-	return dbPutAddrIndexVersion(dbTx)
+	if err := dbPutAddrIndexVersion(dbTx); err != nil {
+		return err
+	}
+	if _, err := bucket.CreateBucket(addrIndexCountsKey); err != nil {
+		return err
+	}
+	return bucket.Put(addrIndexCountsTipKey,
+		serializeIndexerTip(&chainhash.Hash{}, -1))
 }
 
 // writeIndexData represents the address index data to be written for one block.
@@ -839,22 +1163,26 @@ func (idx *AddrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	addrsToTxns := make(writeIndexData)
 	idx.indexBlock(addrsToTxns, block, stxos)
 
-	// Add all of the index entries for each address.
+	// Add all of the index entries for each address, and keep the stored
+	// counts and the tip they were kept at.
 	addrIdxBucket := dbTx.Metadata().Bucket(addrIndexKey)
 	if addrIdxBucket == nil {
 		return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
 	}
+	counts := addrIdxBucket.Bucket(addrIndexCountsKey)
+	if counts == nil {
+		return fmt.Errorf("bucket nil for key: %s", addrIndexCountsKey)
+	}
 	for addrKey, txIdxs := range addrsToTxns {
-		for _, txIdx := range txIdxs {
-			err := dbPutAddrIndexEntry(addrIdxBucket, addrKey,
-				blockID, txLocs[txIdx])
-			if err != nil {
-				return err
-			}
+		err := dbPutAddrIndexEntries(addrIdxBucket, counts, addrKey,
+			blockID, txLocs, txIdxs)
+		if err != nil {
+			return err
 		}
 	}
 
-	return nil
+	return addrIdxBucket.Put(addrIndexCountsTipKey,
+		serializeIndexerTip(block.Hash(), block.Height()))
 }
 
 // DisconnectBlock is invoked by the index manager when a block has been
@@ -869,19 +1197,29 @@ func (idx *AddrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 	addrsToTxns := make(writeIndexData)
 	idx.indexBlock(addrsToTxns, block, stxos)
 
-	// Remove all of the index entries for each address.
+	// Remove all of the index entries for each address, and keep the stored
+	// counts and the tip they were kept at.
 	bucket := dbTx.Metadata().Bucket(addrIndexKey)
 	if bucket == nil {
 		return fmt.Errorf("bucket nil for key: %s", addrIndexKey)
+	}
+	counts := bucket.Bucket(addrIndexCountsKey)
+	if counts == nil {
+		return fmt.Errorf("bucket nil for key: %s", addrIndexCountsKey)
 	}
 	for addrKey, txIdxs := range addrsToTxns {
 		err := dbRemoveAddrIndexEntries(bucket, addrKey, len(txIdxs))
 		if err != nil {
 			return err
 		}
+		err = dbRemoveAddrIndexCount(counts, addrKey, len(txIdxs))
+		if err != nil {
+			return err
+		}
 	}
 
-	return nil
+	return bucket.Put(addrIndexCountsTipKey, serializeIndexerTip(
+		&block.MsgBlock().Header.PrevBlock, block.Height()-1))
 }
 
 // TxRegionsForAddress returns a slice of block regions which identify each
@@ -920,10 +1258,10 @@ func (idx *AddrIndex) TxRegionsForAddress(dbTx database.Tx, addr bchutil.Address
 
 // TxRegionsAndCountForAddress returns what TxRegionsForAddress returns for the
 // passed address, number to skip and number requested, newest first, and the
-// number of transactions the index holds for the address.  It reads all of the
-// address's levels, where TxRegionsForAddress reads the newest it needs, but
-// no transactions, so the count costs the reading of 12 bytes for each of the
-// address's transactions.
+// number of transactions the index holds for the address.  The count costs the
+// reading of the address's stored count, which the index keeps for each
+// address with more than 2040 transactions, or else of the at most 24 KB of
+// its levels.
 //
 // NOTE: These results only include transactions confirmed in blocks.
 //
@@ -942,14 +1280,21 @@ func (idx *AddrIndex) TxRegionsAndCountForAddress(dbTx database.Tx, addr bchutil
 	if addrIdxBucket == nil {
 		return nil, 0, 0, fmt.Errorf("bucket nil for key: %s", addrIndexKey)
 	}
-	serialized := dbFetchAddrIndexLevels(addrIdxBucket, addrKey,
-		math.MaxUint64)
-	regions, skipped, err := addrIndexEntryRegions(serialized, addrKey,
+	counts := addrIdxBucket.Bucket(addrIndexCountsKey)
+	if counts == nil {
+		return nil, 0, 0, fmt.Errorf("bucket nil for key: %s",
+			addrIndexCountsKey)
+	}
+	regions, skipped, err := dbFetchAddrIndexEntries(addrIdxBucket, addrKey,
 		numToSkip, numRequested, true, fetchBlockHash)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	return regions, skipped, uint32(len(serialized) / txEntrySize), nil
+	count, err := dbFetchAddrIndexCount(addrIdxBucket, counts, addrKey)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return regions, skipped, count, nil
 }
 
 // TxRegionPagesForAddress calls fn with the block regions of the transactions

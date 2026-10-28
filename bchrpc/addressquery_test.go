@@ -38,6 +38,16 @@ func newAddrIndexServer(t *testing.T, pkScripts [][]byte) *GrpcServer {
 // with a coinbase paying to each of the passed scripts.
 func newAddrIndexServerBlocks(t *testing.T, pkScripts [][]byte, blocks int) *GrpcServer {
 	t.Helper()
+	return newAddrIndexServerPays(t, blocks, func(int) [][]byte {
+		return pkScripts
+	})
+}
+
+// newAddrIndexServerPays returns a server with an address index over a
+// regtest chain of the passed number of blocks after the genesis block, each
+// with a coinbase paying to each of the scripts pays returns for its height.
+func newAddrIndexServerPays(t *testing.T, blocks int, pays func(height int) [][]byte) *GrpcServer {
+	t.Helper()
 
 	params := chaincfg.RegressionNetParams
 	db, err := database.Create("ffldb", t.TempDir(), params.Net)
@@ -79,7 +89,7 @@ func newAddrIndexServerBlocks(t *testing.T, pkScripts [][]byte, blocks int) *Grp
 			SignatureScript:  sigScript,
 			Sequence:         wire.MaxTxInSequenceNum,
 		})
-		for _, pkScript := range pkScripts {
+		for _, pkScript := range pays(height) {
 			coinbase.AddTxOut(wire.NewTxOut(1000, pkScript,
 				wire.TokenData{}))
 		}
@@ -416,5 +426,83 @@ func TestAddressTransactionsCount(t *testing.T) {
 		&pb.GetRawAddressTransactionsRequest{Address: addr.EncodeAddress()})
 	if status.Code(err) != codes.Unavailable {
 		t.Errorf("no address index, raw: got %v, want Unavailable", err)
+	}
+}
+
+// TestAddressTransactionsCountThreshold ensures GetAddressTransactions and
+// GetRawAddressTransactions give the number of confirmed transactions of an
+// address with more than the 2040 the address index counts from its levels,
+// whose count it stores, and of one with 2040, in every page, and that the
+// pages hold that many transactions, newest first.
+func TestAddressTransactionsCountThreshold(t *testing.T) {
+	scripts := make([][]byte, 2)
+	addrs := make([]string, 2)
+	for i := range scripts {
+		hash := bytes.Repeat([]byte{byte(0x30 + i)}, 20)
+		scripts[i] = append(append([]byte{txscript.OP_DUP,
+			txscript.OP_HASH160, txscript.OP_DATA_20}, hash...),
+			txscript.OP_EQUALVERIFY, txscript.OP_CHECKSIG)
+		addr, err := bchutil.NewAddressPubKeyHash(hash,
+			&chaincfg.RegressionNetParams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs[i] = addr.EncodeAddress()
+	}
+
+	// The first address is paid in every block, the second in all but
+	// the first.
+	const blocks = 2041
+	s := newAddrIndexServerPays(t, blocks, func(height int) [][]byte {
+		if height == 1 {
+			return scripts[:1]
+		}
+		return scripts
+	})
+	ctx := context.Background()
+	for i, wantCount := range []uint32{blocks, blocks - 1} {
+		for _, fetch := range []uint32{1000, 777} {
+			wantHeight := int32(blocks)
+			for skip := uint32(0); ; skip += fetch {
+				resp, err := s.GetAddressTransactions(ctx,
+					&pb.GetAddressTransactionsRequest{Address: addrs[i],
+						NbSkip: skip, NbFetch: fetch})
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := s.GetRawAddressTransactions(ctx,
+					&pb.GetRawAddressTransactionsRequest{Address: addrs[i],
+						NbSkip: skip, NbFetch: fetch})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if resp.ConfirmedCount != wantCount ||
+					raw.ConfirmedCount != wantCount ||
+					len(raw.ConfirmedTransactions) !=
+						len(resp.ConfirmedTransactions) {
+
+					t.Fatalf("address %d skip %d: counts %d and %d, "+
+						"%d and %d transactions, want a count of %d",
+						i, skip, resp.ConfirmedCount, raw.ConfirmedCount,
+						len(resp.ConfirmedTransactions),
+						len(raw.ConfirmedTransactions), wantCount)
+				}
+				for _, tx := range resp.ConfirmedTransactions {
+					if tx.BlockHeight != wantHeight {
+						t.Fatalf("address %d skip %d: a transaction "+
+							"at height %d, want %d", i, skip,
+							tx.BlockHeight, wantHeight)
+					}
+					wantHeight--
+				}
+				if len(resp.ConfirmedTransactions) < int(fetch) {
+					break
+				}
+			}
+			if got := int32(blocks) - wantHeight; got != int32(wantCount) {
+				t.Fatalf("address %d: pages of %d hold %d transactions, "+
+					"want %d", i, fetch, got, wantCount)
+			}
+		}
 	}
 }

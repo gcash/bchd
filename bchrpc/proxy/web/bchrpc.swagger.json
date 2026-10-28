@@ -1600,7 +1600,7 @@
         "confirmed_count": {
           "type": "integer",
           "format": "int64",
-          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions to a request that\nskips none, and a count of 0, is from such a node."
+          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions and a count of 0 is\nfrom such a node."
         }
       }
     },
@@ -2023,7 +2023,7 @@
         "confirmed_count": {
           "type": "integer",
           "format": "int64",
-          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions to a request that\nskips none, and a count of 0, is from such a node."
+          "description": "The number of confirmed transactions of the address, whatever the\nskip, fetch and start block of the request.  Nodes that predate it\nleave it 0, so a reply with confirmed transactions and a count of 0 is\nfrom such a node."
         }
       }
     },
