@@ -1470,3 +1470,22 @@ func TestSlpIndexEntryErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestSlpTrustedValidationBadHash ensures a query hash of the wrong length is
+// refused as an invalid argument, with a message that does not repeat it,
+// rather than with Aborted and the query's bytes.
+func TestSlpTrustedValidationBadHash(t *testing.T) {
+	s, _ := newGraphSearchServer(t)
+	_, err := s.GetSlpTrustedValidation(context.Background(),
+		&pb.GetSlpTrustedValidationRequest{
+			Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+				PrevOutHash: make([]byte, 100000),
+				PrevOutVout: 1,
+			}},
+		})
+	want := "invalid trusted validation hash: invalid hash length of 100000, " +
+		"want 32"
+	if status.Code(err) != codes.InvalidArgument || status.Convert(err).Message() != want {
+		t.Fatalf("got %.100q, want InvalidArgument with %q", err, want)
+	}
+}

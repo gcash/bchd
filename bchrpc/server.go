@@ -1934,7 +1934,7 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 
 		txid, err := chainhash.NewHash(query.PrevOutHash)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "invalid txn hash for txo %s: %v", query.GetPrevOutHash(), err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid trusted validation hash: %v", err)
 		}
 
 		entry, err := s.getSlpIndexEntry(txid)
