@@ -261,10 +261,58 @@ type dbSlpIndexEntry struct {
 	slpMsgPkScript []byte
 }
 
+// slpConnectChanges are the changes connecting a block makes to the slp
+// index's memory: the internal token ID its last new token takes, the entries
+// of the slp transactions it stores and of those it reads, in order, the
+// tokens whose cached metadata its MINTs make stale, and its valid
+// transactions for graph search.  They are made once nothing in the block's
+// connection can fail, so that a block that fails partway through leaves none
+// of them, as it leaves nothing in the database.
+type slpConnectChanges struct {
+	curTokenID  uint32
+	entries     map[chainhash.Hash]SlpTxEntry
+	order       []chainhash.Hash
+	mints       []slpMint
+	graphSearch []*wire.MsgTx
+}
+
+// slpMint is a MINT a block confirms, of a token whose cached metadata it
+// makes stale.
+type slpMint struct {
+	token, mint chainhash.Hash
+}
+
+// addEntry keeps the entry of the transaction hash for the cache.
+func (c *slpConnectChanges) addEntry(hash *chainhash.Hash, entry SlpTxEntry) {
+	if _, ok := c.entries[*hash]; !ok {
+		c.order = append(c.order, *hash)
+	}
+	c.entries[*hash] = entry
+}
+
+// entry returns the entry of the transaction hash as GetSlpIndexEntry does,
+// but keeps one it reads from the database, which may be the block's own,
+// with the block's changes rather than in the cache.
+func (c *slpConnectChanges) entry(idx *SlpIndex, dbTx database.Tx, hash *chainhash.Hash) (*SlpTxEntry, error) {
+	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok {
+		return &entry, nil
+	}
+	if entry, ok := c.entries[*hash]; ok {
+		return &entry, nil
+	}
+	entry, err := dbFetchSlpIndexEntry(dbTx, hash)
+	if err != nil {
+		return nil, err
+	}
+	c.addEntry(hash, *entry)
+	return entry, nil
+}
+
 // dbPutSlpIndexEntry uses an existing database transaction to update the
 // transaction index given the provided serialized data that is expected to have
-// been serialized putSlpIndexEntry.
-func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEntry) error {
+// been serialized putSlpIndexEntry.  The internal token ID it takes and the
+// entry for the cache go with the block's changes.
+func dbPutSlpIndexEntry(changes *slpConnectChanges, dbTx database.Tx, entryInfo *dbSlpIndexEntry) error {
 	txHash := entryInfo.tx.TxHash()
 
 	// A token takes the next internal token ID when the index first sees
@@ -275,8 +323,8 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 	tokenID, err := dbFetchTokenIDByHash(dbTx, entryInfo.tokenIDHash)
 	newToken := err != nil
 	if newToken {
-		idx.curTokenID++
-		tokenID = idx.curTokenID
+		changes.curTokenID++
+		tokenID = changes.curTokenID
 	}
 
 	var (
@@ -327,15 +375,12 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 
 	// The script is copied, as a deserialized transaction holds all its
 	// scripts in one buffer, which the cache would otherwise keep.
-	err = idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
+	changes.addEntry(&txHash, SlpTxEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
 		SlpOpReturn:    bytes.Clone(entryInfo.slpMsgPkScript),
 	})
-	if err != nil {
-		log.Criticalf("AddSlpTxEntry in dbPutSlpIndexEntry failed: %v", err)
-	}
 
 	target := make([]byte, 4+2+len(entryInfo.slpMsgPkScript))
 	byteOrder.PutUint32(target[:], tokenID)
@@ -622,6 +667,10 @@ type BurnedInput struct {
 func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 
 	sortedTxns := TopologicallySortTxs(block.Transactions())
+	changes := &slpConnectChanges{
+		curTokenID: idx.curTokenID,
+		entries:    make(map[chainhash.Hash]SlpTxEntry),
+	}
 
 	// An entry the index holds but cannot read is corrupt, and fails the
 	// block's connection, which stops the node, as a read of the database
@@ -630,7 +679,7 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	// good.
 	var corrupt error
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
-		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
+		entry, err := changes.entry(idx, dbTx, txiHash)
 		if _, notFound := err.(errSlpEntryNotFound); err != nil && !notFound && corrupt == nil {
 			corrupt = errSlpEntryCorrupt{hash: *txiHash, err: err}
 		}
@@ -656,12 +705,11 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			if err != nil {
 				log.Criticalf("invalid hash for token id %s, %v", hex.EncodeToString(msg.TokenID()[:]), err)
 			} else {
-				log.Debugf("clear token metadata cache for %s", hex.EncodeToString(msg.TokenID()[:]))
-				idx.cache.RemoveTokenMetadata(*hash, tx.TxHash())
+				changes.mints = append(changes.mints, slpMint{token: *hash, mint: tx.TxHash()})
 			}
 		}
 
-		return dbPutSlpIndexEntry(idx, dbTx, &dbSlpIndexEntry{
+		return dbPutSlpIndexEntry(changes, dbTx, &dbSlpIndexEntry{
 			tx:             tx,
 			slpMsg:         slpMsg,
 			tokenIDHash:    tokenIDHash,
@@ -714,13 +762,10 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 		// Add Graph search entries here once the gs db is available
 		if idx.GraphSearchEnabled() && isValid {
-			go idx.AddGraphSearchTxn(tx)
+			changes.graphSearch = append(changes.graphSearch, tx)
 		}
 
 	}
-
-	// Remove block transactions from the slp mempool cache
-	idx.removeMempoolSlpTxs(block.Transactions())
 
 	// Loop through burned inputs and check for different situations
 	// where token metadata will need to be updated.
@@ -734,7 +779,32 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 			return err
 		}
 	}
+
+	idx.applyConnectChanges(changes, block)
 	return nil
+}
+
+// applyConnectChanges applies the changes the connection of the block makes to
+// the index's memory, once nothing in the connection can fail.
+func (idx *SlpIndex) applyConnectChanges(changes *slpConnectChanges, block *bchutil.Block) {
+	idx.curTokenID = changes.curTokenID
+	for i := range changes.order {
+		hash := &changes.order[i]
+		if err := idx.cache.AddSlpTxEntry(hash, changes.entries[*hash]); err != nil {
+			log.Criticalf("AddSlpTxEntry in ConnectBlock failed: %v", err)
+		}
+	}
+	for _, m := range changes.mints {
+		log.Debugf("clear token metadata cache for %s", hex.EncodeToString(m.token[:]))
+		idx.cache.RemoveTokenMetadata(m.token, m.mint)
+	}
+
+	// Remove block transactions from the slp mempool cache
+	idx.removeMempoolSlpTxs(block.Transactions())
+
+	for _, tx := range changes.graphSearch {
+		go idx.AddGraphSearchTxn(tx)
+	}
 }
 
 // AddGraphSearchTxn adds a transaction to graph search.
@@ -1126,7 +1196,11 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stxos []blockchain.SpentTxOut) error {
 	// The slp cache keeps the entries of the block's slp transactions with
 	// the memory pool's, as the reorg puts the transactions back in the
-	// memory pool if it takes them (see AddDisconnectedSlpTxEntry).
+	// memory pool if it takes them (see AddDisconnectedSlpTxEntry), once
+	// they are removed from the index, so that a disconnection that fails
+	// leaves the cache as it was.
+	var disconnected []*bchutil.Tx
+	var entries []SlpTxEntry
 	for _, tx := range block.Transactions() {
 		entry, err := dbFetchSlpIndexEntry(dbTx, tx.Hash())
 		if _, ok := err.(errSlpEntryNotFound); ok {
@@ -1136,11 +1210,18 @@ func (idx *SlpIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block, stx
 			log.Criticalf("Failed to read the slp entry of disconnected transaction %v: %v", tx.Hash(), err)
 			continue
 		}
-		idx.cache.AddDisconnectedSlpTxEntry(tx.Hash(), *entry)
+		disconnected = append(disconnected, tx)
+		entries = append(entries, *entry)
 	}
 
 	// Remove all of the transactions in the block from the index.
-	return dbRemoveSlpIndexEntries(dbTx, block)
+	if err := dbRemoveSlpIndexEntries(dbTx, block); err != nil {
+		return err
+	}
+	for i, tx := range disconnected {
+		idx.cache.AddDisconnectedSlpTxEntry(tx.Hash(), entries[i])
+	}
+	return nil
 }
 
 // GetSlpIndexEntry returns a serialized slp index entry for the provided transaction hash
