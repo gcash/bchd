@@ -185,6 +185,10 @@ type BlockChain struct {
 	nextCheckpoint *chaincfg.Checkpoint
 	checkpointNode *blockNode
 
+	// headers keeps the headers of blocks the chain doesn't have.  It is
+	// protected by the chain lock.
+	headers *headerTree
+
 	// finalizedNode is the main chain block below which the chain can no
 	// longer be reorged.  It is protected by the chain lock.
 	finalizedNode     *blockNode
@@ -2707,6 +2711,7 @@ func New(config *Config) (*BlockChain, error) {
 		bestChain:           newChainView(nil),
 		orphans:             make(map[chainhash.Hash]*orphanBlock),
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
+		headers:             newHeaderTree(),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 		pruneMode:           config.Prune,

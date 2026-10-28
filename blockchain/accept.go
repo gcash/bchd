@@ -72,9 +72,13 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 
 	// Create a new block node for the block and add it to the node index. Even
 	// if the block ultimately gets connected to the main chain, it starts out
-	// on a side chain.
+	// on a side chain.  A block whose header is kept gets the kept header's
+	// node, which the kept headers built on it have as their parent.
 	blockHeader := &block.MsgBlock().Header
-	newNode := newBlockNode(blockHeader, prevNode)
+	newNode := b.headers.take(block.Hash(), prevNode)
+	if newNode == nil {
+		newNode = newBlockNode(blockHeader, prevNode)
+	}
 	newNode.status = statusDataStored
 	newNode.received = uint32(time.Now().Unix())
 
