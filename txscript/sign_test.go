@@ -57,10 +57,16 @@ func mkGetScript(scripts map[string][]byte) ScriptDB {
 	})
 }
 
+// relayFlags are the script flags a relayed transaction must pass now that
+// the upgrades are active: the standard ones, with tokens and the May 2025
+// and May 2026 rules, as the memory pool sets them by default.
+const relayFlags = StandardVerifyFlags | ScriptAllowCashTokens |
+	ScriptAllowMay2025 | ScriptAllowMay2025StandardOnly | ScriptAllowMay2026
+
 func checkScripts(msg string, tx *wire.MsgTx, idx int, inputAmt int64, sigScript, pkScript []byte) error {
 	tx.TxIn[idx].SignatureScript = sigScript
-	vm, err := NewEngine(pkScript, tx, idx,
-		ScriptBip16|ScriptVerifyDERSignatures|ScriptVerifyBip143SigHash|ScriptVerifySchnorr, nil, nil, nil, inputAmt)
+	vm, err := NewEngine(pkScript, tx, idx, relayFlags, nil, nil, nil,
+		inputAmt)
 	if err != nil {
 		return fmt.Errorf("failed to make script engine for %s: %v",
 			msg, err)
@@ -1709,7 +1715,7 @@ nexttest:
 		}
 
 		// Validate tx input scripts
-		scriptFlags := ScriptBip16 | ScriptVerifyDERSignatures | ScriptVerifyBip143SigHash | ScriptVerifySchnorr
+		scriptFlags := relayFlags
 		for j := range tx.TxIn {
 			vm, err := NewEngine(sigScriptTests[i].
 				inputs[j].txout.PkScript, tx, j, scriptFlags, nil, nil, nil, 0)
