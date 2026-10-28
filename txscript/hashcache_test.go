@@ -388,3 +388,56 @@ func TestUtxoCacheMissingEntry(t *testing.T) {
 		t.Fatalf("GetEntry: %v %v", out, err)
 	}
 }
+
+// TestCalcSignatureHashUtxos ensures CalcSignatureHash returns an error for a
+// hash type with SigHashUTXO when the sighashes lack an output the
+// transaction spends, instead of hashing a zero hash for them, and computes
+// it when they have them all.  It also ensures neither a hash type without
+// SigHashUTXO nor the legacy algorithm, which covers no spent outputs, needs
+// them.
+func TestCalcSignatureHashUtxos(t *testing.T) {
+	t.Parallel()
+
+	tx, utxos := spentOutputsTestTx(nil)
+	partial := NewUtxoCache()
+	entry, err := utxos.GetEntry(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial.AddEntry(0, entry)
+
+	tests := []struct {
+		name      string
+		sigHashes *TxSigHashes
+		ok        bool
+	}{
+		{"with the spent outputs", NewTxSigHashes(tx).WithUtxos(tx, utxos),
+			true},
+		{"without them", NewTxSigHashes(tx), false},
+		{"with some", NewTxSigHashes(tx).WithUtxos(tx, partial), false},
+		{"with none found", NewTxSigHashes(tx).WithUtxos(tx, nil), false},
+	}
+	hashType := SigHashAll | SigHashForkID | SigHashUTXO
+	for _, test := range tests {
+		for idx := range tx.TxIn {
+			_, _, err := CalcSignatureHash([]byte{OP_TRUE}, test.sigHashes,
+				hashType, tx, idx, 100000, true)
+			if test.ok && err != nil {
+				t.Errorf("%s, input %d: %v", test.name, idx, err)
+			} else if !test.ok && err == nil {
+				t.Errorf("%s, input %d: no error", test.name, idx)
+			}
+		}
+	}
+
+	_, _, err = CalcSignatureHash([]byte{OP_TRUE}, NewTxSigHashes(tx),
+		SigHashAll|SigHashForkID, tx, 0, 100000, true)
+	if err != nil {
+		t.Errorf("without SigHashUTXO: %v", err)
+	}
+	_, _, err = CalcSignatureHash([]byte{OP_TRUE}, nil, hashType, tx, 0,
+		100000, false)
+	if err != nil {
+		t.Errorf("legacy algorithm: %v", err)
+	}
+}

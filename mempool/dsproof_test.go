@@ -47,7 +47,7 @@ func signP2PKH(t testing.TB, tx *wire.MsgTx, idx int, coin *wire.TxOut, key *bch
 
 	t.Helper()
 	sigHashes := txscript.NewTxSigHashes(tx)
-	if !coin.TokenData.IsEmpty() {
+	if !coin.TokenData.IsEmpty() || hashType&txscript.SigHashUTXO != 0 {
 		utxos := txscript.NewUtxoCache()
 		utxos.AddEntry(idx, *coin)
 		sigHashes = sigHashes.WithUtxos(tx, utxos)

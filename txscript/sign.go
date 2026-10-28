@@ -119,7 +119,7 @@ func checkSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 			return errors.New("SigHashUTXO can't be combined with " +
 				"SigHashAnyOneCanPay")
 		}
-		if !sigHashes.hasUtxos || len(sigHashes.missingUtxos) != 0 {
+		if !sigHashes.hasAllUtxos() {
 			return errors.New("signing with SigHashUTXO needs the " +
 				"outputs the transaction spends in its signature hashes")
 		}

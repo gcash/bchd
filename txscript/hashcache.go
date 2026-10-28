@@ -51,6 +51,12 @@ func (txSighashes *TxSigHashes) AddTxSigHashUtxoFromUtxoCache(tx *wire.MsgTx, ut
 	txSighashes.hasUtxos = true
 }
 
+// hasAllUtxos returns whether the sighashes include the outputs spent by all
+// the inputs of the transaction, as a hash with SigHashUTXO covers them all.
+func (txSighashes *TxSigHashes) hasAllUtxos() bool {
+	return txSighashes.hasUtxos && len(txSighashes.missingUtxos) == 0
+}
+
 // WithUtxos returns a copy of the sighashes with the outputs spent by the
 // transaction added.
 func (txSighashes *TxSigHashes) WithUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) *TxSigHashes {
