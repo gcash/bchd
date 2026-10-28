@@ -948,6 +948,55 @@ func TestGetAddressUnspentOutputsLateBlocksReadNewest(t *testing.T) {
 	}
 }
 
+// TestGetAddressUnspentOutputsLateBlocksPaged ensures GetAddressUnspentOutputs
+// returns the outputs of every transaction of the address in the blocks
+// connected during the call, which it reads a page at a time.
+func TestGetAddressUnspentOutputsLateBlocksPaged(t *testing.T) {
+	saved := addressUnspentPageSize
+	t.Cleanup(func() { addressUnspentPageSize = saved })
+	t.Cleanup(func() { addressUnspentScanHook = nil })
+	for _, pageSize := range []int{1, 2, 3} {
+		addressUnspentPageSize = pageSize
+		h := newAddrUnspentHarness(t)
+		addrScript := p2shScript(t, addrRedeem)
+		pay := []*wire.TxOut{wire.NewTxOut(50e8, addrScript, wire.TokenData{})}
+		const n, late = 4, 5
+		var want []string
+		for i := range n {
+			cb := h.mineBlock(pay, nil)
+			want = append(want, wantUnspent(cb, 0, true, int32(i+1)))
+		}
+		addressUnspentScanHook = func() {
+			addressUnspentScanHook = nil
+			for i := range late {
+				cb := h.mineBlock(pay, nil)
+				want = append(want, wantUnspent(cb, 0, true, int32(n+i+1)))
+			}
+		}
+
+		addr, err := bchutil.NewAddressScriptHash(addrRedeem, h.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		resp, err := h.s.GetAddressUnspentOutputs(ctx,
+			&pb.GetAddressUnspentOutputsRequest{Address: addr.EncodeAddress()})
+		cancel()
+		if err != nil {
+			t.Fatalf("pages of %d: %v", pageSize, err)
+		}
+		var got []string
+		for _, u := range resp.Outputs {
+			got = append(got, unspentKey(u))
+		}
+		sort.Strings(got)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("pages of %d: got %v, want %v", pageSize, got, want)
+		}
+	}
+}
+
 // TestGetAddressUnspentOutputsShutdown ensures GetAddressUnspentOutputs stops
 // reading the address's history once the server shuts down.
 func TestGetAddressUnspentOutputsShutdown(t *testing.T) {

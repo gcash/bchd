@@ -1147,7 +1147,7 @@ func (s *GrpcServer) GetAddressTransactions(ctx context.Context, req *pb.GetAddr
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip), true)
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1246,7 +1246,7 @@ func (s *GrpcServer) GetRawAddressTransactions(ctx context.Context, req *pb.GetR
 		startHeight, _ = s.chain.BlockHeightByHash(h)
 	}
 
-	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, int(req.NbFetch), int(req.NbSkip), true)
+	confirmedTxs, confirmedCount, err := s.fetchTransactionsByAddress(addr, startHeight, req.NbFetch, req.NbSkip, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1551,12 +1551,12 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 		}
 	}
 	if s.chain.BestSnapshot().Height > startHeight {
-		for skip := 0; ; {
+		for skip := uint32(0); ; {
 			if err := ctx.Err(); err != nil {
 				return nil, status.FromContextError(err).Err()
 			}
 			newTxs, _, err := s.fetchTransactionsByAddress(addr, startHeight+1,
-				fetch, skip, false)
+				uint32(fetch), skip, false)
 			if err != nil && reorganized() {
 				return nil, errChainReorganized
 			}
@@ -1575,7 +1575,7 @@ func (s *GrpcServer) GetAddressUnspentOutputs(ctx context.Context, req *pb.GetAd
 			if len(newTxs) < fetch {
 				break
 			}
-			skip += fetch
+			skip += uint32(fetch)
 		}
 	}
 	// A listed transaction whose outputs are in the utxo set was confirmed
@@ -3545,26 +3545,21 @@ type retrievedTx struct {
 // fetch and number to skip, newest first, and, when count is set, the number
 // of confirmed transactions the address has, whatever the others.  Both are
 // read in one database transaction, so they agree.
-func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip int, count bool) ([]retrievedTx, uint32, error) {
+func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeight int32, nbFetch, nbSkip uint32, count bool) ([]retrievedTx, uint32, error) {
 	// Override the default number of requested entries if needed.  Also,
 	// just return now if the number of requested entries is zero to avoid
 	// extra work.
-	numRequested := 100
+	numRequested := uint32(100)
 	if nbFetch > 0 {
 		numRequested = nbFetch
-		if numRequested < 0 {
-			numRequested = 1
-		}
 	}
 	if numRequested == 0 {
 		return nil, 0, nil
 	}
 
-	// Override the default number of entries to skip if needed.
-	var numToSkip int
-	if nbSkip > 0 {
-		numToSkip = max(nbSkip, 0)
-	}
+	// The number of entries to skip stays unsigned, as an int would turn a
+	// skip of 2^31 or more negative on 32-bit platforms.
+	numToSkip := nbSkip
 
 	// Add transactions from mempool first if client asked for reverse
 	// order.  Otherwise, they will be added last (as needed depending on
@@ -3579,7 +3574,7 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 
 	// Fetch transactions from the database in the desired order if more are
 	// needed.
-	if len(addressTxns) < numRequested {
+	if uint32(len(addressTxns)) < numRequested {
 		err := s.db.View(func(dbTx database.Tx) error {
 			var (
 				regions   []database.BlockRegion
@@ -3588,12 +3583,12 @@ func (s *GrpcServer) fetchTransactionsByAddress(addr bchutil.Address, startHeigh
 			)
 			if count {
 				regions, dbSkipped, total, err = s.addrIndex.TxRegionsAndCountForAddress(
-					dbTx, addr, uint32(numToSkip)-numSkipped,
-					uint32(numRequested-len(addressTxns)))
+					dbTx, addr, numToSkip-numSkipped,
+					numRequested-uint32(len(addressTxns)))
 			} else {
 				regions, dbSkipped, err = s.addrIndex.TxRegionsForAddress(
-					dbTx, addr, uint32(numToSkip)-numSkipped,
-					uint32(numRequested-len(addressTxns)), true)
+					dbTx, addr, numToSkip-numSkipped,
+					numRequested-uint32(len(addressTxns)), true)
 			}
 			if err != nil {
 				return err

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"math"
 	"testing"
 	"time"
 
@@ -334,8 +335,9 @@ func TestAddressUnspentNotBareMultisig(t *testing.T) {
 // TestAddressTransactionsCount ensures GetAddressTransactions and
 // GetRawAddressTransactions give the number of confirmed transactions of the
 // address whatever the skip, fetch and start block of the request, newest
-// first, 0 for an address without any, and that without an address index
-// both fail as before.
+// first, 0 for an address without any, that a skip of 2^31 or more, which
+// does not fit an int on 32-bit platforms, skips them all, and that without
+// an address index both fail as before.
 func TestAddressTransactionsCount(t *testing.T) {
 	hash := bytes.Repeat([]byte{0xef}, 20)
 	p2pkhScript := append(append([]byte{txscript.OP_DUP, txscript.OP_HASH160,
@@ -368,6 +370,9 @@ func TestAddressTransactionsCount(t *testing.T) {
 		{"first page", addr.EncodeAddress(), 0, 5, 0, 5, blocks, blocks},
 		{"last page", addr.EncodeAddress(), 10, 5, 0, 2, 2, blocks},
 		{"past the end", addr.EncodeAddress(), 20, 5, 0, 0, 0, blocks},
+		{"skip 2^31", addr.EncodeAddress(), 1 << 31, 5, 0, 0, 0, blocks},
+		{"skip the most", addr.EncodeAddress(), math.MaxUint32, 0, 0, 0, 0,
+			blocks},
 		{"from a height", addr.EncodeAddress(), 0, 0, 9, 4, blocks, blocks},
 		{"unused", unused.EncodeAddress(), 0, 0, 0, 0, 0, 0},
 	}
