@@ -7,6 +7,7 @@ package netsync
 import (
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,8 +35,10 @@ func (db *viewCountingDB) View(fn func(database.Tx) error) error {
 }
 
 // requestTestHarness is a sync manager whose regression test chain is
-// current, so it requests what any peer announces, with peers whose getdata
-// messages are recorded.  The reads of the chain's database are counted.
+// current, so it requests what any peer announces, with peers whose getdata,
+// getheaders and getblocks messages are recorded, as are the ban score
+// increases the sync manager asks for.  The reads of the chain's database are
+// counted.
 type requestTestHarness struct {
 	t      *testing.T
 	sm     *SyncManager
@@ -44,8 +47,25 @@ type requestTestHarness struct {
 	tip    *wire.MsgBlock
 	clock  time.Time
 
-	mtx sync.Mutex
-	got map[*peerpkg.Peer][]*wire.InvVect
+	mtx        sync.Mutex
+	got        map[*peerpkg.Peer][]*wire.InvVect
+	gotHeaders map[*peerpkg.Peer][]*wire.MsgGetHeaders
+	gotBlocks  map[*peerpkg.Peer][]*wire.MsgGetBlocks
+	punished   []string
+}
+
+// scoreRecorder is a PeerNotifier that records the ban score increases asked
+// for in its harness.
+type scoreRecorder struct {
+	nopNotifier
+	h *requestTestHarness
+}
+
+// Misbehaving records the increase.
+func (r scoreRecorder) Misbehaving(_ *peerpkg.Peer, score uint32, reason string) {
+	r.h.mtx.Lock()
+	r.h.punished = append(r.h.punished, fmt.Sprintf("%d %s", score, reason))
+	r.h.mtx.Unlock()
 }
 
 // newRequestTestHarness returns a request test harness.
@@ -103,8 +123,12 @@ func newRequestTestHarness(t *testing.T) *requestTestHarness {
 		tip:    tip,
 		clock:  time.Now(),
 		got:    make(map[*peerpkg.Peer][]*wire.InvVect),
+
+		gotHeaders: make(map[*peerpkg.Peer][]*wire.MsgGetHeaders),
+		gotBlocks:  make(map[*peerpkg.Peer][]*wire.MsgGetBlocks),
 	}
 	sm.timeNow = func() time.Time { return h.clock }
+	sm.peerNotifier = scoreRecorder{h: h}
 	return h
 }
 
@@ -127,9 +151,18 @@ func solveBlock(block *wire.MsgBlock) {
 	}
 }
 
-// peer returns a peer of the sync manager whose handshake has completed, and
-// records the getdata messages the sync manager sends it.
+// peer returns a peer of the sync manager, a full node whose handshake has
+// completed, and records the getdata, getheaders and getblocks messages the
+// sync manager sends it.
 func (h *requestTestHarness) peer(index byte) *peerpkg.Peer {
+	h.t.Helper()
+	return h.peerWithServices(index, wire.SFNodeNetwork)
+}
+
+// peerWithServices returns a peer as peer does, which offers the services.
+func (h *requestTestHarness) peerWithServices(index byte,
+	services wire.ServiceFlag) *peerpkg.Peer {
+
 	t := h.t
 	t.Helper()
 
@@ -140,11 +173,22 @@ func (h *requestTestHarness) peer(index byte) *peerpkg.Peer {
 	})
 	remote, err := peerpkg.NewOutboundPeer(&peerpkg.Config{
 		ChainParams:            h.params,
+		Services:               services,
 		TstAllowSelfConnection: true,
 		Listeners: peerpkg.MessageListeners{
 			OnGetData: func(_ *peerpkg.Peer, msg *wire.MsgGetData) {
 				h.mtx.Lock()
 				h.got[local] = append(h.got[local], msg.InvList...)
+				h.mtx.Unlock()
+			},
+			OnGetHeaders: func(_ *peerpkg.Peer, msg *wire.MsgGetHeaders) {
+				h.mtx.Lock()
+				h.gotHeaders[local] = append(h.gotHeaders[local], msg)
+				h.mtx.Unlock()
+			},
+			OnGetBlocks: func(_ *peerpkg.Peer, msg *wire.MsgGetBlocks) {
+				h.mtx.Lock()
+				h.gotBlocks[local] = append(h.gotBlocks[local], msg)
 				h.mtx.Unlock()
 			},
 		},
@@ -183,6 +227,50 @@ func (h *requestTestHarness) inv(p *peerpkg.Peer, typ wire.InvType,
 		}
 	}
 	h.sm.handleInvMsg(&invMsg{inv: msg, peer: p})
+}
+
+// announce has the peer send the headers in a headers message.
+func (h *requestTestHarness) announce(p *peerpkg.Peer,
+	headers ...*wire.BlockHeader) {
+
+	h.t.Helper()
+	h.sm.handleHeadersMsg(&headersMsg{headers: headersMessage(h.t, headers),
+		peer: p})
+}
+
+// tipBlock returns a block on the tip, which differs for each extra.
+func (h *requestTestHarness) tipBlock(extra int64) *bchutil.Block {
+	h.t.Helper()
+	return mineBlock(h.t, h.params, h.tip, 2, extra)
+}
+
+// waitGetHeaders fails the test unless the sync manager asks the peer for the
+// headers up to stop within a few seconds, and returns the request.
+func (h *requestTestHarness) waitGetHeaders(p *peerpkg.Peer,
+	stop chainhash.Hash) *wire.MsgGetHeaders {
+
+	h.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mtx.Lock()
+		for _, msg := range h.gotHeaders[p] {
+			if msg.HashStop == stop {
+				h.mtx.Unlock()
+				return msg
+			}
+		}
+		h.mtx.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.t.Fatalf("headers up to %v were not requested from peer %v", stop, p)
+	return nil
+}
+
+// scores returns the ban score increases asked for so far.
+func (h *requestTestHarness) scores() []string {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	return slices.Clone(h.punished)
 }
 
 // notFound has the peer report that it does not have the passed inventory.
@@ -286,10 +374,11 @@ func TestTxNotFoundForgetsRequest(t *testing.T) {
 func TestDonePeerRequestsNextAnnouncer(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, b := h.peer(1), h.peer(2)
-	tx, block := chainhash.Hash{0xaa}, chainhash.Hash{0xbb}
+	header := &h.tipBlock(0).MsgBlock().Header
+	tx, block := chainhash.Hash{0xaa}, header.BlockHash()
 
 	h.inv(a, wire.InvTypeTx, tx)
-	h.inv(a, wire.InvTypeBlock, block)
+	h.announce(a, header)
 	h.inv(b, wire.InvTypeTx, tx)
 	h.inv(b, wire.InvTypeBlock, block)
 
@@ -425,9 +514,10 @@ func TestConfirmedTxNotRequested(t *testing.T) {
 func TestBlockNotFoundRequestsNextAnnouncer(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, b, c := h.peer(1), h.peer(2), h.peer(3)
-	block := chainhash.Hash{0xbb}
+	header := &h.tipBlock(0).MsgBlock().Header
+	block := header.BlockHash()
 
-	h.inv(a, wire.InvTypeBlock, block)
+	h.announce(a, header)
 	h.waitGetData(a, wire.InvTypeCmpctBlock, block)
 	h.inv(a, wire.InvTypeBlock, block)
 	h.inv(b, wire.InvTypeBlock, block)
@@ -448,10 +538,11 @@ func TestBlockNotFoundRequestsNextAnnouncer(t *testing.T) {
 func TestRetrySkipsDisconnectedPeer(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, b, c := h.peer(1), h.peer(2), h.peer(3)
-	tx, block := chainhash.Hash{0xaa}, chainhash.Hash{0xbb}
+	header := &h.tipBlock(0).MsgBlock().Header
+	tx, block := chainhash.Hash{0xaa}, header.BlockHash()
 	for _, p := range []*peerpkg.Peer{a, b, c} {
 		h.inv(p, wire.InvTypeTx, tx)
-		h.inv(p, wire.InvTypeBlock, block)
+		h.announce(p, header)
 	}
 	b.Disconnect()
 	if !isDisconnected(b) {
@@ -471,8 +562,9 @@ func TestRetrySkipsDisconnectedPeer(t *testing.T) {
 // that peers that are gone make room for others.
 func TestBlockAnnouncersCapped(t *testing.T) {
 	h := newRequestTestHarness(t)
-	block := chainhash.Hash{0xbb}
-	h.inv(h.peer(1), wire.InvTypeBlock, block)
+	header := &h.tipBlock(0).MsgBlock().Header
+	block := header.BlockHash()
+	h.announce(h.peer(1), header)
 
 	var announcers []*peerpkg.Peer
 	for i := range maxBlockAnnouncers + 1 {
@@ -499,7 +591,7 @@ func TestBlockAnnouncersCapped(t *testing.T) {
 func TestStartSyncEndsBlockDownloads(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, syncPeer := h.peer(1), h.peer(2)
-	h.inv(a, wire.InvTypeBlock, chainhash.Hash{0xbb})
+	h.announce(a, &h.tipBlock(0).MsgBlock().Header)
 	h.sm.requestBlock(a, h.sm.peerStates[a], &chainhash.Hash{0xcc}, true)
 
 	h.sm.peerStates[syncPeer].syncCandidate = true
@@ -543,16 +635,17 @@ func TestTxRequestExpires(t *testing.T) {
 
 // TestBlockDownloadTimeout ensures a peer that does not deliver a block it
 // was asked for within a block interval is disconnected, though another peer
-// is asked for a block it announced, and the block is requested from another
-// peer that announced it once the peer is done.
+// is asked for a block whose header was not validated, and the block is
+// requested from another peer that announced it once the peer is done.
 func TestBlockDownloadTimeout(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, b, d := h.peer(1), h.peer(2), h.peer(4)
-	block := chainhash.Hash{0xbb}
+	header := &h.tipBlock(0).MsgBlock().Header
+	block := header.BlockHash()
 
-	h.inv(a, wire.InvTypeBlock, block)
+	h.announce(a, header)
 	h.inv(b, wire.InvTypeBlock, block)
-	h.inv(d, wire.InvTypeBlock, chainhash.Hash{0xdd})
+	h.sm.requestBlock(d, h.sm.peerStates[d], &chainhash.Hash{0xdd}, false)
 	h.advance(h.params.TargetTimePerBlock - time.Second)
 	if isDisconnected(a) {
 		t.Fatal("peer disconnected before a block interval")
@@ -573,7 +666,7 @@ func TestBlockDownloadTimeoutValidatedPeers(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, c := h.peer(1), h.peer(3)
 
-	h.inv(a, wire.InvTypeBlock, chainhash.Hash{0xbb})
+	h.sm.requestBlock(a, h.sm.peerStates[a], &chainhash.Hash{0xbb}, false)
 	h.advance(h.params.TargetTimePerBlock - time.Second)
 	h.sm.requestBlock(c, h.sm.peerStates[c], &chainhash.Hash{0xcc}, true)
 	h.advance(2 * time.Second)
@@ -625,8 +718,9 @@ func TestValidBlockRequestsCounted(t *testing.T) {
 func TestBlockDownloadTimerRestarts(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a := h.peer(1)
-	block := mineBlock(t, h.params, h.tip, 2, 0)
-	h.inv(a, wire.InvTypeBlock, chainhash.Hash{0xbb}, *block.Hash())
+	block := h.tipBlock(0)
+	h.announce(a, &h.tipBlock(1).MsgBlock().Header)
+	h.announce(a, &block.MsgBlock().Header)
 
 	h.advance(h.params.TargetTimePerBlock - time.Second)
 	h.sm.handleBlockMsg(&blockMsg{block: block, peer: a})
@@ -648,9 +742,9 @@ func TestBlockFromOtherPeerEndsDownload(t *testing.T) {
 	h := newRequestTestHarness(t)
 	a, b := h.peer(1), h.peer(2)
 	b.SetAllowDirectBlockRelay(true)
-	block := mineBlock(t, h.params, h.tip, 2, 0)
+	block := h.tipBlock(0)
 
-	h.inv(a, wire.InvTypeBlock, *block.Hash())
+	h.announce(a, &block.MsgBlock().Header)
 	h.sm.handleBlockMsg(&blockMsg{block: block, peer: b})
 	if _, ok := h.sm.requestedBlocks[*block.Hash()]; ok {
 		t.Fatal("block still requested")

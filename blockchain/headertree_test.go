@@ -599,3 +599,26 @@ func TestBlocksToFetch(t *testing.T) {
 	}
 	checkHeaderTree(t, chain)
 }
+
+// TestHaveHeader ensures the chain knows the headers of its blocks and of the
+// blocks whose headers it keeps, and no others.
+func TestHaveHeader(t *testing.T) {
+	chain, nodes := headerTestChain(t, 1)
+	kept := testHeader(nodes[1].hash, after(nodes[1], 10*time.Minute),
+		chain.chainParams.PowLimitBits, 0)
+	processHeaders(t, chain, 1, kept)
+	tests := []struct {
+		name string
+		hash chainhash.Hash
+		want bool
+	}{
+		{"block", nodes[1].hash, true},
+		{"kept header", hashOf(kept), true},
+		{"unknown", chainhash.Hash{1}, false},
+	}
+	for _, test := range tests {
+		if got := chain.HaveHeader(&test.hash); got != test.want {
+			t.Errorf("%s: got %v, want %v", test.name, got, test.want)
+		}
+	}
+}

@@ -53,6 +53,13 @@ type cmpctHarness struct {
 	// getData receives the inventory of each getdata the server peer
 	// sends.
 	getData chan *wire.InvVect
+	// getHeaders receives each getheaders the server peer sends, headers
+	// each headers message, and invs the blocks of each inv.
+	getHeaders chan *wire.MsgGetHeaders
+	headers    chan *wire.MsgHeaders
+	invs       chan *wire.InvVect
+	// pongs receives the nonce of each pong the server peer sends.
+	pongs chan uint64
 	// punished receives each ban score increase the sync manager asks
 	// for, as its score and reason.
 	punished chan string
@@ -112,11 +119,13 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 		ProtocolVersion:        peer.MaxProtocolVersion,
 		TstAllowSelfConnection: true,
 		Listeners: peer.MessageListeners{
-			OnBlock:     listeners.OnBlock,
-			OnBlockTxns: listeners.OnBlockTxns,
-			OnInv:       listeners.OnInv,
-			OnNotFound:  listeners.OnNotFound,
-			OnRead:      listeners.OnRead,
+			OnBlock:      listeners.OnBlock,
+			OnBlockTxns:  listeners.OnBlockTxns,
+			OnInv:        listeners.OnInv,
+			OnHeaders:    listeners.OnHeaders,
+			OnGetHeaders: listeners.OnGetHeaders,
+			OnNotFound:   listeners.OnNotFound,
+			OnRead:       listeners.OnRead,
 		},
 	})
 	local, remote := net.Pipe()
@@ -146,9 +155,13 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 	}
 
 	h := &cmpctHarness{s: s, sp: sp, remote: remote,
-		getTxns:  make(chan *wire.MsgGetBlockTxns, 16),
-		getData:  make(chan *wire.InvVect, 16),
-		punished: punished}
+		getTxns:    make(chan *wire.MsgGetBlockTxns, 16),
+		getData:    make(chan *wire.InvVect, 16),
+		getHeaders: make(chan *wire.MsgGetHeaders, 16),
+		headers:    make(chan *wire.MsgHeaders, 16),
+		invs:       make(chan *wire.InvVect, 16),
+		pongs:      make(chan uint64, 16),
+		punished:   punished}
 	go func() {
 		for {
 			msg, _, err := wire.ReadMessage(remote, pver, params.Net)
@@ -162,6 +175,18 @@ func newCmpctHarness(t *testing.T) *cmpctHarness {
 				for _, iv := range m.InvList {
 					h.getData <- iv
 				}
+			case *wire.MsgGetHeaders:
+				h.getHeaders <- m
+			case *wire.MsgHeaders:
+				h.headers <- m
+			case *wire.MsgInv:
+				for _, iv := range m.InvList {
+					if iv.Type == wire.InvTypeBlock {
+						h.invs <- iv
+					}
+				}
+			case *wire.MsgPong:
+				h.pongs <- m.Nonce
 			}
 		}
 	}()
@@ -182,23 +207,55 @@ func (h *cmpctHarness) send(t *testing.T, msg wire.Message) {
 	}
 }
 
-// request announces the block from the remote side and waits for the
-// compact block to be requested, so the block is requested from the peer.
-func (h *cmpctHarness) request(t *testing.T, hash chainhash.Hash) {
+// request announces the block with its header from the remote side and waits
+// for the compact block to be requested, so the block is requested from the
+// peer.
+func (h *cmpctHarness) request(t *testing.T, block *bchutil.Block) {
 	t.Helper()
-	inv := wire.NewMsgInv()
-	if err := inv.AddInvVect(wire.NewInvVect(wire.InvTypeBlock,
-		&hash)); err != nil {
+	h.requestAs(t, block, wire.InvTypeCmpctBlock)
+}
+
+// requestFull announces the block with its header from the remote side and
+// waits for the full block to be requested, as a block is while another block
+// is requested, or one that does not extend the tip.
+func (h *cmpctHarness) requestFull(t *testing.T, block *bchutil.Block) {
+	t.Helper()
+	h.requestAs(t, block, wire.InvTypeBlock)
+}
+
+// requestAs announces the block with its header from the remote side and waits
+// for it to be requested as the passed type of inventory.  The block's hash is
+// computed here, before goroutines of the test may read it.
+func (h *cmpctHarness) requestAs(t *testing.T, block *bchutil.Block,
+	typ wire.InvType) {
+
+	t.Helper()
+	hash := *block.Hash()
+	msg := wire.NewMsgHeaders()
+	if err := msg.AddBlockHeader(&block.MsgBlock().Header); err != nil {
 		t.Fatal(err)
 	}
-	h.send(t, inv)
+	h.send(t, msg)
 	select {
 	case iv := <-h.getData:
-		if iv.Type != wire.InvTypeCmpctBlock || iv.Hash != hash {
-			t.Fatalf("getdata for %v, want compact block %v", iv, hash)
+		if iv.Type != typ || iv.Hash != hash {
+			t.Fatalf("getdata for %v, want %v %v", iv, typ, hash)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("compact block %v was not requested", hash)
+		t.Fatalf("block %v was not requested", hash)
+	}
+}
+
+// expectGetHeaders waits for a getheaders up to stop.
+func (h *cmpctHarness) expectGetHeaders(t *testing.T, stop chainhash.Hash) {
+	t.Helper()
+	select {
+	case msg := <-h.getHeaders:
+		if msg.HashStop != stop {
+			t.Fatalf("getheaders up to %v, want %v", msg.HashStop, stop)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no getheaders up to %v", stop)
 	}
 }
 
@@ -338,8 +395,8 @@ func testCompactBlocksWaitingTogether(t *testing.T, reverse bool) {
 	h := newCmpctHarness(t)
 	first := solvedBlock(t, h.s.chain, 0, nil)
 	second := solvedBlock(t, h.s.chain, -1, nil)
-	h.request(t, *first.Hash())
-	h.request(t, *second.Hash())
+	h.request(t, first)
+	h.requestFull(t, second)
 
 	firstDone := h.process(shortIDsOnly(t, first))
 	h.expectGetTxns(t, *first.Hash())
@@ -370,7 +427,7 @@ func TestCompactBlockWaitingTwice(t *testing.T) {
 	block := solvedBlock(t, h.s.chain, 0, nil)
 	other := solvedBlock(t, h.s.chain, -1, nil)
 	msg := shortIDsOnly(t, block)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(msg)
 	h.expectGetTxns(t, *block.Hash())
@@ -455,7 +512,7 @@ func TestRemoveCmpctWaiter(t *testing.T) {
 func TestCompactBlockFullBlockReply(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())
@@ -474,7 +531,7 @@ func TestCompactBlockFullBlockReply(t *testing.T) {
 func TestBlockNotFoundForgotten(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	notFound := wire.NewMsgNotFound()
 	if err := notFound.AddInvVect(wire.NewInvVect(wire.InvTypeCmpctBlock,
@@ -482,7 +539,7 @@ func TestBlockNotFoundForgotten(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.send(t, notFound)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 }
 
 // TestCompactBlockWrongTransactions ensures a compact block whose
@@ -494,7 +551,7 @@ func TestCompactBlockWrongTransactions(t *testing.T) {
 	block := solvedBlock(t, h.s.chain, 0, nil)
 	other := solvedBlock(t, h.s.chain, -1, nil)
 	wrongTx := other.MsgBlock().Transactions[0]
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	// A prefilled transaction that is not the block's.
 	prefilled := &wire.MsgCmpctBlock{
@@ -546,7 +603,7 @@ func TestCompactBlockRepeatedTransaction(t *testing.T) {
 	hash := msgBlock.BlockHash()
 	repeated := append(txs, txs[1])
 	msgBlock.Transactions = append(msgBlock.Transactions[:1], repeated...)
-	h.request(t, hash)
+	h.request(t, bchutil.NewBlock(&msgBlock))
 
 	done := h.process(shortIDsOnly(t, bchutil.NewBlock(&msgBlock)))
 	h.expectGetTxns(t, hash)
@@ -557,9 +614,12 @@ func TestCompactBlockRepeatedTransaction(t *testing.T) {
 }
 
 // TestCompactBlockSideChain ensures a compact block for a block on a side
-// chain has its header checked against its own parent, not the tip, and is
-// processed but not relayed.  Its timestamp is after its parent's median
-// time but not the tip's, so a check against the tip would refuse it.
+// chain has its header checked against its own parent, not the tip, and, as it
+// has no more work than the tip, has its header kept but is not reconstructed,
+// as BCHN does (net_processing.cpp:3115-3129).  Its timestamp is after its
+// parent's median time but not the tip's, so a check against the tip would
+// refuse it.  Once announced, the block is requested in full and processed but
+// not relayed.
 func TestCompactBlockSideChain(t *testing.T) {
 	h := newCmpctHarness(t)
 	best := h.s.chain.BestSnapshot()
@@ -584,60 +644,106 @@ func TestCompactBlockSideChain(t *testing.T) {
 		msgBlock.Header.Nonce++
 	}
 	block := bchutil.NewBlock(&msgBlock)
-	h.request(t, *block.Hash())
 
 	msg, err := wire.NewMsgCmpctBlockFromBlock(&msgBlock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, h.process(msg))
+	if got := h.s.chain.BlocksToFetch(block.Hash()); len(got) != 1 ||
+		got[0] != *block.Hash() {
+
+		t.Fatal("the header of the compact block was not kept")
+	}
+	select {
+	case iv := <-h.getData:
+		t.Fatalf("getdata for %v", iv)
+	case <-h.getTxns:
+		t.Fatal("transactions requested for the compact block")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if have, _ := h.s.chain.HaveBlock(block.Hash()); have {
+		t.Fatal("the compact block was processed")
+	}
+
+	h.requestFull(t, block)
+	h.send(t, &msgBlock)
 	h.expectHaveBlock(t, block.Hash())
 	h.expectNotRelayed(t)
 }
 
+// TestCompactBlockRequestedNoMoreWork ensures a compact block requested from
+// the peer that no longer has more work than the tip when it arrives, as
+// another block on the same parent became the tip meanwhile, is fetched in
+// full rather than reconstructed, as BCHN does (net_processing.cpp:3115-3129),
+// so its request is answered.
+func TestCompactBlockRequestedNoMoreWork(t *testing.T) {
+	h := newCmpctHarness(t)
+	block := solvedBlock(t, h.s.chain, 0, nil)
+	sibling := solvedBlock(t, h.s.chain, -1, nil)
+	h.request(t, block)
+	if _, _, err := h.s.chain.ProcessBlock(sibling, blockchain.BFNone); err != nil {
+		t.Fatal(err)
+	}
+
+	waitDone(t, h.process(shortIDsOnly(t, block)))
+	h.expectFullBlockRequest(t, *block.Hash())
+	select {
+	case <-h.getTxns:
+		t.Fatal("transactions requested for the compact block")
+	default:
+	}
+}
+
 // TestCompactBlockUnknownParent ensures a compact block whose parent is not
-// known is fetched in full, so it is processed as an orphan and its parents
-// are requested, and is not relayed.
+// known is not fetched in full, but has the headers leading to it requested,
+// as BCHN does (net_processing.cpp:3039-3049), and is not relayed, with no
+// punishment for the peer.
 func TestCompactBlockUnknownParent(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, &chainhash.Hash{0x55})
-	h.request(t, *block.Hash())
 
 	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, h.process(msg))
-	h.expectFullBlockRequest(t, *block.Hash())
+	h.expectGetHeaders(t, chainhash.Hash{})
+	select {
+	case iv := <-h.getData:
+		t.Fatalf("getdata for %v", iv)
+	case p := <-h.punished:
+		t.Fatalf("the peer was punished: %s", p)
+	case <-time.After(100 * time.Millisecond):
+	}
 	h.expectNotRelayed(t)
 }
 
 // TestCompactBlockKnownOrphan ensures a compact block for a block the chain
-// holds as an orphan is not fetched in full again.  A block whose parent is
-// unknown is fetched in full, and the chain was only asked whether it has the
-// block once the parent was known, so each later compact block for the block,
+// holds as an orphan is neither fetched in full nor reconstructed again, and
+// has no headers requested for it.  The chain was only asked whether it has
+// the block once the parent was known, so each compact block for an orphan,
 // one from every peer that relays it, fetched it again.
 func TestCompactBlockKnownOrphan(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, &chainhash.Hash{0x55})
-	h.request(t, *block.Hash())
+	_, isOrphan, err := h.s.chain.ProcessBlock(block, blockchain.BFNone)
+	if err != nil || !isOrphan {
+		t.Fatalf("the block is not an orphan: %v", err)
+	}
 
 	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, h.process(msg))
-	h.expectFullBlockRequest(t, *block.Hash())
-	h.send(t, block.MsgBlock())
-	h.expectHaveBlock(t, block.Hash())
-	if !h.s.chain.IsKnownOrphan(block.Hash()) {
-		t.Fatal("the block is not an orphan")
-	}
-
-	waitDone(t, h.process(msg))
 	select {
 	case iv := <-h.getData:
 		t.Fatalf("getdata for %v, whose block is a known orphan", iv)
+	case msg := <-h.getHeaders:
+		t.Fatalf("getheaders up to %v for a known orphan", msg.HashStop)
+	case <-h.getTxns:
+		t.Fatal("transactions requested for a known orphan")
 	case <-time.After(100 * time.Millisecond):
 	}
 }
@@ -649,7 +755,7 @@ func TestCompactBlockKnownOrphan(t *testing.T) {
 func TestCompactBlockKnownForgetsRequest(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	if _, _, err := h.s.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
 		t.Fatal(err)
 	}
@@ -675,7 +781,7 @@ func TestCompactBlockRelayedGetDataWaits(t *testing.T) {
 	h := newCmpctHarness(t)
 	h.s.relayCmpctBlock = make(chan *wire.MsgCmpctBlock)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -754,7 +860,7 @@ func TestCompactBlockRelayAfterQuit(t *testing.T) {
 	h.s.quit = make(chan struct{})
 	close(h.s.quit)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	msg, err := wire.NewMsgCmpctBlockFromBlock(block.MsgBlock(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -824,7 +930,7 @@ func TestDirectRelaySlotNotForGonePeer(t *testing.T) {
 func TestCompactBlockTooManyTxs(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	header := block.MsgBlock().Header
 	limit, err := h.s.chain.NextBlockSizeLimit(&header.PrevBlock)
 	if err != nil {
@@ -841,7 +947,7 @@ func TestCompactBlockTooManyTxs(t *testing.T) {
 		t.Fatal("transactions requested for an oversized compact block")
 	case <-time.After(100 * time.Millisecond):
 	}
-	h.request(t, *block.Hash())
+	h.request(t, block)
 }
 
 // TestCompactBlockAlreadyKnown ensures a compact block for a block the chain
@@ -878,7 +984,11 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 	for i := range 3 {
 		block := solvedBlock(t, h.s.chain, -int64(i), nil)
 		blocks[*block.Hash()] = block
-		h.request(t, *block.Hash())
+		if i == 0 {
+			h.request(t, block)
+		} else {
+			h.requestFull(t, block)
+		}
 		msgs = append(msgs, shortIDsOnly(t, block))
 	}
 	for _, msg := range msgs {
@@ -928,7 +1038,7 @@ func TestCompactBlocksInFlightLimit(t *testing.T) {
 func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := twoCoinbasesBlock(t, h)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())
@@ -950,7 +1060,7 @@ func TestCompactBlockInvalidNotRelayed(t *testing.T) {
 func TestInvalidBlockMessagePunished(t *testing.T) {
 	h := newCmpctHarness(t)
 	block := twoCoinbasesBlock(t, h)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	h.send(t, block.MsgBlock())
 	select {
 	case p := <-h.punished:
@@ -997,7 +1107,7 @@ func TestCompactBlockLateFullBlock(t *testing.T) {
 	shortenCmpctTxnsTimeout(t)
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())
@@ -1018,7 +1128,7 @@ func TestCompactBlockLateBlockTxns(t *testing.T) {
 	shortenCmpctTxnsTimeout(t)
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())
@@ -1040,7 +1150,7 @@ func TestCompactBlockReplyAsWaitTimesOut(t *testing.T) {
 	shortenCmpctTxnsTimeout(t)
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	cmpctTxnsTimeoutHook = func() {
 		cmpctTxnsTimeoutHook = nil
@@ -1060,7 +1170,7 @@ func TestCompactBlockTimeoutKnownBlock(t *testing.T) {
 	shortenCmpctTxnsTimeout(t)
 	h := newCmpctHarness(t)
 	block := solvedBlock(t, h.s.chain, 0, nil)
-	h.request(t, *block.Hash())
+	h.request(t, block)
 
 	done := h.process(shortIDsOnly(t, block))
 	h.expectGetTxns(t, *block.Hash())

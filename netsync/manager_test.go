@@ -480,7 +480,11 @@ func TestBlockchainSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	syncMgr.QueueInv(buildBlockInv(known), localNode)
+	headers := wire.NewMsgHeaders()
+	if err := headers.AddBlockHeader(&known.MsgBlock().Header); err != nil {
+		t.Fatal(err)
+	}
+	syncMgr.QueueHeaders(headers, localNode)
 	select {
 	case <-remoteMessages.getDataChan:
 	case msg := <-remoteMessages.rejectChan:
@@ -500,7 +504,9 @@ func TestBlockchainSync(t *testing.T) {
 			known.Height())
 	}
 
-	// Send invalid block with timestamp in the far future
+	// Send invalid block with timestamp in the far future, as a peer that
+	// may relay blocks directly does, since an announced block's header is
+	// checked before the block is requested
 	prevBlock = block
 	timestamp = time.Now().Truncate(time.Second).Add(1000 * time.Hour)
 	block, err = rpctest.CreateBlock(prevBlock, nil, blockVersion,
@@ -509,16 +515,7 @@ func TestBlockchainSync(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	syncMgr.QueueInv(buildBlockInv(block), localNode)
-	select {
-	case <-remoteMessages.getDataChan:
-	case msg := <-remoteMessages.rejectChan:
-		t.Fatalf("Received unexpected reject message for %v: %s, %q",
-			msg.Hash, msg.Code, msg.Reason)
-	case <-time.After(time.Second):
-		t.Fatal("Timeout waiting for remote node to receive getdata message")
-	}
-
+	localNode.SetAllowDirectBlockRelay(true)
 	syncMgr.QueueBlock(block, localNode, syncChan)
 	select {
 	case <-syncChan:

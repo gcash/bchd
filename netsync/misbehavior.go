@@ -6,9 +6,11 @@ package netsync
 
 import (
 	"errors"
+	"math/big"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/wire"
 )
 
 // txBanScores are the ban scores BCHN gives the peer that sent a transaction
@@ -150,4 +152,41 @@ func blockBanScore(code blockchain.ErrorCode, extendsTip bool) uint32 {
 		return connectBanScores[code]
 	}
 	return 0
+}
+
+// headerBanReasons are the ban scores and reject reasons BCHN gives the peer
+// that sent a header for breaking a rule it checks before it keeps the header,
+// by the bchd error code of the rule: its DoS levels in CheckBlockHeader
+// (validation.cpp:3567-3576), ContextualCheckBlockHeader (3685-3781, with
+// -finalizeheaderspenalty at its default) and AcceptBlockHeader (3931-3946).
+// ErrUnexpectedDifficulty is a target out of range, high-hash, or the wrong
+// one, bad-diffbits, told apart by headerBanScore.  Codes BCHN gives no score
+// for are left out: a time too old or too new, an old version and a header of
+// a block known to be invalid.
+var headerBanReasons = map[blockchain.ErrorCode]struct {
+	score  uint32
+	reason string
+}{
+	blockchain.ErrHighHash:             {50, "high-hash"},
+	blockchain.ErrBadCheckpoint:        {100, "checkpoint mismatch"},
+	blockchain.ErrForkTooOld:           {100, "bad-fork-prior-to-checkpoint"},
+	blockchain.ErrForkBeforeFinalized:  {100, "bad-header-finalization"},
+	blockchain.ErrInvalidAncestorBlock: {100, "bad-prevblk"},
+	blockchain.ErrPreviousBlockUnknown: {10, "prev-blk-not-found"},
+}
+
+// headerBanScore returns the ban score and reject reason BCHN gives the peer
+// that sent the header, which failed with the rule error code, or 0 when it
+// gives none.  powLimit tells a target out of range from a wrong one.
+func headerBanScore(code blockchain.ErrorCode, header *wire.BlockHeader,
+	powLimit *big.Int) (uint32, string) {
+
+	if code == blockchain.ErrUnexpectedDifficulty {
+		if blockchain.CheckHeaderProofOfWork(header, powLimit) != nil {
+			return 50, "high-hash"
+		}
+		return 100, "bad-diffbits"
+	}
+	r := headerBanReasons[code]
+	return r.score, r.reason
 }

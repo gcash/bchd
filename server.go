@@ -402,6 +402,42 @@ type serverPeer struct {
 	// cmpctInFlight holds a token for each compact block from the peer
 	// being reconstructed.
 	cmpctInFlight chan struct{}
+
+	// blockFromPeer is the last block the peer announced or sent, and
+	// headerToPeer the last block whose header this node announced to it
+	// or sent it in answer to getheaders: the peer has the headers of
+	// both, as of a peer's best known block and the best header sent to
+	// it in BCHN (net_processing.cpp:629-640).
+	knownBlocksMtx sync.Mutex
+	blockFromPeer  *chainhash.Hash
+	headerToPeer   *chainhash.Hash
+}
+
+// gotBlockFrom records that the peer announced or sent the block.
+func (sp *serverPeer) gotBlockFrom(hash *chainhash.Hash) {
+	h := *hash
+	sp.knownBlocksMtx.Lock()
+	sp.blockFromPeer = &h
+	sp.knownBlocksMtx.Unlock()
+}
+
+// sentHeaderTo records that this node announced the block to the peer with
+// its header, or sent the header in answer to getheaders.
+func (sp *serverPeer) sentHeaderTo(hash *chainhash.Hash) {
+	h := *hash
+	sp.knownBlocksMtx.Lock()
+	sp.headerToPeer = &h
+	sp.knownBlocksMtx.Unlock()
+}
+
+// knowsBlock returns whether the peer is known to have the block's header: it
+// announced or sent the block last, or this node sent it the block's header
+// last.
+func (sp *serverPeer) knowsBlock(hash *chainhash.Hash) bool {
+	sp.knownBlocksMtx.Lock()
+	defer sp.knownBlocksMtx.Unlock()
+	return sp.blockFromPeer != nil && *sp.blockFromPeer == *hash ||
+		sp.headerToPeer != nil && *sp.headerToPeer == *hash
 }
 
 // newServerPeer returns a new serverPeer instance. The peer needs to be set by
@@ -699,6 +735,12 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) *wire.MsgRej
 func (sp *serverPeer) OnVerAck(peer *peer.Peer, msg *wire.MsgVerAck) {
 	sp.server.AddPeer(sp)
 
+	// Ask the peer to announce blocks with their headers, as BCHN does
+	// (net_processing.cpp:2371-2377).
+	if sp.ProtocolVersion() >= wire.SendHeadersVersion {
+		sp.QueueMessage(wire.NewMsgSendHeaders(), nil)
+	}
+
 	// This peer supports the compact blocks version so we should
 	// send them a sendcmpt message.
 	if sp.compactBlocksSupported() {
@@ -941,6 +983,7 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 	// Add the block to the known inventory for the peer.
 	iv := wire.NewInvVect(wire.InvTypeBlock, block.Hash())
 	sp.AddKnownInventory(iv)
+	sp.gotBlockFrom(block.Hash())
 
 	// A peer may answer getblocktxns with the full block, which ends the
 	// wait of the compact block.
@@ -966,6 +1009,8 @@ func (sp *serverPeer) OnBlock(_ *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 // being reconstructed is not decoded: the full block is requested instead,
 // keeping its request, unless the block is known, whose request is forgotten.
 func (sp *serverPeer) OnCmpctBlock(_ *peer.Peer, msg *wire.MsgCmpctBlock) {
+	hash := msg.BlockHash()
+	sp.gotBlockFrom(&hash)
 	select {
 	case sp.cmpctInFlight <- struct{}{}:
 	default:
@@ -1000,7 +1045,7 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 
 	// A block the chain has in any form, as an orphan too, is not fetched
 	// or reconstructed again.  This comes before the header check, which
-	// fetches the full block of one whose parent is unknown.
+	// may fetch the full block of one whose parent is unknown.
 	if have, err := sp.server.chain.HaveBlock(&targetHash); err != nil || have {
 		peerLog.Debugf("Ignoring cmpctblock %v from %v -- already known",
 			targetHash, sp)
@@ -1011,13 +1056,25 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 	// We check the header here before proceeding, as we end up wasting
 	// round trips if it turns out to be invalid.  The block is relayed to
 	// peers that want direct relay before it is validated in full, but only
-	// once it also passes the checks that need no inputs, below.  A block
-	// whose parent is not known is fetched in full instead, so it is
-	// processed as an orphan and its parents are requested.
+	// once it also passes the checks that need no inputs, below.  While the
+	// chain is current, the sync manager handles the header of a block
+	// whose parent is not known, as BCHN does (net_processing.cpp:
+	// 3039-3049): it keeps it if it keeps the parent's header, and asks the
+	// peer for the headers leading to it otherwise.  Before then, the block
+	// is fetched in full, so it is processed as an orphan and its parents
+	// are requested.
+	current := sp.server.syncManager.IsCurrent()
 	if err := sp.server.chain.CheckBlockHeaderContext(&msg.Header); err != nil {
 		if rerr, ok := err.(blockchain.RuleError); ok &&
 			rerr.ErrorCode == blockchain.ErrPreviousBlockUnknown {
 
+			if current {
+				peerLog.Debugf("Parent of cmpctblock %v from %v is "+
+					"unknown -- handling its header", targetHash, sp)
+				sp.server.syncManager.QueueCmpctHeader(&msg.Header,
+					sp.Peer)
+				return
+			}
 			peerLog.Debugf("Parent of cmpctblock %v from %v is unknown "+
 				"-- requesting the full block", targetHash, sp)
 			gdmsg := wire.NewMsgGetDataSizeHint(1)
@@ -1029,6 +1086,21 @@ func (sp *serverPeer) processCompactBlock(msg *wire.MsgCmpctBlock) {
 			"invalid header: %v", msg.Header.BlockHash(), sp, err)
 		sp.server.syncManager.QueueBlockError(&targetHash, sp.Peer)
 		return
+	}
+
+	// While the chain is current, a compact block with no more work than
+	// the tip is not reconstructed, as BCHN does (net_processing.cpp:
+	// 3115-3129): its header is kept, and the sync manager fetches the
+	// block in full if it was requested from the peer.
+	if current {
+		header, _, err := sp.server.chain.ProcessBlockHeaders(
+			[]*wire.BlockHeader{&msg.Header}, sp.ID())
+		if err == nil && header.WorkCmp <= 0 {
+			peerLog.Debugf("Not reconstructing cmpctblock %v from %v "+
+				"-- it has no more work than the tip", targetHash, sp)
+			sp.server.syncManager.QueueCmpctHeader(&msg.Header, sp.Peer)
+			return
+		}
 	}
 
 	// Check what is cheap to check before decoding, which takes memory
@@ -1341,6 +1413,12 @@ func (s *server) checkBlockToSend(sp *serverPeer, hash *chainhash.Hash) error {
 // accordingly.  We pass the message down to blockmanager which will call
 // QueueMessage with any appropriate responses.
 func (sp *serverPeer) OnInv(_ *peer.Peer, msg *wire.MsgInv) {
+	for _, iv := range slices.Backward(msg.InvList) {
+		if iv.Type == wire.InvTypeBlock {
+			sp.gotBlockFrom(&iv.Hash)
+			break
+		}
+	}
 	if !cfg.BlocksOnly {
 		if len(msg.InvList) > 0 {
 			sp.server.syncManager.QueueInv(msg, sp.Peer)
@@ -1379,6 +1457,11 @@ func (sp *serverPeer) OnInv(_ *peer.Peer, msg *wire.MsgInv) {
 // OnHeaders is invoked when a peer receives a headers bitcoin
 // message.  The message is passed down to the sync manager.
 func (sp *serverPeer) OnHeaders(_ *peer.Peer, msg *wire.MsgHeaders) {
+	if n := len(msg.Headers); n > 0 {
+		hash := msg.Headers[n-1].BlockHash()
+		sp.gotBlockFrom(&hash)
+		sp.AddKnownInventory(wire.NewInvVect(wire.InvTypeBlock, &hash))
+	}
 	sp.server.syncManager.QueueHeaders(msg, sp.Peer)
 }
 
@@ -1529,6 +1612,10 @@ func (sp *serverPeer) OnGetHeaders(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 		blockHeaders[i] = &headers[i]
 	}
 	sp.QueueMessage(&wire.MsgHeaders{Headers: blockHeaders}, nil)
+	if n := len(headers); n > 0 {
+		hash := headers[n-1].BlockHash()
+		sp.sentHeaderTo(&hash)
+	}
 }
 
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
@@ -2948,11 +3035,11 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 
 			// If the peer wants direct compact block relay we will set it to
 			// him right away rather than sending an inv message.
+			blockHash := block.BlockHash()
+			blockInv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 			if sp.WantsDirectBlockRelay() {
 				// We need to check if the peer already has this block before
 				// pushing it to them.
-				blockHash := block.BlockHash()
-				blockInv := wire.NewInvVect(wire.InvTypeBlock, &blockHash)
 				if !sp.HasKnownInventory(blockInv) {
 					if blockTxHashes == nil {
 						blockTxHashes, _ = block.TxHashes()
@@ -2970,15 +3057,23 @@ func (s *server) handleRelayInvMsg(state *peerState, msg relayMsg) {
 			}
 
 			// If the peer wants us to send block headers instead of inv messages
-			// then we'll send the header here rather than the inv message.
-			if sp.WantsHeaders() {
+			// then we'll send the header here rather than the inv message, when
+			// the peer doesn't have the block and is known to have the header of
+			// its parent, as BCHN does (net_processing.cpp:4358-4371).  It
+			// could not connect the header otherwise, so the block is announced
+			// with an inv.
+			if sp.WantsHeaders() && !sp.HasKnownInventory(blockInv) &&
+				sp.knowsBlock(&block.Header.PrevBlock) {
+
 				msgHeaders := wire.NewMsgHeaders()
 				if err := msgHeaders.AddBlockHeader(&block.Header); err != nil {
 					peerLog.Errorf("Failed to add block"+
 						" header: %v", err)
 					return
 				}
+				sp.AddKnownInventory(blockInv)
 				sp.QueueMessage(msgHeaders, nil)
+				sp.sentHeaderTo(&blockHash)
 				return
 			}
 		}

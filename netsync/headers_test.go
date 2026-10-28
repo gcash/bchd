@@ -313,3 +313,57 @@ func TestHeadersFromSyncPeerAccepted(t *testing.T) {
 		}
 	})
 }
+
+// TestHeadersFirstSyncPeerAnnouncement ensures a sync peer's announcement of a
+// new block with headers, which don't connect to the headers being downloaded,
+// gets it neither disconnected nor punished during headers-first mode, as an
+// earlier bchd sync peer sends one for each block, and that the download goes
+// on.  Eight headers that don't connect are no announcement, and still get the
+// sync peer disconnected.
+func TestHeadersFirstSyncPeerAnnouncement(t *testing.T) {
+	h := newHeadersTestHarness(t, farCheckpoint)
+	sm := h.sm
+
+	announced := mineHeaders(t, h.params, chainhash.Hash{0x55}, 1)
+	sm.handleHeadersMsg(&headersMsg{headers: headersMessage(t, announced),
+		peer: h.syncPeer})
+	if isDisconnected(h.syncPeer) {
+		t.Fatal("the sync peer was disconnected for an announcement")
+	}
+	if got := sm.headerList.Len(); got != 1 {
+		t.Fatalf("header list length after an announcement: got %d, "+
+			"want 1", got)
+	}
+
+	headers := mineHeaders(t, h.params, *h.params.GenesisHash, 5)
+	sm.handleHeadersMsg(&headersMsg{headers: headersMessage(t, headers),
+		peer: h.syncPeer})
+	if isDisconnected(h.syncPeer) {
+		t.Fatal("the sync peer was disconnected")
+	}
+	if got, want := sm.headerList.Len(), len(headers)+1; got != want {
+		t.Fatalf("header list length after the download went on: got "+
+			"%d, want %d", got, want)
+	}
+
+	unconnected := mineHeaders(t, h.params, chainhash.Hash{0x66}, 8)
+	sm.handleHeadersMsg(&headersMsg{headers: headersMessage(t, unconnected),
+		peer: h.syncPeer})
+	if !isDisconnected(h.syncPeer) {
+		t.Fatal("the sync peer was not disconnected for eight headers " +
+			"that don't connect")
+	}
+}
+
+// TestHeadersFirstEmptyHeaders ensures an empty headers message from the sync
+// peer during headers-first mode still gets the sync peer replaced, as the
+// headers it was asked for are never none.
+func TestHeadersFirstEmptyHeaders(t *testing.T) {
+	h := newHeadersTestHarness(t, farCheckpoint)
+	h.sm.syncPeerState = &syncPeerState{}
+	h.sm.handleHeadersMsg(&headersMsg{headers: wire.NewMsgHeaders(),
+		peer: h.syncPeer})
+	if !isDisconnected(h.syncPeer) {
+		t.Fatal("the sync peer was not replaced")
+	}
+}

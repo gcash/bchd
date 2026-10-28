@@ -96,10 +96,10 @@ templates.
 
 At any time, a block that a peer sends without being asked for it is only
 stored if its chain has at least as much work as the current tip and the
-minimum chain work, and it is at most 288 blocks ahead of the tip. Once bchd's
-chain has the minimum chain work, a block whose parent bchd doesn't have yet is
-the exception: it is kept as an orphan while bchd asks the peer for the missing
-blocks, and stored once they arrive.
+minimum chain work, and it is at most 288 blocks ahead of the tip. Once synced,
+bchd answers a peer that announces a block by asking for the headers leading to
+it, as Bitcoin Cash Node does, and only downloads the blocks once their chain
+has at least as much work as the tip.
 
 To check every block in full, start bchd with `--nocheckpoints`; this also
 ignores `--addcheckpoint`, which adds a checkpoint of your own. With

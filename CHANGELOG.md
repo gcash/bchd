@@ -16,6 +16,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - Catching up with a competing chain that overtakes the node's own no longer takes two minutes per block.
 - Add the `chipnet-seed.bchd.cash` DNS seed.
 - A peer disconnected just as one of its messages arrived no longer leaves a goroutine behind.
+- A synced node no longer downloads and stores the blocks of lower-work forks that peers announce.
 
 ### RPC & gRPC
 

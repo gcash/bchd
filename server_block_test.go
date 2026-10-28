@@ -42,7 +42,7 @@ func TestPaddedBlockMessageStored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.request(t, *block.Hash())
+	h.request(t, block)
 	h.send(t, paddedBlockMsg{block.MsgBlock(), make([]byte, 1000)})
 
 	deadline := time.Now().Add(5 * time.Second)

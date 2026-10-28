@@ -108,11 +108,12 @@ func TestUnrequestedBlockBelowMinimumChainWork(t *testing.T) {
 	}
 }
 
-// TestUnrequestedOrphanStored ensures an orphan that a direct relay peer sends
-// without being asked is stored once its parent arrives, even though its chain
-// still has less work than the tip, as when a peer relays the blocks of a
-// competing chain while this node mines its own.
-func TestUnrequestedOrphanStored(t *testing.T) {
+// TestUnrequestedOrphanChecked ensures an orphan that a direct relay peer sends
+// without being asked is stored once its parent arrives only if it could
+// extend the best chain, as any block such a peer sends unasked, as when the
+// peer relays the blocks of a competing chain with less work.  A competing
+// chain is fetched through its headers once it has the tip's work.
+func TestUnrequestedOrphanChecked(t *testing.T) {
 	sm, params, peer := unrequestedTestManager(t)
 
 	prev := params.GenesisBlock
@@ -124,73 +125,19 @@ func TestUnrequestedOrphanStored(t *testing.T) {
 		prev = block.MsgBlock()
 	}
 
-	// The first block of the competing chain has less work than the tip,
-	// so it is ignored.
 	fork1 := mineBlock(t, params, params.GenesisBlock, 1, 1)
 	fork2 := mineBlock(t, params, fork1.MsgBlock(), 2, 1)
-	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
-	if have, _ := sm.chain.HaveBlock(fork1.Hash()); have {
-		t.Fatal("unrequested block with less work than the tip was stored")
-	}
-
-	// The next one is an orphan, so its parent is requested.
 	sm.handleBlockMsg(&blockMsg{block: fork2, peer: peer})
 	if !sm.chain.IsKnownOrphan(fork2.Hash()) {
 		t.Fatal("unrequested orphan was not kept")
 	}
 	sm.requestBlock(peer, sm.peerStates[peer], fork1.Hash(), false)
 	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
-	for _, block := range []*bchutil.Block{fork1, fork2} {
-		if known, _, _ := sm.chain.BlockValidity(block.Hash()); !known {
-			t.Fatalf("block %v of the competing chain was not stored",
-				block.Hash())
-		}
+	if known, _, _ := sm.chain.BlockValidity(fork1.Hash()); !known {
+		t.Fatal("the requested parent was not stored")
 	}
-}
-
-// TestUnrequestedOrphanBelowMinimumChainWork ensures an orphan that a direct
-// relay peer sends without being asked while the chain has less than the
-// minimum chain work is not stored when its parent arrives, as its chain has
-// less than that work.  Until then bchd only downloads the sync peer's chain,
-// so a peer could otherwise fork it cheaply from a block about to arrive.
-func TestUnrequestedOrphanBelowMinimumChainWork(t *testing.T) {
-	sm, params, peer := unrequestedTestManager(t)
-	params.MinimumChainWork = new(big.Int).Lsh(big.NewInt(1), 128)
-
-	parent := mineBlock(t, params, params.GenesisBlock, 1, 0)
-	orphan := mineBlock(t, params, parent.MsgBlock(), 2, 0)
-	sm.handleBlockMsg(&blockMsg{block: orphan, peer: peer})
-	if !sm.chain.IsKnownOrphan(orphan.Hash()) {
-		t.Fatal("unrequested orphan was not kept")
-	}
-	sm.requestBlock(peer, sm.peerStates[peer], parent.Hash(), false)
-	sm.handleBlockMsg(&blockMsg{block: parent, peer: peer})
-	if known, _, _ := sm.chain.BlockValidity(parent.Hash()); !known {
-		t.Fatal("requested parent was not stored")
-	}
-	if have, _ := sm.chain.HaveBlock(orphan.Hash()); have {
-		t.Fatal("unrequested orphan below the minimum chain work was " +
+	if have, _ := sm.chain.HaveBlock(fork2.Hash()); have {
+		t.Fatal("unrequested orphan with less work than the tip was " +
 			"stored")
-	}
-
-	// Once the chain has the minimum chain work, one is stored though its
-	// chain has less work than the tip.
-	params.MinimumChainWork = big.NewInt(1)
-	prev := parent.MsgBlock()
-	for height := int32(2); height <= 3; height++ {
-		block := mineBlock(t, params, prev, height, 1)
-		if _, _, err := sm.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
-			t.Fatal(err)
-		}
-		prev = block.MsgBlock()
-	}
-	fork1 := mineBlock(t, params, params.GenesisBlock, 1, 1)
-	fork2 := mineBlock(t, params, fork1.MsgBlock(), 2, 1)
-	sm.handleBlockMsg(&blockMsg{block: fork2, peer: peer})
-	sm.requestBlock(peer, sm.peerStates[peer], fork1.Hash(), false)
-	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
-	if known, _, _ := sm.chain.BlockValidity(fork2.Hash()); !known {
-		t.Fatal("unrequested orphan was not stored once the chain had " +
-			"the minimum chain work")
 	}
 }

@@ -430,6 +430,16 @@ func (b *BlockChain) processBlockHeader(header *wire.BlockHeader, peerID int32, 
 	return node, true, nil
 }
 
+// HaveHeader returns whether the chain knows the header with the passed hash,
+// as that of a block it has or as one it keeps.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) HaveHeader(hash *chainhash.Hash) bool {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+	return b.index.LookupNode(hash) != nil || b.headers.lookup(hash) != nil
+}
+
 // headerChainInvalid returns whether the first block in node's chain that is
 // not a kept header is known to be invalid.
 //
