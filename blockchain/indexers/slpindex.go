@@ -314,11 +314,13 @@ func dbPutSlpIndexEntry(idx *SlpIndex, dbTx database.Tx, entryInfo *dbSlpIndexEn
 		}
 	}
 
+	// The script is copied, as a deserialized transaction holds all its
+	// scripts in one buffer, which the cache would otherwise keep.
 	err = idx.cache.AddSlpTxEntry(&txHash, SlpTxEntry{
 		TokenID:        tokenID,
 		TokenIDHash:    *entryInfo.tokenIDHash,
 		SlpVersionType: entryInfo.slpMsg.TokenType(),
-		SlpOpReturn:    entryInfo.slpMsgPkScript,
+		SlpOpReturn:    bytes.Clone(entryInfo.slpMsgPkScript),
 	})
 	if err != nil {
 		log.Criticalf("AddSlpTxEntry in dbPutSlpIndexEntry failed: %v", err)
@@ -1140,12 +1142,14 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		scriptPubKey := tx.TxOut[0].PkScript
 		hash := tx.TxHash()
 
-		// add item to slp txn cache
+		// add item to slp txn cache, with a copy of the script, as the
+		// transaction holds all its scripts in one buffer, which the
+		// cache would otherwise keep
 		idx.cache.AddMempoolSlpTxEntry(&hash, SlpTxEntry{
 			TokenID:        0,
 			TokenIDHash:    *tokenIDHash,
 			SlpVersionType: slpMsg.TokenType(),
-			SlpOpReturn:    scriptPubKey,
+			SlpOpReturn:    bytes.Clone(scriptPubKey),
 		})
 
 		// add or update token metadata cache

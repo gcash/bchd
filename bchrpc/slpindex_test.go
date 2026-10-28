@@ -1162,3 +1162,66 @@ func TestSlpGraphSearchFromPool(t *testing.T) {
 		}
 	}
 }
+
+// TestSlpTrustedValidationLeftPool ensures an output of a GENESIS that left
+// the memory pool without being confirmed is no longer valid to
+// GetSlpTrustedValidation once the next block's event comes, rather than
+// until the slp cache evicts the GENESIS's entry.
+func TestSlpTrustedValidationLeftPool(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex = db, idx
+	// The memory pool does not hold the GENESIS, as when a conflicting
+	// transaction was confirmed or the GENESIS expired.
+	s.txMemPool = mempool.New(&mempool.Config{})
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	hash := genesis.TxHash()
+	validate := func() error {
+		_, err := s.GetSlpTrustedValidation(context.Background(),
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+			})
+		return err
+	}
+	s.dispatchEvent(&rpcEventTxAccepted{TxDesc: &mempool.TxDesc{
+		TxDesc: mining.TxDesc{Tx: bchutil.NewTx(genesis)}}})
+	waitFor(t, "the GENESIS to be valid", func() bool { return validate() == nil })
+
+	s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
+	waitFor(t, "the GENESIS to be no longer valid", func() bool {
+		return status.Code(validate()) == codes.Aborted
+	})
+}

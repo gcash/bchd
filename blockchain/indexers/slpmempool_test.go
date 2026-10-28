@@ -5,7 +5,9 @@
 package indexers
 
 import (
+	"bytes"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -437,5 +439,110 @@ func TestSlpRemoveNotInCheckedAgain(t *testing.T) {
 	if cache.GetMempoolItem(&hash) != nil {
 		t.Error("the entry of the transaction that left the memory pool is " +
 			"still there")
+	}
+}
+
+// TestSlpEntryLeftPool ensures the slp entry of a transaction that left the
+// memory pool unconfirmed goes from the slp cache at the next block's event,
+// the cache's LRU as well, so that the transaction is no longer valid slp to
+// the index, while the entry of one the block confirmed stays, also while
+// graph search loads and the memory pool entry of a confirmed transaction
+// stays until the block's event, and so does that of one still in the pool.
+func TestSlpEntryLeftPool(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	test.idx.config.SlpGraphSearchEnabled = true
+	left, confirmed, pooled := genesisTx(t, 1), genesisTx(t, 2), genesisTx(t, 3)
+	for _, tx := range []*wire.MsgTx{left, confirmed, pooled} {
+		test.addPotential(tx)
+	}
+	test.connect(confirmed)
+	pooledHash := pooled.TxHash()
+	test.idx.RemoveMempoolSlpTxsNotIn(func(hash *chainhash.Hash) bool {
+		return *hash == pooledHash
+	})
+
+	for _, c := range []struct {
+		name  string
+		tx    *wire.MsgTx
+		valid bool
+	}{
+		{"the GENESIS that left", left, false},
+		{"the GENESIS confirmed", confirmed, true},
+		{"the GENESIS in the memory pool", pooled, true},
+	} {
+		hash := c.tx.TxHash()
+		if _, ok := test.idx.cache.GetSlpTxEntry(&hash); ok != c.valid {
+			t.Errorf("%s: cached %v, want %v", c.name, ok, c.valid)
+		}
+		err := test.db.View(func(dbTx database.Tx) error {
+			_, err := test.idx.GetSlpIndexEntry(dbTx, &hash)
+			return err
+		})
+		if (err == nil) != c.valid {
+			t.Errorf("%s: slp entry error %v, want valid %v", c.name, err,
+				c.valid)
+		}
+	}
+
+	// The entry of the confirmed GENESIS is the index's, with its token's
+	// internal ID.
+	hash := confirmed.TxHash()
+	if entry, _ := test.idx.cache.GetSlpTxEntry(&hash); entry.TokenID == 0 {
+		t.Error("the confirmed GENESIS has the memory pool's entry")
+	}
+}
+
+// TestSlpEntryScript ensures the slp cache keeps of a transaction only its slp
+// message, not the buffer that holds all the scripts of a deserialized
+// transaction, as from a block or the network, since the cache holds up to
+// 100,000 entries, of transactions the memory pool and blocks let go of.
+func TestSlpEntryScript(t *testing.T) {
+	const n, scripts = 500, 10000
+	test := newSlpTokenIDTest(t)
+	test.idx = NewSlpIndex(test.db, &SlpConfig{MaxCacheSize: 2 * n})
+	if err := test.idx.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	// decoded returns another GENESIS, deserialized, with an output of a
+	// large script.
+	next := 0
+	decoded := func() *wire.MsgTx {
+		t.Helper()
+		tx := graphSearchGenesis(t, next)
+		next++
+		tx.AddTxOut(&wire.TxOut{Value: 546,
+			PkScript: bytes.Repeat([]byte{0x51}, scripts)})
+		var buf bytes.Buffer
+		if err := tx.Serialize(&buf); err != nil {
+			t.Fatal(err)
+		}
+		var decoded wire.MsgTx
+		if err := decoded.Deserialize(&buf); err != nil {
+			t.Fatal(err)
+		}
+		return &decoded
+	}
+	for _, c := range []struct {
+		name string
+		add  func(*wire.MsgTx)
+	}{
+		{"from the memory pool", test.addPotential},
+		{"from blocks", func(tx *wire.MsgTx) { test.connect(tx) }},
+	} {
+		runtime.GC()
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		for i := 0; i < n; i++ {
+			c.add(decoded())
+		}
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		held := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
+		t.Logf("%s: %d bytes held for each transaction", c.name, held)
+		if held > 2000 {
+			t.Errorf("%s: %d bytes held for each transaction of %d bytes "+
+				"of scripts", c.name, held, scripts)
+		}
 	}
 }

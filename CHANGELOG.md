@@ -22,6 +22,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - gRPC `GetAddressTransactions` and `GetRawAddressTransactions` return the address's number of confirmed transactions in `confirmed_count`.
 - On 32-bit builds, `GetAddressTransactions` and `GetRawAddressTransactions` with an `nb_skip` of 2^31 or more return no confirmed transactions instead of the newest ones.
 - gRPC `GetAddressTransactions` and `GetRawAddressTransactions` no longer list a just-confirmed transaction as unconfirmed too.
+- The gRPC SLP calls no longer treat a transaction that left the memory pool unconfirmed as valid after the next block.
 
 ### Other
 

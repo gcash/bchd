@@ -164,8 +164,8 @@ func (s *SlpCache) RemoveMempoolSlpTxItems(txs []*bchutil.Tx) {
 // RemoveMempoolSlpTxsNotIn removes the mempool transaction items, and the
 // token metadata, of the transactions that inPool reports are no longer in the
 // memory pool.  A transaction that left it without being confirmed, as when a
-// conflicting one was, may have put a mint baton on an output that does not
-// exist.
+// conflicting one was, is not valid slp, and may have put a mint baton on an
+// output that does not exist.
 //
 // inPool is called with no cache lock held.  It takes the memory pool's lock,
 // whose holder may be waiting for the chain lock, which block connection holds
@@ -199,6 +199,14 @@ func (s *SlpCache) RemoveMempoolSlpTxsNotIn(inPool func(*chainhash.Hash) bool) {
 	for hash, entry := range entries {
 		if s.mempoolSlpTxEntries[hash] == entry {
 			delete(s.mempoolSlpTxEntries, hash)
+
+			// The LRU's entry goes too, unless the index's entry of a
+			// block confirming the transaction replaced it.  One the
+			// index sets meanwhile may go as well, as the LRU could
+			// evict it.
+			if cached, err := s.slpTxEntries.Get(hash); err == nil && cached == entry {
+				s.slpTxEntries.Remove(hash)
+			}
 		}
 	}
 	for tokenID, from := range sources {
