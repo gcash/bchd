@@ -37,6 +37,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `GetUnspentOutput` returns the SLP token and token metadata of a confirmed output, not only of an unconfirmed one.
 - A memory pool transaction spending an output whose SLP index entry is corrupt is logged as an error, with advice to rebuild the index, and left unjudged instead of judged invalid.
 - An output or transaction whose SLP index entry is corrupt fails the gRPC call with `Internal`, and streams send it with its SLP state unknown, instead of answering without its token or token metadata.
+- `GetUnspentOutput` returns an output's SLP token metadata only when `include_token_metadata` is set, as `GetAddressUnspentOutputs` does, so clients that read it must now set the flag.
 
 ### Database
 

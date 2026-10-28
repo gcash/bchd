@@ -180,7 +180,8 @@ func TestGetUnspentOutputMempoolIndexBounds(t *testing.T) {
 // output of an unconfirmed transaction whose first output reads as SLP but
 // that holds no tokens without a token, rather than failing with Internal:
 // the change of a GENESIS, and an output of a SEND that is not valid.  A
-// token output still has its token and the token's metadata.
+// token output still has its token, and the token's metadata when the call
+// asks for it.
 func TestGetUnspentOutputMempoolSlpNoToken(t *testing.T) {
 	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
 	if err != nil {
@@ -247,9 +248,10 @@ func TestGetUnspentOutputMempoolSlpNoToken(t *testing.T) {
 			txMemPool: test.pool, db: db, slpIndex: idx}
 		resp, err := s.GetUnspentOutput(context.Background(),
 			&pb.GetUnspentOutputRequest{
-				Hash:           test.tx.Hash()[:],
-				Index:          test.index,
-				IncludeMempool: true,
+				Hash:                 test.tx.Hash()[:],
+				Index:                test.index,
+				IncludeMempool:       true,
+				IncludeTokenMetadata: true,
 			})
 		if err != nil {
 			t.Errorf("%s: GetUnspentOutput: %v", test.name, err)
@@ -272,14 +274,27 @@ func TestGetUnspentOutputMempoolSlpNoToken(t *testing.T) {
 		if resp.TokenMetadata == nil {
 			t.Errorf("%s: no token metadata", test.name)
 		}
+
+		// Without asking for the metadata.
+		resp, err = s.GetUnspentOutput(context.Background(),
+			&pb.GetUnspentOutputRequest{
+				Hash:           test.tx.Hash()[:],
+				Index:          test.index,
+				IncludeMempool: true,
+			})
+		if err != nil || resp.SlpToken == nil || resp.TokenMetadata != nil {
+			t.Errorf("%s without the metadata asked for: got %v and %v, want "+
+				"the token only", test.name, resp, err)
+		}
 	}
 }
 
 // TestGetUnspentOutputConfirmedSlpToken ensures GetUnspentOutput returns a
-// confirmed output that holds tokens with its token and the token's metadata,
-// as it returns an unconfirmed one, and a confirmed output that holds none
-// without a token, and that it answers with an internal error, logging the
-// failure, when the slp index fails to read the token or its metadata.
+// confirmed output that holds tokens with its token, and the token's metadata
+// when the call asks for it, as it returns an unconfirmed one, and a confirmed
+// output that holds none without a token, and that it answers with an internal
+// error, logging the failure, when the slp index fails to read the token or its
+// metadata.
 func TestGetUnspentOutputConfirmedSlpToken(t *testing.T) {
 	var logged syncBuffer
 	saved := log
@@ -320,7 +335,8 @@ func TestGetUnspentOutputConfirmedSlpToken(t *testing.T) {
 	}
 	unspent := func(index uint32, includeMempool bool) (*pb.GetUnspentOutputResponse, error) {
 		return s.GetUnspentOutput(context.Background(), &pb.GetUnspentOutputRequest{
-			Hash: genesis.Hash()[:], Index: index, IncludeMempool: includeMempool})
+			Hash: genesis.Hash()[:], Index: index, IncludeMempool: includeMempool,
+			IncludeTokenMetadata: true})
 	}
 
 	// The entries are read from the cache of the index that connected the
@@ -341,6 +357,14 @@ func TestGetUnspentOutputConfirmedSlpToken(t *testing.T) {
 				!bytes.Equal(resp.TokenMetadata.TokenId, token) {
 				t.Errorf("token output, mempool %v: got metadata %v, want that "+
 					"of token ID %x", includeMempool, resp.TokenMetadata, token)
+			}
+			resp, err = s.GetUnspentOutput(context.Background(),
+				&pb.GetUnspentOutputRequest{Hash: genesis.Hash()[:], Index: 1,
+					IncludeMempool: includeMempool})
+			if err != nil || resp.SlpToken == nil || resp.TokenMetadata != nil {
+				t.Errorf("token output, mempool %v, without the metadata asked "+
+					"for: got %v and %v, want the token only", includeMempool,
+					resp, err)
 			}
 			resp, err = unspent(2, includeMempool)
 			if err != nil {

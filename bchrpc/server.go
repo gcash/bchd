@@ -1765,9 +1765,11 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 			log.Errorf("Failed to load the slp token of output %v: %v", op, err)
 			return nil, status.Error(codes.Internal, "failed to load slp index entry")
 		}
+		// The token's metadata is read only when the call asks for it, as
+		// GetAddressUnspentOutputs does.
 		if err != nil {
 			log.Debugf("No slp token for output %v: %v", op, err)
-		} else {
+		} else if req.IncludeTokenMetadata {
 			tokenID, err := chainhash.NewHash(slpToken.TokenId)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "cannot create hash for token id: %s", hex.EncodeToString(slpToken.TokenId))
