@@ -2974,3 +2974,72 @@ func TestSlpUnparsableEntryCalls(t *testing.T) {
 			"failure", tm, err)
 	}
 }
+
+// TestSlpTokenMetadataPoolBatonBurned ensures GetSlpTokenMetadata reports no
+// mint baton for a token whose GENESIS a block confirms from the memory pool
+// together with a transaction that burns its mint baton, rather than the
+// baton the GENESIS put on its output.
+func TestSlpTokenMetadataPoolBatonBurned(t *testing.T) {
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	s := &GrpcServer{chainParams: &chaincfg.RegressionNetParams, db: db,
+		slpIndex: idx}
+
+	// A GENESIS of the memory pool with its mint baton on output 2, and a
+	// transaction spending the baton, which burns it.
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, metadatamaker.NewMintBatonVout(2), 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee, 40}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: script})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	burn := wire.NewMsgTx(1)
+	burn.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: genesis.TxHash(), Index: 2}, nil))
+	burn.AddTxOut(&wire.TxOut{Value: 500, PkScript: []byte{txscript.OP_TRUE}})
+	err = db.Update(func(dbTx database.Tx) error {
+		valid, err := idx.AddPotentialSlpEntries(dbTx, genesis)
+		if err == nil && !valid {
+			err = errors.New("the GENESIS is not valid")
+		}
+		if err != nil {
+			return err
+		}
+		return idx.ConnectBlock(dbTx, bchutil.NewBlock(&wire.MsgBlock{
+			Transactions: []*wire.MsgTx{genesis, burn}}), nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := s.GetSlpTokenMetadata(context.Background(),
+		&pb.GetSlpTokenMetadataRequest{TokenIds: [][]byte{token}})
+	if err != nil || len(resp.TokenMetadata) != 1 {
+		t.Fatalf("GetSlpTokenMetadata: got %v and %v", resp, err)
+	}
+	if baton := resp.TokenMetadata[0].GetV1Fungible().GetMintBatonHash(); len(baton) != 0 {
+		t.Errorf("the token's mint baton is on %x, want it burned", baton)
+	}
+}

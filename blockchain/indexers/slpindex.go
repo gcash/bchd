@@ -292,12 +292,16 @@ func (c *slpConnectChanges) addEntry(hash *chainhash.Hash, entry SlpTxEntry) {
 
 // entry returns the entry of the transaction hash as GetSlpIndexEntry does,
 // but keeps one it reads from the database, which may be the block's own,
-// with the block's changes rather than in the cache.
+// with the block's changes rather than in the cache.  The block's own entries
+// come first, and a memory pool entry the cache holds, of internal token ID
+// 0, is read from the database instead, where a transaction a valid block
+// spends is if the block does not hold it, so that a burn of its mint baton
+// records the token's metadata under the token's own ID.
 func (c *slpConnectChanges) entry(idx *SlpIndex, dbTx database.Tx, hash *chainhash.Hash) (*SlpTxEntry, error) {
-	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok {
+	if entry, ok := c.entries[*hash]; ok {
 		return &entry, nil
 	}
-	if entry, ok := c.entries[*hash]; ok {
+	if entry, ok := idx.cache.GetSlpTxEntry(hash); ok && entry.TokenID != 0 {
 		return &entry, nil
 	}
 	entry, err := dbFetchSlpIndexEntry(dbTx, hash)

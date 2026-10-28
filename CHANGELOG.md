@@ -38,6 +38,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - A memory pool transaction spending an output whose SLP index entry is corrupt is logged as an error, with advice to rebuild the index, and left unjudged instead of judged invalid.
 - An output or transaction whose SLP index entry is corrupt fails the gRPC call with `Internal`, and streams send it with its SLP state unknown, instead of answering without its token or token metadata.
 - `GetUnspentOutput` returns an output's SLP token metadata only when `include_token_metadata` is set, as `GetAddressUnspentOutputs` does, so clients that read it must now set the flag.
+- `GetSlpTokenMetadata` no longer reports a mint baton that a block burned while confirming, from the memory pool, the GENESIS or MINT that created it.
 
 ### Database
 
@@ -60,6 +61,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 ### Upgrade notes
 
 - **Address index.** On first start, and after an earlier release has run with `--addrindex`, nodes with it read the address index once to count the transactions of large addresses: under a second on chipnet, a few minutes at most on mainnet.
+- **SLP index.** An index that recorded a mint baton burned in the same block that confirmed the token's GENESIS or MINT from the memory pool keeps reporting that baton in `GetSlpTokenMetadata` until it is rebuilt: start once with `--dropslpindex`, which exits when done, then with `--slpindex`.
 
 ## 0.22.3 (2026-10-23)
 
