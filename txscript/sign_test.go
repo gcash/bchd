@@ -2416,3 +2416,54 @@ func TestSignInputIndexRange(t *testing.T) {
 		}
 	}
 }
+
+// TestSignInvalidPubKey ensures SignTxOutput returns an error, instead of
+// panicking, for a pay-to-pubkey script, bare or in P2SH, whose public key
+// has a valid size but isn't on the curve, so no key can sign for it.
+func TestSignInvalidPubKey(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	pubKey := make([]byte, 33)
+	pubKey[0] = 0x02
+	for pubKey[32] = 1; pubKey[32] != 0; pubKey[32]++ {
+		if _, err := bchec.ParsePubKey(pubKey, bchec.S256()); err != nil {
+			break
+		}
+	}
+	if _, err := bchec.ParsePubKey(pubKey, bchec.S256()); err == nil {
+		t.Fatal("no public key off the curve")
+	}
+	p2pk, err := NewScriptBuilder().AddData(pubKey).AddOp(OP_CHECKSIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if class := GetScriptClass(p2pk); class != PubKeyTy {
+		t.Fatalf("script class %v", class)
+	}
+	scriptAddr, err := bchutil.NewAddressScriptHash(p2pk, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh, err := PayToAddrScript(scriptAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdb := mkGetScript(map[string][]byte{scriptAddr.EncodeAddress(): p2pk})
+
+	for _, pkScript := range [][]byte{p2pk, p2sh} {
+		tx, _ := tokenSpendTx(pkScript)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("%x: panicked: %v", pkScript, r)
+				}
+			}()
+			_, err := SignTxOutput(params, tx, 1, 100000, pkScript,
+				SigHashAll, mkGetKey(nil), sdb, nil)
+			if err == nil {
+				t.Errorf("%x: signed", pkScript)
+			}
+		}()
+	}
+}

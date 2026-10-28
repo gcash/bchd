@@ -283,6 +283,13 @@ func sign(chainParams *chaincfg.Params, tx *wire.MsgTx, sigHashes *TxSigHashes,
 
 	switch class {
 	case PubKeyTy:
+		// A public key off the curve has no address, nor a key to sign
+		// for it.  The other classes always have their one address.
+		if len(addresses) == 0 {
+			return nil, class, nil, 0,
+				errors.New("can't sign for an invalid public key")
+		}
+
 		// look up key for address
 		key, _, err := kdb.GetKey(addresses[0])
 		if err != nil {
