@@ -284,7 +284,7 @@ func TestSlpConnectCorruptEntryStopsNode(t *testing.T) {
 // the format does not have is read as corrupt, rather than sliced, which
 // panics for one under 32 bytes, while the records the index writes, of a token
 // with neither a mint baton nor a group, of one with a mint baton, and of an
-// NFT1 child token with its group, are read back.
+// NFT1 child token with its group, are read back, with their token type.
 func TestSlpTokenMetadataRecordLength(t *testing.T) {
 	test := newSlpTokenIDTest(t)
 	token, baton, group := chainhash.Hash{1}, chainhash.Hash{2}, chainhash.Hash{3}
@@ -304,7 +304,7 @@ func TestSlpTokenMetadataRecordLength(t *testing.T) {
 			got, err = dbFetchTokenMetadataByID(dbTx, uint32(i+1))
 			return err
 		})
-		if err != nil || *got.TokenID != token ||
+		if err != nil || *got.TokenID != token || got.SlpVersion != tm.SlpVersion ||
 			(got.MintBatonHash == nil) != (tm.MintBatonHash == nil) ||
 			got.MintBatonVout != tm.MintBatonVout ||
 			(got.NftGroupID == nil) != (tm.NftGroupID == nil) {

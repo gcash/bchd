@@ -239,6 +239,7 @@ func dbFetchTokenMetadataBySerializedID(dbTx database.Tx, serializedID []byte) (
 
 	tm := &TokenMetadata{
 		TokenID:       tokenIDHash,
+		SlpVersion:    slpVersion,
 		NftGroupID:    nft1GroupID,
 		MintBatonHash: mintBatonHash,
 		MintBatonVout: mintBatonVout,
