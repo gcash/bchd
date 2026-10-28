@@ -36,6 +36,10 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `GetUnspentOutput`, `GetAddressUnspentOutputs` and `GetTransaction` answer `Internal` when the SLP index fails to read a token or its metadata, rather than leaving it out.
 - `GetUnspentOutput` returns the SLP token and token metadata of a confirmed output, not only of an unconfirmed one.
 
+### Database
+
+- A block spending an output whose SLP index entry is corrupt stops the node with advice to rebuild the index with `--dropslpindex`, instead of storing the spending transaction as invalid for good.
+
 ### Other
 
 - txscript can sign inputs that spend CashTokens, and sign with `SIGHASH_UTXOS`. `SignTxOutputWithSigHashes`, `SignatureScriptWithSigHashes`, `RawTxInECDSASignatureWithSigHashes` and `RawTxInSchnorrSignatureWithSigHashes` take the transaction's signature hashes, computed once for all its inputs, which must include the outputs it spends (`NewTxSigHashes(tx).WithUtxos(tx, utxos)`) for those. The functions without them can't see the spent outputs, so they now return an error for `SIGHASH_UTXOS` instead of a signature the network refuses.

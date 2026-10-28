@@ -394,6 +394,35 @@ func IsSlpIndexFailure(err error) bool {
 	return errors.As(err, &failure)
 }
 
+// errSlpEntryCorrupt is the error for the entry of a transaction an input
+// spends that the slp index holds but cannot read, or whose slp message does
+// not parse.  Only rebuilding the index mends it.  It is not a database.Error:
+// the chain answers a corrupt database with advice to rebuild the utxo set,
+// which leaves the slp index as it is.
+type errSlpEntryCorrupt struct {
+	hash chainhash.Hash
+	err  error
+}
+
+// Error implements the error interface.
+func (e errSlpEntryCorrupt) Error() string {
+	return fmt.Sprintf("the slp index entry of transaction %v is corrupt: "+
+		"%v; start once with --dropslpindex, which exits when done, then "+
+		"with --slpindex to rebuild the index", e.hash, e.err)
+}
+
+// Unwrap returns the error reading or parsing the entry.
+func (e errSlpEntryCorrupt) Unwrap() error {
+	return e.err
+}
+
+// errSlpMsgUnparsable returns the error for the entry of the transaction hash
+// whose slp message fails to parse with err.
+func errSlpMsgUnparsable(hash chainhash.Hash, err error) error {
+	return errSlpEntryCorrupt{hash: hash, err: fmt.Errorf("previously saved "+
+		"slp scriptPubKey cannot be parsed: %v", err)}
+}
+
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // the error is an errSlpEntryNotFound.
@@ -599,8 +628,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 	sortedTxns := TopologicallySortTxs(block.Transactions())
 
+	// An entry the index holds but cannot read is corrupt, and fails the
+	// block's connection, which stops the node, as a read of the database
+	// that fails does, rather than the input that spends it taken for one
+	// that is not slp, which would store an slp transaction as invalid for
+	// good.
+	var corrupt error
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
-		return idx.GetSlpIndexEntry(dbTx, txiHash)
+		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
+		if _, notFound := err.(errSlpEntryNotFound); err != nil && !notFound && corrupt == nil {
+			corrupt = errSlpEntryCorrupt{hash: *txiHash, err: err}
+		}
+		return entry, err
 	}
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
@@ -638,6 +677,9 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 	burnedInputs := make([]*BurnedInput, 0)
 	for _, tx := range sortedTxns {
 		isValid, txnInputsBurned, err := CheckSlpTx(tx, getSlpIndexEntry, putTxIndexEntry)
+		if corrupt != nil {
+			err = corrupt
+		}
 		if err != nil {
 			log.Critical(err)
 			return err
@@ -646,14 +688,19 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 		// look for burned inputs within non-slp txns
 		if !isValid {
 			for _, txi := range tx.TxIn {
-				slpEntry, err := idx.GetSlpIndexEntry(dbTx, &txi.PreviousOutPoint.Hash)
+				slpEntry, err := getSlpIndexEntry(&txi.PreviousOutPoint.Hash)
+				if corrupt != nil {
+					log.Critical(corrupt)
+					return corrupt
+				}
 				if err != nil {
 					log.Debugf("slp entry does not exist for this transaction %v", txi.PreviousOutPoint.Hash)
 				}
 				if slpEntry != nil {
 					slpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 					if err != nil {
-						log.Criticalf("failed to parse slp message stored in db %v", txi.PreviousOutPoint.Hash)
+						err = errSlpMsgUnparsable(txi.PreviousOutPoint.Hash, err)
+						log.Critical(err)
 						return err
 					}
 					burnedInputs = append(burnedInputs, &BurnedInput{
@@ -964,7 +1011,7 @@ func CheckSlpTx(tx *wire.MsgTx, getSlpIndexEntry GetSlpIndexEntryHandler, putTxI
 
 		inputSlpMsg, err := v1parser.ParseSLP(slpEntry.SlpOpReturn)
 		if err != nil {
-			return false, nil, fmt.Errorf("previously saved slp scriptPubKey cannot be parsed: %v", err)
+			return false, nil, errSlpMsgUnparsable(txi.PreviousOutPoint.Hash, err)
 		}
 
 		amt, _ := inputSlpMsg.GetVoutValue(prevIdx)
