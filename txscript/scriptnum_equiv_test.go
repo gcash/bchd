@@ -175,9 +175,7 @@ func TestScriptNumArithmeticMatchesReference(t *testing.T) {
 	r := rand.New(rand.NewSource(3))
 	vals := equivValues(r, 40)
 	ints := []int64{0, 1, -1, 2, -2, 127, -128, maxInt32, minInt32, maxInt64, minInt64, minInt64 + 1}
-	for k := 0; k < 20000; k++ {
-		x := vals[r.Intn(len(vals))]
-		y := vals[r.Intn(len(vals))]
+	check := func(x, y *big.Int) {
 		type op struct {
 			name string
 			do   func(n, a, b *scriptNum) *scriptNum
@@ -211,6 +209,19 @@ func TestScriptNumArithmeticMatchesReference(t *testing.T) {
 				t.Fatalf("%s(%v, %v) in place = %v, want %v", o.name, x, y, got, want)
 			}
 		}
+	}
+
+	// Every value is an operand, on either side, with each of ints, which
+	// hold the edges of the 32 and 64-bit ranges, and with two others
+	// spread over vals, and is compared with each of ints, so boundaries
+	// like -2^63 are always checked.
+	for i, x := range vals {
+		for _, v := range ints {
+			check(x, big.NewInt(v))
+			check(big.NewInt(v), x)
+		}
+		check(x, vals[len(vals)-1-i])
+		check(x, vals[(i*7919+1)%len(vals)])
 		n := scriptNum(*x)
 		for _, v := range ints {
 			c := x.Cmp(big.NewInt(v))

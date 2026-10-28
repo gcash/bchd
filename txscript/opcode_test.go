@@ -1360,3 +1360,127 @@ func TestCheckSequenceVerifyVersion(t *testing.T) {
 		}
 	}
 }
+
+// TestSharedBytesUnchanged ensures no opcode writes into the shared slices
+// of true, -1 and 1 to 16: each value is put through every opcode that makes
+// bytes, bare and through P2SH, and the slices must be unchanged after.
+func TestSharedBytesUnchanged(t *testing.T) {
+	wantTrue := append([]byte(nil), trueBytes...)
+	wantNegOne := append([]byte(nil), negOneBytes...)
+	var wantSmall [17][]byte
+	for n := 1; n <= 16; n++ {
+		wantSmall[n] = append([]byte(nil), smallIntBytes[n]...)
+	}
+
+	// The values, each pushed by a script, the shared true one by
+	// OP_EQUAL, the others by their own opcodes, which a P2SH signature
+	// script can hold.
+	type value struct {
+		name     string
+		push     []byte
+		pushOnly bool
+	}
+	values := []value{{"true", []byte{OP_1, OP_1, OP_EQUAL}, false},
+		{"-1", []byte{OP_1NEGATE}, true}}
+	for n := byte(1); n <= 16; n++ {
+		values = append(values, value{fmt.Sprintf("%d", n),
+			[]byte{OP_1 - 1 + n}, true})
+	}
+
+	// Each case takes the value on top of the stack.  0x55 is pushed as
+	// data, as no shared slice holds it, so writing it into one shows.
+	cases := []struct {
+		name string
+		ops  []byte
+	}{
+		{"OP_NUM2BIN padded", []byte{OP_4, OP_NUM2BIN}},
+		{"OP_NUM2BIN at its size", []byte{OP_1, OP_NUM2BIN}},
+		{"OP_BIN2NUM", []byte{OP_BIN2NUM}},
+		{"OP_REVERSEBYTES", []byte{OP_REVERSEBYTES}},
+		{"OP_INVERT", []byte{OP_INVERT}},
+		{"OP_AND", []byte{OP_DUP, OP_AND}},
+		{"OP_OR", []byte{OP_DUP, OP_OR}},
+		{"OP_XOR", []byte{OP_DUP, OP_XOR}},
+		{"OP_LSHIFTBIN", []byte{OP_1, OP_LSHIFTBIN}},
+		{"OP_RSHIFTBIN", []byte{OP_1, OP_RSHIFTBIN}},
+		{"OP_CAT", []byte{OP_DUP, OP_CAT}},
+		{"OP_SPLIT at 0, OP_CAT", []byte{OP_0, OP_SPLIT, OP_DROP,
+			OP_DATA_1, 0x55, OP_CAT}},
+		{"OP_SPLIT at 1, OP_CAT", []byte{OP_1, OP_SPLIT, OP_DATA_1, 0x55,
+			OP_CAT, OP_CAT}},
+		{"OP_1ADD", []byte{OP_1ADD}},
+		{"OP_1SUB", []byte{OP_1SUB}},
+		{"OP_NEGATE", []byte{OP_NEGATE}},
+		{"OP_ABS", []byte{OP_ABS}},
+		{"OP_NOT", []byte{OP_NOT}},
+		{"OP_0NOTEQUAL", []byte{OP_0NOTEQUAL}},
+		{"OP_ADD", []byte{OP_DUP, OP_ADD}},
+		{"OP_SUB", []byte{OP_DUP, OP_SUB}},
+		{"OP_MUL", []byte{OP_DUP, OP_MUL}},
+		{"OP_DIV", []byte{OP_DUP, OP_DIV}},
+		{"OP_MOD", []byte{OP_DUP, OP_MOD}},
+		{"OP_BOOLAND", []byte{OP_DUP, OP_BOOLAND}},
+		{"OP_BOOLOR", []byte{OP_DUP, OP_BOOLOR}},
+		{"OP_NUMEQUAL", []byte{OP_DUP, OP_NUMEQUAL}},
+		{"OP_NUMNOTEQUAL", []byte{OP_DUP, OP_NUMNOTEQUAL}},
+		{"OP_LESSTHAN", []byte{OP_DUP, OP_LESSTHAN}},
+		{"OP_GREATERTHAN", []byte{OP_DUP, OP_GREATERTHAN}},
+		{"OP_LESSTHANOREQUAL", []byte{OP_DUP, OP_LESSTHANOREQUAL}},
+		{"OP_GREATERTHANOREQUAL", []byte{OP_DUP, OP_GREATERTHANOREQUAL}},
+		{"OP_MIN", []byte{OP_DUP, OP_MIN}},
+		{"OP_MAX", []byte{OP_DUP, OP_MAX}},
+		{"OP_WITHIN", []byte{OP_DUP, OP_DUP, OP_WITHIN}},
+		{"alt stack", []byte{OP_TOALTSTACK, OP_FROMALTSTACK}},
+		{"OP_PICK", []byte{OP_DUP, OP_1, OP_PICK}},
+		{"OP_ROLL", []byte{OP_DUP, OP_1, OP_ROLL}},
+	}
+
+	// Clean stack is left out, so each script just ends with true.
+	flags := RelayVerifyFlags &^ ScriptVerifyCleanStack
+	run := func(msg string, sigScript, pkScript []byte) {
+		tx := wire.NewMsgTx(2)
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, sigScript))
+		tx.AddTxOut(wire.NewTxOut(0, nil, wire.TokenData{}))
+		vm, err := NewEngine(pkScript, tx, 0, flags, nil, nil, nil, 0)
+		if err == nil {
+			err = vm.Execute()
+		}
+		if err != nil {
+			t.Errorf("%s: %v", msg, err)
+		}
+	}
+	for _, v := range values {
+		for _, c := range cases {
+			msg := fmt.Sprintf("%s, %s", v.name, c.name)
+			redeem := append(append([]byte(nil), c.ops...), OP_1)
+			run(msg, nil, append(append([]byte(nil), v.push...), redeem...))
+			if !v.pushOnly {
+				continue
+			}
+			sigScript, err := NewScriptBuilder().AddOps(v.push).
+				AddData(redeem).Script()
+			if err != nil {
+				t.Fatal(err)
+			}
+			p2sh, err := NewScriptBuilder().AddOp(OP_HASH160).
+				AddData(bchutil.Hash160(redeem)).AddOp(OP_EQUAL).Script()
+			if err != nil {
+				t.Fatal(err)
+			}
+			run(msg+", P2SH", sigScript, p2sh)
+		}
+	}
+
+	if !bytes.Equal(trueBytes, wantTrue) {
+		t.Errorf("trueBytes = %x, want %x", trueBytes, wantTrue)
+	}
+	if !bytes.Equal(negOneBytes, wantNegOne) {
+		t.Errorf("negOneBytes = %x, want %x", negOneBytes, wantNegOne)
+	}
+	for n := 1; n <= 16; n++ {
+		if !bytes.Equal(smallIntBytes[n], wantSmall[n]) {
+			t.Errorf("smallIntBytes[%d] = %x, want %x", n, smallIntBytes[n],
+				wantSmall[n])
+		}
+	}
+}
