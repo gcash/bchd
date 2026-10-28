@@ -215,10 +215,14 @@ func newGraphSearchServer(t *testing.T) (*GrpcServer, *wire.MsgTx) {
 		t.Fatalf("AddPotentialSlpEntries: %v", err)
 	}
 
-	fetch := func(*chainhash.Hash) ([]byte, error) {
+	fetch := func(hashes []chainhash.Hash) ([][]byte, error) {
 		var buf bytes.Buffer
 		err := genesis.Serialize(&buf)
-		return buf.Bytes(), err
+		txns := make([][]byte, len(hashes))
+		for i := range txns {
+			txns[i] = buf.Bytes()
+		}
+		return txns, err
 	}
 	idx.LoadSlpGraphSearchDb(fetch, nil, nil)
 	idx.AddGraphSearchTxn(genesis)
@@ -802,15 +806,15 @@ func (db *failingViewDB) View(func(database.Tx) error) error {
 	return db.err
 }
 
-// TestFetchGraphSearchTxn ensures slp graph search reads a memory pool
+// TestFetchGraphSearchTxns ensures slp graph search reads a memory pool
 // transaction, which its graph holds before a block does, from the memory
-// pool, also once a block holds it, and any other from its block, in one
-// database transaction and without the chain, as the transaction index holds
-// only the blocks of the main chain.  A transaction in neither is not found,
-// by its hash, and the database failing is a load error that leaves out the
-// database's own, which can name the node's files, and which is logged as an
-// error instead.
-func TestFetchGraphSearchTxn(t *testing.T) {
+// pool, also once a block holds it, and the others from their blocks, all in
+// one database transaction and without the chain, as the transaction index
+// holds only the blocks of the main chain, in the order asked for.  A
+// transaction in neither is not found, by its hash, and the database failing
+// is a load error that leaves out the database's own, which can name the
+// node's files, and which is logged as an error instead.
+func TestFetchGraphSearchTxns(t *testing.T) {
 	pool, tx1, _, spend, funding := newDSProofPool(t)
 	db, err := database.Create("ffldb", t.TempDir(), chaincfg.MainNetParams.Net)
 	if err != nil {
@@ -822,11 +826,12 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// A block holds a transaction outside the memory pool and tx1.
+	// A block holds two transactions outside the memory pool and tx1.
 	confirmed := spend(wire.OutPoint{Hash: funding.TxHash(), Index: 1},
 		100000000, 1000)
+	other := spend(wire.OutPoint{Hash: confirmed.TxHash()}, 99999000, 1000)
 	block := bchutil.NewBlock(&wire.MsgBlock{
-		Transactions: []*wire.MsgTx{confirmed, tx1}})
+		Transactions: []*wire.MsgTx{confirmed, other, tx1}})
 	err = db.Update(func(dbTx database.Tx) error {
 		if err := dbTx.StoreBlock(block); err != nil {
 			return err
@@ -841,22 +846,31 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 
 	for _, test := range []struct {
 		name  string
-		tx    *wire.MsgTx
+		txs   []*wire.MsgTx
 		views int32
 	}{
-		{"the memory pool transaction", tx1, 0},
-		{"the confirmed transaction", confirmed, 1},
+		{"the memory pool transaction", []*wire.MsgTx{tx1}, 0},
+		{"all three", []*wire.MsgTx{other, tx1, confirmed}, 1},
 	} {
-		var want bytes.Buffer
-		if err := test.tx.Serialize(&want); err != nil {
-			t.Fatal(err)
+		hashes := make([]chainhash.Hash, len(test.txs))
+		for i, tx := range test.txs {
+			hashes[i] = tx.TxHash()
 		}
 		counted.views.Store(0)
-		hash := test.tx.TxHash()
-		got, err := s.fetchGraphSearchTxn(&hash)
-		if err != nil || !bytes.Equal(got, want.Bytes()) {
-			t.Errorf("%s: got %x and %v, want %x", test.name, got, err,
-				want.Bytes())
+		got, err := s.fetchGraphSearchTxns(hashes)
+		if err != nil || len(got) != len(test.txs) {
+			t.Fatalf("%s: got %d transactions and %v, want %d", test.name,
+				len(got), err, len(test.txs))
+		}
+		for i, tx := range test.txs {
+			var want bytes.Buffer
+			if err := tx.Serialize(&want); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got[i], want.Bytes()) {
+				t.Errorf("%s: transaction %d is %x, want %x", test.name, i,
+					got[i], want.Bytes())
+			}
 		}
 		if views := counted.views.Load(); views != test.views {
 			t.Errorf("%s: read in %d database transactions, want %d",
@@ -864,38 +878,48 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 		}
 	}
 
-	// Asking the memory pool about the confirmed transaction allocates
-	// nothing.
-	hash := confirmed.TxHash()
-	readAllocs := testing.AllocsPerRun(10, func() {
-		var txBytes []byte
-		_ = db.View(func(dbTx database.Tx) error {
-			region, err := txIndex.TxBlockRegionIn(dbTx, &hash)
-			if err == nil {
-				txBytes, err = dbTx.FetchBlockRegion(region)
-			}
-			return err
-		})
-		_ = txBytes
-	})
-	fetchAllocs := testing.AllocsPerRun(10, func() {
-		_, _ = s.fetchGraphSearchTxn(&hash)
-	})
-	if fetchAllocs > readAllocs {
-		t.Errorf("reading the confirmed transaction made %v allocations, "+
-			"reading its block region %v", fetchAllocs, readAllocs)
+	// Asking the memory pool about confirmed transactions allocates
+	// nothing: reading one more allocates as much as reading one more
+	// block region does.
+	read := func(hashes ...chainhash.Hash) func() {
+		return func() {
+			_ = db.View(func(dbTx database.Tx) error {
+				regions := make([]database.BlockRegion, len(hashes))
+				for i := range hashes {
+					region, err := txIndex.TxBlockRegionIn(dbTx, &hashes[i])
+					if err != nil {
+						return err
+					}
+					regions[i] = *region
+				}
+				_, err := dbTx.FetchBlockRegions(regions)
+				return err
+			})
+		}
+	}
+	fetch := func(hashes ...chainhash.Hash) func() {
+		return func() { _, _ = s.fetchGraphSearchTxns(hashes) }
+	}
+	one, two := confirmed.TxHash(), other.TxHash()
+	readMore := testing.AllocsPerRun(10, read(one, two)) -
+		testing.AllocsPerRun(10, read(one))
+	fetchMore := testing.AllocsPerRun(10, fetch(one, two)) -
+		testing.AllocsPerRun(10, fetch(one))
+	if fetchMore > readMore {
+		t.Errorf("reading one more confirmed transaction made %v "+
+			"allocations, one more block region %v", fetchMore, readMore)
 	}
 
 	// The transaction tx1 spends is in no block the index holds.
 	counted.views.Store(0)
-	hash = funding.TxHash()
-	got, err := s.fetchGraphSearchTxn(&hash)
+	missing := funding.TxHash()
+	got, err := s.fetchGraphSearchTxns([]chainhash.Hash{one, missing, two})
 	var notFound errGraphSearchTxnNotFound
-	if !errors.As(err, &notFound) || chainhash.Hash(notFound) != hash ||
+	if !errors.As(err, &notFound) || chainhash.Hash(notFound) != missing ||
 		got != nil {
 
-		t.Errorf("a transaction in neither: got %x and %v, want it not "+
-			"found", got, err)
+		t.Errorf("a transaction in neither: got %d transactions and %v, "+
+			"want it not found", len(got), err)
 	}
 	if views := counted.views.Load(); views != 1 {
 		t.Errorf("a transaction in neither: read in %d database "+
@@ -904,20 +928,19 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 
 	// The index entry of the confirmed transaction runs past the end of
 	// its block.
-	hash = confirmed.TxHash()
 	err = db.Update(func(dbTx database.Tx) error {
 		bucket := dbTx.Metadata().Bucket([]byte("txbyhashidx"))
-		entry := bytes.Clone(bucket.Get(hash[:]))
+		entry := bytes.Clone(bucket.Get(one[:]))
 		binary.LittleEndian.PutUint32(entry[8:], 1<<20)
-		return bucket.Put(hash[:], entry)
+		return bucket.Put(one[:], entry)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.fetchGraphSearchTxn(&hash)
+	got, err = s.fetchGraphSearchTxns([]chainhash.Hash{two, one})
 	if err != errGraphSearchTxnLoad || got != nil {
-		t.Errorf("a region past the end of its block: got %x and %v, want %v",
-			got, err, errGraphSearchTxnLoad)
+		t.Errorf("a region past the end of its block: got %d transactions "+
+			"and %v, want %v", len(got), err, errGraphSearchTxnLoad)
 	}
 
 	failed := "read /home/node/.bchd/data/mainnet/blocks_ffldb/000000001.fdb: " +
@@ -927,13 +950,13 @@ func TestFetchGraphSearchTxn(t *testing.T) {
 	saved := log
 	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
 	defer UseLogger(saved)
-	got, err = s.fetchGraphSearchTxn(&hash)
+	got, err = s.fetchGraphSearchTxns([]chainhash.Hash{two})
 	if err != errGraphSearchTxnLoad || got != nil {
-		t.Errorf("the database failing: got %x and %v, want %v", got, err,
-			errGraphSearchTxnLoad)
+		t.Errorf("the database failing: got %d transactions and %v, want %v",
+			len(got), err, errGraphSearchTxnLoad)
 	}
-	if want := "[ERR] GRPC: Failed to load graph search transaction " +
-		hash.String() + ": " + failed; !strings.Contains(logged.String(), want) {
+	if want := "[ERR] GRPC: Failed to load graph search transactions: " +
+		failed; !strings.Contains(logged.String(), want) {
 
 		t.Errorf("the database failing: log %q, want a line with %q",
 			logged.String(), want)
@@ -983,7 +1006,7 @@ func TestSlpGraphSearchTxnNotFound(t *testing.T) {
 	// transaction index.
 	s := &GrpcServer{db: db, slpIndex: idx, txIndex: txIndex,
 		txMemPool: mempool.New(&mempool.Config{})}
-	idx.LoadSlpGraphSearchDb(s.fetchGraphSearchTxn, nil, nil)
+	idx.LoadSlpGraphSearchDb(s.fetchGraphSearchTxns, nil, nil)
 	idx.AddGraphSearchTxn(genesis)
 	if _, err := idx.GetGraphSearchDb(); err != nil {
 		t.Fatalf("GetGraphSearchDb: %v", err)

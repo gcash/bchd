@@ -90,11 +90,16 @@ func graphSearchChain(t *testing.T, n, extra int) (*GrpcServer, []*wire.MsgTx) {
 		}
 		serialized[tx.TxHash()] = buf.Bytes()
 	}
-	fetch := func(hash *chainhash.Hash) ([]byte, error) {
-		if buf, ok := serialized[*hash]; ok {
-			return buf, nil
+	fetch := func(hashes []chainhash.Hash) ([][]byte, error) {
+		txns := make([][]byte, len(hashes))
+		for i := range hashes {
+			buf, ok := serialized[hashes[i]]
+			if !ok {
+				return nil, errors.New("no such transaction")
+			}
+			txns[i] = buf
 		}
-		return nil, errors.New("no such transaction")
+		return txns, nil
 	}
 	idx.LoadSlpGraphSearchDb(fetch, nil, nil)
 	idx.AddGraphSearchTxn(genesis)

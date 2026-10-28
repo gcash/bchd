@@ -17,18 +17,19 @@ type Db struct {
 	graphs map[chainhash.Hash]*tokenGraph
 	state  uint32 // 0 = initial load incomplete, 1 = initial load complete, 2 = block found after load completed
 
-	// fetchTxn reads a transaction of the graphs, serialized, as they hold
-	// only what a search needs of each.
-	fetchTxn func(txnHash *chainhash.Hash) ([]byte, error)
+	// fetchTxns reads transactions of the graphs, serialized, in the order
+	// of their hashes, as the graphs hold only what a search needs of each.
+	fetchTxns func(txnHashes []chainhash.Hash) ([][]byte, error)
 }
 
 // NewDb creates a new instance of SlpCache, whose searches read the
-// transactions they return with fetchTxn.
-func NewDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error)) *Db {
+// transactions they return with fetchTxns, which fails if it cannot read one
+// of them.
+func NewDb(fetchTxns func(txnHashes []chainhash.Hash) ([][]byte, error)) *Db {
 	return &Db{
-		graphs:   make(map[chainhash.Hash]*tokenGraph),
-		state:    0,
-		fetchTxn: fetchTxn,
+		graphs:    make(map[chainhash.Hash]*tokenGraph),
+		state:     0,
+		fetchTxns: fetchTxns,
 	}
 }
 
@@ -110,28 +111,43 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 }
 
 // graphSearchCheckInterval is how many transactions a graph search finds
-// between looks at whether its context has ended.
+// between looks at whether its context has ended, and how many it reads at a
+// time.
 const graphSearchCheckInterval = 1000
 
 // Find performs a graph search for a given transaction hash.  The search can
 // take the whole of a large token's graph, so it stops once ctx ends and
-// returns the context's error.  It reads each transaction it returns, and
-// fails if it cannot read one.
+// returns the context's error.  It reads the transactions it returns, a batch
+// of graphSearchCheckInterval at a time, as a node reads each batch in one
+// database transaction, and fails if it cannot read one.
 func (gs *Db) Find(ctx context.Context, hash *chainhash.Hash, tokenID *chainhash.Hash, validityCache *map[chainhash.Hash]struct{}) ([][]byte, error) {
 
 	// The result grows with what the search finds, not with the token's
 	// graph, which can hold millions of transactions and can grow while the
 	// search runs.
 	var txdata [][]byte
-	err := gs.search(ctx, hash, tokenID, validityCache, func(hash *chainhash.Hash) error {
-		// add txn buffer to results
-		txBuf, err := gs.fetchTxn(hash)
+	var batch []chainhash.Hash
+	read := func() error {
+		txBufs, err := gs.fetchTxns(batch)
 		if err != nil {
-			return fmt.Errorf("graph search failed to read txn %v: %w", hash, err)
+			return fmt.Errorf("graph search failed to read txns: %w", err)
 		}
-		txdata = append(txdata, txBuf)
+		txdata = append(txdata, txBufs...)
+		batch = batch[:0]
 		return nil
+	}
+	err := gs.search(ctx, hash, tokenID, validityCache, func(hash *chainhash.Hash) error {
+		// add txn to results, reading a full batch before the search
+		// looks at its context again
+		batch = append(batch, *hash)
+		if len(batch) < graphSearchCheckInterval {
+			return nil
+		}
+		return read()
 	})
+	if err == nil && len(batch) > 0 {
+		err = read()
+	}
 	if err != nil {
 		return nil, err
 	}

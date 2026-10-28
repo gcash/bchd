@@ -3218,46 +3218,66 @@ func (e errGraphSearchTxnNotFound) Error() string {
 // server logs that error instead.
 var errGraphSearchTxnLoad = errors.New("failed to load transaction bytes")
 
-// fetchGraphSearchTxn reads a transaction of slp graph search, serialized.
-// The graph holds a memory pool transaction before a block does, so one in
-// the memory pool is read from it, and any other from its block, found in the
-// transaction index in the same database transaction.  The index holds only
-// the blocks of the main chain, so the block's height is not looked up.  A
-// transaction in neither is an errGraphSearchTxnNotFound, and the database
-// failing is errGraphSearchTxnLoad.
-func (s *GrpcServer) fetchGraphSearchTxn(txnHash *chainhash.Hash) ([]byte, error) {
-	// Most transactions a search returns are confirmed, and FetchTransaction
-	// allocates an error for each the memory pool does not hold.
-	if s.txMemPool.IsTransactionInPool(txnHash) {
-		if tx, err := s.txMemPool.FetchTransaction(txnHash); err == nil {
-			txBuf := bytes.NewBuffer(make([]byte, 0, tx.MsgTx().SerializeSize()))
-			if err := tx.MsgTx().Serialize(txBuf); err != nil {
-				return nil, err
+// fetchGraphSearchTxns reads transactions of slp graph search, serialized, in
+// the order of their hashes.  The graph holds a memory pool transaction before
+// a block does, so one in the memory pool is read from it, and the others from
+// their blocks, found in the transaction index, all in one database
+// transaction.  The index holds only the blocks of the main chain, so their
+// heights are not looked up.  A transaction in neither fails the read with an
+// errGraphSearchTxnNotFound, and the database failing with
+// errGraphSearchTxnLoad.
+func (s *GrpcServer) fetchGraphSearchTxns(txnHashes []chainhash.Hash) ([][]byte, error) {
+	txns := make([][]byte, len(txnHashes))
+	confirmed := make([]int, 0, len(txnHashes))
+	for i := range txnHashes {
+		// Most transactions a search returns are confirmed, and
+		// FetchTransaction allocates an error for each the memory pool
+		// does not hold.
+		if s.txMemPool.IsTransactionInPool(&txnHashes[i]) {
+			if tx, err := s.txMemPool.FetchTransaction(&txnHashes[i]); err == nil {
+				txBuf := bytes.NewBuffer(make([]byte, 0, tx.MsgTx().SerializeSize()))
+				if err := tx.MsgTx().Serialize(txBuf); err != nil {
+					return nil, err
+				}
+				txns[i] = txBuf.Bytes()
+				continue
 			}
-			return txBuf.Bytes(), nil
 		}
+		confirmed = append(confirmed, i)
 	}
-	var txBytes []byte
+	if len(confirmed) == 0 {
+		return txns, nil
+	}
 	err := s.db.View(func(dbTx database.Tx) error {
-		region, err := s.txIndex.TxBlockRegionIn(dbTx, txnHash)
+		regions := make([]database.BlockRegion, len(confirmed))
+		for j, i := range confirmed {
+			region, err := s.txIndex.TxBlockRegionIn(dbTx, &txnHashes[i])
+			if err != nil {
+				return err
+			}
+			if region == nil {
+				return errGraphSearchTxnNotFound(txnHashes[i])
+			}
+			regions[j] = *region
+		}
+		txBytes, err := dbTx.FetchBlockRegions(regions)
 		if err != nil {
 			return err
 		}
-		if region == nil {
-			return errGraphSearchTxnNotFound(*txnHash)
+		for j, i := range confirmed {
+			txns[i] = txBytes[j]
 		}
-		txBytes, err = dbTx.FetchBlockRegion(region)
-		return err
+		return nil
 	})
 	if err != nil {
 		var notFound errGraphSearchTxnNotFound
 		if errors.As(err, &notFound) {
 			return nil, err
 		}
-		log.Errorf("Failed to load graph search transaction %v: %v", txnHash, err)
+		log.Errorf("Failed to load graph search transactions: %v", err)
 		return nil, errGraphSearchTxnLoad
 	}
-	return txBytes, nil
+	return txns, nil
 }
 
 func (s *GrpcServer) fetchTransactionFromBlock(txHash *chainhash.Hash) ([]byte, int32, *chainhash.Hash, error) {
@@ -3835,7 +3855,7 @@ func (s *GrpcServer) slpEventHandler() {
 				if s.slpIndex.GraphSearchEnabled() {
 					log.Debug("starting slp graph search")
 					initWg.Add(1)
-					go s.slpIndex.LoadSlpGraphSearchDb(s.fetchGraphSearchTxn, &initWg, &s.shutdown)
+					go s.slpIndex.LoadSlpGraphSearchDb(s.fetchGraphSearchTxns, &initWg, &s.shutdown)
 				}
 			}
 

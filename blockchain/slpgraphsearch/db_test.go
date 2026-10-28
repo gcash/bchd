@@ -117,11 +117,17 @@ func TestSlpGraphSearch(t *testing.T) {
 		}
 
 		// perform the graph search, reading the transactions from the test
-		gsDb := NewDb(func(hash *chainhash.Hash) ([]byte, error) {
-			if txnBuf, ok := raw[*hash]; ok {
-				return txnBuf, nil
+		gsDb := NewDb(func(hashes []chainhash.Hash) ([][]byte, error) {
+			txnBufs := make([][]byte, len(hashes))
+			for i := range hashes {
+				txnBuf, ok := raw[hashes[i]]
+				if !ok {
+					return nil, fmt.Errorf("txn %v is not in the test",
+						hashes[i])
+				}
+				txnBufs[i] = txnBuf
 			}
-			return nil, fmt.Errorf("txn %v is not in the test", hash)
+			return txnBufs, nil
 		})
 		gsDb.graphs[*tokenID] = tokenGraph
 		gsRes, err := gsDb.Find(context.Background(), hash, tokenID, &validityCacheSet)

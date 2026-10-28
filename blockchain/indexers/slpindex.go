@@ -666,19 +666,24 @@ func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 	}
 }
 
+// graphSearchLoadBatch is how many transactions the load of slp graph search
+// reads at a time.
+const graphSearchLoadBatch = 1000
+
 // LoadSlpGraphSearchDb is used to load data needed for slp graph search.
-// fetchTxn reads a transaction, serialized, for the load and for the searches,
-// which read back each transaction they return.
+// fetchTxns reads transactions, serialized, in the order of their hashes, for
+// the load and for the searches, which read back the transactions they
+// return.  It fails if it cannot read one of them.
 //
 // NOTE: this is launched as a goroutine and does not return errors!
-func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash) ([]byte, error), initWg *sync.WaitGroup, interupt *int32) {
+func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.Hash) ([][]byte, error), initWg *sync.WaitGroup, interupt *int32) {
 
 	// this method shouldn't be called more than once or if gs is disabled
 	if idx.graphSearchDb != nil || !idx.config.SlpGraphSearchEnabled {
 		return
 	}
 
-	idx.graphSearchDb = slpgraphsearch.NewDb(fetchTxn)
+	idx.graphSearchDb = slpgraphsearch.NewDb(fetchTxns)
 
 	// now that graphSearchDB is set we can call Done()
 	if initWg != nil {
@@ -699,24 +704,43 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
 	//	      of token IDs for graph search can be added.
 	log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnTokenIDMap)))
-	getTxn := func(txnHash chainhash.Hash, _ *chainhash.Hash, wg *sync.WaitGroup) error {
+
+	// addTxns adds the transactions to graph search, but one that is not
+	// an slp transaction, or returns the error reading them.
+	addTxns := func(txnHashes []chainhash.Hash) error {
+		txBufs, err := fetchTxns(txnHashes)
+		if err != nil {
+			return err
+		}
+		for _, txBytes := range txBufs {
+			var msgTx wire.MsgTx
+			err = msgTx.Deserialize(bytes.NewReader(txBytes))
+			if err != nil {
+				log.Warnf("loadSlpGraphSearchDb failed to deserialize transaction: %v", err)
+				continue
+			}
+			if err := idx.graphSearchDb.AddTxn(&msgTx); err != nil {
+				log.Warn(err.Error())
+			}
+		}
+		return nil
+	}
+
+	// getTxns loads a batch of transactions.  One that cannot be read fails
+	// the read of its batch, so the batch is then read a transaction at a
+	// time, leaving out only those that cannot be read.
+	getTxns := func(txnHashes []chainhash.Hash, wg *sync.WaitGroup) {
 		if wg != nil {
 			defer wg.Done()
 		}
-
-		var msgTx wire.MsgTx
-
-		txBytes, err := fetchTxn(&txnHash)
-		if err != nil {
-			log.Debugf("slp graph search transaction %v was not found", txnHash)
-		} else {
-			err = msgTx.Deserialize(bytes.NewReader(txBytes))
-			if err != nil {
-				return fmt.Errorf("loadSlpGraphSearchDb failed to deserialize transaction: %v", err)
+		if len(txnHashes) > 1 && addTxns(txnHashes) == nil {
+			return
+		}
+		for i := range txnHashes {
+			if addTxns(txnHashes[i:i+1]) != nil {
+				log.Debugf("slp graph search transaction %v was not found", txnHashes[i])
 			}
 		}
-
-		return idx.graphSearchDb.AddTxn(&msgTx)
 	}
 
 	// Limit the number of goroutines to do script validation based on the
@@ -726,8 +750,23 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 	guard := make(chan struct{}, maxGoroutines)
 	var wg sync.WaitGroup
 
+	// load loads a batch, in a goroutine of its own unless there are few.
+	load := func(batch []chainhash.Hash) {
+		if len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
+			guard <- struct{}{}
+			wg.Add(1)
+			go func(batch []chainhash.Hash, wg *sync.WaitGroup) {
+				getTxns(batch, wg)
+				<-guard
+			}(batch, &wg)
+		} else {
+			getTxns(batch, nil)
+		}
+	}
+
 	txnCount := 0
-	for txnHash, tokenIDHash := range *txnTokenIDMap {
+	batch := make([]chainhash.Hash, 0, graphSearchLoadBatch)
+	for txnHash := range *txnTokenIDMap {
 		if interupt != nil && atomic.LoadInt32(interupt) == 1 {
 			log.Warn("slp graph search loading interupted signal received")
 			break
@@ -738,25 +777,17 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxn func(txnHash *chainhash.Hash)
 		}
 		txnCount++
 
-		if len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
-			if txnCount == 1 {
-				log.Debug("loading slp graph search transactions concurrently")
-			}
-			guard <- struct{}{}
-			wg.Add(1)
-			go func(txnHash chainhash.Hash, tokenIDHash *chainhash.Hash, wg *sync.WaitGroup) {
-				err := getTxn(txnHash, tokenIDHash, wg)
-				if err != nil {
-					log.Warn(err.Error())
-				}
-				<-guard
-			}(txnHash, tokenIDHash, &wg)
-		} else {
-			err := getTxn(txnHash, tokenIDHash, nil)
-			if err != nil {
-				log.Warn(err.Error())
-			}
+		if txnCount == 1 && len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
+			log.Debug("loading slp graph search transactions concurrently")
 		}
+		batch = append(batch, txnHash)
+		if len(batch) == graphSearchLoadBatch {
+			load(batch)
+			batch = make([]chainhash.Hash, 0, graphSearchLoadBatch)
+		}
+	}
+	if len(batch) > 0 {
+		load(batch)
 	}
 
 	wg.Wait()

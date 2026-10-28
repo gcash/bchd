@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,11 +29,12 @@ var errNotStored = errors.New("transaction not stored")
 
 // testDb is a database that reads the transactions its searches return from
 // those the test stored, as a node reads them from its transaction index, and
-// counts the reads.
+// counts the transactions read and the batches they were read in.
 type testDb struct {
 	*Db
-	raw   map[chainhash.Hash][]byte
-	reads int
+	raw     map[chainhash.Hash][]byte
+	reads   int
+	batches []int
 }
 
 func newTestDb() *testDb {
@@ -41,13 +43,37 @@ func newTestDb() *testDb {
 	return db
 }
 
-func (db *testDb) fetch(hash *chainhash.Hash) ([]byte, error) {
-	db.reads++
-	raw, ok := db.raw[*hash]
-	if !ok {
-		return nil, fmt.Errorf("%v: %w", hash, errNotStored)
+func (db *testDb) fetch(hashes []chainhash.Hash) ([][]byte, error) {
+	db.batches = append(db.batches, len(hashes))
+	txns := make([][]byte, len(hashes))
+	for i := range hashes {
+		raw, ok := db.raw[hashes[i]]
+		if !ok {
+			return nil, fmt.Errorf("%v: %w", hashes[i], errNotStored)
+		}
+		txns[i] = raw
 	}
-	return raw, nil
+	db.reads += len(hashes)
+	return txns, nil
+}
+
+// checkBatches checks that the transactions found were read in batches of
+// graphSearchCheckInterval, but for the last.
+func checkBatches(t *testing.T, what string, batches []int, found int) {
+	t.Helper()
+	want := (found + graphSearchCheckInterval - 1) / graphSearchCheckInterval
+	if len(batches) != want {
+		t.Fatalf("%s: read %d transactions in %d batches, want %d", what,
+			found, len(batches), want)
+	}
+	for i, n := range batches {
+		if n != min(graphSearchCheckInterval,
+			found-i*graphSearchCheckInterval) {
+
+			t.Fatalf("%s: batches of %v for %d transactions", what,
+				batches, found)
+		}
+	}
 }
 
 // store stores tx for the database to read.
@@ -364,9 +390,9 @@ func TestFindSameAsRecursive(t *testing.T) {
 			}
 			got, counted := *want, *want
 			wantRes, wantErr := findRecursive(whole, want, &root, &valid)
-			db.reads = 0
+			db.reads, db.batches = 0, nil
 			gotRes, gotErr := db.Find(&got, &root, tokenID, &valid)
-			reads := db.reads
+			reads, batches := db.reads, db.batches
 			count, countErr := db.Count(&counted, &root, tokenID, &valid)
 
 			what := fmt.Sprintf("graph %d of %d transactions, search %d "+
@@ -388,9 +414,12 @@ func TestFindSameAsRecursive(t *testing.T) {
 				t.Fatalf("%s: the context was looked at %d times, want %d",
 					what, got.calls, want.calls)
 			}
-			if wantErr == nil && reads != len(wantRes) {
-				t.Fatalf("%s: read %d transactions for %d", what, reads,
-					len(wantRes))
+			if wantErr == nil {
+				if reads != len(wantRes) {
+					t.Fatalf("%s: read %d transactions for %d", what,
+						reads, len(wantRes))
+				}
+				checkBatches(t, what, batches, len(wantRes))
 			}
 			if fmt.Sprint(countErr) != fmt.Sprint(wantErr) ||
 				count != len(wantRes) || counted.calls != want.calls {
@@ -399,7 +428,7 @@ func TestFindSameAsRecursive(t *testing.T) {
 					"times, want %d and %v, %d times", what, count, countErr,
 					counted.calls, len(wantRes), wantErr, want.calls)
 			}
-			if db.reads != reads {
+			if db.reads != reads || len(db.batches) != len(batches) {
 				t.Fatalf("%s: counting read %d transactions", what,
 					db.reads-reads)
 			}
@@ -603,7 +632,7 @@ func TestCountReadsNothing(t *testing.T) {
 	db, tip, tokenID := sendChain(t, sends)
 	n, err := db.Count(context.Background(), tip, tokenID,
 		&map[chainhash.Hash]struct{}{})
-	if err != nil || n != sends+1 || db.reads != 0 {
+	if err != nil || n != sends+1 || db.reads != 0 || db.batches != nil {
 		t.Fatalf("counted %d and %v, reading %d transactions, want %d, "+
 			"reading none", n, err, db.reads, sends+1)
 	}
@@ -615,24 +644,117 @@ func TestCountReadsNothing(t *testing.T) {
 	}
 }
 
+// readsContext is a context that records how many transactions db has read
+// each time it is looked at, and whose Err returns err from its checks-th
+// call on.
+type readsContext struct {
+	context.Context
+	db     *testDb
+	checks int
+	err    error
+	reads  []int
+}
+
+func (c *readsContext) Err() error {
+	c.reads = append(c.reads, c.db.reads)
+	if len(c.reads) == c.checks {
+		return c.err
+	}
+	return nil
+}
+
+// TestFindReadsInBatches ensures a search reads the transactions it finds a
+// batch of graphSearchCheckInterval at a time, each before it looks at its
+// context again, so that a node reads them in one database transaction for
+// each batch, and the search stops as soon as it would have read one at a
+// time.
+func TestFindReadsInBatches(t *testing.T) {
+	const sends = 2500
+	db, tip, tokenID := sendChain(t, sends)
+	ctx := &readsContext{Context: context.Background(), db: db}
+	res, err := db.Find(ctx, tip, tokenID, &map[chainhash.Hash]struct{}{})
+	if err != nil || len(res) != sends+1 {
+		t.Fatalf("got %d transactions and %v, want %d", len(res), err,
+			sends+1)
+	}
+	checkBatches(t, "the search", db.batches, sends+1)
+	if want := []int{0, 1000, 2000}; !slices.Equal(ctx.reads, want) {
+		t.Errorf("the context was looked at with %v transactions read, "+
+			"want %v", ctx.reads, want)
+	}
+
+	// A search finding a batch of transactions reads it once.
+	db.batches = nil
+	graph := db.getTokenGraph(tokenID)
+	hash := *tip
+	for i := 0; i < sends-graphSearchCheckInterval+1; i++ {
+		txn, _ := graph.getTxn(&hash)
+		hash = txn.inputs[0].Hash
+	}
+	res, err = db.Find(context.Background(), &hash, tokenID,
+		&map[chainhash.Hash]struct{}{})
+	if err != nil || len(res) != graphSearchCheckInterval {
+		t.Fatalf("got %d transactions and %v, want %d", len(res), err,
+			graphSearchCheckInterval)
+	}
+	checkBatches(t, "a search of a batch", db.batches,
+		graphSearchCheckInterval)
+
+	// The context ends at the third look, before the 2001st transaction
+	// is found.
+	db.reads, db.batches = 0, nil
+	ctx = &readsContext{Context: context.Background(), db: db, checks: 3,
+		err: context.Canceled}
+	res, err = db.Find(ctx, tip, tokenID, &map[chainhash.Hash]struct{}{})
+	if !errors.Is(err, context.Canceled) || res != nil || db.reads != 2000 {
+		t.Errorf("the context ending: got %d transactions and %v, "+
+			"reading %d, want %v, reading 2000", len(res), err, db.reads,
+			context.Canceled)
+	}
+}
+
 // TestFindReadError ensures a search that cannot read a transaction it finds
-// fails with the error and the transaction's hash, whether that is the
+// fails with the error, which names the transaction, whether that is the
 // transaction searched from or one it leads to, rather than returning the
-// others, while Count, which reads none, still counts it.
+// others, and reads no batch after the one that failed, while Count, which
+// reads none, still counts it.
 func TestFindReadError(t *testing.T) {
-	const sends = 10
+	const sends = 2500
 	db, tip, tokenID := sendChain(t, sends)
 	genesis := genesisHash(tokenID)
-	for _, hash := range []*chainhash.Hash{tip, &genesis} {
+
+	// The search goes from the last send back to the GENESIS, which is
+	// in the third batch, and the 600th transaction it finds is in the
+	// first.
+	graph := db.getTokenGraph(tokenID)
+	middle := *tip
+	for i := 1; i < 600; i++ {
+		txn, _ := graph.getTxn(&middle)
+		middle = txn.inputs[0].Hash
+	}
+	for _, test := range []struct {
+		hash    *chainhash.Hash
+		batches int
+	}{
+		{tip, 1},
+		{&middle, 1},
+		{&genesis, 3},
+	} {
+		hash := test.hash
 		raw := db.raw[*hash]
 		delete(db.raw, *hash)
+		db.batches = nil
 		res, err := db.Find(context.Background(), tip, tokenID,
 			&map[chainhash.Hash]struct{}{})
 		if !errors.Is(err, errNotStored) || res != nil ||
-			!strings.Contains(err.Error(), "failed to read txn "+hash.String()) {
+			!strings.Contains(err.Error(), hash.String()) {
 
 			t.Errorf("without %v: got %d transactions and %v", hash,
 				len(res), err)
+		}
+		if len(db.batches) != test.batches {
+			t.Errorf("without %v: read %d batches, want %d", hash,
+				len(db.batches), test.batches)
 		}
 		n, err := db.Count(context.Background(), tip, tokenID,
 			&map[chainhash.Hash]struct{}{})
