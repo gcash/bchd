@@ -734,41 +734,56 @@ func TestSlpEntryCopied(t *testing.T) {
 	}
 }
 
-// TestSlpPotentialEntryIndexFailure ensures AddPotentialSlpEntries returns a
-// failure of the slp index to read the entry of a transaction an input spends,
-// which IsSlpIndexFailure tells, rather than take the input for one that is
-// not slp, which could find the transaction invalid, while an input of a
-// transaction the index does not hold is still not slp.
+// TestSlpPotentialEntryIndexFailure ensures AddPotentialSlpEntries returns the
+// error for the corrupt entry of a transaction an input spends, which
+// IsSlpEntryCorrupt tells, whether the index cannot read the entry or parse
+// its slp message, rather than take the input for one that is not slp, which
+// could find the transaction invalid, and leaves a transaction valid without
+// the input unjudged too, out of the cache, while an input of a transaction
+// the index does not hold is still not slp.
 func TestSlpPotentialEntryIndexFailure(t *testing.T) {
-	test := newSlpTokenIDTest(t)
-	corrupt, unknown := chainhash.Hash{0xee, 0x20}, chainhash.Hash{0xee, 0x21}
-	err := test.db.Update(func(dbTx database.Tx) error {
-		return dbTx.Metadata().Bucket(slpIndexKey).Put(corrupt[:], []byte{1})
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x08}, 32),
-		[]uint64{1000})
-	for _, c := range []struct {
-		name    string
-		prev    chainhash.Hash
-		failure bool
-	}{
-		{"an input spending a corrupt entry", corrupt, true},
-		{"an input the index does not hold", unknown, false},
-	} {
-		send := slpTx(t, 0x22, script, err)
-		send.TxIn[0].PreviousOutPoint = wire.OutPoint{Hash: c.prev, Index: 1}
+	check := func(what string, test *slpTokenIDTest, tx *wire.MsgTx, corrupt bool) {
+		t.Helper()
 		var valid bool
 		err := test.db.View(func(dbTx database.Tx) error {
 			var err error
-			valid, err = test.idx.AddPotentialSlpEntries(dbTx, send)
+			valid, err = test.idx.AddPotentialSlpEntries(dbTx, tx)
 			return err
 		})
-		if IsSlpIndexFailure(err) != c.failure || valid || (err != nil) != c.failure {
-			t.Errorf("%s: got %v and %v, want a failure %v", c.name, valid,
-				err, c.failure)
+		if IsSlpEntryCorrupt(err) != corrupt || valid || (err != nil) != corrupt {
+			t.Errorf("%s: got %v and %v, want a corrupt entry %v", what, valid,
+				err, corrupt)
+		}
+		hash := tx.TxHash()
+		if _, ok := test.idx.cache.GetSlpTxEntry(&hash); ok {
+			t.Errorf("%s: the transaction is in the cache", what)
+		}
+	}
+
+	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x08}, 32),
+		[]uint64{1000})
+	send := slpTx(t, 0x22, script, err)
+	send.TxIn[0].PreviousOutPoint = wire.OutPoint{Hash: chainhash.Hash{0xee, 0x21}, Index: 1}
+	check("an input the index does not hold", newSlpTokenIDTest(t), send, false)
+
+	for _, c := range slpEntryCorruptions {
+		for _, validWithout := range []bool{false, true} {
+			test := newSlpTokenIDTest(t)
+			genesis, other := genesisTx(t, 1), genesisTx(t, 2)
+			test.connect(genesis, other)
+			corruptSlpEntry(t, test.db, genesis.TxHash(), c.corrupt)
+			test.restart()
+			what := c.name + ", spent by a SEND"
+			spend := spendingSlpTx(t, genesis, true)
+			if validWithout {
+				what = c.name + ", spent by a SEND of another token, valid without it"
+				spend = spendingSlpTx(t, other, true)
+				spend.AddTxIn(&wire.TxIn{
+					PreviousOutPoint: wire.OutPoint{Hash: genesis.TxHash(), Index: 1},
+					Sequence:         wire.MaxTxInSequenceNum,
+				})
+			}
+			check(what, test, spend, true)
 		}
 	}
 }

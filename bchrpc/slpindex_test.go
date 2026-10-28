@@ -2073,13 +2073,13 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// TestSlpEventRecheck ensures a memory pool transaction whose slp check the
-// database fails, by a read that fails or an entry the slp index cannot read,
-// is checked again at each block event while it is in the memory pool, until
-// the database does not fail, and then added to graph search as well, rather
-// than left not valid slp for as long as it is there, and that one that left
-// the memory pool meanwhile is not, the failure logged as an error rather
-// than at debug as an invalid transaction.
+// TestSlpEventRecheck ensures a memory pool transaction whose slp check a read
+// of the database fails is checked again at each block event while it is in
+// the memory pool, until the read does not fail, and then added to graph
+// search as well, rather than left not valid slp for as long as it is there,
+// and that one that left the memory pool meanwhile is not, the failure logged
+// as an error rather than at debug as an invalid transaction, as is the check
+// of one spending an output whose entry the slp index cannot read.
 func TestSlpEventRecheck(t *testing.T) {
 	s := newDispatcherTestServer(t)
 	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
@@ -2199,8 +2199,8 @@ func TestSlpEventRecheck(t *testing.T) {
 	accepted(spends)
 	failures(4)
 	want := "[ERR] GRPC: Failed to check slp transaction " +
-		spends.TxHash().String() + " (mempool): corrupt slp index entry for " +
-		corrupt.String()
+		spends.TxHash().String() + " (mempool): the slp index entry of " +
+		"transaction " + corrupt.String() + " is corrupt"
 	if !strings.Contains(logged.String(), want) {
 		t.Errorf("log %q, want a line with %q", logged.String(), want)
 	}
@@ -2513,4 +2513,181 @@ func TestSlpTokenIndexFailureCalls(t *testing.T) {
 			IncludeTokenMetadata: true})
 		return err
 	})
+}
+
+// TestSlpEventCorruptEntry ensures the slp event handler logs as an error the
+// check of a memory pool transaction spending an output whose slp index entry
+// is corrupt, naming the entry and how to rebuild the index, whether the index
+// cannot read the entry or parse its slp message, rather than judge the
+// transaction invalid at debug, and that it does not check the transaction
+// again at block events, as only rebuilding the index mends the entry, also
+// once a check again after a read of the database failed finds the entry
+// corrupt.
+func TestSlpEventCorruptEntry(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100})
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slpTx := func(script []byte, prev wire.OutPoint) *wire.MsgTx {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&prev, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 90000000, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+
+	// A confirmed GENESIS gives the index the metadata of internal token ID
+	// 1, which the entry of the transaction funding the memory pool names
+	// once it holds a message that does not parse.
+	genesis := slpTx(script, wire.OutPoint{Hash: chainhash.Hash{0xee, 12}})
+	err = db.Update(func(dbTx database.Tx) error {
+		return idx.ConnectBlock(dbTx, bchutil.NewBlock(&wire.MsgBlock{
+			Transactions: []*wire.MsgTx{genesis}}), nil)
+	})
+	if err != nil {
+		t.Fatalf("ConnectBlock: %v", err)
+	}
+	pool, funding := newOpTruePool(t)
+	fundingHash := funding.TxHash()
+	putEntry := func(hash chainhash.Hash, value []byte) {
+		t.Helper()
+		err := db.Update(func(dbTx database.Tx) error {
+			return dbTx.Metadata().Bucket([]byte("slptxbyhashidx")).Put(
+				hash[:], value)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	toggling := &togglingViewDB{DB: db, err: errors.New("the database failed")}
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex, s.txMemPool = toggling, idx, pool
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	t.Cleanup(func() { UseLogger(saved) })
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+	accepted := func(tx *wire.MsgTx) {
+		s.dispatchEvent(&rpcEventTxAccepted{TxDesc: &mempool.TxDesc{
+			TxDesc: mining.TxDesc{Tx: bchutil.NewTx(tx)}}})
+	}
+	failures := func(tx *wire.MsgTx) int {
+		return strings.Count(logged.String(), "[ERR] GRPC: Failed to check "+
+			"slp transaction "+tx.TxHash().String())
+	}
+
+	// A SEND spending an output of the funding transaction is checked while
+	// its entry is too short to read, and another, spending the other
+	// output, once the entry holds a message that does not parse.  The
+	// first read fails, so the index does not cache the entry until the
+	// second.
+	send, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x09}, 32),
+		[]uint64{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name  string
+		value []byte
+		cause string
+	}{
+		{"an entry too short to read", []byte{1},
+			"corrupt slp index entry for " + fundingHash.String()},
+		{"an entry whose message does not parse", append([]byte{1, 0, 0, 0, 1, 0},
+			bytes.Repeat([]byte{txscript.OP_RETURN}, 40)...),
+			"previously saved slp scriptPubKey cannot be parsed"},
+	}
+	spends := make([]*wire.MsgTx, len(cases))
+	for i, c := range cases {
+		putEntry(fundingHash, c.value)
+		spends[i] = slpTx(send, wire.OutPoint{Hash: fundingHash, Index: uint32(i)})
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(spends[i]), false, 0); err != nil {
+			t.Fatalf("ProcessTransaction: %v", err)
+		}
+		accepted(spends[i])
+		waitFor(t, "the check spending "+c.name+" to be logged", func() bool {
+			return failures(spends[i]) == 1
+		})
+		want := "[ERR] GRPC: Failed to check slp transaction " +
+			spends[i].TxHash().String() + " (mempool): the slp index entry of " +
+			"transaction " + fundingHash.String() + " is corrupt: " + c.cause
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("%s: log %q, want a line with %q", c.name, logged.String(), want)
+		}
+	}
+	if !strings.Contains(logged.String(), "start once with --dropslpindex") {
+		t.Errorf("log %q, want the advice to rebuild the index", logged.String())
+	}
+
+	// A third SEND, spending an output of the first, whose entry the index
+	// then holds, too short to read, is checked while a read of the
+	// database fails, and so again at the next block event, which finds the
+	// entry corrupt.
+	putEntry(spends[0].TxHash(), []byte{1})
+	child := wire.NewMsgTx(1)
+	child.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: spends[0].TxHash(), Index: 2}, nil))
+	child.AddTxOut(&wire.TxOut{PkScript: send})
+	child.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	child.AddTxOut(&wire.TxOut{Value: 80000000, PkScript: []byte{txscript.OP_TRUE}})
+	if _, err := pool.ProcessTransaction(bchutil.NewTx(child), false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	toggling.failing.Store(true)
+	accepted(child)
+	waitFor(t, "the check of the third SEND to be logged", func() bool {
+		return failures(child) == 1
+	})
+	toggling.failing.Store(false)
+
+	// The first and second SENDs are not checked again at the next block
+	// events, and the third only at the first.  The check of a fourth SEND,
+	// spending an output of the funding transaction too, after them shows
+	// when the handler is done with them, and its log line, which the test
+	// waits for, comes after the handler's last read of the logger, which
+	// the test then restores.
+	for range 2 {
+		s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
+	}
+	last := slpTx(send, wire.OutPoint{Hash: fundingHash, Index: 1})
+	last.TxOut[2].Value--
+	accepted(last)
+	waitFor(t, "the check of the fourth SEND to be logged", func() bool {
+		return failures(last) == 1
+	})
+	for i, c := range cases {
+		if n := failures(spends[i]); n != 1 {
+			t.Errorf("%s: the check was logged %d times, want once", c.name, n)
+		}
+	}
+	want := "[ERR] GRPC: Failed to check slp transaction " +
+		child.TxHash().String() + " (mempool): the slp index entry of " +
+		"transaction " + spends[0].TxHash().String() + " is corrupt"
+	if n := failures(child); n != 2 || !strings.Contains(logged.String(), want) {
+		t.Errorf("the third SEND: the check was logged %d times, want twice, "+
+			"the second with %q", n, want)
+	}
 }

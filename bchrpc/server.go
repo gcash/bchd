@@ -3979,9 +3979,11 @@ func (s *GrpcServer) slpEventHandler() {
 	// any txns to the graph search db
 	initWg := sync.WaitGroup{}
 
-	// The memory pool transactions whose check the database failed, which
-	// are checked again at each block event while they are in the memory
-	// pool, as it may not fail again.
+	// The memory pool transactions whose check a read of the database
+	// failed, which are checked again at each block event while they are in
+	// the memory pool, as it may not fail again.  One whose check found a
+	// corrupt entry of the slp index is not: only rebuilding the index mends
+	// the entry, so the transaction is left unjudged.
 	recheck := make(map[chainhash.Hash]*wire.MsgTx)
 
 	// This subscription is not bounded, since dropping it would stop SLP
@@ -4012,7 +4014,7 @@ func (s *GrpcServer) slpEventHandler() {
 
 			// validate new slp txns
 			isSlpValid, err := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
-			if err != nil {
+			if err != nil && !indexers.IsSlpEntryCorrupt(err) {
 				recheck[*txDesc.Tx.Hash()] = txDesc.Tx.MsgTx()
 			}
 			if isSlpValid && s.slpIndex.GraphSearchEnabled() {
@@ -4033,7 +4035,7 @@ func (s *GrpcServer) slpEventHandler() {
 					continue
 				}
 				isSlpValid, err := s.checkSlpTxOnEvent(tx, "mempool")
-				if err != nil {
+				if err != nil && !indexers.IsSlpEntryCorrupt(err) {
 					continue
 				}
 				delete(recheck, hash)
@@ -4053,7 +4055,8 @@ func (s *GrpcServer) slpEventHandler() {
 //
 // It returns whether tx is valid slp, and the failure of the database that
 // kept it from telling, which it logs as an error: a read of the database
-// that failed, or an entry of the slp index it could not read.
+// that failed, or a corrupt entry of the slp index, which it cannot read or
+// whose slp message does not parse.
 func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) (bool, error) {
 	if !isMaybeSlpTransaction(tx) {
 		return false, nil
@@ -4068,7 +4071,7 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) (bool, e
 		return checkErr
 	})
 	switch {
-	case err != nil && (err != checkErr || indexers.IsSlpIndexFailure(err)):
+	case err != nil && (err != checkErr || indexers.IsSlpEntryCorrupt(err)):
 		log.Errorf("Failed to check slp transaction %v (%s): %v", tx.TxHash(), eventStr, err)
 		return false, err
 	case err != nil:

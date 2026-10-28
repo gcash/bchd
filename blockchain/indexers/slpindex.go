@@ -370,30 +370,6 @@ func IsSlpEntryNotFound(err error) bool {
 	return errors.As(err, &notFound)
 }
 
-// slpIndexFailure is the error AddPotentialSlpEntries returns when the slp
-// index fails to read the entry of a transaction an input spends.
-type slpIndexFailure struct {
-	err error
-}
-
-// Error implements the error interface.
-func (e slpIndexFailure) Error() string {
-	return e.err.Error()
-}
-
-// Unwrap returns the index's error.
-func (e slpIndexFailure) Unwrap() error {
-	return e.err
-}
-
-// IsSlpIndexFailure reports whether err, from AddPotentialSlpEntries, is a
-// failure of the slp index to read an entry the check needs, rather than a
-// judgement of the transaction, which the caller can check again.
-func IsSlpIndexFailure(err error) bool {
-	var failure slpIndexFailure
-	return errors.As(err, &failure)
-}
-
 // errSlpEntryCorrupt is the error for the entry of a transaction an input
 // spends that the slp index holds but cannot read, or whose slp message does
 // not parse.  Only rebuilding the index mends it.  It is not a database.Error:
@@ -414,6 +390,14 @@ func (e errSlpEntryCorrupt) Error() string {
 // Unwrap returns the error reading or parsing the entry.
 func (e errSlpEntryCorrupt) Unwrap() error {
 	return e.err
+}
+
+// IsSlpEntryCorrupt reports whether err, from AddPotentialSlpEntries, is the
+// error for the corrupt entry of a transaction an input spends, which kept it
+// from judging the transaction, and which only rebuilding the index mends.
+func IsSlpEntryCorrupt(err error) bool {
+	var corrupt errSlpEntryCorrupt
+	return errors.As(err, &corrupt)
 }
 
 // errSlpMsgUnparsable returns the error for the entry of the transaction hash
@@ -1233,9 +1217,11 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		return true, nil
 	}
 
-	// An entry the index fails to read is returned as its failure, rather
-	// than the input taken for one that is not slp, which could find the
-	// transaction invalid, so that the caller can check it again.
+	// An entry the index holds but cannot read is corrupt, and is returned,
+	// as is one whose slp message does not parse, which CheckSlpTx returns,
+	// rather than the input taken for one that is not slp, which could find
+	// the transaction invalid.  The transaction is left unjudged, and so not
+	// cached even when it is valid without the input.
 	var failure error
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
@@ -1243,13 +1229,16 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 			return entry, nil
 		}
 		if err != nil && !IsSlpEntryNotFound(err) && failure == nil {
-			failure = slpIndexFailure{err}
+			failure = errSlpEntryCorrupt{hash: *txiHash, err: err}
 		}
 
 		return nil, err
 	}
 
 	putTxIndexEntry := func(tx *wire.MsgTx, slpMsg v1parser.ParseResult, tokenIDHash *chainhash.Hash) error {
+		if failure != nil {
+			return failure
+		}
 		scriptPubKey := tx.TxOut[0].PkScript
 		hash := tx.TxHash()
 
