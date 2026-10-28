@@ -2,6 +2,7 @@ package bchrpc
 
 import (
 	"context"
+	"io"
 	"runtime"
 	"strings"
 	"testing"
@@ -126,7 +127,10 @@ func TestQueueHandlerUnbounded(t *testing.T) {
 }
 
 // txStream is a SubscribeTransactionStream stream whose client has sent reqs
-// and then sends nothing until the stream ends.
+// and then sends nothing until the stream ends.  The client's side ends with
+// the stream, as io.EOF, so that the call's request reader stops without
+// logging an error: it can stop after the call has returned, and so after the
+// test has, while another test swaps the logger.
 type txStream struct {
 	grpc.ServerStream
 	ctx  context.Context
@@ -144,7 +148,7 @@ func (s *txStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
 		return req, nil
 	}
 	<-s.ctx.Done()
-	return nil, s.ctx.Err()
+	return nil, io.EOF
 }
 
 // streamReaders returns the number of goroutines reading the requests of a
@@ -460,10 +464,15 @@ func TestSubscribeTransactionStreamFilterLimit(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the call still runs with more than maxFilterSize in its filter")
 	}
+
+	// The call's request reader ends before the test does.
+	cancel()
+	waitStreamReaders(t)
 }
 
 // reqTxStream is a SubscribeTransactionStream stream whose client sends the
 // requests handed to reqs, and which passes on the notifications it is sent.
+// The client's side ends with the stream, as txStream's does.
 type reqTxStream struct {
 	grpc.ServerStream
 	ctx  context.Context
@@ -478,7 +487,7 @@ func (s *reqTxStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
 	case req := <-s.reqs:
 		return req, nil
 	case <-s.ctx.Done():
-		return nil, s.ctx.Err()
+		return nil, io.EOF
 	}
 }
 
@@ -536,8 +545,7 @@ func TestSubscribeTransactionStreamMatchedOutputsNotCounted(t *testing.T) {
 	}
 	send("the entry again")
 
-	// The call and its request reader, which logs the end of the stream,
-	// end before the test does.
+	// The call and its request reader end before the test does.
 	cancel()
 	if err := <-done; err != nil {
 		t.Errorf("the call ended with %v", err)
@@ -653,7 +661,16 @@ func TestSubscribeTransactionStreamConfiguredFilterLimit(t *testing.T) {
 					"entries in its filter")
 			}
 		}
+
+		// The call, when it still runs, and its request reader end
+		// before the next one starts.
 		cancel()
+		if !over {
+			if err := <-done; err != nil {
+				t.Errorf("the call ended with %v", err)
+			}
+		}
+		waitStreamReaders(t)
 	}
 }
 
@@ -780,7 +797,8 @@ func (h *heldSender) send() error {
 }
 
 // heldTxStream is a transaction subscription's stream whose client sends the
-// requests handed to reqs and whose notifications are held.
+// requests handed to reqs and whose notifications are held.  The client's side
+// ends with the stream, as txStream's does.
 type heldTxStream struct {
 	grpc.ServerStream
 	*heldSender
@@ -795,7 +813,7 @@ func (s *heldTxStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
 	case req := <-s.reqs:
 		return req, nil
 	case <-s.ctx.Done():
-		return nil, s.ctx.Err()
+		return nil, io.EOF
 	}
 }
 
@@ -966,8 +984,7 @@ func TestSubscriptionsTakeTheirEventKinds(t *testing.T) {
 			&heldBlockStream{ctx: ctx, heldSender: held})
 	}, blockChange, accepted, proof))
 
-	// The calls and the stream's request reader, which logs the end of
-	// the stream, end before the test does.
+	// The calls and the stream's request reader end before the test does.
 	cancel()
 	for _, wait := range calls {
 		wait()

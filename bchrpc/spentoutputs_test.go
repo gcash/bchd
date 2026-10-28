@@ -7,6 +7,7 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,14 +27,17 @@ import (
 
 // txNotifyStream is a SubscribeTransactions or SubscribeTransactionStream
 // stream that records the hashes of the serialized transactions it is sent.
-// For SubscribeTransactionStream it sends req and closes delivered once the
-// call has taken it.
+// For SubscribeTransactionStream it sends req, closes delivered once the call
+// has taken it, and then ends its client's side with the stream, as txStream
+// does, closing ended as it does so, after which the call's request reader
+// only returns.
 type txNotifyStream struct {
 	grpc.ServerStream
 	ctx       context.Context
 	sent      chan chainhash.Hash
 	req       *pb.SubscribeTransactionsRequest
 	delivered chan struct{}
+	ended     chan struct{}
 }
 
 func (s *txNotifyStream) Context() context.Context { return s.ctx }
@@ -45,7 +49,8 @@ func (s *txNotifyStream) Recv() (*pb.SubscribeTransactionsRequest, error) {
 	}
 	close(s.delivered)
 	<-s.ctx.Done()
-	return nil, s.ctx.Err()
+	close(s.ended)
+	return nil, io.EOF
 }
 
 func (s *txNotifyStream) Send(n *pb.TransactionNotification) error {
@@ -107,11 +112,21 @@ func (h *addrUnspentHarness) subscribeAddress(t *testing.T, bidi, mempool,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	stream := &txNotifyStream{ctx: ctx, sent: make(chan chainhash.Hash, 100),
-		delivered: make(chan struct{})}
+		delivered: make(chan struct{}), ended: make(chan struct{})}
 	done := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
 		<-done
+		// A call that took its request has its request reader in the
+		// Recv that closed delivered, which closes ended as it returns
+		// the end of the stream.
+		if bidi {
+			select {
+			case <-stream.delivered:
+				<-stream.ended
+			default:
+			}
+		}
 	})
 	n := h.s.numSubscriptions()
 	go func() {

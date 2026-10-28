@@ -294,13 +294,23 @@ func (h *addrUnspentHarness) subscribeConfirmed(t *testing.T,
 	ctx, cancel := context.WithCancel(context.Background())
 	stream := &metaStream{
 		txNotifyStream: txNotifyStream{ctx: ctx,
-			delivered: make(chan struct{})},
+			delivered: make(chan struct{}), ended: make(chan struct{})},
 		txs: make(chan *pb.Transaction, 100),
 	}
 	done := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
 		<-done
+		// A call that took its request has its request reader in the
+		// Recv that closed delivered, which closes ended as it returns
+		// the end of the stream.
+		if bidi {
+			select {
+			case <-stream.delivered:
+				<-stream.ended
+			default:
+			}
+		}
 	})
 	n := h.s.numSubscriptions()
 	go func() {

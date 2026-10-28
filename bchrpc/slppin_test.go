@@ -51,7 +51,9 @@ func TestSlpTxBackInPoolStaysValid(t *testing.T) {
 	// The memory pool holds none of the transactions, so a block event
 	// finds each of them gone.
 	s.txMemPool = mempool.New(&mempool.Config{})
-	go s.slpEventHandler()
+	// The server's cleanup waits for the handler, which ends once the
+	// server quits, as it does for the server's own goroutines.
+	s.wg.Go(s.slpEventHandler)
 	waitFor(t, "the slp event handler to subscribe", func() bool {
 		return s.numSubscriptions() == 1
 	})
