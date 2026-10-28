@@ -1831,7 +1831,7 @@ func TestSignTokenInputs(t *testing.T) {
 		{"multisig", multiSig, []KeyDB{kdb1, kdb2}},
 		{"p2sh multisig", p2sh, []KeyDB{kdb1, kdb2}},
 		{"p2sh32 multisig", p2sh32, []KeyDB{kdb1, kdb2}},
-		{"p2sh32 p2pkh", p2sh32P2PKH, []KeyDB{kdb1}},
+		{"p2sh32 p2pkh", p2sh32P2PKH, []KeyDB{kdb1, kdb1}},
 	}
 	for _, test := range tests {
 		tx, utxos := tokenSpendTx(test.pkScript)
@@ -2079,6 +2079,191 @@ func TestSignSigHashesChecks(t *testing.T) {
 		}
 		if err != nil {
 			t.Errorf("%s: %v", test.name, err)
+		}
+	}
+}
+
+// TestSignTxOutputMerge ensures SignTxOutput keeps a signature script passed
+// in previousScript for a pay-to-pubkey or pay-to-pubkey-hash script, bare or
+// in P2SH or P2SH32, if it is valid, as BCHN keeps a valid signature, and
+// replaces it if it isn't, also when both have the same length, as Schnorr
+// signature scripts do: for a signature with another amount, by another key,
+// or without the fork id, and for an extra push.  It also ensures a previous
+// signature with SigHashUTXO is checked with the hashes passed in, so it is
+// kept with the spent outputs and replaced without them.
+func TestSignTxOutputMerge(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	key1, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{1}, 32))
+	key2, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{2}, 32))
+	pubKey1 := (*bchec.PublicKey)(&key1.PublicKey).SerializeCompressed()
+	pubKey2 := (*bchec.PublicKey)(&key2.PublicKey).SerializeCompressed()
+	addr, err := bchutil.NewAddressPubKey(pubKey1, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kdb := mkGetKey(map[string]addressToKey{
+		addr.EncodeAddress():                     {key1, true},
+		addr.AddressPubKeyHash().EncodeAddress(): {key1, true},
+	})
+	p2pkh, err := PayToAddrScript(addr.AddressPubKeyHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2pk, err := PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each lock is a script the signatures are made for, bare or as the
+	// redeem script of a P2SH or P2SH32 one.
+	type lock struct {
+		name     string
+		pkScript []byte
+		redeem   []byte
+	}
+	var locks []lock
+	scripts := make(map[string][]byte)
+	for _, inner := range []lock{{"p2pkh", p2pkh, nil}, {"p2pk", p2pk, nil}} {
+		sh, err := bchutil.NewAddressScriptHash(inner.pkScript, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sh32, err := bchutil.NewAddressScriptHash32(inner.pkScript, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		locks = append(locks, inner)
+		for _, a := range []bchutil.Address{sh, sh32} {
+			pkScript, err := PayToAddrScript(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scripts[a.EncodeAddress()] = inner.pkScript
+			name := "p2sh "
+			if a == bchutil.Address(sh32) {
+				name = "p2sh32 "
+			}
+			locks = append(locks, lock{name + inner.name, pkScript,
+				inner.pkScript})
+		}
+	}
+	sdb := mkGetScript(scripts)
+
+	for _, l := range locks {
+		// Input 1 spends no tokens.
+		const idx = 1
+		tx, utxos := tokenSpendTx(l.pkScript)
+		withUtxos := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+		subScript := l.pkScript
+		if l.redeem != nil {
+			subScript = l.redeem
+		}
+
+		// sigScript returns the signature script of sig, after the
+		// pushes of extra, with the public key for pay-to-pubkey-hash.
+		sigScript := func(sig, pubKey []byte, extra ...[]byte) []byte {
+			b := NewScriptBuilder()
+			for _, data := range extra {
+				b.AddData(data)
+			}
+			b.AddData(sig)
+			if isPubKeyHashScript(subScript) {
+				b.AddData(pubKey)
+			}
+			if l.redeem != nil {
+				b.AddData(l.redeem)
+			}
+			script, err := b.Script()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return script
+		}
+		rawSig := func(key *bchec.PrivateKey, amt int64) []byte {
+			sig, err := RawTxInSchnorrSignature(tx, idx, subScript,
+				SigHashAll, key, amt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sig
+		}
+		sign := func(sigHashes *TxSigHashes, hashType SigHashType,
+			prev []byte) []byte {
+
+			var script []byte
+			var err error
+			if sigHashes == nil {
+				script, err = SignTxOutput(params, tx, idx, 100000,
+					l.pkScript, hashType, kdb, sdb, prev)
+			} else {
+				script, err = SignTxOutputWithSigHashes(params, tx,
+					sigHashes, idx, 100000, l.pkScript, hashType, kdb,
+					sdb, prev)
+			}
+			if err != nil {
+				t.Fatalf("%s: %v", l.name, err)
+			}
+			return script
+		}
+
+		// A signature without the fork id over the hash with it, which
+		// verifies but breaks the encoding rules.
+		hash, _, err := CalcSignatureHash(subScript, NewTxSigHashes(tx),
+			SigHashAll, tx, idx, 100000, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		noForkID, err := key1.SignSchnorr(hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fresh := sign(nil, SigHashAll, nil)
+		withUTXO := sign(withUtxos, SigHashAll|SigHashUTXO, nil)
+		tests := []struct {
+			name      string
+			sigHashes *TxSigHashes
+			prev      []byte
+			keep      bool
+		}{
+			{"valid", nil, sign(nil, SigHashAll|SigHashAnyOneCanPay, nil),
+				true},
+			{"other amount", nil, sigScript(rawSig(key1, 99999), pubKey1),
+				false},
+			{"other key", nil, sigScript(rawSig(key2, 100000), pubKey2),
+				false},
+			{"no fork id", nil, sigScript(append(noForkID.Serialize(),
+				byte(SigHashAll)), pubKey1), false},
+			{"extra push", nil, sigScript(rawSig(key1, 100000), pubKey1,
+				[]byte{0xff}), false},
+			{"SigHashUTXO with the spent outputs", withUtxos, withUTXO,
+				true},
+			{"SigHashUTXO without them", nil, withUTXO, false},
+		}
+		for _, test := range tests {
+			msg := fmt.Sprintf("%s, %s", l.name, test.name)
+			got := sign(test.sigHashes, SigHashAll, test.prev)
+			want := fresh
+			if test.keep {
+				want = test.prev
+			}
+			if !bytes.Equal(got, want) {
+				t.Errorf("%s: kept %v, want %v", msg,
+					bytes.Equal(got, test.prev), test.keep)
+			}
+
+			tx.TxIn[idx].SignatureScript = got
+			vm, err := NewEngine(l.pkScript, tx, idx,
+				StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos,
+				100000)
+			if err == nil {
+				err = vm.Execute()
+			}
+			if err != nil {
+				t.Errorf("%s: %v", msg, err)
+			}
 		}
 	}
 }

@@ -366,9 +366,9 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
 		class, addresses, nrequired, _ :=
 			ExtractPkScriptAddrs(script, chainParams)
 
-		// regenerate scripts.
-		sigScript, _ := unparseScript(sigPops)
-		prevScript, _ := unparseScript(prevPops)
+		// regenerate scripts without their last push.
+		sigScript, _ := unparseScript(sigPops[:len(sigPops)-1])
+		prevScript, _ := unparseScript(prevPops[:len(prevPops)-1])
 
 		// Merge
 		mergedScript, err := mergeScripts(chainParams, tx, sigHashes, idx,
@@ -387,6 +387,18 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
 		return mergeMultiSig(tx, sigHashes, idx, amt, addresses, nRequired,
 			pkScript, sigScript, prevScript)
 
+	// These take a single signature, so prevScript is kept if it is valid,
+	// as BCHN keeps a valid signature, and replaced by sigScript otherwise.
+	// Their lengths can't tell, as Schnorr signatures all have the same
+	// length.
+	case PubKeyTy, PubKeyHashTy:
+		if len(prevScript) != 0 &&
+			sigScriptVerifies(tx, sigHashes, idx, amt, pkScript, prevScript) {
+
+			return prevScript, nil
+		}
+		return sigScript, nil
+
 	// It doesn't actually make sense to merge anything other than multiig
 	// and scripthash (because it could contain multisig). Everything else
 	// has either zero signature, can't be spent, or has a single signature
@@ -399,6 +411,32 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
 		}
 		return prevScript, nil
 	}
+}
+
+// sigScriptVerifies returns whether sigScript, as the signature script of
+// input idx of tx, which spends amt, satisfies pkScript under the standard
+// script rules, its signatures checked with sigHashes.  The engine doesn't get
+// the outputs tx spends, so pkScript must not read them; sigScript can't, as
+// the rules allow only pushes in it.
+func sigScriptVerifies(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
+	amt int64, pkScript, sigScript []byte) bool {
+
+	// The engine reads the signature script from the transaction, so it
+	// gets a copy with sigScript in input idx.
+	txCopy := *tx
+	txCopy.TxIn = make([]*wire.TxIn, len(tx.TxIn))
+	for i, txIn := range tx.TxIn {
+		if i == idx {
+			withSigScript := *txIn
+			withSigScript.SignatureScript = sigScript
+			txIn = &withSigScript
+		}
+		txCopy.TxIn[i] = txIn
+	}
+
+	vm, err := NewEngine(pkScript, &txCopy, idx,
+		StandardVerifyFlags|ScriptAllowCashTokens, nil, sigHashes, nil, amt)
+	return err == nil && vm.Execute() == nil
 }
 
 // mergeMultiSig combines the two signature scripts sigScript and prevScript
@@ -556,11 +594,13 @@ func (sc ScriptClosure) GetScript(address bchutil.Address) ([]byte, error) {
 // Any pay-to-script-hash signatures will be similarly looked up by calling
 // getScript. If previousScript is provided then the results in previousScript
 // will be merged in a type-dependent manner with the newly generated.
-// signature script.  It doesn't know the outputs tx spends, so its signatures
-// for an input that spends tokens are invalid, and it returns an error for
+// signature script.  Only the signatures in previousScript that verify are
+// kept, and for a script that takes one signature, previousScript is kept if
+// it is valid.  It doesn't know the outputs tx spends, so its signatures for
+// an input that spends tokens are invalid, and it returns an error for
 // SigHashUTXO; SignTxOutputWithSigHashes signs those.  For the same reason, it
-// drops the multisig signatures in previousScript that cover those outputs:
-// the ones with SigHashUTXO, and all for an input that spends tokens.
+// drops the signatures in previousScript that cover those outputs: the ones
+// with SigHashUTXO, and all for an input that spends tokens.
 func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
@@ -574,7 +614,7 @@ func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 // computed from the finished transaction: only its signature scripts may
 // change afterwards.  To sign an input that spends tokens, or with
 // SigHashUTXO, they must include the outputs tx spends, as
-// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.  The multisig signatures in
+// NewTxSigHashes(tx).WithUtxos(tx, utxos) does.  The signatures in
 // previousScript are checked with the same hashes, so those that cover the
 // outputs tx spends are dropped unless the hashes include them.
 func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
