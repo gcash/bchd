@@ -491,7 +491,7 @@ func TestSigHashesOtherInputs(t *testing.T) {
 		}()
 		f()
 	}
-	flags := StandardVerifyFlags | ScriptAllowCashTokens
+	flags := RelayVerifyFlags
 	tests := []struct {
 		name      string
 		tx        *wire.MsgTx

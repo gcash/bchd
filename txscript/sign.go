@@ -445,10 +445,10 @@ func mergeScripts(chainParams *chaincfg.Params, tx *wire.MsgTx,
 }
 
 // sigScriptVerifies returns whether sigScript, as the signature script of
-// input idx of tx, which spends amt, satisfies pkScript under the standard
-// script rules, its signatures checked with sigHashes.  The engine doesn't get
-// the outputs tx spends, so pkScript must not read them; sigScript can't, as
-// the rules allow only pushes in it.
+// input idx of tx, which spends amt, satisfies pkScript under the script rules
+// a relayed transaction must pass, its signatures checked with sigHashes.  The
+// engine doesn't get the outputs tx spends, so pkScript must not read them;
+// sigScript can't, as the rules allow only pushes in it.
 func sigScriptVerifies(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	amt int64, pkScript, sigScript []byte) bool {
 
@@ -465,8 +465,8 @@ func sigScriptVerifies(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 		txCopy.TxIn[i] = txIn
 	}
 
-	vm, err := NewEngine(pkScript, &txCopy, idx,
-		StandardVerifyFlags|ScriptAllowCashTokens, nil, sigHashes, nil, amt)
+	vm, err := NewEngine(pkScript, &txCopy, idx, RelayVerifyFlags, nil,
+		sigHashes, nil, amt)
 	return err == nil && vm.Execute() == nil
 }
 

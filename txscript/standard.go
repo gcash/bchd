@@ -53,6 +53,15 @@ const (
 		ScriptVerifyInputSigChecks |
 		ScriptVerify64BitIntegers |
 		ScriptVerifyNativeIntrospection
+
+	// RelayVerifyFlags are the script flags a transaction must pass to be
+	// relayed once all the upgrades this version knows are active, as the
+	// memory pool sets them by default on mainnet: StandardVerifyFlags
+	// with the CashTokens, May 2025 and May 2026 rules.  The memory pool's
+	// tests keep them its default.
+	RelayVerifyFlags = StandardVerifyFlags | ScriptAllowCashTokens |
+		ScriptAllowMay2025 | ScriptAllowMay2025StandardOnly |
+		ScriptAllowMay2026
 )
 
 // ScriptClass is an enumeration for the list of standard types of script.

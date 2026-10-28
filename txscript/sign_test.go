@@ -57,15 +57,9 @@ func mkGetScript(scripts map[string][]byte) ScriptDB {
 	})
 }
 
-// relayFlags are the script flags a relayed transaction must pass now that
-// the upgrades are active: the standard ones, with tokens and the May 2025
-// and May 2026 rules, as the memory pool sets them by default.
-const relayFlags = StandardVerifyFlags | ScriptAllowCashTokens |
-	ScriptAllowMay2025 | ScriptAllowMay2025StandardOnly | ScriptAllowMay2026
-
 func checkScripts(msg string, tx *wire.MsgTx, idx int, inputAmt int64, sigScript, pkScript []byte) error {
 	tx.TxIn[idx].SignatureScript = sigScript
-	vm, err := NewEngine(pkScript, tx, idx, relayFlags, nil, nil, nil,
+	vm, err := NewEngine(pkScript, tx, idx, RelayVerifyFlags, nil, nil, nil,
 		inputAmt)
 	if err != nil {
 		return fmt.Errorf("failed to make script engine for %s: %v",
@@ -1715,7 +1709,7 @@ nexttest:
 		}
 
 		// Validate tx input scripts
-		scriptFlags := relayFlags
+		scriptFlags := RelayVerifyFlags
 		for j := range tx.TxIn {
 			vm, err := NewEngine(sigScriptTests[i].
 				inputs[j].txout.PkScript, tx, j, scriptFlags, nil, nil, nil, 0)
@@ -1872,7 +1866,7 @@ func TestSignTokenInputs(t *testing.T) {
 		verify := func(idx int, sigScript []byte) error {
 			tx.TxIn[idx].SignatureScript = sigScript
 			vm, err := NewEngine(test.pkScript, tx, idx,
-				StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos,
+				RelayVerifyFlags, nil, nil, utxos,
 				100000)
 			if err != nil {
 				return err
@@ -2083,7 +2077,7 @@ func TestSignSigHashesChecks(t *testing.T) {
 		}
 		signTx.TxIn[test.idx].SignatureScript = sigScript
 		vm, err := NewEngine(p2pkh, signTx, test.idx,
-			StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos, 100000)
+			RelayVerifyFlags, nil, nil, utxos, 100000)
 		if err == nil {
 			err = vm.Execute()
 		}
@@ -2266,7 +2260,7 @@ func TestSignTxOutputMerge(t *testing.T) {
 
 			tx.TxIn[idx].SignatureScript = got
 			vm, err := NewEngine(l.pkScript, tx, idx,
-				StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos,
+				RelayVerifyFlags, nil, nil, utxos,
 				100000)
 			if err == nil {
 				err = vm.Execute()
@@ -2560,7 +2554,7 @@ func TestSignMergeMultiSig(t *testing.T) {
 		verify := func(script []byte) error {
 			tx.TxIn[idx].SignatureScript = script
 			vm, err := NewEngine(pkScript, tx, idx,
-				StandardVerifyFlags|ScriptAllowCashTokens, nil, nil, utxos,
+				RelayVerifyFlags, nil, nil, utxos,
 				100000)
 			if err != nil {
 				return err

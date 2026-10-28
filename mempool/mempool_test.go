@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"runtime"
@@ -2252,5 +2253,37 @@ func TestOrphanAfterInvalidOrphan(t *testing.T) {
 		if !harness.txPool.IsTransactionInPool(child.Hash()) {
 			t.Fatal("the valid orphan was not accepted with its parent")
 		}
+	}
+}
+
+// TestStandardScriptFlagsAfterUpgrades ensures the script flags the pool
+// sets with the node's default policy on mainnet, once every upgrade it knows
+// is active, are txscript.RelayVerifyFlags, which tests outside the pool
+// verify the scripts they make with, and those the VMB tests give the pool's
+// checks with every upgrade, so an upgrade's flag can't be left out of either.
+func TestStandardScriptFlagsAfterUpgrades(t *testing.T) {
+	t.Parallel()
+
+	// The policy the server gives the pool, with the default for
+	// non-standard transactions on mainnet.
+	mp := &TxPool{cfg: Config{
+		Policy: Policy{
+			AcceptNonStd:   chaincfg.MainNetParams.RelayNonStdTxs,
+			LimitSigChecks: true,
+		},
+		ChainParams: &chaincfg.MainNetParams,
+	}}
+
+	// A height and a time past every upgrade.
+	got := mp.standardScriptFlags(math.MaxInt32, time.Unix(1<<62, 0))
+	if got != txscript.RelayVerifyFlags {
+		t.Errorf("pool flags %#x, txscript.RelayVerifyFlags %#x: they "+
+			"differ in %#x", got, txscript.RelayVerifyFlags,
+			got^txscript.RelayVerifyFlags)
+	}
+	all := vmbEra{upgrade9: true, upgrade11: true, upgrade12: true}
+	if vmb := vmbMempoolFlags(all); vmb != got {
+		t.Errorf("pool flags %#x, vmbMempoolFlags %#x: they differ in %#x",
+			got, vmb, got^vmb)
 	}
 }
