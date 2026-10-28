@@ -96,9 +96,10 @@ templates.
 
 At any time, a block that a peer sends without being asked for it is only
 stored if its chain has at least as much work as the current tip and the
-minimum chain work, and it is at most 288 blocks ahead of the tip. A block
-whose parent bchd doesn't have yet is the exception: it is kept as an orphan
-while bchd asks the peer for the missing blocks, and stored once they arrive.
+minimum chain work, and it is at most 288 blocks ahead of the tip. Once bchd's
+chain has the minimum chain work, a block whose parent bchd doesn't have yet is
+the exception: it is kept as an orphan while bchd asks the peer for the missing
+blocks, and stored once they arrive.
 
 To check every block in full, start bchd with `--nocheckpoints`; this also
 ignores `--addcheckpoint`, which adds a checkpoint of your own. With

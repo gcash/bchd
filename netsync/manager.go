@@ -900,14 +900,16 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 	if !requested {
 		// Peers we allow to relay blocks directly may send blocks we
 		// didn't request, but these are only stored if they could
-		// extend the best chain.  An orphan is the exception: its work
-		// isn't known until its parents arrive, and the peer is asked
-		// for those below, so it is on a chain being downloaded.
-		// Checking it once they arrive would drop it while its chain
-		// has less work than the tip, and nothing would request it
-		// again.
+		// extend the best chain.  Once the chain has the minimum chain
+		// work, an orphan is the exception: its work isn't known until
+		// its parents arrive, and the peer is asked for those below, so
+		// it is on a chain being downloaded.  Checking it once they
+		// arrive would drop it while its chain has less work than the
+		// tip, and nothing would request it again.  Below that work
+		// only the sync peer's chain is downloaded, and the orphan
+		// could be a cheap fork of it from a block about to arrive.
 		if peer.AllowDirectBlockRelay() {
-			if parentKnown {
+			if parentKnown || !sm.chain.HasMinimumChainWork() {
 				behaviorFlags |= blockchain.BFUnrequested
 			}
 		} else if sm.chainParams != &chaincfg.RegressionNetParams {

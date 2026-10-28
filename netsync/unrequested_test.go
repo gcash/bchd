@@ -147,3 +147,50 @@ func TestUnrequestedOrphanStored(t *testing.T) {
 		}
 	}
 }
+
+// TestUnrequestedOrphanBelowMinimumChainWork ensures an orphan that a direct
+// relay peer sends without being asked while the chain has less than the
+// minimum chain work is not stored when its parent arrives, as its chain has
+// less than that work.  Until then bchd only downloads the sync peer's chain,
+// so a peer could otherwise fork it cheaply from a block about to arrive.
+func TestUnrequestedOrphanBelowMinimumChainWork(t *testing.T) {
+	sm, params, peer := unrequestedTestManager(t)
+	params.MinimumChainWork = new(big.Int).Lsh(big.NewInt(1), 128)
+
+	parent := mineBlock(t, params, params.GenesisBlock, 1, 0)
+	orphan := mineBlock(t, params, parent.MsgBlock(), 2, 0)
+	sm.handleBlockMsg(&blockMsg{block: orphan, peer: peer})
+	if !sm.chain.IsKnownOrphan(orphan.Hash()) {
+		t.Fatal("unrequested orphan was not kept")
+	}
+	sm.requestBlock(peer, sm.peerStates[peer], parent.Hash(), false)
+	sm.handleBlockMsg(&blockMsg{block: parent, peer: peer})
+	if known, _, _ := sm.chain.BlockValidity(parent.Hash()); !known {
+		t.Fatal("requested parent was not stored")
+	}
+	if have, _ := sm.chain.HaveBlock(orphan.Hash()); have {
+		t.Fatal("unrequested orphan below the minimum chain work was " +
+			"stored")
+	}
+
+	// Once the chain has the minimum chain work, one is stored though its
+	// chain has less work than the tip.
+	params.MinimumChainWork = big.NewInt(1)
+	prev := parent.MsgBlock()
+	for height := int32(2); height <= 3; height++ {
+		block := mineBlock(t, params, prev, height, 1)
+		if _, _, err := sm.chain.ProcessBlock(block, blockchain.BFNone); err != nil {
+			t.Fatal(err)
+		}
+		prev = block.MsgBlock()
+	}
+	fork1 := mineBlock(t, params, params.GenesisBlock, 1, 1)
+	fork2 := mineBlock(t, params, fork1.MsgBlock(), 2, 1)
+	sm.handleBlockMsg(&blockMsg{block: fork2, peer: peer})
+	sm.requestBlock(peer, sm.peerStates[peer], fork1.Hash(), false)
+	sm.handleBlockMsg(&blockMsg{block: fork1, peer: peer})
+	if known, _, _ := sm.chain.BlockValidity(fork2.Hash()); !known {
+		t.Fatal("unrequested orphan was not stored once the chain had " +
+			"the minimum chain work")
+	}
+}
