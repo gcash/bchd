@@ -8,19 +8,26 @@
 package integration
 
 import (
+	"net"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/integration/rpctest"
+	"github.com/gcash/bchd/peer"
+	"github.com/gcash/bchd/wire"
 )
 
-// TestCompetingChains mines competing chains on two connected nodes at the
-// same time and checks that they soon agree on one.  The nodes relay their
-// blocks to each other as compact blocks that were not requested, so the node
-// whose chain has less work gets the other chain's blocks as orphans while it
-// requests their parents.  It must keep those orphans, or it only gets the
-// next block each time it drops its stalled sync peer, every two minutes.
+// TestCompetingChains relays a competing chain that overtakes a node's own to
+// the node, from a peer that may relay blocks directly, and checks that the
+// node follows it.  The peer announces the chain's first block, sends the
+// others unrequested, and then the first, which the node asked for, as it
+// would ask for an orphan's parents.  The chain up to the first orphans has
+// less work than the node's tip, so the node must keep the orphans and store
+// them once their parents arrive, or it only gets the next block each time it
+// drops its stalled sync peer, every two minutes.  Two nodes mining competing
+// chains at once showed this only when one mined its blocks faster than the
+// other could request their parents.
 func TestCompetingChains(t *testing.T) {
 	h1, err := rpctest.New(&chaincfg.SimNetParams, nil, nil)
 	if err != nil {
@@ -30,6 +37,12 @@ func TestCompetingChains(t *testing.T) {
 	if err := h1.SetUp(false, 0); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := h1.Node.Generate(20); err != nil {
+		t.Fatal(err)
+	}
+
+	// The competing chain is mined by a node that is not connected to the
+	// first.
 	h2, err := rpctest.New(&chaincfg.SimNetParams, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -38,44 +51,93 @@ func TestCompetingChains(t *testing.T) {
 	if err := h2.SetUp(false, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := rpctest.ConnectNode(h1, h2); err != nil {
+	hashes, err := h2.Node.Generate(30)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h1.Node.Generate(20); err != nil {
-		t.Fatal(err)
-	}
-	if err := rpctest.JoinNodes([]*rpctest.Harness{h1, h2}, rpctest.Blocks); err != nil {
-		t.Fatal(err)
-	}
-
-	errs := make(chan error, 1)
-	go func() {
-		_, err := h2.Node.Generate(75)
-		errs <- err
-	}()
-	if _, err := h1.Node.Generate(50); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-errs; err != nil {
-		t.Fatal(err)
+	blocks := make([]*wire.MsgBlock, len(hashes))
+	for i, hash := range hashes {
+		if blocks[i], err = h2.Node.GetBlock(hash); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	deadline := time.Now().Add(30 * time.Second)
+	first := hashes[0]
+	announce := make(chan bool, 1)
+	requested := make(chan struct{}, 1)
+	p, err := peer.NewOutboundPeer(&peer.Config{
+		UserAgentName:    "relay",
+		UserAgentVersion: "1.0.0",
+		ChainParams:      &chaincfg.SimNetParams,
+		Listeners: peer.MessageListeners{
+			OnSendCmpct: func(_ *peer.Peer, msg *wire.MsgSendCmpct) {
+				select {
+				case announce <- msg.Announce:
+				default:
+				}
+			},
+			OnGetData: func(_ *peer.Peer, msg *wire.MsgGetData) {
+				for _, iv := range msg.InvList {
+					if iv.Hash != *first {
+						continue
+					}
+					select {
+					case requested <- struct{}{}:
+					default:
+					}
+				}
+			},
+		},
+	}, h1.P2PAddress())
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.Dial("tcp", p.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.AssociateConnection(conn)
+	defer p.Disconnect()
+
+	select {
+	case ok := <-announce:
+		if !ok {
+			t.Fatal("the node does not let the peer relay blocks directly")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the node sent no sendcmpct")
+	}
+
+	// The node only asks for an announced block once it knows the peer, so
+	// the orphans are sent once it has asked for the first block.
+	inv := wire.NewMsgInv()
+	if err := inv.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, first)); err != nil {
+		t.Fatal(err)
+	}
+	p.QueueMessage(inv, nil)
+	select {
+	case <-requested:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the node did not ask for the first block")
+	}
+	for _, block := range blocks[1:] {
+		p.QueueMessage(block, nil)
+	}
+	p.QueueMessage(blocks[0], nil)
+
+	tip := hashes[len(hashes)-1]
+	deadline := time.Now().Add(20 * time.Second)
 	for {
-		hash1, height1, err := h1.Node.GetBestBlock()
+		hash, height, err := h1.Node.GetBestBlock()
 		if err != nil {
 			t.Fatal(err)
 		}
-		hash2, height2, err := h2.Node.GetBestBlock()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if *hash1 == *hash2 {
+		if *hash == *tip {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("nodes did not agree on a chain within 30 seconds: "+
-				"heights %d and %d", height1, height2)
+			t.Fatalf("the node did not follow the competing chain "+
+				"within 20 seconds: its tip is at height %d", height)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
