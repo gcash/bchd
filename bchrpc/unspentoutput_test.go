@@ -3,6 +3,10 @@ package bchrpc
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"errors"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,7 +20,9 @@ import (
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchlog"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/goslp"
 	"github.com/gcash/goslp/metadatamaker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -267,4 +273,124 @@ func TestGetUnspentOutputMempoolSlpNoToken(t *testing.T) {
 			t.Errorf("%s: no token metadata", test.name)
 		}
 	}
+}
+
+// TestGetUnspentOutputConfirmedSlpToken ensures GetUnspentOutput returns a
+// confirmed output that holds tokens with its token and the token's metadata,
+// as it returns an unconfirmed one, and a confirmed output that holds none
+// without a token, and that it answers with an internal error, logging the
+// failure, when the slp index fails to read the token or its metadata.
+func TestGetUnspentOutputConfirmedSlpToken(t *testing.T) {
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+
+	genesisScript, err := metadatamaker.TokenType1Genesis([]byte("T"),
+		[]byte("Token"), nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatalf("TokenType1Genesis: %v", err)
+	}
+	// Block 1's coinbase is a GENESIS, whose output 1 holds its tokens and
+	// whose output 2 holds none.
+	opTrue := []byte{txscript.OP_TRUE}
+	s := newAddrIndexServerBlocks(t, [][]byte{genesisScript, opTrue, opTrue}, 1)
+	s.txMemPool = mempool.New(&mempool.Config{})
+	newIndex := func() *indexers.SlpIndex {
+		return indexers.NewSlpIndex(s.db, &indexers.SlpConfig{MaxCacheSize: 100})
+	}
+	connected := newIndex()
+	block, err := s.chain.BlockByHeight(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.db.Update(func(dbTx database.Tx) error {
+		if err := connected.Create(dbTx); err != nil {
+			return err
+		}
+		return connected.ConnectBlock(dbTx, block, nil)
+	})
+	if err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	genesis := block.Transactions()[0]
+	token, err := goslp.GetSlpTokenID(genesis.MsgTx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	unspent := func(index uint32, includeMempool bool) (*pb.GetUnspentOutputResponse, error) {
+		return s.GetUnspentOutput(context.Background(), &pb.GetUnspentOutputRequest{
+			Hash: genesis.Hash()[:], Index: index, IncludeMempool: includeMempool})
+	}
+
+	// The entries are read from the cache of the index that connected the
+	// block, and from the database by another index, as after a restart.
+	for _, idx := range []*indexers.SlpIndex{connected, newIndex()} {
+		s.slpIndex = idx
+		for _, includeMempool := range []bool{false, true} {
+			resp, err := unspent(1, includeMempool)
+			if err != nil {
+				t.Fatalf("token output, mempool %v: %v", includeMempool, err)
+			}
+			if resp.SlpToken == nil || resp.SlpToken.Amount != 1000 ||
+				!bytes.Equal(resp.SlpToken.TokenId, token) {
+				t.Errorf("token output, mempool %v: got token %v, want 1000 "+
+					"tokens of token ID %x", includeMempool, resp.SlpToken, token)
+			}
+			if resp.TokenMetadata == nil ||
+				!bytes.Equal(resp.TokenMetadata.TokenId, token) {
+				t.Errorf("token output, mempool %v: got metadata %v, want that "+
+					"of token ID %x", includeMempool, resp.TokenMetadata, token)
+			}
+			resp, err = unspent(2, includeMempool)
+			if err != nil {
+				t.Fatalf("change, mempool %v: %v", includeMempool, err)
+			}
+			if resp.SlpToken != nil || resp.TokenMetadata != nil {
+				t.Errorf("change, mempool %v: got token %v and metadata %v, "+
+					"want none", includeMempool, resp.SlpToken, resp.TokenMetadata)
+			}
+		}
+	}
+
+	check := func(what string, err error, msg, logLine string) {
+		t.Helper()
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != msg {
+			t.Errorf("%s: got %v, want Internal with %q", what, err, msg)
+		}
+		if !strings.Contains(logged.String(), logLine) {
+			t.Errorf("%s: log %q, want a line with %q", what, logged.String(),
+				logLine)
+		}
+	}
+
+	// The read of the token's metadata, in the call's last database
+	// transaction, fails.
+	last := &lastViewDB{DB: s.db, err: errors.New("the database failed")}
+	s.db = last
+	if _, err := unspent(1, false); err != nil {
+		t.Fatalf("GetUnspentOutput: %v", err)
+	}
+	last.fail, last.views = last.views.Load(), atomic.Int32{}
+	_, err = unspent(1, false)
+	check("the metadata's read failing", err, "failed to load slp token metadata",
+		"[ERR] GRPC: Failed to load slp token metadata of token ID "+
+			hex.EncodeToString(token)+": the database failed")
+	s.db = last.DB
+
+	// The output's entry is corrupt, which an index whose cache does not
+	// hold the entry reads.
+	err = s.db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket([]byte("slptxbyhashidx")).Put(
+			genesis.Hash()[:], []byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.slpIndex = newIndex()
+	_, err = unspent(1, false)
+	op := wire.OutPoint{Hash: *genesis.Hash(), Index: 1}
+	check("a corrupt entry", err, "failed to load slp index entry",
+		"[ERR] GRPC: Failed to load the slp token of output "+op.String()+
+			": corrupt slp index entry for "+op.Hash.String())
 }

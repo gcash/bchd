@@ -1692,6 +1692,7 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 		cashToken      *pb.CashToken
 		coinbase       bool
 		isSlpInMempool = false
+		confirmed      = false
 	)
 	if req.IncludeMempool && s.txMemPool.HaveTransaction(txnHash) {
 		tx, err := s.txMemPool.FetchTransaction(txnHash)
@@ -1744,13 +1745,18 @@ func (s *GrpcServer) GetUnspentOutput(ctx context.Context, req *pb.GetUnspentOut
 			cashToken = getPbCashTokenDataFromTokenData(entry.TokenData())
 		}
 		coinbase = entry.IsCoinBase()
+		confirmed = true
 	}
 
 	var (
 		slpToken *pb.SlpToken
 		tm       *pb.SlpTokenMetadata
 	)
-	if s.slpIndex != nil && req.Index > 0 && isSlpInMempool && req.IncludeMempool {
+	// The utxo set does not hold the transaction of a confirmed output, to
+	// tell whether its first output reads as SLP, so the token of a
+	// confirmed output is always looked up, as GetAddressUnspentOutputs
+	// does.
+	if s.slpIndex != nil && req.Index > 0 && (isSlpInMempool || confirmed) {
 		// An output that holds no tokens, such as the change of a GENESIS
 		// or an output of a transaction that is not valid SLP, is returned
 		// without a token, as the outputs of a transaction are.
