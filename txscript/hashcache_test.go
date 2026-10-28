@@ -534,3 +534,50 @@ func TestSigHashesOtherInputs(t *testing.T) {
 		}
 	}
 }
+
+// TestCalcSignatureHashNilSigHashes ensures CalcSignatureHash with the BIP143
+// algorithm computes the sighashes from the transaction when it gets none,
+// as BCHN does without a cache of them, so it returns the hash it does with
+// those, and that SigHashUTXO, which still needs the spent outputs, is an
+// error then.
+func TestCalcSignatureHashNilSigHashes(t *testing.T) {
+	t.Parallel()
+
+	// try runs f, failing the test if it panics.
+	try := func(msg string, f func()) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("%s: panicked: %v", msg, r)
+			}
+		}()
+		f()
+	}
+	tx, _ := spentOutputsTestTx(nil)
+	for idx := range tx.TxIn {
+		for _, hashType := range []SigHashType{SigHashAll, SigHashNone,
+			SigHashSingle, SigHashAll | SigHashAnyOneCanPay} {
+
+			hashType |= SigHashForkID
+			msg := fmt.Sprintf("input %d, hash type %#x", idx, hashType)
+			try(msg, func() {
+				want, _, err := CalcSignatureHash([]byte{OP_TRUE},
+					NewTxSigHashes(tx), hashType, tx, idx, 100000, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, _, err := CalcSignatureHash([]byte{OP_TRUE}, nil,
+					hashType, tx, idx, 100000, true)
+				if err != nil || !bytes.Equal(got, want) {
+					t.Errorf("%s: got %x, %v, want %x", msg, got, err, want)
+				}
+			})
+		}
+	}
+	try("SigHashUTXO", func() {
+		_, _, err := CalcSignatureHash([]byte{OP_TRUE}, nil,
+			SigHashAll|SigHashForkID|SigHashUTXO, tx, 0, 100000, true)
+		if err == nil {
+			t.Error("SigHashUTXO hashed without the spent outputs")
+		}
+	})
+}

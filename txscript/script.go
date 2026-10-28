@@ -470,9 +470,10 @@ func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 // CalcSignatureHash returns a signature hash which can then be signed by the
 // input. Since Bitcoin Cash uses a different signature hashing algorithm
 // before and after the Uahf fork, the 'useBip143SigHashAlgo' bool is used
-// to specify which algorithm to use.  With the BIP143 one, a hash type with
-// SigHashUTXO covers the outputs tx spends, so, as in BCHN, it returns an
-// error unless sigHashes includes them all, as
+// to specify which algorithm to use.  With the BIP143 one, a nil sigHashes is
+// computed from tx, as BCHN does without a cache of them, so it lacks the
+// outputs tx spends.  A hash type with SigHashUTXO covers those, so, as in
+// BCHN, it returns an error unless sigHashes includes them all, as
 // NewTxSigHashes(tx).WithUtxos(tx, utxos) does.
 func CalcSignatureHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
 	tx *wire.MsgTx, idx int, amt int64, useBip143SigHashAlgo bool) ([]byte, int, error) {
@@ -482,13 +483,18 @@ func CalcSignatureHash(script []byte, sigHashes *TxSigHashes, hType SigHashType,
 		return nil, 0, fmt.Errorf("cannot parse output script: %v", err)
 	}
 
-	// The engine calls calcSignatureHash, and always has the spent outputs
-	// when tokens, and with them SigHashUTXO, are allowed.
-	if useBip143SigHashAlgo && hType&SigHashUTXO != 0 &&
-		!sigHashes.hasAllUtxos() {
+	if useBip143SigHashAlgo {
+		if sigHashes == nil {
+			sigHashes = NewTxSigHashes(tx)
+		}
 
-		return nil, 0, errors.New("a signature hash with SigHashUTXO " +
-			"needs the outputs the transaction spends in the sighashes")
+		// The engine calls calcSignatureHash, and always has the spent
+		// outputs when tokens, and with them SigHashUTXO, are allowed.
+		if hType&SigHashUTXO != 0 && !sigHashes.hasAllUtxos() {
+			return nil, 0, errors.New("a signature hash with " +
+				"SigHashUTXO needs the outputs the transaction spends " +
+				"in the sighashes")
+		}
 	}
 	return calcSignatureHash(parsedScript, sigHashes, hType, tx, idx, amt, useBip143SigHashAlgo)
 }
