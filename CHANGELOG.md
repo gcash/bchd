@@ -29,6 +29,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - `GetSlpGraphSearch` and the graph search count of `GetSlpTrustedValidation` answer bad client input with `InvalidArgument` or `NotFound` instead of `Internal` or `Aborted`.
 - `GetSlpGraphSearch` and `GetSlpTrustedValidation` answer a transaction the SLP index does not hold with `NotFound`, and a failure to read the index with `Internal`, rather than both with `Aborted`.
 - `GetSlpTrustedValidation` answers a query hash of the wrong length with `InvalidArgument` rather than `Aborted`.
+- `GetSlpTokenMetadata` answers a token with no GENESIS or metadata in the SLP index with `NotFound`, a failure to read the index with `Internal`, and a token ID of the wrong length with `InvalidArgument`, instead of `Aborted`.
 
 ### Other
 

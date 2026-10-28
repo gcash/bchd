@@ -1823,12 +1823,21 @@ func (s *GrpcServer) GetSlpTokenMetadata(ctx context.Context, req *pb.GetSlpToke
 	for _, hash := range req.GetTokenIds() {
 		tokenID, err := chainhash.NewHash(hash)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "token ID hash %s is invalid: %s", hex.EncodeToString(hash), err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid token ID: %v", err)
 		}
 
+		// A failure of the index is logged, and answered without the
+		// database's own error, which can name the node's files.
 		tm, err := s.marshalTokenMetadata(*tokenID)
+		if indexers.IsSlpEntryNotFound(err) || errors.Is(err, errTokenNotGenesis) {
+			return nil, status.Errorf(codes.NotFound, "token ID %x has no GENESIS in the slp index", hash)
+		}
+		if indexers.IsTokenNotIndexed(err) {
+			return nil, status.Errorf(codes.NotFound, "token ID %x has no metadata in the slp index", hash)
+		}
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "token ID %v does not exist", hex.EncodeToString(hash))
+			log.Errorf("Failed to load slp token metadata of token ID %x: %v", hash, err)
+			return nil, status.Error(codes.Internal, "failed to load slp token metadata")
 		}
 
 		tokenMetadata = append(tokenMetadata, tm)
@@ -3948,6 +3957,10 @@ func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
 	return true
 }
 
+// errTokenNotGenesis is the error for a token ID that names an slp transaction
+// other than a GENESIS, as a valid SEND of zero tokens may.
+var errTokenNotGenesis = errors.New("cannot build token metadata from a non-genesis entry")
+
 // tokenMetadataOrNil returns the metadata of the token, or nil when it cannot
 // be built.  A valid SEND of zero tokens may name a token ID that is no
 // GENESIS, so the metadata of a transaction or output is then just missing.
@@ -3989,7 +4002,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 
 	genMsg, isGenesis := slpMsg.(*v1parser.SlpGenesis)
 	if !isGenesis {
-		return nil, errors.New("cannot build token metadata from a non-genesis entry")
+		return nil, errTokenNotGenesis
 	}
 
 	tm := &pb.SlpTokenMetadata{

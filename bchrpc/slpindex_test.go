@@ -1489,3 +1489,128 @@ func TestSlpTrustedValidationBadHash(t *testing.T) {
 		t.Fatalf("got %.100q, want InvalidArgument with %q", err, want)
 	}
 }
+
+// TestSlpTokenMetadataErrors ensures GetSlpTokenMetadata answers a token the
+// slp index holds no GENESIS of, as one whose token ID names no transaction
+// or one that is not a GENESIS, as not found, a failure of the index as an
+// internal error with a fixed message, logging the failure, and a token ID of
+// the wrong length as an invalid argument, with a message that does not repeat
+// it, rather than all with Aborted.
+func TestSlpTokenMetadataErrors(t *testing.T) {
+	s, genesis := newGraphSearchServer(t)
+
+	// tokenID returns the token ID that names tx, in the byte order the
+	// call takes it in.
+	tokenID := func(hash chainhash.Hash) []byte {
+		id, err := hex.DecodeString(hash.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	// A SEND of zero tokens names a GENESIS that does not exist, and the
+	// index has a corrupt entry for another transaction.
+	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x01}, 32),
+		[]uint64{0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := wire.NewMsgTx(1)
+	send.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{3}}, nil))
+	send.AddTxOut(&wire.TxOut{PkScript: script})
+	send.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	corrupt := chainhash.Hash{0xee, 3}
+	err = s.db.Update(func(dbTx database.Tx) error {
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		if err != nil {
+			return err
+		}
+		valid, err := s.slpIndex.AddPotentialSlpEntries(dbTx, send)
+		if err == nil && !valid {
+			err = errors.New("the SEND is not valid")
+		}
+		if err != nil {
+			return err
+		}
+		return dbTx.Metadata().Bucket([]byte("slptxbyhashidx")).Put(corrupt[:],
+			[]byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var logged bytes.Buffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+	metadata := func(id []byte) error {
+		_, err := s.GetSlpTokenMetadata(context.Background(),
+			&pb.GetSlpTokenMetadataRequest{TokenIds: [][]byte{id}})
+		return err
+	}
+	if err := metadata(tokenID(genesis.TxHash())); err != nil {
+		t.Fatalf("the GENESIS's token: %v", err)
+	}
+	unknown := bytes.Repeat([]byte{0x77}, 32)
+	for _, test := range []struct {
+		name string
+		id   []byte
+		code codes.Code
+		msg  string
+	}{
+		{"a token ID naming no transaction", unknown, codes.NotFound,
+			"token ID " + hex.EncodeToString(unknown) + " has no GENESIS in " +
+				"the slp index"},
+		{"a token ID naming a SEND", tokenID(send.TxHash()), codes.NotFound,
+			"token ID " + send.TxHash().String() + " has no GENESIS in the " +
+				"slp index"},
+		{"a corrupt entry", tokenID(corrupt), codes.Internal,
+			"failed to load slp token metadata"},
+		{"a token ID of the wrong length", make([]byte, 100000),
+			codes.InvalidArgument, "invalid token ID: invalid hash length " +
+				"of 100000, want 32"},
+	} {
+		err := metadata(test.id)
+		if status.Code(err) != test.code || status.Convert(err).Message() != test.msg {
+			t.Errorf("%s: got %.200v, want %v with %q", test.name, err,
+				test.code, test.msg)
+		}
+	}
+	want := "[ERR] GRPC: Failed to load slp token metadata of token ID " +
+		corrupt.String() + ": corrupt slp index entry for " + corrupt.String()
+	if !strings.Contains(logged.String(), want) {
+		t.Errorf("log %q, want a line with %q", logged.String(), want)
+	}
+
+	// The GENESIS is in the memory pool, and the cache, which holds 100
+	// tokens' metadata, no longer holds that of its token once 150 others
+	// come, so the index has none.
+	for i := 0; i < 150; i++ {
+		script, err := metadatamaker.TokenType1Genesis([]byte("T"),
+			[]byte("Token"), nil, nil, 0, nil, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other := wire.NewMsgTx(1)
+		other.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee,
+			byte(i), 0x20}}, nil))
+		other.AddTxOut(&wire.TxOut{PkScript: script})
+		other.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		err = s.db.View(func(dbTx database.Tx) error {
+			_, err := s.slpIndex.AddPotentialSlpEntries(dbTx, other)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err = metadata(tokenID(genesis.TxHash()))
+	want = "token ID " + hex.EncodeToString(tokenID(genesis.TxHash())) +
+		" has no metadata in the slp index"
+	if status.Code(err) != codes.NotFound || status.Convert(err).Message() != want {
+		t.Errorf("a token of the memory pool whose metadata the cache no "+
+			"longer holds: got %v, want NotFound with %q", err, want)
+	}
+}

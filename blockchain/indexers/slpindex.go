@@ -355,6 +355,13 @@ func (e errSlpEntryNotFound) Error() string {
 	return fmt.Sprintf("slp entry does not exist %v", chainhash.Hash(e))
 }
 
+// IsTokenNotIndexed reports whether err is the error GetTokenMetadata returns
+// for a token the slp index has no internal token ID for: one whose GENESIS is
+// in the memory pool, and whose metadata the cache no longer holds.
+func IsTokenNotIndexed(err error) bool {
+	return errors.Is(err, errNoTokenIDHashEntry)
+}
+
 // IsSlpEntryNotFound reports whether err is the error GetSlpIndexEntry returns
 // for a transaction the slp index has no entry for, as opposed to a failure
 // of the database.
