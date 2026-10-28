@@ -259,3 +259,30 @@ func TestFindStopsWhenContextEnds(t *testing.T) {
 		}
 	}
 }
+
+// TestDbStateRace ensures SetReady, which fails while the database loads, can
+// run while SetLoaded ends the load, as the slp event handler adds the memory
+// pool transactions that arrive during the load to graph search.  The error
+// once read the state again without the lock.
+func TestDbStateRace(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		db := NewDb(nil)
+		failed, ready := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(ready)
+			for n := 0; db.SetReady() != nil; n++ {
+				if n == 0 {
+					close(failed)
+				}
+			}
+		}()
+		<-failed
+		if err := db.SetLoaded(); err != nil {
+			t.Fatal(err)
+		}
+		<-ready
+		if !db.IsLoaded() || !db.IsReady() {
+			t.Fatalf("loaded %v, ready %v", db.IsLoaded(), db.IsReady())
+		}
+	}
+}

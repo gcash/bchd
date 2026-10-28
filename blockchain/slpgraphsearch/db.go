@@ -66,7 +66,7 @@ func (gs *Db) SetLoaded() error {
 		gs.state++
 		return nil
 	}
-	return fmt.Errorf("slp gs db was not set to loaded with current state is %s", fmt.Sprint(gs.state))
+	return fmt.Errorf("slp gs db was not set to loaded with current state is %s", fmt.Sprint(state))
 }
 
 // SetReady allows external callers to determine when the graph search db is ready for use
@@ -86,7 +86,7 @@ func (gs *Db) SetReady() error {
 		gs.state++
 		return nil
 	}
-	return fmt.Errorf("slp gs db was not set to ready with current state is %s", fmt.Sprint(gs.state))
+	return fmt.Errorf("slp gs db was not set to ready with current state is %s", fmt.Sprint(state))
 }
 
 // AddTxn adds a transaction to the graph search database

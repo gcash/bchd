@@ -1038,3 +1038,127 @@ func TestSlpGraphSearchTxnNotFound(t *testing.T) {
 			"error", err, errGraphSearchTxnLoad)
 	}
 }
+
+// TestSlpGraphSearchFromPool ensures the graph search that the slp event
+// handler loads at the first memory pool transaction finds a GENESIS and a
+// SEND accepted into the memory pool, and reads them from it, as neither is
+// in a block.  The next slp transaction after the load makes graph search
+// ready.
+func TestSlpGraphSearchFromPool(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100,
+		SlpGraphSearchEnabled: true})
+	txIndex := indexers.NewTxIndex(db)
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		if err := txIndex.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// The memory pool spends the outputs of a confirmed transaction.
+	opTrue := []byte{txscript.OP_TRUE}
+	funding := wire.NewMsgTx(1)
+	funding.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee}}, nil))
+	funding.AddTxOut(&wire.TxOut{Value: 100000000, PkScript: opTrue})
+	utxos := blockchain.NewUtxoViewpoint()
+	utxos.AddTxOuts(bchutil.NewTx(funding), 1)
+	pool := mempool.New(&mempool.Config{
+		Policy:      mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
+		ChainParams: &chaincfg.RegressionNetParams,
+		FetchUtxoView: func(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
+			view := blockchain.NewUtxoViewpoint()
+			for _, in := range tx.MsgTx().TxIn {
+				view.Entries()[in.PreviousOutPoint] =
+					utxos.LookupEntry(in.PreviousOutPoint).Clone()
+			}
+			return view, nil
+		},
+		BestHeight:     func() int32 { return 1000 },
+		MedianTimePast: time.Now,
+		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+		},
+	})
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex, s.txIndex, s.txMemPool = db, idx, txIndex, pool
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	// accept puts tx in the memory pool, whose event the slp event
+	// handler gets.
+	accept := func(script []byte, err error, prev ...wire.OutPoint) *wire.MsgTx {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx := wire.NewMsgTx(1)
+		for i := range prev {
+			tx.AddTxIn(wire.NewTxIn(&prev[i], nil))
+		}
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: opTrue})
+		tx.AddTxOut(&wire.TxOut{Value: 90000000, PkScript: opTrue})
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0); err != nil {
+			t.Fatalf("ProcessTransaction: %v", err)
+		}
+		hash := tx.TxHash()
+		desc, err := pool.FetchTxDesc(&hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.dispatchEvent(&rpcEventTxAccepted{TxDesc: desc})
+		return tx
+	}
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	genesis := accept(script, err, wire.OutPoint{Hash: funding.TxHash()})
+	waitFor(t, "graph search to load", func() bool {
+		gsDb, _ := idx.GetGraphSearchDb()
+		return gsDb != nil && gsDb.IsLoaded()
+	})
+
+	id, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err = metadatamaker.TokenType1Send(id, []uint64{1000})
+	send := accept(script, err, wire.OutPoint{Hash: genesis.TxHash(), Index: 1},
+		wire.OutPoint{Hash: genesis.TxHash(), Index: 2})
+	hash := send.TxHash()
+	var resp *pb.GetSlpGraphSearchResponse
+	waitFor(t, "the SEND in graph search", func() bool {
+		resp, err = s.GetSlpGraphSearch(context.Background(),
+			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
+		return err == nil
+	})
+	if len(resp.Txdata) != 2 {
+		t.Fatalf("the search found %d transactions, want the SEND and the "+
+			"GENESIS", len(resp.Txdata))
+	}
+	for i, tx := range []*wire.MsgTx{send, genesis} {
+		var want bytes.Buffer
+		if err := tx.Serialize(&want); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(resp.Txdata[i], want.Bytes()) {
+			t.Errorf("transaction %d of the search is %x, want %x", i,
+				resp.Txdata[i], want.Bytes())
+		}
+	}
+}

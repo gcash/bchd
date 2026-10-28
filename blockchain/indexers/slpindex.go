@@ -433,11 +433,14 @@ func dbRemoveSlpIndexEntries(dbTx database.Tx, block *bchutil.Block) error {
 // SlpIndex implements a transaction by hash index.  That is to say, it supports
 // querying all transactions by their hash.
 type SlpIndex struct {
-	db            database.DB
-	curTokenID    uint32
-	config        *SlpConfig
-	cache         *SlpCache
-	graphSearchDb *slpgraphsearch.Db
+	db         database.DB
+	curTokenID uint32
+	config     *SlpConfig
+	cache      *SlpCache
+
+	// graphSearchDb is set once, by the load of graph search, while
+	// block connection, the memory pool and searches read it.
+	graphSearchDb atomic.Pointer[slpgraphsearch.Db]
 }
 
 // Ensure the SlpIndex type implements the Indexer interface.
@@ -650,17 +653,18 @@ func (idx *SlpIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block, stxos 
 
 // AddGraphSearchTxn adds a transaction to graph search.
 func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
-	if idx.graphSearchDb == nil {
+	gsDb := idx.graphSearchDb.Load()
+	if gsDb == nil {
 		return
 	}
 
-	if !idx.graphSearchDb.IsReady() {
-		if err := idx.graphSearchDb.SetReady(); err != nil {
+	if !gsDb.IsReady() {
+		if err := gsDb.SetReady(); err != nil {
 			log.Errorf("Failed to set graph search db ready: %v", err)
 		}
 	}
 
-	err := idx.graphSearchDb.AddTxn(tx)
+	err := gsDb.AddTxn(tx)
 	if err != nil {
 		log.Criticalf("Failed to add transcation %v to graph search db due to error: %v", tx.TxHash(), err)
 	}
@@ -679,11 +683,13 @@ const graphSearchLoadBatch = 1000
 func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.Hash) ([][]byte, error), initWg *sync.WaitGroup, interupt *int32) {
 
 	// this method shouldn't be called more than once or if gs is disabled
-	if idx.graphSearchDb != nil || !idx.config.SlpGraphSearchEnabled {
+	if !idx.config.SlpGraphSearchEnabled {
 		return
 	}
-
-	idx.graphSearchDb = slpgraphsearch.NewDb(fetchTxns)
+	gsDb := slpgraphsearch.NewDb(fetchTxns)
+	if !idx.graphSearchDb.CompareAndSwap(nil, gsDb) {
+		return
+	}
 
 	// now that graphSearchDB is set we can call Done()
 	if initWg != nil {
@@ -723,7 +729,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 				log.Warnf("loadSlpGraphSearchDb failed to deserialize transaction: %v", err)
 				continue
 			}
-			if err := idx.graphSearchDb.AddTxn(&msgTx); err != nil {
+			if err := gsDb.AddTxn(&msgTx); err != nil {
 				log.Warn(err.Error())
 			}
 		}
@@ -792,7 +798,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 	wg.Wait()
 
 	// try to set db state to loaded
-	err = idx.graphSearchDb.SetLoaded()
+	err = gsDb.SetLoaded()
 	if err != nil {
 		log.Debugf("couldn't set state to loaded: %v", err)
 	} else {
@@ -806,19 +812,20 @@ func (idx *SlpIndex) GetGraphSearchDb() (*slpgraphsearch.Db, error) {
 		return nil, errors.New("slp graph search is not enabled")
 	}
 
-	if idx.graphSearchDb == nil {
+	gsDb := idx.graphSearchDb.Load()
+	if gsDb == nil {
 		return nil, errors.New("an internal error has occurred, slp graph search db has not been created yet")
 	}
 
-	if !idx.graphSearchDb.IsLoaded() {
-		return idx.graphSearchDb, fmt.Errorf("graph search db is loading")
+	if !gsDb.IsLoaded() {
+		return gsDb, fmt.Errorf("graph search db is loading")
 	}
 
-	if !idx.graphSearchDb.IsReady() {
-		return idx.graphSearchDb, fmt.Errorf("graph search db is waiting on the next block")
+	if !gsDb.IsReady() {
+		return gsDb, fmt.Errorf("graph search db is waiting on the next block")
 	}
 
-	return idx.graphSearchDb, nil
+	return gsDb, nil
 }
 
 func (idx *SlpIndex) checkBurnedInputForMintBaton(dbTx database.Tx, burn *BurnedInput) (bool, error) {
@@ -1226,7 +1233,8 @@ func (idx *SlpIndex) RemoveMempoolSlpTxsNotIn(inPool func(*chainhash.Hash) bool)
 // both mempool and recently queried SlpIndexEntries
 func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
 	// skip removal if slp graph search enabled but is still loading, this way gs db won't miss any txns
-	if idx.config.SlpGraphSearchEnabled && (idx.graphSearchDb == nil || !idx.graphSearchDb.IsLoaded()) {
+	gsDb := idx.graphSearchDb.Load()
+	if idx.config.SlpGraphSearchEnabled && (gsDb == nil || !gsDb.IsLoaded()) {
 		return
 	}
 	idx.cache.RemoveMempoolSlpTxItems(txs)

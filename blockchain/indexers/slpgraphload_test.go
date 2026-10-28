@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
@@ -104,7 +105,7 @@ func (load *graphSearchLoad) run(left ...chainhash.Hash) ([]int, []chainhash.Has
 	}
 	slices.Sort(sizes)
 
-	db := load.test.idx.graphSearchDb
+	db := load.test.idx.graphSearchDb.Load()
 	if !db.IsLoaded() {
 		t.Fatal("graph search is not loaded")
 	}
@@ -297,5 +298,55 @@ func TestSlpGraphSearchLoadList(t *testing.T) {
 	if list, err := test.idx.buildGraphSearchTxnList(); err == nil || list != nil {
 		t.Errorf("without the index's bucket: got %d batches and %v",
 			len(list), err)
+	}
+}
+
+// TestSlpGraphSearchDbOnce ensures graph search is loaded only when it is on,
+// and once, that it is not served before the load creates it, and that the
+// index keeps the memory pool entries of the transactions a block confirms
+// until the load is done, so that the load misses none of them.
+func TestSlpGraphSearchDbOnce(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	fetched := 0
+	fetch := func([]chainhash.Hash) ([][]byte, error) {
+		fetched++
+		return nil, errors.New("not found")
+	}
+	test.idx.LoadSlpGraphSearchDb(fetch, nil, nil)
+	if test.idx.graphSearchDb.Load() != nil {
+		t.Fatal("graph search was loaded while off")
+	}
+	test.idx.config.SlpGraphSearchEnabled = true
+	if gsDb, err := test.idx.GetGraphSearchDb(); gsDb != nil || err == nil {
+		t.Errorf("before the load: got %v and %v", gsDb, err)
+	}
+
+	// The load has created the database, and runs.
+	gsDb := slpgraphsearch.NewDb(fetch)
+	test.idx.graphSearchDb.Store(gsDb)
+	genesis := genesisTx(t, 1)
+	hash := genesis.TxHash()
+	test.addPotential(genesis)
+	test.connect(genesis)
+	if test.idx.cache.GetMempoolItem(&hash) == nil {
+		t.Error("the memory pool entry of a transaction confirmed while " +
+			"graph search loads is gone")
+	}
+	if err := gsDb.SetLoaded(); err != nil {
+		t.Fatal(err)
+	}
+	genesis = genesisTx(t, 2)
+	hash = genesis.TxHash()
+	test.addPotential(genesis)
+	test.connect(genesis)
+	if test.idx.cache.GetMempoolItem(&hash) != nil {
+		t.Error("the memory pool entry of a transaction confirmed once " +
+			"graph search loaded is still there")
+	}
+
+	test.idx.LoadSlpGraphSearchDb(fetch, nil, nil)
+	if test.idx.graphSearchDb.Load() != gsDb || fetched != 0 {
+		t.Errorf("a second load replaced the database or read %d batches",
+			fetched)
 	}
 }
