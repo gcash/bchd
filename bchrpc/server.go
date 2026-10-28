@@ -1939,7 +1939,7 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 
 		entry, err := s.getSlpIndexEntry(txid)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txo: %v:%s: %v", txid, fmt.Sprint(query.GetPrevOutVout()), err)
+			return nil, slpEntryStatus(txid, err)
 		}
 
 		if query.PrevOutVout == 0 || query.PrevOutVout > 19 {
@@ -2090,7 +2090,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 
 	entry, err := s.getSlpIndexEntry(hash)
 	if err != nil {
-		return nil, status.Errorf(codes.Aborted, "txid is missing from slp validity set for txn: %s: %v", hash, err)
+		return nil, slpEntryStatus(hash, err)
 	}
 
 	// get map for token and do graph search
@@ -3708,6 +3708,17 @@ func (s *GrpcServer) getSlpIndexEntry(hash *chainhash.Hash) (*indexers.SlpTxEntr
 	}
 
 	return entry, nil
+}
+
+// slpEntryStatus returns the status a call answers with when it cannot read
+// the slp entry of the transaction hash: NotFound for a transaction the slp
+// index does not hold, and Internal for a failure of the database, without
+// its error, which can name the node's files.
+func slpEntryStatus(hash *chainhash.Hash, err error) error {
+	if indexers.IsSlpEntryNotFound(err) {
+		return status.Errorf(codes.NotFound, "transaction %v is not in the slp index", hash)
+	}
+	return status.Error(codes.Internal, "failed to load slp index entry")
 }
 
 // Get decimal amount from Genesis for convenience

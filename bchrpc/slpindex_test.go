@@ -1237,7 +1237,7 @@ func TestSlpTrustedValidationLeftPool(t *testing.T) {
 
 	s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
 	waitFor(t, "the GENESIS to be no longer valid", func() bool {
-		return status.Code(validate()) == codes.Aborted
+		return status.Code(validate()) == codes.NotFound
 	})
 }
 
@@ -1322,7 +1322,7 @@ func TestSlpTrustedValidationDisconnected(t *testing.T) {
 	s.dispatchEvent(&rpcEventBlockDisconnected{block})
 	waitFor(t, "the GENESIS the memory pool did not take back to be no "+
 		"longer valid", func() bool {
-		return status.Code(validate(gone)) == codes.Aborted
+		return status.Code(validate(gone)) == codes.NotFound
 	})
 	if err := validate(back); err != nil {
 		t.Errorf("the GENESIS back in the memory pool: %v", err)
@@ -1412,6 +1412,61 @@ func TestSlpGraphSearchClientErrors(t *testing.T) {
 
 			t.Errorf("%s: got %.200v, want %v with %q", test.name, test.err,
 				test.code, test.msg)
+		}
+	}
+}
+
+// TestSlpIndexEntryErrors ensures GetSlpGraphSearch and GetSlpTrustedValidation
+// answer a transaction the slp index does not hold as not found, naming it,
+// and a failure of the index as an internal error, with a message that leaves
+// out the database's own error, which can name the node's files, rather than
+// both as Aborted with the index's error.
+func TestSlpIndexEntryErrors(t *testing.T) {
+	s, _ := newGraphSearchServer(t)
+	ctx := context.Background()
+	search := func(hash chainhash.Hash) error {
+		_, err := s.GetSlpGraphSearch(ctx,
+			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
+		return err
+	}
+	validate := func(hash chainhash.Hash) error {
+		_, err := s.GetSlpTrustedValidation(ctx,
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+			})
+		return err
+	}
+
+	// The index has no entry for one, and a corrupt one for the other.
+	unknown, corrupt := chainhash.Hash{0xee, 1}, chainhash.Hash{0xee, 2}
+	err := s.db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket([]byte("slptxbyhashidx")).Put(corrupt[:],
+			[]byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []struct {
+		name string
+		call func(chainhash.Hash) error
+	}{
+		{"GetSlpGraphSearch", search},
+		{"GetSlpTrustedValidation", validate},
+	} {
+		err := call.call(unknown)
+		want := "transaction " + unknown.String() + " is not in the slp index"
+		if status.Code(err) != codes.NotFound || status.Convert(err).Message() != want {
+			t.Errorf("%s of a transaction the index does not hold: got %v, "+
+				"want NotFound with %q", call.name, err, want)
+		}
+		err = call.call(corrupt)
+		want = "failed to load slp index entry"
+		if status.Code(err) != codes.Internal || status.Convert(err).Message() != want {
+			t.Errorf("%s of a corrupt entry: got %v, want Internal with %q",
+				call.name, err, want)
 		}
 	}
 }

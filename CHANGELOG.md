@@ -27,6 +27,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - The gRPC SLP calls no longer treat a transaction that left the memory pool unconfirmed as valid after the next block.
 - The gRPC SLP calls no longer treat as valid a transaction that a reorg disconnected and the memory pool didn't take back.
 - `GetSlpGraphSearch` and the graph search count of `GetSlpTrustedValidation` answer bad client input with `InvalidArgument` or `NotFound` instead of `Internal` or `Aborted`.
+- `GetSlpGraphSearch` and `GetSlpTrustedValidation` answer a transaction the SLP index does not hold with `NotFound`, and a failure to read the index with `Internal`, rather than both with `Aborted`.
 
 ### Other
 

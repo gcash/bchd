@@ -355,6 +355,14 @@ func (e errSlpEntryNotFound) Error() string {
 	return fmt.Sprintf("slp entry does not exist %v", chainhash.Hash(e))
 }
 
+// IsSlpEntryNotFound reports whether err is the error GetSlpIndexEntry returns
+// for a transaction the slp index has no entry for, as opposed to a failure
+// of the database.
+func IsSlpEntryNotFound(err error) bool {
+	var notFound errSlpEntryNotFound
+	return errors.As(err, &notFound)
+}
+
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // the error is an errSlpEntryNotFound.
