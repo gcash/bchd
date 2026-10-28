@@ -1420,15 +1420,21 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 			if mintMetadata == nil {
 				break
 			}
+
+			// The MINT puts the mint baton on its output, or, without a
+			// baton output, ends it, as the index records once the MINT
+			// is confirmed.  The metadata goes once the MINT leaves the
+			// memory pool (see RemoveMempoolSlpTxsNotIn).
 			if t.MintBatonVout > 1 {
 				mintMetadata.MintBatonHash = &hash
 				mintMetadata.MintBatonVout = uint32(t.MintBatonVout)
-				err := idx.cache.AddTempTokenMetadata(*mintMetadata, hash)
-				if err != nil {
-					log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
-				}
 			} else {
-				log.Debugf("AddPotentialSlpEntries: invalid mint baton for mint txn %v", hash)
+				mintMetadata.MintBatonHash = nil
+				mintMetadata.MintBatonVout = 0
+			}
+			err := idx.cache.AddTempTokenMetadata(*mintMetadata, hash)
+			if err != nil {
+				log.Criticalf("AddTempTokenMetadata in AddPotentialSlpEntries failed for Mint: %v", err)
 			}
 		}
 		return nil
