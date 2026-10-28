@@ -52,6 +52,10 @@ This release fetches announced blocks through their headers, as BCHN does, cuts 
 - When an index fails on a block, the log names the index instead of reporting a failure to write the chain state.
 - When an index fails to catch up at startup, the error names the index.
 
+### Build & Packaging
+
+- Update dependencies, including gRPC v1.85.0, protobuf v1.36.12, grpc-gateway v2.33.0 and the Prometheus client v1.25.0, and regenerate `bchrpc/pb` with them.
+
 ### Other
 
 - txscript can sign inputs that spend CashTokens, and sign with `SIGHASH_UTXOS`. `SignTxOutputWithSigHashes`, `SignatureScriptWithSigHashes`, `RawTxInECDSASignatureWithSigHashes` and `RawTxInSchnorrSignatureWithSigHashes` take the transaction's signature hashes, computed once for all its inputs, which must include the outputs it spends (`NewTxSigHashes(tx).WithUtxos(tx, utxos)`) for those. The functions without them can't see the spent outputs, so they now return an error for `SIGHASH_UTXOS` instead of a signature the network refuses.

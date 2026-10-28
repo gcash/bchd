@@ -6,7 +6,8 @@
   },
   "tags": [
     {
-      "name": "bchrpc"
+      "name": "bchrpc",
+      "description": "bchrpc contains a set of RPCs that can be exposed publicly via\nthe command line options. This service could be authenticated or\nunauthenticated."
     }
   ],
   "consumes": [
@@ -2829,7 +2830,7 @@
           "type": "string"
         }
       },
-      "additionalProperties": {}
+      "additionalProperties": true
     },
     "rpcStatus": {
       "type": "object",
