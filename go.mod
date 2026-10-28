@@ -8,8 +8,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dchest/siphash v1.2.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
-	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6
-	github.com/gcash/bchutil v0.0.0-20261023042530-83c74af4dbd7
+	github.com/gcash/bchlog v0.0.0-20261027020323-7b5704c0a60f
+	github.com/gcash/bchutil v0.0.0-20261028060706-e320ade87427
 	github.com/gcash/goleveldb v1.1.0
 	github.com/gcash/goslp v1.0.0
 	github.com/golang/glog v1.2.5
@@ -23,7 +23,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/text v0.43.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
@@ -38,7 +38,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/desertbit/timer v1.0.1 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect

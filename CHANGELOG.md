@@ -42,6 +42,8 @@ This release fetches announced blocks through their headers, as BCHN does, cuts 
 - `GetUnspentOutput` returns an output's SLP token metadata only when `include_token_metadata` is set, as `GetAddressUnspentOutputs` does, so clients that read it must now set the flag.
 - `GetSlpTokenMetadata` no longer reports a mint baton that a block burned while confirming, from the memory pool, the GENESIS or MINT that created it.
 - `GetSlpTokenMetadata` reports a token's mint baton ended once a MINT ending it is in the memory pool, as it does once the MINT is confirmed, instead of the baton the MINT spent.
+- `searchrawtransactions`, the websocket address filters and `notifyreceived`, and the gRPC address calls and transaction filters refuse a legacy address from another network, such as a testnet address on mainnet, instead of reading it as this network's address with the same hash.
+- On systems that don't allow reading the network interfaces, such as Android, bchd creates its RPC certificate without their addresses instead of failing to start.
 
 ### Database
 
