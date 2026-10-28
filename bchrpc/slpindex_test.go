@@ -10,6 +10,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2034,4 +2035,196 @@ func TestSlpIndexFailureCalls(t *testing.T) {
 			t.Errorf("%s: got %v, want Internal with %q", test.name, err, want)
 		}
 	}
+}
+
+// togglingViewDB is a database whose read transactions fail with err while
+// failing is set.
+type togglingViewDB struct {
+	database.DB
+	err     error
+	failing atomic.Bool
+}
+
+func (db *togglingViewDB) View(fn func(database.Tx) error) error {
+	if db.failing.Load() {
+		return db.err
+	}
+	return db.DB.View(fn)
+}
+
+// syncBuffer is a buffer that a logger writes to from other goroutines.
+type syncBuffer struct {
+	mtx sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.String()
+}
+
+// TestSlpEventRecheck ensures a memory pool transaction whose slp check the
+// database fails, by a read that fails or an entry the slp index cannot read,
+// is checked again at each block event while it is in the memory pool, until
+// the database does not fail, and then added to graph search as well, rather
+// than left not valid slp for as long as it is there, and that one that left
+// the memory pool meanwhile is not, the failure logged as an error rather
+// than at debug as an invalid transaction.
+func TestSlpEventRecheck(t *testing.T) {
+	s := newDispatcherTestServer(t)
+	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("database.Create: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	idx := indexers.NewSlpIndex(db, &indexers.SlpConfig{MaxCacheSize: 100,
+		SlpGraphSearchEnabled: true})
+	txIndex := indexers.NewTxIndex(db)
+	corrupt := chainhash.Hash{0xee, 14}
+	err = db.Update(func(dbTx database.Tx) error {
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		if err := txIndex.Create(dbTx); err != nil {
+			return err
+		}
+		// The bucket of index tips, which the index manager creates.
+		_, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("idxtips"))
+		if err != nil {
+			return err
+		}
+		return dbTx.Metadata().Bucket([]byte("slptxbyhashidx")).Put(corrupt[:],
+			[]byte{1})
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	pool, funding := newOpTruePool(t)
+	toggling := &togglingViewDB{DB: db, err: errors.New("the database failed")}
+	s.chainParams = &chaincfg.RegressionNetParams
+	s.db, s.slpIndex, s.txIndex, s.txMemPool = toggling, idx, txIndex, pool
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	t.Cleanup(func() { UseLogger(saved) })
+	go s.slpEventHandler()
+	waitFor(t, "the slp event handler to subscribe", func() bool {
+		return s.numSubscriptions() == 1
+	})
+
+	script, err := metadatamaker.TokenType1Genesis([]byte("T"), []byte("Token"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slpTx := func(script []byte, prev wire.OutPoint) *wire.MsgTx {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(&prev, nil))
+		tx.AddTxOut(&wire.TxOut{PkScript: script})
+		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+		tx.AddTxOut(&wire.TxOut{Value: 90000000, PkScript: []byte{txscript.OP_TRUE}})
+		return tx
+	}
+	accepted := func(tx *wire.MsgTx) {
+		s.dispatchEvent(&rpcEventTxAccepted{TxDesc: &mempool.TxDesc{
+			TxDesc: mining.TxDesc{Tx: bchutil.NewTx(tx)}}})
+	}
+	block := func() {
+		s.dispatchEvent(&rpcEventBlockConnected{Block: bchutil.NewBlock(&wire.MsgBlock{})})
+	}
+	validate := func(tx *wire.MsgTx) error {
+		hash := tx.TxHash()
+		_, err := s.GetSlpTrustedValidation(context.Background(),
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash: hash[:],
+					PrevOutVout: 1,
+				}},
+			})
+		return err
+	}
+	failures := func(n int) {
+		t.Helper()
+		waitFor(t, fmt.Sprintf("%d failures logged", n), func() bool {
+			return strings.Count(logged.String(), "[ERR] GRPC: Failed to "+
+				"check slp transaction") == n
+		})
+	}
+
+	// The database fails while the slp event handler checks two GENESIS
+	// transactions of the memory pool, one of which then leaves it.
+	stays := slpTx(script, wire.OutPoint{Hash: funding.TxHash()})
+	leaves := slpTx(script, wire.OutPoint{Hash: funding.TxHash(), Index: 1})
+	toggling.failing.Store(true)
+	for _, tx := range []*wire.MsgTx{stays, leaves} {
+		if _, err := pool.ProcessTransaction(bchutil.NewTx(tx), false, 0); err != nil {
+			t.Fatalf("ProcessTransaction: %v", err)
+		}
+		accepted(tx)
+	}
+	failures(2)
+	for _, tx := range []*wire.MsgTx{stays, leaves} {
+		want := "[ERR] GRPC: Failed to check slp transaction " +
+			tx.TxHash().String() + " (mempool): the database failed"
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("log %q, want a line with %q", logged.String(), want)
+		}
+	}
+	pool.RemoveTransaction(bchutil.NewTx(leaves), true)
+
+	// The database fails again at the next block event, and the GENESIS
+	// still in the memory pool is checked again.
+	block()
+	failures(3)
+	toggling.failing.Store(false)
+
+	// The check of a SEND spending an output of a transaction whose entry
+	// the index cannot read fails too.
+	send, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x09}, 32),
+		[]uint64{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spends := slpTx(send, wire.OutPoint{Hash: corrupt, Index: 1})
+	accepted(spends)
+	failures(4)
+	want := "[ERR] GRPC: Failed to check slp transaction " +
+		spends.TxHash().String() + " (mempool): corrupt slp index entry for " +
+		corrupt.String()
+	if !strings.Contains(logged.String(), want) {
+		t.Errorf("log %q, want a line with %q", logged.String(), want)
+	}
+
+	// At the next block event, the database does not fail.  A third
+	// GENESIS, checked after the block event, shows when the handler is
+	// done with it.
+	block()
+	after := slpTx(script, wire.OutPoint{Hash: chainhash.Hash{0xee, 13}})
+	accepted(after)
+	waitFor(t, "the GENESIS checked after the block event to be valid", func() bool {
+		return validate(after) == nil
+	})
+	if err := validate(stays); err != nil {
+		t.Errorf("the GENESIS in the memory pool: %v", err)
+	}
+	if status.Code(validate(leaves)) != codes.NotFound {
+		t.Errorf("the GENESIS that left the memory pool: got %v, want it "+
+			"not valid", validate(leaves))
+	}
+	failures(4)
+
+	// The GENESIS checked again is in graph search.
+	hash := stays.TxHash()
+	waitFor(t, "the GENESIS in graph search", func() bool {
+		_, err := s.GetSlpGraphSearch(context.Background(),
+			&pb.GetSlpGraphSearchRequest{Hash: hash[:]})
+		return err == nil
+	})
 }

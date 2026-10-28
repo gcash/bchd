@@ -2782,7 +2782,9 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 				txDesc := event
 
 				if s.slpIndex != nil {
-					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactions rpcEventTxAccepted")
+					// A failure is logged, and the slp event handler checks
+					// the transaction again at the next block.
+					_, _ = s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactions rpcEventTxAccepted")
 				}
 
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.txSpentScripts(txDesc)) {
@@ -2839,7 +2841,9 @@ func (s *GrpcServer) SubscribeTransactions(req *pb.SubscribeTransactionsRequest,
 					}
 
 					if s.slpIndex != nil {
-						s.checkSlpTxOnEvent(tx.MsgTx(), "SubscribeTransactions rpcEventBlockConnected")
+						// A failure is logged; the index judged the block's
+						// transactions when it connected it.
+						_, _ = s.checkSlpTxOnEvent(tx.MsgTx(), "SubscribeTransactions rpcEventBlockConnected")
 					}
 
 					toSend := &pb.TransactionNotification{}
@@ -2955,7 +2959,9 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 				txDesc := event
 
 				if s.slpIndex != nil {
-					s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactionStream rpcEventTxAccepted")
+					// A failure is logged, and the slp event handler checks
+					// the transaction again at the next block.
+					_, _ = s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "SubscribeTransactionStream rpcEventTxAccepted")
 				}
 
 				if !filter.MatchAndUpdate(txDesc.Tx, s.chainParams, s.txSpentScripts(txDesc)) {
@@ -3012,7 +3018,9 @@ func (s *GrpcServer) SubscribeTransactionStream(stream pb.Bchrpc_SubscribeTransa
 					}
 
 					if s.slpIndex != nil {
-						s.checkSlpTxOnEvent(tx.MsgTx(), "SubscribeTransactionStream rpcEventBlockConnected")
+						// A failure is logged; the index judged the block's
+						// transactions when it connected it.
+						_, _ = s.checkSlpTxOnEvent(tx.MsgTx(), "SubscribeTransactionStream rpcEventBlockConnected")
 					}
 
 					toSend := &pb.TransactionNotification{}
@@ -3948,6 +3956,11 @@ func (s *GrpcServer) slpEventHandler() {
 	// any txns to the graph search db
 	initWg := sync.WaitGroup{}
 
+	// The memory pool transactions whose check the database failed, which
+	// are checked again at each block event while they are in the memory
+	// pool, as it may not fail again.
+	recheck := make(map[chainhash.Hash]*wire.MsgTx)
+
 	// This subscription is not bounded, since dropping it would stop SLP
 	// validation of mempool transactions.
 	subscription := s.subscribeEvents(0,
@@ -3975,7 +3988,10 @@ func (s *GrpcServer) slpEventHandler() {
 			}
 
 			// validate new slp txns
-			isSlpValid := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
+			isSlpValid, err := s.checkSlpTxOnEvent(txDesc.Tx.MsgTx(), "mempool")
+			if err != nil {
+				recheck[*txDesc.Tx.Hash()] = txDesc.Tx.MsgTx()
+			}
 			if isSlpValid && s.slpIndex.GraphSearchEnabled() {
 				initWg.Wait()
 				go s.slpIndex.AddGraphSearchTxn(txDesc.Tx.MsgTx())
@@ -3988,6 +4004,21 @@ func (s *GrpcServer) slpEventHandler() {
 			// of a block disconnected that it takes, so the slp cache
 			// drops what the transactions not in it put there.
 			s.slpIndex.RemoveMempoolSlpTxsNotIn(s.txMemPool.IsTransactionInPool)
+			for hash, tx := range recheck {
+				if !s.txMemPool.IsTransactionInPool(&hash) {
+					delete(recheck, hash)
+					continue
+				}
+				isSlpValid, err := s.checkSlpTxOnEvent(tx, "mempool")
+				if err != nil {
+					continue
+				}
+				delete(recheck, hash)
+				if isSlpValid && s.slpIndex.GraphSearchEnabled() {
+					initWg.Wait()
+					go s.slpIndex.AddGraphSearchTxn(tx)
+				}
+			}
 			continue
 		}
 	}
@@ -3996,26 +4027,36 @@ func (s *GrpcServer) slpEventHandler() {
 // checkSlpTxOnEvent is used to make sure slp information has been processed before
 // returning subscriber event info to the client.  Without this, a race condition exists
 // where the subscriber event can be returned before the slp validation is completed.
-func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) bool {
+//
+// It returns whether tx is valid slp, and the failure of the database that
+// kept it from telling, which it logs as an error: a read of the database
+// that failed, or an entry of the slp index it could not read.
+func (s *GrpcServer) checkSlpTxOnEvent(tx *wire.MsgTx, eventStr string) (bool, error) {
 	if !isMaybeSlpTransaction(tx) {
-		return false
+		return false, nil
 	}
 	log.Debugf("possible slp transaction added %v (%s)", tx.TxHash(), eventStr)
+	var (
+		valid    bool
+		checkErr error
+	)
 	err := s.db.View(func(dbTx database.Tx) error {
-		valid, err := s.slpIndex.AddPotentialSlpEntries(dbTx, tx)
-		if err != nil {
-			return fmt.Errorf("invalid slp transaction %v (%s): %v", tx.TxHash(), eventStr, err)
-		} else if valid {
-			log.Debugf("valid slp transaction %v (%s)", tx.TxHash(), eventStr)
-			return nil
-		}
-		return fmt.Errorf("invalid slp transaction in %v (%s)", tx.TxHash(), eventStr)
+		valid, checkErr = s.slpIndex.AddPotentialSlpEntries(dbTx, tx)
+		return checkErr
 	})
-	if err != nil {
-		log.Debug(err)
-		return false
+	switch {
+	case err != nil && (err != checkErr || indexers.IsSlpIndexFailure(err)):
+		log.Errorf("Failed to check slp transaction %v (%s): %v", tx.TxHash(), eventStr, err)
+		return false, err
+	case err != nil:
+		log.Debugf("invalid slp transaction %v (%s): %v", tx.TxHash(), eventStr, err)
+		return false, nil
+	case !valid:
+		log.Debugf("invalid slp transaction in %v (%s)", tx.TxHash(), eventStr)
+		return false, nil
 	}
-	return true
+	log.Debugf("valid slp transaction %v (%s)", tx.TxHash(), eventStr)
+	return true, nil
 }
 
 // errTokenNotGenesis is the error for a token ID that names an slp transaction

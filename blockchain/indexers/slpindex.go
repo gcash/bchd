@@ -370,6 +370,30 @@ func IsSlpEntryNotFound(err error) bool {
 	return errors.As(err, &notFound)
 }
 
+// slpIndexFailure is the error AddPotentialSlpEntries returns when the slp
+// index fails to read the entry of a transaction an input spends.
+type slpIndexFailure struct {
+	err error
+}
+
+// Error implements the error interface.
+func (e slpIndexFailure) Error() string {
+	return e.err.Error()
+}
+
+// Unwrap returns the index's error.
+func (e slpIndexFailure) Unwrap() error {
+	return e.err
+}
+
+// IsSlpIndexFailure reports whether err, from AddPotentialSlpEntries, is a
+// failure of the slp index to read an entry the check needs, rather than a
+// judgement of the transaction, which the caller can check again.
+func IsSlpIndexFailure(err error) bool {
+	var failure slpIndexFailure
+	return errors.As(err, &failure)
+}
+
 // dbFetchSlpIndexEntry uses an existing database transaction to fetch the serialized slp
 // index entry for the provided transaction hash.  When there is no entry for the provided hash,
 // the error is an errSlpEntryNotFound.
@@ -1162,10 +1186,17 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 		return true, nil
 	}
 
+	// An entry the index fails to read is returned as its failure, rather
+	// than the input taken for one that is not slp, which could find the
+	// transaction invalid, so that the caller can check it again.
+	var failure error
 	getSlpIndexEntry := func(txiHash *chainhash.Hash) (*SlpTxEntry, error) {
 		entry, err := idx.GetSlpIndexEntry(dbTx, txiHash)
 		if entry != nil {
 			return entry, nil
+		}
+		if err != nil && !IsSlpEntryNotFound(err) && failure == nil {
+			failure = slpIndexFailure{err}
 		}
 
 		return nil, err
@@ -1255,6 +1286,9 @@ func (idx *SlpIndex) AddPotentialSlpEntries(dbTx database.Tx, msgTx *wire.MsgTx)
 	valid, _, err := CheckSlpTx(msgTx, getSlpIndexEntry, putTxIndexEntry)
 	if err != nil {
 		return valid, err
+	}
+	if failure != nil {
+		return false, failure
 	}
 
 	return valid, nil

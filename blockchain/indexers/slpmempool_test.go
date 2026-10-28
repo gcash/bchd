@@ -733,3 +733,42 @@ func TestSlpEntryCopied(t *testing.T) {
 			ok, want)
 	}
 }
+
+// TestSlpPotentialEntryIndexFailure ensures AddPotentialSlpEntries returns a
+// failure of the slp index to read the entry of a transaction an input spends,
+// which IsSlpIndexFailure tells, rather than take the input for one that is
+// not slp, which could find the transaction invalid, while an input of a
+// transaction the index does not hold is still not slp.
+func TestSlpPotentialEntryIndexFailure(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	corrupt, unknown := chainhash.Hash{0xee, 0x20}, chainhash.Hash{0xee, 0x21}
+	err := test.db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Bucket(slpIndexKey).Put(corrupt[:], []byte{1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := metadatamaker.TokenType1Send(bytes.Repeat([]byte{0x08}, 32),
+		[]uint64{1000})
+	for _, c := range []struct {
+		name    string
+		prev    chainhash.Hash
+		failure bool
+	}{
+		{"an input spending a corrupt entry", corrupt, true},
+		{"an input the index does not hold", unknown, false},
+	} {
+		send := slpTx(t, 0x22, script, err)
+		send.TxIn[0].PreviousOutPoint = wire.OutPoint{Hash: c.prev, Index: 1}
+		var valid bool
+		err := test.db.View(func(dbTx database.Tx) error {
+			var err error
+			valid, err = test.idx.AddPotentialSlpEntries(dbTx, send)
+			return err
+		})
+		if IsSlpIndexFailure(err) != c.failure || valid || (err != nil) != c.failure {
+			t.Errorf("%s: got %v and %v, want a failure %v", c.name, valid,
+				err, c.failure)
+		}
+	}
+}
