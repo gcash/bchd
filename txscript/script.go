@@ -662,6 +662,13 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 		return nil, totalBytesHashedlength, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
 	}
 
+	// Sighashes with the spent outputs hold the token data of the output
+	// each input spends, so they must be for as many inputs as tx has.
+	if sigHashes.hasUtxos && len(sigHashes.tokenDataList) != len(tx.TxIn) {
+		return nil, totalBytesHashedlength, fmt.Errorf("sighashes for %d "+
+			"inputs but %d txins", len(sigHashes.tokenDataList), len(tx.TxIn))
+	}
+
 	// We'll utilize this buffer throughout to incrementally calculate
 	// the signature hash for this transaction.
 	var sigHash bytes.Buffer

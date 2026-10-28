@@ -7,6 +7,7 @@ package txscript
 import (
 	"bytes"
 	crand "crypto/rand"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -439,5 +440,97 @@ func TestCalcSignatureHashUtxos(t *testing.T) {
 		100000, false)
 	if err != nil {
 		t.Errorf("legacy algorithm: %v", err)
+	}
+}
+
+// TestSigHashesOtherInputs ensures CalcSignatureHash, and the engine, return
+// an error instead of panicking or hashing for sighashes that include the
+// spent outputs of a transaction with another number of inputs, and that the
+// engine verifies with those of the transaction itself.
+func TestSigHashesOtherInputs(t *testing.T) {
+	t.Parallel()
+
+	priv, pub := bchec.PrivKeyFromBytes(bchec.S256(),
+		bytes.Repeat([]byte{1}, 32))
+	checkSig, err := NewScriptBuilder().AddData(pub.SerializeCompressed()).
+		AddOp(OP_CHECKSIG).Script()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, utxos := spentOutputsTestTx([][]byte{checkSig, checkSig})
+	sigHashes := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+	hashType := SigHashAll | SigHashForkID
+	for idx := range tx.TxIn {
+		hash, _, err := CalcSignatureHash(checkSig, sigHashes, hashType, tx,
+			idx, 100000, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sig, err := priv.SignSchnorr(hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx.TxIn[idx].SignatureScript, err = NewScriptBuilder().
+			AddData(append(sig.Serialize(), byte(hashType))).Script()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The first input alone, with the signature made with the sighashes
+	// of both, which match it but for the hash of the inputs.
+	first := tx.Copy()
+	first.TxIn = first.TxIn[:1]
+
+	// try runs f, failing the test if it panics.
+	try := func(msg string, f func()) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("%s: panicked: %v", msg, r)
+			}
+		}()
+		f()
+	}
+	flags := StandardVerifyFlags | ScriptAllowCashTokens
+	tests := []struct {
+		name      string
+		tx        *wire.MsgTx
+		sigHashes *TxSigHashes
+	}{
+		{"fewer inputs", tx, NewTxSigHashes(first).WithUtxos(first, utxos)},
+		{"more inputs", first, sigHashes},
+	}
+	for _, test := range tests {
+		for idx := range test.tx.TxIn {
+			msg := fmt.Sprintf("%s, input %d", test.name, idx)
+			try(msg+", CalcSignatureHash", func() {
+				_, _, err := CalcSignatureHash(checkSig, test.sigHashes,
+					hashType, test.tx, idx, 100000, true)
+				if err == nil {
+					t.Errorf("%s: CalcSignatureHash hashed", msg)
+				}
+			})
+			try(msg+", engine", func() {
+				vm, err := NewEngine(checkSig, test.tx, idx, flags, nil,
+					test.sigHashes, utxos, 100000)
+				if err != nil {
+					t.Fatalf("%s: %v", msg, err)
+				}
+				if vm.Execute() == nil {
+					t.Errorf("%s: the engine verified", msg)
+				}
+			})
+		}
+	}
+
+	for idx := range tx.TxIn {
+		vm, err := NewEngine(checkSig, tx, idx, flags, nil, sigHashes, utxos,
+			100000)
+		if err == nil {
+			err = vm.Execute()
+		}
+		if err != nil {
+			t.Errorf("matching sighashes, input %d: %v", idx, err)
+		}
 	}
 }
