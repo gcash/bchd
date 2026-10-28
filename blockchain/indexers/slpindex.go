@@ -690,20 +690,24 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 		initWg.Done()
 	}
 
-	// build an initial map containing all slp transactions mapped to their token ID hash
-	txnTokenIDMap, err := idx.buildGraphSearchTokenMap()
+	// build an initial list containing all slp transactions, in batches
+	batches, err := idx.buildGraphSearchTxnList()
 	if err != nil {
 		log.Debugf("slp graph search failed to load with error: %v", err)
 		return
 	}
+	total := 0
+	for _, batch := range batches {
+		total += len(batch)
+	}
 
-	// loop through the map and load full transactions into s.slpGraphSearchDb
+	// loop through the list and load full transactions into s.slpGraphSearchDb
 	//
 	// Future TODO: this can be optimized by storing slp txn block region in an index
 	//
 	// Future TODO: to reduce memory footprint either lazy loading and/or a whitelist
 	//	      of token IDs for graph search can be added.
-	log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(len(*txnTokenIDMap)))
+	log.Debugf("fetching %s transactions for slp graph search db...", fmt.Sprint(total))
 
 	// addTxns adds the transactions to graph search, but one that is not
 	// an slp transaction, or returns the error reading them.
@@ -752,7 +756,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 
 	// load loads a batch, in a goroutine of its own unless there are few.
 	load := func(batch []chainhash.Hash) {
-		if len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
+		if total > maxGoroutines && maxGoroutines > 0 {
 			guard <- struct{}{}
 			wg.Add(1)
 			go func(batch []chainhash.Hash, wg *sync.WaitGroup) {
@@ -765,8 +769,7 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 	}
 
 	txnCount := 0
-	batch := make([]chainhash.Hash, 0, graphSearchLoadBatch)
-	for txnHash := range *txnTokenIDMap {
+	for i, batch := range batches {
 		if interupt != nil && atomic.LoadInt32(interupt) == 1 {
 			log.Warn("slp graph search loading interupted signal received")
 			break
@@ -775,18 +778,14 @@ func (idx *SlpIndex) LoadSlpGraphSearchDb(fetchTxns func(txnHashes []chainhash.H
 		if txnCount > 0 && txnCount%10000 == 0 {
 			log.Infof("slp graph search %s transactions loaded...", fmt.Sprint(txnCount))
 		}
-		txnCount++
-
-		if txnCount == 1 && len(*txnTokenIDMap) > maxGoroutines && maxGoroutines > 0 {
+		if txnCount == 0 && total > maxGoroutines && maxGoroutines > 0 {
 			log.Debug("loading slp graph search transactions concurrently")
 		}
-		batch = append(batch, txnHash)
-		if len(batch) == graphSearchLoadBatch {
-			load(batch)
-			batch = make([]chainhash.Hash, 0, graphSearchLoadBatch)
-		}
-	}
-	if len(batch) > 0 {
+		txnCount += len(batch)
+
+		// The list lets go of each batch, so that what the load holds
+		// shrinks as the graph grows.
+		batches[i] = nil
 		load(batch)
 	}
 
@@ -1233,51 +1232,62 @@ func (idx *SlpIndex) removeMempoolSlpTxs(txs []*bchutil.Tx) {
 	idx.cache.RemoveMempoolSlpTxItems(txs)
 }
 
-// buildGraphSearchTokenMap is used to load transactions and associated tokenID
-func (idx *SlpIndex) buildGraphSearchTokenMap() (*map[chainhash.Hash]*chainhash.Hash, error) {
+// buildGraphSearchTxnList returns the hashes of the slp transactions graph
+// search loads, those the index holds and those of the memory pool, each once,
+// in batches of graphSearchLoadBatch.  It keeps nothing else of them, as the
+// index can hold millions.
+func (idx *SlpIndex) buildGraphSearchTxnList() ([][]chainhash.Hash, error) {
 
-	db := make(map[chainhash.Hash]*chainhash.Hash)
+	// The memory pool's transactions are few, and the index can hold some
+	// of them, as it keeps the memory pool entries of the transactions a
+	// block confirms while graph search loads.
+	mempool := make(map[chainhash.Hash]struct{})
+	err := idx.cache.ForEachMempoolItem(func(h *chainhash.Hash, _ *SlpTxEntry) error {
+		mempool[*h] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	err := idx.db.View(func(dbTx database.Tx) error {
+	var batches [][]chainhash.Hash
+	n := 0
+	add := func(hash *chainhash.Hash) {
+		if n%graphSearchLoadBatch == 0 {
+			batches = append(batches, make([]chainhash.Hash, 0, graphSearchLoadBatch))
+		}
+		batches[len(batches)-1] = append(batches[len(batches)-1], *hash)
+		n++
+	}
+	err = idx.db.View(func(dbTx database.Tx) error {
 		idxBucket := dbTx.Metadata().Bucket(slpIndexKey)
 		if idxBucket == nil {
 			return fmt.Errorf("bucket nil for key: %s", slpIndexKey)
 		}
 
 		// loop through all of the valid slp txn items stored in the db
-		err := idxBucket.ForEach(func(k []byte, v []byte) error {
-			ch, err := chainhash.NewHash(k)
-			if err != nil {
+		var hash chainhash.Hash
+		return idxBucket.ForEach(func(k []byte, _ []byte) error {
+			if err := hash.SetBytes(k); err != nil {
 				return err
 			}
-			tm, err := dbFetchTokenMetadataBySerializedID(dbTx, v[0:4])
-			if err != nil {
-				return err
+			if _, ok := mempool[hash]; !ok {
+				add(&hash)
 			}
-			db[*ch] = tm.TokenID
 			return nil
 		})
-		if err != nil {
-			return err
-		}
-
-		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// loop through all of the valid slp txn items in the mempool slp cache
-	err = idx.cache.ForEachMempoolItem(func(h *chainhash.Hash, e *SlpTxEntry) error {
-		db[*h] = &e.TokenIDHash
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	// add all of the valid slp txn items in the mempool slp cache
+	for hash := range mempool {
+		add(&hash)
 	}
 
-	log.Infof("SLP graph search is loading %s transactions...", fmt.Sprint(len(db)))
-	return &db, nil
+	log.Infof("SLP graph search is loading %s transactions...", fmt.Sprint(n))
+	return batches, nil
 }
 
 // SlpConfig provides the proper starting height and hash

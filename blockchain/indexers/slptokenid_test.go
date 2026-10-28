@@ -158,8 +158,8 @@ func TestSlpZeroSendTokenID(t *testing.T) {
 			t.Errorf("%s: SEND names token %v, %v; want %x", typ.name, got,
 				err, unknown)
 		}
-		if _, err := test.idx.buildGraphSearchTokenMap(); err != nil {
-			t.Errorf("%s: graph search map: %v", typ.name, err)
+		if _, err := test.idx.buildGraphSearchTxnList(); err != nil {
+			t.Errorf("%s: graph search list: %v", typ.name, err)
 		}
 
 		genesis := genesisTx(t, 2)
