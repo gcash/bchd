@@ -1659,7 +1659,9 @@ func opcodeSplit(op *parsedOpcode, vm *Engine) error {
 	if n.Int32() < 0 {
 		return scriptError(ErrInvalidSplitRange, "n is negative")
 	}
-	a := c[:n.Int32()]
+	// The first part gets no spare capacity, which would hold the
+	// second's bytes.
+	a := c[:n.Int32():n.Int32()]
 	b := c[n.Int32():]
 	vm.dstack.PushByteArray(a)
 	vm.dstack.PushByteArray(b)

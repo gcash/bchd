@@ -27,8 +27,8 @@ func asBool(t []byte) bool {
 // trueBytes is the encoding of true, and smallIntBytes[n] that of the number
 // n for 1 <= n <= 16 (index 0 is unused).  Stack items are never modified in
 // place (pushed data shares the script's own bytes), so every push of these
-// values shares one slice.  The capacity equals the length, so an append to
-// one always copies.
+// values shares one slice.  That holds as no code writes or appends into a
+// stack item, and every opcode that makes new bytes allocates them.
 var (
 	trueBytes     = []byte{1}[:1:1]
 	negOneBytes   = []byte{0x81}[:1:1]
