@@ -16,9 +16,11 @@ import (
 )
 
 // RawTxInECDSASignature returns the serialized ECDSA signature for the input idx of
-// the given transaction, with hashType appended to it.  It doesn't know the
-// outputs the transaction spends, so its signature for an input that spends
-// tokens is invalid, and it returns an error for SigHashUTXO;
+// the given transaction, with hashType appended to it, the fork id added if
+// it lacks it.  It returns an error for a hash type the network refuses, as
+// it does SigHashOld's undefined base type.  It doesn't know the outputs the
+// transaction spends, so its signature for an input that spends tokens is
+// invalid, and it returns an error for SigHashUTXO;
 // RawTxInECDSASignatureWithSigHashes signs those.
 func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
@@ -51,9 +53,11 @@ func RawTxInECDSASignatureWithSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes,
 }
 
 // RawTxInSchnorrSignature returns the serialized Schnorr signature for the input idx of
-// the given transaction, with hashType appended to it.  It doesn't know the
-// outputs the transaction spends, so its signature for an input that spends
-// tokens is invalid, and it returns an error for SigHashUTXO;
+// the given transaction, with hashType appended to it, the fork id added if
+// it lacks it.  It returns an error for a hash type the network refuses, as
+// it does SigHashOld's undefined base type.  It doesn't know the outputs the
+// transaction spends, so its signature for an input that spends tokens is
+// invalid, and it returns an error for SigHashUTXO;
 // RawTxInSchnorrSignatureWithSigHashes signs those.
 func RawTxInSchnorrSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey, amt int64) ([]byte, error) {
@@ -105,24 +109,21 @@ func signatureHash(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	return hash, hashType, nil
 }
 
-// checkSigHashes returns an error if signing input idx of tx with hashType and
-// sigHashes would make a signature the network refuses, as far as sigHashes
-// shows: with both SigHashUTXO and SigHashAnyOneCanPay, with SigHashUTXO if
-// sigHashes lacks an output tx spends, if sigHashes is for a transaction with
-// other inputs, or if it has the outputs tx spends but not the one input idx
-// spends, whose tokens the signature covers.
+// checkSigHashes returns an error if signing input idx of tx with hashType,
+// which has the fork id, and sigHashes would make a signature the network
+// refuses, as far as sigHashes shows: with a hash type it refuses, with
+// SigHashUTXO if sigHashes lacks an output tx spends, if sigHashes is for a
+// transaction with other inputs, or if it has the outputs tx spends but not
+// the one input idx spends, whose tokens the signature covers.
 func checkSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	hashType SigHashType) error {
 
-	if hashType&SigHashUTXO != 0 {
-		if hashType&SigHashAnyOneCanPay != 0 {
-			return errors.New("SigHashUTXO can't be combined with " +
-				"SigHashAnyOneCanPay")
-		}
-		if !sigHashes.hasAllUtxos() {
-			return errors.New("signing with SigHashUTXO needs the " +
-				"outputs the transaction spends in its signature hashes")
-		}
+	if err := checkHashType(hashType, true); err != nil {
+		return err
+	}
+	if hashType&SigHashUTXO != 0 && !sigHashes.hasAllUtxos() {
+		return errors.New("signing with SigHashUTXO needs the outputs " +
+			"the transaction spends in its signature hashes")
 	}
 	if !sigHashes.hasUtxos {
 		return nil
@@ -139,10 +140,31 @@ func checkSigHashes(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 	return nil
 }
 
+// checkHashType returns an error for a hash type the network refuses, as the
+// engine's strict encoding decides: with forkID for a signature with the
+// fork id and tokens allowed, and without it for a legacy signature, as
+// before the fork.
+func checkHashType(hashType SigHashType, forkID bool) error {
+	vm := Engine{flags: ScriptVerifyStrictEncoding}
+	if forkID {
+		vm.flags |= ScriptVerifyBip143SigHash | ScriptAllowCashTokens
+	}
+	if err := vm.checkHashTypeEncoding(hashType); err != nil {
+		return fmt.Errorf("can't sign with a hash type the network "+
+			"refuses: %w", err)
+	}
+	return nil
+}
+
 // LegacyTxInSignature generates a signature using the pre-uahf signature
-// hashing algorithm
+// hashing algorithm.  It returns an error for a hash type strict encoding
+// refused before the fork, as an undefined base type or the fork id.
 func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *bchec.PrivateKey) ([]byte, error) {
+
+	if err := checkHashType(hashType, false); err != nil {
+		return nil, err
+	}
 
 	script, _ := parseScript(subScript)
 	hash, _, err := calcLegacySignatureHash(script, hashType, tx, idx)
@@ -165,6 +187,8 @@ func LegacyTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 // as the idx'th input. privKey is serialized in either a compressed or
 // uncompressed format based on compress. This format must match the same format
 // used to generate the payment address, or the script validation will fail.
+// The fork id is added to hashType if it lacks it, and it returns an error for
+// a hash type the network refuses, as it does SigHashOld's undefined base type.
 // It doesn't know the outputs tx spends, so its signature for an input that
 // spends tokens is invalid, and it returns an error for SigHashUTXO;
 // SignatureScriptWithSigHashes signs those.
@@ -494,14 +518,7 @@ func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 
 	possibleSigs := make([][]byte, 0, len(sigPops)+len(prevPops))
 	possibleSigs = extractSigs(sigPops, possibleSigs)
-	newSigs := len(possibleSigs)
 	possibleSigs = extractSigs(prevPops, possibleSigs)
-
-	// The previous signatures are dropped if the network refuses their
-	// hash type, which is checked as the engine's strict encoding does.
-	// The new ones have the hash type the caller chose.
-	strict := Engine{flags: ScriptVerifyStrictEncoding |
-		ScriptVerifyBip143SigHash | ScriptAllowCashTokens}
 
 	// Now we need to match the signatures to pubkeys, the only real way to
 	// do that is to try to verify them all and match it to the pubkey
@@ -510,7 +527,7 @@ func mergeMultiSig(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64,
 	// throw away.
 	addrToSig := make(map[string][]byte)
 sigLoop:
-	for i, sig := range possibleSigs {
+	for _, sig := range possibleSigs {
 
 		// can't have a valid signature that doesn't at least have a
 		// hashtype, in practise it is even longer than this. but
@@ -520,7 +537,10 @@ sigLoop:
 		}
 		tSig := sig[:len(sig)-1]
 		hashType := SigHashType(sig[len(sig)-1])
-		if i >= newSigs && strict.checkHashTypeEncoding(hashType) != nil {
+
+		// Drop a signature whose hash type the network refuses, which
+		// only a previous one can have, as signing refuses them.
+		if checkHashType(hashType, true) != nil {
 			continue
 		}
 
@@ -630,7 +650,9 @@ func (sc ScriptClosure) GetScript(address bchutil.Address) ([]byte, error) {
 // spends tokens are invalid, and it returns an error for SigHashUTXO;
 // SignTxOutputWithSigHashes signs those.  For the same reason, it drops the
 // signatures in previousScript that cover those outputs: the ones with
-// SigHashUTXO, and all for an input that spends tokens.
+// SigHashUTXO, and all for an input that spends tokens.  The fork id is added
+// to hashType if it lacks it, and it returns an error for a hash type the
+// network refuses, as it does SigHashOld's undefined base type.
 func SignTxOutput(chainParams *chaincfg.Params, tx *wire.MsgTx, idx int,
 	amt int64, pkScript []byte, hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
@@ -652,12 +674,14 @@ func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 	hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
 
-	// Check the index and the hashes here, as a multisig script skips the
-	// keys it fails to sign with.
+	// Check the index, the hash type with the fork id the signatures get,
+	// and the hashes here, as a multisig script skips the keys it fails to
+	// sign with.
 	if idx < 0 || idx >= len(tx.TxIn) {
 		return nil, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
 	}
-	if err := checkSigHashes(tx, sigHashes, idx, hashType); err != nil {
+	err := checkSigHashes(tx, sigHashes, idx, hashType|SigHashForkID)
+	if err != nil {
 		return nil, err
 	}
 

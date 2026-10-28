@@ -94,8 +94,9 @@ func TestSignTxOutput(t *testing.T) {
 	// make key
 	// make script based on key.
 	// sign with magic pixie dust.
+	// Signing refuses SigHashOld, whose undefined base type the network
+	// refuses, as TestSignRefusedHashTypes checks.
 	hashTypes := []SigHashType{
-		SigHashOld, // no longer used but should act like all
 		SigHashAll,
 		SigHashNone,
 		SigHashSingle,
@@ -1172,13 +1173,8 @@ func TestSignTxOutput(t *testing.T) {
 		}
 	}
 
-	// Two part multisig, sign with one key then the other.  The merge drops
-	// the first signature if the network refuses its hash type, as it does
-	// SigHashOld's undefined base type.
+	// Two part multisig, sign with one key then the other.
 	for _, hashType := range hashTypes {
-		if hashType == SigHashOld {
-			continue
-		}
 		for i := range tx.TxIn {
 			msg := fmt.Sprintf("%d:%d", hashType, i)
 
@@ -1545,12 +1541,13 @@ var sigScriptTests = []tstSigScript{
 		scriptAtWrongIndex: false,
 	},
 	{
+		// Refused, as the network refuses its base type of 0.
 		name: "hashType SigHashAnyoneCanPay",
 		inputs: []tstInput{
 			{
 				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
-				sigscriptGenerates: true,
-				inputValidates:     true,
+				sigscriptGenerates: false,
+				inputValidates:     false,
 				indexOutOfRange:    false,
 			},
 		},
@@ -1559,12 +1556,13 @@ var sigScriptTests = []tstSigScript{
 		scriptAtWrongIndex: false,
 	},
 	{
+		// Refused, as the network refuses its base type of 4.
 		name: "hashType non-standard",
 		inputs: []tstInput{
 			{
 				txout:              wire.NewTxOut(coinbaseVal, uncompressedPkScript, wire.TokenData{}),
-				sigscriptGenerates: true,
-				inputValidates:     true,
+				sigscriptGenerates: false,
+				inputValidates:     false,
 				indexOutOfRange:    false,
 			},
 		},
@@ -2477,10 +2475,10 @@ func TestSignInvalidPubKey(t *testing.T) {
 // TestSignMergeMultiSig ensures SignTxOutput, merging a co-signer's multisig
 // signature from previousScript, bare or in P2SH, drops it if the network
 // refuses its hash type, for one without the fork id, with an undefined
-// base type, or with SigHashUTXO and SigHashAnyOneCanPay, keeps it
-// otherwise, SigHashUTXO with the spent outputs included, and keeps the new
-// signatures whatever their hash type.  It also ensures a previousScript in
-// Schnorr multisig mode, whose signatures can't be merged, is an error.
+// base type, or with SigHashUTXO and SigHashAnyOneCanPay, and keeps it
+// otherwise, SigHashUTXO with the spent outputs included.  It also ensures a
+// previousScript in Schnorr multisig mode, whose signatures can't be merged,
+// is an error.
 func TestSignMergeMultiSig(t *testing.T) {
 	t.Parallel()
 
@@ -2582,8 +2580,6 @@ func TestSignMergeMultiSig(t *testing.T) {
 				SigHashAll | SigHashForkID | SigHashUTXO, SigHashAll, true},
 			{"SigHashUTXO without them", nil,
 				SigHashAll | SigHashForkID | SigHashUTXO, SigHashAll, false},
-			{"new signature with SigHashOld", nil,
-				SigHashAll | SigHashForkID, SigHashOld, true},
 		}
 		// sign signs with key2, merging prev, with sigHashes if not nil,
 		// and returns the pushes of the script.
@@ -2636,7 +2632,7 @@ func TestSignMergeMultiSig(t *testing.T) {
 				t.Errorf("%s: dropped the new signature", msg)
 			}
 			err = verify(merged)
-			if test.keep && test.hashType != SigHashOld && err != nil {
+			if test.keep && err != nil {
 				t.Errorf("%s: %v", msg, err)
 			}
 		}
@@ -2686,4 +2682,150 @@ func mustParseScript(t *testing.T, script []byte) []parsedOpcode {
 		t.Fatal(err)
 	}
 	return pops
+}
+
+// TestSignRefusedHashTypes ensures every signing function returns an error
+// for a hash type the network refuses once the fork id is added, as for
+// SigHashOld's undefined base type, and signs with the others, multisig
+// included, and that the legacy ones refuse the hash types strict encoding
+// refused before the fork, the fork id among them.
+func TestSignRefusedHashTypes(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	key, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{1}, 32))
+	addr, err := bchutil.NewAddressPubKey(
+		(*bchec.PublicKey)(&key.PublicKey).SerializeCompressed(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kdb := mkGetKey(map[string]addressToKey{
+		addr.EncodeAddress():                     {key, true},
+		addr.AddressPubKeyHash().EncodeAddress(): {key, true},
+	})
+	p2pkh, err := PayToAddrScript(addr.AddressPubKeyHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2pk, err := PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiSig, err := MultiSigScript([]*bchutil.AddressPubKey{addr}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptAddr, err := bchutil.NewAddressScriptHash(multiSig, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh, err := PayToAddrScript(scriptAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdb := mkGetScript(map[string][]byte{scriptAddr.EncodeAddress(): multiSig})
+	tx, utxos := tokenSpendTx(p2pkh)
+	withUtxos := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+
+	// Each signer that has the outputs tx spends can sign with
+	// SigHashUTXO.
+	type signFunc func(hashType SigHashType) error
+	type signer struct {
+		name  string
+		utxos bool
+		sign  signFunc
+	}
+	signers := []signer{
+		{"RawTxInECDSASignature", false, func(hashType SigHashType) error {
+			_, err := RawTxInECDSASignature(tx, 1, p2pkh, hashType, key,
+				100000)
+			return err
+		}},
+		{"RawTxInSchnorrSignature", false, func(hashType SigHashType) error {
+			_, err := RawTxInSchnorrSignature(tx, 1, p2pkh, hashType, key,
+				100000)
+			return err
+		}},
+		{"RawTxInECDSASignatureWithSigHashes", true, func(hashType SigHashType) error {
+			_, err := RawTxInECDSASignatureWithSigHashes(tx, withUtxos, 1,
+				p2pkh, hashType, key, 100000)
+			return err
+		}},
+		{"RawTxInSchnorrSignatureWithSigHashes", true, func(hashType SigHashType) error {
+			_, err := RawTxInSchnorrSignatureWithSigHashes(tx, withUtxos, 1,
+				p2pkh, hashType, key, 100000)
+			return err
+		}},
+		{"SignatureScript", false, func(hashType SigHashType) error {
+			_, err := SignatureScript(tx, 1, 100000, p2pkh, hashType, key,
+				true)
+			return err
+		}},
+		{"SignatureScriptWithSigHashes", true, func(hashType SigHashType) error {
+			_, err := SignatureScriptWithSigHashes(tx, withUtxos, 1, 100000,
+				p2pkh, hashType, key, true)
+			return err
+		}},
+	}
+	for _, s := range []struct {
+		name     string
+		pkScript []byte
+	}{{"p2pkh", p2pkh}, {"p2pk", p2pk}, {"multisig", multiSig},
+		{"p2sh multisig", p2sh}} {
+
+		signers = append(signers, signer{"SignTxOutput " + s.name, false,
+			func(hashType SigHashType) error {
+				_, err := SignTxOutput(params, tx, 1, 100000, s.pkScript,
+					hashType, kdb, sdb, nil)
+				return err
+			}}, signer{"SignTxOutputWithSigHashes " + s.name, true,
+			func(hashType SigHashType) error {
+				_, err := SignTxOutputWithSigHashes(params, tx, withUtxos, 1,
+					100000, s.pkScript, hashType, kdb, sdb, nil)
+				return err
+			}})
+	}
+	legacy := []signer{
+		{"LegacyTxInSignature", false, func(hashType SigHashType) error {
+			_, err := LegacyTxInSignature(tx, 1, p2pkh, hashType, key)
+			return err
+		}},
+		{"LegacySignatureScript", false, func(hashType SigHashType) error {
+			_, err := LegacySignatureScript(tx, 1, p2pkh, hashType, key, true)
+			return err
+		}},
+	}
+
+	// Some of the hash types the network takes, and some it refuses, the
+	// last one for bits beyond the byte that ends a signature.
+	taken := []SigHashType{SigHashAll, SigHashNone, SigHashSingle,
+		SigHashAll | SigHashAnyOneCanPay, SigHashSingle | SigHashForkID,
+		SigHashAll | SigHashUTXO}
+	refused := []SigHashType{SigHashOld, SigHashAnyOneCanPay, SigHashUTXO,
+		4, 0x1f, SigHashAll | 0x08, SigHashAll | SigHashUTXO |
+			SigHashAnyOneCanPay, SigHashAll | 0x100}
+	legacyTaken := []SigHashType{SigHashAll, SigHashNone, SigHashSingle,
+		SigHashAll | SigHashAnyOneCanPay}
+	legacyRefused := []SigHashType{SigHashOld, SigHashAnyOneCanPay, 4,
+		SigHashAll | SigHashForkID, SigHashAll | SigHashUTXO}
+
+	check := func(signers []signer, taken, refused []SigHashType) {
+		for _, s := range signers {
+			for _, hashType := range taken {
+				if hashType&SigHashUTXO != 0 && !s.utxos {
+					continue
+				}
+				if err := s.sign(hashType); err != nil {
+					t.Errorf("%s, hash type %#x: %v", s.name, hashType, err)
+				}
+			}
+			for _, hashType := range refused {
+				if s.sign(hashType) == nil {
+					t.Errorf("%s, hash type %#x: signed", s.name, hashType)
+				}
+			}
+		}
+	}
+	check(signers, taken, refused)
+	check(legacy, legacyTaken, legacyRefused)
 }
