@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gcash/bchd/bchrpc/pb"
@@ -25,10 +25,10 @@ import (
 
 // graphSearchChain returns a server whose slp index holds, from the memory
 // pool, a GENESIS and a chain of n sends, each spending the token output of
-// the one before, with graph search loaded and ready, and those transactions
-// in that order.  Each send has an output with a script of extra bytes after
-// its token output.
-func graphSearchChain(t *testing.T, n, extra int) (*GrpcServer, []*wire.MsgTx) {
+// the one before, with graph search loaded and ready, those transactions in
+// that order, and the number of times graph search has read transactions
+// since it loaded.
+func graphSearchChain(t *testing.T, n int) (*GrpcServer, []*wire.MsgTx, *atomic.Int32) {
 	t.Helper()
 	db, err := database.Create("ffldb", t.TempDir(), chaincfg.RegressionNetParams.Net)
 	if err != nil {
@@ -65,10 +65,6 @@ func graphSearchChain(t *testing.T, n, extra int) (*GrpcServer, []*wire.MsgTx) {
 			Index: 1}, nil))
 		tx.AddTxOut(&wire.TxOut{PkScript: send})
 		tx.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
-		if extra > 0 {
-			tx.AddTxOut(&wire.TxOut{Value: 546,
-				PkScript: bytes.Repeat([]byte{txscript.OP_TRUE}, extra)})
-		}
 		txs = append(txs, tx)
 	}
 
@@ -90,7 +86,9 @@ func graphSearchChain(t *testing.T, n, extra int) (*GrpcServer, []*wire.MsgTx) {
 		}
 		serialized[tx.TxHash()] = buf.Bytes()
 	}
+	var reads atomic.Int32
 	fetch := func(hashes []chainhash.Hash) ([][]byte, error) {
+		reads.Add(1)
 		txns := make([][]byte, len(hashes))
 		for i := range hashes {
 			buf, ok := serialized[hashes[i]]
@@ -106,8 +104,9 @@ func graphSearchChain(t *testing.T, n, extra int) (*GrpcServer, []*wire.MsgTx) {
 	if _, err := idx.GetGraphSearchDb(); err != nil {
 		t.Fatalf("GetGraphSearchDb: %v", err)
 	}
+	reads.Store(0)
 	return &GrpcServer{db: db, slpIndex: idx, txIndex: indexers.NewTxIndex(db)},
-		txs
+		txs, &reads
 }
 
 // countingContext is a context that counts the times it is looked at.
@@ -127,7 +126,7 @@ func (c *countingContext) Err() error {
 // of its own gets.  A request carries as many queries as fit in 4 MB, and a
 // search can take the whole of a large token's graph.
 func TestSlpTrustedValidationCountOnce(t *testing.T) {
-	s, txs := graphSearchChain(t, 3, 0)
+	s, txs, _ := graphSearchChain(t, 3)
 	hash := func(i int) []byte {
 		h := txs[i].TxHash()
 		return h[:]
@@ -178,42 +177,36 @@ func TestSlpTrustedValidationCountOnce(t *testing.T) {
 	}
 }
 
-// TestSlpTrustedValidationCountSize ensures the graph search count of
-// GetSlpTrustedValidation does not serialize the transactions it counts:
-// what it allocates does not grow with their size.  It once serialized every
+// TestSlpTrustedValidationCountReadsNothing ensures the graph search count of
+// GetSlpTrustedValidation reads none of the transactions it counts, which
+// GetSlpGraphSearch reads to return them.  It once serialized every
 // transaction of the search, only to count them.
-func TestSlpTrustedValidationCountSize(t *testing.T) {
-	const sends, extra = 2000, 10000
-	allocated := func(extra int) uint64 {
-		s, txs := graphSearchChain(t, sends, extra)
-		tip := txs[sends].TxHash()
-		req := &pb.GetSlpTrustedValidationRequest{
+func TestSlpTrustedValidationCountReadsNothing(t *testing.T) {
+	const sends = 2000
+	s, txs, reads := graphSearchChain(t, sends)
+	tip := txs[sends].TxHash()
+	resp, err := s.GetSlpTrustedValidation(context.Background(),
+		&pb.GetSlpTrustedValidationRequest{
 			Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
 				PrevOutHash: tip[:],
 				PrevOutVout: 1,
 			}},
 			IncludeGraphsearchCount: true,
-		}
-		least := ^uint64(0)
-		for i := 0; i < 3; i++ {
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			resp, err := s.GetSlpTrustedValidation(context.Background(), req)
-			runtime.ReadMemStats(&after)
-			if err != nil {
-				t.Fatalf("GetSlpTrustedValidation: %v", err)
-			}
-			if got := resp.Results[0].GraphsearchTxnCount; got != sends+1 {
-				t.Fatalf("count %d, want %d", got, sends+1)
-			}
-			least = min(least, after.TotalAlloc-before.TotalAlloc)
-		}
-		return least
+		})
+	if err != nil {
+		t.Fatalf("GetSlpTrustedValidation: %v", err)
 	}
-	grown := int64(allocated(extra)) - int64(allocated(0))
-	t.Logf("allocated %d bytes more", grown)
-	if grown > 1<<20 {
-		t.Errorf("counting %d transactions of %d bytes more allocated %d "+
-			"bytes more", sends+1, extra, grown)
+	if got := resp.Results[0].GraphsearchTxnCount; got != sends+1 {
+		t.Fatalf("count %d, want %d", got, sends+1)
+	}
+	if n := reads.Load(); n != 0 {
+		t.Errorf("counting %d transactions read them %d times", sends+1, n)
+	}
+
+	search, err := s.GetSlpGraphSearch(context.Background(),
+		&pb.GetSlpGraphSearchRequest{Hash: tip[:]})
+	if err != nil || len(search.Txdata) != sends+1 || reads.Load() == 0 {
+		t.Fatalf("the search: got %d transactions and %v, reading them %d "+
+			"times, want %d", len(search.Txdata), err, reads.Load(), sends+1)
 	}
 }

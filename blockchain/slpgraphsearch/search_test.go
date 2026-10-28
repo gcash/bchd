@@ -841,20 +841,23 @@ func TestFindUnknownKind(t *testing.T) {
 // TestGraphTxnSize ensures a token's graph holds little of each transaction,
 // and nothing that grows with its scripts, as it can hold millions: of a SEND
 // spending 2 outputs, it holds the outpoints and what its slp message says,
-// where it once held the whole transaction, scripts and all.
+// where it once held the whole transaction, scripts and all.  Each
+// transaction is deserialized, as from a block or the network, so that its
+// scripts share one buffer, which keeping any of them would hold.
 func TestGraphTxnSize(t *testing.T) {
 	const txns, scripts = 5000, 1000
 	tokenID := chainhash.Hash{0x51}
-	send, err := metadatamaker.TokenType1Send(tokenID[:], []uint64{600, 400})
-	if err != nil {
-		t.Fatal(err)
-	}
 	db := NewDb(nil)
 
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	for i := 0; i < txns; i++ {
+		send, err := metadatamaker.TokenType1Send(tokenID[:],
+			[]uint64{600 + uint64(i), 400})
+		if err != nil {
+			t.Fatal(err)
+		}
 		tx := wire.NewMsgTx(1)
 		for j := 0; j < 2; j++ {
 			prev := wire.OutPoint{Hash: chainhash.Hash{byte(i), byte(i >> 8),
@@ -867,7 +870,15 @@ func TestGraphTxnSize(t *testing.T) {
 			tx.AddTxOut(&wire.TxOut{Value: 546,
 				PkScript: bytes.Repeat([]byte{txscript.OP_TRUE}, scripts)})
 		}
-		if err := db.AddTxn(tx); err != nil {
+		var buf bytes.Buffer
+		if err := tx.Serialize(&buf); err != nil {
+			t.Fatal(err)
+		}
+		var decoded wire.MsgTx
+		if err := decoded.Deserialize(&buf); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.AddTxn(&decoded); err != nil {
 			t.Fatal(err)
 		}
 	}
