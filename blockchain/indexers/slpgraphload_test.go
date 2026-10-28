@@ -350,3 +350,43 @@ func TestSlpGraphSearchDbOnce(t *testing.T) {
 			fetched)
 	}
 }
+
+// TestSlpGraphSearchReadyLog ensures a transaction added to graph search while
+// it loads is added without logging an error, as one is added for each slp
+// transaction of the memory pool and of blocks during the load, and that the
+// first added once the load is done makes graph search ready.
+func TestSlpGraphSearchReadyLog(t *testing.T) {
+	test := newSlpTokenIDTest(t)
+	test.idx.config.SlpGraphSearchEnabled = true
+	gsDb := slpgraphsearch.NewDb(nil)
+	test.idx.graphSearchDb.Store(gsDb)
+	var buf bytes.Buffer
+	logger := bchlog.NewBackend(&buf).Logger("INDX")
+	logger.SetLevel(bchlog.LevelInfo)
+	saved := log
+	UseLogger(logger)
+	defer UseLogger(saved)
+
+	for i, loaded := range []bool{false, true} {
+		if loaded {
+			if err := gsDb.SetLoaded(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		genesis := genesisTx(t, byte(i))
+		test.idx.AddGraphSearchTxn(genesis)
+		hash, token := genesis.TxHash(), tokenIDOf(t, genesis)
+		n, err := gsDb.Count(context.Background(), &hash, &token,
+			&map[chainhash.Hash]struct{}{})
+		if err != nil || n != 1 {
+			t.Errorf("loaded %v: counted %d and %v, want the GENESIS",
+				loaded, n, err)
+		}
+		if gsDb.IsReady() != loaded {
+			t.Errorf("loaded %v: ready %v", loaded, gsDb.IsReady())
+		}
+		if buf.Len() != 0 {
+			t.Errorf("loaded %v: logged %q", loaded, buf.String())
+		}
+	}
+}

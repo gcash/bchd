@@ -658,7 +658,9 @@ func (idx *SlpIndex) AddGraphSearchTxn(tx *wire.MsgTx) {
 		return
 	}
 
-	if !gsDb.IsReady() {
+	// The first transaction added once the load is done makes graph search
+	// ready, and those added while it loads cannot.
+	if gsDb.IsLoaded() && !gsDb.IsReady() {
 		if err := gsDb.SetReady(); err != nil {
 			log.Errorf("Failed to set graph search db ready: %v", err)
 		}

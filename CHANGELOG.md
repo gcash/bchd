@@ -30,6 +30,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 - txscript's `SignTxOutput` and `SignTxOutputWithSigHashes` sign P2SH32 inputs.
 - txscript's `SignTxOutput` keeps a P2PKH or P2PK signature from `previousScript` only if it is valid, and no longer returns an invalid script when re-signing one wrapped in P2SH.
 - txscript's `CalcSignatureHash` returns an error for `SIGHASH_UTXOS` unless the signature hashes include all the outputs the transaction spends.
+- `--slpgraphsearch` no longer logs an error for each SLP transaction that arrives while the graph loads.
 
 ### Upgrade notes
 
