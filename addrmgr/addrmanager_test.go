@@ -386,6 +386,37 @@ func TestGetAddress(t *testing.T) {
 	}
 }
 
+// TestGetAddressAfterManyAttempts checks that GetAddress returns the only
+// address it has at once even after a hundred thousand failed attempts to
+// connect to it, as a client without network makes.
+func TestGetAddressAfterManyAttempts(t *testing.T) {
+	n := addrmgr.New("testgetaddressaftermanyattempts", lookupFunc)
+	if err := n.AddAddressByIP(someIP + ":8333"); err != nil {
+		t.Fatalf("Adding address failed: %v", err)
+	}
+	ka := n.GetAddress()
+	if ka == nil {
+		t.Fatal("Did not get an address where there is one in the pool")
+	}
+	n.Good(ka.NetAddress())
+	for i := 0; i < 100000; i++ {
+		n.Attempt(ka.NetAddress())
+	}
+
+	// GetAddress takes microseconds here, and about fifteen seconds when
+	// every attempt lowers the chance.
+	got := make(chan *addrmgr.KnownAddress, 1)
+	go func() { got <- n.GetAddress() }()
+	select {
+	case ka = <-got:
+		if ka == nil || ka.NetAddress().IP().String() != someIP {
+			t.Errorf("GetAddress returned %v, want %s", ka, someIP)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("GetAddress took over five seconds after 100000 failed attempts")
+	}
+}
+
 func TestGetBestLocalAddress(t *testing.T) {
 	amgr := addrmgr.New("testgetbestlocaladdress", lookupFunc)
 	addr := func(host string) *wire.NetAddressV2 {

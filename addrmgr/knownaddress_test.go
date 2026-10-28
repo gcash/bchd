@@ -44,6 +44,17 @@ func TestChance(t *testing.T) {
 			addrmgr.TstNewKnownAddress(&wire.NetAddressV2{Timestamp: now.Add(-35 * time.Second)},
 				2, time.Now().Add(-30*time.Minute), time.Now(), false, 0),
 			1 / 1.5 / 1.5,
+		}, {
+			//Test case in which only the first eight failed attempts count.
+			addrmgr.TstNewKnownAddress(&wire.NetAddressV2{Timestamp: now.Add(-35 * time.Second)},
+				9, time.Now().Add(-30*time.Minute), time.Now(), false, 0),
+			math.Pow(1/1.5, 8),
+		}, {
+			//Test case with enough failed attempts to make the chance zero
+			//if they all counted.
+			addrmgr.TstNewKnownAddress(&wire.NetAddressV2{Timestamp: now.Add(-35 * time.Second)},
+				5000, time.Now().Add(-30*time.Minute), time.Now(), false, 0),
+			math.Pow(1/1.5, 8),
 		},
 	}
 

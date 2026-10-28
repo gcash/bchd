@@ -52,8 +52,13 @@ func (ka *KnownAddress) chance() float64 {
 		c *= 0.01
 	}
 
-	// Failed attempts deprioritise.
-	for i := ka.attempts; i > 0; i-- {
+	// Failed attempts deprioritise, but only the first eight count, as in
+	// Bitcoin Core's addrman.  Counting them all sank the chance of an
+	// address that failed thousands of times, as the only one a client
+	// without network keeps trying does, so far that GetAddress, which
+	// loops while holding the lock until it picks an address by its
+	// chance, took seconds to pick it, and longer with every attempt.
+	for i := min(ka.attempts, 8); i > 0; i-- {
 		c /= 1.5
 	}
 
