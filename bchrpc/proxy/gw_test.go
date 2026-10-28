@@ -134,21 +134,47 @@ func TestGetBlockchainInfo(t *testing.T) {
 	t.Logf("Successfully passed %s test - best block height %.0f", method, resMap["best_height"].(float64))
 }
 
+// TestResponseHeaders ensures the replies under /v1 carry the Cache-Control
+// and CORS headers: the OPTIONS reply the proxy makes itself and, when the
+// node can be reached, a reply from the node.
 func TestResponseHeaders(t *testing.T) {
 	method := "GetBlockchainInfo"
-	res, err := httpClient.Request(method, D{})
-	if err != nil {
-		t.Fatalf("%s request failed: %+v", method, err)
+	checkHeaders := func(t *testing.T, res *http.Response) {
+		t.Helper()
+		if res.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("%s is missing expected Cache-Control header", method)
+		} else if res.Header.Get("Access-Control-Allow-Origin") != "*" {
+			t.Errorf("%s is missing expected Access-Control-Allow-Origin header", method)
+		} else {
+			t.Logf("%s contains expected HTTP headers", method)
+		}
 	}
-	defer res.Body.Close()
 
-	if res.Header.Get("Cache-Control") != "no-store" {
-		t.Errorf("%s is missing expected Cache-Control header", method)
-	} else if res.Header.Get("Access-Control-Allow-Origin") != "*" {
-		t.Errorf("%s is missing expected Access-Control-Allow-Origin header", method)
-	} else {
-		t.Logf("%s contains expected HTTP headers", method)
-	}
+	t.Run("proxy", func(t *testing.T) {
+		urlObj, err := url.Parse(httpClient.GetMethodURL(method))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := httpClient.Client.Do(&http.Request{
+			Method: "OPTIONS",
+			URL:    urlObj,
+		})
+		if err != nil {
+			t.Fatalf("%s OPTIONS request failed: %+v", method, err)
+		}
+		defer res.Body.Close()
+		checkHeaders(t, res)
+	})
+
+	t.Run("node", func(t *testing.T) {
+		requireNode(t)
+		res, err := httpClient.Request(method, D{})
+		if err != nil {
+			t.Fatalf("%s request failed: %+v", method, err)
+		}
+		defer res.Body.Close()
+		checkHeaders(t, res)
+	})
 }
 
 func TestOptionsRequest(t *testing.T) {
@@ -170,18 +196,25 @@ func TestOptionsRequest(t *testing.T) {
 	t.Logf("%s OPTIONS request got expected status code %d", method, resp.StatusCode)
 }
 
+// TestRequestInvalid ensures an invalid request fails rather than crashing
+// BCHD or returning unexpected data: the proxy refuses a hash that is not
+// base64 itself, with a 400, without calling the node.
 func TestRequestInvalid(t *testing.T) {
-	requireNode(t)
-	// ensure BCHD doesn't crash or return unexpected data
 	method := "GetTransaction"
-	res, err := httpClient.RequestMap(method, D{
+	res, err := httpClient.Request(method, D{
 		"hash":                   "some-invalid-hash",
 		"include_token_metadata": true,
 	})
-	if err == nil {
-		t.Fatalf("%s was expected to fail with invalid params. Response: %+v", method, res)
+	if err != nil {
+		t.Fatalf("%s request failed: %+v", method, err)
 	}
-	t.Logf("Successfully tested %s - received %+v", method, err)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("%s was expected to fail with invalid params. Response: %s",
+			method, httpClient.PrintRes(res))
+	}
+	t.Logf("Successfully tested %s - received %s", method,
+		httpClient.PrintRes(res))
 }
 
 func TestGetTransaction(t *testing.T) {
