@@ -2831,3 +2831,146 @@ func TestSlpTokenMetadataCorruptRecord(t *testing.T) {
 		t.Errorf("log %q, want a line with %q", logged.String(), want)
 	}
 }
+
+// TestSlpUnparsableEntryCalls ensures a stored slp entry whose slp message does
+// not parse is a failure of the slp index, as one it cannot read is, rather
+// than an output or transaction without its token or its token's metadata:
+// Internal for GetUnspentOutput and GetAddressUnspentOutputs, an error for a
+// transaction marshalled for a call, and an unknown slp state for one sent to
+// a stream, whether the entry is the output's or that of the GENESIS of the
+// token of a SEND, which gives its decimals and metadata.
+func TestSlpUnparsableEntryCalls(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	ctx := context.Background()
+	var logged syncBuffer
+	saved := log
+	UseLogger(bchlog.NewBackend(&logged).Logger("GRPC"))
+	defer UseLogger(saved)
+
+	// Block 1's coinbase pays to an address on its output 1.
+	addr, err := bchutil.NewAddressPubKeyHash(bytes.Repeat([]byte{0x05}, 20), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrScript, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newAddrIndexServerBlocks(t, [][]byte{{txscript.OP_TRUE}, addrScript}, 1)
+	s.txMemPool = mempool.New(&mempool.Config{})
+	s.slpIndex = indexers.NewSlpIndex(s.db, &indexers.SlpConfig{MaxCacheSize: 100})
+	if err := s.db.Update(s.slpIndex.Create); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	block, err := s.chain.BlockByHeight(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coinbase := block.Transactions()[0]
+
+	// A GENESIS and a SEND of its token give the index internal token ID 1.
+	genesisScript, err := metadatamaker.TokenType1Genesis([]byte("T"),
+		[]byte("Token"), nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := wire.NewMsgTx(1)
+	genesis.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{0xee, 30}}, nil))
+	genesis.AddTxOut(&wire.TxOut{PkScript: genesisScript})
+	genesis.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	token, err := goslp.GetSlpTokenID(genesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sendScript, err := metadatamaker.TokenType1Send(token, []uint64{1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := wire.NewMsgTx(1)
+	send.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: genesis.TxHash(), Index: 1}, nil))
+	send.AddTxOut(&wire.TxOut{PkScript: sendScript})
+	send.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = s.db.Update(func(dbTx database.Tx) error {
+		return s.slpIndex.ConnectBlock(dbTx, bchutil.NewBlock(&wire.MsgBlock{
+			Transactions: []*wire.MsgTx{genesis, send}}), nil)
+	})
+	if err != nil {
+		t.Fatalf("ConnectBlock: %v", err)
+	}
+
+	// The entries of the coinbase and of the GENESIS then hold a message
+	// that does not parse, of token ID 1, which an index whose cache does
+	// not hold them reads.
+	unparsable := append([]byte{1, 0, 0, 0, 1, 0},
+		bytes.Repeat([]byte{txscript.OP_RETURN}, 40)...)
+	err = s.db.Update(func(dbTx database.Tx) error {
+		bucket := dbTx.Metadata().Bucket([]byte("slptxbyhashidx"))
+		for _, hash := range []chainhash.Hash{*coinbase.Hash(), genesis.TxHash()} {
+			if err := bucket.Put(hash[:], unparsable); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.slpIndex = indexers.NewSlpIndex(s.db, &indexers.SlpConfig{MaxCacheSize: 100})
+
+	check := func(what string, err error, logLine string) {
+		t.Helper()
+		if status.Code(err) != codes.Internal ||
+			status.Convert(err).Message() != "failed to load slp index entry" {
+			t.Errorf("%s: got %v, want Internal", what, err)
+		}
+		if !strings.Contains(logged.String(), logLine) {
+			t.Errorf("%s: log %q, want a line with %q", what, logged.String(), logLine)
+		}
+	}
+	op := wire.OutPoint{Hash: *coinbase.Hash(), Index: 1}
+	_, err = s.GetUnspentOutput(ctx, &pb.GetUnspentOutputRequest{Hash: op.Hash[:],
+		Index: 1})
+	check("GetUnspentOutput", err, "[ERR] GRPC: Failed to load the slp token of "+
+		"output "+op.String()+": the slp message stored for transaction "+
+		op.Hash.String()+" does not parse")
+	_, err = s.GetAddressUnspentOutputs(ctx, &pb.GetAddressUnspentOutputsRequest{
+		Address: addr.EncodeAddress()})
+	check("GetAddressUnspentOutputs", err, "[ERR] GRPC: Failed to load the slp "+
+		"token of output "+op.String())
+
+	// A transaction spending the coinbase's output, and the SEND, which
+	// spends the GENESIS's.
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(&op, nil))
+	spend.AddTxOut(&wire.TxOut{Value: 500, PkScript: []byte{txscript.OP_TRUE}})
+	for _, tx := range []*wire.MsgTx{spend, send} {
+		if _, err := marshalTransactionChecked(bchutil.NewTx(tx), 0, nil, 0, s); err == nil {
+			t.Errorf("transaction %v marshalled for a call: no failure", tx.TxHash())
+		}
+		got := marshalTransaction(bchutil.NewTx(tx), 0, nil, 0, s)
+		if got.SlpTransactionInfo.ValidityJudgement != pb.SlpTransactionInfo_UNKNOWN_OR_INVALID ||
+			got.Inputs[0].SlpToken != nil {
+
+			t.Errorf("transaction %v sent to a stream: got %v, want its slp "+
+				"state unknown", tx.TxHash(), got.SlpTransactionInfo)
+		}
+	}
+
+	// The token of the SEND's output, whose decimals the GENESIS gives,
+	// and the token's metadata.
+	sendHash := send.TxHash()
+	if _, err := s.getSlpToken(&sendHash, 1, nil); err == nil {
+		t.Error("the token of the SEND's output: no failure")
+	} else if _, ok := err.(errSlpIndexFailure); !ok {
+		t.Errorf("the token of the SEND's output: got %v, want a failure of "+
+			"the index", err)
+	}
+	id, err := chainhash.NewHash(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm, err := s.tokenMetadataOrNil(*id); tm != nil || err == nil {
+		t.Errorf("the metadata of the GENESIS's token: got %v and %v, want a "+
+			"failure", tm, err)
+	}
+}

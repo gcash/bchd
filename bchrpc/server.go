@@ -3810,6 +3810,14 @@ func (e errSlpIndexFailure) Unwrap() error {
 	return e.err
 }
 
+// errSlpMsgUnparsable returns the failure of the slp index whose entry of the
+// transaction hash holds an slp message that fails to parse with err, which
+// only a corrupt index holds, as it stores the messages of valid transactions.
+func errSlpMsgUnparsable(hash *chainhash.Hash, err error) error {
+	return errSlpIndexFailure{fmt.Errorf("the slp message stored for "+
+		"transaction %v does not parse: %v", hash, err)}
+}
+
 // slpEntryStatus returns the status a call answers with when it cannot read
 // the slp entry of the transaction hash: NotFound for a transaction the slp
 // index does not hold, and Internal for a failure of the database, without
@@ -3842,8 +3850,7 @@ func (s *GrpcServer) getDecimalsForTokenID(tokenID chainhash.Hash) (int, error) 
 	}
 	genSlpMsg, err := v1parser.ParseSLP(genEntry.SlpOpReturn)
 	if err != nil {
-		log.Criticalf("Failed to parse slp message for %v, with error: %v", tokenIDRev, err)
-		return -1, err
+		return -1, errSlpMsgUnparsable(tokenIDRev, err)
 	}
 	genesis, ok := genSlpMsg.(*v1parser.SlpGenesis)
 	if !ok {
@@ -3876,8 +3883,7 @@ func (s *GrpcServer) getSlpToken(hash *chainhash.Hash, vout uint32, scriptPubKey
 
 	slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
 	if err != nil {
-		log.Criticalf("Failed to parse an slp entry message stored in the index db for txn: %v, this should never happen.", hash)
-		return nil, err
+		return nil, errSlpMsgUnparsable(hash, err)
 	}
 
 	// set isMintBaton and also check that vout is within proper range
@@ -4131,7 +4137,7 @@ func (s *GrpcServer) marshalTokenMetadata(tokenID chainhash.Hash) (*pb.SlpTokenM
 
 	slpMsg, err := v1parser.ParseSLP(entry.SlpOpReturn)
 	if err != nil {
-		return nil, err
+		return nil, errSlpMsgUnparsable(tokenIDRev, err)
 	}
 
 	genMsg, isGenesis := slpMsg.(*v1parser.SlpGenesis)
