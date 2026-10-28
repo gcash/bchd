@@ -305,6 +305,47 @@ func TestRetryPermanent(t *testing.T) {
 	cmgr.Stop()
 }
 
+// TestReconnectAfterDisconnect tests that a connection request that isn't
+// permanent is replaced by one that can connect to the same address again once
+// its connection is disconnected, as a client that knows a single peer needs.
+//
+// We let GetNewAddress always return the same address, disconnect the first
+// connection using Disconnect and wait for a new connection to the address.
+func TestReconnectAfterDisconnect(t *testing.T) {
+	connected := make(chan *ConnReq)
+	cmgr, err := New(&Config{
+		RetryDuration:  time.Millisecond,
+		TargetOutbound: 1,
+		Dial:           mockDialer,
+		GetNewAddress: func() (net.Addr, error) {
+			return &net.TCPAddr{
+				IP:   net.ParseIP("127.0.0.1"),
+				Port: 18555,
+			}, nil
+		},
+		OnConnection: func(c *ConnReq, _ net.Conn) {
+			connected <- c
+		},
+	})
+	if err != nil {
+		t.Fatalf("New error: %v", err)
+	}
+	cmgr.Start()
+	first := <-connected
+
+	cmgr.Disconnect(first.ID())
+	select {
+	case c := <-connected:
+		if c.Addr.String() != first.Addr.String() {
+			t.Fatalf("reconnect: got %v, want %v", c.Addr, first.Addr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("reconnect: no new connection to %v after disconnecting "+
+			"from it", first.Addr)
+	}
+	cmgr.Stop()
+}
+
 // TestMaxRetryDuration tests the maximum retry duration.
 //
 // We have a timed dialer which initially returns err but after RetryDuration

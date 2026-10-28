@@ -349,17 +349,25 @@ out:
 
 				// Otherwise, we will attempt a reconnection if
 				// we do not have enough peers, or if this is a
-				// persistent peer. The connection request is
-				// re added to the pending map, so that
-				// subsequent processing of connections and
-				// failures do not ignore the request.
+				// persistent peer. A persistent peer's request
+				// is retried, so it is re added to the pending
+				// map, so that subsequent processing of
+				// connections and failures do not ignore it.
+				// Any other request is replaced by a new one,
+				// as in handleFailed, and left in the pending
+				// map it would make its address a duplicate
+				// that no new request could connect to again.
 				if uint32(len(conns)) < cm.cfg.TargetOutbound ||
 					connReq.Permanent {
 
-					connReq.updateState(ConnPending)
-					log.Debugf("Reconnecting to %v",
-						connReq)
-					pending[msg.id] = connReq
+					if connReq.Permanent {
+						connReq.updateState(ConnPending)
+						log.Debugf("Reconnecting to %v",
+							connReq)
+						pending[msg.id] = connReq
+					} else {
+						connReq.updateState(ConnDisconnected)
+					}
 					cm.handleFailedConn(connReq)
 				}
 
