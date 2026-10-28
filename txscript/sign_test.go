@@ -2267,3 +2267,152 @@ func TestSignTxOutputMerge(t *testing.T) {
 		}
 	}
 }
+
+// TestSignInputIndexRange ensures the signing functions, and
+// CalcSignatureHash with either algorithm, return an error for an input index
+// out of range, negative ones included, instead of panicking or signing.
+func TestSignInputIndexRange(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.TestNet3Params
+	key, _ := bchec.PrivKeyFromBytes(bchec.S256(), bytes.Repeat([]byte{1}, 32))
+	addr, err := bchutil.NewAddressPubKey(
+		(*bchec.PublicKey)(&key.PublicKey).SerializeCompressed(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kdb := mkGetKey(map[string]addressToKey{
+		addr.EncodeAddress():                     {key, true},
+		addr.AddressPubKeyHash().EncodeAddress(): {key, true},
+	})
+	p2pkh, err := PayToAddrScript(addr.AddressPubKeyHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2pk, err := PayToAddrScript(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiSig, err := MultiSigScript([]*bchutil.AddressPubKey{addr}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptAddr, err := bchutil.NewAddressScriptHash(multiSig, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p2sh, err := PayToAddrScript(scriptAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdb := mkGetScript(map[string][]byte{scriptAddr.EncodeAddress(): multiSig})
+	tx, utxos := tokenSpendTx(p2pkh)
+	withUtxos := NewTxSigHashes(tx).WithUtxos(tx, utxos)
+
+	type signFunc func(idx int, hashType SigHashType) error
+	funcs := []struct {
+		name string
+		sign signFunc
+	}{
+		{"RawTxInECDSASignature", func(idx int, hashType SigHashType) error {
+			_, err := RawTxInECDSASignature(tx, idx, p2pkh, hashType, key,
+				100000)
+			return err
+		}},
+		{"RawTxInSchnorrSignature", func(idx int, hashType SigHashType) error {
+			_, err := RawTxInSchnorrSignature(tx, idx, p2pkh, hashType, key,
+				100000)
+			return err
+		}},
+		{"RawTxInECDSASignatureWithSigHashes", func(idx int,
+			hashType SigHashType) error {
+
+			_, err := RawTxInECDSASignatureWithSigHashes(tx, withUtxos, idx,
+				p2pkh, hashType, key, 100000)
+			return err
+		}},
+		{"RawTxInSchnorrSignatureWithSigHashes", func(idx int,
+			hashType SigHashType) error {
+
+			_, err := RawTxInSchnorrSignatureWithSigHashes(tx, withUtxos, idx,
+				p2pkh, hashType, key, 100000)
+			return err
+		}},
+		{"SignatureScript", func(idx int, hashType SigHashType) error {
+			_, err := SignatureScript(tx, idx, 100000, p2pkh, hashType, key,
+				true)
+			return err
+		}},
+		{"SignatureScriptWithSigHashes", func(idx int,
+			hashType SigHashType) error {
+
+			_, err := SignatureScriptWithSigHashes(tx, withUtxos, idx, 100000,
+				p2pkh, hashType, key, true)
+			return err
+		}},
+		{"LegacyTxInSignature", func(idx int, hashType SigHashType) error {
+			_, err := LegacyTxInSignature(tx, idx, p2pkh, hashType, key)
+			return err
+		}},
+		{"LegacySignatureScript", func(idx int, hashType SigHashType) error {
+			_, err := LegacySignatureScript(tx, idx, p2pkh, hashType, key,
+				true)
+			return err
+		}},
+		{"CalcSignatureHash", func(idx int, hashType SigHashType) error {
+			_, _, err := CalcSignatureHash(p2pkh, withUtxos,
+				hashType|SigHashForkID, tx, idx, 100000, true)
+			return err
+		}},
+		{"CalcSignatureHash legacy", func(idx int, hashType SigHashType) error {
+			_, _, err := CalcSignatureHash(p2pkh, nil, hashType, tx, idx,
+				100000, false)
+			return err
+		}},
+	}
+	for _, s := range []struct {
+		name     string
+		pkScript []byte
+	}{{"p2pkh", p2pkh}, {"p2pk", p2pk}, {"multisig", multiSig},
+		{"p2sh multisig", p2sh}} {
+
+		funcs = append(funcs, struct {
+			name string
+			sign signFunc
+		}{"SignTxOutput " + s.name, func(idx int, hashType SigHashType) error {
+			_, err := SignTxOutput(params, tx, idx, 100000, s.pkScript,
+				hashType, kdb, sdb, nil)
+			return err
+		}}, struct {
+			name string
+			sign signFunc
+		}{"SignTxOutputWithSigHashes " + s.name, func(idx int,
+			hashType SigHashType) error {
+
+			_, err := SignTxOutputWithSigHashes(params, tx, withUtxos, idx,
+				100000, s.pkScript, hashType, kdb, sdb, nil)
+			return err
+		}})
+	}
+
+	for _, f := range funcs {
+		for _, idx := range []int{-1, -2, len(tx.TxIn)} {
+			for _, hashType := range []SigHashType{SigHashAll,
+				SigHashAll | SigHashAnyOneCanPay, SigHashSingle} {
+
+				msg := fmt.Sprintf("%s, input %d, hash type %#x", f.name,
+					idx, hashType)
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.Errorf("%s: panicked: %v", msg, r)
+						}
+					}()
+					if err := f.sign(idx, hashType); err == nil {
+						t.Errorf("%s: no error", msg)
+					}
+				}()
+			}
+		}
+	}
+}

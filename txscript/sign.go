@@ -622,8 +622,11 @@ func SignTxOutputWithSigHashes(chainParams *chaincfg.Params, tx *wire.MsgTx,
 	hashType SigHashType, kdb KeyDB, sdb ScriptDB,
 	previousScript []byte) ([]byte, error) {
 
-	// Check the hashes here, as a multisig script skips the keys it fails
-	// to sign with.
+	// Check the index and the hashes here, as a multisig script skips the
+	// keys it fails to sign with.
+	if idx < 0 || idx >= len(tx.TxIn) {
+		return nil, fmt.Errorf("idx %d but %d txins", idx, len(tx.TxIn))
+	}
 	if err := checkSigHashes(tx, sigHashes, idx, hashType); err != nil {
 		return nil, err
 	}
