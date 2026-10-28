@@ -47,6 +47,13 @@ func serializeIndexerTip(hash *chainhash.Hash, height int32) []byte {
 // current tip for the given index to the provided values.
 func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, height int32) error {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
+	if indexesBucket == nil {
+		return database.Error{
+			ErrorCode: database.ErrBucketNotFound,
+			Description: fmt.Sprintf("bucket %s does not exist for "+
+				"index %q tip", indexTipsBucketName, string(idxKey)),
+		}
+	}
 	return indexesBucket.Put(idxKey, serializeIndexerTip(hash, height))
 }
 
@@ -54,6 +61,13 @@ func dbPutIndexerTip(dbTx database.Tx, idxKey []byte, hash *chainhash.Hash, heig
 // hash and height of the current tip for the provided index.
 func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32, error) {
 	indexesBucket := dbTx.Metadata().Bucket(indexTipsBucketName)
+	if indexesBucket == nil {
+		return nil, 0, database.Error{
+			ErrorCode: database.ErrBucketNotFound,
+			Description: fmt.Sprintf("bucket %s does not exist for "+
+				"index %q tip", indexTipsBucketName, string(idxKey)),
+		}
+	}
 	serialized := indexesBucket.Get(idxKey)
 	if len(serialized) < chainhash.HashSize+4 {
 		return nil, 0, database.Error{
