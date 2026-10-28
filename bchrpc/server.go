@@ -19,6 +19,7 @@ import (
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/blockchain/indexers"
+	"github.com/gcash/bchd/blockchain/slpgraphsearch"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
@@ -2050,10 +2051,7 @@ func (s *GrpcServer) GetSlpTrustedValidation(ctx context.Context, req *pb.GetSlp
 			if !ok {
 				n, err := gsDb.Count(ctx, hash, &entry.TokenIDHash, &validityCache)
 				if err != nil {
-					if ctxErr := ctx.Err(); ctxErr != nil {
-						return nil, status.FromContextError(ctxErr).Err()
-					}
-					return nil, status.Errorf(codes.Internal, "%v", err)
+					return nil, graphSearchStatus(ctx, err)
 				}
 				count = uint32(n)
 				counts[key] = count
@@ -2086,7 +2084,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	// check slp validity, get graph tokenId
 	hash, err := chainhash.NewHash(req.GetHash())
 	if err != nil {
-		return nil, status.Errorf(codes.Aborted, "graph search hash %s: %v", hex.EncodeToString(req.GetHash()), err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid graph search hash: %v", err)
 	}
 	log.Debugf("received graph search for txid: %v", hash)
 
@@ -2106,7 +2104,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	for _, txHash := range req.GetValidHashes() {
 		hash, err := chainhash.NewHash(txHash)
 		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "graph search validity cache invalid hash %v", txHash)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid graph search valid hash: %v", err)
 		}
 		validityCache[*hash] = struct{}{}
 	}
@@ -2115,14 +2113,7 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	// deadline has passed
 	txData, err := gsDb.Find(ctx, hash, &entry.TokenIDHash, &validityCache)
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, status.FromContextError(ctxErr).Err()
-		}
-		var notFound errGraphSearchTxnNotFound
-		if errors.As(err, &notFound) {
-			return nil, status.Error(codes.NotFound, notFound.Error())
-		}
-		return nil, status.Errorf(codes.Internal, "%v", err)
+		return nil, graphSearchStatus(ctx, err)
 	}
 
 	res := &pb.GetSlpGraphSearchResponse{}
@@ -2130,6 +2121,30 @@ func (s *GrpcServer) GetSlpGraphSearch(ctx context.Context, req *pb.GetSlpGraphS
 	log.Debugf("SLP graph search returned %s transactions for txid %v", fmt.Sprint(len(txData)), hash)
 
 	return res, nil
+}
+
+// graphSearchStatus returns the status a graph search of the call whose
+// context is ctx answers err with: that of the context once it has ended,
+// NotFound for a transaction of the search that the node does not have and
+// InvalidArgument for a valid hash the client gave that is not in the token's
+// graph, which the client asked for, and Internal for the node's own failures.
+func graphSearchStatus(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return status.FromContextError(ctxErr).Err()
+	}
+	var notFound errGraphSearchTxnNotFound
+	if errors.As(err, &notFound) {
+		return status.Error(codes.NotFound, notFound.Error())
+	}
+	var notInGraph slpgraphsearch.TxnNotInGraphError
+	if errors.As(err, &notInGraph) {
+		return status.Error(codes.NotFound, notInGraph.Error())
+	}
+	var validHash slpgraphsearch.ValidHashNotInGraphError
+	if errors.As(err, &validHash) {
+		return status.Error(codes.InvalidArgument, validHash.Error())
+	}
+	return status.Errorf(codes.Internal, "%v", err)
 }
 
 func isMaybeSlpTransaction(txn *wire.MsgTx) bool {

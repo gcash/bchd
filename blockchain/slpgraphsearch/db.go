@@ -110,6 +110,26 @@ func (gs *Db) AddTxn(msgTx *wire.MsgTx) error {
 
 }
 
+// ValidHashNotInGraphError is the error for a hash of the validity cache a
+// client gives a search that is not in the token's graph.
+type ValidHashNotInGraphError chainhash.Hash
+
+// Error implements the error interface.
+func (e ValidHashNotInGraphError) Error() string {
+	return fmt.Sprintf("valid hash %v is not in the token's graph",
+		chainhash.Hash(e))
+}
+
+// TxnNotInGraphError is the error for a search from a transaction that is not
+// in the token's graph.
+type TxnNotInGraphError chainhash.Hash
+
+// Error implements the error interface.
+func (e TxnNotInGraphError) Error() string {
+	return fmt.Sprintf("transaction %v is not in the token's graph",
+		chainhash.Hash(e))
+}
+
 // graphSearchCheckInterval is how many transactions a graph search finds
 // between looks at whether its context has ended, and how many it reads at a
 // time.
@@ -187,13 +207,13 @@ func (gs *Db) search(ctx context.Context, hash *chainhash.Hash, tokenID *chainha
 	// check client validity cache transactions are valid
 	for hash := range *validityCache {
 		if _, ok := (*tokenGraph).getTxn(&hash); !ok {
-			return fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
+			return ValidHashNotInGraphError(hash)
 		}
 	}
 
 	txn, ok := tokenGraph.getTxn(hash)
 	if !ok {
-		return fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
+		return TxnNotInGraphError(*hash)
 	}
 
 	// perform the graph search

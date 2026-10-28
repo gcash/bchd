@@ -1324,3 +1324,90 @@ func TestSlpTrustedValidationDisconnected(t *testing.T) {
 		t.Errorf("the GENESIS back in the memory pool: %v", err)
 	}
 }
+
+// TestSlpGraphSearchClientErrors ensures GetSlpGraphSearch, and the graph
+// search count of GetSlpTrustedValidation, answer a search they cannot make
+// for what the client asked as the client's error, which is logged at debug,
+// rather than as an internal one, which is logged as an error: a valid hash
+// that is not in the token's graph as an invalid argument, a transaction that
+// is not in it as not found, and a hash of the wrong length as an invalid
+// argument, with a message that does not repeat it.
+func TestSlpGraphSearchClientErrors(t *testing.T) {
+	s, genesis := newGraphSearchServer(t)
+	hash := genesis.TxHash()
+
+	// A GENESIS that is valid slp, but that graph search does not hold, as
+	// one a block confirms for a moment.
+	script, err := metadatamaker.TokenType1Genesis([]byte("O"), []byte("Other"),
+		nil, nil, 0, nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := wire.NewMsgTx(1)
+	other.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{2}}, nil))
+	other.AddTxOut(&wire.TxOut{PkScript: script})
+	other.AddTxOut(&wire.TxOut{Value: 546, PkScript: []byte{txscript.OP_TRUE}})
+	err = s.db.View(func(dbTx database.Tx) error {
+		valid, err := s.slpIndex.AddPotentialSlpEntries(dbTx, other)
+		if err == nil && !valid {
+			err = errors.New("the GENESIS is not valid")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("AddPotentialSlpEntries: %v", err)
+	}
+	otherHash := other.TxHash()
+	outside := chainhash.Hash{0xff}
+
+	ctx := context.Background()
+	search := func(hash []byte, valid ...[]byte) error {
+		_, err := s.GetSlpGraphSearch(ctx,
+			&pb.GetSlpGraphSearchRequest{Hash: hash, ValidHashes: valid})
+		return err
+	}
+	count := func(hash []byte, valid ...[]byte) error {
+		_, err := s.GetSlpTrustedValidation(ctx,
+			&pb.GetSlpTrustedValidationRequest{
+				Queries: []*pb.GetSlpTrustedValidationRequest_Query{{
+					PrevOutHash:            hash,
+					PrevOutVout:            1,
+					GraphsearchValidHashes: valid,
+				}},
+				IncludeGraphsearchCount: true,
+			})
+		return err
+	}
+	long := make([]byte, 100000)
+	notValid := "valid hash " + outside.String() + " is not in the token's graph"
+	notInGraph := "transaction " + otherHash.String() + " is not in the " +
+		"token's graph"
+	for _, test := range []struct {
+		name string
+		err  error
+		code codes.Code
+		msg  string
+	}{
+		{"a search with a valid hash outside the graph",
+			search(hash[:], outside[:]), codes.InvalidArgument, notValid},
+		{"a count with a valid hash outside the graph",
+			count(hash[:], outside[:]), codes.InvalidArgument, notValid},
+		{"a search from a transaction outside the graph",
+			search(otherHash[:]), codes.NotFound, notInGraph},
+		{"a count from a transaction outside the graph",
+			count(otherHash[:]), codes.NotFound, notInGraph},
+		{"a search from a hash of the wrong length", search(long),
+			codes.InvalidArgument, "invalid graph search hash: invalid " +
+				"hash length of 100000, want 32"},
+		{"a search with a valid hash of the wrong length",
+			search(hash[:], long), codes.InvalidArgument, "invalid graph " +
+				"search valid hash: invalid hash length of 100000, want 32"},
+	} {
+		if status.Code(test.err) != test.code ||
+			status.Convert(test.err).Message() != test.msg {
+
+			t.Errorf("%s: got %.200v, want %v with %q", test.name, test.err,
+				test.code, test.msg)
+		}
+	}
+}

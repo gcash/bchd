@@ -108,13 +108,13 @@ func findRecursive(graph map[chainhash.Hash]*wire.MsgTx, ctx context.Context, ha
 	// check client validity cache transactions are valid
 	for hash := range *validityCache {
 		if txn := graph[hash]; txn == nil {
-			return nil, fmt.Errorf("client provided validity cache with hash %v that is not in the token graph", hash)
+			return nil, ValidHashNotInGraphError(hash)
 		}
 	}
 
 	txMsg := graph[*hash]
 	if txMsg == nil {
-		return nil, fmt.Errorf("txn %v not in token graph, implies invalid slp", hash)
+		return nil, TxnNotInGraphError(*hash)
 	}
 
 	// perform the recursive graph search
@@ -763,6 +763,39 @@ func TestFindReadError(t *testing.T) {
 				err, sends+1)
 		}
 		db.raw[*hash] = raw
+	}
+}
+
+// TestSearchNotInGraph ensures a search from a transaction that is not in the
+// token's graph, or given a validity cache naming one, fails with the error
+// of each, by the transaction's hash, so that the node can answer the client
+// that asked for it.
+func TestSearchNotInGraph(t *testing.T) {
+	db, tip, tokenID := sendChain(t, 3)
+	outside := chainhash.Hash{0xff}
+	for _, test := range []struct {
+		name  string
+		root  *chainhash.Hash
+		valid map[chainhash.Hash]struct{}
+		want  error
+	}{
+		{"from outside the graph", &outside, nil, TxnNotInGraphError(outside)},
+		{"with a valid hash outside the graph", tip,
+			map[chainhash.Hash]struct{}{outside: {}},
+			ValidHashNotInGraphError(outside)},
+	} {
+		res, err := db.Find(context.Background(), test.root, tokenID,
+			&test.valid)
+		if err != test.want || res != nil {
+			t.Errorf("Find %s: got %d transactions and %v, want %v",
+				test.name, len(res), err, test.want)
+		}
+		n, err := db.Count(context.Background(), test.root, tokenID,
+			&test.valid)
+		if err != test.want || n != 0 {
+			t.Errorf("Count %s: got %d and %v, want %v", test.name, n, err,
+				test.want)
+		}
 	}
 }
 
