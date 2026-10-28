@@ -33,6 +33,13 @@ func (ka *KnownAddress) LastAttempt() time.Time {
 	return ka.lastattempt
 }
 
+// LastSuccess returns the last time a connection to the known address was
+// marked good, which also marks it attempted, so it is before LastAttempt
+// only if an attempt has failed since.
+func (ka *KnownAddress) LastSuccess() time.Time {
+	return ka.lastsuccess
+}
+
 // Services returns the services supported by the peer with the known address.
 func (ka *KnownAddress) Services() wire.ServiceFlag {
 	return ka.na.Services

@@ -67,6 +67,33 @@ func TestChance(t *testing.T) {
 	}
 }
 
+// TestLastSuccess checks that LastSuccess is zero for an address never
+// connected to, before LastAttempt after an attempt, and equal to it once the
+// connection is marked good.
+func TestLastSuccess(t *testing.T) {
+	n := addrmgr.New("testlastsuccess", lookupFunc)
+	if err := n.AddAddressByIP(someIP + ":8333"); err != nil {
+		t.Fatalf("Adding address failed: %v", err)
+	}
+	ka := n.GetAddress()
+	if ka == nil {
+		t.Fatal("Did not get an address where there is one in the pool")
+	}
+	if !ka.LastSuccess().IsZero() {
+		t.Errorf("new address: got LastSuccess %v, want zero", ka.LastSuccess())
+	}
+	n.Attempt(ka.NetAddress())
+	if !ka.LastSuccess().Before(ka.LastAttempt()) {
+		t.Errorf("after an attempt: got LastSuccess %v, want before LastAttempt %v",
+			ka.LastSuccess(), ka.LastAttempt())
+	}
+	n.Good(ka.NetAddress())
+	if ka.LastSuccess().IsZero() || !ka.LastSuccess().Equal(ka.LastAttempt()) {
+		t.Errorf("after Good: got LastSuccess %v, want LastAttempt %v",
+			ka.LastSuccess(), ka.LastAttempt())
+	}
+}
+
 func TestIsBad(t *testing.T) {
 	now := time.Unix(time.Now().Unix(), 0)
 	future := now.Add(35 * time.Minute)
