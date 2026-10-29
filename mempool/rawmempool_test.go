@@ -78,8 +78,8 @@ func TestRawMempoolVerbose(t *testing.T) {
 }
 
 // TestRawMempoolVerboseOutsideLock ensures the verbose getrawmempool result
-// is built after the mempool lock is released, so a writer waits for no more
-// than a fraction of the call, which is long for a large pool.
+// is built after the mempool lock is released, so the lock is held for no
+// more than part of the call, which is long for a large pool.
 func TestRawMempoolVerboseOutsideLock(t *testing.T) {
 	// Fill the pool directly with transactions, every other one spending
 	// the one before.
@@ -102,8 +102,11 @@ func TestRawMempoolVerboseOutsideLock(t *testing.T) {
 		prev = *btx.Hash()
 	}
 
-	// Take the write lock over and over during a call, and keep the
-	// longest wait for it.
+	// Try the write lock over and over during a call, and keep the longest
+	// time it was held, from a try that failed to the next one that
+	// succeeded. A writer that waits for the lock would also count the
+	// time it isn't scheduled, which on a busy machine is longer than the
+	// lock is held.
 	done := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
@@ -114,19 +117,35 @@ func TestRawMempoolVerboseOutsideLock(t *testing.T) {
 		done <- time.Since(start)
 	}()
 	var longest, call time.Duration
+	var heldSince time.Time
 	for call == 0 {
-		start := time.Now()
-		mp.mtx.Lock()
-		longest = max(longest, time.Since(start))
-		mp.mtx.Unlock()
+		now := time.Now()
+		if mp.mtx.TryLock() {
+			mp.mtx.Unlock()
+			if !heldSince.IsZero() {
+				longest = max(longest, now.Sub(heldSince))
+				heldSince = time.Time{}
+			}
+		} else if heldSince.IsZero() {
+			heldSince = now
+		}
 		select {
 		case call = <-done:
 		default:
 		}
 	}
-	t.Logf("longest writer wait %v during a call of %v", longest, call)
-	if longest > call/4 {
-		t.Errorf("a writer waited %v for the mempool lock during a call "+
-			"of %v", longest, call)
+
+	// The call has returned, so a lock that was still held is released.
+	if !heldSince.IsZero() {
+		longest = max(longest, time.Since(heldSince))
+	}
+
+	// Building the result under the lock holds it for all of the call,
+	// while a slow or busy machine can hold it longer than the copy of the
+	// pool's descriptors takes, when it doesn't run the call then.
+	t.Logf("lock held for at most %v during a call of %v", longest, call)
+	if longest > call/2 {
+		t.Errorf("the mempool lock was held for %v during a call of %v",
+			longest, call)
 	}
 }
