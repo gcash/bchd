@@ -653,10 +653,8 @@ out:
 				// Skip iterating through all txs if no
 				// tx notification requests exist.
 				if len(watchedOutPoints) != 0 || len(watchedAddrs) != 0 {
-					for _, tx := range block.Transactions() {
-						m.notifyForTx(watchedOutPoints,
-							watchedAddrs, tx, block)
-					}
+					m.notifyForBlockTxs(watchedOutPoints,
+						watchedAddrs, block)
 				}
 
 				if len(blockNotifications) != 0 {
@@ -909,13 +907,13 @@ func (m *wsNotificationManager) notifyFilteredBlockConnected(clients map[chan st
 	// Search for relevant transactions for each client and save them
 	// serialized in hex encoding for the notification.
 	subscribedTxs := make(map[chan struct{}][]string)
-	for _, tx := range block.Transactions() {
-		var txHex string
-		for quitChan := range m.subscribedClients(tx, clients) {
-			if txHex == "" {
-				txHex = txHexString(tx.MsgTx())
-			}
-			subscribedTxs[quitChan] = append(subscribedTxs[quitChan], txHex)
+	for quitChan, wsc := range clients {
+		wsc.Lock()
+		filter := wsc.filterData
+		wsc.Unlock()
+		if filter != nil {
+			subscribedTxs[quitChan] = rescanBlockFilter(filter, block,
+				m.server.cfg.ChainParams)
 		}
 	}
 	for quitChan, wsc := range clients {
@@ -1284,6 +1282,97 @@ func (m *wsNotificationManager) notifyForTx(ops map[wire.OutPoint]map[chan struc
 	}
 	if len(addrs) != 0 {
 		m.notifyForTxOuts(ops, addrs, tx, block)
+	}
+}
+
+// notifyForBlockTxs notifies websocket clients of the transactions of a
+// connected block that pay a watched address or spend a watched outpoint, as
+// notifyForTx does for a single transaction, and watches the outputs paying a
+// watched address for their spends.  Since the canonical transaction ordering
+// upgrade, a block orders its transactions by txid, so it can list a
+// transaction before the parent whose output it spends.  The outputs of all
+// the block's transactions are therefore watched before any spend is matched,
+// and the transactions are notified parents first, as a client that records
+// each transaction as it is notified, such as a wallet, only sees that a
+// transaction spends its parent's output once it knows the parent.
+func (m *wsNotificationManager) notifyForBlockTxs(ops map[wire.OutPoint]map[chan struct{}]*wsClient,
+	addrs map[string]map[chan struct{}]*wsClient, block *bchutil.Block) {
+
+	// The clients to notify of the outputs and of the inputs of each
+	// transaction, by its index in the block.
+	txs := block.Transactions()
+	recvClients := make([]map[chan struct{}]*wsClient, len(txs))
+	spendClients := make([]map[chan struct{}]*wsClient, len(txs))
+	addClient := func(clients []map[chan struct{}]*wsClient, i int, wsc *wsClient) {
+		if clients[i] == nil {
+			clients[i] = make(map[chan struct{}]*wsClient)
+		}
+		clients[i][wsc.quit] = wsc
+	}
+
+	for i, tx := range txs {
+		for j, txOut := range tx.MsgTx().TxOut {
+			_, txAddrs, _, err := txscript.ExtractPkScriptAddrs(
+				txOut.PkScript, m.server.cfg.ChainParams)
+			if err != nil {
+				continue
+			}
+
+			for _, txAddr := range txAddrs {
+				cmap, ok := addrs[txAddr.EncodeAddress()]
+				if !ok {
+					continue
+				}
+
+				op := []*wire.OutPoint{wire.NewOutPoint(tx.Hash(), uint32(j))}
+				for _, wsc := range cmap {
+					m.addSpentRequests(ops, wsc, op)
+					addClient(recvClients, i, wsc)
+				}
+			}
+		}
+	}
+	for i, tx := range txs {
+		for _, txIn := range tx.MsgTx().TxIn {
+			prevOut := &txIn.PreviousOutPoint
+			for _, wsc := range ops[*prevOut] {
+				m.removeSpentRequest(ops, wsc, prevOut)
+				addClient(spendClients, i, wsc)
+			}
+		}
+	}
+
+	var matched []*bchutil.Tx
+	for i, tx := range txs {
+		if recvClients[i] != nil || spendClients[i] != nil {
+			matched = append(matched, tx)
+		}
+	}
+	for _, tx := range parentsFirst(matched) {
+		txHex := txHexString(tx.MsgTx())
+		if clients := spendClients[tx.Index()]; clients != nil {
+			marshalledJSON, err := newRedeemingTxNotification(txHex,
+				tx.Index(), block)
+			if err != nil {
+				rpcsLog.Warnf("Failed to marshal redeemingtx notification: %v", err)
+			} else {
+				for _, wsc := range clients {
+					_ = wsc.QueueNotification(marshalledJSON)
+				}
+			}
+		}
+		if clients := recvClients[tx.Index()]; clients != nil {
+			ntfn := btcjson.NewRecvTxNtfn(txHex, blockDetails(block,
+				tx.Index()))
+			marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
+			if err != nil {
+				rpcsLog.Errorf("Failed to marshal processed tx notification: %v", err)
+				continue
+			}
+			for _, wsc := range clients {
+				_ = wsc.QueueNotification(marshalledJSON)
+			}
+		}
 	}
 }
 
@@ -2734,6 +2823,14 @@ func spendsWatchedAddr(addrs map[string]struct{}, txin *wire.TxIn,
 // rescanBlock rescans all transactions in a single block.  stxos are the
 // outputs spent by the block as returned by rescanSpentOutputs.  This is a
 // helper function for handleRescan.
+//
+// Since the canonical transaction ordering upgrade, a block orders its
+// transactions by txid, so it can list a transaction before the parent whose
+// output it spends.  The outputs of all the block's transactions are therefore
+// watched before any spend is matched, and the transactions are notified
+// parents first, as a client that records each transaction as it is notified,
+// such as a wallet, only sees that a transaction spends its parent's output
+// once it knows the parent.
 func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 	stxos []blockchain.SpentTxOut) {
 
@@ -2747,104 +2844,16 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 		stxos = nil
 	}
 
-	var stxoIdx int
-	for txIdx, tx := range blk.Transactions() {
-		// Hexadecimal representation of this tx.  Only created if
-		// needed, and reused for later notifications if already made.
-		var txHex string
+	params := wsc.server.cfg.ChainParams
+	txs := blk.Transactions()
+	received := make([]bool, len(txs))
+	spent := make([]bool, len(txs))
 
-		// All inputs and outputs must be iterated through to correctly
-		// modify the unspent map, however, just a single notification
-		// for any matching transaction inputs or outputs should be
-		// created and sent.
-		spentNotified := false
-		recvNotified := false
-
-		// notifySpend is a closure we'll use when we first detect that
-		// a transactions spends an outpoint/script in our filter list.
-		notifySpend := func() error {
-			if txHex == "" {
-				txHex = txHexString(tx.MsgTx())
-			}
-			marshalledJSON, err := newRedeemingTxNotification(
-				txHex, tx.Index(), blk,
-			)
-			if err != nil {
-				return fmt.Errorf("unable to marshal "+
-					"btcjson.RedeeminTxNtfn: %v", err)
-			}
-
-			return wsc.QueueNotification(marshalledJSON)
-		}
-
-		// We'll start by iterating over the transaction's inputs to
-		// determine if it spends an outpoint/script in our filter list.
-		for _, txin := range tx.MsgTx().TxIn {
-			var stxo *blockchain.SpentTxOut
-			if txIdx > 0 && stxos != nil {
-				stxo = &stxos[stxoIdx]
-				stxoIdx++
-			}
-
-			// If it spends an outpoint, we'll dispatch a spend
-			// notification for the transaction.
-			if _, ok := lookups.unspent[txin.PreviousOutPoint]; ok {
-				delete(lookups.unspent, txin.PreviousOutPoint)
-
-				if spentNotified {
-					continue
-				}
-
-				err := notifySpend()
-
-				// Stop the rescan early if the websocket client
-				// disconnected.
-				if err == ErrClientQuit {
-					return
-				}
-				if err != nil {
-					rpcsLog.Errorf("Unable to notify "+
-						"redeeming transaction %v: %v",
-						tx.Hash(), err)
-					continue
-				}
-
-				spentNotified = true
-			}
-
-			// We'll also check the address of the output the input
-			// spends to determine whether it is relevant to us.  The
-			// coinbase spends no output.
-			if spentNotified || txIdx == 0 {
-				continue
-			}
-
-			// If it is, we'll also dispatch a spend notification
-			// for this transaction.
-			if spendsWatchedAddr(lookups.addrs, txin, stxo,
-				wsc.server.cfg.ChainParams) {
-
-				err := notifySpend()
-
-				// Stop the rescan early if the websocket client
-				// disconnected.
-				if err == ErrClientQuit {
-					return
-				}
-				if err != nil {
-					rpcsLog.Errorf("Unable to notify "+
-						"redeeming transaction %v: %v",
-						tx.Hash(), err)
-					continue
-				}
-
-				spentNotified = true
-			}
-		}
-
+	// Watch the outputs that pay a watched address.
+	for txIdx, tx := range txs {
 		for txOutIdx, txout := range tx.MsgTx().TxOut {
 			_, addrs, _, _ := txscript.ExtractPkScriptAddrs(
-				txout.PkScript, wsc.server.cfg.ChainParams)
+				txout.PkScript, params)
 
 			for _, addr := range addrs {
 				if _, ok := lookups.addrs[addr.String()]; !ok {
@@ -2856,30 +2865,86 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 					Index: uint32(txOutIdx),
 				}
 				lookups.unspent[outpoint] = struct{}{}
+				received[txIdx] = true
+			}
+		}
+	}
 
-				if recvNotified {
-					continue
-				}
+	// Then find the transactions that spend a watched outpoint, or an
+	// output paying a watched address.  All inputs must be iterated
+	// through to correctly modify the unspent map.
+	var stxoIdx int
+	for txIdx, tx := range txs {
+		for _, txin := range tx.MsgTx().TxIn {
+			var stxo *blockchain.SpentTxOut
+			if txIdx > 0 && stxos != nil {
+				stxo = &stxos[stxoIdx]
+				stxoIdx++
+			}
 
-				if txHex == "" {
-					txHex = txHexString(tx.MsgTx())
-				}
-				ntfn := btcjson.NewRecvTxNtfn(txHex,
-					blockDetails(blk, tx.Index()))
+			if _, ok := lookups.unspent[txin.PreviousOutPoint]; ok {
+				delete(lookups.unspent, txin.PreviousOutPoint)
+				spent[txIdx] = true
+				continue
+			}
 
-				marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
-				if err != nil {
-					rpcsLog.Errorf("Failed to marshal recvtx notification: %v", err)
-					return
-				}
+			// We'll also check the address of the output the input
+			// spends to determine whether it is relevant to us.  The
+			// coinbase spends no output.
+			if spent[txIdx] || txIdx == 0 {
+				continue
+			}
+			if spendsWatchedAddr(lookups.addrs, txin, stxo, params) {
+				spent[txIdx] = true
+			}
+		}
+	}
 
+	var matched []*bchutil.Tx
+	for txIdx, tx := range txs {
+		if received[txIdx] || spent[txIdx] {
+			matched = append(matched, tx)
+		}
+	}
+	for _, tx := range parentsFirst(matched) {
+		txHex := txHexString(tx.MsgTx())
+
+		// Just a single notification for any matching transaction
+		// inputs and one for any matching outputs are sent.
+		if spent[tx.Index()] {
+			marshalledJSON, err := newRedeemingTxNotification(
+				txHex, tx.Index(), blk,
+			)
+			if err != nil {
+				rpcsLog.Errorf("Unable to notify redeeming "+
+					"transaction %v: unable to marshal "+
+					"btcjson.RedeemingTxNtfn: %v", tx.Hash(), err)
+			} else {
 				err = wsc.QueueNotification(marshalledJSON)
+
 				// Stop the rescan early if the websocket client
 				// disconnected.
 				if err == ErrClientQuit {
 					return
 				}
-				recvNotified = true
+			}
+		}
+
+		if received[tx.Index()] {
+			ntfn := btcjson.NewRecvTxNtfn(txHex,
+				blockDetails(blk, tx.Index()))
+
+			marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
+			if err != nil {
+				rpcsLog.Errorf("Failed to marshal recvtx notification: %v", err)
+				return
+			}
+
+			err = wsc.QueueNotification(marshalledJSON)
+			// Stop the rescan early if the websocket client
+			// disconnected.
+			if err == ErrClientQuit {
+				return
 			}
 		}
 	}
@@ -2887,41 +2952,25 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 
 // rescanBlockFilter rescans a block for any relevant transactions for the
 // passed lookup keys. Any discovered transactions are returned hex encoded as
-// a string slice.
+// a string slice, parents first, as rescanBlock notifies them.  The outputs of
+// all the block's transactions that pay a watched address are added to the
+// filter before any spend is matched, as a block can list a transaction
+// before the parent whose output it spends.
 //
 // NOTE: This extension is ported from github.com/decred/dcrd
 func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *chaincfg.Params) []string {
-	var transactions []string
-
 	// The unlock is deferred so a panic that runRPCHandler recovers cannot
 	// leave the filter locked, as the notification manager locks it for
 	// every transaction it checks.
 	filter.mu.Lock()
 	defer filter.mu.Unlock()
-	for _, tx := range block.Transactions() {
-		msgTx := tx.MsgTx()
 
-		// Keep track of whether the transaction has already been added
-		// to the result.  It shouldn't be added twice.
-		added := false
+	txs := block.Transactions()
+	matched := make([]bool, len(txs))
 
-		// Scan inputs if not a coinbase transaction.
-		if !blockchain.IsCoinBaseTx(msgTx) {
-			for _, input := range msgTx.TxIn {
-				if !filter.existsUnspentOutPoint(&input.PreviousOutPoint) {
-					continue
-				}
-				if !added {
-					transactions = append(
-						transactions,
-						txHexString(msgTx))
-					added = true
-				}
-			}
-		}
-
-		// Scan outputs.
-		for i, output := range msgTx.TxOut {
+	// Scan outputs.
+	for i, tx := range txs {
+		for j, output := range tx.MsgTx().TxOut {
 			_, addrs, _, err := txscript.ExtractPkScriptAddrs(
 				output.PkScript, params)
 			if err != nil {
@@ -2934,21 +2983,79 @@ func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *cha
 
 				op := wire.OutPoint{
 					Hash:  *tx.Hash(),
-					Index: uint32(i),
+					Index: uint32(j),
 				}
 				filter.addUnspentOutPoint(&op)
-
-				if !added {
-					transactions = append(
-						transactions,
-						txHexString(msgTx))
-					added = true
-				}
+				matched[i] = true
 			}
 		}
 	}
 
+	// Scan inputs if not a coinbase transaction.
+	var relevant []*bchutil.Tx
+	for i, tx := range txs {
+		msgTx := tx.MsgTx()
+		if !matched[i] && !blockchain.IsCoinBaseTx(msgTx) {
+			for _, input := range msgTx.TxIn {
+				if filter.existsUnspentOutPoint(&input.PreviousOutPoint) {
+					matched[i] = true
+					break
+				}
+			}
+		}
+		if matched[i] {
+			relevant = append(relevant, tx)
+		}
+	}
+
+	var transactions []string
+	for _, tx := range parentsFirst(relevant) {
+		transactions = append(transactions, txHexString(tx.MsgTx()))
+	}
 	return transactions
+}
+
+// parentsFirst returns a block's transactions with each one after those it
+// spends, keeping their order otherwise, as netsync's parentsFirst does when
+// it puts a disconnected block's transactions back in the memory pool.  The
+// transactions waiting for their parents are kept in a slice rather than on
+// the goroutine's stack, as a chain of transactions can be as long as a block
+// holds transactions.
+func parentsFirst(txs []*bchutil.Tx) []*bchutil.Tx {
+	index := make(map[chainhash.Hash]int, len(txs))
+	for i, tx := range txs {
+		index[*tx.Hash()] = i
+	}
+	seen := make([]bool, len(txs))
+	sorted := make([]*bchutil.Tx, 0, len(txs))
+
+	// Each waiting transaction is held with the next of its inputs to look
+	// at.
+	type waiting struct{ tx, in int }
+	var stack []waiting
+	for i := range txs {
+		if seen[i] {
+			continue
+		}
+		seen[i] = true
+		stack = append(stack, waiting{tx: i})
+		for len(stack) > 0 {
+			top := &stack[len(stack)-1]
+			txIns := txs[top.tx].MsgTx().TxIn
+			if top.in == len(txIns) {
+				sorted = append(sorted, txs[top.tx])
+				stack = stack[:len(stack)-1]
+				continue
+			}
+			prevHash := txIns[top.in].PreviousOutPoint.Hash
+			top.in++
+			if parent, ok := index[prevHash]; ok && !seen[parent] {
+				seen[parent] = true
+				stack = append(stack, waiting{tx: parent})
+			}
+		}
+	}
+	return sorted
 }
 
 // handleRescanBlocks implements the rescanblocks command extension for

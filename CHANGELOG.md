@@ -4,6 +4,15 @@ All notable user-visible changes to [bchd](https://github.com/gcash/bchd), a ful
 
 bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original btcd changelog (0.3.0-alpha through 0.12.0) is preserved unchanged at the bottom of this file under **Legacy btcd changelog (pre-fork)**.
 
+## Unreleased
+
+This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, and sends a block's transactions parents first.
+
+### RPC & gRPC
+
+- The websocket notifications of a block's transactions (`recvtx`, `redeemingtx`, `filteredblockconnected`, `rescanblocks`, and `rescan` without the spend journal) no longer miss a transaction that spends a watched output of a transaction the block lists after it. Since the canonical transaction ordering upgrade, blocks list their transactions by txid, so this happens to about half of such pairs. A block's live notifications also kept watching the spent output.
+- These notifications, and `rescan`'s, list a block's transactions with each one after those it spends. A wallet that records each transaction as it comes, such as bchwallet with a bchd backend, saw the spend before the output it spends and kept that output unspent.
+
 ## 0.22.4 (2026-10-27)
 
 This release fetches announced blocks through their headers, as BCHN does, cuts the memory `--slpgraphsearch` needs to about a fifth, and has the gRPC address calls return the address's number of transactions. Nodes with `--addrindex` should read the upgrade notes first.

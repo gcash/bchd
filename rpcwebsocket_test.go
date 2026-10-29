@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
@@ -412,4 +414,265 @@ func TestRescanBlockFilterPanicUnlocks(t *testing.T) {
 		t.Fatal("filter left locked")
 	}
 	filter.mu.Unlock()
+}
+
+// TestParentsFirst ensures transactions are ordered after the ones whose
+// outputs they spend, and otherwise kept in order.
+func TestParentsFirst(t *testing.T) {
+	t.Parallel()
+
+	newTx := func(value int64, parents ...*bchutil.Tx) *bchutil.Tx {
+		msgTx := wire.NewMsgTx(2)
+		for _, parent := range parents {
+			msgTx.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: wire.OutPoint{Hash: *parent.Hash()},
+			})
+		}
+		if len(parents) == 0 {
+			msgTx.AddTxIn(&wire.TxIn{
+				PreviousOutPoint: wire.OutPoint{Index: uint32(value)},
+			})
+		}
+		msgTx.AddTxOut(&wire.TxOut{Value: value})
+		return bchutil.NewTx(msgTx)
+	}
+	a := newTx(1)
+	b := newTx(2, a)
+	c := newTx(3, b)
+	d := newTx(4)
+	e := newTx(5, a, d)
+	names := map[*bchutil.Tx]string{a: "a", b: "b", c: "c", d: "d", e: "e"}
+	nameAll := func(txs []*bchutil.Tx) []string {
+		var s []string
+		for _, tx := range txs {
+			s = append(s, names[tx])
+		}
+		return s
+	}
+
+	tests := []struct {
+		txs, want []*bchutil.Tx
+	}{
+		{nil, nil},
+		{[]*bchutil.Tx{a, b, c, d, e}, []*bchutil.Tx{a, b, c, d, e}},
+		{[]*bchutil.Tx{c, d, e, b, a}, []*bchutil.Tx{a, b, c, d, e}},
+		{[]*bchutil.Tx{e, c}, []*bchutil.Tx{e, c}},
+		{[]*bchutil.Tx{e, d, a}, []*bchutil.Tx{a, d, e}},
+	}
+	for _, test := range tests {
+		got := nameAll(parentsFirst(test.txs))
+		want := nameAll(test.want)
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%v: got %v, want %v", nameAll(test.txs), got, want)
+		}
+	}
+}
+
+// spendBeforeParentBlock returns a block that lists a transaction before its
+// parent, as the canonical transaction ordering can, and the outputs its
+// inputs spend.  The parent pays the watched P2SH32 address of s, whose spend
+// can't be told from its signature script, and the child spends that output
+// and pays an address that isn't watched.  names gives the hex of each a name.
+func spendBeforeParentBlock(t *testing.T, s *rescanTestSpends) (*bchutil.Block,
+	[]blockchain.SpentTxOut, map[string]string) {
+
+	t.Helper()
+
+	coinbase := wire.NewMsgTx(2)
+	coinbase.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Index: wire.MaxPrevOutIndex},
+		SignatureScript:  []byte{txscript.OP_0, txscript.OP_0},
+	})
+	coinbase.AddTxOut(&wire.TxOut{Value: 1000, PkScript: []byte{txscript.OP_TRUE}})
+
+	parent := wire.NewMsgTx(2)
+	parent.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: chainhash.Hash{9}},
+		SignatureScript:  s.otherSig,
+	})
+	parent.AddTxOut(&wire.TxOut{Value: 1000, PkScript: s.p2sh32Out.PkScript})
+
+	child := wire.NewMsgTx(2)
+	child.AddTxIn(&wire.TxIn{
+		PreviousOutPoint: wire.OutPoint{Hash: parent.TxHash()},
+		SignatureScript:  s.p2sh32Sig,
+	})
+	child.AddTxOut(&wire.TxOut{Value: 900, PkScript: s.otherOut.PkScript})
+
+	block := bchutil.NewBlock(&wire.MsgBlock{
+		Transactions: []*wire.MsgTx{coinbase, child, parent},
+	})
+	block.SetHeight(100)
+
+	// The spend journal lists the outputs the block's inputs spend in
+	// block order, the coinbase's aside.
+	stxos := []blockchain.SpentTxOut{s.p2sh32Out, s.otherOut}
+	names := map[string]string{
+		txHexString(parent): "parent",
+		txHexString(child):  "child",
+	}
+	return block, stxos, names
+}
+
+// notified returns the notifications queued for a client, each as its method
+// and the name of its transaction.
+func notified(t *testing.T, wsc *wsClient, names map[string]string) []string {
+	t.Helper()
+
+	var got []string
+	for {
+		select {
+		case marshalled := <-wsc.ntfnChan:
+			var ntfn struct {
+				Method string            `json:"method"`
+				Params []json.RawMessage `json:"params"`
+			}
+			var txHex string
+			if err := json.Unmarshal(marshalled, &ntfn); err != nil {
+				t.Fatalf("unable to decode notification: %v", err)
+			}
+			if err := json.Unmarshal(ntfn.Params[0], &txHex); err != nil {
+				t.Fatalf("unable to decode %s notification: %v",
+					ntfn.Method, err)
+			}
+			got = append(got, ntfn.Method+" "+names[txHex])
+		default:
+			return got
+		}
+	}
+}
+
+// TestRescanBlockFilterSpendBeforeParent ensures rescanblocks finds a
+// transaction listed before the parent whose watched output it spends, and
+// returns the parent first.
+func TestRescanBlockFilterSpendBeforeParent(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.MainNetParams
+	s := newRescanTestSpends(t, params)
+	block, _, names := spendBeforeParentBlock(t, s)
+
+	filter := newWSClientFilter([]bchutil.Address{s.p2sh32Addr}, nil)
+	var got []string
+	for _, txHex := range rescanBlockFilter(filter, block, params) {
+		got = append(got, names[txHex])
+	}
+	if want := "parent child"; strings.Join(got, " ") != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestRescanBlockSpendBeforeParent ensures rescan notifies a transaction
+// listed before the parent whose watched output it spends, after the parent,
+// whether or not the spend journal lines up with the block.
+func TestRescanBlockSpendBeforeParent(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.MainNetParams
+	s := newRescanTestSpends(t, params)
+	block, stxos, names := spendBeforeParentBlock(t, s)
+
+	tests := []struct {
+		name  string
+		stxos []blockchain.SpentTxOut
+	}{
+		{"spent outputs", stxos},
+		{"no spent outputs", nil},
+	}
+	for _, test := range tests {
+		wsc := &wsClient{
+			server:   &rpcServer{cfg: rpcserverConfig{ChainParams: params}},
+			ntfnChan: make(chan []byte, 10),
+		}
+		lookups := &rescanKeys{
+			addrs:   map[string]struct{}{s.p2sh32Addr.String(): {}},
+			unspent: map[wire.OutPoint]struct{}{},
+		}
+		rescanBlock(wsc, lookups, block, test.stxos)
+
+		got := notified(t, wsc, names)
+		want := "recvtx parent,redeemingtx child"
+		if strings.Join(got, ",") != want {
+			t.Errorf("%s: got %v, want %v", test.name, got, want)
+		}
+		if len(lookups.unspent) != 0 {
+			t.Errorf("%s: still watching %v, which the child spent",
+				test.name, lookups.unspent)
+		}
+	}
+}
+
+// TestNotifyForBlockTxsSpendBeforeParent ensures a connected block's
+// transaction listed before the parent whose watched output it spends is
+// notified, after the parent.
+func TestNotifyForBlockTxsSpendBeforeParent(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.MainNetParams
+	s := newRescanTestSpends(t, params)
+	block, _, names := spendBeforeParentBlock(t, s)
+
+	m := &wsNotificationManager{server: &rpcServer{cfg: rpcserverConfig{
+		ChainParams: params,
+		TxMemPool:   &mempool.TxPool{},
+	}}}
+	wsc := &wsClient{
+		quit:          make(chan struct{}),
+		ntfnChan:      make(chan []byte, 10),
+		spentRequests: make(map[wire.OutPoint]struct{}),
+	}
+	ops := make(map[wire.OutPoint]map[chan struct{}]*wsClient)
+	addrs := map[string]map[chan struct{}]*wsClient{
+		s.p2sh32Addr.EncodeAddress(): {wsc.quit: wsc},
+	}
+	m.notifyForBlockTxs(ops, addrs, block)
+
+	got := notified(t, wsc, names)
+	if want := "recvtx parent,redeemingtx child"; strings.Join(got, ",") != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if len(ops) != 0 || len(wsc.spentRequests) != 0 {
+		t.Errorf("still watching %v, which the child spent", ops)
+	}
+}
+
+// TestNotifyFilteredBlockConnectedSpendBeforeParent ensures a filtered block
+// lists a transaction that comes before the parent whose watched output it
+// spends, after the parent.
+func TestNotifyFilteredBlockConnectedSpendBeforeParent(t *testing.T) {
+	t.Parallel()
+
+	params := &chaincfg.MainNetParams
+	s := newRescanTestSpends(t, params)
+	block, _, names := spendBeforeParentBlock(t, s)
+
+	m := &wsNotificationManager{server: &rpcServer{cfg: rpcserverConfig{
+		ChainParams: params,
+	}}}
+	wsc := &wsClient{
+		quit:       make(chan struct{}),
+		ntfnChan:   make(chan []byte, 1),
+		filterData: newWSClientFilter([]bchutil.Address{s.p2sh32Addr}, nil),
+	}
+	m.notifyFilteredBlockConnected(map[chan struct{}]*wsClient{wsc.quit: wsc},
+		block)
+
+	var ntfn struct {
+		Method string            `json:"method"`
+		Params []json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(<-wsc.ntfnChan, &ntfn); err != nil {
+		t.Fatalf("unable to decode notification: %v", err)
+	}
+	var txHexes []string
+	if err := json.Unmarshal(ntfn.Params[2], &txHexes); err != nil {
+		t.Fatalf("unable to decode the subscribed transactions: %v", err)
+	}
+	var got []string
+	for _, txHex := range txHexes {
+		got = append(got, names[txHex])
+	}
+	if want := "parent child"; strings.Join(got, " ") != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
