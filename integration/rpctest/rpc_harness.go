@@ -24,11 +24,14 @@ import (
 const (
 	// These constants define the minimum and maximum p2p and rpc port
 	// numbers used by a test harness.  The min port is inclusive while the
-	// max port is exclusive.
+	// max port is exclusive.  Both ranges stay below 32768, where Linux
+	// starts the ephemeral ports it gives outgoing connections (macOS and
+	// Windows start at 49152), so that a connection the test makes can't
+	// hold a port that a harness then fails to listen on.
 	minPeerPort = 10000
-	maxPeerPort = 35000
+	maxPeerPort = 21000
 	minRPCPort  = maxPeerPort
-	maxRPCPort  = 60000
+	maxRPCPort  = 32000
 
 	// BlockVersion is the default block version used when generating
 	// blocks.

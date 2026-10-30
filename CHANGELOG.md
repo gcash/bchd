@@ -13,6 +13,10 @@ This release keeps the websocket notifications from missing a transaction that s
 - The websocket notifications of a block's transactions (`recvtx`, `redeemingtx`, `filteredblockconnected`, `rescanblocks`, and `rescan` without the spend journal) no longer miss a transaction that spends a watched output of a transaction the block lists after it. Since the canonical transaction ordering upgrade, blocks list their transactions by txid, so this happens to about half of such pairs. A block's live notifications also kept watching the spent output.
 - These notifications, and `rescan`'s, list a block's transactions with each one after those it spends. A wallet that records each transaction as it comes, such as bchwallet with a bchd backend, saw the spend before the output it spends and kept that output unspent.
 
+### Other
+
+- `rpctest` harnesses listen on ports below 32768, where Linux starts the ephemeral ports of outgoing connections. Their RPC ports reached 60000, so a connection that a test made could hold the RPC port of a harness, which then failed to start with "address already in use", as neutrino's sync test did on CI.
+
 ## 0.22.4 (2026-10-27)
 
 This release fetches announced blocks through their headers, as BCHN does, cuts the memory `--slpgraphsearch` needs to about a fifth, and has the gRPC address calls return the address's number of transactions. Nodes with `--addrindex` should read the upgrade notes first.
