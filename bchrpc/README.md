@@ -35,6 +35,13 @@ In short, gRPC moves the interaction between frontend code and the server from t
 $ bchd --grpclisten=<your_interface>
 ```
 
+Documentation for client authors:
+
+- [Client usage (Go, Node.js, Python)](documentation/client_usage.md)
+- [Hash, address, and token id encoding](documentation/data_encoding.md)
+- [grpcurl and curl examples](documentation/cli_examples.md)
+- [Server configuration](documentation/server_configuration.md)
+
 ## License
 
 Package bchrpc is licensed under the [copyfree](http://copyfree.org) ISC License.

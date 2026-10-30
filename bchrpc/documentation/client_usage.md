@@ -24,6 +24,10 @@ different languages:
 - [Go](#go)
 - [Node.js](#node.js)
 - [Python](#python)
+- [Command line (grpcurl and curl)](./cli_examples.md)
+
+For hash, address, and token id field formats (including the common `invalid hash length of 64, want 32`
+error), see [data_encoding.md](./data_encoding.md).
 
 Unless otherwise stated under the language example, it is assumed that
 gRPC is already installed.  The gRPC installation procedure
@@ -186,20 +190,30 @@ export NODE_TLS_REJECT_UNAUTHORIZED=0
 
 ## Python
 
-### Protoc
+### Dependencies and generated stubs
 
-Install dependencies
+Install dependencies:
+
 ```
 python -m pip install grpcio
 python -m pip install grpcio-tools
 ```
 
-Generate libs
+Generate Python stubs from the repo root (or from `bchrpc/`):
+
 ```
-python -m grpc_tools.protoc -I=./ --python_out=./pb-py --grpc_python_out=./pb-py ./bchrpc.proto
+python -m grpc_tools.protoc -I=bchrpc --python_out=bchrpc/pb-py --grpc_python_out=bchrpc/pb-py bchrpc/bchrpc.proto
 ```
 
-### Example
+Checked-in stubs live in [`bchrpc/pb-py`](../pb-py/README.md). Additional runnable examples (including
+`GetTransaction` and `GetSlpTokenMetadata` with correct hash encoding) are in
+[`client-usage-examples/python-grpc`](./client-usage-examples/python-grpc/README.md).
+
+### Example (GetBlockchainInfo and block tx ids)
+
+Transaction and block hashes returned in protobuf are **little-endian** `bytes`. Reverse before
+showing the same hex as a block explorer:
+
 ```python
 #!/usr/bin/env python3
 
@@ -207,38 +221,43 @@ import grpc
 import bchrpc_pb2 as pb
 import bchrpc_pb2_grpc as bchrpc
 
+def display_hash(hash_bytes: bytes) -> str:
+    return hash_bytes[::-1].hex()
+
 def run():
     with grpc.secure_channel('bchd.greyh.at:8335', grpc.ssl_channel_credentials()) as channel:
-        
-        # Get MempoolInfo
         stub = bchrpc.bchrpcStub(channel)
-        req = pb.GetMempoolInfoRequest()
 
-        resp = stub.GetMempoolInfo(req)
+        resp = stub.GetMempoolInfo(pb.GetMempoolInfoRequest())
+        print("mempool size:", resp.size)
 
-        print("mempool")
-        print(resp)
-
-        # Get block and parse tx hashes contained in block
         req = pb.GetBlockRequest()
         req.height = 555555
-        # req.full_transactions = True
-
         resp = stub.GetBlock(req)
 
-        hash = resp.block.info.hash
-        hash = bytearray(hash[::-1])
-        print("blockhash: " + hash.hex())
+        print("blockhash:", display_hash(resp.block.info.hash))
 
         for tx in resp.block.transaction_data:
-            txhash = bytearray(tx.transaction_hash[::-1])
-            print(txhash.hex())
-
-
-if __name__ == '__main__':
-    run()
+            print(display_hash(tx.transaction_hash))
 ```
-With Python is may be difficult to setup gRPC with self-signed certs.
-We highly recommend getting a certificate from Let's Encrypt.
 
-TODO: Add examples in other languages
+### GetTransaction and SLP token ids
+
+Request fields such as `GetTransactionRequest.hash` and `GetSlpTokenMetadataRequest.token_ids`
+expect **32 raw bytes in little-endian order**, not the 64-character hex string from a wallet.
+Convert display hex with `bytes.fromhex(hex_string)[::-1]` or the helpers in
+[`hash_utils.py`](./client-usage-examples/python-grpc/hash_utils.py). See
+[data_encoding.md](./data_encoding.md).
+
+### TLS with a self-signed certificate
+
+Load `rpc.cert` from the bchd data directory when connecting to your own node:
+
+```python
+with open("/path/to/rpc.cert", "rb") as f:
+    creds = grpc.ssl_channel_credentials(root_certificates=f.read())
+channel = grpc.secure_channel("127.0.0.1:8335", creds)
+```
+
+For a server using a public CA certificate, `grpc.ssl_channel_credentials()` with no arguments
+is enough.
