@@ -678,7 +678,7 @@ out:
 				if n.isNew && len(txNotifications) != 0 {
 					m.notifyForNewTx(txNotifications, n.tx)
 				}
-				m.notifyForTx(watchedOutPoints, watchedAddrs, n.tx, nil)
+				m.notifyForTx(watchedOutPoints, watchedAddrs, n.tx)
 				m.notifyRelevantTxAccepted(n.tx, clients)
 
 			case *notificationDSProof:
@@ -1123,7 +1123,7 @@ func (m *wsNotificationManager) addSpentRequests(opMap map[wire.OutPoint]map[cha
 	}
 
 	for _, spend := range spends {
-		m.notifyForTx(opMap, nil, spend, nil)
+		m.notifyForTx(opMap, nil, spend)
 	}
 }
 
@@ -1196,12 +1196,12 @@ func newRedeemingTxNotification(txHex string, index int, block *bchutil.Block) (
 	return btcjson.MarshalCmd("1.0", nil, ntfn)
 }
 
-// notifyForTxOuts examines each transaction output, notifying interested
-// websocket clients of the transaction if an output spends to a watched
-// address.  A spent notification request is automatically registered for
-// the client for each matching output.
+// notifyForTxOuts examines each output of an unconfirmed transaction,
+// notifying interested websocket clients of the transaction if an output
+// spends to a watched address.  A spent notification request is automatically
+// registered for the client for each matching output.
 func (m *wsNotificationManager) notifyForTxOuts(ops map[wire.OutPoint]map[chan struct{}]*wsClient,
-	addrs map[string]map[chan struct{}]*wsClient, tx *bchutil.Tx, block *bchutil.Block) {
+	addrs map[string]map[chan struct{}]*wsClient, tx *bchutil.Tx) {
 
 	// Nothing to do if nobody is listening for address notifications.
 	if len(addrs) == 0 {
@@ -1226,8 +1226,7 @@ func (m *wsNotificationManager) notifyForTxOuts(ops map[wire.OutPoint]map[chan s
 			if txHex == "" {
 				txHex = txHexString(tx.MsgTx())
 			}
-			ntfn := btcjson.NewRecvTxNtfn(txHex, blockDetails(block,
-				tx.Index()))
+			ntfn := btcjson.NewRecvTxNtfn(txHex, nil)
 
 			marshalledJSON, err := btcjson.MarshalCmd("1.0", nil, ntfn)
 			if err != nil {
@@ -1271,17 +1270,18 @@ func (m *wsNotificationManager) notifyRelevantTxAccepted(tx *bchutil.Tx,
 	}
 }
 
-// notifyForTx examines the inputs and outputs of the passed transaction,
-// notifying websocket clients of outputs spending to a watched address
-// and inputs spending a watched outpoint.
+// notifyForTx examines the inputs and outputs of the passed unconfirmed
+// transaction, notifying websocket clients of outputs spending to a watched
+// address and inputs spending a watched outpoint.  The transactions of a
+// connected block go through notifyForBlockTxs.
 func (m *wsNotificationManager) notifyForTx(ops map[wire.OutPoint]map[chan struct{}]*wsClient,
-	addrs map[string]map[chan struct{}]*wsClient, tx *bchutil.Tx, block *bchutil.Block) {
+	addrs map[string]map[chan struct{}]*wsClient, tx *bchutil.Tx) {
 
 	if len(ops) != 0 {
-		m.notifyForTxIns(ops, tx, block)
+		m.notifyForTxIns(ops, tx)
 	}
 	if len(addrs) != 0 {
-		m.notifyForTxOuts(ops, addrs, tx, block)
+		m.notifyForTxOuts(ops, addrs, tx)
 	}
 }
 
@@ -1376,12 +1376,12 @@ func (m *wsNotificationManager) notifyForBlockTxs(ops map[wire.OutPoint]map[chan
 	}
 }
 
-// notifyForTxIns examines the inputs of the passed transaction and sends
-// interested websocket clients a redeemingtx notification if any inputs
-// spend a watched output.  If block is non-nil, any matching spent
-// requests are removed.
+// notifyForTxIns examines the inputs of the passed unconfirmed transaction
+// and sends interested websocket clients a redeemingtx notification if any
+// inputs spend a watched output.  The spent requests stay until a block
+// confirms the spend.
 func (m *wsNotificationManager) notifyForTxIns(ops map[wire.OutPoint]map[chan struct{}]*wsClient,
-	tx *bchutil.Tx, block *bchutil.Block) {
+	tx *bchutil.Tx) {
 
 	// Nothing to do if nobody is watching outpoints.
 	if len(ops) == 0 {
@@ -1396,16 +1396,12 @@ func (m *wsNotificationManager) notifyForTxIns(ops map[wire.OutPoint]map[chan st
 			if txHex == "" {
 				txHex = txHexString(tx.MsgTx())
 			}
-			marshalledJSON, err := newRedeemingTxNotification(txHex, tx.Index(), block)
+			marshalledJSON, err := newRedeemingTxNotification(txHex, tx.Index(), nil)
 			if err != nil {
 				rpcsLog.Warnf("Failed to marshal redeemingtx notification: %v", err)
 				continue
 			}
 			for wscQuit, wsc := range cmap {
-				if block != nil {
-					m.removeSpentRequest(ops, wsc, prevOut)
-				}
-
 				if _, ok := wscNotified[wscQuit]; !ok {
 					wscNotified[wscQuit] = struct{}{}
 					_ = wsc.QueueNotification(marshalledJSON)
