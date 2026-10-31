@@ -8,8 +8,10 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/bchutil/bloom"
 	"github.com/gcash/bchutil/gcs/builder"
 )
 
@@ -72,5 +74,39 @@ func TestMempoolFilterCache(t *testing.T) {
 	if &removed[0] == &added[0] || !bytes.Equal(removed, fresh()) {
 		t.Fatal("the filter served after a transaction left the " +
 			"mempool is not the mempool's")
+	}
+}
+
+// TestMempoolRequestBanScores ensures that a peer can ask for the mempool's
+// filter and then for the mempool three times in a row without being banned,
+// as a mobile wallet asks each time it starts or wakes, and that it is banned
+// the fourth time.
+func TestMempoolRequestBanScores(t *testing.T) {
+	useTestConfig(t, &config{BanThreshold: defaultBanThreshold})
+	h := newMempoolTestHarness(t, 1)
+	sp := &serverPeer{
+		Peer: peer.NewInboundPeer(&peer.Config{}),
+		server: &server{
+			services:  wire.SFNodeBloom | wire.SFNodeCF,
+			txMemPool: h.server.cfg.TxMemPool,
+			banPeers:  make(chan *serverPeer, 1),
+			quit:      make(chan struct{}),
+		},
+		filter: bloom.LoadFilter(nil),
+	}
+	request := func() {
+		sp.OnGetCFMemPool(nil, wire.NewMsgGetCFMempool(wire.GCSFilterRegular))
+		sp.OnMemPool(nil, wire.NewMsgMemPool())
+	}
+
+	for i := 1; i <= 3; i++ {
+		request()
+		if len(sp.server.banPeers) != 0 {
+			t.Fatalf("banned after %d requests in a row", i)
+		}
+	}
+	request()
+	if len(sp.server.banPeers) != 1 {
+		t.Fatal("not banned after four requests in a row")
 	}
 }

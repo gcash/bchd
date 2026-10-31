@@ -791,8 +791,10 @@ func (sp *serverPeer) OnMemPool(_ *peer.Peer, msg *wire.MsgMemPool) {
 	// A decaying ban score increase is applied to prevent flooding.
 	// The ban score accumulates and passes the ban threshold if a burst of
 	// mempool messages comes from a peer. The score decays each minute to
-	// half of its value.
-	sp.addBanScore(0, 33, "mempool")
+	// half of its value.  It lets a wallet ask for the mempool three times
+	// in a row, with a getcfmempool message first, as mobile wallets ask
+	// each time they start or wake.
+	sp.addBanScore(0, 20, "mempool")
 
 	// Send the inventory messages, if there is anything to send.
 	for _, invMsg := range sp.mempoolInvs() {
@@ -899,8 +901,10 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// A decaying ban score increase is applied to prevent flooding.
 	// The ban score accumulates and passes the ban threshold if a burst of
 	// getcfmempool messages comes from a peer. The score decays each minute to
-	// half of its value.
-	sp.addBanScore(0, 33, "getcfmempool")
+	// half of its value.  It is lower than a mempool message's, as the filter
+	// is only built when the mempool changed, and wallets check it more often
+	// than they fetch the mempool.
+	sp.addBanScore(0, 10, "getcfmempool")
 
 	switch msg.FilterType {
 	case wire.GCSFilterRegular:

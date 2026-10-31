@@ -6,11 +6,15 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 ## Unreleased
 
-This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, and sends a block's transactions parents first.
+This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, sends a block's transactions parents first, and lets mobile wallets ask for the mempool each time they start or wake, which costs the node a filter build only when the mempool changed.
 
 ### Performance
 
 - `getcfmempool` builds the filter of the mempool only when the mempool changed since it last built it, and serves that filter to every peer that asks in between. It built the filter for each request, which for a mempool of 50,000 transactions takes about a tenth of a second and 50 MB of short-lived memory.
+
+### Consensus & Network
+
+- A peer's `getcfmempool` adds 10 to its ban score and its `mempool` 20, rather than 33 each, so that a wallet can ask for the mempool three times in a row, with the filter first, as mobile wallets ask each time they start or wake. A wallet that asked twice within about a minute was banned for a day.
 
 ### RPC & gRPC
 
