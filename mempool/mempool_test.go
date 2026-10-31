@@ -465,6 +465,43 @@ func TestSimpleOrphanChain(t *testing.T) {
 	}
 }
 
+// TestChanges ensures that the change count goes up each time a transaction is
+// added to or removed from the main pool, and not for an orphan.
+func TestChanges(t *testing.T) {
+	t.Parallel()
+
+	harness, spendableOuts, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+	pool := harness.txPool
+	chain, err := harness.CreateTxChain(spendableOuts[0], 2)
+	if err != nil {
+		t.Fatalf("unable to create transaction chain: %v", err)
+	}
+
+	// The child of a transaction the pool doesn't have is an orphan.
+	if _, err := pool.ProcessTransaction(chain[1], true, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	if got := pool.Changes(); got != 0 {
+		t.Fatalf("%d changes after an orphan, want 0", got)
+	}
+
+	// The parent joins the pool, and with it the orphan.
+	if _, err := pool.ProcessTransaction(chain[0], false, 0); err != nil {
+		t.Fatalf("ProcessTransaction: %v", err)
+	}
+	if got := pool.Changes(); got != 2 {
+		t.Fatalf("%d changes after two transactions joined, want 2", got)
+	}
+
+	pool.RemoveTransaction(chain[1], false)
+	if got := pool.Changes(); got != 3 {
+		t.Fatalf("%d changes after a removal, want 3", got)
+	}
+}
+
 // TestOrphanReject ensures that orphans are properly rejected when the allow
 // orphans flag is not set on ProcessTransaction.
 func TestOrphanReject(t *testing.T) {

@@ -180,7 +180,8 @@ type orphanTx struct {
 // peers.
 type TxPool struct {
 	// The following variables must only be used atomically.
-	lastUpdated atomic.Int64 // last time pool was updated
+	lastUpdated atomic.Int64  // last time pool was updated
+	changes     atomic.Uint64 // times a transaction was added or removed
 
 	mtx           sync.RWMutex
 	cfg           Config
@@ -508,6 +509,7 @@ func (mp *TxPool) removeTransaction(tx *bchutil.Tx, removeRedeemers bool) {
 		mp.removeTxDSProof(txHash)
 		delete(mp.pool, *txHash)
 		mp.lastUpdated.Store(time.Now().Unix())
+		mp.changes.Add(1)
 	}
 }
 
@@ -606,6 +608,7 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *bchutil
 		mp.outpoints[txIn.PreviousOutPoint] = tx
 	}
 	mp.lastUpdated.Store(time.Now().Unix())
+	mp.changes.Add(1)
 
 	// Add unconfirmed address index entries associated with the transaction
 	// if enabled.
@@ -1492,6 +1495,17 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 // This function is safe for concurrent access.
 func (mp *TxPool) LastUpdated() time.Time {
 	return time.Unix(mp.lastUpdated.Load(), 0)
+}
+
+// Changes returns how many times a transaction was added to or removed from
+// the main pool.  It does not include the orphan pool.  Unlike LastUpdated,
+// whose resolution is a second, it tells every change apart, so a caller that
+// read it before it read the pool knows the pool is unchanged while it reads
+// the same.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) Changes() uint64 {
+	return mp.changes.Load()
 }
 
 // maxCompactBlockTxs returns the maximum number of transactions a compact

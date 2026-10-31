@@ -8,6 +8,10 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, and sends a block's transactions parents first.
 
+### Performance
+
+- `getcfmempool` builds the filter of the mempool only when the mempool changed since it last built it, and serves that filter to every peer that asks in between. It built the filter for each request, which for a mempool of 50,000 transactions takes about a tenth of a second and 50 MB of short-lived memory.
+
 ### RPC & gRPC
 
 - The websocket notifications of a block's transactions (`recvtx`, `redeemingtx`, `filteredblockconnected`, `rescanblocks`, and `rescan` without the spend journal) no longer miss a transaction that spends a watched output of a transaction the block lists after it. Since the canonical transaction ordering upgrade, blocks list their transactions by txid, so this happens to about half of such pairs. A block's live notifications also kept watching the spent output.

@@ -342,6 +342,15 @@ type server struct {
 	cfCheckptCaches    map[wire.FilterType][]cfHeaderKV
 	cfCheckptCachesMtx sync.RWMutex
 
+	// mempoolFilterBytes caches the regular filter of the mempool that
+	// getcfmempool serves, as built when the mempool's change count was
+	// mempoolFilterChanges.  mempoolFilterMtx guards both, and is held
+	// while the filter is built, so that peers asking at once share one
+	// build.
+	mempoolFilterBytes   []byte
+	mempoolFilterChanges uint64
+	mempoolFilterMtx     sync.Mutex
+
 	// agentBlacklist is a list of blacklisted substrings by which to filter
 	// user agents.
 	agentBlacklist []string
@@ -903,23 +912,46 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 		return
 	}
 
-	var txs []*wire.MsgTx
-	for _, txDesc := range sp.server.txMemPool.TxDescs() {
-		txs = append(txs, txDesc.Tx.MsgTx())
-	}
-
-	filter, err := builder.BuildMempoolFilter(txs)
-	if err != nil {
-		return
-	}
-
-	filterBytes, err := filter.NBytes()
+	filterBytes, err := sp.server.mempoolFilter()
 	if err != nil {
 		return
 	}
 	zeroHash := &chainhash.Hash{}
 	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, zeroHash, filterBytes)
 	sp.QueueMessage(resp, nil)
+}
+
+// mempoolFilter returns the regular filter of the mempool, serialized, which
+// getcfmempool serves.  It builds the filter only when the mempool changed
+// since it was last built, as mobile wallets ask for it each time they start
+// or wake.  The callers must not modify the bytes, which they share.
+func (s *server) mempoolFilter() ([]byte, error) {
+	s.mempoolFilterMtx.Lock()
+	defer s.mempoolFilterMtx.Unlock()
+
+	// The change count is read before the pool.  A change made after it is
+	// then newer than the count kept with the filter, even if the filter
+	// has it, so the next request builds the filter again.
+	changes := s.txMemPool.Changes()
+	if s.mempoolFilterBytes != nil && s.mempoolFilterChanges == changes {
+		return s.mempoolFilterBytes, nil
+	}
+
+	var txs []*wire.MsgTx
+	for _, txDesc := range s.txMemPool.TxDescs() {
+		txs = append(txs, txDesc.Tx.MsgTx())
+	}
+	filter, err := builder.BuildMempoolFilter(txs)
+	if err != nil {
+		return nil, err
+	}
+	filterBytes, err := filter.NBytes()
+	if err != nil {
+		return nil, err
+	}
+	s.mempoolFilterBytes = filterBytes
+	s.mempoolFilterChanges = changes
+	return filterBytes, nil
 }
 
 // OnTx is invoked when a peer receives a tx bitcoin message.  It blocks
