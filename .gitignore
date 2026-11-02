@@ -49,3 +49,5 @@ bchrpc/regtest/node_modules
 .vscode
 *.cert
 *.key
+
+pkg/*
