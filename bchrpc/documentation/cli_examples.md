@@ -87,6 +87,10 @@ grpcurl -cacert ~/.bchd/rpc.cert -H 'AuthenticationToken: your_token_here' \
 The [gRPC HTTP gateway](../proxy/README.md) exposes selected RPCs as POST JSON under `/v1/...`.
 Start the proxy, then use curl against the proxy URL (not bchd's gRPC port directly).
 
+The proxy cannot reach a node run with `--grpcauthtoken`: it has no option for the token, and since
+grpc-gateway v2.33.0 (BCHD v0.22.4) it does not forward `Grpc-Metadata-*` request headers, so a
+client cannot send the token through it either.
+
 ```bash
 # Example: proxy started with
 #   ./gw -http-addr :8080 -bchd-grpc-url localhost:8335 -bchd-grpc-certpath ~/.bchd/rpc.cert

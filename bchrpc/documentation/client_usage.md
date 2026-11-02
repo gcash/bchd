@@ -90,6 +90,18 @@ The server applies a few limits to connections and streams:
 - A call that fails because of an unexpected error in the server returns
   `Internal`.
 
+## Status codes
+
+| Code | Returned when |
+| ---- | ------------- |
+| `ResourceExhausted` | A limit of [server_configuration.md](./server_configuration.md) is reached: too many calls in progress and waiting, too many subscriptions, or a transaction filter with too many entries; or a subscription falls more than 50000 events behind |
+| `InvalidArgument` | The request is malformed, such as a hash that is not 32 bytes, an address of another network, or `nb_fetch` over 10,000 |
+| `Unavailable` | The call needs an index the node runs without (for example `txindex required`), or the node is shutting down |
+| `NotFound` | The index is on but has no such entry, or a block is not in the main chain |
+| `FailedPrecondition` | The service is not ready yet |
+| `Unknown` | The node runs with `--grpcauthtoken` and the token is missing or wrong (`invalid authentication token`) |
+| `Internal` | An unexpected error in the server |
+
 ## Why Are Transaction IDs Backwards?
 Bitcoin was originally coded by Satoshi in a somewhat quirky way. When a transaction ID is in byte format in memory it is
 stored in little endian format (the bytes are in reverse order). When the ID is converted into a hex string the ID is reversed into
