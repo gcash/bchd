@@ -9,9 +9,9 @@ Package bchrpc implements a gRPC server.
 
 ## Overview
 
-This package provides a gRPC API which when combined with the `addrindex` and `txindex` provides
-a powerful API for supporting Bitcoin Cash applications. At present the API only exposes public
-methods for interacting with transactions and blocks. It does not expose any methods which can
+This package provides a gRPC API which when combined with the `addrindex`, `txindex` and, for SLP,
+`slpindex` provides a powerful API for supporting Bitcoin Cash applications. At present the API only
+exposes public methods for interacting with transactions and blocks. It does not expose any methods which can
 control the node so it is safe to expose the API publicly. To control the node continue using
 the JSON-RPC API.
 
@@ -32,8 +32,11 @@ In short, gRPC moves the interaction between frontend code and the server from t
 ## Using the API
 
 ```bash
-$ bchd --grpclisten=<your_interface>
+$ bchd --rpcuser=<user> --rpcpass=<password> --grpclisten=<your_interface>
 ```
+
+The gRPC server only starts when the JSON-RPC server is enabled, so `rpcuser` and `rpcpass` (or
+`rpclimituser` and `rpclimitpass`) must be set. See [Server configuration](documentation/server_configuration.md).
 
 Documentation for client authors:
 

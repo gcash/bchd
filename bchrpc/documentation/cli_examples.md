@@ -1,7 +1,8 @@
 # Command-line gRPC examples (grpcurl and curl)
 
-These examples call a bchd gRPC server on **localhost:8335** (mainnet default). Testnet uses
-**18335**. TLS is required; for the default self-signed certificate use grpcurl's `-insecure` flag
+These examples call a bchd gRPC server on **localhost:8335** (mainnet default), started with
+`--grpclisten=127.0.0.1` and the JSON-RPC credentials set (see
+[server_configuration.md](./server_configuration.md)). Testnet uses **18335**. TLS is required; for the default self-signed certificate use grpcurl's `-insecure` flag
 or point `-cacert` at `rpc.cert` from the bchd data directory.
 
 Install [grpcurl](https://github.com/fullstorydev/grpcurl) and run commands from the repository
