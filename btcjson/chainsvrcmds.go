@@ -747,6 +747,27 @@ func NewGetRawTransactionCmd(txHash string, verbose *VerboseLevel) *GetRawTransa
 	}
 }
 
+// GetSHVCmd defines the getshv JSON-RPC command, which returns the proof of
+// CHIP-2026-02, Simplified Header Verification, that the main chain's block at
+// BlockHeight is in the commitment at CommitmentHeight.  Type is "root" for a
+// proof to the commitment's root and "peak" for one to the peak of the block's
+// mountain.
+type GetSHVCmd struct {
+	Type             string
+	CommitmentHeight int64
+	BlockHeight      int64
+}
+
+// NewGetSHVCmd returns a new instance which can be used to issue a getshv
+// JSON-RPC command.
+func NewGetSHVCmd(proofType string, commitmentHeight, blockHeight int64) *GetSHVCmd {
+	return &GetSHVCmd{
+		Type:             proofType,
+		CommitmentHeight: commitmentHeight,
+		BlockHeight:      blockHeight,
+	}
+}
+
 // GetTxOutCmd defines the gettxout JSON-RPC command.
 type GetTxOutCmd struct {
 	Txid           string
@@ -1097,6 +1118,7 @@ func init() {
 	MustRegisterCmd("getpeerinfo", (*GetPeerInfoCmd)(nil), flags)
 	MustRegisterCmd("getrawmempool", (*GetRawMempoolCmd)(nil), flags)
 	MustRegisterCmd("getrawtransaction", (*GetRawTransactionCmd)(nil), flags)
+	MustRegisterCmd("getshv", (*GetSHVCmd)(nil), flags)
 	MustRegisterCmd("gettxout", (*GetTxOutCmd)(nil), flags)
 	MustRegisterCmd("gettxoutproof", (*GetTxOutProofCmd)(nil), flags)
 	MustRegisterCmd("gettxoutsetinfo", (*GetTxOutSetInfoCmd)(nil), flags)

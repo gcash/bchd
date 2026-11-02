@@ -15,6 +15,7 @@ This release keeps the websocket notifications from missing a transaction that s
 ### Consensus & Network
 
 - A peer's `getcfmempool` adds 10 to its ban score and its `mempool` 20, rather than 33 each, so that a wallet can ask for the mempool three times in a row, with the filter first, as mobile wallets ask each time they start or wake. A wallet that asked twice within about a minute was banned for a day.
+- Serve Simplified Header Verification (CHIP-2026-02) header proofs, so BIP37 and Neutrino wallets can check headers against a small accumulator instead of storing them: an in-memory index of the main chain's block hashes (about 30 MB on mainnet), the `NODE_SHV` service bit (bit 9, `SFNodeSHV`, which replaces the unused `SFNodeXThinner`, kept as a deprecated alias), the `getshv` and `shv` messages, the `getshv` RPC and `shvroot` in verbose `getblock` and `getblockheader`. On by default; `--noshv` turns it off. See [docs/shv.md](docs/shv.md).
 
 ### RPC & gRPC
 

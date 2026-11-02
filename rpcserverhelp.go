@@ -278,6 +278,7 @@ var helpDescsEnUS = map[string]string{
 	"getblockverboseresult-previousblockhash": "The hash of the previous block",
 	"getblockverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
 	"getblockverboseresult-strippedsize":      "Always 0, as Bitcoin Cash blocks have no witness data",
+	"getblockverboseresult-shvroot":           "The root of the Simplified Header Verification commitment at the block's height, as getshv gives it (only if SHV is enabled)",
 
 	// GetBlockVerboseTxResult help.
 	"getblockverbosetxresult-hash":              "The hash of the block (same as provided)",
@@ -295,6 +296,7 @@ var helpDescsEnUS = map[string]string{
 	"getblockverbosetxresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
 	"getblockverbosetxresult-previousblockhash": "The hash of the previous block",
 	"getblockverbosetxresult-nextblockhash":     "The hash of the next block (only if there is one)",
+	"getblockverbosetxresult-shvroot":           "The root of the Simplified Header Verification commitment at the block's height, as getshv gives it (only if SHV is enabled)",
 
 	// GetBlockCountCmd help.
 	"getblockcount--synopsis": "Returns the number of blocks in the longest block chain.",
@@ -326,6 +328,7 @@ var helpDescsEnUS = map[string]string{
 	"getblockheaderverboseresult-difficulty":        "The proof-of-work difficulty as a multiple of the minimum difficulty",
 	"getblockheaderverboseresult-previousblockhash": "The hash of the previous block",
 	"getblockheaderverboseresult-nextblockhash":     "The hash of the next block (only if there is one)",
+	"getblockheaderverboseresult-shvroot":           "The root of the Simplified Header Verification commitment at the block's height, as getshv gives it (only if SHV is enabled)",
 
 	// TemplateRequest help.
 	"templaterequest-mode":         "This is 'template', 'proposal', or omitted",
@@ -629,6 +632,20 @@ var helpDescsEnUS = map[string]string{
 	"getrawtransaction--condition1": "verbose=true",
 	"getrawtransaction--result0":    "Hex-encoded bytes of the serialized transaction",
 
+	// GetSHVCmd help.
+	"getshv--synopsis": "Returns the proof of Simplified Header Verification (CHIP-2026-02) that the main chain's block at block_height is in the commitment at commitment_height, the Merkle Mountain Range of the block hashes up to that height.\n" +
+		"Fails with code -1 when the node runs with --noshv.",
+	"getshv-type":             `The proof's target: "root" for the root of the commitment, which is Bitcoin's Merkle root over the block hashes, or "peak" for the peak of the block's mountain`,
+	"getshv-commitmentheight": "The height of the commitment's last block",
+	"getshv-blockheight":      "The height of the block to prove, at most commitment_height",
+	"getshv--result0":         "The block's header, the proof and its target",
+
+	// GetSHVResult help.
+	"getshvresult-branch": "The siblings on the path from the block's hash up to the target, from the bottom up",
+	"getshvresult-header": "The hex-encoded block header, which hashes to the leaf proven",
+	"getshvresult-root":   "The root of the commitment (only for type root)",
+	"getshvresult-peak":   "The peak of the block's mountain (only for type peak)",
+
 	// GetTxOutResult help.
 	"gettxoutresult-bestblock":     "The hash of the best block",
 	"gettxoutresult-confirmations": "The number of confirmations",
@@ -910,6 +927,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getpeerinfo":           {(*[]btcjson.GetPeerInfoResult)(nil)},
 	"getrawmempool":         {(*[]string)(nil), (*btcjson.GetRawMempoolVerboseResult)(nil)},
 	"getrawtransaction":     {(*string)(nil), (*btcjson.TxRawResult)(nil)},
+	"getshv":                {(*btcjson.GetSHVResult)(nil)},
 	"gettxout":              {(*btcjson.GetTxOutResult)(nil)},
 	"gettxoutproof":         {(*string)(nil)},
 	"node":                  nil,

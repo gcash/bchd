@@ -412,6 +412,12 @@ func TestPeerListeners(t *testing.T) {
 			OnGetCFCheckpt: func(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 				ok <- msg
 			},
+			OnGetSHV: func(_ *peer.Peer, msg *wire.MsgGetSHV) {
+				ok <- msg
+			},
+			OnSHV: func(_ *peer.Peer, msg *wire.MsgSHV) {
+				ok <- msg
+			},
 			OnCFilter: func(_ *peer.Peer, msg *wire.MsgCFilter) {
 				ok <- msg
 			},
@@ -559,6 +565,14 @@ func TestPeerListeners(t *testing.T) {
 		{
 			"OnGetCFCheckpt",
 			wire.NewMsgGetCFCheckpt(wire.GCSFilterRegular, &chainhash.Hash{}),
+		},
+		{
+			"OnGetSHV",
+			wire.NewMsgGetSHV(wire.NewSHVRequestByHeight(true, 10, 5)),
+		},
+		{
+			"OnSHV",
+			wire.NewMsgSHV(wire.SHVResponse{Proof: []chainhash.Hash{{}}}),
 		},
 		{
 			"OnCFilter",

@@ -1,0 +1,240 @@
+{
+  "blocks": {
+    "53066": {
+      "description": "Block with 8 transactions: b1000.",
+      "merkleroot": "271eafea9cfeb730c6fae8c39da387b37967646d26224a10878e04f3f6212fbe",
+      "tx": [
+        "e0598db6abb41bf57ee0019c23520121565d2217eb9ae91d2114199fec5ac41d",
+        "1001d10ddf64509c1548125ca3120f32355e8af588fe6724aa5dc033e699a617",
+        "3cd17728f2e9152cc908976701a28e910838a86fe5b745af74bd5b373aff6e1d",
+        "7d8514357058d8b1a08d51bbca54329b7dbafc5c2e792f99c38e67297fda2c28",
+        "32a83b09394f17131074360c6628147bfb3eaf0f57000bc416da7bce140c74dd",
+        "4e3a183b09d35e5adeed6d12c880b46486db3f25869c939269770268a7bd5298",
+        "8fb3751403381c11979f8b0d9fac7b121ad49561c6a07645e58da7d5ab5bf8f8",
+        "c429d280b4f74e016c358d8bb3a909889ee23b058c26767f14384d9ff8d9b8f4"
+      ]
+    },
+    "57113": {
+      "description": "Block with 10 transactions: b1010.",
+      "merkleroot": "dd9bfa795a0dfe64975eb03fddf8419e03f48fe6b5a97aa736b2536c035df864",
+      "tx": [
+        "f24cf73bba7fdc286201060ffe0b433c2c2dfc74110e7f9a7e02a50dae1fee7a",
+        "3c2512fc8473ae119beca8556f6be65cb358d3f25e6d063057fa676c1a642c4c",
+        "aa397b27bed2a9577df83eb6bbc7d6bdfb108ccfe346d204eb9bc839472a3bb7",
+        "bcd3bff748813ad6b5c3137cc6b2f5563700fe858cda6fa534f38cb986f2f1ea",
+        "d9a8e7e04aec530604a1f9ed66e302591e7395bb2f7477261949eefaea34de92",
+        "26fca71da3aa89507d7eeae052ff326d0a2b76d4228774ddbd78fbaf9aafa67d",
+        "90aa27025d52c9032a15db22e44b6f810b2e9dd1639cac461864adf863063c28",
+        "9b2857b0e22af35974e5e551dabd0160b0b1a18a02e67c21ea93c5cb35e2217d",
+        "5158cb8b66c60c0db90a23f8c7945b8634835b52f1e669a9fb4e883e40a1d82f",
+        "8eb65266588615fd7c35f5152748fb63f5668c60017ac82e0213f840a9efb718"
+      ]
+    },
+    "57286": {
+      "description": "Block with 11 transactions: b1011.",
+      "merkleroot": "23d97ad1b6e828398aff13122e312883c47986e8c8a9d1f4042876fa2e9e1fe4",
+      "tx": [
+        "e17e4987fb4565e496c4751d44f52aca00eed2387379669f039bf04ae174048b",
+        "03a5497d96f8f39cdac8761e7bfa21049816378c6bdf331921c607093ec8474b",
+        "2c43eebedbd5529b4c9496f08d31d5d22aa7b061aa5efa6d45f1d8efe611150d",
+        "3d2a352ca353760d2d8fc2b10e9944789f1ea0ea2a8ca340fe7a426c1f5008cb",
+        "4a225d19c0bf7ed70433a8c9acfb239e160414e1ed0c6733c051111f624dd78b",
+        "6227326e6c5035ad1bc5c61c78c27223bfe5694c797bd974cf296e509162777f",
+        "9bf4cc2687cb85712e964f23bc48b8a90ede1b1a985e35ee7601af137631c3a2",
+        "b0c940c008ff0ee11c1babea4d92da387b563fdbb2b15a5f693567b44575dc36",
+        "b6eee3a4f98271224e205fcf56a76fc55bfffcabe1b0121348cbc038601338e2",
+        "b7d9686a8310881505e6853d13c4ae31dd52c925e729d3b4975120436e6ca56e",
+        "f651523681ff86796635cb0671bf01a5f35c41b1804d3f6cce903257bb41768e"
+      ]
+    }
+  },
+  "header_segments": {
+    "first_16": {
+      "description": "First 16 block headers.",
+      "start_height": 0,
+      "header_hashes": [
+        "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+        "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+        "000000006a625f06636b8bb6ac7b960a8d03705d1ace08b1a19da3fdcc99ddbd",
+        "0000000082b5015589a3fdf2d4baff403e6f0be035a5d9742c1cae6295464449",
+        "000000004ebadb55ee9096c9a2f8880e09da59c0d68b1c228da88e48844a1485",
+        "000000009b7262315dbf071787ad3656097b892abffd1f95a1a022f896f533fc",
+        "000000003031a0e73735690c5a1ff2a4be82553b2a12b776fbd3a215dc8f778d",
+        "0000000071966c2b1d065fd446b1e485b2c9d9594acd2007ccbd5441cfc89444",
+        "00000000408c48f847aa786c2268fc3e6ec2af68e8468a34a28c61b7f1de0dc6",
+        "000000008d9dc510f23c2657fc4f67bea30078cc05a90eb89e84cc475c080805",
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "0000000097be56d606cdd9c54b04d4747e957d3608abe69198c661f2add73073",
+        "0000000027c2488e2510d1acf4369787784fa20ee084c258b58d9fbd43802b5e",
+        "000000005c51de2031a895adc145ee2242e919a01c6d61fb222a54a54b4d3089",
+        "0000000080f17a0c5a67f663a9bc9969eb37e81666d9321125f0e293656f8a37",
+        "00000000b3322c8c3ef7d2cf6da009a776e6a99ee65ec5a32f3f345712238473"
+      ]
+    },
+    "first_16_forged": {
+      "description": "Forged block hashes for CVE-2012-2459 test. First 11 are real block hashes (heights 0-10). Last 5 are duplicates to create phantom leaves 11-15: 11=10, 12=8, 13=9, 14=10, 15=10",
+      "start_height": 0,
+      "header_hashes": [
+        "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+        "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+        "000000006a625f06636b8bb6ac7b960a8d03705d1ace08b1a19da3fdcc99ddbd",
+        "0000000082b5015589a3fdf2d4baff403e6f0be035a5d9742c1cae6295464449",
+        "000000004ebadb55ee9096c9a2f8880e09da59c0d68b1c228da88e48844a1485",
+        "000000009b7262315dbf071787ad3656097b892abffd1f95a1a022f896f533fc",
+        "000000003031a0e73735690c5a1ff2a4be82553b2a12b776fbd3a215dc8f778d",
+        "0000000071966c2b1d065fd446b1e485b2c9d9594acd2007ccbd5441cfc89444",
+        "00000000408c48f847aa786c2268fc3e6ec2af68e8468a34a28c61b7f1de0dc6",
+        "000000008d9dc510f23c2657fc4f67bea30078cc05a90eb89e84cc475c080805",
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "00000000408c48f847aa786c2268fc3e6ec2af68e8468a34a28c61b7f1de0dc6",
+        "000000008d9dc510f23c2657fc4f67bea30078cc05a90eb89e84cc475c080805",
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9"
+      ]
+    }
+  },
+  "electrum_proofs": {
+    "proof_10_0": {
+      "height": 0,
+      "cp_height": 10,
+      "branch": [
+        "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+        "f2a2a2907abb326726a2d6500fe494f63772a941b414236c302e920bc1aa9caf",
+        "0e85585b6afb71116ec439b72a25edb8003ef34bc42fb2c88a05249da335774d",
+        "6f5faa6cae5ecd9824ff04c4d480fdef63fc7e60ec9e0b3a7fad844187cbbd07"
+      ],
+      "header": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_10_6": {
+      "height": 6,
+      "cp_height": 10,
+      "branch": [
+        "0000000071966c2b1d065fd446b1e485b2c9d9594acd2007ccbd5441cfc89444",
+        "f9f17a3c6d02b0920eccb11156df370bf4117fae2233dfee40817586ba981ca5",
+        "965ac94082cebbcffe458075651e9cc33ce703ab0115c72d9e8b1a9906b2b636",
+        "6f5faa6cae5ecd9824ff04c4d480fdef63fc7e60ec9e0b3a7fad844187cbbd07"
+      ],
+      "header": "01000000fc33f596f822a0a1951ffdbf2a897b095636ad871707bf5d3162729b00000000379dfb96a5ea8c81700ea4ac6b97ae9a9312b2d4301a29580e924ee6761a2520adc46649ffff001d189c4c97",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_10_7": {
+      "height": 7,
+      "cp_height": 10,
+      "branch": [
+        "000000003031a0e73735690c5a1ff2a4be82553b2a12b776fbd3a215dc8f778d",
+        "f9f17a3c6d02b0920eccb11156df370bf4117fae2233dfee40817586ba981ca5",
+        "965ac94082cebbcffe458075651e9cc33ce703ab0115c72d9e8b1a9906b2b636",
+        "6f5faa6cae5ecd9824ff04c4d480fdef63fc7e60ec9e0b3a7fad844187cbbd07"
+      ],
+      "header": "010000008d778fdc15a2d3fb76b7122a3b5582bea4f21f5a0c693537e7a03130000000003f674005103b42f984169c7d008370967e91920a6a5d64fd51282f75bc73a68af1c66649ffff001d39a59c86",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_10_8": {
+      "height": 8,
+      "cp_height": 10,
+      "branch": [
+        "000000008d9dc510f23c2657fc4f67bea30078cc05a90eb89e84cc475c080805",
+        "ff221cad72aacdd0a63bf5445c0ef4c50b3a1a64ad504458b72009666f770c31",
+        "10a317ca1368c7c35b98df8d356c6246519dd428081d115e16a97573d3eb0d4b",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "010000004494c8cf4154bdcc0720cd4a59d9c9b285e4b146d45f061d2b6c967100000000e3855ed886605b6d4a99d5fa2ef2e9b0b164e63df3c4136bebf2d0dac0f1f7a667c86649ffff001d1c4b5666",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_10_9": {
+      "height": 9,
+      "cp_height": 10,
+      "branch": [
+        "00000000408c48f847aa786c2268fc3e6ec2af68e8468a34a28c61b7f1de0dc6",
+        "ff221cad72aacdd0a63bf5445c0ef4c50b3a1a64ad504458b72009666f770c31",
+        "10a317ca1368c7c35b98df8d356c6246519dd428081d115e16a97573d3eb0d4b",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "01000000c60ddef1b7618ca2348a46e868afc26e3efc68226c78aa47f8488c4000000000c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd37047fca6649ffff001d28404f53",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_10_10": {
+      "height": 10,
+      "cp_height": 10,
+      "branch": [
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "cd5d21a5bc8ad65c8dc862bd9e6ec38f914ee6499d7e0ad23d7ca9582770b6c2",
+        "10a317ca1368c7c35b98df8d356c6246519dd428081d115e16a97573d3eb0d4b",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "010000000508085c47cc849eb80ea905cc7800a3be674ffc57263cf210c59d8d00000000112ba175a1e04b14ba9e7ea5f76ab640affeef5ec98173ac9799a852fa39add320cd6649ffff001d1e2de565",
+      "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f"
+    },
+    "proof_11_11": {
+      "height": 11,
+      "cp_height": 11,
+      "branch": [
+        "000000002c05cc2e78923c34df87fd108b22221ac6076c18f3ade378a4d915e9",
+        "cd5d21a5bc8ad65c8dc862bd9e6ec38f914ee6499d7e0ad23d7ca9582770b6c2",
+        "e9106987dc15c9ea710feeed3c2b3252cbfe21925803696ea52aa7b50a0f1085",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "01000000e915d9a478e3adf3186c07c61a22228b10fd87df343c92782ecc052c000000006e06373c80de397406dc3d19c90d71d230058d28293614ea58d6a57f8f5d32f8b8ce6649ffff001d173807f8",
+      "root": "b05152646ed9384d234ae37e034db54e1ff65314200edd9617c53cd72a2e706d"
+    },
+    "proof_12_12": {
+      "height": 12,
+      "cp_height": 12,
+      "branch": [
+        "0000000027c2488e2510d1acf4369787784fa20ee084c258b58d9fbd43802b5e",
+        "83b532d4707c4a8464dcf40bb814a1d9d7dc2bdd0b693d8a949fd53b61dcaa61",
+        "e9106987dc15c9ea710feeed3c2b3252cbfe21925803696ea52aa7b50a0f1085",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "010000007330d7adf261c69891e6ab08367d957e74d4044bc5d9cd06d656be9700000000b8c8754fabb0ffeb04ca263a1368c39c059ca0d4af3151b876f27e197ebb963bc8d06649ffff001d3f596a0c",
+      "root": "15288b27a233994b809901c91af1bd27992b20b26cf187b4eb72d6a2858ff5f0"
+    },
+    "proof_15_15": {
+      "height": 15,
+      "cp_height": 15,
+      "branch": [
+        "0000000080f17a0c5a67f663a9bc9969eb37e81666d9321125f0e293656f8a37",
+        "e55021736ef89c3787e2729058a76a3cf6decf561b856c57eb88ed99899009d1",
+        "e9106987dc15c9ea710feeed3c2b3252cbfe21925803696ea52aa7b50a0f1085",
+        "c809e7a698a4b4c474ff6f5f05e88af6d7cb80ddbbe302660dfe6bd1969224a2"
+      ],
+      "header": "01000000378a6f6593e2f0251132d96616e837eb6999bca963f6675a0c7af180000000000d080260d107d269ccba9247cfc64c952f1d13514b49e9f1230b3a197a8b7450fa276849ffff001d38d8fb98",
+      "root": "3cdcb64f35c3fc45a2737c2c22c5b61ccb8b93d36af10d21ae953b7d91e094d7"
+    }
+  },
+  "cve_2012_2459": {
+    "description": "Forged 16-leaf MMR has same root as real 11-leaf MMR",
+    "real_leaf_count": 11,
+    "forged_leaf_count": 16,
+    "root": "8b8f513a34feeb1f2cdac70fcd97042be23ccd64de9d66d36f9407bbc1809f5f",
+    "forged_proof_mappings": [
+      {
+        "forged_index": 11,
+        "real_index": 10,
+        "proof_key": "proof_10_10"
+      },
+      {
+        "forged_index": 12,
+        "real_index": 8,
+        "proof_key": "proof_10_8"
+      },
+      {
+        "forged_index": 13,
+        "real_index": 9,
+        "proof_key": "proof_10_9"
+      },
+      {
+        "forged_index": 14,
+        "real_index": 10,
+        "proof_key": "proof_10_10"
+      },
+      {
+        "forged_index": 15,
+        "real_index": 10,
+        "proof_key": "proof_10_10"
+      }
+    ]
+  }
+}
