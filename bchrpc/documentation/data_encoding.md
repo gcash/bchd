@@ -85,5 +85,6 @@ cases:
 | SLP fields on transactions / addresses | `--slpindex` |
 | `GetSlpTokenMetadata` | `--slpindex` |
 
-See [server_configuration.md](./server_configuration.md) for startup flags. Default gRPC port is
-**8335** on mainnet (**18335** on testnet3/regtest); see [default_ports.md](../../docs/default_ports.md).
+See [server_configuration.md](./server_configuration.md) for startup flags; the gRPC server only
+starts with `--grpclisten` and the JSON-RPC credentials set. Default gRPC port is **8335** on mainnet
+(**18335** on testnet3, testnet4, chipnet and regtest); see [default_ports.md](../../docs/default_ports.md).
