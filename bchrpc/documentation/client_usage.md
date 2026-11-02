@@ -18,11 +18,12 @@ that case, the first step may be omitted by importing the bindings from
 bchd itself.
 
 The rest of this document provides short examples of how to quickly get started
-by implementing a basic client from a testnet3 server listening on `localhost:18335` in several
-different languages:
+by implementing a basic client in several different languages. The Go example connects to a
+testnet3 server listening on `localhost:18335`, and the Node.js and Python examples to the public
+mainnet server `bchd.greyh.at:8335`, which a third party runs:
 
 - [Go](#go)
-- [Node.js](#node.js)
+- [Node.js](#nodejs)
 - [Python](#python)
 - [Command line (grpcurl and curl)](./cli_examples.md)
 
@@ -45,7 +46,7 @@ By default bchd uses a self signed certificate to encrypt and authenticate the
 connection. To authenticate against the server the client will need access to the
 certificate. For example, in Go:
 ```go
-certificateFile := filepath.Join(bchutil.AppDataDir("bchwallet", false), "rpc.cert")
+certificateFile := filepath.Join(bchutil.AppDataDir("bchd", false), "rpc.cert")
 creds, err := credentials.NewClientTLSFromFile(certificateFile, "localhost")
 if err != nil {
     fmt.Println(err)
@@ -56,13 +57,14 @@ tlsOption := grpc.WithTransportCredentials(creds)
 
 If the server is using a certificate signed by a valid certificate authority just use nil for the cert:
 ```go
-tlsOption := gprc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, "")
+tlsOption := grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
 ```
 
 ## Authentication
 
 The server may require client authentication via an auth token. This token must be provided with each request as part of the context metadata. 
-The key is `AuthenticationToken`. For example in Go:
+The key is `AuthenticationToken`; the server reads it in any case, and some clients, such as Python's,
+only accept the lowercase `authenticationtoken`. For example in Go:
 ```go
 md := metadata.Pairs("AuthenticationToken", "auth_token_here")
 ctx := metadata.NewOutgoingContext(context.Background(), md)
@@ -131,7 +133,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	conn, err := grpc.Dial("localhost:18332", grpc.WithTransportCredentials(creds))
+	conn, err := grpc.Dial("localhost:18335", grpc.WithTransportCredentials(creds))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -171,7 +173,7 @@ var client = new pb.bchrpc('bchd.greyh.at:8335', grpc.credentials.createSsl());
 
 
 // Get current state of the mempool
-client.GetMempoolInfo(pb.MempoolInfoRequest, function(error, resp) {
+client.GetMempoolInfo({}, function(error, resp) {
     if (error) {
         console.log("Error: " + error.code + ": " + error.message)
         console.log(error)
@@ -182,9 +184,11 @@ client.GetMempoolInfo(pb.MempoolInfoRequest, function(error, resp) {
     }
 });
 ```
-If connecting to a node using a self signed cert you will need to use:
+If connecting to a node using a self signed cert, pass the node's `rpc.cert` to `createSsl`:
 ```javascript
-export NODE_TLS_REJECT_UNAUTHORIZED=0
+var fs = require('fs');
+var creds = grpc.credentials.createSsl(fs.readFileSync('/path/to/bchd/rpc.cert'));
+var client = new pb.bchrpc('localhost:8335', creds);
 ```
 **More Examples**: [here](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client-usage-examples/nodejs-grpc)
 
@@ -192,10 +196,11 @@ export NODE_TLS_REJECT_UNAUTHORIZED=0
 
 ### Dependencies and generated stubs
 
-Install dependencies:
+Install dependencies (the checked-in stubs need grpcio 1.68.1 and protobuf 5.28.1 or newer;
+grpcio-tools is only needed to generate stubs):
 
 ```
-python -m pip install grpcio
+python -m pip install 'grpcio>=1.68.1' 'protobuf>=5.28.1'
 python -m pip install grpcio-tools
 ```
 
@@ -239,6 +244,9 @@ def run():
 
         for tx in resp.block.transaction_data:
             print(display_hash(tx.transaction_hash))
+
+if __name__ == '__main__':
+    run()
 ```
 
 ### GetTransaction and SLP token ids
@@ -251,7 +259,7 @@ Convert display hex with `bytes.fromhex(hex_string)[::-1]` or the helpers in
 
 ### TLS with a self-signed certificate
 
-Load `rpc.cert` from the bchd data directory when connecting to your own node:
+Load `rpc.cert` from BCHD's home directory (`~/.bchd` on Linux) when connecting to your own node:
 
 ```python
 with open("/path/to/rpc.cert", "rb") as f:

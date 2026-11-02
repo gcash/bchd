@@ -1,9 +1,12 @@
 // Example use of BCHD's gRPC bchrpc with nodejs. 
 
-// If connecting to a node using a self signed cert you will need to use:
-// export NODE_TLS_REJECT_UNAUTHORIZED=0
+// If connecting to a node using a self signed cert, set BCHD_RPC_CERT to
+// the node's rpc.cert so that the connection is verified against it.
 
-var PROTO_PATH = __dirname + '../../../../bchrpc.proto';
+var fs = require('fs');
+var path = require('path');
+
+var PROTO_PATH = path.join(__dirname, '../../../bchrpc.proto');
 
 var grpc = require('@grpc/grpc-js');
 var protoLoader = require('@grpc/proto-loader');
@@ -17,11 +20,14 @@ var packageDefinition = protoLoader.loadSync(
     });
 var pb = grpc.loadPackageDefinition(packageDefinition).pb;
 
-var client = new pb.bchrpc('bchd.greyh.at:8335', grpc.credentials.createSsl());
+var creds = process.env.BCHD_RPC_CERT
+    ? grpc.credentials.createSsl(fs.readFileSync(process.env.BCHD_RPC_CERT))
+    : grpc.credentials.createSsl();
+var client = new pb.bchrpc(process.env.BCHD_GRPC_TARGET || 'bchd.greyh.at:8335', creds);
 
 
 // Get current state of the mempool
-client.GetMempoolInfo(pb.MempoolInfoRequest, function(error, resp) {
+client.GetMempoolInfo({}, function(error, resp) {
     if (error) {
         console.log("Error: " + error.code + ": " + error.message)
         console.log(error)
@@ -55,8 +61,7 @@ for(var i=0; i< hex.length-1; i+=2){
     bytes.push(parseInt(hex.substr(i, 2), 16));
 }
 
-var getRawTransactionRequest = pb.GetRawTransactionRequest
-getRawTransactionRequest.hash = bytes
+var getRawTransactionRequest = {hash: Buffer.from(bytes)}
 
 client.GetRawTransaction(getRawTransactionRequest, function(error, resp) {
     if (error) {
@@ -71,8 +76,7 @@ client.GetRawTransaction(getRawTransactionRequest, function(error, resp) {
 
 
 // Get deserialized tx from tx hash
-var getTransactionRequest = pb.GetTransactionRequest
-getTransactionRequest.hash = bytes
+var getTransactionRequest = {hash: Buffer.from(bytes)}
 
 client.GetTransaction(getTransactionRequest, function(error, resp) {
     if (error) {
@@ -87,14 +91,14 @@ client.GetTransaction(getTransactionRequest, function(error, resp) {
 
 
 // Build TransactionFilter & setup live transaction stream
-var transactionFilter = pb.TransactionFilter
-transactionFilter.all_transactions = true
+var transactionFilter = {all_transactions: true}
 
-var subscribreTransactionsRequest = pb.SubscribeTransactionsRequest
-subscribreTransactionsRequest.include_mempool = true
-subscribreTransactionsRequest.subscribe = transactionFilter
+var subscribeTransactionsRequest = {
+    include_mempool: true,
+    subscribe: transactionFilter
+}
 
-var stream = client.SubscribeTransactions(subscribreTransactionsRequest)
+var stream = client.SubscribeTransactions(subscribeTransactionsRequest)
 
 stream.on('data', function(message) {
     var tx = message

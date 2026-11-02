@@ -45,8 +45,9 @@ or in a wallet is display-order hex.
 
 Address fields are **strings**, not bytes:
 
-- `GetAddressTransactionsRequest.address` — lowercase **cashaddr** (with or without the `bitcoincash:` /
-  `bchtest:` / `bchreg:` prefix; the `cashaddress:` prefix is also accepted per the `.proto` comments).
+- `GetAddressTransactionsRequest.address` — **cashaddr**, with or without the prefix of the node's
+  network (`bitcoincash:` on mainnet, `bchtest:` on the testnets, `bchreg:` on regtest); a prefix of
+  another network fails with `InvalidArgument`. Legacy and SLP-format addresses are also accepted.
 - Example: `qrj279sdafw2r9zkcw7uncdhks2s3lpzmvwlle5243` or `bitcoincash:qrj279sdafw2r9zkcw7uncdhks2s3lpzmvwlle5243`
 
 Do not hex-encode addresses into `bytes`.
@@ -55,7 +56,7 @@ Do not hex-encode addresses into `bytes`.
 
 | Field | Meaning |
 | ----- | ------- |
-| `SubmitTransactionRequest.serialized_tx` | Raw transaction serialization |
+| `SubmitTransactionRequest.transaction` | Raw transaction serialization |
 | `GetSlpParsedScriptRequest.slp_opreturn_script` | Raw OP_RETURN script bytes |
 | `CashToken.category_id` | 32-byte token category (little-endian hash) |
 | Mempool / block `transaction_hash` | Little-endian tx hash |
@@ -67,16 +68,17 @@ When in doubt, check the comment on the field in [bchrpc.proto](../bchrpc.proto)
 Tools that send **JSON** (grpcurl, the gRPC HTTP gateway) encode `bytes` fields as **standard base64**
 (not hex). You must supply **already little-endian** 32-byte values, then base64-encode them.
 
-Example: display tx id `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (64 `a` chars)
-is 32 bytes of `0xaa` in display order; little-endian bytes are still 32 × `0xaa`, and base64 is
-`qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq`.
+Example: the genesis block hash `000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f`
+(display order) reversed to little-endian bytes is, in base64,
+`b+KMCrbxs3LBpqJGrmP3T5Meg2XhWgicaNYZAAAAAAA=`. Without the reversal it would be
+`AAAAAAAZ1micCFrhZYMek0/3Y65GoqbBcrPxtgqM4m8=`, which the node does not find.
 
 See [cli_examples.md](./cli_examples.md) for grpcurl and curl commands against a local node or proxy.
 
 ## Index requirements
 
-Some RPCs return `NotFound` or empty data if the node was started without the right indexes. Common
-cases:
+RPCs that need an index fail with `Unavailable` (for example `txindex required`) if the node was
+started without it. `NotFound` means the index is on but has no entry. Common cases:
 
 | RPC | Needs |
 | --- | ----- |
