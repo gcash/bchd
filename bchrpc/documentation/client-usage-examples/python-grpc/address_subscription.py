@@ -59,7 +59,10 @@ def run():
 
         print("\nMonitor txs for address: " + address + "\n")
         for notification in stub.SubscribeTransactions(req):
-            tx = notification.unconfirmed_transaction.transaction
+            if notification.WhichOneof("transaction") == "confirmed_transaction":
+                tx = notification.confirmed_transaction
+            else:
+                tx = notification.unconfirmed_transaction.transaction
 
             incoming = 0
             outgoing = 0

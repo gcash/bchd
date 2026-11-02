@@ -51,3 +51,6 @@ bchrpc/regtest/node_modules
 *.key
 
 pkg/*
+
+# Python bytecode
+__pycache__/

@@ -33,13 +33,7 @@ def run(
     else:
         creds = grpc.ssl_channel_credentials()
 
-    options = []
-    if auth_token:
-        options.append(
-            ("grpc.default_authority", target.split(":")[0])
-        )
-
-    with grpc.secure_channel(target, creds, options=options) as channel:
+    with grpc.secure_channel(target, creds) as channel:
         stub = bchrpc.bchrpcStub(channel)
         req = pb.GetTransactionRequest()
         req.hash = hex_txid_to_grpc_hash(txid_hex)
@@ -47,7 +41,8 @@ def run(
 
         metadata = ()
         if auth_token:
-            metadata = (("AuthenticationToken", auth_token),)
+            # gRPC metadata keys must be lowercase in Python.
+            metadata = (("authenticationtoken", auth_token),)
 
         resp = stub.GetTransaction(req, metadata=metadata)
         tx = resp.transaction
@@ -58,7 +53,7 @@ def run(
 
 
 if __name__ == "__main__":
-    # Defaults: public mainnet gRPC (replace tx id with one your node has indexed).
+    # Defaults: local mainnet node (replace tx id with one your node has indexed).
     target = os.environ.get("BCHD_GRPC_TARGET", "127.0.0.1:8335")
     txid = os.environ.get(
         "BCHD_TXID_HEX",
