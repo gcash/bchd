@@ -143,7 +143,7 @@ A quick summary of test practices follows:
   - Function comments must always begin with the name of the function per
     [Effective Go](http://golang.org/doc/effective_go.html)
   - Function comments should be complete sentences since they allow a wide
-    variety of automated presentations such as [godoc.org](https://godoc.org)
+    variety of automated presentations such as [pkg.go.dev](https://pkg.go.dev)
   - The general rule of thumb is to look at it as if you were completely
     unfamiliar with the code and ask yourself, would this give me enough
     information to understand what this function does and how I'd probably want
@@ -353,7 +353,7 @@ Rejoice as you will now be listed as a [contributor](https://github.com/gcash/bc
 - [&nbsp;&nbsp;] Code has been formatted with `go fmt`
 - [&nbsp;&nbsp;] Running `go test` does not fail any tests
 - [&nbsp;&nbsp;] Running `go vet` does not report any issues
-- [&nbsp;&nbsp;] Running [golint](https://github.com/golang/lint) does not
+- [&nbsp;&nbsp;] Running [golangci-lint](https://golangci-lint.run) does not
   report any **new** issues that did not already exist
 
 <a name="Licensing" />

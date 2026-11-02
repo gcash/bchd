@@ -30,7 +30,7 @@ export BCHD_RPC_CERT=~/.bchd/rpc.cert
 The example code will show you how to:
 
 * Get the mempool state with a simple `GetMempoolInfo` request
-* Convert a tx hash string to bin and change the edianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
+* Convert a tx hash string to bin and change the endianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
 * Define a `TransactionFilter`
 * Setup a live transaction stream with `SubscribeTransactions`
 

@@ -10,15 +10,12 @@
 
 ### 1. What is bootstrap.dat?
 
-It is a flat, binary file containing bitcoin blockchain data starting from the
+It is a flat, binary file containing block chain data starting from the
 genesis block and continuing through a relatively recent block height depending
 on the last time it was updated.
 
-See [this](https://bitcointalk.org/index.php?topic=145386.0) thread on
-bitcointalk for more details.
-
 **NOTE:** Using bootstrap.dat is entirely optional. Bchd will download the
-block chain from other peers through the Bitcoin protocol with no extra
+block chain from other peers through the Bitcoin Cash protocol with no extra
 configuration needed.
 
 <a name="ProsCons" />
@@ -27,16 +24,11 @@ configuration needed.
 
 Pros:
 
-- Typically accelerates the initial process of bringing up a new node as it
-  downloads from public P2P nodes and generally is able to achieve faster
-  download speeds
 - It is particularly beneficial when bringing up multiple nodes as you only need
   to download the data once
 
 Cons:
 
-- Requires you to setup and configure a torrent client if you don't already have
-  one available
 - Requires roughly twice as much disk space since you'll need the flat file as
   well as the imported database
 
@@ -44,9 +36,11 @@ Cons:
 
 ### 3. Where do I get bootstrap.dat?
 
-The bootstrap.dat file is made available via a torrent. See
-[this](https://bitcointalk.org/index.php?topic=145386.0) thread on bitcointalk
-for the torrent download details.
+No bootstrap.dat that `addblock` can import is published. The torrent that
+was linked here is no longer kept up, and its file, like one made from Bitcoin
+Cash Node's block files with its `contrib/linearize` scripts, starts each block
+with `f9beb4d9`, while `addblock` expects BCHD's network magic (`e3e1f3e8` on
+mainnet).
 
 <a name="Trust" />
 
@@ -54,7 +48,7 @@ for the torrent download details.
 
 You don't need to trust the file as the `addblock` utility verifies every block
 using the same rules that are used when downloading the block chain normally
-through the Bitcoin protocol. Additionally, the chain rules contain hard-coded
+through the Bitcoin Cash protocol. Additionally, the chain rules contain hard-coded
 checkpoints for the known-good block chain at periodic intervals. This ensures
 that not only is it a valid chain, but it is the same chain that everyone else
 is using.
@@ -71,7 +65,7 @@ and we prefer to keep the daemon itself as lightweight as possible.
    access the database used by bchd and it will be locked if bchd is using it.
 2. Note the path to the downloaded bootstrap.dat file.
 3. Run the addblock utility with the `-i` argument pointing to the location of
-   boostrap.dat:<br /><br />
+   bootstrap.dat:<br /><br />
    **Windows:**
 
 ```bat
