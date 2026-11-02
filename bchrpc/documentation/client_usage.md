@@ -204,6 +204,8 @@ var client = new pb.bchrpc('localhost:8335', creds);
 ```
 **More Examples**: [here](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client-usage-examples/nodejs-grpc)
 
+Browsers reach BCHD over gRPC-Web, see [Web](./web.md).
+
 ## Python
 
 ### Dependencies and generated stubs
