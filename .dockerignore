@@ -5,6 +5,7 @@
 .travis.yml
 .vscode
 kube
+pkg
 Dockerfile
 CHANGELOG.md
 LICENSE
