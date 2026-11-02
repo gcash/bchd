@@ -44,6 +44,9 @@ Documentation for client authors:
 - [Hash, address, and token id encoding](documentation/data_encoding.md)
 - [grpcurl and curl examples](documentation/cli_examples.md)
 - [Server configuration](documentation/server_configuration.md)
+- [Serving the API through NGINX](documentation/nginx.md)
+- [Browsers and gRPC-Web](documentation/web.md)
+- [Operation of a wallet](documentation/wallet_operation.md)
 
 ## License
 

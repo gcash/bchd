@@ -9,6 +9,7 @@
       2. [Finalization and Deep Reorganizations](#Finalization)
    3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
    4. [Mining](#Mining)
+   5. [Kubernetes](#Kubernetes)
 3. [Help](#Help)
    1. [Startup](#Startup)
       1. [Using bootstrap.dat](#BootstrapDat)
@@ -18,7 +19,9 @@
 4. [Developer Resources](#DeveloperResources)
    1. [Code Contribution Guidelines](#ContributionGuidelines)
    2. [JSON-RPC Reference](#JSONRPCReference)
-   3. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
+   3. [gRPC API Reference](#GRPCReference)
+   4. [Changelog](#Changelog)
+   5. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
 
 <a name="About" />
 
@@ -224,6 +227,13 @@ certificate into the default system Certificate Authority list.
 
 `$ cgminer -o https://127.0.0.1:8334 -u rpcuser -p rpcpassword`
 
+<a name="Kubernetes" />
+
+**2.5 Kubernetes**
+
+The [kube](https://github.com/gcash/bchd/tree/master/kube) folder has the configs and a guide
+for running BCHD on Google Kubernetes Engine.
+
 <a name="Help" />
 
 ### 3. Help
@@ -308,6 +318,22 @@ information.
 
 - [JSON-RPC Reference](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md)
   - [RPC Examples](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md#ExampleCode)
+
+<a name="GRPCReference" />
+
+- [gRPC API Reference](https://github.com/gcash/bchd/tree/master/bchrpc/README.md)
+  - [Client Usage](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client_usage.md)
+  - [Client Examples](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client-usage-examples)
+  - [Hash, Address and Token ID Encoding](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/data_encoding.md)
+  - [grpcurl and curl Examples](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/cli_examples.md)
+  - [Server Configuration](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/server_configuration.md)
+  - [NGINX Reverse Proxy](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/nginx.md)
+  - [Web Browsers (gRPC-Web)](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/web.md)
+  - [Wallet Operation](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/wallet_operation.md)
+
+<a name="Changelog" />
+
+- [Changelog](https://github.com/gcash/bchd/tree/master/CHANGELOG.md)
 
 <a name="GoPackages" />
 
