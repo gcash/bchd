@@ -124,6 +124,8 @@ docker exec <container> bchctl <command>
 ## Documentation
 
 The documentation is a work-in-progress.  It is located in the [docs](https://github.com/gcash/bchd/tree/master/docs) folder.
+The gRPC API is documented in [bchrpc](https://github.com/gcash/bchd/tree/master/bchrpc), the changes of each release are
+listed in the [CHANGELOG](https://github.com/gcash/bchd/blob/master/CHANGELOG.md) and Kubernetes configs are in [kube](https://github.com/gcash/bchd/tree/master/kube).
 
 ## Contributing
 
