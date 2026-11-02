@@ -56,7 +56,7 @@ If you prefer to install from source do the following:
 - Run the following commands to obtain bchd, all dependencies, and install it:
 
 ```bash
-$ go get github.com/gcash/bchd
+$ go install github.com/gcash/bchd@v0.22.4
 ```
 
 This will download and compile `bchd` and put it in your path.
@@ -65,7 +65,7 @@ This will download and compile `bchd` and put it in your path.
 
 **2.2 Configuration**
 
-bchd has a number of [configuration](http://godoc.org/github.com/gcash/bchd)
+bchd has a number of [configuration](https://pkg.go.dev/github.com/gcash/bchd)
 options, which can be viewed by running: `$ bchd --help`.
 
 <a name="Checkpoints" />
@@ -203,8 +203,8 @@ The limited user cannot access this RPC.
 [Application Options]
 rpcuser=myuser
 rpcpass=SomeDecentp4ssw0rd
-miningaddr=12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX
-miningaddr=1M83ju3EChKYyysmM2FXtLNftbacagd8FR
+miningaddr=bitcoincash:qqgekzvw96vq5g57zwdfa5q6g609rrn0ycp33uc325
+miningaddr=bitcoincash:qrwt0dka0x6atfqup8xegzrjuclm975u8c9hu4p4tx
 ```
 
 **2. Add bchd's RPC TLS certificate to system Certificate Authority list.**
