@@ -229,8 +229,8 @@ func (b *BlockChain) calcNextBlockVersion(prevNode *blockNode) (int32, error) {
 // This function is safe for concurrent access.
 func (b *BlockChain) CalcNextBlockVersion() (int32, error) {
 	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
 	version, err := b.calcNextBlockVersion(b.bestChain.Tip())
-	b.chainLock.Unlock()
 	return version, err
 }
 

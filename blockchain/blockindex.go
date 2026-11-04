@@ -292,8 +292,8 @@ func newBlockIndex(db database.DB, chainParams *chaincfg.Params) *blockIndex {
 // This function is safe for concurrent access.
 func (bi *blockIndex) HaveBlock(hash *chainhash.Hash) bool {
 	bi.RLock()
+	defer bi.RUnlock()
 	_, hasBlock := bi.index[*hash]
-	bi.RUnlock()
 	return hasBlock
 }
 
@@ -303,8 +303,8 @@ func (bi *blockIndex) HaveBlock(hash *chainhash.Hash) bool {
 // This function is safe for concurrent access.
 func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
 	bi.RLock()
+	defer bi.RUnlock()
 	node := bi.index[*hash]
-	bi.RUnlock()
 	return node
 }
 
@@ -314,9 +314,9 @@ func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
 // This function is safe for concurrent access.
 func (bi *blockIndex) AddNode(node *blockNode) {
 	bi.Lock()
+	defer bi.Unlock()
 	bi.addNode(node)
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // addNode adds the provided node to the block index, but does not mark it as
@@ -332,8 +332,8 @@ func (bi *blockIndex) addNode(node *blockNode) {
 // This function is safe for concurrent access.
 func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 	bi.RLock()
+	defer bi.RUnlock()
 	status := node.status
-	bi.RUnlock()
 	return status
 }
 
@@ -344,9 +344,9 @@ func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 // This function is safe for concurrent access.
 func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
+	defer bi.Unlock()
 	node.status |= flags
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // UnsetStatusFlags flips the provided status flags on the block node to off,
@@ -355,17 +355,17 @@ func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 // This function is safe for concurrent access.
 func (bi *blockIndex) UnsetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
+	defer bi.Unlock()
 	node.status &^= flags
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // flushToDB writes all dirty block nodes to the database. If all writes
 // succeed, this clears the dirty set.
 func (bi *blockIndex) flushToDB() error {
 	bi.Lock()
+	defer bi.Unlock()
 	if len(bi.dirty) == 0 {
-		bi.Unlock()
 		return nil
 	}
 
@@ -384,6 +384,5 @@ func (bi *blockIndex) flushToDB() error {
 		bi.dirty = make(map[*blockNode]struct{})
 	}
 
-	bi.Unlock()
 	return err
 }

@@ -307,8 +307,8 @@ func (b *BlockChain) IsKnownOrphan(hash *chainhash.Hash) bool {
 	// Protect concurrent access.  Using a read lock only so multiple
 	// readers can query without blocking each other.
 	b.orphanLock.RLock()
+	defer b.orphanLock.RUnlock()
 	_, exists := b.orphans[*hash]
-	b.orphanLock.RUnlock()
 
 	return exists
 }
@@ -783,6 +783,13 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	return detachNodes, attachNodes
 }
 
+// commitUtxoView commits the view to the UTXO cache, under the state lock.
+func (b *BlockChain) commitUtxoView(view *UtxoViewpoint) error {
+	b.stateLock.Lock()
+	defer b.stateLock.Unlock()
+	return b.utxoCache.Commit(view)
+}
+
 // connectBlock handles connecting the passed node/block to the end of the main
 // (best) chain.
 //
@@ -896,9 +903,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
-	b.stateLock.Lock()
-	err = b.utxoCache.Commit(view)
-	b.stateLock.Unlock()
+	err = b.commitUtxoView(view)
 	if err != nil {
 		b.requestShutdown(err)
 		return err
@@ -1053,9 +1058,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
-	b.stateLock.Lock()
-	err = b.utxoCache.Commit(view)
-	b.stateLock.Unlock()
+	err = b.commitUtxoView(view)
 	if err != nil {
 		b.requestShutdown(err)
 		return err
@@ -1628,8 +1631,8 @@ func (b *BlockChain) HasMinimumChainWork() bool {
 // This function is safe for concurrent access.
 func (b *BlockChain) BestSnapshot() *BestState {
 	b.stateLock.RLock()
+	defer b.stateLock.RUnlock()
 	snapshot := b.stateSnapshot
-	b.stateLock.RUnlock()
 	return snapshot
 }
 
@@ -1689,9 +1692,9 @@ func (b *BlockChain) MainChainHasBlock(hash *chainhash.Hash) bool {
 // This function is safe for concurrent access.
 func (b *BlockChain) BlockLocatorFromHash(hash *chainhash.Hash) BlockLocator {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	node := b.index.LookupNode(hash)
 	locator := b.bestChain.blockLocator(node)
-	b.chainLock.RUnlock()
 	return locator
 }
 
@@ -1701,8 +1704,8 @@ func (b *BlockChain) BlockLocatorFromHash(hash *chainhash.Hash) BlockLocator {
 // This function is safe for concurrent access.
 func (b *BlockChain) LatestBlockLocator() (BlockLocator, error) {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	locator := b.bestChain.BlockLocator(nil)
-	b.chainLock.RUnlock()
 	return locator, nil
 }
 
@@ -1988,8 +1991,8 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateBlocks(locator BlockLocator, hashStop *chainhash.Hash, maxHashes uint32) []chainhash.Hash {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	hashes := b.locateBlocks(locator, hashStop, maxHashes)
-	b.chainLock.RUnlock()
 	return hashes
 }
 
@@ -2501,8 +2504,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateHeaders(locator BlockLocator, hashStop *chainhash.Hash) []wire.BlockHeader {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	headers := b.locateHeaders(locator, hashStop, wire.MaxBlockHeadersPerMsg)
-	b.chainLock.RUnlock()
 	return headers
 }
 
