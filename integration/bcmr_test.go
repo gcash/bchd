@@ -9,12 +9,18 @@ package integration
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/btcjson"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -22,7 +28,28 @@ import (
 	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
+
+// bcmrGrpcAddress returns a free local address for a gRPC listener, below the
+// ephemeral ports that outgoing connections take, as the harness's ports are.
+func bcmrGrpcAddress(t *testing.T) string {
+	t.Helper()
+	for port := 29000 + os.Getpid()%2000; port < 32000; port++ {
+		addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			continue
+		}
+		l.Close()
+		return addr
+	}
+	t.Fatal("no free port for gRPC")
+	return ""
+}
 
 // bcmrOpTrue is the locking bytecode of the outputs the BCMR test spends,
 // which need no signature.
@@ -114,12 +141,101 @@ func bcmrHex(t *testing.T, tx *wire.MsgTx) string {
 	return hex.EncodeToString(buf.Bytes())
 }
 
+// checkBcmrGrpc checks that GetBcmrIdentity gives the answer that
+// getbcmridentity gave with includeauthchain, for a token whose genesis is in
+// genesisBlock, and errors for an unknown authbase and a link of no authchain.
+func checkBcmrGrpc(t *testing.T, address string, category chainhash.Hash,
+	result *btcjson.GetBcmrIdentityResult, genesisBlock *bchutil.Block) {
+
+	t.Helper()
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(
+		credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
+	if err != nil {
+		t.Fatalf("connecting to gRPC: %v", err)
+	}
+	defer conn.Close()
+	client := pb.NewBchrpcClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := client.GetBcmrIdentity(ctx, &pb.GetBcmrIdentityRequest{
+		Authbase: category[:], IncludeAuthchain: true,
+	})
+	if err != nil {
+		t.Fatalf("GetBcmrIdentity: %v", err)
+	}
+	head, _ := chainhash.NewHashFromStr(result.Head.Txid)
+	if !bytes.Equal(resp.Head.Hash, head[:]) || resp.Head.Height != 0 ||
+		resp.Status != pb.GetBcmrIdentityResponse_ACTIVE {
+
+		t.Errorf("gRPC head %v, status %v", resp.Head, resp.Status)
+	}
+	pubLink, _ := chainhash.NewHashFromStr(result.Publication.Txid)
+	if resp.Publication == nil || !bytes.Equal(resp.Publication.Hash, pubLink[:]) ||
+		resp.PublicationCurrent != result.Publication.Current ||
+		hex.EncodeToString(resp.Publication.Publication.Hash) != result.Publication.Hash {
+
+		t.Errorf("gRPC publication %v", resp.Publication)
+	}
+	if !resp.HasGenesisSupply || strconv.FormatUint(resp.GenesisSupply, 10) != result.GenesisSupply {
+		t.Errorf("gRPC genesis supply %d (%v)", resp.GenesisSupply, resp.HasGenesisSupply)
+	}
+	if len(resp.Authchain) != len(*result.Authchain) || resp.More {
+		t.Fatalf("gRPC authchain of %d links, more %v", len(resp.Authchain), resp.More)
+	}
+	for i, link := range resp.Authchain {
+		key := strconv.Itoa(int(resp.FirstIndex) + i)
+		if hex.EncodeToString(link.Transaction) != (*result.Authchain)[key] {
+			t.Errorf("gRPC link %s differs", key)
+		}
+	}
+
+	// The proof is of the genesis, with the hashes and flags of the merkle
+	// block that getbcmridentity encodes.
+	raw, err := hex.DecodeString(result.Proof.MerkleBlock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var merkleBlock wire.MsgMerkleBlock
+	err = merkleBlock.BchDecode(bytes.NewReader(raw), wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof := resp.Proof
+	if proof == nil || strconv.Itoa(int(proof.Index)) != result.Proof.Index ||
+		!bytes.Equal(proof.Block.Hash, genesisBlock.Hash()[:]) ||
+		!bytes.Equal(proof.Flags, merkleBlock.Flags) || len(proof.Hashes) != len(merkleBlock.Hashes) {
+
+		t.Fatalf("gRPC proof %v", proof)
+	}
+	for i, hash := range merkleBlock.Hashes {
+		if !bytes.Equal(proof.Hashes[i], hash[:]) {
+			t.Errorf("gRPC proof hash %d differs", i)
+		}
+	}
+
+	unknown := chainhash.Hash{7}
+	_, err = client.GetBcmrIdentity(ctx, &pb.GetBcmrIdentityRequest{Authbase: unknown[:]})
+	if status.Code(err) != codes.NotFound {
+		t.Errorf("gRPC for an unknown authbase: %v", err)
+	}
+	_, err = client.GetBcmrIdentity(ctx, &pb.GetBcmrIdentityRequest{
+		Authbase: category[:], IncludeAuthchain: true, After: unknown[:],
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Errorf("gRPC after a link of no authchain: %v", err)
+	}
+}
+
 // TestBcmrIdentity checks getbcmridentity on a regtest node with
 // --bcmrindex: a token's identity from its genesis, a link in the mempool,
 // the authchain in pages with a proof that verifytxoutproof accepts, a block
-// invalidated and reconsidered, a burn, and the errors.
+// invalidated and reconsidered, a burn, and the errors.  It checks that
+// GetBcmrIdentity gives the same answers over gRPC.
 func TestBcmrIdentity(t *testing.T) {
-	h, err := rpctest.New(&chaincfg.RegressionNetParams, nil, []string{"--bcmrindex"})
+	grpcAddress := bcmrGrpcAddress(t)
+	h, err := rpctest.New(&chaincfg.RegressionNetParams, nil,
+		[]string{"--bcmrindex", "--grpclisten=" + grpcAddress})
 	if err != nil {
 		t.Fatalf("creating the harness: %v", err)
 	}
@@ -225,6 +341,9 @@ func TestBcmrIdentity(t *testing.T) {
 
 		t.Errorf("verifytxoutproof proves %v, %v", proven, err)
 	}
+
+	// The gRPC calls give the same answers, with hashes little-endian.
+	checkBcmrGrpc(t, grpcAddress, category, result, genesisBlock)
 
 	// The client's calls give the same answers.
 	byClient, err := h.Node.GetBcmrIdentity(&category, true, nil, 0)

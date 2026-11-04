@@ -135,6 +135,9 @@ type BcmrIdentityInfo struct {
 	// up to the authhead and a link is confirmed.
 	Proof      *wire.MsgMerkleBlock
 	ProofIndex uint32
+
+	// ProofBlock is the block of the proven link.
+	ProofBlock *bchutil.Block
 }
 
 // Identity returns what the index knows of the identity with the authbase in
@@ -685,7 +688,9 @@ func (q *bcmrQuerier) answerAuthchain(info *BcmrIdentityInfo) error {
 			return err
 		}
 	}
+	block.SetHeight(proofLink.Height)
 	info.Proof, _ = merkleblock.NewMerkleBlockWithTxnSet(block,
 		[]*chainhash.Hash{&proofLink.Hash})
+	info.ProofBlock = block
 	return nil
 }

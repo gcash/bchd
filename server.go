@@ -4673,6 +4673,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			AddrIndex:   s.addrIndex,
 			CfIndex:     s.cfIndex,
 			SlpIndex:    s.slpIndex,
+			BcmrIndex:   s.bcmrIndex,
 
 			MaxSubscriptions: cfg.GrpcMaxSubscriptions,
 			AuthRequired:     cfg.GrpcAuthToken != "",

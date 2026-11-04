@@ -440,6 +440,33 @@ func local_request_Bchrpc_GetMerkleProof_0(ctx context.Context, marshaler runtim
 	return msg, metadata, err
 }
 
+func request_Bchrpc_GetBcmrIdentity_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetBcmrIdentityRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.GetBcmrIdentity(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_Bchrpc_GetBcmrIdentity_0(ctx context.Context, marshaler runtime.Marshaler, server BchrpcServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetBcmrIdentityRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.GetBcmrIdentity(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 func request_Bchrpc_GetSlpTokenMetadata_0(ctx context.Context, marshaler runtime.Marshaler, client BchrpcClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq GetSlpTokenMetadataRequest
@@ -1101,6 +1128,26 @@ func RegisterBchrpcHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 		forward_Bchrpc_GetMerkleProof_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_Bchrpc_GetBcmrIdentity_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.Bchrpc/GetBcmrIdentity", runtime.WithHTTPPathPattern("/v1/GetBcmrIdentity"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_Bchrpc_GetBcmrIdentity_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Bchrpc_GetBcmrIdentity_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_Bchrpc_GetSlpTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -1604,6 +1651,23 @@ func RegisterBchrpcHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 		forward_Bchrpc_GetMerkleProof_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_Bchrpc_GetBcmrIdentity_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/pb.Bchrpc/GetBcmrIdentity", runtime.WithHTTPPathPattern("/v1/GetBcmrIdentity"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_Bchrpc_GetBcmrIdentity_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Bchrpc_GetBcmrIdentity_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_Bchrpc_GetSlpTokenMetadata_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -1844,6 +1908,7 @@ var (
 	pattern_Bchrpc_GetAddressUnspentOutputs_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetAddressUnspentOutputs"}, ""))
 	pattern_Bchrpc_GetUnspentOutput_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetUnspentOutput"}, ""))
 	pattern_Bchrpc_GetMerkleProof_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetMerkleProof"}, ""))
+	pattern_Bchrpc_GetBcmrIdentity_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetBcmrIdentity"}, ""))
 	pattern_Bchrpc_GetSlpTokenMetadata_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpTokenMetadata"}, ""))
 	pattern_Bchrpc_GetSlpParsedScript_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpParsedScript"}, ""))
 	pattern_Bchrpc_GetSlpTrustedValidation_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetSlpTrustedValidation"}, ""))
@@ -1875,6 +1940,7 @@ var (
 	forward_Bchrpc_GetAddressUnspentOutputs_0   = runtime.ForwardResponseMessage
 	forward_Bchrpc_GetUnspentOutput_0           = runtime.ForwardResponseMessage
 	forward_Bchrpc_GetMerkleProof_0             = runtime.ForwardResponseMessage
+	forward_Bchrpc_GetBcmrIdentity_0            = runtime.ForwardResponseMessage
 	forward_Bchrpc_GetSlpTokenMetadata_0        = runtime.ForwardResponseMessage
 	forward_Bchrpc_GetSlpParsedScript_0         = runtime.ForwardResponseMessage
 	forward_Bchrpc_GetSlpTrustedValidation_0    = runtime.ForwardResponseMessage

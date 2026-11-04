@@ -228,7 +228,8 @@ Application Options:
 	    --bcmrindex                Maintain an index of the authchain of every
 	                               token category and of its BCMR metadata
 	                               registry publications, which makes the
-	                               getbcmridentity RPC available
+	                               getbcmridentity and GetBcmrIdentity RPCs
+	                               available
 	    --dropbcmrindex            Deletes the BCMR index from the database on
 	                               start up and then exits.
 	    --relaynonstd              Relay non-standard transactions regardless of

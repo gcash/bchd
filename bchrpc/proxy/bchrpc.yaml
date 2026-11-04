@@ -63,6 +63,9 @@ http:
   - selector: pb.bchrpc.GetMerkleProof
     post: /v1/GetMerkleProof
     body: "*"
+  - selector: pb.bchrpc.GetBcmrIdentity
+    post: /v1/GetBcmrIdentity
+    body: "*"
   - selector: pb.bchrpc.SubmitTransaction
     post: /v1/SubmitTransaction
     body: "*"

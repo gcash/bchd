@@ -31,7 +31,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -65,7 +65,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -100,7 +100,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -111,6 +111,40 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/pbGetAddressUnspentOutputsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "bchrpc"
+        ]
+      }
+    },
+    "/v1/GetBcmrIdentity": {
+      "post": {
+        "summary": "GetBcmrIdentity returns what the BCMR index knows of a token's identity,\nas CHIP-BCMR defines it, with the links of its authchain in the mempool:\nthe authhead, the BCMR publication to read and the genesis supply, and on\nrequest the authchain itself, in pages, with a merkle proof of the\nnewest confirmed link.",
+        "description": "**Requires BcmrIndex**",
+        "operationId": "bchrpc_GetBcmrIdentity",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/pbGetBcmrIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googleRpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/pbGetBcmrIdentityRequest"
             }
           }
         ],
@@ -133,7 +167,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -167,7 +201,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -200,7 +234,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -234,7 +268,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -267,7 +301,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -301,7 +335,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -334,7 +368,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -367,7 +401,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -400,7 +434,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -433,7 +467,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -467,7 +501,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -501,7 +535,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -535,7 +569,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -569,7 +603,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -604,7 +638,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -637,7 +671,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -671,7 +705,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -705,7 +739,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -739,7 +773,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -774,7 +808,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -807,7 +841,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -840,7 +874,7 @@
                   "$ref": "#/definitions/pbBlockNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/rpcStatus"
+                  "$ref": "#/definitions/googleRpcStatus"
                 }
               },
               "title": "Stream result of pbBlockNotification"
@@ -849,7 +883,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -883,7 +917,7 @@
                   "$ref": "#/definitions/pbDoubleSpendProofNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/rpcStatus"
+                  "$ref": "#/definitions/googleRpcStatus"
                 }
               },
               "title": "Stream result of pbDoubleSpendProofNotification"
@@ -892,7 +926,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -926,7 +960,7 @@
                   "$ref": "#/definitions/pbTransactionNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/rpcStatus"
+                  "$ref": "#/definitions/googleRpcStatus"
                 }
               },
               "title": "Stream result of pbTransactionNotification"
@@ -935,7 +969,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -970,7 +1004,7 @@
                   "$ref": "#/definitions/pbTransactionNotification"
                 },
                 "error": {
-                  "$ref": "#/definitions/rpcStatus"
+                  "$ref": "#/definitions/googleRpcStatus"
                 }
               },
               "title": "Stream result of pbTransactionNotification"
@@ -979,7 +1013,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/rpcStatus"
+              "$ref": "#/definitions/googleRpcStatus"
             }
           }
         },
@@ -1044,6 +1078,89 @@
         }
       },
       "description": "The parts of the signature preimage of one of the two inputs."
+    },
+    "GetBcmrIdentityResponseLink": {
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The link's transaction hash, little-endian."
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The height of the link's block, or 0 while it is in the mempool."
+        },
+        "block_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The hash of the link's block, little-endian, or empty while it is\nin the mempool."
+        },
+        "publication": {
+          "$ref": "#/definitions/GetBcmrIdentityResponsePublication",
+          "description": "The link's BCMR publication output, if it has one."
+        },
+        "transaction": {
+          "type": "string",
+          "format": "byte",
+          "description": "The serialized transaction, for the links in authchain."
+        }
+      },
+      "description": "A link of the authchain."
+    },
+    "GetBcmrIdentityResponseProof": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The index of the link in the authchain."
+        },
+        "block": {
+          "$ref": "#/definitions/pbBlockInfo",
+          "description": "The link's block, and the proof's hashes and flags, as in\nGetMerkleProofResponse."
+        },
+        "hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        },
+        "flags": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "A merkle proof of a link of the authchain."
+    },
+    "GetBcmrIdentityResponsePublication": {
+      "type": "object",
+      "properties": {
+        "output": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The index of the output."
+        },
+        "malformed": {
+          "type": "boolean",
+          "description": "The output starts with the publication prefix but is malformed,\nand hash and uris are empty."
+        },
+        "hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The SHA-256 of the registry in the byte order it was pushed in,\nwhich SHA-256 tools print, unlike the little-endian hashes of\ntransactions and blocks."
+        },
+        "uris": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The URIs pushed after the hash, as they are."
+        }
+      },
+      "description": "A BCMR publication output, as CHIP-BCMR defines it."
     },
     "GetBlockchainInfoResponseBitcoinNet": {
       "type": "string",
@@ -1315,6 +1432,25 @@
         },
         "cash_token": {
           "$ref": "#/definitions/pbCashToken"
+        }
+      }
+    },
+    "googleRpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
         }
       }
     },
@@ -1640,6 +1776,97 @@
           }
         }
       }
+    },
+    "pbGetBcmrIdentityRequest": {
+      "type": "object",
+      "properties": {
+        "authbase": {
+          "type": "string",
+          "format": "byte",
+          "description": "The identity's authbase, which for a token is its category ID,\nlittle-endian."
+        },
+        "include_authchain": {
+          "type": "boolean",
+          "description": "Also return the authchain's transactions, from the authbase, or from\nthe link after the one in after."
+        },
+        "after": {
+          "type": "string",
+          "format": "byte",
+          "description": "A link of the authchain, little-endian, which the client knows the\nauthchain up to, to return the links after it. Only with\ninclude_authchain."
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The most links to return, up to 1000, which 0 also means. An answer\nalso holds no more after the link that takes its transactions past\n1 MB. Only with include_authchain."
+        }
+      }
+    },
+    "pbGetBcmrIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "authbase": {
+          "type": "string",
+          "format": "byte",
+          "description": "The identity's authbase, little-endian."
+        },
+        "status": {
+          "$ref": "#/definitions/pbGetBcmrIdentityResponseStatus"
+        },
+        "head": {
+          "$ref": "#/definitions/GetBcmrIdentityResponseLink",
+          "description": "The authhead, the newest link of the authchain, confirmed or in the\nmempool."
+        },
+        "publication": {
+          "$ref": "#/definitions/GetBcmrIdentityResponseLink",
+          "description": "The link with the publication to read: the authhead, when it has a\nwell-formed publication and publication_current is set, or else the\nnewest earlier link with one. Unset if no link has one."
+        },
+        "publication_current": {
+          "type": "boolean"
+        },
+        "genesis_supply": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The number of fungible tokens the token's genesis created, when\nhas_genesis_supply is set, for a token's identity."
+        },
+        "has_genesis_supply": {
+          "type": "boolean"
+        },
+        "identity_output": {
+          "$ref": "#/definitions/pbCashToken",
+          "description": "The CashTokens data of the authhead's identity output, output 0, as it\nis, if it carries a token."
+        },
+        "first_index": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The index of the first link in authchain, counted from the authbase\nas 0."
+        },
+        "authchain": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/GetBcmrIdentityResponseLink"
+          },
+          "description": "The links of the authchain, with include_authchain, in the order of\nCHIP-BCMR's authchain extension."
+        },
+        "more": {
+          "type": "boolean",
+          "description": "Later links didn't fit; ask again with after set to the last one."
+        },
+        "proof": {
+          "$ref": "#/definitions/GetBcmrIdentityResponseProof",
+          "description": "A merkle proof of the newest confirmed link, which proves the earlier\nlinks too, since each spends the one before. Set when the links\nreturned reach the authhead and a link is confirmed."
+        }
+      },
+      "description": "GetBcmrIdentityResponse is what the BCMR index knows of an identity.\n\nWARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'\nfor large amounts. For this reason, an annotation has been added for JS to\nreturn a string for the genesis_supply field instead of casting uint64 to the\nJS 'number' type. Other languages may require similar treatment."
+    },
+    "pbGetBcmrIdentityResponseStatus": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "BURNED"
+      ],
+      "default": "ACTIVE",
+      "description": " - ACTIVE: The authchain goes on.\n - BURNED: The authhead spent the identity output to a data-carrier output,\nwhich ends the authchain."
     },
     "pbGetBlockFilterRequest": {
       "type": "object",
@@ -2831,25 +3058,6 @@
         }
       },
       "additionalProperties": true
-    },
-    "rpcStatus": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "message": {
-          "type": "string"
-        },
-        "details": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/protobufAny"
-          }
-        }
-      }
     }
   }
 }
