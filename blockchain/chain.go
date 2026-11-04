@@ -2054,18 +2054,23 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
-	detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
 
-	err := b.reorganizeChain(detachNodes, attachNodes)
-	if err != nil {
-		return err
-	}
+	// A block off the main chain takes nothing with it: the blocks that
+	// build on it are refused for their invalid ancestor.
+	if b.bestChain.Contains(node) {
+		detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
 
-	for i, e := 0, detachNodes.Front(); e != nil; i, e = i+1, e.Next() {
-		n := e.Value.(*blockNode)
+		err := b.reorganizeChain(detachNodes, attachNodes)
+		if err != nil {
+			return err
+		}
 
-		b.index.SetStatusFlags(n, statusInvalidAncestor)
-		b.index.UnsetStatusFlags(n, statusValid)
+		for i, e := 0, detachNodes.Front(); e != nil; i, e = i+1, e.Next() {
+			n := e.Value.(*blockNode)
+
+			b.index.SetStatusFlags(n, statusInvalidAncestor)
+			b.index.UnsetStatusFlags(n, statusValid)
+		}
 	}
 
 	if writeErr := b.index.flushToDB(); writeErr != nil {

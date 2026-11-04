@@ -578,3 +578,62 @@ func TestInvalidateFirstBlock(t *testing.T) {
 		t.Fatalf("tip %v, want the new block", tip.hash)
 	}
 }
+
+// TestInvalidateSideBlock ensures that invalidating a block of a side chain
+// leaves the main chain alone, that a chain that builds on the block can't
+// take over, and that the block can be reconsidered.
+func TestInvalidateSideBlock(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+
+	// A side chain from block 2 with less work than the main chain.
+	prev := blocks[2]
+	var side []*bchutil.Block
+	for h := int32(3); h <= 4; h++ {
+		block := procTestBlock(t, prev.MsgBlock(), h-1,
+			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatalf("side chain block %d: %v", h, err)
+		}
+		side = append(side, block)
+		prev = block
+	}
+
+	if err := chain.InvalidateBlock(side[0].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	checkMain := func() {
+		t.Helper()
+		if tip := chain.bestChain.Tip(); tip.hash != *blocks[5].Hash() {
+			t.Fatalf("tip %v, want block 5", tip.hash)
+		}
+		for h, block := range blocks {
+			node := chain.index.LookupNode(block.Hash())
+			if chain.index.NodeStatus(node).KnownInvalid() {
+				t.Errorf("main chain block %d is invalid", h)
+			}
+		}
+	}
+	checkMain()
+	node := chain.index.LookupNode(side[0].Hash())
+	if !chain.index.NodeStatus(node).KnownInvalid() {
+		t.Error("the side block is not invalid")
+	}
+
+	// More work on the invalid side chain doesn't make it the main chain.
+	for h := int32(5); h <= 6; h++ {
+		block := procTestBlock(t, prev.MsgBlock(), h-1,
+			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+		_, _, _ = chain.ProcessBlock(block, BFNone)
+		prev = block
+	}
+	checkMain()
+
+	if err := chain.ReconsiderBlock(side[0].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	node = chain.index.LookupNode(side[0].Hash())
+	if chain.index.NodeStatus(node).KnownInvalid() {
+		t.Error("the side block is still invalid after it was reconsidered")
+	}
+}
