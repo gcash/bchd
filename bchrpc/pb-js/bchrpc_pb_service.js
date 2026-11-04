@@ -145,6 +145,15 @@ bchrpc.GetMerkleProof = {
   responseType: bchrpc_pb.GetMerkleProofResponse
 };
 
+bchrpc.GetBcmrIdentity = {
+  methodName: "GetBcmrIdentity",
+  service: bchrpc,
+  requestStream: false,
+  responseStream: false,
+  requestType: bchrpc_pb.GetBcmrIdentityRequest,
+  responseType: bchrpc_pb.GetBcmrIdentityResponse
+};
+
 bchrpc.GetSlpTokenMetadata = {
   methodName: "GetSlpTokenMetadata",
   service: bchrpc,
@@ -708,6 +717,37 @@ bchrpcClient.prototype.getMerkleProof = function getMerkleProof(requestMessage, 
     callback = arguments[1];
   }
   var client = grpc.unary(bchrpc.GetMerkleProof, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
+
+bchrpcClient.prototype.getBcmrIdentity = function getBcmrIdentity(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(bchrpc.GetBcmrIdentity, {
     request: requestMessage,
     host: this.serviceHost,
     metadata: metadata,

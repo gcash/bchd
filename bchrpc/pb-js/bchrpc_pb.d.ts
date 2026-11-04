@@ -3013,6 +3013,245 @@ export namespace SlpRequiredBurn {
   }
 }
 
+export class GetBcmrIdentityRequest extends jspb.Message {
+  getAuthbase(): Uint8Array | string;
+  getAuthbase_asU8(): Uint8Array;
+  getAuthbase_asB64(): string;
+  setAuthbase(value: Uint8Array | string): void;
+
+  getIncludeAuthchain(): boolean;
+  setIncludeAuthchain(value: boolean): void;
+
+  getAfter(): Uint8Array | string;
+  getAfter_asU8(): Uint8Array;
+  getAfter_asB64(): string;
+  setAfter(value: Uint8Array | string): void;
+
+  getLimit(): number;
+  setLimit(value: number): void;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): GetBcmrIdentityRequest.AsObject;
+  static toObject(includeInstance: boolean, msg: GetBcmrIdentityRequest): GetBcmrIdentityRequest.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: GetBcmrIdentityRequest, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): GetBcmrIdentityRequest;
+  static deserializeBinaryFromReader(message: GetBcmrIdentityRequest, reader: jspb.BinaryReader): GetBcmrIdentityRequest;
+}
+
+export namespace GetBcmrIdentityRequest {
+  export type AsObject = {
+    authbase: Uint8Array | string,
+    includeAuthchain: boolean,
+    after: Uint8Array | string,
+    limit: number,
+  }
+}
+
+export class GetBcmrIdentityResponse extends jspb.Message {
+  getAuthbase(): Uint8Array | string;
+  getAuthbase_asU8(): Uint8Array;
+  getAuthbase_asB64(): string;
+  setAuthbase(value: Uint8Array | string): void;
+
+  getStatus(): GetBcmrIdentityResponse.StatusMap[keyof GetBcmrIdentityResponse.StatusMap];
+  setStatus(value: GetBcmrIdentityResponse.StatusMap[keyof GetBcmrIdentityResponse.StatusMap]): void;
+
+  hasHead(): boolean;
+  clearHead(): void;
+  getHead(): GetBcmrIdentityResponse.Link | undefined;
+  setHead(value?: GetBcmrIdentityResponse.Link): void;
+
+  hasPublication(): boolean;
+  clearPublication(): void;
+  getPublication(): GetBcmrIdentityResponse.Link | undefined;
+  setPublication(value?: GetBcmrIdentityResponse.Link): void;
+
+  getPublicationCurrent(): boolean;
+  setPublicationCurrent(value: boolean): void;
+
+  getGenesisSupply(): string;
+  setGenesisSupply(value: string): void;
+
+  getHasGenesisSupply(): boolean;
+  setHasGenesisSupply(value: boolean): void;
+
+  hasIdentityOutput(): boolean;
+  clearIdentityOutput(): void;
+  getIdentityOutput(): CashToken | undefined;
+  setIdentityOutput(value?: CashToken): void;
+
+  getFirstIndex(): number;
+  setFirstIndex(value: number): void;
+
+  clearAuthchainList(): void;
+  getAuthchainList(): Array<GetBcmrIdentityResponse.Link>;
+  setAuthchainList(value: Array<GetBcmrIdentityResponse.Link>): void;
+  addAuthchain(value?: GetBcmrIdentityResponse.Link, index?: number): GetBcmrIdentityResponse.Link;
+
+  getMore(): boolean;
+  setMore(value: boolean): void;
+
+  hasProof(): boolean;
+  clearProof(): void;
+  getProof(): GetBcmrIdentityResponse.Proof | undefined;
+  setProof(value?: GetBcmrIdentityResponse.Proof): void;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): GetBcmrIdentityResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: GetBcmrIdentityResponse): GetBcmrIdentityResponse.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: GetBcmrIdentityResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): GetBcmrIdentityResponse;
+  static deserializeBinaryFromReader(message: GetBcmrIdentityResponse, reader: jspb.BinaryReader): GetBcmrIdentityResponse;
+}
+
+export namespace GetBcmrIdentityResponse {
+  export type AsObject = {
+    authbase: Uint8Array | string,
+    status: GetBcmrIdentityResponse.StatusMap[keyof GetBcmrIdentityResponse.StatusMap],
+    head?: GetBcmrIdentityResponse.Link.AsObject,
+    publication?: GetBcmrIdentityResponse.Link.AsObject,
+    publicationCurrent: boolean,
+    genesisSupply: string,
+    hasGenesisSupply: boolean,
+    identityOutput?: CashToken.AsObject,
+    firstIndex: number,
+    authchainList: Array<GetBcmrIdentityResponse.Link.AsObject>,
+    more: boolean,
+    proof?: GetBcmrIdentityResponse.Proof.AsObject,
+  }
+
+  export class Publication extends jspb.Message {
+    getOutput(): number;
+    setOutput(value: number): void;
+
+    getMalformed(): boolean;
+    setMalformed(value: boolean): void;
+
+    getHash(): Uint8Array | string;
+    getHash_asU8(): Uint8Array;
+    getHash_asB64(): string;
+    setHash(value: Uint8Array | string): void;
+
+    clearUrisList(): void;
+    getUrisList(): Array<string>;
+    setUrisList(value: Array<string>): void;
+    addUris(value: string, index?: number): string;
+
+    serializeBinary(): Uint8Array;
+    toObject(includeInstance?: boolean): Publication.AsObject;
+    static toObject(includeInstance: boolean, msg: Publication): Publication.AsObject;
+    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+    static serializeBinaryToWriter(message: Publication, writer: jspb.BinaryWriter): void;
+    static deserializeBinary(bytes: Uint8Array): Publication;
+    static deserializeBinaryFromReader(message: Publication, reader: jspb.BinaryReader): Publication;
+  }
+
+  export namespace Publication {
+    export type AsObject = {
+      output: number,
+      malformed: boolean,
+      hash: Uint8Array | string,
+      urisList: Array<string>,
+    }
+  }
+
+  export class Link extends jspb.Message {
+    getHash(): Uint8Array | string;
+    getHash_asU8(): Uint8Array;
+    getHash_asB64(): string;
+    setHash(value: Uint8Array | string): void;
+
+    getHeight(): number;
+    setHeight(value: number): void;
+
+    getBlockHash(): Uint8Array | string;
+    getBlockHash_asU8(): Uint8Array;
+    getBlockHash_asB64(): string;
+    setBlockHash(value: Uint8Array | string): void;
+
+    hasPublication(): boolean;
+    clearPublication(): void;
+    getPublication(): GetBcmrIdentityResponse.Publication | undefined;
+    setPublication(value?: GetBcmrIdentityResponse.Publication): void;
+
+    getTransaction(): Uint8Array | string;
+    getTransaction_asU8(): Uint8Array;
+    getTransaction_asB64(): string;
+    setTransaction(value: Uint8Array | string): void;
+
+    serializeBinary(): Uint8Array;
+    toObject(includeInstance?: boolean): Link.AsObject;
+    static toObject(includeInstance: boolean, msg: Link): Link.AsObject;
+    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+    static serializeBinaryToWriter(message: Link, writer: jspb.BinaryWriter): void;
+    static deserializeBinary(bytes: Uint8Array): Link;
+    static deserializeBinaryFromReader(message: Link, reader: jspb.BinaryReader): Link;
+  }
+
+  export namespace Link {
+    export type AsObject = {
+      hash: Uint8Array | string,
+      height: number,
+      blockHash: Uint8Array | string,
+      publication?: GetBcmrIdentityResponse.Publication.AsObject,
+      transaction: Uint8Array | string,
+    }
+  }
+
+  export class Proof extends jspb.Message {
+    getIndex(): number;
+    setIndex(value: number): void;
+
+    hasBlock(): boolean;
+    clearBlock(): void;
+    getBlock(): BlockInfo | undefined;
+    setBlock(value?: BlockInfo): void;
+
+    clearHashesList(): void;
+    getHashesList(): Array<Uint8Array | string>;
+    getHashesList_asU8(): Array<Uint8Array>;
+    getHashesList_asB64(): Array<string>;
+    setHashesList(value: Array<Uint8Array | string>): void;
+    addHashes(value: Uint8Array | string, index?: number): Uint8Array | string;
+
+    getFlags(): Uint8Array | string;
+    getFlags_asU8(): Uint8Array;
+    getFlags_asB64(): string;
+    setFlags(value: Uint8Array | string): void;
+
+    serializeBinary(): Uint8Array;
+    toObject(includeInstance?: boolean): Proof.AsObject;
+    static toObject(includeInstance: boolean, msg: Proof): Proof.AsObject;
+    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+    static serializeBinaryToWriter(message: Proof, writer: jspb.BinaryWriter): void;
+    static deserializeBinary(bytes: Uint8Array): Proof;
+    static deserializeBinaryFromReader(message: Proof, reader: jspb.BinaryReader): Proof;
+  }
+
+  export namespace Proof {
+    export type AsObject = {
+      index: number,
+      block?: BlockInfo.AsObject,
+      hashesList: Array<Uint8Array | string>,
+      flags: Uint8Array | string,
+    }
+  }
+
+  export interface StatusMap {
+    ACTIVE: 0;
+    BURNED: 1;
+  }
+
+  export const Status: StatusMap;
+}
+
 export interface SlpTokenTypeMap {
   VERSION_NOT_SET: 0;
   V1_FUNGIBLE: 1;

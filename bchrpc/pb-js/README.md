@@ -16,3 +16,7 @@ protoc \
 ```
 > yarn install
 ```
+
+`protoc` no longer includes the JavaScript generator, so `protoc-gen-js` from
+[protobuf-javascript](https://github.com/protocolbuffers/protobuf-javascript/releases)
+has to be on the `PATH`.  The provided libs are generated with version 4.0.3.
