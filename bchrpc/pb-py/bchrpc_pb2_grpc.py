@@ -112,6 +112,11 @@ class bchrpcStub(object):
                 request_serializer=bchrpc__pb2.GetMerkleProofRequest.SerializeToString,
                 response_deserializer=bchrpc__pb2.GetMerkleProofResponse.FromString,
                 _registered_method=True)
+        self.GetBcmrIdentity = channel.unary_unary(
+                '/pb.bchrpc/GetBcmrIdentity',
+                request_serializer=bchrpc__pb2.GetBcmrIdentityRequest.SerializeToString,
+                response_deserializer=bchrpc__pb2.GetBcmrIdentityResponse.FromString,
+                _registered_method=True)
         self.GetSlpTokenMetadata = channel.unary_unary(
                 '/pb.bchrpc/GetSlpTokenMetadata',
                 request_serializer=bchrpc__pb2.GetSlpTokenMetadataRequest.SerializeToString,
@@ -321,6 +326,25 @@ class bchrpcServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetBcmrIdentity(self, request, context):
+        """GetBcmrIdentity returns what the BCMR index knows of an identity, as
+        CHIP-BCMR defines it, a token's or that of any transaction of an
+        authchain the index tracks, with the links of its authchain in the
+        mempool: the authhead, the BCMR publication to read and a token's
+        genesis supply, and on request the authchain itself, in pages, with a
+        merkle proof of the newest confirmed link. The index tracks every
+        token's authchain and, from where it begins, every authchain that holds
+        a publication, unless more than 100,000 transactions it doesn't
+        otherwise track are behind the publication; it finds the transactions
+        behind a publication in the background, once the publication's block is
+        connected.
+
+        **Requires BcmrIndex**
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetSlpTokenMetadata(self, request, context):
         """GetSlpTokenMetadata return slp token metadata for one or more tokens.
 
@@ -520,6 +544,11 @@ def add_bchrpcServicer_to_server(servicer, server):
                     servicer.GetMerkleProof,
                     request_deserializer=bchrpc__pb2.GetMerkleProofRequest.FromString,
                     response_serializer=bchrpc__pb2.GetMerkleProofResponse.SerializeToString,
+            ),
+            'GetBcmrIdentity': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBcmrIdentity,
+                    request_deserializer=bchrpc__pb2.GetBcmrIdentityRequest.FromString,
+                    response_serializer=bchrpc__pb2.GetBcmrIdentityResponse.SerializeToString,
             ),
             'GetSlpTokenMetadata': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSlpTokenMetadata,
@@ -995,6 +1024,33 @@ class bchrpc(object):
             '/pb.bchrpc/GetMerkleProof',
             bchrpc__pb2.GetMerkleProofRequest.SerializeToString,
             bchrpc__pb2.GetMerkleProofResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetBcmrIdentity(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pb.bchrpc/GetBcmrIdentity',
+            bchrpc__pb2.GetBcmrIdentityRequest.SerializeToString,
+            bchrpc__pb2.GetBcmrIdentityResponse.FromString,
             options,
             channel_credentials,
             insecure,
