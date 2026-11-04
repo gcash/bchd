@@ -672,3 +672,43 @@ func TestAddHeaderSnapshot(t *testing.T) {
 		t.Fatalf("height %d, want 25", height)
 	}
 }
+
+// TestReconsiderKeepsNode ensures that a reconsidered block keeps its node, so
+// that a block built on it that wasn't reconsidered, as a side chain's, still
+// has it as its parent, and the main chain and the block index agree once
+// that side chain takes over.
+func TestReconsiderKeepsNode(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+
+	// A side chain from block 4.
+	side := procTestBlock(t, blocks[4].MsgBlock(), 4,
+		CalcBlockSubsidy(5, params)-1, params.PowLimitBits, nil)
+	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := chain.InvalidateBlock(blocks[4].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if err := chain.ReconsiderBlock(blocks[4].Hash()); err != nil {
+		t.Fatal(err)
+	}
+
+	// The side chain takes over.
+	next := procTestBlock(t, side.MsgBlock(), 5,
+		CalcBlockSubsidy(6, params)-1, params.PowLimitBits, nil)
+	if _, _, err := chain.ProcessBlock(next, BFNone); err != nil {
+		t.Fatal(err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *next.Hash() {
+		t.Fatalf("tip %v, want the side chain's", tip.hash)
+	}
+	node := chain.index.LookupNode(blocks[4].Hash())
+	if !chain.bestChain.Contains(node) {
+		t.Error("the main chain has another node for block 4 than the index")
+	}
+	if chain.index.NodeStatus(node).KnownInvalid() {
+		t.Error("block 4 is invalid")
+	}
+}

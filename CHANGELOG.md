@@ -33,6 +33,7 @@ This release keeps the websocket notifications from missing a transaction that s
 - A `rescan` that reached the tip as the node shut down no longer can hang the shutdown. Requests to the websocket notification manager return once it has shut down, and the sync manager stops while it is paused.
 - A panic in an RPC handler, which the RPC server recovers from, no longer can leave the block index, the best chain, the UTXO cache, the mempool or the chain lock held, which would freeze the node.
 - `reconsiderblock` and other calls that change the chain no longer can crash the node as the sync peer changes, and fast sync's headers no longer race with the readers of the best state.
+- `reconsiderblock` keeps the block's entry in the block index rather than replacing it, so that a side chain built on the block, which the call doesn't touch, can't later leave the main chain and the index with different entries for it.
 
 ### Other
 
