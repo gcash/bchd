@@ -180,6 +180,57 @@ var helpDescsEnUS = map[string]string{
 	"getaddednodeinfo--condition1": "dns=true",
 	"getaddednodeinfo--result0":    "List of added peers",
 
+	// GetBcmrIdentityCmd help.
+	"getbcmridentity--synopsis": "Returns what the BCMR index knows of a token's identity, as CHIP-BCMR defines it, " +
+		"with the links of its authchain in the mempool: the authhead, the BCMR publication to read and the genesis supply, " +
+		"and on request the authchain itself with a merkle proof. Requires --bcmrindex.",
+	"getbcmridentity-authbase":         "The identity's authbase, which for a token is its category ID",
+	"getbcmridentity-includeauthchain": "Also return the authchain's transactions, from the authbase, or from the link after the one given in after",
+	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it",
+	"getbcmridentity-limit":            "The most links to return, up to 1000; an answer also holds no more after the link that takes its transactions past 1 MB",
+
+	// GetBcmrIdentityResult help.
+	"getbcmridentityresult-authbase":             "The identity's authbase",
+	"getbcmridentityresult-status":               "active, or burned if the authhead spent the identity output to a data-carrier output",
+	"getbcmridentityresult-head":                 "The authhead, the newest link of the authchain, confirmed or in the mempool",
+	"getbcmridentityresult-publication":          "The BCMR publication to read: the authhead's if it has a well-formed one, or else the newest earlier link's (only if a link has one)",
+	"getbcmridentityresult-genesissupply":        "The number of fungible tokens the token's genesis created, as a decimal string",
+	"getbcmridentityresult-identityoutput":       "The CashTokens data of the authhead's identity output, output 0, as it is (only if it carries a token)",
+	"getbcmridentityresult-authchain":            "The authchain's transactions, keyed by their index from the authbase as 0, in the shape of CHIP-BCMR's authchain extension (only with includeauthchain)",
+	"getbcmridentityresult-authchain--key":       "index",
+	"getbcmridentityresult-authchain--value":     "transaction",
+	"getbcmridentityresult-authchain--desc":      "The link's hex-encoded transaction",
+	"getbcmridentityresult-authchaininfo":        "The height, block and publication of each link in authchain, keyed the same way (only with includeauthchain)",
+	"getbcmridentityresult-authchaininfo--key":   "index",
+	"getbcmridentityresult-authchaininfo--value": "link",
+	"getbcmridentityresult-authchaininfo--desc":  "The link",
+	"getbcmridentityresult-more":                 "Whether later links didn't fit in the answer, to ask for with after set to the last one (only with includeauthchain)",
+	"getbcmridentityresult-proof":                "A merkle proof of the newest confirmed link, which proves the earlier links too, since each spends the one before (only when the answer's links reach the authhead and a link is confirmed)",
+
+	// BcmrLinkResult help.
+	"bcmrlinkresult-txid":        "The link's txid",
+	"bcmrlinkresult-height":      "The height of the link's block, or 0 while it is in the mempool",
+	"bcmrlinkresult-blockhash":   "The hash of the link's block (only if it is confirmed)",
+	"bcmrlinkresult-publication": "The link's BCMR publication output (only if it has one)",
+
+	// BcmrPublicationOutputResult help.
+	"bcmrpublicationoutputresult-output":    "The index of the publication output",
+	"bcmrpublicationoutputresult-malformed": "Whether the output starts with the publication prefix but is malformed, and has no hash or URIs here",
+	"bcmrpublicationoutputresult-hash":      "The SHA-256 of the registry, hex-encoded in the byte order it was pushed in, which SHA-256 tools print",
+	"bcmrpublicationoutputresult-uris":      "The URIs pushed after the hash, as they are, which may be none (only if well-formed)",
+
+	// BcmrPublicationResult help.
+	"bcmrpublicationresult-txid":    "The txid of the link with the publication",
+	"bcmrpublicationresult-height":  "The height of its block, or 0 while it is in the mempool",
+	"bcmrpublicationresult-output":  "The index of the publication output",
+	"bcmrpublicationresult-hash":    "The SHA-256 of the registry, hex-encoded in the byte order it was pushed in, which SHA-256 tools print",
+	"bcmrpublicationresult-uris":    "The URIs pushed after the hash, as they are",
+	"bcmrpublicationresult-current": "Whether it is the authhead's publication; if not, it is the newest earlier one, which may be out of date",
+
+	// BcmrProofResult help.
+	"bcmrproofresult-index":       "The index of the proven link in the authchain",
+	"bcmrproofresult-merkleblock": "The proof, hex-encoded as gettxoutproof encodes one, which verifytxoutproof checks",
+
 	// GetBestBlockResult help.
 	"getbestblockresult-hash":   "Hex-encoded bytes of the best block hash",
 	"getbestblockresult-height": "Height of the best block",
@@ -881,6 +932,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"finalizeblock":         nil,
 	"generate":              {(*[]string)(nil)},
 	"getaddednodeinfo":      {(*[]string)(nil), (*[]btcjson.GetAddedNodeInfoResult)(nil)},
+	"getbcmridentity":       {(*btcjson.GetBcmrIdentityResult)(nil)},
 	"getbestblock":          {(*btcjson.GetBestBlockResult)(nil)},
 	"getbestblockhash":      {(*string)(nil)},
 	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil), (*btcjson.GetBlockVerboseTxResult)(nil)},

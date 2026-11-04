@@ -175,6 +175,37 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "getbcmridentity",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getbcmridentity", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBcmrIdentityCmd("123", nil, nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getbcmridentity","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.GetBcmrIdentityCmd{
+				Authbase:         "123",
+				IncludeAuthchain: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "getbcmridentity optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getbcmridentity", "123", true, "456", 10)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBcmrIdentityCmd("123", btcjson.Bool(true),
+					btcjson.String("456"), btcjson.Int(10))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getbcmridentity","params":["123",true,"456",10],"id":1}`,
+			unmarshalled: &btcjson.GetBcmrIdentityCmd{
+				Authbase:         "123",
+				IncludeAuthchain: btcjson.Bool(true),
+				After:            btcjson.String("456"),
+				Limit:            btcjson.Int(10),
+			},
+		},
+		{
 			name: "getbestblockhash",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getbestblockhash")

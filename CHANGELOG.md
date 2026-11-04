@@ -6,7 +6,7 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 ## Unreleased
 
-This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, sends a block's transactions parents first, lets mobile wallets ask for the mempool each time they start or wake, which costs the node a filter build only when the mempool changed, keeps `invalidateblock`, `reconsiderblock` and `finalizeblock` from deadlocking the node, and adds an index of the authchain of every token category, for BCMR metadata registries.
+This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, sends a block's transactions parents first, lets mobile wallets ask for the mempool each time they start or wake, which costs the node a filter build only when the mempool changed, keeps `invalidateblock`, `reconsiderblock` and `finalizeblock` from deadlocking the node, and adds `getbcmridentity`, which answers for a token's BCMR identity from an index of the authchain of every token category.
 
 ### Performance
 
@@ -22,6 +22,7 @@ This release keeps the websocket notifications from missing a transaction that s
 
 ### RPC & gRPC
 
+- `getbcmridentity`, with `--bcmrindex`, returns what the index knows of a token's identity, with the links of its authchain in the mempool: the authhead, the BCMR publication to read (the authhead's if it has a well-formed one, else the newest earlier one, marked not current), the number of fungible tokens the genesis created, and the CashTokens data of the authhead's identity output. With `includeauthchain` it also returns the authchain's transactions, in the shape of CHIP-BCMR's authchain extension, in pages that `after` continues, and a merkle proof of the newest confirmed link, which proves the earlier ones too. `rpcclient` has the call.
 - The websocket notifications of a block's transactions (`recvtx`, `redeemingtx`, `filteredblockconnected`, `rescanblocks`, and `rescan` without the spend journal) no longer miss a transaction that spends a watched output of a transaction the block lists after it. Since the canonical transaction ordering upgrade, blocks list their transactions by txid, so this happens to about half of such pairs. A block's live notifications also kept watching the spent output.
 - These notifications, and `rescan`'s, list a block's transactions with each one after those it spends. A wallet that records each transaction as it comes, such as bchwallet with a bchd backend, saw the spend before the output it spends and kept that output unspent.
 - `invalidateblock`, `reconsiderblock` and `finalizeblock` no longer deadlock the node when they run while it connects or disconnects a block, which it does most of the time while it syncs; a deadlocked node had to be killed. They now wait until the chain is done with that block, so they can't change the chain in the middle of another change either, as when a reorganization disconnected a block that `finalizeblock` had just finalized.

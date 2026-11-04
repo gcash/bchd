@@ -370,6 +370,58 @@ type TokenDataResult struct {
 	NFT      *NFTResult `json:"nft,omitempty"`
 }
 
+// BcmrPublicationOutputResult models a link's BCMR publication output in the
+// getbcmridentity command's answer.
+type BcmrPublicationOutputResult struct {
+	Output    uint32    `json:"output"`
+	Malformed bool      `json:"malformed,omitempty"`
+	Hash      string    `json:"hash,omitempty"`
+	URIs      *[]string `json:"uris,omitempty"`
+}
+
+// BcmrLinkResult models a link of an authchain in the getbcmridentity
+// command's answer.
+type BcmrLinkResult struct {
+	Txid        string                       `json:"txid"`
+	Height      int32                        `json:"height"`
+	BlockHash   string                       `json:"blockhash,omitempty"`
+	Publication *BcmrPublicationOutputResult `json:"publication,omitempty"`
+}
+
+// BcmrPublicationResult models the publication to read in the getbcmridentity
+// command's answer.
+type BcmrPublicationResult struct {
+	Txid    string   `json:"txid"`
+	Height  int32    `json:"height"`
+	Output  uint32   `json:"output"`
+	Hash    string   `json:"hash"`
+	URIs    []string `json:"uris"`
+	Current bool     `json:"current"`
+}
+
+// BcmrProofResult models the merkle proof in the getbcmridentity command's
+// answer.
+type BcmrProofResult struct {
+	Index       string `json:"index"`
+	MerkleBlock string `json:"merkleblock"`
+}
+
+// GetBcmrIdentityResult models the data from the getbcmridentity command.
+// The genesis supply is a decimal string so values above 2^53 stay exact.  The authchain
+// and its info are there, even empty, whenever they were asked for.
+type GetBcmrIdentityResult struct {
+	Authbase       string                     `json:"authbase"`
+	Status         string                     `json:"status"`
+	Head           BcmrLinkResult             `json:"head"`
+	Publication    *BcmrPublicationResult     `json:"publication,omitempty"`
+	GenesisSupply  string                     `json:"genesissupply,omitempty"`
+	IdentityOutput *TokenDataResult           `json:"identityoutput,omitempty"`
+	Authchain      *map[string]string         `json:"authchain,omitempty"`
+	AuthchainInfo  *map[string]BcmrLinkResult `json:"authchaininfo,omitempty"`
+	More           *bool                      `json:"more,omitempty"`
+	Proof          *BcmrProofResult           `json:"proof,omitempty"`
+}
+
 // GetTxOutResult models the data from the gettxout command.
 type GetTxOutResult struct {
 	BestBlock     string             `json:"bestblock"`

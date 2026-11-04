@@ -227,7 +227,8 @@ Application Options:
 	    --slpgraphsearch           Enables gRPC calls related to slp graph search.
 	    --bcmrindex                Maintain an index of the authchain of every
 	                               token category and of its BCMR metadata
-	                               registry publications
+	                               registry publications, which makes the
+	                               getbcmridentity RPC available
 	    --dropbcmrindex            Deletes the BCMR index from the database on
 	                               start up and then exits.
 	    --relaynonstd              Relay non-standard transactions regardless of

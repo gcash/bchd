@@ -14,6 +14,7 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
+	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
 
@@ -116,11 +117,13 @@ var bcmrBucketNames = [bcmrTop][]byte{
 }
 
 // bcmrChain is the part of the chain the index reads: the main chain's block
-// at a height, and, while the index catches up, the outputs a block spends.
-// The index manager hands the index the chain before it initializes it.
+// at a height, while the index catches up the outputs a block spends, and for
+// a query the unspent output that a genesis in the mempool spends.  The index
+// manager hands the index the chain before it initializes it.
 type bcmrChain interface {
 	BlockHashByHeight(height int32) (*chainhash.Hash, error)
 	FetchSpendJournal(block *bchutil.Block) ([]blockchain.SpentTxOut, error)
+	FetchUtxoEntry(outpoint wire.OutPoint) (*blockchain.UtxoEntry, error)
 }
 
 // BcmrIndex implements an index of the authchains of all token categories and
@@ -478,8 +481,10 @@ type bcmrIdentityState struct {
 	identity *bcmrIdentity
 
 	// path is the segments the identity's authchain runs through, from
-	// the one that holds its authbase to the current one.
-	path []uint64
+	// the one that holds its authbase to the current one, and lengths
+	// their lengths.
+	path    []uint64
+	lengths []uint32
 
 	// head is the authhead, and burned reports that it burned the
 	// identity.
@@ -526,6 +531,7 @@ func fetchBcmrIdentityState(dbTx database.Tx, authbase *chainhash.Hash) (*bcmrId
 			state.pubLink = s.pubLink
 		}
 		state.path = append(state.path, segmentID)
+		state.lengths = append(state.lengths, s.length)
 		if s.next == 0 {
 			state.head = s.head
 			state.burned = s.burned

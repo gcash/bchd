@@ -195,6 +195,63 @@ func (c *Client) GetBestBlock() (*chainhash.Hash, int32, error) {
 	return c.GetBestBlockAsync().Receive()
 }
 
+// FutureGetBcmrIdentityResult is a future promise to deliver the result of a
+// GetBcmrIdentityAsync RPC invocation (or an applicable error).
+type FutureGetBcmrIdentityResult chan *response
+
+// Receive waits for the response promised by the future and returns what the
+// BCMR index knows of the identity.
+func (r FutureGetBcmrIdentityResult) Receive() (*btcjson.GetBcmrIdentityResult, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var identity btcjson.GetBcmrIdentityResult
+	if err := json.Unmarshal(res, &identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+// GetBcmrIdentityAsync returns an instance of a type that can be used to get
+// the result of the RPC at some future time by invoking the Receive function
+// on the returned instance.
+//
+// See GetBcmrIdentity for the blocking version and more details.
+//
+// NOTE: This is a bchd extension.
+func (c *Client) GetBcmrIdentityAsync(authbase *chainhash.Hash, includeAuthchain bool,
+	after *chainhash.Hash, limit int) FutureGetBcmrIdentityResult {
+
+	var afterString *string
+	if after != nil {
+		s := after.String()
+		afterString = &s
+	}
+	var limitPtr *int
+	if limit > 0 {
+		limitPtr = &limit
+	}
+	cmd := btcjson.NewGetBcmrIdentityCmd(authbase.String(), &includeAuthchain,
+		afterString, limitPtr)
+	return c.sendCmd(cmd)
+}
+
+// GetBcmrIdentity returns what the BCMR index knows of the identity with the
+// passed authbase, which for a token is its category ID, with the links of
+// its authchain in the mempool: the authhead, the BCMR publication to read,
+// and the genesis supply.  With includeAuthchain, it also returns the
+// authchain's transactions, from the authbase, or from the link after after if
+// it isn't nil, up to limit links if limit is above 0.
+//
+// NOTE: This is a bchd extension, which needs --bcmrindex.
+func (c *Client) GetBcmrIdentity(authbase *chainhash.Hash, includeAuthchain bool,
+	after *chainhash.Hash, limit int) (*btcjson.GetBcmrIdentityResult, error) {
+
+	return c.GetBcmrIdentityAsync(authbase, includeAuthchain, after, limit).Receive()
+}
+
 // FutureGetCurrentNetResult is a future promise to deliver the result of a
 // GetCurrentNetAsync RPC invocation (or an applicable error).
 type FutureGetCurrentNetResult chan *response

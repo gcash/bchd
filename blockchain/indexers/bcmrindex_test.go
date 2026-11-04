@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
@@ -27,7 +28,7 @@ import (
 // bcmrTestChain stands in for the chain in the BCMR index tests.  It builds
 // blocks, stores them, and connects them to an index, keeping its tip as the
 // index manager does, and it answers the index's reads of the main chain's
-// blocks and of their spent outputs.
+// blocks, of their spent outputs, and of the UTXO set.
 type bcmrTestChain struct {
 	t      *testing.T
 	db     database.DB
@@ -45,6 +46,22 @@ type bcmrTestChain struct {
 
 	// fundings counts the funding outpoints handed out.
 	fundings uint32
+
+	// views counts the index's open read transactions.
+	views atomic.Int32
+}
+
+// bcmrViewCounter is a database that counts its open read transactions.
+type bcmrViewCounter struct {
+	database.DB
+	views *atomic.Int32
+}
+
+// View runs fn in a read transaction.
+func (c *bcmrViewCounter) View(fn func(dbTx database.Tx) error) error {
+	c.views.Add(1)
+	defer c.views.Add(-1)
+	return c.DB.View(fn)
 }
 
 // newBcmrTestChain returns a test chain with an index on which CashTokens
@@ -68,6 +85,7 @@ func newBcmrTestChain(t *testing.T, forkHeight int32) *bcmrTestChain {
 		stxos:   make(map[chainhash.Hash][]blockchain.SpentTxOut),
 	}
 	c.idx.chain = c
+	c.idx.db = &bcmrViewCounter{DB: db, views: &c.views}
 	err = db.Update(func(dbTx database.Tx) error {
 		_, err := dbTx.Metadata().CreateBucketIfNotExists(indexTipsBucketName)
 		if err != nil {
@@ -110,6 +128,29 @@ func (c *bcmrTestChain) FetchSpendJournal(block *bchutil.Block) ([]blockchain.Sp
 		return nil, fmt.Errorf("no spend journal for block %v", block.Hash())
 	}
 	return stxos, nil
+}
+
+// FetchUtxoEntry returns the unspent output at an outpoint of the test chain,
+// for an output 0 that no block of the chain spends.
+func (c *bcmrTestChain) FetchUtxoEntry(outpoint wire.OutPoint) (*blockchain.UtxoEntry, error) {
+	if c.views.Load() != 0 {
+		c.t.Error("the UTXO set was read in a database transaction")
+	}
+	height, ok := c.heights[outpoint.Hash]
+	if !ok {
+		return nil, nil
+	}
+	for _, block := range c.blocks {
+		for _, tx := range block.Transactions() {
+			for _, in := range tx.MsgTx().TxIn {
+				if in.PreviousOutPoint == outpoint {
+					return nil, nil
+				}
+			}
+		}
+	}
+	return blockchain.NewUtxoEntry(wire.NewTxOut(1000, []byte{txscript.OP_TRUE},
+		wire.TokenData{}), height, false), nil
 }
 
 // funding returns an outpoint for a transaction to spend, of a transaction

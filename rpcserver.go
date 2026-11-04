@@ -150,6 +150,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"finalizeblock":         handleFinalizeBlock,
 	"generate":              handleGenerate,
 	"getaddednodeinfo":      handleGetAddedNodeInfo,
+	"getbcmridentity":       handleGetBcmrIdentity,
 	"getbestblock":          handleGetBestBlock,
 	"getbestblockhash":      handleGetBestBlockHash,
 	"getblock":              handleGetBlock,
@@ -288,6 +289,7 @@ var rpcLimited = map[string]struct{}{
 	"decoderawtransaction":  {},
 	"decodescript":          {},
 	"estimatefee":           {},
+	"getbcmridentity":       {},
 	"getbestblock":          {},
 	"getbestblockhash":      {},
 	"getblock":              {},
@@ -1725,6 +1727,154 @@ func handleGetBestBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		Height: best.Height,
 	}
 	return result, nil
+}
+
+// handleGetBcmrIdentity implements the getbcmridentity command.
+func handleGetBcmrIdentity(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	bcmrIndex := s.cfg.BcmrIndex
+	if bcmrIndex == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCMisc,
+			Message: "BCMR index must be enabled (--bcmrindex)",
+		}
+	}
+
+	c := cmd.(*btcjson.GetBcmrIdentityCmd)
+	authbase, err := chainhash.NewHashFromStr(c.Authbase)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Authbase)
+	}
+	query := &indexers.BcmrQuery{
+		Authbase:  *authbase,
+		Authchain: c.IncludeAuthchain != nil && *c.IncludeAuthchain,
+	}
+	if (c.After != nil || c.Limit != nil) && !query.Authchain {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "after and limit only apply with includeauthchain",
+		}
+	}
+	if c.After != nil {
+		after, err := chainhash.NewHashFromStr(*c.After)
+		if err != nil {
+			return nil, rpcDecodeHexError(*c.After)
+		}
+		query.After = after
+	}
+	if c.Limit != nil {
+		if *c.Limit < 1 {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: "limit must be at least 1",
+			}
+		}
+		query.Limit = *c.Limit
+	}
+
+	info, err := bcmrIndex.Identity(query, s.cfg.TxMemPool)
+	switch {
+	case errors.Is(err, indexers.ErrBcmrIdentityNotFound):
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "No identity with authbase " + authbase.String(),
+		}
+	case errors.Is(err, indexers.ErrBcmrNotALink):
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "after is not a link of the identity's authchain",
+		}
+	case err != nil:
+		return nil, internalRPCError(err.Error(), "Failed to read the BCMR index")
+	}
+	return createBcmrIdentityResult(info, query.Authchain)
+}
+
+// createBcmrIdentityResult returns the getbcmridentity command's answer for an
+// identity, with its authchain if it was asked for.
+func createBcmrIdentityResult(info *indexers.BcmrIdentityInfo, withAuthchain bool) (*btcjson.GetBcmrIdentityResult, error) {
+	result := &btcjson.GetBcmrIdentityResult{
+		Authbase: info.Authbase.String(),
+		Status:   "active",
+		Head:     createBcmrLinkResult(&info.Head),
+	}
+	if info.Burned {
+		result.Status = "burned"
+	}
+	if pubLink := info.Publication; pubLink != nil {
+		pub := pubLink.Publication
+		uris := pub.URIs
+		if uris == nil {
+			uris = []string{}
+		}
+		result.Publication = &btcjson.BcmrPublicationResult{
+			Txid:    pubLink.Hash.String(),
+			Height:  pubLink.Height,
+			Output:  pub.Output,
+			Hash:    hex.EncodeToString(pub.Hash[:]),
+			URIs:    uris,
+			Current: info.Current,
+		}
+	}
+	if info.HasGenesisSupply {
+		result.GenesisSupply = strconv.FormatUint(info.GenesisSupply, 10)
+	}
+	if info.IdentityOutput != nil {
+		result.IdentityOutput = createTokenDataResult(info.IdentityOutput)
+	}
+	if !withAuthchain {
+		return result, nil
+	}
+
+	more := info.More
+	authchain := make(map[string]string, len(info.Authchain))
+	authchainInfo := make(map[string]btcjson.BcmrLinkResult, len(info.Authchain))
+	for i := range info.Authchain {
+		link := &info.Authchain[i]
+		key := strconv.FormatUint(uint64(info.FirstIndex)+uint64(i), 10)
+		authchain[key] = hex.EncodeToString(link.Tx)
+		authchainInfo[key] = createBcmrLinkResult(link)
+	}
+	result.More, result.Authchain, result.AuthchainInfo = &more, &authchain, &authchainInfo
+	if info.Proof != nil {
+		var buf bytes.Buffer
+		err := info.Proof.BchEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+		if err != nil {
+			return nil, internalRPCError(err.Error(), "Failed to encode the merkle proof")
+		}
+		result.Proof = &btcjson.BcmrProofResult{
+			Index:       strconv.FormatUint(uint64(info.ProofIndex), 10),
+			MerkleBlock: hex.EncodeToString(buf.Bytes()),
+		}
+	}
+	return result, nil
+}
+
+// createBcmrLinkResult returns a link of an authchain in the getbcmridentity
+// command's answer.  The hash of a publication is in the byte order it was
+// pushed in, unlike transaction and block hashes.
+func createBcmrLinkResult(link *indexers.BcmrLinkInfo) btcjson.BcmrLinkResult {
+	result := btcjson.BcmrLinkResult{
+		Txid:   link.Hash.String(),
+		Height: link.Height,
+	}
+	if link.BlockHash != nil {
+		result.BlockHash = link.BlockHash.String()
+	}
+	if pub := link.Publication; pub != nil {
+		result.Publication = &btcjson.BcmrPublicationOutputResult{
+			Output:    pub.Output,
+			Malformed: pub.Malformed,
+		}
+		if !pub.Malformed {
+			uris := pub.URIs
+			if uris == nil {
+				uris = []string{}
+			}
+			result.Publication.Hash = hex.EncodeToString(pub.Hash[:])
+			result.Publication.URIs = &uris
+		}
+	}
+	return result
 }
 
 // handleGetBestBlockHash implements the getbestblockhash command.
@@ -5807,6 +5957,7 @@ type rpcserverConfig struct {
 	AddrIndex *indexers.AddrIndex
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
+	BcmrIndex *indexers.BcmrIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.

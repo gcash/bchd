@@ -4649,6 +4649,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			AddrIndex:      s.addrIndex,
 			CfIndex:        s.cfIndex,
 			SlpIndex:       s.slpIndex,
+			BcmrIndex:      s.bcmrIndex,
 			FeeEstimator:   s.feeEstimator,
 			Services:       s.services,
 			RPCAuthTimeout: cfg.RPCAuthTimeout,

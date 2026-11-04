@@ -196,6 +196,30 @@ func NewFinalizeBlockCmd(blockHash string) *FinalizeBlockCmd {
 	}
 }
 
+// GetBcmrIdentityCmd defines the getbcmridentity JSON-RPC command.
+type GetBcmrIdentityCmd struct {
+	Authbase         string
+	IncludeAuthchain *bool `jsonrpcdefault:"false"`
+	After            *string
+	Limit            *int
+}
+
+// NewGetBcmrIdentityCmd returns a new instance which can be used to issue a
+// getbcmridentity JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewGetBcmrIdentityCmd(authbase string, includeAuthchain *bool, after *string,
+	limit *int) *GetBcmrIdentityCmd {
+
+	return &GetBcmrIdentityCmd{
+		Authbase:         authbase,
+		IncludeAuthchain: includeAuthchain,
+		After:            after,
+		Limit:            limit,
+	}
+}
+
 // GetBestBlockHashCmd defines the getbestblockhash JSON-RPC command.
 type GetBestBlockHashCmd struct{}
 
@@ -1069,6 +1093,7 @@ func init() {
 	MustRegisterCmd("decodescript", (*DecodeScriptCmd)(nil), flags)
 	MustRegisterCmd("finalizeblock", (*FinalizeBlockCmd)(nil), flags)
 	MustRegisterCmd("getaddednodeinfo", (*GetAddedNodeInfoCmd)(nil), flags)
+	MustRegisterCmd("getbcmridentity", (*GetBcmrIdentityCmd)(nil), flags)
 	MustRegisterCmd("getbestblockhash", (*GetBestBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getblock", (*GetBlockCmd)(nil), flags)
 	MustRegisterCmd("getblockchaininfo", (*GetBlockChainInfoCmd)(nil), flags)
