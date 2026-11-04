@@ -557,3 +557,24 @@ func testUtxoReadError(t *testing.T, corrupt []byte) {
 			best.Height, b4.Hash())
 	}
 }
+
+// TestInvalidateFirstBlock ensures that invalidating the block after the
+// genesis block disconnects the whole chain, and that it can grow again.
+func TestInvalidateFirstBlock(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+	if err := chain.InvalidateBlock(blocks[1].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *blocks[0].Hash() {
+		t.Fatalf("tip %v, want the genesis block", tip.hash)
+	}
+	block := procTestBlock(t, blocks[0].MsgBlock(), 0,
+		CalcBlockSubsidy(1, params)-1, params.PowLimitBits, nil)
+	if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+		t.Fatal(err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *block.Hash() {
+		t.Fatalf("tip %v, want the new block", tip.hash)
+	}
+}

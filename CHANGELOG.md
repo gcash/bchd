@@ -21,6 +21,7 @@ This release keeps the websocket notifications from missing a transaction that s
 - The websocket notifications of a block's transactions (`recvtx`, `redeemingtx`, `filteredblockconnected`, `rescanblocks`, and `rescan` without the spend journal) no longer miss a transaction that spends a watched output of a transaction the block lists after it. Since the canonical transaction ordering upgrade, blocks list their transactions by txid, so this happens to about half of such pairs. A block's live notifications also kept watching the spent output.
 - These notifications, and `rescan`'s, list a block's transactions with each one after those it spends. A wallet that records each transaction as it comes, such as bchwallet with a bchd backend, saw the spend before the output it spends and kept that output unspent.
 - `invalidateblock`, `reconsiderblock` and `finalizeblock` no longer deadlock the node when they run while it connects or disconnects a block, which it does most of the time while it syncs; a deadlocked node had to be killed. They now wait until the chain is done with that block, so they can't change the chain in the middle of another change either, as when a reorganization disconnected a block that `finalizeblock` had just finalized.
+- `invalidateblock` of the block after the genesis block no longer freezes the node. It panicked while it held the lock of the block index, and the RPC server recovered from the panic with the lock still held, so that everything that reads the index waited forever.
 
 ### Other
 

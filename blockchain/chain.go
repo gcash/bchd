@@ -741,8 +741,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 
 	// Do not reorganize to a known invalid chain. Ancestors deeper than the
 	// direct parent are checked below but this is a quick check before doing
-	// more unnecessary work.
-	if b.index.NodeStatus(node.parent).KnownInvalid() {
+	// more unnecessary work.  The genesis block has no parent.
+	if node.parent != nil && b.index.NodeStatus(node.parent).KnownInvalid() {
 		b.index.SetStatusFlags(node, statusInvalidAncestor)
 		return detachNodes, attachNodes
 	}
