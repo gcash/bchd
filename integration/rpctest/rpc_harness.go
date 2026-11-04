@@ -253,18 +253,25 @@ func (h *Harness) SetUp(createTestChain bool, numMatureOutputs uint32) error {
 
 	// Block until the wallet has fully synced up to the tip of the main
 	// chain.
+	return h.WaitForWallet()
+}
+
+// WaitForWallet blocks until the wallet has synced up to the tip of the main
+// chain.  The wallet follows the chain in the background, so a test that
+// spends what the block it just mined gave the wallet waits for it first.
+func (h *Harness) WaitForWallet() error {
 	_, height, err := h.Node.GetBestBlock()
 	if err != nil {
 		return err
 	}
 	ticker := time.NewTicker(time.Millisecond * 100)
+	defer ticker.Stop()
 	for range ticker.C {
 		walletHeight := h.wallet.SyncedHeight()
 		if walletHeight == height {
 			break
 		}
 	}
-	ticker.Stop()
 
 	return nil
 }

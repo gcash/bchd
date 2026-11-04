@@ -581,8 +581,11 @@ func TestGrpcStalledReaderReset(t *testing.T) {
 		if method == "/pb.bchrpc/SubscribeBlocks" {
 			req = &pb.SubscribeBlocksRequest{}
 		}
-		c.call(1, method, req)
+
+		// The server's clock starts once it has the request, so this one
+		// starts before it is sent, or a slow runner measures too little.
 		start := time.Now()
+		c.call(1, method, req)
 		reset := false
 		for !reset {
 			f := c.next(start.Add(10 * timeout))
