@@ -221,9 +221,14 @@ type BlockChain struct {
 	shutdownRequest     chan struct{}
 	shutdownRequestOnce sync.Once
 
-	// notificationLock is used to make sure notifications are sent
-	// serially and protect against double mutex unlock panics during reorg.
-	notificationLock sync.Mutex
+	// processLock is held throughout each change to the chain, which
+	// ProcessBlock, InvalidateBlock, ReconsiderBlock, FinalizeBlock and
+	// AddHeader make, and is taken before chainLock.  A change releases
+	// chainLock while it sends a notification, so that the callbacks can
+	// call into the chain, though they can't make a change, and
+	// processLock keeps the other changes out meanwhile: none starts in
+	// the middle of another, and the notifications are sent serially.
+	processLock sync.Mutex
 
 	// The following caches are used to efficiently keep track of the
 	// current deployment threshold state of each rule change deployment.
@@ -357,6 +362,8 @@ func (b *BlockChain) GetWarnings() (bool, bool) {
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
@@ -786,7 +793,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 // must happen prior to calling this function requires the same details, so
 // it would be inefficient to repeat it.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	view *UtxoViewpoint, stxos []SpentTxOut) error {
 
@@ -914,11 +922,9 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Notify the caller that the block was connected to the main chain.
 	// The caller would typically want to react with actions such as
 	// updating wallets.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockConnected, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
@@ -948,7 +954,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 // disconnectBlock handles disconnecting the passed node/block from the end of
 // the main (best) chain.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view *UtxoViewpoint) error {
 	// Make sure the node being disconnected is the end of the best chain.
 	if !node.hash.IsEqual(&b.bestChain.Tip().hash) {
@@ -1074,11 +1081,9 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Notify the caller that the block was disconnected from the main
 	// chain.  The caller would typically want to react with actions such as
 	// updating wallets.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockDisconnected, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size.
@@ -1107,7 +1112,8 @@ func countSpentOutputs(block *bchutil.Block) int {
 //
 // This function may modify node statuses in the block index without flushing.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error {
 	// Nothing to do if no reorganize nodes were provided.
 	if detachNodes.Len() == 0 && attachNodes.Len() == 0 {
@@ -1348,11 +1354,9 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// Notify other peers that this block was accepted. Since it was
 		// originally seen as an orphan the accept message was never sent
 		// to downstream peers.
-		b.notificationLock.Lock()
 		b.chainLock.Unlock()
 		b.sendNotification(NTBlockAccepted, block)
 		b.chainLock.Lock()
-		b.notificationLock.Unlock()
 	}
 
 	// Log the point where the chain forked and old and new best chain
@@ -1382,7 +1386,8 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 //   - BFFastAdd: Avoids several expensive transaction validation operations.
 //     This is useful when using checkpoints.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, flags BehaviorFlags) (bool, error) {
 	fastAdd := flags.HasFlag(BFFastAdd)
 
@@ -2017,10 +2022,15 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) InvalidateBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
 	return b.invalidateBlock(hash)
 }
 
 // invalidateBlock takes a block hash and invalidates it.
+//
+// This function MUST be called with processLock held.
 func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	node := b.index.LookupNode(hash)
 	if node == nil {
@@ -2069,10 +2079,15 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) ReconsiderBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
 	return b.reconsiderBlock(hash)
 }
 
 // reconsiderBlock takes a block hash and allows it to be revalidated.
+//
+// This function MUST be called with processLock held.
 func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	node := b.index.LookupNode(hash)
 	if node == nil {
@@ -2115,8 +2130,8 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	}
 
 	// Process it all again. This will take care of the
-	// orphans as well.
-	_, _, err = b.ProcessBlock(blk, BFNoDupBlockCheck)
+	// orphans as well.  The caller holds processLock already.
+	_, _, err = b.lockAndProcessBlock(blk, BFNoDupBlockCheck)
 	if err != nil {
 		return err
 	}

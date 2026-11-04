@@ -23,7 +23,8 @@ import (
 // The flags are also passed to checkBlockContext and connectBestChain.  See
 // their documentation for how the flags modify their behavior.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.Hash, prevNode *blockNode, flags BehaviorFlags) (bool, error) {
 	// The height of this block is one more than the referenced previous
 	// block.
@@ -100,11 +101,9 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	// Notify the caller that the new block was accepted into the block
 	// chain.  The caller would typically want to react by relaying the
 	// inventory to other peers.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockAccepted, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	return isMainChain, nil
 }
