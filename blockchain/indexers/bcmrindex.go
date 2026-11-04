@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -25,6 +26,16 @@ import (
 // unspent.  It keeps each link's BCMR publication too, so that the newest
 // one can be found without reading the chain.
 //
+// It keeps every authchain that holds a publication as well, from where it
+// begins.  Nothing on chain says which identity a publication is for: a
+// registry names its own only in its JSON, and its authbase can be the
+// publishing transaction or any transaction behind it, one whose identity
+// output that spends, or one behind that in turn.  So a transaction with a
+// publication that isn't a link starts an authchain of its own, and the
+// walker, in the background, adds every transaction behind each publication
+// that the index doesn't track yet, unless there are more than bcmrMaxFound.
+// The index answers for any link it tracks as an authbase.
+//
 // Authchains share links.  A transaction that spends two identity outputs
 // merges the identities, and both carry on through it.  A genesis that
 // creates several categories, each by spending the identity output of the
@@ -33,15 +44,18 @@ import (
 // identity's authhead makes that authhead the new category's authbase, so
 // the two authchains are the same from there on.  The index therefore keeps
 // each link once, and groups links into segments, runs of links between the
-// points where authchains join.  An identity starts at a place in a segment,
-// and its authchain runs through the segments that segment continues into, up
-// to the current one, which holds the authhead.  A new link updates a single
+// points where authchains join, or where one meets a transaction the index
+// doesn't track.  An identity starts at a place in a segment, and its
+// authchain runs through the segments that segment continues into, up to the
+// current one, which holds the authhead.  A new link updates a single
 // segment, however many identities share it.
 //
 // Every change a block makes is recorded with the value it replaced, in an
 // undo record for the block, so that disconnecting the block puts the index
-// back as it was.  The index keeps the undo records of the latest
-// BcmrUndoDepth blocks only.
+// back as it was.  The walker's changes are recorded the same way, after
+// those of the block that is the index's tip when it writes them, so that
+// disconnecting that block undoes them first.  The index keeps the undo
+// records of the latest BcmrUndoDepth blocks only.
 
 const (
 	// bcmrIndexName is the human-readable name of the index.
@@ -97,8 +111,15 @@ const (
 	// output can still be spent to the segment's ID.
 	bcmrHeads
 
+	// bcmrPending maps the key, by bcmrPendingKey, of each segment that
+	// the walker is to walk behind, for a publication in it, to a byte
+	// of 1.
+	bcmrPending
+
 	// bcmrUndo maps the height of each of the latest blocks that changed
-	// the index to the block's undo record.
+	// the index to the block's undo record, and that height followed by a
+	// sequence number to the undo record of each write of the walker while
+	// the block was the index's tip.
 	bcmrUndo
 
 	// bcmrTop is the index's own bucket.
@@ -113,23 +134,26 @@ var bcmrBucketNames = [bcmrTop][]byte{
 	bcmrSegments:   []byte("segments"),
 	bcmrIdentities: []byte("identities"),
 	bcmrHeads:      []byte("heads"),
+	bcmrPending:    []byte("pending"),
 	bcmrUndo:       []byte("undo"),
 }
 
 // bcmrChain is the part of the chain the index reads: the main chain's block
-// at a height, while the index catches up the outputs a block spends, and for
-// a query the unspent output that a genesis in the mempool spends.  The index
-// manager hands the index the chain before it initializes it.
+// at a height, the outputs a block spends, which the index reads while it
+// catches up and the walker reads for the heights of the transactions behind
+// a publication, and for a query the unspent output that a genesis in the
+// mempool spends.  The index manager hands the index the chain before it
+// initializes it.
 type bcmrChain interface {
 	BlockHashByHeight(height int32) (*chainhash.Hash, error)
 	FetchSpendJournal(block *bchutil.Block) ([]blockchain.SpentTxOut, error)
 	FetchUtxoEntry(outpoint wire.OutPoint) (*blockchain.UtxoEntry, error)
 }
 
-// BcmrIndex implements an index of the authchains of all token categories and
-// of their BCMR publications, as CHIP-BCMR defines them.  For each category
-// it knows the authbase, every link of the authchain since, with where it is
-// in the block files and its publication, the authhead, and whether the
+// BcmrIndex implements an index of the authchains of all token categories,
+// and of all that hold a BCMR publication, with their publications, as
+// CHIP-BCMR defines them.  For each authchain it knows every link, with where
+// it is in the block files and its publication, the authhead, and whether the
 // identity was burned.
 //
 // It implements the Indexer interface which plugs into the IndexManager that in
@@ -152,6 +176,11 @@ type BcmrIndex struct {
 	// block finds the inputs that spend an identity output without reading
 	// the database for each input.
 	heads map[chainhash.Hash]uint64
+
+	// walkSignal wakes the walker, quit stops it, and wg waits for it.
+	walkSignal chan struct{}
+	quit       chan struct{}
+	wg         sync.WaitGroup
 }
 
 // Ensure the BcmrIndex type implements the Indexer and ChainUser interfaces.
@@ -172,6 +201,8 @@ func NewBcmrIndex(db database.DB, chainParams *chaincfg.Params) *BcmrIndex {
 		chainParams: chainParams,
 		startHeight: -1,
 		heads:       make(map[chainhash.Hash]uint64),
+		walkSignal:  make(chan struct{}, 1),
+		quit:        make(chan struct{}),
 	}
 
 	// No token can be created in a block before CashTokens activated, so
@@ -306,17 +337,20 @@ func (idx *BcmrIndex) StartBlock() (*chainhash.Hash, int32) {
 }
 
 // UseChain hands the index the chain, which it reads the height and block of
-// an authbase from, and, while it catches up, the outputs a block spends.
+// an authbase from, and, while it catches up, the outputs a block spends.  The
+// index's walker takes the chain's notifications of the blocks it connects
+// and disconnects.
 //
 // This is part of the ChainUser interface.
 func (idx *BcmrIndex) UseChain(chain *blockchain.BlockChain) {
 	idx.chain = chain
+	chain.Subscribe(idx.handleChainNotification)
 }
 
 // ConnectBlock is invoked by the index manager when a new block has been
 // connected to the main chain.  It adds the links of the block to the
-// authchains they extend, and the authchains of the token categories the block
-// creates.
+// authchains they extend, the authchains of the token categories the block
+// creates, and those its publications start.
 //
 // This is part of the Indexer interface.
 func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
@@ -351,10 +385,6 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	}
 	txs := block.Transactions()
 	for _, i := range bcmrTxOrder(txs) {
-		// The coinbase spends no output.
-		if i == 0 {
-			continue
-		}
 		if err := c.connectTx(i, tokensActive); err != nil {
 			return err
 		}
@@ -363,15 +393,16 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 }
 
 // blockMatters returns whether the block extends an authchain the index
-// tracks or creates a token category.  A transaction that spends the identity
-// output of a transaction in the same block extends an authchain only if that
-// transaction does, so this needs no order of the block's transactions.
+// tracks, creates a token category or holds a publication.  A transaction that
+// spends the identity output of a transaction in the same block extends an
+// authchain only if that transaction does, so this needs no order of the
+// block's transactions.
 func (idx *BcmrIndex) blockMatters(block *bchutil.Block, tokensActive bool) bool {
-	for i, tx := range block.Transactions() {
-		if i == 0 {
-			continue
-		}
+	for _, tx := range block.Transactions() {
 		msgTx := tx.MsgTx()
+		if bcmr.ParsePublication(msgTx) != nil {
+			return true
+		}
 		for _, in := range msgTx.TxIn {
 			if in.PreviousOutPoint.Index != 0 {
 				continue
@@ -389,7 +420,8 @@ func (idx *BcmrIndex) blockMatters(block *bchutil.Block, tokensActive bool) bool
 
 // DisconnectBlock is invoked by the index manager when a block has been
 // disconnected from the main chain.  It puts back every entry of the index
-// the block changed, from the block's undo record.
+// that the block changed, and that the walker changed while the block was the
+// index's tip, from their undo records.
 //
 // This is part of the Indexer interface.
 func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
@@ -402,9 +434,11 @@ func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 	if err != nil {
 		return err
 	}
-	key := bcmrUndoKey(block.Height())
-	raw := w.get(bcmrUndo, key)
-	if raw == nil {
+	keys, entries, err := bcmrUndoRecords(w, block.Height())
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
 		// The block changed nothing, unless it is below the floor,
 		// where the index pruned the undo records.
 		floor := w.get(bcmrTop, bcmrUndoFloorKey)
@@ -416,10 +450,6 @@ func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 				bcmrUndoDepth)
 		}
 		return nil
-	}
-	entries, err := deserializeBcmrUndo(raw)
-	if err != nil {
-		return err
 	}
 
 	for i := len(entries) - 1; i >= 0; i-- {
@@ -434,8 +464,10 @@ func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 			return err
 		}
 	}
-	if err := w.buckets[bcmrUndo].Delete(key); err != nil {
-		return err
+	for _, key := range keys {
+		if err := w.buckets[bcmrUndo].Delete(key); err != nil {
+			return err
+		}
 	}
 
 	// The heads in memory take the values the bucket was put back to.
@@ -454,9 +486,50 @@ func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 	return nil
 }
 
-// pruneBcmrUndo removes the undo record of the block bcmrUndoDepth below the
-// one being connected at height, if it has one, and raises the floor above
-// it.
+// bcmrUndoRecords returns the keys of the undo records of the block at a
+// height and of the walker's writes while that block was the index's tip, and
+// their entries, in the order they were written.
+func bcmrUndoRecords(w *bcmrWriter, height int32) ([][]byte, []bcmrUndoEntry, error) {
+	keys := bcmrUndoKeys(w.buckets[bcmrUndo], height)
+	var entries []bcmrUndoEntry
+	for _, key := range keys {
+		record, err := deserializeBcmrUndo(w.get(bcmrUndo, key))
+		if err != nil {
+			return nil, nil, err
+		}
+		entries = append(entries, record...)
+	}
+	return keys, entries, nil
+}
+
+// bcmrUndoKeys returns the keys of the undo records of the block at a height
+// and of the walker's writes while that block was the index's tip, in the
+// order they were written: the key of the block's sorts before those that
+// extend it with a sequence number.
+func bcmrUndoKeys(undo database.Bucket, height int32) [][]byte {
+	prefix := bcmrUndoKey(height)
+	var keys [][]byte
+	cursor := undo.Cursor()
+	for ok := cursor.Seek(prefix); ok && bytes.HasPrefix(cursor.Key(), prefix); ok = cursor.Next() {
+		keys = append(keys, bytes.Clone(cursor.Key()))
+	}
+	return keys
+}
+
+// nextBcmrWalkUndoKey returns the key of the undo record of the walker's next
+// write while the block at a height is the index's tip, after those it has.
+func nextBcmrWalkUndoKey(undo database.Bucket, height int32) []byte {
+	seq := uint32(1)
+	keys := bcmrUndoKeys(undo, height)
+	if n := len(keys); n > 0 && len(keys[n-1]) == len(bcmrWalkUndoKey(height, 0)) {
+		seq = binary.BigEndian.Uint32(keys[n-1][len(keys[n-1])-4:]) + 1
+	}
+	return bcmrWalkUndoKey(height, seq)
+}
+
+// pruneBcmrUndo removes the undo records of the block bcmrUndoDepth below the
+// one being connected at height and of the walker's writes while it was the
+// tip, if there are any, and raises the floor above it.
 func pruneBcmrUndo(dbTx database.Tx, height int32) error {
 	pruned := height - bcmrUndoDepth
 	if pruned < 0 {
@@ -464,12 +537,14 @@ func pruneBcmrUndo(dbTx database.Tx, height int32) error {
 	}
 	top := dbTx.Metadata().Bucket(bcmrIndexKey)
 	undo := top.Bucket(bcmrBucketNames[bcmrUndo])
-	key := bcmrUndoKey(pruned)
-	if undo.Get(key) == nil {
+	keys := bcmrUndoKeys(undo, pruned)
+	if len(keys) == 0 {
 		return nil
 	}
-	if err := undo.Delete(key); err != nil {
-		return err
+	for _, key := range keys {
+		if err := undo.Delete(key); err != nil {
+			return err
+		}
 	}
 	floor := make([]byte, 4)
 	byteOrder.PutUint32(floor, uint32(pruned+1))
@@ -478,7 +553,13 @@ func pruneBcmrUndo(dbTx database.Tx, height int32) error {
 
 // bcmrIdentityState is what the index knows of an identity.
 type bcmrIdentityState struct {
+	// identity is the token's identity, with its genesis supply, when the
+	// authbase is a token category's, and nil otherwise: any other link the
+	// index tracks is the authbase of an identity without a genesis supply.
 	identity *bcmrIdentity
+
+	// place is the authbase's place in the first segment of path.
+	place uint32
 
 	// path is the segments the identity's authchain runs through, from
 	// the one that holds its authbase to the current one, and lengths
@@ -497,23 +578,34 @@ type bcmrIdentityState struct {
 }
 
 // fetchBcmrIdentityState returns what the index knows of the identity with
-// the passed authbase, or nil if it doesn't track one.
+// the passed authbase, a token's category ID or any other link the index
+// tracks, or nil if it tracks no such link.
 func fetchBcmrIdentityState(dbTx database.Tx, authbase *chainhash.Hash) (*bcmrIdentityState, error) {
 	w, err := newBcmrWriter(dbTx)
 	if err != nil {
 		return nil, err
 	}
-	raw := w.get(bcmrIdentities, authbase[:])
-	if raw == nil {
-		return nil, nil
-	}
-	id, err := deserializeBcmrIdentity(raw)
-	if err != nil {
-		return nil, err
+	state := &bcmrIdentityState{}
+	var segmentID uint64
+	if raw := w.get(bcmrIdentities, authbase[:]); raw != nil {
+		id, err := deserializeBcmrIdentity(raw)
+		if err != nil {
+			return nil, err
+		}
+		state.identity = id
+		segmentID, state.place = id.segment, id.place
+	} else {
+		raw := w.get(bcmrLinks, authbase[:])
+		if raw == nil {
+			return nil, nil
+		}
+		link, err := deserializeBcmrLink(raw)
+		if err != nil {
+			return nil, err
+		}
+		segmentID, state.place = link.segment, link.place
 	}
 
-	state := &bcmrIdentityState{identity: id}
-	segmentID := id.segment
 	for {
 		raw := w.get(bcmrSegments, bcmrSegmentKey(segmentID))
 		if raw == nil {
@@ -526,7 +618,7 @@ func fetchBcmrIdentityState(dbTx database.Tx, authbase *chainhash.Hash) (*bcmrId
 		// In the segment that holds the authbase, only the links from
 		// the authbase on are the identity's.
 		if s.pubLink != (chainhash.Hash{}) &&
-			(len(state.path) > 0 || s.pubPlace >= id.place) {
+			(len(state.path) > 0 || s.pubPlace >= state.place) {
 
 			state.pubLink = s.pubLink
 		}

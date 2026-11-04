@@ -1859,9 +1859,10 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	return resp, nil
 }
 
-// GetBcmrIdentity returns what the BCMR index knows of a token's identity,
-// with the links of its authchain in the mempool, and on request the
-// authchain itself, in pages, with a merkle proof of the newest confirmed link.
+// GetBcmrIdentity returns what the BCMR index knows of an identity, a token's
+// or that of any transaction of an authchain the index tracks, with the links
+// of its authchain in the mempool, and on request the authchain itself, in
+// pages, with a merkle proof of the newest confirmed link.
 //
 // **Requires BcmrIndex**
 func (s *GrpcServer) GetBcmrIdentity(ctx context.Context, req *pb.GetBcmrIdentityRequest) (*pb.GetBcmrIdentityResponse, error) {

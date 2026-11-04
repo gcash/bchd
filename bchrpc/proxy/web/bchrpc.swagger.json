@@ -121,7 +121,7 @@
     },
     "/v1/GetBcmrIdentity": {
       "post": {
-        "summary": "GetBcmrIdentity returns what the BCMR index knows of a token's identity,\nas CHIP-BCMR defines it, with the links of its authchain in the mempool:\nthe authhead, the BCMR publication to read and the genesis supply, and on\nrequest the authchain itself, in pages, with a merkle proof of the\nnewest confirmed link.",
+        "summary": "GetBcmrIdentity returns what the BCMR index knows of an identity, as\nCHIP-BCMR defines it, a token's or that of any transaction of an\nauthchain the index tracks, with the links of its authchain in the\nmempool: the authhead, the BCMR publication to read and a token's\ngenesis supply, and on request the authchain itself, in pages, with a\nmerkle proof of the newest confirmed link. The index tracks every\ntoken's authchain and, from where it begins, every authchain that holds\na publication, unless more than 100,000 transactions it doesn't\notherwise track are behind the publication; it finds the transactions\nbehind a publication in the background, once the publication's block is\nconnected.",
         "description": "**Requires BcmrIndex**",
         "operationId": "bchrpc_GetBcmrIdentity",
         "responses": {
@@ -1783,7 +1783,7 @@
         "authbase": {
           "type": "string",
           "format": "byte",
-          "description": "The identity's authbase, which for a token is its category ID,\nlittle-endian."
+          "description": "The identity's authbase, little-endian: a token's category ID, or any\ntransaction of an authchain the index tracks."
         },
         "include_authchain": {
           "type": "boolean",

@@ -194,7 +194,7 @@ type config struct {
 	SlpCacheMaxSize         uint          `long:"slpcachemaxsize" description:"The maximum number of entries in the slp indexer cache"`
 	DropSlpIndex            bool          `long:"dropslpindex" description:"Deletes the slp index from the database on start up and then exits."`
 	SlpGraphSearch          bool          `long:"slpgraphsearch" description:"Enables gRPC calls related to slp graph search."`
-	BcmrIndex               bool          `long:"bcmrindex" description:"Maintain an index of the authchain of every token category and of its BCMR metadata registry publications, which makes the getbcmridentity and GetBcmrIdentity RPCs available"`
+	BcmrIndex               bool          `long:"bcmrindex" description:"Maintain an index of the authchain of every token category, and of every authchain that holds a BCMR metadata registry publication, from where it begins, which makes the getbcmridentity and GetBcmrIdentity RPCs available"`
 	DropBcmrIndex           bool          `long:"dropbcmrindex" description:"Deletes the BCMR index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`

@@ -144,7 +144,10 @@ func deserializeBcmrLink(b []byte) (*bcmrLink, error) {
 	return l, nil
 }
 
-// bcmrSegment is a run of links between the points where authchains join.
+// bcmrSegment is a run of links between the points where authchains join, or
+// where one meets a transaction the index doesn't track: each link but the
+// first spends the identity output of the link before it, and no other, so
+// that what is behind every link of a segment is behind its first link.
 type bcmrSegment struct {
 	// length is the number of links in the segment.
 	length uint32
@@ -166,14 +169,32 @@ type bcmrSegment struct {
 	// burned reports, for a current segment, that its head spent the
 	// identity output to a data-carrier output, which ends the authchain.
 	burned bool
+
+	// complete reports that the walker has nothing to do behind the
+	// segment: the index tracks every transaction behind it, of which
+	// found are ones the walker added, counting the segment's own links if
+	// the walker added them, or else found is bcmrMaxFound+1, and the
+	// walker leaves what is behind it, more than it adds behind any one
+	// publication, untracked.
+	complete bool
+	found    uint32
 }
 
+// The bits of a serialized segment's flags.
+const (
+	bcmrSegmentBurned   = 0x01
+	bcmrSegmentComplete = 0x02
+)
+
 // bcmrSegmentSize is the size of a serialized segment.
-const bcmrSegmentSize = 4 + 3*chainhash.HashSize + 4 + 8 + 1
+const bcmrSegmentSize = 4 + 3*chainhash.HashSize + 4 + 8 + 1 + 4
 
 // serializeBcmrSegment serializes a segment as
 //
-//	<length><first><head><publication link><publication place><next><burned>
+//	<length><first><head><publication link><publication place><next><flags><found>
+//
+// where the flags are a byte with bcmrSegmentBurned set when it is burned and
+// bcmrSegmentComplete when it is complete.
 func serializeBcmrSegment(s *bcmrSegment) []byte {
 	buf := make([]byte, bcmrSegmentSize)
 	byteOrder.PutUint32(buf[0:4], s.length)
@@ -183,8 +204,12 @@ func serializeBcmrSegment(s *bcmrSegment) []byte {
 	byteOrder.PutUint32(buf[100:104], s.pubPlace)
 	byteOrder.PutUint64(buf[104:112], s.next)
 	if s.burned {
-		buf[112] = 1
+		buf[112] |= bcmrSegmentBurned
 	}
+	if s.complete {
+		buf[112] |= bcmrSegmentComplete
+	}
+	byteOrder.PutUint32(buf[113:117], s.found)
 	return buf
 }
 
@@ -194,11 +219,16 @@ func deserializeBcmrSegment(b []byte) (*bcmrSegment, error) {
 	if len(b) != bcmrSegmentSize {
 		return nil, errDeserialize("BCMR segment has the wrong size")
 	}
+	if b[112]&^(bcmrSegmentBurned|bcmrSegmentComplete) != 0 {
+		return nil, errDeserialize("BCMR segment has unknown flags")
+	}
 	s := &bcmrSegment{
 		length:   byteOrder.Uint32(b[0:4]),
 		pubPlace: byteOrder.Uint32(b[100:104]),
 		next:     byteOrder.Uint64(b[104:112]),
-		burned:   b[112] == 1,
+		burned:   b[112]&bcmrSegmentBurned != 0,
+		complete: b[112]&bcmrSegmentComplete != 0,
+		found:    byteOrder.Uint32(b[113:117]),
 	}
 	copy(s.first[:], b[4:36])
 	copy(s.head[:], b[36:68])
@@ -267,8 +297,23 @@ func bcmrUndoKey(height int32) []byte {
 	return binary.BigEndian.AppendUint32(nil, uint32(height))
 }
 
-// bcmrUndoEntry is the value an entry of the index had before a block
-// changed it.
+// bcmrWalkUndoKey returns the database key of the undo record of the walker's
+// write number seq, counted from 1, while the block at a height was the
+// index's tip: the block's key followed by seq in big-endian order.
+func bcmrWalkUndoKey(height int32, seq uint32) []byte {
+	return binary.BigEndian.AppendUint32(bcmrUndoKey(height), seq)
+}
+
+// bcmrPendingKey returns the database key of a segment left for the walker,
+// for a publication in the block at a height: the height and the segment's ID
+// in big-endian order, so that the walker goes behind older publications
+// first.
+func bcmrPendingKey(height int32, segment uint64) []byte {
+	return binary.BigEndian.AppendUint64(binary.BigEndian.AppendUint32(nil, uint32(height)), segment)
+}
+
+// bcmrUndoEntry is the value an entry of the index had before a block, or the
+// walker, changed it.
 type bcmrUndoEntry struct {
 	bucket byte
 	key    []byte
@@ -276,8 +321,8 @@ type bcmrUndoEntry struct {
 	old    []byte
 }
 
-// serializeBcmrUndo serializes a block's undo record, its entries in the
-// order the block first changed them, each as
+// serializeBcmrUndo serializes an undo record, its entries in the order they
+// were first changed, each as
 //
 //	<bucket><key length><key><whether it had a value><value length><value>
 //
@@ -331,9 +376,9 @@ func deserializeBcmrUndo(b []byte) ([]bcmrUndoEntry, error) {
 	return entries, nil
 }
 
-// bcmrWriter writes the changes a block makes to the index in a database
-// transaction, and records the value each entry had before, for the block's
-// undo record.
+// bcmrWriter writes the changes a block, or the walker, makes to the index in
+// a database transaction, and records the value each entry had before, for
+// their undo record.
 type bcmrWriter struct {
 	buckets [bcmrNumBuckets]database.Bucket
 	touched map[string]struct{}
@@ -376,7 +421,7 @@ func (w *bcmrWriter) delete(b byte, key []byte) error {
 }
 
 // record adds the value key has in bucket b to the undo record, the first
-// time the block changes it.
+// time the writer changes it.
 func (w *bcmrWriter) record(b byte, key []byte) {
 	id := string(b) + string(key)
 	if _, ok := w.touched[id]; ok {
@@ -404,4 +449,27 @@ func (w *bcmrWriter) newSegment() (uint64, error) {
 	next := make([]byte, 8)
 	byteOrder.PutUint64(next, id+1)
 	return id, w.put(bcmrTop, bcmrNextSegmentKey, next)
+}
+
+// link returns the link with the passed txid, which the index must hold.
+func (w *bcmrWriter) link(hash chainhash.Hash) (*bcmrLink, error) {
+	raw := w.get(bcmrLinks, hash[:])
+	if raw == nil {
+		return nil, AssertError(fmt.Sprintf("BCMR link %v is missing", hash))
+	}
+	return deserializeBcmrLink(raw)
+}
+
+// segment returns the segment with the passed ID, which the index must hold.
+func (w *bcmrWriter) segment(id uint64) (*bcmrSegment, error) {
+	raw := w.get(bcmrSegments, bcmrSegmentKey(id))
+	if raw == nil {
+		return nil, AssertError(fmt.Sprintf("BCMR segment %d is missing", id))
+	}
+	return deserializeBcmrSegment(raw)
+}
+
+// putSegment stores the segment with the passed ID.
+func (w *bcmrWriter) putSegment(id uint64, s *bcmrSegment) error {
+	return w.put(bcmrSegments, bcmrSegmentKey(id), serializeBcmrSegment(s))
 }

@@ -428,3 +428,149 @@ func TestBcmrIdentity(t *testing.T) {
 		genesisHash.String())
 	checkBcmrRPCError(t, h, btcjson.ErrRPCDecodeHexString, "xyz")
 }
+
+// waitForBcmrIdentity calls getbcmridentity until the walker has found the
+// identity, and fails the test if it doesn't in time.
+func waitForBcmrIdentity(t *testing.T, h *rpctest.Harness, params ...interface{}) *btcjson.GetBcmrIdentityResult {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		result, err := bcmrIdentity(h, params...)
+		if err == nil {
+			return result
+		}
+		var rpcErr *btcjson.RPCError
+		if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCInvalidAddressOrKey {
+			t.Fatalf("getbcmridentity %v: %v", params, err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("getbcmridentity %v: no identity in time", params)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// checkBcmrAuthchain checks that an answer's authchain is the passed
+// transactions, from the authbase, with the publication of pub and no genesis
+// supply.
+func checkBcmrAuthchain(t *testing.T, result *btcjson.GetBcmrIdentityResult, pub *wire.MsgTx,
+	txs ...*wire.MsgTx) {
+
+	t.Helper()
+	if len(*result.Authchain) != len(txs) || *result.More {
+		t.Fatalf("authchain of %d links, more %v, want %d", len(*result.Authchain),
+			*result.More, len(txs))
+	}
+	for i, tx := range txs {
+		if (*result.Authchain)[strconv.Itoa(i)] != bcmrHex(t, tx) {
+			t.Errorf("link %d differs", i)
+		}
+	}
+	if head := txs[len(txs)-1].TxHash(); result.Head.Txid != head.String() {
+		t.Errorf("head %s, want %v", result.Head.Txid, head)
+	}
+	if pubHash := pub.TxHash(); result.Publication == nil || result.Publication.Txid != pubHash.String() {
+		t.Errorf("publication %+v, want %v's", result.Publication, pubHash)
+	}
+	if result.GenesisSupply != "" {
+		t.Errorf("genesis supply %s", result.GenesisSupply)
+	}
+}
+
+// TestBcmrPublications checks, on a regtest node with --bcmrindex, that a
+// registry's authbase behind its first publication answers once the walker
+// has gone behind the publication, and that a branch the index didn't track,
+// which merges into a token's authchain before a publication, answers from
+// where it begins, while the token's authchain is unchanged; and that a block
+// invalidated and reconsidered undoes the walk and has it walked again.
+func TestBcmrPublications(t *testing.T) {
+	h, err := rpctest.New(&chaincfg.RegressionNetParams, nil, []string{"--bcmrindex"})
+	if err != nil {
+		t.Fatalf("creating the harness: %v", err)
+	}
+	defer func() {
+		if err := h.TearDown(); err != nil {
+			t.Errorf("tearing down the harness: %v", err)
+		}
+	}()
+	if err := h.SetUp(true, 1); err != nil {
+		t.Fatalf("setting up the harness: %v", err)
+	}
+
+	fund, err := h.CreateTransaction([]*wire.TxOut{
+		wire.NewTxOut(100000000, bcmrOpTrue, wire.TokenData{}),
+	}, 10, true)
+	if err != nil {
+		t.Fatalf("funding: %v", err)
+	}
+	bcmrMine(t, h, fund)
+	fundIndex := uint32(0)
+	for i, out := range fund.TxOut {
+		if bytes.Equal(out.PkScript, bcmrOpTrue) {
+			fundIndex = uint32(i)
+		}
+	}
+
+	// The outputs spent below are none an output 0, so that nothing is
+	// behind the transactions that spend them.
+	split := bcmrSpend(fund, fundIndex)
+	for i := 0; i < 4; i++ {
+		split.AddTxOut(wire.NewTxOut(20000000, bcmrOpTrue, wire.TokenData{}))
+	}
+	bcmrMine(t, h, split)
+
+	// A registry publishes for the first time, a transaction after its
+	// authbase.  Outputs of change keep the transactions above the
+	// smallest size.
+	change := wire.NewTxOut(10000, bcmrOpTrue, wire.TokenData{})
+	base := bcmrSpend(split, 1, wire.NewTxOut(19000000, bcmrOpTrue, wire.TokenData{}), change)
+	bcmrMine(t, h, base)
+	registry := bcmrSpend(base, 0, wire.NewTxOut(18000000, bcmrOpTrue, wire.TokenData{}),
+		bcmrPublicationOut(1, "registry.example"))
+	bcmrMine(t, h, registry)
+	result := waitForBcmrIdentity(t, h, base.TxHash().String(), true)
+	checkBcmrAuthchain(t, result, registry, base, registry)
+
+	// A token's authchain, which a branch the index doesn't track merges
+	// into before a publication.
+	authbase := bcmrSpend(split, 2, wire.NewTxOut(19000000, bcmrOpTrue, wire.TokenData{}), change)
+	branch := bcmrSpend(split, 3, wire.NewTxOut(19000000, bcmrOpTrue, wire.TokenData{}), change)
+	bcmrMine(t, h, authbase)
+	bcmrMine(t, h, branch)
+	category := authbase.TxHash()
+	tokens := wire.TokenData{CategoryID: category, Amount: 50, BitField: wire.HAS_AMOUNT}
+	genesis := bcmrSpend(authbase, 0, wire.NewTxOut(18000000, bcmrOpTrue, tokens), change)
+	bcmrMine(t, h, genesis)
+	link := bcmrSpend(genesis, 0, wire.NewTxOut(17000000, bcmrOpTrue, tokens), change)
+	bcmrMine(t, h, link)
+	merge := bcmrSpend(link, 0, wire.NewTxOut(35000000, bcmrOpTrue, tokens))
+	merge.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: branch.TxHash(), Index: 0}, nil))
+	bcmrMine(t, h, merge)
+	update := bcmrSpend(merge, 0, wire.NewTxOut(34000000, bcmrOpTrue, tokens),
+		bcmrPublicationOut(2, "token.example"))
+	updateBlock := bcmrMine(t, h, update)
+
+	result = waitForBcmrIdentity(t, h, branch.TxHash().String(), true)
+	checkBcmrAuthchain(t, result, update, branch, merge, update)
+	result = mustBcmrIdentity(t, h, category.String(), true)
+	if len(*result.Authchain) != 5 || result.GenesisSupply != "50" ||
+		(*result.Authchain)["3"] != bcmrHex(t, merge) || (*result.Authchain)["4"] != bcmrHex(t, update) ||
+		result.Publication == nil || result.Publication.Txid != update.TxHash().String() {
+
+		t.Errorf("the token's authchain of %d links, supply %s, publication %+v",
+			len(*result.Authchain), result.GenesisSupply, result.Publication)
+	}
+
+	// Invalidating the block of the publication undoes the walk behind it,
+	// and reconsidering it has the walker walk again.
+	blockParam, _ := json.Marshal(updateBlock.Hash().String())
+	if _, err := h.Node.RawRequest("invalidateblock", []json.RawMessage{blockParam}); err != nil {
+		t.Fatalf("invalidateblock: %v", err)
+	}
+	checkBcmrRPCError(t, h, btcjson.ErrRPCInvalidAddressOrKey, branch.TxHash().String())
+	if _, err := h.Node.RawRequest("reconsiderblock", []json.RawMessage{blockParam}); err != nil {
+		t.Fatalf("reconsiderblock: %v", err)
+	}
+	result = waitForBcmrIdentity(t, h, branch.TxHash().String(), true)
+	checkBcmrAuthchain(t, result, update, branch, merge, update)
+}

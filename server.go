@@ -4009,6 +4009,12 @@ func (s *server) Start() {
 	if cfg.Generate {
 		s.cpuMiner.Start()
 	}
+
+	// Walk behind the BCMR publications that the BCMR index left for its
+	// walker, and those of the blocks to come.
+	if s.bcmrIndex != nil {
+		s.bcmrIndex.StartWalker()
+	}
 }
 
 // Stop gracefully shuts down the server by stopping and disconnecting all
@@ -4026,6 +4032,12 @@ func (s *server) Stop() error {
 	srvrLog.Info("Stopping: cpuMiner")
 	s.cpuMiner.Stop()
 	srvrLog.Info("Stopped: cpuMiner")
+
+	if s.bcmrIndex != nil {
+		srvrLog.Info("Stopping: BCMR walker")
+		s.bcmrIndex.StopWalker()
+		srvrLog.Info("Stopped: BCMR walker")
+	}
 
 	// Shutdown the RPC server if it's not disabled.
 	if !cfg.DisableRPC {

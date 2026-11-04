@@ -119,11 +119,17 @@ type BchrpcClient interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
-	// GetBcmrIdentity returns what the BCMR index knows of a token's identity,
-	// as CHIP-BCMR defines it, with the links of its authchain in the mempool:
-	// the authhead, the BCMR publication to read and the genesis supply, and on
-	// request the authchain itself, in pages, with a merkle proof of the
-	// newest confirmed link.
+	// GetBcmrIdentity returns what the BCMR index knows of an identity, as
+	// CHIP-BCMR defines it, a token's or that of any transaction of an
+	// authchain the index tracks, with the links of its authchain in the
+	// mempool: the authhead, the BCMR publication to read and a token's
+	// genesis supply, and on request the authchain itself, in pages, with a
+	// merkle proof of the newest confirmed link. The index tracks every
+	// token's authchain and, from where it begins, every authchain that holds
+	// a publication, unless more than 100,000 transactions it doesn't
+	// otherwise track are behind the publication; it finds the transactions
+	// behind a publication in the background, once the publication's block is
+	// connected.
 	//
 	// **Requires BcmrIndex**
 	GetBcmrIdentity(ctx context.Context, in *GetBcmrIdentityRequest, opts ...grpc.CallOption) (*GetBcmrIdentityResponse, error)
@@ -583,11 +589,17 @@ type BchrpcServer interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
-	// GetBcmrIdentity returns what the BCMR index knows of a token's identity,
-	// as CHIP-BCMR defines it, with the links of its authchain in the mempool:
-	// the authhead, the BCMR publication to read and the genesis supply, and on
-	// request the authchain itself, in pages, with a merkle proof of the
-	// newest confirmed link.
+	// GetBcmrIdentity returns what the BCMR index knows of an identity, as
+	// CHIP-BCMR defines it, a token's or that of any transaction of an
+	// authchain the index tracks, with the links of its authchain in the
+	// mempool: the authhead, the BCMR publication to read and a token's
+	// genesis supply, and on request the authchain itself, in pages, with a
+	// merkle proof of the newest confirmed link. The index tracks every
+	// token's authchain and, from where it begins, every authchain that holds
+	// a publication, unless more than 100,000 transactions it doesn't
+	// otherwise track are behind the publication; it finds the transactions
+	// behind a publication in the background, once the publication's block is
+	// connected.
 	//
 	// **Requires BcmrIndex**
 	GetBcmrIdentity(context.Context, *GetBcmrIdentityRequest) (*GetBcmrIdentityResponse, error)

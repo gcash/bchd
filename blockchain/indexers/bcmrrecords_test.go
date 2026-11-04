@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 
@@ -38,12 +39,23 @@ func TestBcmrRecords(t *testing.T) {
 		}
 	}
 
-	segment := &bcmrSegment{length: 3, first: chainhash.Hash{1}, head: chainhash.Hash{2},
-		pubLink: chainhash.Hash{3}, pubPlace: 1, next: 9, burned: true}
-	if got, err := deserializeBcmrSegment(serializeBcmrSegment(segment)); err != nil ||
-		!reflect.DeepEqual(got, segment) {
+	for _, segment := range []*bcmrSegment{
+		{length: 3, first: chainhash.Hash{1}, head: chainhash.Hash{2},
+			pubLink: chainhash.Hash{3}, pubPlace: 1, next: 9, burned: true},
+		{length: 1, first: chainhash.Hash{4}, head: chainhash.Hash{4}, complete: true,
+			found: 1 << 30},
+		{length: 2, burned: true, complete: true},
+	} {
+		serialized := serializeBcmrSegment(segment)
+		if got, err := deserializeBcmrSegment(serialized); err != nil ||
+			!reflect.DeepEqual(got, segment) {
 
-		t.Errorf("segment decoded as %+v, %v", got, err)
+			t.Errorf("segment decoded as %+v, %v", got, err)
+		}
+		serialized[112] |= 0x04
+		if _, err := deserializeBcmrSegment(serialized); err == nil {
+			t.Error("segment with an unknown flag decoded")
+		}
 	}
 	for _, identity := range []*bcmrIdentity{
 		{segment: 4, place: 2, supply: 1 << 62},
@@ -74,5 +86,21 @@ func TestBcmrRecords(t *testing.T) {
 	}
 	if _, err := deserializeBcmrUndo([]byte{bcmrUndo, 0, 0}); err == nil {
 		t.Error("undo record for the undo bucket decoded")
+	}
+
+	// The undo records of the walker's writes sort after the block's own,
+	// in the order they were written, and before the next block's; the
+	// segments left for the walker sort by height and then by segment.
+	for _, keys := range [][][]byte{
+		{bcmrUndoKey(5), bcmrWalkUndoKey(5, 1), bcmrWalkUndoKey(5, 2),
+			bcmrWalkUndoKey(5, 256), bcmrUndoKey(6)},
+		{bcmrPendingKey(5, 9), bcmrPendingKey(5, 256), bcmrPendingKey(6, 1),
+			bcmrPendingKey(256, 0)},
+	} {
+		for i := 1; i < len(keys); i++ {
+			if bytes.Compare(keys[i-1], keys[i]) >= 0 {
+				t.Errorf("key %x sorts after %x", keys[i-1], keys[i])
+			}
+		}
 	}
 }

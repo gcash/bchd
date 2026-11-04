@@ -416,7 +416,7 @@ func TestBcmrQueryMempoolGenesis(t *testing.T) {
 	// not its own.
 	c.connect(true, gh)
 	mempool = newBcmrTestMempool()
-	if state := c.state(&hCat); state == nil || state.identity.place == 0 {
+	if state := c.state(&hCat); state == nil || state.place == 0 {
 		t.Fatal("h doesn't start partway along a segment")
 	}
 	info = c.mustQuery(t, mempool, hCat, true, nil, 0)

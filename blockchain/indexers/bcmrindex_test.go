@@ -27,8 +27,9 @@ import (
 
 // bcmrTestChain stands in for the chain in the BCMR index tests.  It builds
 // blocks, stores them, and connects them to an index, keeping its tip as the
-// index manager does, and it answers the index's reads of the main chain's
-// blocks, of their spent outputs, and of the UTXO set.
+// index manager does and notifying the index of each block once it is
+// committed, as the chain does, and it answers the index's reads of the main
+// chain's blocks, of their spent outputs, and of the UTXO set.
 type bcmrTestChain struct {
 	t      *testing.T
 	db     database.DB
@@ -49,6 +50,13 @@ type bcmrTestChain struct {
 
 	// views counts the index's open read transactions.
 	views atomic.Int32
+
+	// coinbaseOuts are outputs that the coinbase of the next block has
+	// after its own.
+	coinbaseOuts []*wire.TxOut
+
+	// onJournal, if set, runs each time the index reads a spend journal.
+	onJournal func()
 }
 
 // bcmrViewCounter is a database that counts its open read transactions.
@@ -122,9 +130,14 @@ func (c *bcmrTestChain) BlockHashByHeight(height int32) (*chainhash.Hash, error)
 }
 
 // FetchSpendJournal returns the outputs a block of the test chain spends.
+// Like the chain's, it has none for a block the chain disconnected.
 func (c *bcmrTestChain) FetchSpendJournal(block *bchutil.Block) ([]blockchain.SpentTxOut, error) {
+	if c.onJournal != nil {
+		c.onJournal()
+	}
 	stxos, ok := c.stxos[*block.Hash()]
-	if !ok {
+	height := block.Height()
+	if !ok || height < 0 || int(height) >= len(c.blocks) || *c.blocks[height].Hash() != *block.Hash() {
 		return nil, fmt.Errorf("no spend journal for block %v", block.Hash())
 	}
 	return stxos, nil
@@ -184,6 +197,10 @@ func (c *bcmrTestChain) connect(withStxos bool, txs ...*wire.MsgTx) *bchutil.Blo
 		SignatureScript:  []byte{txscript.OP_DATA_4, byte(height), byte(height >> 8), 0, 0},
 	})
 	coinbase.AddTxOut(wire.NewTxOut(5000000000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
+	for _, out := range c.coinbaseOuts {
+		coinbase.AddTxOut(out)
+	}
+	c.coinbaseOuts = nil
 	if err := msgBlock.AddTransaction(coinbase); err != nil {
 		c.t.Fatal(err)
 	}
@@ -231,6 +248,9 @@ func (c *bcmrTestChain) connect(withStxos bool, txs ...*wire.MsgTx) *bchutil.Blo
 	if err != nil {
 		c.t.Fatalf("connecting block %d: %v", height, err)
 	}
+	c.idx.handleChainNotification(&blockchain.Notification{
+		Type: blockchain.NTBlockConnected, Data: block,
+	})
 	return block
 }
 
@@ -245,6 +265,9 @@ func (c *bcmrTestChain) disconnect() {
 		c.t.Fatalf("disconnecting block %d: %v", block.Height(), err)
 	}
 	c.blocks = c.blocks[:len(c.blocks)-1]
+	c.idx.handleChainNotification(&blockchain.Notification{
+		Type: blockchain.NTBlockDisconnected, Data: block,
+	})
 }
 
 // snapshot returns every entry of the index, and the heads it keeps in
@@ -271,6 +294,8 @@ func (c *bcmrTestChain) snapshot() map[string]string {
 	if err != nil {
 		c.t.Fatal(err)
 	}
+	c.idx.mtx.Lock()
+	defer c.idx.mtx.Unlock()
 	for head, segment := range c.idx.heads {
 		entries["memory/"+head.String()] = fmt.Sprint(segment)
 	}
@@ -423,8 +448,8 @@ func checkBcmrState(t *testing.T, name string, state *bcmrIdentityState,
 	if state.pubLink != wantPub {
 		t.Errorf("%s: publication in %v, want %v", name, state.pubLink, wantPub)
 	}
-	if state.identity.supply != supply {
-		t.Errorf("%s: supply %d, want %d", name, state.identity.supply, supply)
+	if state.identity == nil || state.identity.supply != supply {
+		t.Errorf("%s: identity %+v, want a supply of %d", name, state.identity, supply)
 	}
 }
 
@@ -547,9 +572,9 @@ func TestBcmrIndexSharedChains(t *testing.T) {
 	if state := c.state(&x1Cat); len(state.path) != 3 {
 		t.Errorf("x1's authchain runs through %d segments, want 3", len(state.path))
 	}
-	if state := c.state(&gCat); state.identity.place != 0 || len(state.path) != 2 {
+	if state := c.state(&gCat); state.place != 0 || len(state.path) != 2 {
 		t.Errorf("g starts at place %d and runs through %d segments",
-			state.identity.place, len(state.path))
+			state.place, len(state.path))
 	}
 }
 
@@ -615,9 +640,9 @@ func TestBcmrIndexTokenFromHead(t *testing.T) {
 	checkBcmrState(t, "a", c.state(&aCat), fromA, false, a, 1)
 	checkBcmrState(t, "token from a's authhead", c.state(&gaCat), fromA, false, nil, 2)
 	checkBcmrState(t, "token from b's authhead", c.state(&gbCat), fromB, false, gb, 3)
-	if state := c.state(&gaCat); state.identity.place != 1 || len(state.path) != 1 {
+	if state := c.state(&gaCat); state.place != 1 || len(state.path) != 1 {
 		t.Errorf("the token from a's authhead starts at place %d of %d segments",
-			state.identity.place, len(state.path))
+			state.place, len(state.path))
 	}
 }
 

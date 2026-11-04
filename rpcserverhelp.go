@@ -181,10 +181,14 @@ var helpDescsEnUS = map[string]string{
 	"getaddednodeinfo--result0":    "List of added peers",
 
 	// GetBcmrIdentityCmd help.
-	"getbcmridentity--synopsis": "Returns what the BCMR index knows of a token's identity, as CHIP-BCMR defines it, " +
-		"with the links of its authchain in the mempool: the authhead, the BCMR publication to read and the genesis supply, " +
-		"and on request the authchain itself with a merkle proof. Requires --bcmrindex.",
-	"getbcmridentity-authbase":         "The identity's authbase, which for a token is its category ID",
+	"getbcmridentity--synopsis": "Returns what the BCMR index knows of an identity, as CHIP-BCMR defines it, " +
+		"a token's or that of any transaction of an authchain the index tracks, " +
+		"with the links of its authchain in the mempool: the authhead, the BCMR publication to read and a token's genesis supply, " +
+		"and on request the authchain itself with a merkle proof. The index tracks every token's authchain and, " +
+		"from where it begins, every authchain that holds a publication, unless more than 100,000 transactions it doesn't " +
+		"otherwise track are behind the publication; it finds the transactions behind a publication in the background, " +
+		"once the publication's block is connected. Requires --bcmrindex.",
+	"getbcmridentity-authbase":         "The identity's authbase: a token's category ID, or any transaction of an authchain the index tracks",
 	"getbcmridentity-includeauthchain": "Also return the authchain's transactions, from the authbase, or from the link after the one given in after",
 	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it",
 	"getbcmridentity-limit":            "The most links to return, up to 1000; an answer also holds no more after the link that takes its transactions past 1 MB",
@@ -194,7 +198,7 @@ var helpDescsEnUS = map[string]string{
 	"getbcmridentityresult-status":               "active, or burned if the authhead spent the identity output to a data-carrier output",
 	"getbcmridentityresult-head":                 "The authhead, the newest link of the authchain, confirmed or in the mempool",
 	"getbcmridentityresult-publication":          "The BCMR publication to read: the authhead's if it has a well-formed one, or else the newest earlier link's (only if a link has one)",
-	"getbcmridentityresult-genesissupply":        "The number of fungible tokens the token's genesis created, as a decimal string",
+	"getbcmridentityresult-genesissupply":        "The number of fungible tokens the token's genesis created, as a decimal string (only for a token's identity)",
 	"getbcmridentityresult-identityoutput":       "The CashTokens data of the authhead's identity output, output 0, as it is (only if it carries a token)",
 	"getbcmridentityresult-authchain":            "The authchain's transactions, keyed by their index from the authbase as 0, in the shape of CHIP-BCMR's authchain extension (only with includeauthchain)",
 	"getbcmridentityresult-authchain--key":       "index",

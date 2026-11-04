@@ -5624,8 +5624,8 @@ func (*SlpRequiredBurn_MintBatonVout) isSlpRequiredBurn_BurnIntention() {}
 
 type GetBcmrIdentityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The identity's authbase, which for a token is its category ID,
-	// little-endian.
+	// The identity's authbase, little-endian: a token's category ID, or any
+	// transaction of an authchain the index tracks.
 	Authbase []byte `protobuf:"bytes,1,opt,name=authbase,proto3" json:"authbase,omitempty"`
 	// Also return the authchain's transactions, from the authbase, or from
 	// the link after the one in after.

@@ -40,9 +40,9 @@ const (
 var bcmrMaxAuthchainBytes = BcmrMaxAuthchainBytes
 
 var (
-	// ErrBcmrIdentityNotFound is returned for an authbase that is no
-	// identity the index tracks, and that no genesis in the mempool spends
-	// the identity output of either.
+	// ErrBcmrIdentityNotFound is returned for an authbase that is no link
+	// the index tracks, and that no genesis in the mempool spends the
+	// identity output of either.
 	ErrBcmrIdentityNotFound = errors.New("no identity with that authbase")
 
 	// ErrBcmrNotALink is returned for a query that asks for the links after
@@ -61,8 +61,8 @@ type BcmrMempool interface {
 
 // BcmrQuery is a query of the BCMR index.
 type BcmrQuery struct {
-	// Authbase is the identity's authbase, which for a token is its
-	// category ID.
+	// Authbase is the identity's authbase: a token's category ID, or any
+	// other link the index tracks.
 	Authbase chainhash.Hash
 
 	// Authchain asks for the links of the authchain, from the authbase,
@@ -249,13 +249,27 @@ func (q *bcmrQuerier) answer() (*BcmrIdentityInfo, error) {
 	// is the next link.
 	if state != nil {
 		info.Burned = state.burned
-		info.HasGenesisSupply = true
-		info.GenesisSupply = state.identity.supply
+		if state.identity != nil {
+			info.HasGenesisSupply = true
+			info.GenesisSupply = state.identity.supply
+		}
 		q.mempoolIndex = state.length()
 		if !state.burned {
 			q.mempoolLinks, err = q.mempoolLinksFrom(state.head)
 			if err != nil {
 				return nil, err
+			}
+		}
+
+		// A genesis in the mempool that spends the identity output of an
+		// authhead that is no token's authbase makes it one, as it does
+		// once it confirms.
+		if state.identity == nil && len(q.mempoolLinks) > 0 {
+			g, ok := findBcmrGenesis(bcmr.Geneses(q.mempoolLinks[0].MsgTx()),
+				q.query.Authbase)
+			if ok {
+				info.HasGenesisSupply = true
+				info.GenesisSupply = g.Supply
 			}
 		}
 	} else {
@@ -305,7 +319,7 @@ func (s *bcmrIdentityState) length() uint32 {
 	for _, length := range s.lengths {
 		n += length
 	}
-	return n - s.identity.place
+	return n - s.place
 }
 
 // findBcmrGenesis returns the genesis of a category among geneses.
@@ -535,10 +549,10 @@ func (q *bcmrQuerier) linkIndex(link *bcmrLink) (uint32, error) {
 	var base uint32
 	for i, segment := range q.state.path {
 		if segment == link.segment {
-			if i == 0 && link.place < q.state.identity.place {
+			if i == 0 && link.place < q.state.place {
 				return 0, ErrBcmrNotALink
 			}
-			return base + link.place - q.state.identity.place, nil
+			return base + link.place - q.state.place, nil
 		}
 		base += q.state.lengths[i]
 	}

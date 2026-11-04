@@ -111,11 +111,7 @@ func (c *bcmrConnector) removeHead(hash chainhash.Hash) error {
 
 // link returns the link with the passed txid.
 func (c *bcmrConnector) link(hash chainhash.Hash) (*bcmrLink, error) {
-	raw := c.w.get(bcmrLinks, hash[:])
-	if raw == nil {
-		return nil, AssertError(fmt.Sprintf("BCMR link %v is missing", hash))
-	}
-	return deserializeBcmrLink(raw)
+	return c.w.link(hash)
 }
 
 // putLink stores a link.
@@ -125,16 +121,18 @@ func (c *bcmrConnector) putLink(hash chainhash.Hash, l *bcmrLink) error {
 
 // segment returns the segment with the passed ID.
 func (c *bcmrConnector) segment(id uint64) (*bcmrSegment, error) {
-	raw := c.w.get(bcmrSegments, bcmrSegmentKey(id))
-	if raw == nil {
-		return nil, AssertError(fmt.Sprintf("BCMR segment %d is missing", id))
-	}
-	return deserializeBcmrSegment(raw)
+	return c.w.segment(id)
 }
 
 // putSegment stores a segment.
 func (c *bcmrConnector) putSegment(id uint64, s *bcmrSegment) error {
-	return c.w.put(bcmrSegments, bcmrSegmentKey(id), serializeBcmrSegment(s))
+	return c.w.putSegment(id, s)
+}
+
+// leaveForWalker leaves the segment with the passed ID for the walker to walk
+// behind, for a publication in the block at height.
+func (c *bcmrConnector) leaveForWalker(height int32, segment uint64) error {
+	return c.w.put(bcmrPending, bcmrPendingKey(height, segment), bcmrPendingValue)
 }
 
 // newSegment returns the ID for a new segment.
@@ -240,19 +238,20 @@ func (c *bcmrConnector) fetchBlock(height int32) (*bchutil.Block, error) {
 
 // authbaseLink returns the link of the authbase of a category that the
 // transaction at position i of the block creates, which the index doesn't
-// track yet.  Its height is that of the output the genesis input spends, and
-// the block at that height holds it.
-func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, error) {
+// track yet, and whether the authbase spends an identity output, which is of a
+// transaction the index doesn't track either.  Its height is that of the
+// output the genesis input spends, and the block at that height holds it.
+func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, bool, error) {
 	block := c.block
 	pos, ok := c.position(g.Category)
 	if !ok {
 		stxo, err := c.spentOutput(i, g.Input)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		block, err = c.fetchBlock(stxo.Height)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		pos = -1
 		for k, tx := range block.Transactions() {
@@ -262,7 +261,7 @@ func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, error) {
 			}
 		}
 		if pos < 0 {
-			return nil, AssertError(fmt.Sprintf("authbase %v is not in "+
+			return nil, false, AssertError(fmt.Sprintf("authbase %v is not in "+
 				"block %v", g.Category, block.Hash()))
 		}
 	}
@@ -272,35 +271,56 @@ func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, error) {
 		var err error
 		loc, err = c.txLoc(pos)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	} else {
 		locs, err := blockTxLocs(block)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		loc = locs[pos]
 	}
+	msgTx := block.Transactions()[pos].MsgTx()
 	return &bcmrLink{
 		blockHash: *block.Hash(),
 		height:    block.Height(),
 		offset:    uint32(loc.TxStart),
 		length:    uint32(loc.TxLen),
-		pub:       bcmr.ParsePublication(block.Transactions()[pos].MsgTx()),
-	}, nil
+		pub:       bcmr.ParsePublication(msgTx),
+	}, bcmrSpendsIdentity(msgTx), nil
+}
+
+// bcmrSpendsIdentity reports whether a transaction spends an identity output.
+func bcmrSpendsIdentity(msgTx *wire.MsgTx) bool {
+	for _, in := range msgTx.TxIn {
+		if in.PreviousOutPoint.Index == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// addBcmrFound returns the sum of two counts of transactions the walker
+// added, which stops at bcmrMaxFound+1, standing for any more.
+func addBcmrFound(a, b uint32) uint32 {
+	return min(a+b, bcmrMaxFound+1)
 }
 
 // connectTx adds the transaction at position i of the block to the index if
-// it spends the identity output of an authhead or creates a token category.
+// it spends the identity output of an authhead, creates a token category, or
+// has a publication.  One that has a publication and does neither starts an
+// authchain of its own.
 func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 	tx := c.block.Transactions()[i]
 	msgTx := tx.MsgTx()
 
 	var spent []chainhash.Hash
+	identityInputs := 0
 	for _, in := range msgTx.TxIn {
 		if in.PreviousOutPoint.Index != 0 {
 			continue
 		}
+		identityInputs++
 		if _, ok := c.head(in.PreviousOutPoint.Hash); ok {
 			spent = append(spent, in.PreviousOutPoint.Hash)
 		}
@@ -309,7 +329,8 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 	if tokensActive {
 		geneses = bcmr.Geneses(msgTx)
 	}
-	if len(spent) == 0 && len(geneses) == 0 {
+	pub := bcmr.ParsePublication(msgTx)
+	if len(spent) == 0 && len(geneses) == 0 && pub == nil {
 		return nil
 	}
 
@@ -323,13 +344,14 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		height:    c.block.Height(),
 		offset:    uint32(loc.TxStart),
 		length:    uint32(loc.TxLen),
-		pub:       bcmr.ParsePublication(msgTx),
+		pub:       pub,
 	}
 	burned := bcmr.IsBurn(msgTx)
 
 	// The categories whose authbase the index doesn't track yet each start
 	// an authchain of their own, which comes into this transaction, as does
-	// the segment of each authhead it spends.
+	// the segment of each authhead it spends.  Any other identity output it
+	// spends is of a transaction the index doesn't track.
 	var fresh []bcmr.Genesis
 	for _, g := range geneses {
 		if _, ok := c.head(g.Category); !ok {
@@ -341,10 +363,12 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		segment, _ := c.head(prev)
 		segments = append(segments, segment)
 	}
+	untracked := identityInputs - len(spent) - len(fresh)
 
 	var segmentID uint64
+	var complete bool
 	switch {
-	case len(segments) == 1 && len(fresh) == 0:
+	case len(segments) == 1 && len(fresh) == 0 && untracked == 0:
 		// The transaction extends a segment.
 		segmentID = segments[0]
 		s, err := c.segment(segmentID)
@@ -359,8 +383,9 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		if err := c.putSegment(segmentID, s); err != nil {
 			return err
 		}
+		complete = s.complete
 
-	case len(segments) == 0 && len(fresh) == 1:
+	case len(segments) == 0 && len(fresh) == 1 && untracked == 0:
 		// The transaction creates a token whose authbase starts a
 		// segment, which this transaction continues.
 		g := fresh[0]
@@ -368,13 +393,15 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		if err != nil {
 			return err
 		}
-		auth, err := c.authbaseLink(g, i)
+		auth, behind, err := c.authbaseLink(g, i)
 		if err != nil {
 			return err
 		}
 		auth.segment, auth.place, auth.next = segmentID, 0, txHash
 		link.segment, link.place = segmentID, 1
-		s := &bcmrSegment{length: 2, first: g.Category, head: txHash, burned: burned}
+		complete = !behind
+		s := &bcmrSegment{length: 2, first: g.Category, head: txHash, burned: burned,
+			complete: complete}
 		s.notePublication(g.Category, 0, auth.pub)
 		s.notePublication(txHash, 1, link.pub)
 		if err := c.putLink(g.Category, auth); err != nil {
@@ -382,6 +409,11 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		}
 		if err := c.putSegment(segmentID, s); err != nil {
 			return err
+		}
+		if auth.pub != nil && !complete {
+			if err := c.leaveForWalker(auth.height, segmentID); err != nil {
+				return err
+			}
 		}
 		err = c.putIdentity(g.Category, &bcmrIdentity{
 			segment: segmentID, supply: g.Supply,
@@ -391,18 +423,19 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		}
 
 	default:
-		// Authchains join at the transaction: it starts a segment,
-		// which each of them continues into.
+		// Authchains join at the transaction, or it meets one the index
+		// doesn't track, or its publication starts one: it starts a
+		// segment, which each segment it spends the authhead of continues
+		// into.  The segment is complete if each of those is and the
+		// transaction spends no identity output the index doesn't track.
 		segmentID, err = c.newSegment()
 		if err != nil {
 			return err
 		}
 		link.segment, link.place = segmentID, 0
-		s := &bcmrSegment{length: 1, first: txHash, head: txHash, burned: burned}
+		s := &bcmrSegment{length: 1, first: txHash, head: txHash, burned: burned,
+			complete: untracked == 0}
 		s.notePublication(txHash, 0, link.pub)
-		if err := c.putSegment(segmentID, s); err != nil {
-			return err
-		}
 		for _, id := range segments {
 			prevSegment, err := c.segment(id)
 			if err != nil {
@@ -412,20 +445,22 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 			if err := c.putSegment(id, prevSegment); err != nil {
 				return err
 			}
+			s.complete = s.complete && prevSegment.complete
+			s.found = addBcmrFound(s.found, prevSegment.found)
 		}
 		for _, g := range fresh {
 			authSegmentID, err := c.newSegment()
 			if err != nil {
 				return err
 			}
-			auth, err := c.authbaseLink(g, i)
+			auth, behind, err := c.authbaseLink(g, i)
 			if err != nil {
 				return err
 			}
 			auth.segment, auth.place, auth.next = authSegmentID, 0, txHash
 			authSegment := &bcmrSegment{
 				length: 1, first: g.Category, head: g.Category,
-				next: segmentID,
+				next: segmentID, complete: !behind,
 			}
 			authSegment.notePublication(g.Category, 0, auth.pub)
 			if err := c.putLink(g.Category, auth); err != nil {
@@ -434,13 +469,27 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 			if err := c.putSegment(authSegmentID, authSegment); err != nil {
 				return err
 			}
+			if auth.pub != nil && behind {
+				err := c.leaveForWalker(auth.height, authSegmentID)
+				if err != nil {
+					return err
+				}
+			}
 			err = c.putIdentity(g.Category, &bcmrIdentity{
 				segment: authSegmentID, supply: g.Supply,
 			})
 			if err != nil {
 				return err
 			}
+			s.complete = s.complete && !behind
 		}
+		if !s.complete {
+			s.found = 0
+		}
+		if err := c.putSegment(segmentID, s); err != nil {
+			return err
+		}
+		complete = s.complete
 	}
 
 	// The authheads the transaction spent now lead to it, and their
@@ -478,6 +527,11 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 
 	if err := c.putLink(txHash, link); err != nil {
 		return err
+	}
+	if link.pub != nil && !complete {
+		if err := c.leaveForWalker(c.block.Height(), segmentID); err != nil {
+			return err
+		}
 	}
 	if burned {
 		return nil

@@ -226,8 +226,9 @@ Application Options:
 	                               start up and then exits.
 	    --slpgraphsearch           Enables gRPC calls related to slp graph search.
 	    --bcmrindex                Maintain an index of the authchain of every
-	                               token category and of its BCMR metadata
-	                               registry publications, which makes the
+	                               token category, and of every authchain that
+	                               holds a BCMR metadata registry publication,
+	                               from where it begins, which makes the
 	                               getbcmridentity and GetBcmrIdentity RPCs
 	                               available
 	    --dropbcmrindex            Deletes the BCMR index from the database on
