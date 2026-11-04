@@ -82,7 +82,7 @@ func newHeadersTestHarness(t *testing.T,
 			requestedBlocks: make(map[chainhash.Hash]struct{}),
 		}
 	}
-	sm.syncPeer = h.syncPeer
+	sm.syncPeer.Store(h.syncPeer)
 	sm.headersFirstMode = true
 
 	// Disconnect both peers when the test finishes so no goroutine is

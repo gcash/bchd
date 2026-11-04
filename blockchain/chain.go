@@ -372,12 +372,15 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	b.index.AddNode(node)
 	b.index.SetStatusFlags(node, statusValid)
 	b.bestChain.SetTip(node)
-	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	state := newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	b.stateLock.Lock()
+	b.stateSnapshot = state
+	b.stateLock.Unlock()
 
 	// Atomically insert info into the database.
 	err := b.db.Update(func(dbTx database.Tx) error {
 		// Update best block state.
-		if err := dbPutBestState(dbTx, b.stateSnapshot, node.workSum); err != nil {
+		if err := dbPutBestState(dbTx, state, node.workSum); err != nil {
 			return err
 		}
 

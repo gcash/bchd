@@ -40,7 +40,7 @@ func newProgressTestHarness(t *testing.T, n int32) *progressTestHarness {
 	logger := bchlog.NewBackend(&h.logged).Logger("SYNC")
 	logger.SetLevel(bchlog.LevelInfo)
 	sm.progressLogger = newBlockProgressLogger("Processed", logger)
-	sm.syncPeer = peer
+	sm.syncPeer.Store(peer)
 	sm.syncPeerState = &syncPeerState{}
 
 	h.blocks = []*bchutil.Block{bchutil.NewBlock(params.GenesisBlock)}
@@ -188,18 +188,18 @@ func TestProgressFirstLineAtSyncHeight(t *testing.T) {
 // height after such blocks is logged at once.
 func TestProgressWithoutSyncPeer(t *testing.T) {
 	h := newProgressTestHarness(t, 5)
-	h.sm.syncPeer = nil
+	h.sm.syncPeer.Store(nil)
 	h.hold()
 	h.send(1)
 	h.due()
 	h.send(2)
-	h.sm.syncPeer = h.peer
+	h.sm.syncPeer.Store(h.peer)
 	h.hold()
 	h.send(3)
-	h.sm.syncPeer = nil
+	h.sm.syncPeer.Store(nil)
 	h.hold()
 	h.send(4)
-	h.sm.syncPeer = h.peer
+	h.sm.syncPeer.Store(h.peer)
 	h.hold()
 	h.send(5)
 	h.expectLines("height 2, ", "height 3 (100.00%)", "height 5 (100.00%)")

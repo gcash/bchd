@@ -237,7 +237,7 @@ func TestTxNotPunishedWhileSyncing(t *testing.T) {
 
 	// The chain is current, but its sync peer is ahead of it.
 	makeCurrent(t, sm, params)
-	sm.syncPeer = peer
+	sm.syncPeer.Store(peer)
 	peer.UpdateLastBlockHeight(2)
 	refused("sync peer ahead", 1, 0)
 
@@ -245,7 +245,7 @@ func TestTxNotPunishedWhileSyncing(t *testing.T) {
 	// score.  This pool keeps the old rules, but a current node's pool
 	// checks transactions under the rules of its tip, so a failure there
 	// breaks the rules in force.
-	sm.syncPeer = nil
+	sm.syncPeer.Store(nil)
 	refused("current", 2, 100)
 
 	// Under the May 2026 rules the spend is valid.

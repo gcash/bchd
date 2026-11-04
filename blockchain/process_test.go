@@ -637,3 +637,38 @@ func TestInvalidateSideBlock(t *testing.T) {
 		t.Error("the side block is still invalid after it was reconsidered")
 	}
 }
+
+// TestAddHeaderSnapshot ensures that AddHeader, which moves the tip, can run
+// while BestSnapshot reads the state.  The race detector checks it.
+func TestAddHeaderSnapshot(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+	done := make(chan struct{})
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				chain.BestSnapshot()
+			}
+		}
+	}()
+
+	prev := blocks[5].MsgBlock()
+	for h := int32(6); h <= 25; h++ {
+		block := procTestBlock(t, prev, h-1, CalcBlockSubsidy(h, params),
+			params.PowLimitBits, nil)
+		if err := chain.AddHeader(&block.MsgBlock().Header); err != nil {
+			t.Fatal(err)
+		}
+		prev = block.MsgBlock()
+	}
+	close(done)
+	<-read
+	if height := chain.BestSnapshot().Height; height != 25 {
+		t.Fatalf("height %d, want 25", height)
+	}
+}
