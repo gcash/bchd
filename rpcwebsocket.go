@@ -331,6 +331,15 @@ func (m *wsNotificationManager) queueHandler() {
 	m.wg.Done()
 }
 
+// queue hands a notification or a client's request to the manager, unless it
+// has shut down.
+func (m *wsNotificationManager) queue(n interface{}) {
+	select {
+	case m.queueNotification <- n:
+	case <-m.quit:
+	}
+}
+
 // NotifyBlockConnected passes a block newly-connected to the best chain
 // to the notification manager for block and transaction notification
 // processing.
@@ -339,10 +348,7 @@ func (m *wsNotificationManager) NotifyBlockConnected(block *bchutil.Block) {
 	// and the RPC server may no longer be running, use a select
 	// statement to unblock enqueuing the notification once the RPC
 	// server has begun shutting down.
-	select {
-	case m.queueNotification <- (*notificationBlockConnected)(block):
-	case <-m.quit:
-	}
+	m.queue((*notificationBlockConnected)(block))
 }
 
 // NotifyBlockDisconnected passes a block disconnected from the best chain
@@ -352,10 +358,7 @@ func (m *wsNotificationManager) NotifyBlockDisconnected(block *bchutil.Block) {
 	// and the RPC server may no longer be running, use a select
 	// statement to unblock enqueuing the notification once the RPC
 	// server has begun shutting down.
-	select {
-	case m.queueNotification <- (*notificationBlockDisconnected)(block):
-	case <-m.quit:
-	}
+	m.queue((*notificationBlockDisconnected)(block))
 }
 
 // NotifyMempoolTx passes a transaction accepted by mempool to the
@@ -372,10 +375,7 @@ func (m *wsNotificationManager) NotifyMempoolTx(tx *bchutil.Tx, isNew bool) {
 	// may no longer be running, use a select statement to unblock
 	// enqueuing the notification once the RPC server has begun
 	// shutting down.
-	select {
-	case m.queueNotification <- n:
-	case <-m.quit:
-	}
+	m.queue(n)
 }
 
 // wsClientFilter tracks relevant addresses for each websocket client for
@@ -773,13 +773,13 @@ func (m *wsNotificationManager) NumClients() (n int) {
 // RegisterBlockUpdates requests block update notifications to the passed
 // websocket client.
 func (m *wsNotificationManager) RegisterBlockUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationRegisterBlocks)(wsc)
+	m.queue((*notificationRegisterBlocks)(wsc))
 }
 
 // UnregisterBlockUpdates removes block update notifications for the passed
 // websocket client.
 func (m *wsNotificationManager) UnregisterBlockUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationUnregisterBlocks)(wsc)
+	m.queue((*notificationUnregisterBlocks)(wsc))
 }
 
 // subscribedClients returns the set of all websocket client quit channels that
@@ -969,22 +969,19 @@ func (*wsNotificationManager) notifyFilteredBlockDisconnected(clients map[chan s
 // NotifyDSProof passes a double spend proof that became associated with a
 // memory pool transaction to the notification manager.
 func (m *wsNotificationManager) NotifyDSProof(desc *mempool.DSProofDesc) {
-	select {
-	case m.queueNotification <- (*notificationDSProof)(desc):
-	case <-m.quit:
-	}
+	m.queue((*notificationDSProof)(desc))
 }
 
 // RegisterDSProofUpdates requests double spend proof notifications to the
 // passed websocket client.
 func (m *wsNotificationManager) RegisterDSProofUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationRegisterDSProofs)(wsc)
+	m.queue((*notificationRegisterDSProofs)(wsc))
 }
 
 // UnregisterDSProofUpdates removes double spend proof notifications for the
 // passed websocket client.
 func (m *wsNotificationManager) UnregisterDSProofUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationUnregisterDSProofs)(wsc)
+	m.queue((*notificationUnregisterDSProofs)(wsc))
 }
 
 // marshalDSProofNtfn returns the dsproof notification for a proof at the
@@ -1020,13 +1017,13 @@ func (m *wsNotificationManager) notifyDSProof(clients map[chan struct{}]*wsClien
 // RegisterNewMempoolTxsUpdates requests notifications to the passed websocket
 // client when new transactions are added to the memory pool.
 func (m *wsNotificationManager) RegisterNewMempoolTxsUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationRegisterNewMempoolTxs)(wsc)
+	m.queue((*notificationRegisterNewMempoolTxs)(wsc))
 }
 
 // UnregisterNewMempoolTxsUpdates removes notifications to the passed websocket
 // client when new transaction are added to the memory pool.
 func (m *wsNotificationManager) UnregisterNewMempoolTxsUpdates(wsc *wsClient) {
-	m.queueNotification <- (*notificationUnregisterNewMempoolTxs)(wsc)
+	m.queue((*notificationUnregisterNewMempoolTxs)(wsc))
 }
 
 // notifyForNewTx notifies websocket clients that have registered for updates
@@ -1083,10 +1080,10 @@ func (m *wsNotificationManager) notifyForNewTx(clients map[chan struct{}]*wsClie
 // chain) for the passed websocket client.  The request is automatically
 // removed once the notification has been sent.
 func (m *wsNotificationManager) RegisterSpentRequests(wsc *wsClient, ops []*wire.OutPoint) {
-	m.queueNotification <- &notificationRegisterSpent{
+	m.queue(&notificationRegisterSpent{
 		wsc: wsc,
 		ops: ops,
-	}
+	})
 }
 
 // addSpentRequests modifies a map of watched outpoints to sets of websocket
@@ -1131,10 +1128,10 @@ func (m *wsNotificationManager) addSpentRequests(opMap map[wire.OutPoint]map[cha
 // to be notified when the passed outpoint is confirmed spent (contained in a
 // block connected to the main chain).
 func (m *wsNotificationManager) UnregisterSpentRequest(wsc *wsClient, op *wire.OutPoint) {
-	m.queueNotification <- &notificationUnregisterSpent{
+	m.queue(&notificationUnregisterSpent{
 		wsc: wsc,
 		op:  op,
-	}
+	})
 }
 
 // removeSpentRequest modifies a map of watched outpoints to remove the
@@ -1414,10 +1411,10 @@ func (m *wsNotificationManager) notifyForTxIns(ops map[wire.OutPoint]map[chan st
 // RegisterTxOutAddressRequests requests notifications to the passed websocket
 // client when a transaction output spends to the passed address.
 func (m *wsNotificationManager) RegisterTxOutAddressRequests(wsc *wsClient, addrs []string) {
-	m.queueNotification <- &notificationRegisterAddr{
+	m.queue(&notificationRegisterAddr{
 		wsc:   wsc,
 		addrs: addrs,
-	}
+	})
 }
 
 // addAddrRequests adds the websocket client wsc to the address to client set
@@ -1445,10 +1442,10 @@ func (*wsNotificationManager) addAddrRequests(addrMap map[string]map[chan struct
 // UnregisterTxOutAddressRequest removes a request from the passed websocket
 // client to be notified when a transaction spends to the passed address.
 func (m *wsNotificationManager) UnregisterTxOutAddressRequest(wsc *wsClient, addr string) {
-	m.queueNotification <- &notificationUnregisterAddr{
+	m.queue(&notificationUnregisterAddr{
 		wsc:  wsc,
 		addr: addr,
-	}
+	})
 }
 
 // removeAddrRequest removes the websocket client wsc from the address to
@@ -1480,16 +1477,13 @@ func (*wsNotificationManager) removeAddrRequest(addrs map[string]map[chan struct
 
 // AddClient adds the passed websocket client to the notification manager.
 func (m *wsNotificationManager) AddClient(wsc *wsClient) {
-	m.queueNotification <- (*notificationRegisterClient)(wsc)
+	m.queue((*notificationRegisterClient)(wsc))
 }
 
 // RemoveClient removes the passed websocket client and all notifications
 // registered for it.
 func (m *wsNotificationManager) RemoveClient(wsc *wsClient) {
-	select {
-	case m.queueNotification <- (*notificationUnregisterClient)(wsc):
-	case <-m.quit:
-	}
+	m.queue((*notificationUnregisterClient)(wsc))
 }
 
 // Start starts the goroutines required for the manager to queue and process

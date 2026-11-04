@@ -2018,8 +2018,12 @@ out:
 				msg.reply <- sm.current()
 
 			case pauseMsg:
-				// Wait until the sender unpauses the manager.
-				<-msg.unpause
+				// Wait until the sender unpauses the manager,
+				// or it stops.
+				select {
+				case <-msg.unpause:
+				case <-sm.quit:
+				}
 
 			default:
 				log.Warnf("Invalid message type in block "+

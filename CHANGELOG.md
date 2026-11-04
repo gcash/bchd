@@ -23,6 +23,7 @@ This release keeps the websocket notifications from missing a transaction that s
 - `invalidateblock`, `reconsiderblock` and `finalizeblock` no longer deadlock the node when they run while it connects or disconnects a block, which it does most of the time while it syncs; a deadlocked node had to be killed. They now wait until the chain is done with that block, so they can't change the chain in the middle of another change either, as when a reorganization disconnected a block that `finalizeblock` had just finalized.
 - `invalidateblock` of the block after the genesis block no longer freezes the node. It panicked while it held the lock of the block index, and the RPC server recovered from the panic with the lock still held, so that everything that reads the index waited forever.
 - `invalidateblock` of a block off the main chain no longer disconnects the main chain down to the fork and marks it invalid. It marks that block invalid and leaves the main chain alone.
+- A `rescan` that reached the tip as the node shut down no longer can hang the shutdown. Requests to the websocket notification manager return once it has shut down, and the sync manager stops while it is paused.
 
 ### Other
 
