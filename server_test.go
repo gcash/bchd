@@ -1254,26 +1254,26 @@ func TestMisbehavingAddsBanScore(t *testing.T) {
 	// once the score is seen, so the config can be changed below.
 	s.Misbehaving(normal.Peer, 10, "bad-txns-vin-empty")
 	scoreBecomes(normal, 10)
-	s.punishPeer(normal.Peer, 90, "bad-txns-vin-empty")
-	scoreBecomes(normal, 100)
+	s.punishPeer(normal.Peer, 89, "bad-txns-vin-empty")
+	scoreBecomes(normal, 99)
 	if score := normal.banScore.String(); !strings.HasPrefix(score,
-		"persistent 100 + transient 0 ") {
+		"persistent 99 + transient 0 ") {
 
-		t.Fatalf("ban score %s, want a lasting 100", score)
+		t.Fatalf("ban score %s, want a lasting 99", score)
 	}
 	select {
 	case sp := <-s.banPeers:
-		t.Fatalf("%s banned at a ban score of 100", sp)
+		t.Fatalf("%s banned at a ban score of 99", sp)
 	default:
 	}
-	s.punishPeer(normal.Peer, 100, "bad-txnmrklroot")
+	s.punishPeer(normal.Peer, 1, "bad-txns-vin-empty")
 	select {
 	case sp := <-s.banPeers:
 		if sp != normal {
 			t.Fatalf("banned %s, want %s", sp, normal)
 		}
 	default:
-		t.Fatal("peer not banned at a ban score of 200")
+		t.Fatal("peer not banned at a ban score of 100")
 	}
 
 	s.punishPeer(persistent.Peer, 100, "bad-txnmrklroot")

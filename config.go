@@ -120,7 +120,7 @@ type config struct {
 	MinSyncPeerNetworkSpeed uint64        `long:"minsyncpeernetworkspeed" description:"Disconnect sync peers slower than this threshold in bytes/sec"`
 	DisableBanning          bool          `long:"nobanning" description:"Disable banning of misbehaving peers"`
 	BanDuration             time.Duration `long:"banduration" description:"How long to ban misbehaving peers.  Valid time units are {s, m, h}.  Minimum 1 second"`
-	BanThreshold            uint32        `long:"banthreshold" description:"Maximum allowed ban score before disconnecting and banning misbehaving peers."`
+	BanThreshold            uint32        `long:"banthreshold" description:"Ban score at which misbehaving peers are disconnected and banned."`
 	Whitelists              []string      `long:"whitelist" description:"Add an IP network or IP that will not be banned. (eg. 192.168.1.0/24 or ::1)"`
 	AgentBlacklist          []string      `long:"agentblacklist" description:"A comma separated list of user-agent substrings which will cause bchd to reject any peers whose user-agent contains any of the blacklisted substrings."`
 	AgentWhitelist          []string      `long:"agentwhitelist" description:"A comma separated list of user-agent substrings which will cause bchd to require all peers' user-agents to contain one of the whitelisted substrings. The blacklist is applied before the whitelist, and an empty whitelist will allow all agents that do not fail the blacklist."`

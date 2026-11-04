@@ -574,7 +574,7 @@ func (sp *serverPeer) pushAddrMsg(addresses []*wire.NetAddressV2) {
 // addBanScore increases the persistent and decaying ban score fields by the
 // values passed as parameters. If the resulting score exceeds half of the ban
 // threshold, a warning is logged including the reason provided. Further, if
-// the score is above the ban threshold, the peer will be banned and
+// the score reaches the ban threshold, the peer will be banned and
 // disconnected.
 func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 	// No warning is logged and no score is calculated if banning is disabled.
@@ -588,11 +588,11 @@ func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 
 	warnThreshold := cfg.BanThreshold >> 1
 	if transient == 0 && persistent == 0 {
-		// The score is not being increased, but a warning message is still
-		// logged if the score is above the warn threshold.
+		// The score is not being increased, so this is no misbehavior of
+		// its own, and is only logged for debugging.
 		score := sp.banScore.Int()
 		if score > warnThreshold {
-			peerLog.Warnf("Misbehaving peer %s: %s -- ban score is %d, "+
+			peerLog.Debugf("Misbehaving peer %s: %s -- ban score is %d, "+
 				"it was not increased this time", sp, reason, score)
 		}
 		return
@@ -601,7 +601,7 @@ func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 	if score > warnThreshold {
 		peerLog.Warnf("Misbehaving peer %s: %s -- ban score increased to %d",
 			sp, reason, score)
-		if score > cfg.BanThreshold {
+		if score >= cfg.BanThreshold {
 			peerLog.Warnf("Misbehaving peer %s -- banning and disconnecting",
 				sp)
 			sp.server.BanPeer(sp)

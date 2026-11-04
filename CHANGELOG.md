@@ -18,6 +18,7 @@ This release keeps the websocket notifications from missing a transaction that s
 
 ### Consensus & Network
 
+- A peer whose ban score reaches `--banthreshold` is banned. It took a score above it, so the offenses that score 100, which BCHN bans for at once, such as an invalid block or a fork below a checkpoint, left the peer connected at a score that doesn't decay, and bchd warned at each of its small `getdata` requests. A peer on another chain now gets banned, for `--banduration`, a day by default.
 - A peer's `getcfmempool` adds 10 to its ban score and its `mempool` 20, rather than 33 each, so that a wallet can ask for the mempool three times in a row, with the filter first, as mobile wallets ask each time they start or wake. A wallet that asked twice within about a minute was banned for a day.
 
 ### RPC & gRPC

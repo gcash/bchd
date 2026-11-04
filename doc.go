@@ -54,8 +54,8 @@ Application Options:
 	    --banduration=             How long to ban misbehaving peers.  Valid time
 	                               units are {s, m, h}.  Minimum 1 second
 	                               (default: 24h0m0s)
-	    --banthreshold=            Maximum allowed ban score before disconnecting
-	                               and banning misbehaving peers. (default: 100)
+	    --banthreshold=            Ban score at which misbehaving peers are
+	                               disconnected and banned. (default: 100)
 	    --whitelist=               Add an IP network or IP that will not be
 	                               banned. (eg. 192.168.1.0/24 or ::1)
 	    --agentblacklist=          A comma separated list of user-agent

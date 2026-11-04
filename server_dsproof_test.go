@@ -413,3 +413,25 @@ func TestOnInvBlocksOnlyDSProof(t *testing.T) {
 	// The server has no sync manager, so queueing anything panics.
 	sp.OnInv(nil, msg)
 }
+
+// TestBanAtThreshold ensures that a score that reaches the ban threshold bans
+// the peer, as the 100 that BCHN gives the worst offenses is meant to, and
+// that one below it doesn't.
+func TestBanAtThreshold(t *testing.T) {
+	sp, _ := newDSProofServerPeer(t)
+	s := sp.server
+	s.banPeers = make(chan *serverPeer, 10)
+
+	sp.addBanScore(defaultBanThreshold-1, 0, "test")
+	select {
+	case <-s.banPeers:
+		t.Fatal("peer banned below the threshold")
+	default:
+	}
+	sp.addBanScore(1, 0, "test")
+	select {
+	case <-s.banPeers:
+	default:
+		t.Fatal("peer not banned at the threshold")
+	}
+}
