@@ -26,6 +26,7 @@ import (
 	"github.com/gcash/bchd/mining"
 
 	"github.com/gcash/bchd/blockchain"
+	"github.com/gcash/bchd/blockchain/indexers"
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/connmgr"
@@ -193,6 +194,8 @@ type config struct {
 	SlpCacheMaxSize         uint          `long:"slpcachemaxsize" description:"The maximum number of entries in the slp indexer cache"`
 	DropSlpIndex            bool          `long:"dropslpindex" description:"Deletes the slp index from the database on start up and then exits."`
 	SlpGraphSearch          bool          `long:"slpgraphsearch" description:"Enables gRPC calls related to slp graph search."`
+	BcmrIndex               bool          `long:"bcmrindex" description:"Maintain an index of the authchain of every token category and of its BCMR metadata registry publications"`
+	DropBcmrIndex           bool          `long:"dropbcmrindex" description:"Deletes the BCMR index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
@@ -655,6 +658,36 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// The BCMR index reads every block since CashTokens activated, and serves
+	// the transactions of authchains from the block files.
+	if cfg.BcmrIndex && cfg.Prune {
+		str := "%s: bcmrindex can not be used with a pruned blockchain"
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// A fast-synced node has no blocks before the UTXO set it downloaded,
+	// and the authbase of a token can be older than that.
+	if cfg.BcmrIndex && cfg.FastSync {
+		str := "%s: bcmrindex can not be used with fast sync mode"
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// The BCMR index can undo only its latest blocks, so the chain mustn't
+	// finalize blocks deeper than that.
+	if cfg.BcmrIndex && cfg.MaxReorgDepth > indexers.BcmrUndoDepth {
+		str := "%s: bcmrindex can not be used with a maxreorgdepth above %d"
+		err := fmt.Errorf(str, funcName, indexers.BcmrUndoDepth)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Checkpoints must not be disabled in fast sync mode
 	if cfg.FastSync && cfg.DisableCheckpoints {
 		str := "%s: disablecheckpoints can not be used with fast sync mode"
@@ -1055,6 +1088,16 @@ func loadConfig() (*config, []string, error) {
 	// --slpindex and --dropslpindex do not mix.
 	if cfg.SlpIndex && cfg.DropSlpIndex {
 		err := fmt.Errorf("%s: the --slpindex and --dropslpindex "+
+			"options may not be activated at the same time",
+			funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// --bcmrindex and --dropbcmrindex do not mix.
+	if cfg.BcmrIndex && cfg.DropBcmrIndex {
+		err := fmt.Errorf("%s: the --bcmrindex and --dropbcmrindex "+
 			"options may not be activated at the same time",
 			funcName)
 		fmt.Fprintln(os.Stderr, err)

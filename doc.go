@@ -225,6 +225,11 @@ Application Options:
 	    --dropslpindex             Deletes the slp index from the database on
 	                               start up and then exits.
 	    --slpgraphsearch           Enables gRPC calls related to slp graph search.
+	    --bcmrindex                Maintain an index of the authchain of every
+	                               token category and of its BCMR metadata
+	                               registry publications
+	    --dropbcmrindex            Deletes the BCMR index from the database on
+	                               start up and then exits.
 	    --relaynonstd              Relay non-standard transactions regardless of
 	                               the default settings for the active network.
 	    --rejectnonstd             Reject non-standard transactions regardless of

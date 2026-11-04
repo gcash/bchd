@@ -332,6 +332,7 @@ type server struct {
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
 	slpIndex  *indexers.SlpIndex
+	bcmrIndex *indexers.BcmrIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
@@ -4358,6 +4359,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indxLog.Info("Committed filter index is enabled")
 		s.cfIndex = indexers.NewCfIndex(db, chainParams)
 		indexes = append(indexes, s.cfIndex)
+	}
+	if cfg.BcmrIndex {
+		indxLog.Info("BCMR index is enabled")
+		s.bcmrIndex = indexers.NewBcmrIndex(db, chainParams)
+		indexes = append(indexes, s.bcmrIndex)
 	}
 
 	// Create an index manager if any of the optional indexes are enabled.

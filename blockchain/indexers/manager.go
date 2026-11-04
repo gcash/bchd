@@ -347,6 +347,13 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 		return errInterruptRequested
 	}
 
+	// Hand the chain to the indexes that read it.
+	for _, indexer := range m.enabledIndexes {
+		if user, ok := indexer.(ChainUser); ok {
+			user.UseChain(chain)
+		}
+	}
+
 	// Finish and drops that were previously interrupted.
 	if err := m.maybeFinishDrops(interrupt); err != nil {
 		return err

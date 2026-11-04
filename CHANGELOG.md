@@ -6,11 +6,15 @@ bchd forked from [btcd](https://github.com/btcsuite/btcd) 0.12.x. The original b
 
 ## Unreleased
 
-This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, sends a block's transactions parents first, lets mobile wallets ask for the mempool each time they start or wake, which costs the node a filter build only when the mempool changed, and keeps `invalidateblock`, `reconsiderblock` and `finalizeblock` from deadlocking the node.
+This release keeps the websocket notifications from missing a transaction that spends an output created later in the same block, sends a block's transactions parents first, lets mobile wallets ask for the mempool each time they start or wake, which costs the node a filter build only when the mempool changed, keeps `invalidateblock`, `reconsiderblock` and `finalizeblock` from deadlocking the node, and adds an index of the authchain of every token category, for BCMR metadata registries.
 
 ### Performance
 
 - `getcfmempool` builds the filter of the mempool only when the mempool changed since it last built it, and serves that filter to every peer that asks in between. It built the filter for each request, which for a mempool of 50,000 transactions takes about a tenth of a second and 50 MB of short-lived memory.
+
+### New options
+
+- `--bcmrindex` keeps an index of the authchain of every token category, as CHIP-BCMR defines it: the transactions from the category's authbase, whose ID is the category ID, to its authhead, each with its BCMR metadata registry publication, and whether the identity was burned. Authchains that share transactions, after a merge or when one genesis creates several categories, share them in the index. It reads every block since CashTokens activated once, and the spend journal only of blocks that create a category, so it can't be used with `--prune` or `--fastsync`. It keeps what it needs to undo the latest 1,000 blocks, so it can't be used with a `--maxreorgdepth` above 1,000; a deeper reorganization, while finalization is off or before it finalized a block, fails and asks for a rebuild. `--dropbcmrindex` deletes it.
 
 ### Consensus & Network
 
