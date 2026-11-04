@@ -25,7 +25,19 @@ func TestIndexerTipMissingBucket(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	idx := NewSlpIndex(db, &SlpConfig{MaxCacheSize: 100})
-	if err := db.Update(idx.Create); err != nil {
+	err = db.Update(func(dbTx database.Tx) error {
+		// The index stores its version in the bucket, which goes once
+		// the index is created.
+		meta := dbTx.Metadata()
+		if _, err := meta.CreateBucket(indexTipsBucketName); err != nil {
+			return err
+		}
+		if err := idx.Create(dbTx); err != nil {
+			return err
+		}
+		return meta.DeleteBucket(indexTipsBucketName)
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	genesis := genesisTx(t, 1)

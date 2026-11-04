@@ -30,6 +30,11 @@ import (
 const (
 	// slpIndexName is the human-readable name for the index.
 	slpIndexName = "slp index"
+
+	// slpIndexVersion is the version of the index's records.  An index
+	// built before indexes stored their versions has the records of
+	// version 1.
+	slpIndexVersion = 1
 )
 
 var (
@@ -580,13 +585,21 @@ var _ Indexer = (*SlpIndex)(nil)
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Init() error {
+	// An index that a later bchd built may have records this one can't
+	// read.
+	_, err := checkIndexVersion(idx.db, slpIndexKey, slpIndexName, "dropslpindex",
+		slpIndexVersion)
+	if err != nil {
+		return err
+	}
+
 	// Find the highest internal token id in use and initialize the counter
 	// to it.  This is done because it's a lot more efficient to do a single
 	// search at initialize time than it is to write another value to the
 	// database on every update.  The search reads every id, as an index
 	// where an earlier version connected a GENESIS again after a reorg has
 	// ids below the highest that no token uses.
-	err := idx.db.View(func(dbTx database.Tx) error {
+	err = idx.db.View(func(dbTx database.Tx) error {
 		var highestKnown uint32
 		idIndex := dbTx.Metadata().Bucket(tokenMetadataByIDIndexBucketName)
 		if idIndex != nil {
@@ -626,13 +639,12 @@ func (idx *SlpIndex) StartBlock() (*chainhash.Hash, int32) {
 	return idx.config.StartHash, idx.config.StartHeight
 }
 
-// Migrate is only provided to satisfy the Indexer interface as there is nothing to
-// migrate this index.
+// Migrate marks an index built before indexes stored their versions as
+// version 1, whose records it has.
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
-	// Nothing to do.
-	return nil
+	return stampIndexVersion(db, slpIndexKey, slpIndexName, slpIndexVersion)
 }
 
 // Key returns the database key to use for the index as a byte slice.
@@ -651,7 +663,8 @@ func (idx *SlpIndex) Name() string {
 
 // Create is invoked when the indexer manager determines the index needs
 // to be created for the first time.  It creates the buckets for the hash-based
-// transaction index and the internal token ID and token metadata indexes.
+// transaction index and the internal token ID and token metadata indexes, and
+// stores the index's version.
 //
 // This is part of the Indexer interface.
 func (idx *SlpIndex) Create(dbTx database.Tx) error {
@@ -662,8 +675,10 @@ func (idx *SlpIndex) Create(dbTx database.Tx) error {
 	if _, err := meta.CreateBucket(tokenMetadataByIDIndexBucketName); err != nil {
 		return err
 	}
-	_, err := meta.CreateBucket(slpIndexKey)
-	return err
+	if _, err := meta.CreateBucket(slpIndexKey); err != nil {
+		return err
+	}
+	return dbPutIndexVersion(dbTx, slpIndexKey, slpIndexVersion)
 }
 
 // BurnedInput represents a burned slp txo item

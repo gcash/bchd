@@ -18,6 +18,11 @@ import (
 const (
 	// txIndexName is the human-readable name for the index.
 	txIndexName = "transaction index"
+
+	// txIndexVersion is the version of the index's records.  An index
+	// built before indexes stored their versions has the records of
+	// version 1.
+	txIndexVersion = 1
 )
 
 var (
@@ -310,11 +315,19 @@ var _ Indexer = (*TxIndex)(nil)
 //
 // This is part of the Indexer interface.
 func (idx *TxIndex) Init() error {
+	// An index that a later bchd built may have records this one can't
+	// read.
+	_, err := checkIndexVersion(idx.db, txIndexKey, txIndexName, "droptxindex",
+		txIndexVersion)
+	if err != nil {
+		return err
+	}
+
 	// Find the latest known block id field for the internal block id
 	// index and initialize it.  This is done because it's a lot more
 	// efficient to do a single search at initialize time than it is to
 	// write another value to the database on every update.
-	err := idx.db.View(func(dbTx database.Tx) error {
+	err = idx.db.View(func(dbTx database.Tx) error {
 		// Scan forward in large gaps to find a block id that doesn't
 		// exist yet to serve as an upper bound for the binary search
 		// below.
@@ -374,13 +387,12 @@ func (idx *TxIndex) StartBlock() (*chainhash.Hash, int32) {
 	return nil, -1
 }
 
-// Migrate is only provided to satisfy the Indexer interface as there is nothing to
-// migrate this index.
+// Migrate marks an index built before indexes stored their versions as
+// version 1, whose records it has.
 //
 // This is part of the Indexer interface.
 func (idx *TxIndex) Migrate(db database.DB, interrupt <-chan struct{}) error {
-	// Nothing to do.
-	return nil
+	return stampIndexVersion(db, txIndexKey, txIndexName, txIndexVersion)
 }
 
 // Key returns the database key to use for the index as a byte slice.
@@ -399,7 +411,8 @@ func (idx *TxIndex) Name() string {
 
 // Create is invoked when the indexer manager determines the index needs
 // to be created for the first time.  It creates the buckets for the hash-based
-// transaction index and the internal block ID indexes.
+// transaction index and the internal block ID indexes, and stores the index's
+// version.
 //
 // This is part of the Indexer interface.
 func (idx *TxIndex) Create(dbTx database.Tx) error {
@@ -410,8 +423,10 @@ func (idx *TxIndex) Create(dbTx database.Tx) error {
 	if _, err := meta.CreateBucket(hashByIDIndexBucketName); err != nil {
 		return err
 	}
-	_, err := meta.CreateBucket(txIndexKey)
-	return err
+	if _, err := meta.CreateBucket(txIndexKey); err != nil {
+		return err
+	}
+	return dbPutIndexVersion(dbTx, txIndexKey, txIndexVersion)
 }
 
 // ConnectBlock is invoked by the index manager when a new block has been
