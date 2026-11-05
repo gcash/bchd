@@ -142,6 +142,9 @@ type commandHandler func(*rpcServer, interface{}, <-chan struct{}) (interface{},
 var rpcHandlers map[string]commandHandler
 var rpcHandlersBeforeInit = map[string]commandHandler{
 	"addnode":               handleAddNode,
+	"clearbanned":           handleClearBanned,
+	"listbanned":            handleListBanned,
+	"setban":                handleSetBan,
 	"createrawtransaction":  handleCreateRawTransaction,
 	"debuglevel":            handleDebugLevel,
 	"decoderawtransaction":  handleDecodeRawTransaction,
@@ -150,6 +153,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"finalizeblock":         handleFinalizeBlock,
 	"generate":              handleGenerate,
 	"getaddednodeinfo":      handleGetAddedNodeInfo,
+	"getbcmridentity":       handleGetBcmrIdentity,
 	"getbestblock":          handleGetBestBlock,
 	"getbestblockhash":      handleGetBestBlockHash,
 	"getblock":              handleGetBlock,
@@ -289,6 +293,7 @@ var rpcLimited = map[string]struct{}{
 	"decoderawtransaction":  {},
 	"decodescript":          {},
 	"estimatefee":           {},
+	"getbcmridentity":       {},
 	"getbestblock":          {},
 	"getbestblockhash":      {},
 	"getblock":              {},
@@ -418,6 +423,100 @@ func handleUnimplemented(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 // These commands will be implemented in bchwallet.
 func handleAskWallet(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	return nil, ErrRPCNoWallet
+}
+
+// maxBanUnix is the latest end of a ban, in seconds since the Unix epoch, the
+// end of the year 9999.  It keeps a huge bantime from overflowing.
+const maxBanUnix = 253402300799
+
+// banEnd returns when a ban made at now ends, as BCHN works it out: banTime
+// seconds from now, or at banTime seconds since the Unix epoch when absolute is
+// set.  A banTime of zero or less means --banduration from now.
+func banEnd(now time.Time, banTime int64, absolute bool) time.Time {
+	if banTime <= 0 {
+		return now.Add(cfg.BanDuration)
+	}
+	if absolute {
+		return time.Unix(min(banTime, maxBanUnix), 0)
+	}
+	return time.Unix(now.Unix()+min(banTime, maxBanUnix-now.Unix()), 0)
+}
+
+// handleSetBan handles setban commands.
+func handleSetBan(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.SetBanCmd)
+
+	if c.Command != btcjson.SBAdd && c.Command != btcjson.SBRemove {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "invalid command for setban",
+		}
+	}
+	target, ok := parseBanTarget(c.Subnet)
+	if !ok {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCClientInvalidIPOrSubnet,
+			Message: "Error: Invalid IP/Subnet",
+		}
+	}
+
+	if c.Command == btcjson.SBRemove {
+		if !s.cfg.ConnMgr.Unban(target) {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCClientInvalidIPOrSubnet,
+				Message: "Error: Unban failed. Requested address/subnet was not banned.",
+			}
+		}
+		return nil, nil
+	}
+
+	// An argument passed as null is nil, and means its default.
+	var banTime int64
+	if c.BanTime != nil {
+		banTime = *c.BanTime
+	}
+	absolute := c.Absolute != nil && *c.Absolute
+
+	now := time.Now()
+	if !s.cfg.ConnMgr.Ban(target, now, banEnd(now, banTime, absolute)) {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCClientNodeAlreadyAdded,
+			Message: "Error: IP/Subnet already banned",
+		}
+	}
+	return nil, nil
+}
+
+// handleListBanned handles listbanned commands.
+func handleListBanned(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	now := time.Now()
+	bans := s.cfg.ConnMgr.Bans(now)
+	results := make([]btcjson.ListBannedResult, 0, len(bans))
+	for _, ban := range bans {
+		reason := "node misbehaving"
+		if ban.manual {
+			reason = "manually added"
+		}
+		results = append(results, btcjson.ListBannedResult{
+			Address:       ban.target.String(),
+			BanCreated:    ban.created.Unix(),
+			BannedUntil:   ban.until.Unix(),
+			BanReason:     reason,
+			BanDuration:   ban.until.Unix() - ban.created.Unix(),
+			TimeRemaining: ban.until.Unix() - now.Unix(),
+		})
+	}
+	return results, nil
+}
+
+// handleClearBanned handles clearbanned commands.
+func handleClearBanned(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.ClearBannedCmd)
+
+	// An argument passed as null is nil, and means its default.
+	s.cfg.ConnMgr.ClearBans(c.Manual == nil || *c.Manual,
+		c.Automatic == nil || *c.Automatic)
+	return nil, nil
 }
 
 // handleAddNode handles addnode commands.
@@ -1727,6 +1826,154 @@ func handleGetBestBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 		Height: best.Height,
 	}
 	return result, nil
+}
+
+// handleGetBcmrIdentity implements the getbcmridentity command.
+func handleGetBcmrIdentity(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	bcmrIndex := s.cfg.BcmrIndex
+	if bcmrIndex == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCMisc,
+			Message: "BCMR index must be enabled (--bcmrindex)",
+		}
+	}
+
+	c := cmd.(*btcjson.GetBcmrIdentityCmd)
+	authbase, err := chainhash.NewHashFromStr(c.Authbase)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Authbase)
+	}
+	query := &indexers.BcmrQuery{
+		Authbase:  *authbase,
+		Authchain: c.IncludeAuthchain != nil && *c.IncludeAuthchain,
+	}
+	if (c.After != nil || c.Limit != nil) && !query.Authchain {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "after and limit only apply with includeauthchain",
+		}
+	}
+	if c.After != nil && *c.After != "" {
+		after, err := chainhash.NewHashFromStr(*c.After)
+		if err != nil {
+			return nil, rpcDecodeHexError(*c.After)
+		}
+		query.After = after
+	}
+	if c.Limit != nil {
+		if *c.Limit < 1 {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: "limit must be at least 1",
+			}
+		}
+		query.Limit = *c.Limit
+	}
+
+	info, err := bcmrIndex.Identity(query, s.cfg.TxMemPool)
+	switch {
+	case errors.Is(err, indexers.ErrBcmrIdentityNotFound):
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "No identity with authbase " + authbase.String(),
+		}
+	case errors.Is(err, indexers.ErrBcmrNotALink):
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "after is not a link of the identity's authchain",
+		}
+	case err != nil:
+		return nil, internalRPCError(err.Error(), "Failed to read the BCMR index")
+	}
+	return createBcmrIdentityResult(info, query.Authchain)
+}
+
+// createBcmrIdentityResult returns the getbcmridentity command's answer for an
+// identity, with its authchain if it was asked for.
+func createBcmrIdentityResult(info *indexers.BcmrIdentityInfo, withAuthchain bool) (*btcjson.GetBcmrIdentityResult, error) {
+	result := &btcjson.GetBcmrIdentityResult{
+		Authbase: info.Authbase.String(),
+		Status:   "active",
+		Head:     createBcmrLinkResult(&info.Head),
+	}
+	if info.Burned {
+		result.Status = "burned"
+	}
+	if pubLink := info.Publication; pubLink != nil {
+		pub := pubLink.Publication
+		uris := pub.URIs
+		if uris == nil {
+			uris = []string{}
+		}
+		result.Publication = &btcjson.BcmrPublicationResult{
+			Txid:    pubLink.Hash.String(),
+			Height:  pubLink.Height,
+			Output:  pub.Output,
+			Hash:    hex.EncodeToString(pub.Hash[:]),
+			URIs:    uris,
+			Current: info.Current,
+		}
+	}
+	if info.HasGenesisSupply {
+		result.GenesisSupply = strconv.FormatUint(info.GenesisSupply, 10)
+	}
+	if info.IdentityOutput != nil {
+		result.IdentityOutput = createTokenDataResult(info.IdentityOutput)
+	}
+	if !withAuthchain {
+		return result, nil
+	}
+
+	more := info.More
+	authchain := make(map[string]string, len(info.Authchain))
+	authchainInfo := make(map[string]btcjson.BcmrLinkResult, len(info.Authchain))
+	for i := range info.Authchain {
+		link := &info.Authchain[i]
+		key := strconv.FormatUint(uint64(info.FirstIndex)+uint64(i), 10)
+		authchain[key] = hex.EncodeToString(link.Tx)
+		authchainInfo[key] = createBcmrLinkResult(link)
+	}
+	result.More, result.Authchain, result.AuthchainInfo = &more, &authchain, &authchainInfo
+	if info.Proof != nil {
+		var buf bytes.Buffer
+		err := info.Proof.BchEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+		if err != nil {
+			return nil, internalRPCError(err.Error(), "Failed to encode the merkle proof")
+		}
+		result.Proof = &btcjson.BcmrProofResult{
+			Index:       strconv.FormatUint(uint64(info.ProofIndex), 10),
+			MerkleBlock: hex.EncodeToString(buf.Bytes()),
+		}
+	}
+	return result, nil
+}
+
+// createBcmrLinkResult returns a link of an authchain in the getbcmridentity
+// command's answer.  The hash of a publication is in the byte order it was
+// pushed in, unlike transaction and block hashes.
+func createBcmrLinkResult(link *indexers.BcmrLinkInfo) btcjson.BcmrLinkResult {
+	result := btcjson.BcmrLinkResult{
+		Txid:   link.Hash.String(),
+		Height: link.Height,
+	}
+	if link.BlockHash != nil {
+		result.BlockHash = link.BlockHash.String()
+	}
+	if pub := link.Publication; pub != nil {
+		result.Publication = &btcjson.BcmrPublicationOutputResult{
+			Output:    pub.Output,
+			Malformed: pub.Malformed,
+		}
+		if !pub.Malformed {
+			uris := pub.URIs
+			if uris == nil {
+				uris = []string{}
+			}
+			result.Publication.Hash = hex.EncodeToString(pub.Hash[:])
+			result.Publication.URIs = &uris
+		}
+	}
+	return result
 }
 
 // handleGetBestBlockHash implements the getbestblockhash command.
@@ -5786,6 +6033,20 @@ type rpcserverConnManager interface {
 	// error.
 	DisconnectByAddr(addr string) error
 
+	// Ban bans target from now until until and disconnects the peers the
+	// ban applies to.  It returns false if target is banned already.
+	Ban(target banTarget, now, until time.Time) bool
+
+	// Unban lifts the ban of exactly target, and returns false if there is
+	// none.
+	Unban(target banTarget) bool
+
+	// Bans returns the bans in force at now.
+	Bans(now time.Time) []banEntry
+
+	// ClearBans lifts the bans of the chosen kinds.
+	ClearBans(manual, automatic bool)
+
 	// ConnectedCount returns the number of currently connected peers.
 	ConnectedCount() int32
 
@@ -5896,6 +6157,7 @@ type rpcserverConfig struct {
 	AddrIndex *indexers.AddrIndex
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
+	BcmrIndex *indexers.BcmrIndex
 
 	// SHVIndex proves block headers are in the main chain for getshv, and
 	// gives shvroot in getblock and getblockheader.  It is nil when SHV is

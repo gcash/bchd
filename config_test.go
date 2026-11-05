@@ -185,6 +185,36 @@ func TestFinalizationOptions(t *testing.T) {
 	}
 }
 
+// TestBcmrIndexOptions checks the options that --bcmrindex can't be used
+// with: those that keep no blocks from before CashTokens activated, and a
+// --maxreorgdepth deeper than the index can undo.
+func TestBcmrIndexOptions(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	tests := []struct {
+		args []string
+		ok   bool
+	}{
+		{[]string{"--bcmrindex"}, true},
+		{[]string{"--bcmrindex", "--maxreorgdepth=1000"}, true},
+		{[]string{"--bcmrindex", "--maxreorgdepth=-1"}, true},
+		{[]string{"--bcmrindex", "--maxreorgdepth=1001"}, false},
+		{[]string{"--bcmrindex", "--prune"}, false},
+		{[]string{"--bcmrindex", "--fastsync"}, false},
+	}
+	for _, test := range tests {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		_, _, err := loadConfig()
+		if (err == nil) != test.ok {
+			t.Errorf("%v: error %v, want it accepted %v", test.args, err, test.ok)
+		}
+	}
+}
+
 // TestProfileListenAddr ensures a bare --profile port only listens on
 // localhost and that IP:port is accepted.
 func TestProfileListenAddr(t *testing.T) {
@@ -506,5 +536,21 @@ func TestMaxPeers(t *testing.T) {
 			t.Errorf("%v: got %d, want %d", test.args, cfg.MaxPeers,
 				test.want)
 		}
+	}
+}
+
+// TestSampleConfigEmbedded ensures that the sample configuration in bindata.go,
+// which a first run writes out, is sample-bchd.conf.  make bindata updates it.
+func TestSampleConfigEmbedded(t *testing.T) {
+	embedded, err := Asset("sample-bchd.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sample, err := os.ReadFile("sample-bchd.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, sample) {
+		t.Fatal("bindata.go is out of date: run make bindata")
 	}
 }

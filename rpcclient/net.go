@@ -317,3 +317,90 @@ func (c *Client) GetNetTotalsAsync() FutureGetNetTotalsResult {
 func (c *Client) GetNetTotals() (*btcjson.GetNetTotalsResult, error) {
 	return c.GetNetTotalsAsync().Receive()
 }
+
+// FutureSetBanResult is a future promise to deliver the result of a
+// SetBanAsync RPC invocation (or an applicable error).
+type FutureSetBanResult chan *response
+
+// Receive waits for the response promised by the future and returns an error if
+// any occurred when performing the specified command.
+func (r FutureSetBanResult) Receive() error {
+	_, err := receiveFuture(r)
+	return err
+}
+
+// SetBanAsync returns an instance of a type that can be used to get the result
+// of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See SetBan for the blocking version and more details.
+func (c *Client) SetBanAsync(subnet string, command btcjson.SetBanSubCmd, banTime *int64, absolute *bool) FutureSetBanResult {
+	cmd := btcjson.NewSetBanCmd(subnet, command, banTime, absolute)
+	return c.sendCmd(cmd)
+}
+
+// SetBan bans an IP address or subnet, or lifts its ban.  A nil banTime is the
+// node's default, and a nil absolute takes banTime as seconds from now.
+func (c *Client) SetBan(subnet string, command btcjson.SetBanSubCmd, banTime *int64, absolute *bool) error {
+	return c.SetBanAsync(subnet, command, banTime, absolute).Receive()
+}
+
+// FutureListBannedResult is a future promise to deliver the result of a
+// ListBannedAsync RPC invocation (or an applicable error).
+type FutureListBannedResult chan *response
+
+// Receive waits for the response promised by the future and returns the bans
+// in force.
+func (r FutureListBannedResult) Receive() ([]btcjson.ListBannedResult, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var bans []btcjson.ListBannedResult
+	if err := json.Unmarshal(res, &bans); err != nil {
+		return nil, err
+	}
+	return bans, nil
+}
+
+// ListBannedAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See ListBanned for the blocking version and more details.
+func (c *Client) ListBannedAsync() FutureListBannedResult {
+	cmd := btcjson.NewListBannedCmd()
+	return c.sendCmd(cmd)
+}
+
+// ListBanned returns the bans in force.
+func (c *Client) ListBanned() ([]btcjson.ListBannedResult, error) {
+	return c.ListBannedAsync().Receive()
+}
+
+// FutureClearBannedResult is a future promise to deliver the result of a
+// ClearBannedAsync RPC invocation (or an applicable error).
+type FutureClearBannedResult chan *response
+
+// Receive waits for the response promised by the future and returns an error if
+// any occurred when performing the specified command.
+func (r FutureClearBannedResult) Receive() error {
+	_, err := receiveFuture(r)
+	return err
+}
+
+// ClearBannedAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See ClearBanned for the blocking version and more details.
+func (c *Client) ClearBannedAsync(manual, automatic *bool) FutureClearBannedResult {
+	cmd := btcjson.NewClearBannedCmd(manual, automatic)
+	return c.sendCmd(cmd)
+}
+
+// ClearBanned lifts every ban of the chosen kinds.  A nil argument is true.
+func (c *Client) ClearBanned(manual, automatic *bool) error {
+	return c.ClearBannedAsync(manual, automatic).Receive()
+}

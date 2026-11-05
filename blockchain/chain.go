@@ -221,9 +221,14 @@ type BlockChain struct {
 	shutdownRequest     chan struct{}
 	shutdownRequestOnce sync.Once
 
-	// notificationLock is used to make sure notifications are sent
-	// serially and protect against double mutex unlock panics during reorg.
-	notificationLock sync.Mutex
+	// processLock is held throughout each change to the chain, which
+	// ProcessBlock, InvalidateBlock, ReconsiderBlock, FinalizeBlock and
+	// AddHeader make, and is taken before chainLock.  A change releases
+	// chainLock while it sends a notification, so that the callbacks can
+	// call into the chain, though they can't make a change, and
+	// processLock keeps the other changes out meanwhile: none starts in
+	// the middle of another, and the notifications are sent serially.
+	processLock sync.Mutex
 
 	// The following caches are used to efficiently keep track of the
 	// current deployment threshold state of each rule change deployment.
@@ -302,8 +307,8 @@ func (b *BlockChain) IsKnownOrphan(hash *chainhash.Hash) bool {
 	// Protect concurrent access.  Using a read lock only so multiple
 	// readers can query without blocking each other.
 	b.orphanLock.RLock()
+	defer b.orphanLock.RUnlock()
 	_, exists := b.orphans[*hash]
-	b.orphanLock.RUnlock()
 
 	return exists
 }
@@ -357,6 +362,8 @@ func (b *BlockChain) GetWarnings() (bool, bool) {
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
@@ -365,12 +372,15 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	b.index.AddNode(node)
 	b.index.SetStatusFlags(node, statusValid)
 	b.bestChain.SetTip(node)
-	b.stateSnapshot = newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	state := newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	b.stateLock.Lock()
+	b.stateSnapshot = state
+	b.stateLock.Unlock()
 
 	// Atomically insert info into the database.
 	err := b.db.Update(func(dbTx database.Tx) error {
 		// Update best block state.
-		if err := dbPutBestState(dbTx, b.stateSnapshot, node.workSum); err != nil {
+		if err := dbPutBestState(dbTx, state, node.workSum); err != nil {
 			return err
 		}
 
@@ -734,8 +744,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 
 	// Do not reorganize to a known invalid chain. Ancestors deeper than the
 	// direct parent are checked below but this is a quick check before doing
-	// more unnecessary work.
-	if b.index.NodeStatus(node.parent).KnownInvalid() {
+	// more unnecessary work.  The genesis block has no parent.
+	if node.parent != nil && b.index.NodeStatus(node.parent).KnownInvalid() {
 		b.index.SetStatusFlags(node, statusInvalidAncestor)
 		return detachNodes, attachNodes
 	}
@@ -776,6 +786,13 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	return detachNodes, attachNodes
 }
 
+// commitUtxoView commits the view to the UTXO cache, under the state lock.
+func (b *BlockChain) commitUtxoView(view *UtxoViewpoint) error {
+	b.stateLock.Lock()
+	defer b.stateLock.Unlock()
+	return b.utxoCache.Commit(view)
+}
+
 // connectBlock handles connecting the passed node/block to the end of the main
 // (best) chain.
 //
@@ -786,7 +803,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 // must happen prior to calling this function requires the same details, so
 // it would be inefficient to repeat it.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	view *UtxoViewpoint, stxos []SpentTxOut) error {
 
@@ -888,9 +906,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
-	b.stateLock.Lock()
-	err = b.utxoCache.Commit(view)
-	b.stateLock.Unlock()
+	err = b.commitUtxoView(view)
 	if err != nil {
 		b.requestShutdown(err)
 		return err
@@ -914,11 +930,9 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	// Notify the caller that the block was connected to the main chain.
 	// The caller would typically want to react with actions such as
 	// updating wallets.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockConnected, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	b.stateLock.Lock()
 	defer b.stateLock.Unlock()
@@ -948,7 +962,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 // disconnectBlock handles disconnecting the passed node/block from the end of
 // the main (best) chain.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view *UtxoViewpoint) error {
 	// Make sure the node being disconnected is the end of the best chain.
 	if !node.hash.IsEqual(&b.bestChain.Tip().hash) {
@@ -1046,9 +1061,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 
 	// Commit all modifications made to the view into the utxo state.  This also
 	// prunes these changes from the view.
-	b.stateLock.Lock()
-	err = b.utxoCache.Commit(view)
-	b.stateLock.Unlock()
+	err = b.commitUtxoView(view)
 	if err != nil {
 		b.requestShutdown(err)
 		return err
@@ -1074,11 +1087,9 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	// Notify the caller that the block was disconnected from the main
 	// chain.  The caller would typically want to react with actions such as
 	// updating wallets.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockDisconnected, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	// Since we just changed the UTXO cache, we make sure it didn't exceed its
 	// maximum size.
@@ -1107,7 +1118,8 @@ func countSpentOutputs(block *bchutil.Block) int {
 //
 // This function may modify node statuses in the block index without flushing.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error {
 	// Nothing to do if no reorganize nodes were provided.
 	if detachNodes.Len() == 0 && attachNodes.Len() == 0 {
@@ -1348,11 +1360,9 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// Notify other peers that this block was accepted. Since it was
 		// originally seen as an orphan the accept message was never sent
 		// to downstream peers.
-		b.notificationLock.Lock()
 		b.chainLock.Unlock()
 		b.sendNotification(NTBlockAccepted, block)
 		b.chainLock.Lock()
-		b.notificationLock.Unlock()
 	}
 
 	// Log the point where the chain forked and old and new best chain
@@ -1382,7 +1392,8 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 //   - BFFastAdd: Avoids several expensive transaction validation operations.
 //     This is useful when using checkpoints.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, flags BehaviorFlags) (bool, error) {
 	fastAdd := flags.HasFlag(BFFastAdd)
 
@@ -1499,6 +1510,15 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 	// the blocks that form the new chain to the main chain starting at the
 	// common ancenstor (the point where the chain forked).
 	detachNodes, attachNodes := b.getReorganizeNodes(node)
+
+	// Nothing is attached when the chain has an invalid block, so the block
+	// stays off the main chain.  The nodes it marked are written.
+	if attachNodes.Len() == 0 {
+		if writeErr := b.index.flushToDB(); writeErr != nil {
+			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+		}
+		return false, nil
+	}
 
 	// A pruned node can't switch to a chain holding a block whose data it
 	// deleted, so it stays on its own chain, as Bitcoin Cash Node removes
@@ -1623,8 +1643,8 @@ func (b *BlockChain) HasMinimumChainWork() bool {
 // This function is safe for concurrent access.
 func (b *BlockChain) BestSnapshot() *BestState {
 	b.stateLock.RLock()
+	defer b.stateLock.RUnlock()
 	snapshot := b.stateSnapshot
-	b.stateLock.RUnlock()
 	return snapshot
 }
 
@@ -1684,9 +1704,9 @@ func (b *BlockChain) MainChainHasBlock(hash *chainhash.Hash) bool {
 // This function is safe for concurrent access.
 func (b *BlockChain) BlockLocatorFromHash(hash *chainhash.Hash) BlockLocator {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	node := b.index.LookupNode(hash)
 	locator := b.bestChain.blockLocator(node)
-	b.chainLock.RUnlock()
 	return locator
 }
 
@@ -1696,8 +1716,8 @@ func (b *BlockChain) BlockLocatorFromHash(hash *chainhash.Hash) BlockLocator {
 // This function is safe for concurrent access.
 func (b *BlockChain) LatestBlockLocator() (BlockLocator, error) {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	locator := b.bestChain.BlockLocator(nil)
-	b.chainLock.RUnlock()
 	return locator, nil
 }
 
@@ -1983,8 +2003,8 @@ func (b *BlockChain) locateBlocks(locator BlockLocator, hashStop *chainhash.Hash
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateBlocks(locator BlockLocator, hashStop *chainhash.Hash, maxHashes uint32) []chainhash.Hash {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	hashes := b.locateBlocks(locator, hashStop, maxHashes)
-	b.chainLock.RUnlock()
 	return hashes
 }
 
@@ -2017,10 +2037,15 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) InvalidateBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
 	return b.invalidateBlock(hash)
 }
 
 // invalidateBlock takes a block hash and invalidates it.
+//
+// This function MUST be called with processLock held.
 func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	node := b.index.LookupNode(hash)
 	if node == nil {
@@ -2039,21 +2064,36 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	// The block is marked before the reorganization, which releases the
+	// chain lock while it sends notifications, so that headers arriving
+	// meanwhile can't extend it, and a failure, which leaves it connected,
+	// takes the mark back.
+	oldStatus := b.index.NodeStatus(node)
 	b.index.SetStatusFlags(node, statusValidateFailed)
 	b.index.UnsetStatusFlags(node, statusValid)
 
-	b.chainLock.Lock()
-	defer b.chainLock.Unlock()
-	detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
+	// A block off the main chain takes nothing else off it.
+	if b.bestChain.Contains(node) {
+		detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
 
-	err := b.reorganizeChain(detachNodes, attachNodes)
-	if err != nil {
-		return err
+		err := b.reorganizeChain(detachNodes, attachNodes)
+		if err != nil {
+			b.index.UnsetStatusFlags(node, statusValidateFailed)
+			b.index.SetStatusFlags(node, oldStatus&statusValid)
+
+			// The reorganization can have written the mark.
+			if writeErr := b.index.flushToDB(); writeErr != nil {
+				log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+			}
+			return err
+		}
 	}
 
-	for i, e := 0, detachNodes.Front(); e != nil; i, e = i+1, e.Next() {
-		n := e.Value.(*blockNode)
-
+	// Every block built on it has an invalid ancestor now, on any chain.
+	for _, n := range b.index.descendants(node) {
 		b.index.SetStatusFlags(n, statusInvalidAncestor)
 		b.index.UnsetStatusFlags(n, statusValid)
 	}
@@ -2069,10 +2109,15 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) ReconsiderBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
 	return b.reconsiderBlock(hash)
 }
 
 // reconsiderBlock takes a block hash and allows it to be revalidated.
+//
+// This function MUST be called with processLock held.
 func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	node := b.index.LookupNode(hash)
 	if node == nil {
@@ -2080,30 +2125,21 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
-	// A block before the finalized block can only be reconsidered once
-	// finalization moves back to where its chain forks.
-	b.chainLock.Lock()
-	b.unfinalizeTo(node)
-	b.chainLock.Unlock()
-
-	// No need to reconsider, it is already valid.
-	if node.status.KnownValid() {
+	// No need to reconsider, it is already valid.  A block can have been
+	// valid before something marked it invalid.
+	if status := b.index.NodeStatus(node); status.KnownValid() && !status.KnownInvalid() {
 		err := fmt.Errorf("block %s is already valid", hash)
 		return err
 	}
 
-	// Keep a reference to the first node in the chain of invalid
-	// blocks so we can reprocess after status flags are updated.
+	// Find the first node in the chain of invalid blocks, to reprocess it
+	// once the status flags are updated.
 	firstNode := node
-
-	// Find previous node to the point where the blocks are valid again.
 	for n := node; n.status.KnownInvalid(); n = n.parent {
-		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
-		b.index.UnsetStatusFlags(n, statusValidateFailed)
-
 		firstNode = n
 	}
 
+	// Read it before anything changes, so that a failure changes nothing.
 	var blk *bchutil.Block
 	err := b.db.View(func(dbTx database.Tx) error {
 		var err error
@@ -2114,18 +2150,74 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
+	// A block before the finalized block can only be reconsidered once
+	// finalization moves back to where its chain forks.
+	b.chainLock.Lock()
+	b.unfinalizeTo(node)
+	b.chainLock.Unlock()
+
+	// The blocks from there on are no longer known to be invalid.
+	for n := node; n.status.KnownInvalid(); n = n.parent {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
+	}
+
+	// The blocks built on it are no longer known to be invalid either.
+	for _, n := range b.index.descendants(node) {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
+	}
+
 	// Process it all again. This will take care of the
-	// orphans as well.
-	_, _, err = b.ProcessBlock(blk, BFNoDupBlockCheck)
+	// orphans as well.  The caller holds processLock already.
+	_, _, err = b.lockAndProcessBlock(blk, BFNoDupBlockCheck)
 	if err != nil {
 		return err
 	}
+
+	// Processing the block connects at most that block, and the blocks
+	// built on it can make a better chain.
+	err = b.reorganizeToBest(b.index.descendants(firstNode))
 
 	if writeErr := b.index.flushToDB(); writeErr != nil {
 		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 	}
 
-	return nil
+	return err
+}
+
+// reorganizeToBest makes the candidate with the most work the tip of the main
+// chain, if it has more work than the tip, its data, and no invalid ancestor.
+// At equal work the first one wins.
+//
+// This function MUST be called with processLock held.
+func (b *BlockChain) reorganizeToBest(candidates []*blockNode) error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	tip := b.bestChain.Tip()
+	best := tip
+	for _, n := range candidates {
+		status := b.index.NodeStatus(n)
+		if status.HaveData() && !status.KnownInvalid() &&
+			n.workSum.Cmp(best.workSum) > 0 {
+
+			best = n
+		}
+	}
+	if best == tip {
+		return nil
+	}
+
+	detachNodes, attachNodes := b.getReorganizeNodes(best)
+	if attachNodes.Len() == 0 {
+		return nil
+	}
+	pruned, err := b.prunedNode(attachNodes)
+	if err != nil || pruned != nil {
+		return err
+	}
+	return b.reorganizeChain(detachNodes, attachNodes)
 }
 
 // Prune deletes the block data and spend journals for all blocks deeper than
@@ -2481,8 +2573,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 // This function is safe for concurrent access.
 func (b *BlockChain) LocateHeaders(locator BlockLocator, hashStop *chainhash.Hash) []wire.BlockHeader {
 	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
 	headers := b.locateHeaders(locator, hashStop, wire.MaxBlockHeadersPerMsg)
-	b.chainLock.RUnlock()
 	return headers
 }
 

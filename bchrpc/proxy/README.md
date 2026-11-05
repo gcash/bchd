@@ -21,6 +21,8 @@ the Go toolchain version set in `../regen.sh`.
 
 If you are using a certificate signed by a CA then you do not need to specify a value for `-bchd-grpc-certpath`.
 
+The proxy cannot send an auth token, so it cannot be used with a BCHD node run with `--grpcauthtoken`.
+
 
 ## Swagger API Docs
 

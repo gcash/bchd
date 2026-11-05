@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -164,6 +165,45 @@ func (cm *rpcConnManager) DisconnectByAddr(addr string) error {
 		cmp:   func(sp *serverPeer) bool { return sp.Addr() == addr },
 		reply: replyChan,
 	}, replyChan)
+}
+
+// Ban bans target from now until until and disconnects the peers the ban
+// applies to, persistent and whitelisted ones too, as BCHN does, though those
+// can connect again.  It returns false if target is banned already.
+//
+// This function is safe for concurrent access and is part of the
+// rpcserverConnManager interface implementation.
+func (cm *rpcConnManager) Ban(target banTarget, now, until time.Time) bool {
+	if !cm.server.bans.add(target, now, until) {
+		return false
+	}
+	reply := make(chan struct{}, 1)
+	queryPeerHandler(cm.server, disconnectBannedMsg{reply: reply}, reply)
+	return true
+}
+
+// Unban lifts the ban of exactly target, and returns false if there is none.
+//
+// This function is safe for concurrent access and is part of the
+// rpcserverConnManager interface implementation.
+func (cm *rpcConnManager) Unban(target banTarget) bool {
+	return cm.server.bans.remove(target)
+}
+
+// Bans returns the bans in force at now.
+//
+// This function is safe for concurrent access and is part of the
+// rpcserverConnManager interface implementation.
+func (cm *rpcConnManager) Bans(now time.Time) []banEntry {
+	return cm.server.bans.list(now)
+}
+
+// ClearBans lifts the bans of the chosen kinds.
+//
+// This function is safe for concurrent access and is part of the
+// rpcserverConnManager interface implementation.
+func (cm *rpcConnManager) ClearBans(manual, automatic bool) {
+	cm.server.bans.clear(manual, automatic)
 }
 
 // ConnectedCount returns the number of currently connected peers.

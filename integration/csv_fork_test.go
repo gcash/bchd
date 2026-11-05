@@ -469,6 +469,9 @@ func TestBIP0068AndBIP0112Activation(t *testing.T) {
 	for txVersion := int32(0); txVersion < 3; txVersion++ {
 		// Create a trivially spendable output with a CSV lock-time of
 		// 10 relative blocks.
+		if err := r.WaitForWallet(); err != nil {
+			t.Fatalf("waiting for the wallet: %v", err)
+		}
 		redeemScript, testUTXO, tx, err := createCSVOutput(r, t, outputAmt,
 			relativeBlockLock, false)
 		if err != nil {
@@ -552,6 +555,9 @@ func TestBIP0068AndBIP0112Activation(t *testing.T) {
 			isSeconds = false
 		}
 
+		if err := r.WaitForWallet(); err != nil {
+			t.Fatalf("waiting for the wallet: %v", err)
+		}
 		redeemScript, utxo, tx, err := createCSVOutput(r, t, outputAmt,
 			int32(timeLock), isSeconds)
 		if err != nil {

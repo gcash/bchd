@@ -294,3 +294,50 @@ func TestQueuedAnsweredOnStop(t *testing.T) {
 		t.Fatalf("%d of %d queued messages answered", answered, queued)
 	}
 }
+
+// TestStopWhilePaused ensures that the sync manager stops while it is paused,
+// as when the websocket client that paused it can't finish.
+func TestStopWhilePaused(t *testing.T) {
+	h := newRequestTestHarness(t)
+	h.sm.Start()
+	unpause := h.sm.Pause()
+	defer close(unpause)
+
+	// Give the sync manager the time to take the pause, which a slow
+	// machine only makes this test pass without it.
+	time.Sleep(100 * time.Millisecond)
+	stopped := make(chan struct{})
+	go func() {
+		_ = h.sm.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Minute):
+		t.Fatal("the sync manager didn't stop while it was paused")
+	}
+}
+
+// TestPauseWaitsForHandler ensures Pause returns only once the handler has
+// paused, not when its message is queued, as the caller counts on nothing
+// changing from then on.
+func TestPauseWaitsForHandler(t *testing.T) {
+	sm := &SyncManager{
+		msgChan: make(chan interface{}, 1),
+		quit:    make(chan struct{}),
+	}
+	returned := make(chan struct{})
+	go func() {
+		sm.Pause()
+		close(returned)
+	}()
+
+	msg := (<-sm.msgChan).(pauseMsg)
+	select {
+	case <-returned:
+		t.Fatal("Pause returned before the handler paused")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(msg.paused)
+	returnsWithin(t, "Pause", func() { <-returned })
+}

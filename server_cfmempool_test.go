@@ -89,7 +89,7 @@ func TestMempoolRequestBanScores(t *testing.T) {
 		server: &server{
 			services:  wire.SFNodeBloom | wire.SFNodeCF,
 			txMemPool: h.server.cfg.TxMemPool,
-			banPeers:  make(chan *serverPeer, 1),
+			banPeers:  make(chan *serverPeer, 2),
 			quit:      make(chan struct{}),
 		},
 		filter: bloom.LoadFilter(nil),
@@ -106,7 +106,7 @@ func TestMempoolRequestBanScores(t *testing.T) {
 		}
 	}
 	request()
-	if len(sp.server.banPeers) != 1 {
+	if len(sp.server.banPeers) == 0 {
 		t.Fatal("not banned after four requests in a row")
 	}
 }

@@ -5,7 +5,10 @@
 package blockchain
 
 import (
+	"bytes"
+	"cmp"
 	"math/big"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -292,8 +295,8 @@ func newBlockIndex(db database.DB, chainParams *chaincfg.Params) *blockIndex {
 // This function is safe for concurrent access.
 func (bi *blockIndex) HaveBlock(hash *chainhash.Hash) bool {
 	bi.RLock()
+	defer bi.RUnlock()
 	_, hasBlock := bi.index[*hash]
-	bi.RUnlock()
 	return hasBlock
 }
 
@@ -303,8 +306,8 @@ func (bi *blockIndex) HaveBlock(hash *chainhash.Hash) bool {
 // This function is safe for concurrent access.
 func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
 	bi.RLock()
+	defer bi.RUnlock()
 	node := bi.index[*hash]
-	bi.RUnlock()
 	return node
 }
 
@@ -314,9 +317,9 @@ func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
 // This function is safe for concurrent access.
 func (bi *blockIndex) AddNode(node *blockNode) {
 	bi.Lock()
+	defer bi.Unlock()
 	bi.addNode(node)
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // addNode adds the provided node to the block index, but does not mark it as
@@ -327,13 +330,45 @@ func (bi *blockIndex) addNode(node *blockNode) {
 	bi.index[node.hash] = node
 }
 
+// descendants returns the nodes of the index that build on node, lowest first
+// and, at a height, in the order they were received.  It reads every node of
+// the index.
+//
+// This function is safe for concurrent access.
+func (bi *blockIndex) descendants(node *blockNode) []*blockNode {
+	bi.RLock()
+	defer bi.RUnlock()
+
+	var above []*blockNode
+	for _, n := range bi.index {
+		if n.height > node.height {
+			above = append(above, n)
+		}
+	}
+	slices.SortFunc(above, func(a, b *blockNode) int {
+		return cmp.Or(cmp.Compare(a.height, b.height),
+			cmp.Compare(a.received, b.received),
+			bytes.Compare(a.hash[:], b.hash[:]))
+	})
+
+	found := map[*blockNode]struct{}{node: {}}
+	var descendants []*blockNode
+	for _, n := range above {
+		if _, ok := found[n.parent]; ok {
+			found[n] = struct{}{}
+			descendants = append(descendants, n)
+		}
+	}
+	return descendants
+}
+
 // NodeStatus provides concurrent-safe access to the status field of a node.
 //
 // This function is safe for concurrent access.
 func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 	bi.RLock()
+	defer bi.RUnlock()
 	status := node.status
-	bi.RUnlock()
 	return status
 }
 
@@ -344,9 +379,9 @@ func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 // This function is safe for concurrent access.
 func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
+	defer bi.Unlock()
 	node.status |= flags
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // UnsetStatusFlags flips the provided status flags on the block node to off,
@@ -355,17 +390,17 @@ func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 // This function is safe for concurrent access.
 func (bi *blockIndex) UnsetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
+	defer bi.Unlock()
 	node.status &^= flags
 	bi.dirty[node] = struct{}{}
-	bi.Unlock()
 }
 
 // flushToDB writes all dirty block nodes to the database. If all writes
 // succeed, this clears the dirty set.
 func (bi *blockIndex) flushToDB() error {
 	bi.Lock()
+	defer bi.Unlock()
 	if len(bi.dirty) == 0 {
-		bi.Unlock()
 		return nil
 	}
 
@@ -384,6 +419,5 @@ func (bi *blockIndex) flushToDB() error {
 		bi.dirty = make(map[*blockNode]struct{})
 	}
 
-	bi.Unlock()
 	return err
 }

@@ -282,8 +282,8 @@ func (s *utxoCache) totalMemoryUsage() uint64 {
 // This method is safe for concurrent access.
 func (s *utxoCache) TotalMemoryUsage() uint64 {
 	s.mtx.Lock()
+	defer s.mtx.Unlock()
 	tmu := s.totalMemoryUsage()
-	s.mtx.Unlock()
 	return tmu
 }
 
@@ -331,8 +331,8 @@ func (s *utxoCache) getEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 // This method is safe for concurrent access.
 func (s *utxoCache) FetchEntry(outpoint wire.OutPoint) (*UtxoEntry, error) {
 	s.mtx.Lock()
+	defer s.mtx.Unlock()
 	entry, err := s.getEntry(outpoint)
-	s.mtx.Unlock()
 	return entry.Clone(), err
 }
 
@@ -459,10 +459,7 @@ var unspentOutputScanHook func()
 // This function is safe for concurrent access.
 func (b *BlockChain) FetchUnspentOutputOfTx(hash *chainhash.Hash) (*UtxoEntry, error) {
 	for start := uint32(0); start < maxTxOutputs; start += utxoScanChunk {
-		b.chainLock.RLock()
-		entry := b.utxoCache.cachedUnspentOutput(hash, start,
-			min(start+utxoScanChunk, maxTxOutputs))
-		b.chainLock.RUnlock()
+		entry := b.cachedUnspentOutput(hash, start)
 		if entry != nil {
 			return entry, nil
 		}
@@ -474,6 +471,17 @@ func (b *BlockChain) FetchUnspentOutputOfTx(hash *chainhash.Hash) (*UtxoEntry, e
 	b.chainLock.RLock()
 	defer b.chainLock.RUnlock()
 	return b.utxoCache.storedUnspentOutput(hash)
+}
+
+// cachedUnspentOutput searches a chunk of the outputs a transaction can have,
+// from start, in the cache.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) cachedUnspentOutput(hash *chainhash.Hash, start uint32) *UtxoEntry {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+	return b.utxoCache.cachedUnspentOutput(hash, start,
+		min(start+utxoScanChunk, maxTxOutputs))
 }
 
 // spendEntry marks the output as spent.  Spending an output that is already
@@ -788,12 +796,12 @@ func (s *utxoCache) flush(bestState *BestState) error {
 // This function is safe for concurrent access.
 func (s *utxoCache) setStaleJournal(hash chainhash.Hash, stale bool) {
 	s.mtx.Lock()
+	defer s.mtx.Unlock()
 	if stale {
 		s.staleJournals[hash] = struct{}{}
 	} else {
 		delete(s.staleJournals, hash)
 	}
-	s.mtx.Unlock()
 }
 
 // Flush flushes the UTXO state to the database.

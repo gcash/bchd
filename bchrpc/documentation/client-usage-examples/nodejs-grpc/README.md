@@ -14,10 +14,15 @@ npm install @grpc/proto-loader
 wget https://raw.githubusercontent.com/gcash/bchd/master/bchrpc/bchrpc.proto
 ```
 
-If connecting to a node using a self signed cert you will need to use:
+`grpc.js` reads `bchrpc.proto` from this repository; the downloaded copy is for use outside it.
+
+The example connects to `bchd.greyh.at:8335`, a public node run by a third party. To use another
+node set `BCHD_GRPC_TARGET`, and if that node uses a self signed cert, set `BCHD_RPC_CERT` to its
+`rpc.cert` so that the connection is verified against it:
 
 ```
-export NODE_TLS_REJECT_UNAUTHORIZED=0
+export BCHD_GRPC_TARGET=localhost:8335
+export BCHD_RPC_CERT=~/.bchd/rpc.cert
 ```
 
 ## Examples
@@ -25,7 +30,7 @@ export NODE_TLS_REJECT_UNAUTHORIZED=0
 The example code will show you how to:
 
 * Get the mempool state with a simple `GetMempoolInfo` request
-* Convert a tx hash string to bin and change the edianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
+* Convert a tx hash string to bin and change the endianness in order to use it as a request parameter for `GetRawTransactionRequest` and `GetTransactionRequest`
 * Define a `TransactionFilter`
 * Setup a live transaction stream with `SubscribeTransactions`
 
@@ -38,6 +43,7 @@ The example code will show you how to:
 ```
 git clone https://github.com/gcash/bchd.git
 cd bchd/bchrpc/documentation/client-usage-examples/nodejs-grpc/
+npm install @grpc/grpc-js @grpc/proto-loader
 node grpc.js
 ```
 

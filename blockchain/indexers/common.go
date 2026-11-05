@@ -34,6 +34,13 @@ type NeedsInputser interface {
 	NeedsInputs() bool
 }
 
+// ChainUser is the interface of an index that reads the chain itself, beyond
+// the blocks and spent outputs the index manager hands it.  The manager hands
+// it the chain before it initializes the index.
+type ChainUser interface {
+	UseChain(chain *blockchain.BlockChain)
+}
+
 // Indexer provides a generic interface for an indexer that is managed by an
 // index manager such as the Manager type provided by this package.
 type Indexer interface {

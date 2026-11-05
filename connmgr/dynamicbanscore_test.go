@@ -77,3 +77,14 @@ func TestDynamicBanScoreString(t *testing.T) {
 	}
 	t.Log(bs.String())
 }
+
+// TestDynamicBanScoreDecaysOnPersistentIncrease ensures that an increase of the
+// persistent score alone counts the transient score as it has decayed.
+func TestDynamicBanScoreDecaysOnPersistentIncrease(t *testing.T) {
+	var bs DynamicBanScore
+	base := time.Now()
+	bs.increase(0, 90, base)
+	if got := bs.increase(10, 0, base.Add(time.Hour)); got != 10 {
+		t.Fatalf("score %d an hour later, want 10", got)
+	}
+}

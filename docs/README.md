@@ -9,6 +9,7 @@
       2. [Finalization and Deep Reorganizations](#Finalization)
    3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
    4. [Mining](#Mining)
+   5. [Kubernetes](#Kubernetes)
 3. [Help](#Help)
    1. [Startup](#Startup)
       1. [Using bootstrap.dat](#BootstrapDat)
@@ -18,7 +19,9 @@
 4. [Developer Resources](#DeveloperResources)
    1. [Code Contribution Guidelines](#ContributionGuidelines)
    2. [JSON-RPC Reference](#JSONRPCReference)
-   3. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
+   3. [gRPC API Reference](#GRPCReference)
+   4. [Changelog](#Changelog)
+   5. [The gcash Bitcoin Cash-related Go Packages](#GoPackages)
 
 <a name="About" />
 
@@ -56,7 +59,7 @@ If you prefer to install from source do the following:
 - Run the following commands to obtain bchd, all dependencies, and install it:
 
 ```bash
-$ go get github.com/gcash/bchd
+$ go install github.com/gcash/bchd@v0.22.4
 ```
 
 This will download and compile `bchd` and put it in your path.
@@ -65,7 +68,7 @@ This will download and compile `bchd` and put it in your path.
 
 **2.2 Configuration**
 
-bchd has a number of [configuration](http://godoc.org/github.com/gcash/bchd)
+bchd has a number of [configuration](https://pkg.go.dev/github.com/gcash/bchd)
 options, which can be viewed by running: `$ bchd --help`.
 
 <a name="Checkpoints" />
@@ -203,8 +206,8 @@ The limited user cannot access this RPC.
 [Application Options]
 rpcuser=myuser
 rpcpass=SomeDecentp4ssw0rd
-miningaddr=12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX
-miningaddr=1M83ju3EChKYyysmM2FXtLNftbacagd8FR
+miningaddr=bitcoincash:qqgekzvw96vq5g57zwdfa5q6g609rrn0ycp33uc325
+miningaddr=bitcoincash:qrwt0dka0x6atfqup8xegzrjuclm975u8c9hu4p4tx
 ```
 
 **2. Add bchd's RPC TLS certificate to system Certificate Authority list.**
@@ -223,6 +226,13 @@ certificate into the default system Certificate Authority list.
 **3. Set your mining software url to use https.**
 
 `$ cgminer -o https://127.0.0.1:8334 -u rpcuser -p rpcpassword`
+
+<a name="Kubernetes" />
+
+**2.5 Kubernetes**
+
+The [kube](https://github.com/gcash/bchd/tree/master/kube) folder has the configs and a guide
+for running BCHD on Google Kubernetes Engine.
 
 <a name="Help" />
 
@@ -308,6 +318,22 @@ information.
 
 - [JSON-RPC Reference](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md)
   - [RPC Examples](https://github.com/gcash/bchd/tree/master/docs/json_rpc_api.md#ExampleCode)
+
+<a name="GRPCReference" />
+
+- [gRPC API Reference](https://github.com/gcash/bchd/tree/master/bchrpc/README.md)
+  - [Client Usage](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client_usage.md)
+  - [Client Examples](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/client-usage-examples)
+  - [Hash, Address and Token ID Encoding](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/data_encoding.md)
+  - [grpcurl and curl Examples](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/cli_examples.md)
+  - [Server Configuration](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/server_configuration.md)
+  - [NGINX Reverse Proxy](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/nginx.md)
+  - [Web Browsers (gRPC-Web)](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/web.md)
+  - [Wallet Operation](https://github.com/gcash/bchd/tree/master/bchrpc/documentation/wallet_operation.md)
+
+<a name="Changelog" />
+
+- [Changelog](https://github.com/gcash/bchd/tree/master/CHANGELOG.md)
 
 <a name="GoPackages" />
 

@@ -100,7 +100,7 @@ func syncCandidate(t *testing.T, sm *SyncManager, params *chaincfg.Params,
 // longer ago than a sync peer may go without one.
 func setStalledSyncPeer(sm *SyncManager, p *peerpkg.Peer) {
 	p.SetSyncPeer(true)
-	sm.syncPeer = p
+	sm.syncPeer.Store(p)
 	sm.syncPeerState = &syncPeerState{
 		lastBlockTime: time.Now().Add(-maxLastBlockTime - time.Minute),
 	}
@@ -125,7 +125,7 @@ func TestSyncPeerBelowMinimumChainWorkReplaced(t *testing.T) {
 		t.Fatal("sync peer whose chain is below the minimum chain work " +
 			"was kept")
 	}
-	if sm.syncPeer != honest {
+	if sm.syncPeer.Load() != honest {
 		t.Fatal("peer behind the low-work chain did not become the sync " +
 			"peer")
 	}
@@ -143,7 +143,7 @@ func TestSyncPeerWithMinimumChainWorkKept(t *testing.T) {
 	setStalledSyncPeer(sm, peer)
 
 	sm.handleCheckSyncPeer()
-	if sm.syncPeer != peer || isDisconnected(peer) {
+	if sm.syncPeer.Load() != peer || isDisconnected(peer) {
 		t.Fatal("sync peer at the tip of a chain with the minimum chain " +
 			"work was replaced")
 	}
@@ -158,14 +158,14 @@ func TestStartSyncFromPeerBehind(t *testing.T) {
 
 	params.MinimumChainWork = big.NewInt(1)
 	sm.startSync()
-	if sm.syncPeer != nil {
+	if sm.syncPeer.Load() != nil {
 		t.Fatal("sync started from a peer behind a chain with the minimum " +
 			"chain work")
 	}
 
 	params.MinimumChainWork = new(big.Int).Lsh(big.NewInt(1), 128)
 	sm.startSync()
-	if sm.syncPeer != behind {
+	if sm.syncPeer.Load() != behind {
 		t.Fatal("sync did not start from the peer behind a chain below " +
 			"the minimum chain work")
 	}

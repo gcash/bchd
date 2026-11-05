@@ -54,8 +54,8 @@ Application Options:
 	    --banduration=             How long to ban misbehaving peers.  Valid time
 	                               units are {s, m, h}.  Minimum 1 second
 	                               (default: 24h0m0s)
-	    --banthreshold=            Maximum allowed ban score before disconnecting
-	                               and banning misbehaving peers. (default: 100)
+	    --banthreshold=            Ban score at which misbehaving peers are
+	                               disconnected and banned. (default: 100)
 	    --whitelist=               Add an IP network or IP that will not be
 	                               banned. (eg. 192.168.1.0/24 or ::1)
 	    --agentblacklist=          A comma separated list of user-agent
@@ -227,6 +227,14 @@ Application Options:
 	    --dropslpindex             Deletes the slp index from the database on
 	                               start up and then exits.
 	    --slpgraphsearch           Enables gRPC calls related to slp graph search.
+	    --bcmrindex                Maintain an index of the authchain of every
+	                               token category, and of every authchain that
+	                               holds a BCMR metadata registry publication,
+	                               from where it begins, which makes the
+	                               getbcmridentity and GetBcmrIdentity RPCs
+	                               available
+	    --dropbcmrindex            Deletes the BCMR index from the database on
+	                               start up and then exits.
 	    --relaynonstd              Relay non-standard transactions regardless of
 	                               the default settings for the active network.
 	    --rejectnonstd             Reject non-standard transactions regardless of

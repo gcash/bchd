@@ -115,7 +115,8 @@ func (b *BlockChain) heightFlags(height int32, flags BehaviorFlags) BehaviorFlag
 // are needed to pass along to maybeAcceptBlock.  BFFastAdd only applies to the
 // block it was passed with, so it is not passed on to the orphans.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) processOrphans(hash *chainhash.Hash, flags BehaviorFlags) error {
 	// parentErr is the error that showed the passed block or one of its
 	// ancestors to be invalid while connecting an orphan.
@@ -233,6 +234,18 @@ func (b *BlockChain) knownInvalid(hash *chainhash.Hash) bool {
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bool, bool, error) {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
+	return b.lockAndProcessBlock(block, flags)
+}
+
+// lockAndProcessBlock takes the chain lock and processes the block as
+// described for ProcessBlock, asking the node to shut down on a database
+// error.
+//
+// This function MUST be called with processLock held.
+func (b *BlockChain) lockAndProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bool, bool, error) {
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
@@ -245,7 +258,8 @@ func (b *BlockChain) ProcessBlock(block *bchutil.Block, flags BehaviorFlags) (bo
 
 // processBlock processes the block as described for ProcessBlock.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) processBlock(block *bchutil.Block, flags BehaviorFlags) (bool, bool, error) {
 	blockHash := block.Hash()
 	log.Tracef("Processing block %v", blockHash)

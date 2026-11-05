@@ -142,5 +142,5 @@ func (s *DynamicBanScore) increase(persistent, transient uint32, t time.Time) ui
 		s.transient += float64(transient)
 		s.lastUnix = tu
 	}
-	return s.persistent + uint32(s.transient)
+	return s.int(t)
 }

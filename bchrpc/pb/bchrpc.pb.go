@@ -416,6 +416,55 @@ func (SlpTransactionInfo_BurnFlags) EnumDescriptor() ([]byte, []int) {
 	return file_bchrpc_proto_rawDescGZIP(), []int{63, 1}
 }
 
+type GetBcmrIdentityResponse_Status int32
+
+const (
+	// The authchain goes on.
+	GetBcmrIdentityResponse_ACTIVE GetBcmrIdentityResponse_Status = 0
+	// The authhead spent the identity output to a data-carrier output,
+	// which ends the authchain.
+	GetBcmrIdentityResponse_BURNED GetBcmrIdentityResponse_Status = 1
+)
+
+// Enum value maps for GetBcmrIdentityResponse_Status.
+var (
+	GetBcmrIdentityResponse_Status_name = map[int32]string{
+		0: "ACTIVE",
+		1: "BURNED",
+	}
+	GetBcmrIdentityResponse_Status_value = map[string]int32{
+		"ACTIVE": 0,
+		"BURNED": 1,
+	}
+)
+
+func (x GetBcmrIdentityResponse_Status) Enum() *GetBcmrIdentityResponse_Status {
+	p := new(GetBcmrIdentityResponse_Status)
+	*p = x
+	return p
+}
+
+func (x GetBcmrIdentityResponse_Status) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GetBcmrIdentityResponse_Status) Descriptor() protoreflect.EnumDescriptor {
+	return file_bchrpc_proto_enumTypes[7].Descriptor()
+}
+
+func (GetBcmrIdentityResponse_Status) Type() protoreflect.EnumType {
+	return &file_bchrpc_proto_enumTypes[7]
+}
+
+func (x GetBcmrIdentityResponse_Status) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GetBcmrIdentityResponse_Status.Descriptor instead.
+func (GetBcmrIdentityResponse_Status) EnumDescriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{72, 0}
+}
+
 type GetMempoolInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -656,8 +705,11 @@ type GetBlockchainInfoResponse struct {
 	SlpIndex bool `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
 	// When `slp_graphsearch` is true, the node is able to handle calls to slp graph search
 	SlpGraphsearch bool `protobuf:"varint,9,opt,name=slp_graphsearch,json=slpGraphsearch,proto3" json:"slp_graphsearch,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// When `bcmr_index` is true, the node has the BCMR index enabled and may
+	// be used with GetBcmrIdentity.
+	BcmrIndex     bool `protobuf:"varint,10,opt,name=bcmr_index,json=bcmrIndex,proto3" json:"bcmr_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetBlockchainInfoResponse) Reset() {
@@ -749,6 +801,13 @@ func (x *GetBlockchainInfoResponse) GetSlpIndex() bool {
 func (x *GetBlockchainInfoResponse) GetSlpGraphsearch() bool {
 	if x != nil {
 		return x.SlpGraphsearch
+	}
+	return false
+}
+
+func (x *GetBlockchainInfoResponse) GetBcmrIndex() bool {
+	if x != nil {
+		return x.BcmrIndex
 	}
 	return false
 }
@@ -5573,6 +5632,240 @@ func (*SlpRequiredBurn_Amount) isSlpRequiredBurn_BurnIntention() {}
 
 func (*SlpRequiredBurn_MintBatonVout) isSlpRequiredBurn_BurnIntention() {}
 
+type GetBcmrIdentityRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The identity's authbase, little-endian: a token's category ID, or any
+	// transaction of an authchain the index tracks.
+	Authbase []byte `protobuf:"bytes,1,opt,name=authbase,proto3" json:"authbase,omitempty"`
+	// Also return the authchain's transactions, from the authbase, or from
+	// the link after the one in after.
+	IncludeAuthchain bool `protobuf:"varint,2,opt,name=include_authchain,json=includeAuthchain,proto3" json:"include_authchain,omitempty"`
+	// A link of the authchain, little-endian, which the client knows the
+	// authchain up to, to return the links after it. Only with
+	// include_authchain.
+	After []byte `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
+	// The most links to return, up to 1000, which 0 also means. An answer
+	// also holds no more after the link that takes its transactions past
+	// 1 MB. Only with include_authchain.
+	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBcmrIdentityRequest) Reset() {
+	*x = GetBcmrIdentityRequest{}
+	mi := &file_bchrpc_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBcmrIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBcmrIdentityRequest) ProtoMessage() {}
+
+func (x *GetBcmrIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBcmrIdentityRequest.ProtoReflect.Descriptor instead.
+func (*GetBcmrIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *GetBcmrIdentityRequest) GetAuthbase() []byte {
+	if x != nil {
+		return x.Authbase
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityRequest) GetIncludeAuthchain() bool {
+	if x != nil {
+		return x.IncludeAuthchain
+	}
+	return false
+}
+
+func (x *GetBcmrIdentityRequest) GetAfter() []byte {
+	if x != nil {
+		return x.After
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// GetBcmrIdentityResponse is what the BCMR index knows of an identity.
+//
+// WARNING: Some languages (e.g., JavaScript) may not properly handle the 'uint64'
+// for large amounts. For this reason, an annotation has been added for JS to
+// return a string for the genesis_supply field instead of casting uint64 to the
+// JS 'number' type. Other languages may require similar treatment.
+type GetBcmrIdentityResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The identity's authbase, little-endian.
+	Authbase []byte                         `protobuf:"bytes,1,opt,name=authbase,proto3" json:"authbase,omitempty"`
+	Status   GetBcmrIdentityResponse_Status `protobuf:"varint,2,opt,name=status,proto3,enum=pb.GetBcmrIdentityResponse_Status" json:"status,omitempty"`
+	// The authhead, the newest link of the authchain, confirmed or in the
+	// mempool.
+	Head *GetBcmrIdentityResponse_Link `protobuf:"bytes,3,opt,name=head,proto3" json:"head,omitempty"`
+	// The link with the publication to read: the authhead, when it has a
+	// well-formed publication and publication_current is set, or else the
+	// newest earlier link with one. Unset if no link has one.
+	Publication        *GetBcmrIdentityResponse_Link `protobuf:"bytes,4,opt,name=publication,proto3" json:"publication,omitempty"`
+	PublicationCurrent bool                          `protobuf:"varint,5,opt,name=publication_current,json=publicationCurrent,proto3" json:"publication_current,omitempty"`
+	// The number of fungible tokens the token's genesis created, when
+	// has_genesis_supply is set, for a token's identity.
+	GenesisSupply    uint64 `protobuf:"varint,6,opt,name=genesis_supply,json=genesisSupply,proto3" json:"genesis_supply,omitempty"`
+	HasGenesisSupply bool   `protobuf:"varint,12,opt,name=has_genesis_supply,json=hasGenesisSupply,proto3" json:"has_genesis_supply,omitempty"`
+	// The CashTokens data of the authhead's identity output, output 0, as it
+	// is, if it carries a token.
+	IdentityOutput *CashToken `protobuf:"bytes,7,opt,name=identity_output,json=identityOutput,proto3" json:"identity_output,omitempty"`
+	// The index of the first link in authchain, counted from the authbase
+	// as 0.
+	FirstIndex uint32 `protobuf:"varint,8,opt,name=first_index,json=firstIndex,proto3" json:"first_index,omitempty"`
+	// The links of the authchain, with include_authchain, in the order of
+	// CHIP-BCMR's authchain extension.
+	Authchain []*GetBcmrIdentityResponse_Link `protobuf:"bytes,9,rep,name=authchain,proto3" json:"authchain,omitempty"`
+	// Later links didn't fit; ask again with after set to the last one.
+	More bool `protobuf:"varint,10,opt,name=more,proto3" json:"more,omitempty"`
+	// A merkle proof of the newest confirmed link, which proves the earlier
+	// links too, since each spends the one before. Set when the links
+	// returned reach the authhead and a link is confirmed.
+	Proof         *GetBcmrIdentityResponse_Proof `protobuf:"bytes,11,opt,name=proof,proto3" json:"proof,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBcmrIdentityResponse) Reset() {
+	*x = GetBcmrIdentityResponse{}
+	mi := &file_bchrpc_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBcmrIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBcmrIdentityResponse) ProtoMessage() {}
+
+func (x *GetBcmrIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBcmrIdentityResponse.ProtoReflect.Descriptor instead.
+func (*GetBcmrIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *GetBcmrIdentityResponse) GetAuthbase() []byte {
+	if x != nil {
+		return x.Authbase
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse) GetStatus() GetBcmrIdentityResponse_Status {
+	if x != nil {
+		return x.Status
+	}
+	return GetBcmrIdentityResponse_ACTIVE
+}
+
+func (x *GetBcmrIdentityResponse) GetHead() *GetBcmrIdentityResponse_Link {
+	if x != nil {
+		return x.Head
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse) GetPublication() *GetBcmrIdentityResponse_Link {
+	if x != nil {
+		return x.Publication
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse) GetPublicationCurrent() bool {
+	if x != nil {
+		return x.PublicationCurrent
+	}
+	return false
+}
+
+func (x *GetBcmrIdentityResponse) GetGenesisSupply() uint64 {
+	if x != nil {
+		return x.GenesisSupply
+	}
+	return 0
+}
+
+func (x *GetBcmrIdentityResponse) GetHasGenesisSupply() bool {
+	if x != nil {
+		return x.HasGenesisSupply
+	}
+	return false
+}
+
+func (x *GetBcmrIdentityResponse) GetIdentityOutput() *CashToken {
+	if x != nil {
+		return x.IdentityOutput
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse) GetFirstIndex() uint32 {
+	if x != nil {
+		return x.FirstIndex
+	}
+	return 0
+}
+
+func (x *GetBcmrIdentityResponse) GetAuthchain() []*GetBcmrIdentityResponse_Link {
+	if x != nil {
+		return x.Authchain
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse) GetMore() bool {
+	if x != nil {
+		return x.More
+	}
+	return false
+}
+
+func (x *GetBcmrIdentityResponse) GetProof() *GetBcmrIdentityResponse_Proof {
+	if x != nil {
+		return x.Proof
+	}
+	return nil
+}
+
 type GetMempoolResponse_TransactionData struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Either one of the two following is provided, depending on the request.
@@ -5588,7 +5881,7 @@ type GetMempoolResponse_TransactionData struct {
 
 func (x *GetMempoolResponse_TransactionData) Reset() {
 	*x = GetMempoolResponse_TransactionData{}
-	mi := &file_bchrpc_proto_msgTypes[71]
+	mi := &file_bchrpc_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5600,7 +5893,7 @@ func (x *GetMempoolResponse_TransactionData) String() string {
 func (*GetMempoolResponse_TransactionData) ProtoMessage() {}
 
 func (x *GetMempoolResponse_TransactionData) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[71]
+	mi := &file_bchrpc_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5672,7 +5965,7 @@ type GetSlpTrustedValidationRequest_Query struct {
 
 func (x *GetSlpTrustedValidationRequest_Query) Reset() {
 	*x = GetSlpTrustedValidationRequest_Query{}
-	mi := &file_bchrpc_proto_msgTypes[72]
+	mi := &file_bchrpc_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5684,7 +5977,7 @@ func (x *GetSlpTrustedValidationRequest_Query) String() string {
 func (*GetSlpTrustedValidationRequest_Query) ProtoMessage() {}
 
 func (x *GetSlpTrustedValidationRequest_Query) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[72]
+	mi := &file_bchrpc_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5741,7 +6034,7 @@ type GetSlpTrustedValidationResponse_ValidityResult struct {
 
 func (x *GetSlpTrustedValidationResponse_ValidityResult) Reset() {
 	*x = GetSlpTrustedValidationResponse_ValidityResult{}
-	mi := &file_bchrpc_proto_msgTypes[73]
+	mi := &file_bchrpc_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5753,7 +6046,7 @@ func (x *GetSlpTrustedValidationResponse_ValidityResult) String() string {
 func (*GetSlpTrustedValidationResponse_ValidityResult) ProtoMessage() {}
 
 func (x *GetSlpTrustedValidationResponse_ValidityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[73]
+	mi := &file_bchrpc_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5886,7 +6179,7 @@ type DoubleSpendProof_Spender struct {
 
 func (x *DoubleSpendProof_Spender) Reset() {
 	*x = DoubleSpendProof_Spender{}
-	mi := &file_bchrpc_proto_msgTypes[74]
+	mi := &file_bchrpc_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5898,7 +6191,7 @@ func (x *DoubleSpendProof_Spender) String() string {
 func (*DoubleSpendProof_Spender) ProtoMessage() {}
 
 func (x *DoubleSpendProof_Spender) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[74]
+	mi := &file_bchrpc_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5976,7 +6269,7 @@ type Block_TransactionData struct {
 
 func (x *Block_TransactionData) Reset() {
 	*x = Block_TransactionData{}
-	mi := &file_bchrpc_proto_msgTypes[75]
+	mi := &file_bchrpc_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5988,7 +6281,7 @@ func (x *Block_TransactionData) String() string {
 func (*Block_TransactionData) ProtoMessage() {}
 
 func (x *Block_TransactionData) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[75]
+	mi := &file_bchrpc_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6073,7 +6366,7 @@ type Transaction_Input struct {
 
 func (x *Transaction_Input) Reset() {
 	*x = Transaction_Input{}
-	mi := &file_bchrpc_proto_msgTypes[76]
+	mi := &file_bchrpc_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6085,7 +6378,7 @@ func (x *Transaction_Input) String() string {
 func (*Transaction_Input) ProtoMessage() {}
 
 func (x *Transaction_Input) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[76]
+	mi := &file_bchrpc_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6189,7 +6482,7 @@ type Transaction_Output struct {
 
 func (x *Transaction_Output) Reset() {
 	*x = Transaction_Output{}
-	mi := &file_bchrpc_proto_msgTypes[77]
+	mi := &file_bchrpc_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6201,7 +6494,7 @@ func (x *Transaction_Output) String() string {
 func (*Transaction_Output) ProtoMessage() {}
 
 func (x *Transaction_Output) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[77]
+	mi := &file_bchrpc_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6285,7 +6578,7 @@ type Transaction_Input_Outpoint struct {
 
 func (x *Transaction_Input_Outpoint) Reset() {
 	*x = Transaction_Input_Outpoint{}
-	mi := &file_bchrpc_proto_msgTypes[78]
+	mi := &file_bchrpc_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6297,7 +6590,7 @@ func (x *Transaction_Input_Outpoint) String() string {
 func (*Transaction_Input_Outpoint) ProtoMessage() {}
 
 func (x *Transaction_Input_Outpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[78]
+	mi := &file_bchrpc_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6343,7 +6636,7 @@ type SlpTokenMetadata_V1Fungible struct {
 
 func (x *SlpTokenMetadata_V1Fungible) Reset() {
 	*x = SlpTokenMetadata_V1Fungible{}
-	mi := &file_bchrpc_proto_msgTypes[79]
+	mi := &file_bchrpc_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6355,7 +6648,7 @@ func (x *SlpTokenMetadata_V1Fungible) String() string {
 func (*SlpTokenMetadata_V1Fungible) ProtoMessage() {}
 
 func (x *SlpTokenMetadata_V1Fungible) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[79]
+	mi := &file_bchrpc_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6436,7 +6729,7 @@ type SlpTokenMetadata_V1NFT1Group struct {
 
 func (x *SlpTokenMetadata_V1NFT1Group) Reset() {
 	*x = SlpTokenMetadata_V1NFT1Group{}
-	mi := &file_bchrpc_proto_msgTypes[80]
+	mi := &file_bchrpc_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6448,7 +6741,7 @@ func (x *SlpTokenMetadata_V1NFT1Group) String() string {
 func (*SlpTokenMetadata_V1NFT1Group) ProtoMessage() {}
 
 func (x *SlpTokenMetadata_V1NFT1Group) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[80]
+	mi := &file_bchrpc_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6527,7 +6820,7 @@ type SlpTokenMetadata_V1NFT1Child struct {
 
 func (x *SlpTokenMetadata_V1NFT1Child) Reset() {
 	*x = SlpTokenMetadata_V1NFT1Child{}
-	mi := &file_bchrpc_proto_msgTypes[81]
+	mi := &file_bchrpc_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6539,7 +6832,7 @@ func (x *SlpTokenMetadata_V1NFT1Child) String() string {
 func (*SlpTokenMetadata_V1NFT1Child) ProtoMessage() {}
 
 func (x *SlpTokenMetadata_V1NFT1Child) ProtoReflect() protoreflect.Message {
-	mi := &file_bchrpc_proto_msgTypes[81]
+	mi := &file_bchrpc_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6590,6 +6883,247 @@ func (x *SlpTokenMetadata_V1NFT1Child) GetGroupId() []byte {
 	return nil
 }
 
+// A BCMR publication output, as CHIP-BCMR defines it.
+type GetBcmrIdentityResponse_Publication struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The index of the output.
+	Output uint32 `protobuf:"varint,1,opt,name=output,proto3" json:"output,omitempty"`
+	// The output starts with the publication prefix but is malformed,
+	// and hash and uris are empty.
+	Malformed bool `protobuf:"varint,2,opt,name=malformed,proto3" json:"malformed,omitempty"`
+	// The SHA-256 of the registry in the byte order it was pushed in,
+	// which SHA-256 tools print, unlike the little-endian hashes of
+	// transactions and blocks.
+	Hash []byte `protobuf:"bytes,3,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The URIs pushed after the hash, as they are.
+	Uris          []string `protobuf:"bytes,4,rep,name=uris,proto3" json:"uris,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBcmrIdentityResponse_Publication) Reset() {
+	*x = GetBcmrIdentityResponse_Publication{}
+	mi := &file_bchrpc_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBcmrIdentityResponse_Publication) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBcmrIdentityResponse_Publication) ProtoMessage() {}
+
+func (x *GetBcmrIdentityResponse_Publication) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBcmrIdentityResponse_Publication.ProtoReflect.Descriptor instead.
+func (*GetBcmrIdentityResponse_Publication) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{72, 0}
+}
+
+func (x *GetBcmrIdentityResponse_Publication) GetOutput() uint32 {
+	if x != nil {
+		return x.Output
+	}
+	return 0
+}
+
+func (x *GetBcmrIdentityResponse_Publication) GetMalformed() bool {
+	if x != nil {
+		return x.Malformed
+	}
+	return false
+}
+
+func (x *GetBcmrIdentityResponse_Publication) GetHash() []byte {
+	if x != nil {
+		return x.Hash
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Publication) GetUris() []string {
+	if x != nil {
+		return x.Uris
+	}
+	return nil
+}
+
+// A link of the authchain.
+type GetBcmrIdentityResponse_Link struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The link's transaction hash, little-endian.
+	Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The height of the link's block, or 0 while it is in the mempool.
+	Height int32 `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+	// The hash of the link's block, little-endian, or empty while it is
+	// in the mempool.
+	BlockHash []byte `protobuf:"bytes,3,opt,name=block_hash,json=blockHash,proto3" json:"block_hash,omitempty"`
+	// The link's BCMR publication output, if it has one.
+	Publication *GetBcmrIdentityResponse_Publication `protobuf:"bytes,4,opt,name=publication,proto3" json:"publication,omitempty"`
+	// The serialized transaction, for the links in authchain.
+	Transaction   []byte `protobuf:"bytes,5,opt,name=transaction,proto3" json:"transaction,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBcmrIdentityResponse_Link) Reset() {
+	*x = GetBcmrIdentityResponse_Link{}
+	mi := &file_bchrpc_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBcmrIdentityResponse_Link) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBcmrIdentityResponse_Link) ProtoMessage() {}
+
+func (x *GetBcmrIdentityResponse_Link) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBcmrIdentityResponse_Link.ProtoReflect.Descriptor instead.
+func (*GetBcmrIdentityResponse_Link) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{72, 1}
+}
+
+func (x *GetBcmrIdentityResponse_Link) GetHash() []byte {
+	if x != nil {
+		return x.Hash
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Link) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *GetBcmrIdentityResponse_Link) GetBlockHash() []byte {
+	if x != nil {
+		return x.BlockHash
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Link) GetPublication() *GetBcmrIdentityResponse_Publication {
+	if x != nil {
+		return x.Publication
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Link) GetTransaction() []byte {
+	if x != nil {
+		return x.Transaction
+	}
+	return nil
+}
+
+// A merkle proof of a link of the authchain.
+type GetBcmrIdentityResponse_Proof struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The index of the link in the authchain.
+	Index uint32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	// The link's block, and the proof's hashes and flags, as in
+	// GetMerkleProofResponse.
+	Block  *BlockInfo `protobuf:"bytes,2,opt,name=block,proto3" json:"block,omitempty"`
+	Hashes [][]byte   `protobuf:"bytes,3,rep,name=hashes,proto3" json:"hashes,omitempty"`
+	Flags  []byte     `protobuf:"bytes,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	// The number of transactions in the block, which the proof's tree
+	// needs.
+	Transactions  uint32 `protobuf:"varint,5,opt,name=transactions,proto3" json:"transactions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBcmrIdentityResponse_Proof) Reset() {
+	*x = GetBcmrIdentityResponse_Proof{}
+	mi := &file_bchrpc_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBcmrIdentityResponse_Proof) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBcmrIdentityResponse_Proof) ProtoMessage() {}
+
+func (x *GetBcmrIdentityResponse_Proof) ProtoReflect() protoreflect.Message {
+	mi := &file_bchrpc_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBcmrIdentityResponse_Proof.ProtoReflect.Descriptor instead.
+func (*GetBcmrIdentityResponse_Proof) Descriptor() ([]byte, []int) {
+	return file_bchrpc_proto_rawDescGZIP(), []int{72, 2}
+}
+
+func (x *GetBcmrIdentityResponse_Proof) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *GetBcmrIdentityResponse_Proof) GetBlock() *BlockInfo {
+	if x != nil {
+		return x.Block
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Proof) GetHashes() [][]byte {
+	if x != nil {
+		return x.Hashes
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Proof) GetFlags() []byte {
+	if x != nil {
+		return x.Flags
+	}
+	return nil
+}
+
+func (x *GetBcmrIdentityResponse_Proof) GetTransactions() uint32 {
+	if x != nil {
+		return x.Transactions
+	}
+	return 0
+}
+
 var File_bchrpc_proto protoreflect.FileDescriptor
 
 const file_bchrpc_proto_rawDesc = "" +
@@ -6607,7 +7141,7 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\x10transaction_hash\x18\x01 \x01(\fH\x00R\x0ftransactionHash\x123\n" +
 	"\vtransaction\x18\x02 \x01(\v2\x0f.pb.TransactionH\x00R\vtransactionB\x0e\n" +
 	"\ftxids_or_txs\"\x1a\n" +
-	"\x18GetBlockchainInfoRequest\"\xcd\x03\n" +
+	"\x18GetBlockchainInfoRequest\"\xec\x03\n" +
 	"\x19GetBlockchainInfoResponse\x12I\n" +
 	"\vbitcoin_net\x18\x01 \x01(\x0e2(.pb.GetBlockchainInfoResponse.BitcoinNetR\n" +
 	"bitcoinNet\x12\x1f\n" +
@@ -6623,7 +7157,10 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\n" +
 	"addr_index\x18\a \x01(\bR\taddrIndex\x12\x1b\n" +
 	"\tslp_index\x18\b \x01(\bR\bslpIndex\x12'\n" +
-	"\x0fslp_graphsearch\x18\t \x01(\bR\x0eslpGraphsearch\"[\n" +
+	"\x0fslp_graphsearch\x18\t \x01(\bR\x0eslpGraphsearch\x12\x1d\n" +
+	"\n" +
+	"bcmr_index\x18\n" +
+	" \x01(\bR\tbcmrIndex\"[\n" +
 	"\n" +
 	"BitcoinNet\x12\v\n" +
 	"\aMAINNET\x10\x00\x12\v\n" +
@@ -7054,7 +7591,50 @@ const file_bchrpc_proto_rawDesc = "" +
 	"token_type\x18\x03 \x01(\x0e2\x10.pb.SlpTokenTypeR\ttokenType\x12\x1c\n" +
 	"\x06amount\x18\x04 \x01(\x04B\x020\x01H\x00R\x06amount\x12(\n" +
 	"\x0fmint_baton_vout\x18\x05 \x01(\rH\x00R\rmintBatonVoutB\x10\n" +
-	"\x0eburn_intention*[\n" +
+	"\x0eburn_intention\"\x8d\x01\n" +
+	"\x16GetBcmrIdentityRequest\x12\x1a\n" +
+	"\bauthbase\x18\x01 \x01(\fR\bauthbase\x12+\n" +
+	"\x11include_authchain\x18\x02 \x01(\bR\x10includeAuthchain\x12\x14\n" +
+	"\x05after\x18\x03 \x01(\fR\x05after\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"\xc2\b\n" +
+	"\x17GetBcmrIdentityResponse\x12\x1a\n" +
+	"\bauthbase\x18\x01 \x01(\fR\bauthbase\x12:\n" +
+	"\x06status\x18\x02 \x01(\x0e2\".pb.GetBcmrIdentityResponse.StatusR\x06status\x124\n" +
+	"\x04head\x18\x03 \x01(\v2 .pb.GetBcmrIdentityResponse.LinkR\x04head\x12B\n" +
+	"\vpublication\x18\x04 \x01(\v2 .pb.GetBcmrIdentityResponse.LinkR\vpublication\x12/\n" +
+	"\x13publication_current\x18\x05 \x01(\bR\x12publicationCurrent\x12)\n" +
+	"\x0egenesis_supply\x18\x06 \x01(\x04B\x020\x01R\rgenesisSupply\x12,\n" +
+	"\x12has_genesis_supply\x18\f \x01(\bR\x10hasGenesisSupply\x126\n" +
+	"\x0fidentity_output\x18\a \x01(\v2\r.pb.CashTokenR\x0eidentityOutput\x12\x1f\n" +
+	"\vfirst_index\x18\b \x01(\rR\n" +
+	"firstIndex\x12>\n" +
+	"\tauthchain\x18\t \x03(\v2 .pb.GetBcmrIdentityResponse.LinkR\tauthchain\x12\x12\n" +
+	"\x04more\x18\n" +
+	" \x01(\bR\x04more\x127\n" +
+	"\x05proof\x18\v \x01(\v2!.pb.GetBcmrIdentityResponse.ProofR\x05proof\x1ak\n" +
+	"\vPublication\x12\x16\n" +
+	"\x06output\x18\x01 \x01(\rR\x06output\x12\x1c\n" +
+	"\tmalformed\x18\x02 \x01(\bR\tmalformed\x12\x12\n" +
+	"\x04hash\x18\x03 \x01(\fR\x04hash\x12\x12\n" +
+	"\x04uris\x18\x04 \x03(\tR\x04uris\x1a\xbe\x01\n" +
+	"\x04Link\x12\x12\n" +
+	"\x04hash\x18\x01 \x01(\fR\x04hash\x12\x16\n" +
+	"\x06height\x18\x02 \x01(\x05R\x06height\x12\x1d\n" +
+	"\n" +
+	"block_hash\x18\x03 \x01(\fR\tblockHash\x12I\n" +
+	"\vpublication\x18\x04 \x01(\v2'.pb.GetBcmrIdentityResponse.PublicationR\vpublication\x12 \n" +
+	"\vtransaction\x18\x05 \x01(\fR\vtransaction\x1a\x94\x01\n" +
+	"\x05Proof\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\rR\x05index\x12#\n" +
+	"\x05block\x18\x02 \x01(\v2\r.pb.BlockInfoR\x05block\x12\x16\n" +
+	"\x06hashes\x18\x03 \x03(\fR\x06hashes\x12\x14\n" +
+	"\x05flags\x18\x04 \x01(\fR\x05flags\x12\"\n" +
+	"\ftransactions\x18\x05 \x01(\rR\ftransactions\" \n" +
+	"\x06Status\x12\n" +
+	"\n" +
+	"\x06ACTIVE\x10\x00\x12\n" +
+	"\n" +
+	"\x06BURNED\x10\x01*[\n" +
 	"\fSlpTokenType\x12\x13\n" +
 	"\x0fVERSION_NOT_SET\x10\x00\x12\x0f\n" +
 	"\vV1_FUNGIBLE\x10\x01\x12\x11\n" +
@@ -7073,7 +7653,7 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\x16SLP_V1_NFT1_GROUP_SEND\x10\t\x12$\n" +
 	" SLP_V1_NFT1_UNIQUE_CHILD_GENESIS\x10\n" +
 	"\x12!\n" +
-	"\x1dSLP_V1_NFT1_UNIQUE_CHILD_SEND\x10\v2\xd0\x12\n" +
+	"\x1dSLP_V1_NFT1_UNIQUE_CHILD_SEND\x10\v2\x9e\x13\n" +
 	"\x06bchrpc\x12I\n" +
 	"\x0eGetMempoolInfo\x12\x19.pb.GetMempoolInfoRequest\x1a\x1a.pb.GetMempoolInfoResponse\"\x00\x12=\n" +
 	"\n" +
@@ -7091,7 +7671,8 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\x19GetRawAddressTransactions\x12$.pb.GetRawAddressTransactionsRequest\x1a%.pb.GetRawAddressTransactionsResponse\"\x00\x12g\n" +
 	"\x18GetAddressUnspentOutputs\x12#.pb.GetAddressUnspentOutputsRequest\x1a$.pb.GetAddressUnspentOutputsResponse\"\x00\x12O\n" +
 	"\x10GetUnspentOutput\x12\x1b.pb.GetUnspentOutputRequest\x1a\x1c.pb.GetUnspentOutputResponse\"\x00\x12I\n" +
-	"\x0eGetMerkleProof\x12\x19.pb.GetMerkleProofRequest\x1a\x1a.pb.GetMerkleProofResponse\"\x00\x12X\n" +
+	"\x0eGetMerkleProof\x12\x19.pb.GetMerkleProofRequest\x1a\x1a.pb.GetMerkleProofResponse\"\x00\x12L\n" +
+	"\x0fGetBcmrIdentity\x12\x1a.pb.GetBcmrIdentityRequest\x1a\x1b.pb.GetBcmrIdentityResponse\"\x00\x12X\n" +
 	"\x13GetSlpTokenMetadata\x12\x1e.pb.GetSlpTokenMetadataRequest\x1a\x1f.pb.GetSlpTokenMetadataResponse\"\x00\x12U\n" +
 	"\x12GetSlpParsedScript\x12\x1d.pb.GetSlpParsedScriptRequest\x1a\x1e.pb.GetSlpParsedScriptResponse\"\x00\x12d\n" +
 	"\x17GetSlpTrustedValidation\x12\".pb.GetSlpTrustedValidationRequest\x1a#.pb.GetSlpTrustedValidationResponse\"\x00\x12R\n" +
@@ -7119,8 +7700,8 @@ func file_bchrpc_proto_rawDescGZIP() []byte {
 	return file_bchrpc_proto_rawDescData
 }
 
-var file_bchrpc_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_bchrpc_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
+var file_bchrpc_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_bchrpc_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
 var file_bchrpc_proto_goTypes = []any{
 	(SlpTokenType)(0), // 0: pb.SlpTokenType
 	(SlpAction)(0),    // 1: pb.SlpAction
@@ -7129,229 +7710,245 @@ var file_bchrpc_proto_goTypes = []any{
 	(TransactionNotification_Type)(0),                      // 4: pb.TransactionNotification.Type
 	(SlpTransactionInfo_ValidityJudgement)(0),              // 5: pb.SlpTransactionInfo.ValidityJudgement
 	(SlpTransactionInfo_BurnFlags)(0),                      // 6: pb.SlpTransactionInfo.BurnFlags
-	(*GetMempoolInfoRequest)(nil),                          // 7: pb.GetMempoolInfoRequest
-	(*GetMempoolInfoResponse)(nil),                         // 8: pb.GetMempoolInfoResponse
-	(*GetMempoolRequest)(nil),                              // 9: pb.GetMempoolRequest
-	(*GetMempoolResponse)(nil),                             // 10: pb.GetMempoolResponse
-	(*GetBlockchainInfoRequest)(nil),                       // 11: pb.GetBlockchainInfoRequest
-	(*GetBlockchainInfoResponse)(nil),                      // 12: pb.GetBlockchainInfoResponse
-	(*GetBlockInfoRequest)(nil),                            // 13: pb.GetBlockInfoRequest
-	(*GetBlockInfoResponse)(nil),                           // 14: pb.GetBlockInfoResponse
-	(*GetBlockRequest)(nil),                                // 15: pb.GetBlockRequest
-	(*GetBlockResponse)(nil),                               // 16: pb.GetBlockResponse
-	(*GetRawBlockRequest)(nil),                             // 17: pb.GetRawBlockRequest
-	(*GetRawBlockResponse)(nil),                            // 18: pb.GetRawBlockResponse
-	(*GetBlockFilterRequest)(nil),                          // 19: pb.GetBlockFilterRequest
-	(*GetBlockFilterResponse)(nil),                         // 20: pb.GetBlockFilterResponse
-	(*GetHeadersRequest)(nil),                              // 21: pb.GetHeadersRequest
-	(*GetHeadersResponse)(nil),                             // 22: pb.GetHeadersResponse
-	(*GetTransactionRequest)(nil),                          // 23: pb.GetTransactionRequest
-	(*GetTransactionResponse)(nil),                         // 24: pb.GetTransactionResponse
-	(*GetRawTransactionRequest)(nil),                       // 25: pb.GetRawTransactionRequest
-	(*GetRawTransactionResponse)(nil),                      // 26: pb.GetRawTransactionResponse
-	(*GetAddressTransactionsRequest)(nil),                  // 27: pb.GetAddressTransactionsRequest
-	(*GetAddressTransactionsResponse)(nil),                 // 28: pb.GetAddressTransactionsResponse
-	(*GetRawAddressTransactionsRequest)(nil),               // 29: pb.GetRawAddressTransactionsRequest
-	(*GetRawAddressTransactionsResponse)(nil),              // 30: pb.GetRawAddressTransactionsResponse
-	(*GetAddressUnspentOutputsRequest)(nil),                // 31: pb.GetAddressUnspentOutputsRequest
-	(*GetAddressUnspentOutputsResponse)(nil),               // 32: pb.GetAddressUnspentOutputsResponse
-	(*GetUnspentOutputRequest)(nil),                        // 33: pb.GetUnspentOutputRequest
-	(*GetUnspentOutputResponse)(nil),                       // 34: pb.GetUnspentOutputResponse
-	(*GetMerkleProofRequest)(nil),                          // 35: pb.GetMerkleProofRequest
-	(*GetMerkleProofResponse)(nil),                         // 36: pb.GetMerkleProofResponse
-	(*SubmitTransactionRequest)(nil),                       // 37: pb.SubmitTransactionRequest
-	(*SubmitTransactionResponse)(nil),                      // 38: pb.SubmitTransactionResponse
-	(*CheckSlpTransactionRequest)(nil),                     // 39: pb.CheckSlpTransactionRequest
-	(*CheckSlpTransactionResponse)(nil),                    // 40: pb.CheckSlpTransactionResponse
-	(*SubscribeTransactionsRequest)(nil),                   // 41: pb.SubscribeTransactionsRequest
-	(*SubscribeBlocksRequest)(nil),                         // 42: pb.SubscribeBlocksRequest
-	(*GetDoubleSpendProofRequest)(nil),                     // 43: pb.GetDoubleSpendProofRequest
-	(*GetDoubleSpendProofResponse)(nil),                    // 44: pb.GetDoubleSpendProofResponse
-	(*GetDoubleSpendProofsRequest)(nil),                    // 45: pb.GetDoubleSpendProofsRequest
-	(*GetDoubleSpendProofsResponse)(nil),                   // 46: pb.GetDoubleSpendProofsResponse
-	(*GetDoubleSpendProofScoreRequest)(nil),                // 47: pb.GetDoubleSpendProofScoreRequest
-	(*GetDoubleSpendProofScoreResponse)(nil),               // 48: pb.GetDoubleSpendProofScoreResponse
-	(*SubscribeDoubleSpendProofsRequest)(nil),              // 49: pb.SubscribeDoubleSpendProofsRequest
-	(*GetSlpTokenMetadataRequest)(nil),                     // 50: pb.GetSlpTokenMetadataRequest
-	(*GetSlpTokenMetadataResponse)(nil),                    // 51: pb.GetSlpTokenMetadataResponse
-	(*GetSlpParsedScriptRequest)(nil),                      // 52: pb.GetSlpParsedScriptRequest
-	(*GetSlpParsedScriptResponse)(nil),                     // 53: pb.GetSlpParsedScriptResponse
-	(*GetSlpTrustedValidationRequest)(nil),                 // 54: pb.GetSlpTrustedValidationRequest
-	(*GetSlpTrustedValidationResponse)(nil),                // 55: pb.GetSlpTrustedValidationResponse
-	(*GetSlpGraphSearchRequest)(nil),                       // 56: pb.GetSlpGraphSearchRequest
-	(*GetSlpGraphSearchResponse)(nil),                      // 57: pb.GetSlpGraphSearchResponse
-	(*BlockNotification)(nil),                              // 58: pb.BlockNotification
-	(*TransactionNotification)(nil),                        // 59: pb.TransactionNotification
-	(*DoubleSpendProofNotification)(nil),                   // 60: pb.DoubleSpendProofNotification
-	(*DoubleSpendProof)(nil),                               // 61: pb.DoubleSpendProof
-	(*BlockInfo)(nil),                                      // 62: pb.BlockInfo
-	(*Block)(nil),                                          // 63: pb.Block
-	(*Transaction)(nil),                                    // 64: pb.Transaction
-	(*MempoolTransaction)(nil),                             // 65: pb.MempoolTransaction
-	(*UnspentOutput)(nil),                                  // 66: pb.UnspentOutput
-	(*TransactionFilter)(nil),                              // 67: pb.TransactionFilter
-	(*CashToken)(nil),                                      // 68: pb.CashToken
-	(*SlpToken)(nil),                                       // 69: pb.SlpToken
-	(*SlpTransactionInfo)(nil),                             // 70: pb.SlpTransactionInfo
-	(*SlpV1GenesisMetadata)(nil),                           // 71: pb.SlpV1GenesisMetadata
-	(*SlpV1MintMetadata)(nil),                              // 72: pb.SlpV1MintMetadata
-	(*SlpV1SendMetadata)(nil),                              // 73: pb.SlpV1SendMetadata
-	(*SlpV1Nft1ChildGenesisMetadata)(nil),                  // 74: pb.SlpV1Nft1ChildGenesisMetadata
-	(*SlpV1Nft1ChildSendMetadata)(nil),                     // 75: pb.SlpV1Nft1ChildSendMetadata
-	(*SlpTokenMetadata)(nil),                               // 76: pb.SlpTokenMetadata
-	(*SlpRequiredBurn)(nil),                                // 77: pb.SlpRequiredBurn
-	(*GetMempoolResponse_TransactionData)(nil),             // 78: pb.GetMempoolResponse.TransactionData
-	(*GetSlpTrustedValidationRequest_Query)(nil),           // 79: pb.GetSlpTrustedValidationRequest.Query
-	(*GetSlpTrustedValidationResponse_ValidityResult)(nil), // 80: pb.GetSlpTrustedValidationResponse.ValidityResult
-	(*DoubleSpendProof_Spender)(nil),                       // 81: pb.DoubleSpendProof.Spender
-	(*Block_TransactionData)(nil),                          // 82: pb.Block.TransactionData
-	(*Transaction_Input)(nil),                              // 83: pb.Transaction.Input
-	(*Transaction_Output)(nil),                             // 84: pb.Transaction.Output
-	(*Transaction_Input_Outpoint)(nil),                     // 85: pb.Transaction.Input.Outpoint
-	(*SlpTokenMetadata_V1Fungible)(nil),                    // 86: pb.SlpTokenMetadata.V1Fungible
-	(*SlpTokenMetadata_V1NFT1Group)(nil),                   // 87: pb.SlpTokenMetadata.V1NFT1Group
-	(*SlpTokenMetadata_V1NFT1Child)(nil),                   // 88: pb.SlpTokenMetadata.V1NFT1Child
+	(GetBcmrIdentityResponse_Status)(0),                    // 7: pb.GetBcmrIdentityResponse.Status
+	(*GetMempoolInfoRequest)(nil),                          // 8: pb.GetMempoolInfoRequest
+	(*GetMempoolInfoResponse)(nil),                         // 9: pb.GetMempoolInfoResponse
+	(*GetMempoolRequest)(nil),                              // 10: pb.GetMempoolRequest
+	(*GetMempoolResponse)(nil),                             // 11: pb.GetMempoolResponse
+	(*GetBlockchainInfoRequest)(nil),                       // 12: pb.GetBlockchainInfoRequest
+	(*GetBlockchainInfoResponse)(nil),                      // 13: pb.GetBlockchainInfoResponse
+	(*GetBlockInfoRequest)(nil),                            // 14: pb.GetBlockInfoRequest
+	(*GetBlockInfoResponse)(nil),                           // 15: pb.GetBlockInfoResponse
+	(*GetBlockRequest)(nil),                                // 16: pb.GetBlockRequest
+	(*GetBlockResponse)(nil),                               // 17: pb.GetBlockResponse
+	(*GetRawBlockRequest)(nil),                             // 18: pb.GetRawBlockRequest
+	(*GetRawBlockResponse)(nil),                            // 19: pb.GetRawBlockResponse
+	(*GetBlockFilterRequest)(nil),                          // 20: pb.GetBlockFilterRequest
+	(*GetBlockFilterResponse)(nil),                         // 21: pb.GetBlockFilterResponse
+	(*GetHeadersRequest)(nil),                              // 22: pb.GetHeadersRequest
+	(*GetHeadersResponse)(nil),                             // 23: pb.GetHeadersResponse
+	(*GetTransactionRequest)(nil),                          // 24: pb.GetTransactionRequest
+	(*GetTransactionResponse)(nil),                         // 25: pb.GetTransactionResponse
+	(*GetRawTransactionRequest)(nil),                       // 26: pb.GetRawTransactionRequest
+	(*GetRawTransactionResponse)(nil),                      // 27: pb.GetRawTransactionResponse
+	(*GetAddressTransactionsRequest)(nil),                  // 28: pb.GetAddressTransactionsRequest
+	(*GetAddressTransactionsResponse)(nil),                 // 29: pb.GetAddressTransactionsResponse
+	(*GetRawAddressTransactionsRequest)(nil),               // 30: pb.GetRawAddressTransactionsRequest
+	(*GetRawAddressTransactionsResponse)(nil),              // 31: pb.GetRawAddressTransactionsResponse
+	(*GetAddressUnspentOutputsRequest)(nil),                // 32: pb.GetAddressUnspentOutputsRequest
+	(*GetAddressUnspentOutputsResponse)(nil),               // 33: pb.GetAddressUnspentOutputsResponse
+	(*GetUnspentOutputRequest)(nil),                        // 34: pb.GetUnspentOutputRequest
+	(*GetUnspentOutputResponse)(nil),                       // 35: pb.GetUnspentOutputResponse
+	(*GetMerkleProofRequest)(nil),                          // 36: pb.GetMerkleProofRequest
+	(*GetMerkleProofResponse)(nil),                         // 37: pb.GetMerkleProofResponse
+	(*SubmitTransactionRequest)(nil),                       // 38: pb.SubmitTransactionRequest
+	(*SubmitTransactionResponse)(nil),                      // 39: pb.SubmitTransactionResponse
+	(*CheckSlpTransactionRequest)(nil),                     // 40: pb.CheckSlpTransactionRequest
+	(*CheckSlpTransactionResponse)(nil),                    // 41: pb.CheckSlpTransactionResponse
+	(*SubscribeTransactionsRequest)(nil),                   // 42: pb.SubscribeTransactionsRequest
+	(*SubscribeBlocksRequest)(nil),                         // 43: pb.SubscribeBlocksRequest
+	(*GetDoubleSpendProofRequest)(nil),                     // 44: pb.GetDoubleSpendProofRequest
+	(*GetDoubleSpendProofResponse)(nil),                    // 45: pb.GetDoubleSpendProofResponse
+	(*GetDoubleSpendProofsRequest)(nil),                    // 46: pb.GetDoubleSpendProofsRequest
+	(*GetDoubleSpendProofsResponse)(nil),                   // 47: pb.GetDoubleSpendProofsResponse
+	(*GetDoubleSpendProofScoreRequest)(nil),                // 48: pb.GetDoubleSpendProofScoreRequest
+	(*GetDoubleSpendProofScoreResponse)(nil),               // 49: pb.GetDoubleSpendProofScoreResponse
+	(*SubscribeDoubleSpendProofsRequest)(nil),              // 50: pb.SubscribeDoubleSpendProofsRequest
+	(*GetSlpTokenMetadataRequest)(nil),                     // 51: pb.GetSlpTokenMetadataRequest
+	(*GetSlpTokenMetadataResponse)(nil),                    // 52: pb.GetSlpTokenMetadataResponse
+	(*GetSlpParsedScriptRequest)(nil),                      // 53: pb.GetSlpParsedScriptRequest
+	(*GetSlpParsedScriptResponse)(nil),                     // 54: pb.GetSlpParsedScriptResponse
+	(*GetSlpTrustedValidationRequest)(nil),                 // 55: pb.GetSlpTrustedValidationRequest
+	(*GetSlpTrustedValidationResponse)(nil),                // 56: pb.GetSlpTrustedValidationResponse
+	(*GetSlpGraphSearchRequest)(nil),                       // 57: pb.GetSlpGraphSearchRequest
+	(*GetSlpGraphSearchResponse)(nil),                      // 58: pb.GetSlpGraphSearchResponse
+	(*BlockNotification)(nil),                              // 59: pb.BlockNotification
+	(*TransactionNotification)(nil),                        // 60: pb.TransactionNotification
+	(*DoubleSpendProofNotification)(nil),                   // 61: pb.DoubleSpendProofNotification
+	(*DoubleSpendProof)(nil),                               // 62: pb.DoubleSpendProof
+	(*BlockInfo)(nil),                                      // 63: pb.BlockInfo
+	(*Block)(nil),                                          // 64: pb.Block
+	(*Transaction)(nil),                                    // 65: pb.Transaction
+	(*MempoolTransaction)(nil),                             // 66: pb.MempoolTransaction
+	(*UnspentOutput)(nil),                                  // 67: pb.UnspentOutput
+	(*TransactionFilter)(nil),                              // 68: pb.TransactionFilter
+	(*CashToken)(nil),                                      // 69: pb.CashToken
+	(*SlpToken)(nil),                                       // 70: pb.SlpToken
+	(*SlpTransactionInfo)(nil),                             // 71: pb.SlpTransactionInfo
+	(*SlpV1GenesisMetadata)(nil),                           // 72: pb.SlpV1GenesisMetadata
+	(*SlpV1MintMetadata)(nil),                              // 73: pb.SlpV1MintMetadata
+	(*SlpV1SendMetadata)(nil),                              // 74: pb.SlpV1SendMetadata
+	(*SlpV1Nft1ChildGenesisMetadata)(nil),                  // 75: pb.SlpV1Nft1ChildGenesisMetadata
+	(*SlpV1Nft1ChildSendMetadata)(nil),                     // 76: pb.SlpV1Nft1ChildSendMetadata
+	(*SlpTokenMetadata)(nil),                               // 77: pb.SlpTokenMetadata
+	(*SlpRequiredBurn)(nil),                                // 78: pb.SlpRequiredBurn
+	(*GetBcmrIdentityRequest)(nil),                         // 79: pb.GetBcmrIdentityRequest
+	(*GetBcmrIdentityResponse)(nil),                        // 80: pb.GetBcmrIdentityResponse
+	(*GetMempoolResponse_TransactionData)(nil),             // 81: pb.GetMempoolResponse.TransactionData
+	(*GetSlpTrustedValidationRequest_Query)(nil),           // 82: pb.GetSlpTrustedValidationRequest.Query
+	(*GetSlpTrustedValidationResponse_ValidityResult)(nil), // 83: pb.GetSlpTrustedValidationResponse.ValidityResult
+	(*DoubleSpendProof_Spender)(nil),                       // 84: pb.DoubleSpendProof.Spender
+	(*Block_TransactionData)(nil),                          // 85: pb.Block.TransactionData
+	(*Transaction_Input)(nil),                              // 86: pb.Transaction.Input
+	(*Transaction_Output)(nil),                             // 87: pb.Transaction.Output
+	(*Transaction_Input_Outpoint)(nil),                     // 88: pb.Transaction.Input.Outpoint
+	(*SlpTokenMetadata_V1Fungible)(nil),                    // 89: pb.SlpTokenMetadata.V1Fungible
+	(*SlpTokenMetadata_V1NFT1Group)(nil),                   // 90: pb.SlpTokenMetadata.V1NFT1Group
+	(*SlpTokenMetadata_V1NFT1Child)(nil),                   // 91: pb.SlpTokenMetadata.V1NFT1Child
+	(*GetBcmrIdentityResponse_Publication)(nil),            // 92: pb.GetBcmrIdentityResponse.Publication
+	(*GetBcmrIdentityResponse_Link)(nil),                   // 93: pb.GetBcmrIdentityResponse.Link
+	(*GetBcmrIdentityResponse_Proof)(nil),                  // 94: pb.GetBcmrIdentityResponse.Proof
 }
 var file_bchrpc_proto_depIdxs = []int32{
-	78,  // 0: pb.GetMempoolResponse.transaction_data:type_name -> pb.GetMempoolResponse.TransactionData
+	81,  // 0: pb.GetMempoolResponse.transaction_data:type_name -> pb.GetMempoolResponse.TransactionData
 	2,   // 1: pb.GetBlockchainInfoResponse.bitcoin_net:type_name -> pb.GetBlockchainInfoResponse.BitcoinNet
-	62,  // 2: pb.GetBlockInfoResponse.info:type_name -> pb.BlockInfo
-	63,  // 3: pb.GetBlockResponse.block:type_name -> pb.Block
-	62,  // 4: pb.GetHeadersResponse.headers:type_name -> pb.BlockInfo
-	64,  // 5: pb.GetTransactionResponse.transaction:type_name -> pb.Transaction
-	76,  // 6: pb.GetTransactionResponse.token_metadata:type_name -> pb.SlpTokenMetadata
-	64,  // 7: pb.GetAddressTransactionsResponse.confirmed_transactions:type_name -> pb.Transaction
-	65,  // 8: pb.GetAddressTransactionsResponse.unconfirmed_transactions:type_name -> pb.MempoolTransaction
-	66,  // 9: pb.GetAddressUnspentOutputsResponse.outputs:type_name -> pb.UnspentOutput
-	76,  // 10: pb.GetAddressUnspentOutputsResponse.token_metadata:type_name -> pb.SlpTokenMetadata
-	85,  // 11: pb.GetUnspentOutputResponse.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	69,  // 12: pb.GetUnspentOutputResponse.slp_token:type_name -> pb.SlpToken
-	76,  // 13: pb.GetUnspentOutputResponse.token_metadata:type_name -> pb.SlpTokenMetadata
-	68,  // 14: pb.GetUnspentOutputResponse.cash_token:type_name -> pb.CashToken
-	62,  // 15: pb.GetMerkleProofResponse.block:type_name -> pb.BlockInfo
-	77,  // 16: pb.SubmitTransactionRequest.required_slp_burns:type_name -> pb.SlpRequiredBurn
-	77,  // 17: pb.CheckSlpTransactionRequest.required_slp_burns:type_name -> pb.SlpRequiredBurn
-	67,  // 18: pb.SubscribeTransactionsRequest.subscribe:type_name -> pb.TransactionFilter
-	67,  // 19: pb.SubscribeTransactionsRequest.unsubscribe:type_name -> pb.TransactionFilter
-	85,  // 20: pb.GetDoubleSpendProofRequest.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	61,  // 21: pb.GetDoubleSpendProofResponse.proof:type_name -> pb.DoubleSpendProof
-	61,  // 22: pb.GetDoubleSpendProofsResponse.proofs:type_name -> pb.DoubleSpendProof
-	76,  // 23: pb.GetSlpTokenMetadataResponse.token_metadata:type_name -> pb.SlpTokenMetadata
+	63,  // 2: pb.GetBlockInfoResponse.info:type_name -> pb.BlockInfo
+	64,  // 3: pb.GetBlockResponse.block:type_name -> pb.Block
+	63,  // 4: pb.GetHeadersResponse.headers:type_name -> pb.BlockInfo
+	65,  // 5: pb.GetTransactionResponse.transaction:type_name -> pb.Transaction
+	77,  // 6: pb.GetTransactionResponse.token_metadata:type_name -> pb.SlpTokenMetadata
+	65,  // 7: pb.GetAddressTransactionsResponse.confirmed_transactions:type_name -> pb.Transaction
+	66,  // 8: pb.GetAddressTransactionsResponse.unconfirmed_transactions:type_name -> pb.MempoolTransaction
+	67,  // 9: pb.GetAddressUnspentOutputsResponse.outputs:type_name -> pb.UnspentOutput
+	77,  // 10: pb.GetAddressUnspentOutputsResponse.token_metadata:type_name -> pb.SlpTokenMetadata
+	88,  // 11: pb.GetUnspentOutputResponse.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	70,  // 12: pb.GetUnspentOutputResponse.slp_token:type_name -> pb.SlpToken
+	77,  // 13: pb.GetUnspentOutputResponse.token_metadata:type_name -> pb.SlpTokenMetadata
+	69,  // 14: pb.GetUnspentOutputResponse.cash_token:type_name -> pb.CashToken
+	63,  // 15: pb.GetMerkleProofResponse.block:type_name -> pb.BlockInfo
+	78,  // 16: pb.SubmitTransactionRequest.required_slp_burns:type_name -> pb.SlpRequiredBurn
+	78,  // 17: pb.CheckSlpTransactionRequest.required_slp_burns:type_name -> pb.SlpRequiredBurn
+	68,  // 18: pb.SubscribeTransactionsRequest.subscribe:type_name -> pb.TransactionFilter
+	68,  // 19: pb.SubscribeTransactionsRequest.unsubscribe:type_name -> pb.TransactionFilter
+	88,  // 20: pb.GetDoubleSpendProofRequest.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	62,  // 21: pb.GetDoubleSpendProofResponse.proof:type_name -> pb.DoubleSpendProof
+	62,  // 22: pb.GetDoubleSpendProofsResponse.proofs:type_name -> pb.DoubleSpendProof
+	77,  // 23: pb.GetSlpTokenMetadataResponse.token_metadata:type_name -> pb.SlpTokenMetadata
 	1,   // 24: pb.GetSlpParsedScriptResponse.slp_action:type_name -> pb.SlpAction
 	0,   // 25: pb.GetSlpParsedScriptResponse.token_type:type_name -> pb.SlpTokenType
-	71,  // 26: pb.GetSlpParsedScriptResponse.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
-	72,  // 27: pb.GetSlpParsedScriptResponse.v1_mint:type_name -> pb.SlpV1MintMetadata
-	73,  // 28: pb.GetSlpParsedScriptResponse.v1_send:type_name -> pb.SlpV1SendMetadata
-	74,  // 29: pb.GetSlpParsedScriptResponse.v1_nft1_child_genesis:type_name -> pb.SlpV1Nft1ChildGenesisMetadata
-	75,  // 30: pb.GetSlpParsedScriptResponse.v1_nft1_child_send:type_name -> pb.SlpV1Nft1ChildSendMetadata
-	79,  // 31: pb.GetSlpTrustedValidationRequest.queries:type_name -> pb.GetSlpTrustedValidationRequest.Query
-	80,  // 32: pb.GetSlpTrustedValidationResponse.results:type_name -> pb.GetSlpTrustedValidationResponse.ValidityResult
+	72,  // 26: pb.GetSlpParsedScriptResponse.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
+	73,  // 27: pb.GetSlpParsedScriptResponse.v1_mint:type_name -> pb.SlpV1MintMetadata
+	74,  // 28: pb.GetSlpParsedScriptResponse.v1_send:type_name -> pb.SlpV1SendMetadata
+	75,  // 29: pb.GetSlpParsedScriptResponse.v1_nft1_child_genesis:type_name -> pb.SlpV1Nft1ChildGenesisMetadata
+	76,  // 30: pb.GetSlpParsedScriptResponse.v1_nft1_child_send:type_name -> pb.SlpV1Nft1ChildSendMetadata
+	82,  // 31: pb.GetSlpTrustedValidationRequest.queries:type_name -> pb.GetSlpTrustedValidationRequest.Query
+	83,  // 32: pb.GetSlpTrustedValidationResponse.results:type_name -> pb.GetSlpTrustedValidationResponse.ValidityResult
 	3,   // 33: pb.BlockNotification.type:type_name -> pb.BlockNotification.Type
-	62,  // 34: pb.BlockNotification.block_info:type_name -> pb.BlockInfo
-	63,  // 35: pb.BlockNotification.marshaled_block:type_name -> pb.Block
+	63,  // 34: pb.BlockNotification.block_info:type_name -> pb.BlockInfo
+	64,  // 35: pb.BlockNotification.marshaled_block:type_name -> pb.Block
 	4,   // 36: pb.TransactionNotification.type:type_name -> pb.TransactionNotification.Type
-	64,  // 37: pb.TransactionNotification.confirmed_transaction:type_name -> pb.Transaction
-	65,  // 38: pb.TransactionNotification.unconfirmed_transaction:type_name -> pb.MempoolTransaction
-	61,  // 39: pb.DoubleSpendProofNotification.proof:type_name -> pb.DoubleSpendProof
-	85,  // 40: pb.DoubleSpendProof.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	81,  // 41: pb.DoubleSpendProof.first_spender:type_name -> pb.DoubleSpendProof.Spender
-	81,  // 42: pb.DoubleSpendProof.double_spender:type_name -> pb.DoubleSpendProof.Spender
-	62,  // 43: pb.Block.info:type_name -> pb.BlockInfo
-	82,  // 44: pb.Block.transaction_data:type_name -> pb.Block.TransactionData
-	83,  // 45: pb.Transaction.inputs:type_name -> pb.Transaction.Input
-	84,  // 46: pb.Transaction.outputs:type_name -> pb.Transaction.Output
-	70,  // 47: pb.Transaction.slp_transaction_info:type_name -> pb.SlpTransactionInfo
-	64,  // 48: pb.MempoolTransaction.transaction:type_name -> pb.Transaction
-	85,  // 49: pb.UnspentOutput.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	69,  // 50: pb.UnspentOutput.slp_token:type_name -> pb.SlpToken
-	68,  // 51: pb.UnspentOutput.cash_token:type_name -> pb.CashToken
-	85,  // 52: pb.TransactionFilter.outpoints:type_name -> pb.Transaction.Input.Outpoint
+	65,  // 37: pb.TransactionNotification.confirmed_transaction:type_name -> pb.Transaction
+	66,  // 38: pb.TransactionNotification.unconfirmed_transaction:type_name -> pb.MempoolTransaction
+	62,  // 39: pb.DoubleSpendProofNotification.proof:type_name -> pb.DoubleSpendProof
+	88,  // 40: pb.DoubleSpendProof.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	84,  // 41: pb.DoubleSpendProof.first_spender:type_name -> pb.DoubleSpendProof.Spender
+	84,  // 42: pb.DoubleSpendProof.double_spender:type_name -> pb.DoubleSpendProof.Spender
+	63,  // 43: pb.Block.info:type_name -> pb.BlockInfo
+	85,  // 44: pb.Block.transaction_data:type_name -> pb.Block.TransactionData
+	86,  // 45: pb.Transaction.inputs:type_name -> pb.Transaction.Input
+	87,  // 46: pb.Transaction.outputs:type_name -> pb.Transaction.Output
+	71,  // 47: pb.Transaction.slp_transaction_info:type_name -> pb.SlpTransactionInfo
+	65,  // 48: pb.MempoolTransaction.transaction:type_name -> pb.Transaction
+	88,  // 49: pb.UnspentOutput.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	70,  // 50: pb.UnspentOutput.slp_token:type_name -> pb.SlpToken
+	69,  // 51: pb.UnspentOutput.cash_token:type_name -> pb.CashToken
+	88,  // 52: pb.TransactionFilter.outpoints:type_name -> pb.Transaction.Input.Outpoint
 	1,   // 53: pb.SlpToken.slp_action:type_name -> pb.SlpAction
 	0,   // 54: pb.SlpToken.token_type:type_name -> pb.SlpTokenType
 	1,   // 55: pb.SlpTransactionInfo.slp_action:type_name -> pb.SlpAction
 	5,   // 56: pb.SlpTransactionInfo.validity_judgement:type_name -> pb.SlpTransactionInfo.ValidityJudgement
 	6,   // 57: pb.SlpTransactionInfo.burn_flags:type_name -> pb.SlpTransactionInfo.BurnFlags
-	71,  // 58: pb.SlpTransactionInfo.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
-	72,  // 59: pb.SlpTransactionInfo.v1_mint:type_name -> pb.SlpV1MintMetadata
-	73,  // 60: pb.SlpTransactionInfo.v1_send:type_name -> pb.SlpV1SendMetadata
-	74,  // 61: pb.SlpTransactionInfo.v1_nft1_child_genesis:type_name -> pb.SlpV1Nft1ChildGenesisMetadata
-	75,  // 62: pb.SlpTransactionInfo.v1_nft1_child_send:type_name -> pb.SlpV1Nft1ChildSendMetadata
+	72,  // 58: pb.SlpTransactionInfo.v1_genesis:type_name -> pb.SlpV1GenesisMetadata
+	73,  // 59: pb.SlpTransactionInfo.v1_mint:type_name -> pb.SlpV1MintMetadata
+	74,  // 60: pb.SlpTransactionInfo.v1_send:type_name -> pb.SlpV1SendMetadata
+	75,  // 61: pb.SlpTransactionInfo.v1_nft1_child_genesis:type_name -> pb.SlpV1Nft1ChildGenesisMetadata
+	76,  // 62: pb.SlpTransactionInfo.v1_nft1_child_send:type_name -> pb.SlpV1Nft1ChildSendMetadata
 	0,   // 63: pb.SlpTokenMetadata.token_type:type_name -> pb.SlpTokenType
-	86,  // 64: pb.SlpTokenMetadata.v1_fungible:type_name -> pb.SlpTokenMetadata.V1Fungible
-	87,  // 65: pb.SlpTokenMetadata.v1_nft1_group:type_name -> pb.SlpTokenMetadata.V1NFT1Group
-	88,  // 66: pb.SlpTokenMetadata.v1_nft1_child:type_name -> pb.SlpTokenMetadata.V1NFT1Child
-	85,  // 67: pb.SlpRequiredBurn.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	89,  // 64: pb.SlpTokenMetadata.v1_fungible:type_name -> pb.SlpTokenMetadata.V1Fungible
+	90,  // 65: pb.SlpTokenMetadata.v1_nft1_group:type_name -> pb.SlpTokenMetadata.V1NFT1Group
+	91,  // 66: pb.SlpTokenMetadata.v1_nft1_child:type_name -> pb.SlpTokenMetadata.V1NFT1Child
+	88,  // 67: pb.SlpRequiredBurn.outpoint:type_name -> pb.Transaction.Input.Outpoint
 	0,   // 68: pb.SlpRequiredBurn.token_type:type_name -> pb.SlpTokenType
-	64,  // 69: pb.GetMempoolResponse.TransactionData.transaction:type_name -> pb.Transaction
-	1,   // 70: pb.GetSlpTrustedValidationResponse.ValidityResult.slp_action:type_name -> pb.SlpAction
-	0,   // 71: pb.GetSlpTrustedValidationResponse.ValidityResult.token_type:type_name -> pb.SlpTokenType
-	64,  // 72: pb.Block.TransactionData.transaction:type_name -> pb.Transaction
-	85,  // 73: pb.Transaction.Input.outpoint:type_name -> pb.Transaction.Input.Outpoint
-	69,  // 74: pb.Transaction.Input.slp_token:type_name -> pb.SlpToken
-	68,  // 75: pb.Transaction.Input.cash_token:type_name -> pb.CashToken
-	69,  // 76: pb.Transaction.Output.slp_token:type_name -> pb.SlpToken
-	68,  // 77: pb.Transaction.Output.cash_token:type_name -> pb.CashToken
-	7,   // 78: pb.bchrpc.GetMempoolInfo:input_type -> pb.GetMempoolInfoRequest
-	9,   // 79: pb.bchrpc.GetMempool:input_type -> pb.GetMempoolRequest
-	11,  // 80: pb.bchrpc.GetBlockchainInfo:input_type -> pb.GetBlockchainInfoRequest
-	13,  // 81: pb.bchrpc.GetBlockInfo:input_type -> pb.GetBlockInfoRequest
-	15,  // 82: pb.bchrpc.GetBlock:input_type -> pb.GetBlockRequest
-	17,  // 83: pb.bchrpc.GetRawBlock:input_type -> pb.GetRawBlockRequest
-	19,  // 84: pb.bchrpc.GetBlockFilter:input_type -> pb.GetBlockFilterRequest
-	21,  // 85: pb.bchrpc.GetHeaders:input_type -> pb.GetHeadersRequest
-	23,  // 86: pb.bchrpc.GetTransaction:input_type -> pb.GetTransactionRequest
-	25,  // 87: pb.bchrpc.GetRawTransaction:input_type -> pb.GetRawTransactionRequest
-	27,  // 88: pb.bchrpc.GetAddressTransactions:input_type -> pb.GetAddressTransactionsRequest
-	29,  // 89: pb.bchrpc.GetRawAddressTransactions:input_type -> pb.GetRawAddressTransactionsRequest
-	31,  // 90: pb.bchrpc.GetAddressUnspentOutputs:input_type -> pb.GetAddressUnspentOutputsRequest
-	33,  // 91: pb.bchrpc.GetUnspentOutput:input_type -> pb.GetUnspentOutputRequest
-	35,  // 92: pb.bchrpc.GetMerkleProof:input_type -> pb.GetMerkleProofRequest
-	50,  // 93: pb.bchrpc.GetSlpTokenMetadata:input_type -> pb.GetSlpTokenMetadataRequest
-	52,  // 94: pb.bchrpc.GetSlpParsedScript:input_type -> pb.GetSlpParsedScriptRequest
-	54,  // 95: pb.bchrpc.GetSlpTrustedValidation:input_type -> pb.GetSlpTrustedValidationRequest
-	56,  // 96: pb.bchrpc.GetSlpGraphSearch:input_type -> pb.GetSlpGraphSearchRequest
-	39,  // 97: pb.bchrpc.CheckSlpTransaction:input_type -> pb.CheckSlpTransactionRequest
-	37,  // 98: pb.bchrpc.SubmitTransaction:input_type -> pb.SubmitTransactionRequest
-	41,  // 99: pb.bchrpc.SubscribeTransactions:input_type -> pb.SubscribeTransactionsRequest
-	41,  // 100: pb.bchrpc.SubscribeTransactionStream:input_type -> pb.SubscribeTransactionsRequest
-	42,  // 101: pb.bchrpc.SubscribeBlocks:input_type -> pb.SubscribeBlocksRequest
-	43,  // 102: pb.bchrpc.GetDoubleSpendProof:input_type -> pb.GetDoubleSpendProofRequest
-	45,  // 103: pb.bchrpc.GetDoubleSpendProofs:input_type -> pb.GetDoubleSpendProofsRequest
-	47,  // 104: pb.bchrpc.GetDoubleSpendProofScore:input_type -> pb.GetDoubleSpendProofScoreRequest
-	49,  // 105: pb.bchrpc.SubscribeDoubleSpendProofs:input_type -> pb.SubscribeDoubleSpendProofsRequest
-	8,   // 106: pb.bchrpc.GetMempoolInfo:output_type -> pb.GetMempoolInfoResponse
-	10,  // 107: pb.bchrpc.GetMempool:output_type -> pb.GetMempoolResponse
-	12,  // 108: pb.bchrpc.GetBlockchainInfo:output_type -> pb.GetBlockchainInfoResponse
-	14,  // 109: pb.bchrpc.GetBlockInfo:output_type -> pb.GetBlockInfoResponse
-	16,  // 110: pb.bchrpc.GetBlock:output_type -> pb.GetBlockResponse
-	18,  // 111: pb.bchrpc.GetRawBlock:output_type -> pb.GetRawBlockResponse
-	20,  // 112: pb.bchrpc.GetBlockFilter:output_type -> pb.GetBlockFilterResponse
-	22,  // 113: pb.bchrpc.GetHeaders:output_type -> pb.GetHeadersResponse
-	24,  // 114: pb.bchrpc.GetTransaction:output_type -> pb.GetTransactionResponse
-	26,  // 115: pb.bchrpc.GetRawTransaction:output_type -> pb.GetRawTransactionResponse
-	28,  // 116: pb.bchrpc.GetAddressTransactions:output_type -> pb.GetAddressTransactionsResponse
-	30,  // 117: pb.bchrpc.GetRawAddressTransactions:output_type -> pb.GetRawAddressTransactionsResponse
-	32,  // 118: pb.bchrpc.GetAddressUnspentOutputs:output_type -> pb.GetAddressUnspentOutputsResponse
-	34,  // 119: pb.bchrpc.GetUnspentOutput:output_type -> pb.GetUnspentOutputResponse
-	36,  // 120: pb.bchrpc.GetMerkleProof:output_type -> pb.GetMerkleProofResponse
-	51,  // 121: pb.bchrpc.GetSlpTokenMetadata:output_type -> pb.GetSlpTokenMetadataResponse
-	53,  // 122: pb.bchrpc.GetSlpParsedScript:output_type -> pb.GetSlpParsedScriptResponse
-	55,  // 123: pb.bchrpc.GetSlpTrustedValidation:output_type -> pb.GetSlpTrustedValidationResponse
-	57,  // 124: pb.bchrpc.GetSlpGraphSearch:output_type -> pb.GetSlpGraphSearchResponse
-	40,  // 125: pb.bchrpc.CheckSlpTransaction:output_type -> pb.CheckSlpTransactionResponse
-	38,  // 126: pb.bchrpc.SubmitTransaction:output_type -> pb.SubmitTransactionResponse
-	59,  // 127: pb.bchrpc.SubscribeTransactions:output_type -> pb.TransactionNotification
-	59,  // 128: pb.bchrpc.SubscribeTransactionStream:output_type -> pb.TransactionNotification
-	58,  // 129: pb.bchrpc.SubscribeBlocks:output_type -> pb.BlockNotification
-	44,  // 130: pb.bchrpc.GetDoubleSpendProof:output_type -> pb.GetDoubleSpendProofResponse
-	46,  // 131: pb.bchrpc.GetDoubleSpendProofs:output_type -> pb.GetDoubleSpendProofsResponse
-	48,  // 132: pb.bchrpc.GetDoubleSpendProofScore:output_type -> pb.GetDoubleSpendProofScoreResponse
-	60,  // 133: pb.bchrpc.SubscribeDoubleSpendProofs:output_type -> pb.DoubleSpendProofNotification
-	106, // [106:134] is the sub-list for method output_type
-	78,  // [78:106] is the sub-list for method input_type
-	78,  // [78:78] is the sub-list for extension type_name
-	78,  // [78:78] is the sub-list for extension extendee
-	0,   // [0:78] is the sub-list for field type_name
+	7,   // 69: pb.GetBcmrIdentityResponse.status:type_name -> pb.GetBcmrIdentityResponse.Status
+	93,  // 70: pb.GetBcmrIdentityResponse.head:type_name -> pb.GetBcmrIdentityResponse.Link
+	93,  // 71: pb.GetBcmrIdentityResponse.publication:type_name -> pb.GetBcmrIdentityResponse.Link
+	69,  // 72: pb.GetBcmrIdentityResponse.identity_output:type_name -> pb.CashToken
+	93,  // 73: pb.GetBcmrIdentityResponse.authchain:type_name -> pb.GetBcmrIdentityResponse.Link
+	94,  // 74: pb.GetBcmrIdentityResponse.proof:type_name -> pb.GetBcmrIdentityResponse.Proof
+	65,  // 75: pb.GetMempoolResponse.TransactionData.transaction:type_name -> pb.Transaction
+	1,   // 76: pb.GetSlpTrustedValidationResponse.ValidityResult.slp_action:type_name -> pb.SlpAction
+	0,   // 77: pb.GetSlpTrustedValidationResponse.ValidityResult.token_type:type_name -> pb.SlpTokenType
+	65,  // 78: pb.Block.TransactionData.transaction:type_name -> pb.Transaction
+	88,  // 79: pb.Transaction.Input.outpoint:type_name -> pb.Transaction.Input.Outpoint
+	70,  // 80: pb.Transaction.Input.slp_token:type_name -> pb.SlpToken
+	69,  // 81: pb.Transaction.Input.cash_token:type_name -> pb.CashToken
+	70,  // 82: pb.Transaction.Output.slp_token:type_name -> pb.SlpToken
+	69,  // 83: pb.Transaction.Output.cash_token:type_name -> pb.CashToken
+	92,  // 84: pb.GetBcmrIdentityResponse.Link.publication:type_name -> pb.GetBcmrIdentityResponse.Publication
+	63,  // 85: pb.GetBcmrIdentityResponse.Proof.block:type_name -> pb.BlockInfo
+	8,   // 86: pb.bchrpc.GetMempoolInfo:input_type -> pb.GetMempoolInfoRequest
+	10,  // 87: pb.bchrpc.GetMempool:input_type -> pb.GetMempoolRequest
+	12,  // 88: pb.bchrpc.GetBlockchainInfo:input_type -> pb.GetBlockchainInfoRequest
+	14,  // 89: pb.bchrpc.GetBlockInfo:input_type -> pb.GetBlockInfoRequest
+	16,  // 90: pb.bchrpc.GetBlock:input_type -> pb.GetBlockRequest
+	18,  // 91: pb.bchrpc.GetRawBlock:input_type -> pb.GetRawBlockRequest
+	20,  // 92: pb.bchrpc.GetBlockFilter:input_type -> pb.GetBlockFilterRequest
+	22,  // 93: pb.bchrpc.GetHeaders:input_type -> pb.GetHeadersRequest
+	24,  // 94: pb.bchrpc.GetTransaction:input_type -> pb.GetTransactionRequest
+	26,  // 95: pb.bchrpc.GetRawTransaction:input_type -> pb.GetRawTransactionRequest
+	28,  // 96: pb.bchrpc.GetAddressTransactions:input_type -> pb.GetAddressTransactionsRequest
+	30,  // 97: pb.bchrpc.GetRawAddressTransactions:input_type -> pb.GetRawAddressTransactionsRequest
+	32,  // 98: pb.bchrpc.GetAddressUnspentOutputs:input_type -> pb.GetAddressUnspentOutputsRequest
+	34,  // 99: pb.bchrpc.GetUnspentOutput:input_type -> pb.GetUnspentOutputRequest
+	36,  // 100: pb.bchrpc.GetMerkleProof:input_type -> pb.GetMerkleProofRequest
+	79,  // 101: pb.bchrpc.GetBcmrIdentity:input_type -> pb.GetBcmrIdentityRequest
+	51,  // 102: pb.bchrpc.GetSlpTokenMetadata:input_type -> pb.GetSlpTokenMetadataRequest
+	53,  // 103: pb.bchrpc.GetSlpParsedScript:input_type -> pb.GetSlpParsedScriptRequest
+	55,  // 104: pb.bchrpc.GetSlpTrustedValidation:input_type -> pb.GetSlpTrustedValidationRequest
+	57,  // 105: pb.bchrpc.GetSlpGraphSearch:input_type -> pb.GetSlpGraphSearchRequest
+	40,  // 106: pb.bchrpc.CheckSlpTransaction:input_type -> pb.CheckSlpTransactionRequest
+	38,  // 107: pb.bchrpc.SubmitTransaction:input_type -> pb.SubmitTransactionRequest
+	42,  // 108: pb.bchrpc.SubscribeTransactions:input_type -> pb.SubscribeTransactionsRequest
+	42,  // 109: pb.bchrpc.SubscribeTransactionStream:input_type -> pb.SubscribeTransactionsRequest
+	43,  // 110: pb.bchrpc.SubscribeBlocks:input_type -> pb.SubscribeBlocksRequest
+	44,  // 111: pb.bchrpc.GetDoubleSpendProof:input_type -> pb.GetDoubleSpendProofRequest
+	46,  // 112: pb.bchrpc.GetDoubleSpendProofs:input_type -> pb.GetDoubleSpendProofsRequest
+	48,  // 113: pb.bchrpc.GetDoubleSpendProofScore:input_type -> pb.GetDoubleSpendProofScoreRequest
+	50,  // 114: pb.bchrpc.SubscribeDoubleSpendProofs:input_type -> pb.SubscribeDoubleSpendProofsRequest
+	9,   // 115: pb.bchrpc.GetMempoolInfo:output_type -> pb.GetMempoolInfoResponse
+	11,  // 116: pb.bchrpc.GetMempool:output_type -> pb.GetMempoolResponse
+	13,  // 117: pb.bchrpc.GetBlockchainInfo:output_type -> pb.GetBlockchainInfoResponse
+	15,  // 118: pb.bchrpc.GetBlockInfo:output_type -> pb.GetBlockInfoResponse
+	17,  // 119: pb.bchrpc.GetBlock:output_type -> pb.GetBlockResponse
+	19,  // 120: pb.bchrpc.GetRawBlock:output_type -> pb.GetRawBlockResponse
+	21,  // 121: pb.bchrpc.GetBlockFilter:output_type -> pb.GetBlockFilterResponse
+	23,  // 122: pb.bchrpc.GetHeaders:output_type -> pb.GetHeadersResponse
+	25,  // 123: pb.bchrpc.GetTransaction:output_type -> pb.GetTransactionResponse
+	27,  // 124: pb.bchrpc.GetRawTransaction:output_type -> pb.GetRawTransactionResponse
+	29,  // 125: pb.bchrpc.GetAddressTransactions:output_type -> pb.GetAddressTransactionsResponse
+	31,  // 126: pb.bchrpc.GetRawAddressTransactions:output_type -> pb.GetRawAddressTransactionsResponse
+	33,  // 127: pb.bchrpc.GetAddressUnspentOutputs:output_type -> pb.GetAddressUnspentOutputsResponse
+	35,  // 128: pb.bchrpc.GetUnspentOutput:output_type -> pb.GetUnspentOutputResponse
+	37,  // 129: pb.bchrpc.GetMerkleProof:output_type -> pb.GetMerkleProofResponse
+	80,  // 130: pb.bchrpc.GetBcmrIdentity:output_type -> pb.GetBcmrIdentityResponse
+	52,  // 131: pb.bchrpc.GetSlpTokenMetadata:output_type -> pb.GetSlpTokenMetadataResponse
+	54,  // 132: pb.bchrpc.GetSlpParsedScript:output_type -> pb.GetSlpParsedScriptResponse
+	56,  // 133: pb.bchrpc.GetSlpTrustedValidation:output_type -> pb.GetSlpTrustedValidationResponse
+	58,  // 134: pb.bchrpc.GetSlpGraphSearch:output_type -> pb.GetSlpGraphSearchResponse
+	41,  // 135: pb.bchrpc.CheckSlpTransaction:output_type -> pb.CheckSlpTransactionResponse
+	39,  // 136: pb.bchrpc.SubmitTransaction:output_type -> pb.SubmitTransactionResponse
+	60,  // 137: pb.bchrpc.SubscribeTransactions:output_type -> pb.TransactionNotification
+	60,  // 138: pb.bchrpc.SubscribeTransactionStream:output_type -> pb.TransactionNotification
+	59,  // 139: pb.bchrpc.SubscribeBlocks:output_type -> pb.BlockNotification
+	45,  // 140: pb.bchrpc.GetDoubleSpendProof:output_type -> pb.GetDoubleSpendProofResponse
+	47,  // 141: pb.bchrpc.GetDoubleSpendProofs:output_type -> pb.GetDoubleSpendProofsResponse
+	49,  // 142: pb.bchrpc.GetDoubleSpendProofScore:output_type -> pb.GetDoubleSpendProofScoreResponse
+	61,  // 143: pb.bchrpc.SubscribeDoubleSpendProofs:output_type -> pb.DoubleSpendProofNotification
+	115, // [115:144] is the sub-list for method output_type
+	86,  // [86:115] is the sub-list for method input_type
+	86,  // [86:86] is the sub-list for extension type_name
+	86,  // [86:86] is the sub-list for extension extendee
+	0,   // [0:86] is the sub-list for field type_name
 }
 
 func init() { file_bchrpc_proto_init() }
@@ -7421,15 +8018,15 @@ func file_bchrpc_proto_init() {
 		(*SlpRequiredBurn_Amount)(nil),
 		(*SlpRequiredBurn_MintBatonVout)(nil),
 	}
-	file_bchrpc_proto_msgTypes[71].OneofWrappers = []any{
+	file_bchrpc_proto_msgTypes[73].OneofWrappers = []any{
 		(*GetMempoolResponse_TransactionData_TransactionHash)(nil),
 		(*GetMempoolResponse_TransactionData_Transaction)(nil),
 	}
-	file_bchrpc_proto_msgTypes[73].OneofWrappers = []any{
+	file_bchrpc_proto_msgTypes[75].OneofWrappers = []any{
 		(*GetSlpTrustedValidationResponse_ValidityResult_V1TokenAmount)(nil),
 		(*GetSlpTrustedValidationResponse_ValidityResult_V1MintBaton)(nil),
 	}
-	file_bchrpc_proto_msgTypes[75].OneofWrappers = []any{
+	file_bchrpc_proto_msgTypes[77].OneofWrappers = []any{
 		(*Block_TransactionData_TransactionHash)(nil),
 		(*Block_TransactionData_Transaction)(nil),
 	}
@@ -7438,8 +8035,8 @@ func file_bchrpc_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bchrpc_proto_rawDesc), len(file_bchrpc_proto_rawDesc)),
-			NumEnums:      7,
-			NumMessages:   82,
+			NumEnums:      8,
+			NumMessages:   87,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

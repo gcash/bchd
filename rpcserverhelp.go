@@ -29,6 +29,29 @@ var helpDescsEnUS = map[string]string{
 	"debuglevel--result0":    "The string 'Done.'",
 	"debuglevel--result1":    "The list of subsystems",
 
+	// SetBanCmd help.
+	"setban--synopsis": "Attempts to add or remove an IP address or subnet from the banned list, and disconnects the peers a new ban applies to.",
+	"setban-subnet":    "The IP address, or a subnet as an IP address with a netmask, such as 192.168.0.0/24; or an onion address",
+	"setban-command":   "'add' to ban it, 'remove' to lift the ban of exactly it",
+	"setban-bantime":   "How long the ban lasts in seconds, or until when if absolute is set; 0 or less means the time of --banduration",
+	"setban-absolute":  "Whether bantime is a time in seconds since the Unix epoch",
+
+	// ListBannedCmd help.
+	"listbanned--synopsis": "Returns the bans in force, those of setban and those of ban scores, as an array of json objects.",
+
+	// ListBannedResult help.
+	"listbannedresult-address":        "The IP address or subnet of the ban, or the onion address",
+	"listbannedresult-ban_created":    "When the ban was created, in seconds since the Unix epoch",
+	"listbannedresult-banned_until":   "When the ban ends, in seconds since the Unix epoch",
+	"listbannedresult-ban_reason":     "'manually added' for a ban of setban, 'node misbehaving' for one of a ban score",
+	"listbannedresult-ban_duration":   "How long the ban lasts in seconds",
+	"listbannedresult-time_remaining": "The seconds until the ban ends",
+
+	// ClearBannedCmd help.
+	"clearbanned--synopsis": "Lifts every ban of the chosen kinds.",
+	"clearbanned-manual":    "Whether to lift the bans of setban",
+	"clearbanned-automatic": "Whether to lift the bans of ban scores",
+
 	// AddNodeCmd help.
 	"addnode--synopsis": "Attempts to add or remove a persistent peer.",
 	"addnode-addr":      "IP address, host name or Tor v3 onion address and port of the peer to operate on",
@@ -179,6 +202,61 @@ var helpDescsEnUS = map[string]string{
 	"getaddednodeinfo--condition0": "dns=false",
 	"getaddednodeinfo--condition1": "dns=true",
 	"getaddednodeinfo--result0":    "List of added peers",
+
+	// GetBcmrIdentityCmd help.
+	"getbcmridentity--synopsis": "Returns what the BCMR index knows of an identity, as CHIP-BCMR defines it, " +
+		"a token's or that of any transaction of an authchain the index tracks, " +
+		"with the links of its authchain in the mempool: the authhead, the BCMR publication to read and a token's genesis supply, " +
+		"and on request the authchain itself with a merkle proof. The index tracks every token's authchain and, " +
+		"from where it begins, every authchain that holds a publication, unless more than 100,000 transactions it doesn't " +
+		"otherwise track are behind the publication; it finds the transactions behind a publication in the background, " +
+		"once the publication's block is connected. Requires --bcmrindex.",
+	"getbcmridentity-authbase":         "The identity's authbase: a token's category ID, or any transaction of an authchain the index tracks",
+	"getbcmridentity-includeauthchain": "Also return the authchain's transactions, from the authbase, or from the link after the one given in after",
+	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it, or empty for the start; a link a reorganization took off the authchain is an error",
+	"getbcmridentity-limit":            "The most links to return, from 1 to 1000; an answer also holds no more after the link that takes its transactions to 1 MB",
+
+	// GetBcmrIdentityResult help.
+	"getbcmridentityresult-authbase":             "The identity's authbase",
+	"getbcmridentityresult-status":               "active, or burned if the authhead spent the identity output to a data-carrier output",
+	"getbcmridentityresult-head":                 "The authhead, the newest link of the authchain, confirmed or in the mempool",
+	"getbcmridentityresult-publication":          "The BCMR publication to read: the authhead's if it has a well-formed one, or else the newest earlier link's (only if a link has one)",
+	"getbcmridentityresult-genesissupply":        "The number of fungible tokens the token's genesis created, as a decimal string (only for a token's identity)",
+	"getbcmridentityresult-identityoutput":       "The CashTokens data of the authhead's identity output, output 0, as it is (only if it carries a token)",
+	"getbcmridentityresult-authchain":            "The authchain's transactions, keyed by their index from the authbase as 0, in the shape of CHIP-BCMR's authchain extension (only with includeauthchain)",
+	"getbcmridentityresult-authchain--key":       "index",
+	"getbcmridentityresult-authchain--value":     "transaction",
+	"getbcmridentityresult-authchain--desc":      "The link's hex-encoded transaction",
+	"getbcmridentityresult-authchaininfo":        "The height, block and publication of each link in authchain, keyed the same way (only with includeauthchain)",
+	"getbcmridentityresult-authchaininfo--key":   "index",
+	"getbcmridentityresult-authchaininfo--value": "link",
+	"getbcmridentityresult-authchaininfo--desc":  "The link",
+	"getbcmridentityresult-more":                 "Whether later links didn't fit in the answer, to ask for with after set to the last one (only with includeauthchain)",
+	"getbcmridentityresult-proof":                "A merkle proof of the newest confirmed link, which proves the earlier links too, since each spends the one before (only when the answer's links reach the authhead and a link is confirmed)",
+
+	// BcmrLinkResult help.
+	"bcmrlinkresult-txid":        "The link's txid",
+	"bcmrlinkresult-height":      "The height of the link's block, or 0 while it is in the mempool",
+	"bcmrlinkresult-blockhash":   "The hash of the link's block (only if it is confirmed)",
+	"bcmrlinkresult-publication": "The link's BCMR publication output (only if it has one)",
+
+	// BcmrPublicationOutputResult help.
+	"bcmrpublicationoutputresult-output":    "The index of the publication output",
+	"bcmrpublicationoutputresult-malformed": "Whether the output starts with the publication prefix but is malformed, and has no hash or URIs here",
+	"bcmrpublicationoutputresult-hash":      "The SHA-256 of the registry, hex-encoded in the byte order it was pushed in, which SHA-256 tools print",
+	"bcmrpublicationoutputresult-uris":      "The URIs pushed after the hash, as they are, which may be none (only if well-formed)",
+
+	// BcmrPublicationResult help.
+	"bcmrpublicationresult-txid":    "The txid of the link with the publication",
+	"bcmrpublicationresult-height":  "The height of its block, or 0 while it is in the mempool",
+	"bcmrpublicationresult-output":  "The index of the publication output",
+	"bcmrpublicationresult-hash":    "The SHA-256 of the registry, hex-encoded in the byte order it was pushed in, which SHA-256 tools print",
+	"bcmrpublicationresult-uris":    "The URIs pushed after the hash, as they are",
+	"bcmrpublicationresult-current": "Whether it is the authhead's publication; if not, it is the newest earlier one, which may be out of date",
+
+	// BcmrProofResult help.
+	"bcmrproofresult-index":       "The index of the proven link in the authchain",
+	"bcmrproofresult-merkleblock": "The proof, hex-encoded as gettxoutproof encodes one, which verifytxoutproof checks",
 
 	// GetBestBlockResult help.
 	"getbestblockresult-hash":   "Hex-encoded bytes of the best block hash",
@@ -890,6 +968,9 @@ var helpDescsEnUS = map[string]string{
 // pointer to the type (or nil to indicate no return value).
 var rpcResultTypes = map[string][]interface{}{
 	"addnode":               nil,
+	"clearbanned":           nil,
+	"listbanned":            {(*[]btcjson.ListBannedResult)(nil)},
+	"setban":                nil,
 	"createrawtransaction":  {(*string)(nil)},
 	"debuglevel":            {(*string)(nil), (*string)(nil)},
 	"decoderawtransaction":  {(*btcjson.TxRawDecodeResult)(nil)},
@@ -898,6 +979,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"finalizeblock":         nil,
 	"generate":              {(*[]string)(nil)},
 	"getaddednodeinfo":      {(*[]string)(nil), (*[]btcjson.GetAddedNodeInfoResult)(nil)},
+	"getbcmridentity":       {(*btcjson.GetBcmrIdentityResult)(nil)},
 	"getbestblock":          {(*btcjson.GetBestBlockResult)(nil)},
 	"getbestblockhash":      {(*string)(nil)},
 	"getblock":              {(*string)(nil), (*btcjson.GetBlockVerboseResult)(nil), (*btcjson.GetBlockVerboseTxResult)(nil)},

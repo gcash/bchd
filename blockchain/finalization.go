@@ -163,6 +163,8 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 		return fmt.Errorf("block %s is not known", hash)
 	}
 
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
@@ -191,7 +193,8 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 
 	// Finalize the block and invalidate the chain being detached before
 	// the reorganization, which releases the chain lock while it sends
-	// notifications, so blocks arriving meanwhile can't extend that chain.
+	// notifications, so that the callbacks see both and headers arriving
+	// meanwhile can't extend that chain.
 	const invalid = statusValidateFailed | statusInvalidAncestor
 	oldStatus := make([]blockStatus, 0, detachNodes.Len())
 	for e := detachNodes.Front(); e != nil; e = e.Next() {
@@ -213,6 +216,11 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 			n := e.Value.(*blockNode)
 			b.index.UnsetStatusFlags(n, invalid&^oldStatus[i])
 			b.index.SetStatusFlags(n, oldStatus[i]&statusValid)
+		}
+
+		// The reorganization can have written the marks.
+		if writeErr := b.index.flushToDB(); writeErr != nil {
+			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 		}
 		return err
 	}

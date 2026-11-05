@@ -1,0 +1,7 @@
+version: v2
+inputs:
+  - proto_file: ../../../bchrpc.proto
+plugins:
+  - local: protoc-gen-es
+    out: gen
+    opt: target=js

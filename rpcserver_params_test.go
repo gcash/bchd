@@ -431,7 +431,10 @@ func TestGetTxOutProofManyTxids(t *testing.T) {
 	elapsed := time.Since(start)
 	assertRPCError(t, "txids not in the block", err, btcjson.ErrRPCInvalidAddressOrKey,
 		"Not all transactions found in specified or retrieved block")
-	if elapsed > 2*time.Second {
+
+	// A search of the list for each transaction takes minutes, so this has
+	// room for a loaded runner under the race detector.
+	if elapsed > 30*time.Second {
 		t.Errorf("%d txids took %v", len(txids), elapsed)
 	}
 

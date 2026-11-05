@@ -1,0 +1,18 @@
+{
+  "name": "bchd-web-connect-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "buf generate",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-web": "2.2.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.74.0",
+    "@bufbuild/protoc-gen-es": "2.16.0"
+  }
+}

@@ -130,10 +130,14 @@ func TestFilterAddWithoutFilter(t *testing.T) {
 
 	sp = newBloomTestPeer()
 	sp.server.services = 0
+	sp.server.banPeers = make(chan *serverPeer, 1)
 	sp.OnFilterAdd(nil, wire.NewMsgFilterAdd([]byte{1, 2, 3}))
 	if !isDisconnected(sp) {
 		t.Error("peer was not disconnected by a server without bloom " +
 			"filtering")
+	}
+	if len(sp.server.banPeers) != 1 {
+		t.Error("peer was not banned by a server without bloom filtering")
 	}
 }
 

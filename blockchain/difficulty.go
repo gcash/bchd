@@ -532,9 +532,9 @@ func (b *BlockChain) calcLegacyRequiredDifficulty(lastNode *blockNode, newBlockT
 // This function is safe for concurrent access.
 func (b *BlockChain) CalcNextRequiredDifficulty(timestamp time.Time) (uint32, error) {
 	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
 	tip := b.bestChain.Tip()
 	difficulty, err := b.calcNextRequiredDifficulty(tip, timestamp,
 		b.SelectDifficultyAdjustmentAlgorithm(tip))
-	b.chainLock.Unlock()
 	return difficulty, err
 }

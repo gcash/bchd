@@ -120,7 +120,7 @@ func TestSyncPeerAnnouncingTipKept(t *testing.T) {
 			"want %d", got, best)
 	}
 	h.sm.handleCheckSyncPeer()
-	if h.sm.syncPeer != a || isDisconnected(a) {
+	if h.sm.syncPeer.Load() != a || isDisconnected(a) {
 		t.Fatal("the sync peer that announced the tip was replaced")
 	}
 }
@@ -273,7 +273,7 @@ func TestHeaderChainFetchContinues(t *testing.T) {
 	syncPeer := h.peer(2)
 	syncPeer.UpdateLastBlockHeight(100)
 	h.sm.peerStates[syncPeer].syncCandidate = true
-	h.sm.syncPeer = syncPeer
+	h.sm.syncPeer.Store(syncPeer)
 	h.sm.handleBlockMsg(&blockMsg{block: blocks[1], peer: a})
 	if h.requested(*blocks[17].Hash()) {
 		t.Fatal("a block was requested while the chain is not current")
@@ -429,7 +429,7 @@ func TestHeadersWhenNotCurrent(t *testing.T) {
 	syncPeer, other := h.peer(1), h.peer(2)
 	syncPeer.UpdateLastBlockHeight(10)
 	h.sm.peerStates[syncPeer].syncCandidate = true
-	h.sm.syncPeer = syncPeer
+	h.sm.syncPeer.Store(syncPeer)
 	if h.sm.current() {
 		t.Fatal("the sync manager is current")
 	}
@@ -536,7 +536,7 @@ func TestNewPeerGetsHeaders(t *testing.T) {
 
 	p.UpdateLastBlockHeight(10)
 	h.sm.peerStates[p].syncCandidate = true
-	h.sm.syncPeer = p
+	h.sm.syncPeer.Store(p)
 	late := h.peer(3)
 	delete(h.sm.peerStates, late)
 	h.sm.handleNewPeerMsg(late)

@@ -139,6 +139,15 @@ type bchrpcGetMerkleProof = {
   readonly responseType: typeof bchrpc_pb.GetMerkleProofResponse;
 };
 
+type bchrpcGetBcmrIdentity = {
+  readonly methodName: string;
+  readonly service: typeof bchrpc;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof bchrpc_pb.GetBcmrIdentityRequest;
+  readonly responseType: typeof bchrpc_pb.GetBcmrIdentityResponse;
+};
+
 type bchrpcGetSlpTokenMetadata = {
   readonly methodName: string;
   readonly service: typeof bchrpc;
@@ -273,6 +282,7 @@ export class bchrpc {
   static readonly GetAddressUnspentOutputs: bchrpcGetAddressUnspentOutputs;
   static readonly GetUnspentOutput: bchrpcGetUnspentOutput;
   static readonly GetMerkleProof: bchrpcGetMerkleProof;
+  static readonly GetBcmrIdentity: bchrpcGetBcmrIdentity;
   static readonly GetSlpTokenMetadata: bchrpcGetSlpTokenMetadata;
   static readonly GetSlpParsedScript: bchrpcGetSlpParsedScript;
   static readonly GetSlpTrustedValidation: bchrpcGetSlpTrustedValidation;
@@ -454,6 +464,15 @@ export class bchrpcClient {
   getMerkleProof(
     requestMessage: bchrpc_pb.GetMerkleProofRequest,
     callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetMerkleProofResponse|null) => void
+  ): UnaryResponse;
+  getBcmrIdentity(
+    requestMessage: bchrpc_pb.GetBcmrIdentityRequest,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetBcmrIdentityResponse|null) => void
+  ): UnaryResponse;
+  getBcmrIdentity(
+    requestMessage: bchrpc_pb.GetBcmrIdentityRequest,
+    callback: (error: ServiceError|null, responseMessage: bchrpc_pb.GetBcmrIdentityResponse|null) => void
   ): UnaryResponse;
   getSlpTokenMetadata(
     requestMessage: bchrpc_pb.GetSlpTokenMetadataRequest,

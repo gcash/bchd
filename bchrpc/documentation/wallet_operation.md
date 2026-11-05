@@ -5,6 +5,7 @@ The following describes the operation of a hypothetical wallet built using the g
 *Startup*
 - Make a `GetBlockchainInfo` call to get the current best hash and height.
 - For each address in the wallet's key chain make a `GetAddressTransactions` call. If there are any hits, extend the keychain, make another `GetAddressTransactions` call for the new address. Repeat until there are no more hits. 
+- Each `GetAddressTransactions` call returns at most `nb_fetch` confirmed transactions, newest first: 100 when `nb_fetch` is 0, and a request for more than 10,000 fails with `InvalidArgument`. `confirmed_count` in the reply is the address's total, whatever the start block, so on a first sync page through the history by raising `nb_skip` by `nb_fetch` until it reaches `confirmed_count`. Nodes that predate `confirmed_count` leave it 0; for them, keep paging until a call returns fewer than `nb_fetch` transactions. Unconfirmed transactions are returned in full with every call.
 - Calculate the wallet's UTXOs by iterating over all the returned transactions. For each output which matches an address, build the UTXO and add it to a UTXOs list. Next iterate over the transaction again. This time for each input spending a matched output, delete the UTXO from the UTXO list. The remaining UTXOs will be the full list of the wallet's UTXOs. There is a `GetAddressUnspentOutputs` RPC call but this is much less efficient and slower than just calculating the UTXOs locally. 
 
 *Operation*
@@ -12,7 +13,7 @@ The following describes the operation of a hypothetical wallet built using the g
 - Subscribe to the `SubscribeBlocks` RPC. When a new message is received, for each disconnected block iterate over the wallet's transaction, if any transactions were mined in this block, set the confirmation count to zero. If these transaction re-confirm they will be sent in a `TransactionNotification`. For each connected block, update the best hash and height and update the confirmation count for each transaction. Persist the hash and height to disk.
 
 *Next startup*
-- Make a `GetBlockInfo` for the last saved block hash. Make sure the block is still in the best chain (confirmations > 0). If so make the `GetAddressTransactions` like before but using the last saved block hash as the start block. If it's not in the best chain, re-download all transactions from the genesis as there was a reorg. 
+- Make a `GetBlockInfo` for the last saved block hash. Make sure the block is still in the best chain: for a block that is not, `GetBlockInfo` fails with `NotFound`. If so make the `GetAddressTransactions` like before but using the last saved block hash as the start block. If it's not in the best chain, re-download all transactions from the genesis as there was a reorg. 
 
 ### SPV Wallet
 Similar operation as above with the following exceptions:

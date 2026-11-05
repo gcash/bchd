@@ -34,6 +34,7 @@ const (
 	Bchrpc_GetAddressUnspentOutputs_FullMethodName   = "/pb.bchrpc/GetAddressUnspentOutputs"
 	Bchrpc_GetUnspentOutput_FullMethodName           = "/pb.bchrpc/GetUnspentOutput"
 	Bchrpc_GetMerkleProof_FullMethodName             = "/pb.bchrpc/GetMerkleProof"
+	Bchrpc_GetBcmrIdentity_FullMethodName            = "/pb.bchrpc/GetBcmrIdentity"
 	Bchrpc_GetSlpTokenMetadata_FullMethodName        = "/pb.bchrpc/GetSlpTokenMetadata"
 	Bchrpc_GetSlpParsedScript_FullMethodName         = "/pb.bchrpc/GetSlpParsedScript"
 	Bchrpc_GetSlpTrustedValidation_FullMethodName    = "/pb.bchrpc/GetSlpTrustedValidation"
@@ -118,6 +119,20 @@ type BchrpcClient interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(ctx context.Context, in *GetMerkleProofRequest, opts ...grpc.CallOption) (*GetMerkleProofResponse, error)
+	// GetBcmrIdentity returns what the BCMR index knows of an identity, as
+	// CHIP-BCMR defines it, a token's or that of any transaction of an
+	// authchain the index tracks, with the links of its authchain in the
+	// mempool: the authhead, the BCMR publication to read and a token's
+	// genesis supply, and on request the authchain itself, in pages, with a
+	// merkle proof of the newest confirmed link. The index tracks every
+	// token's authchain and, from where it begins, every authchain that holds
+	// a publication, unless more than 100,000 transactions it doesn't
+	// otherwise track are behind the publication; it finds the transactions
+	// behind a publication in the background, once the publication's block is
+	// connected.
+	//
+	// **Requires BcmrIndex**
+	GetBcmrIdentity(ctx context.Context, in *GetBcmrIdentityRequest, opts ...grpc.CallOption) (*GetBcmrIdentityResponse, error)
 	// GetSlpTokenMetadata return slp token metadata for one or more tokens.
 	//
 	// **Requires SlpIndex**
@@ -329,6 +344,16 @@ func (c *bchrpcClient) GetMerkleProof(ctx context.Context, in *GetMerkleProofReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMerkleProofResponse)
 	err := c.cc.Invoke(ctx, Bchrpc_GetMerkleProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bchrpcClient) GetBcmrIdentity(ctx context.Context, in *GetBcmrIdentityRequest, opts ...grpc.CallOption) (*GetBcmrIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBcmrIdentityResponse)
+	err := c.cc.Invoke(ctx, Bchrpc_GetBcmrIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -564,6 +589,20 @@ type BchrpcServer interface {
 	//
 	// **Requires TxIndex**
 	GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error)
+	// GetBcmrIdentity returns what the BCMR index knows of an identity, as
+	// CHIP-BCMR defines it, a token's or that of any transaction of an
+	// authchain the index tracks, with the links of its authchain in the
+	// mempool: the authhead, the BCMR publication to read and a token's
+	// genesis supply, and on request the authchain itself, in pages, with a
+	// merkle proof of the newest confirmed link. The index tracks every
+	// token's authchain and, from where it begins, every authchain that holds
+	// a publication, unless more than 100,000 transactions it doesn't
+	// otherwise track are behind the publication; it finds the transactions
+	// behind a publication in the background, once the publication's block is
+	// connected.
+	//
+	// **Requires BcmrIndex**
+	GetBcmrIdentity(context.Context, *GetBcmrIdentityRequest) (*GetBcmrIdentityResponse, error)
 	// GetSlpTokenMetadata return slp token metadata for one or more tokens.
 	//
 	// **Requires SlpIndex**
@@ -674,6 +713,9 @@ func (UnimplementedBchrpcServer) GetUnspentOutput(context.Context, *GetUnspentOu
 }
 func (UnimplementedBchrpcServer) GetMerkleProof(context.Context, *GetMerkleProofRequest) (*GetMerkleProofResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMerkleProof not implemented")
+}
+func (UnimplementedBchrpcServer) GetBcmrIdentity(context.Context, *GetBcmrIdentityRequest) (*GetBcmrIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBcmrIdentity not implemented")
 }
 func (UnimplementedBchrpcServer) GetSlpTokenMetadata(context.Context, *GetSlpTokenMetadataRequest) (*GetSlpTokenMetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSlpTokenMetadata not implemented")
@@ -1004,6 +1046,24 @@ func _Bchrpc_GetMerkleProof_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bchrpc_GetBcmrIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBcmrIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BchrpcServer).GetBcmrIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Bchrpc_GetBcmrIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BchrpcServer).GetBcmrIdentity(ctx, req.(*GetBcmrIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Bchrpc_GetSlpTokenMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSlpTokenMetadataRequest)
 	if err := dec(in); err != nil {
@@ -1272,6 +1332,10 @@ var Bchrpc_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMerkleProof",
 			Handler:    _Bchrpc_GetMerkleProof_Handler,
+		},
+		{
+			MethodName: "GetBcmrIdentity",
+			Handler:    _Bchrpc_GetBcmrIdentity_Handler,
 		},
 		{
 			MethodName: "GetSlpTokenMetadata",

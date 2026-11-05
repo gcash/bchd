@@ -597,7 +597,7 @@ func TestStartSyncEndsBlockDownloads(t *testing.T) {
 	h.sm.peerStates[syncPeer].syncCandidate = true
 	syncPeer.UpdateLastBlockHeight(10)
 	h.sm.startSync()
-	if h.sm.syncPeer != syncPeer {
+	if h.sm.syncPeer.Load() != syncPeer {
 		t.Fatal("sync did not start")
 	}
 	if n := h.sm.peerStates[a].validBlocksInFlight; n != 0 {

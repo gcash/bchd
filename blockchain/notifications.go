@@ -12,7 +12,11 @@ import (
 type NotificationType int
 
 // NotificationCallback is used for a caller to provide a callback for
-// notifications about various chain events.
+// notifications about various chain events.  It runs on the goroutine that is
+// changing the chain, in the middle of the change, with the chain lock
+// released.  So it can call into the chain, but it must not change it, as
+// ProcessBlock, InvalidateBlock, ReconsiderBlock, FinalizeBlock and AddHeader
+// wait for the change under way, which waits for the callback.
 type NotificationCallback func(*Notification)
 
 // Constants for the type of a notification message.

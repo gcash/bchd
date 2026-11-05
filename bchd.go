@@ -168,6 +168,14 @@ func bchdMain(serverChan chan<- *server) error {
 
 		return nil
 	}
+	if cfg.DropBcmrIndex {
+		if err := indexers.DropBcmrIndex(db, interrupt); err != nil {
+			bchdLog.Errorf("%v", err)
+			return err
+		}
+
+		return nil
+	}
 
 	// Create server and start it.
 	server, err := newServer(cfg.Listeners, cfg.AgentBlacklist, cfg.AgentWhitelist, db, activeNetParams.Params,

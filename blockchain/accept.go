@@ -23,7 +23,8 @@ import (
 // The flags are also passed to checkBlockContext and connectBestChain.  See
 // their documentation for how the flags modify their behavior.
 //
-// This function MUST be called with the chain state lock held (for writes).
+// This function MUST be called with processLock and the chain state lock held
+// (for writes).
 func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.Hash, prevNode *blockNode, flags BehaviorFlags) (bool, error) {
 	// The height of this block is one more than the referenced previous
 	// block.
@@ -73,16 +74,21 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	// Create a new block node for the block and add it to the node index. Even
 	// if the block ultimately gets connected to the main chain, it starts out
 	// on a side chain.  A block whose header is kept gets the kept header's
-	// node, which the kept headers built on it have as their parent.
-	blockHeader := &block.MsgBlock().Header
-	newNode := b.headers.take(block.Hash(), prevNode)
+	// node, which the kept headers built on it have as their parent, and a
+	// block being reconsidered keeps its node, which the blocks built on it
+	// have as theirs.
+	newNode := b.index.LookupNode(block.Hash())
 	if newNode == nil {
-		newNode = newBlockNode(blockHeader, prevNode)
-	}
-	newNode.status = statusDataStored
-	newNode.received = uint32(time.Now().Unix())
+		blockHeader := &block.MsgBlock().Header
+		newNode = b.headers.take(block.Hash(), prevNode)
+		if newNode == nil {
+			newNode = newBlockNode(blockHeader, prevNode)
+		}
+		newNode.status = statusDataStored
+		newNode.received = uint32(time.Now().Unix())
 
-	b.index.AddNode(newNode)
+		b.index.AddNode(newNode)
+	}
 	err = b.index.flushToDB()
 	if err != nil {
 		b.requestShutdown(err)
@@ -100,11 +106,9 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	// Notify the caller that the new block was accepted into the block
 	// chain.  The caller would typically want to react by relaying the
 	// inventory to other peers.
-	b.notificationLock.Lock()
 	b.chainLock.Unlock()
 	b.sendNotification(NTBlockAccepted, block)
 	b.chainLock.Lock()
-	b.notificationLock.Unlock()
 
 	return isMainChain, nil
 }

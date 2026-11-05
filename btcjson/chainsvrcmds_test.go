@@ -42,6 +42,91 @@ func TestChainSvrCmds(t *testing.T) {
 			unmarshalled: &btcjson.AddNodeCmd{Addr: "127.0.0.1", SubCmd: btcjson.ANRemove},
 		},
 		{
+			name: "clearbanned",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("clearbanned")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewClearBannedCmd(nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"clearbanned","params":[],"id":1}`,
+			unmarshalled: &btcjson.ClearBannedCmd{
+				Manual:    btcjson.Bool(true),
+				Automatic: btcjson.Bool(true),
+			},
+		},
+		{
+			name: "clearbanned optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("clearbanned", false, true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewClearBannedCmd(btcjson.Bool(false), btcjson.Bool(true))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"clearbanned","params":[false,true],"id":1}`,
+			unmarshalled: &btcjson.ClearBannedCmd{
+				Manual:    btcjson.Bool(false),
+				Automatic: btcjson.Bool(true),
+			},
+		},
+		{
+			name: "clearbanned second only",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("clearbanned", true, false)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewClearBannedCmd(nil, btcjson.Bool(false))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"clearbanned","params":[true,false],"id":1}`,
+			unmarshalled: &btcjson.ClearBannedCmd{
+				Manual:    btcjson.Bool(true),
+				Automatic: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "listbanned",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("listbanned")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewListBannedCmd()
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"listbanned","params":[],"id":1}`,
+			unmarshalled: &btcjson.ListBannedCmd{},
+		},
+		{
+			name: "setban",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("setban", "192.168.0.0/24", btcjson.SBAdd)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewSetBanCmd("192.168.0.0/24", btcjson.SBAdd, nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"setban","params":["192.168.0.0/24","add"],"id":1}`,
+			unmarshalled: &btcjson.SetBanCmd{
+				Subnet:   "192.168.0.0/24",
+				Command:  btcjson.SBAdd,
+				BanTime:  btcjson.Int64(0),
+				Absolute: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "setban optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("setban", "1.2.3.4", btcjson.SBRemove, 86400, true)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewSetBanCmd("1.2.3.4", btcjson.SBRemove, btcjson.Int64(86400), btcjson.Bool(true))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"setban","params":["1.2.3.4","remove",86400,true],"id":1}`,
+			unmarshalled: &btcjson.SetBanCmd{
+				Subnet:   "1.2.3.4",
+				Command:  btcjson.SBRemove,
+				BanTime:  btcjson.Int64(86400),
+				Absolute: btcjson.Bool(true),
+			},
+		},
+		{
 			name: "createrawtransaction",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("createrawtransaction", `[{"txid":"123","vout":1}]`,
@@ -172,6 +257,37 @@ func TestChainSvrCmds(t *testing.T) {
 			unmarshalled: &btcjson.GetAddedNodeInfoCmd{
 				DNS:  true,
 				Node: btcjson.String("127.0.0.1"),
+			},
+		},
+		{
+			name: "getbcmridentity",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getbcmridentity", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBcmrIdentityCmd("123", nil, nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getbcmridentity","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.GetBcmrIdentityCmd{
+				Authbase:         "123",
+				IncludeAuthchain: btcjson.Bool(false),
+			},
+		},
+		{
+			name: "getbcmridentity optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getbcmridentity", "123", true, "456", 10)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBcmrIdentityCmd("123", btcjson.Bool(true),
+					btcjson.String("456"), btcjson.Int(10))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getbcmridentity","params":["123",true,"456",10],"id":1}`,
+			unmarshalled: &btcjson.GetBcmrIdentityCmd{
+				Authbase:         "123",
+				IncludeAuthchain: btcjson.Bool(true),
+				After:            btcjson.String("456"),
+				Limit:            btcjson.Int(10),
 			},
 		},
 		{

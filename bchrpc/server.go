@@ -106,6 +106,7 @@ type GrpcServerConfig struct {
 	AddrIndex *indexers.AddrIndex
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
+	BcmrIndex *indexers.BcmrIndex
 
 	// MaxSubscriptions is the most subscriptions clients may hold at once,
 	// over all the subscription calls.
@@ -140,6 +141,7 @@ type GrpcServer struct {
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
 	slpIndex  *indexers.SlpIndex
+	bcmrIndex *indexers.BcmrIndex
 
 	httpServer  *http.Server
 	subscribe   chan *rpcEventSubscription
@@ -180,6 +182,7 @@ func NewGrpcServer(cfg *GrpcServerConfig) *GrpcServer {
 		addrIndex:   cfg.AddrIndex,
 		cfIndex:     cfg.CfIndex,
 		slpIndex:    cfg.SlpIndex,
+		bcmrIndex:   cfg.BcmrIndex,
 		httpServer:  cfg.HTTPServer,
 		subscribe:   make(chan *rpcEventSubscription),
 		unsubscribe: make(chan *rpcEventSubscription),
@@ -716,6 +719,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		TxIndex:        s.txIndex != nil,
 		SlpIndex:       s.slpIndex != nil,
 		SlpGraphsearch: gsEnabled,
+		BcmrIndex:      s.bcmrIndex != nil,
 		BestHeight:     bestSnapShot.Height,
 		BestBlockHash:  bestSnapShot.Hash[:],
 		BitcoinNet:     net,
@@ -1854,6 +1858,127 @@ func (s *GrpcServer) GetMerkleProof(ctx context.Context, req *pb.GetMerkleProofR
 	}
 
 	return resp, nil
+}
+
+// GetBcmrIdentity returns what the BCMR index knows of an identity, a token's
+// or that of any transaction of an authchain the index tracks, with the links
+// of its authchain in the mempool, and on request the authchain itself, in
+// pages, with a merkle proof of the newest confirmed link.
+//
+// **Requires BcmrIndex**
+func (s *GrpcServer) GetBcmrIdentity(ctx context.Context, req *pb.GetBcmrIdentityRequest) (*pb.GetBcmrIdentityResponse, error) {
+	if s.bcmrIndex == nil {
+		return nil, status.Error(codes.Unavailable, "bcmrindex required")
+	}
+	authbase, err := chainhash.NewHash(req.Authbase)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid authbase: %v", err)
+	}
+	if (len(req.After) > 0 || req.Limit > 0) && !req.IncludeAuthchain {
+		return nil, status.Error(codes.InvalidArgument,
+			"after and limit only apply with include_authchain")
+	}
+	query := &indexers.BcmrQuery{
+		Authbase:  *authbase,
+		Authchain: req.IncludeAuthchain,
+		Limit:     int(min(req.Limit, indexers.BcmrMaxAuthchainEntries)),
+	}
+	if len(req.After) > 0 {
+		query.After, err = chainhash.NewHash(req.After)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid after: %v", err)
+		}
+	}
+
+	info, err := s.bcmrIndex.Identity(query, s.txMemPool)
+	switch {
+	case errors.Is(err, indexers.ErrBcmrIdentityNotFound):
+		return nil, status.Error(codes.NotFound, "no identity with that authbase")
+	case errors.Is(err, indexers.ErrBcmrNotALink):
+		return nil, status.Error(codes.NotFound,
+			"after is not a link of the identity's authchain")
+	case err != nil:
+		log.Errorf("Failed to read the BCMR identity %v: %v", query.Authbase, err)
+		return nil, status.Error(codes.Internal, "failed to read the BCMR index")
+	}
+	return s.marshalBcmrIdentity(info)
+}
+
+// marshalBcmrIdentity returns what the BCMR index knows of an identity, for
+// GetBcmrIdentity.
+func (s *GrpcServer) marshalBcmrIdentity(info *indexers.BcmrIdentityInfo) (*pb.GetBcmrIdentityResponse, error) {
+	resp := &pb.GetBcmrIdentityResponse{
+		Authbase:   info.Authbase.CloneBytes(),
+		Status:     pb.GetBcmrIdentityResponse_ACTIVE,
+		Head:       marshalBcmrLink(&info.Head),
+		FirstIndex: info.FirstIndex,
+		More:       info.More,
+	}
+	if info.Burned {
+		resp.Status = pb.GetBcmrIdentityResponse_BURNED
+	}
+	if info.Publication != nil {
+		resp.Publication = marshalBcmrLink(info.Publication)
+		resp.PublicationCurrent = info.Current
+	}
+	if info.HasGenesisSupply {
+		resp.HasGenesisSupply = true
+		resp.GenesisSupply = info.GenesisSupply
+	}
+	if info.IdentityOutput != nil {
+		resp.IdentityOutput = getPbCashTokenDataFromTokenData(*info.IdentityOutput)
+	}
+	for i := range info.Authchain {
+		resp.Authchain = append(resp.Authchain, marshalBcmrLink(&info.Authchain[i]))
+	}
+	if info.Proof != nil {
+		block := info.ProofBlock
+		medianTime, err := s.chain.MedianTimeByHash(block.Hash())
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error calculating median time for block")
+		}
+		hashes := make([][]byte, 0, len(info.Proof.Hashes))
+		for _, h := range info.Proof.Hashes {
+			hashes = append(hashes, h.CloneBytes())
+		}
+		resp.Proof = &pb.GetBcmrIdentityResponse_Proof{
+			Index: info.ProofIndex,
+			Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1,
+				medianTime, s.chainParams),
+			Hashes:       hashes,
+			Flags:        info.Proof.Flags,
+			Transactions: info.Proof.Transactions,
+		}
+		if nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1); err == nil {
+			nextHash := nextHeader.BlockHash()
+			resp.Proof.Block.NextBlockHash = nextHash.CloneBytes()
+		}
+	}
+	return resp, nil
+}
+
+// marshalBcmrLink returns a link of an authchain for GetBcmrIdentity.  The
+// hash of a publication stays in the byte order it was pushed in.
+func marshalBcmrLink(link *indexers.BcmrLinkInfo) *pb.GetBcmrIdentityResponse_Link {
+	result := &pb.GetBcmrIdentityResponse_Link{
+		Hash:        link.Hash.CloneBytes(),
+		Height:      link.Height,
+		Transaction: link.Tx,
+	}
+	if link.BlockHash != nil {
+		result.BlockHash = link.BlockHash.CloneBytes()
+	}
+	if pub := link.Publication; pub != nil {
+		result.Publication = &pb.GetBcmrIdentityResponse_Publication{
+			Output:    pub.Output,
+			Malformed: pub.Malformed,
+		}
+		if !pub.Malformed {
+			result.Publication.Hash = append([]byte(nil), pub.Hash[:]...)
+			result.Publication.Uris = pub.URIs
+		}
+	}
+	return result
 }
 
 // GetSlpTokenMetadata returns metadata associated with a Token ID

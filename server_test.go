@@ -39,7 +39,7 @@ func newInboundTestServer(t *testing.T, maxPerIP, maxPeers int) *server {
 		addrManager:  addrmgr.New(t.TempDir(), nil),
 		donePeers:    make(chan *serverPeer, 10),
 		inboundHosts: make(map[string]int),
-		inboundBans:  make(map[string]time.Time),
+		bans:         newBanList(),
 	}
 }
 
@@ -83,9 +83,9 @@ func TestAdmitInbound(t *testing.T) {
 		case "release":
 			releases[step.idx]()
 		case "ban":
-			s.inboundBans[step.arg] = time.Now().Add(time.Hour)
+			s.bans.banPeer(step.arg, time.Now(), time.Now().Add(time.Hour))
 		case "unban":
-			s.inboundBans[step.arg] = time.Now().Add(-time.Second)
+			s.bans.remove(banTarget{host: step.arg})
 		}
 	}
 }
@@ -151,7 +151,7 @@ func TestHandleBanPeerMsgMirrorsBan(t *testing.T) {
 		t.Fatalf("NewOutboundPeer: %v", err)
 	}
 	sp.Peer = p
-	s.handleBanPeerMsg(&peerState{banned: make(map[string]time.Time)}, sp)
+	s.handleBanPeerMsg(sp)
 
 	addr := &net.TCPAddr{IP: net.ParseIP("10.0.0.1"), Port: 1}
 	if s.admitInbound(addr) != nil {
@@ -231,7 +231,6 @@ func newTestPeerState() *peerState {
 		outboundPeers:    make(map[int32]*serverPeer),
 		persistentPeers:  make(map[int32]*serverPeer),
 		directRelayPeers: make(map[int32]*serverPeer),
-		banned:           make(map[string]time.Time),
 		outboundGroups:   make(map[string]int),
 		connectionCount:  make(map[string]int),
 	}
@@ -323,6 +322,7 @@ func testAddPeerWhileSyncManagerRelays(t *testing.T, fillQueue bool) {
 		chainParams: params,
 		chain:       chain,
 		addrManager: addrmgr.New(t.TempDir(), nil),
+		bans:        newBanList(),
 		relayInv:    make(chan relayMsg, 1),
 		quit:        make(chan struct{}),
 	}
@@ -502,7 +502,7 @@ func newAddPeerTestServer(t *testing.T, maxPeers int,
 		connManager:  cm,
 		quit:         make(chan struct{}),
 		inboundHosts: make(map[string]int),
-		inboundBans:  make(map[string]time.Time),
+		bans:         newBanList(),
 	}
 }
 
@@ -631,9 +631,8 @@ func TestLocalPeerNotBanned(t *testing.T) {
 			t.Fatalf("NewOutboundPeer: %v", err)
 		}
 		sp.Peer = p
-		state := newTestPeerState()
-		s.handleBanPeerMsg(state, sp)
-		if len(state.banned) != 0 || len(s.inboundBans) != 0 {
+		s.handleBanPeerMsg(sp)
+		if len(s.bans.list(time.Now())) != 0 {
 			t.Fatalf("local peer %s was banned", addr)
 		}
 	}
@@ -720,34 +719,10 @@ func TestDisconnectNodeReleasesIP(t *testing.T) {
 	}
 }
 
-// TestSweepBans ensures sweepBans forgets the bans that have ended, from the
-// peer handler's state and from the bans checked when connections are
-// accepted, and keeps the others.
-func TestSweepBans(t *testing.T) {
-	s := newInboundTestServer(t, 5, 10)
-	state := newTestPeerState()
-	now := time.Now()
-	for _, bans := range []map[string]time.Time{state.banned, s.inboundBans} {
-		bans["10.0.0.1"] = now.Add(-time.Second)
-		bans["10.0.0.2"] = now
-		bans["10.0.0.3"] = now.Add(time.Second)
-	}
-	s.sweepBans(state, now)
-	for _, bans := range []map[string]time.Time{state.banned, s.inboundBans} {
-		if len(bans) != 1 || bans["10.0.0.3"].IsZero() {
-			t.Fatalf("bans left: %v", bans)
-		}
-	}
-}
-
-// TestPeerHandlerSweepsBans ensures the peer handler forgets ended bans on its
-// own, every banSweepInterval.  An ended ban was only dropped when its host
-// connected again, so the ban maps never shrank.
-func TestPeerHandlerSweepsBans(t *testing.T) {
-	oldInterval := banSweepInterval
-	banSweepInterval = 10 * time.Millisecond
-	t.Cleanup(func() { banSweepInterval = oldInterval })
-	s := newAddPeerTestServer(t, 10, 2)
+// startTestPeerHandler runs the peer handler of s, a server from
+// newAddPeerTestServer, until the test ends.
+func startTestPeerHandler(t *testing.T, s *server) {
+	t.Helper()
 	cfg.DisableDNSSeed = true
 	s.newPeers = make(chan *serverPeer, 1)
 	s.donePeers = make(chan *serverPeer, 1)
@@ -758,8 +733,6 @@ func TestPeerHandlerSweepsBans(t *testing.T) {
 	s.broadcast = make(chan broadcastMsg, 1)
 	s.query = make(chan interface{})
 	s.maybeAddDirectRelayPeer = make(chan *maybeAddDirectRelayPeerMsg)
-	s.inboundBans["10.0.0.1"] = time.Now().Add(-time.Second)
-	s.inboundBans["10.0.0.2"] = time.Now().Add(time.Hour)
 
 	s.wg.Add(1)
 	go s.peerHandler()
@@ -767,12 +740,27 @@ func TestPeerHandlerSweepsBans(t *testing.T) {
 		close(s.quit)
 		s.wg.Wait()
 	})
+}
+
+// TestPeerHandlerSweepsBans ensures the peer handler forgets ended bans on its
+// own, every banSweepInterval.  An ended ban was only dropped when its host
+// connected again, so the ban maps never shrank.
+func TestPeerHandlerSweepsBans(t *testing.T) {
+	oldInterval := banSweepInterval
+	banSweepInterval = 10 * time.Millisecond
+	t.Cleanup(func() { banSweepInterval = oldInterval })
+	s := newAddPeerTestServer(t, 10, 2)
+	now := time.Now()
+	s.bans.banPeer("10.0.0.1", now, now.Add(-time.Second))
+	s.bans.banPeer("10.0.0.2", now, now.Add(time.Hour))
+	startTestPeerHandler(t, s)
+
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		s.inboundMtx.Lock()
-		_, ended := s.inboundBans["10.0.0.1"]
-		_, current := s.inboundBans["10.0.0.2"]
-		s.inboundMtx.Unlock()
+		s.bans.mtx.Lock()
+		_, ended := s.bans.hosts["10.0.0.1"]
+		_, current := s.bans.hosts["10.0.0.2"]
+		s.bans.mtx.Unlock()
 		if !current {
 			t.Fatal("a ban in force was forgotten")
 		}
@@ -783,6 +771,82 @@ func TestPeerHandlerSweepsBans(t *testing.T) {
 			t.Fatal("an ended ban was not forgotten")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestNewOutboundAddressSkipsBans ensures a banned address, by its host or by
+// a subnet, isn't dialed, which would only have the connection refused once
+// the handshake is done, right after the ban disconnected the peer.
+func TestNewOutboundAddressSkipsBans(t *testing.T) {
+	s := newAddPeerTestServer(t, 10, 2)
+	startTestPeerHandler(t, s)
+	if err := s.addrManager.AddAddressByIP("8.8.8.8:" +
+		activeNetParams.DefaultPort); err != nil {
+
+		t.Fatal(err)
+	}
+	now := time.Now()
+	hour := now.Add(time.Hour)
+
+	s.bans.banPeer("8.8.8.8", now, hour)
+	if addr, err := s.newOutboundAddress(); err == nil {
+		t.Fatalf("got the banned address %v", addr)
+	}
+	s.bans.remove(banTarget{host: "8.8.8.8"})
+
+	subnet := mustBanTarget(t, "8.8.0.0/16")
+	s.bans.add(subnet, now, hour)
+	if addr, err := s.newOutboundAddress(); err == nil {
+		t.Fatalf("got the address %v of a banned subnet", addr)
+	}
+	s.bans.remove(subnet)
+
+	if _, err := s.newOutboundAddress(); err != nil {
+		t.Fatalf("the address was left out with no ban: %v", err)
+	}
+}
+
+// TestSubnetBanRefusesPeers ensures a subnet's ban keeps out the peers of the
+// subnet, when they connect and when they are added after their handshake.
+func TestSubnetBanRefusesPeers(t *testing.T) {
+	s := newAddPeerTestServer(t, 10, 2)
+	state := newTestPeerState()
+	s.bans.add(mustBanTarget(t, "10.0.0.0/24"), time.Now(), time.Now().Add(time.Hour))
+
+	addr := &net.TCPAddr{IP: net.ParseIP("10.0.0.5"), Port: 1}
+	if s.admitInbound(addr) != nil {
+		t.Fatal("a connection from the banned subnet was admitted")
+	}
+	addr.IP = net.ParseIP("10.0.1.5")
+	if s.admitInbound(addr) == nil {
+		t.Fatal("a connection from outside the subnet was refused")
+	}
+
+	sp := newOutboundTestPeer(t, s, "10.0.0.6:8333")
+	if s.handleAddPeerMsg(state, sp) {
+		t.Fatal("a peer of the banned subnet was added")
+	}
+	if sp.Connected() {
+		t.Fatal("a peer of the banned subnet stayed connected")
+	}
+}
+
+// TestBanSparesChosenPeers ensures a ban doesn't refuse a persistent or a
+// whitelisted peer, as in BCHN.
+func TestBanSparesChosenPeers(t *testing.T) {
+	s := newAddPeerTestServer(t, 10, 2)
+	state := newTestPeerState()
+	s.bans.add(mustBanTarget(t, "10.0.0.0/24"), time.Now(), time.Now().Add(time.Hour))
+
+	persistent := newOutboundTestPeer(t, s, "10.0.0.5:8333")
+	persistent.persistent = true
+	if !s.handleAddPeerMsg(state, persistent) {
+		t.Fatal("a persistent peer was refused")
+	}
+	whitelisted := newOutboundTestPeer(t, s, "10.0.0.6:8333")
+	whitelisted.isWhitelisted = true
+	if !s.handleAddPeerMsg(state, whitelisted) {
+		t.Fatal("a whitelisted peer was refused")
 	}
 }
 
@@ -1199,8 +1263,8 @@ func TestOnRejectLogsAtDebug(t *testing.T) {
 
 // TestMisbehavingAddsBanScore ensures the sync manager's report of a peer that
 // sent an invalid transaction or block adds the score to the peer's lasting
-// ban score, as BCHN's Misbehaving does: bchd bans above --banthreshold, so a
-// score of 100 does not ban the peer at the default threshold and a further
+// ban score, as BCHN's Misbehaving does: a score that reaches --banthreshold
+// bans the peer, so 99 does not at the default threshold and a further
 // report does.  A persistent peer, a whitelisted one and any peer with
 // --nobanning are spared, as BCHN discourages no peer with noban or one it
 // connected to by hand.
@@ -1254,26 +1318,26 @@ func TestMisbehavingAddsBanScore(t *testing.T) {
 	// once the score is seen, so the config can be changed below.
 	s.Misbehaving(normal.Peer, 10, "bad-txns-vin-empty")
 	scoreBecomes(normal, 10)
-	s.punishPeer(normal.Peer, 90, "bad-txns-vin-empty")
-	scoreBecomes(normal, 100)
+	s.punishPeer(normal.Peer, 89, "bad-txns-vin-empty")
+	scoreBecomes(normal, 99)
 	if score := normal.banScore.String(); !strings.HasPrefix(score,
-		"persistent 100 + transient 0 ") {
+		"persistent 99 + transient 0 ") {
 
-		t.Fatalf("ban score %s, want a lasting 100", score)
+		t.Fatalf("ban score %s, want a lasting 99", score)
 	}
 	select {
 	case sp := <-s.banPeers:
-		t.Fatalf("%s banned at a ban score of 100", sp)
+		t.Fatalf("%s banned at a ban score of 99", sp)
 	default:
 	}
-	s.punishPeer(normal.Peer, 100, "bad-txnmrklroot")
+	s.punishPeer(normal.Peer, 1, "bad-txns-vin-empty")
 	select {
 	case sp := <-s.banPeers:
 		if sp != normal {
 			t.Fatalf("banned %s, want %s", sp, normal)
 		}
 	default:
-		t.Fatal("peer not banned at a ban score of 200")
+		t.Fatal("peer not banned at a ban score of 100")
 	}
 
 	s.punishPeer(persistent.Peer, 100, "bad-txnmrklroot")
