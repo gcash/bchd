@@ -14,8 +14,153 @@ import (
 )
 
 // The functions below are the buffer-based sighash code from before the
-// preimage was streamed into sha256.  The tests check the streamed code
-// against them.
+// preimage was streamed into sha256, with the script unparsing and the
+// transaction serialization it used.  The tests check the streamed code
+// against them.  They only use encoding/binary and bytes for the encoding, so
+// they don't change with the code they are compared to.
+
+// refWriteVarInt writes val to b as a bitcoin variable length integer.
+func refWriteVarInt(b *bytes.Buffer, val uint64) {
+	var buf [8]byte
+	switch {
+	case val < 0xfd:
+		b.WriteByte(uint8(val))
+	case val <= 0xffff:
+		b.WriteByte(0xfd)
+		binary.LittleEndian.PutUint16(buf[:], uint16(val))
+		b.Write(buf[:2])
+	case val <= 0xffffffff:
+		b.WriteByte(0xfe)
+		binary.LittleEndian.PutUint32(buf[:], uint32(val))
+		b.Write(buf[:4])
+	default:
+		b.WriteByte(0xff)
+		binary.LittleEndian.PutUint64(buf[:], val)
+		b.Write(buf[:])
+	}
+}
+
+// refTokenDataBuffer returns the serialized token prefix.
+func refTokenDataBuffer(tokenData *wire.TokenData) bytes.Buffer {
+	var buf bytes.Buffer
+	buf.WriteByte(0xef)
+	buf.Write(tokenData.CategoryID[:])
+	buf.WriteByte(tokenData.BitField)
+	if tokenData.HasCommitmentLength() {
+		refWriteVarInt(&buf, uint64(len(tokenData.Commitment)))
+		buf.Write(tokenData.Commitment[:])
+	}
+	if tokenData.HasAmount() {
+		refWriteVarInt(&buf, tokenData.Amount)
+	}
+	return buf
+}
+
+// refWriteTxOut writes the output to b as WriteTxOut serializes it.
+func refWriteTxOut(b *bytes.Buffer, to *wire.TxOut) {
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], uint64(to.Value))
+	b.Write(buf[:])
+	script := to.PkScript
+	if !to.TokenData.IsEmpty() {
+		tb := refTokenDataBuffer(&to.TokenData)
+		tb.Write(to.PkScript)
+		script = tb.Bytes()
+	}
+	refWriteVarInt(b, uint64(len(script)))
+	b.Write(script)
+}
+
+// refSerializeTx writes the transaction to b as Serialize does.
+func refSerializeTx(b *bytes.Buffer, msg *wire.MsgTx) {
+	var buf [4]byte
+	binary.LittleEndian.PutUint32(buf[:], uint32(msg.Version))
+	b.Write(buf[:])
+	refWriteVarInt(b, uint64(len(msg.TxIn)))
+	for _, ti := range msg.TxIn {
+		b.Write(ti.PreviousOutPoint.Hash[:])
+		binary.LittleEndian.PutUint32(buf[:], ti.PreviousOutPoint.Index)
+		b.Write(buf[:])
+		refWriteVarInt(b, uint64(len(ti.SignatureScript)))
+		b.Write(ti.SignatureScript)
+		binary.LittleEndian.PutUint32(buf[:], ti.Sequence)
+		b.Write(buf[:])
+	}
+	refWriteVarInt(b, uint64(len(msg.TxOut)))
+	for _, to := range msg.TxOut {
+		refWriteTxOut(b, to)
+	}
+	binary.LittleEndian.PutUint32(buf[:], msg.LockTime)
+	b.Write(buf[:])
+}
+
+// refOpcodeBytes returns any data associated with the opcode encoded as it
+// would be in a script.
+func refOpcodeBytes(pop *parsedOpcode) ([]byte, error) {
+	var retbytes []byte
+	if pop.opcode.length > 0 {
+		retbytes = make([]byte, 1, pop.opcode.length)
+	} else {
+		retbytes = make([]byte, 1, 1+len(pop.data)-
+			pop.opcode.length)
+	}
+
+	retbytes[0] = pop.opcode.value
+	if pop.opcode.length == 1 {
+		if len(pop.data) != 0 {
+			str := fmt.Sprintf("internal consistency error - "+
+				"parsed opcode %s has data length %d when %d "+
+				"was expected", pop.opcode.name, len(pop.data),
+				0)
+			return nil, scriptError(ErrInternal, str)
+		}
+		return retbytes, nil
+	}
+	nbytes := pop.opcode.length
+	if pop.opcode.length < 0 {
+		l := len(pop.data)
+		switch pop.opcode.length {
+		case -1:
+			retbytes = append(retbytes, byte(l))
+			nbytes = int(retbytes[1]) + len(retbytes)
+		case -2:
+			retbytes = append(retbytes, byte(l&0xff),
+				byte(l>>8&0xff))
+			nbytes = int(binary.LittleEndian.Uint16(retbytes[1:])) +
+				len(retbytes)
+		case -4:
+			retbytes = append(retbytes, byte(l&0xff),
+				byte((l>>8)&0xff), byte((l>>16)&0xff),
+				byte((l>>24)&0xff))
+			nbytes = int(binary.LittleEndian.Uint32(retbytes[1:])) +
+				len(retbytes)
+		}
+	}
+
+	retbytes = append(retbytes, pop.data...)
+
+	if len(retbytes) != nbytes {
+		str := fmt.Sprintf("internal consistency error - "+
+			"parsed opcode %s has data length %d when %d was "+
+			"expected", pop.opcode.name, len(retbytes), nbytes)
+		return nil, scriptError(ErrInternal, str)
+	}
+
+	return retbytes, nil
+}
+
+// refUnparseScript returns the parsed opcodes as a script.
+func refUnparseScript(pops []parsedOpcode) ([]byte, error) {
+	script := make([]byte, 0, len(pops))
+	for i := range pops {
+		b, err := refOpcodeBytes(&pops[i])
+		if err != nil {
+			return nil, err
+		}
+		script = append(script, b...)
+	}
+	return script, nil
+}
 
 // refCalcHashPrevOuts calculates a single hash of all the previous outputs
 // (txid:index) referenced within the passed transaction. This calculated hash
@@ -47,7 +192,7 @@ func refCalcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 		if utxoCache != nil {
 			utxo, err := utxoCache.GetEntry(i)
 			if err == nil {
-				_ = wire.WriteTxOut(&b, 0, 0, &utxo)
+				refWriteTxOut(&b, &utxo)
 			} else {
 				log.Debugf("%v", err)
 			}
@@ -87,7 +232,7 @@ func refCalcHashSequence(tx *wire.MsgTx) chainhash.Hash {
 func refCalcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 	var b bytes.Buffer
 	for _, out := range tx.TxOut {
-		_ = wire.WriteTxOut(&b, 0, 0, out)
+		refWriteTxOut(&b, out)
 	}
 
 	return chainhash.DoubleHashH(b.Bytes())
@@ -170,7 +315,7 @@ func refCalcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx 
 		if i == idx {
 			// UnparseScript cannot fail here because removeOpcode
 			// above only returns a valid script.
-			sigScript, _ := unparseScript(script)
+			sigScript, _ := refUnparseScript(script)
 			txCopy.TxIn[idx].SignatureScript = sigScript
 		} else {
 			txCopy.TxIn[i].SignatureScript = nil
@@ -219,8 +364,8 @@ func refCalcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx 
 	// The final hash is the double sha256 of both the serialized modified
 	// transaction and the hash type (encoded as a 4-byte little-endian
 	// value) appended.
-	wbuf := bytes.NewBuffer(make([]byte, 0, txCopy.SerializeSize()+4))
-	_ = txCopy.Serialize(wbuf)
+	wbuf := new(bytes.Buffer)
+	refSerializeTx(wbuf, &txCopy)
 	_ = binary.Write(wbuf, binary.LittleEndian, hashType)
 
 	totalBytesHashedlength += wbuf.Len()
@@ -308,9 +453,10 @@ func refCalcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes
 		sigHash.Write(sigHashes.tokenDataList[idx])
 	}
 
-	scriptBytes, _ := unparseScript(subScript)
+	scriptBytes, _ := refUnparseScript(subScript)
 
-	_ = wire.WriteVarBytes(&sigHash, 0, scriptBytes)
+	refWriteVarInt(&sigHash, uint64(len(scriptBytes)))
+	sigHash.Write(scriptBytes)
 
 	// Next, add the input amount, and sequence number of the input being
 	// signed.
@@ -330,7 +476,7 @@ func refCalcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes
 		sigHash.Write(sigHashes.HashOutputs[:])
 	} else if hashType&sigHashMask == SigHashSingle && idx < len(tx.TxOut) {
 		var b bytes.Buffer
-		_ = wire.WriteTxOut(&b, 0, 0, tx.TxOut[idx])
+		refWriteTxOut(&b, tx.TxOut[idx])
 		sigHash.Write(chainhash.DoubleHashB(b.Bytes()))
 	} else {
 		sigHash.Write(zeroHash[:])
