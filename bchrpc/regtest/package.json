@@ -28,6 +28,8 @@
   "overrides": {
     "bitcore-lib-cash": {
       "bn.js": "^4.12.5"
-    }
+    },
+    "glob": "^14.0.3",
+    "minimatch": "^11.0.4"
   }
 }
