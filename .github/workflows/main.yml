@@ -29,6 +29,19 @@ jobs:
         run: go build && go install . ./cmd/...
         env:
           GO111MODULE: on
+  test-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Test with the race detector
+        run: go test -race -timeout 100m ./...
+        env:
+          GO111MODULE: on
   test-386:
     runs-on: ubuntu-latest
     steps:
