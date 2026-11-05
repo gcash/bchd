@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"reflect"
 	"runtime"
 	"slices"
 	"testing"
@@ -997,6 +998,24 @@ func TestUtxoCacheMemoryAccounting(t *testing.T) {
 			return NewUtxoEntry(txOut, 1, false)
 		})
 	})
+
+	// Token entries read from the database, which stores the token data
+	// in front of the script.
+	t.Run("loaded", func(t *testing.T) {
+		src := NewUtxoEntry(wire.NewTxOut(1000, make([]byte, 25), token), 1, false)
+		src.tokenData.Commitment = make([]byte, 40)
+		serialized, err := serializeUtxoEntry(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkUtxoCacheMemory(t, n, func(int) *UtxoEntry {
+			entry, err := DeserializeUtxoEntry(serialized)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return entry
+		})
+	})
 }
 
 // checkUtxoCacheMemory adds n entries to a cache and checks its memory usage
@@ -1020,6 +1039,88 @@ func checkUtxoCacheMemory(t *testing.T, n int, newEntry func(i int) *UtxoEntry) 
 		t.Fatalf("cache counts %d bytes, heap grew %d", counted, heap)
 	}
 	runtime.KeepAlive(cache)
+}
+
+// TestDeserializeTokenUtxoScript checks that token entries read back keep
+// their script and token data, and that the script doesn't share the
+// serialized buffer.
+func TestDeserializeTokenUtxoScript(t *testing.T) {
+	var category [32]byte
+	category[0] = 1
+	token := wire.TokenData{CategoryID: category, BitField: wire.HAS_NFT |
+		wire.HAS_COMMITMENT_LENGTH, Commitment: []byte{1, 2, 3}}
+	pkScript := hexToBytes("76a914ee8bd501094a7d5ca318da2506de35e1cb025ddc88ac")
+
+	prefix := token.TokenDataBuffer()
+	script := append(prefix.Bytes(), pkScript...)
+	serialized := make([]byte, 52, 52+len(script))
+	binary.LittleEndian.PutUint32(serialized[36:], 100)
+	binary.LittleEndian.PutUint64(serialized[40:], 1000)
+	binary.LittleEndian.PutUint32(serialized[48:], uint32(len(script)))
+	serialized = append(serialized, script...)
+
+	_, entry, err := deserializeUtxoCommitmentFormat(serialized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clear(serialized)
+	if !bytes.Equal(entry.PkScript(), pkScript) {
+		t.Fatalf("script %x, want %x", entry.PkScript(), pkScript)
+	}
+	if !reflect.DeepEqual(entry.tokenData, token) {
+		t.Fatalf("token data %v, want %v", entry.tokenData, token)
+	}
+
+	src := NewUtxoEntry(wire.NewTxOut(1000, pkScript, token), 100, false)
+	serialized, err = serializeUtxoEntry(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err = DeserializeUtxoEntry(serialized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(entry.PkScript(), pkScript) ||
+		!reflect.DeepEqual(entry.tokenData, token) {
+		t.Fatalf("got script %x, token data %v", entry.PkScript(),
+			entry.tokenData)
+	}
+}
+
+// TestDisconnectTokenUtxoScript checks that a token output restored from the
+// spend journal keeps its script, and that the script doesn't share the
+// journal's buffer.
+func TestDisconnectTokenUtxoScript(t *testing.T) {
+	var category [32]byte
+	category[0] = 1
+	token := wire.TokenData{CategoryID: category, BitField: wire.HAS_NFT |
+		wire.HAS_COMMITMENT_LENGTH, Commitment: []byte{1, 2, 3}}
+	pkScript := hexToBytes("76a914ee8bd501094a7d5ca318da2506de35e1cb025ddc88ac")
+	prefix := token.TokenDataBuffer()
+	stxos := []SpentTxOut{{Amount: 1000,
+		PkScript: append(prefix.Bytes(), pkScript...), Height: 100}}
+
+	coinbase := wire.NewMsgTx(1)
+	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{},
+		math.MaxUint32), nil))
+	coinbase.AddTxOut(wire.NewTxOut(1000, opTrueScript, wire.TokenData{}))
+	spent := wire.OutPoint{Hash: chainhash.Hash{1}}
+	spend := wire.NewMsgTx(1)
+	spend.AddTxIn(wire.NewTxIn(&spent, nil))
+	spend.AddTxOut(wire.NewTxOut(900, opTrueScript, wire.TokenData{}))
+	block := bchutil.NewBlock(&wire.MsgBlock{
+		Transactions: []*wire.MsgTx{coinbase, spend}})
+
+	view := NewUtxoViewpoint()
+	if err := disconnectTransactions(view, block, stxos); err != nil {
+		t.Fatal(err)
+	}
+	clear(stxos[0].PkScript)
+	entry := view.LookupEntry(spent)
+	if entry == nil || !bytes.Equal(entry.PkScript(), pkScript) ||
+		!reflect.DeepEqual(entry.tokenData, token) {
+		t.Fatalf("restored entry %v, want script %x", entry, pkScript)
+	}
 }
 
 // TestAllocSize checks allocSize against some of Go's size classes.

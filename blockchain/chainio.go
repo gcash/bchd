@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 	"time"
 
@@ -743,8 +744,12 @@ func DeserializeUtxoEntry(serialized []byte) (*UtxoEntry, error) {
 			"utxo: %v", err))
 	}
 
-	// Token data is stored in front of the script.
+	// Token data is stored in front of the script.  Copy the script when
+	// it is split off so the entry doesn't keep the prefix.
 	tokenData, pkScript := wire.SplitPkScript(pkScript)
+	if !tokenData.IsEmpty() {
+		pkScript = slices.Clone(pkScript)
+	}
 	entry := &UtxoEntry{
 		amount:      int64(amount),
 		pkScript:    pkScript,
@@ -778,16 +783,16 @@ func deserializeUtxoCommitmentFormat(serialized []byte) (*wire.OutPoint, *UtxoEn
 
 	value := binary.LittleEndian.Uint64(serialized[40:48])
 
-	pkScript := serialized[52:]
-
+	// Copy the script so the entry doesn't keep the serialized utxo.
+	tokenData, pkScript := wire.SplitPkScript(serialized[52:])
 	op := wire.NewOutPoint(txid, index)
 	entry := &UtxoEntry{
 		amount:      int64(value),
 		blockHeight: int32(height),
-		pkScript:    pkScript,
+		pkScript:    slices.Clone(pkScript),
+		tokenData:   tokenData,
 		packedFlags: 0,
 	}
-	entry.tokenData, entry.pkScript = wire.SplitPkScript(pkScript)
 	if coinbaseFlag > 0 {
 		entry.packedFlags |= tfCoinBase
 	}

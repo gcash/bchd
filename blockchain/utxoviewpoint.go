@@ -6,6 +6,7 @@ package blockchain
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/txscript"
@@ -358,10 +359,9 @@ func disconnectTransactions(view utxoView, block *bchutil.Block, stxos []SpentTx
 			stxoIdx--
 
 			// The spend journal stores token data in front of the
-			// script.
-			pkScript := make([]byte, len(stxo.PkScript))
-			copy(pkScript, stxo.PkScript)
-			tokenData, pkScript := wire.SplitPkScript(pkScript)
+			// script.  Copy only the script.
+			tokenData, pkScript := wire.SplitPkScript(stxo.PkScript)
+			pkScript = slices.Clone(pkScript)
 
 			entry := &UtxoEntry{
 				amount:      stxo.Amount,
