@@ -5,8 +5,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/gcash/bchlog"
 )
 
 // TestParseBanTarget ensures addresses and subnets are read as BCHN reads
@@ -304,5 +308,103 @@ func TestBanListSweep(t *testing.T) {
 	}
 	if _, ok := b.subnets["192.168.2.0/24"]; !ok {
 		t.Fatalf("the subnet in force was forgotten: %+v", b.subnets)
+	}
+}
+
+// TestBanListFile ensures manual bans outlive the process, with their times,
+// and that the bans of a ban score, bans that ended and lifted bans don't.
+func TestBanListFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), banListFilename)
+	now := time.Unix(1800000000, 0)
+	hour := now.Add(time.Hour)
+
+	b := loadBanList(file, now)
+	b.banPeer("10.0.0.1", now, hour)
+	b.add(mustBanTarget(t, "10.0.0.2"), now, hour)
+	b.add(mustBanTarget(t, "10.0.0.3"), now, hour)
+	b.add(mustBanTarget(t, "2001:db8::/32"), now, hour)
+	b.add(mustBanTarget(t, "192.168.1.0/24"), now, now.Add(time.Minute))
+	b.remove(mustBanTarget(t, "10.0.0.3"))
+
+	later := now.Add(2 * time.Minute)
+	entries := loadBanList(file, later).list(later)
+	if len(entries) != 2 {
+		t.Fatalf("loaded: %+v", entries)
+	}
+	want := []string{"10.0.0.2/32", "2001:db8::/32"}
+	for i, entry := range entries {
+		if entry.target.String() != want[i] || !entry.manual ||
+			!entry.created.Equal(now) || !entry.until.Equal(hour) {
+
+			t.Fatalf("loaded: %+v", entries)
+		}
+	}
+
+	// A subnet from the file works as one added here.
+	b = loadBanList(file, later)
+	if _, banned := b.bannedUntil("2001:db8:1::1", later); !banned {
+		t.Fatal("the subnet from the file isn't banned")
+	}
+
+	// Clearing the automatic bans leaves the file alone, and clearing the
+	// manual ones empties it.
+	b.clear(false, true)
+	if n := len(loadBanList(file, later).list(later)); n != 2 {
+		t.Fatalf("%d bans after clearing the automatic ones", n)
+	}
+	b.clear(true, false)
+	if n := len(loadBanList(file, later).list(later)); n != 0 {
+		t.Fatalf("%d bans after clearing the manual ones", n)
+	}
+}
+
+// TestBanListManualExtended ensures a manual ban that a ban score extends is
+// saved with its new end.
+func TestBanListManualExtended(t *testing.T) {
+	file := filepath.Join(t.TempDir(), banListFilename)
+	now := time.Unix(1800000000, 0)
+	b := loadBanList(file, now)
+	b.add(mustBanTarget(t, "10.0.0.1"), now, now.Add(time.Hour))
+	b.banPeer("10.0.0.1", now, now.Add(2*time.Hour))
+	until, banned := loadBanList(file, now).bannedUntil("10.0.0.1", now)
+	if !banned || !until.Equal(now.Add(2*time.Hour)) {
+		t.Fatalf("banned %v until %v", banned, until)
+	}
+}
+
+// TestBanListBadFile ensures a damaged file leaves an empty list and an entry
+// that can't be read leaves the others, and that no file is no problem.
+func TestBanListBadFile(t *testing.T) {
+	oldLevel := srvrLog.Level()
+	srvrLog.SetLevel(bchlog.LevelOff)
+	t.Cleanup(func() { srvrLog.SetLevel(oldLevel) })
+
+	file := filepath.Join(t.TempDir(), banListFilename)
+	now := time.Unix(1800000000, 0)
+	if n := len(loadBanList(file, now).list(now)); n != 0 {
+		t.Fatalf("%d bans from no file", n)
+	}
+	if err := os.WriteFile(file, []byte("{not json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(loadBanList(file, now).list(now)); n != 0 {
+		t.Fatalf("%d bans from a damaged file", n)
+	}
+	data := `[{"address":"nonsense","created":1,"until":1900000000},
+		{"address":"10.0.0.1/32","created":1,"until":1900000000}]`
+	if err := os.WriteFile(file, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(loadBanList(file, now).list(now)); n != 1 {
+		t.Fatalf("%d bans from a file with one good entry", n)
+	}
+
+	// Reading the file doesn't write it.
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != data {
+		t.Fatalf("the file was written: %s", got)
 	}
 }

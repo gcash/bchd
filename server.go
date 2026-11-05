@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sort"
@@ -203,6 +204,9 @@ type maybeAddDirectRelayPeerMsg struct {
 	response chan bool
 	peer     *serverPeer
 }
+
+// banListFilename is the file in the data directory that keeps manual bans.
+const banListFilename = "banlist.json"
 
 // peerState maintains state of inbound, persistent, outbound peers as well
 // as outbound groups.
@@ -4295,7 +4299,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		agentBlacklist:       agentBlacklist,
 		agentWhitelist:       agentWhitelist,
 		inboundHosts:         make(map[string]int),
-		bans:                 newBanList(),
+		bans:                 loadBanList(filepath.Join(cfg.DataDir, banListFilename), time.Now()),
 	}
 
 	// Create the transaction and address indexes if needed.

@@ -6,7 +6,9 @@ package main
 
 import (
 	"encoding/base32"
+	"encoding/json"
 	"net"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,18 +118,122 @@ type banEntry struct {
 // a ban by a peer's ban score is always of a host, and subnets, which only
 // come from setban and are few, are the only bans that take a scan to find.
 // It is safe for concurrent access.
+//
+// Manual bans are kept in file, when it is set, and those of a peer's ban score
+// end with the process, as BCHN's discouragements do.
 type banList struct {
 	mtx     sync.Mutex
 	hosts   map[string]banEntry
 	subnets map[string]banEntry
+	file    string
 }
 
-// newBanList returns an empty ban list.
+// newBanList returns an empty ban list that keeps nothing on disk.
 func newBanList() *banList {
 	return &banList{
 		hosts:   make(map[string]banEntry),
 		subnets: make(map[string]banEntry),
 	}
+}
+
+// savedBan is a manual ban in the file of a ban list, with its times in
+// seconds since the Unix epoch.
+type savedBan struct {
+	Address string `json:"address"`
+	Created int64  `json:"created"`
+	Until   int64  `json:"until"`
+}
+
+// loadBanList returns a ban list that keeps its manual bans in file, with those
+// there that haven't ended.  A file that can't be read is logged and starts an
+// empty list, as a damaged list of bans is no reason not to run.
+func loadBanList(file string, now time.Time) *banList {
+	b := newBanList()
+
+	// The file is set last, so that adding its bans doesn't write it.
+	defer func() { b.file = file }()
+	data, err := os.ReadFile(file)
+	if os.IsNotExist(err) {
+		return b
+	}
+	var saved []savedBan
+	if err == nil {
+		err = json.Unmarshal(data, &saved)
+	}
+	if err != nil {
+		srvrLog.Errorf("Failed to read the bans in %s: %v", file, err)
+		return b
+	}
+	for _, ban := range saved {
+		target, ok := parseBanTarget(ban.Address)
+		if !ok {
+			srvrLog.Warnf("Skipping the invalid ban %q in %s", ban.Address, file)
+			continue
+		}
+		until := time.Unix(ban.Until, 0)
+		if now.Before(until) {
+			b.addLocked(banEntry{
+				target:  target,
+				created: time.Unix(ban.Created, 0),
+				until:   until,
+				manual:  true,
+			})
+		}
+	}
+	return b
+}
+
+// saveLocked writes the manual bans to the file, through a synced temporary
+// file so that a crash leaves the old list whole.  A failure is only logged, as the bans
+// stay in force until the process ends.  The file is small, and it is written
+// only when a manual ban changes, so the mutex is held through the write to
+// keep the writes in order.
+func (b *banList) saveLocked() {
+	if b.file == "" {
+		return
+	}
+	saved := []savedBan{}
+	for _, table := range []map[string]banEntry{b.hosts, b.subnets} {
+		for _, entry := range table {
+			if entry.manual {
+				saved = append(saved, savedBan{
+					Address: entry.target.String(),
+					Created: entry.created.Unix(),
+					Until:   entry.until.Unix(),
+				})
+			}
+		}
+	}
+	sort.Slice(saved, func(i, j int) bool {
+		return saved[i].Address < saved[j].Address
+	})
+	data, err := json.MarshalIndent(saved, "", "  ")
+	if err == nil {
+		err = replaceBanFile(b.file, data)
+	}
+	if err != nil {
+		srvrLog.Errorf("Failed to save the bans in %s: %v", b.file, err)
+	}
+}
+
+// replaceBanFile replaces file with data through a temporary file.
+func replaceBanFile(file string, data []byte) error {
+	tmp := file + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp, file)
 }
 
 // bannedUntil returns when the ban in force on host at now ends, the one of
@@ -186,6 +292,9 @@ func (b *banList) addLocked(entry banEntry) {
 	}
 	entry.manual = entry.manual || (ok && old.manual && entry.created.Before(old.until))
 	table[key] = entry
+	if entry.manual {
+		b.saveLocked()
+	}
 }
 
 // banPeer bans host from now until until, for its ban score.
@@ -227,10 +336,14 @@ func (b *banList) remove(target banTarget) bool {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 	table, key := b.tableLocked(target)
-	if _, ok := table[key]; !ok {
+	entry, ok := table[key]
+	if !ok {
 		return false
 	}
 	delete(table, key)
+	if entry.manual {
+		b.saveLocked()
+	}
 	return true
 }
 
@@ -244,6 +357,9 @@ func (b *banList) clear(manual, automatic bool) {
 				delete(table, key)
 			}
 		}
+	}
+	if manual {
+		b.saveLocked()
 	}
 }
 
@@ -265,7 +381,8 @@ func (b *banList) list(now time.Time) []banEntry {
 	return entries
 }
 
-// sweep forgets the bans that ended by now.
+// sweep forgets the bans that ended by now.  The file keeps those until it is
+// next written, as they are left out when it is read.
 func (b *banList) sweep(now time.Time) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
