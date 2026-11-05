@@ -712,3 +712,91 @@ func TestReconsiderKeepsNode(t *testing.T) {
 		t.Error("block 4 is invalid")
 	}
 }
+
+// TestReconsiderRestoresChain ensures that reconsidering a block takes back
+// the invalid marks of the blocks built on it and returns to the best chain
+// they make, so that the node follows the chain again.
+func TestReconsiderRestoresChain(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+	if err := chain.InvalidateBlock(blocks[3].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *blocks[2].Hash() {
+		t.Fatalf("tip %v, want block 2", tip.hash)
+	}
+	if err := chain.ReconsiderBlock(blocks[3].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if tip := chain.bestChain.Tip(); tip.hash != *blocks[5].Hash() {
+		t.Fatalf("tip %v at height %d, want block 5", tip.hash, tip.height)
+	}
+	for h := 3; h <= 5; h++ {
+		node := chain.index.LookupNode(blocks[h].Hash())
+		if chain.index.NodeStatus(node).KnownInvalid() {
+			t.Errorf("block %d is still invalid", h)
+		}
+	}
+	next := procTestBlock(t, blocks[5].MsgBlock(), 5,
+		CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+	if _, _, err := chain.ProcessBlock(next, BFNone); err != nil {
+		t.Fatalf("the next block: %v", err)
+	}
+}
+
+// TestReconsiderDescendant ensures that reconsidering a block reaches back to
+// the invalidated block behind it, also on a side chain, whose blocks
+// invalidating that block marks.
+func TestReconsiderDescendant(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+
+	// A side chain from block 2 with less work than the main chain.
+	prev := blocks[2]
+	var side []*bchutil.Block
+	for h := int32(3); h <= 4; h++ {
+		block := procTestBlock(t, prev.MsgBlock(), h-1,
+			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatalf("side chain block %d: %v", h, err)
+		}
+		side = append(side, block)
+		prev = block
+	}
+	if err := chain.InvalidateBlock(side[0].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	node := chain.index.LookupNode(side[1].Hash())
+	if !chain.index.NodeStatus(node).KnownInvalid() {
+		t.Fatal("the block on the invalidated side block isn't marked")
+	}
+	if err := chain.ReconsiderBlock(side[1].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	for i, block := range side {
+		node := chain.index.LookupNode(block.Hash())
+		if chain.index.NodeStatus(node).KnownInvalid() {
+			t.Errorf("side block %d is still invalid", i)
+		}
+	}
+}
+
+// TestReconsiderValidAndInvalid ensures that a block that was valid once and
+// was then marked invalid can be reconsidered.
+func TestReconsiderValidAndInvalid(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	node := chain.index.LookupNode(blocks[5].Hash())
+	if !chain.index.NodeStatus(node).KnownValid() {
+		t.Fatal("block 5 is not valid")
+	}
+	if err := chain.InvalidateBlock(blocks[4].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	chain.index.SetStatusFlags(node, statusValid)
+	if err := chain.ReconsiderBlock(blocks[5].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if chain.index.NodeStatus(node).KnownInvalid() {
+		t.Fatal("block 5 is still invalid")
+	}
+}

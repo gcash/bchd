@@ -34,6 +34,7 @@ This release keeps the websocket notifications from missing a transaction that s
 - A panic in an RPC handler, which the RPC server recovers from, no longer can leave the block index, the best chain, the UTXO cache, the mempool or the chain lock held, which would freeze the node.
 - `reconsiderblock` and other calls that change the chain no longer can crash the node as the sync peer changes, and fast sync's headers no longer race with the readers of the best state.
 - `reconsiderblock` keeps the block's entry in the block index rather than replacing it, so that a side chain built on the block, which the call doesn't touch, can't later leave the main chain and the index with different entries for it.
+- `invalidateblock` marks every block built on the block, and `reconsiderblock` clears those marks and returns to the best chain they make. It left them invalid, so that after invalidating and reconsidering a block the node stayed behind, refused the next block, and would have banned the peers that announced it.
 
 ### Other
 

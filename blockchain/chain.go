@@ -2061,8 +2061,7 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
-	// A block off the main chain takes nothing with it: the blocks that
-	// build on it are refused for their invalid ancestor.
+	// A block off the main chain takes nothing else off it.
 	if b.bestChain.Contains(node) {
 		detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
 
@@ -2070,13 +2069,12 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 		if err != nil {
 			return err
 		}
+	}
 
-		for i, e := 0, detachNodes.Front(); e != nil; i, e = i+1, e.Next() {
-			n := e.Value.(*blockNode)
-
-			b.index.SetStatusFlags(n, statusInvalidAncestor)
-			b.index.UnsetStatusFlags(n, statusValid)
-		}
+	// Every block built on it has an invalid ancestor now, on any chain.
+	for _, n := range b.index.descendants(node) {
+		b.index.SetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValid)
 	}
 
 	if writeErr := b.index.flushToDB(); writeErr != nil {
@@ -2106,17 +2104,18 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
+	// No need to reconsider, it is already valid.  A block can have been
+	// valid before something marked it invalid.
+	if status := b.index.NodeStatus(node); status.KnownValid() && !status.KnownInvalid() {
+		err := fmt.Errorf("block %s is already valid", hash)
+		return err
+	}
+
 	// A block before the finalized block can only be reconsidered once
 	// finalization moves back to where its chain forks.
 	b.chainLock.Lock()
 	b.unfinalizeTo(node)
 	b.chainLock.Unlock()
-
-	// No need to reconsider, it is already valid.
-	if node.status.KnownValid() {
-		err := fmt.Errorf("block %s is already valid", hash)
-		return err
-	}
 
 	// Keep a reference to the first node in the chain of invalid
 	// blocks so we can reprocess after status flags are updated.
@@ -2128,6 +2127,12 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		b.index.UnsetStatusFlags(n, statusValidateFailed)
 
 		firstNode = n
+	}
+
+	// The blocks built on it are no longer known to be invalid either.
+	for _, n := range b.index.descendants(node) {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
 	}
 
 	var blk *bchutil.Block
@@ -2147,11 +2152,49 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
+	// Processing the block connects at most that block, and the blocks
+	// built on it can make a better chain.
+	err = b.reorganizeToBest(b.index.descendants(firstNode))
+
 	if writeErr := b.index.flushToDB(); writeErr != nil {
 		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 	}
 
-	return nil
+	return err
+}
+
+// reorganizeToBest makes the candidate with the most work the tip of the main
+// chain, if it has more work than the tip, its data, and no invalid ancestor.
+// At equal work the first one wins.
+//
+// This function MUST be called with processLock held.
+func (b *BlockChain) reorganizeToBest(candidates []*blockNode) error {
+	b.chainLock.Lock()
+	defer b.chainLock.Unlock()
+
+	tip := b.bestChain.Tip()
+	best := tip
+	for _, n := range candidates {
+		status := b.index.NodeStatus(n)
+		if status.HaveData() && !status.KnownInvalid() &&
+			n.workSum.Cmp(best.workSum) > 0 {
+
+			best = n
+		}
+	}
+	if best == tip {
+		return nil
+	}
+
+	detachNodes, attachNodes := b.getReorganizeNodes(best)
+	if attachNodes.Len() == 0 {
+		return nil
+	}
+	pruned, err := b.prunedNode(attachNodes)
+	if err != nil || pruned != nil {
+		return err
+	}
+	return b.reorganizeChain(detachNodes, attachNodes)
 }
 
 // Prune deletes the block data and spend journals for all blocks deeper than

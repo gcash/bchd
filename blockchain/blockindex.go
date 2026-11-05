@@ -5,7 +5,10 @@
 package blockchain
 
 import (
+	"bytes"
+	"cmp"
 	"math/big"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -325,6 +328,38 @@ func (bi *blockIndex) AddNode(node *blockNode) {
 // This function is NOT safe for concurrent access.
 func (bi *blockIndex) addNode(node *blockNode) {
 	bi.index[node.hash] = node
+}
+
+// descendants returns the nodes of the index that build on node, lowest first
+// and, at a height, in the order they were received.  It reads every node of
+// the index.
+//
+// This function is safe for concurrent access.
+func (bi *blockIndex) descendants(node *blockNode) []*blockNode {
+	bi.RLock()
+	defer bi.RUnlock()
+
+	var above []*blockNode
+	for _, n := range bi.index {
+		if n.height > node.height {
+			above = append(above, n)
+		}
+	}
+	slices.SortFunc(above, func(a, b *blockNode) int {
+		return cmp.Or(cmp.Compare(a.height, b.height),
+			cmp.Compare(a.received, b.received),
+			bytes.Compare(a.hash[:], b.hash[:]))
+	})
+
+	found := map[*blockNode]struct{}{node: {}}
+	var descendants []*blockNode
+	for _, n := range above {
+		if _, ok := found[n.parent]; ok {
+			found[n] = struct{}{}
+			descendants = append(descendants, n)
+		}
+	}
+	return descendants
 }
 
 // NodeStatus provides concurrent-safe access to the status field of a node.
