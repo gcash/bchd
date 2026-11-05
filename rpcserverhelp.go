@@ -213,8 +213,8 @@ var helpDescsEnUS = map[string]string{
 		"once the publication's block is connected. Requires --bcmrindex.",
 	"getbcmridentity-authbase":         "The identity's authbase: a token's category ID, or any transaction of an authchain the index tracks",
 	"getbcmridentity-includeauthchain": "Also return the authchain's transactions, from the authbase, or from the link after the one given in after",
-	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it, or empty for the start",
-	"getbcmridentity-limit":            "The most links to return, up to 1000; an answer also holds no more after the link that takes its transactions to 1 MB",
+	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it, or empty for the start; a link a reorganization took off the authchain is an error",
+	"getbcmridentity-limit":            "The most links to return, from 1 to 1000; an answer also holds no more after the link that takes its transactions to 1 MB",
 
 	// GetBcmrIdentityResult help.
 	"getbcmridentityresult-authbase":             "The identity's authbase",
