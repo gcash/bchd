@@ -906,14 +906,19 @@ func (m *wsNotificationManager) notifyFilteredBlockConnected(clients map[chan st
 
 	// Search for relevant transactions for each client and save them
 	// serialized in hex encoding for the notification.
+	// The addresses of the block's outputs are the same for every client,
+	// so they are extracted once, for the first client with a filter.
 	subscribedTxs := make(map[chan struct{}][]string)
+	var addrs blockOutputAddrs
 	for quitChan, wsc := range clients {
 		wsc.Lock()
 		filter := wsc.filterData
 		wsc.Unlock()
 		if filter != nil {
-			subscribedTxs[quitChan] = rescanBlockFilter(filter, block,
-				m.server.cfg.ChainParams)
+			if addrs == nil {
+				addrs = newBlockOutputAddrs(block, m.server.cfg.ChainParams)
+			}
+			subscribedTxs[quitChan] = rescanBlockFilter(filter, block, addrs)
 		}
 	}
 	for quitChan, wsc := range clients {
@@ -926,7 +931,7 @@ func (m *wsNotificationManager) notifyFilteredBlockConnected(clients map[chan st
 		if err != nil {
 			rpcsLog.Errorf("Failed to marshal filtered block "+
 				"connected notification: %v", err)
-			return
+			continue
 		}
 		_ = wsc.QueueNotification(marshalledJSON)
 	}
@@ -2940,6 +2945,29 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 	}
 }
 
+// blockOutputAddrs holds the addresses of a block's outputs, by transaction
+// and then by output.
+type blockOutputAddrs [][][]bchutil.Address
+
+// newBlockOutputAddrs returns the addresses of the outputs of block.  An output
+// whose addresses can't be extracted has none.
+func newBlockOutputAddrs(block *bchutil.Block, params *chaincfg.Params) blockOutputAddrs {
+	txs := block.Transactions()
+	addrs := make(blockOutputAddrs, len(txs))
+	for i, tx := range txs {
+		outputs := tx.MsgTx().TxOut
+		addrs[i] = make([][]bchutil.Address, len(outputs))
+		for j, output := range outputs {
+			_, outputAddrs, _, err := txscript.ExtractPkScriptAddrs(
+				output.PkScript, params)
+			if err == nil {
+				addrs[i][j] = outputAddrs
+			}
+		}
+	}
+	return addrs
+}
+
 // rescanBlockFilter rescans a block for any relevant transactions for the
 // passed lookup keys. Any discovered transactions are returned hex encoded as
 // a string slice, parents first, as rescanBlock notifies them.  The outputs of
@@ -2948,7 +2976,7 @@ func rescanBlock(wsc *wsClient, lookups *rescanKeys, blk *bchutil.Block,
 // before the parent whose output it spends.
 //
 // NOTE: This extension is ported from github.com/decred/dcrd
-func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *chaincfg.Params) []string {
+func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, addrs blockOutputAddrs) []string {
 	// The unlock is deferred so a panic that runRPCHandler recovers cannot
 	// leave the filter locked, as the notification manager locks it for
 	// every transaction it checks.
@@ -2960,13 +2988,8 @@ func rescanBlockFilter(filter *wsClientFilter, block *bchutil.Block, params *cha
 
 	// Scan outputs.
 	for i, tx := range txs {
-		for j, output := range tx.MsgTx().TxOut {
-			_, addrs, _, err := txscript.ExtractPkScriptAddrs(
-				output.PkScript, params)
-			if err != nil {
-				continue
-			}
-			for _, a := range addrs {
+		for j, outputAddrs := range addrs[i] {
+			for _, a := range outputAddrs {
 				if !filter.existsAddress(a) {
 					continue
 				}
@@ -3103,7 +3126,8 @@ func handleRescanBlocks(wsc *wsClient, icmd interface{}) (interface{}, error) {
 		}
 		lastBlockHash = blockHashes[i]
 
-		transactions := rescanBlockFilter(filter, block, params)
+		transactions := rescanBlockFilter(filter, block,
+			newBlockOutputAddrs(block, params))
 		if len(transactions) != 0 {
 			discoveredData = append(discoveredData, btcjson.RescannedBlock{
 				Hash:         cmd.BlockHashes[i],

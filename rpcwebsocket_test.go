@@ -402,13 +402,14 @@ func TestLimitedUserStopNotify(t *testing.T) {
 func TestRescanBlockFilterPanicUnlocks(t *testing.T) {
 	filter := newWSClientFilter(nil, nil)
 	block := bchutil.NewBlock(&wire.MsgBlock{Transactions: []*wire.MsgTx{nil}})
+	addrs := blockOutputAddrs{{}}
 	func() {
 		defer func() {
 			if recover() == nil {
 				t.Fatal("scanning a nil transaction did not panic")
 			}
 		}()
-		rescanBlockFilter(filter, block, &chaincfg.MainNetParams)
+		rescanBlockFilter(filter, block, addrs)
 	}()
 	if !filter.mu.TryLock() {
 		t.Fatal("filter left locked")
@@ -554,7 +555,7 @@ func TestRescanBlockFilterSpendBeforeParent(t *testing.T) {
 
 	filter := newWSClientFilter([]bchutil.Address{s.p2sh32Addr}, nil)
 	var got []string
-	for _, txHex := range rescanBlockFilter(filter, block, params) {
+	for _, txHex := range rescanBlockFilter(filter, block, newBlockOutputAddrs(block, params)) {
 		got = append(got, names[txHex])
 	}
 	if want := "parent child"; strings.Join(got, " ") != want {

@@ -10,6 +10,7 @@ This release keeps the websocket notifications from missing a transaction that s
 
 ### Performance
 
+- The `filteredblockconnected` notifications extract the addresses of a block's outputs once, not once for each client.
 - `getcfmempool` builds the filter of the mempool only when the mempool changed since it last built it, and serves that filter to every peer that asks in between. It built the filter for each request, which for a mempool of 50,000 transactions takes about a tenth of a second and 50 MB of short-lived memory.
 
 ### New options
