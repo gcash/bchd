@@ -205,13 +205,12 @@ type maybeAddDirectRelayPeerMsg struct {
 }
 
 // peerState maintains state of inbound, persistent, outbound peers as well
-// as banned peers and outbound groups.
+// as outbound groups.
 type peerState struct {
 	inboundPeers     map[int32]*serverPeer
 	outboundPeers    map[int32]*serverPeer
 	persistentPeers  map[int32]*serverPeer
 	directRelayPeers map[int32]*serverPeer
-	banned           map[string]time.Time
 	outboundGroups   map[string]int
 	connectionCount  map[string]int
 }
@@ -360,18 +359,16 @@ type server struct {
 	// whitelisting will be applied if the list is empty or nil.
 	agentWhitelist []string
 
-	// The following fields apply connection limits and bans to inbound
-	// connections when they are accepted.  They count each admitted
-	// inbound connection until it disconnects, including connections
-	// still in the handshake, and are protected by inboundMtx.
+	// The following fields apply connection limits to inbound connections
+	// when they are accepted.  They count each admitted inbound connection
+	// until it disconnects, including connections still in the handshake,
+	// and are protected by inboundMtx.
 	inboundMtx   sync.Mutex
 	inboundHosts map[string]int
 	inboundTotal int
 
-	// inboundBans mirrors the banned map of the peerHandler's peerState
-	// so bans can be checked when a connection is accepted.  As there, an
-	// entry is only dropped when its host reconnects after the ban ends.
-	inboundBans map[string]time.Time
+	// bans holds the banned hosts and subnets.
+	bans *banList
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -2841,23 +2838,22 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		return false
 	}
 
-	// Disconnect banned peers.
+	// Disconnect banned peers.  As in BCHN, a ban doesn't apply to a peer
+	// the user chose: a persistent one, which would otherwise be dialed
+	// again and again, or a whitelisted one.
 	host, _, err := net.SplitHostPort(sp.Addr())
 	if err != nil {
 		srvrLog.Debugf("can't split hostport %v", err)
 		sp.Disconnect()
 		return false
 	}
-	if banEnd, ok := state.banned[host]; ok {
-		if time.Now().Before(banEnd) {
-			srvrLog.Debugf("Peer %s is banned for another %v - disconnecting",
-				host, time.Until(banEnd))
-			sp.Disconnect()
-			return false
-		}
+	if banEnd, banned := s.bans.bannedUntil(host, time.Now()); banned &&
+		!sp.persistent && !sp.isWhitelisted {
 
-		srvrLog.Infof("Peer %s is no longer banned", host)
-		delete(state.banned, host)
+		srvrLog.Debugf("Peer %s is banned for another %v - disconnecting",
+			host, time.Until(banEnd))
+		sp.Disconnect()
+		return false
 	}
 
 	// Limit max number of total peers per ip.  A local address is not
@@ -2999,7 +2995,7 @@ func (s *server) handleDonePeerMsg(state *peerState, sp *serverPeer) {
 
 // handleBanPeerMsg deals with banning peers.  It is invoked from the
 // peerHandler goroutine.
-func (s *server) handleBanPeerMsg(state *peerState, sp *serverPeer) {
+func (s *server) handleBanPeerMsg(sp *serverPeer) {
 	host, _, err := net.SplitHostPort(sp.Addr())
 	if err != nil {
 		srvrLog.Debugf("can't split ban peer %s %v", sp.Addr(), err)
@@ -3017,30 +3013,8 @@ func (s *server) handleBanPeerMsg(state *peerState, sp *serverPeer) {
 	}
 	srvrLog.Infof("Banned peer %s (%s) for %v", host, direction,
 		cfg.BanDuration)
-	banEnd := time.Now().Add(cfg.BanDuration)
-	state.banned[host] = banEnd
-	s.inboundMtx.Lock()
-	s.inboundBans[host] = banEnd
-	s.inboundMtx.Unlock()
-}
-
-// sweepBans forgets the bans that ended by now, from the peer handler's state
-// and from the bans checked when connections are accepted.  Otherwise a ban
-// is only dropped when its host connects again.  It is invoked from the
-// peerHandler goroutine.
-func (s *server) sweepBans(state *peerState, now time.Time) {
-	for host, banEnd := range state.banned {
-		if !now.Before(banEnd) {
-			delete(state.banned, host)
-		}
-	}
-	s.inboundMtx.Lock()
-	for host, banEnd := range s.inboundBans {
-		if !now.Before(banEnd) {
-			delete(s.inboundBans, host)
-		}
-	}
-	s.inboundMtx.Unlock()
+	now := time.Now()
+	s.bans.banPeer(host, now, now.Add(cfg.BanDuration))
 }
 
 // handleRelayInvMsg deals with relaying inventory to peers that are not already
@@ -3542,18 +3516,15 @@ func (s *server) admitInbound(addr net.Addr) func() {
 		return nil
 	}
 
+	if banEnd, banned := s.bans.bannedUntil(host, time.Now()); banned {
+		srvrLog.Debugf("Inbound connection from %s refused - banned for "+
+			"another %v", host, time.Until(banEnd))
+		return nil
+	}
+
 	s.inboundMtx.Lock()
 	defer s.inboundMtx.Unlock()
 
-	if banEnd, ok := s.inboundBans[host]; ok {
-		if time.Now().Before(banEnd) {
-			srvrLog.Debugf("Inbound connection from %s refused - "+
-				"banned for another %v", host,
-				time.Until(banEnd))
-			return nil
-		}
-		delete(s.inboundBans, host)
-	}
 	if !isLocalHost(host) && s.inboundHosts[host] >= cfg.MaxPeersPerIP {
 		srvrLog.Debugf("Inbound connection from %s refused - max peers "+
 			"per IP reached [%d]", host, cfg.MaxPeersPerIP)
@@ -3671,7 +3642,6 @@ func (s *server) peerHandler() {
 		persistentPeers:  make(map[int32]*serverPeer),
 		outboundPeers:    make(map[int32]*serverPeer),
 		directRelayPeers: make(map[int32]*serverPeer),
-		banned:           make(map[string]time.Time),
 		outboundGroups:   make(map[string]int),
 		connectionCount:  make(map[string]int),
 	}
@@ -3715,7 +3685,7 @@ out:
 
 		// Peer to ban.
 		case p := <-s.banPeers:
-			s.handleBanPeerMsg(state, p)
+			s.handleBanPeerMsg(p)
 
 		// New inventory to potentially be relayed to other peers.
 		case invMsg := <-s.relayInv:
@@ -3738,7 +3708,7 @@ out:
 			s.handleMaybeAddDirectRelayPeer(state, amsg)
 
 		case <-banSweep.C:
-			s.sweepBans(state, time.Now())
+			s.bans.sweep(time.Now())
 
 		case <-s.quit:
 			// Disconnect all peers on server shutdown.
@@ -4325,7 +4295,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		agentBlacklist:       agentBlacklist,
 		agentWhitelist:       agentWhitelist,
 		inboundHosts:         make(map[string]int),
-		inboundBans:          make(map[string]time.Time),
+		bans:                 newBanList(),
 	}
 
 	// Create the transaction and address indexes if needed.
@@ -4562,50 +4532,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	// network.
 	var newAddressFunc func() (net.Addr, error)
 	if !cfg.SimNet && !cfg.RegressionTest && len(cfg.ConnectPeers) == 0 {
-		newAddressFunc = func() (net.Addr, error) {
-			for tries := range 100 {
-				addr := s.addrManager.GetAddress()
-				if addr == nil {
-					break
-				}
-
-				// Skip networks we can't connect to.
-				if !canDial(addr.NetAddress()) {
-					continue
-				}
-
-				// Address will not be invalid, local or unroutable
-				// because addrmanager rejects those on addition.
-				// Just check that we don't already have an address
-				// in the same group so that we are not connecting
-				// to the same network segment at the expense of
-				// others.
-				key := addrmgr.GroupKey(addr.NetAddress())
-				if s.OutboundGroupCount(key) != 0 {
-					continue
-				}
-
-				// only allow recent nodes (10mins) after we failed 30
-				// times
-				if tries < 30 && time.Since(addr.LastAttempt()) < 10*time.Minute {
-					continue
-				}
-
-				// allow nondefault ports after 50 failed tries.
-				if tries < 50 && fmt.Sprintf("%d", addr.NetAddress().Port) !=
-					activeNetParams.DefaultPort {
-					continue
-				}
-
-				// Mark an attempt for the valid address.
-				s.addrManager.Attempt(addr.NetAddress())
-
-				addrString := addrmgr.NetAddressKey(addr.NetAddress())
-				return addrStringToNetAddr(addrString)
-			}
-
-			return nil, errors.New("no valid connect address")
-		}
+		newAddressFunc = s.newOutboundAddress
 	}
 
 	// Create a connection manager.
@@ -4903,6 +4830,58 @@ func permanentPeerAddrs(addrs []string) ([]net.Addr, error) {
 // which needs a proxy.
 func onionReachable() bool {
 	return !cfg.NoOnion && (cfg.Proxy != "" || cfg.OnionProxy != "")
+}
+
+// newOutboundAddress returns an address from the address manager for the
+// connection manager to connect to.
+func (s *server) newOutboundAddress() (net.Addr, error) {
+	for tries := range 100 {
+		addr := s.addrManager.GetAddress()
+		if addr == nil {
+			break
+		}
+
+		// Skip networks we can't connect to.
+		if !canDial(addr.NetAddress()) {
+			continue
+		}
+
+		// Skip banned hosts, which are refused once connected.
+		if _, banned := s.bans.bannedUntil(addr.NetAddress().Host(), time.Now()); banned {
+			continue
+		}
+
+		// Address will not be invalid, local or unroutable
+		// because addrmanager rejects those on addition.
+		// Just check that we don't already have an address
+		// in the same group so that we are not connecting
+		// to the same network segment at the expense of
+		// others.
+		key := addrmgr.GroupKey(addr.NetAddress())
+		if s.OutboundGroupCount(key) != 0 {
+			continue
+		}
+
+		// only allow recent nodes (10mins) after we failed 30
+		// times
+		if tries < 30 && time.Since(addr.LastAttempt()) < 10*time.Minute {
+			continue
+		}
+
+		// allow nondefault ports after 50 failed tries.
+		if tries < 50 && fmt.Sprintf("%d", addr.NetAddress().Port) !=
+			activeNetParams.DefaultPort {
+			continue
+		}
+
+		// Mark an attempt for the valid address.
+		s.addrManager.Attempt(addr.NetAddress())
+
+		addrString := addrmgr.NetAddressKey(addr.NetAddress())
+		return addrStringToNetAddr(addrString)
+	}
+
+	return nil, errors.New("no valid connect address")
 }
 
 // canDial returns whether an address is of a network we can connect to.
