@@ -762,3 +762,87 @@ func TestBcmrQueryLink(t *testing.T) {
 	c.connect(true, genesis)
 	checkBcmrState(t, "the token", c.state(&aHash), genesis, false, a, 77)
 }
+
+// TestBcmrDisconnectBelowFloor ensures that a block below the floor can't be
+// disconnected although the walker wrote at it since, as its own undo record
+// is gone.
+func TestBcmrDisconnectBelowFloor(t *testing.T) {
+	saved := bcmrUndoDepth
+	bcmrUndoDepth = 3
+	defer func() { bcmrUndoDepth = saved }()
+
+	c := newBcmrTestChain(t, 0)
+	r := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	c.connect(true, r)
+	p := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(r)}, bcmrOut(), bcmrPub(1, "p.example"))
+	c.connect(true, p)
+	c.connect(true)
+	c.connect(true)
+	c.connect(true)
+	c.disconnect()
+	c.disconnect()
+	c.disconnect()
+	c.walk()
+
+	block := c.blocks[len(c.blocks)-1]
+	err := c.db.Update(func(dbTx database.Tx) error {
+		return dbIndexDisconnectBlock(dbTx, c.idx, block, c.stxos[*block.Hash()])
+	})
+	if err == nil || !strings.Contains(err.Error(), "--dropbcmrindex") {
+		t.Fatalf("disconnecting below the floor: %v", err)
+	}
+}
+
+// TestBcmrBlockCache ensures that a block is read once, with the place of each
+// of its transactions, and that the cache starts over at its limit.
+func TestBcmrBlockCache(t *testing.T) {
+	saved := bcmrMaxReadBlocks
+	defer func() { bcmrMaxReadBlocks = saved }()
+
+	c := newBcmrTestChain(t, 0)
+	txs := []*wire.MsgTx{
+		bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut()),
+		bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut()),
+	}
+	first := c.connect(true, txs...)
+	second := c.connect(true, bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut()))
+
+	err := c.db.View(func(dbTx database.Tx) error {
+		var cache bcmrBlockCache
+		read, err := cache.fetch(dbTx, first.Hash(), first.Height())
+		if err != nil {
+			return err
+		}
+		again, err := cache.fetch(dbTx, first.Hash(), first.Height())
+		if err != nil {
+			return err
+		}
+		if read != again {
+			t.Error("a block was read twice")
+		}
+		locs, err := blockTxLocs(first)
+		if err != nil {
+			return err
+		}
+		for k, tx := range first.Transactions() {
+			if pos, ok := read.positions[*tx.Hash()]; !ok || pos != k ||
+				read.locs[pos] != locs[k] {
+
+				t.Errorf("transaction %d is at %d", k, pos)
+			}
+		}
+
+		// A limit below the size of two blocks keeps only the second.
+		bcmrMaxReadBlocks = cache.size
+		if _, err := cache.fetch(dbTx, second.Hash(), second.Height()); err != nil {
+			return err
+		}
+		if len(cache.blocks) != 1 {
+			t.Errorf("%d blocks kept, want 1", len(cache.blocks))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

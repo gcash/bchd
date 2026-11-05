@@ -79,7 +79,7 @@ type bcmrConnector struct {
 	removed map[chainhash.Hash]struct{}
 
 	// blocks are the blocks read to find authbases in.
-	blocks map[chainhash.Hash]*bchutil.Block
+	blocks bcmrBlockCache
 }
 
 // head returns the segment of which hash is the current head, if it is one.
@@ -209,7 +209,7 @@ func (c *bcmrConnector) spentOutput(i, j int) (*blockchain.SpentTxOut, error) {
 }
 
 // fetchBlock returns the block of the main chain at a height.
-func (c *bcmrConnector) fetchBlock(height int32) (*bchutil.Block, error) {
+func (c *bcmrConnector) fetchBlock(height int32) (*bcmrReadBlock, error) {
 	if c.idx.chain == nil {
 		return nil, AssertError("the BCMR index has no chain to read blocks from")
 	}
@@ -217,23 +217,7 @@ func (c *bcmrConnector) fetchBlock(height int32) (*bchutil.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	if block, ok := c.blocks[*hash]; ok {
-		return block, nil
-	}
-	raw, err := c.dbTx.FetchBlock(hash)
-	if err != nil {
-		return nil, err
-	}
-	block, err := bchutil.NewBlockFromBytes(raw)
-	if err != nil {
-		return nil, err
-	}
-	block.SetHeight(height)
-	if c.blocks == nil {
-		c.blocks = make(map[chainhash.Hash]*bchutil.Block)
-	}
-	c.blocks[*hash] = block
-	return block, nil
+	return c.blocks.fetch(c.dbTx, hash, height)
 }
 
 // authbaseLink returns the link of the authbase of a category that the
@@ -243,42 +227,30 @@ func (c *bcmrConnector) fetchBlock(height int32) (*bchutil.Block, error) {
 // output the genesis input spends, and the block at that height holds it.
 func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, bool, error) {
 	block := c.block
-	pos, ok := c.position(g.Category)
-	if !ok {
-		stxo, err := c.spentOutput(i, g.Input)
-		if err != nil {
-			return nil, false, err
-		}
-		block, err = c.fetchBlock(stxo.Height)
-		if err != nil {
-			return nil, false, err
-		}
-		pos = -1
-		for k, tx := range block.Transactions() {
-			if *tx.Hash() == g.Category {
-				pos = k
-				break
-			}
-		}
-		if pos < 0 {
-			return nil, false, AssertError(fmt.Sprintf("authbase %v is not in "+
-				"block %v", g.Category, block.Hash()))
-		}
-	}
-
 	var loc wire.TxLoc
-	if block == c.block {
+	pos, ok := c.position(g.Category)
+	if ok {
 		var err error
 		loc, err = c.txLoc(pos)
 		if err != nil {
 			return nil, false, err
 		}
 	} else {
-		locs, err := blockTxLocs(block)
+		stxo, err := c.spentOutput(i, g.Input)
 		if err != nil {
 			return nil, false, err
 		}
-		loc = locs[pos]
+		read, err := c.fetchBlock(stxo.Height)
+		if err != nil {
+			return nil, false, err
+		}
+		block = read.block
+		pos, ok = read.positions[g.Category]
+		if !ok {
+			return nil, false, AssertError(fmt.Sprintf("authbase %v is not in "+
+				"block %v", g.Category, block.Hash()))
+		}
+		loc = read.locs[pos]
 	}
 	msgTx := block.Transactions()[pos].MsgTx()
 	return &bcmrLink{
@@ -288,6 +260,71 @@ func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, bool, er
 		length:    uint32(loc.TxLen),
 		pub:       bcmr.ParsePublication(msgTx),
 	}, bcmrSpendsIdentity(msgTx), nil
+}
+
+// bcmrMaxReadBlocks is the size of the blocks that a bcmrBlockCache keeps.
+var bcmrMaxReadBlocks = 256 << 20
+
+// bcmrReadBlock is a block that the index read to find transactions in, with
+// what finding each of them takes, so that finding many in a block doesn't
+// take time for each in proportion to the block.
+type bcmrReadBlock struct {
+	block *bchutil.Block
+
+	// positions has the position of each transaction in the block, and
+	// locs where it is in the serialized block.
+	positions map[chainhash.Hash]int
+	locs      []wire.TxLoc
+
+	// stxos is the block's spend journal, and stxoStarts where each
+	// transaction's spent outputs start in it, once they were asked for.
+	stxos      []blockchain.SpentTxOut
+	stxoStarts []int
+}
+
+// bcmrBlockCache keeps the blocks read while connecting a block or walking.  It
+// starts over once they pass bcmrMaxReadBlocks, so that a block whose
+// transactions reach into many others needs no more memory than that.
+type bcmrBlockCache struct {
+	blocks map[chainhash.Hash]*bcmrReadBlock
+	size   int
+}
+
+// fetch returns the block with the passed hash, at the passed height, reading
+// it from the database unless the cache has it.
+func (c *bcmrBlockCache) fetch(dbTx database.Tx, hash *chainhash.Hash, height int32) (*bcmrReadBlock, error) {
+	if read, ok := c.blocks[*hash]; ok {
+		return read, nil
+	}
+	raw, err := dbTx.FetchBlock(hash)
+	if err != nil {
+		return nil, err
+	}
+	block, err := bchutil.NewBlockFromBytes(raw)
+	if err != nil {
+		return nil, err
+	}
+	block.SetHeight(height)
+	locs, err := blockTxLocs(block)
+	if err != nil {
+		return nil, err
+	}
+	txs := block.Transactions()
+	read := &bcmrReadBlock{
+		block:     block,
+		positions: make(map[chainhash.Hash]int, len(txs)),
+		locs:      locs,
+	}
+	for k, tx := range txs {
+		read.positions[*tx.Hash()] = k
+	}
+	if c.blocks == nil || c.size+len(raw) > bcmrMaxReadBlocks {
+		c.blocks = make(map[chainhash.Hash]*bcmrReadBlock)
+		c.size = 0
+	}
+	c.blocks[*hash] = read
+	c.size += len(raw)
+	return read, nil
 }
 
 // bcmrSpendsIdentity reports whether a transaction spends an identity output.

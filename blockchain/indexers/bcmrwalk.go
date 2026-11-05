@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/gcash/bchd/bcmr"
@@ -17,7 +16,6 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
-	"github.com/gcash/bchutil"
 )
 
 // The walker adds to the index every transaction behind each publication that
@@ -226,8 +224,8 @@ type bcmrWalk struct {
 	total uint32
 	over  bool
 
-	// block is the block the walk read last.
-	block *bchutil.Block
+	// blocks are the blocks the walk read.
+	blocks bcmrBlockCache
 }
 
 // bcmrWalkSegment is a segment that a walk read.
@@ -326,7 +324,7 @@ func (idx *BcmrIndex) readBcmrWalk() (*bcmrWalk, error) {
 		return nil, err
 	}
 	if walk != nil {
-		walk.dbTx, walk.block = nil, nil
+		walk.dbTx, walk.blocks = nil, bcmrBlockCache{}
 	}
 	return walk, nil
 }
@@ -499,31 +497,36 @@ func (walk *bcmrWalk) spentOutputs(hash chainhash.Hash, l *bcmrLink, pos, numIns
 	if err != nil {
 		return nil, err
 	}
-	txs := block.Transactions()
 	if pos < 0 {
-		pos = slices.IndexFunc(txs, func(tx *bchutil.Tx) bool {
-			return *tx.Hash() == hash
-		})
+		var ok bool
+		pos, ok = block.positions[hash]
+		if !ok {
+			pos = -1
+		}
 	}
 
 	// The coinbase spends no output, and so has no spent outputs.
 	if pos < 1 {
 		return nil, AssertError(fmt.Sprintf("transaction %v spends no "+
-			"output of block %v", hash, block.Hash()))
+			"output of block %v", hash, block.block.Hash()))
 	}
-	stxos, err := walk.idx.chain.FetchSpendJournal(block)
-	if err != nil {
-		return nil, err
+	if block.stxoStarts == nil {
+		block.stxos, err = walk.idx.chain.FetchSpendJournal(block.block)
+		if err != nil {
+			return nil, err
+		}
+		txs := block.block.Transactions()
+		block.stxoStarts = make([]int, len(txs))
+		for k := 2; k < len(txs); k++ {
+			block.stxoStarts[k] = block.stxoStarts[k-1] + len(txs[k-1].MsgTx().TxIn)
+		}
 	}
-	start := 0
-	for _, tx := range txs[1:pos] {
-		start += len(tx.MsgTx().TxIn)
-	}
-	if start+numIns > len(stxos) {
+	start := block.stxoStarts[pos]
+	if start+numIns > len(block.stxos) {
 		return nil, AssertError(fmt.Sprintf("block %v has %d spent outputs, "+
-			"fewer than its transactions spend", block.Hash(), len(stxos)))
+			"fewer than its transactions spend", block.block.Hash(), len(block.stxos)))
 	}
-	return stxos[start : start+numIns], nil
+	return block.stxos[start : start+numIns], nil
 }
 
 // find returns the transaction with the passed hash, whose identity output the
@@ -538,52 +541,32 @@ func (walk *bcmrWalk) find(child, hash chainhash.Hash, height int32) (*bcmrWalkT
 	if err != nil {
 		return nil, err
 	}
-	for k, tx := range block.Transactions() {
-		if *tx.Hash() != hash {
-			continue
-		}
-		locs, err := blockTxLocs(block)
-		if err != nil {
-			return nil, err
-		}
-		msgTx := tx.MsgTx()
-		found := &bcmrWalkTx{
-			hash: hash,
-			link: &bcmrLink{
-				blockHash: *blockHash,
-				height:    height,
-				offset:    uint32(locs[k].TxStart),
-				length:    uint32(locs[k].TxLen),
-				pub:       bcmr.ParsePublication(msgTx),
-			},
-			msgTx: msgTx,
-			pos:   k,
-			child: child,
-		}
-		walk.found = append(walk.found, found)
-		return found, nil
+	k, ok := block.positions[hash]
+	if !ok {
+		return nil, AssertError(fmt.Sprintf("transaction %v is not in block %v",
+			hash, blockHash))
 	}
-	return nil, AssertError(fmt.Sprintf("transaction %v is not in block %v",
-		hash, blockHash))
+	msgTx := block.block.Transactions()[k].MsgTx()
+	found := &bcmrWalkTx{
+		hash: hash,
+		link: &bcmrLink{
+			blockHash: *blockHash,
+			height:    height,
+			offset:    uint32(block.locs[k].TxStart),
+			length:    uint32(block.locs[k].TxLen),
+			pub:       bcmr.ParsePublication(msgTx),
+		},
+		msgTx: msgTx,
+		pos:   k,
+		child: child,
+	}
+	walk.found = append(walk.found, found)
+	return found, nil
 }
 
-// fetchBlock returns the block with the passed hash and height, reading it
-// unless the walk read it last.
-func (walk *bcmrWalk) fetchBlock(hash chainhash.Hash, height int32) (*bchutil.Block, error) {
-	if walk.block != nil && *walk.block.Hash() == hash {
-		return walk.block, nil
-	}
-	raw, err := walk.dbTx.FetchBlock(&hash)
-	if err != nil {
-		return nil, err
-	}
-	block, err := bchutil.NewBlockFromBytes(raw)
-	if err != nil {
-		return nil, err
-	}
-	block.SetHeight(height)
-	walk.block = block
-	return block, nil
+// fetchBlock returns the block with the passed hash and height.
+func (walk *bcmrWalk) fetchBlock(hash chainhash.Hash, height int32) (*bcmrReadBlock, error) {
+	return walk.blocks.fetch(walk.dbTx, &hash, height)
 }
 
 // writeBcmrWalk writes what a walk found, unless the chain changed what the

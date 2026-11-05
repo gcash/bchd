@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/gcash/bchd/bcmr"
@@ -434,21 +435,22 @@ func (idx *BcmrIndex) DisconnectBlock(dbTx database.Tx, block *bchutil.Block,
 	if err != nil {
 		return err
 	}
+
+	// Below the floor the index pruned the block's undo records, though
+	// the walker can have written some since at that tip.
+	floor := w.get(bcmrTop, bcmrUndoFloorKey)
+	if floor != nil && block.Height() < int32(byteOrder.Uint32(floor)) {
+		return fmt.Errorf("the %s can't disconnect block %v at height "+
+			"%d, deeper than the latest %d blocks it keeps undo "+
+			"records for; drop it with --dropbcmrindex, and it "+
+			"rebuilds", bcmrIndexName, block.Hash(), block.Height(),
+			bcmrUndoDepth)
+	}
 	keys, entries, err := bcmrUndoRecords(w, block.Height())
 	if err != nil {
 		return err
 	}
 	if len(keys) == 0 {
-		// The block changed nothing, unless it is below the floor,
-		// where the index pruned the undo records.
-		floor := w.get(bcmrTop, bcmrUndoFloorKey)
-		if floor != nil && block.Height() < int32(byteOrder.Uint32(floor)) {
-			return fmt.Errorf("the %s can't disconnect block %v at height "+
-				"%d, deeper than the latest %d blocks it keeps undo "+
-				"records for; drop it with --dropbcmrindex, and it "+
-				"rebuilds", bcmrIndexName, block.Hash(), block.Height(),
-				bcmrUndoDepth)
-		}
 		return nil
 	}
 
@@ -519,10 +521,20 @@ func bcmrUndoKeys(undo database.Bucket, height int32) [][]byte {
 // nextBcmrWalkUndoKey returns the key of the undo record of the walker's next
 // write while the block at a height is the index's tip, after those it has.
 func nextBcmrWalkUndoKey(undo database.Bucket, height int32) []byte {
+	// The last of them is right before the key of the highest sequence.
+	cursor := undo.Cursor()
+	var ok bool
+	if cursor.Seek(bcmrWalkUndoKey(height, math.MaxUint32)) {
+		ok = cursor.Prev()
+	} else {
+		ok = cursor.Last()
+	}
+	first := bcmrWalkUndoKey(height, 1)
 	seq := uint32(1)
-	keys := bcmrUndoKeys(undo, height)
-	if n := len(keys); n > 0 && len(keys[n-1]) == len(bcmrWalkUndoKey(height, 0)) {
-		seq = binary.BigEndian.Uint32(keys[n-1][len(keys[n-1])-4:]) + 1
+	if key := cursor.Key(); ok && len(key) == len(first) &&
+		bytes.HasPrefix(key, first[:len(first)-4]) {
+
+		seq = binary.BigEndian.Uint32(key[len(key)-4:]) + 1
 	}
 	return bcmrWalkUndoKey(height, seq)
 }
