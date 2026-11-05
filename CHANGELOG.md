@@ -32,13 +32,16 @@ This release keeps the websocket notifications from missing a transaction that s
 - `invalidateblock` of the block after the genesis block no longer freezes the node. It panicked while it held the lock of the block index, and the RPC server recovered from the panic with the lock still held, so that everything that reads the index waited forever.
 - `invalidateblock` of a block off the main chain no longer disconnects the main chain down to the fork and marks it invalid. It marks that block invalid and leaves the main chain alone.
 - A `rescan` that reached the tip as the node shut down no longer can hang the shutdown. Requests to the websocket notification manager return once it has shut down, and the sync manager stops while it is paused.
-- A panic in an RPC handler, which the RPC server recovers from, no longer can leave the block index, the best chain, the UTXO cache, the mempool or the chain lock held, which would freeze the node.
+- A panic in an RPC handler, which the RPC server recovers from, no longer leaves the block index, the best chain, the UTXO cache or the mempool locked, or the chain lock in the accessors that RPC handlers use, which would freeze the node.
 - `reconsiderblock` and other calls that change the chain no longer can crash the node as the sync peer changes, and fast sync's headers no longer race with the readers of the best state.
 - `reconsiderblock` keeps the block's entry in the block index rather than replacing it, so that a side chain built on the block, which the call doesn't touch, can't later leave the main chain and the index with different entries for it.
 - `invalidateblock` marks every block built on the block, and `reconsiderblock` clears those marks and returns to the best chain they make. It left them invalid, so that after invalidating and reconsidering a block the node stayed behind, refused the next block, and would have banned the peers that announced it.
 
 ### Other
 
+- The new `bcmr` package has CHIP-BCMR's on-chain rules, for the index and for wallets.
+- The JavaScript client in `bchrpc/pb-js` is generated with `protoc-gen-js` 4.0.3 rather than protoc 3.6.1, and `bchrpc/pb-py` has the new call. Setters in the JavaScript client now return the message.
+- The Docker image builds with Go 1.27.3.
 - An index that needs no spent outputs no longer stops the node from starting when its tip is a block a reorganization left while the index was off, as after a run without it or on an older version: the block's spend journal is gone by then. One that needs them, the address and filter indexes, says which one to drop.
 - `--bcmrindex` is refused on a data directory that was pruned or fast synced before, not only with `--prune` or `--fastsync` set.
 - The transaction and SLP indexes store the version of their records, as the address and filter indexes do, so that a later bchd can migrate them, and so that bchd refuses an index that a later version built rather than misread it. An index built before is marked version 1, which its records are.

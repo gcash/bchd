@@ -66,7 +66,9 @@ const (
 	bcmrIndexVersion = 1
 
 	// bcmrMaxPathSegments bounds the segments an identity's authchain runs
-	// through when it is read, which only a corrupt index could exceed.
+	// through when it is read.  Only a corrupt index, or an authchain of
+	// over 16 million links that each start a segment, could exceed it,
+	// and that identity then fails with an internal error.
 	bcmrMaxPathSegments = 1 << 24
 )
 

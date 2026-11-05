@@ -27,7 +27,9 @@ const (
 	// answer holds no more links: it stops at the link that reaches it, and
 	// holds at least one link.  A transaction is at most 1 MB, so an
 	// answer's transactions stay under 2 MB, under the 4 MB most gRPC clients
-	// accept by default, and under 4 MB as hex in JSON.
+	// accept by default, and under 4 MB as hex in JSON.  The URIs of
+	// publications come on top of that, which standard transactions keep
+	// small.
 	BcmrMaxAuthchainBytes = 1000000
 
 	// bcmrMaxMempoolLinks bounds the links a query follows through the
@@ -473,9 +475,9 @@ func (q *bcmrQuerier) authbaseInfo(withTx bool) (*BcmrLinkInfo, error) {
 }
 
 // findAuthbase returns the authbase of a token whose genesis is in the
-// mempool, with its transaction.  The index holds it if it is a link of
-// another identity's authchain; else it is in the mempool, or in the block
-// where the UTXO set has its identity output.
+// mempool, with its transaction.  It is in the mempool, or in the block where
+// the UTXO set has its identity output: a link the index tracks would have an
+// identity.
 func (q *bcmrQuerier) findAuthbase() (*BcmrLinkInfo, error) {
 	authbase := q.query.Authbase
 	if q.unconfirmedBase != nil {
@@ -486,15 +488,6 @@ func (q *bcmrQuerier) findAuthbase() (*BcmrLinkInfo, error) {
 		}
 		info.Tx = raw
 		return &info, nil
-	}
-
-	links := q.dbTx.Metadata().Bucket(bcmrIndexKey).Bucket(bcmrBucketNames[bcmrLinks])
-	if raw := links.Get(authbase[:]); raw != nil {
-		link, err := deserializeBcmrLink(raw)
-		if err != nil {
-			return nil, err
-		}
-		return q.linkInfo(authbase, link, true)
 	}
 
 	if q.utxoEntry == nil || q.utxoEntry.IsSpent() {

@@ -264,12 +264,17 @@ func (h *Harness) WaitForWallet() error {
 	if err != nil {
 		return err
 	}
+	deadline := time.Now().Add(time.Minute)
 	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
 	for range ticker.C {
 		walletHeight := h.wallet.SyncedHeight()
-		if walletHeight == height {
+		if walletHeight >= height {
 			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the wallet is at height %d after a minute, "+
+				"the chain at %d", walletHeight, height)
 		}
 	}
 
