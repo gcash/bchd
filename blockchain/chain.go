@@ -1511,6 +1511,15 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 	// common ancenstor (the point where the chain forked).
 	detachNodes, attachNodes := b.getReorganizeNodes(node)
 
+	// Nothing is attached when the chain has an invalid block, so the block
+	// stays off the main chain.  The nodes it marked are written.
+	if attachNodes.Len() == 0 {
+		if writeErr := b.index.flushToDB(); writeErr != nil {
+			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+		}
+		return false, nil
+	}
+
 	// A pruned node can't switch to a chain holding a block whose data it
 	// deleted, so it stays on its own chain, as Bitcoin Cash Node removes
 	// such a chain from the candidates for the best chain.  This is checked

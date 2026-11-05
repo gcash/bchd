@@ -7,6 +7,8 @@ package blockchain
 import (
 	"testing"
 	"time"
+
+	"github.com/gcash/bchutil"
 )
 
 // TestFailedInvalidateKeepsBlockValid ensures a block that can't be taken off
@@ -112,5 +114,48 @@ func TestFailedReconsiderKeepsMarks(t *testing.T) {
 	}
 	if !chain.index.NodeStatus(chain.index.LookupNode(next.Hash())).KnownInvalid() {
 		t.Fatal("the block built on it lost its mark")
+	}
+}
+
+// TestInvalidChainNotMainChain ensures a block with more work on a chain with
+// an invalid ancestor is reported as off the main chain, since the chain can't
+// reorganize to it.
+func TestInvalidChainNotMainChain(t *testing.T) {
+	chain, blocks := finalizationTestChain(t, -1, time.Hour)
+	params := chain.chainParams
+	tip := chain.bestChain.Tip()
+
+	// A side chain from block 3, the first of whose blocks alone is marked
+	// invalid, so that the block on top of it is accepted.
+	prev := blocks[3]
+	var first *bchutil.Block
+	for h := int32(4); h <= 5; h++ {
+		block := procTestBlock(t, prev.MsgBlock(), h-1,
+			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
+			t.Fatalf("side chain block %d: %v", h, err)
+		}
+		if first == nil {
+			first = block
+		}
+		prev = block
+	}
+	chain.index.SetStatusFlags(chain.index.LookupNode(first.Hash()), statusValidateFailed)
+
+	block := procTestBlock(t, prev.MsgBlock(), 5, CalcBlockSubsidy(6, params)-1,
+		params.PowLimitBits, nil)
+	isMainChain, _, err := chain.ProcessBlock(block, BFNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isMainChain {
+		t.Fatal("the block was reported on the main chain")
+	}
+	if got := chain.bestChain.Tip(); got != tip {
+		t.Fatalf("tip %v, want the old tip", got.hash)
+	}
+	status := chain.index.NodeStatus(chain.index.LookupNode(block.Hash()))
+	if !status.KnownInvalid() {
+		t.Fatalf("the block has status %v", status)
 	}
 }
