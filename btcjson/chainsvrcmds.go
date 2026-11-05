@@ -266,6 +266,29 @@ func NewFinalizeBlockCmd(blockHash string) *FinalizeBlockCmd {
 	}
 }
 
+// ListBcmrIdentitiesCmd defines the listbcmridentities JSON-RPC command.
+type ListBcmrIdentitiesCmd struct {
+	After *string
+	Limit *int
+}
+
+// NewListBcmrIdentitiesCmd returns a new instance which can be used to issue a
+// listbcmridentities JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewListBcmrIdentitiesCmd(after *string, limit *int) *ListBcmrIdentitiesCmd {
+	// The parameters end at the first nil, so limit needs after, which
+	// means the start when it is empty.
+	if after == nil && limit != nil {
+		after = String("")
+	}
+	return &ListBcmrIdentitiesCmd{
+		After: after,
+		Limit: limit,
+	}
+}
+
 // GetBcmrIdentityCmd defines the getbcmridentity JSON-RPC command.
 type GetBcmrIdentityCmd struct {
 	Authbase         string
@@ -1160,6 +1183,7 @@ func init() {
 	MustRegisterCmd("addnode", (*AddNodeCmd)(nil), flags)
 	MustRegisterCmd("clearbanned", (*ClearBannedCmd)(nil), flags)
 	MustRegisterCmd("listbanned", (*ListBannedCmd)(nil), flags)
+	MustRegisterCmd("listbcmridentities", (*ListBcmrIdentitiesCmd)(nil), flags)
 	MustRegisterCmd("setban", (*SetBanCmd)(nil), flags)
 	MustRegisterCmd("createrawtransaction", (*CreateRawTransactionCmd)(nil), flags)
 	MustRegisterCmd("decoderawtransaction", (*DecodeRawTransactionCmd)(nil), flags)

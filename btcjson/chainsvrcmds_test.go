@@ -260,6 +260,31 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "listbcmridentities",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("listbcmridentities")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewListBcmrIdentitiesCmd(nil, nil)
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"listbcmridentities","params":[],"id":1}`,
+			unmarshalled: &btcjson.ListBcmrIdentitiesCmd{},
+		},
+		{
+			name: "listbcmridentities limit alone",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("listbcmridentities", "", 10)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewListBcmrIdentitiesCmd(nil, btcjson.Int(10))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"listbcmridentities","params":["",10],"id":1}`,
+			unmarshalled: &btcjson.ListBcmrIdentitiesCmd{
+				After: btcjson.String(""),
+				Limit: btcjson.Int(10),
+			},
+		},
+		{
 			name: "getbcmridentity",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getbcmridentity", "123")

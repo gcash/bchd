@@ -96,6 +96,41 @@ func checkBcmrRPCError(t *testing.T, h *rpctest.Harness, code btcjson.RPCErrorCo
 	}
 }
 
+// checkBcmrListed checks that listbcmridentities lists the identity, as
+// getbcmridentity answers, and refuses a limit of 0.
+func checkBcmrListed(t *testing.T, h *rpctest.Harness, want *btcjson.GetBcmrIdentityResult) {
+	t.Helper()
+	listed, err := h.Node.ListBcmrIdentities(nil, 0)
+	if err != nil {
+		t.Fatalf("listbcmridentities: %v", err)
+	}
+	found := false
+	for i := range listed.Identities {
+		identity := &listed.Identities[i]
+		if identity.Authbase == want.Authbase {
+			found = identity.Head.Txid == want.Head.Txid &&
+				identity.GenesisSupply == want.GenesisSupply
+		}
+	}
+	if !found || listed.More {
+		t.Fatalf("listed %+v, want %+v", listed, want)
+	}
+
+	limit, err := json.Marshal(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := json.Marshal("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Node.RawRequest("listbcmridentities", []json.RawMessage{after, limit})
+	var rpcErr *btcjson.RPCError
+	if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCInvalidParameter {
+		t.Fatalf("a limit of 0: %v", err)
+	}
+}
+
 // bcmrSpend returns a transaction that spends output index of prev, which
 // pays to bcmrOpTrue, and has the passed outputs.
 func bcmrSpend(prev *wire.MsgTx, index uint32, outs ...*wire.TxOut) *wire.MsgTx {
@@ -276,6 +311,7 @@ func TestBcmrIdentity(t *testing.T) {
 	genesisHash := genesis.TxHash()
 
 	result := mustBcmrIdentity(t, h, category.String())
+	checkBcmrListed(t, h, result)
 	if result.Status != "active" || result.Head.Txid != genesisHash.String() ||
 		result.Head.Height != genesisBlock.Height() ||
 		result.Head.BlockHash != genesisBlock.Hash().String() {

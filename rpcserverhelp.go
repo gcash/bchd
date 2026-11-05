@@ -36,6 +36,16 @@ var helpDescsEnUS = map[string]string{
 	"setban-bantime":   "How long the ban lasts in seconds, or until when if absolute is set; 0 or less means the time of --banduration",
 	"setban-absolute":  "Whether bantime is a time in seconds since the Unix epoch",
 
+	// ListBcmrIdentitiesCmd help.
+	"listbcmridentities--synopsis": "Returns what the BCMR index knows of each identity, as getbcmridentity does, from the chain alone, a page at a time, " +
+		"in the order of the bytes of the authbases.  An identity is a token's if it has a genesissupply.  Pages can be of different blocks.  Requires --bcmrindex.",
+	"listbcmridentities-after": "The authbase of the last identity of the page before, or empty for the start",
+	"listbcmridentities-limit": "The most identities to return, from 1 to 1000",
+
+	// ListBcmrIdentitiesResult help.
+	"listbcmridentitiesresult-identities": "The identities",
+	"listbcmridentitiesresult-more":       "Whether there are more identities after these",
+
 	// ListBannedCmd help.
 	"listbanned--synopsis": "Returns the bans in force, those of setban and those of ban scores, as an array of json objects.",
 
@@ -953,6 +963,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"addnode":               nil,
 	"clearbanned":           nil,
 	"listbanned":            {(*[]btcjson.ListBannedResult)(nil)},
+	"listbcmridentities":    {(*btcjson.ListBcmrIdentitiesResult)(nil)},
 	"setban":                nil,
 	"createrawtransaction":  {(*string)(nil)},
 	"debuglevel":            {(*string)(nil), (*string)(nil)},

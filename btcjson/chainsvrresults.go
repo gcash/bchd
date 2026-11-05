@@ -317,6 +317,13 @@ type ListBannedResult struct {
 	TimeRemaining int64  `json:"time_remaining"`
 }
 
+// ListBcmrIdentitiesResult models the data returned from the listbcmridentities
+// command.
+type ListBcmrIdentitiesResult struct {
+	Identities []GetBcmrIdentityResult `json:"identities"`
+	More       bool                    `json:"more"`
+}
+
 // GetPeerInfoResult models the data returned from the getpeerinfo command.
 type GetPeerInfoResult struct {
 	ID             int32   `json:"id"`

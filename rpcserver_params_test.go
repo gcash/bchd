@@ -692,3 +692,11 @@ func TestGetTxOutProofFromUtxoSet(t *testing.T) {
 	assertRPCError(t, "spent txid", err, btcjson.ErrRPCNoTxInfo,
 		"Transaction not yet in block")
 }
+
+// TestListBcmrIdentitiesAdminOnly ensures a limited user can't page through the
+// whole index, which reads every identity.
+func TestListBcmrIdentitiesAdminOnly(t *testing.T) {
+	if _, limited := rpcLimited["listbcmridentities"]; limited {
+		t.Fatal("listbcmridentities is open to limited users")
+	}
+}

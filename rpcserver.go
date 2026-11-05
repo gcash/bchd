@@ -144,6 +144,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"addnode":               handleAddNode,
 	"clearbanned":           handleClearBanned,
 	"listbanned":            handleListBanned,
+	"listbcmridentities":    handleListBcmrIdentities,
 	"setban":                handleSetBan,
 	"createrawtransaction":  handleCreateRawTransaction,
 	"debuglevel":            handleDebugLevel,
@@ -1822,6 +1823,54 @@ func handleGetBestBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan stru
 	result := &btcjson.GetBestBlockResult{
 		Hash:   best.Hash.String(),
 		Height: best.Height,
+	}
+	return result, nil
+}
+
+// handleListBcmrIdentities implements the listbcmridentities command.
+func handleListBcmrIdentities(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	bcmrIndex := s.cfg.BcmrIndex
+	if bcmrIndex == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCMisc,
+			Message: "BCMR index must be enabled (--bcmrindex)",
+		}
+	}
+
+	c := cmd.(*btcjson.ListBcmrIdentitiesCmd)
+	var after *chainhash.Hash
+	if c.After != nil && *c.After != "" {
+		var err error
+		after, err = chainhash.NewHashFromStr(*c.After)
+		if err != nil {
+			return nil, rpcDecodeHexError(*c.After)
+		}
+	}
+	limit := indexers.BcmrMaxListedIdentities
+	if c.Limit != nil {
+		if *c.Limit < 1 {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidParameter,
+				Message: "limit must be at least 1",
+			}
+		}
+		limit = min(*c.Limit, limit)
+	}
+
+	infos, more, err := bcmrIndex.ListIdentities(after, limit)
+	if err != nil {
+		return nil, internalRPCError(err.Error(), "Failed to read the BCMR index")
+	}
+	result := btcjson.ListBcmrIdentitiesResult{
+		Identities: make([]btcjson.GetBcmrIdentityResult, 0, len(infos)),
+		More:       more,
+	}
+	for _, info := range infos {
+		identity, err := createBcmrIdentityResult(info, false)
+		if err != nil {
+			return nil, err
+		}
+		result.Identities = append(result.Identities, *identity)
 	}
 	return result, nil
 }

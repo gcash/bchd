@@ -578,3 +578,51 @@ func (c *Client) GetUptimeAsync() FutureGetUptimeResult {
 func (c *Client) GetUptime() (int64, error) {
 	return c.GetUptimeAsync().Receive()
 }
+
+// FutureListBcmrIdentitiesResult is a future promise to deliver the result of a
+// ListBcmrIdentitiesAsync RPC invocation (or an applicable error).
+type FutureListBcmrIdentitiesResult chan *response
+
+// Receive waits for the response promised by the future and returns the page
+// of identities.
+func (r FutureListBcmrIdentitiesResult) Receive() (*btcjson.ListBcmrIdentitiesResult, error) {
+	res, err := receiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var result btcjson.ListBcmrIdentitiesResult
+	if err := json.Unmarshal(res, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ListBcmrIdentitiesAsync returns an instance of a type that can be used to get
+// the result of the RPC at some future time by invoking the Receive function on
+// the returned instance.
+//
+// See ListBcmrIdentities for the blocking version and more details.
+//
+// NOTE: This is a bchd extension.
+func (c *Client) ListBcmrIdentitiesAsync(after *chainhash.Hash, limit int) FutureListBcmrIdentitiesResult {
+	var afterString *string
+	if after != nil {
+		s := after.String()
+		afterString = &s
+	}
+	var limitPtr *int
+	if limit > 0 {
+		limitPtr = &limit
+	}
+	return c.sendCmd(btcjson.NewListBcmrIdentitiesCmd(afterString, limitPtr))
+}
+
+// ListBcmrIdentities returns what the BCMR index knows of the identities after
+// the passed authbase, or from the first when it is nil, up to limit of them if
+// limit is above 0, from the chain alone.
+//
+// NOTE: This is a bchd extension, which needs --bcmrindex.
+func (c *Client) ListBcmrIdentities(after *chainhash.Hash, limit int) (*btcjson.ListBcmrIdentitiesResult, error) {
+	return c.ListBcmrIdentitiesAsync(after, limit).Receive()
+}

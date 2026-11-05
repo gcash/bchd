@@ -38,6 +38,9 @@ const (
 	bcmrMaxMempoolLinks = 1 << 22
 )
 
+// BcmrMaxListedIdentities is the most identities ListIdentities returns.
+const BcmrMaxListedIdentities = 1000
+
 // bcmrMaxAuthchainBytes is BcmrMaxAuthchainBytes, which tests lower.
 var bcmrMaxAuthchainBytes = BcmrMaxAuthchainBytes
 
@@ -176,6 +179,76 @@ func (idx *BcmrIndex) Identity(query *BcmrQuery, mempool BcmrMempool) (*BcmrIden
 		return err
 	})
 	return info, err
+}
+
+// bcmrNoMempool is a mempool with nothing in it, for answers from the chain
+// alone.
+type bcmrNoMempool struct{}
+
+// CheckSpend reports that nothing spends op.
+func (bcmrNoMempool) CheckSpend(wire.OutPoint) *bchutil.Tx {
+	return nil
+}
+
+// FetchTransaction reports that the mempool doesn't have the transaction.
+func (bcmrNoMempool) FetchTransaction(hash *chainhash.Hash) (*bchutil.Tx, error) {
+	return nil, fmt.Errorf("transaction %v is not in the mempool", hash)
+}
+
+// ListIdentities returns what the index knows of the identities after the
+// passed authbase, or from the first when it is nil, in the order of their
+// authbases' bytes, up to limit of them, and whether there are more.  An answer
+// is from the chain alone, without the mempool.  The identities of a call and
+// of the next can be of different blocks, and an identity a reorganization
+// removes meanwhile is left out.
+//
+// This function is safe for concurrent access.
+func (idx *BcmrIndex) ListIdentities(after *chainhash.Hash, limit int) ([]*BcmrIdentityInfo, bool, error) {
+	if limit <= 0 || limit > BcmrMaxListedIdentities {
+		limit = BcmrMaxListedIdentities
+	}
+
+	// One more than the limit shows whether there are more.
+	var authbases []chainhash.Hash
+	err := idx.db.View(func(dbTx database.Tx) error {
+		bucket := dbTx.Metadata().Bucket(bcmrIndexKey).Bucket(bcmrBucketNames[bcmrIdentities])
+		cursor := bucket.Cursor()
+		var ok bool
+		if after == nil {
+			ok = cursor.First()
+		} else {
+			ok = cursor.Seek(after[:])
+			if ok && bytes.Equal(cursor.Key(), after[:]) {
+				ok = cursor.Next()
+			}
+		}
+		for ; ok && len(authbases) <= limit; ok = cursor.Next() {
+			var authbase chainhash.Hash
+			copy(authbase[:], cursor.Key())
+			authbases = append(authbases, authbase)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(authbases) > limit
+	if more {
+		authbases = authbases[:limit]
+	}
+
+	infos := make([]*BcmrIdentityInfo, 0, len(authbases))
+	for i := range authbases {
+		info, err := idx.Identity(&BcmrQuery{Authbase: authbases[i]}, bcmrNoMempool{})
+		if errors.Is(err, ErrBcmrIdentityNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		infos = append(infos, info)
+	}
+	return infos, more, nil
 }
 
 // bcmrQuerier answers a query in a database transaction.

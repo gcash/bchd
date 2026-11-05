@@ -5,6 +5,7 @@
 package indexers
 
 import (
+	"slices"
 	"bytes"
 	"errors"
 	"testing"
@@ -439,5 +440,65 @@ func TestBcmrQueryMempoolGenesis(t *testing.T) {
 		[]byte{txscript.OP_TRUE}, wire.TokenData{}))
 	if _, err := c.query(t, newBcmrTestMempool(spend), lone.TxHash(), false, nil, 0); !errors.Is(err, ErrBcmrIdentityNotFound) {
 		t.Errorf("a spend that creates no token: %v", err)
+	}
+}
+
+// TestBcmrListIdentities checks that the pages of ListIdentities hold every
+// identity once, in order, each answered as a query is, and that an answer
+// comes from the chain alone.
+func TestBcmrListIdentities(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	var want []chainhash.Hash
+	for range 5 {
+		want = append(want, bcmrTestAuthchain(c)[0].TxHash())
+	}
+	slices.SortFunc(want, func(a, b chainhash.Hash) int {
+		return bytes.Compare(a[:], b[:])
+	})
+
+	var got []chainhash.Hash
+	var after *chainhash.Hash
+	for pages := 0; ; pages++ {
+		infos, more, err := c.idx.ListIdentities(after, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pages > 5 {
+			t.Fatal("the pages don't end")
+		}
+		if more && len(infos) != 2 {
+			t.Fatalf("%d identities on a page with more", len(infos))
+		}
+		for _, info := range infos {
+			hash := info.Authbase
+			got = append(got, hash)
+			after = &hash
+			query := c.mustQuery(t, newBcmrTestMempool(), hash, false, nil, 0)
+			if info.Head.Hash != query.Head.Hash || info.Burned != query.Burned ||
+				info.GenesisSupply != query.GenesisSupply ||
+				info.Publication.Hash != query.Publication.Hash {
+
+				t.Fatalf("listed %+v, queried %+v", info, query)
+			}
+		}
+		if !more {
+			break
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("listed %v, want %v", got, want)
+	}
+
+	// The page after the last is empty, and an authbase that isn't one still
+	// places a page.
+	infos, more, err := c.idx.ListIdentities(&want[len(want)-1], 10)
+	if err != nil || len(infos) != 0 || more {
+		t.Fatalf("after the last: %d identities, more %v, %v", len(infos), more, err)
+	}
+	between := want[1]
+	between[len(between)-1]++
+	infos, _, err = c.idx.ListIdentities(&between, 1)
+	if err != nil || len(infos) != 1 || infos[0].Authbase != want[2] {
+		t.Fatalf("after a hash that isn't an authbase: %+v, %v", infos, err)
 	}
 }
