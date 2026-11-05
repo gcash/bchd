@@ -317,3 +317,27 @@ func TestStopWhilePaused(t *testing.T) {
 		t.Fatal("the sync manager didn't stop while it was paused")
 	}
 }
+
+// TestPauseWaitsForHandler ensures Pause returns only once the handler has
+// paused, not when its message is queued, as the caller counts on nothing
+// changing from then on.
+func TestPauseWaitsForHandler(t *testing.T) {
+	sm := &SyncManager{
+		msgChan: make(chan interface{}, 1),
+		quit:    make(chan struct{}),
+	}
+	returned := make(chan struct{})
+	go func() {
+		sm.Pause()
+		close(returned)
+	}()
+
+	msg := (<-sm.msgChan).(pauseMsg)
+	select {
+	case <-returned:
+		t.Fatal("Pause returned before the handler paused")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(msg.paused)
+	returnsWithin(t, "Pause", func() { <-returned })
+}

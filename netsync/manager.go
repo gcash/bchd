@@ -184,6 +184,7 @@ type isCurrentMsg struct {
 // exclusive access over the manager until a receive is performed on the
 // unpause channel.
 type pauseMsg struct {
+	paused  chan<- struct{}
 	unpause <-chan struct{}
 }
 
@@ -2024,8 +2025,9 @@ out:
 				msg.reply <- sm.current()
 
 			case pauseMsg:
-				// Wait until the sender unpauses the manager,
-				// or it stops.
+				// Tell the sender nothing runs now, and wait
+				// until it unpauses the manager, or it stops.
+				close(msg.paused)
 				select {
 				case <-msg.unpause:
 				case <-sm.quit:
@@ -2461,16 +2463,23 @@ func (sm *SyncManager) IsCurrent() bool {
 	}
 }
 
-// Pause pauses the sync manager until the returned channel is closed.  Once
-// the sync manager has stopped, it returns without pausing it, as nothing is
-// processed then.
+// Pause pauses the sync manager until the returned channel is closed.  It
+// returns once the sync manager has paused, after what it was processing, so
+// that nothing changes under the caller.  Once the sync manager has stopped,
+// it returns without pausing it, as nothing is processed then.
 //
 // Note that while paused, all peer and block processing is halted.  The
 // message sender should avoid pausing the sync manager for long durations.
 func (sm *SyncManager) Pause() chan<- struct{} {
 	c := make(chan struct{})
+	paused := make(chan struct{})
 	select {
-	case sm.msgChan <- pauseMsg{c}:
+	case sm.msgChan <- pauseMsg{paused, c}:
+	case <-sm.quit:
+		return c
+	}
+	select {
+	case <-paused:
 	case <-sm.quit:
 	}
 	return c
