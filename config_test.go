@@ -511,3 +511,19 @@ func TestMaxPeers(t *testing.T) {
 		}
 	}
 }
+
+// TestSampleConfigEmbedded ensures that the sample configuration in bindata.go,
+// which a first run writes out, is sample-bchd.conf.  make bindata updates it.
+func TestSampleConfigEmbedded(t *testing.T) {
+	embedded, err := Asset("sample-bchd.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sample, err := os.ReadFile("sample-bchd.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, sample) {
+		t.Fatal("bindata.go is out of date: run make bindata")
+	}
+}
