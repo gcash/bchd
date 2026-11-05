@@ -262,17 +262,9 @@ func writeTokenPrefixBuf(w io.Writer, tokenData *TokenData, buf []byte) error {
 func (tokenData *TokenData) TokenDataBuffer() bytes.Buffer {
 	var buf bytes.Buffer
 	buf.Grow(tokenData.serializeSize())
-	buf.WriteByte(0xef)
-	buf.Write(tokenData.CategoryID[:])
-	buf.WriteByte(tokenData.BitField)
-	if tokenData.HasCommitmentLength() {
-		_ = WriteVarInt(&buf, 0, uint64(len(tokenData.Commitment)))
-
-		buf.Write(tokenData.Commitment[:])
-	}
-	if tokenData.HasAmount() {
-		_ = WriteVarInt(&buf, 0, tokenData.Amount)
-	}
+	scratch := binarySerializer.Borrow()
+	defer binarySerializer.Return(scratch)
+	_ = writeTokenPrefixBuf(&buf, tokenData, scratch)
 	return buf
 }
 

@@ -17,13 +17,16 @@ const hasherBufSize = 2048
 
 // DoubleHasher computes hash(hash(b)) of the bytes written to it.  Writes are
 // gathered in a buffer, so serializing field by field is cheap, and no full
-// serialization buffer is needed.  Get one with NewDoubleHasher and finish it
-// with Sum, which puts it back in a pool, so it must not be used after Sum.
+// serialization buffer is needed.  Get one with NewDoubleHasher, and give it
+// back with Finish, which returns the hash, or with Release.  Sum returns the
+// hash so far and can be called any number of times, as with a hash.Hash, so
+// only those two end its use.
 type DoubleHasher struct {
-	h   hash.Hash // only used once a full buffer is flushed
-	n   int       // bytes in buf
-	len int       // bytes written
-	buf [hasherBufSize]byte
+	h        hash.Hash // only used once a full buffer is flushed
+	n        int       // bytes in buf
+	len      int       // bytes written
+	released bool      // given back to the pool
+	buf      [hasherBufSize]byte
 }
 
 var hasherPool = sync.Pool{New: func() any { return new(DoubleHasher) }}
@@ -33,6 +36,7 @@ func NewDoubleHasher() *DoubleHasher {
 	d := hasherPool.Get().(*DoubleHasher)
 	d.n = 0
 	d.len = 0
+	d.released = false
 	if d.h != nil {
 		d.h.Reset()
 	}
@@ -99,8 +103,8 @@ func (d *DoubleHasher) Len() int {
 	return d.len
 }
 
-// Sum returns the double sha256 of the bytes written and puts d back in the
-// pool.  d must not be used afterwards.
+// Sum returns the double sha256 of the bytes written so far.  d stays usable,
+// and more can be written.
 func (d *DoubleHasher) Sum() Hash {
 	var first [HashSize]byte
 	if d.len == d.n {
@@ -109,6 +113,24 @@ func (d *DoubleHasher) Sum() Hash {
 		d.flush()
 		copy(first[:], d.h.Sum(d.buf[:0]))
 	}
-	hasherPool.Put(d)
 	return Hash(sha256.Sum256(first[:]))
+}
+
+// Finish returns the double sha256 of the bytes written and gives d back to the
+// pool.  d must not be used afterwards.
+func (d *DoubleHasher) Finish() Hash {
+	sum := d.Sum()
+	d.Release()
+	return sum
+}
+
+// Release gives d back to the pool without a hash.  d must not be used
+// afterwards.  A second Release panics, as it would put d in the pool twice, and
+// two callers would then share it and get each other's hashes.
+func (d *DoubleHasher) Release() {
+	if d.released {
+		panic("chainhash: DoubleHasher released twice")
+	}
+	d.released = true
+	hasherPool.Put(d)
 }

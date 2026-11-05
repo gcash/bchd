@@ -71,7 +71,9 @@ func NewInvVect(typ InvType, hash *chainhash.Hash) *InvVect {
 // readInvVect reads an encoded InvVect from r depending on the protocol
 // version.
 func readInvVect(r io.Reader, pver uint32, iv *InvVect) error {
-	return readElements(r, &iv.Type, &iv.Hash)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return readInvVectBuf(r, iv, buf)
 }
 
 // readInvVectBuf reads an InvVect from r using the provided scratch buffer.
@@ -86,7 +88,9 @@ func readInvVectBuf(r io.Reader, iv *InvVect, buf []byte) error {
 
 // writeInvVect serializes an InvVect to w depending on the protocol version.
 func writeInvVect(w io.Writer, pver uint32, iv *InvVect) error {
-	return writeElements(w, iv.Type, &iv.Hash)
+	buf := binarySerializer.Borrow()
+	defer binarySerializer.Return(buf)
+	return writeInvVectBuf(w, iv, buf)
 }
 
 // writeInvVectBuf writes iv to w using the provided scratch buffer.

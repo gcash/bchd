@@ -95,7 +95,7 @@ func TestTxHashStreamed(t *testing.T) {
 		if d.Len() != buf.Len() {
 			t.Fatalf("tx %d: hashed %d bytes, want %d", i, d.Len(), buf.Len())
 		}
-		_ = d.Sum()
+		d.Release()
 
 		for j, to := range tx.TxOut {
 			buf.Reset()
@@ -104,7 +104,7 @@ func TestTxHashStreamed(t *testing.T) {
 			}
 			d := chainhash.NewDoubleHasher()
 			to.SerializeToHasher(d)
-			if got, want := d.Sum(), chainhash.DoubleHashH(buf.Bytes()); got != want {
+			if got, want := d.Finish(), chainhash.DoubleHashH(buf.Bytes()); got != want {
 				t.Fatalf("tx %d out %d: got %v, want %v", i, j, got, want)
 			}
 		}
@@ -135,5 +135,17 @@ func TestBlockHashFixed(t *testing.T) {
 		if got, want := headers[i].BlockHash(), chainhash.DoubleHashH(buf.Bytes()); got != want {
 			t.Fatalf("header %d: BlockHash %v, want %v", i, got, want)
 		}
+	}
+}
+
+// TestWriteVarIntToHasherAllocs ensures writing a varint to a hasher costs no
+// allocation, as it's on the path of every transaction hash.
+func TestWriteVarIntToHasherAllocs(t *testing.T) {
+	d := chainhash.NewDoubleHasher()
+	defer d.Release()
+	if allocs := testing.AllocsPerRun(100, func() {
+		WriteVarIntToHasher(d, 0x100000000)
+	}); allocs != 0 {
+		t.Fatalf("%v allocations", allocs)
 	}
 }

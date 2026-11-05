@@ -516,6 +516,8 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 // provided scratch buffer with a capacity of at least 8 bytes and returns it
 // as a uint64.
 func ReadVarIntBuf(r io.Reader, pver uint32, buf []byte) (uint64, error) {
+	// Only the capacity counts, as the documentation says.
+	buf = buf[:8]
 	if _, err := io.ReadFull(r, buf[:1]); err != nil {
 		return 0, err
 	}

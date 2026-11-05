@@ -109,3 +109,29 @@ func checkTokenPrefix(t *testing.T, commitments [][]byte, amounts []uint64,
 		}
 	}
 }
+
+// TestTokenPrefixBytes checks the token prefix against bytes written out here,
+// as the encoders are otherwise compared with each other.
+func TestTokenPrefixBytes(t *testing.T) {
+	var category [32]byte
+	category[0] = 0xaa
+	prefix := append([]byte{0xef}, category[:]...)
+	for _, test := range []struct {
+		token TokenData
+		want  []byte
+	}{
+		{TokenData{CategoryID: category, BitField: HAS_AMOUNT, Amount: 0xfd},
+			[]byte{HAS_AMOUNT, 0xfd, 0xfd, 0x00}},
+		{TokenData{CategoryID: category, BitField: HAS_NFT | HAS_COMMITMENT_LENGTH,
+			Commitment: []byte{1, 2}}, []byte{HAS_NFT | HAS_COMMITMENT_LENGTH, 2, 1, 2}},
+		{TokenData{CategoryID: category, BitField: HAS_NFT | HAS_COMMITMENT_LENGTH | HAS_AMOUNT,
+			Commitment: []byte{}, Amount: 5},
+			[]byte{HAS_NFT | HAS_COMMITMENT_LENGTH | HAS_AMOUNT, 0, 5}},
+		{TokenData{CategoryID: category, BitField: HAS_NFT}, []byte{HAS_NFT}},
+	} {
+		buf := test.token.TokenDataBuffer()
+		if want := append(append([]byte(nil), prefix...), test.want...); !bytes.Equal(buf.Bytes(), want) {
+			t.Errorf("%+v: got %x, want %x", test.token, buf.Bytes(), want)
+		}
+	}
+}

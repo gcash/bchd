@@ -48,7 +48,7 @@ func TestDoubleHasher(t *testing.T) {
 			if d.Len() != size {
 				t.Fatalf("size %d: Len %d", size, d.Len())
 			}
-			if got := d.Sum(); got != want {
+			if got := d.Finish(); got != want {
 				t.Fatalf("size %d: got %v, want %v", size, got, want)
 			}
 		}
@@ -64,7 +64,7 @@ func TestDoubleHasherAllocs(t *testing.T) {
 			d := NewDoubleHasher()
 			_, _ = d.Write(data[:size])
 			d.WriteUint32(1)
-			_ = d.Sum()
+			_ = d.Finish()
 		})
 		if allocs != 0 {
 			t.Errorf("size %d: %v allocs", size, allocs)
@@ -83,7 +83,7 @@ func BenchmarkDoubleHasher(b *testing.B) {
 			for b.Loop() {
 				d := NewDoubleHasher()
 				_, _ = d.Write(data[:size])
-				_ = d.Sum()
+				_ = d.Finish()
 			}
 		})
 		b.Run(fmt.Sprintf("DoubleHashH/%d", size), func(b *testing.B) {
@@ -94,4 +94,38 @@ func BenchmarkDoubleHasher(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestDoubleHasherSumRepeats ensures Sum can be called any number of times, and
+// that writing can go on after it, whether the hash fits the buffer or not.
+func TestDoubleHasherSumRepeats(t *testing.T) {
+	for _, size := range []int{0, 10, hasherBufSize, hasherBufSize + 1, 3 * hasherBufSize} {
+		data := make([]byte, size)
+		for i := range data {
+			data[i] = byte(i)
+		}
+		d := NewDoubleHasher()
+		_, _ = d.Write(data)
+		first, second := d.Sum(), d.Sum()
+		if want := DoubleHashH(data); first != want || second != want {
+			t.Fatalf("%d bytes: got %v and %v, want %v", size, first, second, want)
+		}
+		_, _ = d.Write([]byte{1, 2, 3})
+		if got, want := d.Finish(), DoubleHashH(append(data, 1, 2, 3)); got != want {
+			t.Fatalf("%d bytes and more: got %v, want %v", size, got, want)
+		}
+	}
+}
+
+// TestDoubleHasherReleaseTwice ensures giving a hasher back twice is refused,
+// as two callers would then share it.
+func TestDoubleHasherReleaseTwice(t *testing.T) {
+	d := NewDoubleHasher()
+	d.Release()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a second release went through")
+		}
+	}()
+	d.Release()
 }

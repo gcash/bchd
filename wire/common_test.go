@@ -828,8 +828,23 @@ func TestAppendVarInt(t *testing.T) {
 		}
 		d := chainhash.NewDoubleHasher()
 		WriteVarIntToHasher(d, v)
-		if got, wantHash := d.Sum(), chainhash.DoubleHashH(want.Bytes()); got != wantHash {
+		if got, wantHash := d.Finish(), chainhash.DoubleHashH(want.Bytes()); got != wantHash {
 			t.Errorf("WriteVarIntToHasher(%d) hashes to %v, want %v", v, got, wantHash)
+		}
+	}
+}
+
+// TestReadVarIntBufCapacity ensures a buffer of no length and enough capacity
+// works, as ReadVarIntBuf's documentation says, for each size of encoding.
+func TestReadVarIntBufCapacity(t *testing.T) {
+	for _, want := range []uint64{1, 0xfd, 0x10000, 0x100000000} {
+		var buf bytes.Buffer
+		if err := WriteVarInt(&buf, 0, want); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ReadVarIntBuf(&buf, 0, make([]byte, 0, 8))
+		if err != nil || got != want {
+			t.Fatalf("got %d, %v, want %d", got, err, want)
 		}
 	}
 }

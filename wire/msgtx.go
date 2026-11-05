@@ -325,7 +325,7 @@ func (msg *MsgTx) TxHash() chainhash.Hash {
 	// Stream the serialized transaction into sha256.
 	d := chainhash.NewDoubleHasher()
 	msg.SerializeToHasher(d)
-	return d.Sum()
+	return d.Finish()
 }
 
 // Copy creates a deep copy of a transaction so that the original does not get

@@ -388,7 +388,7 @@ func calcHashPrevOuts(tx *wire.MsgTx) chainhash.Hash {
 		d.WriteUint32(in.PreviousOutPoint.Index)
 	}
 
-	return d.Sum()
+	return d.Finish()
 }
 
 func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
@@ -408,9 +408,9 @@ func calcHashUtxos(tx *wire.MsgTx, utxoCache *UtxoCache) chainhash.Hash {
 	}
 
 	if d.Len() > 0 {
-		return d.Sum()
+		return d.Finish()
 	}
-	_ = d.Sum()
+	d.Release()
 	return chainhash.Hash{}
 }
 
@@ -451,7 +451,7 @@ func calcHashSequence(tx *wire.MsgTx) chainhash.Hash {
 		d.WriteUint32(in.Sequence)
 	}
 
-	return d.Sum()
+	return d.Finish()
 }
 
 // calcHashOutputs computes a hash digest of all outputs created by the
@@ -465,7 +465,7 @@ func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 		out.SerializeToHasher(d)
 	}
 
-	return d.Sum()
+	return d.Finish()
 }
 
 // CalcSignatureHash returns a signature hash which can then be signed by the
@@ -617,7 +617,7 @@ func calcLegacySignatureHash(script []parsedOpcode, hashType SigHashType, tx *wi
 	d.WriteUint32(uint32(hashType))
 
 	totalBytesHashedlength += d.Len()
-	hash := d.Sum()
+	hash := d.Finish()
 
 	return hash[:], totalBytesHashedlength, nil
 }
@@ -742,7 +742,7 @@ func calcBip143SignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	} else if hashType&sigHashMask == SigHashSingle && idx < len(tx.TxOut) {
 		d := chainhash.NewDoubleHasher()
 		tx.TxOut[idx].SerializeToHasher(d)
-		outHash := d.Sum()
+		outHash := d.Finish()
 		sigHash = append(sigHash, outHash[:]...)
 	} else {
 		sigHash = append(sigHash, zeroHash[:]...)
