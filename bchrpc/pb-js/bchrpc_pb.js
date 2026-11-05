@@ -2894,7 +2894,8 @@ medianTime: jspb.Message.getFieldWithDefault(msg, 5, 0),
 txIndex: jspb.Message.getBooleanFieldWithDefault(msg, 6, false),
 addrIndex: jspb.Message.getBooleanFieldWithDefault(msg, 7, false),
 slpIndex: jspb.Message.getBooleanFieldWithDefault(msg, 8, false),
-slpGraphsearch: jspb.Message.getBooleanFieldWithDefault(msg, 9, false)
+slpGraphsearch: jspb.Message.getBooleanFieldWithDefault(msg, 9, false),
+bcmrIndex: jspb.Message.getBooleanFieldWithDefault(msg, 10, false)
   };
 
   if (includeInstance) {
@@ -2966,6 +2967,10 @@ proto.pb.GetBlockchainInfoResponse.deserializeBinaryFromReader = function(msg, r
     case 9:
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setSlpGraphsearch(value);
+      break;
+    case 10:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setBcmrIndex(value);
       break;
     default:
       reader.skipField();
@@ -3056,6 +3061,13 @@ proto.pb.GetBlockchainInfoResponse.serializeBinaryToWriter = function(message, w
   if (f) {
     writer.writeBool(
       9,
+      f
+    );
+  }
+  f = message.getBcmrIndex();
+  if (f) {
+    writer.writeBool(
+      10,
       f
     );
   }
@@ -3257,6 +3269,24 @@ proto.pb.GetBlockchainInfoResponse.prototype.getSlpGraphsearch = function() {
  */
 proto.pb.GetBlockchainInfoResponse.prototype.setSlpGraphsearch = function(value) {
   return jspb.Message.setProto3BooleanField(this, 9, value);
+};
+
+
+/**
+ * optional bool bcmr_index = 10;
+ * @return {boolean}
+ */
+proto.pb.GetBlockchainInfoResponse.prototype.getBcmrIndex = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 10, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pb.GetBlockchainInfoResponse} returns this
+ */
+proto.pb.GetBlockchainInfoResponse.prototype.setBcmrIndex = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 10, value);
 };
 
 
@@ -24821,7 +24851,8 @@ proto.pb.GetBcmrIdentityResponse.Proof.toObject = function(includeInstance, msg)
 index: jspb.Message.getFieldWithDefault(msg, 1, 0),
 block: (f = msg.getBlock()) && proto.pb.BlockInfo.toObject(includeInstance, f),
 hashesList: msg.getHashesList_asB64(),
-flags: msg.getFlags_asB64()
+flags: msg.getFlags_asB64(),
+transactions: jspb.Message.getFieldWithDefault(msg, 5, 0)
   };
 
   if (includeInstance) {
@@ -24874,6 +24905,10 @@ proto.pb.GetBcmrIdentityResponse.Proof.deserializeBinaryFromReader = function(ms
     case 4:
       var value = /** @type {!Uint8Array} */ (reader.readBytes());
       msg.setFlags(value);
+      break;
+    case 5:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setTransactions(value);
       break;
     default:
       reader.skipField();
@@ -24930,6 +24965,13 @@ proto.pb.GetBcmrIdentityResponse.Proof.serializeBinaryToWriter = function(messag
   if (f.length > 0) {
     writer.writeBytes(
       4,
+      f
+    );
+  }
+  f = message.getTransactions();
+  if (f !== 0) {
+    writer.writeUint32(
+      5,
       f
     );
   }
@@ -25091,6 +25133,24 @@ proto.pb.GetBcmrIdentityResponse.Proof.prototype.getFlags_asU8 = function() {
  */
 proto.pb.GetBcmrIdentityResponse.Proof.prototype.setFlags = function(value) {
   return jspb.Message.setProto3BytesField(this, 4, value);
+};
+
+
+/**
+ * optional uint32 transactions = 5;
+ * @return {number}
+ */
+proto.pb.GetBcmrIdentityResponse.Proof.prototype.getTransactions = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 5, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.pb.GetBcmrIdentityResponse.Proof} returns this
+ */
+proto.pb.GetBcmrIdentityResponse.Proof.prototype.setTransactions = function(value) {
+  return jspb.Message.setProto3IntField(this, 5, value);
 };
 
 

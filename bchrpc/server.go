@@ -719,6 +719,7 @@ func (s *GrpcServer) GetBlockchainInfo(ctx context.Context, req *pb.GetBlockchai
 		TxIndex:        s.txIndex != nil,
 		SlpIndex:       s.slpIndex != nil,
 		SlpGraphsearch: gsEnabled,
+		BcmrIndex:      s.bcmrIndex != nil,
 		BestHeight:     bestSnapShot.Height,
 		BestBlockHash:  bestSnapShot.Hash[:],
 		BitcoinNet:     net,
@@ -1944,8 +1945,9 @@ func (s *GrpcServer) marshalBcmrIdentity(info *indexers.BcmrIdentityInfo) (*pb.G
 			Index: info.ProofIndex,
 			Block: marshalBlockInfo(block, s.chain.BestSnapshot().Height-block.Height()+1,
 				medianTime, s.chainParams),
-			Hashes: hashes,
-			Flags:  info.Proof.Flags,
+			Hashes:       hashes,
+			Flags:        info.Proof.Flags,
+			Transactions: info.Proof.Transactions,
 		}
 		if nextHeader, err := s.chain.HeaderByHeight(block.Height() + 1); err == nil {
 			nextHash := nextHeader.BlockHash()

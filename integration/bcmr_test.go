@@ -204,7 +204,8 @@ func checkBcmrGrpc(t *testing.T, address string, category chainhash.Hash,
 	proof := resp.Proof
 	if proof == nil || strconv.Itoa(int(proof.Index)) != result.Proof.Index ||
 		!bytes.Equal(proof.Block.Hash, genesisBlock.Hash()[:]) ||
-		!bytes.Equal(proof.Flags, merkleBlock.Flags) || len(proof.Hashes) != len(merkleBlock.Hashes) {
+		!bytes.Equal(proof.Flags, merkleBlock.Flags) || len(proof.Hashes) != len(merkleBlock.Hashes) ||
+		proof.Transactions != merkleBlock.Transactions {
 
 		t.Fatalf("gRPC proof %v", proof)
 	}
@@ -354,6 +355,14 @@ func TestBcmrIdentity(t *testing.T) {
 		byClient.Proof == nil || *byClient.Proof != *result.Proof {
 
 		t.Errorf("GetBcmrIdentity differs: head %+v, proof %+v", byClient.Head, byClient.Proof)
+	}
+	firstPage, err := h.Node.GetBcmrIdentity(&category, true, nil, 1)
+	if err != nil {
+		t.Fatalf("GetBcmrIdentity with a limit: %v", err)
+	}
+	if len(*firstPage.Authchain) != 1 || firstPage.More == nil || !*firstPage.More {
+		t.Errorf("first page of one: %d links, more %v", len(*firstPage.Authchain),
+			firstPage.More)
 	}
 	// Pages, and the page after the authhead, which has no links but
 	// still an authchain.

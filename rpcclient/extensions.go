@@ -224,6 +224,15 @@ func (r FutureGetBcmrIdentityResult) Receive() (*btcjson.GetBcmrIdentityResult, 
 func (c *Client) GetBcmrIdentityAsync(authbase *chainhash.Hash, includeAuthchain bool,
 	after *chainhash.Hash, limit int) FutureGetBcmrIdentityResult {
 
+	return c.sendCmd(newGetBcmrIdentityCmd(authbase, includeAuthchain, after, limit))
+}
+
+// newGetBcmrIdentityCmd returns the command for GetBcmrIdentity.  Commands stop
+// at the first unset parameter, so a limit without after has an empty after,
+// which means the same.
+func newGetBcmrIdentityCmd(authbase *chainhash.Hash, includeAuthchain bool,
+	after *chainhash.Hash, limit int) *btcjson.GetBcmrIdentityCmd {
+
 	var afterString *string
 	if after != nil {
 		s := after.String()
@@ -232,10 +241,13 @@ func (c *Client) GetBcmrIdentityAsync(authbase *chainhash.Hash, includeAuthchain
 	var limitPtr *int
 	if limit > 0 {
 		limitPtr = &limit
+		if afterString == nil {
+			empty := ""
+			afterString = &empty
+		}
 	}
-	cmd := btcjson.NewGetBcmrIdentityCmd(authbase.String(), &includeAuthchain,
+	return btcjson.NewGetBcmrIdentityCmd(authbase.String(), &includeAuthchain,
 		afterString, limitPtr)
-	return c.sendCmd(cmd)
 }
 
 // GetBcmrIdentity returns what the BCMR index knows of the identity with the

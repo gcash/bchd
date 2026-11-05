@@ -1754,7 +1754,7 @@ func handleGetBcmrIdentity(s *rpcServer, cmd interface{}, closeChan <-chan struc
 			Message: "after and limit only apply with includeauthchain",
 		}
 	}
-	if c.After != nil {
+	if c.After != nil && *c.After != "" {
 		after, err := chainhash.NewHashFromStr(*c.After)
 		if err != nil {
 			return nil, rpcDecodeHexError(*c.After)

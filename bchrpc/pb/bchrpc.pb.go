@@ -705,8 +705,11 @@ type GetBlockchainInfoResponse struct {
 	SlpIndex bool `protobuf:"varint,8,opt,name=slp_index,json=slpIndex,proto3" json:"slp_index,omitempty"`
 	// When `slp_graphsearch` is true, the node is able to handle calls to slp graph search
 	SlpGraphsearch bool `protobuf:"varint,9,opt,name=slp_graphsearch,json=slpGraphsearch,proto3" json:"slp_graphsearch,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// When `bcmr_index` is true, the node has the BCMR index enabled and may
+	// be used with GetBcmrIdentity.
+	BcmrIndex     bool `protobuf:"varint,10,opt,name=bcmr_index,json=bcmrIndex,proto3" json:"bcmr_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetBlockchainInfoResponse) Reset() {
@@ -798,6 +801,13 @@ func (x *GetBlockchainInfoResponse) GetSlpIndex() bool {
 func (x *GetBlockchainInfoResponse) GetSlpGraphsearch() bool {
 	if x != nil {
 		return x.SlpGraphsearch
+	}
+	return false
+}
+
+func (x *GetBlockchainInfoResponse) GetBcmrIndex() bool {
+	if x != nil {
+		return x.BcmrIndex
 	}
 	return false
 }
@@ -7039,9 +7049,12 @@ type GetBcmrIdentityResponse_Proof struct {
 	Index uint32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
 	// The link's block, and the proof's hashes and flags, as in
 	// GetMerkleProofResponse.
-	Block         *BlockInfo `protobuf:"bytes,2,opt,name=block,proto3" json:"block,omitempty"`
-	Hashes        [][]byte   `protobuf:"bytes,3,rep,name=hashes,proto3" json:"hashes,omitempty"`
-	Flags         []byte     `protobuf:"bytes,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	Block  *BlockInfo `protobuf:"bytes,2,opt,name=block,proto3" json:"block,omitempty"`
+	Hashes [][]byte   `protobuf:"bytes,3,rep,name=hashes,proto3" json:"hashes,omitempty"`
+	Flags  []byte     `protobuf:"bytes,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	// The number of transactions in the block, which the proof's tree
+	// needs.
+	Transactions  uint32 `protobuf:"varint,5,opt,name=transactions,proto3" json:"transactions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7104,6 +7117,13 @@ func (x *GetBcmrIdentityResponse_Proof) GetFlags() []byte {
 	return nil
 }
 
+func (x *GetBcmrIdentityResponse_Proof) GetTransactions() uint32 {
+	if x != nil {
+		return x.Transactions
+	}
+	return 0
+}
+
 var File_bchrpc_proto protoreflect.FileDescriptor
 
 const file_bchrpc_proto_rawDesc = "" +
@@ -7121,7 +7141,7 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\x10transaction_hash\x18\x01 \x01(\fH\x00R\x0ftransactionHash\x123\n" +
 	"\vtransaction\x18\x02 \x01(\v2\x0f.pb.TransactionH\x00R\vtransactionB\x0e\n" +
 	"\ftxids_or_txs\"\x1a\n" +
-	"\x18GetBlockchainInfoRequest\"\xcd\x03\n" +
+	"\x18GetBlockchainInfoRequest\"\xec\x03\n" +
 	"\x19GetBlockchainInfoResponse\x12I\n" +
 	"\vbitcoin_net\x18\x01 \x01(\x0e2(.pb.GetBlockchainInfoResponse.BitcoinNetR\n" +
 	"bitcoinNet\x12\x1f\n" +
@@ -7137,7 +7157,10 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\n" +
 	"addr_index\x18\a \x01(\bR\taddrIndex\x12\x1b\n" +
 	"\tslp_index\x18\b \x01(\bR\bslpIndex\x12'\n" +
-	"\x0fslp_graphsearch\x18\t \x01(\bR\x0eslpGraphsearch\"[\n" +
+	"\x0fslp_graphsearch\x18\t \x01(\bR\x0eslpGraphsearch\x12\x1d\n" +
+	"\n" +
+	"bcmr_index\x18\n" +
+	" \x01(\bR\tbcmrIndex\"[\n" +
 	"\n" +
 	"BitcoinNet\x12\v\n" +
 	"\aMAINNET\x10\x00\x12\v\n" +
@@ -7573,7 +7596,7 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\bauthbase\x18\x01 \x01(\fR\bauthbase\x12+\n" +
 	"\x11include_authchain\x18\x02 \x01(\bR\x10includeAuthchain\x12\x14\n" +
 	"\x05after\x18\x03 \x01(\fR\x05after\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\rR\x05limit\"\x9d\b\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"\xc2\b\n" +
 	"\x17GetBcmrIdentityResponse\x12\x1a\n" +
 	"\bauthbase\x18\x01 \x01(\fR\bauthbase\x12:\n" +
 	"\x06status\x18\x02 \x01(\x0e2\".pb.GetBcmrIdentityResponse.StatusR\x06status\x124\n" +
@@ -7600,12 +7623,13 @@ const file_bchrpc_proto_rawDesc = "" +
 	"\n" +
 	"block_hash\x18\x03 \x01(\fR\tblockHash\x12I\n" +
 	"\vpublication\x18\x04 \x01(\v2'.pb.GetBcmrIdentityResponse.PublicationR\vpublication\x12 \n" +
-	"\vtransaction\x18\x05 \x01(\fR\vtransaction\x1ap\n" +
+	"\vtransaction\x18\x05 \x01(\fR\vtransaction\x1a\x94\x01\n" +
 	"\x05Proof\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12#\n" +
 	"\x05block\x18\x02 \x01(\v2\r.pb.BlockInfoR\x05block\x12\x16\n" +
 	"\x06hashes\x18\x03 \x03(\fR\x06hashes\x12\x14\n" +
-	"\x05flags\x18\x04 \x01(\fR\x05flags\" \n" +
+	"\x05flags\x18\x04 \x01(\fR\x05flags\x12\"\n" +
+	"\ftransactions\x18\x05 \x01(\rR\ftransactions\" \n" +
 	"\x06Status\x12\n" +
 	"\n" +
 	"\x06ACTIVE\x10\x00\x12\n" +

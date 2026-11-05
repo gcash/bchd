@@ -247,6 +247,9 @@ message GetBlockchainInfoResponse {
     bool slp_index = 8;
     // When `slp_graphsearch` is true, the node is able to handle calls to slp graph search
     bool slp_graphsearch = 9;
+    // When `bcmr_index` is true, the node has the BCMR index enabled and may
+    // be used with GetBcmrIdentity.
+    bool bcmr_index = 10;
 }
 
 message GetBlockInfoRequest {
@@ -1241,6 +1244,9 @@ message GetBcmrIdentityResponse {
         BlockInfo block = 2;
         repeated bytes hashes = 3;
         bytes flags = 4;
+        // The number of transactions in the block, which the proof's tree
+        // needs.
+        uint32 transactions = 5;
     }
 
     // The identity's authbase, little-endian.

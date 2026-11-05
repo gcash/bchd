@@ -168,6 +168,9 @@ export class GetBlockchainInfoResponse extends jspb.Message {
   getSlpGraphsearch(): boolean;
   setSlpGraphsearch(value: boolean): void;
 
+  getBcmrIndex(): boolean;
+  setBcmrIndex(value: boolean): void;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetBlockchainInfoResponse.AsObject;
   static toObject(includeInstance: boolean, msg: GetBlockchainInfoResponse): GetBlockchainInfoResponse.AsObject;
@@ -189,6 +192,7 @@ export namespace GetBlockchainInfoResponse {
     addrIndex: boolean,
     slpIndex: boolean,
     slpGraphsearch: boolean,
+    bcmrIndex: boolean,
   }
 
   export interface BitcoinNetMap {
@@ -3225,6 +3229,9 @@ export namespace GetBcmrIdentityResponse {
     getFlags_asB64(): string;
     setFlags(value: Uint8Array | string): void;
 
+    getTransactions(): number;
+    setTransactions(value: number): void;
+
     serializeBinary(): Uint8Array;
     toObject(includeInstance?: boolean): Proof.AsObject;
     static toObject(includeInstance: boolean, msg: Proof): Proof.AsObject;
@@ -3241,6 +3248,7 @@ export namespace GetBcmrIdentityResponse {
       block?: BlockInfo.AsObject,
       hashesList: Array<Uint8Array | string>,
       flags: Uint8Array | string,
+      transactions: number,
     }
   }
 

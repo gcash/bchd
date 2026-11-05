@@ -86,6 +86,7 @@ started without it. `NotFound` means the index is on but has no entry. Common ca
 | `GetAddressTransactions`, `GetAddressUnspentOutputs` | `--addrindex` |
 | SLP fields on transactions / addresses | `--slpindex` |
 | `GetSlpTokenMetadata` | `--slpindex` |
+| `GetBcmrIdentity` | `--bcmrindex`; a publication's `hash` stays in the byte order it was pushed in |
 
 See [server_configuration.md](./server_configuration.md) for startup flags; the gRPC server only
 starts with `--grpclisten` and the JSON-RPC credentials set. Default gRPC port is **8335** on mainnet

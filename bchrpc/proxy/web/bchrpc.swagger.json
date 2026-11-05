@@ -1131,6 +1131,11 @@
         "flags": {
           "type": "string",
           "format": "byte"
+        },
+        "transactions": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The number of transactions in the block, which the proof's tree\nneeds."
         }
       },
       "description": "A merkle proof of a link of the authchain."
@@ -1990,6 +1995,10 @@
         "slp_graphsearch": {
           "type": "boolean",
           "title": "When `slp_graphsearch` is true, the node is able to handle calls to slp graph search"
+        },
+        "bcmr_index": {
+          "type": "boolean",
+          "description": "When `bcmr_index` is true, the node has the BCMR index enabled and may\nbe used with GetBcmrIdentity."
         }
       }
     },

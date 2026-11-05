@@ -96,5 +96,6 @@ bchd --grpclisten=0.0.0.0 --txindex --addrindex
 `GetSlpTokenMetadata`, `GetSlpTrustedValidation`, `CheckSlpTransaction` and the
 `include_token_metadata` request option also need `--slpindex`, and `GetSlpGraphSearch` needs
 `--slpgraphsearch`, which in turn needs both `--txindex` and `--slpindex`. `GetBlockFilter` needs
-the committed filter index, which is on unless `--nocfilters` or `--fastsync` is set. A call
+the committed filter index, which is on unless `--nocfilters` or `--fastsync` is set.
+`GetBcmrIdentity` needs `--bcmrindex`, which `GetBlockchainInfo`'s `bcmr_index` reports. A call
 whose index is off fails with `Unavailable`.
