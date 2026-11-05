@@ -217,6 +217,11 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 			b.index.UnsetStatusFlags(n, invalid&^oldStatus[i])
 			b.index.SetStatusFlags(n, oldStatus[i]&statusValid)
 		}
+
+		// The reorganization can have written the marks.
+		if writeErr := b.index.flushToDB(); writeErr != nil {
+			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+		}
 		return err
 	}
 	if err := b.index.flushToDB(); err != nil {

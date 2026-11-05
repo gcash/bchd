@@ -39,6 +39,7 @@ This release keeps the websocket notifications from missing a transaction that s
 - `reconsiderblock` keeps the block's entry in the block index rather than replacing it, so that a side chain built on the block, which the call doesn't touch, can't later leave the main chain and the index with different entries for it.
 - A `rescan` that reaches the tip waits until the sync manager has paused before it reads the tip and registers its addresses, so that a block being connected can no longer slip between the two.
 - `invalidateblock` marks every block built on the block, and `reconsiderblock` clears those marks and returns to the best chain they make. It left them invalid, so that after invalidating and reconsidering a block the node stayed behind, refused the next block, and would have banned the peers that announced it.
+- An `invalidateblock` that fails, or a `reconsiderblock` that can't read the block, leaves the block as it was. A block that stayed connected was left marked invalid, and a chain that couldn't be read was left marked valid.
 
 ### Other
 

@@ -2055,11 +2055,16 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
-	b.index.SetStatusFlags(node, statusValidateFailed)
-	b.index.UnsetStatusFlags(node, statusValid)
-
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
+
+	// The block is marked before the reorganization, which releases the
+	// chain lock while it sends notifications, so that headers arriving
+	// meanwhile can't extend it, and a failure, which leaves it connected,
+	// takes the mark back.
+	oldStatus := b.index.NodeStatus(node)
+	b.index.SetStatusFlags(node, statusValidateFailed)
+	b.index.UnsetStatusFlags(node, statusValid)
 
 	// A block off the main chain takes nothing else off it.
 	if b.bestChain.Contains(node) {
@@ -2067,6 +2072,13 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 
 		err := b.reorganizeChain(detachNodes, attachNodes)
 		if err != nil {
+			b.index.UnsetStatusFlags(node, statusValidateFailed)
+			b.index.SetStatusFlags(node, oldStatus&statusValid)
+
+			// The reorganization can have written the mark.
+			if writeErr := b.index.flushToDB(); writeErr != nil {
+				log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+			}
 			return err
 		}
 	}
@@ -2111,30 +2123,14 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 		return err
 	}
 
-	// A block before the finalized block can only be reconsidered once
-	// finalization moves back to where its chain forks.
-	b.chainLock.Lock()
-	b.unfinalizeTo(node)
-	b.chainLock.Unlock()
-
-	// Keep a reference to the first node in the chain of invalid
-	// blocks so we can reprocess after status flags are updated.
+	// Find the first node in the chain of invalid blocks, to reprocess it
+	// once the status flags are updated.
 	firstNode := node
-
-	// Find previous node to the point where the blocks are valid again.
 	for n := node; n.status.KnownInvalid(); n = n.parent {
-		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
-		b.index.UnsetStatusFlags(n, statusValidateFailed)
-
 		firstNode = n
 	}
 
-	// The blocks built on it are no longer known to be invalid either.
-	for _, n := range b.index.descendants(node) {
-		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
-		b.index.UnsetStatusFlags(n, statusValidateFailed)
-	}
-
+	// Read it before anything changes, so that a failure changes nothing.
 	var blk *bchutil.Block
 	err := b.db.View(func(dbTx database.Tx) error {
 		var err error
@@ -2143,6 +2139,24 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// A block before the finalized block can only be reconsidered once
+	// finalization moves back to where its chain forks.
+	b.chainLock.Lock()
+	b.unfinalizeTo(node)
+	b.chainLock.Unlock()
+
+	// The blocks from there on are no longer known to be invalid.
+	for n := node; n.status.KnownInvalid(); n = n.parent {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
+	}
+
+	// The blocks built on it are no longer known to be invalid either.
+	for _, n := range b.index.descendants(node) {
+		b.index.UnsetStatusFlags(n, statusInvalidAncestor)
+		b.index.UnsetStatusFlags(n, statusValidateFailed)
 	}
 
 	// Process it all again. This will take care of the
