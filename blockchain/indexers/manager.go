@@ -447,10 +447,18 @@ func (m *Manager) Init(chain *blockchain.BlockChain, interrupt <-chan struct{}) 
 			}
 
 			// We'll also grab the set of outputs spent by this
-			// block so we can remove them from the index.
-			spentTxos, err := chain.FetchSpendJournal(block)
-			if err != nil {
-				return err
+			// block so we can remove them from the index.  The
+			// journal of a block off the main chain may be gone, so
+			// only an index that needs them asks for them, and it
+			// can only be rebuilt without them.
+			var spentTxos []blockchain.SpentTxOut
+			if indexNeedsInputs(indexer) {
+				spentTxos, err = chain.FetchSpendJournal(block)
+				if err != nil {
+					return fmt.Errorf("can't roll the %s back from "+
+						"block %v, drop the index to rebuild it: %w",
+						indexer.Name(), hash, err)
+				}
 			}
 
 			// With the block and stxo set for that block retrieved,

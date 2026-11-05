@@ -39,6 +39,8 @@ This release keeps the websocket notifications from missing a transaction that s
 
 ### Other
 
+- An index that needs no spent outputs no longer stops the node from starting when its tip is a block a reorganization left while the index was off, as after a run without it or on an older version: the block's spend journal is gone by then. One that needs them, the address and filter indexes, says which one to drop.
+- `--bcmrindex` is refused on a data directory that was pruned or fast synced before, not only with `--prune` or `--fastsync` set.
 - The transaction and SLP indexes store the version of their records, as the address and filter indexes do, so that a later bchd can migrate them, and so that bchd refuses an index that a later version built rather than misread it. An index built before is marked version 1, which its records are.
 - `rpctest` harnesses listen on ports below 32768, where Linux starts the ephemeral ports of outgoing connections. Their RPC ports reached 60000, so a connection that a test made could hold the RPC port of a harness, which then failed to start with "address already in use", as neutrino's sync test did on CI.
 

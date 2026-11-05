@@ -4430,6 +4430,13 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		return nil, err
 	}
 
+	// The chain keeps no indexes once it was pruned, and --prune and
+	// --fastsync are only refused while they are set.
+	if s.bcmrIndex != nil && s.chain.IsPruned() {
+		return nil, errors.New("bcmrindex can not be used with a pruned " +
+			"blockchain, and this one was pruned or fast synced before")
+	}
+
 	// Signal process shutdown when the chain state can't be written.
 	go func() {
 		<-s.chain.RequestedProcessShutdown()
