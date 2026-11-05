@@ -16,17 +16,43 @@ const (
 	// to the root of a commitment of 2^64 - 1 blocks has 64.
 	MaxSHVProofLength = 64
 
-	// minSHVResponsePayload is the size of the smallest SHV response: the
-	// type, one-byte heights, the header, an empty proof and the target.
-	minSHVResponsePayload = 1 + 1 + 1 + blockHeaderLen + 1 +
-		chainhash.HashSize
+	// SHVStatusFound is an shv entry that carries the header and the proof.
+	// Every other status is that one byte alone.
+	SHVStatusFound uint8 = 0
+
+	// SHVStatusNotFound is an shv entry whose block is not on the main
+	// chain.
+	SHVStatusNotFound uint8 = 1
+
+	// SHVStatusAboveCommitment is an shv entry whose block is above the
+	// commitment height.
+	SHVStatusAboveCommitment uint8 = 2
+
+	// SHVStatusCommitmentAboveTip is an shv entry whose commitment height
+	// is above the index's tip.
+	SHVStatusCommitmentAboveTip uint8 = 3
+
+	// SHVStatusReservedType is an shv entry whose request set a reserved
+	// type bit, bits 2 to 7.
+	SHVStatusReservedType uint8 = 4
+
+	// minSHVResponsePayload is the size of the smallest SHV response, a
+	// status other than found, which is that byte alone.  A found response
+	// also carries the type, the heights, the header, the proof and the
+	// target.
+	minSHVResponsePayload = 1
 )
 
-// SHVResponse is a response of an shv message: the header of a block, and
-// the proof that its hash is the leaf at its height of the commitment at
-// CommitmentHeight, with the target the proof leads to.
+// SHVResponse is one entry of an shv message.  Status says whether the entry
+// carries the header of a block and the proof that its hash is the leaf at
+// its height of the commitment at CommitmentHeight.  Any other status is the
+// status byte alone.
 type SHVResponse struct {
-	// Type is the type of the request answered.
+	// Status is the outcome of the request this entry answers.
+	Status uint8
+
+	// Type is the type of the request answered.  It is written only when
+	// Status is SHVStatusFound.
 	Type uint8
 
 	// CommitmentHeight is the commitment height of the request answered.
@@ -52,7 +78,10 @@ type SHVResponse struct {
 // SerializeSize returns the number of bytes the response takes in an shv
 // message.
 func (resp *SHVResponse) SerializeSize() int {
-	return 1 + VarIntSerializeSize(resp.CommitmentHeight) +
+	if resp.Status != SHVStatusFound {
+		return 1
+	}
+	return 1 + 1 + VarIntSerializeSize(resp.CommitmentHeight) +
 		VarIntSerializeSize(resp.BlockHeight) + blockHeaderLen +
 		VarIntSerializeSize(uint64(len(resp.Proof))) +
 		len(resp.Proof)*chainhash.HashSize + chainhash.HashSize
@@ -60,7 +89,19 @@ func (resp *SHVResponse) SerializeSize() int {
 
 // readSHVResponse reads an SHV response from r.
 func readSHVResponse(r io.Reader, pver uint32, resp *SHVResponse) error {
-	var err error
+	status, err := binarySerializer.Uint8(r)
+	if err != nil {
+		return err
+	}
+	if status > SHVStatusReservedType {
+		str := fmt.Sprintf("unknown SHV status [status %d]", status)
+		return messageError("MsgSHV.BchDecode", str)
+	}
+	resp.Status = status
+	if status != SHVStatusFound {
+		return nil
+	}
+
 	resp.Type, err = binarySerializer.Uint8(r)
 	if err != nil {
 		return err
@@ -101,6 +142,17 @@ func readSHVResponse(r io.Reader, pver uint32, resp *SHVResponse) error {
 
 // writeSHVResponse writes an SHV response to w.
 func writeSHVResponse(w io.Writer, pver uint32, resp *SHVResponse) error {
+	if resp.Status > SHVStatusReservedType {
+		str := fmt.Sprintf("unknown SHV status [status %d]", resp.Status)
+		return messageError("MsgSHV.BchEncode", str)
+	}
+	if err := binarySerializer.PutUint8(w, resp.Status); err != nil {
+		return err
+	}
+	if resp.Status != SHVStatusFound {
+		return nil
+	}
+
 	if err := binarySerializer.PutUint8(w, resp.Type); err != nil {
 		return err
 	}
@@ -132,13 +184,10 @@ func writeSHVResponse(w io.Writer, pver uint32, resp *SHVResponse) error {
 	return writeElement(w, &resp.Target)
 }
 
-// MsgSHV implements the Message interface and represents an shv message,
-// from CHIP-2026-02, Simplified Header Verification.  It answers a getshv
-// message with a response for each valid request, leaving the invalid ones
-// out.  A server may split its answer over more than one shv message, and the
-// responses may come in any order, so a client matches them to its requests by
-// their type, commitment height and block height, or for a request by hash,
-// by the hash of the header.
+// MsgSHV implements the Message interface and represents an shv message, from
+// CHIP-2026-02, Simplified Header Verification.  It answers one getshv message
+// with one entry per request, in the same order.  An entry other than
+// SHVStatusFound is a status byte alone.
 type MsgSHV struct {
 	Responses []SHVResponse
 }
@@ -202,9 +251,20 @@ func (msg *MsgSHV) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgSHV) MaxPayloadLength(pver uint32) uint32 {
-	// The limit BCHN applies to every message but block, cmpctblock and
-	// blocktxn.  An answer to a full getshv message with the longest
-	// proofs, about 220 KB, fits well within it.
+	// One shv message answers one getshv message in full: up to
+	// MaxSHVRequestsPerMsg found responses, each with a proof of
+	// MaxSHVProofLength hashes and heights at their longest compact size.
+	// The limit is the larger of that size and maxProtocolMessageLength,
+	// which BCHN applies to every message but block, cmpctblock and
+	// blocktxn, so the whole answer fits in one message.
+	entry := 1 + 1 + 2*VarIntSerializeSize(^uint64(0)) + blockHeaderLen +
+		VarIntSerializeSize(MaxSHVProofLength) +
+		MaxSHVProofLength*chainhash.HashSize + chainhash.HashSize
+	full := VarIntSerializeSize(MaxSHVRequestsPerMsg) +
+		MaxSHVRequestsPerMsg*entry
+	if full > int(maxProtocolMessageLength) {
+		return uint32(full)
+	}
 	return maxProtocolMessageLength
 }
 

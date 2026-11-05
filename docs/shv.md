@@ -32,20 +32,32 @@ A node with SHV advertises `NODE_SHV`, service bit 9, which bchd's `wire`
 package names `SFNodeSHV`.  The bit was the never used `SFNodeXThinner`, which
 remains as a deprecated alias.
 
-`getshv` holds up to 100 requests.  Each has a type byte (bit 0: proof to the
-root rather than to the block's peak; bit 1: block selected by hash rather
-than by height; bits 2 to 7 reserved), a compact size commitment height, and 32
-bytes holding the block's hash or its height as a little-endian number.  `shv`
-answers with, for each valid request, the type, commitment height and block
-height, the 80-byte header, the proof's sibling hashes from the bottom up, and
-the target peak or root.  Hashes are in internal byte order.
+`getshv` holds up to 100 requests.  Each starts with a type byte.  Bit 0
+asks for a proof to the root of the commitment, rather than to the peak
+of the block's mountain.  Bit 1 set selects the block by its hash, and
+the request then carries that 32-byte hash.  Bit 1 clear selects it by
+height, as a compact size.  Bits 2 to 7 are reserved.  The commitment
+height is a compact size either way.  Hashes are in internal byte order.
 
-As the CHIP has it, a request is left out of the answer when a reserved bit is
-set, a height does not fit in eight bytes, the main chain has no such block,
-the block is above the commitment, or the commitment is above the index's tip.
-A `getshv` message whose requests are all left out gets an empty `shv`
-message.  One of more than 100 requests gets no answer and, as in Bitcoin Cash
-Node, adds 20 to the peer's ban score.  A node without SHV ignores `getshv`.
+One `shv` message answers one `getshv` message, with one entry per
+request, in the same order.  The answer is not split across messages.  A
+`getshv` message with no requests gets an `shv` message with no entries.
+Each entry starts with a status byte:
+
+* 0, found.  The entry continues with the type, the commitment height, the
+  block height, the 80-byte header, the proof's sibling hashes from the bottom
+  up, and the target peak or root, in that order.  The heights are compact
+  sizes.
+* 1, not found.  The main chain has no such block.
+* 2, above the commitment.  The block is above the commitment height.
+* 3, commitment above the tip.  The commitment height is above the index's tip.
+* 4, reserved type.  A reserved type bit is set.
+
+Any status but found is that single byte.  A status above 4 is not a valid
+entry.  A height the main chain does not have is not found, including when the
+commitment is also above the tip.  A `getshv` message of more than 100
+requests gets one `shv` message with no entries and, as in Bitcoin Cash Node,
+adds 20 to the peer's ban score.  A node without SHV ignores `getshv`.
 
 ## RPC
 

@@ -463,53 +463,62 @@ func TestSHVIndexConcurrentProofs(t *testing.T) {
 	checkSHVIndex(t, x, chain)
 }
 
-// TestSHVReplies ensures the responses to a getshv message are put in order
-// into as few shv messages as fit the payload limit, at most 100 each, and
-// that no responses still make one empty message.
-func TestSHVReplies(t *testing.T) {
-	if replies := shvReplies(nil, 1000); len(replies) != 1 ||
-		len(replies[0].Responses) != 0 {
-
-		t.Fatalf("no responses gave %d replies", len(replies))
+// TestSHVResponseStatus ensures each request is answered with the status for
+// its outcome: found, with the header, when the block is in the commitment,
+// and otherwise not found, above the commitment, above the index's tip, or a
+// reserved type bit.
+func TestSHVResponseStatus(t *testing.T) {
+	chain, _, x := newSHVTestChain(t)
+	for range 4 {
+		mineSHVBlock(t, chain, 0)
 	}
+	hashes := mainChainHashes(t, chain)
+	tip := uint64(len(hashes) - 1)
+	unknown := chainhash.Hash{0x01}
+	reserved := wire.NewSHVRequestByHeight(false, tip, 1)
+	reserved.Type |= 0x04
 
-	responses := make([]wire.SHVResponse, 250)
-	for i := range responses {
-		responses[i].BlockHeight = uint64(i)
-		responses[i].Proof = make([]chainhash.Hash, i%8)
+	tests := []struct {
+		name   string
+		req    wire.SHVRequest
+		status uint8
+	}{
+		{"by height", wire.NewSHVRequestByHeight(true, tip, 1),
+			wire.SHVStatusFound},
+		{"by hash", wire.NewSHVRequestByHash(false, tip, &hashes[2]),
+			wire.SHVStatusFound},
+		{"reserved type", reserved, wire.SHVStatusReservedType},
+		{"no such block", wire.NewSHVRequestByHeight(false, tip + 5, tip + 2),
+			wire.SHVStatusNotFound},
+		{"unknown hash", wire.NewSHVRequestByHash(true, tip, &unknown),
+			wire.SHVStatusNotFound},
+		{"above the commitment", wire.NewSHVRequestByHeight(false, 1, 3),
+			wire.SHVStatusAboveCommitment},
+		{"hash above the commitment", wire.NewSHVRequestByHash(false, 0,
+			&hashes[len(hashes) - 1]), wire.SHVStatusAboveCommitment},
+		{"commitment above the tip", wire.NewSHVRequestByHeight(true,
+			tip + 5, 1), wire.SHVStatusCommitmentAboveTip},
 	}
-	maxPayload := (&wire.MsgSHV{}).MaxPayloadLength(wire.ProtocolVersion)
-	for _, limit := range []uint32{maxPayload, 4000, 1000, 1} {
-		replies := shvReplies(responses, limit)
-		var got []wire.SHVResponse
-		for _, reply := range replies {
-			if len(reply.Responses) == 0 ||
-				len(reply.Responses) > wire.MaxSHVRequestsPerMsg {
+	for _, test := range tests {
+		resp := x.response(&test.req)
+		if resp.Status != test.status {
+			t.Errorf("%s: status %d, want %d", test.name, resp.Status,
+				test.status)
+			continue
+		}
+		if test.status != wire.SHVStatusFound {
+			if resp.SerializeSize() != 1 {
+				t.Errorf("%s: size %d, want 1", test.name,
+					resp.SerializeSize())
+			}
+			continue
+		}
+		if resp.Type != test.req.Type ||
+			resp.CommitmentHeight != test.req.CommitmentHeight ||
+			resp.BlockHeight >= uint64(len(hashes)) ||
+			resp.Header.BlockHash() != hashes[int(resp.BlockHeight)] {
 
-				t.Fatalf("limit %d: a reply of %d responses", limit,
-					len(reply.Responses))
-			}
-			size := wire.VarIntSerializeSize(uint64(len(reply.Responses)))
-			for i := range reply.Responses {
-				size += reply.Responses[i].SerializeSize()
-			}
-			if uint32(size) > limit && len(reply.Responses) > 1 {
-				t.Fatalf("limit %d: a reply of %d bytes", limit, size)
-			}
-			got = append(got, reply.Responses...)
-		}
-		if len(got) != len(responses) {
-			t.Fatalf("limit %d: %d responses, want %d", limit, len(got),
-				len(responses))
-		}
-		for i := range got {
-			if got[i].BlockHeight != uint64(i) {
-				t.Fatalf("limit %d: response %d out of order", limit, i)
-			}
-		}
-		if limit == maxPayload && len(replies) != 3 {
-			t.Fatalf("%d replies under the message limit, want 3",
-				len(replies))
+			t.Errorf("%s: %+v", test.name, resp)
 		}
 	}
 }

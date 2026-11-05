@@ -310,15 +310,19 @@ func (x *shvIndex) blockRoot(hash *chainhash.Hash, height int32) (chainhash.Hash
 	return root, true
 }
 
-// response returns the response to an SHV request of a getshv message, and
-// false when the request is invalid, which CHIP-2026-02 has the server leave
-// out of its answer: when a reserved type bit is set, a height has more than
-// eight bytes, the main chain has no block at the height or with the hash,
-// the block is above the commitment, or the commitment is above the index's
-// tip.
-func (x *shvIndex) response(req *wire.SHVRequest) (wire.SHVResponse, bool) {
+// response returns the shv entry for one getshv request.  The status is
+// SHVStatusFound, with the header and the proof, when the request can be
+// answered.  Otherwise it is the reason there is no proof:
+// SHVStatusReservedType when a reserved type bit is set, SHVStatusNotFound
+// when the main chain has no such block, SHVStatusAboveCommitment when the
+// block is above the commitment, and SHVStatusCommitmentAboveTip when the
+// commitment is above the index's tip.  While the index is not in step with
+// the main chain, proof cannot show the block is on it, and the status is
+// SHVStatusNotFound: proof reports that before it reports a commitment above
+// the tip.
+func (x *shvIndex) response(req *wire.SHVRequest) wire.SHVResponse {
 	if !req.IsValid() {
-		return wire.SHVResponse{}, false
+		return wire.SHVResponse{Status: wire.SHVStatusReservedType}
 	}
 
 	var height uint64
@@ -326,61 +330,48 @@ func (x *shvIndex) response(req *wire.SHVRequest) (wire.SHVResponse, bool) {
 		blockHeight, err := x.chain.BlockHeightByHash(
 			&req.BlockHeightOrHash)
 		if err != nil {
-			return wire.SHVResponse{}, false
+			return wire.SHVResponse{Status: wire.SHVStatusNotFound}
 		}
 		height = uint64(blockHeight)
 	} else {
-		height, _ = req.BlockHeight()
+		height = req.BlockHeight()
 	}
 	if height > req.CommitmentHeight {
-		return wire.SHVResponse{}, false
+		return wire.SHVResponse{Status: wire.SHVStatusAboveCommitment}
 	}
 
 	header, branch, target, err := x.proof(req.ProofToRoot(), height,
 		req.CommitmentHeight)
 	if err != nil {
-		return wire.SHVResponse{}, false
+		// proof returns errSHVBlockNotFound when the main chain has no
+		// block at the height, and errSHVCommitment when the commitment
+		// is above the index's tip.  A block above the commitment was
+		// answered above; proof reports that case as ErrLeafIndex too.
+		status := wire.SHVStatusNotFound
+		switch {
+		case errors.Is(err, errSHVCommitment):
+			status = wire.SHVStatusCommitmentAboveTip
+		case errors.Is(err, shv.ErrLeafIndex):
+			status = wire.SHVStatusAboveCommitment
+		}
+		return wire.SHVResponse{Status: status}
 	}
 
 	// A reorganization may have replaced the block with the hash since
 	// its height was looked up.
 	if req.ByHash() && header.BlockHash() != req.BlockHeightOrHash {
-		return wire.SHVResponse{}, false
+		return wire.SHVResponse{Status: wire.SHVStatusNotFound}
 	}
 
 	return wire.SHVResponse{
+		Status:           wire.SHVStatusFound,
 		Type:             req.Type,
 		CommitmentHeight: req.CommitmentHeight,
 		BlockHeight:      height,
 		Header:           *header,
 		Proof:            branch,
 		Target:           target,
-	}, true
-}
-
-// shvReplies puts the responses to a getshv message into as few shv messages
-// of at most maxPayload bytes as hold them, in order.  There is always at
-// least one, as a getshv message whose requests are all invalid still gets an
-// empty answer.
-func shvReplies(responses []wire.SHVResponse, maxPayload uint32) []*wire.MsgSHV {
-	reply := wire.NewMsgSHV()
-	replies := []*wire.MsgSHV{reply}
-	size := 0
-	for _, resp := range responses {
-		respSize := resp.SerializeSize()
-		count := len(reply.Responses)
-		total := wire.VarIntSerializeSize(uint64(count+1)) + size + respSize
-		if count > 0 && (uint64(total) > uint64(maxPayload) ||
-			count == wire.MaxSHVRequestsPerMsg) {
-
-			reply = wire.NewMsgSHV()
-			replies = append(replies, reply)
-			size = 0
-		}
-		reply.Responses = append(reply.Responses, resp)
-		size += respSize
 	}
-	return replies
 }
 
 // initSHVIndex builds the SHV index over the main chain, unless --noshv is

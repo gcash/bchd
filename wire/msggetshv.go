@@ -14,9 +14,9 @@ import (
 
 const (
 	// MaxSHVRequestsPerMsg is the most requests a getshv message may hold.
-	// CHIP-2026-02 has servers refuse a getshv message with more, and as
-	// an shv message answers the requests of one getshv message, it holds
-	// no more responses either.
+	// An shv message answers the requests of one getshv message, so it
+	// holds no more responses either.  More requests than this still
+	// decode; the server answers them with an empty shv message.
 	MaxSHVRequestsPerMsg = 100
 
 	// SHVProofToRoot is the bit of an SHV request type that asks for a
@@ -33,8 +33,9 @@ const (
 	SHVReservedTypeBits uint8 = 0xfc
 
 	// minSHVRequestPayload is the size of the smallest SHV request: the
-	// type, a one-byte commitment height and the block height or hash.
-	minSHVRequestPayload = 1 + 1 + chainhash.HashSize
+	// type, a one-byte commitment height and a one-byte block height.  A
+	// request by hash carries a 32-byte hash in place of the height.
+	minSHVRequestPayload = 1 + 1 + 1
 
 	// maxSHVRequestsDecode is the most requests a getshv message within its
 	// payload limit can hold.  More than MaxSHVRequestsPerMsg decode, so
@@ -55,8 +56,10 @@ type SHVRequest struct {
 	// CommitmentHeight is the height of the last block of the commitment.
 	CommitmentHeight uint64
 
-	// BlockHeightOrHash is the block's hash for a request by hash, and
-	// otherwise its height as a 32-byte little-endian number.
+	// BlockHeightOrHash is the block's hash for a request by hash.  For a
+	// request by height it is the height as a little-endian integer in the
+	// first eight bytes, which the wire writes as a compact size; the
+	// other bytes are zero and are not written.
 	BlockHeightOrHash chainhash.Hash
 }
 
@@ -96,30 +99,19 @@ func (req *SHVRequest) ByHash() bool {
 	return req.Type&SHVByHash != 0
 }
 
-// BlockHeight returns the height a request by height selects, from the first
-// eight bytes of BlockHeightOrHash, and whether the other 24 are zero, as they
-// must be.
-func (req *SHVRequest) BlockHeight() (uint64, bool) {
-	for _, b := range req.BlockHeightOrHash[8:] {
-		if b != 0 {
-			return 0, false
-		}
-	}
-	return binary.LittleEndian.Uint64(req.BlockHeightOrHash[:8]), true
+// BlockHeight returns the height a request by height selects, the
+// little-endian integer in the first eight bytes of BlockHeightOrHash.  The
+// bytes after those are not part of the height and are not written.
+func (req *SHVRequest) BlockHeight() uint64 {
+	return binary.LittleEndian.Uint64(req.BlockHeightOrHash[:8])
 }
 
-// IsValid reports whether the request is valid by itself: whether none of its
-// reserved type bits are set and, for a request by height, the height is well
-// formed.  Whether the heights and the hash fit the chain is up to the server.
+// IsValid reports whether the request is valid by itself, which is whether
+// none of its reserved type bits are set.  Whether the heights and the hash
+// fit the chain is up to the server.  A height always fits in the field: on
+// the wire it is a compact size, so it is at most eight bytes.
 func (req *SHVRequest) IsValid() bool {
-	if req.Type&SHVReservedTypeBits != 0 {
-		return false
-	}
-	if req.ByHash() {
-		return true
-	}
-	_, ok := req.BlockHeight()
-	return ok
+	return req.Type&SHVReservedTypeBits == 0
 }
 
 // readSHVRequest reads an SHV request from r.
@@ -133,7 +125,19 @@ func readSHVRequest(r io.Reader, pver uint32, req *SHVRequest) error {
 	if err != nil {
 		return err
 	}
-	return readElement(r, &req.BlockHeightOrHash)
+	if req.ByHash() {
+		return readElement(r, &req.BlockHeightOrHash)
+	}
+
+	// A height is a compact size.  It is kept in the first eight bytes so
+	// BlockHeight can read it back; the other bytes are not on the wire.
+	height, err := ReadVarInt(r, pver)
+	if err != nil {
+		return err
+	}
+	req.BlockHeightOrHash = chainhash.Hash{}
+	binary.LittleEndian.PutUint64(req.BlockHeightOrHash[:8], height)
+	return nil
 }
 
 // writeSHVRequest writes an SHV request to w.
@@ -144,7 +148,10 @@ func writeSHVRequest(w io.Writer, pver uint32, req *SHVRequest) error {
 	if err := WriteVarInt(w, pver, req.CommitmentHeight); err != nil {
 		return err
 	}
-	return writeElement(w, &req.BlockHeightOrHash)
+	if req.ByHash() {
+		return writeElement(w, &req.BlockHeightOrHash)
+	}
+	return WriteVarInt(w, pver, req.BlockHeight())
 }
 
 // MsgGetSHV implements the Message interface and represents a getshv message,

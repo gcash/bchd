@@ -157,12 +157,13 @@ func checkSHVResponse(t *testing.T, hashes []chainhash.Hash, resp *wire.SHVRespo
 	typ uint8, commitment, height uint64) {
 
 	t.Helper()
-	if resp.Type != typ || resp.CommitmentHeight != commitment ||
-		resp.BlockHeight != height {
+	if resp.Status != wire.SHVStatusFound || resp.Type != typ ||
+		resp.CommitmentHeight != commitment || resp.BlockHeight != height {
 
-		t.Fatalf("response type %d, commitment %d, height %d, want %d %d %d",
-			resp.Type, resp.CommitmentHeight, resp.BlockHeight, typ,
-			commitment, height)
+		t.Fatalf("response status %d, type %d, commitment %d, height %d, "+
+			"want %d %d %d %d", resp.Status, resp.Type,
+			resp.CommitmentHeight, resp.BlockHeight, wire.SHVStatusFound,
+			typ, commitment, height)
 	}
 	leaf := resp.Header.BlockHash()
 	if leaf != hashes[height] {
@@ -195,11 +196,21 @@ func checkSHVResponse(t *testing.T, hashes []chainhash.Hash, resp *wire.SHVRespo
 	}
 }
 
-// TestSHVServerAnswers ensures a node with SHV advertises SFNodeSHV, answers
-// the valid requests of a getshv message in order, with proofs to the peak or
-// root of blocks selected by height or by hash, leaves the invalid requests
-// out, answers a getshv message without valid requests with an empty shv
-// message, and answers 100 requests.
+// checkSHVStatus ensures resp is the passed status and nothing after it.
+func checkSHVStatus(t *testing.T, resp *wire.SHVResponse, status uint8) {
+	t.Helper()
+	if resp.Status != status || resp.SerializeSize() != 1 {
+		t.Fatalf("status %d, size %d, want status %d", resp.Status,
+			resp.SerializeSize(), status)
+	}
+}
+
+// TestSHVServerAnswers ensures a node with SHV advertises SFNodeSHV and
+// answers a getshv message with one shv message of one entry per request, in
+// order, found entries carrying the proof and the others the status for a
+// reserved type, a block above the commitment, a commitment above the tip or
+// a block the main chain does not have.  An empty getshv message gets an
+// empty shv message, and 100 requests are all answered.
 func TestSHVServerAnswers(t *testing.T) {
 	h := newSHVHarness(t, false, 12)
 	if h.services&wire.SFNodeSHV == 0 {
@@ -209,14 +220,11 @@ func TestSHVServerAnswers(t *testing.T) {
 
 	reserved := wire.NewSHVRequestByHeight(false, 10, 3)
 	reserved.Type |= 0x04
-	wide := wire.NewSHVRequestByHeight(false, 10, 3)
-	wide.BlockHeightOrHash[8] = 1
 	unknown := chainhash.Hash{0x01}
 	requests := []wire.SHVRequest{
 		wire.NewSHVRequestByHeight(false, 10, 3),
 		reserved,
 		wire.NewSHVRequestByHash(true, 12, &hashes[7]),
-		wide,
 		wire.NewSHVRequestByHeight(false, 10, 11),
 		wire.NewSHVRequestByHeight(true, 13, 1),
 		wire.NewSHVRequestByHash(true, 12, &unknown),
@@ -226,32 +234,41 @@ func TestSHVServerAnswers(t *testing.T) {
 		wire.NewSHVRequestByHash(false, 12, &hashes[9]),
 	}
 	replies := h.ask(t, 1, requests...)
-	if len(replies) != 1 || len(replies[0].Responses) != 5 {
-		t.Fatalf("got %d replies, want one of 5 responses", len(replies))
+	if len(replies) != 1 || len(replies[0].Responses) != len(requests) {
+		t.Fatalf("got %d replies, want one of %d responses", len(replies),
+			len(requests))
 	}
 	resps := replies[0].Responses
 	checkSHVResponse(t, hashes, &resps[0], 0, 10, 3)
-	checkSHVResponse(t, hashes, &resps[1], wire.SHVByHash|wire.SHVProofToRoot,
+	checkSHVStatus(t, &resps[1], wire.SHVStatusReservedType)
+	checkSHVResponse(t, hashes, &resps[2], wire.SHVByHash|wire.SHVProofToRoot,
 		12, 7)
-	checkSHVResponse(t, hashes, &resps[2], wire.SHVProofToRoot, 0, 0)
-	checkSHVResponse(t, hashes, &resps[3], 0, 12, 12)
-	checkSHVResponse(t, hashes, &resps[4], wire.SHVByHash, 12, 9)
+	checkSHVStatus(t, &resps[3], wire.SHVStatusAboveCommitment)
+	checkSHVStatus(t, &resps[4], wire.SHVStatusCommitmentAboveTip)
+	checkSHVStatus(t, &resps[5], wire.SHVStatusNotFound)
+	checkSHVResponse(t, hashes, &resps[6], wire.SHVProofToRoot, 0, 0)
+	checkSHVResponse(t, hashes, &resps[7], 0, 12, 12)
+	checkSHVStatus(t, &resps[8], wire.SHVStatusAboveCommitment)
+	checkSHVResponse(t, hashes, &resps[9], wire.SHVByHash, 12, 9)
 
 	// The genesis block proven in a commitment of itself, and the last
 	// block of an odd commitment proven to its peak, have empty proofs.
-	if len(resps[2].Proof) != 0 || resps[2].Target != hashes[0] ||
-		len(resps[3].Proof) != 0 || resps[3].Target != hashes[12] {
+	if len(resps[6].Proof) != 0 || resps[6].Target != hashes[0] ||
+		len(resps[7].Proof) != 0 || resps[7].Target != hashes[12] {
 
 		t.Error("genesis or lone peak proofs not empty")
 	}
 
-	// A getshv message without valid requests, and an empty one, get an
-	// empty answer.
-	for nonce, reqs := range [][]wire.SHVRequest{{reserved, wide}, nil} {
-		replies := h.ask(t, uint64(nonce)+2, reqs...)
-		if len(replies) != 1 || len(replies[0].Responses) != 0 {
-			t.Fatalf("got %d replies, want one empty one", len(replies))
-		}
+	// A reserved request is answered with that status.  An empty getshv
+	// message gets an empty shv message.
+	replies = h.ask(t, 2, reserved)
+	if len(replies) != 1 || len(replies[0].Responses) != 1 {
+		t.Fatalf("got %d replies to a reserved request", len(replies))
+	}
+	checkSHVStatus(t, &replies[0].Responses[0], wire.SHVStatusReservedType)
+	replies = h.ask(t, 3)
+	if len(replies) != 1 || len(replies[0].Responses) != 0 {
+		t.Fatalf("got %d replies, want one empty one", len(replies))
 	}
 
 	// A block that left the main chain can't be proven by its hash, while
@@ -263,16 +280,17 @@ func TestSHVServerAnswers(t *testing.T) {
 	newHashes := mainChainHashes(t, h.chain)
 	replies = h.ask(t, 4, wire.NewSHVRequestByHash(true, 12, &hashes[12]),
 		wire.NewSHVRequestByHash(true, 12, &newHashes[12]))
-	if len(replies) != 1 || len(replies[0].Responses) != 1 {
-		t.Fatalf("got %d replies, want one of one response", len(replies))
+	if len(replies) != 1 || len(replies[0].Responses) != 2 {
+		t.Fatalf("got %d replies, want one of two responses", len(replies))
 	}
-	checkSHVResponse(t, newHashes, &replies[0].Responses[0],
+	checkSHVStatus(t, &replies[0].Responses[0], wire.SHVStatusNotFound)
+	checkSHVResponse(t, newHashes, &replies[0].Responses[1],
 		wire.SHVByHash|wire.SHVProofToRoot, 12, 12)
 
 	// 100 requests are all answered.
 	full := make([]wire.SHVRequest, wire.MaxSHVRequestsPerMsg)
 	for i := range full {
-		full[i] = wire.NewSHVRequestByHeight(i%2 == 0, 12, uint64(i%13))
+		full[i] = wire.NewSHVRequestByHeight(i%2 == 0, 12, uint64(i % 13))
 	}
 	replies = h.ask(t, 5, full...)
 	if len(replies) != 1 ||
@@ -282,7 +300,7 @@ func TestSHVServerAnswers(t *testing.T) {
 	}
 	for i := range replies[0].Responses {
 		checkSHVResponse(t, newHashes, &replies[0].Responses[i],
-			full[i].Type, 12, uint64(i%13))
+			full[i].Type, 12, uint64(i % 13))
 	}
 	if score := h.sp.banScore.Int(); score != 0 {
 		t.Fatalf("ban score %d after valid requests", score)
@@ -290,15 +308,16 @@ func TestSHVServerAnswers(t *testing.T) {
 }
 
 // TestSHVServerTooManyRequests ensures a getshv message of more than 100
-// requests gets no answer and adds BCHN's 20 to the peer's ban score, without
-// disconnecting it.
+// requests gets one shv message with no entries and adds BCHN's 20 to the
+// peer's ban score, without disconnecting it.
 func TestSHVServerTooManyRequests(t *testing.T) {
 	h := newSHVHarness(t, false, 3)
-	requests := make([]wire.SHVRequest, wire.MaxSHVRequestsPerMsg+1)
+	requests := make([]wire.SHVRequest, wire.MaxSHVRequestsPerMsg + 1)
 	for i := range requests {
 		requests[i] = wire.NewSHVRequestByHeight(true, 3, 1)
 	}
-	if replies := h.ask(t, 1, requests...); len(replies) != 0 {
+	replies := h.ask(t, 1, requests...)
+	if len(replies) != 1 || len(replies[0].Responses) != 0 {
 		t.Fatalf("got %d replies to 101 requests", len(replies))
 	}
 	if score := h.sp.banScore.Int(); score != 20 {
@@ -306,7 +325,7 @@ func TestSHVServerTooManyRequests(t *testing.T) {
 	}
 
 	// The peer is still served.
-	replies := h.ask(t, 2, wire.NewSHVRequestByHeight(true, 3, 1))
+	replies = h.ask(t, 2, wire.NewSHVRequestByHeight(true, 3, 1))
 	if len(replies) != 1 || len(replies[0].Responses) != 1 {
 		t.Fatalf("got %d replies after the oversized request",
 			len(replies))
@@ -322,12 +341,12 @@ func TestSHVServerDisabled(t *testing.T) {
 		t.Fatalf("services %v advertised, index %v", h.services,
 			h.s.shvIndex)
 	}
-	requests := make([]wire.SHVRequest, wire.MaxSHVRequestsPerMsg+1)
+	requests := make([]wire.SHVRequest, wire.MaxSHVRequestsPerMsg + 1)
 	for i := range requests {
 		requests[i] = wire.NewSHVRequestByHeight(true, 3, 1)
 	}
 	for nonce, reqs := range [][]wire.SHVRequest{requests[:1], requests} {
-		if replies := h.ask(t, uint64(nonce)+1, reqs...); len(replies) != 0 {
+		if replies := h.ask(t, uint64(nonce) + 1, reqs...); len(replies) != 0 {
 			t.Fatalf("got %d replies with SHV disabled", len(replies))
 		}
 	}

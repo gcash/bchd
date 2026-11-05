@@ -14,15 +14,15 @@ import (
 )
 
 // shvRequestBytes is a getshv payload of one request, for the proof of block 5
-// to its peak in the commitment at height 10, as BCHN's bchn-p2p-shv.py and
-// test_framework/messages.py serialize it, and as kth's tests have it.
-const shvRequestBytes = "01000a" +
-	"0500000000000000000000000000000000000000000000000000000000000000"
+// to its peak in the commitment at height 10.  The block height is a compact
+// size.
+const shvRequestBytes = "01000a05"
 
-// shvResponseBytes is an shv payload of one response, the proof of the
-// genesis block to the root of the commitment at height 0, in the field order
-// of SHVResponse in BCHN's test_framework/messages.py, as kth's tests have it.
-const shvResponseBytes = "01010000" +
+// shvResponseBytes is an shv payload of one found response, the proof of the
+// genesis block to the root of the commitment at height 0.  The entry starts
+// with the found status, then the type, the heights, the header, the proof
+// and the target.
+const shvResponseBytes = "0100010000" +
 	"01000000" +
 	"0000000000000000000000000000000000000000000000000000000000000000" +
 	"3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a" +
@@ -50,10 +50,9 @@ func encodeSHV(t *testing.T, msg Message) []byte {
 	return buf.Bytes()
 }
 
-// TestSHVWireVectors ensures getshv and shv messages decode from and encode to
-// the bytes BCHN's functional tests and kth's tests use, with hashes in
-// internal order, and that compact sizes take one, three and nine bytes as
-// their values need.
+// TestSHVWireVectors ensures a by-height getshv request and a found shv entry
+// decode from and encode to the bytes above, with hashes in internal order,
+// and that compact sizes take one, three and nine bytes as their values need.
 func TestSHVWireVectors(t *testing.T) {
 	requestRaw := mustDecodeSHVHex(t, shvRequestBytes)
 	var request MsgGetSHV
@@ -66,8 +65,7 @@ func TestSHVWireVectors(t *testing.T) {
 		t.Fatalf("got %d requests, want 1", len(request.Requests))
 	}
 	req := request.Requests[0]
-	height, ok := req.BlockHeight()
-	if req.Type != 0 || req.CommitmentHeight != 10 || !ok || height != 5 ||
+	if req.Type != 0 || req.CommitmentHeight != 10 || req.BlockHeight() != 5 ||
 		!req.IsValid() || req.ProofToRoot() || req.ByHash() {
 
 		t.Errorf("got request %+v", req)
@@ -90,8 +88,9 @@ func TestSHVWireVectors(t *testing.T) {
 		t.Fatalf("got %d responses, want 1", len(response.Responses))
 	}
 	resp := response.Responses[0]
-	if resp.Type != SHVProofToRoot || resp.CommitmentHeight != 0 ||
-		resp.BlockHeight != 0 || resp.Proof == nil || len(resp.Proof) != 0 {
+	if resp.Status != SHVStatusFound || resp.Type != SHVProofToRoot ||
+		resp.CommitmentHeight != 0 || resp.BlockHeight != 0 ||
+		resp.Proof == nil || len(resp.Proof) != 0 {
 
 		t.Errorf("got response %+v", resp)
 	}
@@ -153,16 +152,16 @@ func TestSHVWireVectors(t *testing.T) {
 	}
 }
 
-// TestSHVRequestValidity ensures the four request types are valid, a request
-// with a reserved type bit or, by height, a height that does not fit in eight
-// bytes is not, and that invalid requests still decode, so the server can
-// leave each out of its answer.
+// TestSHVRequestValidity ensures the four request types are valid and a
+// request with a reserved type bit is not, that bytes past a height are not
+// part of it, and that an invalid request still decodes, so the server can
+// answer it with a status.
 func TestSHVRequestValidity(t *testing.T) {
 	var req SHVRequest
 	req.BlockHeightOrHash[0] = 0xef
 	req.BlockHeightOrHash[7] = 0x12
-	if height, ok := req.BlockHeight(); !ok || height != 0x12000000000000ef {
-		t.Errorf("block height %#x, %v", height, ok)
+	if height := req.BlockHeight(); height != 0x12000000000000ef {
+		t.Errorf("block height %#x", height)
 	}
 	for typ := uint8(0); typ < 4; typ++ {
 		req.Type = typ
@@ -180,11 +179,24 @@ func TestSHVRequestValidity(t *testing.T) {
 		}
 	}
 
-	// Bytes 8 to 31 must be zero for a height, but not for a hash.
+	// Bytes past the first eight are not part of a height, and are not
+	// written.  A hash keeps all 32.
 	req.Type = 0
 	req.BlockHeightOrHash[8] = 1
-	if _, ok := req.BlockHeight(); ok || req.IsValid() {
-		t.Error("a height of more than eight bytes is valid")
+	if !req.IsValid() || req.BlockHeight() != 0x12000000000000ef {
+		t.Errorf("by height: valid %v, height %#x", req.IsValid(),
+			req.BlockHeight())
+	}
+	var decodedHeight MsgGetSHV
+	if err := decodedHeight.BchDecode(bytes.NewReader(encodeSHV(t,
+		NewMsgGetSHV(req))), ProtocolVersion, BaseEncoding); err != nil {
+
+		t.Fatal(err)
+	}
+	if got := decodedHeight.Requests[0]; got.BlockHeight() != req.BlockHeight() ||
+		got.BlockHeightOrHash[8] != 0 {
+
+		t.Errorf("by height read back %+v", got)
 	}
 	req.Type = SHVByHash
 	if !req.IsValid() {
@@ -252,9 +264,11 @@ func TestSHVWireRefusals(t *testing.T) {
 		}
 	}
 
-	// The request count and commitment height; the response count, the
-	// commitment and block heights and the proof's hash count.
-	for _, offset := range []int{0, 2} {
+	// The request count, commitment height and block height.  The response
+	// count, the commitment and block heights and the proof's hash count.
+	// The proof count follows the status, the type, the two heights and
+	// the header.
+	for _, offset := range []int{0, 2, 3} {
 		err := decode(&MsgGetSHV{}, nonCanonical(requestRaw, offset))
 		if _, ok := err.(*MessageError); !ok {
 			t.Errorf("getshv with a non-canonical size at %d: %v",
@@ -262,7 +276,8 @@ func TestSHVWireRefusals(t *testing.T) {
 		}
 	}
 	shvRaw := mustDecodeSHVHex(t, shvResponseBytes)
-	for _, offset := range []int{0, 2, 3, 84} {
+	proofCountAt := 5 + blockHeaderLen
+	for _, offset := range []int{0, 3, 4, proofCountAt} {
 		err := decode(&MsgSHV{}, nonCanonical(shvRaw, offset))
 		if _, ok := err.(*MessageError); !ok {
 			t.Errorf("shv with a non-canonical size at %d: %v", offset,
@@ -277,20 +292,20 @@ func TestSHVWireRefusals(t *testing.T) {
 		t.Errorf("shv of 101 responses: %v", err)
 	}
 	tooLong := bytes.Clone(shvRaw)
-	tooLong[84] = MaxSHVProofLength + 1
+	tooLong[proofCountAt] = MaxSHVProofLength + 1
 	if err := decode(&MsgSHV{}, tooLong); err == nil {
 		t.Error("shv with a proof of 65 hashes decoded")
 	} else if _, ok := err.(*MessageError); !ok {
 		t.Errorf("shv with a proof of 65 hashes: %v", err)
 	}
-	over := NewMsgSHV(make([]SHVResponse, MaxSHVRequestsPerMsg+1)...)
+	over := NewMsgSHV(make([]SHVResponse, MaxSHVRequestsPerMsg + 1)...)
 	if err := over.BchEncode(&bytes.Buffer{}, ProtocolVersion,
 		BaseEncoding); err == nil {
 
 		t.Error("shv of 101 responses encoded")
 	}
 	over = NewMsgSHV(SHVResponse{Proof: make([]chainhash.Hash,
-		MaxSHVProofLength+1)})
+		MaxSHVProofLength + 1)})
 	if err := over.BchEncode(&bytes.Buffer{}, ProtocolVersion,
 		BaseEncoding); err == nil {
 
@@ -299,7 +314,7 @@ func TestSHVWireRefusals(t *testing.T) {
 
 	// More than 100 requests decode, up to as many as the payload limit
 	// holds, but no more.
-	requests := make([]SHVRequest, MaxSHVRequestsPerMsg+1)
+	requests := make([]SHVRequest, MaxSHVRequestsPerMsg + 1)
 	for i := range requests {
 		requests[i] = NewSHVRequestByHeight(i%2 == 0, uint64(i), uint64(i))
 	}
@@ -310,30 +325,39 @@ func TestSHVWireRefusals(t *testing.T) {
 		t.Errorf("getshv of 101 requests: %v", err)
 	}
 	var count bytes.Buffer
-	_ = WriteVarInt(&count, 0, maxSHVRequestsDecode+1)
+	_ = WriteVarInt(&count, 0, maxSHVRequestsDecode + 1)
 	if err := decode(&MsgGetSHV{}, count.Bytes()); err == nil {
 		t.Error("getshv of more requests than fit decoded")
 	} else if _, ok := err.(*MessageError); !ok {
 		t.Errorf("getshv of more requests than fit: %v", err)
 	}
 	if err := NewMsgGetSHV(make([]SHVRequest,
-		maxSHVRequestsDecode+1)...).BchEncode(&bytes.Buffer{},
+		maxSHVRequestsDecode + 1)...).BchEncode(&bytes.Buffer{},
 		ProtocolVersion, BaseEncoding); err == nil {
 
 		t.Error("getshv of more requests than fit encoded")
 	}
 
-	// The largest messages: as many requests as fit, with one-byte
-	// commitment heights, and 100 responses with proofs of 64 hashes.
-	full := make([]SHVRequest, maxSHVRequestsDecode)
+	// The largest messages: as many minimum requests as fit, and 100 found
+	// responses with proofs of 64 hashes and the longest heights.  The
+	// decode cap counts request bodies only, so a count whose compact
+	// size no longer fits in the leftover bytes is one request smaller.
+	n := maxSHVRequestsDecode
+	for VarIntSerializeSize(uint64(n)) + n*minSHVRequestPayload >
+		maxProtocolMessageLength {
+
+		n--
+	}
+	full := make([]SHVRequest, n)
 	for i := range full {
-		full[i] = NewSHVRequestByHeight(true, uint64(i%0xfd), uint64(i))
+		full[i] = NewSHVRequestByHeight(true, uint64(i % 0xfd),
+			uint64(i % 0xfd))
 	}
 	longest := make([]SHVResponse, MaxSHVRequestsPerMsg)
 	for i := range longest {
 		longest[i] = response.Responses[0]
-		longest[i].CommitmentHeight = 1 << 40
-		longest[i].BlockHeight = uint64(i)
+		longest[i].CommitmentHeight = ^uint64(0)
+		longest[i].BlockHeight = ^uint64(0)
 		longest[i].Proof = make([]chainhash.Hash, MaxSHVProofLength)
 		for j := range longest[i].Proof {
 			longest[i].Proof[j] = chainhash.Hash{byte(i), byte(j)}
@@ -352,6 +376,134 @@ func TestSHVWireRefusals(t *testing.T) {
 		}
 		if !reflect.DeepEqual(read, msg) {
 			t.Errorf("%s: the message read back differs", msg.Command())
+		}
+	}
+}
+
+// TestSHVHeightAndStatus ensures a request by height writes that height as a
+// compact size, a request by hash keeps its 32 bytes, an shv message of every
+// status round-trips, a status above the reserved one does not decode, and a
+// found entry cut short does not decode.
+func TestSHVHeightAndStatus(t *testing.T) {
+	decode := func(msg Message, raw []byte) error {
+		return msg.BchDecode(bytes.NewReader(raw), ProtocolVersion,
+			BaseEncoding)
+	}
+	roundTripGet := func(msg *MsgGetSHV) {
+		t.Helper()
+		var got MsgGetSHV
+		if err := decode(&got, encodeSHV(t, msg)); err != nil ||
+			!reflect.DeepEqual(&got, msg) {
+
+			t.Fatalf("got %+v, %v, want %+v", got, err, msg)
+		}
+	}
+	roundTripSHV := func(msg *MsgSHV) {
+		t.Helper()
+		var got MsgSHV
+		if err := decode(&got, encodeSHV(t, msg)); err != nil ||
+			!reflect.DeepEqual(&got, msg) {
+
+			t.Fatalf("got %+v, %v, want %+v", got, err, msg)
+		}
+	}
+
+	// Small and large heights, and the compact-size boundaries between.
+	small := NewMsgGetSHV(NewSHVRequestByHeight(false, 10, 5))
+	if raw := encodeSHV(t, small); !bytes.Equal(raw, mustDecodeSHVHex(t,
+		"01000a05")) {
+
+		t.Errorf("height 5 encodes to %x", raw)
+	}
+	large := NewMsgGetSHV(NewSHVRequestByHeight(false, 10, 0x100000000))
+	if raw := encodeSHV(t, large); !bytes.Equal(raw, mustDecodeSHVHex(t,
+		"01000aff0000000001000000")) {
+
+		t.Errorf("height 2^32 encodes to %x", raw)
+	}
+	for _, height := range []uint64{0, 5, 0xfc, 0xfd, 0xffff, 0x10000,
+		0xffffffff, 0x100000000, ^uint64(0)} {
+
+		msg := NewMsgGetSHV(NewSHVRequestByHeight(true, height, height))
+		roundTripGet(msg)
+		if got := msg.Requests[0]; got.ByHash() || got.BlockHeight() != height {
+			t.Errorf("height %#x: %+v", height, got)
+		}
+	}
+
+	hash := chainhash.Hash{0x11, 0x22, 0x33}
+	byHash := NewMsgGetSHV(NewSHVRequestByHash(false, 10, &hash))
+	wantHash := "01020a112233" +
+		"0000000000000000000000000000000000000000000000000000000000"
+	if raw := encodeSHV(t, byHash); !bytes.Equal(raw,
+		mustDecodeSHVHex(t, wantHash)) {
+
+		t.Errorf("by hash encodes to %x", raw)
+	}
+	roundTripGet(byHash)
+	roundTripGet(NewMsgGetSHV(NewSHVRequestByHash(true, 0x100000000, &hash)))
+
+	// Bit 1 chooses the field, including when a reserved bit is also set.
+	reservedHeight := NewSHVRequestByHeight(false, 1, 2)
+	reservedHeight.Type |= 0x04
+	if raw := encodeSHV(t, NewMsgGetSHV(reservedHeight)); !bytes.Equal(raw,
+		[]byte{1, 0x04, 1, 2}) {
+
+		t.Errorf("reserved by-height request encodes to %x", raw)
+	}
+	both := NewMsgGetSHV(NewSHVRequestByHeight(false, 10, 5),
+		NewSHVRequestByHash(true, 7, &hash))
+	roundTripGet(both)
+
+	var found MsgSHV
+	if err := decode(&found, mustDecodeSHVHex(t, shvResponseBytes)); err != nil {
+		t.Fatal(err)
+	}
+	statuses := NewMsgSHV(
+		found.Responses[0],
+		SHVResponse{Status: SHVStatusNotFound},
+		SHVResponse{Status: SHVStatusAboveCommitment},
+		SHVResponse{Status: SHVStatusCommitmentAboveTip},
+		SHVResponse{Status: SHVStatusReservedType},
+	)
+	roundTripSHV(statuses)
+	for _, resp := range statuses.Responses[1:] {
+		if resp.SerializeSize() != 1 {
+			t.Errorf("status %d takes %d bytes", resp.Status,
+				resp.SerializeSize())
+		}
+	}
+
+	for _, status := range []byte{5, 0xff} {
+		err := decode(&MsgSHV{}, []byte{1, status})
+		if _, ok := err.(*MessageError); !ok {
+			t.Errorf("status %d: %v", status, err)
+		}
+		bad := NewMsgSHV(SHVResponse{Status: status})
+		if err := bad.BchEncode(&bytes.Buffer{}, ProtocolVersion,
+			BaseEncoding); err == nil {
+
+			t.Errorf("status %d encoded", status)
+		} else if _, ok := err.(*MessageError); !ok {
+			t.Errorf("status %d: %v", status, err)
+		}
+	}
+
+	// A found entry needs the fields after its status.  A not-found entry
+	// is complete at that byte.
+	for _, raw := range [][]byte{
+		{1},
+		{1, SHVStatusFound},
+		{1, SHVStatusFound, SHVProofToRoot},
+	} {
+		if err := decode(&MsgSHV{}, raw); err == nil {
+			t.Errorf("%x decoded", raw)
+		}
+	}
+	statusRaw := encodeSHV(t, statuses)
+	for size := range statusRaw {
+		if err := decode(&MsgSHV{}, statusRaw[:size]); err == nil {
+			t.Errorf("shv cut to %d bytes decoded", size)
 		}
 	}
 }

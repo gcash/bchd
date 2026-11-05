@@ -2022,9 +2022,8 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 }
 
 // OnGetSHV is invoked when a peer receives a getshv bitcoin message.  It
-// answers each valid request with the header of the block it selects and the
-// proof that the block is in the main chain, in one or more shv messages, and
-// leaves the invalid requests out (CHIP-2026-02).
+// answers with one shv message holding one entry per request, in order, each
+// with a status (CHIP-2026-02).
 func (sp *serverPeer) OnGetSHV(_ *peer.Peer, msg *wire.MsgGetSHV) {
 	// A node that does not advertise SHV ignores the request without a
 	// word, as CHIP-2026-02 has it.
@@ -2034,26 +2033,22 @@ func (sp *serverPeer) OnGetSHV(_ *peer.Peer, msg *wire.MsgGetSHV) {
 		return
 	}
 
-	// A getshv message of more requests than it may hold gets no answer,
-	// and, as in BCHN, adds 20 to the peer's ban score.
+	// A getshv message of more requests than it may hold is answered with
+	// no entries and, as in BCHN, adds 20 to the peer's ban score.
 	if len(msg.Requests) > wire.MaxSHVRequestsPerMsg {
-		peerLog.Debugf("Ignoring getshv with %d requests from %s",
+		peerLog.Debugf("getshv with %d requests from %s",
 			len(msg.Requests), sp)
 		sp.addBanScore(20, 0, "getshv with more than "+
 			strconv.Itoa(wire.MaxSHVRequestsPerMsg)+" requests")
+		sp.QueueMessage(wire.NewMsgSHV(), nil)
 		return
 	}
 
-	responses := make([]wire.SHVResponse, 0, len(msg.Requests))
+	responses := make([]wire.SHVResponse, len(msg.Requests))
 	for i := range msg.Requests {
-		if resp, ok := index.response(&msg.Requests[i]); ok {
-			responses = append(responses, resp)
-		}
+		responses[i] = index.response(&msg.Requests[i])
 	}
-	maxPayload := (&wire.MsgSHV{}).MaxPayloadLength(sp.ProtocolVersion())
-	for _, reply := range shvReplies(responses, maxPayload) {
-		sp.QueueMessage(reply, nil)
-	}
+	sp.QueueMessage(wire.NewMsgSHV(responses...), nil)
 }
 
 // enforceNodeBloomFlag disconnects the peer if the server is not configured to
