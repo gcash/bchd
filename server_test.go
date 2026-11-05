@@ -1199,8 +1199,8 @@ func TestOnRejectLogsAtDebug(t *testing.T) {
 
 // TestMisbehavingAddsBanScore ensures the sync manager's report of a peer that
 // sent an invalid transaction or block adds the score to the peer's lasting
-// ban score, as BCHN's Misbehaving does: bchd bans above --banthreshold, so a
-// score of 100 does not ban the peer at the default threshold and a further
+// ban score, as BCHN's Misbehaving does: a score that reaches --banthreshold
+// bans the peer, so 99 does not at the default threshold and a further
 // report does.  A persistent peer, a whitelisted one and any peer with
 // --nobanning are spared, as BCHN discourages no peer with noban or one it
 // connected to by hand.

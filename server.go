@@ -586,6 +586,13 @@ func (sp *serverPeer) addBanScore(persistent, transient uint32, reason string) {
 		return
 	}
 
+	// A peer connected to by hand is spared, as BCHN does not discourage
+	// one (net_processing.cpp:3792-3794).
+	if sp.persistent {
+		peerLog.Debugf("Misbehaving persistent peer %s: %s", sp, reason)
+		return
+	}
+
 	warnThreshold := cfg.BanThreshold >> 1
 	if transient == 0 && persistent == 0 {
 		// The score is not being increased, so this is no misbehavior of
@@ -2362,10 +2369,8 @@ func (s *server) Misbehaving(p *peer.Peer, score uint32, reason string) {
 	go s.punishPeer(p, score, reason)
 }
 
-// punishPeer adds score to the ban score of the connected peer p.  A
-// persistent peer is spared, as BCHN does not discourage a peer it connected
-// to by hand (net_processing.cpp:3792-3794); a whitelisted one and
-// --nobanning are left to addBanScore.
+// punishPeer adds score to the ban score of the connected peer p.  Whitelisted
+// and persistent peers and --nobanning are left to addBanScore.
 func (s *server) punishPeer(p *peer.Peer, score uint32, reason string) {
 	reply := make(chan []*serverPeer, 1)
 	connected, ok := queryPeerHandler(s, getPeersMsg{reply: reply}, reply)
@@ -2375,11 +2380,6 @@ func (s *server) punishPeer(p *peer.Peer, score uint32, reason string) {
 	for _, sp := range connected {
 		if sp.Peer != p {
 			continue
-		}
-		if sp.persistent {
-			peerLog.Debugf("Misbehaving persistent peer %s: %s", sp,
-				reason)
-			return
 		}
 		sp.addBanScore(score, 0, reason)
 		return
