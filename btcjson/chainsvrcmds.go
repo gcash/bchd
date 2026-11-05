@@ -50,6 +50,76 @@ func NewAddNodeCmd(addr string, subCmd AddNodeSubCmd) *AddNodeCmd {
 	}
 }
 
+// SetBanSubCmd defines the type used in the setban JSON-RPC command for the
+// command field.
+type SetBanSubCmd string
+
+const (
+	// SBAdd indicates the specified host or subnet should be banned.
+	SBAdd SetBanSubCmd = "add"
+
+	// SBRemove indicates the ban of the specified host or subnet should be
+	// lifted.
+	SBRemove SetBanSubCmd = "remove"
+)
+
+// SetBanCmd defines the setban JSON-RPC command.
+type SetBanCmd struct {
+	Subnet   string
+	Command  SetBanSubCmd `jsonrpcusage:"\"add|remove\""`
+	BanTime  *int64       `jsonrpcdefault:"0"`
+	Absolute *bool        `jsonrpcdefault:"false"`
+}
+
+// NewSetBanCmd returns a new instance which can be used to issue a setban
+// JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewSetBanCmd(subnet string, command SetBanSubCmd, banTime *int64, absolute *bool) *SetBanCmd {
+	// The parameters end at the first nil, so a later one needs this one.
+	if banTime == nil && absolute != nil {
+		banTime = Int64(0)
+	}
+	return &SetBanCmd{
+		Subnet:   subnet,
+		Command:  command,
+		BanTime:  banTime,
+		Absolute: absolute,
+	}
+}
+
+// ListBannedCmd defines the listbanned JSON-RPC command.
+type ListBannedCmd struct{}
+
+// NewListBannedCmd returns a new instance which can be used to issue a
+// listbanned JSON-RPC command.
+func NewListBannedCmd() *ListBannedCmd {
+	return &ListBannedCmd{}
+}
+
+// ClearBannedCmd defines the clearbanned JSON-RPC command.
+type ClearBannedCmd struct {
+	Manual    *bool `jsonrpcdefault:"true"`
+	Automatic *bool `jsonrpcdefault:"true"`
+}
+
+// NewClearBannedCmd returns a new instance which can be used to issue a
+// clearbanned JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewClearBannedCmd(manual, automatic *bool) *ClearBannedCmd {
+	// The parameters end at the first nil, so a later one needs this one.
+	if manual == nil && automatic != nil {
+		manual = Bool(true)
+	}
+	return &ClearBannedCmd{
+		Manual:    manual,
+		Automatic: automatic,
+	}
+}
+
 // TransactionInput represents the inputs to a transaction.  Specifically a
 // transaction hash and output number pair, and, for createrawtransaction,
 // optionally the sequence number of the input.
@@ -1088,6 +1158,9 @@ func init() {
 	flags := UsageFlag(0)
 
 	MustRegisterCmd("addnode", (*AddNodeCmd)(nil), flags)
+	MustRegisterCmd("clearbanned", (*ClearBannedCmd)(nil), flags)
+	MustRegisterCmd("listbanned", (*ListBannedCmd)(nil), flags)
+	MustRegisterCmd("setban", (*SetBanCmd)(nil), flags)
 	MustRegisterCmd("createrawtransaction", (*CreateRawTransactionCmd)(nil), flags)
 	MustRegisterCmd("decoderawtransaction", (*DecodeRawTransactionCmd)(nil), flags)
 	MustRegisterCmd("decodescript", (*DecodeScriptCmd)(nil), flags)

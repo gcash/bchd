@@ -3238,6 +3238,12 @@ type getPeersMsg struct {
 	reply chan []*serverPeer
 }
 
+// disconnectBannedMsg asks the peer handler to disconnect the peers that are
+// banned.
+type disconnectBannedMsg struct {
+	reply chan struct{}
+}
+
 type getOutboundGroup struct {
 	key   string
 	reply chan int
@@ -3344,6 +3350,20 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 			peers = append(peers, sp)
 		}
 		msg.reply <- peers
+	case disconnectBannedMsg:
+		now := time.Now()
+		state.forAllPeers(func(sp *serverPeer) {
+			host, _, err := net.SplitHostPort(sp.Addr())
+			if err != nil {
+				return
+			}
+			if _, banned := s.bans.bannedUntil(host, now); banned {
+				srvrLog.Infof("Disconnecting banned peer %s", sp)
+				sp.Disconnect()
+			}
+		})
+		msg.reply <- struct{}{}
+
 	case disconnectNodeMsg:
 		// Check inbound peers.  The per-IP count of a peer is lowered
 		// now, as it is removed from its list, which its done message

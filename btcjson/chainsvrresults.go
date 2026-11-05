@@ -306,6 +306,17 @@ type GetNetworkInfoResult struct {
 	Warnings        string                 `json:"warnings"`
 }
 
+// ListBannedResult models the data of a ban returned from the listbanned
+// command.
+type ListBannedResult struct {
+	Address       string `json:"address"`
+	BanCreated    int64  `json:"ban_created"`
+	BannedUntil   int64  `json:"banned_until"`
+	BanReason     string `json:"ban_reason"`
+	BanDuration   int64  `json:"ban_duration"`
+	TimeRemaining int64  `json:"time_remaining"`
+}
+
 // GetPeerInfoResult models the data returned from the getpeerinfo command.
 type GetPeerInfoResult struct {
 	ID             int32   `json:"id"`

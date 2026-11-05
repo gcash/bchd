@@ -142,6 +142,9 @@ type commandHandler func(*rpcServer, interface{}, <-chan struct{}) (interface{},
 var rpcHandlers map[string]commandHandler
 var rpcHandlersBeforeInit = map[string]commandHandler{
 	"addnode":               handleAddNode,
+	"clearbanned":           handleClearBanned,
+	"listbanned":            handleListBanned,
+	"setban":                handleSetBan,
 	"createrawtransaction":  handleCreateRawTransaction,
 	"debuglevel":            handleDebugLevel,
 	"decoderawtransaction":  handleDecodeRawTransaction,
@@ -418,6 +421,100 @@ func handleUnimplemented(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 // These commands will be implemented in bchwallet.
 func handleAskWallet(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	return nil, ErrRPCNoWallet
+}
+
+// maxBanUnix is the latest end of a ban, in seconds since the Unix epoch, the
+// end of the year 9999.  It keeps a huge bantime from overflowing.
+const maxBanUnix = 253402300799
+
+// banEnd returns when a ban made at now ends, as BCHN works it out: banTime
+// seconds from now, or at banTime seconds since the Unix epoch when absolute is
+// set.  A banTime of zero or less means --banduration from now.
+func banEnd(now time.Time, banTime int64, absolute bool) time.Time {
+	if banTime <= 0 {
+		return now.Add(cfg.BanDuration)
+	}
+	if absolute {
+		return time.Unix(min(banTime, maxBanUnix), 0)
+	}
+	return time.Unix(now.Unix()+min(banTime, maxBanUnix-now.Unix()), 0)
+}
+
+// handleSetBan handles setban commands.
+func handleSetBan(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.SetBanCmd)
+
+	if c.Command != btcjson.SBAdd && c.Command != btcjson.SBRemove {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: "invalid command for setban",
+		}
+	}
+	target, ok := parseBanTarget(c.Subnet)
+	if !ok {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCClientInvalidIPOrSubnet,
+			Message: "Error: Invalid IP/Subnet",
+		}
+	}
+
+	if c.Command == btcjson.SBRemove {
+		if !s.cfg.ConnMgr.Unban(target) {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCClientInvalidIPOrSubnet,
+				Message: "Error: Unban failed. Requested address/subnet was not banned.",
+			}
+		}
+		return nil, nil
+	}
+
+	// An argument passed as null is nil, and means its default.
+	var banTime int64
+	if c.BanTime != nil {
+		banTime = *c.BanTime
+	}
+	absolute := c.Absolute != nil && *c.Absolute
+
+	now := time.Now()
+	if !s.cfg.ConnMgr.Ban(target, now, banEnd(now, banTime, absolute)) {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCClientNodeAlreadyAdded,
+			Message: "Error: IP/Subnet already banned",
+		}
+	}
+	return nil, nil
+}
+
+// handleListBanned handles listbanned commands.
+func handleListBanned(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	now := time.Now()
+	bans := s.cfg.ConnMgr.Bans(now)
+	results := make([]btcjson.ListBannedResult, 0, len(bans))
+	for _, ban := range bans {
+		reason := "node misbehaving"
+		if ban.manual {
+			reason = "manually added"
+		}
+		results = append(results, btcjson.ListBannedResult{
+			Address:       ban.target.String(),
+			BanCreated:    ban.created.Unix(),
+			BannedUntil:   ban.until.Unix(),
+			BanReason:     reason,
+			BanDuration:   ban.until.Unix() - ban.created.Unix(),
+			TimeRemaining: ban.until.Unix() - now.Unix(),
+		})
+	}
+	return results, nil
+}
+
+// handleClearBanned handles clearbanned commands.
+func handleClearBanned(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.ClearBannedCmd)
+
+	// An argument passed as null is nil, and means its default.
+	s.cfg.ConnMgr.ClearBans(c.Manual == nil || *c.Manual,
+		c.Automatic == nil || *c.Automatic)
+	return nil, nil
 }
 
 // handleAddNode handles addnode commands.
@@ -5846,6 +5943,20 @@ type rpcserverConnManager interface {
 	// Attempting to remove an address that does not exist will return an
 	// error.
 	DisconnectByAddr(addr string) error
+
+	// Ban bans target from now until until and disconnects the peers the
+	// ban applies to.  It returns false if target is banned already.
+	Ban(target banTarget, now, until time.Time) bool
+
+	// Unban lifts the ban of exactly target, and returns false if there is
+	// none.
+	Unban(target banTarget) bool
+
+	// Bans returns the bans in force at now.
+	Bans(now time.Time) []banEntry
+
+	// ClearBans lifts the bans of the chosen kinds.
+	ClearBans(manual, automatic bool)
 
 	// ConnectedCount returns the number of currently connected peers.
 	ConnectedCount() int32

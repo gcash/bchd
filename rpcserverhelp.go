@@ -29,6 +29,29 @@ var helpDescsEnUS = map[string]string{
 	"debuglevel--result0":    "The string 'Done.'",
 	"debuglevel--result1":    "The list of subsystems",
 
+	// SetBanCmd help.
+	"setban--synopsis": "Attempts to add or remove an IP address or subnet from the banned list, and disconnects the peers a new ban applies to.",
+	"setban-subnet":    "The IP address, or a subnet as an IP address with a netmask, such as 192.168.0.0/24; or an onion address",
+	"setban-command":   "'add' to ban it, 'remove' to lift the ban of exactly it",
+	"setban-bantime":   "How long the ban lasts in seconds, or until when if absolute is set; 0 or less means the time of --banduration",
+	"setban-absolute":  "Whether bantime is a time in seconds since the Unix epoch",
+
+	// ListBannedCmd help.
+	"listbanned--synopsis": "Returns the bans in force, those of setban and those of ban scores, as an array of json objects.",
+
+	// ListBannedResult help.
+	"listbannedresult-address":        "The IP address or subnet of the ban, or the onion address",
+	"listbannedresult-ban_created":    "When the ban was created, in seconds since the Unix epoch",
+	"listbannedresult-banned_until":   "When the ban ends, in seconds since the Unix epoch",
+	"listbannedresult-ban_reason":     "'manually added' for a ban of setban, 'node misbehaving' for one of a ban score",
+	"listbannedresult-ban_duration":   "How long the ban lasts in seconds",
+	"listbannedresult-time_remaining": "The seconds until the ban ends",
+
+	// ClearBannedCmd help.
+	"clearbanned--synopsis": "Lifts every ban of the chosen kinds.",
+	"clearbanned-manual":    "Whether to lift the bans of setban",
+	"clearbanned-automatic": "Whether to lift the bans of ban scores",
+
 	// AddNodeCmd help.
 	"addnode--synopsis": "Attempts to add or remove a persistent peer.",
 	"addnode-addr":      "IP address, host name or Tor v3 onion address and port of the peer to operate on",
@@ -928,6 +951,9 @@ var helpDescsEnUS = map[string]string{
 // pointer to the type (or nil to indicate no return value).
 var rpcResultTypes = map[string][]interface{}{
 	"addnode":               nil,
+	"clearbanned":           nil,
+	"listbanned":            {(*[]btcjson.ListBannedResult)(nil)},
+	"setban":                nil,
 	"createrawtransaction":  {(*string)(nil)},
 	"debuglevel":            {(*string)(nil), (*string)(nil)},
 	"decoderawtransaction":  {(*btcjson.TxRawDecodeResult)(nil)},
