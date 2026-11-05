@@ -5,9 +5,9 @@
 package indexers
 
 import (
-	"slices"
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"

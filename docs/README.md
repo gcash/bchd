@@ -279,9 +279,10 @@ utxocachemaxsize=250
 dbcachesize=250
 ```
 
-The UTXO cache size limits the live heap memory of the cache itself, to within
-a few percent, counting each entry and map slot at the size Go allocates for
-it. A given size holds about 30% fewer entries than in 0.22.4 and earlier, so
+The UTXO cache size limits the live heap memory of the cache itself, counting
+each entry and map slot at the size Go allocates for it. It's an upper bound
+for a large cache, which uses up to about 18% less than the limit at the default size,
+and a small cache can go about 2% over it, or 4% on 32-bit platforms. A given size holds about 30% fewer entries than in 0.22.4 and earlier, so
 a tuned `utxocachemaxsize` can be raised by about 40% to keep the same number
 of entries.
 

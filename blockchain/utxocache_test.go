@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -977,11 +978,18 @@ func TestUtxoCacheReaddedOutputSpent(t *testing.T) {
 }
 
 // TestUtxoCacheMemoryAccounting checks the cache's memory usage against the
-// heap it really uses: it must not count less, nor much more.  The entry
-// count is a little after the map grows, where it takes about 103 bytes per
-// entry, so a map counted much lower fails.
+// heap it really uses, at sizes across the map's growth: just before it grows it
+// takes about 69 bytes per entry, and just after, its peak of about 119.  The
+// count can't be far under the heap at any of them, nor much over it.
 func TestUtxoCacheMemoryAccounting(t *testing.T) {
-	const n = 232000
+	for _, n := range []int{13000, 15400, 55000, 61500, 214000, 241000, 428000} {
+		t.Run(strconv.Itoa(n), func(t *testing.T) {
+			testUtxoCacheMemoryAccounting(t, n)
+		})
+	}
+}
+
+func testUtxoCacheMemoryAccounting(t *testing.T, n int) {
 	var category [32]byte
 	category[0] = 1
 	token := wire.TokenData{CategoryID: category, BitField: wire.HAS_NFT |
@@ -1035,8 +1043,11 @@ func checkUtxoCacheMemory(t *testing.T, n int, newEntry func(i int) *UtxoEntry) 
 	runtime.ReadMemStats(&after)
 	heap := after.HeapAlloc - before.HeapAlloc
 	counted := cache.totalMemoryUsage()
-	if counted < heap || counted > heap*5/4 {
-		t.Fatalf("cache counts %d bytes, heap grew %d", counted, heap)
+
+	// utxoMapEntrySize is below the map's measured peak, so the count can fall
+	// a little under the heap just after the map grows.
+	if counted < heap*96/100 || counted > heap*5/4 {
+		t.Fatalf("%d entries: cache counts %d bytes, heap grew %d", n, counted, heap)
 	}
 	runtime.KeepAlive(cache)
 }
@@ -1120,6 +1131,22 @@ func TestDisconnectTokenUtxoScript(t *testing.T) {
 	if entry == nil || !bytes.Equal(entry.PkScript(), pkScript) ||
 		!reflect.DeepEqual(entry.tokenData, token) {
 		t.Fatalf("restored entry %v, want script %x", entry, pkScript)
+	}
+}
+
+// TestSizeClassesMatchRuntime checks the copy of Go's size classes against the
+// runtime, as append rounds an allocation up to its size class, so that a Go
+// upgrade that changes them fails here.
+func TestSizeClassesMatchRuntime(t *testing.T) {
+	previous := 0
+	for _, class := range sizeClasses {
+		// The first size past the class before finds a class the copy lacks.
+		for _, n := range []int{previous + 1, int(class) - 1, int(class)} {
+			if got, want := allocSize(n), uint64(cap(append([]byte(nil), make([]byte, n)...))); got != want {
+				t.Errorf("allocSize(%d) = %d, the runtime allocates %d", n, got, want)
+			}
+		}
+		previous = int(class)
 	}
 }
 
