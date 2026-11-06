@@ -66,6 +66,18 @@ func TestTokenPrefixParsing(t *testing.T) {
 			wantScript: lockingScript,
 		},
 		{
+			name: "commitment of the longest length",
+			script: join(prefix(category, 0x60, 0x80),
+				bytes.Repeat([]byte{0xcc}, 128), lockingScript),
+			wantToken:  true,
+			wantScript: lockingScript,
+		},
+		{
+			name: "commitment a byte too long",
+			script: join(prefix(category, 0x60, 0x81),
+				bytes.Repeat([]byte{0xcc}, 129), lockingScript),
+		},
+		{
 			name:       "token without a locking script",
 			script:     prefix(category, 0x10, 0x05),
 			wantToken:  true,
