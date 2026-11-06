@@ -171,6 +171,12 @@ type MessageListeners struct {
 	// bitcoin message.
 	OnGetCFMempool func(p *Peer, msg *wire.MsgGetCFMempool)
 
+	// OnGetSHV is invoked when a peer receives a getshv bitcoin message.
+	OnGetSHV func(p *Peer, msg *wire.MsgGetSHV)
+
+	// OnSHV is invoked when a peer receives an shv bitcoin message.
+	OnSHV func(p *Peer, msg *wire.MsgSHV)
+
 	// OnFeeFilter is invoked when a peer receives a feefilter bitcoin message.
 	OnFeeFilter func(p *Peer, msg *wire.MsgFeeFilter)
 
@@ -1819,6 +1825,16 @@ out:
 		case *wire.MsgGetCFMempool:
 			if p.cfg.Listeners.OnGetCFMempool != nil {
 				p.cfg.Listeners.OnGetCFMempool(p, msg)
+			}
+
+		case *wire.MsgGetSHV:
+			if p.cfg.Listeners.OnGetSHV != nil {
+				p.cfg.Listeners.OnGetSHV(p, msg)
+			}
+
+		case *wire.MsgSHV:
+			if p.cfg.Listeners.OnSHV != nil {
+				p.cfg.Listeners.OnSHV(p, msg)
 			}
 
 		case *wire.MsgCFilter:

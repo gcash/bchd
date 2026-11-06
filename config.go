@@ -180,6 +180,7 @@ type config struct {
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
 	NoPeerBloomFilters      bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	NoCFilters              bool          `long:"nocfilters" description:"Disable committed filtering (CF) support"`
+	NoSHV                   bool          `long:"noshv" description:"Disable Simplified Header Verification (SHV) support"`
 	DropCfIndex             bool          `long:"dropcfindex" description:"Deletes the index used for committed filtering (CF) support from the database on start up and then exits."`
 	SigCacheMaxSize         uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache, and in the cache of transaction signature hashes"`
 	UtxoCacheMaxSizeMiB     uint          `long:"utxocachemaxsize" description:"The maximum size in MiB of the UTXO cache"`
