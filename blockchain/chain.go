@@ -216,6 +216,10 @@ type BlockChain struct {
 	// read without it.
 	disconnects atomic.Uint64
 
+	// finishedInitialDownload is set the first time IsInitialBlockDownload
+	// finds the chain current, and is never cleared.
+	finishedInitialDownload atomic.Bool
+
 	// shutdownRequest is closed, once, when a failure to write the chain
 	// state requires the process to shut down.
 	shutdownRequest     chan struct{}
@@ -1621,6 +1625,24 @@ func (b *BlockChain) IsCurrent() bool {
 	defer b.chainLock.RUnlock()
 
 	return b.isCurrent()
+}
+
+// IsInitialBlockDownload returns whether the chain is still in its initial
+// block download.  That is true until IsCurrent first reports the chain
+// current, and false from then on, so a chain that falls behind later, such
+// as a test network that mines no block for a day, does not go back into it.
+// This is how BCHN latches the initialblockdownload of getblockchaininfo.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) IsInitialBlockDownload() bool {
+	if b.finishedInitialDownload.Load() {
+		return false
+	}
+	if !b.IsCurrent() {
+		return true
+	}
+	b.finishedInitialDownload.Store(true)
+	return false
 }
 
 // HasMinimumChainWork returns whether the best chain has at least the

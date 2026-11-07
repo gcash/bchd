@@ -1049,3 +1049,47 @@ func TestIntervalBlockHashes(t *testing.T) {
 		}
 	}
 }
+
+// fixedTimeSource is a MedianTimeSource whose time the test sets.
+type fixedTimeSource struct {
+	now time.Time
+}
+
+func (s *fixedTimeSource) AdjustedTime() time.Time { return s.now }
+
+func (s *fixedTimeSource) AddTimeSample(string, time.Time) {}
+
+func (s *fixedTimeSource) Offset() time.Duration { return 0 }
+
+// TestIsInitialBlockDownload ensures the chain is in its initial block
+// download until it is current, and stays out of it once it has been current.
+func TestIsInitialBlockDownload(t *testing.T) {
+	chain, teardownFunc, err := chainSetup("isinitialblockdownload",
+		&chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatalf("Failed to setup chain instance: %v", err)
+	}
+	defer teardownFunc()
+
+	genesisTime := chaincfg.RegressionNetParams.GenesisBlock.Header.Timestamp
+	clock := &fixedTimeSource{now: genesisTime.Add(48 * time.Hour)}
+	chain.timeSource = clock
+
+	if !chain.IsInitialBlockDownload() {
+		t.Fatal("a tip 48 hours old is not in initial block download")
+	}
+
+	clock.now = genesisTime.Add(time.Hour)
+	if chain.IsInitialBlockDownload() {
+		t.Fatal("a tip an hour old is still in initial block download")
+	}
+
+	clock.now = genesisTime.Add(48 * time.Hour)
+	if chain.IsCurrent() {
+		t.Fatal("a tip 48 hours old is current")
+	}
+	if chain.IsInitialBlockDownload() {
+		t.Fatal("a chain that has been current went back into initial " +
+			"block download")
+	}
+}
