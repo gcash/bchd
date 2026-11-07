@@ -302,6 +302,7 @@ var helpDescsEnUS = map[string]string{
 	"getblockchaininforesult-difficulty":            "The current chain difficulty",
 	"getblockchaininforesult-mediantime":            "The median time from the PoV of the best block in the chain",
 	"getblockchaininforesult-verificationprogress":  "An estimate for how much of the best chain we've verified",
+	"getblockchaininforesult-initialblockdownload":  "Whether the node is still in its initial block download: true until the best chain is current for the first time (after the latest checkpoint, with the minimum chain work, and a tip less than 24 hours old), then false",
 	"getblockchaininforesult-syncheight":            "The block height obtained from the best peer",
 	"getblockchaininforesult-pruned":                "A bool that indicates if the node is pruned or not",
 	"getblockchaininforesult-pruneheight":           "The lowest block retained in the current pruned chain",

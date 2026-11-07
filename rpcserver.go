@@ -2324,6 +2324,7 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan
 		Pruned:               false,
 		Bip9SoftForks:        make(map[string]*btcjson.Bip9SoftForkDescription),
 		VerificationProgress: verifyProgress,
+		InitialBlockDownload: chain.IsInitialBlockDownload(),
 		SyncHeight:           syncHeight,
 	}
 
