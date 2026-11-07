@@ -142,6 +142,7 @@ type GetBlockChainInfoResult struct {
 	Difficulty           float64                             `json:"difficulty"`
 	MedianTime           int64                               `json:"mediantime"`
 	VerificationProgress float64                             `json:"verificationprogress,omitempty"`
+	InitialBlockDownload bool                                `json:"initialblockdownload"`
 	SyncHeight           uint64                              `json:"syncheight,omitempty"`
 	Pruned               bool                                `json:"pruned"`
 	PruneHeight          int32                               `json:"pruneheight,omitempty"`
