@@ -191,6 +191,8 @@ Application Options:
 	                               for more information.
 	    --nopeerbloomfilters       Disable bloom filtering support
 	    --nocfilters               Disable committed filtering (CF) support
+	    --noshv                    Disable Simplified Header Verification (SHV)
+	                               support
 	    --dropcfindex              Deletes the index used for committed filtering
 	                               (CF) support from the database on start up and
 	                               then exits.

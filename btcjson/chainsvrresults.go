@@ -22,6 +22,7 @@ type GetBlockHeaderVerboseResult struct {
 	Difficulty    float64 `json:"difficulty"`
 	PreviousHash  string  `json:"previousblockhash,omitempty"`
 	NextHash      string  `json:"nextblockhash,omitempty"`
+	SHVRoot       string  `json:"shvroot,omitempty"`
 }
 
 // GetBlockVerboseResult models the data from the getblock command when the
@@ -47,6 +48,7 @@ type GetBlockVerboseResult struct {
 	Difficulty    float64       `json:"difficulty"`
 	PreviousHash  string        `json:"previousblockhash"`
 	NextHash      string        `json:"nextblockhash,omitempty"`
+	SHVRoot       string        `json:"shvroot,omitempty"`
 }
 
 // GetBlockVerboseTxResult models the data from the getblock command when the
@@ -72,6 +74,7 @@ type GetBlockVerboseTxResult struct {
 	Difficulty    float64       `json:"difficulty"`
 	PreviousHash  string        `json:"previousblockhash"`
 	NextHash      string        `json:"nextblockhash,omitempty"`
+	SHVRoot       string        `json:"shvroot,omitempty"`
 }
 
 // AddMultisigAddressResult models the data returned from the addmultisigaddress
@@ -387,6 +390,17 @@ type TokenDataResult struct {
 	Category string     `json:"category"`
 	Amount   string     `json:"amount"`
 	NFT      *NFTResult `json:"nft,omitempty"`
+}
+
+// GetSHVResult models the data from the getshv command: the header of the
+// block, hex-encoded, the siblings on the path from its hash up to the target,
+// and the target, the root for a proof to the root and the peak for a proof to
+// the peak.  The hashes are in the order RPCs show block hashes.
+type GetSHVResult struct {
+	Branch []string `json:"branch"`
+	Header string   `json:"header"`
+	Root   string   `json:"root,omitempty"`
+	Peak   string   `json:"peak,omitempty"`
 }
 
 // BcmrPublicationOutputResult models a link's BCMR publication output in the

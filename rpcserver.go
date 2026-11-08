@@ -184,6 +184,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getpeerinfo":           handleGetPeerInfo,
 	"getrawmempool":         handleGetRawMempool,
 	"getrawtransaction":     handleGetRawTransaction,
+	"getshv":                handleGetSHV,
 	"gettxout":              handleGetTxOut,
 	"gettxoutproof":         handleGetTxOutProof,
 	"help":                  handleHelp,
@@ -314,6 +315,7 @@ var rpcLimited = map[string]struct{}{
 	"getnetworkhashps":      {},
 	"getrawmempool":         {},
 	"getrawtransaction":     {},
+	"getshv":                {},
 	"gettxout":              {},
 	"gettxoutproof":         {},
 	"searchrawtransactions": {},
@@ -2121,6 +2123,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
 		NextHash:      nextHashString,
+		SHVRoot:       shvRootString(s.cfg.SHVIndex, hash, blockHeight),
 	}
 
 	if *c.Verbosity == 1 {
@@ -2167,6 +2170,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 				Difficulty:    blockReply.Difficulty,
 				PreviousHash:  blockReply.PreviousHash,
 				NextHash:      blockReply.NextHash,
+				SHVRoot:       blockReply.SHVRoot,
 			}, nil
 		}
 
@@ -2500,8 +2504,93 @@ func handleGetBlockHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 		Time:          blockHeader.Timestamp.Unix(),
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
+		SHVRoot:       shvRootString(s.cfg.SHVIndex, hash, blockHeight),
 	}
 	return blockHeaderReply, nil
+}
+
+// shvRootString returns the root of the SHV commitment at the height of the
+// main chain's block with the passed hash, as shvroot in getblock and
+// getblockheader gives it, or an empty string, which leaves shvroot out, when
+// SHV is disabled or the index does not cover the block.
+func shvRootString(index *shvIndex, hash *chainhash.Hash, height int32) string {
+	if index == nil {
+		return ""
+	}
+	root, ok := index.blockRoot(hash, height)
+	if !ok {
+		return ""
+	}
+	return root.String()
+}
+
+// handleGetSHV implements the getshv command, which returns the proof of
+// CHIP-2026-02, Simplified Header Verification, that the main chain's block at
+// a height is in the commitment at another, with the errors the CHIP gives.
+func handleGetSHV(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetSHVCmd)
+
+	if s.cfg.SHVIndex == nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCMisc,
+			Message: "MMR index is not enabled",
+		}
+	}
+	invalidParameter := func(message string) error {
+		return &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidParameter,
+			Message: message,
+		}
+	}
+
+	var toRoot bool
+	switch c.Type {
+	case "root":
+		toRoot = true
+	case "peak":
+	default:
+		return nil, invalidParameter("Unknown type")
+	}
+	switch {
+	case c.CommitmentHeight < 0:
+		return nil, invalidParameter("commitment_height must be " +
+			"non-negative")
+	case c.BlockHeight < 0:
+		return nil, invalidParameter("block_height must be non-negative")
+	case c.BlockHeight > c.CommitmentHeight:
+		return nil, invalidParameter("block_height cannot exceed " +
+			"commitment_height")
+	}
+
+	header, branch, target, err := s.cfg.SHVIndex.proof(toRoot,
+		uint64(c.BlockHeight), uint64(c.CommitmentHeight))
+	switch {
+	case errors.Is(err, errSHVBlockNotFound):
+		return nil, invalidParameter("Block not found")
+	case err != nil:
+		rpcsLog.Debugf("No SHV proof of block %d in the commitment at %d: "+
+			"%v", c.BlockHeight, c.CommitmentHeight, err)
+		return nil, invalidParameter("Failed to generate proof")
+	}
+
+	var headerBuf bytes.Buffer
+	if err := header.Serialize(&headerBuf); err != nil {
+		context := "Failed to serialize block header"
+		return nil, internalRPCError(err.Error(), context)
+	}
+	result := &btcjson.GetSHVResult{
+		Branch: make([]string, len(branch)),
+		Header: hex.EncodeToString(headerBuf.Bytes()),
+	}
+	for i := range branch {
+		result.Branch[i] = branch[i].String()
+	}
+	if toRoot {
+		result.Root = target.String()
+	} else {
+		result.Peak = target.String()
+	}
+	return result, nil
 }
 
 // encodeTemplateID encodes the passed details into an ID that can be used to
@@ -6119,6 +6208,11 @@ type rpcserverConfig struct {
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
 	BcmrIndex *indexers.BcmrIndex
+
+	// SHVIndex proves block headers are in the main chain for getshv, and
+	// gives shvroot in getblock and getblockheader.  It is nil when SHV is
+	// disabled.
+	SHVIndex *shvIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.

@@ -371,6 +371,33 @@ func TestDeprecatedOptions(t *testing.T) {
 	}
 }
 
+// TestNoSHVOption ensures SHV is on by default and --noshv turns it off.
+func TestNoSHVOption(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	for _, test := range []struct {
+		args []string
+		want bool
+	}{
+		{args: nil, want: false},
+		{args: []string{"--noshv"}, want: true},
+	} {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if cfg.NoSHV != test.want {
+			t.Errorf("%v: noshv %v, want %v", test.args, cfg.NoSHV,
+				test.want)
+		}
+	}
+}
+
 // TestGrpcMaxFilterEntries ensures --grpcmaxfilterentries defaults to 100000,
 // takes 0 and larger values, and refuses a negative one.
 func TestGrpcMaxFilterEntries(t *testing.T) {
