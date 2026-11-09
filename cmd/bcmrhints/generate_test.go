@@ -109,7 +109,7 @@ func (n *testNode) ListBcmrIdentities(after *chainhash.Hash, _ int) (*btcjson.Li
 }
 
 func (n *testNode) GetBcmrIdentity(authbase *chainhash.Hash, _ bool, after *chainhash.Hash,
-	_ int) (*btcjson.GetBcmrIdentityResult, error) {
+	limit int) (*btcjson.GetBcmrIdentityResult, error) {
 
 	links := n.chains[*authbase]
 	start := 0
@@ -120,7 +120,11 @@ func (n *testNode) GetBcmrIdentity(authbase *chainhash.Hash, _ bool, after *chai
 			}
 		}
 	}
-	end := min(start+n.linkPage, len(links))
+	page := n.linkPage
+	if limit > 0 {
+		page = min(page, limit)
+	}
+	end := min(start+page, len(links))
 	n.served += end - start
 	result := n.identity(*authbase)
 	info := make(map[string]btcjson.BcmrLinkResult)
@@ -300,6 +304,36 @@ func TestGenerateSharedChain(t *testing.T) {
 	// The first token walks the shared links, and each other walks its
 	// authbase and a page into them.
 	if limit := sharedLinks + 1 + tokens*2*node.linkPage; node.served > limit {
+		t.Errorf("the node served %d links, more than %d", node.served, limit)
+	}
+}
+
+// TestGenerateSmallFirstPage ensures a walk asks for a few links first, so that
+// a token that reaches another's walk soon after its authbase doesn't have the
+// node read a full page of the chain they share.
+func TestGenerateSmallFirstPage(t *testing.T) {
+	const tokens, sharedLinks = 20, 200
+	var shared []testLink
+	for i := 0; i < sharedLinks; i++ {
+		shared = append(shared, testLink{height: int32(200 + i),
+			txid: chainhash.Hash{0xee, byte(i), byte(i >> 8)}})
+	}
+	shared = append(shared, testLink{height: 900, txid: chainhash.Hash{0xee, 0xff, 0xff}})
+	chains := make(map[byte][]testLink)
+	for c := 1; c <= tokens; c++ {
+		chains[byte(c)] = append([]testLink{{height: 100}}, shared...)
+	}
+	node := newTestNode(chains)
+	node.linkPage = 1000
+
+	hints, err := generate(node, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hints) != tokens {
+		t.Fatalf("%d hints, want %d", len(hints), tokens)
+	}
+	if limit := sharedLinks + 2 + tokens*firstPageLinks; node.served > limit {
 		t.Errorf("the node served %d links, more than %d", node.served, limit)
 	}
 }

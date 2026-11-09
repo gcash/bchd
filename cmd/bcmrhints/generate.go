@@ -19,6 +19,11 @@ import (
 // reorganization can't change the file between two nodes.
 const minDepth = 100
 
+// firstPageLinks is how many links a walk asks for first.  Most tokens reach a
+// link another's walk did within a few, so a full page of up to 1000, which the
+// node reads for each, would mostly go unused.  The pages after it are full.
+const firstPageLinks = 16
+
 // source is what generating hints needs of a node.
 type source interface {
 	GetBlockCount() (int64, error)
@@ -132,7 +137,11 @@ func (w *chainWalker) walkToHeight(category *chainhash.Hash) (*bcmr.Hint, error)
 	sawGenesis := false
 walk:
 	for {
-		answer, err := w.node.GetBcmrIdentity(category, true, after, 0)
+		limit := 0
+		if after == nil {
+			limit = firstPageLinks
+		}
+		answer, err := w.node.GetBcmrIdentity(category, true, after, limit)
 		if err != nil {
 			return nil, err
 		}
