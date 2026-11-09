@@ -390,9 +390,11 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 	// the segment of each authhead it spends.  Any other identity output it
 	// spends is of a transaction the index doesn't track.
 	var fresh []bcmr.Genesis
+	isFresh := make(map[chainhash.Hash]struct{})
 	for _, g := range geneses {
 		if _, ok := c.head(g.Category); !ok {
 			fresh = append(fresh, g)
+			isFresh[g.Category] = struct{}{}
 		}
 	}
 	segments := make([]uint64, 0, len(spent))
@@ -547,7 +549,7 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 
 	// A category whose authbase was an authhead starts where that is.
 	for _, g := range geneses {
-		if containsBcmrGenesis(fresh, g.Category) {
+		if _, ok := isFresh[g.Category]; ok {
 			continue
 		}
 		auth, err := c.link(g.Category)
@@ -574,16 +576,6 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 		return nil
 	}
 	return c.addHead(txHash, segmentID)
-}
-
-// containsBcmrGenesis returns whether geneses creates the category.
-func containsBcmrGenesis(geneses []bcmr.Genesis, category chainhash.Hash) bool {
-	for _, g := range geneses {
-		if g.Category == category {
-			return true
-		}
-	}
-	return false
 }
 
 // finish stores the block's undo record and updates the heads of the index.
