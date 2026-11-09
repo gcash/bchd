@@ -40,6 +40,8 @@ func generate(node source, height int32) ([]bcmr.Hint, error) {
 			"below the tip at %d", height, minDepth, tip)
 	}
 
+	walker := &chainWalker{node: node, height: height,
+		from: make(map[chainhash.Hash]chainFrom)}
 	var hints []bcmr.Hint
 	var after *chainhash.Hash
 	for {
@@ -48,7 +50,7 @@ func generate(node source, height int32) ([]bcmr.Hint, error) {
 			return nil, err
 		}
 		for i := range page.Identities {
-			hint, err := identityHint(node, &page.Identities[i], height)
+			hint, err := walker.identityHint(&page.Identities[i])
 			if err != nil {
 				return nil, fmt.Errorf("identity %s: %w",
 					page.Identities[i].Authbase, err)
@@ -70,9 +72,27 @@ func generate(node source, height int32) ([]bcmr.Hint, error) {
 	}
 }
 
-// identityHint returns the hint of an identity as of height, or nil if the
+// chainWalker walks authchains back to the height, remembering where the chain
+// stood then from each link it walked, so that the tokens whose authchains join
+// walk the links they share once, and the work is in proportion to the links,
+// not to them times the tokens through them.
+type chainWalker struct {
+	node   source
+	height int32
+	from   map[chainhash.Hash]chainFrom
+}
+
+// chainFrom is where an authchain stood at the height, from one of its links at
+// or below it: the last link at or below it, and the newest well-formed
+// publication of the links from the one to it, or nil.
+type chainFrom struct {
+	head, publication *btcjson.BcmrLinkResult
+}
+
+// identityHint returns the hint of an identity as of the height, or nil if the
 // token's genesis came after it.
-func identityHint(node source, identity *btcjson.GetBcmrIdentityResult, height int32) (*bcmr.Hint, error) {
+func (w *chainWalker) identityHint(identity *btcjson.GetBcmrIdentityResult) (*bcmr.Hint, error) {
+	height := w.height
 	category, err := chainhash.NewHashFromStr(identity.Authbase)
 	if err != nil {
 		return nil, err
@@ -96,19 +116,23 @@ func identityHint(node source, identity *btcjson.GetBcmrIdentityResult, height i
 		}
 		return hint, nil
 	}
-	return walkToHeight(node, category, height)
+	return w.walkToHeight(category)
 }
 
-// walkToHeight reads an authchain that moved past height, for the hint of where
-// it stood then.  The link after the last at height spent its identity output
-// later, so that link didn't burn the identity.
-func walkToHeight(node source, category *chainhash.Hash, height int32) (*bcmr.Hint, error) {
+// walkToHeight reads an authchain that moved past the height, for the hint of
+// where it stood then, up to the first link another token's walk reached.  The
+// link after the last at the height spent its identity output later, so that
+// link didn't burn the identity.
+func (w *chainWalker) walkToHeight(category *chainhash.Hash) (*bcmr.Hint, error) {
+	height := w.height
 	var head, publication *btcjson.BcmrLinkResult
+	var walked []*btcjson.BcmrLinkResult
+	var reached *chainFrom
 	var after *chainhash.Hash
 	sawGenesis := false
 walk:
 	for {
-		answer, err := node.GetBcmrIdentity(category, true, after, 0)
+		answer, err := w.node.GetBcmrIdentity(category, true, after, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +145,22 @@ walk:
 			if link.Height <= 0 || link.Height > height {
 				break walk
 			}
+			txid, err := chainhash.NewHashFromStr(link.Txid)
+			if err != nil {
+				return nil, err
+			}
+			if from, ok := w.from[*txid]; ok {
+				// The chain from here is as another token's walk
+				// found it, which ran past this link, unless the
+				// link was its head.
+				reached = &from
+				if links[i].index >= 1 || from.head.Txid != link.Txid {
+					sawGenesis = true
+				}
+				break walk
+			}
 			head = link
+			walked = append(walked, link)
 			if links[i].index >= 1 {
 				sawGenesis = true
 			}
@@ -137,6 +176,14 @@ walk:
 			return nil, err
 		}
 	}
+
+	if reached != nil {
+		head = reached.head
+		if reached.publication != nil {
+			publication = reached.publication
+		}
+	}
+	w.remember(walked, head, reached)
 
 	// The authbase can come before the genesis, which makes the token.
 	if !sawGenesis {
@@ -155,6 +202,28 @@ walk:
 		hint.Publication = &bcmr.HintPublication{Txid: *txid, Height: publication.Height}
 	}
 	return hint, nil
+}
+
+// remember keeps where the chain stood at the height from each of the links a
+// walk read, all at or below it, which end at head or at the link reached.
+func (w *chainWalker) remember(walked []*btcjson.BcmrLinkResult, head *btcjson.BcmrLinkResult,
+	reached *chainFrom) {
+
+	var publication *btcjson.BcmrLinkResult
+	if reached != nil {
+		publication = reached.publication
+	}
+	for i := len(walked) - 1; i >= 0; i-- {
+		link := walked[i]
+		if publication == nil && link.Publication != nil && !link.Publication.Malformed {
+			publication = link
+		}
+		txid, err := chainhash.NewHashFromStr(link.Txid)
+		if err != nil {
+			continue
+		}
+		w.from[*txid] = chainFrom{head: head, publication: publication}
+	}
 }
 
 // indexedLink is a link of an answer with its index from the authbase.

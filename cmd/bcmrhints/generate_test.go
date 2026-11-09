@@ -15,10 +15,12 @@ import (
 )
 
 // testLink is a link of a test authchain, at a height, with a publication if
-// pub is set, and malformed then if bad is.
+// pub is set, and malformed then if bad is.  A link with a txid is that
+// transaction, which other authchains can share, and else one of its own.
 type testLink struct {
 	height   int32
 	pub, bad bool
+	txid     chainhash.Hash
 }
 
 // testNode answers for authchains from their links, paging both calls.
@@ -29,6 +31,15 @@ type testNode struct {
 	pageSize  int
 	linkPage  int
 	listCalls int
+	served    int
+}
+
+// linkTxid returns the txid of link i of the authchain of the category.
+func (n *testNode) linkTxid(category chainhash.Hash, i int) chainhash.Hash {
+	if txid := n.chains[category][i].txid; txid != (chainhash.Hash{}) {
+		return txid
+	}
+	return testHash(category[0], i)
 }
 
 // testHash returns the hash of link i of the authchain of category c.
@@ -59,7 +70,7 @@ func (n *testNode) identity(category chainhash.Hash) *btcjson.GetBcmrIdentityRes
 		Authbase: category.String(),
 		Status:   "active",
 		Head: btcjson.BcmrLinkResult{
-			Txid:   testHash(category[0], last).String(),
+			Txid:   n.linkTxid(category, last).String(),
 			Height: links[last].height,
 		},
 	}
@@ -69,7 +80,7 @@ func (n *testNode) identity(category chainhash.Hash) *btcjson.GetBcmrIdentityRes
 	for i := last; i >= 0; i-- {
 		if links[i].pub && !links[i].bad {
 			result.Publication = &btcjson.BcmrPublicationResult{
-				Txid:   testHash(category[0], i).String(),
+				Txid:   n.linkTxid(category, i).String(),
 				Height: links[i].height,
 			}
 			break
@@ -104,17 +115,18 @@ func (n *testNode) GetBcmrIdentity(authbase *chainhash.Hash, _ bool, after *chai
 	start := 0
 	if after != nil {
 		for i := range links {
-			if testHash(authbase[0], i) == *after {
+			if n.linkTxid(*authbase, i) == *after {
 				start = i + 1
 			}
 		}
 	}
 	end := min(start+n.linkPage, len(links))
+	n.served += end - start
 	result := n.identity(*authbase)
 	info := make(map[string]btcjson.BcmrLinkResult)
 	for i := start; i < end; i++ {
 		link := btcjson.BcmrLinkResult{
-			Txid:   testHash(authbase[0], i).String(),
+			Txid:   n.linkTxid(*authbase, i).String(),
 			Height: links[i].height,
 		}
 		if links[i].pub {
@@ -237,5 +249,57 @@ func TestGenerateHeightLimits(t *testing.T) {
 	}
 	if _, err := generate(node, 9900); err != nil {
 		t.Fatalf("the deepest allowed height: %v", err)
+	}
+}
+
+// TestGenerateSharedChain ensures tokens whose authchains join walk the links
+// they share once, so that the work is in proportion to the links rather than
+// to them times the tokens, and that each still gets its own hint: the head of
+// the shared chain, and the newest publication of its own links and the
+// shared ones.
+func TestGenerateSharedChain(t *testing.T) {
+	const tokens, sharedLinks = 20, 60
+	var shared []testLink
+	for i := 0; i < sharedLinks; i++ {
+		shared = append(shared, testLink{height: int32(200 + i),
+			txid: chainhash.Hash{0xee, byte(i + 1)}})
+	}
+	// A publication at link 10, and one after the height.
+	shared[10].pub = true
+	shared = append(shared, testLink{height: 900, pub: true, txid: chainhash.Hash{0xee, 0xff}})
+
+	chains := make(map[byte][]testLink)
+	for c := 1; c <= tokens; c++ {
+		chains[byte(c)] = append([]testLink{{height: 100}}, shared...)
+	}
+	// One with a publication of its own before the join, and one that
+	// joins after link 10's publication, which it doesn't have.
+	chains[1] = append([]testLink{{height: 100, pub: true}}, shared...)
+	chains[2] = append([]testLink{{height: 100, pub: true}}, shared[11:]...)
+	node := newTestNode(chains)
+
+	hints, err := generate(node, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hints) != tokens {
+		t.Fatalf("%d hints, want %d", len(hints), tokens)
+	}
+	head := shared[sharedLinks-1].txid
+	for _, hint := range hints {
+		want := bcmr.Hint{Category: hint.Category, Head: head, HeadHeight: 200 + sharedLinks - 1,
+			Publication: &bcmr.HintPublication{Txid: shared[10].txid, Height: 210}}
+		if hint.Category == testHash(2, 0) {
+			want.Publication = &bcmr.HintPublication{Txid: testHash(2, 0), Height: 100}
+		}
+		if !reflect.DeepEqual(hint, want) {
+			t.Errorf("got  %+v\nwant %+v", hint, want)
+		}
+	}
+
+	// The first token walks the shared links, and each other walks its
+	// authbase and a page into them.
+	if limit := sharedLinks + 1 + tokens*2*node.linkPage; node.served > limit {
+		t.Errorf("the node served %d links, more than %d", node.served, limit)
 	}
 }
