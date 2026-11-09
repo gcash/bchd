@@ -80,6 +80,10 @@ type bcmrConnector struct {
 
 	// blocks are the blocks read to find authbases in.
 	blocks bcmrBlockCache
+
+	// parsed is what blockMatters parsed of the block's transactions, by
+	// their position.
+	parsed []bcmrParsedTx
 }
 
 // head returns the segment of which hash is the current head, if it is one.
@@ -362,11 +366,21 @@ func (c *bcmrConnector) connectTx(i int, tokensActive bool) error {
 			spent = append(spent, in.PreviousOutPoint.Hash)
 		}
 	}
+	var parsed bcmrParsedTx
+	if i < len(c.parsed) {
+		parsed = c.parsed[i]
+	}
 	var geneses []bcmr.Genesis
 	if tokensActive {
-		geneses = bcmr.Geneses(msgTx)
+		geneses = parsed.geneses
+		if !parsed.genesesRead {
+			geneses = bcmr.Geneses(msgTx)
+		}
 	}
-	pub := bcmr.ParsePublication(msgTx)
+	pub := parsed.pub
+	if !parsed.pubRead {
+		pub = bcmr.ParsePublication(msgTx)
+	}
 	if len(spent) == 0 && len(geneses) == 0 && pub == nil {
 		return nil
 	}
