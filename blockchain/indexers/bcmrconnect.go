@@ -19,9 +19,9 @@ import (
 // which each one comes after the transactions of the block whose outputs it
 // spends.  Blocks list their transactions by txid since the canonical
 // transaction ordering upgrade, so a link can come before the link whose
-// identity output it spends.
-func bcmrTxOrder(txs []*bchutil.Tx) []int {
-	positions := bcmrTxPositions(txs)
+// identity output it spends.  positions is where each transaction is, by its
+// txid, which the connector keeps too, so that it's built once a block.
+func bcmrTxOrder(txs []*bchutil.Tx, positions map[chainhash.Hash]int) []int {
 	children := make([][]int, len(txs))
 	parents := make([]int, len(txs))
 	for i, tx := range txs {

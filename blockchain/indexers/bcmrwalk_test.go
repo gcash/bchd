@@ -912,6 +912,25 @@ func TestBcmrWalkChecksJournal(t *testing.T) {
 	}
 }
 
+// TestBcmrTxOrderTakesPositions ensures the order of a block's transactions
+// comes from the positions it's given, the map the connector keeps, rather than
+// one it builds again: a spend of a transaction the map doesn't have counts as
+// a spend of one outside the block.
+func TestBcmrTxOrderTakesPositions(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	parent := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	child := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(parent)}, bcmrOut())
+	txs := []*bchutil.Tx{bchutil.NewTx(child), bchutil.NewTx(parent)}
+
+	if got := bcmrTxOrder(txs, bcmrTxPositions(txs)); !reflect.DeepEqual(got, []int{1, 0}) {
+		t.Errorf("with every position, the order is %v, want [1 0]", got)
+	}
+	without := map[chainhash.Hash]int{*txs[0].Hash(): 0}
+	if got := bcmrTxOrder(txs, without); !reflect.DeepEqual(got, []int{0, 1}) {
+		t.Errorf("without the parent's position, the order is %v, want [0 1]", got)
+	}
+}
+
 // TestBcmrWalkSharesBlocks checks that the walks of one pass share the blocks
 // they read: a walk behind a second publication keeps what the walk behind
 // the first read, as two segments behind one block need it read only once.

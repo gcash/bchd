@@ -391,7 +391,8 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		removed: make(map[chainhash.Hash]struct{}),
 	}
 	txs := block.Transactions()
-	for _, i := range bcmrTxOrder(txs) {
+	c.positions = bcmrTxPositions(txs)
+	for _, i := range bcmrTxOrder(txs, c.positions) {
 		if err := c.connectTx(i, tokensActive); err != nil {
 			return err
 		}
