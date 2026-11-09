@@ -155,8 +155,12 @@ func (idx *BcmrIndex) walkPending() error {
 	start := time.Now()
 	lastLog := start
 	var walks, found int
+
+	// Walks behind segments near one another read the same blocks, which
+	// stay as they are whatever becomes of the chain, as a hash names each.
+	var blocks bcmrBlockCache
 	for {
-		walk, err := idx.readBcmrWalk()
+		walk, err := idx.readBcmrWalk(&blocks)
 		if err != nil {
 			return err
 		}
@@ -224,8 +228,8 @@ type bcmrWalk struct {
 	total uint32
 	over  bool
 
-	// blocks are the blocks the walk read.
-	blocks bcmrBlockCache
+	// blocks are the blocks the walk read, which the walks of one pass share.
+	blocks *bcmrBlockCache
 }
 
 // bcmrWalkSegment is a segment that a walk read.
@@ -279,8 +283,9 @@ type bcmrWalkNewSegment struct {
 }
 
 // readBcmrWalk reads the walk behind the first segment left for the walker,
-// with the database unlocked, or returns nil if none is left.
-func (idx *BcmrIndex) readBcmrWalk() (*bcmrWalk, error) {
+// with the database unlocked, or returns nil if none is left.  It reads blocks
+// through the passed cache, which keeps them for the next walk.
+func (idx *BcmrIndex) readBcmrWalk(blocks *bcmrBlockCache) (*bcmrWalk, error) {
 	if idx.chain == nil {
 		return nil, AssertError("the BCMR index has no chain to walk")
 	}
@@ -309,6 +314,7 @@ func (idx *BcmrIndex) readBcmrWalk() (*bcmrWalk, error) {
 			tipHeight:  tipHeight,
 			pendingKey: key,
 			segments:   make(map[uint64]*bcmrWalkSegment),
+			blocks:     blocks,
 		}
 		return walk.read(w, binary.BigEndian.Uint64(key[4:]))
 	})
@@ -324,7 +330,7 @@ func (idx *BcmrIndex) readBcmrWalk() (*bcmrWalk, error) {
 		return nil, err
 	}
 	if walk != nil {
-		walk.dbTx, walk.blocks = nil, bcmrBlockCache{}
+		walk.dbTx, walk.blocks = nil, nil
 	}
 	return walk, nil
 }

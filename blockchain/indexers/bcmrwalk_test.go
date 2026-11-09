@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -580,7 +581,7 @@ func TestBcmrWalkChainChanges(t *testing.T) {
 	c.connect(true, p)
 
 	// A block extends p's segment after the walk read it.
-	walk, err := c.idx.readBcmrWalk()
+	walk, err := c.idx.readBcmrWalk(new(bcmrBlockCache))
 	if err != nil || walk == nil {
 		t.Fatalf("reading a walk: %v, %v", walk, err)
 	}
@@ -598,7 +599,7 @@ func TestBcmrWalkChainChanges(t *testing.T) {
 	c.connect(true, s)
 	ps := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(s)}, bcmrOut(), bcmrPub(2))
 	c.connect(true, ps)
-	walk, err = c.idx.readBcmrWalk()
+	walk, err = c.idx.readBcmrWalk(new(bcmrBlockCache))
 	if err != nil || walk == nil {
 		t.Fatalf("reading a walk: %v, %v", walk, err)
 	}
@@ -613,7 +614,7 @@ func TestBcmrWalkChainChanges(t *testing.T) {
 
 	// A disconnect and a connect put the block back.
 	c.connect(true, ps)
-	walk, err = c.idx.readBcmrWalk()
+	walk, err = c.idx.readBcmrWalk(new(bcmrBlockCache))
 	if err != nil || walk == nil {
 		t.Fatalf("reading a walk: %v, %v", walk, err)
 	}
@@ -640,7 +641,7 @@ func TestBcmrWalkChainChanges(t *testing.T) {
 	pg := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(genesis)},
 		bcmrTokens(authbase.TxHash(), 5), bcmrPub(4))
 	c.connect(true, pg)
-	walk, err = c.idx.readBcmrWalk()
+	walk, err = c.idx.readBcmrWalk(new(bcmrBlockCache))
 	if err != nil || walk == nil {
 		t.Fatalf("reading a walk: %v, %v", walk, err)
 	}
@@ -663,7 +664,7 @@ func TestBcmrWalkChainChanges(t *testing.T) {
 		c.onJournal = nil
 		c.disconnect()
 	}
-	if _, err := c.idx.readBcmrWalk(); !errors.Is(err, errBcmrWalkAgain) {
+	if _, err := c.idx.readBcmrWalk(new(bcmrBlockCache)); !errors.Is(err, errBcmrWalkAgain) {
 		t.Errorf("reading while a disconnect removes the block read: %v", err)
 	}
 	if got := c.pending(); len(got) != 0 {
@@ -844,5 +845,41 @@ func TestBcmrBlockCache(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestBcmrWalkSharesBlocks checks that the walks of one pass share the blocks
+// they read: a walk behind a second publication keeps what the walk behind
+// the first read, as two segments behind one block need it read only once.
+func TestBcmrWalkSharesBlocks(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	r1 := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	r2 := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	shared := c.connect(true, r1, r2)
+	p1 := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(r1)}, bcmrOut(), bcmrPub(1))
+	c.connect(true, p1)
+	p2 := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(r2)}, bcmrOut(), bcmrPub(2))
+	c.connect(true, p2)
+
+	var blocks bcmrBlockCache
+	walk, err := c.idx.readBcmrWalk(&blocks)
+	if err != nil || walk == nil {
+		t.Fatalf("reading the first walk: %v, %v", walk, err)
+	}
+	if err := c.idx.writeBcmrWalk(walk); err != nil {
+		t.Fatal(err)
+	}
+	read := maps.Clone(blocks.blocks)
+	if _, ok := read[*shared.Hash()]; !ok {
+		t.Fatal("the first walk didn't read the shared block")
+	}
+	walk, err = c.idx.readBcmrWalk(&blocks)
+	if err != nil || walk == nil {
+		t.Fatalf("reading the second walk: %v, %v", walk, err)
+	}
+	for hash, block := range read {
+		if blocks.blocks[hash] != block {
+			t.Fatalf("the second walk read block %v again", hash)
+		}
 	}
 }
