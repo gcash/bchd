@@ -5,6 +5,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -176,7 +177,7 @@ func orderedLinks(answer *btcjson.GetBcmrIdentityResult) ([]indexedLink, error) 
 		links = append(links, indexedLink{index, info})
 	}
 	slices.SortFunc(links, func(a, b indexedLink) int {
-		return int(int64(a.index) - int64(b.index))
+		return cmp.Compare(a.index, b.index)
 	})
 	return links, nil
 }
