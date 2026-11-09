@@ -64,10 +64,10 @@ type bcmrTestChain struct {
 	sizeErr   error
 }
 
-// BestSnapshot returns the test chain's tip.
+// BestSnapshot returns no tip, as the test chain's block size limit doesn't
+// depend on it, and the walker asks for it while a test connects blocks.
 func (c *bcmrTestChain) BestSnapshot() *blockchain.BestState {
-	tip := c.blocks[len(c.blocks)-1]
-	return &blockchain.BestState{Hash: *tip.Hash(), Height: tip.Height()}
+	return &blockchain.BestState{}
 }
 
 // NextBlockSizeLimit returns the largest block the test network allows next,
