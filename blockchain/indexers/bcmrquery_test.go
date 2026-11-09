@@ -150,6 +150,12 @@ func (c *bcmrTestChain) checkProof(t *testing.T, info *BcmrIdentityInfo, tx *wir
 
 		t.Errorf("the proof doesn't prove %v at index %d", hash, index)
 	}
+	if info.ProofBlock == nil || *info.ProofBlock.Hash() != *block.Hash() ||
+		info.ProofBlock.Height() != c.heights[hash] {
+
+		t.Errorf("the proof's block is %v, want %v at height %d", info.ProofBlock,
+			block.Hash(), c.heights[hash])
+	}
 }
 
 // bcmrTestAuthchain builds an authchain on a test chain: an authbase that
@@ -346,15 +352,30 @@ func TestBcmrQueryMempoolGenesis(t *testing.T) {
 	yCat := y.TxHash()
 	gy := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(y)}, bcmrTokens(yCat, 6), bcmrPub(2))
 
+	// An authbase in a block that the index doesn't track, as it has no
+	// publication, with another transaction before it in its block.
+	z := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	c.connect(true, bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut()), z)
+	zCat := z.TxHash()
+	gz := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(z)}, bcmrTokens(zCat, 8))
+
 	// The authhead of another identity.
 	links := bcmrTestAuthchain(c)
 	head := links[3]
 	hCat := head.TxHash()
 	gh := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(head)}, bcmrTokens(hCat, 7))
 
-	mempool := newBcmrTestMempool(gx, y, gy, gh)
+	mempool := newBcmrTestMempool(gx, y, gy, gh, gz)
 
-	info := c.mustQuery(t, mempool, xCat, true, nil, 0)
+	info := c.mustQuery(t, mempool, zCat, true, nil, 0)
+	if info.Head.Hash != gz.TxHash() || info.GenesisSupply != 8 || info.Publication != nil {
+		t.Errorf("z: head %v, supply %d, publication %+v", info.Head.Hash,
+			info.GenesisSupply, info.Publication)
+	}
+	c.checkAuthchain(t, info, 0, false, z, gz)
+	c.checkProof(t, info, z, 0)
+
+	info = c.mustQuery(t, mempool, xCat, true, nil, 0)
 	if info.Head.Hash != gx.TxHash() || info.GenesisSupply != 5 || info.Publication == nil ||
 		info.Publication.Hash != xCat || info.Current {
 

@@ -521,11 +521,7 @@ func (walk *bcmrWalk) spentOutputs(hash chainhash.Hash, l *bcmrLink, pos, numIns
 		if err != nil {
 			return nil, err
 		}
-		txs := block.block.Transactions()
-		block.stxoStarts = make([]int, len(txs))
-		for k := 2; k < len(txs); k++ {
-			block.stxoStarts[k] = block.stxoStarts[k-1] + len(txs[k-1].MsgTx().TxIn)
-		}
+		block.stxoStarts, _ = bcmrStxoStarts(block.block.Transactions())
 	}
 	start := block.stxoStarts[pos]
 	if start+numIns > len(block.stxos) {

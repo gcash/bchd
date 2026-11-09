@@ -21,10 +21,7 @@ import (
 // transaction ordering upgrade, so a link can come before the link whose
 // identity output it spends.
 func bcmrTxOrder(txs []*bchutil.Tx) []int {
-	positions := make(map[chainhash.Hash]int, len(txs))
-	for i, tx := range txs {
-		positions[*tx.Hash()] = i
-	}
+	positions := bcmrTxPositions(txs)
 	children := make([][]int, len(txs))
 	parents := make([]int, len(txs))
 	for i, tx := range txs {
@@ -152,6 +149,32 @@ func (c *bcmrConnector) putIdentity(authbase chainhash.Hash, id *bcmrIdentity) e
 	return c.w.put(bcmrIdentities, authbase[:], serializeBcmrIdentity(id))
 }
 
+// bcmrTxPositions returns the position of each of a block's transactions, by
+// txid.
+func bcmrTxPositions(txs []*bchutil.Tx) map[chainhash.Hash]int {
+	positions := make(map[chainhash.Hash]int, len(txs))
+	for i, tx := range txs {
+		positions[*tx.Hash()] = i
+	}
+	return positions
+}
+
+// bcmrStxoStarts returns where the spent outputs of each of a block's
+// transactions start in its spend journal, which lists them in the order of
+// the transactions and their inputs, the coinbase spending none, and how many
+// spent outputs the block has.
+func bcmrStxoStarts(txs []*bchutil.Tx) ([]int, int) {
+	starts := make([]int, len(txs))
+	n := 0
+	for k, tx := range txs {
+		starts[k] = n
+		if k > 0 {
+			n += len(tx.MsgTx().TxIn)
+		}
+	}
+	return starts, n
+}
+
 // txLoc returns where the transaction at position i of the block is.
 func (c *bcmrConnector) txLoc(i int) (wire.TxLoc, error) {
 	if c.locs == nil {
@@ -168,11 +191,7 @@ func (c *bcmrConnector) txLoc(i int) (wire.TxLoc, error) {
 // passed txid, if the block has it.
 func (c *bcmrConnector) position(hash chainhash.Hash) (int, bool) {
 	if c.positions == nil {
-		txs := c.block.Transactions()
-		c.positions = make(map[chainhash.Hash]int, len(txs))
-		for i, tx := range txs {
-			c.positions[*tx.Hash()] = i
-		}
+		c.positions = bcmrTxPositions(c.block.Transactions())
 	}
 	i, ok := c.positions[hash]
 	return i, ok
@@ -194,15 +213,7 @@ func (c *bcmrConnector) spentOutput(i, j int) (*blockchain.SpentTxOut, error) {
 		c.stxos = stxos
 	}
 	if c.stxoStarts == nil {
-		txs := c.block.Transactions()
-		starts := make([]int, len(txs))
-		n := 0
-		for k, tx := range txs {
-			starts[k] = n
-			if k > 0 {
-				n += len(tx.MsgTx().TxIn)
-			}
-		}
+		starts, n := bcmrStxoStarts(c.block.Transactions())
 		if n != len(c.stxos) {
 			return nil, AssertError(fmt.Sprintf("block %v spends %d outputs, "+
 				"but has %d spent outputs", c.block.Hash(), n, len(c.stxos)))
@@ -313,14 +324,10 @@ func (c *bcmrBlockCache) fetch(dbTx database.Tx, hash *chainhash.Hash, height in
 	if err != nil {
 		return nil, err
 	}
-	txs := block.Transactions()
 	read := &bcmrReadBlock{
 		block:     block,
-		positions: make(map[chainhash.Hash]int, len(txs)),
+		positions: bcmrTxPositions(block.Transactions()),
 		locs:      locs,
-	}
-	for k, tx := range txs {
-		read.positions[*tx.Hash()] = k
 	}
 	if c.blocks == nil || c.size+len(raw) > bcmrMaxReadBlocks {
 		c.blocks = make(map[chainhash.Hash]*bcmrReadBlock)

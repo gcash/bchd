@@ -291,10 +291,12 @@ type bcmrQuerier struct {
 	mempoolIndex uint32
 
 	// authbase is the authbase of a token whose genesis is in the mempool,
-	// with its transaction, once it is found, and authbaseBlock the block
-	// it was found in, if that was read.
-	authbase      *BcmrLinkInfo
-	authbaseBlock *bchutil.Block
+	// with its transaction, once it is found.
+	authbase *BcmrLinkInfo
+
+	// blocks are the blocks the query read, as the authbase's block can
+	// also be the proof's.
+	blocks bcmrBlockCache
 }
 
 // mempoolLinksFrom returns the links in the mempool that the identity output
@@ -580,32 +582,26 @@ func (q *bcmrQuerier) findAuthbase() (*BcmrLinkInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := q.dbTx.FetchBlock(blockHash)
+	read, err := q.blocks.fetch(q.dbTx, blockHash, height)
 	if err != nil {
 		return nil, err
 	}
-	block, err := bchutil.NewBlockFromBytes(raw)
+	k, ok := read.positions[authbase]
+	if !ok {
+		return nil, AssertError(fmt.Sprintf("authbase %v is not in block %v", authbase, blockHash))
+	}
+	raw, err := read.block.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	locs, err := blockTxLocs(block)
-	if err != nil {
-		return nil, err
-	}
-	for i, tx := range block.Transactions() {
-		if *tx.Hash() != authbase {
-			continue
-		}
-		q.authbaseBlock = block
-		return &BcmrLinkInfo{
-			Hash:        authbase,
-			Height:      height,
-			BlockHash:   blockHash,
-			Publication: bcmr.ParsePublication(tx.MsgTx()),
-			Tx:          bytes.Clone(raw[locs[i].TxStart : locs[i].TxStart+locs[i].TxLen]),
-		}, nil
-	}
-	return nil, AssertError(fmt.Sprintf("authbase %v is not in block %v", authbase, blockHash))
+	loc := read.locs[k]
+	return &BcmrLinkInfo{
+		Hash:        authbase,
+		Height:      height,
+		BlockHash:   blockHash,
+		Publication: bcmr.ParsePublication(read.block.Transactions()[k].MsgTx()),
+		Tx:          bytes.Clone(raw[loc.TxStart : loc.TxStart+loc.TxLen]),
+	}, nil
 }
 
 // serializeBcmrTx serializes a transaction.
@@ -766,18 +762,11 @@ func (q *bcmrQuerier) answerAuthchain(info *BcmrIdentityInfo) error {
 	if proofLink == nil {
 		return nil
 	}
-	block := q.authbaseBlock
-	if block == nil || *block.Hash() != *proofLink.BlockHash {
-		raw, err := q.dbTx.FetchBlock(proofLink.BlockHash)
-		if err != nil {
-			return err
-		}
-		block, err = bchutil.NewBlockFromBytes(raw)
-		if err != nil {
-			return err
-		}
+	read, err := q.blocks.fetch(q.dbTx, proofLink.BlockHash, proofLink.Height)
+	if err != nil {
+		return err
 	}
-	block.SetHeight(proofLink.Height)
+	block := read.block
 	info.Proof, _ = merkleblock.NewMerkleBlockWithTxnSet(block,
 		[]*chainhash.Hash{&proofLink.Hash})
 	info.ProofBlock = block
