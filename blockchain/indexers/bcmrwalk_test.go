@@ -891,6 +891,27 @@ func TestBcmrWalkCacheLimit(t *testing.T) {
 	}
 }
 
+// TestBcmrWalkChecksJournal ensures the walker refuses a block whose spend
+// journal has more spent outputs than its transactions spend, as the connector
+// does, rather than reading a transaction's from wherever they'd start.
+func TestBcmrWalkChecksJournal(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	r1 := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	c.connect(true, r1)
+	p1 := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(r1)}, bcmrOut(), bcmrPub(1))
+	published := c.connect(true, p1)
+
+	// One spent output too many in the block the walk reads it from.
+	journal := c.stxos[*published.Hash()]
+	c.stxos[*published.Hash()] = append(journal, journal[len(journal)-1])
+
+	err := c.idx.walkPending()
+	var assert AssertError
+	if !errors.As(err, &assert) || !strings.Contains(err.Error(), "spent outputs") {
+		t.Fatalf("walking behind a block with a wrong journal: %v", err)
+	}
+}
+
 // TestBcmrWalkSharesBlocks checks that the walks of one pass share the blocks
 // they read: a walk behind a second publication keeps what the walk behind
 // the first read, as two segments behind one block need it read only once.

@@ -532,11 +532,18 @@ func (walk *bcmrWalk) spentOutputs(hash chainhash.Hash, l *bcmrLink, pos, numIns
 			"output of block %v", hash, block.block.Hash()))
 	}
 	if block.stxoStarts == nil {
-		block.stxos, err = walk.idx.chain.FetchSpendJournal(block.block)
+		stxos, err := walk.idx.chain.FetchSpendJournal(block.block)
 		if err != nil {
 			return nil, err
 		}
-		block.stxoStarts, _ = bcmrStxoStarts(block.block.Transactions())
+		// A journal that doesn't match its block, as the connector checks
+		// too, would give a transaction another's spent outputs.
+		starts, n := bcmrStxoStarts(block.block.Transactions())
+		if n != len(stxos) {
+			return nil, AssertError(fmt.Sprintf("block %v spends %d outputs, "+
+				"but has %d spent outputs", block.block.Hash(), n, len(stxos)))
+		}
+		block.stxos, block.stxoStarts = stxos, starts
 	}
 	start := block.stxoStarts[pos]
 	if start+numIns > len(block.stxos) {
