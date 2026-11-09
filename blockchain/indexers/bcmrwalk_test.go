@@ -877,6 +877,15 @@ func TestBcmrWalkSharesBlocks(t *testing.T) {
 	if err != nil || walk == nil {
 		t.Fatalf("reading the second walk: %v, %v", walk, err)
 	}
+	// It found r2, which only the shared block holds, so it read that block,
+	// and from the cache, as it's the one the first walk read.
+	foundR2 := false
+	for _, tx := range walk.found {
+		foundR2 = foundR2 || tx.hash == r2.TxHash()
+	}
+	if !foundR2 {
+		t.Fatal("the second walk didn't find what's behind its publication")
+	}
 	for hash, block := range read {
 		if blocks.blocks[hash] != block {
 			t.Fatalf("the second walk read block %v again", hash)

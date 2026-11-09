@@ -525,7 +525,7 @@ func TestBcmrListIdentities(t *testing.T) {
 }
 
 // TestBcmrListJoinedIdentities checks that ListIdentities answers identities
-// whose authchains join as queries do, over segments it reads once: each link
+// whose authchains join as queries do, over the segments it shares: each link
 // of one authchain makes a token of the link before, some links start a
 // segment by spending an identity output the index doesn't track, and a
 // publication before an identity's authbase in its first segment isn't its.
