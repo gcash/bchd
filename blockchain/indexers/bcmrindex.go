@@ -709,11 +709,17 @@ type bcmrSuffixes map[uint64]*bcmrSuffix
 // suffix returns the suffix of the segments from the passed one on, reading
 // the segments it doesn't hold yet.
 func (suffixes bcmrSuffixes) suffix(w *bcmrWriter, id uint64) (*bcmrSuffix, error) {
+	// Only what a suffix takes of each segment is kept on the way, as an
+	// authchain can run through millions of them: the authhead and whether
+	// it burned the identity come from the last.
 	type read struct {
 		id      uint64
-		segment *bcmrSegment
+		pubLink chainhash.Hash
+		length  uint32
 	}
 	var walked []read
+	var head chainhash.Hash
+	var burned bool
 	for id != 0 {
 		if _, ok := suffixes[id]; ok {
 			break
@@ -726,13 +732,14 @@ func (suffixes bcmrSuffixes) suffix(w *bcmrWriter, id uint64) (*bcmrSuffix, erro
 		if err != nil {
 			return nil, err
 		}
-		walked = append(walked, read{id, s})
+		walked = append(walked, read{id, s.pubLink, s.length})
+		head, burned = s.head, s.burned
 		id = s.next
 	}
 	after := suffixes[id]
 	for i := len(walked) - 1; i >= 0; i-- {
-		s := walked[i].segment
-		suffix := &bcmrSuffix{head: s.head, burned: s.burned, pubLink: s.pubLink,
+		s := walked[i]
+		suffix := &bcmrSuffix{head: head, burned: burned, pubLink: s.pubLink,
 			segments: 1, length: s.length}
 		if after != nil {
 			suffix.head, suffix.burned = after.head, after.burned

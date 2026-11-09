@@ -931,6 +931,57 @@ func TestBcmrTxOrderTakesPositions(t *testing.T) {
 	}
 }
 
+// TestBcmrSuffixes ensures the suffix of a run of segments takes the authhead
+// and burn of the last, the newest publication of any, and the counts of all,
+// and that a run joining one already read takes those from where it joins.
+func TestBcmrSuffixes(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	head := chainhash.Hash{3}
+	pub1, pub4 := chainhash.Hash{0x11}, chainhash.Hash{0x44}
+	segments := map[uint64]*bcmrSegment{
+		1: {length: 2, pubLink: pub1, next: 2},
+		2: {length: 3, next: 3},
+		3: {length: 5, head: head, burned: true},
+		4: {length: 7, pubLink: pub4, next: 2},
+	}
+	err := c.db.Update(func(dbTx database.Tx) error {
+		w, err := newBcmrWriter(dbTx)
+		if err != nil {
+			return err
+		}
+		for id, s := range segments {
+			if err := w.putSegment(id, s); err != nil {
+				return err
+			}
+		}
+		suffixes := make(bcmrSuffixes)
+		got, err := suffixes.suffix(w, 1)
+		if err != nil {
+			return err
+		}
+		want := bcmrSuffix{head: head, burned: true, pubLink: pub1, segments: 3, length: 10}
+		if *got != want {
+			t.Errorf("suffix from 1: %+v, want %+v", *got, want)
+		}
+		want = bcmrSuffix{head: head, burned: true, segments: 2, length: 8}
+		if *suffixes[2] != want {
+			t.Errorf("suffix from 2: %+v, want %+v", *suffixes[2], want)
+		}
+		got, err = suffixes.suffix(w, 4)
+		if err != nil {
+			return err
+		}
+		want = bcmrSuffix{head: head, burned: true, pubLink: pub4, segments: 3, length: 15}
+		if *got != want {
+			t.Errorf("suffix from 4, joining 2: %+v, want %+v", *got, want)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestBcmrWalkSharesBlocks checks that the walks of one pass share the blocks
 // they read: a walk behind a second publication keeps what the walk behind
 // the first read, as two segments behind one block need it read only once.
