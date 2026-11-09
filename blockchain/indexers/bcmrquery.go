@@ -360,8 +360,7 @@ func (q *bcmrQuerier) answer() (*BcmrIdentityInfo, error) {
 		// authhead that is no token's authbase makes it one, as it does
 		// once it confirms.
 		if state.identity == nil && len(q.mempoolLinks) > 0 {
-			g, ok := findBcmrGenesis(bcmr.Geneses(q.mempoolLinks[0].MsgTx()),
-				q.query.Authbase)
+			g, ok := bcmr.FindGenesis(q.mempoolLinks[0].MsgTx(), q.query.Authbase)
 			if ok {
 				info.HasGenesisSupply = true
 				info.GenesisSupply = g.Supply
@@ -372,7 +371,7 @@ func (q *bcmrQuerier) answer() (*BcmrIdentityInfo, error) {
 		if genesis == nil {
 			return nil, ErrBcmrIdentityNotFound
 		}
-		g, ok := findBcmrGenesis(bcmr.Geneses(genesis.MsgTx()), q.query.Authbase)
+		g, ok := bcmr.FindGenesis(genesis.MsgTx(), q.query.Authbase)
 		if !ok {
 			return nil, ErrBcmrIdentityNotFound
 		}
@@ -415,16 +414,6 @@ func (s *bcmrIdentityState) length() uint32 {
 		n += length
 	}
 	return n - s.place
-}
-
-// findBcmrGenesis returns the genesis of a category among geneses.
-func findBcmrGenesis(geneses []bcmr.Genesis, category chainhash.Hash) (bcmr.Genesis, bool) {
-	for _, g := range geneses {
-		if g.Category == category {
-			return g, true
-		}
-	}
-	return bcmr.Genesis{}, false
 }
 
 // answerHead fills in the authhead, the publication to read, and the token

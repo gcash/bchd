@@ -74,6 +74,17 @@ func Geneses(tx *wire.MsgTx) []Genesis {
 	return geneses
 }
 
+// FindGenesis returns the genesis of the category among those of the
+// transaction, if the transaction creates it.
+func FindGenesis(tx *wire.MsgTx, category chainhash.Hash) (Genesis, bool) {
+	for _, g := range Geneses(tx) {
+		if g.Category == category {
+			return g, true
+		}
+	}
+	return Genesis{}, false
+}
+
 // IsBurn returns whether a transaction that spends an identity output burns
 // the identity: its own identity output, output 0, is a data-carrier output,
 // which ends the authchain.

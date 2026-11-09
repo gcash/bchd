@@ -83,6 +83,24 @@ func TestGeneses(t *testing.T) {
 	}
 }
 
+// TestFindGenesis checks that the genesis of a category is found among a
+// transaction's, and that a category it only transfers isn't.
+func TestFindGenesis(t *testing.T) {
+	a, b, c := chainhash.Hash{1}, chainhash.Hash{2}, chainhash.Hash{3}
+	ft := byte(wire.HAS_AMOUNT)
+	tx := spending([]wire.OutPoint{{Hash: b}, {Hash: c, Index: 2}, {Hash: a}},
+		tokenOut(c, 1, ft), tokenOut(b, 3, ft), tokenOut(a, 4, ft))
+	if g, ok := FindGenesis(tx, a); !ok || g != (Genesis{Category: a, Input: 2, Supply: 4}) {
+		t.Errorf("a: %+v, %v", g, ok)
+	}
+	if g, ok := FindGenesis(tx, b); !ok || g != (Genesis{Category: b, Input: 0, Supply: 3}) {
+		t.Errorf("b: %+v, %v", g, ok)
+	}
+	if g, ok := FindGenesis(tx, c); ok {
+		t.Errorf("a transfer of c: %+v", g)
+	}
+}
+
 // TestIsBurn checks which identity outputs burn an identity.
 func TestIsBurn(t *testing.T) {
 	tests := []struct {
