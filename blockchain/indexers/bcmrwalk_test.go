@@ -982,6 +982,27 @@ func TestBcmrSuffixes(t *testing.T) {
 	}
 }
 
+// TestBcmrBlockMatters ensures blockMatters gives the position of the first
+// transaction that matters, with what it parsed of it, and nothing for a block
+// with none.
+func TestBcmrBlockMatters(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	plain := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	other := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	published := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut(), bcmrPub(1))
+	block := func(txs ...*wire.MsgTx) *bchutil.Block {
+		return bchutil.NewBlock(&wire.MsgBlock{Transactions: txs})
+	}
+
+	if _, _, matters := c.idx.blockMatters(block(plain, other), false); matters {
+		t.Error("a block of plain transactions matters")
+	}
+	at, parsed, matters := c.idx.blockMatters(block(plain, other, published), false)
+	if !matters || at != 2 || !parsed.pubRead || parsed.pub == nil {
+		t.Errorf("a block with a publication third: %v, %d, %+v", matters, at, parsed)
+	}
+}
+
 // TestBcmrWalkSharesBlocks checks that the walks of one pass share the blocks
 // they read: a walk behind a second publication keeps what the walk behind
 // the first read, as two segments behind one block need it read only once.

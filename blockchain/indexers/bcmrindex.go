@@ -371,7 +371,7 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 	// A block before CashTokens activated can create no token, and only
 	// extends an authchain the index already tracks.
 	tokensActive := block.Height() > idx.chainParams.Upgrade9ForkHeight
-	parsed, matters := idx.blockMatters(block, tokensActive)
+	firstAt, first, matters := idx.blockMatters(block, tokensActive)
 	if !matters {
 		return nil
 	}
@@ -386,7 +386,8 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 		w:       w,
 		block:   block,
 		stxos:   stxos,
-		parsed:  parsed,
+		firstAt: firstAt,
+		first:   first,
 		added:   make(map[chainhash.Hash]uint64),
 		removed: make(map[chainhash.Hash]struct{}),
 	}
@@ -401,37 +402,37 @@ func (idx *BcmrIndex) ConnectBlock(dbTx database.Tx, block *bchutil.Block,
 }
 
 // blockMatters returns whether the block extends an authchain the index
-// tracks, creates a token category or holds a publication, with what it parsed
-// of the transactions it read, by their position in the block, for connecting
-// them.  A transaction that spends the identity output of a transaction in the
-// same block extends an authchain only if that transaction does, so this needs
-// no order of the block's transactions.
-func (idx *BcmrIndex) blockMatters(block *bchutil.Block, tokensActive bool) ([]bcmrParsedTx, bool) {
-	txs := block.Transactions()
-	parsed := make([]bcmrParsedTx, len(txs))
-	for i, tx := range txs {
+// tracks, creates a token category or holds a publication, with the position of
+// the first transaction that does and what it parsed of it, for connecting it.
+// The transactions before it hold no publication and, with tokensActive,
+// create no category.  A transaction that spends the identity output of a
+// transaction in the same block extends an authchain only if that transaction
+// does, so this needs no order of the block's transactions.  Most blocks don't
+// matter, so it keeps nothing of each transaction it reads.
+func (idx *BcmrIndex) blockMatters(block *bchutil.Block, tokensActive bool) (int, bcmrParsedTx, bool) {
+	for i, tx := range block.Transactions() {
 		msgTx := tx.MsgTx()
-		p := &parsed[i]
+		var p bcmrParsedTx
 		p.pub, p.pubRead = bcmr.ParsePublication(msgTx), true
 		if p.pub != nil {
-			return parsed, true
+			return i, p, true
 		}
 		for _, in := range msgTx.TxIn {
 			if in.PreviousOutPoint.Index != 0 {
 				continue
 			}
 			if _, ok := idx.heads[in.PreviousOutPoint.Hash]; ok {
-				return parsed, true
+				return i, p, true
 			}
 		}
 		if tokensActive {
 			p.geneses, p.genesesRead = bcmr.Geneses(msgTx), true
 			if len(p.geneses) > 0 {
-				return parsed, true
+				return i, p, true
 			}
 		}
 	}
-	return nil, false
+	return 0, bcmrParsedTx{}, false
 }
 
 // bcmrParsedTx is what was parsed of a transaction of a block, so that it
