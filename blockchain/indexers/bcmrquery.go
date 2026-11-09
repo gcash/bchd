@@ -208,9 +208,12 @@ func (idx *BcmrIndex) ListIdentities(after *chainhash.Hash, limit int) ([]*BcmrI
 		limit = BcmrMaxListedIdentities
 	}
 
-	// One more than the limit shows whether there are more.
-	var authbases []chainhash.Hash
+	// One more than the limit shows whether there are more.  Identities
+	// whose authchains join share what's read of the segments from there.
+	var infos []*BcmrIdentityInfo
+	var more bool
 	err := idx.db.View(func(dbTx database.Tx) error {
+		var authbases []chainhash.Hash
 		bucket := dbTx.Metadata().Bucket(bcmrIndexKey).Bucket(bcmrBucketNames[bcmrIdentities])
 		cursor := bucket.Cursor()
 		var ok bool
@@ -227,26 +230,33 @@ func (idx *BcmrIndex) ListIdentities(after *chainhash.Hash, limit int) ([]*BcmrI
 			copy(authbase[:], cursor.Key())
 			authbases = append(authbases, authbase)
 		}
+		more = len(authbases) > limit
+		if more {
+			authbases = authbases[:limit]
+		}
+
+		suffixes := make(bcmrSuffixes)
+		infos = make([]*BcmrIdentityInfo, 0, len(authbases))
+		for i := range authbases {
+			state, err := fetchBcmrIdentitySummary(dbTx, &authbases[i], suffixes)
+			if err != nil {
+				return err
+			}
+			if state == nil {
+				continue
+			}
+			q := &bcmrQuerier{idx: idx, dbTx: dbTx, query: &BcmrQuery{Authbase: authbases[i]},
+				mempool: bcmrNoMempool{}, summary: state}
+			info, err := q.answer()
+			if err != nil {
+				return err
+			}
+			infos = append(infos, info)
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, false, err
-	}
-	more := len(authbases) > limit
-	if more {
-		authbases = authbases[:limit]
-	}
-
-	infos := make([]*BcmrIdentityInfo, 0, len(authbases))
-	for i := range authbases {
-		info, err := idx.Identity(&BcmrQuery{Authbase: authbases[i]}, bcmrNoMempool{})
-		if errors.Is(err, ErrBcmrIdentityNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, false, err
-		}
-		infos = append(infos, info)
 	}
 	return infos, more, nil
 }
@@ -264,8 +274,11 @@ type bcmrQuerier struct {
 	utxoEntry *blockchain.UtxoEntry
 
 	// state is what the index knows of the identity, or nil for a token
-	// whose genesis is in the mempool.
-	state *bcmrIdentityState
+	// whose genesis is in the mempool.  A summary, set before the query is
+	// answered, is the state without its path, for an answer without the
+	// authchain.
+	state   *bcmrIdentityState
+	summary *bcmrIdentityState
 
 	// unconfirmedBase is the authbase of a token whose genesis is in the
 	// mempool, when it is in the mempool too.
@@ -312,11 +325,18 @@ func (q *bcmrQuerier) mempoolLinksFrom(hash chainhash.Hash) ([]*bchutil.Tx, erro
 // answer answers the query.
 func (q *bcmrQuerier) answer() (*BcmrIdentityInfo, error) {
 	info := &BcmrIdentityInfo{Authbase: q.query.Authbase}
-	state, err := fetchBcmrIdentityState(q.dbTx, &q.query.Authbase)
-	if err != nil {
-		return nil, err
+	state := q.summary
+	if state == nil {
+		var err error
+		state, err = fetchBcmrIdentityState(q.dbTx, &q.query.Authbase)
+		if err != nil {
+			return nil, err
+		}
+	} else if q.query.Authchain {
+		return nil, AssertError("a summary of a BCMR identity has no path for its authchain")
 	}
 	q.state = state
+	var err error
 
 	// Follow the identity output through the mempool, from the newest
 	// confirmed link, or from the genesis of a token whose genesis is in the

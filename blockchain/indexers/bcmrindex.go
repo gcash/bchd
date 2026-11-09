@@ -599,33 +599,13 @@ func fetchBcmrIdentityState(dbTx database.Tx, authbase *chainhash.Hash) (*bcmrId
 	if err != nil {
 		return nil, err
 	}
-	state := &bcmrIdentityState{}
-	var segmentID uint64
-	if raw := w.get(bcmrIdentities, authbase[:]); raw != nil {
-		id, err := deserializeBcmrIdentity(raw)
-		if err != nil {
-			return nil, err
-		}
-		state.identity = id
-		segmentID, state.place = id.segment, id.place
-	} else {
-		raw := w.get(bcmrLinks, authbase[:])
-		if raw == nil {
-			return nil, nil
-		}
-		link, err := deserializeBcmrLink(raw)
-		if err != nil {
-			return nil, err
-		}
-		segmentID, state.place = link.segment, link.place
+	state, segmentID, err := startBcmrIdentityState(w, authbase)
+	if state == nil || err != nil {
+		return nil, err
 	}
 
 	for {
-		raw := w.get(bcmrSegments, bcmrSegmentKey(segmentID))
-		if raw == nil {
-			return nil, AssertError(fmt.Sprintf("BCMR segment %d is missing", segmentID))
-		}
-		s, err := deserializeBcmrSegment(raw)
+		s, err := readBcmrSegment(w, segmentID)
 		if err != nil {
 			return nil, err
 		}
@@ -649,6 +629,147 @@ func fetchBcmrIdentityState(dbTx database.Tx, authbase *chainhash.Hash) (*bcmrId
 		}
 		segmentID = s.next
 	}
+}
+
+// startBcmrIdentityState returns the state of the identity with the passed
+// authbase with only its genesis supply and the authbase's place, and the
+// segment that holds the authbase, or a nil state if the index tracks no such
+// link.
+func startBcmrIdentityState(w *bcmrWriter, authbase *chainhash.Hash) (*bcmrIdentityState, uint64, error) {
+	state := &bcmrIdentityState{}
+	if raw := w.get(bcmrIdentities, authbase[:]); raw != nil {
+		id, err := deserializeBcmrIdentity(raw)
+		if err != nil {
+			return nil, 0, err
+		}
+		state.identity = id
+		state.place = id.place
+		return state, id.segment, nil
+	}
+	raw := w.get(bcmrLinks, authbase[:])
+	if raw == nil {
+		return nil, 0, nil
+	}
+	link, err := deserializeBcmrLink(raw)
+	if err != nil {
+		return nil, 0, err
+	}
+	state.place = link.place
+	return state, link.segment, nil
+}
+
+// readBcmrSegment reads a segment the index holds.
+func readBcmrSegment(w *bcmrWriter, id uint64) (*bcmrSegment, error) {
+	raw := w.get(bcmrSegments, bcmrSegmentKey(id))
+	if raw == nil {
+		return nil, AssertError(fmt.Sprintf("BCMR segment %d is missing", id))
+	}
+	return deserializeBcmrSegment(raw)
+}
+
+// bcmrSuffix is what the state of an identity needs of the segments from one
+// on: the authhead and whether it burned the identity, the newest link of
+// those segments with a well-formed publication, the number of segments and
+// the links they hold.
+type bcmrSuffix struct {
+	head     chainhash.Hash
+	burned   bool
+	pubLink  chainhash.Hash
+	segments int
+	length   uint32
+}
+
+// bcmrSuffixes holds the suffixes of the segments read in one database
+// transaction, so that authchains that join are read once from where they
+// join, however many identities run through them.
+type bcmrSuffixes map[uint64]*bcmrSuffix
+
+// suffix returns the suffix of the segments from the passed one on, reading
+// the segments it doesn't hold yet.
+func (suffixes bcmrSuffixes) suffix(w *bcmrWriter, id uint64) (*bcmrSuffix, error) {
+	type read struct {
+		id      uint64
+		segment *bcmrSegment
+	}
+	var walked []read
+	for id != 0 {
+		if _, ok := suffixes[id]; ok {
+			break
+		}
+		if len(walked) >= bcmrMaxPathSegments {
+			return nil, AssertError(fmt.Sprintf("BCMR segment %d leads "+
+				"through too many segments", walked[0].id))
+		}
+		s, err := readBcmrSegment(w, id)
+		if err != nil {
+			return nil, err
+		}
+		walked = append(walked, read{id, s})
+		id = s.next
+	}
+	after := suffixes[id]
+	for i := len(walked) - 1; i >= 0; i-- {
+		s := walked[i].segment
+		suffix := &bcmrSuffix{head: s.head, burned: s.burned, pubLink: s.pubLink,
+			segments: 1, length: s.length}
+		if after != nil {
+			suffix.head, suffix.burned = after.head, after.burned
+			suffix.segments += after.segments
+			suffix.length += after.length
+			if after.pubLink != (chainhash.Hash{}) {
+				suffix.pubLink = after.pubLink
+			}
+		}
+		suffixes[walked[i].id] = suffix
+		after = suffix
+	}
+	return after, nil
+}
+
+// fetchBcmrIdentitySummary returns the state of the identity with the passed
+// authbase as fetchBcmrIdentityState does, but without its path, which only a
+// query for the authchain needs, so that the segments in suffixes aren't read
+// again.  Its lengths hold the length of the whole path.
+func fetchBcmrIdentitySummary(dbTx database.Tx, authbase *chainhash.Hash,
+	suffixes bcmrSuffixes) (*bcmrIdentityState, error) {
+
+	w, err := newBcmrWriter(dbTx)
+	if err != nil {
+		return nil, err
+	}
+	state, segmentID, err := startBcmrIdentityState(w, authbase)
+	if state == nil || err != nil {
+		return nil, err
+	}
+	first, err := readBcmrSegment(w, segmentID)
+	if err != nil {
+		return nil, err
+	}
+	state.head, state.burned = first.head, first.burned
+	length := first.length
+
+	// In the segment that holds the authbase, only the links from the
+	// authbase on are the identity's.
+	if first.pubLink != (chainhash.Hash{}) && first.pubPlace >= state.place {
+		state.pubLink = first.pubLink
+	}
+	if first.next != 0 {
+		after, err := suffixes.suffix(w, first.next)
+		if err != nil {
+			return nil, err
+		}
+		if 1+after.segments > bcmrMaxPathSegments {
+			return nil, AssertError(fmt.Sprintf("BCMR identity %v runs "+
+				"through too many segments", authbase))
+		}
+		state.head, state.burned = after.head, after.burned
+		length += after.length
+		if after.pubLink != (chainhash.Hash{}) {
+			state.pubLink = after.pubLink
+		}
+	}
+	state.lengths = []uint32{length}
+	return state, nil
 }
 
 // DropBcmrIndex drops the BCMR index from the provided database if it exists.

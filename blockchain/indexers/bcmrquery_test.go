@@ -502,3 +502,67 @@ func TestBcmrListIdentities(t *testing.T) {
 		t.Fatalf("after a hash that isn't an authbase: %+v, %v", infos, err)
 	}
 }
+
+// TestBcmrListJoinedIdentities checks that ListIdentities answers identities
+// whose authchains join as queries do, over segments it reads once: each link
+// of one authchain makes a token of the link before, some links start a
+// segment by spending an identity output the index doesn't track, and a
+// publication before an identity's authbase in its first segment isn't its.
+func TestBcmrListJoinedIdentities(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	links := []*wire.MsgTx{bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())}
+	c.connect(true, links[0])
+	for i := 1; i <= 10; i++ {
+		prev := links[i-1]
+		ins := []wire.OutPoint{bcmrOutPoint(prev)}
+		if i == 4 || i == 8 {
+			untracked := c.funding()
+			untracked.Index = 0
+			ins = append(ins, untracked)
+		}
+		head := bcmrOut()
+		if i == 10 {
+			head = wire.NewTxOut(0, []byte{txscript.OP_RETURN}, wire.TokenData{})
+		}
+		outs := []*wire.TxOut{head, bcmrTokens(prev.TxHash(), uint64(i))}
+		switch i {
+		case 2, 6:
+			outs = append(outs, bcmrPub(byte(i), "p.example"))
+		case 9:
+			outs = append(outs, bcmrMalformedPub())
+		}
+		links = append(links, bcmrTestTx(ins, outs...))
+		c.connect(true, links[i])
+	}
+
+	infos, more, err := c.idx.ListIdentities(nil, 0)
+	if err != nil || more || len(infos) != 10 {
+		t.Fatalf("%d identities, more %v, %v", len(infos), more, err)
+	}
+	var noPublication int
+	for _, info := range infos {
+		query := c.mustQuery(t, newBcmrTestMempool(), info.Authbase, false, nil, 0)
+		if (info.Publication == nil) != (query.Publication == nil) ||
+			info.Publication != nil && info.Publication.Hash != query.Publication.Hash {
+
+			t.Fatalf("%v: listed publication %+v, queried %+v", info.Authbase,
+				info.Publication, query.Publication)
+		}
+		if info.Head.Hash != query.Head.Hash || info.Burned != query.Burned ||
+			info.Current != query.Current || info.GenesisSupply != query.GenesisSupply {
+
+			t.Fatalf("listed %+v, queried %+v", info, query)
+		}
+		if info.Head.Hash != links[10].TxHash() || !info.Burned {
+			t.Fatalf("%v: head %v, burned %v", info.Authbase, info.Head.Hash, info.Burned)
+		}
+		if info.Publication == nil {
+			noPublication++
+		}
+	}
+	// The tokens of links 7, 8 and 9 have no publication of their own: link
+	// 6's comes before the authbase of link 7's token, in its segment.
+	if noPublication != 3 {
+		t.Fatalf("%d identities without a publication, want 3", noPublication)
+	}
+}
