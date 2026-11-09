@@ -1185,7 +1185,7 @@ message GetBcmrIdentityRequest {
     // include_authchain.
     bytes after = 3;
     // The most links to return, up to 1000, which 0 also means. An answer
-    // also holds no more after the link that takes its transactions past
+    // also holds no more after the link that takes its transactions to
     // 1 MB. Only with include_authchain.
     uint32 limit = 4;
 }

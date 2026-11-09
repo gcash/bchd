@@ -5645,7 +5645,7 @@ type GetBcmrIdentityRequest struct {
 	// include_authchain.
 	After []byte `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
 	// The most links to return, up to 1000, which 0 also means. An answer
-	// also holds no more after the link that takes its transactions past
+	// also holds no more after the link that takes its transactions to
 	// 1 MB. Only with include_authchain.
 	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields

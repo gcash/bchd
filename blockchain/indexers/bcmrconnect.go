@@ -277,7 +277,8 @@ func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, bool, er
 	}, bcmrSpendsIdentity(msgTx), nil
 }
 
-// bcmrMaxReadBlocks is the size of the blocks that a bcmrBlockCache keeps.
+// bcmrMaxReadBlocks is the serialized size of the blocks that a bcmrBlockCache
+// keeps.  Decoded, they take several times that.
 var bcmrMaxReadBlocks = 256 << 20
 
 // bcmrReadBlock is a block that the index read to find transactions in, with

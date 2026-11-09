@@ -1802,7 +1802,7 @@
         "limit": {
           "type": "integer",
           "format": "int64",
-          "description": "The most links to return, up to 1000, which 0 also means. An answer\nalso holds no more after the link that takes its transactions past\n1 MB. Only with include_authchain."
+          "description": "The most links to return, up to 1000, which 0 also means. An answer\nalso holds no more after the link that takes its transactions to\n1 MB. Only with include_authchain."
         }
       }
     },

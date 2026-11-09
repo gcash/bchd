@@ -37,10 +37,10 @@ var helpDescsEnUS = map[string]string{
 	"setban-absolute":  "Whether bantime is a time in seconds since the Unix epoch",
 
 	// ListBcmrIdentitiesCmd help.
-	"listbcmridentities--synopsis": "Returns what the BCMR index knows of each identity, as getbcmridentity does, from the chain alone, a page at a time, " +
-		"in the order of the bytes of the authbases.  An identity is a token's if it has a genesissupply.  Pages can be of different blocks.  Requires --bcmrindex.",
+	"listbcmridentities--synopsis": "Returns what the BCMR index knows of the identity of each token, as getbcmridentity does, from the chain alone, a page at a time, " +
+		"in the order of the bytes of their category IDs, the authbases.  Pages can be of different blocks.  Requires --bcmrindex.",
 	"listbcmridentities-after": "The authbase of the last identity of the page before, or empty for the start",
-	"listbcmridentities-limit": "The most identities to return, from 1 to 1000",
+	"listbcmridentities-limit": "The most identities to return, from 1; more than 1000 counts as 1000",
 
 	// ListBcmrIdentitiesResult help.
 	"listbcmridentitiesresult-identities": "The identities",
@@ -223,8 +223,8 @@ var helpDescsEnUS = map[string]string{
 		"once the publication's block is connected. Requires --bcmrindex.",
 	"getbcmridentity-authbase":         "The identity's authbase: a token's category ID, or any transaction of an authchain the index tracks",
 	"getbcmridentity-includeauthchain": "Also return the authchain's transactions, from the authbase, or from the link after the one given in after",
-	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it, or empty for the start; a link a reorganization took off the authchain is an error",
-	"getbcmridentity-limit":            "The most links to return, from 1 to 1000; an answer also holds no more after the link that takes its transactions to 1 MB",
+	"getbcmridentity-after":            "The txid of a link of the authchain, which the client knows the authchain up to, to return the links after it, or empty for the start, with includeauthchain; a link a reorganization took off the authchain is an error",
+	"getbcmridentity-limit":            "The most links to return, from 1, with includeauthchain; more than 1000 counts as 1000, and an answer also holds no more after the link that takes its transactions to 1 MB",
 
 	// GetBcmrIdentityResult help.
 	"getbcmridentityresult-authbase":             "The identity's authbase",

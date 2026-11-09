@@ -12,7 +12,9 @@ An identity is anchored by a transaction, its authbase.  The identity's
 authchain is the authbase, then each transaction that spends output 0, the
 identity output, of the one before, up to the authhead, whose identity output
 is unspent.  Of the publications along an authchain, CHIP-BCMR counts the
-authhead's.  A token category's ID is the hash of the transaction whose
+authhead's.  bchd's BCMR index goes further, and when the authhead has no
+well-formed publication, it answers with the newest earlier one, marked as not
+current.  A token category's ID is the hash of the transaction whose
 identity output its genesis spends, so every category has an authchain from
 that authbase on.  It is usually the identity a registry gives the token,
 though CHIP-BCMR lets an identity move to a new category.
