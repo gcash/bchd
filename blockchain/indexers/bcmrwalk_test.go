@@ -18,6 +18,7 @@ import (
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 )
 
 // walk walks behind the segments left for the walker until none are left,
@@ -841,10 +842,52 @@ func TestBcmrBlockCache(t *testing.T) {
 		if len(cache.blocks) != 1 {
 			t.Errorf("%d blocks kept, want 1", len(cache.blocks))
 		}
+
+		// A cache with a limit of its own starts over at it, whatever
+		// the others keep, as the walker's does.
+		bcmrMaxReadBlocks = saved
+		own := bcmrBlockCache{limit: cache.size}
+		for _, block := range []*bchutil.Block{first, second} {
+			if _, err := own.fetch(dbTx, block.Hash(), block.Height()); err != nil {
+				return err
+			}
+		}
+		if len(own.blocks) != 1 {
+			t.Errorf("%d blocks kept under the cache's own limit, want 1",
+				len(own.blocks))
+		}
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestBcmrWalkCacheLimit ensures the walker's cache keeps twice the largest
+// block the network allows now, as ABLA moves that, but no less than
+// bcmrMinWalkBlocks, also when the chain can't say, which is less than the
+// others keep while blocks are 32 MB, as it lives for a whole pass alongside
+// the cache of the block being connected.
+func TestBcmrWalkCacheLimit(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	c.connect(true, bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut()))
+	if got := c.idx.newWalkCache().max(); got != bcmrMinWalkBlocks || got >= bcmrMaxReadBlocks {
+		t.Fatalf("with 32 MB blocks, the walker's cache keeps %d bytes, want %d, below %d",
+			got, bcmrMinWalkBlocks, bcmrMaxReadBlocks)
+	}
+	c.sizeLimit = 100000000
+	if got := c.idx.newWalkCache().max(); got != 200000000 {
+		t.Fatalf("with 100 MB blocks, the walker's cache keeps %d bytes, want 200000000", got)
+	}
+	c.sizeErr = errors.New("no limit")
+	if got := c.idx.newWalkCache().max(); got != bcmrMinWalkBlocks {
+		t.Fatalf("with no limit known, the walker's cache keeps %d bytes, want %d", got, bcmrMinWalkBlocks)
+	}
+	if got := new(BcmrIndex).newWalkCache().max(); got != bcmrMinWalkBlocks {
+		t.Fatalf("with no chain, the walker's cache keeps %d bytes, want %d", got, bcmrMinWalkBlocks)
+	}
+	if got := new(bcmrBlockCache).max(); got != bcmrMaxReadBlocks {
+		t.Fatalf("a cache with no limit keeps %d bytes, want %d", got, bcmrMaxReadBlocks)
 	}
 }
 

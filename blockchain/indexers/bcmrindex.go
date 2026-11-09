@@ -148,6 +148,8 @@ var bcmrBucketNames = [bcmrTop][]byte{
 // mempool spends.  The index manager hands the index the chain before it
 // initializes it.
 type bcmrChain interface {
+	BestSnapshot() *blockchain.BestState
+	NextBlockSizeLimit(prevHash *chainhash.Hash) (uint64, error)
 	BlockHashByHeight(height int32) (*chainhash.Hash, error)
 	FetchSpendJournal(block *bchutil.Block) ([]blockchain.SpentTxOut, error)
 	FetchUtxoEntry(outpoint wire.OutPoint) (*blockchain.UtxoEntry, error)

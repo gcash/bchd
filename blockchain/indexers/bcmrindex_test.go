@@ -57,6 +57,29 @@ type bcmrTestChain struct {
 
 	// onJournal, if set, runs each time the index reads a spend journal.
 	onJournal func()
+
+	// sizeLimit is the largest block the network allows next, which
+	// sizeErr, if set, fails to say.
+	sizeLimit uint64
+	sizeErr   error
+}
+
+// BestSnapshot returns the test chain's tip.
+func (c *bcmrTestChain) BestSnapshot() *blockchain.BestState {
+	tip := c.blocks[len(c.blocks)-1]
+	return &blockchain.BestState{Hash: *tip.Hash(), Height: tip.Height()}
+}
+
+// NextBlockSizeLimit returns the largest block the test network allows next,
+// 32 MB unless a test set another.
+func (c *bcmrTestChain) NextBlockSizeLimit(*chainhash.Hash) (uint64, error) {
+	if c.sizeErr != nil {
+		return 0, c.sizeErr
+	}
+	if c.sizeLimit == 0 {
+		return 32000000, nil
+	}
+	return c.sizeLimit, nil
 }
 
 // bcmrViewCounter is a database that counts its open read transactions.

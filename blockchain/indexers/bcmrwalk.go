@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/gcash/bchd/bcmr"
@@ -149,6 +150,20 @@ func (idx *BcmrIndex) walker() {
 	}
 }
 
+// newWalkCache returns the cache of the blocks a pass of the walker reads,
+// which keeps twice the largest block that the network allows now, as ABLA
+// moves that, or bcmrMinWalkBlocks if that's more.
+func (idx *BcmrIndex) newWalkCache() *bcmrBlockCache {
+	limit := bcmrMinWalkBlocks
+	if idx.chain != nil {
+		size, err := idx.chain.NextBlockSizeLimit(&idx.chain.BestSnapshot().Hash)
+		if err == nil && size <= math.MaxInt/2 && 2*int(size) > limit {
+			limit = 2 * int(size)
+		}
+	}
+	return &bcmrBlockCache{limit: limit}
+}
+
 // walkPending walks behind the segments left for the walker, one at a time,
 // until none are left.
 func (idx *BcmrIndex) walkPending() error {
@@ -158,9 +173,9 @@ func (idx *BcmrIndex) walkPending() error {
 
 	// Walks behind segments near one another read the same blocks, which
 	// stay as they are whatever becomes of the chain, as a hash names each.
-	var blocks bcmrBlockCache
+	blocks := idx.newWalkCache()
 	for {
-		walk, err := idx.readBcmrWalk(&blocks)
+		walk, err := idx.readBcmrWalk(blocks)
 		if err != nil {
 			return err
 		}

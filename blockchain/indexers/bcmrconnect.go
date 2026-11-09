@@ -278,8 +278,16 @@ func (c *bcmrConnector) authbaseLink(g bcmr.Genesis, i int) (*bcmrLink, bool, er
 }
 
 // bcmrMaxReadBlocks is the serialized size of the blocks that a bcmrBlockCache
-// keeps.  Decoded, they take several times that.
+// keeps, unless it has a limit of its own.  Decoded, they take several times
+// that.
 var bcmrMaxReadBlocks = 256 << 20
+
+// bcmrMinWalkBlocks is the least serialized size of the blocks that the
+// walker's cache keeps, which is twice the largest block the network allows
+// now if that's more.  It lives for a whole pass, alongside the cache of the
+// block being connected, so it keeps less than that, but at least two of the
+// largest blocks, as walks near one another share the blocks they read.
+var bcmrMinWalkBlocks = 64 << 20
 
 // bcmrReadBlock is a block that the index read to find transactions in, with
 // what finding each of them takes, so that finding many in a block doesn't
@@ -299,11 +307,21 @@ type bcmrReadBlock struct {
 }
 
 // bcmrBlockCache keeps the blocks read while connecting a block or walking.  It
-// starts over once they pass bcmrMaxReadBlocks, so that a block whose
-// transactions reach into many others needs no more memory than that.
+// starts over once they pass its limit, or bcmrMaxReadBlocks without one, so
+// that a block whose transactions reach into many others needs no more memory
+// than that.
 type bcmrBlockCache struct {
 	blocks map[chainhash.Hash]*bcmrReadBlock
 	size   int
+	limit  int
+}
+
+// max returns the serialized size of the blocks the cache keeps.
+func (c *bcmrBlockCache) max() int {
+	if c.limit > 0 {
+		return c.limit
+	}
+	return bcmrMaxReadBlocks
 }
 
 // fetch returns the block with the passed hash, at the passed height, reading
@@ -330,7 +348,7 @@ func (c *bcmrBlockCache) fetch(dbTx database.Tx, hash *chainhash.Hash, height in
 		positions: bcmrTxPositions(block.Transactions()),
 		locs:      locs,
 	}
-	if c.blocks == nil || c.size+len(raw) > bcmrMaxReadBlocks {
+	if c.blocks == nil || c.size+len(raw) > c.max() {
 		c.blocks = make(map[chainhash.Hash]*bcmrReadBlock)
 		c.size = 0
 	}
