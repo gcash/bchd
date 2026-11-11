@@ -165,7 +165,7 @@ type config struct {
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit of a 10-minute block, a tenth of it for a 1-minute block -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
+	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit of a 10-minute block, a tenth of it for a 1-minute block -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000; the maximum is 2000000000"`
 	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0 and at most 21000000"`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Deprecated, has no effect: free transactions are no longer relayed"`
@@ -1046,8 +1046,19 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// The excessive block size cannot be set less than the network's default
-	// block size, which is also used when it isn't set, but it can be higher.
+	// The excessive block size cannot be more than the largest block size
+	// limit, nor less than the network's default block size, which is also
+	// used when it isn't set.
+	if uint64(cfg.ExcessiveBlockSize) > blockchain.TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT {
+		str := "%s: The excessiveblocksize option may not be more than " +
+			"%d -- parsed [%d]"
+		err := fmt.Errorf(str, funcName,
+			blockchain.TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT,
+			cfg.ExcessiveBlockSize)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
 	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize,
 		activeNetParams.DefaultConsensusBlockSize)
 

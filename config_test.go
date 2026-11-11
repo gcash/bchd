@@ -43,6 +43,8 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 		{[]string{"--chipnet"}, 2000000, "EB2.0"},
 		{[]string{"--chipnet", "--excessiveblocksize=1000000"}, 2000000, "EB2.0"},
 		{[]string{"--testnet4", "--excessiveblocksize=8000000"}, 8000000, "EB8.0"},
+		{[]string{"--regtest", "--excessiveblocksize=2000000000"},
+			2000000000, "EB2000.0"},
 	}
 	for _, test := range tests {
 		// loadConfig only sets the network params when a network is
@@ -65,6 +67,28 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 
 			t.Errorf("%v: got user agent comments %v, want [%s]",
 				test.args, cfg.UserAgentComments, test.uac)
+		}
+	}
+}
+
+// TestExcessiveBlockSizeMax ensures an excessive block size above the largest
+// block size limit is refused.
+func TestExcessiveBlockSizeMax(t *testing.T) {
+	tmpDir := t.TempDir()
+	defer func() {
+		os.Args = []string{"bchd"}
+		activeNetParams = &mainNetParams
+	}()
+
+	for _, net := range []string{"--regtest", "--testnet4"} {
+		activeNetParams = &mainNetParams
+		os.Args = []string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir, net,
+			"--excessiveblocksize=2000000001"}
+		if _, _, err := loadConfig(); err == nil {
+			t.Errorf("%s: an excessive block size above 2000000000 "+
+				"was taken", net)
 		}
 	}
 }

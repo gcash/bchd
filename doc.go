@@ -165,7 +165,8 @@ Application Options:
 	                                 of a 10-minute block, a tenth of it for a
 	                                 1-minute block -- 0 uses the network's
 	                                 default, which is also the minimum: 2000000
-	                                 on testnet4 and chipnet, otherwise 32000000
+	                                 on testnet4 and chipnet, otherwise 32000000;
+	                                 the maximum is 2000000000
 	    --minrelaytxfee=             The minimum fee rate in BCH/kB a transaction
 	                                 must pay to be relayed, accepted into the
 	                                 mempool and mined -- Must be above 0 and at
