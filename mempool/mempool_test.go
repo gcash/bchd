@@ -1394,6 +1394,7 @@ func TestBlockRejectReason(t *testing.T) {
 		{blockchain.ErrImmatureSpend, "bad-txns-premature-spend-of-coinbase"},
 		{blockchain.ErrSpendTooHigh, "bad-txns-in-belowout"},
 		{blockchain.ErrBadCoinbaseValue, "bad-cb-amount"},
+		{blockchain.ErrBadCoinbaseShape, "bad-cb-shape"},
 		{blockchain.ErrBadFees, "bad-txns-accumulated-fee-outofrange"},
 		{blockchain.ErrTooManySigChecks, "blk-bad-inputs"},
 		{blockchain.ErrScriptMalformed, "blk-bad-inputs"},

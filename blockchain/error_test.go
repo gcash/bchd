@@ -64,6 +64,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrTxOutValueTooHigh, "ErrTxOutValueTooHigh"},
 		{ErrTxOutTotalTooHigh, "ErrTxOutTotalTooHigh"},
 		{ErrTxInValueOutOfRange, "ErrTxInValueOutOfRange"},
+		{ErrBadCoinbaseShape, "ErrBadCoinbaseShape"},
 		{0xffff, "Unknown ErrorCode (65535)"},
 	}
 

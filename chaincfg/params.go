@@ -174,6 +174,12 @@ type Params struct {
 	Upgrade12ActivationTime       uint64 // May 15, 2026 hardfork
 	Upgrade2027ActivationTime     uint64 // May 15, 2027 hardfork
 
+	// CoinbaseShapeExemption defers the forbidden coinbase shape rule of
+	// the 2027 upgrade to fixed heights instead of the block after the
+	// activation block, so miners have time to change their coinbases.
+	// Only mainnet sets it.
+	CoinbaseShapeExemption bool
+
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
 
@@ -323,6 +329,7 @@ var MainNetParams = Params{
 	Upgrade11ActivationTime:   1747310400,
 	Upgrade12ActivationTime:   1778846400,
 	Upgrade2027ActivationTime: 1810382400,
+	CoinbaseShapeExemption:    true,
 
 	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
 	ABLAConfig: ABLAConstants{

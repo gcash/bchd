@@ -75,6 +75,19 @@ const (
 
 	// MaxTransactionSigChecks is the maximum number of sig checks per transaction.
 	MaxTransactionSigChecks = 3000
+
+	// forbiddenCoinbaseValue is the least a coinbase of the forbidden shape
+	// pays: the least any coinbase before BIP0034 could repeat paid.
+	forbiddenCoinbaseValue = 25 * bchutil.SatoshiPerBitcoin
+
+	// coinbaseShapeMainnetHeight is the first mainnet height at which the
+	// forbidden coinbase shape rule applies.
+	coinbaseShapeMainnetHeight = 3708179
+
+	// coinbaseBanHeight is the mainnet height at which the coinbase of
+	// block 164384 could appear again, as its script starts with a push of
+	// that height.
+	coinbaseBanHeight = 1983702
 )
 
 var (
@@ -92,6 +105,10 @@ var (
 	// set forth in BIP0030.  It is defined as a package level variable to
 	// avoid the need to create a new instance every time a check is needed.
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
+
+	// bannedCoinbaseHash is the coinbase of block 164384, which is invalid
+	// at coinbaseBanHeight on mainnet.
+	bannedCoinbaseHash = newHashFromStr("3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462")
 )
 
 // MaxBlockSize returns the is the maximum number of bytes allowed in
@@ -798,7 +815,8 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 //
 // The flags modify the behavior of this function as follows:
 //   - BFFastAdd: The transactions are not checked to see if they are finalized
-//     and the somewhat expensive BIP0034 validation is not performed.
+//     and the somewhat expensive BIP0034 validation and the coinbase shape
+//     check are not performed.
 //
 // The flags are also passed to checkBlockHeaderContext.  See its documentation
 // for how the flags modify its behavior.
@@ -911,6 +929,12 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 				return err
 			}
 		}
+
+		err = checkCoinbaseShape(b.chainParams,
+			block.Transactions()[0], blockHeight, upgrade2027Active)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -942,6 +966,59 @@ func checkCoinbaseTokens(tx *bchutil.Tx) error {
 		}
 	}
 	return nil
+}
+
+// hasForbiddenCoinbaseShape returns whether the coinbase transaction has
+// version 1, lock time 0, a final input sequence and outputs worth at least
+// forbiddenCoinbaseValue, the shape of the coinbases from before BIP0034 that
+// a later coinbase could repeat.
+func hasForbiddenCoinbaseShape(tx *wire.MsgTx) bool {
+	if tx.Version != 1 || tx.LockTime != 0 ||
+		tx.TxIn[0].Sequence != wire.MaxTxInSequenceNum {
+
+		return false
+	}
+	var total int64
+	for _, txOut := range tx.TxOut {
+		total += txOut.Value
+	}
+	return total >= forbiddenCoinbaseValue
+}
+
+// coinbaseShapeExempt returns whether the coinbase with the passed hash at the
+// given height is exempt from the forbidden shape rule.  Networks with the
+// exemption apply the rule from coinbaseShapeMainnetHeight, and before it only
+// reject the coinbase of block 164384 at the one height it could appear again.
+func coinbaseShapeExempt(params *chaincfg.Params, hash *chainhash.Hash,
+	height int32) bool {
+
+	if !params.CoinbaseShapeExemption ||
+		height >= coinbaseShapeMainnetHeight {
+
+		return false
+	}
+	if height == coinbaseBanHeight {
+		return !hash.IsEqual(bannedCoinbaseHash)
+	}
+	return true
+}
+
+// checkCoinbaseShape ensures a coinbase does not have the forbidden shape once
+// the 2027 upgrade applies, so it cannot repeat the hash of a coinbase from
+// before BIP0034.  The upgrade applies from the block after the activation
+// block.
+func checkCoinbaseShape(params *chaincfg.Params, tx *bchutil.Tx,
+	height int32, upgrade2027Active bool) error {
+
+	if !upgrade2027Active || !hasForbiddenCoinbaseShape(tx.MsgTx()) ||
+		coinbaseShapeExempt(params, tx.Hash(), height) {
+
+		return nil
+	}
+	str := fmt.Sprintf("coinbase transaction %v has version 1, lock time "+
+		"0, a final sequence and pays at least %v", tx.Hash(),
+		bchutil.Amount(forbiddenCoinbaseValue))
+	return ruleError(ErrBadCoinbaseShape, str)
 }
 
 // checkBIP0030 ensures blocks do not contain duplicate transactions which
