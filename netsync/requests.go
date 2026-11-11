@@ -89,6 +89,7 @@ func newPeerSyncState(syncCandidate bool) *peerSyncState {
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		announcedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 }
 
@@ -215,10 +216,10 @@ func (sm *SyncManager) requestBlock(peer *peerpkg.Peer, state *peerSyncState,
 		}
 		sm.endBlockRequest(hash)
 	}
-	if state.blocksInFlight == 0 {
+	if len(state.blocksInFlight) == 0 {
 		state.downloadingSince = sm.now()
 	}
-	state.blocksInFlight++
+	state.blocksInFlight[*hash] = struct{}{}
 	if validHeader {
 		state.validBlocksInFlight++
 		sm.validBlockRequests[*hash] = struct{}{}
@@ -246,8 +247,8 @@ func (sm *SyncManager) endBlockRequest(hash *chainhash.Hash) {
 	if valid && state.validBlocksInFlight > 0 {
 		state.validBlocksInFlight--
 	}
-	if state.blocksInFlight > 0 {
-		state.blocksInFlight--
+	if _, ok := state.blocksInFlight[*hash]; ok {
+		delete(state.blocksInFlight, *hash)
 		state.downloadingSince = sm.now()
 	}
 }
@@ -316,10 +317,7 @@ func (sm *SyncManager) inFlightInterval(peer *peerpkg.Peer,
 	state *peerSyncState) time.Duration {
 
 	oldest := blockchain.BlockTicks{Ticks: math.MaxInt64}
-	for hash := range state.requestedBlocks {
-		if sm.requestedBlocks[hash] != peer {
-			continue
-		}
+	for hash := range state.blocksInFlight {
 		ticks, err := sm.chain.BlockTicksByHash(&hash)
 		if err == nil && ticks.Ticks < oldest.Ticks {
 			oldest = ticks
@@ -356,7 +354,7 @@ func (sm *SyncManager) handleRequestTimeouts() {
 		}
 	}
 	for peer, state := range sm.peerStates {
-		if state.blocksInFlight == 0 || !peer.Connected() {
+		if len(state.blocksInFlight) == 0 || !peer.Connected() {
 			continue
 		}
 		others := validDownloads

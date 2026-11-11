@@ -74,6 +74,7 @@ func unrequestedTestManager(t *testing.T) (*SyncManager, *chaincfg.Params, *peer
 	sm.peerStates[peer] = &peerSyncState{
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 	t.Cleanup(peer.Disconnect)
 	return sm, &params, peer

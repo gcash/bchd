@@ -117,6 +117,7 @@ func TestForkBeforeFinalizedDisconnects(t *testing.T) {
 	state := &peerSyncState{
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 	sm.peerStates[peer] = state
 

@@ -198,7 +198,7 @@ type headerNode struct {
 
 // peerSyncState stores additional information that the SyncManager tracks
 // about a peer.  The peer may send the blocks in requestedBlocks, but only
-// blocksInFlight of them are still waited for from it, since the others
+// those in blocksInFlight are still waited for from it, since the others
 // arrived from other peers, validBlocksInFlight of them with validated
 // headers, and its download timer runs from downloadingSince.  The
 // transactions it announced while another peer was asked for them are in
@@ -209,7 +209,7 @@ type peerSyncState struct {
 	requestedTxns       map[chainhash.Hash]struct{}
 	announcedTxns       map[chainhash.Hash]struct{}
 	requestedBlocks     map[chainhash.Hash]struct{}
-	blocksInFlight      int
+	blocksInFlight      map[chainhash.Hash]struct{}
 	validBlocksInFlight int
 	downloadingSince    time.Time
 
@@ -449,7 +449,7 @@ func (sm *SyncManager) startSync() {
 		sm.validBlockRequests = make(map[chainhash.Hash]struct{})
 		sm.blockAnnouncers = make(map[chainhash.Hash][]*peerpkg.Peer)
 		for _, state := range sm.peerStates {
-			state.blocksInFlight = 0
+			state.blocksInFlight = make(map[chainhash.Hash]struct{})
 			state.validBlocksInFlight = 0
 		}
 
@@ -758,7 +758,7 @@ func (sm *SyncManager) clearRequestedState(peer *peerpkg.Peer,
 		}
 	}
 	state.requestedBlocks = make(map[chainhash.Hash]struct{})
-	state.blocksInFlight = 0
+	state.blocksInFlight = make(map[chainhash.Hash]struct{})
 	state.validBlocksInFlight = 0
 	q.send()
 }
@@ -1608,7 +1608,7 @@ func (sm *SyncManager) fetchHeaderChain(peer *peerpkg.Peer, state *peerSyncState
 		header.Height == sm.chain.BestSnapshot().Height+1
 	q := make(getDataQueue)
 	for i := range hashes {
-		if state.blocksInFlight >= maxBlocksInTransitPerPeer {
+		if len(state.blocksInFlight) >= maxBlocksInTransitPerPeer {
 			break
 		}
 		hash := &hashes[i]

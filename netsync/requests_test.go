@@ -943,3 +943,81 @@ func TestBlockFromOtherPeerEndsDownload(t *testing.T) {
 		t.Fatal("peer disconnected for sending the block it was asked for")
 	}
 }
+
+// TestEndedBlockRequestsNotInFlight ensures the blocks no longer waited for
+// from a peer, which it may still send, stop counting as in flight from it,
+// so its download timeout looks only at the blocks still waited for, and that
+// a block the peer rejected or reported missing is forgotten.
+func TestEndedBlockRequestsNotInFlight(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a, b := h.peer(1), h.peer(2)
+	b.SetAllowDirectBlockRelay(true)
+	state := h.sm.peerStates[a]
+	block := h.tipBlock(0)
+
+	h.announce(a, &block.MsgBlock().Header)
+	for i := range 100 {
+		hash := chainhash.Hash{0xee, byte(i)}
+		h.sm.requestBlock(a, state, &hash, false)
+		h.sm.endBlockRequest(&hash)
+	}
+	h.sm.handleBlockMsg(&blockMsg{block: block, peer: b})
+	if n := len(state.blocksInFlight); n != 0 {
+		t.Fatalf("%d blocks in flight after all requests ended", n)
+	}
+	if n := len(state.requestedBlocks); n != 101 {
+		t.Fatalf("peer may send %d blocks, want 101", n)
+	}
+	h.advance(2 * h.params.TargetTimePerBlock)
+	if isDisconnected(a) {
+		t.Fatal("peer disconnected for blocks no longer waited for")
+	}
+
+	rejected, missing := chainhash.Hash{0xaa}, chainhash.Hash{0xbb}
+	h.sm.requestBlock(a, state, &rejected, false)
+	h.sm.requestBlock(a, state, &missing, false)
+	h.sm.handleBlockError(&blockErrorMsg{hash: &rejected, peer: a})
+	h.notFound(a, wire.InvTypeBlock, missing)
+	for _, hash := range []chainhash.Hash{rejected, missing} {
+		if _, ok := state.requestedBlocks[hash]; ok {
+			t.Fatalf("block %v still requested from the peer", hash)
+		}
+		if _, ok := state.blocksInFlight[hash]; ok {
+			t.Fatalf("block %v still in flight from the peer", hash)
+		}
+	}
+}
+
+// TestEndedBlockRequestsIgnoredByTimeout ensures a peer's download timeout
+// follows only the blocks still waited for from it, so a peer whose requests
+// for 10-minute blocks ended and that is asked for a 1-minute block times out
+// after a minute.
+func TestEndedBlockRequestsIgnoredByTimeout(t *testing.T) {
+	activation := uint64(time.Now().Unix() + 90)
+	h := newUpgradeRequestTestHarness(t, activation)
+	blocks := h.chainOn(h.tip, 2, 6, 0)
+	_, _, err := h.sm.chain.ProcessBlockHeaders(headersOf(blocks), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := h.peer(1)
+	state := h.sm.peerStates[a]
+	for _, block := range blocks[:4] {
+		h.sm.requestBlock(a, state, block.Hash(), true)
+		h.sm.endBlockRequest(block.Hash())
+	}
+	h.sm.requestBlock(a, state, blocks[5].Hash(), true)
+	if n := len(state.requestedBlocks); n != 5 {
+		t.Fatalf("peer may send %d blocks, want 5", n)
+	}
+	h.advance(59 * time.Second)
+	if isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block still connected after " +
+			"its timeout")
+	}
+}

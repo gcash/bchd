@@ -259,7 +259,7 @@ func TestHeaderChainFetchContinues(t *testing.T) {
 
 	h.announce(a, headersOf(blocks)...)
 	h.waitGetData(a, wire.InvTypeBlock, *blocks[15].Hash())
-	if n := h.sm.peerStates[a].blocksInFlight; n != 16 {
+	if n := len(h.sm.peerStates[a].blocksInFlight); n != 16 {
 		t.Fatalf("%d blocks requested at once, want 16", n)
 	}
 	if h.requested(*blocks[16].Hash()) {
