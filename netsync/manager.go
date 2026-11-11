@@ -1029,6 +1029,12 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		code, _ := mempool.ErrToRejectErr(err)
 		reason := mempool.BlockRejectReason(err,
 			bmsg.block.MsgBlock().Header.Version)
+		if rerr.ErrorCode == blockchain.ErrUnexpectedDifficulty {
+			// A target out of range is high-hash, not bad-diffbits.
+			_, reason = HeaderBanScore(rerr.ErrorCode,
+				&bmsg.block.MsgBlock().Header,
+				sm.chainParams.PowLimit)
+		}
 		peer.PushRejectMsg(wire.CmdBlock, code, reason, blockHash, false)
 
 		// Punish the peer for an invalid block it sent in a block

@@ -347,7 +347,7 @@ func TestBlockMisbehavior(t *testing.T) {
 		func(msg *wire.MsgBlock) { msg.Header.Bits = 0x2100ffff })
 	send(aboveLimit, true, false)
 	expectRejected("target above the limit", aboveLimit,
-		wire.RejectInvalid, "bad-diffbits", 50)
+		wire.RejectInvalid, "high-hash", 50)
 
 	// An old version is refused with no score.
 	a2 := mineBlock(t, params, a1.MsgBlock(), 2, 2)
@@ -395,6 +395,40 @@ func TestBlockMisbehavior(t *testing.T) {
 		!invalid {
 
 		t.Fatal("the side chain block's failure did not show")
+	}
+}
+
+// TestBlockBanScoreDifficulty ensures a block that failed with
+// ErrUnexpectedDifficulty gets 100 when it meets its in-range target and 50
+// when the target is out of range.  A chain with fewer ticks than the
+// CHIP-2025-03 ASERT anchor fails with that code and an in-range target, so it
+// gets 100 too.
+func TestBlockBanScoreDifficulty(t *testing.T) {
+	powLimit := chaincfg.RegressionNetParams.PowLimit
+	tests := []struct {
+		name  string
+		bits  uint32
+		score uint32
+	}{
+		{"in range", 0x207fffff, 100},
+		{"above the limit", 0x2100ffff, 50},
+		{"zero", 0, 50},
+	}
+	for _, test := range tests {
+		block := &wire.MsgBlock{Header: wire.BlockHeader{Bits: test.bits}}
+		if test.score == 100 {
+			solveBlock(block)
+		}
+		header := &block.Header
+		for _, extendsTip := range []bool{false, true} {
+			score := blockBanScore(blockchain.ErrUnexpectedDifficulty,
+				header, powLimit, extendsTip)
+			if score != test.score {
+				t.Errorf("%s (extends tip %v): got score %d, "+
+					"want %d", test.name, extendsTip, score,
+					test.score)
+			}
+		}
 	}
 }
 
