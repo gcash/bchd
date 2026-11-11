@@ -633,7 +633,7 @@ func TestHarness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to execute getinfo on node: %v", err)
 	}
-	expectedChainHeight := numMatureOutputs + uint32(mainHarness.ActiveNet.CoinbaseMaturity)
+	expectedChainHeight := numMatureOutputs + uint32(coinbaseMaturity(mainHarness.ActiveNet))
 	if uint32(nodeInfo.Blocks) != expectedChainHeight {
 		t.Errorf("Chain height is %v, should be %v",
 			nodeInfo.Blocks, expectedChainHeight)

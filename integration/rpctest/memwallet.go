@@ -246,6 +246,12 @@ func (m *memWallet) chainSyncer() {
 	}
 }
 
+// coinbaseMaturity returns the number of blocks after which the harness and
+// its wallet take a coinbase output to be spendable.
+func coinbaseMaturity(net *chaincfg.Params) int32 {
+	return int32(net.CoinbaseMaturity)
+}
+
 // evalOutputs evaluates each of the passed outputs, creating a new matching
 // utxo within the wallet if we're able to spend the output.
 func (m *memWallet) evalOutputs(outputs []*wire.TxOut, txHash *chainhash.Hash,
@@ -267,7 +273,7 @@ func (m *memWallet) evalOutputs(outputs []*wire.TxOut, txHash *chainhash.Hash,
 			// future.
 			var maturityHeight int32
 			if isCoinbase {
-				maturityHeight = m.currentHeight + int32(m.net.CoinbaseMaturity)
+				maturityHeight = m.currentHeight + coinbaseMaturity(m.net)
 			}
 
 			op := wire.OutPoint{Hash: *txHash, Index: uint32(i)}

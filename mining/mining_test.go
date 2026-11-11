@@ -7,6 +7,7 @@ package mining
 import (
 	"container/heap"
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
@@ -15,6 +16,20 @@ import (
 
 	"github.com/gcash/bchutil"
 )
+
+// TestMain runs the tests with the upgrade to 1-minute blocks never active
+// on every network, since the template tests stamp their blocks with the wall
+// clock.
+func TestMain(m *testing.M) {
+	for _, params := range []*chaincfg.Params{&chaincfg.MainNetParams,
+		&chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
+		&chaincfg.ChipNetParams, &chaincfg.RegressionNetParams,
+		&chaincfg.SimNetParams} {
+
+		params.Upgrade2027ActivationTime = 1<<48 - 1
+	}
+	os.Exit(m.Run())
+}
 
 // TestTxFeePrioHeap ensures the priority queue pops transactions by fee per
 // kilobyte, highest first.
