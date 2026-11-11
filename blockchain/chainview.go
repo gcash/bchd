@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"sort"
 	"sync"
 )
 
@@ -193,6 +194,24 @@ func (c *chainView) nodeByHeight(height int32) *blockNode {
 	}
 
 	return c.nodes[height]
+}
+
+// nodeByTickDepth returns the newest block node of the chain view that is at
+// least the passed number of ticks below the tip.  Nil will be returned if
+// there is none or the number is negative.  Ticks increase along the chain, so
+// this is a binary search.
+//
+// This function MUST be called with the view mutex locked (for reads).
+func (c *chainView) nodeByTickDepth(ticks int64) *blockNode {
+	tip := c.tip()
+	if tip == nil || ticks < 0 || ticks > tip.ticks {
+		return nil
+	}
+	target := tip.ticks - ticks
+	i := sort.Search(len(c.nodes), func(i int) bool {
+		return c.nodes[i].ticks > target
+	})
+	return c.nodes[i-1]
 }
 
 // NodeByHeight returns the block node at the specified height.  Nil will be

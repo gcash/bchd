@@ -118,7 +118,9 @@ checkpoints up to that block. `--fastsync` can't be combined with
 Finalization stops the node from following a very deep reorganization of the
 chain. Once a main chain block is 10 blocks deep and the node has known it for
 two hours (the defaults), the block is finalized: the node rejects any block
-that forks the chain below it.
+that forks the chain below it. The depth counts 10-minute blocks, so after the
+upgrade to 1-minute blocks (May 2027 on mainnet) a block is finalized 100
+blocks deep.
 
 Nothing is finalized until the node has been running for the finalization
 delay, two hours by default, and blocks loaded from disk at startup count as

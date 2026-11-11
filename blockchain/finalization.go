@@ -14,6 +14,8 @@ import (
 const (
 	// DefaultMaxReorgDepth is the default depth below the tip at which
 	// main chain blocks are finalized, so they can no longer be reorged.
+	// It counts 600-tick blocks, so it is 100 blocks once blocks are 60
+	// ticks apart.
 	DefaultMaxReorgDepth = 10
 
 	// DefaultFinalizationDelay is the default time a block must have been
@@ -23,8 +25,8 @@ const (
 
 // findBlockToFinalize returns the block to finalize at time now, in Unix
 // seconds, with tip as the main chain tip, or nil.  This is the newest block
-// that is at least maxReorgDepth below the tip and has been known for the
-// finalization delay.  Blocks loaded from disk count as known since startup.
+// that is at least maxReorgDepth*600 ticks below the tip and has been known for
+// the finalization delay.  Blocks loaded from disk count as known since startup.
 // Nothing is finalized while the tip has less than the minimum chain work.
 //
 // This function MUST be called with the chain state lock held (for reads).
@@ -49,7 +51,8 @@ func (b *BlockChain) findBlockToFinalize(tip *blockNode, now int64) *blockNode {
 		return now >= int64(n.received)+delay
 	}
 
-	candidate := b.bestChain.nodeByHeight(tip.height - b.maxReorgDepth)
+	depth := int64(b.maxReorgDepth) * legacyBlockInterval
+	candidate := b.bestChain.nodeByTickDepth(depth)
 	if candidate == nil || candidate == b.finalizedNode {
 		return nil
 	}
