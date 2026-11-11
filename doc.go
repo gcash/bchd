@@ -140,7 +140,8 @@ Application Options:
 	                                 epoch, at which the May 2027 upgrade to
 	                                 1-minute blocks activates, for testing --
 	                                 Must not be before the network's ASERT
-	                                 anchor block; changing it requires a fresh
+	                                 anchor block; changing it once a block
+	                                 reached the old or new time requires a fresh
 	                                 data directory (default: 1810382400,
 	                                 chipnet: 1794744000)
 	    --dbtype=                    Database backend to use for the Block Chain

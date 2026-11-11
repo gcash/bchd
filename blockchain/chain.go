@@ -2766,6 +2766,12 @@ type Config struct {
 	// the network's ASERT anchor.
 	Upgrade2027ActivationTime *uint64
 
+	// UseStoredUpgrade2027Time, when Upgrade2027ActivationTime is nil,
+	// takes the activation time the database was last used with instead
+	// of the network's.  It is for tools that work on the data directory
+	// of a node.
+	UseStoredUpgrade2027Time bool
+
 	// NotifyMaxBlockSizeLookAhead, when not nil, is called with the largest
 	// size ABLA can let a block have within the next 2048 blocks, assuming
 	// they are all full, once the chain is loaded and whenever its tip
@@ -2882,6 +2888,17 @@ func New(config *Config) (*BlockChain, error) {
 	b.upgrade2027ActivationTime = params.Upgrade2027ActivationTime
 	if config.Upgrade2027ActivationTime != nil {
 		b.upgrade2027ActivationTime = *config.Upgrade2027ActivationTime
+	} else if config.UseStoredUpgrade2027Time {
+		err := b.db.View(func(dbTx database.Tx) error {
+			stored, ok, err := dbFetchUpgrade2027Time(dbTx)
+			if ok {
+				b.upgrade2027ActivationTime = stored
+			}
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// A fast sync whose download of the utxo set was not verified can only

@@ -159,7 +159,7 @@ type config struct {
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
-	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
+	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it once a block reached the old or new time requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -716,4 +717,126 @@ func forkBlock(t *testing.T, chain *BlockChain, hash chainhash.Hash) *wire.MsgBl
 		t.Fatalf("block %v: %v", hash, err)
 	}
 	return block.MsgBlock()
+}
+
+// TestUpgrade2027TimeStored ensures a database takes a changed activation
+// time while no block has reached either time, refuses one once a block has,
+// the network's included, and that a database from before the time was
+// stored takes the time in effect.
+func TestUpgrade2027TimeStored(t *testing.T) {
+	// Block 1 is stamped 1700000000 and every block is 600 seconds after
+	// its parent, so the tip at height 10 has a median time past of
+	// 1700002400.
+	reached, later := uint64(1700000000), uint64(1700060000)
+	mine := func(chain *BlockChain, db database.DB) {
+		t.Helper()
+		m := &ruleTestMiner{t: t, chain: chain,
+			tip: chaincfg.RegressionNetParams.GenesisBlock}
+		for range 10 {
+			m.mustAccept(m.build(nil))
+		}
+		if err := chain.FlushCachedState(FlushRequired); err != nil {
+			t.Fatalf("flush: %v", err)
+		}
+		db.Close()
+	}
+	reopen := func(dir string, override *uint64, useStored bool) (*BlockChain, error) {
+		t.Helper()
+		db, err := database.Open(testDbType, dir,
+			chaincfg.RegressionNetParams.Net)
+		if err != nil {
+			t.Fatalf("failed to open database: %v", err)
+		}
+		defer db.Close()
+		params := chaincfg.RegressionNetParams
+		return New(&Config{
+			DB:                        db,
+			ChainParams:               &params,
+			TimeSource:                NewMedianTime(),
+			SigCache:                  txscript.NewSigCache(1000),
+			UtxoCacheMaxSize:          250 * 1024 * 1024,
+			ExcessiveBlockSize:        32000000,
+			Upgrade2027ActivationTime: override,
+			UseStoredUpgrade2027Time:  useStored,
+		})
+	}
+
+	// No block reaches a later time, so it can change, to the network's
+	// too.
+	dir := filepath.Join(t.TempDir(), "db")
+	chain, db, err := openTicksTestChain(t, dir, &later)
+	if err != nil {
+		t.Fatalf("failed to open chain: %v", err)
+	}
+	mine(chain, db)
+	for _, override := range []*uint64{new(later + 1), &later, nil} {
+		if _, err := reopen(dir, override, false); err != nil {
+			t.Fatalf("override %v: %v", override, err)
+		}
+	}
+
+	// The tip reached an earlier time, so it is refused, and the error
+	// names the way back to the stored time.
+	for _, test := range []struct {
+		stored *uint64
+		hint   string
+	}{
+		{nil, "start bchd without --upgrade2027activationtime"},
+		{&later, "--upgrade2027activationtime=1700060000"},
+	} {
+		if _, err := reopen(dir, test.stored, false); err != nil {
+			t.Fatalf("override %v: %v", test.stored, err)
+		}
+		_, err = reopen(dir, &reached, false)
+		if err == nil || !strings.Contains(err.Error(), test.hint) {
+			t.Fatalf("opened with an earlier time, error %v", err)
+		}
+	}
+
+	// Once blocks reached the stored time, neither another override nor
+	// the network's is taken, unless the stored one is asked for.
+	dir = filepath.Join(t.TempDir(), "db")
+	chain, db, err = openTicksTestChain(t, dir, &reached)
+	if err != nil {
+		t.Fatalf("failed to open chain: %v", err)
+	}
+	mine(chain, db)
+	for _, override := range []*uint64{&later, nil} {
+		_, err = reopen(dir, override, false)
+		if err == nil || !strings.Contains(err.Error(),
+			"upgrade 2027 activation time 1700000000") {
+
+			t.Fatalf("override %v: opened with error %v", override,
+				err)
+		}
+	}
+	chain, err = reopen(dir, nil, true)
+	if err != nil {
+		t.Fatalf("failed to open with the stored time: %v", err)
+	}
+	if got := chain.Upgrade2027ActivationTime(); got != reached {
+		t.Fatalf("took activation time %d, want %d", got, reached)
+	}
+	if _, err := reopen(dir, &later, true); err == nil {
+		t.Fatal("an override did not replace the stored time")
+	}
+
+	// A database without a stored time takes the one in effect.
+	db, err = database.Open(testDbType, dir, chaincfg.RegressionNetParams.Net)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	err = db.Update(func(dbTx database.Tx) error {
+		return dbTx.Metadata().Delete(upgrade2027TimeKeyName)
+	})
+	db.Close()
+	if err != nil {
+		t.Fatalf("delete activation time: %v", err)
+	}
+	if _, err := reopen(dir, &later, false); err != nil {
+		t.Fatalf("failed to open without a stored time: %v", err)
+	}
+	if _, err := reopen(dir, &reached, false); err == nil {
+		t.Fatal("opened with a time other than the stored one")
+	}
 }
