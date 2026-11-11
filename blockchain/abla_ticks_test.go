@@ -224,6 +224,9 @@ func TestABLATicksConfigs(t *testing.T) {
 func TestABLATicksLimits(t *testing.T) {
 	v := loadChipABLAVectors(t)
 	configs := chipABLAConfigs(t, v)
+	if len(v.Limits) != 25 {
+		t.Fatalf("%d limit vectors, want 25", len(v.Limits))
+	}
 	for _, test := range v.Limits {
 		if _, ok := configs[test.Config]; !ok {
 			t.Fatalf("%s: unknown config %s", test.Name, test.Config)

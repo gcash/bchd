@@ -589,8 +589,9 @@ func TestFinalizationVectors(t *testing.T) {
 		}
 	}
 
-	if len(vectors.Finalization) == 0 {
-		t.Fatal("no finalization vectors")
+	if len(vectors.Finalization) != 13 {
+		t.Fatalf("%d finalization vectors, want 13",
+			len(vectors.Finalization))
 	}
 	for _, v := range vectors.Finalization {
 		t.Run(v.Name, func(t *testing.T) {

@@ -120,8 +120,9 @@ func TestCoinbaseShapeVectors(t *testing.T) {
 		t.Fatalf("constants %v", c)
 	}
 
-	if len(vectors.Vectors) == 0 || len(vectors.TxidVectors) == 0 {
-		t.Fatal("no vectors")
+	if len(vectors.Vectors) != 61 || len(vectors.TxidVectors) != 6 {
+		t.Fatalf("%d shape vectors and %d txid vectors, want 61 and 6",
+			len(vectors.Vectors), len(vectors.TxidVectors))
 	}
 	for _, v := range vectors.Vectors {
 		height := int32(num(v.Block.Height))
@@ -145,10 +146,12 @@ func TestCoinbaseShapeVectors(t *testing.T) {
 	// The coinbase of block 164384 has the forbidden shape, so whether it
 	// is invalid on mainnet only depends on the exemption.  BCHD has no
 	// configurable ban list, so rows with their own list do not apply.
+	checked := 0
 	for _, v := range vectors.TxidVectors {
 		if !v.DefaultBans {
 			continue
 		}
+		checked++
 		hash, err := chainhash.NewHashFromStr(v.Txid)
 		if err != nil {
 			t.Fatalf("%s: bad txid: %v", v.Name, err)
@@ -159,6 +162,9 @@ func TestCoinbaseShapeVectors(t *testing.T) {
 			t.Errorf("%s: exempt %v, want invalid %v", v.Name, exempt,
 				v.Expected.Invalid)
 		}
+	}
+	if checked != 4 {
+		t.Fatalf("checked %d txid vectors, want 4", checked)
 	}
 
 	raw := vectors.RawCoinbase
