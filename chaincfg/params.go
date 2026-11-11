@@ -172,6 +172,7 @@ type Params struct {
 	ABLAForkHeight                int32  // May 15, 2024 hardfork
 	Upgrade11ActivationTime       uint64 // May 15, 2025 hardfork
 	Upgrade12ActivationTime       uint64 // May 15, 2026 hardfork
+	Upgrade2027ActivationTime     uint64 // May 15, 2027 hardfork
 
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
@@ -318,8 +319,9 @@ var MainNetParams = Params{
 	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
 	ABLAForkHeight:     845890,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
 
 	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
 	ABLAConfig: ABLAConstants{
@@ -524,10 +526,11 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 0, // Always active on regtest
 
-	Upgrade9ForkHeight:      0, // Always active on regtest
-	ABLAForkHeight:          0, // Always active on regtest
-	Upgrade11ActivationTime: 0, // Always active on regtest
-	Upgrade12ActivationTime: 0,
+	Upgrade9ForkHeight:        0, // Always active on regtest
+	ABLAForkHeight:            0, // Always active on regtest
+	Upgrade11ActivationTime:   0, // Always active on regtest
+	Upgrade12ActivationTime:   0,
+	Upgrade2027ActivationTime: 1810382400, // Mainnet time, set an override to activate
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -637,8 +640,9 @@ var TestNet3Params = Params{
 	Upgrade9ForkHeight: 1552787,
 	ABLAForkHeight:     1605520,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -781,8 +785,9 @@ var ChipNetParams = Params{
 	Upgrade9ForkHeight: 121956,
 	ABLAForkHeight:     174519,
 
-	Upgrade11ActivationTime: 1731672000,
-	Upgrade12ActivationTime: 1763208000,
+	Upgrade11ActivationTime:   1731672000,
+	Upgrade12ActivationTime:   1763208000,
+	Upgrade2027ActivationTime: 1794744000,
 
 	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
 	ABLAConfig: ABLAConstants{
@@ -918,8 +923,9 @@ var TestNet4Params = Params{
 	Upgrade9ForkHeight: 148043,
 	ABLAForkHeight:     200740,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
@@ -1055,10 +1061,11 @@ var SimNetParams = Params{
 	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
 	GenerateSupported:                    true,
 
-	Upgrade9ForkHeight:      100000000,
-	ABLAForkHeight:          100000000,
-	Upgrade11ActivationTime: 0, // Always active on simnet
-	Upgrade12ActivationTime: 0,
+	Upgrade9ForkHeight:        100000000,
+	ABLAForkHeight:            100000000,
+	Upgrade11ActivationTime:   0, // Always active on simnet
+	Upgrade12ActivationTime:   0,
+	Upgrade2027ActivationTime: 1810382400, // Mainnet time, set an override to activate
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,

@@ -175,3 +175,27 @@ func TestDefaultConsensusBlockSize(t *testing.T) {
 		}
 	}
 }
+
+// TestUpgrade2027ActivationTime pins the activation time of the 1-minute
+// block upgrade on each network.  Regtest and simnet keep the mainnet time
+// rather than 0, so the upgrade only activates there when asked for.
+func TestUpgrade2027ActivationTime(t *testing.T) {
+	tests := []struct {
+		params *Params
+		time   uint64
+	}{
+		{&MainNetParams, 1810382400},
+		{&TestNet3Params, 1810382400},
+		{&TestNet4Params, 1810382400},
+		{&ChipNetParams, 1794744000},
+		{&RegressionNetParams, 1810382400},
+		{&SimNetParams, 1810382400},
+	}
+	for _, test := range tests {
+		got := test.params.Upgrade2027ActivationTime
+		if got != test.time {
+			t.Errorf("%s: upgrade 2027 activation time %d, want %d",
+				test.params.Name, got, test.time)
+		}
+	}
+}
