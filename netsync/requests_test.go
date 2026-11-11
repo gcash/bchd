@@ -68,11 +68,26 @@ func (r scoreRecorder) Misbehaving(_ *peerpkg.Peer, score uint32, reason string)
 	r.h.mtx.Unlock()
 }
 
-// newRequestTestHarness returns a request test harness.
+// upgrade2027Never is an upgrade 2027 activation time that no test chain
+// reaches.
+const upgrade2027Never = 1<<48 - 1
+
+// newRequestTestHarness returns a request test harness whose chain never
+// activates the upgrade to 1-minute blocks.
 func newRequestTestHarness(t *testing.T) *requestTestHarness {
+	t.Helper()
+	return newUpgradeRequestTestHarness(t, upgrade2027Never)
+}
+
+// newUpgradeRequestTestHarness returns a request test harness whose chain
+// activates the upgrade to 1-minute blocks at the passed time.
+func newUpgradeRequestTestHarness(t *testing.T,
+	activation uint64) *requestTestHarness {
+
 	t.Helper()
 
 	params := chaincfg.RegressionNetParams
+	params.Upgrade2027ActivationTime = activation
 	created, err := database.Create("ffldb", t.TempDir(), params.Net)
 	if err != nil {
 		t.Fatal(err)
@@ -685,6 +700,176 @@ func TestBlockDownloadTimeoutValidatedPeers(t *testing.T) {
 	h.advance(h.params.TargetTimePerBlock / 2)
 	if !isDisconnected(c) {
 		t.Fatal("peer still connected a block interval after its request")
+	}
+}
+
+// TestBlockDownloadTimeoutInterval ensures a peer's download timeout follows
+// the target interval of the oldest block it is asked for, so a peer asked for
+// a 1-minute block times out after a minute though the tip is a 10-minute
+// block, and a peer still asked for the last 10-minute block does not.
+func TestBlockDownloadTimeoutInterval(t *testing.T) {
+	// The tip's median time past is its own timestamp, and each pair of
+	// blocks after it moves the median a minute on, so the fifth block
+	// after the tip is the first 1-minute block.
+	activation := uint64(time.Now().Unix() + 90)
+	h := newUpgradeRequestTestHarness(t, activation)
+	blocks := h.chainOn(h.tip, 2, 6, 0)
+	_, _, err := h.sm.chain.ProcessBlockHeaders(headersOf(blocks), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []int64{600, 600, 600, 600, 60, 60} {
+		ticks, err := h.sm.chain.BlockTicksByHash(blocks[i].Hash())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ticks.Interval != want {
+			t.Fatalf("block %d has interval %d, want %d", i+2,
+				ticks.Interval, want)
+		}
+	}
+
+	// Each peer's validated download adds half an interval to the
+	// other's timeout.
+	a, b := h.peer(1), h.peer(2)
+	h.sm.requestBlock(a, h.sm.peerStates[a], blocks[5].Hash(), true)
+	h.sm.requestBlock(b, h.sm.peerStates[b], blocks[4].Hash(), true)
+	h.sm.requestBlock(b, h.sm.peerStates[b], blocks[3].Hash(), true)
+	h.advance(89 * time.Second)
+	if isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block still connected after " +
+			"its timeout")
+	}
+	if isDisconnected(b) {
+		t.Fatal("peer asked for a 10-minute block disconnected after " +
+			"the 1-minute timeout")
+	}
+	h.advance(900*time.Second - 91*time.Second)
+	if isDisconnected(b) {
+		t.Fatal("peer asked for a 10-minute block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(b) {
+		t.Fatal("peer asked for a 10-minute block still connected " +
+			"after its timeout")
+	}
+}
+
+// TestBlockDownloadTimeoutUnknownHeader ensures a peer asked only for blocks
+// whose headers are unknown times out by the interval of the block after the
+// tip, a 10-minute block, though the best header is a 1-minute block.
+func TestBlockDownloadTimeoutUnknownHeader(t *testing.T) {
+	activation := uint64(time.Now().Unix() + 90)
+	h := newUpgradeRequestTestHarness(t, activation)
+	blocks := h.chainOn(h.tip, 2, 6, 0)
+	_, _, err := h.sm.chain.ProcessBlockHeaders(headersOf(blocks), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticks, err := h.sm.chain.BlockTicksByHash(blocks[5].Hash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ticks.Interval != 60 {
+		t.Fatalf("best header has interval %d, want 60", ticks.Interval)
+	}
+
+	// The validated download of the 1-minute block adds half of the
+	// fallback interval to the timeout of the peer asked for the
+	// unknown block, which adds nothing to that of the other peer.
+	a, b := h.peer(1), h.peer(2)
+	unknown := chainhash.Hash{0xcc}
+	h.sm.requestBlock(a, h.sm.peerStates[a], &unknown, false)
+	h.sm.requestBlock(b, h.sm.peerStates[b], blocks[5].Hash(), true)
+	h.advance(61 * time.Second)
+	if !isDisconnected(b) {
+		t.Fatal("peer asked for a 1-minute block still connected after " +
+			"its timeout")
+	}
+	h.advance(899*time.Second - 61*time.Second)
+	if isDisconnected(a) {
+		t.Fatal("peer asked for an unknown block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(a) {
+		t.Fatal("peer asked for an unknown block still connected after " +
+			"its timeout")
+	}
+}
+
+// TestBlockDownloadTimeoutKnownAndUnknownHeader ensures a peer asked for a
+// 1-minute block whose header is known and a block whose header is unknown
+// times out by the 1-minute interval, though the block after the tip is a
+// 10-minute block.
+func TestBlockDownloadTimeoutKnownAndUnknownHeader(t *testing.T) {
+	activation := uint64(time.Now().Unix() + 90)
+	h := newUpgradeRequestTestHarness(t, activation)
+	blocks := h.chainOn(h.tip, 2, 6, 0)
+	_, _, err := h.sm.chain.ProcessBlockHeaders(headersOf(blocks), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next := h.sm.chain.BestSnapshot().NextBlockInterval; next != 600 {
+		t.Fatalf("block after the tip has interval %d, want 600", next)
+	}
+
+	a := h.peer(1)
+	h.sm.requestBlock(a, h.sm.peerStates[a], blocks[5].Hash(), true)
+	h.sm.requestBlock(a, h.sm.peerStates[a], &chainhash.Hash{0xaa}, false)
+	h.advance(59 * time.Second)
+	if isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(a) {
+		t.Fatal("peer asked for a 1-minute block and an unknown block " +
+			"still connected after a 1-minute interval")
+	}
+}
+
+// TestBlockDownloadTimeoutUnknownHeaderActive ensures a peer asked only for
+// blocks whose headers are unknown times out by a 1-minute interval once the
+// block after the tip is a 1-minute block, and that a known block with fewer
+// ticks than the tip's next block sets the timeout instead.
+func TestBlockDownloadTimeoutUnknownHeaderActive(t *testing.T) {
+	// The harness tip, block 1, is the activation block.
+	activation := uint64(chaincfg.RegressionNetParams.GenesisBlock.Header.
+		Timestamp.Unix()) + 1
+	h := newUpgradeRequestTestHarness(t, activation)
+	if next := h.sm.chain.BestSnapshot().NextBlockInterval; next != 60 {
+		t.Fatalf("block after the tip has interval %d, want 60", next)
+	}
+
+	a, b := h.peer(1), h.peer(2)
+	h.sm.requestBlock(a, h.sm.peerStates[a], &chainhash.Hash{0xaa}, false)
+	h.sm.requestBlock(b, h.sm.peerStates[b], &chainhash.Hash{0xbb}, false)
+	h.sm.requestBlock(b, h.sm.peerStates[b], h.params.GenesisHash, false)
+	h.advance(59 * time.Second)
+	if isDisconnected(a) {
+		t.Fatal("peer asked for an unknown block disconnected early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(a) {
+		t.Fatal("peer asked for an unknown block still connected after " +
+			"a 1-minute interval")
+	}
+	if isDisconnected(b) {
+		t.Fatal("peer also asked for the genesis block disconnected " +
+			"after a 1-minute interval")
+	}
+	h.advance(599*time.Second - 61*time.Second)
+	if isDisconnected(b) {
+		t.Fatal("peer also asked for the genesis block disconnected " +
+			"early")
+	}
+	h.advance(2 * time.Second)
+	if !isDisconnected(b) {
+		t.Fatal("peer also asked for the genesis block still connected " +
+			"after a 10-minute interval")
 	}
 }
 
