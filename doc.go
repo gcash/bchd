@@ -256,8 +256,10 @@ Application Options:
 	                                 buffer of blocks will be retained in case of
 	                                 a reorg.
 	    --prunedepth=                The number of blocks to retain when running
-	                                 in pruned mode. Cannot be less than 288.
-	                                 (default: 4320)
+	                                 in pruned mode, counted in 10-minute blocks:
+	                                 after the upgrade to 1-minute blocks ten
+	                                 times as many are kept. Cannot be less than
+	                                 288. (default: 4320)
 	    --targetoutboundpeers=       Number of outbound connections to maintain
 	                                 (default: 8)
 	    --reindexchainstate          Rebuild the UTXO database from currently

@@ -991,7 +991,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	flushMode := FlushIfNeeded
 	if b.pruneMode {
 		node := b.bestChain.FindFork(b.index.LookupNode(&b.utxoCache.lastFlushHash))
-		if node.height <= block.Height()-int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep != nil && node.height <= keep.height {
 			flushMode = FlushRequired
 		}
 	}
@@ -1992,8 +1993,8 @@ func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.H
 	// are below our prune depth then just return nil as we can't
 	// serve these blocks if requested.
 	if b.pruneMode && !headersOnly {
-		tip := b.bestChain.Tip()
-		if startNode.height < tip.height-int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep != nil && startNode.height < keep.height {
 			return nil, 0
 		}
 	}
@@ -2356,19 +2357,26 @@ func (b *BlockChain) RollbackUtxoSet(height int32) (*UtxoViewpoint, error) {
 	return view, nil
 }
 
+// pruneTicks returns the tick depth of the deepest block a pruned node keeps.
+// The prune depth counts 10-minute blocks, so a node keeps ten times as many
+// 1-minute blocks.
+func (b *BlockChain) pruneTicks() int64 {
+	return int64(b.pruneDepth) * legacyBlockInterval
+}
+
 // prune deletes the block data and spend journals for all blocks deeper than
 // the set prune depth.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) prune() error {
 	return b.db.Update(func(tx database.Tx) error {
-		tip := b.bestChain.Tip()
-		if tip.height <= int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep == nil || keep.parent == nil {
 			return nil
 		}
 		pruneHeight := dbFetchPruneHeight(tx)
 
-		node := b.bestChain.NodeByHeight(tip.height - int32(b.pruneDepth) - 1)
+		node := keep.parent
 
 		// Delete blocks before the height
 		if err := tx.DeleteBlocks(uint32(node.height)); err != nil {
@@ -2388,7 +2396,7 @@ func (b *BlockChain) prune() error {
 		}
 
 		// Put the prune height to the database
-		return dbPutPruneHeight(tx, uint32(tip.height)-b.pruneDepth)
+		return dbPutPruneHeight(tx, uint32(keep.height))
 	})
 }
 
@@ -2738,8 +2746,9 @@ type Config struct {
 	Prune bool
 
 	// PruneDepth is the minimum amount of blocks to keep to protect
-	// against a reorg. Everything after the depth will be deleted
-	// whenever we connect a new block.
+	// against a reorg, counted in 10-minute blocks: a 1-minute block counts
+	// as a tenth.  Everything after the depth will be deleted whenever we
+	// connect a new block.
 	PruneDepth uint32
 
 	// ReIndexChainState will delete the UTXO db bucket and rebuild the

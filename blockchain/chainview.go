@@ -214,6 +214,17 @@ func (c *chainView) nodeByTickDepth(ticks int64) *blockNode {
 	return c.nodes[i-1]
 }
 
+// NodeByTickDepth returns the newest block node of the chain view that is at
+// least the passed number of ticks below the tip.  Nil will be returned if
+// there is none or the number is negative.
+//
+// This function is safe for concurrent access.
+func (c *chainView) NodeByTickDepth(ticks int64) *blockNode {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	return c.nodeByTickDepth(ticks)
+}
+
 // NodeByHeight returns the block node at the specified height.  Nil will be
 // returned if the height does not exist.
 //

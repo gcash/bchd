@@ -200,7 +200,7 @@ type config struct {
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
-	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
+	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode, counted in 10-minute blocks: after the upgrade to 1-minute blocks ten times as many are kept. Cannot be less than 288."`
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"Number of outbound connections to maintain"`
 	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
 	FastSync                bool          `long:"fastsync" description:"Download the UTXO set of the last checkpoint that has one and sync full blocks from there to the tip rather than from genesis."`
