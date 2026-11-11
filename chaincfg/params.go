@@ -894,6 +894,30 @@ var ChipNetParams = Params{
 	SlpAddressPrefix:    "slptest",
 }
 
+// TempNetParams defines the network parameters for tempnet, a temporary fork
+// of chipnet that activated the May 2027 upgrade on 2026-10-15 to test it
+// before chipnet does on 2026-11-15, when tempnet ends.  It shares chipnet's
+// network magic and port, and its chain leaves chipnet's at height 327989.
+var TempNetParams = tempNetParams()
+
+func tempNetParams() Params {
+	params := ChipNetParams
+	params.Name = "tempnet"
+	params.DNSSeeds = []DNSSeed{
+		{"tempnet.bitjson.com", false},
+		{"chipnet.bitjson.com", true},
+	}
+	params.Upgrade2027ActivationTime = 1792065600
+
+	// The first tempnet block keeps nodes off chipnet's branch.
+	params.Checkpoints = append(append([]Checkpoint(nil),
+		ChipNetParams.Checkpoints...), Checkpoint{
+		Height: 327989,
+		Hash:   newHashFromStr("00000000e18af2c66d44a1bbfe165acc4b87a625d211a09e33d5ee61d35dcb66"),
+	})
+	return params
+}
+
 // TestNet4Params defines the network parameters for the test Bitcoin network
 // (version 4).  Not to be confused with the regression test network, this
 // network is sometimes simply called "testnet".
