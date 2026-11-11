@@ -185,6 +185,62 @@ func TestFinalizationOptions(t *testing.T) {
 	}
 }
 
+// TestUpgrade2027ActivationTime checks that the override can't be before the
+// network's ASERT anchor block, except on regtest and simnet, which don't
+// adjust the difficulty.
+func TestUpgrade2027ActivationTime(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() {
+		os.Args = []string{"bchd"}
+		activeNetParams = &mainNetParams
+	}()
+
+	tests := []struct {
+		args []string
+		want int64 // -1 for no override, -2 for a rejected option
+	}{
+		{[]string{}, -1},
+		{[]string{"--upgrade2027activationtime=1810382400"}, 1810382400},
+		{[]string{"--upgrade2027activationtime=1605447844"}, 1605447844},
+		{[]string{"--upgrade2027activationtime=1605447843"}, -2},
+		{[]string{"--chipnet", "--upgrade2027activationtime=1792065600"}, 1792065600},
+		{[]string{"--chipnet", "--upgrade2027activationtime=1605451779"}, 1605451779},
+		{[]string{"--chipnet", "--upgrade2027activationtime=1605451778"}, -2},
+		{[]string{"--testnet", "--upgrade2027activationtime=1605445399"}, -2},
+		{[]string{"--testnet4", "--upgrade2027activationtime=1605451778"}, -2},
+		{[]string{"--regtest", "--upgrade2027activationtime=0"}, 0},
+		{[]string{"--regtest", "--upgrade2027activationtime=1"}, 1},
+		{[]string{"--simnet", "--upgrade2027activationtime=0"}, 0},
+		{[]string{"--regtest", "--upgrade2027activationtime=-1"}, -2},
+		{[]string{"--regtest", "--upgrade2027activationtime=9223372036854775808"}, -2},
+	}
+	for _, test := range tests {
+		activeNetParams = &mainNetParams
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.want == -2 {
+			if err == nil {
+				t.Errorf("%v: no error", test.args)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%v: %v", test.args, err)
+			continue
+		}
+		got := int64(-1)
+		if cfg.Upgrade2027Time != nil {
+			got = int64(*cfg.Upgrade2027Time)
+		}
+		if got != test.want {
+			t.Errorf("%v: override %d, want %d", test.args, got, test.want)
+		}
+	}
+}
+
 // TestBcmrIndexOptions checks the options that --bcmrindex can't be used
 // with: those that keep no blocks from before CashTokens activated, and a
 // --maxreorgdepth deeper than the index can undo.

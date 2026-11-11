@@ -4418,6 +4418,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		FastSyncDataDir:    cfg.DataDir,
 		Proxy:              cfg.Proxy,
 
+		Upgrade2027ActivationTime:   cfg.Upgrade2027Time,
 		NotifyMaxBlockSizeLookAhead: wire.SetMaxBlockSizeLookAhead,
 	})
 	if err != nil {

@@ -197,6 +197,10 @@ type BlockChain struct {
 	finalizationDelay time.Duration
 	startTime         int64
 
+	// upgrade2027ActivationTime is the network's activation time of the
+	// 1-minute block upgrade, or its override.
+	upgrade2027ActivationTime uint64
+
 	// The state is used as a fairly efficient way to cache information
 	// about the current best chain state that is returned to callers when
 	// requested.  It operates on the principle of MVCC such that any time a
@@ -334,6 +338,12 @@ func (b *BlockChain) BlockValidity(hash *chainhash.Hash) (known, valid, invalid 
 // utxo cache to disk.
 func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 	return b.utxoCache.flushInProgress
+}
+
+// Upgrade2027ActivationTime returns the median time past at which the
+// 1-minute block upgrade activates: the network's time or its override.
+func (b *BlockChain) Upgrade2027ActivationTime() uint64 {
+	return b.upgrade2027ActivationTime
 }
 
 // PruneMode returns whether or not the blockchain is running in prune mode.
@@ -2732,6 +2742,11 @@ type Config struct {
 	// DefaultFinalizationDelay.
 	FinalizationDelay time.Duration
 
+	// Upgrade2027ActivationTime, when not nil, replaces the network's
+	// Upgrade2027ActivationTime.  The caller checks that it is not before
+	// the network's ASERT anchor.
+	Upgrade2027ActivationTime *uint64
+
 	// NotifyMaxBlockSizeLookAhead, when not nil, is called with the largest
 	// size ABLA can let a block have within the next 2048 blocks, assuming
 	// they are all full, once the chain is loaded and whenever its tip
@@ -2844,6 +2859,10 @@ func New(config *Config) (*BlockChain, error) {
 	}
 	if b.finalizationDelay == 0 {
 		b.finalizationDelay = DefaultFinalizationDelay
+	}
+	b.upgrade2027ActivationTime = params.Upgrade2027ActivationTime
+	if config.Upgrade2027ActivationTime != nil {
+		b.upgrade2027ActivationTime = *config.Upgrade2027ActivationTime
 	}
 
 	// A fast sync whose download of the utxo set was not verified can only

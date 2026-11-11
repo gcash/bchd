@@ -159,6 +159,7 @@ type config struct {
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
+	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
@@ -829,6 +830,29 @@ func loadConfig() (*config, []string, error) {
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
+	}
+
+	// The upgrade can't activate before the ASERT anchor, as the difficulty
+	// of 1-minute blocks is computed from it.  Regtest and simnet don't
+	// adjust the difficulty, so any time is accepted there.
+	if cfg.Upgrade2027Time != nil {
+		var minTime uint64
+		if !activeNetParams.NoDifficultyAdjustment {
+			minTime = uint64(activeNetParams.AsertDifficultyAnchorParentTimestamp)
+		}
+		if *cfg.Upgrade2027Time < minTime ||
+			*cfg.Upgrade2027Time > math.MaxInt64 {
+
+			str := "%s: The upgrade2027activationtime option must be " +
+				"at least %d and at most %d -- parsed [%d]"
+			err := fmt.Errorf(str, funcName, minTime, int64(math.MaxInt64),
+				*cfg.Upgrade2027Time)
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, usageMessage)
+			return nil, nil, err
+		}
+		bchdLog.Infof("Using upgrade 2027 activation time override: %d",
+			*cfg.Upgrade2027Time)
 	}
 
 	if cfg.Prune && cfg.PruneDepth < minPruneDepth {

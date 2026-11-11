@@ -5,12 +5,14 @@
 package blockchain
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -1091,5 +1093,44 @@ func TestIsInitialBlockDownload(t *testing.T) {
 	if chain.IsInitialBlockDownload() {
 		t.Fatal("a chain that has been current went back into initial " +
 			"block download")
+	}
+}
+
+// TestUpgrade2027ActivationTimeOverride ensures the chain uses the network's
+// activation time of the 1-minute block upgrade unless the configuration
+// overrides it, and that an override of 0 is kept.
+func TestUpgrade2027ActivationTimeOverride(t *testing.T) {
+	zero, past := uint64(0), uint64(1605451779)
+	tests := []struct {
+		override *uint64
+		want     uint64
+	}{
+		{nil, chaincfg.RegressionNetParams.Upgrade2027ActivationTime},
+		{&zero, 0},
+		{&past, 1605451779},
+	}
+	for i, test := range tests {
+		db, err := database.Create(testDbType,
+			filepath.Join(t.TempDir(), "db"), blockDataNet)
+		if err != nil {
+			t.Fatalf("create db: %v", err)
+		}
+		params := chaincfg.RegressionNetParams
+		chain, err := New(&Config{
+			DB:                        db,
+			ChainParams:               &params,
+			TimeSource:                NewMedianTime(),
+			ExcessiveBlockSize:        32000000,
+			Upgrade2027ActivationTime: test.override,
+		})
+		if err != nil {
+			db.Close()
+			t.Fatalf("test %d: New: %v", i, err)
+		}
+		if got := chain.Upgrade2027ActivationTime(); got != test.want {
+			t.Errorf("test %d: activation time %d, want %d", i, got,
+				test.want)
+		}
+		db.Close()
 	}
 }
