@@ -41,10 +41,48 @@ func TestUpgrade2027DefaultArg(t *testing.T) {
 		want: []string{"--upgrade2027activationtimes=1", never},
 	}}
 	for _, test := range tests {
-		got := withUpgrade2027Default(slices.Clone(test.args))
+		got := withUpgrade2027Default(slices.Clone(test.args),
+			Upgrade2027Never)
 		if !slices.Equal(got, test.want) {
 			t.Errorf("%s: got %q, want %q", test.name, got, test.want)
 		}
+	}
+}
+
+// TestUpgrade2027EnvTime checks the activation times the Upgrade2027Env
+// environment variable sets for the harnesses whose test does not choose one.
+func TestUpgrade2027EnvTime(t *testing.T) {
+	tests := []struct {
+		value string
+		want  uint64
+		ok    bool
+	}{
+		{"", Upgrade2027Never, true},
+		{"never", Upgrade2027Never, true},
+		{"past", Upgrade2027InThePast, true},
+		{"1700000000", 1700000000, true},
+		{"Past", 0, false},
+		{"-1", 0, false},
+	}
+	for _, test := range tests {
+		got, err := upgrade2027EnvTime(test.value)
+		if (err == nil) != test.ok || got != test.want {
+			t.Errorf("%q: got %d, %v, want %d (ok %v)", test.value,
+				got, err, test.want, test.ok)
+		}
+	}
+
+	args := withUpgrade2027Default([]string{"--regtest"},
+		Upgrade2027InThePast)
+	if got := upgrade2027ArgTime(args); got != Upgrade2027InThePast {
+		t.Errorf("default past: got %d, want %d", got,
+			Upgrade2027InThePast)
+	}
+	args = withUpgrade2027Default([]string{Upgrade2027Arg(Upgrade2027Never)},
+		Upgrade2027InThePast)
+	if got := upgrade2027ArgTime(args); got != Upgrade2027Never {
+		t.Errorf("test's own time: got %d, want %d", got,
+			Upgrade2027Never)
 	}
 }
 
@@ -56,7 +94,8 @@ func TestUpgrade2027ArgTime(t *testing.T) {
 		want uint64
 	}{
 		{nil, Upgrade2027Never},
-		{withUpgrade2027Default([]string{"--regtest"}), Upgrade2027Never},
+		{withUpgrade2027Default([]string{"--regtest"}, Upgrade2027Never),
+			Upgrade2027Never},
 		{[]string{Upgrade2027Arg(Upgrade2027InThePast)}, 1605451779},
 		{[]string{"--upgrade2027activationtime", "1700000000"}, 1700000000},
 		{[]string{"--upgrade2027activationtimes=1"}, Upgrade2027Never},

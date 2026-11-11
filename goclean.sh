@@ -25,6 +25,9 @@ env GO111MODULE=on golangci-lint run
 # its output when it fails.
 proxy=github.com/gcash/bchd/bchrpc/proxy
 env GO111MODULE=on go test -tags rpctest $(env GO111MODULE=on go list -tags rpctest ./... | grep -vx "$proxy")
+# The integration tests run a second time with the upgrade to 1-minute blocks
+# active from the first blocks of each harness that doesn't choose a time.
+env GO111MODULE=on BCHD_RPCTEST_UPGRADE2027=past go test -tags rpctest ./integration/...
 proxy_log=$(mktemp)
 if ! env GO111MODULE=on go test -tags rpctest -v "$proxy" >"$proxy_log" 2>&1; then
   cat "$proxy_log"

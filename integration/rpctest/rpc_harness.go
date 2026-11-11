@@ -40,8 +40,9 @@ const (
 	BlockVersion = 4
 
 	// Upgrade2027Never is the upgrade 2027 activation time a harness
-	// passes to bchd unless the test chooses one with Upgrade2027Arg.  No
-	// test chain reaches it, so tests don't change rules with the date.
+	// passes to bchd unless the test chooses one with Upgrade2027Arg or
+	// the Upgrade2027Env environment variable sets another.  No test chain
+	// reaches it, so tests don't change rules with the date.
 	Upgrade2027Never = 1<<48 - 1
 
 	// Upgrade2027InThePast is an upgrade 2027 activation time before any
@@ -51,6 +52,13 @@ const (
 
 	// upgrade2027Flag is the bchd option setting the activation time.
 	upgrade2027Flag = "--upgrade2027activationtime"
+
+	// Upgrade2027Env is the environment variable that sets the activation
+	// time of the harnesses whose test does not choose one: "never" (the
+	// default), "past" for Upgrade2027InThePast, or a time.  Running the
+	// tests once with each runs them under both the 10-minute and the
+	// 1-minute block rules.
+	Upgrade2027Env = "BCHD_RPCTEST_UPGRADE2027"
 )
 
 var (
@@ -165,7 +173,11 @@ func New(activeNet *chaincfg.Params, handlers *rpcclient.NotificationHandlers,
 
 	miningAddr := fmt.Sprintf("--miningaddr=%s", wallet.coinbaseAddr)
 	extraArgs = append(extraArgs, miningAddr)
-	extraArgs = withUpgrade2027Default(extraArgs)
+	defaultTime, err := upgrade2027EnvTime(os.Getenv(Upgrade2027Env))
+	if err != nil {
+		return nil, err
+	}
+	extraArgs = withUpgrade2027Default(extraArgs, defaultTime)
 
 	config, err := newConfig("rpctest", certFile, keyFile, extraArgs)
 	if err != nil {
@@ -239,9 +251,9 @@ func Upgrade2027Arg(activationTime uint64) string {
 	return fmt.Sprintf("%s=%d", upgrade2027Flag, activationTime)
 }
 
-// withUpgrade2027Default returns args with the Upgrade2027Never activation
-// time added unless args already set one.
-func withUpgrade2027Default(args []string) []string {
+// withUpgrade2027Default returns args with the passed activation time added
+// unless args already set one.
+func withUpgrade2027Default(args []string, activationTime uint64) []string {
 	for _, arg := range args {
 		if arg == upgrade2027Flag ||
 			strings.HasPrefix(arg, upgrade2027Flag+"=") {
@@ -249,7 +261,24 @@ func withUpgrade2027Default(args []string) []string {
 			return args
 		}
 	}
-	return append(args, Upgrade2027Arg(Upgrade2027Never))
+	return append(args, Upgrade2027Arg(activationTime))
+}
+
+// upgrade2027EnvTime returns the activation time that the passed value of the
+// Upgrade2027Env environment variable sets.
+func upgrade2027EnvTime(value string) (uint64, error) {
+	switch value {
+	case "", "never":
+		return Upgrade2027Never, nil
+	case "past":
+		return Upgrade2027InThePast, nil
+	}
+	t, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%q is not never, past or a time",
+			Upgrade2027Env, value)
+	}
+	return t, nil
 }
 
 // SetUp initializes the rpc test state. Initialization includes: starting up a

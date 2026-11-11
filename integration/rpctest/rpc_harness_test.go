@@ -27,7 +27,28 @@ func init() {
 	wire.SetLimits(fixedExcessiveBlockSize)
 }
 
+// coinbaseSubsidies returns the subsidies of the blocks from height 1 to the
+// passed height: 50 BCH each, or 5 BCH after the upgrade to 1-minute blocks.
+func coinbaseSubsidies(t *testing.T, h *Harness, height int32) bchutil.Amount {
+	var total bchutil.Amount
+	for prevHeight := int32(0); prevHeight < height; prevHeight++ {
+		hash, err := h.Node.GetBlockHash(int64(prevHeight))
+		if err != nil {
+			t.Fatalf("unable to get block hash: %v", err)
+		}
+		subsidy, err := h.nextBlockSubsidy(hash, prevHeight)
+		if err != nil {
+			t.Fatalf("unable to get subsidy: %v", err)
+		}
+		total += bchutil.Amount(subsidy)
+	}
+	return total
+}
+
 func testSendOutputs(r *Harness, t *testing.T) {
+	// The spends are a 250th and two fifths of the balance, 5 and 500 BCH
+	// with 25 mature 50 BCH coinbases.
+	balance := r.ConfirmedBalance()
 	genSpend := func(amt bchutil.Amount) *chainhash.Hash {
 		// Grab a fresh address from the wallet.
 		addr, err := r.NewAddress()
@@ -70,7 +91,7 @@ func testSendOutputs(r *Harness, t *testing.T) {
 
 	// First, generate a small spend which will require only a single
 	// input.
-	txid := genSpend(bchutil.Amount(5 * bchutil.SatoshiPerBitcoin))
+	txid := genSpend(balance / 250)
 
 	// Generate a single block, the transaction the wallet created should
 	// be found in this block.
@@ -82,7 +103,7 @@ func testSendOutputs(r *Harness, t *testing.T) {
 
 	// Next, generate a spend much greater than the block reward. This
 	// transaction should also have been mined properly.
-	txid = genSpend(bchutil.Amount(500 * bchutil.SatoshiPerBitcoin))
+	txid = genSpend(balance * 2 / 5)
 	blockHashes, err = r.Node.Generate(1)
 	if err != nil {
 		t.Fatalf("unable to generate single block: %v", err)
@@ -488,8 +509,9 @@ func testMemWalletReorg(r *Harness, t *testing.T) {
 		t.Fatalf("unable to complete rpctest setup: %v", err)
 	}
 
-	// The internal wallet of this harness should now have 250 BCH.
-	expectedBalance := bchutil.Amount(250 * bchutil.SatoshiPerBitcoin)
+	// The internal wallet of this harness should now have the coinbases
+	// of the first 5 blocks.
+	expectedBalance := coinbaseSubsidies(t, harness, 5)
 	walletBalance := harness.ConfirmedBalance()
 	if expectedBalance != walletBalance {
 		t.Fatalf("wallet balance incorrect: expected %v, got %v",
@@ -618,9 +640,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestHarness(t *testing.T) {
-	// We should have (numMatureOutputs * 50 BCH) of mature unspendable
-	// outputs.
-	expectedBalance := bchutil.Amount(numMatureOutputs * 50 * bchutil.SatoshiPerBitcoin)
+	// We should have the coinbases of the first numMatureOutputs blocks
+	// as mature unspendable outputs.
+	expectedBalance := coinbaseSubsidies(t, mainHarness, numMatureOutputs)
 	harnessBalance := mainHarness.ConfirmedBalance()
 	if harnessBalance != expectedBalance {
 		t.Fatalf("expected wallet balance of %v instead have %v",

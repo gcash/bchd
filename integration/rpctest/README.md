@@ -23,6 +23,16 @@ never activate, so tests don't change rules with the date. A test passes
 arguments of `rpctest.New` to mine a chain that activates it within its first
 few blocks.
 
+The `BCHD_RPCTEST_UPGRADE2027` environment variable changes the default of the
+harnesses whose test does not choose a time: `never` (the default), `past` for
+`rpctest.Upgrade2027InThePast`, or a time in seconds.  Run the integration tests
+under both rule sets with:
+
+```bash
+$ go test -tags rpctest ./integration/...
+$ BCHD_RPCTEST_UPGRADE2027=past go test -tags rpctest ./integration/...
+```
+
 ## Installation and Updating
 
 ```bash
