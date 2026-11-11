@@ -108,7 +108,10 @@ func createCoinbaseTx(coinbaseScript []byte, nextBlockHeight int32,
 		return nil, err
 	}
 
-	tx := wire.NewMsgTx(wire.TxVersion)
+	// Version 2 keeps the coinbase clear of the version 1, lock time 0
+	// shape that the 1-minute block upgrade forbids for coinbases paying 25
+	// BCH or more.
+	tx := wire.NewMsgTx(2)
 	tx.AddTxIn(&wire.TxIn{
 		// Coinbase transactions have no inputs, so previous outpoint is
 		// zero hash and max index.

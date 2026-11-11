@@ -438,3 +438,28 @@ func TestTemplateMinFeeRounding(t *testing.T) {
 			n, exact.TxHash(), short.TxHash())
 	}
 }
+
+// TestTemplateCoinbaseEscapesForbiddenShape ensures a template coinbase paying
+// 25 BCH or more is not version 1, so it can never have the shape the
+// 1-minute block upgrade forbids for coinbases.
+func TestTemplateCoinbaseEscapesForbiddenShape(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(101)
+	h.src.add(spend(h.cbTxs[0], 1000), 1000)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	cb := tmpl.Block.Transactions[0]
+	var total int64
+	for _, out := range cb.TxOut {
+		total += out.Value
+	}
+	if total < 25*bchutil.SatoshiPerBitcoin {
+		t.Fatalf("coinbase pays %d, want at least 25 BCH", total)
+	}
+	if cb.Version != 2 {
+		t.Errorf("coinbase has version %d, want 2", cb.Version)
+	}
+}
