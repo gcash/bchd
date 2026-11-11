@@ -43,7 +43,7 @@ const (
 	serializedHeightVersion = 2
 
 	// baseSubsidy is the starting subsidy amount for mined blocks.  This
-	// value is halved every SubsidyHalvingInterval blocks.
+	// value is halved every SubsidyReductionInterval chunks of 600 ticks.
 	baseSubsidy = 50 * bchutil.SatoshiPerBitcoin
 
 	// LegacyMaxBlockSize is the maximum number of bytes allowed in a block
@@ -225,23 +225,29 @@ func isBIP0030Node(node *blockNode) bool {
 	return false
 }
 
-// CalcBlockSubsidy returns the subsidy amount a block at the provided height
-// should have. This is mainly used for determining how much the coinbase for
-// newly generated blocks awards as well as validating the coinbase for blocks
-// has the expected value.
+// CalcBlockSubsidy returns the subsidy amount of a block with the passed
+// ticks and target interval in ticks.  This is mainly used for determining how
+// much the coinbase for newly generated blocks awards as well as validating
+// the coinbase for blocks has the expected value.
 //
-// The subsidy is halved every SubsidyReductionInterval blocks.  Mathematically
-// this is: baseSubsidy / 2^(height/SubsidyReductionInterval)
+// The subsidy is halved every SubsidyReductionInterval chunks of 600 ticks,
+// which is approximately every 4 years, and scaled by the interval:
+// (baseSubsidy >> (ceil(ticks/600) / SubsidyReductionInterval)) * interval / 600
 //
-// At the target block generation rate for the main network, this is
-// approximately every 4 years.
-func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
-	if chainParams.SubsidyReductionInterval == 0 {
-		return baseSubsidy
+// The halving count follows the 600-tick chunk the block's interval lies in,
+// so halvings stay on the boundaries of 10-minute blocks.  Halving before the
+// scaling is part of the rule, and so is the truncation it leaves.  The
+// interval must divide 600.
+func CalcBlockSubsidy(ticks, interval int64, chainParams *chaincfg.Params) int64 {
+	var halvings int64
+	if chainParams.SubsidyReductionInterval != 0 {
+		chunk := (ticks + legacyBlockInterval - 1) / legacyBlockInterval
+		halvings = chunk / int64(chainParams.SubsidyReductionInterval)
 	}
-
-	// Equivalent to: baseSubsidy / 2^(height/subsidyHalvingInterval)
-	return baseSubsidy >> uint(height/chainParams.SubsidyReductionInterval)
+	if halvings >= 64 {
+		return 0
+	}
+	return (baseSubsidy >> uint(halvings)) * interval / legacyBlockInterval
 }
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
@@ -1315,8 +1321,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	for _, txOut := range transactions[0].MsgTx().TxOut {
 		totalSatoshiOut += txOut.Value
 	}
-	expectedSatoshiOut := CalcBlockSubsidy(node.height, b.chainParams) +
-		totalFees
+	expectedSatoshiOut := CalcBlockSubsidy(node.ticks, blockInterval(node),
+		b.chainParams) + totalFees
 	if totalSatoshiOut > expectedSatoshiOut {
 		str := fmt.Sprintf("coinbase transaction for block pays %v "+
 			"which is more than expected value of %v",

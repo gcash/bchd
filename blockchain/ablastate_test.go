@@ -76,7 +76,7 @@ func ablaTestBlock(t *testing.T, prev *wire.MsgBlock, height int32, size int,
 		Sequence:         wire.MaxTxInSequenceNum,
 		SignatureScript:  cbScript,
 	})
-	cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, params), opTrueScript,
+	cb.AddTxOut(wire.NewTxOut(legacySubsidy(height, params), opTrueScript,
 		wire.TokenData{}))
 	pad := wire.NewTxOut(0, []byte{txscript.OP_RETURN}, wire.TokenData{})
 	cb.AddTxOut(pad)

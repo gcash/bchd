@@ -57,6 +57,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// legacySubsidy returns the subsidy of the block at the passed height of a
+// chain that never activates the upgrade to 1-minute blocks.
+func legacySubsidy(height int32, params *chaincfg.Params) int64 {
+	return CalcBlockSubsidy(int64(height)*legacyBlockInterval,
+		legacyBlockInterval, params)
+}
+
 // fileExists returns whether or not the named file or directory exists.
 func fileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {

@@ -47,3 +47,24 @@ func TestUpgrade2027DefaultArg(t *testing.T) {
 		}
 	}
 }
+
+// TestUpgrade2027ArgTime checks that the harness reads the activation time
+// bchd was started with.
+func TestUpgrade2027ArgTime(t *testing.T) {
+	tests := []struct {
+		args []string
+		want uint64
+	}{
+		{nil, Upgrade2027Never},
+		{withUpgrade2027Default([]string{"--regtest"}), Upgrade2027Never},
+		{[]string{Upgrade2027Arg(Upgrade2027InThePast)}, 1605451779},
+		{[]string{"--upgrade2027activationtime", "1700000000"}, 1700000000},
+		{[]string{"--upgrade2027activationtimes=1"}, Upgrade2027Never},
+		{[]string{Upgrade2027Arg(5), Upgrade2027Arg(7)}, 7},
+	}
+	for _, test := range tests {
+		if got := upgrade2027ArgTime(test.args); got != test.want {
+			t.Errorf("%q: got %d, want %d", test.args, got, test.want)
+		}
+	}
+}

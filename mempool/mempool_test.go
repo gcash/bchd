@@ -174,7 +174,9 @@ func (p *poolHarness) CreateCoinbaseTx(blockHeight int32, numOutputs uint32) (*b
 		SignatureScript: coinbaseScript,
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
-	totalInput := blockchain.CalcBlockSubsidy(blockHeight, p.chainParams)
+	// The test chains never activate the upgrade to 1-minute blocks.
+	totalInput := blockchain.CalcBlockSubsidy(int64(blockHeight)*600, 600,
+		p.chainParams)
 	amountPerOutput := totalInput / int64(numOutputs)
 	remainder := totalInput - amountPerOutput*int64(numOutputs)
 	for i := range numOutputs {

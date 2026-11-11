@@ -18,6 +18,7 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/rpcclient"
+	"github.com/gcash/bchd/txscript"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -103,6 +104,11 @@ type Harness struct {
 	testNodeDir    string
 	maxConnRetries int
 	nodeNum        int
+
+	// upgrade2027Time is the upgrade 2027 activation time of the node and
+	// upgrade2027Block the activation block found last.
+	upgrade2027Time  uint64
+	upgrade2027Block *upgrade2027Block
 
 	sync.Mutex
 }
@@ -214,6 +220,8 @@ func New(activeNet *chaincfg.Params, handlers *rpcclient.NotificationHandlers,
 		ActiveNet:      activeNet,
 		nodeNum:        nodeNum,
 		wallet:         wallet,
+
+		upgrade2027Time: upgrade2027ArgTime(extraArgs),
 	}
 
 	// Track this newly created test instance within the package level
@@ -511,6 +519,20 @@ func (h *Harness) GenerateAndSubmitBlockWithCustomCoinbaseOutputs(
 	}
 	prevBlock := bchutil.NewBlock(mBlock)
 	prevBlock.SetHeight(prevBlockHeight)
+
+	// Pay the wallet the subsidy of the node's tick schedule, which
+	// CreateBlock does not know.
+	if len(mineTo) == 0 {
+		subsidy, err := h.nextBlockSubsidy(prevBlockHash, prevBlockHeight)
+		if err != nil {
+			return nil, err
+		}
+		pkScript, err := txscript.PayToAddrScript(h.wallet.coinbaseAddr)
+		if err != nil {
+			return nil, err
+		}
+		mineTo = []wire.TxOut{{Value: subsidy, PkScript: pkScript}}
+	}
 
 	// Create a new block including the specified transactions
 	newBlock, err := CreateBlock(prevBlock, txns, blockVersion,

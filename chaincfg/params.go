@@ -186,8 +186,8 @@ type Params struct {
 	// coins (coinbase transactions) can be spent.
 	CoinbaseMaturity uint16
 
-	// SubsidyReductionInterval is the interval of blocks before the subsidy
-	// is reduced.
+	// SubsidyReductionInterval is the interval, in 10-minute blocks of 600
+	// ticks, before the subsidy is reduced.
 	SubsidyReductionInterval int32
 
 	// TargetTimespan is the desired amount of time that should elapse

@@ -213,13 +213,14 @@ func standardCoinbaseScript(nextBlockHeight int32, extraNonce uint64) ([]byte, e
 		Script()
 }
 
-// createCoinbaseTx returns a coinbase transaction paying an appropriate subsidy
-// based on the passed block height to the provided address.  When the address
-// is nil, the coinbase transaction will instead be redeemable by anyone.
+// createCoinbaseTx returns a coinbase transaction paying the subsidy of the
+// block the passed tick schedule was built for to the provided address.  When
+// the address is nil, the coinbase transaction will instead be redeemable by
+// anyone.
 //
 // See the comment for NewBlockTemplate for more information about why the nil
 // address handling is useful.
-func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockHeight int32, addr bchutil.Address) (*bchutil.Tx, error) {
+func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, sched blockchain.TickSchedule, addr bchutil.Address) (*bchutil.Tx, error) {
 	// Create the script to pay to the provided payment address if one was
 	// specified.  Otherwise create a script that allows the coinbase to be
 	// redeemable by anyone.
@@ -252,10 +253,11 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
 	tx.AddTxOut(&wire.TxOut{
-		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
+		Value: blockchain.CalcBlockSubsidy(sched.NextBlockTicks(),
+			sched.BlockInterval(sched.NextHeight()), params),
 		PkScript: pkScript,
 	})
-	padCoinbaseScript(tx, minCoinbaseSize(params, nextBlockHeight))
+	padCoinbaseScript(tx, minCoinbaseSize(params, sched.NextHeight()))
 
 	return bchutil.NewTx(tx), nil
 }
@@ -433,7 +435,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 		return nil, err
 	}
 	coinbaseTx, err := createCoinbaseTx(g.chainParams, coinbaseScript,
-		nextBlockHeight, payToAddress)
+		best.TickSchedule, payToAddress)
 	if err != nil {
 		return nil, err
 	}

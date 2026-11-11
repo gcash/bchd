@@ -423,7 +423,7 @@ func TestHeaderTreeNodeMovesToIndex(t *testing.T) {
 	var headers []*wire.BlockHeader
 	for height := int32(6); height <= 8; height++ {
 		block := procTestBlock(t, prev.MsgBlock(), height-1,
-			CalcBlockSubsidy(height, params), params.PowLimitBits, nil)
+			legacySubsidy(height, params), params.PowLimitBits, nil)
 		next = append(next, block)
 		headers = append(headers, &block.MsgBlock().Header)
 		prev = block

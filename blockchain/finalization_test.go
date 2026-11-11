@@ -43,7 +43,7 @@ func finalizationTestChain(t *testing.T, depth int32, delay time.Duration) (*Blo
 	blocks := []*bchutil.Block{bchutil.NewBlock(params.GenesisBlock)}
 	for h := int32(1); h <= 5; h++ {
 		block := procTestBlock(t, blocks[h-1].MsgBlock(), h-1,
-			CalcBlockSubsidy(h, &params), params.PowLimitBits, nil)
+			legacySubsidy(h, &params), params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("block %d: %v", h, err)
 		}
@@ -65,7 +65,7 @@ func TestFinalization(t *testing.T) {
 	// A fork from block 2 is below the finalized block 3, one from block 3
 	// is not.
 	fork := procTestBlock(t, blocks[2].MsgBlock(), 2,
-		CalcBlockSubsidy(3, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(3, params)-1, params.PowLimitBits, nil)
 	_, _, err := chain.ProcessBlock(fork, BFNone)
 	var rerr RuleError
 	if !errors.As(err, &rerr) || rerr.ErrorCode != ErrForkBeforeFinalized {
@@ -73,7 +73,7 @@ func TestFinalization(t *testing.T) {
 			"ErrForkBeforeFinalized", err)
 	}
 	fork = procTestBlock(t, blocks[3].MsgBlock(), 3,
-		CalcBlockSubsidy(4, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(4, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(fork, BFNone); err != nil {
 		t.Fatalf("fork above the finalized block: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestReconsiderBeforeFinalized(t *testing.T) {
 	prev := blocks[2]
 	for h := int32(3); h <= 6; h++ {
 		fork := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(fork, BFNone); err != nil {
 			t.Fatalf("fork block %d: %v", h, err)
 		}
@@ -267,7 +267,7 @@ func TestFinalizeBlock(t *testing.T) {
 	var fork []*bchutil.Block
 	for h := int32(3); h <= 4; h++ {
 		block := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("fork block %d: %v", h, err)
 		}
@@ -330,7 +330,7 @@ func TestFinalizeBlock(t *testing.T) {
 		t.Fatalf("finalized %v after finalizing an ancestor", hash)
 	}
 	child := procTestBlock(t, blocks[5].MsgBlock(), 5,
-		CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+		legacySubsidy(6, params), params.PowLimitBits, nil)
 	_, _, err := chain.ProcessBlock(child, BFNone)
 	var rerr RuleError
 	if !errors.As(err, &rerr) {

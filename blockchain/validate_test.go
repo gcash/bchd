@@ -443,7 +443,7 @@ func TestTxVersionRule(t *testing.T) {
 			SignatureScript:  []byte{txscript.OP_DATA_2, byte(height), 0},
 			Sequence:         wire.MaxTxInSequenceNum,
 		})
-		cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, &params),
+		cb.AddTxOut(wire.NewTxOut(legacySubsidy(height, &params),
 			[]byte{txscript.OP_TRUE}, wire.TokenData{}))
 		cb.AddTxOut(padding)
 		return cb
@@ -816,7 +816,7 @@ func TestCoinbaseTokenRule(t *testing.T) {
 			SignatureScript:  []byte{txscript.OP_DATA_2, byte(height), 0},
 			Sequence:         wire.MaxTxInSequenceNum,
 		})
-		cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, &params),
+		cb.AddTxOut(wire.NewTxOut(legacySubsidy(height, &params),
 			[]byte{txscript.OP_TRUE}, wire.TokenData{}))
 		cb.AddTxOut(padding)
 		if extra != nil {

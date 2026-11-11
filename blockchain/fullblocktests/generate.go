@@ -313,8 +313,11 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		Sequence:        wire.MaxTxInSequenceNum,
 		SignatureScript: coinbaseScript,
 	})
+	// The test parameters never activate the upgrade to 1-minute blocks,
+	// so every block is a 600-tick block.
 	tx.AddTxOut(&wire.TxOut{
-		Value:    blockchain.CalcBlockSubsidy(blockHeight, g.params),
+		Value: blockchain.CalcBlockSubsidy(int64(blockHeight)*600, 600,
+			g.params),
 		PkScript: opTrueScript,
 	})
 

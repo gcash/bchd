@@ -25,7 +25,7 @@ func TestUnrequestedBlock(t *testing.T) {
 
 	// A fork with less work than the tip.
 	fork := procTestBlock(t, blocks[3].MsgBlock(), 3,
-		CalcBlockSubsidy(4, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(4, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(fork, BFUnrequested); !isUnrequested(err) {
 		t.Fatalf("unrequested low-work fork: got %v, want "+
 			"ErrUnrequestedBlock", err)
@@ -42,7 +42,7 @@ func TestUnrequestedBlock(t *testing.T) {
 	tip := chain.bestChain.Tip()
 	params.MinimumChainWork = new(big.Int).Lsh(tip.workSum, 1)
 	next := procTestBlock(t, blocks[5].MsgBlock(), 5,
-		CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+		legacySubsidy(6, params), params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(next, BFUnrequested); !isUnrequested(err) {
 		t.Fatalf("unrequested block below the minimum chain work: got "+
 			"%v, want ErrUnrequestedBlock", err)
@@ -50,7 +50,7 @@ func TestUnrequestedBlock(t *testing.T) {
 
 	// An unrequested orphan is checked when its parent arrives.
 	child := procTestBlock(t, next.MsgBlock(), 6,
-		CalcBlockSubsidy(7, params), params.PowLimitBits, nil)
+		legacySubsidy(7, params), params.PowLimitBits, nil)
 	_, isOrphan, err := chain.ProcessBlock(child, BFUnrequested)
 	if err != nil || !isOrphan {
 		t.Fatalf("unrequested orphan: orphan %v, err %v", isOrphan, err)

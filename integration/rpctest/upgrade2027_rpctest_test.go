@@ -66,11 +66,36 @@ func TestUpgrade2027ActivatedHarness(t *testing.T) {
 		t.Fatalf("node log lacks %q", want)
 	}
 
-	// Every coinbase pays 50 BCH, so it has to escape the forbidden shape.
-	// TODO: once the subsidy follows the block interval these pay under
-	// 25 BCH, so make one pay more to keep covering that case.
+	// Every coinbase is version 2, including those up to the activation
+	// block that pay 50 BCH and so must escape the forbidden shape.
 	for i, hash := range hashes {
 		checkCoinbaseVersion(t, h, i+1, hash)
+	}
+
+	// Blocks after the activation block pay a tenth of the subsidy, both
+	// from the node's templates and the harness's own blocks.  The genesis
+	// block is too old to activate, so block 1 at least pays 50 BCH.
+	activation, err := h.upgrade2027Height(hashes[9], 10)
+	if err != nil {
+		t.Fatalf("unable to find the activation block: %v", err)
+	}
+	if activation < 1 || activation > 4 {
+		t.Fatalf("activation block at %d, want one before block 5",
+			activation)
+	}
+	for i, hash := range hashes {
+		block, err := h.Node.GetBlock(hash)
+		if err != nil {
+			t.Fatalf("unable to get block %d: %v", i+1, err)
+		}
+		want := int64(500000000)
+		if int32(i+1) <= activation {
+			want = 5000000000
+		}
+		if v := block.Transactions[0].TxOut[0].Value; v != want {
+			t.Errorf("coinbase of block %d pays %d, want %d", i+1, v,
+				want)
+		}
 	}
 }
 

@@ -121,8 +121,11 @@ func createCoinbaseTx(coinbaseScript []byte, nextBlockHeight int32,
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
 	if len(mineTo) == 0 {
+		// Only the node knows whether the upgrade to 1-minute blocks has
+		// activated, so pay the subsidy of a 600-tick block.
 		tx.AddTxOut(&wire.TxOut{
-			Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, net),
+			Value: blockchain.CalcBlockSubsidy(
+				int64(nextBlockHeight)*600, 600, net),
 			PkScript: pkScript,
 		})
 	} else {
