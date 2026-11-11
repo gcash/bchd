@@ -4,7 +4,11 @@
 
 package chaincfg
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gcash/bchd/wire"
+)
 
 // TestInvalidHashStr ensures the newShaHashFromStr function panics when used to
 // with an invalid hash string.
@@ -98,6 +102,7 @@ func TestCheckpoints(t *testing.T) {
 		{&TestNet3Params, 1730264, "000000000001ce982fa29717a4ed233b0e5a7a8b9936a17fdeeccc5c1d0af795"},
 		{&TestNet4Params, 325709, "00000000000097a6ca206aa88b45a2158eea1a9ab8a49aed8f4b193d558e74b4"},
 		{&ChipNetParams, 325627, "000000002bb8a32bd6b1022e5370b10e7dc139770d626e1a0911e6b596cf3069"},
+		{&TempNetParams, 327989, "00000000e18af2c66d44a1bbfe165acc4b87a625d211a09e33d5ee61d35dcb66"},
 	}
 	for _, test := range tests {
 		checkpoints := test.params.Checkpoints
@@ -131,6 +136,7 @@ func TestMinimumChainWork(t *testing.T) {
 		{&TestNet3Params, "11fdbbe582349040762"},
 		{&TestNet4Params, "bd5a1b5bda45b5da"},
 		{&ChipNetParams, "7a3195391c4408f2"},
+		{&TempNetParams, "7a3195391c4408f2"},
 		{&RegressionNetParams, ""},
 		{&SimNetParams, ""},
 	}
@@ -159,6 +165,7 @@ func TestDefaultConsensusBlockSize(t *testing.T) {
 		{&TestNet3Params, 32000000, true},
 		{&TestNet4Params, 2000000, true},
 		{&ChipNetParams, 2000000, true},
+		{&TempNetParams, 2000000, true},
 		{&RegressionNetParams, 32000000, false},
 		{&SimNetParams, 32000000, true},
 	}
@@ -188,6 +195,7 @@ func TestUpgrade2027ActivationTime(t *testing.T) {
 		{&TestNet3Params, 1810382400},
 		{&TestNet4Params, 1810382400},
 		{&ChipNetParams, 1794744000},
+		{&TempNetParams, 1792065600},
 		{&RegressionNetParams, 1810382400},
 		{&SimNetParams, 1810382400},
 	}
@@ -197,5 +205,72 @@ func TestUpgrade2027ActivationTime(t *testing.T) {
 			t.Errorf("%s: upgrade 2027 activation time %d, want %d",
 				test.params.Name, got, test.time)
 		}
+	}
+}
+
+// TestTempNetParams ensures tempnet is chipnet with the May 2027 upgrade
+// activated on 2026-10-15, its own DNS seeds and a checkpoint at the first
+// block after the fork, and that deriving it leaves chipnet unchanged.
+func TestTempNetParams(t *testing.T) {
+	if TempNetParams.Name != "tempnet" || TempNetParams.Net != wire.ChipNet ||
+		TempNetParams.DefaultPort != "48333" {
+
+		t.Fatalf("got name %q, net %v, port %s", TempNetParams.Name,
+			TempNetParams.Net, TempNetParams.DefaultPort)
+	}
+	if *TempNetParams.GenesisHash != *ChipNetParams.GenesisHash ||
+		TempNetParams.AsertDifficultyAnchorHeight !=
+			ChipNetParams.AsertDifficultyAnchorHeight ||
+		TempNetParams.ABLAConfig != ChipNetParams.ABLAConfig ||
+		TempNetParams.CashAddressPrefix != "bchtest" {
+
+		t.Fatal("tempnet does not share chipnet's chain parameters")
+	}
+
+	wantSeeds := []DNSSeed{
+		{"tempnet.bitjson.com", false},
+		{"chipnet.bitjson.com", true},
+	}
+	if len(TempNetParams.DNSSeeds) != len(wantSeeds) {
+		t.Fatalf("got DNS seeds %v, want %v", TempNetParams.DNSSeeds,
+			wantSeeds)
+	}
+	for i, seed := range wantSeeds {
+		if TempNetParams.DNSSeeds[i] != seed {
+			t.Errorf("DNS seed %d: got %v, want %v", i,
+				TempNetParams.DNSSeeds[i], seed)
+		}
+	}
+
+	// The checkpoints are chipnet's and the fork block, none with a UTXO
+	// set to fast sync from.
+	chip, temp := ChipNetParams.Checkpoints, TempNetParams.Checkpoints
+	if len(temp) != len(chip)+1 {
+		t.Fatalf("got %d checkpoints, want %d", len(temp), len(chip)+1)
+	}
+	for i := range chip {
+		if temp[i].Height != chip[i].Height ||
+			*temp[i].Hash != *chip[i].Hash {
+
+			t.Errorf("checkpoint %d: got %d %v, want chipnet's %d %v",
+				i, temp[i].Height, temp[i].Hash, chip[i].Height,
+				chip[i].Hash)
+		}
+	}
+	for _, checkpoint := range temp {
+		if checkpoint.UtxoSetHash != nil ||
+			len(checkpoint.UtxoSetSources) != 0 ||
+			checkpoint.UtxoSetSize != 0 {
+
+			t.Errorf("checkpoint %d has a UTXO set", checkpoint.Height)
+		}
+	}
+	if last := chip[len(chip)-1]; last.Height != 325627 {
+		t.Errorf("chipnet's latest checkpoint is now %d", last.Height)
+	}
+	if len(ChipNetParams.DNSSeeds) != 2 ||
+		ChipNetParams.DNSSeeds[0].Host != "chipnet-seed.bchd.cash" {
+
+		t.Errorf("chipnet DNS seeds changed: %v", ChipNetParams.DNSSeeds)
 	}
 }
