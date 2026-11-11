@@ -1,0 +1,741 @@
+{
+  "description": "Tick-normalized height-mode time-lock vectors: nLockTime, nSequence, and coinbase maturity. T(x) is the cumulative tick of block x, inclusive of its own interval, from the schedule. Height-mode predicates: nLockTime is strict and absolute — final in block b iff T(b) > 600*lockTime; nSequence is weak and relative — mature in block b iff T(b) - T(fundingBlock) >= 600*relativeLock; coinbase maturity is weak and absolute — spendable in block b iff T(b) - T(creationBlock) >= 60,000. Mempool forms use T(tip+1) from the schedule, never T(tip)+tau(tip). BCHN escape clauses: nLockTime==0 is final everywhere; every-input-SEQUENCE_FINAL is final regardless of nLockTime. A coinbase transaction is exempt from both predicates: it is always final, whatever its nLockTime and whatever the nSequence of its single input (CHIP: Coinbase Exemption). The exemption is a scope restriction on the predicates, so it lives in the caller and the evaluators are coinbase-agnostic; the lock_coinbase_* vectors model that short circuit via `subjectIsCoinbase`, and lock_noncoinbase_bip54_twin pins that an identical non-coinbase is still bound. Coinbase maturity is unaffected, because it reads the spent output's height and a coinbase spends none. MTP-mode comparison and the LOCKTIME_THRESHOLD split are unchanged and out of scope. Every expected value is a hand-derived golden pin; the generator verifies the shared reference evaluators (timelock_ticks.h) against the pins and refuses to emit on any mismatch. All integer values are decimal strings to preserve full 64-bit precision.",
+  "constants": {
+    "BASE_BLOCK_INTERVAL_TIME": "600",
+    "LOCK_UNIT_TICKS": "600",
+    "COINBASE_MATURITY_TICKS": "60000",
+    "ACTIVATION_HEIGHT_ILLUSTRATION": "1000000"
+  },
+  "schedules": [
+    {
+      "name": "empty",
+      "schedule": []
+    },
+    {
+      "name": "activation_1M",
+      "schedule": [
+        {
+          "height": "1000000",
+          "tau": "60"
+        }
+      ]
+    },
+    {
+      "name": "multi",
+      "schedule": [
+        {
+          "height": "50000",
+          "tau": "300"
+        },
+        {
+          "height": "100000",
+          "tau": "600"
+        },
+        {
+          "height": "150000",
+          "tau": "60"
+        },
+        {
+          "height": "200000",
+          "tau": "600"
+        }
+      ]
+    }
+  ],
+  "vectors": [
+    {
+      "name": "lock_escape_zero",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "0",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "nLockTime==0 is final at every block via the BCHN escape, even with a non-final input sequence"
+    },
+    {
+      "name": "lock_escape_all_seqfinal",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000011",
+        "inputSequence": "0xffffffff"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000000",
+            "result": true
+          },
+          {
+            "block": "1000111",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "absolute nLockTime is a no-op when every input is SEQUENCE_FINAL; the CHIP example release at 1,000,111 only holds with a non-final sequence"
+    },
+    {
+      "name": "lock_pre_L1",
+      "schedule": "empty",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "2",
+        "blocks": [
+          {
+            "block": "1",
+            "result": false
+          },
+          {
+            "block": "2",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "strict: T(b) > 600 means T(1)=600 is still non-final"
+    },
+    {
+      "name": "lock_pre_L100",
+      "schedule": "empty",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "100",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "101",
+        "blocks": [
+          {
+            "block": "100",
+            "result": false
+          },
+          {
+            "block": "101",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "legacy release block = L+1"
+    },
+    {
+      "name": "seq_pre_n1_c100",
+      "schedule": "empty",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "100",
+        "relativeLock": "1"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "101",
+        "blocks": [
+          {
+            "block": "100",
+            "result": false
+          },
+          {
+            "block": "101",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "weak: equality at c+n satisfies"
+    },
+    {
+      "name": "seq_pre_n6_c100",
+      "schedule": "empty",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "100",
+        "relativeLock": "6"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "106",
+        "blocks": [
+          {
+            "block": "105",
+            "result": false
+          },
+          {
+            "block": "106",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "legacy release block = c+n"
+    },
+    {
+      "name": "mat_pre_c0",
+      "schedule": "empty",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "0"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "100",
+        "blocks": [
+          {
+            "block": "99",
+            "result": false
+          },
+          {
+            "block": "100",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "genesis coinbase: 60,000 ticks = 100 blocks"
+    },
+    {
+      "name": "mat_pre_c500000",
+      "schedule": "empty",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "500000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "500100",
+        "blocks": [
+          {
+            "block": "500099",
+            "result": false
+          },
+          {
+            "block": "500100",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "legacy release block = c+100"
+    },
+    {
+      "name": "lock_post_doc",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000011",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000111",
+        "blocks": [
+          {
+            "block": "1000110",
+            "result": false
+          },
+          {
+            "block": "1000111",
+            "result": true
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "1000109",
+            "result": false
+          },
+          {
+            "tip": "1000110",
+            "result": true
+          }
+        ]
+      },
+      "note": "CHIP example: nLocktime=1,000,011 releases at block 1,000,111, the first block whose tick exceeds 600*1,000,011 = 600,006,600"
+    },
+    {
+      "name": "lock_post_600grid",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000010",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000101",
+        "blocks": [
+          {
+            "block": "1000100",
+            "result": false
+          },
+          {
+            "block": "1000101",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "strictness where 600*L (600,006,000) is exactly a block tick (block 1,000,100)"
+    },
+    {
+      "name": "lock_post_Ha",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000000",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000001",
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "lock naming the activation height releases at the first 1-minute block; L <= H_a keeps release = L+1"
+    },
+    {
+      "name": "lock_post_pre_Ha",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "999999",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000000",
+        "blocks": [
+          {
+            "block": "999999",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "pre-activation lock: release = L+1 exactly as legacy, because blocks <= H_a are 600-tick"
+    },
+    {
+      "name": "seq_post_fund_Ha_n1",
+      "schedule": "activation_1M",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "1000000",
+        "relativeLock": "1"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000010",
+        "blocks": [
+          {
+            "block": "1000009",
+            "result": false
+          },
+          {
+            "block": "1000010",
+            "result": true
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "1000000",
+            "result": false
+          },
+          {
+            "tip": "1000009",
+            "result": true
+          }
+        ]
+      },
+      "note": "one normalized unit (600 ticks) = ten 1-minute blocks; mempool MUST use T(tip+1) from the schedule, not T(tip)+tau(tip)"
+    },
+    {
+      "name": "seq_post_n1_c1000010",
+      "schedule": "activation_1M",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "1000010",
+        "relativeLock": "1"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000020",
+        "blocks": [
+          {
+            "block": "1000019",
+            "result": false
+          },
+          {
+            "block": "1000020",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "post-activation funding: +10 blocks per normalized unit"
+    },
+    {
+      "name": "seq_post_straddle",
+      "schedule": "activation_1M",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "999990",
+        "relativeLock": "10"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000000",
+        "blocks": [
+          {
+            "block": "999999",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "funded 10 blocks before activation with n=10 releases exactly at activation"
+    },
+    {
+      "name": "seq_multi_300tick",
+      "schedule": "multi",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "50000",
+        "relativeLock": "1"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "50002",
+        "blocks": [
+          {
+            "block": "50001",
+            "result": false
+          },
+          {
+            "block": "50002",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "in a 300-tick segment one normalized unit = 2 blocks"
+    },
+    {
+      "name": "mat_post_fund_Ha",
+      "schedule": "activation_1M",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "1000000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1001000",
+        "blocks": [
+          {
+            "block": "1000999",
+            "result": false
+          },
+          {
+            "block": "1001000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "coinbase created in the last 600-tick block matures after exactly 1,000 one-minute blocks"
+    },
+    {
+      "name": "mat_post_c1001000",
+      "schedule": "activation_1M",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "1001000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1002000",
+        "blocks": [
+          {
+            "block": "1001999",
+            "result": false
+          },
+          {
+            "block": "1002000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "post-activation coinbase: 60,000 ticks = 1,000 blocks"
+    },
+    {
+      "name": "mat_post_straddle",
+      "schedule": "activation_1M",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "999900"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000000",
+        "blocks": [
+          {
+            "block": "999999",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "coinbase 100 blocks before activation (60,000 ticks) matures exactly at activation"
+    },
+    {
+      "name": "mat_multi_300tick",
+      "schedule": "multi",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "60000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "60200",
+        "blocks": [
+          {
+            "block": "60199",
+            "result": false
+          },
+          {
+            "block": "60200",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "60,000 ticks = 200 blocks in a 300-tick segment"
+    },
+    {
+      "name": "lock_multi_300tick",
+      "schedule": "multi",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "50100",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "50201",
+        "blocks": [
+          {
+            "block": "50200",
+            "result": false
+          },
+          {
+            "block": "50201",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "strictness where 600*L (30,060,000) is exactly a block tick inside a 300-tick segment"
+    },
+    {
+      "name": "lock_coinbase_bip54_h_plus_2",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000001",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000002",
+            "result": true
+          },
+          {
+            "block": "1000010",
+            "result": true
+          },
+          {
+            "block": "1000011",
+            "result": true
+          },
+          {
+            "block": "2000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "BIP-54 template stamping nLockTime = height - 1 with a non-final input sequence, as it lands in block H_a + 2 (1,000,002) where the value is 1,000,001. Without the exemption the raw predicate calls 1,000,002..1,000,010 non-final -- 600 * 1,000,001 = 600,000,600 is not exceeded by T(1,000,002) = 600,000,120, and the equality case at 1,000,010 is non-final too -- recovering only at 1,000,011. The bypass makes every block final, which is what keeps those templates valid."
+    },
+    {
+      "name": "lock_coinbase_bip54_h_plus_1",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000000",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000000",
+            "result": true
+          },
+          {
+            "block": "1000001",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "The other half of the BIP-54 pair: block H_a + 1 carries nLockTime = 1,000,000, whose boundary 600,000,000 is already cleared by T(1,000,001) = 600,000,060, so the raw predicate would call this block final on its own. Pinned to show the exemption is not needed here -- and, with the twin below, that it is a scope restriction rather than a value-dependent special case."
+    },
+    {
+      "name": "lock_coinbase_time_mode",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "600000000",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000001",
+            "result": true
+          },
+          {
+            "block": "2000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "Time-mode nLockTime (>= LOCKTIME_THRESHOLD), far ahead of any block timestamp: the raw time-mode arm reports non-final everywhere here, since the harness supplies nBlockTime = 0. The exemption covers the time-mode arm as well, so this is final throughout."
+    },
+    {
+      "name": "lock_coinbase_zero_sequence",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000011",
+        "inputSequence": "0x00000000"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000011",
+            "result": true
+          },
+          {
+            "block": "1000111",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "nSequence 0x00000000 with a height-mode locktime naming 1,000,011: the raw predicate only clears it at 1,000,111. 'Whatever the nSequence' is the arm pinned here -- the exemption does not read it."
+    },
+    {
+      "name": "lock_noncoinbase_bip54_twin",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1000001",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000011",
+        "blocks": [
+          {
+            "block": "1000002",
+            "result": false
+          },
+          {
+            "block": "1000010",
+            "result": false
+          },
+          {
+            "block": "1000011",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "Non-coinbase twin of lock_coinbase_bip54_h_plus_2: identical fields, only the subject differs, and the raw predicate binds unchanged. This is what makes the exemption a restriction on scope rather than a relaxation of the two predicates for everyone."
+    }
+  ]
+}

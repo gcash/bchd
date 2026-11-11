@@ -1,0 +1,3033 @@
+{
+  "description": "Tick-scaled block subsidy vectors, full schedule. halvings = chunk(tick) / chunks_per_era, where chunk(tick) = ceil(tick / 600) is the 600-tick chunk containing the block's interval and chunks_per_era is the network's halving interval in chunks (210,000 on the BCH networks, 150 on regtest); subsidy = ((50e8 >> halvings) * tau) / 600. On the tau-600 schedule chunk(h) == h, so this equals the legacy height/chunks_per_era form at every height. Keying on the chunk (not the raw end tick) is required: under a 60-tick cadence a chunk holds ten blocks, and only its last has an end tick on the chunk boundary, so a raw tick key would assign nine of them the previous era's double subsidy. With the chunk key every era total equals the legacy ideal up to the per-block truncation, and the activation grand total is 20,999,999.7270 BCH (the documented 0.2499 BCH shortfall); a raw tick key would give 21,000,002.5395 BCH. On tau 60 a block's subsidy equals the tau-600 subsidy at the same tick / 10 with integer truncation, exact for every halving. `chunk` is tick / 600. Halving ticks are schedule-independent; halving heights are not. Era tables give per-era block counts and totals. Every schedule emitted here belongs to a BCH network and so uses 210,000 chunks per era; elapsed era length is chunks_per_era * 600 ticks, i.e. 126,000,000 ticks on these networks. Regtest's 150-chunk era is pinned in the self-test only. Short-interval schedules are spot-checked at the first, last nonzero, and first zero halving, with grand totals emitted but not fully tabulated: 3 s changing at block 123,456, and 1 s from block 1. The 3 s total matches the CHIP shortfall table's row exactly. The 1 s total is 200 satoshis above its row, because the table assumes a first era of 126,000,000 equal-interval blocks, whereas the actual first era holds the 600-tick genesis block in place of 600 one-second blocks (5e9 mod (600/tau), zero for tau 3 and 60, at most 200 satoshis).",
+  "constants": {
+    "CHUNKS_PER_ERA_BCH": "210000",
+    "CHUNKS_PER_ERA_REGTEST": "150",
+    "TICKS_PER_ERA_BCH": "126000000",
+    "TICKS_PER_ERA_REGTEST": "90000",
+    "BASE_SUBSIDY_BCH": "50",
+    "COIN_SATS": "100000000",
+    "MAX_HALVINGS": "64",
+    "LAST_NONZERO_ERA_600": "32",
+    "LAST_NONZERO_ERA_60": "28",
+    "LAST_NONZERO_ERA_TAU3": "24",
+    "LAST_NONZERO_ERA_TAU1": "22"
+  },
+  "schedules": [
+    {
+      "name": "empty",
+      "schedule": []
+    },
+    {
+      "name": "activation_1M",
+      "schedule": [
+        {
+          "height": "1000000",
+          "tau": "60"
+        }
+      ]
+    },
+    {
+      "name": "tau3_123456",
+      "schedule": [
+        {
+          "height": "123456",
+          "tau": "3"
+        }
+      ]
+    },
+    {
+      "name": "tau1_0",
+      "schedule": [
+        {
+          "height": "0",
+          "tau": "1"
+        }
+      ]
+    }
+  ],
+  "halvingsLegacy": [
+    {
+      "schedule": "empty",
+      "halving": "1",
+      "boundaryChunk": "210000",
+      "boundaryTick": "126000000",
+      "boundaryHeight": "210000",
+      "before": {
+        "height": "209999",
+        "tick": "125999400",
+        "chunk": "209999",
+        "tau": "600",
+        "subsidySats": "5000000000",
+        "halvingsCount": "0"
+      },
+      "at": {
+        "height": "210000",
+        "tick": "126000000",
+        "chunk": "210000",
+        "tau": "600",
+        "subsidySats": "2500000000",
+        "halvingsCount": "1"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "2",
+      "boundaryChunk": "420000",
+      "boundaryTick": "252000000",
+      "boundaryHeight": "420000",
+      "before": {
+        "height": "419999",
+        "tick": "251999400",
+        "chunk": "419999",
+        "tau": "600",
+        "subsidySats": "2500000000",
+        "halvingsCount": "1"
+      },
+      "at": {
+        "height": "420000",
+        "tick": "252000000",
+        "chunk": "420000",
+        "tau": "600",
+        "subsidySats": "1250000000",
+        "halvingsCount": "2"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "3",
+      "boundaryChunk": "630000",
+      "boundaryTick": "378000000",
+      "boundaryHeight": "630000",
+      "before": {
+        "height": "629999",
+        "tick": "377999400",
+        "chunk": "629999",
+        "tau": "600",
+        "subsidySats": "1250000000",
+        "halvingsCount": "2"
+      },
+      "at": {
+        "height": "630000",
+        "tick": "378000000",
+        "chunk": "630000",
+        "tau": "600",
+        "subsidySats": "625000000",
+        "halvingsCount": "3"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "4",
+      "boundaryChunk": "840000",
+      "boundaryTick": "504000000",
+      "boundaryHeight": "840000",
+      "before": {
+        "height": "839999",
+        "tick": "503999400",
+        "chunk": "839999",
+        "tau": "600",
+        "subsidySats": "625000000",
+        "halvingsCount": "3"
+      },
+      "at": {
+        "height": "840000",
+        "tick": "504000000",
+        "chunk": "840000",
+        "tau": "600",
+        "subsidySats": "312500000",
+        "halvingsCount": "4"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "5",
+      "boundaryChunk": "1050000",
+      "boundaryTick": "630000000",
+      "boundaryHeight": "1050000",
+      "before": {
+        "height": "1049999",
+        "tick": "629999400",
+        "chunk": "1049999",
+        "tau": "600",
+        "subsidySats": "312500000",
+        "halvingsCount": "4"
+      },
+      "at": {
+        "height": "1050000",
+        "tick": "630000000",
+        "chunk": "1050000",
+        "tau": "600",
+        "subsidySats": "156250000",
+        "halvingsCount": "5"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "6",
+      "boundaryChunk": "1260000",
+      "boundaryTick": "756000000",
+      "boundaryHeight": "1260000",
+      "before": {
+        "height": "1259999",
+        "tick": "755999400",
+        "chunk": "1259999",
+        "tau": "600",
+        "subsidySats": "156250000",
+        "halvingsCount": "5"
+      },
+      "at": {
+        "height": "1260000",
+        "tick": "756000000",
+        "chunk": "1260000",
+        "tau": "600",
+        "subsidySats": "78125000",
+        "halvingsCount": "6"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "7",
+      "boundaryChunk": "1470000",
+      "boundaryTick": "882000000",
+      "boundaryHeight": "1470000",
+      "before": {
+        "height": "1469999",
+        "tick": "881999400",
+        "chunk": "1469999",
+        "tau": "600",
+        "subsidySats": "78125000",
+        "halvingsCount": "6"
+      },
+      "at": {
+        "height": "1470000",
+        "tick": "882000000",
+        "chunk": "1470000",
+        "tau": "600",
+        "subsidySats": "39062500",
+        "halvingsCount": "7"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "8",
+      "boundaryChunk": "1680000",
+      "boundaryTick": "1008000000",
+      "boundaryHeight": "1680000",
+      "before": {
+        "height": "1679999",
+        "tick": "1007999400",
+        "chunk": "1679999",
+        "tau": "600",
+        "subsidySats": "39062500",
+        "halvingsCount": "7"
+      },
+      "at": {
+        "height": "1680000",
+        "tick": "1008000000",
+        "chunk": "1680000",
+        "tau": "600",
+        "subsidySats": "19531250",
+        "halvingsCount": "8"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "9",
+      "boundaryChunk": "1890000",
+      "boundaryTick": "1134000000",
+      "boundaryHeight": "1890000",
+      "before": {
+        "height": "1889999",
+        "tick": "1133999400",
+        "chunk": "1889999",
+        "tau": "600",
+        "subsidySats": "19531250",
+        "halvingsCount": "8"
+      },
+      "at": {
+        "height": "1890000",
+        "tick": "1134000000",
+        "chunk": "1890000",
+        "tau": "600",
+        "subsidySats": "9765625",
+        "halvingsCount": "9"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "10",
+      "boundaryChunk": "2100000",
+      "boundaryTick": "1260000000",
+      "boundaryHeight": "2100000",
+      "before": {
+        "height": "2099999",
+        "tick": "1259999400",
+        "chunk": "2099999",
+        "tau": "600",
+        "subsidySats": "9765625",
+        "halvingsCount": "9"
+      },
+      "at": {
+        "height": "2100000",
+        "tick": "1260000000",
+        "chunk": "2100000",
+        "tau": "600",
+        "subsidySats": "4882812",
+        "halvingsCount": "10"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "11",
+      "boundaryChunk": "2310000",
+      "boundaryTick": "1386000000",
+      "boundaryHeight": "2310000",
+      "before": {
+        "height": "2309999",
+        "tick": "1385999400",
+        "chunk": "2309999",
+        "tau": "600",
+        "subsidySats": "4882812",
+        "halvingsCount": "10"
+      },
+      "at": {
+        "height": "2310000",
+        "tick": "1386000000",
+        "chunk": "2310000",
+        "tau": "600",
+        "subsidySats": "2441406",
+        "halvingsCount": "11"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "12",
+      "boundaryChunk": "2520000",
+      "boundaryTick": "1512000000",
+      "boundaryHeight": "2520000",
+      "before": {
+        "height": "2519999",
+        "tick": "1511999400",
+        "chunk": "2519999",
+        "tau": "600",
+        "subsidySats": "2441406",
+        "halvingsCount": "11"
+      },
+      "at": {
+        "height": "2520000",
+        "tick": "1512000000",
+        "chunk": "2520000",
+        "tau": "600",
+        "subsidySats": "1220703",
+        "halvingsCount": "12"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "13",
+      "boundaryChunk": "2730000",
+      "boundaryTick": "1638000000",
+      "boundaryHeight": "2730000",
+      "before": {
+        "height": "2729999",
+        "tick": "1637999400",
+        "chunk": "2729999",
+        "tau": "600",
+        "subsidySats": "1220703",
+        "halvingsCount": "12"
+      },
+      "at": {
+        "height": "2730000",
+        "tick": "1638000000",
+        "chunk": "2730000",
+        "tau": "600",
+        "subsidySats": "610351",
+        "halvingsCount": "13"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "14",
+      "boundaryChunk": "2940000",
+      "boundaryTick": "1764000000",
+      "boundaryHeight": "2940000",
+      "before": {
+        "height": "2939999",
+        "tick": "1763999400",
+        "chunk": "2939999",
+        "tau": "600",
+        "subsidySats": "610351",
+        "halvingsCount": "13"
+      },
+      "at": {
+        "height": "2940000",
+        "tick": "1764000000",
+        "chunk": "2940000",
+        "tau": "600",
+        "subsidySats": "305175",
+        "halvingsCount": "14"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "15",
+      "boundaryChunk": "3150000",
+      "boundaryTick": "1890000000",
+      "boundaryHeight": "3150000",
+      "before": {
+        "height": "3149999",
+        "tick": "1889999400",
+        "chunk": "3149999",
+        "tau": "600",
+        "subsidySats": "305175",
+        "halvingsCount": "14"
+      },
+      "at": {
+        "height": "3150000",
+        "tick": "1890000000",
+        "chunk": "3150000",
+        "tau": "600",
+        "subsidySats": "152587",
+        "halvingsCount": "15"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "16",
+      "boundaryChunk": "3360000",
+      "boundaryTick": "2016000000",
+      "boundaryHeight": "3360000",
+      "before": {
+        "height": "3359999",
+        "tick": "2015999400",
+        "chunk": "3359999",
+        "tau": "600",
+        "subsidySats": "152587",
+        "halvingsCount": "15"
+      },
+      "at": {
+        "height": "3360000",
+        "tick": "2016000000",
+        "chunk": "3360000",
+        "tau": "600",
+        "subsidySats": "76293",
+        "halvingsCount": "16"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "17",
+      "boundaryChunk": "3570000",
+      "boundaryTick": "2142000000",
+      "boundaryHeight": "3570000",
+      "before": {
+        "height": "3569999",
+        "tick": "2141999400",
+        "chunk": "3569999",
+        "tau": "600",
+        "subsidySats": "76293",
+        "halvingsCount": "16"
+      },
+      "at": {
+        "height": "3570000",
+        "tick": "2142000000",
+        "chunk": "3570000",
+        "tau": "600",
+        "subsidySats": "38146",
+        "halvingsCount": "17"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "18",
+      "boundaryChunk": "3780000",
+      "boundaryTick": "2268000000",
+      "boundaryHeight": "3780000",
+      "before": {
+        "height": "3779999",
+        "tick": "2267999400",
+        "chunk": "3779999",
+        "tau": "600",
+        "subsidySats": "38146",
+        "halvingsCount": "17"
+      },
+      "at": {
+        "height": "3780000",
+        "tick": "2268000000",
+        "chunk": "3780000",
+        "tau": "600",
+        "subsidySats": "19073",
+        "halvingsCount": "18"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "19",
+      "boundaryChunk": "3990000",
+      "boundaryTick": "2394000000",
+      "boundaryHeight": "3990000",
+      "before": {
+        "height": "3989999",
+        "tick": "2393999400",
+        "chunk": "3989999",
+        "tau": "600",
+        "subsidySats": "19073",
+        "halvingsCount": "18"
+      },
+      "at": {
+        "height": "3990000",
+        "tick": "2394000000",
+        "chunk": "3990000",
+        "tau": "600",
+        "subsidySats": "9536",
+        "halvingsCount": "19"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "20",
+      "boundaryChunk": "4200000",
+      "boundaryTick": "2520000000",
+      "boundaryHeight": "4200000",
+      "before": {
+        "height": "4199999",
+        "tick": "2519999400",
+        "chunk": "4199999",
+        "tau": "600",
+        "subsidySats": "9536",
+        "halvingsCount": "19"
+      },
+      "at": {
+        "height": "4200000",
+        "tick": "2520000000",
+        "chunk": "4200000",
+        "tau": "600",
+        "subsidySats": "4768",
+        "halvingsCount": "20"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "21",
+      "boundaryChunk": "4410000",
+      "boundaryTick": "2646000000",
+      "boundaryHeight": "4410000",
+      "before": {
+        "height": "4409999",
+        "tick": "2645999400",
+        "chunk": "4409999",
+        "tau": "600",
+        "subsidySats": "4768",
+        "halvingsCount": "20"
+      },
+      "at": {
+        "height": "4410000",
+        "tick": "2646000000",
+        "chunk": "4410000",
+        "tau": "600",
+        "subsidySats": "2384",
+        "halvingsCount": "21"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "22",
+      "boundaryChunk": "4620000",
+      "boundaryTick": "2772000000",
+      "boundaryHeight": "4620000",
+      "before": {
+        "height": "4619999",
+        "tick": "2771999400",
+        "chunk": "4619999",
+        "tau": "600",
+        "subsidySats": "2384",
+        "halvingsCount": "21"
+      },
+      "at": {
+        "height": "4620000",
+        "tick": "2772000000",
+        "chunk": "4620000",
+        "tau": "600",
+        "subsidySats": "1192",
+        "halvingsCount": "22"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "23",
+      "boundaryChunk": "4830000",
+      "boundaryTick": "2898000000",
+      "boundaryHeight": "4830000",
+      "before": {
+        "height": "4829999",
+        "tick": "2897999400",
+        "chunk": "4829999",
+        "tau": "600",
+        "subsidySats": "1192",
+        "halvingsCount": "22"
+      },
+      "at": {
+        "height": "4830000",
+        "tick": "2898000000",
+        "chunk": "4830000",
+        "tau": "600",
+        "subsidySats": "596",
+        "halvingsCount": "23"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "24",
+      "boundaryChunk": "5040000",
+      "boundaryTick": "3024000000",
+      "boundaryHeight": "5040000",
+      "before": {
+        "height": "5039999",
+        "tick": "3023999400",
+        "chunk": "5039999",
+        "tau": "600",
+        "subsidySats": "596",
+        "halvingsCount": "23"
+      },
+      "at": {
+        "height": "5040000",
+        "tick": "3024000000",
+        "chunk": "5040000",
+        "tau": "600",
+        "subsidySats": "298",
+        "halvingsCount": "24"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "25",
+      "boundaryChunk": "5250000",
+      "boundaryTick": "3150000000",
+      "boundaryHeight": "5250000",
+      "before": {
+        "height": "5249999",
+        "tick": "3149999400",
+        "chunk": "5249999",
+        "tau": "600",
+        "subsidySats": "298",
+        "halvingsCount": "24"
+      },
+      "at": {
+        "height": "5250000",
+        "tick": "3150000000",
+        "chunk": "5250000",
+        "tau": "600",
+        "subsidySats": "149",
+        "halvingsCount": "25"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "26",
+      "boundaryChunk": "5460000",
+      "boundaryTick": "3276000000",
+      "boundaryHeight": "5460000",
+      "before": {
+        "height": "5459999",
+        "tick": "3275999400",
+        "chunk": "5459999",
+        "tau": "600",
+        "subsidySats": "149",
+        "halvingsCount": "25"
+      },
+      "at": {
+        "height": "5460000",
+        "tick": "3276000000",
+        "chunk": "5460000",
+        "tau": "600",
+        "subsidySats": "74",
+        "halvingsCount": "26"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "27",
+      "boundaryChunk": "5670000",
+      "boundaryTick": "3402000000",
+      "boundaryHeight": "5670000",
+      "before": {
+        "height": "5669999",
+        "tick": "3401999400",
+        "chunk": "5669999",
+        "tau": "600",
+        "subsidySats": "74",
+        "halvingsCount": "26"
+      },
+      "at": {
+        "height": "5670000",
+        "tick": "3402000000",
+        "chunk": "5670000",
+        "tau": "600",
+        "subsidySats": "37",
+        "halvingsCount": "27"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "28",
+      "boundaryChunk": "5880000",
+      "boundaryTick": "3528000000",
+      "boundaryHeight": "5880000",
+      "before": {
+        "height": "5879999",
+        "tick": "3527999400",
+        "chunk": "5879999",
+        "tau": "600",
+        "subsidySats": "37",
+        "halvingsCount": "27"
+      },
+      "at": {
+        "height": "5880000",
+        "tick": "3528000000",
+        "chunk": "5880000",
+        "tau": "600",
+        "subsidySats": "18",
+        "halvingsCount": "28"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "29",
+      "boundaryChunk": "6090000",
+      "boundaryTick": "3654000000",
+      "boundaryHeight": "6090000",
+      "before": {
+        "height": "6089999",
+        "tick": "3653999400",
+        "chunk": "6089999",
+        "tau": "600",
+        "subsidySats": "18",
+        "halvingsCount": "28"
+      },
+      "at": {
+        "height": "6090000",
+        "tick": "3654000000",
+        "chunk": "6090000",
+        "tau": "600",
+        "subsidySats": "9",
+        "halvingsCount": "29"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "30",
+      "boundaryChunk": "6300000",
+      "boundaryTick": "3780000000",
+      "boundaryHeight": "6300000",
+      "before": {
+        "height": "6299999",
+        "tick": "3779999400",
+        "chunk": "6299999",
+        "tau": "600",
+        "subsidySats": "9",
+        "halvingsCount": "29"
+      },
+      "at": {
+        "height": "6300000",
+        "tick": "3780000000",
+        "chunk": "6300000",
+        "tau": "600",
+        "subsidySats": "4",
+        "halvingsCount": "30"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "31",
+      "boundaryChunk": "6510000",
+      "boundaryTick": "3906000000",
+      "boundaryHeight": "6510000",
+      "before": {
+        "height": "6509999",
+        "tick": "3905999400",
+        "chunk": "6509999",
+        "tau": "600",
+        "subsidySats": "4",
+        "halvingsCount": "30"
+      },
+      "at": {
+        "height": "6510000",
+        "tick": "3906000000",
+        "chunk": "6510000",
+        "tau": "600",
+        "subsidySats": "2",
+        "halvingsCount": "31"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "32",
+      "boundaryChunk": "6720000",
+      "boundaryTick": "4032000000",
+      "boundaryHeight": "6720000",
+      "before": {
+        "height": "6719999",
+        "tick": "4031999400",
+        "chunk": "6719999",
+        "tau": "600",
+        "subsidySats": "2",
+        "halvingsCount": "31"
+      },
+      "at": {
+        "height": "6720000",
+        "tick": "4032000000",
+        "chunk": "6720000",
+        "tau": "600",
+        "subsidySats": "1",
+        "halvingsCount": "32"
+      }
+    },
+    {
+      "schedule": "empty",
+      "halving": "33",
+      "boundaryChunk": "6930000",
+      "boundaryTick": "4158000000",
+      "boundaryHeight": "6930000",
+      "before": {
+        "height": "6929999",
+        "tick": "4157999400",
+        "chunk": "6929999",
+        "tau": "600",
+        "subsidySats": "1",
+        "halvingsCount": "32"
+      },
+      "at": {
+        "height": "6930000",
+        "tick": "4158000000",
+        "chunk": "6930000",
+        "tau": "600",
+        "subsidySats": "0",
+        "halvingsCount": "33"
+      }
+    }
+  ],
+  "halvingsActivation": [
+    {
+      "schedule": "activation_1M",
+      "halving": "1",
+      "boundaryChunk": "210000",
+      "boundaryTick": "126000000",
+      "boundaryHeight": "210000",
+      "before": {
+        "height": "209999",
+        "tick": "125999400",
+        "chunk": "209999",
+        "tau": "600",
+        "subsidySats": "5000000000",
+        "halvingsCount": "0"
+      },
+      "at": {
+        "height": "210000",
+        "tick": "126000000",
+        "chunk": "210000",
+        "tau": "600",
+        "subsidySats": "2500000000",
+        "halvingsCount": "1"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "2",
+      "boundaryChunk": "420000",
+      "boundaryTick": "252000000",
+      "boundaryHeight": "420000",
+      "before": {
+        "height": "419999",
+        "tick": "251999400",
+        "chunk": "419999",
+        "tau": "600",
+        "subsidySats": "2500000000",
+        "halvingsCount": "1"
+      },
+      "at": {
+        "height": "420000",
+        "tick": "252000000",
+        "chunk": "420000",
+        "tau": "600",
+        "subsidySats": "1250000000",
+        "halvingsCount": "2"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "3",
+      "boundaryChunk": "630000",
+      "boundaryTick": "378000000",
+      "boundaryHeight": "630000",
+      "before": {
+        "height": "629999",
+        "tick": "377999400",
+        "chunk": "629999",
+        "tau": "600",
+        "subsidySats": "1250000000",
+        "halvingsCount": "2"
+      },
+      "at": {
+        "height": "630000",
+        "tick": "378000000",
+        "chunk": "630000",
+        "tau": "600",
+        "subsidySats": "625000000",
+        "halvingsCount": "3"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "4",
+      "boundaryChunk": "840000",
+      "boundaryTick": "504000000",
+      "boundaryHeight": "840000",
+      "before": {
+        "height": "839999",
+        "tick": "503999400",
+        "chunk": "839999",
+        "tau": "600",
+        "subsidySats": "625000000",
+        "halvingsCount": "3"
+      },
+      "at": {
+        "height": "840000",
+        "tick": "504000000",
+        "chunk": "840000",
+        "tau": "600",
+        "subsidySats": "312500000",
+        "halvingsCount": "4"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "5",
+      "boundaryChunk": "1050000",
+      "boundaryTick": "630000000",
+      "boundaryHeight": "1499991",
+      "before": {
+        "height": "1499990",
+        "tick": "629999400",
+        "chunk": "1049999",
+        "tau": "60",
+        "subsidySats": "31250000",
+        "halvingsCount": "4"
+      },
+      "at": {
+        "height": "1499991",
+        "tick": "629999460",
+        "chunk": "1050000",
+        "tau": "60",
+        "subsidySats": "15625000",
+        "halvingsCount": "5"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "6",
+      "boundaryChunk": "1260000",
+      "boundaryTick": "756000000",
+      "boundaryHeight": "3599991",
+      "before": {
+        "height": "3599990",
+        "tick": "755999400",
+        "chunk": "1259999",
+        "tau": "60",
+        "subsidySats": "15625000",
+        "halvingsCount": "5"
+      },
+      "at": {
+        "height": "3599991",
+        "tick": "755999460",
+        "chunk": "1260000",
+        "tau": "60",
+        "subsidySats": "7812500",
+        "halvingsCount": "6"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "7",
+      "boundaryChunk": "1470000",
+      "boundaryTick": "882000000",
+      "boundaryHeight": "5699991",
+      "before": {
+        "height": "5699990",
+        "tick": "881999400",
+        "chunk": "1469999",
+        "tau": "60",
+        "subsidySats": "7812500",
+        "halvingsCount": "6"
+      },
+      "at": {
+        "height": "5699991",
+        "tick": "881999460",
+        "chunk": "1470000",
+        "tau": "60",
+        "subsidySats": "3906250",
+        "halvingsCount": "7"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "8",
+      "boundaryChunk": "1680000",
+      "boundaryTick": "1008000000",
+      "boundaryHeight": "7799991",
+      "before": {
+        "height": "7799990",
+        "tick": "1007999400",
+        "chunk": "1679999",
+        "tau": "60",
+        "subsidySats": "3906250",
+        "halvingsCount": "7"
+      },
+      "at": {
+        "height": "7799991",
+        "tick": "1007999460",
+        "chunk": "1680000",
+        "tau": "60",
+        "subsidySats": "1953125",
+        "halvingsCount": "8"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "9",
+      "boundaryChunk": "1890000",
+      "boundaryTick": "1134000000",
+      "boundaryHeight": "9899991",
+      "before": {
+        "height": "9899990",
+        "tick": "1133999400",
+        "chunk": "1889999",
+        "tau": "60",
+        "subsidySats": "1953125",
+        "halvingsCount": "8"
+      },
+      "at": {
+        "height": "9899991",
+        "tick": "1133999460",
+        "chunk": "1890000",
+        "tau": "60",
+        "subsidySats": "976562",
+        "halvingsCount": "9"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "10",
+      "boundaryChunk": "2100000",
+      "boundaryTick": "1260000000",
+      "boundaryHeight": "11999991",
+      "before": {
+        "height": "11999990",
+        "tick": "1259999400",
+        "chunk": "2099999",
+        "tau": "60",
+        "subsidySats": "976562",
+        "halvingsCount": "9"
+      },
+      "at": {
+        "height": "11999991",
+        "tick": "1259999460",
+        "chunk": "2100000",
+        "tau": "60",
+        "subsidySats": "488281",
+        "halvingsCount": "10"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "11",
+      "boundaryChunk": "2310000",
+      "boundaryTick": "1386000000",
+      "boundaryHeight": "14099991",
+      "before": {
+        "height": "14099990",
+        "tick": "1385999400",
+        "chunk": "2309999",
+        "tau": "60",
+        "subsidySats": "488281",
+        "halvingsCount": "10"
+      },
+      "at": {
+        "height": "14099991",
+        "tick": "1385999460",
+        "chunk": "2310000",
+        "tau": "60",
+        "subsidySats": "244140",
+        "halvingsCount": "11"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "12",
+      "boundaryChunk": "2520000",
+      "boundaryTick": "1512000000",
+      "boundaryHeight": "16199991",
+      "before": {
+        "height": "16199990",
+        "tick": "1511999400",
+        "chunk": "2519999",
+        "tau": "60",
+        "subsidySats": "244140",
+        "halvingsCount": "11"
+      },
+      "at": {
+        "height": "16199991",
+        "tick": "1511999460",
+        "chunk": "2520000",
+        "tau": "60",
+        "subsidySats": "122070",
+        "halvingsCount": "12"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "13",
+      "boundaryChunk": "2730000",
+      "boundaryTick": "1638000000",
+      "boundaryHeight": "18299991",
+      "before": {
+        "height": "18299990",
+        "tick": "1637999400",
+        "chunk": "2729999",
+        "tau": "60",
+        "subsidySats": "122070",
+        "halvingsCount": "12"
+      },
+      "at": {
+        "height": "18299991",
+        "tick": "1637999460",
+        "chunk": "2730000",
+        "tau": "60",
+        "subsidySats": "61035",
+        "halvingsCount": "13"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "14",
+      "boundaryChunk": "2940000",
+      "boundaryTick": "1764000000",
+      "boundaryHeight": "20399991",
+      "before": {
+        "height": "20399990",
+        "tick": "1763999400",
+        "chunk": "2939999",
+        "tau": "60",
+        "subsidySats": "61035",
+        "halvingsCount": "13"
+      },
+      "at": {
+        "height": "20399991",
+        "tick": "1763999460",
+        "chunk": "2940000",
+        "tau": "60",
+        "subsidySats": "30517",
+        "halvingsCount": "14"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "15",
+      "boundaryChunk": "3150000",
+      "boundaryTick": "1890000000",
+      "boundaryHeight": "22499991",
+      "before": {
+        "height": "22499990",
+        "tick": "1889999400",
+        "chunk": "3149999",
+        "tau": "60",
+        "subsidySats": "30517",
+        "halvingsCount": "14"
+      },
+      "at": {
+        "height": "22499991",
+        "tick": "1889999460",
+        "chunk": "3150000",
+        "tau": "60",
+        "subsidySats": "15258",
+        "halvingsCount": "15"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "16",
+      "boundaryChunk": "3360000",
+      "boundaryTick": "2016000000",
+      "boundaryHeight": "24599991",
+      "before": {
+        "height": "24599990",
+        "tick": "2015999400",
+        "chunk": "3359999",
+        "tau": "60",
+        "subsidySats": "15258",
+        "halvingsCount": "15"
+      },
+      "at": {
+        "height": "24599991",
+        "tick": "2015999460",
+        "chunk": "3360000",
+        "tau": "60",
+        "subsidySats": "7629",
+        "halvingsCount": "16"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "17",
+      "boundaryChunk": "3570000",
+      "boundaryTick": "2142000000",
+      "boundaryHeight": "26699991",
+      "before": {
+        "height": "26699990",
+        "tick": "2141999400",
+        "chunk": "3569999",
+        "tau": "60",
+        "subsidySats": "7629",
+        "halvingsCount": "16"
+      },
+      "at": {
+        "height": "26699991",
+        "tick": "2141999460",
+        "chunk": "3570000",
+        "tau": "60",
+        "subsidySats": "3814",
+        "halvingsCount": "17"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "18",
+      "boundaryChunk": "3780000",
+      "boundaryTick": "2268000000",
+      "boundaryHeight": "28799991",
+      "before": {
+        "height": "28799990",
+        "tick": "2267999400",
+        "chunk": "3779999",
+        "tau": "60",
+        "subsidySats": "3814",
+        "halvingsCount": "17"
+      },
+      "at": {
+        "height": "28799991",
+        "tick": "2267999460",
+        "chunk": "3780000",
+        "tau": "60",
+        "subsidySats": "1907",
+        "halvingsCount": "18"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "19",
+      "boundaryChunk": "3990000",
+      "boundaryTick": "2394000000",
+      "boundaryHeight": "30899991",
+      "before": {
+        "height": "30899990",
+        "tick": "2393999400",
+        "chunk": "3989999",
+        "tau": "60",
+        "subsidySats": "1907",
+        "halvingsCount": "18"
+      },
+      "at": {
+        "height": "30899991",
+        "tick": "2393999460",
+        "chunk": "3990000",
+        "tau": "60",
+        "subsidySats": "953",
+        "halvingsCount": "19"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "20",
+      "boundaryChunk": "4200000",
+      "boundaryTick": "2520000000",
+      "boundaryHeight": "32999991",
+      "before": {
+        "height": "32999990",
+        "tick": "2519999400",
+        "chunk": "4199999",
+        "tau": "60",
+        "subsidySats": "953",
+        "halvingsCount": "19"
+      },
+      "at": {
+        "height": "32999991",
+        "tick": "2519999460",
+        "chunk": "4200000",
+        "tau": "60",
+        "subsidySats": "476",
+        "halvingsCount": "20"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "21",
+      "boundaryChunk": "4410000",
+      "boundaryTick": "2646000000",
+      "boundaryHeight": "35099991",
+      "before": {
+        "height": "35099990",
+        "tick": "2645999400",
+        "chunk": "4409999",
+        "tau": "60",
+        "subsidySats": "476",
+        "halvingsCount": "20"
+      },
+      "at": {
+        "height": "35099991",
+        "tick": "2645999460",
+        "chunk": "4410000",
+        "tau": "60",
+        "subsidySats": "238",
+        "halvingsCount": "21"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "22",
+      "boundaryChunk": "4620000",
+      "boundaryTick": "2772000000",
+      "boundaryHeight": "37199991",
+      "before": {
+        "height": "37199990",
+        "tick": "2771999400",
+        "chunk": "4619999",
+        "tau": "60",
+        "subsidySats": "238",
+        "halvingsCount": "21"
+      },
+      "at": {
+        "height": "37199991",
+        "tick": "2771999460",
+        "chunk": "4620000",
+        "tau": "60",
+        "subsidySats": "119",
+        "halvingsCount": "22"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "23",
+      "boundaryChunk": "4830000",
+      "boundaryTick": "2898000000",
+      "boundaryHeight": "39299991",
+      "before": {
+        "height": "39299990",
+        "tick": "2897999400",
+        "chunk": "4829999",
+        "tau": "60",
+        "subsidySats": "119",
+        "halvingsCount": "22"
+      },
+      "at": {
+        "height": "39299991",
+        "tick": "2897999460",
+        "chunk": "4830000",
+        "tau": "60",
+        "subsidySats": "59",
+        "halvingsCount": "23"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "24",
+      "boundaryChunk": "5040000",
+      "boundaryTick": "3024000000",
+      "boundaryHeight": "41399991",
+      "before": {
+        "height": "41399990",
+        "tick": "3023999400",
+        "chunk": "5039999",
+        "tau": "60",
+        "subsidySats": "59",
+        "halvingsCount": "23"
+      },
+      "at": {
+        "height": "41399991",
+        "tick": "3023999460",
+        "chunk": "5040000",
+        "tau": "60",
+        "subsidySats": "29",
+        "halvingsCount": "24"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "25",
+      "boundaryChunk": "5250000",
+      "boundaryTick": "3150000000",
+      "boundaryHeight": "43499991",
+      "before": {
+        "height": "43499990",
+        "tick": "3149999400",
+        "chunk": "5249999",
+        "tau": "60",
+        "subsidySats": "29",
+        "halvingsCount": "24"
+      },
+      "at": {
+        "height": "43499991",
+        "tick": "3149999460",
+        "chunk": "5250000",
+        "tau": "60",
+        "subsidySats": "14",
+        "halvingsCount": "25"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "26",
+      "boundaryChunk": "5460000",
+      "boundaryTick": "3276000000",
+      "boundaryHeight": "45599991",
+      "before": {
+        "height": "45599990",
+        "tick": "3275999400",
+        "chunk": "5459999",
+        "tau": "60",
+        "subsidySats": "14",
+        "halvingsCount": "25"
+      },
+      "at": {
+        "height": "45599991",
+        "tick": "3275999460",
+        "chunk": "5460000",
+        "tau": "60",
+        "subsidySats": "7",
+        "halvingsCount": "26"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "27",
+      "boundaryChunk": "5670000",
+      "boundaryTick": "3402000000",
+      "boundaryHeight": "47699991",
+      "before": {
+        "height": "47699990",
+        "tick": "3401999400",
+        "chunk": "5669999",
+        "tau": "60",
+        "subsidySats": "7",
+        "halvingsCount": "26"
+      },
+      "at": {
+        "height": "47699991",
+        "tick": "3401999460",
+        "chunk": "5670000",
+        "tau": "60",
+        "subsidySats": "3",
+        "halvingsCount": "27"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "28",
+      "boundaryChunk": "5880000",
+      "boundaryTick": "3528000000",
+      "boundaryHeight": "49799991",
+      "before": {
+        "height": "49799990",
+        "tick": "3527999400",
+        "chunk": "5879999",
+        "tau": "60",
+        "subsidySats": "3",
+        "halvingsCount": "27"
+      },
+      "at": {
+        "height": "49799991",
+        "tick": "3527999460",
+        "chunk": "5880000",
+        "tau": "60",
+        "subsidySats": "1",
+        "halvingsCount": "28"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "29",
+      "boundaryChunk": "6090000",
+      "boundaryTick": "3654000000",
+      "boundaryHeight": "51899991",
+      "before": {
+        "height": "51899990",
+        "tick": "3653999400",
+        "chunk": "6089999",
+        "tau": "60",
+        "subsidySats": "1",
+        "halvingsCount": "28"
+      },
+      "at": {
+        "height": "51899991",
+        "tick": "3653999460",
+        "chunk": "6090000",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "29"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "30",
+      "boundaryChunk": "6300000",
+      "boundaryTick": "3780000000",
+      "boundaryHeight": "53999991",
+      "before": {
+        "height": "53999990",
+        "tick": "3779999400",
+        "chunk": "6299999",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "29"
+      },
+      "at": {
+        "height": "53999991",
+        "tick": "3779999460",
+        "chunk": "6300000",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "30"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "31",
+      "boundaryChunk": "6510000",
+      "boundaryTick": "3906000000",
+      "boundaryHeight": "56099991",
+      "before": {
+        "height": "56099990",
+        "tick": "3905999400",
+        "chunk": "6509999",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "30"
+      },
+      "at": {
+        "height": "56099991",
+        "tick": "3905999460",
+        "chunk": "6510000",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "31"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "32",
+      "boundaryChunk": "6720000",
+      "boundaryTick": "4032000000",
+      "boundaryHeight": "58199991",
+      "before": {
+        "height": "58199990",
+        "tick": "4031999400",
+        "chunk": "6719999",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "31"
+      },
+      "at": {
+        "height": "58199991",
+        "tick": "4031999460",
+        "chunk": "6720000",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "32"
+      }
+    },
+    {
+      "schedule": "activation_1M",
+      "halving": "33",
+      "boundaryChunk": "6930000",
+      "boundaryTick": "4158000000",
+      "boundaryHeight": "60299991",
+      "before": {
+        "height": "60299990",
+        "tick": "4157999400",
+        "chunk": "6929999",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "32"
+      },
+      "at": {
+        "height": "60299991",
+        "tick": "4157999460",
+        "chunk": "6930000",
+        "tau": "60",
+        "subsidySats": "0",
+        "halvingsCount": "33"
+      }
+    }
+  ],
+  "erasLegacy": [
+    {
+      "schedule": "empty",
+      "era": "0",
+      "firstHeight": "0",
+      "lastHeight": "209999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "5000000000",
+      "subsidyLastBlockSats": "5000000000",
+      "eraTotalSats": "1050000000000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "1",
+      "firstHeight": "210000",
+      "lastHeight": "419999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "2500000000",
+      "subsidyLastBlockSats": "2500000000",
+      "eraTotalSats": "525000000000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "2",
+      "firstHeight": "420000",
+      "lastHeight": "629999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "1250000000",
+      "subsidyLastBlockSats": "1250000000",
+      "eraTotalSats": "262500000000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "3",
+      "firstHeight": "630000",
+      "lastHeight": "839999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "625000000",
+      "subsidyLastBlockSats": "625000000",
+      "eraTotalSats": "131250000000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "4",
+      "firstHeight": "840000",
+      "lastHeight": "1049999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "312500000",
+      "subsidyLastBlockSats": "312500000",
+      "eraTotalSats": "65625000000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "5",
+      "firstHeight": "1050000",
+      "lastHeight": "1259999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "156250000",
+      "subsidyLastBlockSats": "156250000",
+      "eraTotalSats": "32812500000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "6",
+      "firstHeight": "1260000",
+      "lastHeight": "1469999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "78125000",
+      "subsidyLastBlockSats": "78125000",
+      "eraTotalSats": "16406250000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "7",
+      "firstHeight": "1470000",
+      "lastHeight": "1679999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "39062500",
+      "subsidyLastBlockSats": "39062500",
+      "eraTotalSats": "8203125000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "8",
+      "firstHeight": "1680000",
+      "lastHeight": "1889999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "19531250",
+      "subsidyLastBlockSats": "19531250",
+      "eraTotalSats": "4101562500000"
+    },
+    {
+      "schedule": "empty",
+      "era": "9",
+      "firstHeight": "1890000",
+      "lastHeight": "2099999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "9765625",
+      "subsidyLastBlockSats": "9765625",
+      "eraTotalSats": "2050781250000"
+    },
+    {
+      "schedule": "empty",
+      "era": "10",
+      "firstHeight": "2100000",
+      "lastHeight": "2309999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "4882812",
+      "subsidyLastBlockSats": "4882812",
+      "eraTotalSats": "1025390520000"
+    },
+    {
+      "schedule": "empty",
+      "era": "11",
+      "firstHeight": "2310000",
+      "lastHeight": "2519999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "2441406",
+      "subsidyLastBlockSats": "2441406",
+      "eraTotalSats": "512695260000"
+    },
+    {
+      "schedule": "empty",
+      "era": "12",
+      "firstHeight": "2520000",
+      "lastHeight": "2729999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "1220703",
+      "subsidyLastBlockSats": "1220703",
+      "eraTotalSats": "256347630000"
+    },
+    {
+      "schedule": "empty",
+      "era": "13",
+      "firstHeight": "2730000",
+      "lastHeight": "2939999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "610351",
+      "subsidyLastBlockSats": "610351",
+      "eraTotalSats": "128173710000"
+    },
+    {
+      "schedule": "empty",
+      "era": "14",
+      "firstHeight": "2940000",
+      "lastHeight": "3149999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "305175",
+      "subsidyLastBlockSats": "305175",
+      "eraTotalSats": "64086750000"
+    },
+    {
+      "schedule": "empty",
+      "era": "15",
+      "firstHeight": "3150000",
+      "lastHeight": "3359999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "152587",
+      "subsidyLastBlockSats": "152587",
+      "eraTotalSats": "32043270000"
+    },
+    {
+      "schedule": "empty",
+      "era": "16",
+      "firstHeight": "3360000",
+      "lastHeight": "3569999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "76293",
+      "subsidyLastBlockSats": "76293",
+      "eraTotalSats": "16021530000"
+    },
+    {
+      "schedule": "empty",
+      "era": "17",
+      "firstHeight": "3570000",
+      "lastHeight": "3779999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "38146",
+      "subsidyLastBlockSats": "38146",
+      "eraTotalSats": "8010660000"
+    },
+    {
+      "schedule": "empty",
+      "era": "18",
+      "firstHeight": "3780000",
+      "lastHeight": "3989999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "19073",
+      "subsidyLastBlockSats": "19073",
+      "eraTotalSats": "4005330000"
+    },
+    {
+      "schedule": "empty",
+      "era": "19",
+      "firstHeight": "3990000",
+      "lastHeight": "4199999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "9536",
+      "subsidyLastBlockSats": "9536",
+      "eraTotalSats": "2002560000"
+    },
+    {
+      "schedule": "empty",
+      "era": "20",
+      "firstHeight": "4200000",
+      "lastHeight": "4409999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "4768",
+      "subsidyLastBlockSats": "4768",
+      "eraTotalSats": "1001280000"
+    },
+    {
+      "schedule": "empty",
+      "era": "21",
+      "firstHeight": "4410000",
+      "lastHeight": "4619999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "2384",
+      "subsidyLastBlockSats": "2384",
+      "eraTotalSats": "500640000"
+    },
+    {
+      "schedule": "empty",
+      "era": "22",
+      "firstHeight": "4620000",
+      "lastHeight": "4829999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "1192",
+      "subsidyLastBlockSats": "1192",
+      "eraTotalSats": "250320000"
+    },
+    {
+      "schedule": "empty",
+      "era": "23",
+      "firstHeight": "4830000",
+      "lastHeight": "5039999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "596",
+      "subsidyLastBlockSats": "596",
+      "eraTotalSats": "125160000"
+    },
+    {
+      "schedule": "empty",
+      "era": "24",
+      "firstHeight": "5040000",
+      "lastHeight": "5249999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "298",
+      "subsidyLastBlockSats": "298",
+      "eraTotalSats": "62580000"
+    },
+    {
+      "schedule": "empty",
+      "era": "25",
+      "firstHeight": "5250000",
+      "lastHeight": "5459999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "149",
+      "subsidyLastBlockSats": "149",
+      "eraTotalSats": "31290000"
+    },
+    {
+      "schedule": "empty",
+      "era": "26",
+      "firstHeight": "5460000",
+      "lastHeight": "5669999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "74",
+      "subsidyLastBlockSats": "74",
+      "eraTotalSats": "15540000"
+    },
+    {
+      "schedule": "empty",
+      "era": "27",
+      "firstHeight": "5670000",
+      "lastHeight": "5879999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "37",
+      "subsidyLastBlockSats": "37",
+      "eraTotalSats": "7770000"
+    },
+    {
+      "schedule": "empty",
+      "era": "28",
+      "firstHeight": "5880000",
+      "lastHeight": "6089999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "18",
+      "subsidyLastBlockSats": "18",
+      "eraTotalSats": "3780000"
+    },
+    {
+      "schedule": "empty",
+      "era": "29",
+      "firstHeight": "6090000",
+      "lastHeight": "6299999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "9",
+      "subsidyLastBlockSats": "9",
+      "eraTotalSats": "1890000"
+    },
+    {
+      "schedule": "empty",
+      "era": "30",
+      "firstHeight": "6300000",
+      "lastHeight": "6509999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "4",
+      "subsidyLastBlockSats": "4",
+      "eraTotalSats": "840000"
+    },
+    {
+      "schedule": "empty",
+      "era": "31",
+      "firstHeight": "6510000",
+      "lastHeight": "6719999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "2",
+      "subsidyLastBlockSats": "2",
+      "eraTotalSats": "420000"
+    },
+    {
+      "schedule": "empty",
+      "era": "32",
+      "firstHeight": "6720000",
+      "lastHeight": "6929999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "1",
+      "subsidyLastBlockSats": "1",
+      "eraTotalSats": "210000"
+    },
+    {
+      "schedule": "empty",
+      "era": "33",
+      "firstHeight": "6930000",
+      "lastHeight": "7139999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    }
+  ],
+  "erasActivation": [
+    {
+      "schedule": "activation_1M",
+      "era": "0",
+      "firstHeight": "0",
+      "lastHeight": "209999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "5000000000",
+      "subsidyLastBlockSats": "5000000000",
+      "eraTotalSats": "1050000000000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "1",
+      "firstHeight": "210000",
+      "lastHeight": "419999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "2500000000",
+      "subsidyLastBlockSats": "2500000000",
+      "eraTotalSats": "525000000000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "2",
+      "firstHeight": "420000",
+      "lastHeight": "629999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "1250000000",
+      "subsidyLastBlockSats": "1250000000",
+      "eraTotalSats": "262500000000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "3",
+      "firstHeight": "630000",
+      "lastHeight": "839999",
+      "blockCount": "210000",
+      "subsidyFirstBlockSats": "625000000",
+      "subsidyLastBlockSats": "625000000",
+      "eraTotalSats": "131250000000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "4",
+      "firstHeight": "840000",
+      "lastHeight": "1499990",
+      "blockCount": "659991",
+      "subsidyFirstBlockSats": "312500000",
+      "subsidyLastBlockSats": "31250000",
+      "eraTotalSats": "65625000000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "5",
+      "firstHeight": "1499991",
+      "lastHeight": "3599990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "15625000",
+      "subsidyLastBlockSats": "15625000",
+      "eraTotalSats": "32812500000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "6",
+      "firstHeight": "3599991",
+      "lastHeight": "5699990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "7812500",
+      "subsidyLastBlockSats": "7812500",
+      "eraTotalSats": "16406250000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "7",
+      "firstHeight": "5699991",
+      "lastHeight": "7799990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "3906250",
+      "subsidyLastBlockSats": "3906250",
+      "eraTotalSats": "8203125000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "8",
+      "firstHeight": "7799991",
+      "lastHeight": "9899990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "1953125",
+      "subsidyLastBlockSats": "1953125",
+      "eraTotalSats": "4101562500000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "9",
+      "firstHeight": "9899991",
+      "lastHeight": "11999990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "976562",
+      "subsidyLastBlockSats": "976562",
+      "eraTotalSats": "2050780200000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "10",
+      "firstHeight": "11999991",
+      "lastHeight": "14099990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "488281",
+      "subsidyLastBlockSats": "488281",
+      "eraTotalSats": "1025390100000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "11",
+      "firstHeight": "14099991",
+      "lastHeight": "16199990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "244140",
+      "subsidyLastBlockSats": "244140",
+      "eraTotalSats": "512694000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "12",
+      "firstHeight": "16199991",
+      "lastHeight": "18299990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "122070",
+      "subsidyLastBlockSats": "122070",
+      "eraTotalSats": "256347000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "13",
+      "firstHeight": "18299991",
+      "lastHeight": "20399990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "61035",
+      "subsidyLastBlockSats": "61035",
+      "eraTotalSats": "128173500000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "14",
+      "firstHeight": "20399991",
+      "lastHeight": "22499990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "30517",
+      "subsidyLastBlockSats": "30517",
+      "eraTotalSats": "64085700000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "15",
+      "firstHeight": "22499991",
+      "lastHeight": "24599990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "15258",
+      "subsidyLastBlockSats": "15258",
+      "eraTotalSats": "32041800000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "16",
+      "firstHeight": "24599991",
+      "lastHeight": "26699990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "7629",
+      "subsidyLastBlockSats": "7629",
+      "eraTotalSats": "16020900000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "17",
+      "firstHeight": "26699991",
+      "lastHeight": "28799990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "3814",
+      "subsidyLastBlockSats": "3814",
+      "eraTotalSats": "8009400000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "18",
+      "firstHeight": "28799991",
+      "lastHeight": "30899990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "1907",
+      "subsidyLastBlockSats": "1907",
+      "eraTotalSats": "4004700000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "19",
+      "firstHeight": "30899991",
+      "lastHeight": "32999990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "953",
+      "subsidyLastBlockSats": "953",
+      "eraTotalSats": "2001300000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "20",
+      "firstHeight": "32999991",
+      "lastHeight": "35099990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "476",
+      "subsidyLastBlockSats": "476",
+      "eraTotalSats": "999600000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "21",
+      "firstHeight": "35099991",
+      "lastHeight": "37199990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "238",
+      "subsidyLastBlockSats": "238",
+      "eraTotalSats": "499800000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "22",
+      "firstHeight": "37199991",
+      "lastHeight": "39299990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "119",
+      "subsidyLastBlockSats": "119",
+      "eraTotalSats": "249900000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "23",
+      "firstHeight": "39299991",
+      "lastHeight": "41399990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "59",
+      "subsidyLastBlockSats": "59",
+      "eraTotalSats": "123900000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "24",
+      "firstHeight": "41399991",
+      "lastHeight": "43499990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "29",
+      "subsidyLastBlockSats": "29",
+      "eraTotalSats": "60900000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "25",
+      "firstHeight": "43499991",
+      "lastHeight": "45599990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "14",
+      "subsidyLastBlockSats": "14",
+      "eraTotalSats": "29400000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "26",
+      "firstHeight": "45599991",
+      "lastHeight": "47699990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "7",
+      "subsidyLastBlockSats": "7",
+      "eraTotalSats": "14700000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "27",
+      "firstHeight": "47699991",
+      "lastHeight": "49799990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "3",
+      "subsidyLastBlockSats": "3",
+      "eraTotalSats": "6300000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "28",
+      "firstHeight": "49799991",
+      "lastHeight": "51899990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "1",
+      "subsidyLastBlockSats": "1",
+      "eraTotalSats": "2100000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "29",
+      "firstHeight": "51899991",
+      "lastHeight": "53999990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "30",
+      "firstHeight": "53999991",
+      "lastHeight": "56099990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "31",
+      "firstHeight": "56099991",
+      "lastHeight": "58199990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "32",
+      "firstHeight": "58199991",
+      "lastHeight": "60299990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "33",
+      "firstHeight": "60299991",
+      "lastHeight": "62399990",
+      "blockCount": "2100000",
+      "subsidyFirstBlockSats": "0",
+      "subsidyLastBlockSats": "0",
+      "eraTotalSats": "0"
+    }
+  ],
+  "halvingSpotChecks": [
+    {
+      "schedule": "tau3_123456",
+      "halving": "1",
+      "boundaryChunk": "210000",
+      "boundaryTick": "126000000",
+      "boundaryHeight": "17432057",
+      "before": {
+        "height": "17432056",
+        "tick": "125999400",
+        "chunk": "209999",
+        "tau": "3",
+        "subsidySats": "25000000",
+        "halvingsCount": "0"
+      },
+      "at": {
+        "height": "17432057",
+        "tick": "125999403",
+        "chunk": "210000",
+        "tau": "3",
+        "subsidySats": "12500000",
+        "halvingsCount": "1"
+      }
+    },
+    {
+      "schedule": "tau3_123456",
+      "halving": "24",
+      "boundaryChunk": "5040000",
+      "boundaryTick": "3024000000",
+      "boundaryHeight": "983432057",
+      "before": {
+        "height": "983432056",
+        "tick": "3023999400",
+        "chunk": "5039999",
+        "tau": "3",
+        "subsidySats": "2",
+        "halvingsCount": "23"
+      },
+      "at": {
+        "height": "983432057",
+        "tick": "3023999403",
+        "chunk": "5040000",
+        "tau": "3",
+        "subsidySats": "1",
+        "halvingsCount": "24"
+      }
+    },
+    {
+      "schedule": "tau3_123456",
+      "halving": "25",
+      "boundaryChunk": "5250000",
+      "boundaryTick": "3150000000",
+      "boundaryHeight": "1025432057",
+      "before": {
+        "height": "1025432056",
+        "tick": "3149999400",
+        "chunk": "5249999",
+        "tau": "3",
+        "subsidySats": "1",
+        "halvingsCount": "24"
+      },
+      "at": {
+        "height": "1025432057",
+        "tick": "3149999403",
+        "chunk": "5250000",
+        "tau": "3",
+        "subsidySats": "0",
+        "halvingsCount": "25"
+      }
+    },
+    {
+      "schedule": "tau1_0",
+      "halving": "1",
+      "boundaryChunk": "210000",
+      "boundaryTick": "126000000",
+      "boundaryHeight": "125999401",
+      "before": {
+        "height": "125999400",
+        "tick": "125999400",
+        "chunk": "209999",
+        "tau": "1",
+        "subsidySats": "8333333",
+        "halvingsCount": "0"
+      },
+      "at": {
+        "height": "125999401",
+        "tick": "125999401",
+        "chunk": "210000",
+        "tau": "1",
+        "subsidySats": "4166666",
+        "halvingsCount": "1"
+      }
+    },
+    {
+      "schedule": "tau1_0",
+      "halving": "22",
+      "boundaryChunk": "4620000",
+      "boundaryTick": "2772000000",
+      "boundaryHeight": "2771999401",
+      "before": {
+        "height": "2771999400",
+        "tick": "2771999400",
+        "chunk": "4619999",
+        "tau": "1",
+        "subsidySats": "3",
+        "halvingsCount": "21"
+      },
+      "at": {
+        "height": "2771999401",
+        "tick": "2771999401",
+        "chunk": "4620000",
+        "tau": "1",
+        "subsidySats": "1",
+        "halvingsCount": "22"
+      }
+    },
+    {
+      "schedule": "tau1_0",
+      "halving": "23",
+      "boundaryChunk": "4830000",
+      "boundaryTick": "2898000000",
+      "boundaryHeight": "2897999401",
+      "before": {
+        "height": "2897999400",
+        "tick": "2897999400",
+        "chunk": "4829999",
+        "tau": "1",
+        "subsidySats": "1",
+        "halvingsCount": "22"
+      },
+      "at": {
+        "height": "2897999401",
+        "tick": "2897999401",
+        "chunk": "4830000",
+        "tau": "1",
+        "subsidySats": "0",
+        "halvingsCount": "23"
+      }
+    }
+  ],
+  "cumulativeLegacy": [
+    {
+      "schedule": "empty",
+      "era": "0",
+      "throughHeight": "209999",
+      "throughTick": "125999400",
+      "eraTotalSats": "1050000000000000",
+      "cumulativeSats": "1050000000000000",
+      "cumulativeBCH": "10500000.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "1",
+      "throughHeight": "419999",
+      "throughTick": "251999400",
+      "eraTotalSats": "525000000000000",
+      "cumulativeSats": "1575000000000000",
+      "cumulativeBCH": "15750000.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "2",
+      "throughHeight": "629999",
+      "throughTick": "377999400",
+      "eraTotalSats": "262500000000000",
+      "cumulativeSats": "1837500000000000",
+      "cumulativeBCH": "18375000.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "3",
+      "throughHeight": "839999",
+      "throughTick": "503999400",
+      "eraTotalSats": "131250000000000",
+      "cumulativeSats": "1968750000000000",
+      "cumulativeBCH": "19687500.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "4",
+      "throughHeight": "1049999",
+      "throughTick": "629999400",
+      "eraTotalSats": "65625000000000",
+      "cumulativeSats": "2034375000000000",
+      "cumulativeBCH": "20343750.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "5",
+      "throughHeight": "1259999",
+      "throughTick": "755999400",
+      "eraTotalSats": "32812500000000",
+      "cumulativeSats": "2067187500000000",
+      "cumulativeBCH": "20671875.000000"
+    },
+    {
+      "schedule": "empty",
+      "era": "6",
+      "throughHeight": "1469999",
+      "throughTick": "881999400",
+      "eraTotalSats": "16406250000000",
+      "cumulativeSats": "2083593750000000",
+      "cumulativeBCH": "20835937.500000"
+    },
+    {
+      "schedule": "empty",
+      "era": "7",
+      "throughHeight": "1679999",
+      "throughTick": "1007999400",
+      "eraTotalSats": "8203125000000",
+      "cumulativeSats": "2091796875000000",
+      "cumulativeBCH": "20917968.750000"
+    },
+    {
+      "schedule": "empty",
+      "era": "8",
+      "throughHeight": "1889999",
+      "throughTick": "1133999400",
+      "eraTotalSats": "4101562500000",
+      "cumulativeSats": "2095898437500000",
+      "cumulativeBCH": "20958984.375000"
+    },
+    {
+      "schedule": "empty",
+      "era": "9",
+      "throughHeight": "2099999",
+      "throughTick": "1259999400",
+      "eraTotalSats": "2050781250000",
+      "cumulativeSats": "2097949218750000",
+      "cumulativeBCH": "20979492.187500"
+    },
+    {
+      "schedule": "empty",
+      "era": "10",
+      "throughHeight": "2309999",
+      "throughTick": "1385999400",
+      "eraTotalSats": "1025390520000",
+      "cumulativeSats": "2098974609270000",
+      "cumulativeBCH": "20989746.092700"
+    },
+    {
+      "schedule": "empty",
+      "era": "11",
+      "throughHeight": "2519999",
+      "throughTick": "1511999400",
+      "eraTotalSats": "512695260000",
+      "cumulativeSats": "2099487304530000",
+      "cumulativeBCH": "20994873.045300"
+    },
+    {
+      "schedule": "empty",
+      "era": "12",
+      "throughHeight": "2729999",
+      "throughTick": "1637999400",
+      "eraTotalSats": "256347630000",
+      "cumulativeSats": "2099743652160000",
+      "cumulativeBCH": "20997436.521600"
+    },
+    {
+      "schedule": "empty",
+      "era": "13",
+      "throughHeight": "2939999",
+      "throughTick": "1763999400",
+      "eraTotalSats": "128173710000",
+      "cumulativeSats": "2099871825870000",
+      "cumulativeBCH": "20998718.258700"
+    },
+    {
+      "schedule": "empty",
+      "era": "14",
+      "throughHeight": "3149999",
+      "throughTick": "1889999400",
+      "eraTotalSats": "64086750000",
+      "cumulativeSats": "2099935912620000",
+      "cumulativeBCH": "20999359.126200"
+    },
+    {
+      "schedule": "empty",
+      "era": "15",
+      "throughHeight": "3359999",
+      "throughTick": "2015999400",
+      "eraTotalSats": "32043270000",
+      "cumulativeSats": "2099967955890000",
+      "cumulativeBCH": "20999679.558900"
+    },
+    {
+      "schedule": "empty",
+      "era": "16",
+      "throughHeight": "3569999",
+      "throughTick": "2141999400",
+      "eraTotalSats": "16021530000",
+      "cumulativeSats": "2099983977420000",
+      "cumulativeBCH": "20999839.774200"
+    },
+    {
+      "schedule": "empty",
+      "era": "17",
+      "throughHeight": "3779999",
+      "throughTick": "2267999400",
+      "eraTotalSats": "8010660000",
+      "cumulativeSats": "2099991988080000",
+      "cumulativeBCH": "20999919.880800"
+    },
+    {
+      "schedule": "empty",
+      "era": "18",
+      "throughHeight": "3989999",
+      "throughTick": "2393999400",
+      "eraTotalSats": "4005330000",
+      "cumulativeSats": "2099995993410000",
+      "cumulativeBCH": "20999959.934100"
+    },
+    {
+      "schedule": "empty",
+      "era": "19",
+      "throughHeight": "4199999",
+      "throughTick": "2519999400",
+      "eraTotalSats": "2002560000",
+      "cumulativeSats": "2099997995970000",
+      "cumulativeBCH": "20999979.959700"
+    },
+    {
+      "schedule": "empty",
+      "era": "20",
+      "throughHeight": "4409999",
+      "throughTick": "2645999400",
+      "eraTotalSats": "1001280000",
+      "cumulativeSats": "2099998997250000",
+      "cumulativeBCH": "20999989.972500"
+    },
+    {
+      "schedule": "empty",
+      "era": "21",
+      "throughHeight": "4619999",
+      "throughTick": "2771999400",
+      "eraTotalSats": "500640000",
+      "cumulativeSats": "2099999497890000",
+      "cumulativeBCH": "20999994.978900"
+    },
+    {
+      "schedule": "empty",
+      "era": "22",
+      "throughHeight": "4829999",
+      "throughTick": "2897999400",
+      "eraTotalSats": "250320000",
+      "cumulativeSats": "2099999748210000",
+      "cumulativeBCH": "20999997.482100"
+    },
+    {
+      "schedule": "empty",
+      "era": "23",
+      "throughHeight": "5039999",
+      "throughTick": "3023999400",
+      "eraTotalSats": "125160000",
+      "cumulativeSats": "2099999873370000",
+      "cumulativeBCH": "20999998.733700"
+    },
+    {
+      "schedule": "empty",
+      "era": "24",
+      "throughHeight": "5249999",
+      "throughTick": "3149999400",
+      "eraTotalSats": "62580000",
+      "cumulativeSats": "2099999935950000",
+      "cumulativeBCH": "20999999.359500"
+    },
+    {
+      "schedule": "empty",
+      "era": "25",
+      "throughHeight": "5459999",
+      "throughTick": "3275999400",
+      "eraTotalSats": "31290000",
+      "cumulativeSats": "2099999967240000",
+      "cumulativeBCH": "20999999.672400"
+    },
+    {
+      "schedule": "empty",
+      "era": "26",
+      "throughHeight": "5669999",
+      "throughTick": "3401999400",
+      "eraTotalSats": "15540000",
+      "cumulativeSats": "2099999982780000",
+      "cumulativeBCH": "20999999.827800"
+    },
+    {
+      "schedule": "empty",
+      "era": "27",
+      "throughHeight": "5879999",
+      "throughTick": "3527999400",
+      "eraTotalSats": "7770000",
+      "cumulativeSats": "2099999990550000",
+      "cumulativeBCH": "20999999.905500"
+    },
+    {
+      "schedule": "empty",
+      "era": "28",
+      "throughHeight": "6089999",
+      "throughTick": "3653999400",
+      "eraTotalSats": "3780000",
+      "cumulativeSats": "2099999994330000",
+      "cumulativeBCH": "20999999.943300"
+    },
+    {
+      "schedule": "empty",
+      "era": "29",
+      "throughHeight": "6299999",
+      "throughTick": "3779999400",
+      "eraTotalSats": "1890000",
+      "cumulativeSats": "2099999996220000",
+      "cumulativeBCH": "20999999.962200"
+    },
+    {
+      "schedule": "empty",
+      "era": "30",
+      "throughHeight": "6509999",
+      "throughTick": "3905999400",
+      "eraTotalSats": "840000",
+      "cumulativeSats": "2099999997060000",
+      "cumulativeBCH": "20999999.970600"
+    },
+    {
+      "schedule": "empty",
+      "era": "31",
+      "throughHeight": "6719999",
+      "throughTick": "4031999400",
+      "eraTotalSats": "420000",
+      "cumulativeSats": "2099999997480000",
+      "cumulativeBCH": "20999999.974800"
+    },
+    {
+      "schedule": "empty",
+      "era": "32",
+      "throughHeight": "6929999",
+      "throughTick": "4157999400",
+      "eraTotalSats": "210000",
+      "cumulativeSats": "2099999997690000",
+      "cumulativeBCH": "20999999.976900"
+    },
+    {
+      "schedule": "empty",
+      "era": "33",
+      "throughHeight": "7139999",
+      "throughTick": "4283999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999997690000",
+      "cumulativeBCH": "20999999.976900"
+    }
+  ],
+  "cumulativeActivation": [
+    {
+      "schedule": "activation_1M",
+      "era": "0",
+      "throughHeight": "209999",
+      "throughTick": "125999400",
+      "eraTotalSats": "1050000000000000",
+      "cumulativeSats": "1050000000000000",
+      "cumulativeBCH": "10500000.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "1",
+      "throughHeight": "419999",
+      "throughTick": "251999400",
+      "eraTotalSats": "525000000000000",
+      "cumulativeSats": "1575000000000000",
+      "cumulativeBCH": "15750000.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "2",
+      "throughHeight": "629999",
+      "throughTick": "377999400",
+      "eraTotalSats": "262500000000000",
+      "cumulativeSats": "1837500000000000",
+      "cumulativeBCH": "18375000.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "3",
+      "throughHeight": "839999",
+      "throughTick": "503999400",
+      "eraTotalSats": "131250000000000",
+      "cumulativeSats": "1968750000000000",
+      "cumulativeBCH": "19687500.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "4",
+      "throughHeight": "1499990",
+      "throughTick": "629999400",
+      "eraTotalSats": "65625000000000",
+      "cumulativeSats": "2034375000000000",
+      "cumulativeBCH": "20343750.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "5",
+      "throughHeight": "3599990",
+      "throughTick": "755999400",
+      "eraTotalSats": "32812500000000",
+      "cumulativeSats": "2067187500000000",
+      "cumulativeBCH": "20671875.000000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "6",
+      "throughHeight": "5699990",
+      "throughTick": "881999400",
+      "eraTotalSats": "16406250000000",
+      "cumulativeSats": "2083593750000000",
+      "cumulativeBCH": "20835937.500000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "7",
+      "throughHeight": "7799990",
+      "throughTick": "1007999400",
+      "eraTotalSats": "8203125000000",
+      "cumulativeSats": "2091796875000000",
+      "cumulativeBCH": "20917968.750000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "8",
+      "throughHeight": "9899990",
+      "throughTick": "1133999400",
+      "eraTotalSats": "4101562500000",
+      "cumulativeSats": "2095898437500000",
+      "cumulativeBCH": "20958984.375000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "9",
+      "throughHeight": "11999990",
+      "throughTick": "1259999400",
+      "eraTotalSats": "2050780200000",
+      "cumulativeSats": "2097949217700000",
+      "cumulativeBCH": "20979492.177000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "10",
+      "throughHeight": "14099990",
+      "throughTick": "1385999400",
+      "eraTotalSats": "1025390100000",
+      "cumulativeSats": "2098974607800000",
+      "cumulativeBCH": "20989746.078000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "11",
+      "throughHeight": "16199990",
+      "throughTick": "1511999400",
+      "eraTotalSats": "512694000000",
+      "cumulativeSats": "2099487301800000",
+      "cumulativeBCH": "20994873.018000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "12",
+      "throughHeight": "18299990",
+      "throughTick": "1637999400",
+      "eraTotalSats": "256347000000",
+      "cumulativeSats": "2099743648800000",
+      "cumulativeBCH": "20997436.488000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "13",
+      "throughHeight": "20399990",
+      "throughTick": "1763999400",
+      "eraTotalSats": "128173500000",
+      "cumulativeSats": "2099871822300000",
+      "cumulativeBCH": "20998718.223000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "14",
+      "throughHeight": "22499990",
+      "throughTick": "1889999400",
+      "eraTotalSats": "64085700000",
+      "cumulativeSats": "2099935908000000",
+      "cumulativeBCH": "20999359.080000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "15",
+      "throughHeight": "24599990",
+      "throughTick": "2015999400",
+      "eraTotalSats": "32041800000",
+      "cumulativeSats": "2099967949800000",
+      "cumulativeBCH": "20999679.498000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "16",
+      "throughHeight": "26699990",
+      "throughTick": "2141999400",
+      "eraTotalSats": "16020900000",
+      "cumulativeSats": "2099983970700000",
+      "cumulativeBCH": "20999839.707000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "17",
+      "throughHeight": "28799990",
+      "throughTick": "2267999400",
+      "eraTotalSats": "8009400000",
+      "cumulativeSats": "2099991980100000",
+      "cumulativeBCH": "20999919.801000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "18",
+      "throughHeight": "30899990",
+      "throughTick": "2393999400",
+      "eraTotalSats": "4004700000",
+      "cumulativeSats": "2099995984800000",
+      "cumulativeBCH": "20999959.848000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "19",
+      "throughHeight": "32999990",
+      "throughTick": "2519999400",
+      "eraTotalSats": "2001300000",
+      "cumulativeSats": "2099997986100000",
+      "cumulativeBCH": "20999979.861000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "20",
+      "throughHeight": "35099990",
+      "throughTick": "2645999400",
+      "eraTotalSats": "999600000",
+      "cumulativeSats": "2099998985700000",
+      "cumulativeBCH": "20999989.857000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "21",
+      "throughHeight": "37199990",
+      "throughTick": "2771999400",
+      "eraTotalSats": "499800000",
+      "cumulativeSats": "2099999485500000",
+      "cumulativeBCH": "20999994.855000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "22",
+      "throughHeight": "39299990",
+      "throughTick": "2897999400",
+      "eraTotalSats": "249900000",
+      "cumulativeSats": "2099999735400000",
+      "cumulativeBCH": "20999997.354000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "23",
+      "throughHeight": "41399990",
+      "throughTick": "3023999400",
+      "eraTotalSats": "123900000",
+      "cumulativeSats": "2099999859300000",
+      "cumulativeBCH": "20999998.593000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "24",
+      "throughHeight": "43499990",
+      "throughTick": "3149999400",
+      "eraTotalSats": "60900000",
+      "cumulativeSats": "2099999920200000",
+      "cumulativeBCH": "20999999.202000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "25",
+      "throughHeight": "45599990",
+      "throughTick": "3275999400",
+      "eraTotalSats": "29400000",
+      "cumulativeSats": "2099999949600000",
+      "cumulativeBCH": "20999999.496000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "26",
+      "throughHeight": "47699990",
+      "throughTick": "3401999400",
+      "eraTotalSats": "14700000",
+      "cumulativeSats": "2099999964300000",
+      "cumulativeBCH": "20999999.643000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "27",
+      "throughHeight": "49799990",
+      "throughTick": "3527999400",
+      "eraTotalSats": "6300000",
+      "cumulativeSats": "2099999970600000",
+      "cumulativeBCH": "20999999.706000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "28",
+      "throughHeight": "51899990",
+      "throughTick": "3653999400",
+      "eraTotalSats": "2100000",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "29",
+      "throughHeight": "53999990",
+      "throughTick": "3779999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "30",
+      "throughHeight": "56099990",
+      "throughTick": "3905999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "31",
+      "throughHeight": "58199990",
+      "throughTick": "4031999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "32",
+      "throughHeight": "60299990",
+      "throughTick": "4157999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    },
+    {
+      "schedule": "activation_1M",
+      "era": "33",
+      "throughHeight": "62399990",
+      "throughTick": "4283999400",
+      "eraTotalSats": "0",
+      "cumulativeSats": "2099999972700000",
+      "cumulativeBCH": "20999999.727000"
+    }
+  ],
+  "totals": [
+    {
+      "schedule": "empty",
+      "totalSats": "2099999997690000",
+      "totalBCH": "20999999.976900"
+    },
+    {
+      "schedule": "activation_1M",
+      "totalSats": "2099999972700000",
+      "totalBCH": "20999999.727000"
+    },
+    {
+      "schedule": "tau3_123456",
+      "totalSats": "2099999496000000",
+      "totalBCH": "20999994.960000"
+    },
+    {
+      "schedule": "tau1_0",
+      "totalSats": "2099998404000200",
+      "totalBCH": "20999984.040002"
+    }
+  ]
+}

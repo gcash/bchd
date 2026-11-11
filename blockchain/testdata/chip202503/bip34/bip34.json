@@ -1,0 +1,1242 @@
+{
+  "description": "Coinbase duplicate-prevention vectors (CHIP-2025-03, BIP-34 mitigation). Two mechanisms, both independent of the tick schedule. 1) Named transaction: at height 1,983,702 on mainnet the coinbase 3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462 is invalid. A coinbase is valid at exactly one height, so naming a transaction names a single block. 2) Forbidden shape: a coinbase is invalid if nVersion == 1 AND nLockTime == 0 AND the sum of its outputs is at least 25 BCH (2,500,000,000 satoshis) AND its single input's nSequence is 0xffffffff. On mainnet the shape rule governs from height 3,708,179 and every block at or below 3,708,178 is exempt; on every other network it governs from H_a + 1, with H_a exempt. The rule reads only those four transaction fields plus the block height's position relative to the gate, so it does not read the coinbase script, the output count, the block's tick or the block's timestamp, and is independent of the target block time. `coinbase.version` is the coinbase *transaction* version, not the block version: BIP-34 itself concerns block version 2, which is unrelated. `expected.invalid` is the only normative field. A rejection reason is node-local diagnostic text and is deliberately not pinned, because a conforming implementation may order its tests differently. Families: `grid` is exhaustive over the shape predicate's own domain (nVersion {1,2} x nLockTime {0,1} x valueOut {25 BCH - 1 sat, 25 BCH} x nSequence {0xffffffff, 0xfffffffe, 0x00000000}), 24 combinations emitted once against the mainnet gate and once against an illustrative H_a, for 48 rows; `gate` pins the exact forbidden shape at each gate's last exempt height; `census` samples real pre-BIP-34 shapes at a governed height with field flips that must pass; `txid` pins the named-transaction ban, its misses either side, a one-bit flip, an empty ban set, and a caller-substituted table. `rawCoinbase` embeds the block 164,384 coinbase verbatim and records what the reference derives from it: the txid from double-SHA256, the height decoded from the first push of its scriptSig, and the shape arms. These are derivations, not pins, so a transcription error in the literal fails the self-test rather than passing silently. Locktime finality is NOT asserted: a coinbase that leaves the shape via nLockTime != 0 must still be final, but that belongs to the timelock vectors and is marked here only via `expected.locktimeEscape`, so a consumer does not read `invalid: false` as 'this block is valid'. Both mechanisms are necessary conditions, not sufficient: a byte-identical TXID collision additionally requires the historical first push to be the minimal script-number encoding of the future height. Exhaustive coverage of the census is extras/bip-34/census_sweep.sql, not here: the rule does not read the script, so one vector per census row would assert the same boolean 192,401 times while varying a field the rule ignores. That sweep also measures the rule's over-coverage: of 227,931 pre-BIP-34 coinbases, 224,110 match the forbidden shape, 192,401 of them collidable and 31,709 not; 3,819 of the 3,821 rows outside the shape escape on nSequence and 2 on nVersion. All integer values are decimal strings; sequence values are 0x-prefixed 32-bit hex.",
+  "constants": {
+    "MIN_FORBIDDEN_VALUE_SATS": "2500000000",
+    "FORBIDDEN_VERSION": "1",
+    "FORBIDDEN_LOCKTIME": "0",
+    "FORBIDDEN_SEQUENCE": "0xffffffff",
+    "COIN_SATS": "100000000",
+    "MAINNET_SHAPE_LAST_EXEMPT": "3708178",
+    "MAINNET_NAMED_TXID_HEIGHT": "1983702",
+    "ACTIVATION_HEIGHT_ILLUSTRATION": "1003670"
+  },
+  "vectors": [
+    {
+      "name": "grid_mainnet_v1_lt0_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value"
+    },
+    {
+      "name": "grid_mainnet_v1_lt0_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt0_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt0_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "all four arms hold: the exact forbidden shape"
+    },
+    {
+      "name": "grid_mainnet_v1_lt0_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt0_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, sequence"
+    },
+    {
+      "name": "grid_mainnet_v1_lt1_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt0_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, sequence"
+    },
+    {
+      "name": "grid_mainnet_v2_lt1_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via value, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "all four arms hold: the exact forbidden shape"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt0_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, value, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, sequence"
+    },
+    {
+      "name": "grid_ha_v1_lt1_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "escapes via locktime, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, value, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt0_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin-1_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin-1_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin-1_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2499999999",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, value, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin_seqfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin_seqnonfinal",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, sequence"
+    },
+    {
+      "name": "grid_ha_v2_lt1_valmin_seqzero",
+      "family": "grid",
+      "coinbase": {
+        "version": "2",
+        "locktime": "1",
+        "valueOut": "2500000000",
+        "sequence": "0x00000000"
+      },
+      "block": {
+        "height": "1003671",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "escapes via version, locktime, sequence"
+    },
+    {
+      "name": "gate_mainnet_exempt",
+      "family": "gate",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708178",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "mainnet: the forbidden shape at 3,708,178 is exempt"
+    },
+    {
+      "name": "gate_ha_exempt",
+      "family": "gate",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1003670",
+        "lastExemptHeight": "1003670"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "H_a: the forbidden shape at the last pre-activation block is exempt"
+    },
+    {
+      "name": "census_164384_as_found",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "17001300000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. All four arms hold."
+    },
+    {
+      "name": "census_164384_v2",
+      "family": "census",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "17001300000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. nVersion 2 leaves the shape unconditionally."
+    },
+    {
+      "name": "census_164384_lt1",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "1",
+        "valueOut": "17001300000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false,
+        "locktimeEscape": true
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. nLockTime 1 leaves this rule; the block must still be final, which is a separate predicate."
+    },
+    {
+      "name": "census_164384_val_min-1",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2499999999",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. Outputs trimmed one satoshi below 25 BCH."
+    },
+    {
+      "name": "census_164384_seq_nonfinal",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "17001300000",
+        "sequence": "0xfffffffe"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. nSequence 0xfffffffe leaves the shape; 3,819 pre-BIP-34 coinbases take this escape."
+    },
+    {
+      "name": "census_164384_pre_gate",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "17001300000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "1983702",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 164384, script 03d6441e014b0136: 170.013 BCH; its first push names 1,983,702, the last reachable collision before the shape rule. At height 1,983,702 the shape rule is not yet in force, so this coinbase is only reachable through the named-txid ban, which the txid family pins."
+    },
+    {
+      "name": "census_169895_as_found",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "5002000010",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "block 169895, script 031395380280070136: 50.02000010 BCH, seven-byte first push. All four arms hold."
+    },
+    {
+      "name": "census_169895_v2",
+      "family": "census",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "5002000010",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 169895, script 031395380280070136: 50.02000010 BCH, seven-byte first push. nVersion 2 leaves the shape unconditionally."
+    },
+    {
+      "name": "census_171896_as_found",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "5005370306",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3712990",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "block 171896, script 03dea73802180e0107: 50.05370306 BCH, seven-byte first push. All four arms hold."
+    },
+    {
+      "name": "census_171896_v2",
+      "family": "census",
+      "coinbase": {
+        "version": "2",
+        "locktime": "0",
+        "valueOut": "5005370306",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3712990",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": false
+      },
+      "note": "block 171896, script 03dea73802180e0107: 50.05370306 BCH, seven-byte first push. nVersion 2 leaves the shape unconditionally."
+    },
+    {
+      "name": "census_synthetic_exact_25bch",
+      "family": "census",
+      "coinbase": {
+        "version": "1",
+        "locktime": "0",
+        "valueOut": "2500000000",
+        "sequence": "0xffffffff"
+      },
+      "block": {
+        "height": "3708179",
+        "lastExemptHeight": "3708178"
+      },
+      "expected": {
+        "invalid": true
+      },
+      "note": "Synthetic: exactly 25 BCH, the collidable set's minimum, so the >= bound carries no margin."
+    }
+  ],
+  "txidVectors": [
+    {
+      "name": "txid_named_at_ban",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462",
+      "height": "1983702",
+      "bans": [
+        {
+          "height": "1983702",
+          "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462"
+        }
+      ],
+      "defaultBans": true,
+      "expected": {
+        "invalid": true
+      },
+      "note": "The named coinbase at its own height is invalid."
+    },
+    {
+      "name": "txid_named_below",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462",
+      "height": "1983701",
+      "bans": [
+        {
+          "height": "1983702",
+          "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462"
+        }
+      ],
+      "defaultBans": true,
+      "expected": {
+        "invalid": false
+      },
+      "note": "One block earlier the ban does not apply."
+    },
+    {
+      "name": "txid_named_above",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462",
+      "height": "1983703",
+      "bans": [
+        {
+          "height": "1983702",
+          "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462"
+        }
+      ],
+      "defaultBans": true,
+      "expected": {
+        "invalid": false
+      },
+      "note": "One block later, for the same reason: the ban names a single height."
+    },
+    {
+      "name": "txid_named_flipped",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1463",
+      "height": "1983702",
+      "bans": [
+        {
+          "height": "1983702",
+          "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462"
+        }
+      ],
+      "defaultBans": true,
+      "expected": {
+        "invalid": false
+      },
+      "note": "One bit off: the ban names a transaction, not a shape."
+    },
+    {
+      "name": "txid_named_no_bans",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462",
+      "height": "1983702",
+      "bans": [],
+      "defaultBans": false,
+      "expected": {
+        "invalid": false
+      },
+      "note": "Empty set: unconstrained, which is the answer on every non-mainnet network."
+    },
+    {
+      "name": "txid_substituted_table",
+      "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1463",
+      "height": "42",
+      "bans": [
+        {
+          "height": "42",
+          "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1463"
+        }
+      ],
+      "defaultBans": false,
+      "expected": {
+        "invalid": true
+      },
+      "note": "A caller-supplied table is honoured."
+    }
+  ],
+  "rawCoinbase": {
+    "hex": "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0803d6441e014b0136ffffffff078374661e000000001976a914f27b35cd5c2b18e326f1e3fcad8f9fa2184112c188ac21a11811000000001976a9142530550534e1cc699b057b5e8220b47a472106c588acbfb64500000000001976a91447cdb6c6b736771d2e6f426652950faed88f66d688ac40823d00000000001976a9146ce5a0ba4be98813d630355c07d19a04173a14f988aca844d47c020000001976a914a046c6fbfa3cafcf8b80464a487304e3808a361c88ac1c778d0c000000001976a914a324583efbfee0e490947670012976bf8cf7700c88acb935f73b010000001976a914c02052ef85d5c7144c6bcc32d047897840efbf2d88ac00000000",
+    "txid": "3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462",
+    "scriptSig": "03d6441e014b0136",
+    "heightPush": "1983702",
+    "expectedHeightPush": "1983702",
+    "expectedOriginalBlock": "164384",
+    "expectedScript": "03d6441e014b0136",
+    "parsed": {
+      "version": "1",
+      "locktime": "0",
+      "valueOut": "17001300000",
+      "sequence": "0xffffffff",
+      "inputCount": "1",
+      "outputCount": "7"
+    },
+    "expected": {
+      "txidMatchesMainnetNamedBan": true,
+      "scriptSigFirstPush": "1983702",
+      "forbiddenShapeAtGate": true,
+      "bannedAtOwnHeight": true
+    }
+  }
+}
