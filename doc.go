@@ -162,9 +162,10 @@ Application Options:
 	    --excessiveblocksize=        The block size (in bytes) that P2P and RPC
 	                                 message limits are sized for, and on regtest
 	                                 and simnet the floor of the block size limit
-	                                 -- 0 uses the network's default, which is
-	                                 also the minimum: 2000000 on testnet4 and
-	                                 chipnet, otherwise 32000000
+	                                 of a 10-minute block, a tenth of it for a
+	                                 1-minute block -- 0 uses the network's
+	                                 default, which is also the minimum: 2000000
+	                                 on testnet4 and chipnet, otherwise 32000000
 	    --minrelaytxfee=             The minimum fee rate in BCH/kB a transaction
 	                                 must pay to be relayed, accepted into the
 	                                 mempool and mined -- Must be above 0 and at

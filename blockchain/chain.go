@@ -893,7 +893,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	state := newBestState(node, b.tickSchedule(node), blockSize,
 		numTxns, curTotalTxns+numTxns, node.CalcPastMedianTime())
 
-	ablaState := b.ablaNextState(b.ablaState, node.height, blockSize)
+	ablaState := b.ablaNodeNextState(b.ablaState, node, blockSize)
 
 	// Atomically insert info into the database.
 	err = b.db.Update(func(dbTx database.Tx) error {

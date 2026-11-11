@@ -37,6 +37,16 @@ const (
 	MAX_DELTA            = uint64(32)
 	MIN_THETA_RECIPROCAL = uint64(9484)
 	MAX_THETA_RECIPROCAL = uint64(151744)
+
+	// ablaBaseBlockInterval is the block interval, in ticks, that the
+	// state's sizes are kept in.  A block of another interval has its size
+	// limit scaled from them, and moves them in proportion to its interval.
+	ablaBaseBlockInterval = uint64(600)
+
+	// ablaMinBlockInterval and ablaMaxBlockInterval bound the block
+	// intervals the algorithm accepts.
+	ablaMinBlockInterval = uint64(1)
+	ablaMaxBlockInterval = uint64(600)
 )
 
 // Utility function to calculate x * y / z where intermediate product
@@ -174,29 +184,60 @@ func (state *ABLAState) IsValid(config *ABLAConfig) (errs *strings.Builder) {
 	return nil
 }
 
-// Calculate the limit for the block to which the algorithm's state
-// applies, given algorithm state
-func (state *ABLAState) getBlockSizeLimit() uint64 {
-	return min(state.controlBlockSize+state.elasticBufferSize, TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT)
+// checkABLABlockInterval panics unless interval is a block interval the
+// algorithm accepts.  Block intervals come from the block index, so another
+// one is a programming error.
+func checkABLABlockInterval(interval uint64) {
+	if interval < ablaMinBlockInterval || interval > ablaMaxBlockInterval {
+		panic(AssertError(fmt.Sprintf("invalid ABLA block interval %d",
+			interval)))
+	}
+}
+
+// scaledSize returns the size the state allows a block of the given interval
+// to have, without the 2 GB limit.
+func (state *ABLAState) scaledSize(interval uint64) uint64 {
+	checkABLABlockInterval(interval)
+	return muldiv(state.controlBlockSize+state.elasticBufferSize, interval,
+		ablaBaseBlockInterval)
+}
+
+// blockSizeLimitAt returns the limit for the block to which the state
+// applies when that block has the given interval.
+func (state *ABLAState) blockSizeLimitAt(interval uint64) uint64 {
+	return min(state.scaledSize(interval), TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT)
 	// Note: Remove the TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT limit once 32-bit architecture is deprecated:
-	// return state.controlBlockSize + state.elasticBufferSize
+	// return state.scaledSize(interval)
+}
+
+// Calculate the limit for the block to which the algorithm's state
+// applies, given algorithm state, for a block of the base interval.
+func (state *ABLAState) getBlockSizeLimit() uint64 {
+	return state.blockSizeLimitAt(ablaBaseBlockInterval)
 }
 
 // Calculate algorithm's look-ahead block size limit, for a block N blocks ahead of current one.
 // Returns the limit for block with current+N height, assuming all blocks 100% full.
+// The blocks are taken to have the base interval, which gives the largest
+// limits.
 func (state *ABLAState) lookaheadState(config *ABLAConfig, count uint) ABLAState {
 	lookaheadState := *state
 	for range count {
 		maxSize := lookaheadState.getBlockSizeLimit()
-		lookaheadState = lookaheadState.nextABLAState(config, maxSize)
+		lookaheadState = lookaheadState.nextABLAState(config, maxSize,
+			ablaBaseBlockInterval)
 	}
 	return lookaheadState
 }
 
 // Calculate algorithm's state for the next block (n), given
-// current blockchain tip (n-1) block size, algorithm state, and
+// current blockchain tip (n-1) block size and interval, algorithm state, and
 // algorithm configuration. Returns the next state after this block.
-func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint64) ABLAState {
+//
+// The size is normalized to the base interval and the state moves by the
+// share of the base interval the block took.  Each step is a single muldiv,
+// since splitting one changes the rounding.
+func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize, interval uint64) ABLAState {
 	// Next block's ABLA state
 	var newState ABLAState
 
@@ -206,7 +247,7 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 	// For safety: we clamp this current block's blocksize to the maximum value this algorithm expects. Normally this
 	// won't happen unless the node is run with some -excessiveblocksize parameter that permits larger blocks than this
 	// algo's current state expects.
-	currentBlockSize = min(currentBlockSize, state.controlBlockSize+state.elasticBufferSize)
+	currentBlockSize = min(currentBlockSize, state.scaledSize(interval))
 
 	// if block height is in range 0 to n0 inclusive use initialization values
 	// else use algorithmic limit
@@ -219,7 +260,8 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 		// control function
 
 		// zeta * x_{n-1}
-		amplifiedCurrentBlockSize := muldiv(config.zetaXB7, currentBlockSize, B7)
+		amplifiedCurrentBlockSize := muldiv(config.zetaXB7,
+			muldiv(currentBlockSize, ablaBaseBlockInterval, interval), B7)
 
 		// if zeta * x_{n-1} > epsilon_{n-1} then increase
 		// else decrease or no change
@@ -237,7 +279,8 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 			scalingOffset := muldiv(muldiv(config.zetaXB7, state.elasticBufferSize, B7),
 				bytesToAdd, bytesMax)
 			// epsilon_n = epsilon_{n-1} + gamma * (zeta * x_{n-1} - epsilon_{n-1} - zeta * beta_{n-1} * (zeta * x_{n-1} - epsilon_{n-1}) / (zeta * y_{n-1} - epsilon_{n-1}))
-			newState.controlBlockSize = state.controlBlockSize + (bytesToAdd-scalingOffset)/config.gammaReciprocal
+			newState.controlBlockSize = state.controlBlockSize + muldiv(bytesToAdd-scalingOffset, interval,
+				config.gammaReciprocal*ablaBaseBlockInterval)
 		} else {
 			// epsilon_{n-1} - zeta * x_{n-1}
 			bytesToRemove := state.controlBlockSize - amplifiedCurrentBlockSize
@@ -245,7 +288,8 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 			// epsilon_{n-1} + gamma * (zeta * x_{n-1} - epsilon_{n-1})
 			// rearranged to:
 			// epsilon_{n-1} - gamma * (epsilon_{n-1} - zeta * x_{n-1})
-			newState.controlBlockSize = state.controlBlockSize - bytesToRemove/config.gammaReciprocal
+			newState.controlBlockSize = state.controlBlockSize - muldiv(bytesToRemove, interval,
+				config.gammaReciprocal*ablaBaseBlockInterval)
 
 			// epsilon_n = max(epsilon_{n-1} + gamma * (zeta * x_{n-1} - epsilon_{n-1}), epsilon_0)
 			newState.controlBlockSize = max(newState.controlBlockSize, config.epsilon0)
@@ -254,7 +298,8 @@ func (state *ABLAState) nextABLAState(config *ABLAConfig, currentBlockSize uint6
 		// elastic buffer function
 
 		// beta_{n-1} * theta
-		bufferDecay := state.elasticBufferSize / config.thetaReciprocal
+		bufferDecay := muldiv(state.elasticBufferSize, interval,
+			config.thetaReciprocal*ablaBaseBlockInterval)
 
 		// if zeta * x_{n-1} > epsilon_{n-1} then increase
 		// else decrease or no change

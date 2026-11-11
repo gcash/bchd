@@ -172,7 +172,8 @@ func runABLATest(test *ablaTest) error {
 		}
 		state.blockHeight = n
 		if n >= config.n0 {
-			next := state.nextABLAState(&config, blockSize)
+			next := state.nextABLAState(&config, blockSize,
+				ablaBaseBlockInterval)
 			if !pastTheEnd && next.getBlockSizeLimit() != nextLimit {
 				return fmt.Errorf("height %d: next limit %d, want %d",
 					n, next.getBlockSizeLimit(), nextLimit)

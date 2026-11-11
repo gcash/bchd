@@ -112,16 +112,18 @@ var (
 )
 
 // MaxBlockSize returns the is the maximum number of bytes allowed in
-// a block. If the UAHF hardfork is active the returned value is the
-// network's floor of the block size limit, see networkSizeFloor, or with ABLA
-// active the limit after the tip when that is larger. Otherwise it's the
-// legacy blocksize.
+// the block after the tip. If the UAHF hardfork is active the returned value
+// is the network's floor of the block size limit, see networkSizeFloor, or
+// with ABLA active the limit after the tip when that is larger, both scaled
+// to the interval of the block. Otherwise it's the legacy blocksize.
 func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 	if uahfActive {
+		interval := nextBlockInterval(b.bestChain.Tip())
+		floor := scaleSizeFloor(b.networkSizeFloor(), interval)
 		if !ablaActive {
-			return b.networkSizeFloor()
+			return floor
 		} else {
-			return max(b.networkSizeFloor(), b.ablaState.getBlockSizeLimit())
+			return max(floor, b.ablaState.blockSizeLimitAt(interval))
 		}
 	}
 	return LegacyMaxBlockSize
