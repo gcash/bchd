@@ -17,8 +17,8 @@ import (
 func TestMain(m *testing.M) {
 	for _, params := range []*chaincfg.Params{&chaincfg.MainNetParams,
 		&chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
-		&chaincfg.ChipNetParams, &chaincfg.RegressionNetParams,
-		&chaincfg.SimNetParams} {
+		&chaincfg.ChipNetParams, &chaincfg.TempNetParams,
+		&chaincfg.RegressionNetParams, &chaincfg.SimNetParams} {
 
 		params.Upgrade2027ActivationTime = 1<<48 - 1
 	}

@@ -168,7 +168,8 @@ const (
 	GetBlockchainInfoResponse_SIMNET GetBlockchainInfoResponse_BitcoinNet = 3
 	// Latest Testnet.
 	GetBlockchainInfoResponse_TESTNET4 GetBlockchainInfoResponse_BitcoinNet = 4
-	// The public network for testing upcoming upgrades.
+	// The public network for testing upcoming upgrades, also reported
+	// for tempnet, its temporary fork.
 	GetBlockchainInfoResponse_CHIPNET GetBlockchainInfoResponse_BitcoinNet = 5
 )
 

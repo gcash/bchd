@@ -151,6 +151,7 @@ type config struct {
 	TestNet3                bool          `long:"testnet" description:"Use the test network"`
 	TestNet4                bool          `long:"testnet4" description:"Use the test 4 network"`
 	ChipNet                 bool          `long:"chipnet" description:"Use the chip network"`
+	TempNet                 bool          `long:"tempnet" description:"Use tempnet, chipnet's temporary fork with the May 2027 upgrade active, which ends on 2026-11-15"`
 	RegressionTest          bool          `long:"regtest" description:"Use the regression test network"`
 	RegressionTestAnyHost   bool          `long:"regtestanyhost" description:"In regression test mode, allow connections from any host, not just localhost"`
 	RegressionTestNoReset   bool          `long:"regtestnoreset" description:"In regression test mode, don't reset the network db on node restart"`
@@ -159,13 +160,13 @@ type config struct {
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
-	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it once a block reached the old or new time requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
+	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it once a block reached the old or new time requires a fresh data directory (default: 1810382400, chipnet: 1794744000, tempnet: 1792065600)"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit of a 10-minute block, a tenth of it for a 1-minute block -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000; the maximum is 2000000000"`
+	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit of a 10-minute block, a tenth of it for a 1-minute block -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4, chipnet and tempnet, otherwise 32000000; the maximum is 2000000000"`
 	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0 and at most 21000000"`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Deprecated, has no effect: free transactions are no longer relayed"`
@@ -603,6 +604,10 @@ func loadConfig() (*config, []string, error) {
 		numNets++
 		activeNetParams = &chipNetParams
 	}
+	if cfg.TempNet {
+		numNets++
+		activeNetParams = &tempNetParams
+	}
 	if cfg.RegressionTest {
 		numNets++
 		activeNetParams = &regressionNetParams
@@ -614,8 +619,8 @@ func loadConfig() (*config, []string, error) {
 		cfg.DisableDNSSeed = true
 	}
 	if numNets > 1 {
-		str := "%s: The testnet, chipnet, regtest, segnet, and simnet params " +
-			"can't be used together -- choose one of the four"
+		str := "%s: The testnet, testnet4, chipnet, tempnet, regtest, and " +
+			"simnet params can't be used together -- choose one of them"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)

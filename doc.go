@@ -119,6 +119,9 @@ Application Options:
 	    --testnet                    Use the test network
 	    --testnet4                   Use the test 4 network
 	    --chipnet                    Use the chip network
+	    --tempnet                    Use tempnet, chipnet's temporary fork with
+	                                 the May 2027 upgrade active, which ends on
+	                                 2026-11-15
 	    --regtest                    Use the regression test network
 	    --regtestanyhost             In regression test mode, allow connections
 	                                 from any host, not just localhost
@@ -143,7 +146,7 @@ Application Options:
 	                                 anchor block; changing it once a block
 	                                 reached the old or new time requires a fresh
 	                                 data directory (default: 1810382400,
-	                                 chipnet: 1794744000)
+	                                 chipnet: 1794744000, tempnet: 1792065600)
 	    --dbtype=                    Database backend to use for the Block Chain
 	                                 (default: ffldb)
 	    --profile=                   Enable HTTP profiling on the given port on
@@ -165,8 +168,8 @@ Application Options:
 	                                 of a 10-minute block, a tenth of it for a
 	                                 1-minute block -- 0 uses the network's
 	                                 default, which is also the minimum: 2000000
-	                                 on testnet4 and chipnet, otherwise 32000000;
-	                                 the maximum is 2000000000
+	                                 on testnet4, chipnet and tempnet, otherwise
+	                                 32000000; the maximum is 2000000000
 	    --minrelaytxfee=             The minimum fee rate in BCH/kB a transaction
 	                                 must pay to be relayed, accepted into the
 	                                 mempool and mined -- Must be above 0 and at

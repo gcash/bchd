@@ -680,7 +680,8 @@ func (s *GrpcServer) GetMempool(ctx context.Context, req *pb.GetMempoolRequest) 
 
 // bitcoinNet returns the GetBlockchainInfo network type for the given
 // chain parameters.  It compares the params themselves because testnet4 and
-// chipnet share the same network magic.
+// chipnet share the same network magic.  Tempnet, a short-lived fork of
+// chipnet, is reported as chipnet.
 func bitcoinNet(params *chaincfg.Params) (pb.GetBlockchainInfoResponse_BitcoinNet, error) {
 	switch params {
 	case &chaincfg.MainNetParams:
@@ -689,7 +690,7 @@ func bitcoinNet(params *chaincfg.Params) (pb.GetBlockchainInfoResponse_BitcoinNe
 		return pb.GetBlockchainInfoResponse_TESTNET3, nil
 	case &chaincfg.TestNet4Params:
 		return pb.GetBlockchainInfoResponse_TESTNET4, nil
-	case &chaincfg.ChipNetParams:
+	case &chaincfg.ChipNetParams, &chaincfg.TempNetParams:
 		return pb.GetBlockchainInfoResponse_CHIPNET, nil
 	case &chaincfg.RegressionNetParams:
 		return pb.GetBlockchainInfoResponse_REGTEST, nil

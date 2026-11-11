@@ -7,6 +7,7 @@
    2. [Configuration](#Configuration)
       1. [Checkpoints and Initial Block Download](#Checkpoints)
       2. [Finalization and Deep Reorganizations](#Finalization)
+      3. [Tempnet](#Tempnet)
    3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
    4. [Mining](#Mining)
    5. [Kubernetes](#Kubernetes)
@@ -75,13 +76,14 @@ options, which can be viewed by running: `$ bchd --help`.
 
 **2.2.1 Checkpoints and Initial Block Download**
 
-Checkpoints are known-good blocks built into bchd. They protect a new node
-from being fed a fake chain while it syncs, and they let it skip the most
-expensive checks on old blocks, which makes the first sync much faster. bchd
-uses the same checkpoints as Bitcoin Cash Node for mainnet, testnet3, testnet4
-and chipnet; the latest mainnet checkpoint is block 970892. A block at the
-height of a checkpoint must match it, and once bchd's chain has reached a
-checkpoint, a block that forks the chain before it is rejected.
+Checkpoints are known-good blocks built into bchd. They protect a new node from
+being fed a fake chain while it syncs, and they let it skip the most expensive
+checks on old blocks, which makes the first sync much faster. bchd uses the
+same checkpoints as Bitcoin Cash Node for mainnet, testnet3, testnet4 and
+chipnet, and tempnet adds its first block, 327989, to chipnet's; the latest
+mainnet checkpoint is block 970892. A block at the height of a checkpoint must
+match it, and once bchd's chain has reached a checkpoint, a block that forks
+the chain before it is rejected.
 
 While syncing, bchd downloads the block headers from one checkpoint to the next
 and then the blocks for them, until it reaches the last checkpoint. These
@@ -158,6 +160,21 @@ it can only be used to switch to the other chain once finalization has moved
 back, for example after step 1 or a restart. Calling `reconsiderblock` on a
 block that was invalidated earlier also moves finalization back to the point
 where that block's chain forks.
+
+<a name="Tempnet" />
+
+**2.2.3 Tempnet**
+
+`--tempnet` follows tempnet, a temporary fork of chipnet that activated the
+May 2027 upgrade to 1-minute blocks on 2026-10-15 to test it ahead of
+chipnet. Tempnet ends on 2026-11-15, when chipnet activates the upgrade. Its
+data goes in the `tempnet` directory.
+
+Tempnet shares chipnet's genesis block, network magic and ports, and its chain
+leaves chipnet's at block 327989. Its DNS seeds also return chipnet nodes,
+which are not on tempnet's chain, so add a tempnet node with `--addpeer` to
+find peers sooner. To run a chipnet and a tempnet node on one host, give one of
+them other ports with `--listen`, `--rpclisten` and `--grpclisten`.
 
 <a name="BchctlConfig" />
 

@@ -988,6 +988,7 @@ func TestIsTestNet(t *testing.T) {
 		{&chaincfg.TestNet3Params, true},
 		{&chaincfg.TestNet4Params, true},
 		{&chaincfg.ChipNetParams, true},
+		{&chaincfg.TempNetParams, true},
 		{&chaincfg.SimNetParams, false},
 	}
 	for _, test := range tests {
