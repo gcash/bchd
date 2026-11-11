@@ -1037,7 +1037,9 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		// is known: bchd checks some of BCHN's rules for the other blocks
 		// too, or earlier, so it could punish a peer BCHN does not.
 		if requested && parentKnown && !bmsg.compact {
-			score := blockBanScore(rerr.ErrorCode, extendsTip)
+			score := blockBanScore(rerr.ErrorCode,
+				&bmsg.block.MsgBlock().Header,
+				sm.chainParams.PowLimit, extendsTip)
 			if score > 0 {
 				sm.peerNotifier.Misbehaving(peer, score, reason)
 			}

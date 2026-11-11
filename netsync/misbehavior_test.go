@@ -337,6 +337,18 @@ func TestBlockMisbehavior(t *testing.T) {
 	expectRejected("high hash", highHashBlock, wire.RejectInvalid,
 		"high-hash", 50)
 
+	// A wrong target gets 100, one above the limit 50, as for a header.
+	wrongBits := rebuild(mineBlock(t, params, a1.MsgBlock(), 2, 4),
+		func(msg *wire.MsgBlock) { msg.Header.Bits = 0x1f7fffff })
+	send(wrongBits, true, false)
+	expectRejected("wrong difficulty", wrongBits, wire.RejectInvalid,
+		"bad-diffbits", 100)
+	aboveLimit := rebuild(mineBlock(t, params, a1.MsgBlock(), 2, 5),
+		func(msg *wire.MsgBlock) { msg.Header.Bits = 0x2100ffff })
+	send(aboveLimit, true, false)
+	expectRejected("target above the limit", aboveLimit,
+		wire.RejectInvalid, "bad-diffbits", 50)
+
 	// An old version is refused with no score.
 	a2 := mineBlock(t, params, a1.MsgBlock(), 2, 2)
 	send(a2, true, false)
