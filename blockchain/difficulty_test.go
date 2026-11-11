@@ -14231,7 +14231,7 @@ func TestCalcAsertRequiredDifficulty(t *testing.T) {
 	b.chainParams.ReduceMinDifficulty = false
 	for _, test := range testVectors {
 		for i, block := range test.blocks {
-			target, err := b.calcAsertRequiredDifficulty(&blockNode{height: int32(block.height), timestamp: block.timestamp}, int32(test.anchorHeight), test.anchorTime, test.anchorBits, time.Unix(block.timestamp, 0))
+			target, err := b.calcAsertRequiredDifficulty(&blockNode{height: int32(block.height), timestamp: block.timestamp, ticks: int64(block.height) * 600, nextInterval: 600}, int32(test.anchorHeight), test.anchorTime, test.anchorBits, time.Unix(block.timestamp, 0))
 			if err != nil {
 				t.Errorf("Run %d, block %d: %s", test.run, i, err)
 			}

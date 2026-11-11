@@ -225,7 +225,9 @@ type Params struct {
 	// MinDiffReductionTime is the amount of time after which the minimum
 	// required difficulty should be reduced when a block hasn't been found.
 	//
-	// NOTE: This only applies if ReduceMinDifficulty is true.
+	// NOTE: This only applies if ReduceMinDifficulty is true, and only to
+	// the difficulty algorithms before ASERT.  ASERT reduces it after twice
+	// the target interval of the new block instead.
 	MinDiffReductionTime time.Duration
 
 	// AsertDifficultyHalflife is the halflife parameter used by the asert

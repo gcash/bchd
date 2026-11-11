@@ -743,6 +743,11 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 		alg := b.SelectDifficultyAdjustmentAlgorithm(prevNode)
 		expectedDifficulty, err := b.calcNextRequiredDifficulty(prevNode,
 			header.Timestamp, alg)
+		if err == errAsertAnchorTicks {
+			str := fmt.Sprintf("no difficulty for the block after "+
+				"height %d: %v", prevNode.height, err)
+			return ruleError(ErrUnexpectedDifficulty, str)
+		}
 		if err != nil {
 			return err
 		}
