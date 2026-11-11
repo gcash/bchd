@@ -175,7 +175,7 @@ type config struct {
 	Generate                bool          `long:"generate" description:"Generate (mine) bitcoins using the CPU"`
 	MiningAddrs             []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
 	BlockMinSize            uint32        `long:"blockminsize" description:"Deprecated, has no effect: blocks no longer include transactions below the minimum relay fee"`
-	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block -- 0 follows the consensus limit less 1000 bytes"`
+	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a 10-minute block, a tenth of it for a 1-minute block -- 0 follows the consensus limit less 1000 bytes"`
 	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Deprecated, has no effect: blocks no longer have a high-priority area"`
 	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`

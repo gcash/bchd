@@ -6,8 +6,10 @@ package mining
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -510,6 +512,112 @@ func TestTemplateTimelocksInTicks(t *testing.T) {
 		if templateHas(tmpl, test.tx) != test.want {
 			t.Errorf("%s: included %v, want %v", test.name,
 				!test.want, test.want)
+		}
+	}
+}
+
+// TestPolicyBlockMaxSize ensures the configured block max size is a size per
+// 600 seconds, scaled down with integer division for a shorter block as in
+// CHIP-2025-03.
+func TestPolicyBlockMaxSize(t *testing.T) {
+	tests := []struct {
+		maxSize  uint32
+		interval int64
+		want     uint64
+	}{
+		{0, 600, 0},
+		{0, 60, 0},
+		{1000000, 600, 1000000},
+		{1000000, 60, 100000},
+		{1009, 60, 100},
+		{math.MaxUint32, 600, math.MaxUint32},
+		{math.MaxUint32, 60, math.MaxUint32 / 10},
+	}
+	for _, test := range tests {
+		p := Policy{BlockMaxSize: test.maxSize}
+		if got := p.blockMaxSize(test.interval); got != test.want {
+			t.Errorf("BlockMaxSize %d at %d s: got %d, want %d",
+				test.maxSize, test.interval, got, test.want)
+		}
+	}
+}
+
+// TestTemplateSizeAcrossUpgrade2027 ensures a template for the activation
+// block, or for any block when the upgrade never activates, uses the
+// configured block max size and the limit as they are, and a template for
+// the first 60-second block a tenth of both.
+func TestTemplateSizeAcrossUpgrade2027(t *testing.T) {
+	const (
+		floor    = 1000000
+		maxSize  = 500000
+		padSize  = 20000
+		ha       = 110
+		interval = 600 * time.Second
+	)
+	// Block i is stamped start+(i-1)*600, so the median time of block ha
+	// is the time of block ha-5 and block ha is the activation block.
+	start := time.Now().Add(-2 * ha * interval).Truncate(time.Second)
+	params := ablaParams()
+	params.Upgrade2027ActivationTime = uint64(start.Add((ha - 6) *
+		interval).Unix())
+	neverParams := ablaParams()
+	neverParams.Upgrade2027ActivationTime = 1<<48 - 1
+
+	tests := []struct {
+		name         string
+		params       chaincfg.Params
+		policy       Policy
+		tipHeight    int32
+		wantInterval int64
+		wantLimit    uint64
+		wantTxns     int
+	}{
+		{"never active", neverParams, Policy{BlockMaxSize: maxSize}, ha,
+			600, floor, 5},
+		{"activation block", params, Policy{BlockMaxSize: maxSize}, ha - 1,
+			600, floor, 5},
+		{"first 60-second block", params, Policy{BlockMaxSize: maxSize}, ha,
+			60, floor / 10, 3},
+		{"first 60-second block, no size set", params, Policy{}, ha, 60,
+			floor / 10, 5},
+	}
+	for _, test := range tests {
+		h := newTemplateHarness(t, test.params, floor, test.policy)
+		h.nextTS = start
+		for range test.tipHeight {
+			h.mine()
+		}
+		best := h.chain.BestSnapshot()
+		if best.NextBlockInterval != test.wantInterval {
+			t.Fatalf("%s: next block interval %d, want %d", test.name,
+				best.NextBlockInterval, test.wantInterval)
+		}
+
+		// Four transactions of over 20 KB each.  A tenth of the
+		// configured size holds two, a tenth of the limit all four.
+		for i := range 4 {
+			tx := spend(h.cbTxs[i], 1000)
+			tx.TxOut[1].PkScript = append([]byte{txscript.OP_RETURN},
+				make([]byte, padSize)...)
+			h.src.add(tx, 1000)
+		}
+		tmpl, err := h.gen.NewBlockTemplate(nil)
+		if err != nil {
+			t.Fatalf("%s: NewBlockTemplate: %v", test.name, err)
+		}
+		if tmpl.MaxBlockSize != test.wantLimit {
+			t.Errorf("%s: template MaxBlockSize %d, want %d", test.name,
+				tmpl.MaxBlockSize, test.wantLimit)
+		}
+		wantSigChecks := test.wantLimit /
+			blockchain.BlockMaxBytesMaxSigChecksRatio
+		if uint64(tmpl.MaxSigChecks) != wantSigChecks {
+			t.Errorf("%s: template MaxSigChecks %d, want %d", test.name,
+				tmpl.MaxSigChecks, wantSigChecks)
+		}
+		if n := len(tmpl.Block.Transactions); n != test.wantTxns {
+			t.Errorf("%s: template has %d transactions, want %d",
+				test.name, n, test.wantTxns)
 		}
 	}
 }

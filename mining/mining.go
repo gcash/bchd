@@ -395,9 +395,9 @@ func NewBlkTmplGenerator(policy *Policy, params *chaincfg.Params,
 //
 // Transactions paying less than the TxMinFreeFee policy setting per kilobyte
 // are skipped.  Any transactions which would cause the block to exceed the
-// BlockMaxSize policy setting or the block size limit less 1000 bytes, exceed
-// the maximum allowed signature checks per block, or otherwise cause the block
-// to be invalid are skipped.
+// BlockMaxSize policy setting, scaled to the target interval of the block, or
+// the block size limit less 1000 bytes, exceed the maximum allowed signature
+// checks per block, or otherwise cause the block to be invalid are skipped.
 func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*BlockTemplate, error) {
 	// Extend the most recently known best block.
 	best := g.chain.BestSnapshot()
@@ -414,11 +414,13 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	maxSigChecks := min(maxBlockSize/blockchain.BlockMaxBytesMaxSigChecksRatio,
 		math.MaxUint32)
 
-	// Select transactions up to the configured size, but no further than
-	// the limit less room for the coinbase.
+	// Select transactions up to the configured size, scaled to the
+	// interval of the next block, but no further than the limit less room
+	// for the coinbase.
 	selectMaxSize := maxBlockSize - 1000
 	if g.policy.BlockMaxSize != 0 {
-		selectMaxSize = min(selectMaxSize, uint64(g.policy.BlockMaxSize))
+		selectMaxSize = min(selectMaxSize,
+			g.policy.blockMaxSize(best.NextBlockInterval))
 	}
 	selectMaxSize = min(max(selectMaxSize, 1000), math.MaxUint32)
 

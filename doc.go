@@ -191,8 +191,9 @@ Application Options:
 	                                 include transactions below the minimum relay
 	                                 fee
 	    --blockmaxsize=              Maximum block size in bytes to be used when
-	                                 creating a block -- 0 follows the consensus
-	                                 limit less 1000 bytes
+	                                 creating a 10-minute block, a tenth of it
+	                                 for a 1-minute block -- 0 follows the
+	                                 consensus limit less 1000 bytes
 	    --blockprioritysize=         Deprecated, has no effect: blocks no longer
 	                                 have a high-priority area
 	    --cbflags=                   Comment to append to the coinbase input when
