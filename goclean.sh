@@ -18,6 +18,9 @@ fi
 
 # Automatic checks
 env GO111MODULE=on golangci-lint run
+# The tests that need a BCHN node are only vetted, so that they keep
+# compiling.
+env GO111MODULE=on go vet -tags interop ./integration/
 
 # The bchrpc/proxy tests skip those that need the remote BCHD node when it
 # can't be reached, and go test shows skips only with -v, so that package is
