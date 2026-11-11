@@ -238,3 +238,27 @@ func (b *BlockChain) Upgrade2027ActivationBlock() (chainhash.Hash, int32, bool) 
 	}
 	return n.hash, n.height, true
 }
+
+// Upgrade2027ActivationBlocks returns the height and hash of the upgrade 2027
+// activation block of the branch that ends at the block with the passed hash,
+// and the hash of the block after it on that branch, which is nil when the
+// branch ends at the activation block.  The activation hash is nil when the
+// upgrade has not activated on the branch or the block is not known.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) Upgrade2027ActivationBlocks(tip *chainhash.Hash) (int32, *chainhash.Hash, *chainhash.Hash) {
+	node := b.index.LookupNode(tip)
+	if node == nil {
+		return 0, nil, nil
+	}
+	n := b.upgrade2027ActivationNode(node)
+	if n == nil {
+		return 0, nil, nil
+	}
+	pre := n.hash
+	var post *chainhash.Hash
+	if next := node.Ancestor(n.height + 1); next != nil {
+		post = &next.hash
+	}
+	return n.height, &pre, post
+}

@@ -1,9 +1,11 @@
 {
 	"hash": "92bbeb48e2184e0352a962094e674ae02c131af38bdb30cb17de21f9430104ea",
 	"confirmations": 6,
+	"confirmations_ticks": 3600,
 	"strippedsize": 0,
 	"size": 454,
 	"height": 300,
+	"ticks": 180000,
 	"version": 536870912,
 	"versionHex": "20000000",
 	"merkleroot": "dd8a29005dfd1955b331bf630b74cd5d9aa130593534be8e410808e76d69d754",
@@ -188,5 +190,7 @@
 	"nonce": 7,
 	"bits": "1d00ffff",
 	"difficulty": 1,
+	"target_time": 600,
+	"next_target_time": 600,
 	"previousblockhash": "00000000000000000123456789abcdef0123456789abcdef0123456789abcdef"
 }

@@ -149,6 +149,55 @@ func TestChainSvrCustomResults(t *testing.T) {
 			result:   &btcjson.ValidateAddressChainResult{},
 			expected: `{"isvalid":false}`,
 		},
+		{
+			name:   "upgrade status before activation",
+			result: &btcjson.UpgradeStatus{Name: "May 2027 Upgrade (mainnet)", MempoolActivationMTP: 1810382400},
+			expected: `{"name":"May 2027 Upgrade (mainnet)","mempool_activated":false,` +
+				`"mempool_activation_mtp":1810382400,"block_preactivation_height":null,` +
+				`"block_preactivation_hash":null,"block_postactivation_height":null,` +
+				`"block_postactivation_hash":null}`,
+		},
+		{
+			name: "upgrade status after activation",
+			result: &btcjson.UpgradeStatus{
+				Name:                      "May 2027 Upgrade (chipnet)",
+				MempoolActivated:          true,
+				MempoolActivationMTP:      1792065600,
+				BlockPreActivationHeight:  btcjson.Int32(327988),
+				BlockPreActivationHash:    btcjson.String("aa"),
+				BlockPostActivationHeight: btcjson.Int32(327989),
+				BlockPostActivationHash:   btcjson.String("bb"),
+			},
+			expected: `{"name":"May 2027 Upgrade (chipnet)","mempool_activated":true,` +
+				`"mempool_activation_mtp":1792065600,"block_preactivation_height":327988,` +
+				`"block_preactivation_hash":"aa","block_postactivation_height":327989,` +
+				`"block_postactivation_hash":"bb"}`,
+		},
+		{
+			name: "getblockheader tick fields",
+			result: &btcjson.GetBlockHeaderVerboseResult{
+				Confirmations:      2,
+				ConfirmationsTicks: 120,
+				Height:             3,
+				Ticks:              1260,
+				TargetTime:         60,
+				NextTargetTime:     60,
+			},
+			expected: `{"hash":"","confirmations":2,"confirmations_ticks":120,` +
+				`"height":3,"ticks":1260,"version":0,"versionHex":"",` +
+				`"merkleroot":"","time":0,"nonce":0,"bits":"","difficulty":0,` +
+				`"target_time":60,"next_target_time":60}`,
+		},
+		{
+			name:     "getrawtransaction from the mempool has no confirmations_ticks",
+			result:   &btcjson.TxRawResult{Txid: "11"},
+			expected: `{"txid":"11","version":0,"locktime":0,"vin":null,"vout":null}`,
+		},
+		{
+			name:     "getrawtransaction confirmations_ticks",
+			result:   &btcjson.TxRawResult{Txid: "11", Confirmations: 1, ConfirmationsTicks: 600},
+			expected: `{"txid":"11","version":0,"locktime":0,"vin":null,"vout":null,"confirmations":1,"confirmations_ticks":600}`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))
@@ -237,14 +286,15 @@ func TestTokenDataResults(t *testing.T) {
 		{
 			name: "gettxout without token",
 			result: &btcjson.GetTxOutResult{
-				BestBlock:     "000000000000000000000000000000000000000000000000000000000000abcd",
-				Confirmations: 6,
-				Value:         0.0001,
-				ScriptPubKey:  scriptPubKey,
-				Coinbase:      false,
+				BestBlock:          "000000000000000000000000000000000000000000000000000000000000abcd",
+				Confirmations:      6,
+				ConfirmationsTicks: 3600,
+				Value:              0.0001,
+				ScriptPubKey:       scriptPubKey,
+				Coinbase:           false,
 			},
 			expected: `{"bestblock":"000000000000000000000000000000000000000000000000000000000000abcd",` +
-				`"confirmations":6,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
+				`"confirmations":6,"confirmations_ticks":3600,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
 				`,"coinbase":false}`,
 		},
 		{
@@ -265,7 +315,7 @@ func TestTokenDataResults(t *testing.T) {
 				Coinbase: false,
 			},
 			expected: `{"bestblock":"000000000000000000000000000000000000000000000000000000000000abcd",` +
-				`"confirmations":6,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
+				`"confirmations":6,"confirmations_ticks":0,"value":0.0001,"scriptPubKey":` + scriptPubKeyJSON +
 				`,"tokenData":{"category":"` + category + `","amount":"252",` +
 				`"nft":{"capability":"none","commitment":"cc"}},"coinbase":false}`,
 		},

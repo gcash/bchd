@@ -400,6 +400,7 @@ type gbtWorkState struct {
 	timeSource    blockchain.MedianTimeSource
 	maxSigChecks  uint32
 	maxBlockSize  uint64
+	targetTime    int64
 }
 
 // newGbtWorkState returns a new instance of a gbtWorkState with all internal
@@ -1538,6 +1539,20 @@ func createTxRawResult(chainParams *chaincfg.Params, mtx *wire.MsgTx,
 	return txReply, nil
 }
 
+// confirmationTicks returns the confirmations of the main chain block at the
+// passed height in ticks: the sum of the target intervals of the block and of
+// the blocks after it up to the tip of best.
+func confirmationTicks(best *blockchain.BestState, height int32) int64 {
+	sched := best.TickSchedule
+	return best.Ticks - sched.HeightToTicks(height) +
+		sched.BlockInterval(height)
+}
+
+// blockTicksError returns the error for a block whose ticks are unknown.
+func blockTicksError(err error) error {
+	return internalRPCError(err.Error(), "Failed to obtain block ticks")
+}
+
 // handleDecodeRawTransaction handles decoderawtransaction commands.
 func handleDecodeRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.DecodeRawTransactionCmd)
@@ -2092,6 +2107,10 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		return nil, internalRPCError(err.Error(), context)
 	}
 	blk.SetHeight(blockHeight)
+	ticks, err := s.cfg.Chain.BlockTicksByHash(hash)
+	if err != nil {
+		return nil, blockTicksError(err)
+	}
 	best := s.cfg.Chain.BestSnapshot()
 
 	// Get next block hash unless there are none.
@@ -2108,19 +2127,23 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	params := s.cfg.ChainParams
 	blockHeader := &blk.MsgBlock().Header
 	blockReply := btcjson.GetBlockVerboseResult{
-		Hash:          c.Hash,
-		Version:       blockHeader.Version,
-		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
-		MerkleRoot:    blockHeader.MerkleRoot.String(),
-		PreviousHash:  blockHeader.PrevBlock.String(),
-		Nonce:         blockHeader.Nonce,
-		Time:          blockHeader.Timestamp.Unix(),
-		Confirmations: int64(1 + best.Height - blockHeight),
-		Height:        int64(blockHeight),
-		Size:          int32(len(blkBytes)),
-		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
-		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
-		NextHash:      nextHashString,
+		Hash:               c.Hash,
+		Version:            blockHeader.Version,
+		VersionHex:         fmt.Sprintf("%08x", blockHeader.Version),
+		MerkleRoot:         blockHeader.MerkleRoot.String(),
+		PreviousHash:       blockHeader.PrevBlock.String(),
+		Nonce:              blockHeader.Nonce,
+		Time:               blockHeader.Timestamp.Unix(),
+		Confirmations:      int64(1 + best.Height - blockHeight),
+		ConfirmationsTicks: best.Ticks - ticks.Ticks + ticks.Interval,
+		Height:             int64(blockHeight),
+		Ticks:              ticks.Ticks,
+		Size:               int32(len(blkBytes)),
+		Bits:               strconv.FormatInt(int64(blockHeader.Bits), 16),
+		Difficulty:         getDifficultyRatio(blockHeader.Bits, params),
+		TargetTime:         ticks.Interval,
+		NextTargetTime:     ticks.NextInterval,
+		NextHash:           nextHashString,
 	}
 
 	if *c.Verbosity == 1 {
@@ -2153,20 +2176,24 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 
 		if *c.Verbosity >= 3 {
 			return btcjson.GetBlockVerboseTxResult{
-				Hash:          blockReply.Hash,
-				Confirmations: blockReply.Confirmations,
-				Size:          blockReply.Size,
-				Height:        blockReply.Height,
-				Version:       blockReply.Version,
-				VersionHex:    blockReply.VersionHex,
-				MerkleRoot:    blockReply.MerkleRoot,
-				Tx:            rawTxns,
-				Time:          blockReply.Time,
-				Nonce:         blockReply.Nonce,
-				Bits:          blockReply.Bits,
-				Difficulty:    blockReply.Difficulty,
-				PreviousHash:  blockReply.PreviousHash,
-				NextHash:      blockReply.NextHash,
+				Hash:               blockReply.Hash,
+				Confirmations:      blockReply.Confirmations,
+				ConfirmationsTicks: blockReply.ConfirmationsTicks,
+				Size:               blockReply.Size,
+				Height:             blockReply.Height,
+				Ticks:              blockReply.Ticks,
+				Version:            blockReply.Version,
+				VersionHex:         blockReply.VersionHex,
+				MerkleRoot:         blockReply.MerkleRoot,
+				Tx:                 rawTxns,
+				Time:               blockReply.Time,
+				Nonce:              blockReply.Nonce,
+				Bits:               blockReply.Bits,
+				Difficulty:         blockReply.Difficulty,
+				TargetTime:         blockReply.TargetTime,
+				NextTargetTime:     blockReply.NextTargetTime,
+				PreviousHash:       blockReply.PreviousHash,
+				NextHash:           blockReply.NextHash,
 			}, nil
 		}
 
@@ -2314,12 +2341,18 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan
 		verifyProgress = math.Min(float64(chainSnapshot.Height)/float64(syncHeight), 1.0)
 	}
 
+	// The headers are reported as the blocks of the best chain, so their
+	// ticks are too.
 	chainInfo := &btcjson.GetBlockChainInfoResult{
 		Chain:                params.Name,
 		Blocks:               chainSnapshot.Height,
+		BlocksTicks:          chainSnapshot.Ticks,
 		Headers:              chainSnapshot.Height,
+		HeadersTicks:         chainSnapshot.Ticks,
 		BestBlockHash:        chainSnapshot.Hash.String(),
 		Difficulty:           getDifficultyRatio(chainSnapshot.Bits, params),
+		TargetTime:           tipTargetTime(chainSnapshot),
+		NextTargetTime:       chainSnapshot.NextBlockInterval,
 		MedianTime:           chainSnapshot.MedianTime.Unix(),
 		Pruned:               false,
 		Bip9SoftForks:        make(map[string]*btcjson.Bip9SoftForkDescription),
@@ -2413,7 +2446,63 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan
 		}
 	}
 
+	chainInfo.UpgradeStatus = upgrade2027Status(chain, params,
+		chainSnapshot)
+
 	return chainInfo, nil
+}
+
+// tipTargetTime returns the target interval of the tip of best.
+func tipTargetTime(best *blockchain.BestState) int64 {
+	return best.TickSchedule.BlockInterval(best.Height)
+}
+
+// upgradeNetNames maps the networks whose upgrade_status names differ from
+// their parameter names to the names other nodes give them.
+var upgradeNetNames = map[string]string{
+	chaincfg.TestNet3Params.Name:      "testnet",
+	chaincfg.TestNet4Params.Name:      "test4net",
+	chaincfg.RegressionNetParams.Name: "regtestnet",
+}
+
+// upgradeNetName returns the network name in the upgrade_status name.
+func upgradeNetName(params *chaincfg.Params) string {
+	if name, ok := upgradeNetNames[params.Name]; ok {
+		return name
+	}
+	return params.Name
+}
+
+// upgrade2027Status returns the status of the upgrade to 1-minute blocks for
+// getblockchaininfo.  The upgrade has activated for the mempool once it
+// applies to the block after the tip.  The preactivation block is the last
+// 600-tick block of the chain that ends at the tip of best and the
+// postactivation block the first 60-tick one.
+func upgrade2027Status(chain *blockchain.BlockChain, params *chaincfg.Params,
+	best *blockchain.BestState) *btcjson.UpgradeStatus {
+
+	status := &btcjson.UpgradeStatus{
+		Name:                 fmt.Sprintf("May 2027 Upgrade (%s)", upgradeNetName(params)),
+		MempoolActivated:     best.Upgrade2027Active,
+		MempoolActivationMTP: chain.Upgrade2027ActivationTime(),
+	}
+	if !best.Upgrade2027Active {
+		return status
+	}
+	height, preHash, postHash := chain.Upgrade2027ActivationBlocks(&best.Hash)
+	if preHash == nil {
+		return status
+	}
+	preHashStr := preHash.String()
+	status.BlockPreActivationHeight = &height
+	status.BlockPreActivationHash = &preHashStr
+	if postHash != nil {
+		postHeight := height + 1
+		postHashStr := postHash.String()
+		status.BlockPostActivationHeight = &postHeight
+		status.BlockPostActivationHash = &postHashStr
+	}
+	return status
 }
 
 // handleGetBlockCount implements the getblockcount command.
@@ -2473,6 +2562,10 @@ func handleGetBlockHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 		context := "Failed to obtain block height"
 		return nil, internalRPCError(err.Error(), context)
 	}
+	ticks, err := s.cfg.Chain.BlockTicksByHash(hash)
+	if err != nil {
+		return nil, blockTicksError(err)
+	}
 	best := s.cfg.Chain.BestSnapshot()
 
 	// Get next block hash unless there are none.
@@ -2488,18 +2581,22 @@ func handleGetBlockHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 
 	params := s.cfg.ChainParams
 	blockHeaderReply := btcjson.GetBlockHeaderVerboseResult{
-		Hash:          c.Hash,
-		Confirmations: int64(1 + best.Height - blockHeight),
-		Height:        blockHeight,
-		Version:       blockHeader.Version,
-		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
-		MerkleRoot:    blockHeader.MerkleRoot.String(),
-		NextHash:      nextHashString,
-		PreviousHash:  blockHeader.PrevBlock.String(),
-		Nonce:         uint64(blockHeader.Nonce),
-		Time:          blockHeader.Timestamp.Unix(),
-		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
-		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
+		Hash:               c.Hash,
+		Confirmations:      int64(1 + best.Height - blockHeight),
+		ConfirmationsTicks: best.Ticks - ticks.Ticks + ticks.Interval,
+		Height:             blockHeight,
+		Ticks:              ticks.Ticks,
+		Version:            blockHeader.Version,
+		VersionHex:         fmt.Sprintf("%08x", blockHeader.Version),
+		MerkleRoot:         blockHeader.MerkleRoot.String(),
+		NextHash:           nextHashString,
+		PreviousHash:       blockHeader.PrevBlock.String(),
+		Nonce:              uint64(blockHeader.Nonce),
+		Time:               blockHeader.Timestamp.Unix(),
+		Bits:               strconv.FormatInt(int64(blockHeader.Bits), 16),
+		Difficulty:         getDifficultyRatio(blockHeader.Bits, params),
+		TargetTime:         ticks.Interval,
+		NextTargetTime:     ticks.NextInterval,
 	}
 	return blockHeaderReply, nil
 }
@@ -2704,6 +2801,11 @@ func (state *gbtWorkState) updateBlockTemplate(s *rpcServer, useCoinbaseValue bo
 		msgBlock = template.Block
 		targetDifficulty = fmt.Sprintf("%064x",
 			blockchain.CompactToBig(msgBlock.Header.Bits))
+		prevTicks, err := s.cfg.Chain.BlockTicksByHash(
+			&msgBlock.Header.PrevBlock)
+		if err != nil {
+			return blockTicksError(err)
+		}
 
 		// Get the minimum allowed timestamp for the block based on the
 		// median timestamp of the last several blocks per the chain
@@ -2720,6 +2822,7 @@ func (state *gbtWorkState) updateBlockTemplate(s *rpcServer, useCoinbaseValue bo
 		state.minTimestamp = minTimestamp
 		state.maxSigChecks = template.MaxSigChecks
 		state.maxBlockSize = template.MaxBlockSize
+		state.targetTime = prevTicks.NextInterval
 
 		rpcsLog.Debugf("Generated block template (timestamp %v, "+
 			"target %s, merkle root %s)",
@@ -2881,6 +2984,7 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		Bits:          strconv.FormatInt(int64(header.Bits), 16),
 		CurTime:       header.Timestamp.Unix(),
 		Height:        int64(template.Height),
+		TargetTime:    state.targetTime,
 		PreviousHash:  header.PrevBlock.String(),
 		SigOpLimit:    int64(template.MaxSigChecks),
 		SigCheckLimit: int64(template.MaxSigChecks),
@@ -3437,6 +3541,8 @@ func handleGetMiningInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan str
 		CurrentBlockSize: best.BlockSize,
 		CurrentBlockTx:   best.NumTxns,
 		Difficulty:       getDifficultyRatio(best.Bits, s.cfg.ChainParams),
+		TargetTime:       tipTargetTime(best),
+		NextTargetTime:   best.NextBlockInterval,
 		Generate:         s.cfg.CPUMiner.IsMining(),
 		GenProcLimit:     s.cfg.CPUMiner.NumWorkers(),
 		HashesPerSec:     int64(s.cfg.CPUMiner.HashesPerSecond()),
@@ -3793,6 +3899,7 @@ func handleGetRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan
 	var blkHeader *wire.BlockHeader
 	var blkHashStr string
 	var chainHeight int32
+	var best *blockchain.BestState
 	if blkHash != nil {
 		// Fetch the header from chain.
 		header, err := s.cfg.Chain.HeaderByHash(blkHash)
@@ -3803,13 +3910,17 @@ func handleGetRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan
 
 		blkHeader = &header
 		blkHashStr = blkHash.String()
-		chainHeight = s.cfg.Chain.BestSnapshot().Height
+		best = s.cfg.Chain.BestSnapshot()
+		chainHeight = best.Height
 	}
 
 	rawTxn, err := createTxRawResult(s.cfg.ChainParams, mtx, txHash.String(),
 		blkHeader, blkHashStr, blkHeight, chainHeight)
 	if err != nil {
 		return nil, err
+	}
+	if best != nil {
+		rawTxn.ConfirmationsTicks = confirmationTicks(best, blkHeight)
 	}
 	return *rawTxn, nil
 }
@@ -3828,6 +3939,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	// from there, otherwise attempt to fetch from the block database.
 	var bestBlockHash string
 	var confirmations int32
+	var confirmationsTicks int64
 	var value int64
 	var pkScript []byte
 	var tokenData wire.TokenData
@@ -3889,6 +4001,7 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		best := s.cfg.Chain.BestSnapshot()
 		bestBlockHash = best.Hash.String()
 		confirmations = 1 + best.Height - entry.BlockHeight()
+		confirmationsTicks = confirmationTicks(best, entry.BlockHeight())
 		value = entry.Amount()
 		pkScript = entry.PkScript()
 		tokenData = entry.TokenData()
@@ -3911,9 +4024,10 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 	}
 
 	txOutReply := &btcjson.GetTxOutResult{
-		BestBlock:     bestBlockHash,
-		Confirmations: int64(confirmations),
-		Value:         bchutil.Amount(value).ToBCH(),
+		BestBlock:          bestBlockHash,
+		Confirmations:      int64(confirmations),
+		ConfirmationsTicks: confirmationsTicks,
+		Value:              bchutil.Amount(value).ToBCH(),
 		ScriptPubKey: btcjson.ScriptPubKeyResult{
 			Asm:       disbuf,
 			Hex:       hex.EncodeToString(pkScript),

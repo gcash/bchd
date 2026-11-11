@@ -677,6 +677,27 @@ func TestTicksReload(t *testing.T) {
 	if !ok || height != 25 || hash != chain.bestChain.NodeByHeight(25).hash {
 		t.Fatalf("activation block %v at %d (%v)", hash, height, ok)
 	}
+	pre := chain.bestChain.NodeByHeight(25)
+	post := chain.bestChain.NodeByHeight(26)
+	side := m.tip.BlockHash()
+	for _, test := range []struct {
+		tip       chainhash.Hash
+		pre, post *chainhash.Hash
+	}{
+		{best.Hash, &pre.hash, &post.hash},
+		{side, &pre.hash, &post.hash},
+		{pre.hash, &pre.hash, nil},
+		{chain.bestChain.NodeByHeight(24).hash, nil, nil},
+		{chainhash.Hash{1}, nil, nil},
+	} {
+		height, gotPre, gotPost := chain.Upgrade2027ActivationBlocks(&test.tip)
+		if !equalHashPtr(gotPre, test.pre) || !equalHashPtr(gotPost, test.post) ||
+			(test.pre != nil && height != 25) {
+
+			t.Fatalf("activation blocks of %v: %d %v %v", test.tip,
+				height, gotPre, gotPost)
+		}
+	}
 	tipTicks, err := chain.BlockTicksByHash(&best.Hash)
 	if err != nil || tipTicks != (BlockTicks{25*600 + 15*60, 60, 60}) {
 		t.Fatalf("tip ticks %+v (%v)", tipTicks, err)
@@ -707,6 +728,14 @@ func TestTicksReload(t *testing.T) {
 		t.Fatalf("best state ticks %d after reload, want %d", got.Ticks,
 			best.Ticks)
 	}
+}
+
+// equalHashPtr returns whether two hashes are both nil or equal.
+func equalHashPtr(a, b *chainhash.Hash) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // forkBlock returns the stored block with the passed hash.
