@@ -42,6 +42,7 @@ func TestExcessiveBlockSizeUserAgentComment(t *testing.T) {
 		{[]string{"--testnet4"}, 2000000, "EB2.0"},
 		{[]string{"--chipnet"}, 2000000, "EB2.0"},
 		{[]string{"--chipnet", "--excessiveblocksize=1000000"}, 2000000, "EB2.0"},
+		{[]string{"--tempnet"}, 2000000, "EB2.0"},
 		{[]string{"--testnet4", "--excessiveblocksize=8000000"}, 8000000, "EB8.0"},
 		{[]string{"--regtest", "--excessiveblocksize=2000000000"},
 			2000000000, "EB2000.0"},
@@ -231,6 +232,8 @@ func TestUpgrade2027ActivationTime(t *testing.T) {
 		{[]string{"--chipnet", "--upgrade2027activationtime=1792065600"}, 1792065600},
 		{[]string{"--chipnet", "--upgrade2027activationtime=1605451779"}, 1605451779},
 		{[]string{"--chipnet", "--upgrade2027activationtime=1605451778"}, -2},
+		{[]string{"--tempnet", "--upgrade2027activationtime=1794744000"}, 1794744000},
+		{[]string{"--tempnet", "--upgrade2027activationtime=1605451778"}, -2},
 		{[]string{"--testnet", "--upgrade2027activationtime=1605445399"}, -2},
 		{[]string{"--testnet4", "--upgrade2027activationtime=1605451778"}, -2},
 		{[]string{"--regtest", "--upgrade2027activationtime=0"}, 0},
@@ -605,5 +608,75 @@ func TestSampleConfigEmbedded(t *testing.T) {
 	}
 	if !bytes.Equal(embedded, sample) {
 		t.Fatal("bindata.go is out of date: run make bindata")
+	}
+}
+
+// TestNetworkSelection ensures each network option selects its params and
+// data and log directories, and that two networks can't be chosen at once.
+func TestNetworkSelection(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() {
+		os.Args = []string{"bchd"}
+		activeNetParams = &mainNetParams
+	}()
+
+	tests := []struct {
+		args []string
+		want *params // nil for a rejected combination
+		dir  string
+	}{
+		{nil, &mainNetParams, "mainnet"},
+		{[]string{"--testnet"}, &testNet3Params, "testnet"},
+		{[]string{"--testnet4"}, &testNet4Params, "testnet4"},
+		{[]string{"--chipnet"}, &chipNetParams, "chipnet"},
+		{[]string{"--tempnet"}, &tempNetParams, "tempnet"},
+		{[]string{"--regtest"}, &regressionNetParams, "regtest"},
+		{[]string{"--simnet"}, &simNetParams, "simnet"},
+		{[]string{"--tempnet", "--chipnet"}, nil, ""},
+		{[]string{"--tempnet", "--testnet4"}, nil, ""},
+		{[]string{"--chipnet", "--regtest"}, nil, ""},
+	}
+	for _, test := range tests {
+		activeNetParams = &mainNetParams
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if test.want == nil {
+			want := "loadConfig: The testnet, testnet4, chipnet, " +
+				"tempnet, regtest, and simnet params can't be used " +
+				"together -- choose one of them"
+			if err == nil || err.Error() != want {
+				t.Errorf("%v: got error %v, want %s", test.args, err,
+					want)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%v: %v", test.args, err)
+			continue
+		}
+		if activeNetParams != test.want {
+			t.Errorf("%v: got network %s, want %s", test.args,
+				activeNetParams.Name, test.want.Name)
+		}
+		if want := filepath.Join(tmpDir, test.dir); cfg.DataDir != want ||
+			cfg.LogDir != want {
+
+			t.Errorf("%v: got data dir %s and log dir %s, want %s",
+				test.args, cfg.DataDir, cfg.LogDir, want)
+		}
+	}
+
+	// Tempnet shares chipnet's ports.
+	if tempNetParams.DefaultPort != chipNetParams.DefaultPort ||
+		tempNetParams.rpcPort != chipNetParams.rpcPort ||
+		tempNetParams.gRRPPort != chipNetParams.gRRPPort {
+
+		t.Errorf("tempnet ports %s %s %s, chipnet's %s %s %s",
+			tempNetParams.DefaultPort, tempNetParams.rpcPort,
+			tempNetParams.gRRPPort, chipNetParams.DefaultPort,
+			chipNetParams.rpcPort, chipNetParams.gRRPPort)
 	}
 }

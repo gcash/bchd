@@ -70,6 +70,14 @@ var chipNetParams = params{
 	gRRPPort: "18335",
 }
 
+// tempNetParams contains parameters specific to tempnet, which shares
+// chipnet's network magic (wire.ChipNet) and ports.
+var tempNetParams = params{
+	Params:   &chaincfg.TempNetParams,
+	rpcPort:  "18334",
+	gRRPPort: "18335",
+}
+
 // simNetParams contains parameters specific to the simulation test network
 // (wire.SimNet).
 var simNetParams = params{

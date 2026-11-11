@@ -424,6 +424,7 @@ func TestUpgradeNetName(t *testing.T) {
 		{&chaincfg.TestNet3Params, "testnet"},
 		{&chaincfg.TestNet4Params, "test4net"},
 		{&chaincfg.ChipNetParams, "chipnet"},
+		{&chaincfg.TempNetParams, "tempnet"},
 		{&chaincfg.RegressionNetParams, "regtestnet"},
 		{&chaincfg.SimNetParams, "simnet"},
 	} {

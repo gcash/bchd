@@ -3474,7 +3474,7 @@ func handleGetHeaders(s *rpcServer, cmd interface{}, closeNotifier <-chan struct
 func isTestNet(params *chaincfg.Params) bool {
 	switch params {
 	case &chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
-		&chaincfg.ChipNetParams:
+		&chaincfg.ChipNetParams, &chaincfg.TempNetParams:
 		return true
 	}
 	return false

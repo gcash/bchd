@@ -15,5 +15,10 @@ configurations.
 | testnet3 | TCP 18333    | TCP 18334 | TCP 18335 |
 | testnet4 | TCP 28333    | TCP 18334 | TCP 18335 |
 | chipnet  | TCP 48333    | TCP 18334 | TCP 18335 |
+| tempnet  | TCP 48333    | TCP 18334 | TCP 18335 |
 | regtest  | TCP 18444    | TCP 18334 | TCP 18335 |
 | simnet   | TCP 18555    | TCP 18556 | TCP 18557 |
+
+Chipnet and tempnet use the same ports, so a node of each on one host needs
+other ports for one of them, set with `--listen`, `--rpclisten` and
+`--grpclisten`. Tempnet ends on 2026-11-15.

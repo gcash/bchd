@@ -59,7 +59,7 @@ func TestMarshalTransactionScriptClass(t *testing.T) {
 }
 
 // TestBitcoinNet ensures GetBlockchainInfo reports a distinct network type
-// for each network in chaincfg.
+// for each network in chaincfg other than tempnet.
 func TestBitcoinNet(t *testing.T) {
 	tests := []struct {
 		params *chaincfg.Params
@@ -71,6 +71,9 @@ func TestBitcoinNet(t *testing.T) {
 		{&chaincfg.SimNetParams, pb.GetBlockchainInfoResponse_SIMNET},
 		{&chaincfg.TestNet4Params, pb.GetBlockchainInfoResponse_TESTNET4},
 		{&chaincfg.ChipNetParams, pb.GetBlockchainInfoResponse_CHIPNET},
+		// Tempnet, a fork of chipnet that ends on 2026-11-15, has no
+		// network type of its own.
+		{&chaincfg.TempNetParams, pb.GetBlockchainInfoResponse_CHIPNET},
 	}
 	wants := make(map[pb.GetBlockchainInfoResponse_BitcoinNet]struct{})
 	for _, test := range tests {
