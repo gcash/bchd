@@ -6,6 +6,7 @@ package netsync
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -383,6 +384,75 @@ func TestBlockMisbehavior(t *testing.T) {
 
 		t.Fatal("the side chain block's failure did not show")
 	}
+}
+
+// TestCoinbaseShapeMisbehavior ensures the peer that sent a block whose
+// coinbase has the shape CHIP-2025-03 forbids gets a ban score of 100 with the
+// reason bad-cb-shape from the block after the upgrade 2027 activation block,
+// and none while the upgrade never activates.
+func TestCoinbaseShapeMisbehavior(t *testing.T) {
+	// send has the peer send the block it was asked for.
+	send := func(h *requestTestHarness, peer *peerpkg.Peer,
+		block *bchutil.Block) {
+
+		h.sm.requestBlock(peer, h.sm.peerStates[peer], block.Hash(), true)
+		h.sm.handleBlockMsg(&blockMsg{block: block, peer: peer})
+	}
+	// expectTip fails the test unless the block is the tip and no score
+	// was asked for.
+	expectTip := func(what string, h *requestTestHarness,
+		block *bchutil.Block) {
+
+		t.Helper()
+		if got := h.scores(); len(got) != 0 {
+			t.Errorf("%s: punished %v, want none", what, got)
+		}
+		if tip := h.sm.chain.BestSnapshot().Hash; tip != *block.Hash() {
+			t.Errorf("%s: tip is %v, want %v", what, tip, block.Hash())
+		}
+	}
+
+	// The coinbases of the test blocks have version 1, lock time 0, a
+	// final sequence and pay 50 BCH.
+	never := newRequestTestHarness(t)
+	block := never.tipBlock(0)
+	send(never, never.peer(1), block)
+	expectTip("never active", never, block)
+
+	// The harness tip, block 1, is the activation block, whose coinbase
+	// may still have the shape.
+	activation := uint64(chaincfg.RegressionNetParams.GenesisBlock.Header.
+		Timestamp.Unix()) + 1
+	h := newUpgradeRequestTestHarness(t, activation)
+	best := h.sm.chain.BestSnapshot()
+	if best.Height != 1 || best.NextBlockInterval != 60 {
+		t.Fatalf("tip at height %d has next interval %d, want the "+
+			"activation block at height 1", best.Height,
+			best.NextBlockInterval)
+	}
+	peer := h.peer(1)
+	forbidden := h.tipBlock(0)
+	send(h, peer, forbidden)
+	if got, want := h.scores(), []string{"100 bad-cb-shape"}; !slices.Equal(got, want) {
+		t.Fatalf("forbidden shape: punished %v, want %v", got, want)
+	}
+	h.mtx.Lock()
+	h.punished = nil
+	h.mtx.Unlock()
+
+	// A version 2 coinbase paying the 1-minute subsidy is accepted.
+	msg := h.tipBlock(1).MsgBlock()
+	cb := msg.Transactions[0]
+	cb.Version = 2
+	cb.TxOut[0].Value = blockchain.CalcBlockSubsidy(best.Ticks+60, 60,
+		h.params)
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(msg).Transactions())
+	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
+	solveBlock(msg)
+	allowed := bchutil.NewBlock(msg)
+	send(h, peer, allowed)
+	expectTip("version 2 coinbase", h, allowed)
 }
 
 // cutReason returns reason cut to the 111 bytes a reject carries.

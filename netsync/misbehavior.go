@@ -106,6 +106,7 @@ var blockBanScores = map[blockchain.ErrorCode]uint32{
 	blockchain.ErrBadTxVersion:          100, // bad-txns-version
 	blockchain.ErrMissingCoinbaseHeight: 100, // bad-cb-height
 	blockchain.ErrBadCoinbaseHeight:     100, // bad-cb-height
+	blockchain.ErrBadCoinbaseShape:      100, // bad-cb-shape
 	blockchain.ErrBadCheckpoint:         100, // checkpoint mismatch
 	blockchain.ErrForkTooOld:            100, // bad-fork-prior-to-checkpoint
 	blockchain.ErrInvalidAncestorBlock:  100, // bad-prevblk
