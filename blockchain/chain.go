@@ -78,20 +78,32 @@ type BestState struct {
 	NumTxns    uint64         // The number of txns in the block.
 	TotalTxns  uint64         // The total number of txns in the chain.
 	MedianTime time.Time      // Median time as per CalcPastMedianTime.
+
+	Ticks             int64 // The ticks of the block.
+	NextBlockInterval int64 // The target interval of the next block.
+	Upgrade2027Active bool  // Whether the next block is a 1-minute block.
+
+	// TickSchedule maps the heights of the chain to ticks, up to the next
+	// block.
+	TickSchedule TickSchedule
 }
 
 // newBestState returns a new best stats instance for the given parameters.
-func newBestState(node *blockNode, blockSize, numTxns,
+func newBestState(node *blockNode, sched TickSchedule, blockSize, numTxns,
 	totalTxns uint64, medianTime time.Time) *BestState {
 
 	return &BestState{
-		Hash:       node.hash,
-		Height:     node.height,
-		Bits:       node.bits,
-		BlockSize:  blockSize,
-		NumTxns:    numTxns,
-		TotalTxns:  totalTxns,
-		MedianTime: medianTime,
+		Hash:              node.hash,
+		Height:            node.height,
+		Bits:              node.bits,
+		BlockSize:         blockSize,
+		NumTxns:           numTxns,
+		TotalTxns:         totalTxns,
+		MedianTime:        medianTime,
+		Ticks:             node.ticks,
+		NextBlockInterval: int64(node.nextInterval),
+		Upgrade2027Active: isUpgrade2027Active(node),
+		TickSchedule:      sched,
 	}
 }
 
@@ -200,6 +212,10 @@ type BlockChain struct {
 	// upgrade2027ActivationTime is the network's activation time of the
 	// 1-minute block upgrade, or its override.
 	upgrade2027ActivationTime uint64
+
+	// upgrade2027Node caches the last activation block of the 1-minute
+	// block upgrade found by upgrade2027ActivationNode.
+	upgrade2027Node atomic.Pointer[blockNode]
 
 	// The state is used as a fairly efficient way to cache information
 	// about the current best chain state that is returned to callers when
@@ -382,11 +398,12 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	defer b.chainLock.Unlock()
 
 	tip := b.bestChain.tip()
-	node := newBlockNode(header, tip)
+	node := newBlockNode(header, tip, b.upgrade2027ActivationTime)
 	b.index.AddNode(node)
 	b.index.SetStatusFlags(node, statusValid)
 	b.bestChain.SetTip(node)
-	state := newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	state := newBestState(node, b.tickSchedule(node), 0, 0, 0,
+		node.CalcPastMedianTime())
 	b.stateLock.Lock()
 	b.stateSnapshot = state
 	b.stateLock.Unlock()
@@ -865,8 +882,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	b.stateLock.RUnlock()
 	numTxns := uint64(len(block.MsgBlock().Transactions))
 	blockSize := uint64(block.MsgBlock().SerializeSize())
-	state := newBestState(node, blockSize, numTxns,
-		curTotalTxns+numTxns, node.CalcPastMedianTime())
+	state := newBestState(node, b.tickSchedule(node), blockSize,
+		numTxns, curTotalTxns+numTxns, node.CalcPastMedianTime())
 
 	ablaState := b.ablaNextState(b.ablaState, node.height, blockSize)
 
@@ -1016,8 +1033,8 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	numTxns := uint64(len(prevBlock.MsgBlock().Transactions))
 	blockSize := uint64(prevBlock.MsgBlock().SerializeSize())
 	newTotalTxns := curTotalTxns - uint64(len(block.MsgBlock().Transactions))
-	state := newBestState(prevNode, blockSize, numTxns,
-		newTotalTxns, prevNode.CalcPastMedianTime())
+	state := newBestState(prevNode, b.tickSchedule(prevNode), blockSize,
+		numTxns, newTotalTxns, prevNode.CalcPastMedianTime())
 
 	var ablaState ABLAState
 	err = b.db.Update(func(dbTx database.Tx) error {
@@ -2551,7 +2568,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 		if err = b.utxoCache.Commit(view); err != nil {
 			return err
 		}
-		state = newBestState(node, 0, 0, 0, time.Time{})
+		state = newBestState(node, b.tickSchedule(node), 0, 0, 0,
+			time.Time{})
 		if interruptRequested(interrupt) {
 			if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
 				return err
@@ -2566,7 +2584,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 	}
 	tip := b.bestChain.Tip()
 	if state == nil {
-		state = newBestState(tip, 0, 0, 0, time.Time{})
+		state = newBestState(tip, b.tickSchedule(tip), 0, 0, 0,
+			time.Time{})
 	}
 	if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
 		return err

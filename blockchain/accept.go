@@ -82,7 +82,8 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 		blockHeader := &block.MsgBlock().Header
 		newNode = b.headers.take(block.Hash(), prevNode)
 		if newNode == nil {
-			newNode = newBlockNode(blockHeader, prevNode)
+			newNode = newBlockNode(blockHeader, prevNode,
+				b.upgrade2027ActivationTime)
 		}
 		newNode.status = statusDataStored
 		newNode.received = uint32(time.Now().Unix())

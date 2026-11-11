@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
@@ -36,7 +37,25 @@ const (
 	// Eventually we should create new testdata using the Bitcoin Cash
 	// magic.
 	blockDataNet wire.BitcoinNet = 0xd9b4bef9
+
+	// upgrade2027Never is an activation time of the upgrade to 1-minute
+	// blocks that is never reached.
+	upgrade2027Never = 1<<48 - 1
 )
+
+// TestMain runs the tests with the upgrade to 1-minute blocks never active
+// on every network, since many tests stamp their blocks with the wall clock.
+// Tests that need the upgrade set an override.
+func TestMain(m *testing.M) {
+	for _, params := range []*chaincfg.Params{&chaincfg.MainNetParams,
+		&chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
+		&chaincfg.ChipNetParams, &chaincfg.RegressionNetParams,
+		&chaincfg.SimNetParams} {
+
+		params.Upgrade2027ActivationTime = upgrade2027Never
+	}
+	os.Exit(m.Run())
+}
 
 // fileExists returns whether or not the named file or directory exists.
 func fileExists(name string) bool {
@@ -352,7 +371,8 @@ func (b *BlockChain) TstSetCoinbaseMaturity(maturity uint16) {
 func newFakeChain(params *chaincfg.Params) *BlockChain {
 	// Create a genesis block node and block index index populated with it
 	// for use when creating the fake chain below.
-	node := newBlockNode(&params.GenesisBlock.Header, nil)
+	node := newBlockNode(&params.GenesisBlock.Header, nil,
+		params.Upgrade2027ActivationTime)
 	index := newBlockIndex(nil, params)
 	index.AddNode(node)
 
@@ -370,6 +390,8 @@ func newFakeChain(params *chaincfg.Params) *BlockChain {
 		headers:             newHeaderTree(),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
+
+		upgrade2027ActivationTime: params.Upgrade2027ActivationTime,
 	}
 }
 
@@ -383,5 +405,5 @@ func newFakeNode(parent *blockNode, blockVersion int32, bits uint32, timestamp t
 		Bits:      bits,
 		Timestamp: timestamp,
 	}
-	return newBlockNode(header, parent)
+	return newBlockNode(header, parent, upgrade2027Never)
 }

@@ -1331,7 +1331,7 @@ func (b *BlockChain) createChainState() error {
 	genesisBlock := bchutil.NewBlock(b.chainParams.GenesisBlock)
 	genesisBlock.SetHeight(0)
 	header := &genesisBlock.MsgBlock().Header
-	node := newBlockNode(header, nil)
+	node := newBlockNode(header, nil, b.upgrade2027ActivationTime)
 	node.status = statusDataStored | statusValid
 	b.bestChain.SetTip(node)
 
@@ -1342,8 +1342,8 @@ func (b *BlockChain) createChainState() error {
 	// genesis block, use its timestamp for the median time.
 	numTxns := uint64(len(genesisBlock.MsgBlock().Transactions))
 	blockSize := uint64(genesisBlock.MsgBlock().SerializeSize())
-	b.stateSnapshot = newBestState(node, blockSize, numTxns,
-		numTxns, time.Unix(node.timestamp, 0))
+	b.stateSnapshot = newBestState(node, b.tickSchedule(node), blockSize,
+		numTxns, numTxns, time.Unix(node.timestamp, 0))
 
 	// Create the initial the database chain state including creating the
 	// necessary index buckets and inserting the genesis block.
@@ -1518,7 +1518,8 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 			// Initialize the block node for the block, connect it,
 			// and add it to the block index.
 			node := new(blockNode)
-			initBlockNode(node, header, parent)
+			initBlockNode(node, header, parent,
+				b.upgrade2027ActivationTime)
 			node.status = status
 			b.index.addNode(node)
 
@@ -1572,8 +1573,8 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 		// Initialize the state related to the best block.
 		blockSize := uint64(len(blockBytes))
 		numTxns := uint64(len(block.Transactions))
-		b.stateSnapshot = newBestState(tip, blockSize, numTxns,
-			state.totalTxns, tip.CalcPastMedianTime())
+		b.stateSnapshot = newBestState(tip, b.tickSchedule(tip), blockSize,
+			numTxns, state.totalTxns, tip.CalcPastMedianTime())
 
 		return nil
 	})

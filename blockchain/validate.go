@@ -1445,6 +1445,6 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 	// Leave the spent txouts entry nil in the state since the information
 	// is not needed and thus extra work can be avoided.
 	view := NewUtxoViewpoint()
-	newNode := newBlockNode(&header, tip)
+	newNode := newBlockNode(&header, tip, b.upgrade2027ActivationTime)
 	return b.checkConnectBlock(newNode, block, view, nil)
 }

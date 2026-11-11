@@ -423,7 +423,7 @@ func (b *BlockChain) processBlockHeader(header *wire.BlockHeader, peerID int32, 
 		return nil, false, err
 	}
 
-	node := newBlockNode(header, prevNode)
+	node := newBlockNode(header, prevNode, b.upgrade2027ActivationTime)
 	if !b.headers.add(node, peerID, b.bestChain.Tip().workSum) {
 		return nil, false, errHeaderTreeFull
 	}
