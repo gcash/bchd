@@ -463,3 +463,53 @@ func TestTemplateCoinbaseEscapesForbiddenShape(t *testing.T) {
 		t.Errorf("coinbase has version %d, want 2", cb.Version)
 	}
 }
+
+// TestTemplateTimelocksInTicks ensures the template checks lock times,
+// sequence locks and coinbase maturity for the ticks of the next block on a
+// chain where every block after the genesis block is 60 ticks.  After tip
+// 1005 the next block is at 60,360 ticks, so the coinbase of block 6 is
+// mature and that of block 7 is not, a lock time of 100 has passed and one
+// of 101 has not, and relative locks of 100 units on an input from block 3
+// and of 101 units on one from block 2 have passed and have not.
+func TestTemplateTimelocksInTicks(t *testing.T) {
+	params := templateParams()
+	params.Upgrade2027ActivationTime = 1
+	h := newTemplateHarness(t, params, 32000000, bigPolicy)
+	h.mineN(1005)
+	next := h.chain.BestSnapshot().TickSchedule.NextBlockTicks()
+	if next != 60360 {
+		t.Fatalf("next block at %d ticks, want 60360", next)
+	}
+
+	locked := func(cb int, lockTime, sequence uint32) *wire.MsgTx {
+		tx := spend(h.cbTxs[cb-1], 1000)
+		tx.TxIn[0].Sequence = sequence
+		tx.LockTime = lockTime
+		return tx
+	}
+	tests := []struct {
+		name string
+		tx   *wire.MsgTx
+		want bool
+	}{
+		{"mature coinbase", locked(6, 0, wire.MaxTxInSequenceNum), true},
+		{"immature coinbase", locked(7, 0, wire.MaxTxInSequenceNum), false},
+		{"passed lock time", locked(5, 100, 0), true},
+		{"lock time at the next block", locked(4, 101, 0), false},
+		{"passed relative lock", locked(3, 0, 100), true},
+		{"relative lock", locked(2, 0, 101), false},
+	}
+	for _, test := range tests {
+		h.src.add(test.tx, 1000)
+	}
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	for _, test := range tests {
+		if templateHas(tmpl, test.tx) != test.want {
+			t.Errorf("%s: included %v, want %v", test.name,
+				!test.want, test.want)
+		}
+	}
+}

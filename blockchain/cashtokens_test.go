@@ -83,7 +83,7 @@ func TestCashTokensStandardValidOPCodes(t *testing.T) {
 
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Now(), bchutil.Amount(1000), 2, true, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772*600, time.Now(), bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -175,7 +175,7 @@ func TestCashTokensStandardInvalidOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772*600, time.Time{}, bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			continue
 		}
@@ -263,7 +263,7 @@ func TestCashTokensNonStandardOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 792772, time.Time{}, bchutil.Amount(1000), 2, true, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 792772*600, time.Time{}, bchutil.Amount(1000), 2, true, false)
 		if err != nil {
 			continue
 		}
@@ -347,7 +347,7 @@ func TestCashTokensBeforeActivationStandardValidOPCodes(t *testing.T) {
 
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Now(), bchutil.Amount(1000), 2, false, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772*600, time.Now(), bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			fatalf(t, err, test, i)
 		}
@@ -439,7 +439,7 @@ func TestCashTokensBeforeActivationStandardInvalidOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772*600, time.Time{}, bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			continue
 		}
@@ -532,7 +532,7 @@ func TestCashTokensBeforeActivationNonStandardOPCodes(t *testing.T) {
 		}
 		bchutilTx := bchutil.NewTx(&tx)
 
-		err = mempool.CheckTransactionStandard(bchutilTx, 782772, time.Time{}, bchutil.Amount(1000), 2, false, false)
+		err = mempool.CheckTransactionStandard(bchutilTx, 782772*600, time.Time{}, bchutil.Amount(1000), 2, false, false)
 		if err != nil {
 			continue
 		}

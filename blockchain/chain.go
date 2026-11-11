@@ -573,21 +573,21 @@ func (b *BlockChain) addOrphanBlock(block *bchutil.Block, flags BehaviorFlags) e
 }
 
 // SequenceLock represents the converted relative lock-time in seconds, and
-// absolute block-height for a transaction input's relative lock-times.
+// absolute block ticks for a transaction input's relative lock-times.
 // According to SequenceLock, after the referenced input has been confirmed
 // within a block, a transaction spending that input can be included into a
-// block either after 'seconds' (according to past median time), or once the
-// 'BlockHeight' has been reached.
+// block either after 'seconds' (according to past median time), or once a
+// block with more than 'BlockTicks' ticks has been reached.
 type SequenceLock struct {
-	Seconds     int64
-	BlockHeight int32
+	Seconds    int64
+	BlockTicks int64
 }
 
 // CalcSequenceLock computes a relative lock-time SequenceLock for the passed
 // transaction using the passed UtxoViewpoint to obtain the past median time
 // for blocks in which the referenced inputs of the transactions were included
 // within. The generated SequenceLock lock can be used in conjunction with a
-// block height, and adjusted median block time to determine if all the inputs
+// block's ticks, and adjusted median block time to determine if all the inputs
 // referenced within a transaction have reached sufficient maturity allowing
 // the candidate transaction to be included in a block.
 //
@@ -627,7 +627,7 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 	// at any given height or time. This value is returned as the relative
 	// lock time in the case that BIP 68 is disabled, or has not yet been
 	// activated.
-	sequenceLock := &SequenceLock{Seconds: -1, BlockHeight: -1}
+	sequenceLock := &SequenceLock{Seconds: -1, BlockTicks: -1}
 
 	// The sequence locks semantics are always active for transactions
 	// within the mempool.
@@ -659,9 +659,10 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 		return sequenceLock, nil
 	}
 
-	// Grab the next height from the PoV of the passed blockNode to use for
-	// inputs present in the mempool.
-	nextHeight := node.height + 1
+	// Inputs present in the mempool are taken to be in the block after the
+	// passed blockNode, whose schedule also maps the heights of the
+	// confirmed inputs to ticks.
+	sched := b.tickSchedule(node)
 
 	for txInIndex, txIn := range mTx.TxIn {
 		utxo := utxoView.LookupEntry(txIn.PreviousOutPoint)
@@ -677,8 +678,8 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 		// assume the transaction makes it into the next block when
 		// evaluating its sequence blocks.
 		inputHeight := utxo.BlockHeight()
-		if inputHeight == 0x7fffffff {
-			inputHeight = nextHeight
+		if inputHeight == mempoolHeight {
+			inputHeight = sched.NextHeight()
 		}
 
 		// Given a sequence number, we apply the relative time lock
@@ -725,18 +726,25 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 			}
 		default:
 			// The relative lock-time for this input is expressed
-			// in blocks so we calculate the relative offset from
-			// the input's height as its converted absolute
-			// lock-time. We subtract one from the relative lock in
-			// order to maintain the original lockTime semantics.
-			blockHeight := inputHeight + int32(relativeLock-1)
-			if blockHeight > sequenceLock.BlockHeight {
-				sequenceLock.BlockHeight = blockHeight
+			// in units of 600 ticks, counted from the ticks of the
+			// input's block.
+			blockTicks := sequenceLockTicks(
+				sched.HeightToTicks(inputHeight), relativeLock)
+			if blockTicks > sequenceLock.BlockTicks {
+				sequenceLock.BlockTicks = blockTicks
 			}
 		}
 	}
 
 	return sequenceLock, nil
+}
+
+// sequenceLockTicks returns the ticks of the last block in which an input
+// created in a block with the passed ticks is still locked by the passed
+// height-based relative lock.  One is subtracted to maintain the original
+// lockTime semantics.
+func sequenceLockTicks(coinTicks, relativeLock int64) int64 {
+	return coinTicks + relativeLock*lockTimeUnitTicks - 1
 }
 
 // LockTimeToSequence converts the passed relative locktime to a sequence

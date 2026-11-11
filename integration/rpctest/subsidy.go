@@ -5,6 +5,7 @@
 package rpctest
 
 import (
+	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -45,16 +46,81 @@ type upgrade2027Block struct {
 func (h *Harness) nextBlockSubsidy(prevHash *chainhash.Hash,
 	prevHeight int32) (int64, error) {
 
-	next := int64(prevHeight) + 1
 	activation, err := h.upgrade2027Height(prevHash, prevHeight)
 	if err != nil {
 		return 0, err
 	}
-	if activation < 0 {
-		return blockchain.CalcBlockSubsidy(next*600, 600, h.ActiveNet), nil
+	interval := int64(600)
+	if activation >= 0 {
+		interval = 60
 	}
-	ticks := int64(activation)*600 + (next-int64(activation))*60
-	return blockchain.CalcBlockSubsidy(ticks, 60, h.ActiveNet), nil
+	ticks := heightToTicks(activation, prevHeight+1)
+	return blockchain.CalcBlockSubsidy(ticks, interval, h.ActiveNet), nil
+}
+
+// heightToTicks returns the ticks of the block at the passed height on a
+// chain whose activation block is at activation, which is -1 when it has
+// none.
+func heightToTicks(activation, height int32) int64 {
+	if activation < 0 || height <= activation {
+		return int64(height) * 600
+	}
+	return int64(activation)*600 + int64(height-activation)*60
+}
+
+// ticksToHeight returns the height of the last block whose ticks are not
+// above the passed ticks on a chain whose activation block is at
+// activation, or -1 when there is none.
+func ticksToHeight(activation int32, ticks int64) int32 {
+	switch {
+	case ticks < 0:
+		return -1
+	case activation < 0 || ticks <= int64(activation)*600:
+		return int32(ticks / 600)
+	default:
+		return activation + int32((ticks-int64(activation)*600)/60)
+	}
+}
+
+// lastMatureCoinbase returns the height of the last block whose coinbase
+// outputs the wallet spends when the tip is at the passed height: the last
+// block at least the coinbase maturity in ticks below the tip.  The node
+// would take them one block earlier, but the wallet has always waited for
+// the tip itself to reach the maturity.
+//
+// The wallet calls it with its own lock held, so code holding the harness
+// lock must not take the wallet's.
+func (h *Harness) lastMatureCoinbase(height int32) int32 {
+	if h.upgrade2027Time >= Upgrade2027Never {
+		return height - int32(h.ActiveNet.CoinbaseMaturity)
+	}
+
+	h.Lock()
+	defer h.Unlock()
+	hash, err := h.Node.GetBlockHash(int64(height))
+	if err != nil {
+		log.Printf("Cannot find the mature coinbase outputs: %v", err)
+		return -1
+	}
+	activation, err := h.upgrade2027Height(hash, height)
+	if err != nil {
+		log.Printf("Cannot find the mature coinbase outputs: %v", err)
+		return -1
+	}
+	maturity := int64(h.ActiveNet.CoinbaseMaturity) * 600
+	return ticksToHeight(activation,
+		heightToTicks(activation, height)-maturity)
+}
+
+// coinbaseMaturityBlocks returns a number of blocks after which the wallet
+// is sure to spend a coinbase output.  Once 1-minute blocks may activate,
+// that is ten times the coinbase maturity.
+func (h *Harness) coinbaseMaturityBlocks() uint32 {
+	blocks := uint32(h.ActiveNet.CoinbaseMaturity)
+	if h.upgrade2027Time < Upgrade2027Never {
+		blocks *= 10
+	}
+	return blocks
 }
 
 // upgrade2027Height returns the height of the upgrade 2027 activation block

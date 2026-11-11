@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"testing"
-	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/btcjson"
@@ -40,10 +39,7 @@ func TestGetTxOutMempool(t *testing.T) {
 		},
 		ChainParams:   params,
 		FetchUtxoView: chain.FetchUtxoView,
-		BestHeight:    func() int32 { return chain.BestSnapshot().Height },
-		MedianTimePast: func() time.Time {
-			return chain.BestSnapshot().MedianTime
-		},
+		BestSnapshot:  chain.BestSnapshot,
 		CalcSequenceLock: func(tx *bchutil.Tx, view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return chain.CalcSequenceLock(tx, view, true)
 		},

@@ -402,6 +402,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	// Extend the most recently known best block.
 	best := g.chain.BestSnapshot()
 	nextBlockHeight := best.Height + 1
+	nextBlockTicks := best.TickSchedule.NextBlockTicks()
 
 	ts := medianAdjustedTime(best, g.timeSource)
 
@@ -484,8 +485,8 @@ mempoolLoop:
 			log.Tracef("Skipping coinbase tx %s", tx.Hash())
 			continue
 		}
-		if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight,
-			best.MedianTime) {
+		if !blockchain.IsFinalizedTransaction(tx, nextBlockTicks,
+			best.MedianTime, best.Upgrade2027Active) {
 
 			log.Tracef("Skipping non-finalized tx %s", tx.Hash())
 			continue
@@ -617,8 +618,8 @@ mempoolLoop:
 
 		// Ensure the transaction inputs pass all of the necessary
 		// preconditions before allowing it to be added to the block.
-		_, err = blockchain.CheckTransactionInputs(tx, nextBlockHeight,
-			blockUtxos, g.chainParams)
+		_, err = blockchain.CheckTransactionInputs(tx,
+			best.TickSchedule, blockUtxos, g.chainParams)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"CheckTransactionInputs: %v", tx.Hash(), err)
@@ -628,7 +629,7 @@ mempoolLoop:
 		seqLock, err := g.chain.NextBlockSequenceLock(&best.Hash, tx,
 			blockUtxos)
 		if err != nil || !blockchain.SequenceLockActive(seqLock,
-			nextBlockHeight, best.MedianTime) {
+			nextBlockTicks, best.MedianTime) {
 
 			log.Tracef("Skipping tx %s because its sequence locks "+
 				"are not met: %v", tx.Hash(), err)

@@ -411,13 +411,12 @@ func fundedPool(params *chaincfg.Params, funding *wire.MsgTx,
 			view.AddTxOuts(fundingTx, 1)
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx,
 			*blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
 			return &blockchain.SequenceLock{Seconds: -1,
-				BlockHeight: -1}, nil
+				BlockTicks: -1}, nil
 		},
 	})
 }

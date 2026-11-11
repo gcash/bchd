@@ -202,15 +202,29 @@ func (c *vmbChain) FetchUtxoView(tx *bchutil.Tx) (*blockchain.UtxoViewpoint, err
 	return view, nil
 }
 
-func (c *vmbChain) BestHeight() int32         { return c.height }
-func (c *vmbChain) MedianTimePast() time.Time { return c.mtp }
+// BestSnapshot returns the state of the tip, which is before 1-minute
+// blocks.
+func (c *vmbChain) BestSnapshot() *blockchain.BestState {
+	return &blockchain.BestState{
+		Height:            c.height,
+		MedianTime:        c.mtp,
+		Ticks:             int64(c.height) * 600,
+		NextBlockInterval: 600,
+		TickSchedule:      c.schedule(),
+	}
+}
+
+// schedule returns the tick schedule for the block after the tip.
+func (c *vmbChain) schedule() blockchain.TickSchedule {
+	return blockchain.NewTickSchedule(c.height+1, 0, false)
+}
 
 // CalcSequenceLock follows BIP68 for outputs created in the tip block, using
 // the tip's median time past for the block before it.
 func (c *vmbChain) CalcSequenceLock(tx *bchutil.Tx,
 	view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
-	lock := &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}
+	lock := &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}
 	if tx.MsgTx().Version < 2 {
 		return lock, nil
 	}
@@ -227,8 +241,9 @@ func (c *vmbChain) CalcSequenceLock(tx *bchutil.Tx,
 			s := c.mtp.Unix() + value<<wire.SequenceLockTimeGranularity - 1
 			lock.Seconds = max(lock.Seconds, s)
 		default:
-			h := entry.BlockHeight() + int32(value) - 1
-			lock.BlockHeight = max(lock.BlockHeight, h)
+			ticks := c.schedule().CoinTicks(entry.BlockHeight()) +
+				value*600 - 1
+			lock.BlockTicks = max(lock.BlockTicks, ticks)
 		}
 	}
 	return lock, nil
@@ -358,8 +373,7 @@ func checkVMBMempool(c *vmbCase, era vmbEra, acceptNonStd bool) (bool, error) {
 			Policy:           vmbPolicy(minRelayTxFee, acceptNonStd),
 			ChainParams:      &chaincfg.MainNetParams,
 			FetchUtxoView:    c.chain.FetchUtxoView,
-			BestHeight:       c.chain.BestHeight,
-			MedianTimePast:   c.chain.MedianTimePast,
+			BestSnapshot:     c.chain.BestSnapshot,
 			CalcSequenceLock: c.chain.CalcSequenceLock,
 		})
 		result, err := pool.CheckMempoolAcceptance(c.tx, 0)
@@ -388,7 +402,8 @@ func checkVMBMempool(c *vmbCase, era vmbEra, acceptNonStd bool) (bool, error) {
 func checkVMBBlock(c *vmbCase, era vmbEra) error {
 	params := &chaincfg.MainNetParams
 	flags := vmbBlockFlags(era)
-	nextHeight := c.chain.height + 1
+	sched := c.chain.schedule()
+	nextTicks := sched.NextBlockTicks()
 	tx := c.tx
 
 	err := blockchain.CheckTransactionSanity(tx, true, era.upgrade9, flags)
@@ -398,7 +413,7 @@ func checkVMBBlock(c *vmbCase, era vmbEra) error {
 	if blockchain.IsCoinBase(tx) {
 		return errors.New("coinbase")
 	}
-	if !blockchain.IsFinalizedTransaction(tx, nextHeight, era.mtp) {
+	if !blockchain.IsFinalizedTransaction(tx, nextTicks, era.mtp, false) {
 		return errors.New("not final")
 	}
 	view, _ := c.chain.FetchUtxoView(tx)
@@ -406,10 +421,10 @@ func checkVMBBlock(c *vmbCase, era vmbEra) error {
 	if err != nil {
 		return err
 	}
-	if !blockchain.SequenceLockActive(lock, nextHeight, era.mtp) {
+	if !blockchain.SequenceLockActive(lock, nextTicks, era.mtp) {
 		return errors.New("sequence locks not met")
 	}
-	if _, err := blockchain.CheckTransactionInputs(tx, nextHeight, view,
+	if _, err := blockchain.CheckTransactionInputs(tx, sched, view,
 		params); err != nil {
 		return err
 	}
@@ -449,9 +464,9 @@ func runVMBInputEngine(c *vmbCase, idx int,
 // checkVMBScriptOnly checks a script only vector.  The standard check is the
 // transaction and input standardness checks plus the input under mempool
 // flags, and the block check is the input under block flags.  Finality is not
-// part of standardness here, so it is passed with a far height and time.
+// part of standardness here, so it is passed with far ticks and time.
 func checkVMBScriptOnly(c *vmbCase, v *vmbVector, era vmbEra) (error, error) {
-	stdErr := checkTransactionStandard(c.tx, math.MaxInt32,
+	stdErr := checkTransactionStandard(c.tx, math.MaxInt64,
 		time.Unix(math.MaxUint32+1, 0), DefaultDustRelayFee, 2, true,
 		era.upgrade12)
 	if stdErr == nil {

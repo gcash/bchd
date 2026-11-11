@@ -34,21 +34,22 @@ var (
 	}
 )
 
-// utxo represents an unspent output spendable by the memWallet. The maturity
-// height of the transaction is recorded in order to properly observe the
-// maturity period of direct coinbase outputs.
+// utxo represents an unspent output spendable by the memWallet. The height
+// of a coinbase output is recorded in order to properly observe the maturity
+// period of direct coinbase outputs.
 type utxo struct {
 	pkScript       []byte
 	value          bchutil.Amount
 	keyIndex       uint32
-	maturityHeight int32
+	isCoinbase     bool
+	coinbaseHeight int32
 	isLocked       bool
 }
 
-// isMature returns true if the target utxo is considered "mature" at the
-// passed block height. Otherwise, false is returned.
-func (u *utxo) isMature(height int32) bool {
-	return height >= u.maturityHeight
+// isMature returns true if the target utxo is considered "mature" when the
+// last mature coinbase is at the passed height. Otherwise, false is returned.
+func (u *utxo) isMature(lastMatureCoinbase int32) bool {
+	return !u.isCoinbase || u.coinbaseHeight <= lastMatureCoinbase
 }
 
 // chainUpdate encapsulates an update to the current main chain. This struct is
@@ -102,6 +103,10 @@ type memWallet struct {
 	chainUpdateSignal chan struct{}
 	chainMtx          sync.Mutex
 
+	// lastMatureCoinbase returns the height of the last block whose
+	// coinbase outputs the wallet spends at the passed height.
+	lastMatureCoinbase func(height int32) int32
+
 	net *chaincfg.Params
 
 	rpc *rpcclient.Client
@@ -154,6 +159,9 @@ func newMemWallet(net *chaincfg.Params, harnessID uint32) (*memWallet, error) {
 		utxos:             make(map[wire.OutPoint]*utxo),
 		chainUpdateSignal: make(chan struct{}),
 		reorgJournal:      make(map[int32]*undoEntry),
+		lastMatureCoinbase: func(height int32) int32 {
+			return height - int32(net.CoinbaseMaturity)
+		},
 	}, nil
 }
 
@@ -246,12 +254,6 @@ func (m *memWallet) chainSyncer() {
 	}
 }
 
-// coinbaseMaturity returns the number of blocks after which the harness and
-// its wallet take a coinbase output to be spendable.
-func coinbaseMaturity(net *chaincfg.Params) int32 {
-	return int32(net.CoinbaseMaturity)
-}
-
 // evalOutputs evaluates each of the passed outputs, creating a new matching
 // utxo within the wallet if we're able to spend the output.
 func (m *memWallet) evalOutputs(outputs []*wire.TxOut, txHash *chainhash.Hash,
@@ -268,19 +270,12 @@ func (m *memWallet) evalOutputs(outputs []*wire.TxOut, txHash *chainhash.Hash,
 				continue
 			}
 
-			// If this is a coinbase output, then we mark the
-			// maturity height at the proper block height in the
-			// future.
-			var maturityHeight int32
-			if isCoinbase {
-				maturityHeight = m.currentHeight + coinbaseMaturity(m.net)
-			}
-
 			op := wire.OutPoint{Hash: *txHash, Index: uint32(i)}
 			m.utxos[op] = &utxo{
 				value:          bchutil.Amount(output.Value),
 				keyIndex:       keyIndex,
-				maturityHeight: maturityHeight,
+				isCoinbase:     isCoinbase,
+				coinbaseHeight: m.currentHeight,
 				pkScript:       pkScript,
 			}
 			undo.utxosCreated = append(undo.utxosCreated, op)
@@ -400,10 +395,11 @@ func (m *memWallet) fundTx(tx *wire.MsgTx, amt bchutil.Amount,
 		inputAmounts []bchutil.Amount
 	)
 
+	lastMature := m.lastMatureCoinbase(m.currentHeight)
 	for outPoint, utxo := range m.utxos {
 		// Skip any outputs that are still currently immature or are
 		// currently locked.
-		if !utxo.isMature(m.currentHeight) || utxo.isLocked {
+		if !utxo.isMature(lastMature) || utxo.isLocked {
 			continue
 		}
 
@@ -576,10 +572,11 @@ func (m *memWallet) ConfirmedBalance() bchutil.Amount {
 	defer m.RUnlock()
 
 	var balance bchutil.Amount
+	lastMature := m.lastMatureCoinbase(m.currentHeight)
 	for _, utxo := range m.utxos {
 		// Prevent any immature or locked outputs from contributing to
 		// the wallet's total confirmed balance.
-		if !utxo.isMature(m.currentHeight) || utxo.isLocked {
+		if !utxo.isMature(lastMature) || utxo.isLocked {
 			continue
 		}
 

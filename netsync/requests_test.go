@@ -102,9 +102,8 @@ func newRequestTestHarness(t *testing.T) *requestTestHarness {
 		Chain:       chain,
 		ChainParams: &params,
 		TxMemPool: mempool.New(&mempool.Config{
-			ChainParams:    &params,
-			BestHeight:     func() int32 { return 1 },
-			MedianTimePast: func() time.Time { return time.Now() },
+			ChainParams:  &params,
+			BestSnapshot: testBestState(1),
 		}),
 		PeerNotifier: nopNotifier{},
 		MaxPeers:     8,

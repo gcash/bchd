@@ -182,8 +182,9 @@ type Params struct {
 	// after.  It matches Bitcoin Cash Node's nDefaultConsensusBlockSize.
 	DefaultConsensusBlockSize uint32
 
-	// CoinbaseMaturity is the number of blocks required before newly mined
-	// coins (coinbase transactions) can be spent.
+	// CoinbaseMaturity is the depth, in 10-minute blocks of 600 ticks,
+	// required before newly mined coins (coinbase transactions) can be
+	// spent.
 	CoinbaseMaturity uint16
 
 	// SubsidyReductionInterval is the interval, in 10-minute blocks of 600

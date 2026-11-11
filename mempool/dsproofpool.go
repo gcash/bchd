@@ -76,7 +76,8 @@ func (mp *TxPool) unlockAndNotify() {
 
 // currentScriptFlags returns the script flags for the next block.
 func (mp *TxPool) currentScriptFlags() txscript.ScriptFlags {
-	return mp.standardScriptFlags(mp.cfg.BestHeight()+1, mp.cfg.MedianTimePast())
+	best := mp.cfg.BestSnapshot()
+	return mp.standardScriptFlags(best.Height+1, best.MedianTime)
 }
 
 // dsProofCoin returns the unspent output op in the utxo set or the memory

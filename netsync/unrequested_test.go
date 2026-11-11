@@ -7,7 +7,6 @@ package netsync
 import (
 	"math/big"
 	"testing"
-	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -52,10 +51,7 @@ func unrequestedTestManager(t *testing.T) (*SyncManager, *chaincfg.Params, *peer
 	txPool := mempool.New(&mempool.Config{
 		ChainParams:   &params,
 		FetchUtxoView: chain.FetchUtxoView,
-		BestHeight:    func() int32 { return chain.BestSnapshot().Height },
-		MedianTimePast: func() time.Time {
-			return chain.BestSnapshot().MedianTime
-		},
+		BestSnapshot:  chain.BestSnapshot,
 		CalcSequenceLock: func(tx *bchutil.Tx,
 			view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 

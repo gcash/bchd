@@ -784,7 +784,8 @@ func TestCheckTransactionStandard(t *testing.T) {
 	for _, test := range tests {
 		// Ensure standardness is as expected.
 		err := checkTransactionStandard(bchutil.NewTx(&test.tx),
-			test.height, pastMedianTime, DefaultDustRelayFee, 1, false, false)
+			int64(test.height)*600, pastMedianTime, DefaultDustRelayFee, 1,
+			false, false)
 		if err == nil && test.isStandard {
 			// Test passes since function returned standard for a
 			// transaction which is intended to be standard.
@@ -840,7 +841,7 @@ func TestNonFinalStandardReason(t *testing.T) {
 	tx.AddTxIn(&wire.TxIn{Sequence: 0})
 	tx.AddTxOut(wire.NewTxOut(1000, []byte{txscript.OP_TRUE}, wire.TokenData{}))
 	tx.LockTime = 300001
-	err := checkTransactionStandard(bchutil.NewTx(tx), 300000, time.Now(),
+	err := checkTransactionStandard(bchutil.NewTx(tx), 300000*600, time.Now(),
 		DefaultDustRelayFee, 2, true, true)
 	if err == nil || !strings.Contains(err.Error(), "bad-txns-nonfinal") {
 		t.Fatalf("got %v, want a rejection with bad-txns-nonfinal", err)
@@ -904,7 +905,7 @@ func TestUnspendableScriptStandard(t *testing.T) {
 			Sequence:         wire.MaxTxInSequenceNum,
 		})
 		tx.TxOut = test.outputs
-		err := checkTransactionStandard(bchutil.NewTx(tx), 300000,
+		err := checkTransactionStandard(bchutil.NewTx(tx), 300000*600,
 			time.Now(), DefaultDustRelayFee, 2, true, test.upgrade12)
 		code, _ := extractRejectCode(err)
 		if (err == nil) != (test.code == 0) || err != nil &&

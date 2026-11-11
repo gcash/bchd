@@ -223,6 +223,7 @@ func New(activeNet *chaincfg.Params, handlers *rpcclient.NotificationHandlers,
 
 		upgrade2027Time: upgrade2027ArgTime(extraArgs),
 	}
+	wallet.lastMatureCoinbase = h.lastMatureCoinbase
 
 	// Track this newly created test instance within the package level
 	// global map of all active test instances.
@@ -286,7 +287,7 @@ func (h *Harness) SetUp(createTestChain bool, numMatureOutputs uint32) error {
 	// Create a test chain with the desired number of mature coinbase
 	// outputs.
 	if createTestChain && numMatureOutputs != 0 {
-		numToGenerate := uint32(coinbaseMaturity(h.ActiveNet)) +
+		numToGenerate := h.coinbaseMaturityBlocks() +
 			numMatureOutputs
 		_, err := h.Node.Generate(numToGenerate)
 		if err != nil {

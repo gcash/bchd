@@ -23,43 +23,48 @@ import (
 // TestSequenceLocksActive tests the SequenceLockActive function to ensure it
 // works as expected in all possible combinations/scenarios.
 func TestSequenceLocksActive(t *testing.T) {
-	seqLock := func(h int32, s int64) *SequenceLock {
+	seqLock := func(ticks int64, s int64) *SequenceLock {
 		return &SequenceLock{
-			Seconds:     s,
-			BlockHeight: h,
+			Seconds:    s,
+			BlockTicks: ticks,
 		}
 	}
 
 	tests := []struct {
-		seqLock     *SequenceLock
-		blockHeight int32
-		mtp         time.Time
+		seqLock    *SequenceLock
+		blockTicks int64
+		mtp        time.Time
 
 		want bool
 	}{
-		// Block based sequence lock with equal block height.
-		{seqLock: seqLock(1000, -1), blockHeight: 1001, mtp: time.Unix(9, 0), want: true},
+		// Tick based sequence lock with the block one tick past it.
+		{seqLock: seqLock(600000, -1), blockTicks: 600001, mtp: time.Unix(9, 0), want: true},
 
 		// Time based sequence lock with mtp past the absolute time.
-		{seqLock: seqLock(-1, 30), blockHeight: 2, mtp: time.Unix(31, 0), want: true},
+		{seqLock: seqLock(-1, 30), blockTicks: 1200, mtp: time.Unix(31, 0), want: true},
 
-		// Block based sequence lock with current height below seq lock block height.
-		{seqLock: seqLock(1000, -1), blockHeight: 90, mtp: time.Unix(9, 0), want: false},
+		// Tick based sequence lock with the block ticks below it.
+		{seqLock: seqLock(600000, -1), blockTicks: 54000, mtp: time.Unix(9, 0), want: false},
 
 		// Time based sequence lock with current time before lock time.
-		{seqLock: seqLock(-1, 30), blockHeight: 2, mtp: time.Unix(29, 0), want: false},
+		{seqLock: seqLock(-1, 30), blockTicks: 1200, mtp: time.Unix(29, 0), want: false},
 
-		// Block based sequence lock at the same height, so shouldn't yet be active.
-		{seqLock: seqLock(1000, -1), blockHeight: 1000, mtp: time.Unix(9, 0), want: false},
+		// Tick based sequence lock at the same ticks, so shouldn't yet be active.
+		{seqLock: seqLock(600000, -1), blockTicks: 600000, mtp: time.Unix(9, 0), want: false},
 
 		// Time based sequence lock with current time equal to lock time, so shouldn't yet be active.
-		{seqLock: seqLock(-1, 30), blockHeight: 2, mtp: time.Unix(30, 0), want: false},
+		{seqLock: seqLock(-1, 30), blockTicks: 1200, mtp: time.Unix(30, 0), want: false},
+
+		// A lock of one unit on a coin at tick 600000 holds for nine
+		// 60-tick blocks and ends with the tenth.
+		{seqLock: seqLock(600599, -1), blockTicks: 600540, mtp: time.Unix(9, 0), want: false},
+		{seqLock: seqLock(600599, -1), blockTicks: 600600, mtp: time.Unix(9, 0), want: true},
 	}
 
 	t.Logf("Running %d sequence locks tests", len(tests))
 	for i, test := range tests {
 		got := SequenceLockActive(test.seqLock,
-			test.blockHeight, test.mtp)
+			test.blockTicks, test.mtp)
 		if got != test.want {
 			t.Fatalf("SequenceLockActive #%d got %v want %v", i,
 				got, test.want)
@@ -1152,7 +1157,8 @@ func TestTxValueErrorCodes(t *testing.T) {
 				NewUtxoEntry(wire.NewTxOut(value, script,
 					wire.TokenData{}), 1, false)
 		}
-		_, err := CheckTransactionInputs(tx, 1000, view,
+		_, err := CheckTransactionInputs(tx,
+			NewTickSchedule(1000, 0, false), view,
 			&chaincfg.RegressionNetParams)
 		checkCode(test.name, err, ErrTxInValueOutOfRange)
 	}

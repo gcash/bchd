@@ -67,10 +67,9 @@ func TestDisconnectedBlockReaddedParentsFirst(t *testing.T) {
 			}
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: func() time.Time { return time.Now() },
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 		IsDeploymentActive: func(uint32) (bool, error) { return true, nil },
 	})
@@ -123,10 +122,9 @@ func newReaddTestManager(chain readdTestChain) *SyncManager {
 			}
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: func() time.Time { return time.Now() },
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 		IsDeploymentActive: func(uint32) (bool, error) { return true, nil },
 	})
@@ -355,6 +353,21 @@ func TestParentsFirstLongChain(t *testing.T) {
 		if tx != chain[i] {
 			t.Fatalf("position %d holds %v, want %v", i, tx.Hash(),
 				chain[i].Hash())
+		}
+	}
+}
+
+// testBestState returns a snapshot callback for a test memory pool whose
+// chain tip is at the passed height, has never activated 1-minute blocks and
+// has the current time as its median time past.
+func testBestState(height int32) func() *blockchain.BestState {
+	return func() *blockchain.BestState {
+		return &blockchain.BestState{
+			Height:            height,
+			MedianTime:        time.Now(),
+			Ticks:             int64(height) * 600,
+			NextBlockInterval: 600,
+			TickSchedule:      blockchain.NewTickSchedule(height+1, 0, false),
 		}
 	}
 }
