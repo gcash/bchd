@@ -34,9 +34,12 @@ const (
 	mpFilterKeep = 720
 
 	// mpFilterBanScore and mpTxsBanScore are added to the ban score of a
-	// peer for a getmpfilters and a getmptxs message.
+	// peer for a getmpfilters and a getmptxs message.  A wallet that
+	// downloads every interval, as one that hides what it watches does
+	// while intervals are small, sends a getmptxs every mpFilterInterval,
+	// which at 2 each settles at a score near 35.
 	mpFilterBanScore = 10
-	mpTxsBanScore    = 5
+	mpTxsBanScore    = 2
 
 	// mpTxsMaxBytes is how many bytes of transactions one getmptxs is
 	// answered with before the intervals left in its run are left out. The
