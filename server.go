@@ -358,6 +358,11 @@ type server struct {
 	mempoolFilterChanges uint64
 	mempoolFilterMtx     sync.Mutex
 
+	// mpFilters builds and serves the script filters of the transactions
+	// admitted to the mempool in each short interval. It is nil when
+	// script filters are off.
+	mpFilters *mpFilters
+
 	// agentBlacklist is a list of blacklisted substrings by which to filter
 	// user agents.
 	agentBlacklist []string
@@ -2325,6 +2330,9 @@ func (s *server) RemoveRebroadcastInventory(iv *wire.InvVect) {
 // relayTransactions generates and relays inventory vectors for all of the
 // passed transactions to all connected peers.
 func (s *server) relayTransactions(txns []*mempool.TxDesc) {
+	// Put them in the open interval of the mempool filters too.
+	s.addMempoolTxs(txns)
+
 	for _, txD := range txns {
 		iv := wire.NewInvVect(wire.InvTypeTx, txD.Tx.Hash())
 		s.RelayInventory(iv, txD)
@@ -3451,6 +3459,9 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnGetCFHeaders: sp.OnGetCFHeaders,
 			OnGetCFCheckpt: sp.OnGetCFCheckpt,
 			OnGetCFMempool: sp.OnGetCFMemPool,
+			OnSendMpFilter: sp.OnSendMpFilter,
+			OnGetMpFilters: sp.OnGetMpFilters,
+			OnGetMpTxs:     sp.OnGetMpTxs,
 			OnFeeFilter:    sp.OnFeeFilter,
 			OnFilterAdd:    sp.OnFilterAdd,
 			OnFilterClear:  sp.OnFilterClear,
@@ -3982,6 +3993,14 @@ func (s *server) Start() {
 	s.wg.Add(1)
 	go s.peerHandler()
 
+	if s.mpFilters != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.mpFilters.run(s.quit)
+		}()
+	}
+
 	if !cfg.NoDoubleSpendProof {
 		s.wg.Add(1)
 		go s.dsProofCleanupHandler()
@@ -4376,6 +4395,10 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indxLog.Info("BCMR index is enabled")
 		s.bcmrIndex = indexers.NewBcmrIndex(db, chainParams)
 		indexes = append(indexes, s.bcmrIndex)
+	}
+	// Mempool filters need no old blocks, so a pruned node serves them too.
+	if !cfg.NoScriptFilters && !cfg.NoCFilters {
+		s.mpFilters = newMpFilters()
 	}
 	if scriptFiltersWanted(cfg) {
 		indxLog.Info("Script filter index is enabled")
