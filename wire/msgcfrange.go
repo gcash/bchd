@@ -160,7 +160,8 @@ func NewMsgGetCFRange(filterType FilterType, blockHash *chainhash.Hash,
 // MsgCFRange implements the Message interface and represents a cfrange
 // message, the reply to getcfrange. With the hashes on its edges, the run of
 // leaves from Before to After rebuilds the root of the tree, which shows that
-// the tree holds no other leaf with the prefix asked for.
+// a tree whose leaves are in order holds no other leaf with the prefix asked
+// for.  The leaves a reply doesn't carry are not shown to be in order.
 type MsgCFRange struct {
 	FilterType FilterType
 	BlockHash  chainhash.Hash

@@ -258,6 +258,41 @@ func (c *cfProofConn) expectPong() {
 	}
 }
 
+// expectBanned sends n getcfrange and n getcfproof messages without waiting
+// for the answers, and fails the test unless the node then disconnects the
+// peer within 10 seconds.
+func (c *cfProofConn) expectBanned(n int) {
+	c.t.Helper()
+	// The answers are read and dropped, so that the peer keeps reading and
+	// sees the connection close.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			select {
+			case <-c.ranges:
+			case <-c.proofs:
+			case <-done:
+				return
+			}
+		}
+	}()
+	for i := 0; i < n; i++ {
+		c.peer.QueueMessage(wire.NewMsgGetCFRange(wire.GCSFilterScripts, &c.block, 0, [32]byte{}), nil)
+		c.peer.QueueMessage(wire.NewMsgGetCFProof(wire.GCSFilterScripts, &c.block, 0), nil)
+	}
+	gone := make(chan struct{})
+	go func() {
+		c.peer.WaitForDisconnect()
+		close(gone)
+	}()
+	select {
+	case <-gone:
+	case <-time.After(cfReplyTimeout):
+		c.t.Errorf("the node kept a peer that sent %d getcfrange and %d getcfproof", n, n)
+	}
+}
+
 // checkCFRange checks one cfrange against the reference leaves of the block.
 func checkCFRange(t *testing.T, name string, msg *wire.MsgCFRange, blockHash *chainhash.Hash,
 	leaves []builder.ScriptLeaf, root chainhash.Hash, prefix *[32]byte, bits uint16) {
@@ -589,4 +624,23 @@ func TestCFRangeAndCFProof(t *testing.T) {
 	conn.expectNoProof("regular filter",
 		wire.NewMsgGetCFProof(wire.GCSFilterRegular, blockHash, 0))
 	conn.expectPong()
+
+	// Each request adds 1 to the ban score the node keeps for a peer, and
+	// it bans at 100. Settling a disagreement takes about one proof for
+	// each level of the tree, 30 for a billion leaves, so a peer that
+	// asks for 60 in a row is still served.
+	quiet := dialCFProofPeer(t, h.P2PAddress(), *blockHash)
+	defer quiet.peer.Disconnect()
+	for i := 0; i < 60; i++ {
+		if _, ok := quiet.askProof(0); !ok {
+			t.Fatalf("no cfproof for request %d of 60 in a row", i+1)
+		}
+	}
+	quiet.expectPong()
+
+	// A peer that sends 60 of each is banned, which 60 of one kind alone
+	// would not do. The ban is on the address, so this comes last.
+	flood := dialCFProofPeer(t, h.P2PAddress(), *blockHash)
+	defer flood.peer.Disconnect()
+	flood.expectBanned(60)
 }

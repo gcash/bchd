@@ -358,6 +358,14 @@ type server struct {
 	mempoolFilterChanges uint64
 	mempoolFilterMtx     sync.Mutex
 
+	// scriptLeaves holds the last block scriptFilterLeaves rebuilt, under
+	// scriptLeavesMtx, for scriptLeavesKept.  A peer that settles a
+	// disagreement over a block's script filter asks for many proofs of
+	// that one block, and rebuilding its leaves for each would read the
+	// block and its spend journal each time.
+	scriptLeavesMtx sync.Mutex
+	scriptLeaves    *scriptLeavesOfBlock
+
 	// agentBlacklist is a list of blacklisted substrings by which to filter
 	// user agents.
 	agentBlacklist []string
@@ -1717,8 +1725,17 @@ func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
 func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
 	[]blockchain.SpentTxOut, []builder.ScriptLeaf, error) {
 
+	// The mutex is held while a block is rebuilt, so that peers that ask
+	// for the same block at once rebuild it once.
+	s.scriptLeavesMtx.Lock()
+	defer s.scriptLeavesMtx.Unlock()
+
+	// A block can leave the main chain while it is kept here.
 	if !s.chain.MainChainHasBlock(blockHash) {
 		return nil, nil, nil, fmt.Errorf("block %v is not in the main chain", blockHash)
+	}
+	if kept := s.scriptLeaves; kept != nil && kept.block.Hash().IsEqual(blockHash) {
+		return kept.block, kept.stxos, kept.leaves, nil
 	}
 	block, err := s.chain.BlockByHash(blockHash)
 	if err != nil {
@@ -1736,14 +1753,45 @@ func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	kept := &scriptLeavesOfBlock{block: block, stxos: stxos, leaves: leaves}
+	s.scriptLeaves = kept
+	time.AfterFunc(scriptLeavesKept, func() {
+		s.scriptLeavesMtx.Lock()
+		if s.scriptLeaves == kept {
+			s.scriptLeaves = nil
+		}
+		s.scriptLeavesMtx.Unlock()
+	})
 	return block, stxos, leaves, nil
 }
+
+// scriptLeavesOfBlock is a block with the outputs it spends and the leaves of
+// its script filter entry tree.
+type scriptLeavesOfBlock struct {
+	block  *bchutil.Block
+	stxos  []blockchain.SpentTxOut
+	leaves []builder.ScriptLeaf
+}
+
+// scriptLeavesKept is how long the block scriptFilterLeaves last rebuilt is
+// kept.  A disagreement over a block is settled well within it, and a block
+// nobody asks about any more is not held in memory.
+const scriptLeavesKept = 2 * time.Minute
+
+// cfTreeBanScore is added to the ban score of a peer for a getcfrange or a
+// getcfproof message.  Each one reads a block and its spend journal unless
+// the block is the last one asked about, and a getcfproof for a spent output
+// reads the block that created it as well, so a peer that asks without end is
+// banned.  One that settles a disagreement asks for about one proof for each
+// level of the block's entry tree, a few dozen in all, and stays far below
+// the score that warns.
+const cfTreeBanScore = 1
 
 // OnGetCFRange is invoked when a peer receives a getcfrange bitcoin message.
 // It answers with the leaves of the block's script filter entry tree whose
 // keys start with the prefix, the leaves next to them, and the hashes that
-// rebuild the tree's root, so the peer can check that no other leaf has the
-// prefix.
+// rebuild the tree's root, so the peer can check that a tree whose leaves are
+// in order has no other leaf with the prefix.
 func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 	// Only script filters have an entry tree. A peer can send this
 	// regardless of the services we advertise.
@@ -1755,6 +1803,9 @@ func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 	if !sp.server.syncManager.IsCurrent() {
 		return
 	}
+
+	// A decaying ban score increase is applied to prevent flooding.
+	sp.addBanScore(0, cfTreeBanScore, "getcfrange")
 
 	_, _, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
 	if err != nil {
@@ -1821,6 +1872,9 @@ func (sp *serverPeer) OnGetCFProof(_ *peer.Peer, msg *wire.MsgGetCFProof) {
 	if !sp.server.syncManager.IsCurrent() {
 		return
 	}
+
+	// A decaying ban score increase is applied to prevent flooding.
+	sp.addBanScore(0, cfTreeBanScore, "getcfproof")
 
 	block, stxos, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
 	if err != nil {
