@@ -17,6 +17,11 @@ type FilterType uint8
 const (
 	// GCSFilterRegular is the regular filter type.
 	GCSFilterRegular FilterType = iota
+
+	// GCSFilterScripts is the script filter type: the scripts of the outputs
+	// a block creates and spends, and their token categories, served with
+	// the root of the block's entry tree in front (gcash/bchd#767).
+	GCSFilterScripts
 )
 
 const (

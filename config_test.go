@@ -215,6 +215,36 @@ func TestBcmrIndexOptions(t *testing.T) {
 	}
 }
 
+// TestScriptFiltersOptions ensures that the script filter index, which reads
+// the spent outputs of every block from genesis, is refused with the options
+// that leave blocks or the spend journal out, and beside its own drop option.
+func TestScriptFiltersOptions(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	tests := []struct {
+		args []string
+		ok   bool
+	}{
+		{[]string{"--scriptfilters"}, true},
+		{[]string{"--scriptfilters", "--prune"}, false},
+		{[]string{"--scriptfilters", "--fastsync"}, false},
+		{[]string{"--scriptfilters", "--nocfilters"}, false},
+		{[]string{"--scriptfilters", "--dropscriptfilterindex"}, false},
+		{[]string{"--dropscriptfilterindex"}, true},
+	}
+	for _, test := range tests {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		_, _, err := loadConfig()
+		if (err == nil) != test.ok {
+			t.Errorf("%v: error %v, want it accepted %v", test.args, err, test.ok)
+		}
+	}
+}
+
 // TestProfileListenAddr ensures a bare --profile port only listens on
 // localhost and that IP:port is accepted.
 func TestProfileListenAddr(t *testing.T) {
