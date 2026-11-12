@@ -1710,6 +1710,185 @@ func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
 	return nil
 }
 
+// scriptFilterLeaves rebuilds the leaves of the entry tree of a main chain
+// block's script filter, from the block and its spend journal, as the script
+// filter index did to build the root in front of the filter. The leaves are
+// not stored, since they would take about half as much space as the blocks.
+func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
+	[]blockchain.SpentTxOut, []builder.ScriptLeaf, error) {
+
+	if !s.chain.MainChainHasBlock(blockHash) {
+		return nil, nil, nil, fmt.Errorf("block %v is not in the main chain", blockHash)
+	}
+	block, err := s.chain.BlockByHash(blockHash)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	stxos, err := s.chain.FetchSpendJournal(block)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	prevOutScripts := make([][]byte, len(stxos))
+	for i := range stxos {
+		prevOutScripts[i] = stxos[i].PkScript
+	}
+	leaves, err := builder.ScriptLeaves(block.MsgBlock(), prevOutScripts)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return block, stxos, leaves, nil
+}
+
+// OnGetCFRange is invoked when a peer receives a getcfrange bitcoin message.
+// It answers with the leaves of the block's script filter entry tree whose
+// keys start with the prefix, the leaves next to them, and the hashes that
+// rebuild the tree's root, so the peer can check that no other leaf has the
+// prefix.
+func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
+	// Only script filters have an entry tree. A peer can send this
+	// regardless of the services we advertise.
+	if msg.FilterType != wire.GCSFilterScripts || sp.server.scriptFilterIndex == nil {
+		peerLog.Debugf("Ignoring getcfrange from %s: no entry tree for "+
+			"filter type %v", sp, msg.FilterType)
+		return
+	}
+	if !sp.server.syncManager.IsCurrent() {
+		return
+	}
+
+	_, _, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	if err != nil {
+		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
+		return
+	}
+	first, end, err := builder.ScriptLeavesWithPrefix(leaves, &msg.Prefix, msg.PrefixBits)
+	if err != nil {
+		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
+		return
+	}
+
+	reply := &wire.MsgCFRange{
+		FilterType: msg.FilterType,
+		BlockHash:  msg.BlockHash,
+		LeafCount:  uint32(len(leaves)),
+		FirstIndex: uint32(first),
+		Leaves:     make([]wire.CFLeaf, 0, end-first),
+	}
+	for i := first; i < end; i++ {
+		reply.Leaves = append(reply.Leaves, wire.CFLeaf(leaves[i].Bytes()))
+	}
+	lo, hi := first, end
+	if first > 0 {
+		before := wire.CFLeaf(leaves[first-1].Bytes())
+		reply.Before = &before
+		lo--
+	}
+	if end < len(leaves) {
+		after := wire.CFLeaf(leaves[end].Bytes())
+		reply.After = &after
+		hi++
+	}
+	if lo < hi {
+		reply.Hashes, err = builder.ScriptRangeHashes(leaves, lo, hi)
+		if err != nil {
+			peerLog.Errorf("Error building cfrange for %v: %v", msg.BlockHash, err)
+			return
+		}
+	}
+
+	// A range too large for one message is not answered. The peer asks
+	// again with a longer prefix, which splits it.
+	if uint64(reply.SerializeSize()) > uint64(reply.MaxPayloadLength(sp.ProtocolVersion())) {
+		peerLog.Debugf("Ignoring getcfrange from %s: %d leaves with the "+
+			"prefix do not fit a message", sp, end-first)
+		return
+	}
+	sp.QueueMessage(reply, nil)
+}
+
+// OnGetCFProof is invoked when a peer receives a getcfproof bitcoin message.
+// It answers with one leaf of the block's script filter entry tree, its
+// branch, and the transaction it names with that transaction's Merkle branch.
+// For a leaf of a spent output, it adds the transaction of that output, with
+// its block and Merkle branch, so the peer can check the leaf's key against
+// block headers it has.
+func (sp *serverPeer) OnGetCFProof(_ *peer.Peer, msg *wire.MsgGetCFProof) {
+	if msg.FilterType != wire.GCSFilterScripts || sp.server.scriptFilterIndex == nil {
+		peerLog.Debugf("Ignoring getcfproof from %s: no entry tree for "+
+			"filter type %v", sp, msg.FilterType)
+		return
+	}
+	if !sp.server.syncManager.IsCurrent() {
+		return
+	}
+
+	block, stxos, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	if err != nil {
+		peerLog.Debugf("Ignoring getcfproof from %s: %v", sp, err)
+		return
+	}
+	if msg.LeafIndex >= uint32(len(leaves)) {
+		peerLog.Debugf("Ignoring getcfproof from %s: leaf %d of %d",
+			sp, msg.LeafIndex, len(leaves))
+		return
+	}
+	leaf := &leaves[msg.LeafIndex]
+	leafBranch, err := builder.ScriptRangeHashes(leaves, int(msg.LeafIndex), int(msg.LeafIndex)+1)
+	if err != nil {
+		peerLog.Errorf("Error building cfproof for %v: %v", msg.BlockHash, err)
+		return
+	}
+	txs := block.Transactions()
+	reply := &wire.MsgCFProof{
+		FilterType: msg.FilterType,
+		BlockHash:  msg.BlockHash,
+		LeafCount:  uint32(len(leaves)),
+		LeafIndex:  msg.LeafIndex,
+		Leaf:       wire.CFLeaf(leaf.Bytes()),
+		LeafBranch: leafBranch,
+		Tx:         txs[leaf.TxIndex].MsgTx(),
+		TxBranch:   blockchain.MerkleBranch(blockchain.BuildMerkleTreeStore(txs), int(leaf.TxIndex)),
+	}
+
+	if reply.Leaf.Spent() {
+		// The spend journal lists the outputs the block's inputs spend,
+		// in order, the coinbase left out.
+		if leaf.TxIndex == 0 {
+			peerLog.Errorf("Spent output leaf in the coinbase of %v", msg.BlockHash)
+			return
+		}
+		spent := int(leaf.Index)
+		for _, tx := range txs[1:leaf.TxIndex] {
+			spent += len(tx.MsgTx().TxIn)
+		}
+		prevOut := &txs[leaf.TxIndex].MsgTx().TxIn[leaf.Index].PreviousOutPoint
+		prevBlock, err := sp.server.chain.BlockByHeight(stxos[spent].Height)
+		if err != nil {
+			peerLog.Errorf("Error reading the block of %v: %v", prevOut, err)
+			return
+		}
+		prevTxs := prevBlock.Transactions()
+		found := false
+		for i, tx := range prevTxs {
+			if tx.Hash().IsEqual(&prevOut.Hash) {
+				reply.PrevBlockHash = *prevBlock.Hash()
+				reply.PrevTxIndex = uint32(i)
+				reply.PrevTx = tx.MsgTx()
+				reply.PrevTxBranch = blockchain.MerkleBranch(
+					blockchain.BuildMerkleTreeStore(prevTxs), i)
+				found = true
+				break
+			}
+		}
+		if !found {
+			peerLog.Errorf("No transaction %v in block %v at height %d",
+				prevOut.Hash, prevBlock.Hash(), stxos[spent].Height)
+			return
+		}
+	}
+	sp.QueueMessage(reply, nil)
+}
+
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
 func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 	// Ignore the request when the index of the filter type asked for is not
@@ -3451,6 +3630,8 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnGetCFHeaders: sp.OnGetCFHeaders,
 			OnGetCFCheckpt: sp.OnGetCFCheckpt,
 			OnGetCFMempool: sp.OnGetCFMemPool,
+			OnGetCFRange:   sp.OnGetCFRange,
+			OnGetCFProof:   sp.OnGetCFProof,
 			OnFeeFilter:    sp.OnFeeFilter,
 			OnFilterAdd:    sp.OnFilterAdd,
 			OnFilterClear:  sp.OnFilterClear,
