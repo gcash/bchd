@@ -358,6 +358,11 @@ type server struct {
 	mempoolFilterChanges uint64
 	mempoolFilterMtx     sync.Mutex
 
+	// mempoolScriptFilterBytes caches the script filter of the mempool the
+	// same way, under the same mutex.
+	mempoolScriptFilterBytes   []byte
+	mempoolScriptFilterChanges uint64
+
 	// mpFilters builds and serves the script filters of the transactions
 	// admitted to the mempool in each short interval. It is nil when
 	// script filters are off.
@@ -923,22 +928,27 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// than they fetch the mempool.
 	sp.addBanScore(0, 10, "getcfmempool")
 
-	switch msg.FilterType {
-	case wire.GCSFilterRegular:
-		break
+	var filterBytes []byte
+	var err error
+	switch {
+	case msg.FilterType == wire.GCSFilterRegular:
+		filterBytes, err = sp.server.mempoolFilter()
+
+	// The script filter of the mempool is served with the mempool filters
+	// by interval, for a wallet that starts.
+	case msg.FilterType == wire.GCSFilterScripts && sp.server.mpFilters != nil:
+		filterBytes, err = sp.server.mempoolScriptFilter()
 
 	default:
 		peerLog.Debugf("Mempool filter request for unknown filter: %v",
 			msg.FilterType)
 		return
 	}
-
-	filterBytes, err := sp.server.mempoolFilter()
 	if err != nil {
 		return
 	}
 	zeroHash := &chainhash.Hash{}
-	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, zeroHash, filterBytes)
+	resp := wire.NewMsgCFilter(msg.FilterType, zeroHash, filterBytes)
 	sp.QueueMessage(resp, nil)
 }
 
@@ -3997,7 +4007,7 @@ func (s *server) Start() {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.mpFilters.run(s.quit)
+			s.mpFilters.serve(s.quit)
 		}()
 	}
 

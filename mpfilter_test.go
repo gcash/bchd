@@ -94,6 +94,13 @@ func TestMpFilters(t *testing.T) {
 	if got := m.since(last + 1); got != nil {
 		t.Errorf("since past the last: %d intervals", len(got))
 	}
+	// A run of intervals comes oldest first, without those not kept.
+	if got := m.run(last-1, last+5); len(got) != 2 || got[0].seq != last-1 || got[1].seq != last {
+		t.Errorf("run: %d intervals", len(got))
+	}
+	if got := m.run(0, 101); got != nil {
+		t.Errorf("run of intervals no longer kept: %d", len(got))
+	}
 
 	// Spent output scripts that don't line up give no interval, and the
 	// next one still gets the next number. The loggers can't write before

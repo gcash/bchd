@@ -172,23 +172,26 @@ func (msg *MsgMpFilter) MaxPayloadLength(pver uint32) uint32 {
 }
 
 // MsgGetMpTxs implements the Message interface and represents a getmptxs
-// message. It asks for the transactions of one interval, as a wallet does
-// when the interval's filter matches.
+// message. It asks for the transactions of the intervals numbered FirstSeq to
+// LastSeq, as a wallet does when an interval's filter matches. The wallet
+// picks a run with enough transactions, by the counts in the filters it has,
+// that the node can't tell which one it wants.
 type MsgGetMpTxs struct {
 	FilterType FilterType
-	Seq        uint32
+	FirstSeq   uint32
+	LastSeq    uint32
 }
 
 // BchDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgGetMpTxs) BchDecode(r io.Reader, pver uint32, _ MessageEncoding) error {
-	return readElements(r, &msg.FilterType, &msg.Seq)
+	return readElements(r, &msg.FilterType, &msg.FirstSeq, &msg.LastSeq)
 }
 
 // BchEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
 func (msg *MsgGetMpTxs) BchEncode(w io.Writer, pver uint32, _ MessageEncoding) error {
-	return writeElements(w, msg.FilterType, msg.Seq)
+	return writeElements(w, msg.FilterType, msg.FirstSeq, msg.LastSeq)
 }
 
 // Command returns the protocol command string for the message. This is part
@@ -200,12 +203,13 @@ func (msg *MsgGetMpTxs) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver. This is part of the Message interface implementation.
 func (msg *MsgGetMpTxs) MaxPayloadLength(pver uint32) uint32 {
-	return 1 + 4
+	return 1 + 4 + 4
 }
 
-// NewMsgGetMpTxs returns a new getmptxs message.
-func NewMsgGetMpTxs(filterType FilterType, seq uint32) *MsgGetMpTxs {
-	return &MsgGetMpTxs{FilterType: filterType, Seq: seq}
+// NewMsgGetMpTxs returns a new getmptxs message for the intervals numbered
+// firstSeq to lastSeq.
+func NewMsgGetMpTxs(filterType FilterType, firstSeq, lastSeq uint32) *MsgGetMpTxs {
+	return &MsgGetMpTxs{FilterType: filterType, FirstSeq: firstSeq, LastSeq: lastSeq}
 }
 
 // MpTx is one transaction of an interval, in an mptxs message: the
@@ -216,9 +220,10 @@ type MpTx struct {
 	TxID chainhash.Hash
 }
 
-// MsgMpTxs implements the Message interface and represents an mptxs message,
-// the reply to getmptxs: every transaction of the interval, in the order the
-// node admitted them, so that their IDs give the interval's hash.
+// MsgMpTxs implements the Message interface and represents an mptxs message.
+// A getmptxs is answered with one for each interval asked for: every
+// transaction of the interval, in the order the node admitted them, so that
+// their IDs give the interval's hash.
 type MsgMpTxs struct {
 	FilterType FilterType
 	Seq        uint32

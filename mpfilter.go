@@ -12,6 +12,7 @@ import (
 	"github.com/gcash/bchd/mempool"
 	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
+	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/gcs/builder"
 )
 
@@ -35,6 +36,11 @@ const (
 	// peer for a getmpfilters and a getmptxs message.
 	mpFilterBanScore = 10
 	mpTxsBanScore    = 5
+
+	// mpTxsMaxBytes is how many bytes of transactions one getmptxs is
+	// answered with before the intervals left in its run are left out. The
+	// peer sees which intervals came, and asks for the rest.
+	mpTxsMaxBytes = 32000000
 )
 
 // mpInterval is a closed interval of transactions the node admitted to its
@@ -183,18 +189,27 @@ func (m *mpFilters) since(startSeq uint32) []*mpInterval {
 
 // interval returns the kept interval numbered seq, or nil.
 func (m *mpFilters) interval(seq uint32) *mpInterval {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	for _, iv := range m.kept {
-		if iv.seq == seq {
-			return iv
-		}
+	if ivs := m.run(seq, seq); len(ivs) == 1 {
+		return ivs[0]
 	}
 	return nil
 }
 
-// run closes the open interval every mpFilterInterval until quit closes.
-func (m *mpFilters) run(quit <-chan struct{}) {
+// run returns the kept intervals numbered firstSeq to lastSeq, oldest first.
+func (m *mpFilters) run(firstSeq, lastSeq uint32) []*mpInterval {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	var ivs []*mpInterval
+	for _, iv := range m.kept {
+		if iv.seq >= firstSeq && iv.seq <= lastSeq {
+			ivs = append(ivs, iv)
+		}
+	}
+	return ivs
+}
+
+// serve closes the open interval every mpFilterInterval until quit closes.
+func (m *mpFilters) serve(quit <-chan struct{}) {
 	ticker := time.NewTicker(mpFilterInterval)
 	defer ticker.Stop()
 	for {
@@ -215,32 +230,71 @@ func (s *server) addMempoolTxs(txns []*mempool.TxDesc) {
 		return
 	}
 	for _, txDesc := range txns {
-		view, err := s.txMemPool.FetchInputUtxos(txDesc.Tx)
-		if err != nil {
-			continue
+		if prevOutScripts, ok := s.spentScripts(txDesc.Tx); ok {
+			s.mpFilters.add(txDesc.Tx.MsgTx(), prevOutScripts)
 		}
-		msgTx := txDesc.Tx.MsgTx()
-		prevOutScripts := make([][]byte, 0, len(msgTx.TxIn))
-		for _, txIn := range msgTx.TxIn {
-			entry := view.LookupEntry(txIn.PreviousOutPoint)
-			if entry == nil {
-				break
-			}
-			// The builder takes the script of an output that
-			// carries tokens with its token prefix in front, as
-			// the spend journal keeps it.
-			script := entry.PkScript()
-			if tokenData := entry.TokenData(); !tokenData.IsEmpty() {
-				prefix := tokenData.TokenDataBuffer()
-				script = append(prefix.Bytes(), script...)
-			}
-			prevOutScripts = append(prevOutScripts, script)
-		}
-		if len(prevOutScripts) != len(msgTx.TxIn) {
-			continue
-		}
-		s.mpFilters.add(msgTx, prevOutScripts)
 	}
+}
+
+// spentScripts returns the scripts of the outputs a mempool transaction
+// spends, in order, from the UTXO set and the mempool, as the script filter
+// builder takes them: the script of an output that carries tokens has its
+// token prefix in front, as the spend journal keeps it. It returns false when
+// an output can't be found any more.
+func (s *server) spentScripts(tx *bchutil.Tx) ([][]byte, bool) {
+	view, err := s.txMemPool.FetchInputUtxos(tx)
+	if err != nil {
+		return nil, false
+	}
+	msgTx := tx.MsgTx()
+	prevOutScripts := make([][]byte, 0, len(msgTx.TxIn))
+	for _, txIn := range msgTx.TxIn {
+		entry := view.LookupEntry(txIn.PreviousOutPoint)
+		if entry == nil {
+			return nil, false
+		}
+		script := entry.PkScript()
+		if tokenData := entry.TokenData(); !tokenData.IsEmpty() {
+			prefix := tokenData.TokenDataBuffer()
+			script = append(prefix.Bytes(), script...)
+		}
+		prevOutScripts = append(prevOutScripts, script)
+	}
+	return prevOutScripts, true
+}
+
+// mempoolScriptFilter returns the script filter of the whole mempool, keyed
+// by the zero hash as the regular filter of the mempool is. A wallet asks for
+// it when it starts, for the transactions admitted before the intervals the
+// node still keeps, and to compare what two peers show. It is built again
+// only when the mempool changed.
+func (s *server) mempoolScriptFilter() ([]byte, error) {
+	s.mempoolFilterMtx.Lock()
+	defer s.mempoolFilterMtx.Unlock()
+
+	changes := s.txMemPool.Changes()
+	if s.mempoolScriptFilterBytes != nil && s.mempoolScriptFilterChanges == changes {
+		return s.mempoolScriptFilterBytes, nil
+	}
+	var txs []*wire.MsgTx
+	var prevOutScripts [][]byte
+	for _, txDesc := range s.txMemPool.TxDescs() {
+		if scripts, ok := s.spentScripts(txDesc.Tx); ok {
+			txs = append(txs, txDesc.Tx.MsgTx())
+			prevOutScripts = append(prevOutScripts, scripts...)
+		}
+	}
+	filter, err := builder.BuildTxScriptFilter(&chainhash.Hash{}, txs, prevOutScripts)
+	if err != nil {
+		return nil, err
+	}
+	filterBytes, err := filter.NBytes()
+	if err != nil {
+		return nil, err
+	}
+	s.mempoolScriptFilterBytes = filterBytes
+	s.mempoolScriptFilterChanges = changes
+	return filterBytes, nil
 }
 
 // mpFiltersFor returns the mempool filters when the node keeps them and the
@@ -278,31 +332,32 @@ func (sp *serverPeer) OnGetMpFilters(_ *peer.Peer, msg *wire.MsgGetMpFilters) {
 }
 
 // OnGetMpTxs is invoked when a peer receives a getmptxs bitcoin message. It
-// sends every transaction of the interval, so the node doesn't learn which
-// one the peer wants: the transaction while the mempool has it, or only its
-// ID once it was mined or dropped.
+// sends every transaction of each interval in the run asked for, so the node
+// doesn't learn which one the peer wants: the transaction while the mempool
+// has it, or only its ID once it was mined or dropped.
 func (sp *serverPeer) OnGetMpTxs(_ *peer.Peer, msg *wire.MsgGetMpTxs) {
 	m := sp.mpFiltersFor(msg.FilterType, "getmptxs")
 	if m == nil {
 		return
 	}
 	sp.addBanScore(0, mpTxsBanScore, "getmptxs")
-	iv := m.interval(msg.Seq)
-	if iv == nil {
-		peerLog.Debugf("Ignoring getmptxs from %s: interval %d is not kept",
-			sp, msg.Seq)
-		return
-	}
-	reply := &wire.MsgMpTxs{
-		FilterType: msg.FilterType,
-		Seq:        iv.seq,
-		Txs:        make([]wire.MpTx, len(iv.txids)),
-	}
-	for i := range iv.txids {
-		reply.Txs[i].TxID = iv.txids[i]
-		if tx, err := sp.server.txMemPool.FetchTransaction(&iv.txids[i]); err == nil {
-			reply.Txs[i].Tx = tx.MsgTx()
+	sent := 0
+	for _, iv := range m.run(msg.FirstSeq, msg.LastSeq) {
+		if sent >= mpTxsMaxBytes {
+			break
 		}
+		reply := &wire.MsgMpTxs{
+			FilterType: msg.FilterType,
+			Seq:        iv.seq,
+			Txs:        make([]wire.MpTx, len(iv.txids)),
+		}
+		for i := range iv.txids {
+			reply.Txs[i].TxID = iv.txids[i]
+			if tx, err := sp.server.txMemPool.FetchTransaction(&iv.txids[i]); err == nil {
+				reply.Txs[i].Tx = tx.MsgTx()
+				sent += tx.MsgTx().SerializeSize()
+			}
+		}
+		sp.QueueMessage(reply, nil)
 	}
-	sp.QueueMessage(reply, nil)
 }

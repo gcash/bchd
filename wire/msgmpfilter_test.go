@@ -29,11 +29,11 @@ func TestMpFilterWire(t *testing.T) {
 		wire.NewMsgGetMpFilters(wire.GCSFilterScripts, 1794461717),
 		&wire.MsgMpFilter{FilterType: wire.GCSFilterScripts, Seq: 7, Time: 1794461717,
 			IntervalHash: chainhash.Hash{3}, TxCount: 2, Data: []byte{0x02, 0xaa, 0xbb}},
-		wire.NewMsgGetMpTxs(wire.GCSFilterScripts, 7),
+		wire.NewMsgGetMpTxs(wire.GCSFilterScripts, 7, 9),
 		&wire.MsgMpTxs{FilterType: wire.GCSFilterScripts, Seq: 7,
 			Txs: []wire.MpTx{{Tx: tx, TxID: tx.TxHash()}, {TxID: gone}}},
 	}
-	sizes := []int{1, 5, 1 + 4 + 8 + 32 + 4 + 1 + 3, 5, 1 + 4 + 1 + 1 + tx.SerializeSize() + 1 + 32}
+	sizes := []int{1, 5, 1 + 4 + 8 + 32 + 4 + 1 + 3, 9, 1 + 4 + 1 + 1 + tx.SerializeSize() + 1 + 32}
 	for i, msg := range msgs {
 		var buf bytes.Buffer
 		if err := wire.WriteMessage(&buf, msg, pver, wire.MainNet); err != nil {
