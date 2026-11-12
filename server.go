@@ -1686,6 +1686,14 @@ type filterIndex interface {
 	FilterHashesByBlockHashes([]*chainhash.Hash, wire.FilterType) ([][]byte, error)
 }
 
+// scriptFiltersWanted reports whether the node keeps the script filter index.
+// It does by default, beside the committed filter index, unless that index is
+// off or the node keeps no old blocks: the script filter of a block needs the
+// scripts of the outputs it spends, from the spend journal.
+func scriptFiltersWanted(cfg *config) bool {
+	return !cfg.NoScriptFilters && !cfg.NoCFilters && !cfg.FastSync && !cfg.Prune
+}
+
 // filterIndexFor returns the index that serves a filter type, or nil when this
 // node does not maintain it.
 func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
@@ -4369,7 +4377,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.bcmrIndex = indexers.NewBcmrIndex(db, chainParams)
 		indexes = append(indexes, s.bcmrIndex)
 	}
-	if cfg.ScriptFilters {
+	if scriptFiltersWanted(cfg) {
 		indxLog.Info("Script filter index is enabled")
 		s.scriptFilterIndex = indexers.NewScriptFilterIndex(db, chainParams)
 		indexes = append(indexes, s.scriptFilterIndex)
@@ -4433,9 +4441,12 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		return nil, errors.New("bcmrindex can not be used with a pruned " +
 			"blockchain, and this one was pruned or fast synced before")
 	}
+	// It lacks the spent outputs of its older blocks too, so it serves no
+	// script filters.
 	if s.scriptFilterIndex != nil && s.chain.IsPruned() {
-		return nil, errors.New("scriptfilters can not be used with a pruned " +
-			"blockchain, and this one was pruned or fast synced before")
+		indxLog.Info("Script filter index is disabled: the chain was pruned " +
+			"or fast synced before")
+		s.scriptFilterIndex = nil
 	}
 
 	// Signal process shutdown when the chain state can't be written.

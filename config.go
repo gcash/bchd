@@ -196,7 +196,7 @@ type config struct {
 	SlpGraphSearch          bool          `long:"slpgraphsearch" description:"Enables gRPC calls related to slp graph search."`
 	BcmrIndex               bool          `long:"bcmrindex" description:"Maintain an index of the authchain of every token category, and of every authchain that holds a BCMR metadata registry publication, from where it begins, which makes the getbcmridentity and GetBcmrIdentity RPCs available"`
 	DropBcmrIndex           bool          `long:"dropbcmrindex" description:"Deletes the BCMR index from the database on start up and then exits."`
-	ScriptFilters           bool          `long:"scriptfilters" description:"Maintain the script filter index and serve script filters (filter type 1), which list the scripts of the outputs each block creates and spends, to light clients"`
+	NoScriptFilters         bool          `long:"noscriptfilters" description:"Disable the script filter index and serving script filters (filter type 1), which list the scripts of the outputs each block creates and spends, to light clients"`
 	DropScriptFilterIndex   bool          `long:"dropscriptfilterindex" description:"Deletes the script filter index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
@@ -660,18 +660,6 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// The script filter index reads the scripts of every block's spent
-	// outputs from the spend journal, from genesis, and is served beside the
-	// committed filters.
-	if cfg.ScriptFilters && (cfg.Prune || cfg.FastSync || cfg.NoCFilters) {
-		str := "%s: scriptfilters can not be used with a pruned blockchain, " +
-			"fast sync mode or nocfilters"
-		err := fmt.Errorf(str, funcName)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, usageMessage)
-		return nil, nil, err
-	}
-
 	// The BCMR index reads every block since CashTokens activated, and serves
 	// the transactions of authchains from the block files.
 	if cfg.BcmrIndex && cfg.Prune {
@@ -1102,16 +1090,6 @@ func loadConfig() (*config, []string, error) {
 	// --slpindex and --dropslpindex do not mix.
 	if cfg.SlpIndex && cfg.DropSlpIndex {
 		err := fmt.Errorf("%s: the --slpindex and --dropslpindex "+
-			"options may not be activated at the same time",
-			funcName)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, usageMessage)
-		return nil, nil, err
-	}
-
-	// --scriptfilters and --dropscriptfilterindex do not mix.
-	if cfg.ScriptFilters && cfg.DropScriptFilterIndex {
-		err := fmt.Errorf("%s: the --scriptfilters and --dropscriptfilterindex "+
 			"options may not be activated at the same time",
 			funcName)
 		fmt.Fprintln(os.Stderr, err)
