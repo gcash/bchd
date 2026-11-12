@@ -1,3 +1,5 @@
+github.com/CyberAshven/bchutil v0.0.0-20261112065215-46dc41c021c8 h1:csQcqKst8ppI0bKV1kbCplszQ4cF5XgROZ4gan+IpgE=
+github.com/CyberAshven/bchutil v0.0.0-20261112065215-46dc41c021c8/go.mod h1:PUl4oVSi94FsHVSOFdAaYG0iFOEG2xrXjet1EEqOSss=
 github.com/aead/siphash v1.0.1 h1:FwHfE/T45KPKYuuSAKyyvE+oPWcaQ+CUmFW0bPlM+kg=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
@@ -29,8 +31,6 @@ github.com/fsnotify/fsnotify v1.5.4 h1:jRbGcIw6P2Meqdwuo0H1p6JVLbL5DHKAKlYndzMwV
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
 github.com/gcash/bchlog v0.0.0-20261027020323-7b5704c0a60f h1:0SX+ItkFDQDEIAmrukIjt0yU1fImY2abRrWtYyAKov8=
 github.com/gcash/bchlog v0.0.0-20261027020323-7b5704c0a60f/go.mod h1:PpfmXTLfjRp7Tf6v/DCGTRXHz+VFbiRcsoUxi7HvwlQ=
-github.com/gcash/bchutil v0.0.0-20261028060706-e320ade87427 h1:yn3A7reRZjmCsNOg0oWPFQIBPNOPqBLvz/DLy3DkE4s=
-github.com/gcash/bchutil v0.0.0-20261028060706-e320ade87427/go.mod h1:PUl4oVSi94FsHVSOFdAaYG0iFOEG2xrXjet1EEqOSss=
 github.com/gcash/goleveldb v1.1.0 h1:ea7gh9xqgAD+llDYhP7ep7daQxLMlcr1zaFTENCygxE=
 github.com/gcash/goleveldb v1.1.0/go.mod h1:5iJUbCHZlp/Gm54CgQz0uYPSX5EMGStfnEzxRiQ3l3Y=
 github.com/gcash/goslp v1.0.0 h1:CUaw4OixaLjJGws1x/lW+56d2QwoABlrUhXG7ssadDw=

@@ -337,6 +337,9 @@ type server struct {
 	slpIndex  *indexers.SlpIndex
 	bcmrIndex *indexers.BcmrIndex
 
+	// scriptFilterIndex serves the script filter type, beside cfIndex.
+	scriptFilterIndex *indexers.ScriptFilterIndex
+
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
 	feeEstimator *mempool.FeeEstimator
@@ -354,6 +357,16 @@ type server struct {
 	mempoolFilterBytes   []byte
 	mempoolFilterChanges uint64
 	mempoolFilterMtx     sync.Mutex
+
+	// mempoolScriptFilterBytes caches the script filter of the mempool the
+	// same way, under the same mutex.
+	mempoolScriptFilterBytes   []byte
+	mempoolScriptFilterChanges uint64
+
+	// mpFilters builds and serves the script filters of the transactions
+	// admitted to the mempool in each short interval. It is nil when
+	// script filters are off.
+	mpFilters *mpFilters
 
 	// agentBlacklist is a list of blacklisted substrings by which to filter
 	// user agents.
@@ -915,22 +928,28 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 	// than they fetch the mempool.
 	sp.addBanScore(0, 10, "getcfmempool")
 
-	switch msg.FilterType {
-	case wire.GCSFilterRegular:
-		break
+	var filterBytes []byte
+	var err error
+	switch {
+	case msg.FilterType == wire.GCSFilterRegular:
+		filterBytes, err = sp.server.mempoolFilter()
+
+	// The script filter of the mempool is served with the mempool filters
+	// by interval, for a wallet that starts.
+	case msg.FilterType == wire.GCSFilterScripts && sp.server.mpFilters != nil:
+		filterBytes, err = sp.server.mempoolScriptFilter()
 
 	default:
 		peerLog.Debugf("Mempool filter request for unknown filter: %v",
 			msg.FilterType)
 		return
 	}
-
-	filterBytes, err := sp.server.mempoolFilter()
 	if err != nil {
+		peerLog.Debugf("No filter of the mempool for %s: %v", sp, err)
 		return
 	}
 	zeroHash := &chainhash.Hash{}
-	resp := wire.NewMsgCFilter(wire.GCSFilterRegular, zeroHash, filterBytes)
+	resp := wire.NewMsgCFilter(msg.FilterType, zeroHash, filterBytes)
 	sp.QueueMessage(resp, nil)
 }
 
@@ -1673,31 +1692,54 @@ func (sp *serverPeer) OnGetHeaders(_ *peer.Peer, msg *wire.MsgGetHeaders) {
 	}
 }
 
+// filterIndex is what the filter messages are served from: the committed
+// filter index for the basic filter, the script filter index for the script
+// filter.
+type filterIndex interface {
+	FiltersByBlockHashes([]*chainhash.Hash, wire.FilterType) ([][]byte, error)
+	FilterHeaderByBlockHash(*chainhash.Hash, wire.FilterType) ([]byte, error)
+	FilterHeadersByBlockHashes([]*chainhash.Hash, wire.FilterType) ([][]byte, error)
+	FilterHashesByBlockHashes([]*chainhash.Hash, wire.FilterType) ([][]byte, error)
+}
+
+// scriptFiltersWanted reports whether the node keeps the script filter index.
+// It does by default, beside the committed filter index, unless that index is
+// off or the node keeps no old blocks: the script filter of a block needs the
+// scripts of the outputs it spends, from the spend journal.
+func scriptFiltersWanted(cfg *config) bool {
+	return !cfg.NoScriptFilters && !cfg.NoCFilters && !cfg.FastSync && !cfg.Prune
+}
+
+// filterIndexFor returns the index that serves a filter type, or nil when this
+// node does not maintain it.
+func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
+	switch filterType {
+	case wire.GCSFilterRegular:
+		if s.cfIndex != nil {
+			return s.cfIndex
+		}
+	case wire.GCSFilterScripts:
+		if s.scriptFilterIndex != nil {
+			return s.scriptFilterIndex
+		}
+	}
+	return nil
+}
+
 // OnGetCFilters is invoked when a peer receives a getcfilters bitcoin message.
 func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
-	// Ignore the request when the committed filter index is not maintained.
-	// A peer can send this regardless of the services we advertise, so this
-	// must be checked rather than assumed.
-	if sp.server.cfIndex == nil {
-		peerLog.Debugf("Ignoring getcfilters from %s: no committed filter "+
-			"index", sp)
+	// Ignore the request when the index of the filter type asked for is not
+	// maintained. A peer can send this regardless of the services we
+	// advertise, so this must be checked rather than assumed.
+	index := sp.server.filterIndexFor(msg.FilterType)
+	if index == nil {
+		peerLog.Debugf("Ignoring getcfilters from %s: no index for filter "+
+			"type %v", sp, msg.FilterType)
 		return
 	}
 
 	// Ignore getcfilters requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
-		return
-	}
-
-	// We'll also ensure that the remote party is requesting a set of
-	// filters that we actually currently maintain.
-	switch msg.FilterType {
-	case wire.GCSFilterRegular:
-		break
-
-	default:
-		peerLog.Debugf("Filter request for unknown filter: %v",
-			msg.FilterType)
 		return
 	}
 
@@ -1716,7 +1758,7 @@ func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 		hashPtrs[i] = &hashes[i]
 	}
 
-	filters, err := sp.server.cfIndex.FiltersByBlockHashes(
+	filters, err := index.FiltersByBlockHashes(
 		hashPtrs, msg.FilterType,
 	)
 	if err != nil {
@@ -1740,27 +1782,17 @@ func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 
 // OnGetCFHeaders is invoked when a peer receives a getcfheader bitcoin message.
 func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
-	// Ignore the request when the committed filter index is not maintained.
-	if sp.server.cfIndex == nil {
-		peerLog.Debugf("Ignoring getcfheaders from %s: no committed filter "+
-			"index", sp)
+	// Ignore the request when the index of the filter type asked for is not
+	// maintained.
+	index := sp.server.filterIndexFor(msg.FilterType)
+	if index == nil {
+		peerLog.Debugf("Ignoring getcfheaders from %s: no index for filter "+
+			"type %v", sp, msg.FilterType)
 		return
 	}
 
 	// Ignore getcfilterheader requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
-		return
-	}
-
-	// We'll also ensure that the remote party is requesting a set of
-	// headers for filters that we actually currently maintain.
-	switch msg.FilterType {
-	case wire.GCSFilterRegular:
-		break
-
-	default:
-		peerLog.Debugf("Filter request for unknown headers for "+
-			"filter: %v", msg.FilterType)
 		return
 	}
 
@@ -1798,7 +1830,7 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 	}
 
 	// Fetch the raw filter hash bytes from the database for all blocks.
-	filterHashes, err := sp.server.cfIndex.FilterHashesByBlockHashes(
+	filterHashes, err := index.FilterHashesByBlockHashes(
 		hashPtrs, msg.FilterType,
 	)
 	if err != nil {
@@ -1815,7 +1847,7 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 
 		// Fetch the raw committed filter header bytes from the
 		// database.
-		headerBytes, err := sp.server.cfIndex.FilterHeaderByBlockHash(
+		headerBytes, err := index.FilterHeaderByBlockHash(
 			prevBlockHash, msg.FilterType)
 		if err != nil {
 			peerLog.Errorf("Error retrieving CF header: %v", err)
@@ -1864,27 +1896,17 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 
 // OnGetCFCheckpt is invoked when a peer receives a getcfcheckpt bitcoin message.
 func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
-	// Ignore the request when the committed filter index is not maintained.
-	if sp.server.cfIndex == nil {
-		peerLog.Debugf("Ignoring getcfcheckpt from %s: no committed filter "+
-			"index", sp)
+	// Ignore the request when the index of the filter type asked for is not
+	// maintained.
+	index := sp.server.filterIndexFor(msg.FilterType)
+	if index == nil {
+		peerLog.Debugf("Ignoring getcfcheckpt from %s: no index for filter "+
+			"type %v", sp, msg.FilterType)
 		return
 	}
 
 	// Ignore getcfcheckpt requests if not in sync.
 	if !sp.server.syncManager.IsCurrent() {
-		return
-	}
-
-	// We'll also ensure that the remote party is requesting a set of
-	// checkpoints for filters that we actually currently maintain.
-	switch msg.FilterType {
-	case wire.GCSFilterRegular:
-		break
-
-	default:
-		peerLog.Debugf("Filter request for unknown checkpoints for "+
-			"filter: %v", msg.FilterType)
 		return
 	}
 
@@ -1975,7 +1997,7 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 	for i := forkIdx; i < len(blockHashes); i++ {
 		blockHashPtrs = append(blockHashPtrs, &blockHashes[i])
 	}
-	filterHeaders, err := sp.server.cfIndex.FilterHeadersByBlockHashes(
+	filterHeaders, err := index.FilterHeadersByBlockHashes(
 		blockHashPtrs, msg.FilterType,
 	)
 	if err != nil {
@@ -2319,6 +2341,9 @@ func (s *server) RemoveRebroadcastInventory(iv *wire.InvVect) {
 // relayTransactions generates and relays inventory vectors for all of the
 // passed transactions to all connected peers.
 func (s *server) relayTransactions(txns []*mempool.TxDesc) {
+	// Put them in the open interval of the mempool filters too.
+	s.addMempoolTxs(txns)
+
 	for _, txD := range txns {
 		iv := wire.NewInvVect(wire.InvTypeTx, txD.Tx.Hash())
 		s.RelayInventory(iv, txD)
@@ -3445,6 +3470,9 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnGetCFHeaders: sp.OnGetCFHeaders,
 			OnGetCFCheckpt: sp.OnGetCFCheckpt,
 			OnGetCFMempool: sp.OnGetCFMemPool,
+			OnSendMpFilter: sp.OnSendMpFilter,
+			OnGetMpFilters: sp.OnGetMpFilters,
+			OnGetMpTxs:     sp.OnGetMpTxs,
 			OnFeeFilter:    sp.OnFeeFilter,
 			OnFilterAdd:    sp.OnFilterAdd,
 			OnFilterClear:  sp.OnFilterClear,
@@ -3976,6 +4004,14 @@ func (s *server) Start() {
 	s.wg.Add(1)
 	go s.peerHandler()
 
+	if s.mpFilters != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.mpFilters.serve(s.quit)
+		}()
+	}
+
 	if !cfg.NoDoubleSpendProof {
 		s.wg.Add(1)
 		go s.dsProofCleanupHandler()
@@ -4371,6 +4407,15 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.bcmrIndex = indexers.NewBcmrIndex(db, chainParams)
 		indexes = append(indexes, s.bcmrIndex)
 	}
+	// Mempool filters need no old blocks, so a pruned node serves them too.
+	if !cfg.NoScriptFilters && !cfg.NoCFilters {
+		s.mpFilters = newMpFilters()
+	}
+	if scriptFiltersWanted(cfg) {
+		indxLog.Info("Script filter index is enabled")
+		s.scriptFilterIndex = indexers.NewScriptFilterIndex(db, chainParams)
+		indexes = append(indexes, s.scriptFilterIndex)
+	}
 
 	// Create an index manager if any of the optional indexes are enabled.
 	var indexManager blockchain.IndexManager
@@ -4429,6 +4474,13 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	if s.bcmrIndex != nil && s.chain.IsPruned() {
 		return nil, errors.New("bcmrindex can not be used with a pruned " +
 			"blockchain, and this one was pruned or fast synced before")
+	}
+	// It lacks the spent outputs of its older blocks too, so it serves no
+	// script filters.
+	if s.scriptFilterIndex != nil && s.chain.IsPruned() {
+		indxLog.Info("Script filter index is disabled: the chain was pruned " +
+			"or fast synced before")
+		s.scriptFilterIndex = nil
 	}
 
 	// Signal process shutdown when the chain state can't be written.
@@ -4623,6 +4675,8 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			FeeEstimator:   s.feeEstimator,
 			Services:       s.services,
 			RPCAuthTimeout: cfg.RPCAuthTimeout,
+
+			ScriptFilterIndex: s.scriptFilterIndex,
 		})
 		if err != nil {
 			return nil, err

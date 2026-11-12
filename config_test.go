@@ -215,6 +215,40 @@ func TestBcmrIndexOptions(t *testing.T) {
 	}
 }
 
+// TestScriptFiltersOptions ensures that the script filter index is kept by
+// default, and left out when it is turned off or when the node keeps no
+// committed filters or no old blocks, since it reads the spent outputs of
+// every block from the spend journal.
+func TestScriptFiltersOptions(t *testing.T) {
+	// Keep the config file, data and logs out of the home directory.
+	tmpDir := t.TempDir()
+	defer func() { os.Args = []string{"bchd"} }()
+
+	tests := []struct {
+		args []string
+		want bool
+	}{
+		{nil, true},
+		{[]string{"--noscriptfilters"}, false},
+		{[]string{"--nocfilters"}, false},
+		{[]string{"--prune"}, false},
+		{[]string{"--fastsync"}, false},
+		{[]string{"--txindex"}, true},
+	}
+	for _, test := range tests {
+		os.Args = append([]string{"bchd",
+			"--configfile=" + filepath.Join(tmpDir, "bchd.conf"),
+			"--datadir=" + tmpDir, "--logdir=" + tmpDir}, test.args...)
+		cfg, _, err := loadConfig()
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if got := scriptFiltersWanted(cfg); got != test.want {
+			t.Errorf("%v: script filter index kept %v, want %v", test.args, got, test.want)
+		}
+	}
+}
+
 // TestProfileListenAddr ensures a bare --profile port only listens on
 // localhost and that IP:port is accepted.
 func TestProfileListenAddr(t *testing.T) {

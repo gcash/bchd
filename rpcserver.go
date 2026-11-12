@@ -3235,22 +3235,48 @@ func handleGetBlockTemplate(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 	}
 }
 
-// handleGetCFilter implements the getcfilter command.
-func handleGetCFilter(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+// rpcFilterIndex is what getcfilter and getcfilterheader read from.
+type rpcFilterIndex interface {
+	FilterByBlockHash(*chainhash.Hash, wire.FilterType) ([]byte, error)
+	FilterHeaderByBlockHash(*chainhash.Hash, wire.FilterType) ([]byte, error)
+}
+
+// filterIndexFor returns the index of a filter type, or an RPC error when it
+// is not maintained: the committed filter index for the basic filter, the
+// script filter index for the script filter.
+func (s *rpcServer) filterIndexFor(filterType wire.FilterType) (rpcFilterIndex, error) {
+	if filterType == wire.GCSFilterScripts {
+		if s.cfg.ScriptFilterIndex == nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCNoCFIndex,
+				Message: "The script filter index must be enabled for this command",
+			}
+		}
+		return s.cfg.ScriptFilterIndex, nil
+	}
 	if s.cfg.CfIndex == nil {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCNoCFIndex,
 			Message: "The CF index must be enabled for this command",
 		}
 	}
+	return s.cfg.CfIndex, nil
+}
 
+// handleGetCFilter implements the getcfilter command.
+func handleGetCFilter(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.GetCFilterCmd)
+	index, err := s.filterIndexFor(c.FilterType)
+	if err != nil {
+		return nil, err
+	}
+
 	hash, err := chainhash.NewHashFromStr(c.Hash)
 	if err != nil {
 		return nil, rpcDecodeHexError(c.Hash)
 	}
 
-	filterBytes, err := s.cfg.CfIndex.FilterByBlockHash(hash, c.FilterType)
+	filterBytes, err := index.FilterByBlockHash(hash, c.FilterType)
 	if err != nil {
 		rpcsLog.Debugf("Could not find committed filter for %v: %v",
 			hash, err)
@@ -3266,20 +3292,18 @@ func handleGetCFilter(s *rpcServer, cmd interface{}, closeNotifier <-chan struct
 
 // handleGetCFilterHeader implements the getcfilterheader command.
 func handleGetCFilterHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
-	if s.cfg.CfIndex == nil {
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCNoCFIndex,
-			Message: "The CF index must be enabled for this command",
-		}
+	c := cmd.(*btcjson.GetCFilterHeaderCmd)
+	index, err := s.filterIndexFor(c.FilterType)
+	if err != nil {
+		return nil, err
 	}
 
-	c := cmd.(*btcjson.GetCFilterHeaderCmd)
 	hash, err := chainhash.NewHashFromStr(c.Hash)
 	if err != nil {
 		return nil, rpcDecodeHexError(c.Hash)
 	}
 
-	headerBytes, err := s.cfg.CfIndex.FilterHeaderByBlockHash(hash, c.FilterType)
+	headerBytes, err := index.FilterHeaderByBlockHash(hash, c.FilterType)
 	if len(headerBytes) > 0 {
 		rpcsLog.Debugf("Found header of committed filter for %v", hash)
 	} else {
@@ -6119,6 +6143,9 @@ type rpcserverConfig struct {
 	CfIndex   *indexers.CfIndex
 	SlpIndex  *indexers.SlpIndex
 	BcmrIndex *indexers.BcmrIndex
+
+	// ScriptFilterIndex serves the script filter type, beside CfIndex.
+	ScriptFilterIndex *indexers.ScriptFilterIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
