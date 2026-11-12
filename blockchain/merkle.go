@@ -109,3 +109,37 @@ func BuildMerkleTreeStore(transactions []*bchutil.Tx) []*chainhash.Hash {
 
 	return merkles
 }
+
+// MerkleBranch returns the Merkle branch of the transaction at index in a
+// tree built by BuildMerkleTreeStore: from the transaction up, the node next
+// to each node on its path to the root. A node without a partner is hashed
+// with itself, so its own hash stands in.
+func MerkleBranch(merkles []*chainhash.Hash, index int) []chainhash.Hash {
+	var branch []chainhash.Hash
+	offset := 0
+	for width := (len(merkles) + 1) / 2; width > 1; width /= 2 {
+		partner := merkles[offset+(index^1)]
+		if partner == nil {
+			partner = merkles[offset+index]
+		}
+		branch = append(branch, *partner)
+		offset += width
+		index /= 2
+	}
+	return branch
+}
+
+// MerkleBranchRoot returns the Merkle root that a transaction hash at index
+// and its Merkle branch lead to. A client compares it with the block header's
+// Merkle root, after checking that index is below 2^len(branch).
+func MerkleBranchRoot(hash chainhash.Hash, index uint32, branch []chainhash.Hash) chainhash.Hash {
+	for i := range branch {
+		if index&1 == 1 {
+			hash = *HashMerkleBranches(&branch[i], &hash)
+		} else {
+			hash = *HashMerkleBranches(&hash, &branch[i])
+		}
+		index >>= 1
+	}
+	return hash
+}
