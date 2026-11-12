@@ -358,13 +358,12 @@ type server struct {
 	mempoolFilterChanges uint64
 	mempoolFilterMtx     sync.Mutex
 
-	// scriptLeaves holds the last block scriptFilterLeaves rebuilt, under
-	// scriptLeavesMtx, for scriptLeavesKept.  A peer that settles a
-	// disagreement over a block's script filter asks for many proofs of
-	// that one block, and rebuilding its leaves for each would read the
-	// block and its spend journal each time.
-	scriptLeavesMtx sync.Mutex
-	scriptLeaves    *scriptLeavesOfBlock
+	// scriptLeaves keeps the leaves of the block last asked about, so a
+	// peer that settles a disagreement over that block's script filter
+	// does not make every proof read the block and its spend journal
+	// again. A request for another block builds without waiting on the
+	// one already in flight.
+	scriptLeaves *scriptLeavesCache
 
 	// agentBlacklist is a list of blacklisted substrings by which to filter
 	// user agents.
@@ -1725,58 +1724,36 @@ func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
 func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
 	[]blockchain.SpentTxOut, []builder.ScriptLeaf, error) {
 
-	// The mutex is held while a block is rebuilt, so that peers that ask
-	// for the same block at once rebuild it once.
-	s.scriptLeavesMtx.Lock()
-	defer s.scriptLeavesMtx.Unlock()
-
-	// A block can leave the main chain while it is kept here.
+	// A block can leave the main chain while its leaves are kept, so this
+	// is checked on every call, before the cache. The build itself runs
+	// inside get, which does not hold its lock across the block read.
 	if !s.chain.MainChainHasBlock(blockHash) {
 		return nil, nil, nil, fmt.Errorf("block %v is not in the main chain", blockHash)
 	}
-	if kept := s.scriptLeaves; kept != nil && kept.block.Hash().IsEqual(blockHash) {
-		return kept.block, kept.stxos, kept.leaves, nil
-	}
-	block, err := s.chain.BlockByHash(blockHash)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	stxos, err := s.chain.FetchSpendJournal(block)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	prevOutScripts := make([][]byte, len(stxos))
-	for i := range stxos {
-		prevOutScripts[i] = stxos[i].PkScript
-	}
-	leaves, err := builder.ScriptLeaves(block.MsgBlock(), prevOutScripts)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	kept := &scriptLeavesOfBlock{block: block, stxos: stxos, leaves: leaves}
-	s.scriptLeaves = kept
-	time.AfterFunc(scriptLeavesKept, func() {
-		s.scriptLeavesMtx.Lock()
-		if s.scriptLeaves == kept {
-			s.scriptLeaves = nil
+	entry, err := s.scriptLeaves.get(blockHash, func() (*scriptLeavesOfBlock, error) {
+		block, err := s.chain.BlockByHash(blockHash)
+		if err != nil {
+			return nil, err
 		}
-		s.scriptLeavesMtx.Unlock()
+		stxos, err := s.chain.FetchSpendJournal(block)
+		if err != nil {
+			return nil, err
+		}
+		prevOutScripts := make([][]byte, len(stxos))
+		for i := range stxos {
+			prevOutScripts[i] = stxos[i].PkScript
+		}
+		leaves, err := builder.ScriptLeaves(block.MsgBlock(), prevOutScripts)
+		if err != nil {
+			return nil, err
+		}
+		return newScriptLeavesOfBlock(block, stxos, leaves), nil
 	})
-	return block, stxos, leaves, nil
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return entry.block, entry.stxos, entry.leaves, nil
 }
-
-// scriptLeavesOfBlock is a block with the outputs it spends and the leaves of
-// its script filter entry tree.
-type scriptLeavesOfBlock struct {
-	block  *bchutil.Block
-	stxos  []blockchain.SpentTxOut
-	leaves []builder.ScriptLeaf
-}
-
-// scriptLeavesKept is how long the block scriptFilterLeaves last rebuilt is
-// kept.  A disagreement over a block is settled well within it, and a block
-// nobody asks about any more is not held in memory.
-const scriptLeavesKept = 2 * time.Minute
 
 // cfTreeBanScore is added to the ban score of a peer for a getcfrange or a
 // getcfproof message.  Each one reads a block and its spend journal unless
@@ -4559,6 +4536,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		cfCheckptCaches:      make(map[wire.FilterType][]cfHeaderKV),
 		agentBlacklist:       agentBlacklist,
 		agentWhitelist:       agentWhitelist,
+		scriptLeaves:         newScriptLeavesCache(scriptLeavesKept),
 		inboundHosts:         make(map[string]int),
 		bans:                 loadBanList(filepath.Join(cfg.DataDir, banListFilename), time.Now()),
 	}
