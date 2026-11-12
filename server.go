@@ -945,6 +945,7 @@ func (sp *serverPeer) OnGetCFMemPool(_ *peer.Peer, msg *wire.MsgGetCFMempool) {
 		return
 	}
 	if err != nil {
+		peerLog.Debugf("No filter of the mempool for %s: %v", sp, err)
 		return
 	}
 	zeroHash := &chainhash.Hash{}

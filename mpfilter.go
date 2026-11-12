@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -124,6 +125,15 @@ func (m *mpFilters) tick() {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	m.closeInterval()
+
+	// An interval without transactions sends nothing, so the peers that
+	// left are dropped here, or a quiet node would keep every peer that
+	// ever asked.
+	for sp := range m.subscribers {
+		if !sp.Connected() {
+			delete(m.subscribers, sp)
+		}
+	}
 }
 
 // closeInterval builds the filter of the open interval, keeps it, sends it to
@@ -230,28 +240,43 @@ func (s *server) addMempoolTxs(txns []*mempool.TxDesc) {
 		return
 	}
 	for _, txDesc := range txns {
-		if prevOutScripts, ok := s.spentScripts(txDesc.Tx); ok {
-			s.mpFilters.add(txDesc.Tx.MsgTx(), prevOutScripts)
+		prevOutScripts, err := s.spentScripts(txDesc.Tx)
+		if err != nil {
+			// Any other failure leaves a transaction that is still in
+			// the mempool out of every interval, which a wallet can't
+			// tell, so it is logged.
+			if !errors.Is(err, errSpentOutputGone) {
+				peerLog.Warnf("Transaction %v is in no mempool filter: %v",
+					txDesc.Tx.Hash(), err)
+			}
+			continue
 		}
+		s.mpFilters.add(txDesc.Tx.MsgTx(), prevOutScripts)
 	}
 }
+
+// errSpentOutputGone is returned by spentScripts for a transaction that spends
+// an output found in neither the UTXO set nor the mempool, as when a block
+// took the transaction meanwhile.
+var errSpentOutputGone = errors.New("an output the transaction spends is gone")
 
 // spentScripts returns the scripts of the outputs a mempool transaction
 // spends, in order, from the UTXO set and the mempool, as the script filter
 // builder takes them: the script of an output that carries tokens has its
-// token prefix in front, as the spend journal keeps it. It returns false when
-// an output can't be found any more.
-func (s *server) spentScripts(tx *bchutil.Tx) ([][]byte, bool) {
+// token prefix in front, as the spend journal keeps it. It returns
+// errSpentOutputGone when an output can't be found any more, and the error of
+// the lookup when that fails.
+func (s *server) spentScripts(tx *bchutil.Tx) ([][]byte, error) {
 	view, err := s.txMemPool.FetchInputUtxos(tx)
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 	msgTx := tx.MsgTx()
 	prevOutScripts := make([][]byte, 0, len(msgTx.TxIn))
 	for _, txIn := range msgTx.TxIn {
 		entry := view.LookupEntry(txIn.PreviousOutPoint)
 		if entry == nil {
-			return nil, false
+			return nil, errSpentOutputGone
 		}
 		script := entry.PkScript()
 		if tokenData := entry.TokenData(); !tokenData.IsEmpty() {
@@ -260,7 +285,7 @@ func (s *server) spentScripts(tx *bchutil.Tx) ([][]byte, bool) {
 		}
 		prevOutScripts = append(prevOutScripts, script)
 	}
-	return prevOutScripts, true
+	return prevOutScripts, nil
 }
 
 // mempoolScriptFilter returns the script filter of the whole mempool, keyed
@@ -276,25 +301,43 @@ func (s *server) mempoolScriptFilter() ([]byte, error) {
 	if s.mempoolScriptFilterBytes != nil && s.mempoolScriptFilterChanges == changes {
 		return s.mempoolScriptFilterBytes, nil
 	}
-	var txs []*wire.MsgTx
-	var prevOutScripts [][]byte
-	for _, txDesc := range s.txMemPool.TxDescs() {
-		if scripts, ok := s.spentScripts(txDesc.Tx); ok {
-			txs = append(txs, txDesc.Tx.MsgTx())
-			prevOutScripts = append(prevOutScripts, scripts...)
-		}
-	}
-	filter, err := builder.BuildTxScriptFilter(&chainhash.Hash{}, txs, prevOutScripts)
-	if err != nil {
-		return nil, err
-	}
-	filterBytes, err := filter.NBytes()
+	filterBytes, err := mempoolScriptFilterOf(s.txMemPool.TxDescs(), s.spentScripts)
 	if err != nil {
 		return nil, err
 	}
 	s.mempoolScriptFilterBytes = filterBytes
 	s.mempoolScriptFilterChanges = changes
 	return filterBytes, nil
+}
+
+// mempoolScriptFilterOf builds the script filter of the given mempool
+// transactions, keyed by the zero hash. spent returns the scripts of the
+// outputs a transaction spends, as spentScripts does. A transaction whose
+// spent outputs are gone has left the mempool, and is left out. Any other
+// failure gives no filter: one without a transaction that is still in the
+// mempool would be taken for the whole of it, and kept until the mempool
+// changed.
+func mempoolScriptFilterOf(txDescs []*mempool.TxDesc,
+	spent func(*bchutil.Tx) ([][]byte, error)) ([]byte, error) {
+
+	var txs []*wire.MsgTx
+	var prevOutScripts [][]byte
+	for _, txDesc := range txDescs {
+		scripts, err := spent(txDesc.Tx)
+		if errors.Is(err, errSpentOutputGone) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		txs = append(txs, txDesc.Tx.MsgTx())
+		prevOutScripts = append(prevOutScripts, scripts...)
+	}
+	filter, err := builder.BuildTxScriptFilter(&chainhash.Hash{}, txs, prevOutScripts)
+	if err != nil {
+		return nil, err
+	}
+	return filter.NBytes()
 }
 
 // mpFiltersFor returns the mempool filters when the node keeps them and the

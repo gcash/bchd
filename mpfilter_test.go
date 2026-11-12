@@ -5,12 +5,18 @@
 package main
 
 import (
+	"errors"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/mempool"
+	"github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchlog"
+	"github.com/gcash/bchutil"
 	"github.com/gcash/bchutil/gcs/builder"
 )
 
@@ -112,5 +118,94 @@ func TestMpFilters(t *testing.T) {
 	m.tick()
 	if m.nextSeq != last+1 || len(m.txs) != 0 {
 		t.Errorf("a failed interval was numbered or kept open")
+	}
+}
+
+// TestMpFiltersDropPeersThatLeft checks that a peer that asked for the
+// filters and left is dropped at the next tick, with no transaction in the
+// interval, and that a peer that is still connected is kept.
+func TestMpFiltersDropPeersThatLeft(t *testing.T) {
+	m := newMpFilters()
+
+	newPeer := func() *serverPeer {
+		p, err := peer.NewOutboundPeer(&peer.Config{
+			ChainParams: &chaincfg.SimNetParams,
+		}, "127.0.0.1:18555")
+		if err != nil {
+			t.Fatalf("new peer: %v", err)
+		}
+		return &serverPeer{Peer: p}
+	}
+
+	// A peer counts as connected from the time it has a connection. The
+	// other end is never read, so the handshake doesn't go on.
+	here := newPeer()
+	near, far := net.Pipe()
+	defer func() { _ = far.Close() }()
+	here.AssociateConnection(near)
+	defer here.Disconnect()
+	if !here.Connected() {
+		t.Fatal("the peer with a connection is not connected")
+	}
+
+	left := newPeer()
+	m.subscribe(here)
+	m.subscribe(left)
+	if len(m.subscribers) != 2 {
+		t.Fatalf("%d subscribers, want 2", len(m.subscribers))
+	}
+
+	m.tick()
+	if _, ok := m.subscribers[left]; ok {
+		t.Error("a peer that left is still a subscriber after a tick")
+	}
+	if _, ok := m.subscribers[here]; !ok {
+		t.Error("a connected peer is no longer a subscriber after a tick")
+	}
+	if len(m.kept) != 0 {
+		t.Errorf("an interval without transactions was kept")
+	}
+}
+
+// TestMempoolScriptFilterOf checks that the script filter of the mempool
+// leaves out a transaction whose spent outputs are gone, and that no filter
+// is built when the outputs of one can't be looked up.
+func TestMempoolScriptFilterOf(t *testing.T) {
+	paid, spentScript, gonePaid := []byte{0x51}, []byte{0x52}, []byte{0x53}
+	txA, txGone := mpTestTx(1, paid), mpTestTx(2, gonePaid)
+	txDescs := []*mempool.TxDesc{{}, {}}
+	txDescs[0].Tx = bchutil.NewTx(txA)
+	txDescs[1].Tx = bchutil.NewTx(txGone)
+
+	lookupFailed := errors.New("lookup failed")
+	var failFor *chainhash.Hash
+	spent := func(tx *bchutil.Tx) ([][]byte, error) {
+		switch {
+		case failFor != nil && tx.Hash().IsEqual(failFor):
+			return nil, lookupFailed
+		case tx.Hash().IsEqual(txDescs[1].Tx.Hash()):
+			return nil, errSpentOutputGone
+		}
+		return [][]byte{spentScript}, nil
+	}
+
+	got, err := mempoolScriptFilterOf(txDescs, spent)
+	if err != nil {
+		t.Fatalf("filter of the mempool: %v", err)
+	}
+	filter, err := builder.BuildTxScriptFilter(&chainhash.Hash{},
+		[]*wire.MsgTx{txA}, [][]byte{spentScript})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filter.NBytes()
+	if string(got) != string(want) {
+		t.Errorf("filter %x, want %x, of the one transaction still there", got, want)
+	}
+
+	failFor = txDescs[0].Tx.Hash()
+	got, err = mempoolScriptFilterOf(txDescs, spent)
+	if !errors.Is(err, lookupFailed) || got != nil {
+		t.Errorf("after a failed lookup: filter %x, err %v", got, err)
 	}
 }
